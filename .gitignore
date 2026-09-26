@@ -1,3 +1,21 @@
 node_modules/
-exports/
+
+# Runtime records written by setup, demo and practice tours
 tourcore-data/
+exports/
+
+# Secrets and local environment
+.env
+.env.*
+*.pem
+*.key
+credentials*.json
+
+# Logs, coverage, OS/editor files
+*.log
+npm-debug.log*
+coverage/
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
