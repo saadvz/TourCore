@@ -1,0 +1,378 @@
+import {
+  DEMO_VERIFICATION_FORM_URL,
+  validateConfig,
+  type Door,
+  type TourCoreConfig,
+  type TourHours,
+  type Unit,
+} from "../config/tourCoreConfig";
+import type { ConfigIssue, ConfigSection } from "../config/validateConfig";
+import { formatClockTime, friendlyTimeZone, WEEKDAYS, type Weekday } from "../core/timezone";
+import { inferTimeZone, resolveTimeZone, slugify } from "./parse";
+
+/**
+ * Setup actions. Each takes the current draft and returns a new one; nothing
+ * here does I/O or knows about the terminal. A Grok Bot skill can call these
+ * same functions one answer at a time.
+ */
+
+/** A TourCoreConfig that may not be complete or valid yet. */
+export type SetupDraft = TourCoreConfig;
+
+/** Visible, overridable defaults. Policy values live in config, never in code paths. */
+export const SETUP_DEFAULTS = {
+  operatorName: "Leasing team",
+  operatorContact: "Shown on screen (demo)",
+  entranceName: "Main Entrance",
+  tourHours: {
+    days: ["MON", "TUE", "WED", "THU", "FRI"],
+    start: "09:00",
+    end: "17:00",
+    slotEveryMinutes: 60,
+    tourLengthMinutes: 45,
+    earlyArrivalMinutes: 10,
+  } satisfies TourHours,
+  verificationMode: "basic-form",
+  verificationValidForDays: 30,
+  messagingMode: "console",
+  storageMode: "memory",
+  accessMode: "durin-mock",
+} as const;
+
+/** What the operator sees instead of mode ids. */
+export const CHOICE_LABELS = {
+  verification: {
+    "basic-form": "Basic identity form",
+    mock: "Practice verification (everyone passes)",
+    "document-check": "Full ID check",
+  },
+  messaging: { console: "Demo messaging (texts show on screen)", bland: "Real text messages" },
+  storage: { memory: "On this computer (demo storage)", "google-drive": "Google Drive" },
+  access: { "durin-mock": "Durin demo mode (no real doors open)", durin: "Durin" },
+} as const;
+
+export class SetupInputError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+const clone = <T>(v: T): T => structuredClone(v);
+
+function uniqueId(base: string, taken: Iterable<string>, fallback: string): string {
+  const used = new Set(taken);
+  const root = base || fallback;
+  if (!used.has(root)) return root;
+  for (let i = 2; ; i++) if (!used.has(`${root}_${i}`)) return `${root}_${i}`;
+}
+
+function requireName(name: string | undefined, code: string, message: string): string {
+  const trimmed = name?.trim();
+  if (!trimmed) throw new SetupInputError(code, message);
+  return trimmed;
+}
+
+function requireTimeZone(input: string): string {
+  const tz = resolveTimeZone(input);
+  if (!tz) throw new SetupInputError("TIMEZONE_INVALID", `I don't recognize the time zone "${input}". Try something like America/New_York or "Eastern".`);
+  return tz;
+}
+
+// ------------------------------------------------------------------ property
+
+export function createPropertySetup(input: {
+  address: string;
+  name?: string;
+  timezone?: string;
+  /** Property ids already in use, so a new one never collides. */
+  existingPropertyIds?: string[];
+}): SetupDraft {
+  const address = requireName(input.address, "ADDRESS_MISSING", "Please enter the property's address.");
+  const name = input.name?.trim() || address;
+  const timezone = input.timezone ? requireTimeZone(input.timezone) : inferTimeZone(address).timezone;
+  return {
+    schemaVersion: 1,
+    property: { id: uniqueId(`prop_${slugify(name)}`, input.existingPropertyIds ?? [], "prop_property"), name, address, timezone },
+    operator: { name: SETUP_DEFAULTS.operatorName, contact: SETUP_DEFAULTS.operatorContact },
+    doors: [],
+    units: [],
+    routes: [],
+    tourHours: clone(SETUP_DEFAULTS.tourHours),
+    verificationMode: SETUP_DEFAULTS.verificationMode,
+    verificationFormUrl: DEMO_VERIFICATION_FORM_URL,
+    verificationValidForDays: SETUP_DEFAULTS.verificationValidForDays,
+    messagingMode: SETUP_DEFAULTS.messagingMode,
+    storageMode: SETUP_DEFAULTS.storageMode,
+    accessMode: SETUP_DEFAULTS.accessMode,
+  };
+}
+
+/** The property id never changes after creation, even if the name does. */
+export function setPropertyDetails(draft: SetupDraft, input: { name?: string; address?: string; timezone?: string }): SetupDraft {
+  const next = clone(draft);
+  if (input.name !== undefined) next.property.name = requireName(input.name, "PROPERTY_NAME_MISSING", "Please give the property a name.");
+  if (input.address !== undefined) next.property.address = requireName(input.address, "ADDRESS_MISSING", "Please enter the property's address.");
+  if (input.timezone !== undefined) next.property.timezone = requireTimeZone(input.timezone);
+  return next;
+}
+
+export function setAlertContact(draft: SetupDraft, input: { name?: string; contact?: string }): SetupDraft {
+  const next = clone(draft);
+  if (input.name !== undefined) next.operator.name = requireName(input.name, "OPERATOR_MISSING", "Please say who should get alerts.");
+  if (input.contact !== undefined) next.operator.contact = input.contact.trim() || SETUP_DEFAULTS.operatorContact;
+  return next;
+}
+
+// ------------------------------------------------------------- doors, units
+
+export function addDoor(draft: SetupDraft, input: { name: string; kind: Door["kind"]; unitId?: string }): { draft: SetupDraft; door: Door } {
+  const name = requireName(input.name, "DOOR_NAME_MISSING", "Please give the door a name.");
+  if (draft.doors.some((d) => d.name.toLowerCase() === name.toLowerCase())) {
+    throw new SetupInputError("DOOR_NAME_TAKEN", `There's already a door called "${name}".`);
+  }
+  const next = clone(draft);
+  const door: Door = { id: uniqueId(slugify(name), next.doors.map((d) => d.id), "door"), name, kind: input.kind };
+  next.doors.push(door);
+  if (input.unitId) {
+    const unit = next.units.find((u) => u.id === input.unitId);
+    if (!unit) throw new SetupInputError("UNIT_NOT_FOUND", "That unit isn't part of this property.");
+    unit.doorId = door.id;
+  }
+  return { draft: next, door };
+}
+
+export function renameDoor(draft: SetupDraft, doorId: string, name: string): SetupDraft {
+  const clean = requireName(name, "DOOR_NAME_MISSING", "Please give the door a name.");
+  if (draft.doors.some((d) => d.id !== doorId && d.name.toLowerCase() === clean.toLowerCase())) {
+    throw new SetupInputError("DOOR_NAME_TAKEN", `There's already a door called "${clean}".`);
+  }
+  const next = clone(draft);
+  const door = next.doors.find((d) => d.id === doorId);
+  if (!door) throw new SetupInputError("DOOR_NOT_FOUND", "That door isn't part of this property.");
+  door.name = clean;
+  return next;
+}
+
+/** Routes that used this door are left alone so the review flags them. */
+export function removeDoor(draft: SetupDraft, doorId: string): SetupDraft {
+  const next = clone(draft);
+  next.doors = next.doors.filter((d) => d.id !== doorId);
+  for (const unit of next.units) if (unit.doorId === doorId) unit.doorId = "";
+  return next;
+}
+
+export function addUnit(draft: SetupDraft, input: { name: string; summary?: string }): { draft: SetupDraft; unit: Unit } {
+  const name = requireName(input.name, "UNIT_NAME_MISSING", "Please give the unit a name.");
+  if (draft.units.some((u) => u.name.toLowerCase() === name.toLowerCase())) {
+    throw new SetupInputError("UNIT_NAME_TAKEN", `There's already a unit called "${name}".`);
+  }
+  const next = clone(draft);
+  const unit: Unit = { id: uniqueId(slugify(name), next.units.map((u) => u.id), "unit"), name, doorId: "", summary: input.summary?.trim() ?? "" };
+  next.units.push(unit);
+  return { draft: next, unit };
+}
+
+export function renameUnit(draft: SetupDraft, unitId: string, name: string): SetupDraft {
+  const clean = requireName(name, "UNIT_NAME_MISSING", "Please give the unit a name.");
+  if (draft.units.some((u) => u.id !== unitId && u.name.toLowerCase() === clean.toLowerCase())) {
+    throw new SetupInputError("UNIT_NAME_TAKEN", `There's already a unit called "${clean}".`);
+  }
+  const next = clone(draft);
+  const unit = next.units.find((u) => u.id === unitId);
+  if (!unit) throw new SetupInputError("UNIT_NOT_FOUND", "That unit isn't part of this property.");
+  const old = unit.name;
+  unit.name = clean;
+  for (const route of next.routes.filter((r) => r.unitId === unitId)) {
+    for (const stop of route.stops) stop.guidance = stop.guidance.split(old).join(clean);
+  }
+  return next;
+}
+
+/** Removes the unit, its route, and its own door. */
+export function removeUnit(draft: SetupDraft, unitId: string): SetupDraft {
+  const unit = draft.units.find((u) => u.id === unitId);
+  if (!unit) return draft;
+  let next = clone(draft);
+  next.units = next.units.filter((u) => u.id !== unitId);
+  next.routes = next.routes.filter((r) => r.unitId !== unitId);
+  const door = next.doors.find((d) => d.id === unit.doorId);
+  if (door?.kind === "UNIT" && !next.units.some((u) => u.doorId === door.id)) next = removeDoor(next, door.id);
+  return next;
+}
+
+export function setUnitSummary(draft: SetupDraft, unitId: string, summary: string): SetupDraft {
+  const next = clone(draft);
+  const unit = next.units.find((u) => u.id === unitId);
+  if (!unit) throw new SetupInputError("UNIT_NOT_FOUND", "That unit isn't part of this property.");
+  unit.summary = summary.trim();
+  return next;
+}
+
+// -------------------------------------------------------------------- routes
+
+/** Door ids in the order the visitor walks through them. Replaces any existing route for the unit. */
+export function setRoute(draft: SetupDraft, unitId: string, doorIds: string[], options: { directions?: string } = {}): SetupDraft {
+  const unit = draft.units.find((u) => u.id === unitId);
+  if (!unit) throw new SetupInputError("UNIT_NOT_FOUND", "That unit isn't part of this property.");
+  if (doorIds.length === 0) throw new SetupInputError("ROUTE_EMPTY", "Pick at least one door for this route.");
+  if (doorIds.some((id) => !draft.doors.some((d) => d.id === id))) {
+    throw new SetupInputError("ROUTE_DOOR_UNKNOWN", "One of those doors isn't part of this property.");
+  }
+  const directions = options.directions?.trim() || undefined;
+  const next = clone(draft);
+  next.routes = next.routes.filter((r) => r.unitId !== unitId);
+  next.routes.push({
+    id: uniqueId(`route_${unit.id}`, next.routes.map((r) => r.id), "route"),
+    unitId,
+    ...(directions ? { directions } : {}),
+    stops: doorIds.map((doorId, i) => ({ doorId, guidance: guidanceFor(draft, unit, doorId, i === doorIds.length - 1, directions) })),
+  });
+  return next;
+}
+
+function guidanceFor(draft: SetupDraft, unit: Unit, doorId: string, isLast: boolean, directions?: string): string {
+  if (isLast) return `Welcome to ${unit.name}! Take your time, and text me any questions.`;
+  const door = draft.doors.find((d) => d.id === doorId);
+  if (door?.kind === "ENTRANCE") {
+    return `Come on in. ${directions ? `To get to ${unit.name}: ${directions.replace(/[.!]?$/, ".")}` : `Head to ${unit.name}.`}`;
+  }
+  return `Keep going toward ${unit.name}.`;
+}
+
+// ---------------------------------------------------------- hours, policies
+
+export function setTourHours(draft: SetupDraft, input: Partial<TourHours>): SetupDraft {
+  const next = clone(draft);
+  const hhmm = /^([01]\d|2[0-3]):[0-5]\d$/;
+  if (input.days !== undefined) {
+    if (input.days.some((d) => !WEEKDAYS.includes(d))) throw new SetupInputError("TOUR_DAYS_UNREADABLE", "I didn't understand those days.");
+    next.tourHours.days = WEEKDAYS.filter((d) => input.days!.includes(d));
+  }
+  for (const key of ["start", "end"] as const) {
+    const value = input[key];
+    if (value === undefined) continue;
+    if (!hhmm.test(value)) throw new SetupInputError("TOUR_TIME_UNREADABLE", "I didn't understand that time.");
+    next.tourHours[key] = value;
+  }
+  for (const key of ["slotEveryMinutes", "tourLengthMinutes", "earlyArrivalMinutes"] as const) {
+    const value = input[key];
+    if (value === undefined) continue;
+    if (!Number.isInteger(value)) throw new SetupInputError("TOUR_MINUTES_UNREADABLE", "Please use a whole number of minutes.");
+    next.tourHours[key] = value;
+  }
+  return next;
+}
+
+export function setVerificationPolicy(
+  draft: SetupDraft,
+  input: { mode?: SetupDraft["verificationMode"]; reuseForDays?: number },
+): SetupDraft {
+  const next = clone(draft);
+  if (input.mode !== undefined) next.verificationMode = input.mode;
+  if (input.reuseForDays !== undefined) {
+    if (!Number.isInteger(input.reuseForDays)) throw new SetupInputError("VERIFICATION_REUSE_UNREADABLE", "Please use a whole number of days.");
+    next.verificationValidForDays = input.reuseForDays;
+  }
+  return next;
+}
+
+export function setServices(
+  draft: SetupDraft,
+  input: { messagingMode?: SetupDraft["messagingMode"]; storageMode?: SetupDraft["storageMode"]; accessMode?: SetupDraft["accessMode"] },
+): SetupDraft {
+  return { ...clone(draft), ...Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined)) };
+}
+
+// -------------------------------------------------------------------- review
+
+export interface ReviewSection {
+  /** Which part of setup to revisit to change this. */
+  editSection: ConfigSection;
+  title: string;
+  lines: string[];
+}
+
+export interface SetupReview {
+  sections: ReviewSection[];
+  issues: ConfigIssue[];
+  canSave: boolean;
+}
+
+export function reviewSetup(draft: SetupDraft): SetupReview {
+  const issues = validateConfig(draft);
+  const doorName = (id: string) => draft.doors.find((d) => d.id === id)?.name ?? "(missing door)";
+  const th = draft.tourHours;
+  const sections: ReviewSection[] = [
+    { editSection: "property", title: "PROPERTY", lines: [draft.property.name, ...(draft.property.address !== draft.property.name ? [draft.property.address] : [])] },
+    { editSection: "property", title: "TIMEZONE", lines: [`${draft.property.timezone} (${friendlyTimeZone(draft.property.timezone)})`] },
+    {
+      editSection: "hours",
+      title: "TOUR HOURS",
+      lines: [
+        describeDays(th.days),
+        `${formatClockTime(th.start)}-${formatClockTime(th.end)}`,
+        `Each tour lasts ${describeMinutes(th.tourLengthMinutes)}; a new tour can start every ${describeInterval(th.slotEveryMinutes)}`,
+        `Visitors can get in up to ${describeMinutes(th.earlyArrivalMinutes)} early`,
+      ],
+    },
+    { editSection: "units", title: "UNITS", lines: draft.units.length ? draft.units.map((u) => u.name) : ["(none yet)"] },
+    ...draft.units.map((unit) => {
+      const route = draft.routes.find((r) => r.unitId === unit.id);
+      return {
+        editSection: "routes" as const,
+        title: `ROUTE: ${unit.name.toUpperCase()}`,
+        lines: route?.stops.length ? route.stops.map((s) => doorName(s.doorId)) : ["(no route yet)"],
+      };
+    }),
+    {
+      editSection: "verification",
+      title: "VERIFICATION",
+      lines: [
+        CHOICE_LABELS.verification[draft.verificationMode],
+        `Checked visitors can book again for ${draft.verificationValidForDays} days without re-checking`,
+      ],
+    },
+    {
+      editSection: "services",
+      title: "RECORDS, MESSAGES AND DOORS",
+      lines: [
+        `Records: ${CHOICE_LABELS.storage[draft.storageMode]}`,
+        `Messages: ${CHOICE_LABELS.messaging[draft.messagingMode]}`,
+        `Doors: ${CHOICE_LABELS.access[draft.accessMode]}`,
+      ],
+    },
+    { editSection: "property", title: "ALERTS", lines: [`If a visitor needs help: ${draft.operator.name}`] },
+  ];
+  return { sections, issues, canSave: issues.length === 0 };
+}
+
+const DAY_LABEL: Record<Weekday, string> = {
+  MON: "Monday", TUE: "Tuesday", WED: "Wednesday", THU: "Thursday", FRI: "Friday", SAT: "Saturday", SUN: "Sunday",
+};
+const WEEK_ORDER: Weekday[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+
+export function describeDays(days: readonly Weekday[]): string {
+  const ordered = WEEK_ORDER.filter((d) => days.includes(d));
+  if (ordered.length === 0) return "No days selected";
+  if (ordered.length === 7) return "Every day";
+  const idx = ordered.map((d) => WEEK_ORDER.indexOf(d));
+  const contiguous = idx.every((n, i) => i === 0 || n === idx[i - 1]! + 1);
+  if (contiguous && ordered.length >= 3) return `${DAY_LABEL[ordered[0]!]}-${DAY_LABEL[ordered[ordered.length - 1]!]}`;
+  return ordered.map((d) => DAY_LABEL[d]).join(", ");
+}
+
+/** For "every ___": 60 -> "hour", 90 -> "1 hour 30 minutes". */
+export function describeInterval(n: number): string {
+  return n === 60 ? "hour" : describeMinutes(n);
+}
+
+export function describeMinutes(n: number): string {
+  if (n === 0) return "0 minutes";
+  const h = Math.floor(n / 60);
+  const m = n % 60;
+  const parts = [h ? `${h} hour${h === 1 ? "" : "s"}` : "", m ? `${m} minute${m === 1 ? "" : "s"}` : ""].filter(Boolean);
+  return parts.join(" ");
+}

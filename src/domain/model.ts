@@ -1,0 +1,155 @@
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
+
+export const SCHEMA_VERSION = 1;
+
+export const ReservationStatusSchema = z.enum([
+  "INQUIRY",
+  "RESERVED",
+  "AWAITING_CONSENT",
+  "AWAITING_VERIFICATION",
+  "READY",
+  "TOURING",
+  "COMPLETED",
+  "CANCELLED",
+  "VERIFICATION_FAILED",
+  "EXPIRED",
+  "REVOKED",
+  "OPERATOR_HOLD",
+  "PROVIDER_FAILURE",
+]);
+export type ReservationStatus = z.infer<typeof ReservationStatusSchema>;
+
+const IsoDate = z.iso.datetime({ offset: true });
+
+export const ProspectSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  phone: z.string(),
+  createdAt: IsoDate,
+});
+
+export const ReservationSchema = z.object({
+  id: z.string(),
+  prospectId: z.string(),
+  propertyId: z.string(),
+  unitId: z.string(),
+  routeId: z.string(),
+  /** Exact, ordered list of Tour Core door ids this reservation may open. */
+  allowedRoute: z.array(z.string()).min(1),
+  status: ReservationStatusSchema,
+  /** Status to return to when an operator hold or provider failure is resolved. */
+  heldFromStatus: ReservationStatusSchema.optional(),
+  slotStart: IsoDate.optional(),
+  windowStart: IsoDate.optional(),
+  windowEnd: IsoDate.optional(),
+  consentId: z.string().optional(),
+  verificationId: z.string().optional(),
+  createdAt: IsoDate,
+  updatedAt: IsoDate,
+});
+
+export const ConsentSchema = z.object({
+  id: z.string(),
+  prospectId: z.string(),
+  reservationId: z.string(),
+  granted: z.boolean(),
+  scope: z.array(z.enum(["messaging", "tour_records"])),
+  text: z.string(),
+  recordedAt: IsoDate,
+});
+
+export const VerificationSchema = z.object({
+  id: z.string(),
+  prospectId: z.string(),
+  reservationId: z.string(),
+  method: z.enum(["basic-form", "mock"]),
+  status: z.enum(["PASSED", "FAILED"]),
+  /** Provider reference (form response id). No ID images are ever stored. */
+  reference: z.string(),
+  claimed: z
+    .object({ firstName: z.string(), lastName: z.string(), email: z.string(), phone: z.string() })
+    .optional(),
+  failureReason: z.string().optional(),
+  completedAt: IsoDate,
+  validUntil: IsoDate,
+});
+
+export const AccessGrantSchema = z.object({
+  id: z.string(),
+  reservationId: z.string(),
+  prospectId: z.string(),
+  doorId: z.string(),
+  durinGrantRef: z.string(),
+  status: z.enum(["ACTIVE", "REVOKED"]),
+  validFrom: IsoDate,
+  validUntil: IsoDate,
+  createdAt: IsoDate,
+  revokedAt: IsoDate.optional(),
+});
+
+export const MessageSchema = z.object({
+  id: z.string(),
+  direction: z.enum(["INBOUND", "OUTBOUND"]),
+  audience: z.enum(["PROSPECT", "OPERATOR"]),
+  channel: z.string(),
+  counterparty: z.string(),
+  body: z.string(),
+  prospectId: z.string().optional(),
+  reservationId: z.string().optional(),
+  at: IsoDate,
+});
+
+export const AuditEventTypeSchema = z.enum([
+  "PROSPECT_CREATED",
+  "PROSPECT_RETURNED",
+  "INQUIRY_STARTED",
+  "RESERVATION_CREATED",
+  "CONSENT_REQUESTED",
+  "CONSENT_RECORDED",
+  "VERIFICATION_REQUESTED",
+  "VERIFICATION_COMPLETED",
+  "VERIFICATION_REUSED",
+  "VERIFICATION_FAILED",
+  "TOUR_READY",
+  "ACCESS_REQUESTED",
+  "ACCESS_ALLOWED",
+  "ACCESS_DENIED",
+  "ACCESS_REVOKED",
+  "TOUR_STARTED",
+  "TOUR_COMPLETED",
+  "FOLLOW_UP_SENT",
+  "RESERVATION_CANCELLED",
+  "RESERVATION_REVOKED",
+  "OPERATOR_HOLD_PLACED",
+  "RESERVATION_RESUMED",
+  "PROVIDER_FAILURE",
+  "OPERATOR_NOTIFIED",
+]);
+export type AuditEventType = z.infer<typeof AuditEventTypeSchema>;
+
+export const AuditEventSchema = z.object({
+  id: z.string(),
+  seq: z.number().int().positive(),
+  type: AuditEventTypeSchema,
+  at: IsoDate,
+  reservationId: z.string().optional(),
+  prospectId: z.string().optional(),
+  doorId: z.string().optional(),
+  code: z.string().optional(),
+  detail: z.string(),
+  statusChange: z.object({ from: ReservationStatusSchema, to: ReservationStatusSchema }).optional(),
+});
+
+export type Prospect = z.infer<typeof ProspectSchema>;
+export type Reservation = z.infer<typeof ReservationSchema>;
+export type Consent = z.infer<typeof ConsentSchema>;
+export type Verification = z.infer<typeof VerificationSchema>;
+export type AccessGrant = z.infer<typeof AccessGrantSchema>;
+export type Message = z.infer<typeof MessageSchema>;
+export type AuditEvent = z.infer<typeof AuditEventSchema>;
+
+/** Stable ids: assigned once, never reused or rewritten. */
+export function newId(prefix: string): string {
+  return `${prefix}_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+}

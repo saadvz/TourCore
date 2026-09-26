@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "property": {
+    "id": "prop_100_alfred_way",
+    "name": "100 Alfred Way",
+    "address": "100 Alfred Way",
+    "timezone": "America/New_York"
+  },
+  "operator": {
+    "name": "Leasing team",
+    "contact": "+15550100000"
+  },
+  "doors": [
+    { "id": "entrance", "name": "Entrance", "kind": "ENTRANCE" },
+    { "id": "unit_101", "name": "Unit 101 Door", "kind": "UNIT" },
+    { "id": "unit_102", "name": "Unit 102 Door", "kind": "UNIT" }
+  ],
+  "units": [
+    { "id": "apt_101", "name": "Unit 101", "doorId": "unit_101", "summary": "Two-bedroom, first floor, south-facing." },
+    { "id": "apt_102", "name": "Unit 102", "doorId": "unit_102", "summary": "One-bedroom, first floor, courtyard view." }
+  ],
+  "routes": [
+    {
+      "id": "route_apt_101",
+      "unitId": "apt_101",
+      "stops": [
+        { "doorId": "entrance", "guidance": "Come on in to the lobby. Unit 101 is straight ahead, first door on your left. Text me when you're there." },
+        { "doorId": "unit_101", "guidance": "Welcome to Unit 101! Take your time. The kitchen is on your right and both bedrooms are down the hall. Text me any questions." }
+      ]
+    },
+    {
+      "id": "route_apt_102",
+      "unitId": "apt_102",
+      "stops": [
+        { "doorId": "entrance", "guidance": "Come on in to the lobby. Unit 102 is down the hall to your right." },
+        { "doorId": "unit_102", "guidance": "Welcome to Unit 102! Have a look around and text me any questions." }
+      ]
+    }
+  ],
+  "tourHours": {
+    "days": ["MON", "TUE", "WED", "THU", "FRI"],
+    "start": "14:00",
+    "end": "17:00",
+    "slotEveryMinutes": 90,
+    "tourLengthMinutes": 45,
+    "earlyArrivalMinutes": 10
+  },
+  "verificationMode": "basic-form",
+  "verificationFormUrl": "https://forms.example/tour-core-basic-id",
+  "verificationValidForDays": 30,
+  "messagingMode": "console",
+  "storageMode": "memory",
+  "accessMode": "durin-mock"
+}
