@@ -19,6 +19,7 @@ import type { VerificationProvider } from "../verification/basicForm";
 import { AuditLog, type AuditInput } from "../audit/audit";
 import { buildExport, type ExportBundle } from "../export/exportBundle";
 import type { Clock } from "./clock";
+import { approvedFacts, type ApprovedFact } from "./facts";
 import { normalizePhone } from "./phone";
 import { nextTourDay, slotsOn, tourWindow, type TourSlot } from "./schedule";
 import { formatDay as formatDayIn, formatTime as formatTimeIn, localDateOf, type LocalDate } from "./timezone";
@@ -323,6 +324,12 @@ export class TourCore {
   }
 
   // ------------------------------------------------------------------ reads
+
+  /** The only facts tour guidance may use for this reservation: the property's and the reserved unit's. */
+  async approvedFacts(reservationId: string): Promise<ApprovedFact[]> {
+    const reservation = await this.mustGetReservation(reservationId);
+    return approvedFacts(this.deps.config, reservation.unitId);
+  }
 
   getReservation(id: string): Promise<Reservation | undefined> {
     return this.deps.store.get("reservations", id);

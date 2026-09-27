@@ -19,31 +19,41 @@ npm install
 npm run setup
 ```
 
-`npm run setup` opens a guided setup in the terminal:
+`npm run setup` starts the setup app on this computer, prints a link (`http://localhost:4321/`) and opens it in
+your browser. Keep the window open while you work and press Ctrl+C to stop. Your work is saved as you go.
 
-```
-1. Set up a new property
-2. Edit an existing property
-3. Run a readiness check
-4. Run a practice tour
-5. Publish for demo
-6. View audit/export
-7. Quit
-```
+In the browser you:
 
-A first run walks through the property address, name and time zone, the units, the entrance, each unit's door, each
-unit's route, tour hours, visitor verification, records, messages and door access. It then shows a review
-("Does this look right?"), saves, runs the readiness check, offers a practice tour, and offers to publish for demo.
-You never edit a file by hand.
+1. **Set up a property**: address, name, time zone (guessed from the address; you confirm it) and optional
+   building facts.
+2. **Units**: add each tourable unit with an optional short description and other facts. Only what you write is ever
+   shared with visitors.
+3. **Doors**: the main entrance, each unit's door, and any hallway doors or extra entrances.
+4. **Routes**: for each unit, the doors in order (Lobby Entrance ↓ Unit 101 Door). A suggested route is filled in.
+5. **Tour hours**: days, first start, last finish, tour length, spacing, and the early-arrival allowance.
+6. **Verification**: basic identity form (recommended) or practice verification.
+7. **Records and messages**: demo records, demo messaging and Durin demo mode, plus who gets alerts.
+8. **Review**: everything on one page, with Edit beside each section.
+9. **Readiness check**: eight real checks, each failure with a button that takes you straight to the fix.
+10. **Practice tour**: a timeline of the visitor's journey, the safety test (too early, on time, no duplicate
+    access, the unit, a door that isn't on the route) and wrap-up.
+11. **Publish for demo**, then view the property, run another practice tour, edit, or read the tour history.
+
+Come back any time with `npm run setup`. Your properties are listed on the first screen. You can edit one thing,
+such as renaming a unit (and optionally its matching door), changing one route or changing tour hours, without
+redoing a section.
 
 Other commands:
 
 ```bash
-npm run setup -- --dev   # same wizard, plus technical codes and Durin mock output
-npm run demo             # scripted walkthrough of one tour on the sample property
-npm run demo:auto        # same, without prompts
-npm test                 # vitest
-npm run typecheck        # tsc
+npm run setup -- --dev      # browser app plus internal ids, codes, adapter names, Durin calls and file paths
+npm run setup -- --no-open  # don't open the browser automatically
+npm run setup:cli           # the same setup in the terminal (development, scripting, quick debugging)
+npm run setup:cli -- --dev
+npm run demo                # scripted walkthrough of one tour on the sample property
+npm run demo:auto           # same, without prompts
+npm test                    # vitest
+npm run typecheck           # tsc
 ```
 
 ## What "Publish for demo" means
@@ -59,14 +69,30 @@ verification and Durin access all stay in demo mode. No physical door is control
 
 ## Setup engine (UI-independent)
 
-The wizard (`src/cli/`) only asks questions and prints answers. All setup logic lives in `src/setup/` and is exposed
-as plain actions that a Grok Bot skill can call the same way:
+```
+Terminal wizard (src/cli)      Browser app (src/web)      Future Grok Bot
+            \                          |                        /
+             '-------------->  Setup actions (src/setup)  <----'
+                                       |
+                                   Tour Core
+```
+
+Neither UI holds setup rules.
+
+- **Browser.** It calls named commands (`SETUP_COMMANDS` in `src/setup/commands.ts`, each with a typed input schema)
+  and draws view models from `src/setup/presenters.ts`: the review cards, readiness fixes, the practice-tour timeline
+  and plain-language history. Anything technical sits under a `dev` key, which the browser server removes unless
+  `--dev` is on.
+- **Server.** It listens on localhost only, rejects other hosts and non-JSON posts, and keeps unfinished setups as
+  drafts. A setup is saved only once it's valid.
+
+The actions:
 
 | Action | What it does |
 | --- | --- |
 | `createPropertySetup` / `setPropertyDetails` | Property name, address and time zone (inferred from the address, always confirmed) |
-| `addUnit` / `renameUnit` / `removeUnit` | Tourable units |
-| `addDoor` / `renameDoor` / `removeDoor` | Entrance and unit doors (ids are generated and can't collide) |
+| `addUnit` / `renameUnit` / `setUnitDetails` / `removeUnit` | Tourable units, their description and approved facts. A rename can also rename the unit's door, but only if it still has the suggested name |
+| `addDoor` / `renameDoor` / `removeDoor` | Entrances, unit doors, and hallway or shared doors (ids are generated and can't collide) |
 | `setRoute` | Ordered doors for one unit, plus optional directions |
 | `setTourHours` | Days, hours, tour length, spacing, early-arrival allowance |
 | `setVerificationPolicy` | Basic identity form or practice verification, plus the reuse window |
@@ -96,6 +122,11 @@ doors, units, routes, and tour hours: days, start, end, `slotEveryMinutes`, `tou
 `earlyArrivalMinutes`. It also holds `verificationMode`, `verificationValidForDays`, `messagingMode`, `storageMode` and
 `accessMode`. Policy values live only in config. Setup shows the defaults (45-minute tours, hourly, 10 minutes early,
 checks reusable for 30 days) and lets the operator change them.
+
+**Approved facts.** `property.facts`, `unit.summary` and `unit.facts` hold only what the operator wrote.
+`approvedFacts(config, unitId)` (`src/core/facts.ts`) and `TourCore.approvedFacts(reservationId)` return them as
+structured entries marked `source: "operator"`. Future tour guidance may repeat these and nothing else. Unsaved
+browser edits are kept in `draft.json` next to the saved config until they pass validation.
 
 All tour-hour and access-window math uses the property's time zone, never the host machine's.
 `config/demo-property.json` is the sample property used by `npm run demo`.
@@ -130,8 +161,9 @@ src/verification/  basic identity form + practice verification
 src/storage/       store contract + in-memory store
 src/audit/, src/export/   audit formatting/CSV, validated export bundle
 src/createTourCore.ts     the only place config modes map to adapters
-src/setup/         setup engine: actions, readiness, practice tour, save/publish
-src/cli/           terminal wizard (npm run setup)
+src/setup/         setup engine: actions, commands, presenters, readiness, practice tour, save/publish
+src/web/           browser setup: local server + API (server.ts, api.ts) and the page (public/)
+src/cli/           terminal wizard (npm run setup:cli)
 src/demo/          scripted demo (npm run demo)
 ```
 

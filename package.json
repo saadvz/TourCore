@@ -6,7 +6,9 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "setup": "tsx src/cli/setup.ts",
+    "setup": "tsx src/web/server.ts",
+    "setup:web": "tsx src/web/server.ts",
+    "setup:cli": "tsx src/cli/setup.ts",
     "demo": "tsx src/demo/run.ts",
     "demo:auto": "tsx src/demo/run.ts --auto",
     "test": "vitest run",

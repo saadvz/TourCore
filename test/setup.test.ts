@@ -161,7 +161,7 @@ describe("readiness check", () => {
       "Unit routes",
       "Verification",
       "Messaging",
-      "Storage",
+      "Records",
       "Durin access",
       "Audit/export",
     ]);
@@ -201,8 +201,8 @@ describe("practice tour", () => {
   it("proves an off-route door is denied before Durin is called", async () => {
     const { draft, ids } = buildProperty();
     const result = await runDryTour(draft, { unitId: ids.u101, now: MONDAY_MORNING });
-    const safety = result.checks.find((c) => c.label.includes("before Durin was ever asked"));
-    expect(safety?.ok).toBe(true);
+    const safety = result.checks.find((c) => c.id === "wrong_door");
+    expect(safety).toMatchObject({ ok: true, group: "safety", outcome: "Access correctly denied before Durin was contacted" });
     const denied = result.audit.find((e) => e.type === "ACCESS_DENIED" && e.doorId === ids.d102);
     expect(denied?.code).toBe("DENY_WRONG_ROUTE");
     expect(result.bundle!.accessGrants.some((g) => g.doorId === ids.d102)).toBe(false);

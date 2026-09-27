@@ -11,15 +11,24 @@ export const DEMO_VERIFICATION_FORM_URL = "https://forms.example/tour-core-basic
 export const DoorSchema = z.object({
   id: Id,
   name: z.string(),
-  kind: z.enum(["ENTRANCE", "UNIT"]),
+  /** COMMON = hallway, stairwell or other shared door a route can pass through. */
+  kind: z.enum(["ENTRANCE", "UNIT", "COMMON"]),
 });
+
+/**
+ * Operator-approved facts only. Tour Core never invents or generates these;
+ * tour guidance may only repeat what is stored here.
+ */
+const ApprovedFacts = z.array(z.string()).default([]);
 
 export const UnitSchema = z.object({
   id: Id,
   name: z.string(),
   /** Empty until the unit's door is added during setup. */
   doorId: z.string(),
+  /** Short operator-written description, e.g. "One-bedroom on the first floor." */
   summary: z.string().default(""),
+  facts: ApprovedFacts,
 });
 
 export const RouteSchema = z.object({
@@ -36,6 +45,7 @@ export const PropertySchema = z.object({
   address: z.string(),
   /** IANA zone, e.g. America/New_York. All tour hours are read in this zone. */
   timezone: z.string(),
+  facts: ApprovedFacts,
 });
 
 export const TourHoursSchema = z.object({

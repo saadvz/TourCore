@@ -1,0 +1,1102 @@
+// Tour Core setup: browser presentation only.
+// Every rule, check and message comes from the setup engine through /api.
+
+const app = document.getElementById("app");
+const state = { meta: null };
+const enc = encodeURIComponent;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ------------------------------------------------------------------ helpers
+
+class UiError extends Error {
+  constructor(message, code) {
+    super(message);
+    this.code = code;
+  }
+}
+
+async function api(method, path, body) {
+  const res = await fetch(path, {
+    method,
+    headers: body !== undefined ? { "Content-Type": "application/json" } : {},
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  let data = {};
+  try {
+    data = await res.json();
+  } catch {
+    /* empty body */
+  }
+  if (!res.ok) throw new UiError(data.error?.message ?? "Something went wrong.", data.error?.dev?.code);
+  return data;
+}
+
+const command = (id, name, input) => api("POST", `/api/properties/${enc(id)}/commands/${name}`, { input });
+const getProperty = (id) => api("GET", `/api/properties/${enc(id)}`);
+
+function el(tag, props, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props ?? {})) {
+    if (v === undefined || v === null || v === false) continue;
+    if (k === "class") node.className = v;
+    else if (k === "text") node.textContent = v;
+    else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else if (k === "value" || k === "checked" || k === "selected" || k === "hidden") node[k] = v;
+    else node.setAttribute(k, v === true ? "" : String(v));
+  }
+  for (const c of children.flat(Infinity)) {
+    if (c === null || c === undefined || c === false) continue;
+    node.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  return node;
+}
+
+const present = (list) => list.flat(Infinity).filter((c) => c !== null && c !== undefined && c !== false);
+/** replaceChildren/append, but skipping empty slots so optional parts never render as "null". */
+const set = (node, ...children) => node.replaceChildren(...present(children));
+const add = (node, ...children) => node.append(...present(children));
+
+const btn = (label, onclick, cls = "") => el("button", { type: "button", class: cls, onclick }, label);
+const input = (props = {}) => el("input", { type: "text", ...props });
+const textarea = (value = "", placeholder = "") => el("textarea", { value, placeholder });
+const field = (text, control, hint) => el("label", {}, text, hint ? el("span", { class: "hint" }, hint) : null, control);
+const lines = (text) => text.split("\n").map((l) => l.trim()).filter(Boolean);
+const mark = (ok) => el("span", { class: `mark ${ok === true ? "ok" : ok === false ? "bad" : "info"}`, "aria-hidden": "true" }, ok === true ? "\u2713" : ok === false ? "\u2715" : "\u2022");
+const devChip = (text) => (state.meta?.dev && text ? el("span", { class: "dev-chip" }, text) : null);
+const devBlock = (obj) =>
+  state.meta?.dev && obj ? el("details", {}, el("summary", {}, "Developer details"), el("pre", { class: "dev" }, JSON.stringify(obj, null, 2))) : null;
+const downloadLink = (label, href) => el("a", { class: "button", href, download: "" }, label);
+
+function errorBox() {
+  const node = el("p", { class: "form-error", role: "alert", hidden: true });
+  return {
+    node,
+    show: (msg) => {
+      node.textContent = msg;
+      node.hidden = false;
+    },
+    clear: () => {
+      node.hidden = true;
+    },
+  };
+}
+
+function banner(message) {
+  app.querySelector(".banner")?.remove();
+  app.prepend(el("div", { class: "issues banner", role: "alert" }, message));
+  window.scrollTo(0, 0);
+}
+
+/** Wraps a click handler: disables the button while working and shows errors in plain words. */
+function action(fn, errors) {
+  return async (ev) => {
+    const b = ev?.currentTarget instanceof HTMLButtonElement ? ev.currentTarget : null;
+    if (b) b.disabled = true;
+    errors?.clear();
+    try {
+      await fn(ev);
+    } catch (e) {
+      const msg = e.message + (state.meta?.dev && e.code ? ` [${e.code}]` : "");
+      errors ? errors.show(msg) : banner(msg);
+    } finally {
+      if (b?.isConnected) b.disabled = false;
+    }
+  };
+}
+
+// ------------------------------------------------------------------ routing
+
+const go = (hash) => {
+  if (location.hash === hash) rerender();
+  else location.hash = hash;
+};
+const base = (id) => `#/p/${enc(id)}`;
+const stepHref = (id, step, unitId) => `${base(id)}/setup/${step}${unitId ? `?unit=${enc(unitId)}` : ""}`;
+function nextHref(id, stepId) {
+  const steps = state.meta.steps;
+  const i = steps.findIndex((s) => s.id === stepId);
+  return i + 1 < steps.length ? stepHref(id, steps[i + 1].id) : `${base(id)}/review`;
+}
+
+async function rerender() {
+  const [path, query = ""] = location.hash.replace(/^#/, "").split("?");
+  const parts = path.split("/").filter(Boolean).map(decodeURIComponent);
+  const params = new URLSearchParams(query);
+  try {
+    if (!state.meta) {
+      state.meta = await api("GET", "/api/meta");
+      document.getElementById("dev-badge").hidden = !state.meta.dev;
+    }
+    let screen;
+    if (parts[0] === "new") screen = await propertyStep(null);
+    else if (parts[0] === "p" && parts[1]) {
+      const [, id, view, step] = parts;
+      if (view === "setup") screen = await setupStep(id, step ?? "property", params);
+      else if (view === "readiness") screen = await readinessScreen(id);
+      else if (view === "practice") screen = await practiceScreen(id);
+      else if (view === "published") screen = await publishedScreen(id);
+      else if (view === "history") screen = await historyScreen(id);
+      else screen = await reviewScreen(id);
+    } else screen = await landing();
+    app.replaceChildren(screen);
+    document.title = `Tour Core${app.querySelector("h1") ? ` - ${app.querySelector("h1").textContent}` : ""}`;
+  } catch (e) {
+    app.replaceChildren(
+      el("h1", {}, "Something went wrong"),
+      el("p", {}, e.message),
+      el("div", { class: "actions" }, btn("Back to start", () => go("#/"), "primary")),
+    );
+  }
+}
+
+window.addEventListener("hashchange", async () => {
+  app.replaceChildren(el("p", { class: "muted" }, "Loading..."));
+  await rerender();
+  window.scrollTo(0, 0);
+});
+rerender();
+
+// ------------------------------------------------------------------ landing
+
+async function landing() {
+  const { properties } = await api("GET", "/api/properties");
+  return el(
+    "div",
+    {},
+    el("h1", {}, "Tour Core"),
+    el("p", { class: "lead" }, "Set up and test self-guided tours for your property."),
+    el("div", { class: "actions" }, btn("Set up a property", () => go("#/new"), "primary")),
+    properties.length ? [el("h2", {}, "Your properties"), properties.map(propertyCard)] : null,
+  );
+}
+
+function statusBadge(p) {
+  return el("span", { class: `badge ${p.published ? "good" : ""}` }, p.statusLabel);
+}
+
+function propertyCard(p) {
+  const actions = [];
+  if (!p.saved) actions.push(btn("Continue setup", () => go(`${base(p.id)}/review`), "primary"));
+  else {
+    if (p.published) actions.push(btn("View property", () => go(`${base(p.id)}/published`), "primary"));
+    else if (p.readinessPassed && p.practicePassed) actions.push(btn("Publish for demo", action(() => publish(p.id)), "primary"));
+    actions.push(btn("Edit a property", () => go(`${base(p.id)}/review`)));
+    actions.push(btn("Run readiness check", () => go(`${base(p.id)}/readiness`)));
+    actions.push(btn("Run a practice tour", () => go(`${base(p.id)}/practice`)));
+    if (p.hasHistory) actions.push(btn("View tour history", () => go(`${base(p.id)}/history`)));
+  }
+  return el(
+    "div",
+    { class: "card" },
+    el("div", { class: "card-head" }, el("div", {}, el("h3", {}, p.name), p.address !== p.name ? el("p", { class: "muted" }, p.address) : null), statusBadge(p)),
+    p.saved && p.unsavedChanges ? el("p", { class: "muted" }, "You have changes that haven't been checked yet.") : null,
+    devBlock(p.dev),
+    el("div", { class: "actions" }, actions),
+  );
+}
+
+async function publish(id) {
+  const res = await api("POST", `/api/properties/${enc(id)}/publish`, {});
+  if (res.published) return go(`${base(id)}/published`);
+  const hrefs = { readiness: `${base(id)}/readiness`, practice: `${base(id)}/practice`, review: `${base(id)}/review` };
+  app.querySelector(".banner")?.remove();
+  app.prepend(
+    el(
+      "div",
+      { class: "issues banner", role: "alert" },
+      el("strong", {}, "Not ready to publish yet:"),
+      res.blockers.map((b) => el("div", { class: "issue" }, el("span", {}, b.message, devChip(b.dev?.code)), btn(b.next.label, () => go(hrefs[b.next.action]), "small"))),
+    ),
+  );
+  window.scrollTo(0, 0);
+}
+
+// ------------------------------------------------------------------ wizard
+
+function wizardShell(data, stepId, body, onContinue) {
+  const steps = state.meta.steps;
+  const idx = steps.findIndex((s) => s.id === stepId);
+  const id = data?.summary.id;
+  const nav = el(
+    "ol",
+    { class: "steps", "aria-label": "Setup steps" },
+    steps.map((s, i) =>
+      el(
+        "li",
+        {},
+        el(
+          "button",
+          { type: "button", class: s.id === stepId ? "current" : "", disabled: !id, "aria-current": s.id === stepId ? "step" : null, onclick: () => go(stepHref(id, s.id)) },
+          `${i + 1}. ${s.title}`,
+          data?.view.steps[i]?.issueCount ? el("span", { class: "dot", title: "Needs attention" }) : null,
+        ),
+      ),
+    ),
+    id ? el("li", {}, el("button", { type: "button", onclick: () => go(`${base(id)}/review`) }, "Review")) : null,
+  );
+  const back = idx > 0 ? btn("Back", () => go(stepHref(id, steps[idx - 1].id))) : btn("Back", () => go(id ? `${base(id)}/review` : "#/"));
+  return el(
+    "div",
+    {},
+    el("p", { class: "muted" }, data ? data.view.property.name : "New property"),
+    nav,
+    body,
+    el("div", { class: "actions end" }, back, btn("Continue", onContinue, "primary")),
+  );
+}
+
+/** Problems with a button to fix each one; no button when the fix is on the page already showing. */
+function issueList(issues, id, currentStep) {
+  if (!issues.length) return null;
+  return el(
+    "div",
+    { class: "issues" },
+    issues.map((i) =>
+      el(
+        "div",
+        { class: "issue" },
+        el("span", {}, i.message, devChip(i.dev?.code)),
+        i.fix && i.fix.step !== currentStep ? btn(i.fix.label, () => go(stepHref(id, i.fix.step, i.fix.unitId)), "small") : null,
+      ),
+    ),
+  );
+}
+
+async function setupStep(id, stepId, params) {
+  if (stepId === "property") return propertyStep(id);
+  const data = await getProperty(id);
+  if (stepId === "units") return unitsStep(data);
+  if (stepId === "doors") return doorsStep(data);
+  if (stepId === "routes") return routesStep(data, params.get("unit"));
+  if (stepId === "hours") return hoursStep(data);
+  if (stepId === "verification") return verificationStep(data);
+  if (stepId === "services") return servicesStep(data);
+  return reviewScreen(id);
+}
+
+// Property ------------------------------------------------------------------
+
+function timezonePicker(current) {
+  const zones = [...state.meta.timeZones];
+  const select = el("select", {}, zones.map((z) => el("option", { value: z.id }, z.label)), el("option", { value: "__other" }, "Somewhere else (type it)"));
+  const other = input({ placeholder: "e.g. America/Denver or Eastern", hidden: true });
+  const set = (tz) => {
+    if (!tz) return;
+    if (!zones.some((z) => z.id === tz)) {
+      zones.push({ id: tz, label: tz });
+      select.insertBefore(el("option", { value: tz }, tz), select.lastChild);
+    }
+    select.value = tz;
+    other.hidden = true;
+  };
+  select.addEventListener("change", () => (other.hidden = select.value !== "__other"));
+  set(current);
+  return { node: el("div", {}, select, other), select, set, value: () => (select.value === "__other" ? other.value : select.value) };
+}
+
+async function propertyStep(id) {
+  const data = id ? await getProperty(id) : null;
+  const p = data?.view.property;
+  const name = input({ value: p?.name ?? "", placeholder: "e.g. 100 Alfred Way", autocomplete: "off" });
+  const address = input({ value: p?.address ?? "", placeholder: "Street, city and state", autocomplete: "off" });
+  const tz = timezonePicker(p?.timezone);
+  const tzNote = el("span", { class: "hint" });
+  const facts = textarea(p?.facts.join("\n") ?? "", 'e.g. "Parking is on the street."');
+  const errors = errorBox();
+  let tzTouched = !!id;
+  tz.select.addEventListener("change", () => (tzTouched = true));
+
+  const suggest = async () => {
+    if (tzTouched) return;
+    const s = await api("POST", "/api/timezone/suggest", { address: address.value });
+    tz.set(s.timezone);
+    tzNote.textContent =
+      s.basis === "address" ? `We guessed ${s.label} from the address. Change it if that's wrong.` : `We guessed ${s.label} from this computer's clock. Please check it.`;
+  };
+  address.addEventListener("change", suggest);
+  if (!id) suggest();
+
+  const save = action(async () => {
+    const body = { name: name.value.trim() || address.value.trim(), address: address.value, timezone: tz.value() };
+    const factList = lines(facts.value);
+    let propertyId = id;
+    if (!id) {
+      const created = await api("POST", "/api/properties", body);
+      propertyId = created.summary.id;
+      if (factList.length) await command(propertyId, "setPropertyDetails", { facts: factList });
+    } else {
+      await command(id, "setPropertyDetails", { ...body, facts: factList });
+    }
+    go(nextHref(propertyId, "property"));
+  }, errors);
+
+  return wizardShell(
+    data,
+    "property",
+    el(
+      "div",
+      {},
+      el("h1", {}, id ? "Property details" : "Let's set up your property"),
+      el("p", { class: "lead" }, "Start with the basics. You can change any of this later."),
+      el("div", { class: "card" }, [
+        field("Property address", address),
+        field("What should we call it?", name, "Leave blank to use the address."),
+        el("label", {}, "Timezone", tzNote, tz.node),
+        field("Anything visitors often ask about the building?", facts, "Optional. One fact per line. Tour Core only ever repeats what you write here."),
+        errors.node,
+      ]),
+    ),
+    save,
+  );
+}
+
+// Units ---------------------------------------------------------------------
+
+function unitsStep(data) {
+  const { view, summary } = data;
+  const id = summary.id;
+  return wizardShell(
+    data,
+    "units",
+    el(
+      "div",
+      {},
+      el("h1", {}, "Which units can people tour?"),
+      el("p", { class: "lead" }, "Add each unit a visitor can tour on their own. Descriptions are optional, and only what you write is ever shared with visitors."),
+      issueList(view.issues.filter((i) => i.fix?.step === "units"), id, "units"),
+      view.units.map((u) => unitCard(id, u)),
+      addUnitForm(id, view.units.length === 0),
+    ),
+    () => go(nextHref(id, "units")),
+  );
+}
+
+function unitCard(id, u) {
+  const card = el("div", { class: "card" });
+  const show = () =>
+    set(card, 
+      el(
+        "div",
+        { class: "card-head" },
+        el(
+          "div",
+          {},
+          el("h3", {}, u.name),
+          el("p", { class: u.summary ? "" : "muted" }, u.summary || "No description yet"),
+          u.facts.length ? el("ul", {}, u.facts.map((f) => el("li", {}, f))) : null,
+          el("p", { class: "muted" }, `Door: ${u.door?.name ?? "not set yet"}`),
+        ),
+        el(
+          "div",
+          { class: "actions" },
+          btn("Edit", edit, "small"),
+          btn(
+            "Remove",
+            action(async () => {
+              if (!confirm(`Remove ${u.name}? Its door and route will be removed too.`)) return;
+              await command(id, "removeUnit", { unitId: u.id });
+              rerender();
+            }),
+            "small",
+          ),
+        ),
+      ),
+      devBlock(u.dev),
+    );
+  const edit = () => {
+    const name = input({ value: u.name });
+    const renameDoor = el("input", { type: "checkbox", checked: true });
+    const doorLine = u.doorFollowsName ? el("label", { class: "checkline", hidden: true }, renameDoor, `Also rename "${u.door.name}" to match`) : null;
+    if (doorLine) name.addEventListener("input", () => (doorLine.hidden = name.value.trim() === u.name));
+    const summary = input({ value: u.summary, placeholder: "e.g. One-bedroom apartment on the first floor." });
+    const facts = textarea(u.facts.join("\n"), 'e.g. "Washer and dryer in the unit."');
+    const errors = errorBox();
+    const save = action(async () => {
+      if (name.value.trim() !== u.name) await command(id, "renameUnit", { unitId: u.id, name: name.value, alsoRenameDoor: !!doorLine && renameDoor.checked });
+      await command(id, "setUnitDetails", { unitId: u.id, summary: summary.value, facts: lines(facts.value) });
+      rerender();
+    }, errors);
+    set(card, 
+      el("h3", {}, `Edit ${u.name}`),
+      field("Unit name", name),
+      doorLine,
+      field("Short description", summary, "Optional. Visitors may be told this."),
+      field("Other facts visitors can ask about", facts, "Optional. One per line."),
+      errors.node,
+      el("div", { class: "actions" }, btn("Save", save, "primary"), btn("Cancel", show)),
+    );
+    name.focus();
+  };
+  show();
+  return card;
+}
+
+function addUnitForm(id, open) {
+  const card = el("div", { class: "card" });
+  const form = () => {
+    const name = input({ placeholder: "e.g. Unit 101" });
+    const summary = input({ placeholder: "e.g. One-bedroom apartment on the first floor." });
+    const facts = textarea("", 'e.g. "South-facing windows."');
+    const doorName = input({ placeholder: "Leave blank to use the unit name + \"Door\"" });
+    const errors = errorBox();
+    const save = action(async () => {
+      await command(id, "addUnit", { name: name.value, summary: summary.value, facts: lines(facts.value), doorName: doorName.value || undefined });
+      rerender();
+    }, errors);
+    set(card, 
+      el("h3", {}, "Add a unit"),
+      field("Unit name", name),
+      field("Short description", summary, "Optional."),
+      field("Other facts visitors can ask about", facts, "Optional. One per line."),
+      field("What's the door to this unit called?", doorName, "Optional."),
+      errors.node,
+      el("div", { class: "actions" }, btn("Add unit", save, "primary"), open ? null : btn("Cancel", closed)),
+    );
+    name.focus();
+  };
+  const closed = () => set(card, btn("+ Add a unit", form));
+  open ? form() : closed();
+  return card;
+}
+
+// Doors ---------------------------------------------------------------------
+
+function doorRow(id, door, extra) {
+  const row = el("div", { class: "card" });
+  const show = () =>
+    set(row, 
+      el(
+        "div",
+        { class: "card-head" },
+        el("div", {}, el("h3", {}, door.name), el("p", { class: "muted" }, door.unitName ? `${door.kindLabel} for ${door.unitName}` : door.kindLabel), devChip(door.id)),
+        el(
+          "div",
+          { class: "actions" },
+          btn("Rename", rename, "small"),
+          extra?.removable
+            ? btn(
+                "Remove",
+                action(async () => {
+                  if (!confirm(`Remove ${door.name}? Any route that uses it will need fixing.`)) return;
+                  await command(id, "removeDoor", { doorId: door.id });
+                  rerender();
+                }),
+                "small",
+              )
+            : null,
+        ),
+      ),
+    );
+  const rename = () => {
+    const name = input({ value: door.name });
+    const errors = errorBox();
+    set(row, 
+      field(`Rename ${door.name}`, name),
+      errors.node,
+      el(
+        "div",
+        { class: "actions" },
+        btn(
+          "Save",
+          action(async () => {
+            await command(id, "renameDoor", { doorId: door.id, name: name.value });
+            rerender();
+          }, errors),
+          "primary",
+        ),
+        btn("Cancel", show),
+      ),
+    );
+    name.focus();
+  };
+  show();
+  return row;
+}
+
+function doorsStep(data) {
+  const { view, summary } = data;
+  const id = summary.id;
+  const entrances = view.doors.filter((d) => d.kind === "ENTRANCE");
+  const main = entrances[0];
+  const others = view.doors.filter((d) => d.kind === "COMMON" || (d.kind === "ENTRANCE" && d !== main));
+
+  const entranceSection = main
+    ? doorRow(id, main, { removable: false })
+    : (() => {
+        const name = input({ value: "Main Entrance" });
+        const errors = errorBox();
+        return el(
+          "div",
+          { class: "card" },
+          field("What's the main entrance called?", name, "The door visitors use to get into the building."),
+          errors.node,
+          el(
+            "div",
+            { class: "actions" },
+            btn(
+              "Add entrance",
+              action(async () => {
+                await command(id, "addDoor", { name: name.value, kind: "ENTRANCE" });
+                rerender();
+              }, errors),
+              "primary",
+            ),
+          ),
+        );
+      })();
+
+  const unitDoors = view.units.map((u) => {
+    const door = view.doors.find((d) => d.id === u.door?.id);
+    if (door) return doorRow(id, door, { removable: false });
+    const name = input({ value: `${u.name} Door` });
+    const errors = errorBox();
+    return el(
+      "div",
+      { class: "card" },
+      field(`${u.name} doesn't have a door yet. What's it called?`, name),
+      errors.node,
+      btn(
+        "Add door",
+        action(async () => {
+          await command(id, "addDoor", { name: name.value, kind: "UNIT", unitId: u.id });
+          rerender();
+        }, errors),
+        "primary",
+      ),
+    );
+  });
+
+  const addOther = el("div", { class: "card" });
+  const openAdd = () => {
+    const name = input({ placeholder: "e.g. Stairwell Door" });
+    const kind = el("select", {}, el("option", { value: "COMMON" }, "Hallway or shared door"), el("option", { value: "ENTRANCE" }, "Another entrance"));
+    const errors = errorBox();
+    set(addOther, 
+      el("h3", {}, "Add another door"),
+      field("Door name", name),
+      field("What kind of door is it?", kind),
+      errors.node,
+      el(
+        "div",
+        { class: "actions" },
+        btn(
+          "Add door",
+          action(async () => {
+            await command(id, "addDoor", { name: name.value, kind: kind.value });
+            rerender();
+          }, errors),
+          "primary",
+        ),
+        btn("Cancel", closeAdd),
+      ),
+    );
+    name.focus();
+  };
+  const closeAdd = () => set(addOther, btn("+ Add another door", openAdd), el("p", { class: "hint" }, "Only needed if visitors pass through a hallway door, stairwell or second entrance."));
+  closeAdd();
+
+  return wizardShell(
+    data,
+    "doors",
+    el(
+      "div",
+      {},
+      el("h1", {}, "Doors"),
+      el("p", { class: "lead" }, "Name the doors a visitor might use. Tour Core never opens a door itself; it asks Durin, and only for doors on the visitor's route."),
+      issueList(view.issues.filter((i) => i.fix?.step === "doors"), id, "doors"),
+      el("h2", {}, "Main entrance"),
+      entranceSection,
+      view.units.length ? [el("h2", {}, "Unit doors"), unitDoors] : null,
+      el("h2", {}, "Other doors"),
+      others.map((d) => doorRow(id, d, { removable: d.removable })),
+      addOther,
+    ),
+    () => go(nextHref(id, "doors")),
+  );
+}
+
+// Routes --------------------------------------------------------------------
+
+function routeDiagram(names) {
+  return el(
+    "div",
+    { class: "route" },
+    names.map((n, i) => [i ? el("span", { class: "arrow", "aria-hidden": "true" }, "\u2193") : null, el("span", { class: "stop" }, n)]),
+  );
+}
+
+function routeCard(id, u, doors, focus) {
+  const card = el("div", { class: focus ? "card highlight" : "card" });
+  const nameOf = (doorId) => doors.find((d) => d.id === doorId)?.name ?? "(a door that no longer exists)";
+  const show = () =>
+    set(card, 
+      el("div", { class: "card-head" }, el("h3", {}, u.name), btn(u.route ? "Change route" : "Set route", editor, "small")),
+      u.route ? routeDiagram(u.route.doorNames) : el("p", { class: "muted" }, "No route yet."),
+      u.route?.directions ? el("p", { class: "muted" }, `Directions: ${u.route.directions}`) : null,
+      issueList(u.issues.filter((i) => i.fix?.step === "routes"), id, "routes"),
+    );
+  const editor = () => {
+    const order = [...(u.route?.doorIds ?? u.suggestedRoute)];
+    const directions = input({ value: u.route?.directions ?? "", placeholder: "e.g. straight ahead, first door on the left" });
+    const errors = errorBox();
+    const list = el("div", { class: "route-editor" });
+    const picker = el("select", { "aria-label": "Door to add" });
+    const move = (i, j) => {
+      [order[i], order[j]] = [order[j], order[i]];
+      draw();
+    };
+    const draw = () => {
+      set(list, 
+        order.length
+          ? order.map((doorId, i) =>
+              el(
+                "div",
+                { class: "stop-row" },
+                el("span", {}, `${i + 1}. ${nameOf(doorId)}`),
+                el("button", { type: "button", class: "small", "aria-label": "Move up", disabled: i === 0, onclick: () => move(i, i - 1) }, "\u2191"),
+                el("button", { type: "button", class: "small", "aria-label": "Move down", disabled: i === order.length - 1, onclick: () => move(i, i + 1) }, "\u2193"),
+                btn("Remove", () => (order.splice(i, 1), draw()), "small"),
+              ),
+            )
+          : el("p", { class: "muted" }, "No doors yet. Start with the entrance."),
+      );
+      set(picker, 
+        el("option", { value: "" }, "Choose a door to add..."),
+        doors.filter((d) => !order.includes(d.id)).map((d) => el("option", { value: d.id }, `${d.name} (${d.kindLabel.toLowerCase()})`)),
+      );
+    };
+    draw();
+    set(card, 
+      el("h3", {}, `Route for ${u.name}`),
+      el("p", { class: "muted" }, u.route ? "List the doors in the order the visitor walks through them." : "We filled in a suggested route. Change it if visitors go a different way."),
+      list,
+      el("div", { class: "row" }, picker, btn("Add door", () => picker.value && (order.push(picker.value), draw()))),
+      field("Directions from the entrance", directions, "Optional. Sent to the visitor when they come in."),
+      issueList(u.issues.filter((i) => i.fix?.step === "routes"), id, "routes"),
+      errors.node,
+      el(
+        "div",
+        { class: "actions" },
+        btn(
+          "Save route",
+          action(async () => {
+            await command(id, "setRoute", { unitId: u.id, doorIds: order, directions: directions.value });
+            rerender();
+          }, errors),
+          "primary",
+        ),
+        u.route ? btn("Cancel", show) : null,
+      ),
+    );
+  };
+  !u.route || focus ? editor() : show();
+  if (focus) setTimeout(() => card.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
+  return card;
+}
+
+function routesStep(data, focusUnit) {
+  const { view, summary } = data;
+  const id = summary.id;
+  return wizardShell(
+    data,
+    "routes",
+    el(
+      "div",
+      {},
+      el("h1", {}, "How does a visitor get to each unit?"),
+      el("p", { class: "lead" }, "For each unit, list the doors a visitor goes through, in order. During a tour, only these doors can open, and only during the visitor's time."),
+      view.units.length ? view.units.map((u) => routeCard(id, u, view.doors, u.id === focusUnit)) : el("p", { class: "muted" }, "Add a unit first."),
+    ),
+    () => go(nextHref(id, "routes")),
+  );
+}
+
+// Tour hours ----------------------------------------------------------------
+
+const DAYS = [["MON", "Mon"], ["TUE", "Tue"], ["WED", "Wed"], ["THU", "Thu"], ["FRI", "Fri"], ["SAT", "Sat"], ["SUN", "Sun"]];
+
+function fmtMinutes(n, zero = "None") {
+  if (n === 0) return zero;
+  const h = Math.floor(n / 60);
+  const m = n % 60;
+  return [h ? `${h} hour${h > 1 ? "s" : ""}` : "", m ? `${m} minutes` : ""].filter(Boolean).join(" ");
+}
+
+function minutesSelect(options, current, zero) {
+  const all = [...new Set([...options, current])].sort((a, b) => a - b);
+  return el("select", {}, all.map((n) => el("option", { value: String(n), selected: n === current }, fmtMinutes(n, zero))));
+}
+
+function hoursStep(data) {
+  const { view, summary } = data;
+  const id = summary.id;
+  const th = view.tourHours;
+  const boxes = DAYS.map(([code, label]) => ({ code, cb: el("input", { type: "checkbox", checked: th.days.includes(code) }), label }));
+  const start = el("input", { type: "time", value: th.start });
+  const end = el("input", { type: "time", value: th.end });
+  const length = minutesSelect([15, 20, 30, 45, 60, 90, 120], th.tourLengthMinutes);
+  const spacing = minutesSelect([15, 30, 45, 60, 90, 120, 180, 240], th.slotEveryMinutes);
+  const early = minutesSelect([0, 5, 10, 15, 20, 30, 45, 60], th.earlyArrivalMinutes, "No early entry");
+  const errors = errorBox();
+  const preset = (days, s, e) => {
+    boxes.forEach((b) => (b.cb.checked = days.includes(b.code)));
+    start.value = s;
+    end.value = e;
+  };
+
+  const save = action(async () => {
+    const res = await command(id, "setTourHours", {
+      days: boxes.filter((b) => b.cb.checked).map((b) => b.code),
+      start: start.value,
+      end: end.value,
+      tourLengthMinutes: Number(length.value),
+      slotEveryMinutes: Number(spacing.value),
+      earlyArrivalMinutes: Number(early.value),
+    });
+    const problems = res.view.issues.filter((i) => i.fix?.step === "hours");
+    if (problems.length) return rerender();
+    go(nextHref(id, "hours"));
+  }, errors);
+
+  return wizardShell(
+    data,
+    "hours",
+    el(
+      "div",
+      {},
+      el("h1", {}, "When can people tour?"),
+      el("p", { class: "lead" }, `Right now: ${th.daysLabel}, ${th.hoursLabel}. That's up to ${th.toursPerDay} tours a day.`),
+      issueList(view.issues.filter((i) => i.fix?.step === "hours"), id, "hours"),
+      el(
+        "div",
+        { class: "card" },
+        el("div", { class: "actions" }, btn("Weekdays, 9 AM to 5 PM", () => preset(["MON", "TUE", "WED", "THU", "FRI"], "09:00", "17:00"), "small"), btn("Every day, 10 AM to 6 PM", () => preset(DAYS.map((d) => d[0]), "10:00", "18:00"), "small")),
+        el("label", {}, "Days"),
+        el("div", { class: "days" }, boxes.map((b) => el("label", { class: "day" }, b.cb, b.label))),
+        el("div", { class: "row" }, field("First tour can start at", start), field("Last tour must be over by", end)),
+        el("div", { class: "row" }, field("Each tour lasts", length), field("A new tour can start every", spacing)),
+        field("Visitors can get in early by", early, "The doors work a little before the tour starts, in case someone arrives early."),
+        errors.node,
+      ),
+    ),
+    save,
+  );
+}
+
+// Verification --------------------------------------------------------------
+
+function verificationStep(data) {
+  const { view, summary } = data;
+  const id = summary.id;
+  let mode = view.verification.mode;
+  const choices = view.verification.options.map((o) => {
+    const radio = el("input", { type: "radio", name: "verification", value: o.mode, checked: o.mode === mode });
+    const node = el(
+      "label",
+      { class: `choice ${o.mode === mode ? "selected" : ""}` },
+      radio,
+      el("div", {}, el("strong", {}, o.title), o.recommended ? [" ", el("span", { class: "badge" }, "Recommended")] : null, el("p", { class: "muted" }, o.explanation)),
+    );
+    radio.addEventListener("change", () => {
+      mode = o.mode;
+      document.querySelectorAll(".choice").forEach((c) => c.classList.toggle("selected", c === node));
+    });
+    return node;
+  });
+  const days = el("input", { type: "number", min: "1", max: "365", value: String(view.verification.reuseForDays) });
+  const errors = errorBox();
+  const save = action(async () => {
+    await command(id, "setVerificationPolicy", { mode, reuseForDays: Number(days.value) });
+    go(nextHref(id, "verification"));
+  }, errors);
+  return wizardShell(
+    data,
+    "verification",
+    el(
+      "div",
+      {},
+      el("h1", {}, "How carefully do you want to check visitors?"),
+      el("p", { class: "lead" }, "Every visitor is checked before any door opens for them."),
+      issueList(view.issues.filter((i) => i.fix?.step === "verification"), id, "verification"),
+      choices,
+      el("div", { class: "card" }, field("How many days can a check be reused?", days, "A visitor who was already checked can book another tour within this many days without being checked again."), errors.node),
+    ),
+    save,
+  );
+}
+
+// Records and messages -------------------------------------------------------
+
+function servicesStep(data) {
+  const { view, summary } = data;
+  const id = summary.id;
+  const alertName = input({ value: view.operator.name });
+  const errors = errorBox();
+  const save = action(async () => {
+    await command(id, "setAlertContact", { name: alertName.value });
+    go(`${base(id)}/review`);
+  }, errors);
+  return wizardShell(
+    data,
+    "services",
+    el(
+      "div",
+      {},
+      el("h1", {}, "Records, messages and doors"),
+      el("p", { class: "lead" }, "For now everything runs as a safe demo. Real texting, record storage and door access come later."),
+      view.services.items.map((s) => el("div", { class: "card" }, el("h3", {}, s.title, " ", el("span", { class: "badge demo" }, "Demo")), el("p", { class: "muted" }, s.text), devBlock(s.dev))),
+      el("div", { class: "card" }, field("Who should we alert if a visitor needs help?", alertName, "For example, your leasing team or your own name."), errors.node),
+    ),
+    save,
+  );
+}
+
+// ------------------------------------------------------------------ review
+
+async function reviewScreen(id) {
+  const { view, summary } = await getProperty(id);
+  return el(
+    "div",
+    {},
+    el("p", { class: "muted" }, "Review your setup"),
+    el("h1", {}, view.property.name),
+    summary.saved && summary.unsavedChanges
+      ? el(
+          "div",
+          { class: "notice" },
+          "You have changes that haven't been checked yet. They'll be saved when you run the readiness check. ",
+          btn(
+            "Discard changes",
+            action(async () => {
+              if (!confirm("Discard your unsaved changes?")) return;
+              await api("POST", `/api/properties/${enc(id)}/discard`, {});
+              rerender();
+            }),
+            "link",
+          ),
+        )
+      : null,
+    view.issues.length ? [el("h2", {}, "Needs attention"), issueList(view.issues, id)] : null,
+    view.reviewCards.map((card) =>
+      el(
+        "div",
+        { class: "card" },
+        el("div", { class: "card-head" }, el("h3", {}, card.title), btn("Edit", () => go(stepHref(id, card.step, card.unitId)), "small")),
+        card.rows.map((r) => el("p", {}, r)),
+        card.route
+          ? el("div", {}, el("p", { class: "muted" }, "Route"), el("p", {}, card.route.text), btn("Edit route", () => go(stepHref(id, "routes", card.unitId)), "link"))
+          : null,
+      ),
+    ),
+    devBlock(view.dev),
+    el("div", { class: "actions end" }, btn("Back to setup", () => go(stepHref(id, "property"))), btn("Run readiness check", () => go(`${base(id)}/readiness`), "primary")),
+  );
+}
+
+// ------------------------------------------------------------------ readiness
+
+function readinessList(id, r) {
+  return el(
+    "div",
+    { class: "card" },
+    el(
+      "ul",
+      { class: "checks" },
+      r.checks.map((c) =>
+        el(
+          "li",
+          {},
+          el("div", { class: "check-line" }, mark(c.ok), el("strong", {}, c.label)),
+          c.problems.map((p) =>
+            el("div", { class: "problem" }, el("span", {}, p.message, devChip(p.dev?.code)), p.fix ? btn(p.fix.label, () => go(stepHref(id, p.fix.step, p.fix.unitId)), "small") : null),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+async function readinessScreen(id) {
+  const res = await api("POST", `/api/properties/${enc(id)}/readiness`, {});
+  const r = res.readiness;
+  return el(
+    "div",
+    {},
+    el("p", { class: "muted" }, res.summary.name),
+    el("h1", {}, "Checking your property"),
+    res.savedChanges ? el("p", { class: "muted" }, "Your changes were saved.") : null,
+    readinessList(id, r),
+    el("div", { class: r.passed ? "success" : "notice" }, r.headline),
+    el(
+      "div",
+      { class: "actions end" },
+      btn("Back to review", () => go(`${base(id)}/review`)),
+      r.passed ? btn("Run a practice tour", () => go(`${base(id)}/practice`), "primary") : btn("Check again", () => rerender(), "primary"),
+    ),
+  );
+}
+
+// ------------------------------------------------------------------ practice
+
+function checkItem(item) {
+  const outcome = item.ok ? item.outcome : item.detail ?? "This didn't work as expected.";
+  return el(
+    "li",
+    {},
+    el("div", { class: "check-line" }, mark(item.ok), el("div", {}, el("strong", {}, item.label), outcome ? el("span", { class: item.ok ? "outcome" : "outcome bad" }, outcome) : null, devChip(item.dev?.id))),
+  );
+}
+
+async function showPractice(container, id, p, summary) {
+  const groups = p.groups.map((g) => {
+    const list = el("ul", { class: "checks" });
+    const box = el(
+      "div",
+      { class: g.id === "safety" ? "card safety" : "card" },
+      el("h2", {}, g.title),
+      g.id === "safety" ? el("p", { class: "muted" }, "Tour Core checks every door request itself. Durin is only contacted when the answer is yes.") : null,
+      list,
+    );
+    return { g, list, box };
+  });
+  set(container, ...groups.map((x) => x.box));
+  for (const { g, list } of groups) {
+    for (const item of g.items) {
+      list.append(checkItem(item));
+      await sleep(140);
+    }
+  }
+  const next = p.passed
+    ? summary.published
+      ? btn("View property", () => go(`${base(id)}/published`), "primary")
+      : btn("Publish for demo", action(() => publish(id)), "primary")
+    : btn("Back to review", () => go(`${base(id)}/review`), "primary");
+  add(
+    container,
+    el("div", { class: p.passed ? "success" : "issues", role: "status" }, el("strong", {}, p.headline), p.failure ? el("p", {}, p.failure) : null),
+    p.recordsSaved
+      ? el(
+          "div",
+          { class: "card" },
+          el("p", {}, "Tour records saved."),
+          el("div", { class: "actions" }, btn("View records", () => go(`${base(id)}/history`)), downloadLink("Export records", `/api/properties/${enc(id)}/export/records.json`)),
+        )
+      : null,
+    p.messages.length
+      ? el(
+          "details",
+          {},
+          el("summary", {}, `See the ${p.messages.length} messages sent during the tour`),
+          p.messages.map((m) => el("div", { class: "message" }, el("span", { class: "who" }, `${m.time} \u00b7 ${m.to}`), m.body)),
+        )
+      : null,
+    devBlock(p.dev),
+    el("div", { class: "actions" }, next, btn("Run it again", () => rerender())),
+  );
+}
+
+async function practiceScreen(id) {
+  const { view, summary } = await getProperty(id);
+  const container = el("div", {});
+  const unitSelect = view.units.length > 1 ? el("select", {}, view.units.map((u) => el("option", { value: u.id }, u.name))) : null;
+  const start = action(async () => {
+    const res = await api("POST", `/api/properties/${enc(id)}/practice`, { unitId: unitSelect?.value });
+    if (res.readiness) {
+      set(container, el("div", { class: "notice" }, "A few things need fixing before a practice tour."), readinessList(id, res.readiness));
+      return;
+    }
+    await showPractice(container, id, res.practice, res.summary);
+  });
+  const unchecked = !summary.saved || summary.unsavedChanges;
+  return el(
+    "div",
+    {},
+    el("p", { class: "muted" }, summary.name),
+    el("h1", {}, "Practice tour"),
+    el("p", { class: "lead" }, "A pretend visitor named Pat takes a tour so you can watch every step. No real texts are sent and no real doors open."),
+    unchecked
+      ? el("div", { class: "notice" }, "Your latest changes need a readiness check first. ", btn("Run readiness check", () => go(`${base(id)}/readiness`), "link"))
+      : [unitSelect ? el("div", { class: "card" }, field("Which unit should Pat tour?", unitSelect)) : null, el("div", { class: "actions" }, btn("Start practice tour", start, "primary"))],
+    container,
+  );
+}
+
+// ------------------------------------------------------------------ published
+
+async function publishedScreen(id) {
+  const { summary: s } = await getProperty(id);
+  if (!s.published) {
+    return el(
+      "div",
+      {},
+      el("p", { class: "muted" }, s.name),
+      el("h1", {}, "Not published yet"),
+      el("p", {}, "This property hasn't been published for demo yet. It needs a passed readiness check and a passed practice tour first."),
+      el("div", { class: "actions" }, btn("Publish for demo", action(() => publish(id)), "primary"), btn("Back to review", () => go(`${base(id)}/review`))),
+    );
+  }
+  return el(
+    "div",
+    {},
+    el("p", { class: "muted" }, s.name),
+    el("h1", {}, "Your property is ready for demo."),
+    el("p", {}, "Status: ", el("span", { class: "badge good status-big" }, "PUBLISHED FOR DEMO")),
+    el(
+      "div",
+      { class: "notice" },
+      el("strong", {}, "This is a demo configuration."),
+      el("p", {}, "No production access system is connected. Messages appear on screen, tour records stay on this computer, and Durin runs in demo mode, so no real doors open."),
+    ),
+    devBlock(s.dev),
+    el(
+      "div",
+      { class: "actions" },
+      btn("View property", () => go(`${base(id)}/review`), "primary"),
+      btn("Run another practice tour", () => go(`${base(id)}/practice`)),
+      btn("Edit setup", () => go(stepHref(id, "property"))),
+      btn("View history", () => go(`${base(id)}/history`)),
+    ),
+  );
+}
+
+// ------------------------------------------------------------------ history
+
+async function historyScreen(id) {
+  const [h, { summary }] = await Promise.all([api("GET", `/api/properties/${enc(id)}/history`), getProperty(id)]);
+  if (!h.available) {
+    return el(
+      "div",
+      {},
+      el("p", { class: "muted" }, summary.name),
+      el("h1", {}, "Tour history"),
+      el("p", {}, "No tours yet. Run a practice tour to see what happens on a tour."),
+      el("div", { class: "actions" }, btn("Run a practice tour", () => go(`${base(id)}/practice`), "primary")),
+    );
+  }
+  return el(
+    "div",
+    {},
+    el("p", { class: "muted" }, summary.name),
+    el("h1", {}, "Tour history"),
+    el("p", { class: "lead" }, `Latest practice tour. ${h.ranAtLabel}`),
+    el(
+      "div",
+      { class: "card" },
+      el(
+        "ul",
+        { class: "checks history" },
+        h.entries.map((e) =>
+          el("li", {}, el("span", { class: "time" }, e.time), mark(e.tone === "good" ? true : e.tone === "blocked" ? false : null), el("span", {}, e.text, devChip(e.dev ? [e.dev.type, e.dev.code].filter(Boolean).join(" ") : ""))),
+        ),
+      ),
+    ),
+    el(
+      "div",
+      { class: "actions" },
+      downloadLink("Export records", `/api/properties/${enc(id)}/export/records.json`),
+      downloadLink("Download as spreadsheet", `/api/properties/${enc(id)}/export/history.csv`),
+      btn("Back", () => go(summary.published ? `${base(id)}/published` : "#/")),
+    ),
+    devBlock(h.dev),
+  );
+}

@@ -47,7 +47,7 @@ export const CHOICE_LABELS = {
     "document-check": "Full ID check",
   },
   messaging: { console: "Demo messaging (texts show on screen)", bland: "Real text messages" },
-  storage: { memory: "On this computer (demo storage)", "google-drive": "Google Drive" },
+  storage: { memory: "Demo records (kept on this computer)", "google-drive": "Google Drive" },
   access: { "durin-mock": "Durin demo mode (no real doors open)", durin: "Durin" },
 } as const;
 
@@ -95,7 +95,7 @@ export function createPropertySetup(input: {
   const timezone = input.timezone ? requireTimeZone(input.timezone) : inferTimeZone(address).timezone;
   return {
     schemaVersion: 1,
-    property: { id: uniqueId(`prop_${slugify(name)}`, input.existingPropertyIds ?? [], "prop_property"), name, address, timezone },
+    property: { id: uniqueId(`prop_${slugify(name)}`, input.existingPropertyIds ?? [], "prop_property"), name, address, timezone, facts: [] },
     operator: { name: SETUP_DEFAULTS.operatorName, contact: SETUP_DEFAULTS.operatorContact },
     doors: [],
     units: [],
@@ -111,12 +111,28 @@ export function createPropertySetup(input: {
 }
 
 /** The property id never changes after creation, even if the name does. */
-export function setPropertyDetails(draft: SetupDraft, input: { name?: string; address?: string; timezone?: string }): SetupDraft {
+export function setPropertyDetails(
+  draft: SetupDraft,
+  input: { name?: string; address?: string; timezone?: string; facts?: string[] },
+): SetupDraft {
   const next = clone(draft);
   if (input.name !== undefined) next.property.name = requireName(input.name, "PROPERTY_NAME_MISSING", "Please give the property a name.");
   if (input.address !== undefined) next.property.address = requireName(input.address, "ADDRESS_MISSING", "Please enter the property's address.");
   if (input.timezone !== undefined) next.property.timezone = requireTimeZone(input.timezone);
+  if (input.facts !== undefined) next.property.facts = cleanFacts(input.facts);
   return next;
+}
+
+/** Keeps operator wording as written; only trims and drops blanks. */
+function cleanFacts(facts: string[]): string[] {
+  const cleaned = facts.map((f) => f.trim()).filter(Boolean);
+  if (cleaned.length > 30) throw new SetupInputError("TOO_MANY_FACTS", "Please keep it to 30 facts or fewer.");
+  return [...new Set(cleaned)];
+}
+
+/** The door label setup suggests for a unit, e.g. "Unit 101" -> "Unit 101 Door". */
+export function defaultUnitDoorName(unitName: string): string {
+  return `${unitName.trim()} Door`;
 }
 
 export function setAlertContact(draft: SetupDraft, input: { name?: string; contact?: string }): SetupDraft {
@@ -164,23 +180,44 @@ export function removeDoor(draft: SetupDraft, doorId: string): SetupDraft {
   return next;
 }
 
-export function addUnit(draft: SetupDraft, input: { name: string; summary?: string }): { draft: SetupDraft; unit: Unit } {
+export function addUnit(
+  draft: SetupDraft,
+  input: { name: string; summary?: string; facts?: string[] },
+): { draft: SetupDraft; unit: Unit } {
   const name = requireName(input.name, "UNIT_NAME_MISSING", "Please give the unit a name.");
   if (draft.units.some((u) => u.name.toLowerCase() === name.toLowerCase())) {
     throw new SetupInputError("UNIT_NAME_TAKEN", `There's already a unit called "${name}".`);
   }
   const next = clone(draft);
-  const unit: Unit = { id: uniqueId(slugify(name), next.units.map((u) => u.id), "unit"), name, doorId: "", summary: input.summary?.trim() ?? "" };
+  const unit: Unit = {
+    id: uniqueId(slugify(name), next.units.map((u) => u.id), "unit"),
+    name,
+    doorId: "",
+    summary: input.summary?.trim() ?? "",
+    facts: cleanFacts(input.facts ?? []),
+  };
   next.units.push(unit);
   return { draft: next, unit };
 }
 
-export function renameUnit(draft: SetupDraft, unitId: string, name: string): SetupDraft {
+/** True when the unit's door still carries the label setup suggested, so it can safely follow a rename. */
+export function doorFollowsUnitName(draft: SetupDraft, unitId: string): boolean {
+  const unit = draft.units.find((u) => u.id === unitId);
+  const door = draft.doors.find((d) => d.id === unit?.doorId);
+  return !!unit && !!door && door.name === defaultUnitDoorName(unit.name);
+}
+
+/**
+ * Renames one unit. Its door is renamed too only when asked AND the door still
+ * has the suggested label; a door the operator named themselves is never touched.
+ */
+export function renameUnit(draft: SetupDraft, unitId: string, name: string, options: { alsoRenameDoor?: boolean } = {}): SetupDraft {
   const clean = requireName(name, "UNIT_NAME_MISSING", "Please give the unit a name.");
   if (draft.units.some((u) => u.id !== unitId && u.name.toLowerCase() === clean.toLowerCase())) {
     throw new SetupInputError("UNIT_NAME_TAKEN", `There's already a unit called "${clean}".`);
   }
-  const next = clone(draft);
+  const renameDoorToo = options.alsoRenameDoor === true && doorFollowsUnitName(draft, unitId);
+  let next = clone(draft);
   const unit = next.units.find((u) => u.id === unitId);
   if (!unit) throw new SetupInputError("UNIT_NOT_FOUND", "That unit isn't part of this property.");
   const old = unit.name;
@@ -188,7 +225,24 @@ export function renameUnit(draft: SetupDraft, unitId: string, name: string): Set
   for (const route of next.routes.filter((r) => r.unitId === unitId)) {
     for (const stop of route.stops) stop.guidance = stop.guidance.split(old).join(clean);
   }
+  if (renameDoorToo) next = renameDoor(next, unit.doorId, defaultUnitDoorName(clean));
   return next;
+}
+
+export function setUnitDetails(draft: SetupDraft, unitId: string, input: { summary?: string; facts?: string[] }): SetupDraft {
+  const next = clone(draft);
+  const unit = next.units.find((u) => u.id === unitId);
+  if (!unit) throw new SetupInputError("UNIT_NOT_FOUND", "That unit isn't part of this property.");
+  if (input.summary !== undefined) unit.summary = input.summary.trim();
+  if (input.facts !== undefined) unit.facts = cleanFacts(input.facts);
+  return next;
+}
+
+/** Entrance -> unit door, when both exist. A suggestion only; nothing is saved until setRoute. */
+export function suggestRoute(draft: SetupDraft, unitId: string): string[] {
+  const unit = draft.units.find((u) => u.id === unitId);
+  const entrance = draft.doors.find((d) => d.kind === "ENTRANCE");
+  return [entrance?.id, unit?.doorId].filter((id): id is string => !!id && draft.doors.some((d) => d.id === id));
 }
 
 /** Removes the unit, its route, and its own door. */
@@ -204,11 +258,7 @@ export function removeUnit(draft: SetupDraft, unitId: string): SetupDraft {
 }
 
 export function setUnitSummary(draft: SetupDraft, unitId: string, summary: string): SetupDraft {
-  const next = clone(draft);
-  const unit = next.units.find((u) => u.id === unitId);
-  if (!unit) throw new SetupInputError("UNIT_NOT_FOUND", "That unit isn't part of this property.");
-  unit.summary = summary.trim();
-  return next;
+  return setUnitDetails(draft, unitId, { summary });
 }
 
 // -------------------------------------------------------------------- routes

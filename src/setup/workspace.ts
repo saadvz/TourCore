@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { auditToCsv } from "../audit/audit";
 import { TourCoreConfigSchema, TourCoreConfigShape, validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
@@ -52,6 +52,7 @@ export function defaultWorkspaceRoot(): string {
  * file is the same canonical TourCoreConfig any setup surface writes.
  *   <root>/properties/<propertyId>/tourcore.config.json
  *   <root>/properties/<propertyId>/status.json
+ *   <root>/properties/<propertyId>/draft.json            (unsaved changes, if any)
  *   <root>/properties/<propertyId>/practice-tours/<timestamp>/{tour-export.json,audit.csv}
  */
 export class PropertyWorkspace {
@@ -102,7 +103,62 @@ export class PropertyWorkspace {
     mkdirSync(this.dir(id), { recursive: true });
     writeFileSync(this.configPath(id), JSON.stringify(config, null, 2) + "\n");
     this.writeState(state);
+    this.discardDraft(id);
     return { config, state };
+  }
+
+  // ------------------------------------------------ work-in-progress drafts
+
+  /** Every property folder with a saved setup or an unsaved draft. */
+  propertyIds(): string[] {
+    const dir = join(this.root, "properties");
+    if (!existsSync(dir)) return [];
+    return readdirSync(dir, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && /^[a-z0-9_]+$/.test(e.name))
+      .filter((e) => existsSync(join(dir, e.name, "tourcore.config.json")) || existsSync(join(dir, e.name, "draft.json")))
+      .map((e) => e.name);
+  }
+
+  loadDraft(propertyId: string): TourCoreConfig | undefined {
+    const path = this.draftPath(propertyId);
+    if (!existsSync(path)) return undefined;
+    const parsed = TourCoreConfigShape.safeParse(JSON.parse(readFileSync(path, "utf8")));
+    return parsed.success ? parsed.data : undefined;
+  }
+
+  /** Unfinished setups may be invalid; they're kept apart from the saved setup until they pass validation. */
+  saveDraft(draft: TourCoreConfig): void {
+    const id = draft.property.id;
+    mkdirSync(this.dir(id), { recursive: true });
+    writeFileSync(this.draftPath(id), JSON.stringify(draft, null, 2) + "\n");
+  }
+
+  discardDraft(propertyId: string): void {
+    rmSync(this.draftPath(propertyId), { force: true });
+    if (!this.has(propertyId)) rmSync(this.dir(propertyId), { recursive: true, force: true });
+  }
+
+  /** The copy to edit: unsaved changes if there are any, otherwise the saved setup. */
+  openDraft(propertyId: string): { draft: TourCoreConfig; unsavedChanges: boolean } {
+    const draft = this.loadDraft(propertyId);
+    if (!this.has(propertyId)) {
+      if (!draft) throw new SetupInputError("PROPERTY_NOT_FOUND", "I couldn't find that property.");
+      return { draft, unsavedChanges: true };
+    }
+    const saved = this.load(propertyId);
+    if (!draft) return { draft: saved.config, unsavedChanges: false };
+    return { draft, unsavedChanges: configHash(draft) !== saved.state.configHash };
+  }
+
+  /** Latest practice tour records as downloadable text. */
+  exportLatest(propertyId: string): { json: string; csv: string } | undefined {
+    const latest = this.latestPracticeTour(propertyId);
+    if (!latest) return undefined;
+    return { json: JSON.stringify(latest.bundle, null, 2) + "\n", csv: auditToCsv(latest.bundle.auditEvents) };
+  }
+
+  private draftPath(propertyId: string): string {
+    return join(this.dir(propertyId), "draft.json");
   }
 
   recordReadiness(propertyId: string, result: ReadinessResult): PropertyState {

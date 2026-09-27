@@ -9,27 +9,46 @@ import type { DurinAccessAdapter } from "../durin/DurinAccessAdapter";
 import type { ExportBundle } from "../export/exportBundle";
 import type { Messenger } from "../messaging/Messenger";
 
+export type DryTourGroup = "journey" | "safety" | "wrapup";
+
+export interface DryTourCheck {
+  /** Stable id, e.g. "early_arrival", "wrong_door". */
+  id: string;
+  group: DryTourGroup;
+  /** What happened, e.g. "Visitor tries Unit 102 Door". */
+  label: string;
+  /** What Tour Core did, e.g. "Access correctly denied before Durin was contacted". */
+  outcome?: string;
+  ok: boolean;
+  /** Plain-language reason when not ok. */
+  detail?: string;
+}
+
+export interface DryTourMessage {
+  time: string;
+  audience: "PROSPECT" | "OPERATOR";
+  body: string;
+}
+
 export type DryTourEvent =
   | { kind: "stage"; title: string }
   | { kind: "moment"; time: string; text: string }
   | { kind: "text"; audience: "PROSPECT" | "OPERATOR"; body: string }
-  | { kind: "check"; ok: boolean; label: string; detail?: string }
+  | ({ kind: "check" } & DryTourCheck)
   /** Technical adapter output, for dev mode. */
   | { kind: "dev"; line: string };
-
-export interface DryTourCheck {
-  label: string;
-  ok: boolean;
-  detail?: string;
-}
 
 export interface DryTourResult {
   passed: boolean;
   ranAt: string;
+  unitId?: string;
   checks: DryTourCheck[];
   /** Plain-language reason when the practice tour stopped early. */
   failure?: string;
   audit: AuditEvent[];
+  messages?: DryTourMessage[];
+  /** Mock Durin output and errors, for dev mode only. */
+  devLines?: string[];
   bundle?: ExportBundle;
 }
 
@@ -40,7 +59,7 @@ export interface DryTourOptions {
   onEvent?: (event: DryTourEvent) => void | Promise<void>;
 }
 
-const PRACTICE_VISITOR = { name: "Pat Practice", phone: "+1 555 019 9999" };
+export const PRACTICE_VISITOR = { name: "Pat Practice", phone: "+1 555 019 9999" };
 
 class StopPractice extends Error {}
 
@@ -50,13 +69,10 @@ class StopPractice extends Error {}
  */
 export async function runDryTour(input: TourCoreConfig, options: DryTourOptions = {}): Promise<DryTourResult> {
   const realNow = options.now ?? new Date();
-  const emit = async (e: DryTourEvent) => options.onEvent?.(e);
   const checks: DryTourCheck[] = [];
-  const check = async (ok: boolean, label: string, detail?: string) => {
-    checks.push({ label, ok, ...(detail ? { detail } : {}) });
-    await emit({ kind: "check", ok, label, ...(detail ? { detail } : {}) });
-    if (!ok) throw new StopPractice(detail ?? label);
-  };
+  const messages: DryTourMessage[] = [];
+  const devLines: string[] = [];
+  const emit = async (e: DryTourEvent) => options.onEvent?.(e);
 
   const parsed = TourCoreConfigSchema.safeParse(input);
   if (!parsed.success) {
@@ -64,64 +80,80 @@ export async function runDryTour(input: TourCoreConfig, options: DryTourOptions 
   }
   const config = parsed.data;
   const tz = config.property.timezone;
-  const unit = config.units.find((u) => u.id === (options.unitId ?? config.units[0]?.id))!;
+  const unit = config.units.find((u) => u.id === (options.unitId ?? config.units[0]?.id)) ?? config.units[0]!;
   const route = config.routes.find((r) => r.unitId === unit.id)!;
-  const doorName = (id: string) => config.doors.find((d) => d.id === id)?.name ?? "a door that isn't on file";
+  const doorName = (id: string) => config.doors.find((d) => d.id === id)?.name ?? "a door that isn't on this tour";
 
   const day = nextTourDay(config, realNow);
   const slot = slotsOn(config, day).find((s) => s.start > realNow)!;
   const clock = new SimulatedClock(new Date(slot.start.getTime() - 3 * 60 * 60_000));
-  const at = (text: string) => emit({ kind: "moment", time: formatTime(clock.now(), tz), text });
+  const now = () => formatTime(clock.now(), tz);
+  const at = (text: string) => emit({ kind: "moment", time: now(), text });
+
+  const check = async (c: Omit<DryTourCheck, "ok" | "detail">, ok: boolean, detail?: string) => {
+    const entry: DryTourCheck = { ...c, ok, ...(!ok && detail ? { detail } : {}) };
+    checks.push(entry);
+    await emit({ kind: "check", ...entry });
+    if (!ok) throw new StopPractice(detail ?? `${c.label} didn't work as expected.`);
+  };
 
   const pending: DryTourEvent[] = [];
   const messenger: Messenger = {
     channel: createMessenger(config, () => {}).channel,
     async send(message) {
+      messages.push({ time: now(), audience: message.audience, body: message.body });
       pending.push({ kind: "text", audience: message.audience, body: message.body });
     },
   };
   const flush = async () => {
     for (const e of pending.splice(0)) await emit(e);
   };
-  const durin = countCalls(createDurin(config, clock, (line) => pending.push({ kind: "dev", line: line.trim() })));
+  const durin = countCalls(
+    createDurin(config, clock, (line) => {
+      devLines.push(line.trim());
+      pending.push({ kind: "dev", line: line.trim() });
+    }),
+  );
   const core = new TourCore({ config, clock, messenger, durin, store: createStore(config), verification: createVerificationProvider(config) });
 
   try {
-    await emit({ kind: "stage", title: "Inquiry" });
+    await emit({ kind: "stage", title: "The visitor's journey" });
     await at(`${PRACTICE_VISITOR.name} texts: "Hi! Can I tour ${unit.name}?"`);
     const { prospect, reservation: inquiry } = await core.startInquiry({ ...PRACTICE_VISITOR, unitId: unit.id });
     await core.recordInbound(prospect.id, inquiry.id, `Hi! Can I tour ${unit.name}?`);
     await flush();
-    await check(inquiry.status === "INQUIRY", `Visitor asked about ${unit.name}`);
+    await check({ id: "inquiry", group: "journey", label: "Inquiry received" }, inquiry.status === "INQUIRY");
 
-    await emit({ kind: "stage", title: "Reservation" });
     await at(`Visitor picks ${slot.label} on ${formatLocalDate(day, tz)}`);
     let reservation = await core.reserveSlot(inquiry.id, slot.start.toISOString());
     await flush();
-    await check(reservation.status === "AWAITING_CONSENT", `Tour booked for ${slot.label}`);
+    await check(
+      { id: "reserved", group: "journey", label: "Tour reserved", outcome: `${slot.label}, ${formatLocalDate(day, tz)}` },
+      reservation.status === "AWAITING_CONSENT",
+    );
     const request = (doorId: string) => core.requestAccess({ reservationId: reservation.id, prospectId: prospect.id, doorId });
 
-    await emit({ kind: "stage", title: "Consent" });
     await at('Visitor replies "YES"');
     reservation = await core.recordConsent(reservation.id, true);
     await flush();
-    await check(!!reservation.consentId, "Permission to text and keep records was recorded");
+    await check({ id: "consent", group: "journey", label: "Consent recorded" }, !!reservation.consentId);
 
-    await emit({ kind: "stage", title: "Verification" });
     if (reservation.status === "AWAITING_VERIFICATION") {
       await at("Visitor fills out the identity form");
       clock.advanceMinutes(2);
       const [first = "Pat", last = "Practice"] = PRACTICE_VISITOR.name.split(" ");
       reservation = await core.submitVerification(reservation.id, {
-        responseId: `practice_form_${Date.now()}`,
+        responseId: `practice_form_${realNow.getTime()}`,
         submittedAt: clock.now().toISOString(),
         answers: { governmentFirstName: first, governmentLastName: last, email: "pat.practice@example.com", phone: PRACTICE_VISITOR.phone },
       });
     }
     await flush();
-    await check(reservation.status === "READY", "Visitor is checked and the tour is ready");
+    const identityLabel = config.verificationMode === "mock" ? "Identity check skipped (practice verification)" : "Identity form completed";
+    await check({ id: "identity", group: "journey", label: identityLabel }, !!reservation.verificationId);
+    await check({ id: "ready", group: "journey", label: "Reservation ready" }, reservation.status === "READY");
 
-    await emit({ kind: "stage", title: "Arrival" });
+    await emit({ kind: "stage", title: "Safety test" });
     const entranceId = route.stops[0]!.doorId;
     clock.set(new Date(Date.parse(reservation.windowStart!) - 20 * 60_000));
     await at(`Visitor shows up early and asks for ${doorName(entranceId)}`);
@@ -129,31 +161,47 @@ export async function runDryTour(input: TourCoreConfig, options: DryTourOptions 
     const early = await request(entranceId);
     await flush();
     await check(
+      { id: "early_arrival", group: "safety", label: "Visitor arrives too early", outcome: "Access correctly denied" },
       !early.decision.allowed && durin.requestCount === before,
-      `Too early: ${doorName(entranceId)} stayed locked, and Durin was never asked`,
-      early.decision.allowed ? "The door opened before the tour window." : undefined,
+      "The door opened before the tour window.",
     );
 
     clock.set(new Date(slot.start));
     await at(`Visitor arrives on time and asks for ${doorName(entranceId)}`);
     const entrance = await request(entranceId);
     await flush();
-    await check(entrance.decision.allowed && !!entrance.grant, `Entrance access: ${doorName(entranceId)} opened through Durin`, entrance.decision.allowed ? undefined : entrance.decision.reason);
+    await check(
+      { id: "entrance", group: "safety", label: "Visitor arrives on time", outcome: "Entrance access approved" },
+      entrance.decision.allowed && !!entrance.grant,
+      `${doorName(entranceId)} didn't open for a visitor who was on time.`,
+    );
 
     before = durin.requestCount;
     const retry = await request(entranceId);
-    await check(retry.decision.allowed && durin.requestCount === before, "A repeated request didn't create a second door grant");
+    await check(
+      { id: "duplicate", group: "safety", label: "The same request is sent twice", outcome: "No duplicate access was created" },
+      retry.decision.allowed && durin.requestCount === before,
+      "A repeated request created a second door grant.",
+    );
 
-    await emit({ kind: "stage", title: "Unit access and tour guidance" });
-    for (const stop of route.stops.slice(1)) {
+    for (const [i, stop] of route.stops.slice(1).entries()) {
       clock.advanceMinutes(2);
+      const isUnitDoor = stop.doorId === unit.doorId;
       await at(`Visitor asks for ${doorName(stop.doorId)}`);
       const out = await request(stop.doorId);
       await flush();
-      await check(out.decision.allowed && !!out.grant, `${doorName(stop.doorId)} opened, and the visitor got directions`, out.decision.allowed ? undefined : out.decision.reason);
+      await check(
+        {
+          id: isUnitDoor ? "unit_door" : `route_door_${i + 1}`,
+          group: "safety",
+          label: isUnitDoor ? `Visitor enters ${unit.name}` : `Visitor reaches ${doorName(stop.doorId)}`,
+          outcome: "Access approved",
+        },
+        out.decision.allowed && !!out.grant,
+        `${doorName(stop.doorId)} didn't open even though it's on the route.`,
+      );
     }
 
-    await emit({ kind: "stage", title: "Safety check" });
     const offRoute = config.doors.find((d) => !route.stops.some((s) => s.doorId === d.id))?.id ?? "practice_door_not_on_file";
     clock.advanceMinutes(5);
     await at(`Visitor tries ${doorName(offRoute)}, which isn't on this tour`);
@@ -161,30 +209,39 @@ export async function runDryTour(input: TourCoreConfig, options: DryTourOptions 
     const wrong = await request(offRoute);
     await flush();
     await check(
+      { id: "wrong_door", group: "safety", label: `Visitor tries ${doorName(offRoute)}`, outcome: "Access correctly denied before Durin was contacted" },
       !wrong.decision.allowed && wrong.decision.code === "DENY_WRONG_ROUTE" && durin.requestCount === before,
-      `${doorName(offRoute)} stayed locked. Tour Core said no before Durin was ever asked`,
-      wrong.decision.allowed ? "A door outside the route opened." : undefined,
+      "A door outside the route was not blocked correctly.",
     );
 
-    await emit({ kind: "stage", title: "Completion and follow-up" });
+    await emit({ kind: "stage", title: "Finishing up" });
     clock.set(new Date(slot.start.getTime() + Math.floor(config.tourHours.tourLengthMinutes * 0.75) * 60_000));
     await at("Visitor finishes the tour");
     const activeBefore = (await core.listGrants(reservation.id)).filter((g) => g.status === "ACTIVE").length;
     reservation = await core.completeTour(reservation.id);
     await flush();
     const stillActive = (await core.listGrants(reservation.id)).filter((g) => g.status === "ACTIVE").length;
-    await check(reservation.status === "COMPLETED" && activeBefore > 0 && stillActive === 0, "Tour completed and every door was locked again");
+    await check({ id: "completed", group: "wrapup", label: "Tour completed" }, reservation.status === "COMPLETED");
+    await check(
+      { id: "revoked", group: "wrapup", label: "Access revoked", outcome: "Every door is locked again" },
+      activeBefore > 0 && stillActive === 0,
+      "Some doors were still open after the tour.",
+    );
     const audit = await core.auditTrail();
-    await check(audit.some((e) => e.type === "FOLLOW_UP_SENT"), "Follow-up message sent");
+    await check({ id: "follow_up", group: "wrapup", label: "Follow-up sent" }, audit.some((e) => e.type === "FOLLOW_UP_SENT"));
 
     const bundle = await core.exportRecords();
-    await check(bundle.auditEvents.length === audit.length, `Tour history saved (${audit.length} entries)`);
-    return { passed: true, ranAt: realNow.toISOString(), checks, audit, bundle };
+    await check({ id: "records", group: "wrapup", label: "Tour records saved" }, bundle.auditEvents.length === audit.length);
+    return { passed: true, ranAt: realNow.toISOString(), unitId: unit.id, checks, audit, messages, devLines, bundle };
   } catch (err) {
     await flush();
     const failure = err instanceof StopPractice ? err.message : "Something unexpected stopped the practice tour.";
-    if (!(err instanceof StopPractice)) await emit({ kind: "dev", line: String(err instanceof Error ? err.stack : err) });
-    return { passed: false, ranAt: realNow.toISOString(), checks, failure, audit: await core.auditTrail() };
+    if (!(err instanceof StopPractice)) {
+      const line = String(err instanceof Error ? err.stack : err);
+      devLines.push(line);
+      await emit({ kind: "dev", line });
+    }
+    return { passed: false, ranAt: realNow.toISOString(), unitId: unit.id, checks, failure, audit: await core.auditTrail(), messages, devLines };
   }
 }
 

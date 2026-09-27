@@ -12,6 +12,10 @@ export {
   renameUnit,
   removeUnit,
   setUnitSummary,
+  setUnitDetails,
+  suggestRoute,
+  doorFollowsUnitName,
+  defaultUnitDoorName,
   addDoor,
   renameDoor,
   removeDoor,
@@ -39,5 +43,8 @@ export function publishDemoProperty(workspace: PropertyWorkspace, propertyId: st
   return workspace.publishDemoProperty(propertyId, now);
 }
 export { parseDays, parseTimeOfDay, parseMinutes, parseChoiceList, resolveTimeZone, inferTimeZone } from "./parse";
+export { SETUP_COMMANDS, applySetupCommand, type SetupCommandName } from "./commands";
+export { draftView, readinessView, dryTourView, propertySummary, fixFor, SETUP_STEPS, COMMON_TIME_ZONES, type DraftView, type SetupStep } from "./presenters";
+export { describeHistory, type HistoryEntry } from "../audit/describe";
 export { validateConfig } from "../config/tourCoreConfig";
 export type { ConfigIssue, ConfigSection } from "../config/validateConfig";

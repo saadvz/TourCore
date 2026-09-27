@@ -6,6 +6,7 @@ import {
   CHOICE_LABELS,
   createPropertySetup,
   describeDays,
+  describeHistory,
   describeInterval,
   describeMinutes,
   inferTimeZone,
@@ -425,7 +426,8 @@ async function practiceFlow(id: string): Promise<boolean> {
 
   if (result.passed) {
     io.say(green(bold("\nPractice tour passed.")) + " Every step worked and every safety check held.");
-    if (saved.dryTour?.recordsFolder) io.say(dim(`The tour's history was saved in ${saved.dryTour.recordsFolder}`));
+    io.say(dim('Tour records saved. Choose "View audit/export" to see them.'));
+    if (DEV && saved.dryTour?.recordsFolder) io.say(dim(`(dev) ${saved.dryTour.recordsFolder}`));
   } else {
     io.say(red(`\nThe practice tour stopped: ${result.failure}`));
   }
@@ -448,7 +450,7 @@ async function renderPracticeEvent(e: DryTourEvent, operatorName: string): Promi
       break;
     }
     case "check":
-      io.say(`  ${e.ok ? OK : BAD} ${e.label}${e.detail && !e.ok ? ` (${e.detail})` : ""}`);
+      io.say(`  ${e.ok ? OK : BAD} ${e.label}${e.outcome ? `: ${e.outcome}` : ""}${e.detail && !e.ok ? ` (${e.detail})` : ""}`);
       break;
     case "dev":
       if (DEV) io.say(`            ${dim(e.line)}`);
@@ -481,8 +483,16 @@ function auditFlow(id: string): void {
   }
   const tz = config.property.timezone;
   io.say(bold(`\nHistory of the latest practice tour (${formatDay(new Date(latest.bundle.exportedAt), tz)})`));
-  io.say(formatAudit(latest.bundle.auditEvents, tz));
-  io.say(dim(`\nSaved copies (the full record and a spreadsheet file) are in:\n  ${latest.folder}`));
+  if (DEV) {
+    io.say(formatAudit(latest.bundle.auditEvents, tz));
+    io.say(dim(`\n(dev) ${latest.folder}`));
+    return;
+  }
+  for (const entry of describeHistory(latest.bundle.auditEvents, { ...latest.bundle, operatorName: config.operator.name }, tz)) {
+    const mark = entry.tone === "blocked" ? red("\u2717") : entry.tone === "good" ? OK : " ";
+    io.say(`  ${yellow(entry.time.padStart(8))}  ${mark} ${entry.text}`);
+  }
+  io.say(dim("\nTour records saved. Open the browser setup (npm run setup) to download them."));
 }
 
 main()

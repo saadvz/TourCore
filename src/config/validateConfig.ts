@@ -16,6 +16,8 @@ export interface ConfigIssue {
   unitId?: string;
 }
 
+export const MAX_FACT_LENGTH = 300;
+
 export const POLICY_LIMITS = {
   tourLengthMinutes: { min: 15, max: 240 },
   slotEveryMinutes: { min: 15, max: 480 },
@@ -42,6 +44,8 @@ export function semanticIssues(cfg: TourCoreConfig): ConfigIssue[] {
     add("property", "TIMEZONE_INVALID", `We don't recognize the time zone "${cfg.property.timezone}". Try something like America/New_York.`);
   }
   if (!cfg.operator.name.trim()) add("property", "OPERATOR_MISSING", "Tell us who should get alerts if a visitor needs help.");
+  const allFacts = [...cfg.property.facts, ...cfg.units.flatMap((u) => [u.summary, ...u.facts])];
+  if (allFacts.some((f) => f.length > MAX_FACT_LENGTH)) add("units", "FACT_TOO_LONG", `Keep each description or fact under ${MAX_FACT_LENGTH} characters.`);
 
   // Units and doors
   for (const id of duplicates(cfg.doors.map((d) => d.id))) add("units", "DUPLICATE_DOOR_ID", `Two doors are labeled "${id}". Give each door its own name.`);
@@ -63,7 +67,7 @@ export function semanticIssues(cfg: TourCoreConfig): ConfigIssue[] {
     }
     const door = doorById.get(unit.doorId);
     if (!door) add("units", "UNIT_DOOR_UNKNOWN", `${label} is linked to a door that no longer exists.`);
-    else if (door.kind !== "UNIT") add("units", "UNIT_DOOR_IS_ENTRANCE", `${label}'s door is set to an entrance. Give the unit its own door.`);
+    else if (door.kind !== "UNIT") add("units", "UNIT_DOOR_NOT_UNIT", `${label} is linked to ${door.name}, which isn't a unit door. Give the unit its own door.`);
     unitDoorOwners.set(unit.doorId, [...(unitDoorOwners.get(unit.doorId) ?? []), label]);
   }
   currentUnit = undefined;
