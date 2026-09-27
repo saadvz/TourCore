@@ -108,6 +108,14 @@ function sentence(
       return blocked(`The door system had a problem during ${c.name}'s tour, so the tour was paused.`);
     case "OPERATOR_NOTIFIED":
       return info(`${c.team} was alerted: ${e.detail}`);
+    case "QUESTION_ANSWERED":
+      return good(`${c.name} asked "${e.detail}" and got an answer from your approved facts.`);
+    case "QUESTION_UNANSWERED":
+      return blocked(`${c.name} asked "${e.detail}". There was no approved answer, so it was flagged for your team.`);
+    case "HELP_REQUESTED":
+      return blocked(`${c.name} asked for help${e.detail ? ` near ${e.detail}` : ""}.`);
+    case "FOLLOW_UP_RESPONSE":
+      return e.detail === "yes" ? good(`${c.name} would like someone to follow up.`) : info(`${c.name} doesn't need a follow-up.`);
     default:
       return info("Something happened on this tour.");
   }

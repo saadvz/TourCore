@@ -125,6 +125,10 @@ export const AuditEventTypeSchema = z.enum([
   "RESERVATION_RESUMED",
   "PROVIDER_FAILURE",
   "OPERATOR_NOTIFIED",
+  "QUESTION_ANSWERED",
+  "QUESTION_UNANSWERED",
+  "HELP_REQUESTED",
+  "FOLLOW_UP_RESPONSE",
 ]);
 export type AuditEventType = z.infer<typeof AuditEventTypeSchema>;
 

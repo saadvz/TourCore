@@ -132,18 +132,63 @@ describe("browser setup", () => {
     await app.call("POST", `/api/properties/${id}/practice`, {});
     await app.call("POST", `/api/properties/${id}/publish`, {});
 
+    // A valid edit is saved immediately, which takes the property back to draft until it's checked again.
     const edited = await app.cmd(id, "renameUnit", { unitId: "unit_102", name: "Unit 202", alsoRenameDoor: true });
-    expect(edited.body.summary).toMatchObject({ unsavedChanges: true, published: true });
+    expect(edited.body.summary).toMatchObject({ unsavedChanges: false, published: false, status: "DRAFT", save: { state: "saved", label: "All changes saved" } });
     expect(edited.body.view.units[1]).toMatchObject({ name: "Unit 202", door: { name: "Unit 202 Door" } });
-
-    const blockedPractice = await app.call("POST", `/api/properties/${id}/practice`, {});
-    expect(blockedPractice.status).toBe(409);
 
     await app.call("POST", `/api/properties/${id}/readiness`, {});
     const publish = await app.call("POST", `/api/properties/${id}/publish`, {});
     expect(publish.body.published).toBe(false);
     expect(publish.body.blockers).toEqual([{ message: "The setup changed after the last practice tour. Please run it again.", next: { action: "practice", label: "Run a practice tour" } }]);
-    expect(publish.body.summary.status).toBe("DRAFT");
+
+    // An edit with problems is kept as a draft; the saved setup is untouched and practice waits for a fix.
+    const broken = await app.cmd(id, "setRoute", { unitId: "unit_101", doorIds: ["unit_101_door"] });
+    expect(broken.body.summary.save).toEqual({ state: "draft", label: "Changes kept as a draft until 1 problem is fixed" });
+    expect((await app.call("POST", `/api/properties/${id}/practice`, {})).status).toBe(409);
+  });
+
+  it("runs a visitor demo from the phone while the operator watches, then keeps it in history", async () => {
+    const app = await startApp();
+    const { id } = await setUpAlfredWay(app);
+    await app.call("POST", `/api/properties/${id}/readiness`, {});
+    const started = await app.call("POST", `/api/properties/${id}/visitor-demos`, {});
+    expect(started.body.visitorUrl).toBe(`/visitor?s=${started.body.sessionId}`);
+    expect((await app.call("GET", started.body.visitorUrl)).text).toContain("Visitor demo");
+
+    const sid = started.body.sessionId as string;
+    const tap = async (action: string, input: unknown = {}) => (await app.call("POST", `/api/visitor-demos/${sid}/actions/${action}`, { input })).body.visitor;
+    await tap("begin", { name: "Pat Smith", phone: "(555) 010-2000" });
+    let phone = await tap("chooseUnit", { unitId: "unit_101" });
+    phone = await tap("chooseTime", phone.choices[0].input);
+    await tap("consent", { agree: true });
+    phone = await tap("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: "555-010-2000" });
+    if (phone.demoControls.some((c: { action: string }) => c.action === "demoSkipAhead")) await tap("demoSkipAhead");
+    phone = await tap("arrive");
+    phone = await tap("demoWrongDoor");
+    expect(phone.thread.at(-1).text).toBe("Demo safety check: Tour Core refused this door and never contacted Durin.");
+    expect(phone.dev).toBeUndefined();
+
+    const live = await app.call("GET", `/api/visitor-demos/${sid}/live`);
+    expect(live.body.live).toMatchObject({ visitorName: "Pat Smith", unitName: "Unit 101", status: "Touring" });
+    expect(live.text).not.toMatch(/DENY_|MockDurin|"dev"/);
+    expect(live.body.live.recent.map((e: { text: string }) => e.text)).toContain("Access to Unit 102 Door was denied because it was not part of Pat's tour.");
+
+    const list = (await app.call("GET", "/api/properties")).body.properties[0];
+    expect(list).toMatchObject({ activeVisitorDemo: sid, hasHistory: true });
+    const tours = (await app.call("GET", `/api/properties/${id}/tours`)).body.tours;
+    expect(tours[0]).toMatchObject({ kindLabel: "Visitor demo", outcomeLabel: "In progress", visitorName: "Pat Smith" });
+    const detail = (await app.call("GET", `/api/properties/${id}/tours/${tours[0].id}`)).body.tour;
+    expect(detail.conversation.some((m: { from: string; text: string }) => m.from === "visitor" && m.text === "I'm here.")).toBe(true);
+  });
+
+  it("shows access codes and Durin call counts on the phone only in developer mode", async () => {
+    const app = await startApp(true);
+    const { id } = await setUpAlfredWay(app);
+    await app.call("POST", `/api/properties/${id}/readiness`, {});
+    const sid = (await app.call("POST", `/api/properties/${id}/visitor-demos`, {})).body.sessionId;
+    const phone = (await app.call("GET", `/api/visitor-demos/${sid}`)).body.visitor;
+    expect(phone.dev).toMatchObject({ durinRequests: 0 });
   });
 
   it("explains mistakes plainly and rejects requests from other sites", async () => {

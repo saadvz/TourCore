@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TourHoursSchema } from "../config/tourCoreConfig";
+import { TourHoursSchema, validateConfig } from "../config/tourCoreConfig";
 import {
   addDoor,
   addUnit,
@@ -60,9 +60,15 @@ export const SETUP_COMMANDS = {
     if (door?.kind === "UNIT") throw new SetupInputError("UNIT_DOOR_LOCKED", "A unit's own door can't be removed. Remove the unit instead.");
     return removeDoor(d, i.doorId);
   }),
-  setRoute: command(z.object({ unitId: Text, doorIds: z.array(Text), directions: Text.optional() }), (d, i) =>
-    setRoute(d, i.unitId, i.doorIds, { directions: i.directions }),
-  ),
+  /** With onlyIfValid, a route with problems is rejected (not saved) so nothing invalid is ever saved silently. */
+  setRoute: command(z.object({ unitId: Text, doorIds: z.array(Text), directions: Text.optional(), onlyIfValid: z.boolean().optional() }), (d, i) => {
+    const next = setRoute(d, i.unitId, i.doorIds, { directions: i.directions });
+    if (i.onlyIfValid) {
+      const problem = validateConfig(next).find((issue) => issue.section === "routes" && issue.unitId === i.unitId);
+      if (problem) throw new SetupInputError("ROUTE_NOT_VALID", problem.message);
+    }
+    return next;
+  }),
   setTourHours: command(TourHoursSchema.partial(), (d, i) => setTourHours(d, i)),
   setVerificationPolicy: command(
     z.object({ mode: z.enum(["basic-form", "mock", "document-check"]).optional(), reuseForDays: z.number().int().optional() }),

@@ -13,7 +13,11 @@ import {
   suggestRoute,
   type SetupDraft,
 } from "./setupActions";
-import { statusLabel, type SavedProperty } from "./workspace";
+import { statusLabel, type SavedProperty, type TourRecord } from "./workspace";
+import { describeHistory } from "../audit/describe";
+import { validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
+import { formatDay, formatShortDateTime, formatTime } from "../core/timezone";
+import type { ExportBundle } from "../export/exportBundle";
 
 /**
  * View models for any setup surface. They carry only plain language plus ids
@@ -166,6 +170,7 @@ export function draftView(draft: SetupDraft) {
     };
   });
 
+  const hoursValid = !issues.some((i) => i.fix?.step === "hours");
   const tourHours = {
     ...th,
     daysLabel: describeDays(th.days),
@@ -173,7 +178,12 @@ export function draftView(draft: SetupDraft) {
     lengthLabel: describeMinutes(th.tourLengthMinutes),
     spacingLabel: describeInterval(th.slotEveryMinutes),
     earlyLabel: describeMinutes(th.earlyArrivalMinutes),
-    toursPerDay: slotStartMinutes(th).length,
+    valid: hoursValid,
+    /** Only when the schedule is valid; an overlapping schedule has no honest count. */
+    toursPerDay: hoursValid ? slotStartMinutes(th).length : undefined,
+    summary: hoursValid
+      ? `${describeDays(th.days)}, ${formatClockTime(th.start)}-${formatClockTime(th.end)}. That's up to ${slotStartMinutes(th).length} tours a day.`
+      : undefined,
   };
 
   const property = {
@@ -281,7 +291,25 @@ export function dryTourView(result: DryTourResult) {
   };
 }
 
-export function propertySummary(saved: SavedProperty | undefined, draft: SetupDraft | undefined, unsaved: boolean) {
+/**
+ * Whether the operator's latest edits are in the saved setup. Valid edits are
+ * saved automatically; edits with problems are kept as a draft until fixed.
+ */
+export function saveStateView(draft: SetupDraft, unsaved: boolean) {
+  if (!unsaved) return { state: "saved" as const, label: "All changes saved" };
+  const count = validateConfig(draft).length;
+  return {
+    state: "draft" as const,
+    label: `Changes kept as a draft until ${count === 1 ? "1 problem is" : `${count} problems are`} fixed`,
+  };
+}
+
+export function propertySummary(
+  saved: SavedProperty | undefined,
+  draft: SetupDraft | undefined,
+  unsaved: boolean,
+  extra: { tourCount?: number; activeVisitorDemo?: string } = {},
+) {
   const config = saved?.config ?? draft!;
   const state = saved?.state;
   const hash = state?.configHash;
@@ -293,12 +321,66 @@ export function propertySummary(saved: SavedProperty | undefined, draft: SetupDr
     address: config.property.address,
     saved: !!saved,
     unsavedChanges: unsaved,
+    save: saveStateView(draft ?? config, unsaved),
     status: saved ? state!.status : ("IN_PROGRESS" as const),
     statusLabel: saved ? statusLabel(saved) : "Setup in progress",
     published: state?.status === "PUBLISHED_FOR_DEMO",
     readinessPassed: readinessCurrent && !!state?.readiness?.passed,
     practicePassed: practiceCurrent && !!state?.dryTour?.passed,
-    hasHistory: !!state?.dryTour?.recordsFolder,
+    hasHistory: (extra.tourCount ?? 0) > 0,
+    activeVisitorDemo: extra.activeVisitorDemo,
     dev: { propertyId: config.property.id, configHash: hash, recordsFolder: state?.dryTour?.recordsFolder },
+  };
+}
+
+// ------------------------------------------------------------ tour records
+
+const OUTCOME_LABELS: Record<TourRecord["outcome"], string> = {
+  passed: "Passed",
+  stopped: "Stopped early",
+  "in-progress": "In progress",
+  finished: "Finished",
+};
+
+export function tourListView(records: TourRecord[], timeZone: string) {
+  return records.map((r) => ({
+    id: r.tourId,
+    label: formatShortDateTime(new Date(r.ranAt), timeZone),
+    kindLabel: r.kind === "practice" ? "Practice tour" : "Visitor demo",
+    outcomeLabel: OUTCOME_LABELS[r.outcome],
+    ok: r.outcome === "passed" || r.outcome === "finished" ? true : r.outcome === "stopped" ? false : null,
+    visitorName: r.visitorName,
+  }));
+}
+
+const ACCESS_TYPES = new Set(["ACCESS_ALLOWED", "ACCESS_DENIED", "ACCESS_REVOKED"]);
+
+/** Everything the operator needs to reopen one tour: conversation, access decisions, safety, timeline. */
+export function tourDetailView(record: TourRecord, bundle: ExportBundle, config: TourCoreConfig) {
+  const tz = config.property.timezone;
+  const timeline = describeHistory(bundle.auditEvents, { ...bundle, operatorName: config.operator.name }, tz);
+  const conversation =
+    record.conversation?.map((m) => ({ from: m.from, text: m.text, time: formatTime(new Date(m.at), tz) })) ??
+    bundle.messages
+      .filter((m) => m.audience === "PROSPECT")
+      .map((m) => ({ from: m.direction === "INBOUND" ? ("visitor" as const) : ("tourcore" as const), text: m.body, time: formatTime(new Date(m.at), tz) }));
+  const unit = config.units.find((u) => u.id === (record.unitId ?? bundle.reservations[0]?.unitId));
+  const reservation = bundle.reservations[0];
+  return {
+    id: record.tourId,
+    title: record.kind === "practice" ? "Practice tour" : "Visitor demo",
+    ranAtLabel: formatShortDateTime(new Date(record.ranAt), tz),
+    outcomeLabel: OUTCOME_LABELS[record.outcome],
+    ok: record.outcome === "passed" || record.outcome === "finished",
+    failure: record.failure,
+    visitorName: record.visitorName ?? bundle.prospects[0]?.name,
+    unitName: unit?.name,
+    tourTime: reservation?.slotStart ? `${formatDay(new Date(reservation.slotStart), tz)}, ${formatTime(new Date(reservation.slotStart), tz)}` : undefined,
+    conversation,
+    safetyChecks: record.checks ? dryTourView({ passed: record.outcome === "passed", ranAt: record.ranAt, checks: record.checks, audit: [] }).groups : undefined,
+    accessDecisions: timeline.filter((e) => ACCESS_TYPES.has(e.dev.type)),
+    safetyEvents: timeline.filter((e) => e.tone === "blocked"),
+    timeline,
+    dev: { tourId: record.tourId, auditEventCount: bundle.auditEvents.length },
   };
 }

@@ -43,6 +43,50 @@ Come back any time with `npm run setup`. Your properties are listed on the first
 such as renaming a unit (and optionally its matching door), changing one route or changing tour hours, without
 redoing a section.
 
+**Saving.** Valid edits are saved immediately. Edits with problems are kept as a draft, and your saved setup is left
+alone until they're fixed. The line at the top of each setup screen always says which: "All changes saved",
+"Changes kept as a draft until 1 problem is fixed", or "Changes not saved yet" while you're still typing. Continue
+also saves anything still on screen, such as a suggested route, but only if Tour Core says it's valid.
+
+### Visitor demo: the tour from both sides
+
+On a property that passes its readiness check, click **Start visitor demo**. A phone-style page opens for the
+pretend visitor, and your tab switches to a live view of the same tour. If the phone tab doesn't open, use "Open
+the visitor's phone" on the live view.
+
+On the phone, the visitor:
+
+1. picks a unit and gets its approved description;
+2. picks a tour time;
+3. agrees to texts and tour records, and fills in the basic identity form;
+4. taps "I'm here".
+   - Arriving early gets the real policy answer ("I can open the doors from 8:50 AM").
+   - "Skip ahead to my tour time" is a demo control that moves the demo clock forward.
+5. is guided along the route ("I'm at Unit 101");
+6. can ask questions, which are answered only from facts you entered and flagged for you when there's no answer;
+7. finishes the tour and answers the follow-up question.
+
+The **Test wrong door** demo control tries a door that isn't on the route. Tour Core refuses it and never contacts
+Durin.
+
+The live view polls every 1.5 seconds and shows:
+
+- who is touring, the unit and the tour time;
+- the tour's status and where the visitor is;
+- questions that need your attention;
+- recent activity in plain sentences.
+
+**Tour history** lists every practice tour and visitor demo ("Sep 27, 2:14 PM — Passed"). Open one to see:
+
+- the visitor conversation;
+- the safety checks;
+- the access decisions;
+- the full timeline, with downloads.
+
+Visitor demos run the real engine: the same `TourCore`, policy, messaging contract, verification boundary and Durin
+adapter. The phone page only draws what `src/visitor/` returns and sends taps back. A live demo lives in the setup
+app's memory, and its records are saved after every step.
+
 Other commands:
 
 ```bash
@@ -125,8 +169,15 @@ checks reusable for 30 days) and lets the operator change them.
 
 **Approved facts.** `property.facts`, `unit.summary` and `unit.facts` hold only what the operator wrote.
 `approvedFacts(config, unitId)` (`src/core/facts.ts`) and `TourCore.approvedFacts(reservationId)` return them as
-structured entries marked `source: "operator"`. Future tour guidance may repeat these and nothing else. Unsaved
-browser edits are kept in `draft.json` next to the saved config until they pass validation.
+structured entries marked `source: "operator"`. Future tour guidance may repeat these and nothing else.
+`TourCore.answerQuestion` matches questions to those facts with a small deterministic keyword lookup
+(`findApprovedAnswer`). No match means "I don't have that information", plus a flagged question for the operator.
+It never guesses. Edits that aren't valid yet are kept in `draft.json` next to the saved config.
+
+**Write safety.** Local records are written atomically: a temp file is flushed, then renamed over the target. Whole
+practice-tour folders are built in a temp folder and renamed into place. If the process stops between writing the
+setup file and its status file, loading detects the mismatch and treats the property as an unchecked draft (fails
+closed). Each tour folder holds `record.json`, `tour-export.json` and `audit.csv`.
 
 All tour-hour and access-window math uses the property's time zone, never the host machine's.
 `config/demo-property.json` is the sample property used by `npm run demo`.
@@ -162,7 +213,9 @@ src/storage/       store contract + in-memory store
 src/audit/, src/export/   audit formatting/CSV, validated export bundle
 src/createTourCore.ts     the only place config modes map to adapters
 src/setup/         setup engine: actions, commands, presenters, readiness, practice tour, save/publish
-src/web/           browser setup: local server + API (server.ts, api.ts) and the page (public/)
+src/visitor/       visitor demo session over the real engine + phone and live-view presenters
+src/web/           local server + API (server.ts, api.ts); pages in public/: app.js (setup), tours.js (history, live),
+                   visitor.js (phone), ui.js (shared helpers). No build step.
 src/cli/           terminal wizard (npm run setup:cli)
 src/demo/          scripted demo (npm run demo)
 ```

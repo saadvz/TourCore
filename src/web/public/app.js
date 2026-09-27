@@ -1,117 +1,41 @@
-// Tour Core setup: browser presentation only.
+// Tour Core operator setup: browser presentation only.
 // Every rule, check and message comes from the setup engine through /api.
 
+import {
+  action,
+  add,
+  api,
+  banner,
+  base,
+  btn,
+  command,
+  devBlock,
+  devChip,
+  downloadLink,
+  el,
+  enc,
+  errorBox,
+  field,
+  go,
+  input,
+  lines,
+  loadMeta,
+  mark,
+  markDirty,
+  onLeave,
+  runPendingSaves,
+  set,
+  sleep,
+  state,
+  stepHref,
+  textarea,
+  UiError,
+} from "/ui.js";
+import { historyRedirect, liveScreen, startVisitorDemo, tourDetailScreen, toursScreen } from "/tours.js";
+
 const app = document.getElementById("app");
-const state = { meta: null };
-const enc = encodeURIComponent;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-// ------------------------------------------------------------------ helpers
-
-class UiError extends Error {
-  constructor(message, code) {
-    super(message);
-    this.code = code;
-  }
-}
-
-async function api(method, path, body) {
-  const res = await fetch(path, {
-    method,
-    headers: body !== undefined ? { "Content-Type": "application/json" } : {},
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  let data = {};
-  try {
-    data = await res.json();
-  } catch {
-    /* empty body */
-  }
-  if (!res.ok) throw new UiError(data.error?.message ?? "Something went wrong.", data.error?.dev?.code);
-  return data;
-}
-
-const command = (id, name, input) => api("POST", `/api/properties/${enc(id)}/commands/${name}`, { input });
 const getProperty = (id) => api("GET", `/api/properties/${enc(id)}`);
 
-function el(tag, props, ...children) {
-  const node = document.createElement(tag);
-  for (const [k, v] of Object.entries(props ?? {})) {
-    if (v === undefined || v === null || v === false) continue;
-    if (k === "class") node.className = v;
-    else if (k === "text") node.textContent = v;
-    else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
-    else if (k === "value" || k === "checked" || k === "selected" || k === "hidden") node[k] = v;
-    else node.setAttribute(k, v === true ? "" : String(v));
-  }
-  for (const c of children.flat(Infinity)) {
-    if (c === null || c === undefined || c === false) continue;
-    node.append(c instanceof Node ? c : document.createTextNode(String(c)));
-  }
-  return node;
-}
-
-const present = (list) => list.flat(Infinity).filter((c) => c !== null && c !== undefined && c !== false);
-/** replaceChildren/append, but skipping empty slots so optional parts never render as "null". */
-const set = (node, ...children) => node.replaceChildren(...present(children));
-const add = (node, ...children) => node.append(...present(children));
-
-const btn = (label, onclick, cls = "") => el("button", { type: "button", class: cls, onclick }, label);
-const input = (props = {}) => el("input", { type: "text", ...props });
-const textarea = (value = "", placeholder = "") => el("textarea", { value, placeholder });
-const field = (text, control, hint) => el("label", {}, text, hint ? el("span", { class: "hint" }, hint) : null, control);
-const lines = (text) => text.split("\n").map((l) => l.trim()).filter(Boolean);
-const mark = (ok) => el("span", { class: `mark ${ok === true ? "ok" : ok === false ? "bad" : "info"}`, "aria-hidden": "true" }, ok === true ? "\u2713" : ok === false ? "\u2715" : "\u2022");
-const devChip = (text) => (state.meta?.dev && text ? el("span", { class: "dev-chip" }, text) : null);
-const devBlock = (obj) =>
-  state.meta?.dev && obj ? el("details", {}, el("summary", {}, "Developer details"), el("pre", { class: "dev" }, JSON.stringify(obj, null, 2))) : null;
-const downloadLink = (label, href) => el("a", { class: "button", href, download: "" }, label);
-
-function errorBox() {
-  const node = el("p", { class: "form-error", role: "alert", hidden: true });
-  return {
-    node,
-    show: (msg) => {
-      node.textContent = msg;
-      node.hidden = false;
-    },
-    clear: () => {
-      node.hidden = true;
-    },
-  };
-}
-
-function banner(message) {
-  app.querySelector(".banner")?.remove();
-  app.prepend(el("div", { class: "issues banner", role: "alert" }, message));
-  window.scrollTo(0, 0);
-}
-
-/** Wraps a click handler: disables the button while working and shows errors in plain words. */
-function action(fn, errors) {
-  return async (ev) => {
-    const b = ev?.currentTarget instanceof HTMLButtonElement ? ev.currentTarget : null;
-    if (b) b.disabled = true;
-    errors?.clear();
-    try {
-      await fn(ev);
-    } catch (e) {
-      const msg = e.message + (state.meta?.dev && e.code ? ` [${e.code}]` : "");
-      errors ? errors.show(msg) : banner(msg);
-    } finally {
-      if (b?.isConnected) b.disabled = false;
-    }
-  };
-}
-
-// ------------------------------------------------------------------ routing
-
-const go = (hash) => {
-  if (location.hash === hash) rerender();
-  else location.hash = hash;
-};
-const base = (id) => `#/p/${enc(id)}`;
-const stepHref = (id, step, unitId) => `${base(id)}/setup/${step}${unitId ? `?unit=${enc(unitId)}` : ""}`;
 function nextHref(id, stepId) {
   const steps = state.meta.steps;
   const i = steps.findIndex((s) => s.id === stepId);
@@ -122,11 +46,11 @@ async function rerender() {
   const [path, query = ""] = location.hash.replace(/^#/, "").split("?");
   const parts = path.split("/").filter(Boolean).map(decodeURIComponent);
   const params = new URLSearchParams(query);
+  state.pending = [];
+  state.dirty = false;
   try {
-    if (!state.meta) {
-      state.meta = await api("GET", "/api/meta");
-      document.getElementById("dev-badge").hidden = !state.meta.dev;
-    }
+    await loadMeta();
+    document.getElementById("dev-badge").hidden = !state.meta.dev;
     let screen;
     if (parts[0] === "new") screen = await propertyStep(null);
     else if (parts[0] === "p" && parts[1]) {
@@ -135,7 +59,9 @@ async function rerender() {
       else if (view === "readiness") screen = await readinessScreen(id);
       else if (view === "practice") screen = await practiceScreen(id);
       else if (view === "published") screen = await publishedScreen(id);
-      else if (view === "history") screen = await historyScreen(id);
+      else if (view === "history") screen = await historyRedirect(id);
+      else if (view === "tours") screen = step ? await tourDetailScreen(id, step) : await toursScreen(id);
+      else if (view === "live") screen = await liveScreen(id, step);
       else screen = await reviewScreen(id);
     } else screen = await landing();
     app.replaceChildren(screen);
@@ -149,11 +75,18 @@ async function rerender() {
   }
 }
 
+let lastHash = location.hash;
 window.addEventListener("hashchange", async () => {
+  if (state.dirty && !confirm("You have changes on this page that aren't saved yet. Leave anyway?")) {
+    history.replaceState(null, "", lastHash || "#/");
+    return;
+  }
+  lastHash = location.hash;
   app.replaceChildren(el("p", { class: "muted" }, "Loading..."));
   await rerender();
   window.scrollTo(0, 0);
 });
+window.addEventListener("tourcore:rerender", () => rerender());
 rerender();
 
 // ------------------------------------------------------------------ landing
@@ -180,16 +113,18 @@ function propertyCard(p) {
   else {
     if (p.published) actions.push(btn("View property", () => go(`${base(p.id)}/published`), "primary"));
     else if (p.readinessPassed && p.practicePassed) actions.push(btn("Publish for demo", action(() => publish(p.id)), "primary"));
+    if (p.activeVisitorDemo) actions.push(btn("Watch live tour", () => go(`${base(p.id)}/live/${enc(p.activeVisitorDemo)}`), "primary"));
+    actions.push(btn("Start visitor demo", action(() => startVisitorDemo(p.id))));
     actions.push(btn("Edit a property", () => go(`${base(p.id)}/review`)));
     actions.push(btn("Run readiness check", () => go(`${base(p.id)}/readiness`)));
     actions.push(btn("Run a practice tour", () => go(`${base(p.id)}/practice`)));
-    if (p.hasHistory) actions.push(btn("View tour history", () => go(`${base(p.id)}/history`)));
+    if (p.hasHistory) actions.push(btn("View tour history", () => go(`${base(p.id)}/tours`)));
   }
   return el(
     "div",
     { class: "card" },
     el("div", { class: "card-head" }, el("div", {}, el("h3", {}, p.name), p.address !== p.name ? el("p", { class: "muted" }, p.address) : null), statusBadge(p)),
-    p.saved && p.unsavedChanges ? el("p", { class: "muted" }, "You have changes that haven't been checked yet.") : null,
+    p.saved && p.unsavedChanges ? el("p", { class: "muted" }, `${p.save.label}.`) : null,
     devBlock(p.dev),
     el("div", { class: "actions" }, actions),
   );
@@ -217,6 +152,18 @@ function wizardShell(data, stepId, body, onContinue) {
   const steps = state.meta.steps;
   const idx = steps.findIndex((s) => s.id === stepId);
   const id = data?.summary.id;
+  body.addEventListener("input", markDirty);
+  body.addEventListener("change", markDirty);
+  const saveState = el(
+    "p",
+    { class: "save-state", role: "status", "data-state": data?.summary.save.state ?? "draft" },
+    data ? data.summary.save.label : "Nothing saved yet",
+  );
+  /** Continue first saves anything still on screen (e.g. a suggested route); a problem keeps you here. */
+  const next = action(async (ev) => {
+    await runPendingSaves();
+    await onContinue(ev);
+  });
   const nav = el(
     "ol",
     { class: "steps", "aria-label": "Setup steps" },
@@ -238,10 +185,10 @@ function wizardShell(data, stepId, body, onContinue) {
   return el(
     "div",
     {},
-    el("p", { class: "muted" }, data ? data.view.property.name : "New property"),
+    el("div", { class: "wizard-head" }, el("p", { class: "muted" }, data ? data.view.property.name : "New property"), saveState),
     nav,
     body,
-    el("div", { class: "actions end" }, back, btn("Continue", onContinue, "primary")),
+    el("div", { class: "actions end" }, back, btn("Continue", next, "primary")),
   );
 }
 
@@ -439,10 +386,21 @@ function addUnitForm(id, open) {
     const facts = textarea("", 'e.g. "South-facing windows."');
     const doorName = input({ placeholder: "Leave blank to use the unit name + \"Door\"" });
     const errors = errorBox();
+    const addIt = () => command(id, "addUnit", { name: name.value, summary: summary.value, facts: lines(facts.value), doorName: doorName.value || undefined });
     const save = action(async () => {
-      await command(id, "addUnit", { name: name.value, summary: summary.value, facts: lines(facts.value), doorName: doorName.value || undefined });
+      await addIt();
       rerender();
     }, errors);
+    // A unit typed in but not added yet is added on Continue rather than silently dropped.
+    onLeave(async () => {
+      if (!name.isConnected || !name.value.trim()) return;
+      try {
+        await addIt();
+      } catch (e) {
+        errors.show(e.message);
+        throw new UiError(`That unit wasn't added: ${e.message}`);
+      }
+    });
     set(card, 
       el("h3", {}, "Add a unit"),
       field("Unit name", name),
@@ -628,17 +586,36 @@ function routeDiagram(names) {
 function routeCard(id, u, doors, focus) {
   const card = el("div", { class: focus ? "card highlight" : "card" });
   const nameOf = (doorId) => doors.find((d) => d.id === doorId)?.name ?? "(a door that no longer exists)";
-  const show = () =>
+  /** The open editor's current contents, or null when the card is just showing the saved route. */
+  let editing = null;
+  const show = () => {
+    editing = null;
     set(card, 
       el("div", { class: "card-head" }, el("h3", {}, u.name), btn(u.route ? "Change route" : "Set route", editor, "small")),
       u.route ? routeDiagram(u.route.doorNames) : el("p", { class: "muted" }, "No route yet."),
       u.route?.directions ? el("p", { class: "muted" }, `Directions: ${u.route.directions}`) : null,
       issueList(u.issues.filter((i) => i.fix?.step === "routes"), id, "routes"),
     );
+  };
+  // Continue saves a route that's on screen but not saved yet, but only if Tour Core says it's valid.
+  onLeave(async () => {
+    if (!editing) return;
+    const { order, directions, errors } = editing;
+    const unchanged = u.route && order.join() === u.route.doorIds.join() && directions.value === (u.route.directions ?? "");
+    if (unchanged) return;
+    try {
+      await command(id, "setRoute", { unitId: u.id, doorIds: order, directions: directions.value, onlyIfValid: true });
+    } catch (e) {
+      errors.show(e.message);
+      card.scrollIntoView({ behavior: "smooth", block: "center" });
+      throw new UiError(`${u.name}'s route wasn't saved: ${e.message}`);
+    }
+  });
   const editor = () => {
     const order = [...(u.route?.doorIds ?? u.suggestedRoute)];
     const directions = input({ value: u.route?.directions ?? "", placeholder: "e.g. straight ahead, first door on the left" });
     const errors = errorBox();
+    editing = { order, directions, errors };
     const list = el("div", { class: "route-editor" });
     const picker = el("select", { "aria-label": "Door to add" });
     const move = (i, j) => {
@@ -765,7 +742,7 @@ function hoursStep(data) {
       "div",
       {},
       el("h1", {}, "When can people tour?"),
-      el("p", { class: "lead" }, `Right now: ${th.daysLabel}, ${th.hoursLabel}. That's up to ${th.toursPerDay} tours a day.`),
+      el("p", { class: "lead" }, th.summary ? `Right now: ${th.summary}` : "This schedule needs a fix before any tours can be offered. See below."),
       issueList(view.issues.filter((i) => i.fix?.step === "hours"), id, "hours"),
       el(
         "div",
@@ -864,9 +841,9 @@ async function reviewScreen(id) {
       ? el(
           "div",
           { class: "notice" },
-          "You have changes that haven't been checked yet. They'll be saved when you run the readiness check. ",
+          `${summary.save.label}. Your saved setup hasn't changed. `,
           btn(
-            "Discard changes",
+            "Discard draft changes",
             action(async () => {
               if (!confirm("Discard your unsaved changes?")) return;
               await api("POST", `/api/properties/${enc(id)}/discard`, {});
@@ -979,7 +956,12 @@ async function showPractice(container, id, p, summary) {
           "div",
           { class: "card" },
           el("p", {}, "Tour records saved."),
-          el("div", { class: "actions" }, btn("View records", () => go(`${base(id)}/history`)), downloadLink("Export records", `/api/properties/${enc(id)}/export/records.json`)),
+          el(
+            "div",
+            { class: "actions" },
+            btn("View records", () => go(p.tourId ? `${base(id)}/tours/${enc(p.tourId)}` : `${base(id)}/tours`)),
+            downloadLink("Export records", `/api/properties/${enc(id)}/export/records.json`),
+          ),
         )
       : null,
     p.messages.length
@@ -991,7 +973,7 @@ async function showPractice(container, id, p, summary) {
         )
       : null,
     devBlock(p.dev),
-    el("div", { class: "actions" }, next, btn("Run it again", () => rerender())),
+    el("div", { class: "actions" }, next, p.passed ? btn("Start visitor demo", action(() => startVisitorDemo(id))) : null, btn("Run it again", () => rerender())),
   );
 }
 
@@ -1015,7 +997,7 @@ async function practiceScreen(id) {
     el("h1", {}, "Practice tour"),
     el("p", { class: "lead" }, "A pretend visitor named Pat takes a tour so you can watch every step. No real texts are sent and no real doors open."),
     unchecked
-      ? el("div", { class: "notice" }, "Your latest changes need a readiness check first. ", btn("Run readiness check", () => go(`${base(id)}/readiness`), "link"))
+      ? el("div", { class: "notice" }, `${summary.save.label}. `, btn("Review setup", () => go(`${base(id)}/review`), "link"))
       : [unitSelect ? el("div", { class: "card" }, field("Which unit should Pat tour?", unitSelect)) : null, el("div", { class: "actions" }, btn("Start practice tour", start, "primary"))],
     container,
   );
@@ -1051,52 +1033,11 @@ async function publishedScreen(id) {
     el(
       "div",
       { class: "actions" },
-      btn("View property", () => go(`${base(id)}/review`), "primary"),
+      btn("Start visitor demo", action(() => startVisitorDemo(id)), "primary"),
+      btn("View property", () => go(`${base(id)}/review`)),
       btn("Run another practice tour", () => go(`${base(id)}/practice`)),
       btn("Edit setup", () => go(stepHref(id, "property"))),
-      btn("View history", () => go(`${base(id)}/history`)),
+      btn("View history", () => go(`${base(id)}/tours`)),
     ),
-  );
-}
-
-// ------------------------------------------------------------------ history
-
-async function historyScreen(id) {
-  const [h, { summary }] = await Promise.all([api("GET", `/api/properties/${enc(id)}/history`), getProperty(id)]);
-  if (!h.available) {
-    return el(
-      "div",
-      {},
-      el("p", { class: "muted" }, summary.name),
-      el("h1", {}, "Tour history"),
-      el("p", {}, "No tours yet. Run a practice tour to see what happens on a tour."),
-      el("div", { class: "actions" }, btn("Run a practice tour", () => go(`${base(id)}/practice`), "primary")),
-    );
-  }
-  return el(
-    "div",
-    {},
-    el("p", { class: "muted" }, summary.name),
-    el("h1", {}, "Tour history"),
-    el("p", { class: "lead" }, `Latest practice tour. ${h.ranAtLabel}`),
-    el(
-      "div",
-      { class: "card" },
-      el(
-        "ul",
-        { class: "checks history" },
-        h.entries.map((e) =>
-          el("li", {}, el("span", { class: "time" }, e.time), mark(e.tone === "good" ? true : e.tone === "blocked" ? false : null), el("span", {}, e.text, devChip(e.dev ? [e.dev.type, e.dev.code].filter(Boolean).join(" ") : ""))),
-        ),
-      ),
-    ),
-    el(
-      "div",
-      { class: "actions" },
-      downloadLink("Export records", `/api/properties/${enc(id)}/export/records.json`),
-      downloadLink("Download as spreadsheet", `/api/properties/${enc(id)}/export/history.csv`),
-      btn("Back", () => go(summary.published ? `${base(id)}/published` : "#/")),
-    ),
-    devBlock(h.dev),
   );
 }

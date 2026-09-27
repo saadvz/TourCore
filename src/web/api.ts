@@ -9,6 +9,7 @@ import {
   formatTime,
   friendlyZone,
   inferTimeZone,
+  liveTourView,
   propertySummary,
   PropertyWorkspace,
   readinessView,
@@ -16,17 +17,25 @@ import {
   runReadinessCheck,
   SETUP_STEPS,
   SetupInputError,
+  tourDetailView,
+  tourListView,
   validateConfig,
+  VisitorDemoRegistry,
+  VisitorDemoSession,
+  visitorView,
 } from "./setupFacade";
 
 /**
- * The browser's API. Every handler delegates to the setup engine; no setup
- * rule lives here. Anything under a `dev` key is removed unless developer
- * mode is on, so operators never see codes, adapter names or file paths.
+ * The browser's API for both the operator and the visitor phone. Every
+ * handler delegates to the setup engine or the visitor session over the real
+ * Tour Core engine; no product rule lives here. Anything under a `dev` key is
+ * removed unless developer mode is on, so operators and visitors never see
+ * codes, adapter names, internal ids or file paths.
  */
 
 export interface ApiContext {
   workspace: PropertyWorkspace;
+  visitors?: VisitorDemoRegistry;
   dev: boolean;
   now?: () => Date;
 }
@@ -65,6 +74,7 @@ const ok = (json: unknown) => ({ status: 200, json });
 
 async function route(ctx: ApiContext, method: string, path: string, body: Record<string, unknown>): Promise<ApiResult> {
   const ws = ctx.workspace;
+  const visitors = (ctx.visitors ??= new VisitorDemoRegistry());
   const now = ctx.now?.() ?? new Date();
   const parts = path.replace(/^\/api\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
 
@@ -77,10 +87,26 @@ async function route(ctx: ApiContext, method: string, path: string, body: Record
     return ok({ timezone: guess.timezone, label: friendlyZone(guess.timezone), basis: guess.basis });
   }
 
+  // --------------------------------------------------------- visitor phone
+
+  if (parts[0] === "visitor-demos" && parts[1]) {
+    const session = visitors.get(parts[1]);
+    if (method === "GET" && !parts[2]) return ok({ visitor: await visitorView(session) });
+    if (method === "GET" && parts[2] === "live") return ok({ live: await liveTourView(session) });
+    if (method === "POST" && parts[2] === "actions" && parts[3]) {
+      await session.act(parts[3], body.input);
+      const { record, bundle } = await session.record();
+      ws.recordVisitorDemo(session.propertyId, record, bundle);
+      return ok({ visitor: await visitorView(session) });
+    }
+  }
+
+  // ------------------------------------------------------------ properties
+
   if (parts[0] !== "properties") throw new ApiError(404, "NOT_FOUND", "That page doesn't exist.");
 
   if (parts.length === 1) {
-    if (method === "GET") return ok({ properties: ws.propertyIds().map((id) => summaryFor(ws, id)) });
+    if (method === "GET") return ok({ properties: await Promise.all(ws.propertyIds().map((id) => summaryFor(ctx, id))) });
     if (method === "POST") {
       const draft = createPropertySetup({
         address: String(body.address ?? ""),
@@ -89,24 +115,24 @@ async function route(ctx: ApiContext, method: string, path: string, body: Record
         existingPropertyIds: ws.propertyIds(),
       });
       ws.saveDraft(draft);
-      return ok(propertyPayload(ws, draft.property.id));
+      return ok(await propertyPayload(ctx, draft.property.id));
     }
   }
 
   const id = parts[1]!;
   const action = parts[2];
 
-  if (method === "GET" && !action) return ok(propertyPayload(ws, id));
+  if (method === "GET" && !action) return ok(await propertyPayload(ctx, id));
 
   if (method === "POST" && action === "commands" && parts[3]) {
     const { draft } = ws.openDraft(id);
-    ws.saveDraft(applySetupCommand(draft, parts[3], body.input));
-    return ok(propertyPayload(ws, id));
+    ws.persistEdit(applySetupCommand(draft, parts[3], body.input), now);
+    return ok(await propertyPayload(ctx, id));
   }
 
   if (method === "POST" && action === "discard") {
     ws.discardDraft(id);
-    return ok(ws.has(id) ? propertyPayload(ws, id) : { discarded: true });
+    return ok(ws.has(id) ? await propertyPayload(ctx, id) : { discarded: true });
   }
 
   if (method === "POST" && action === "readiness") {
@@ -114,42 +140,57 @@ async function route(ctx: ApiContext, method: string, path: string, body: Record
     if (unsavedChanges) {
       if (validateConfig(draft).length) {
         const result = await runReadinessCheck(draft, { now });
-        return ok({ readiness: readinessView(result), savedChanges: false, summary: summaryFor(ws, id) });
+        return ok({ readiness: readinessView(result), savedChanges: false, summary: await summaryFor(ctx, id) });
       }
       ws.save(draft, now);
     }
     const { config } = ws.load(id);
     const result = await runReadinessCheck(config, { now });
     ws.recordReadiness(id, result);
-    return ok({ readiness: readinessView(result), savedChanges: unsavedChanges, summary: summaryFor(ws, id) });
+    return ok({ readiness: readinessView(result), savedChanges: unsavedChanges, summary: await summaryFor(ctx, id) });
   }
 
-  if (method === "POST" && action === "practice") {
-    if (!ws.has(id) || ws.openDraft(id).unsavedChanges) {
-      throw new ApiError(409, "UNCHECKED_CHANGES", "You have changes that haven't been checked yet. Run the readiness check first.");
+  if (method === "POST" && (action === "practice" || action === "visitor-demos")) {
+    const gate = await checkedConfig(ctx, id, now);
+    if ("readiness" in gate) return ok({ readiness: gate.readiness, summary: await summaryFor(ctx, id) });
+    const { config } = gate;
+
+    if (action === "visitor-demos") {
+      const session = visitors.add(new VisitorDemoSession(id, config, ws.newVisitorTourId(id, now)));
+      const { record, bundle } = await session.record();
+      ws.recordVisitorDemo(id, record, bundle);
+      return ok({ sessionId: session.id, visitorUrl: `/visitor?s=${encodeURIComponent(session.id)}`, summary: await summaryFor(ctx, id) });
     }
-    let { config, state } = ws.load(id);
-    if (!state.readiness?.passed || state.readiness.configHash !== state.configHash) {
-      const readiness = await runReadinessCheck(config, { now });
-      ws.recordReadiness(id, readiness);
-      if (!readiness.passed) return ok({ readiness: readinessView(readiness), summary: summaryFor(ws, id) });
-      ({ config, state } = ws.load(id));
-    }
+
     const unitId = typeof body.unitId === "string" && config.units.some((u) => u.id === body.unitId) ? body.unitId : undefined;
     const result = await runDryTour(config, { unitId, now });
     const saved = ws.recordDryTour(id, result);
     const view = dryTourView(result);
-    return ok({ practice: { ...view, dev: { ...view.dev, recordsFolder: saved.dryTour?.recordsFolder } }, summary: summaryFor(ws, id) });
+    return ok({
+      practice: { ...view, tourId: saved.dryTour?.tourId, dev: { ...view.dev, recordsFolder: saved.dryTour?.recordsFolder } },
+      summary: await summaryFor(ctx, id),
+    });
   }
 
   if (method === "POST" && action === "publish") {
     const result = await ws.publishDemoProperty(id, now);
-    if (result.published) return ok({ published: true, summary: summaryFor(ws, id) });
+    if (result.published) return ok({ published: true, summary: await summaryFor(ctx, id) });
     return ok({
       published: false,
       blockers: result.blockers.map((b) => ({ message: b.message, next: nextStepFor(b.code), dev: { code: b.code } })),
-      summary: summaryFor(ws, id),
+      summary: await summaryFor(ctx, id),
     });
+  }
+
+  if (method === "GET" && action === "tours") {
+    const { config } = ws.load(id);
+    const tourId = parts[3];
+    if (!tourId) return ok({ tours: tourListView(ws.listTours(id), config.property.timezone) });
+    if (parts[4] === "export") return download(ws, id, parts[5], tourId);
+    const tour = ws.loadTour(id, tourId);
+    if (!tour) throw new ApiError(404, "TOUR_NOT_FOUND", "I couldn't find that tour.");
+    const view = tourDetailView(tour.record, tour.bundle, config);
+    return ok({ tour: { ...view, dev: { ...view.dev, folder: tour.folder } } });
   }
 
   if (method === "GET" && action === "history") {
@@ -172,21 +213,40 @@ async function route(ctx: ApiContext, method: string, path: string, body: Record
     });
   }
 
-  if (method === "GET" && action === "export" && (parts[3] === "records.json" || parts[3] === "history.csv")) {
-    const files = ws.exportLatest(id);
-    if (!files) throw new ApiError(404, "NO_RECORDS", "There are no tour records yet. Run a practice tour first.");
-    const json = parts[3] === "records.json";
-    return {
-      status: 200,
-      download: {
-        filename: `${id}-${json ? "tour-records.json" : "tour-history.csv"}`,
-        contentType: json ? "application/json" : "text/csv",
-        content: json ? files.json : files.csv,
-      },
-    };
-  }
+  if (method === "GET" && action === "export") return download(ws, id, parts[3]);
 
   throw new ApiError(404, "NOT_FOUND", "That page doesn't exist.");
+}
+
+/** The saved setup, once it's free of unchecked changes and passes readiness (run automatically if needed). */
+async function checkedConfig(ctx: ApiContext, id: string, now: Date) {
+  const ws = ctx.workspace;
+  if (!ws.has(id) || ws.openDraft(id).unsavedChanges) {
+    throw new ApiError(409, "UNCHECKED_CHANGES", "Some changes still need fixing. Open the review to see what's left.");
+  }
+  let { config, state } = ws.load(id);
+  if (!state.readiness?.passed || state.readiness.configHash !== state.configHash) {
+    const readiness = await runReadinessCheck(config, { now });
+    ws.recordReadiness(id, readiness);
+    if (!readiness.passed) return { readiness: readinessView(readiness) };
+    ({ config, state } = ws.load(id));
+  }
+  return { config };
+}
+
+function download(ws: PropertyWorkspace, id: string, file: string | undefined, tourId?: string): ApiResult {
+  if (file !== "records.json" && file !== "history.csv") throw new ApiError(404, "NOT_FOUND", "That page doesn't exist.");
+  const files = ws.exportTour(id, tourId);
+  if (!files) throw new ApiError(404, "NO_RECORDS", "There are no tour records yet. Run a practice tour first.");
+  const json = file === "records.json";
+  return {
+    status: 200,
+    download: {
+      filename: `${id}${tourId ? `-${tourId}` : ""}-${json ? "tour-records.json" : "tour-history.csv"}`,
+      contentType: json ? "application/json" : "text/csv",
+      content: json ? files.json : files.csv,
+    },
+  };
 }
 
 function nextStepFor(code: string): { action: "readiness" | "practice" | "review"; label: string } {
@@ -195,14 +255,19 @@ function nextStepFor(code: string): { action: "readiness" | "practice" | "review
   return { action: "review", label: "Review setup" };
 }
 
-function summaryFor(ws: PropertyWorkspace, id: string) {
+async function summaryFor(ctx: ApiContext, id: string) {
+  const ws = ctx.workspace;
   const { draft, unsavedChanges } = ws.openDraft(id);
-  return propertySummary(ws.has(id) ? ws.load(id) : undefined, draft, unsavedChanges);
+  const active = await ctx.visitors?.activeFor(id);
+  return propertySummary(ws.has(id) ? ws.load(id) : undefined, draft, unsavedChanges, {
+    tourCount: ws.has(id) ? ws.listTours(id).length : 0,
+    activeVisitorDemo: active?.id,
+  });
 }
 
-function propertyPayload(ws: PropertyWorkspace, id: string) {
-  const { draft } = ws.openDraft(id);
-  return { summary: summaryFor(ws, id), view: draftView(draft) };
+async function propertyPayload(ctx: ApiContext, id: string) {
+  const { draft } = ctx.workspace.openDraft(id);
+  return { summary: await summaryFor(ctx, id), view: draftView(draft) };
 }
 
 /** Removes developer-only details (any `dev` key) from a response. */

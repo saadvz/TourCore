@@ -3,12 +3,18 @@ import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { PropertyWorkspace } from "../setup";
+import { VisitorDemoRegistry } from "../visitor";
 import { handleApi } from "./api";
 
 const PUBLIC_DIR = new URL("./public/", import.meta.url);
+const JS = "text/javascript; charset=utf-8";
 const STATIC: Record<string, { file: string; type: string }> = {
   "/": { file: "index.html", type: "text/html; charset=utf-8" },
-  "/app.js": { file: "app.js", type: "text/javascript; charset=utf-8" },
+  "/visitor": { file: "visitor.html", type: "text/html; charset=utf-8" },
+  "/app.js": { file: "app.js", type: JS },
+  "/ui.js": { file: "ui.js", type: JS },
+  "/tours.js": { file: "tours.js", type: JS },
+  "/visitor.js": { file: "visitor.js", type: JS },
   "/styles.css": { file: "styles.css", type: "text/css; charset=utf-8" },
 };
 const MAX_BODY_BYTES = 1_000_000;
@@ -21,6 +27,7 @@ export interface SetupServerOptions {
 /** Local-only setup app. Serves the page and the setup API; holds no setup logic itself. */
 export function createSetupServer(options: SetupServerOptions = {}): Server {
   const workspace = options.workspace ?? new PropertyWorkspace();
+  const visitors = new VisitorDemoRegistry();
   const dev = options.dev ?? false;
 
   return createServer(async (req, res) => {
@@ -40,7 +47,7 @@ export function createSetupServer(options: SetupServerOptions = {}): Server {
           return send(415, "application/json", JSON.stringify({ error: { message: "Unsupported request." } }));
         }
         const body = req.method === "POST" ? await readJson(req) : undefined;
-        const result = await handleApi({ workspace, dev }, req.method ?? "GET", url.pathname, body);
+        const result = await handleApi({ workspace, visitors, dev }, req.method ?? "GET", url.pathname, body);
         if ("download" in result) {
           const { filename, contentType, content } = result.download;
           return send(result.status, `${contentType}; charset=utf-8`, content, { "Content-Disposition": `attachment; filename="${filename}"` });

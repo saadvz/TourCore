@@ -5,7 +5,7 @@ import { formatLocalDate, formatTime } from "../core/timezone";
 import { TourCore } from "../core/TourCore";
 import { createDurin, createMessenger, createStore, createVerificationProvider } from "../createTourCore";
 import type { AuditEvent } from "../domain/model";
-import type { DurinAccessAdapter } from "../durin/DurinAccessAdapter";
+import { countDurinCalls } from "../durin/countingDurin";
 import type { ExportBundle } from "../export/exportBundle";
 import type { Messenger } from "../messaging/Messenger";
 
@@ -108,7 +108,7 @@ export async function runDryTour(input: TourCoreConfig, options: DryTourOptions 
   const flush = async () => {
     for (const e of pending.splice(0)) await emit(e);
   };
-  const durin = countCalls(
+  const durin = countDurinCalls(
     createDurin(config, clock, (line) => {
       devLines.push(line.trim());
       pending.push({ kind: "dev", line: line.trim() });
@@ -243,18 +243,4 @@ export async function runDryTour(input: TourCoreConfig, options: DryTourOptions 
     }
     return { passed: false, ranAt: realNow.toISOString(), unitId: unit.id, checks, failure, audit: await core.auditTrail(), messages, devLines };
   }
-}
-
-/** Wraps any Durin adapter so the practice tour can prove when it was (not) called. */
-function countCalls(inner: DurinAccessAdapter): DurinAccessAdapter & { requestCount: number } {
-  const wrapper = {
-    requestCount: 0,
-    requestAccess: (req: Parameters<DurinAccessAdapter["requestAccess"]>[0]) => {
-      wrapper.requestCount++;
-      return inner.requestAccess(req);
-    },
-    revokeAccess: (req: Parameters<DurinAccessAdapter["revokeAccess"]>[0]) => inner.revokeAccess(req),
-    getHealth: () => inner.getHealth(),
-  };
-  return wrapper;
 }

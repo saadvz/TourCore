@@ -44,7 +44,21 @@ export function publishDemoProperty(workspace: PropertyWorkspace, propertyId: st
 }
 export { parseDays, parseTimeOfDay, parseMinutes, parseChoiceList, resolveTimeZone, inferTimeZone } from "./parse";
 export { SETUP_COMMANDS, applySetupCommand, type SetupCommandName } from "./commands";
-export { draftView, readinessView, dryTourView, propertySummary, fixFor, SETUP_STEPS, COMMON_TIME_ZONES, type DraftView, type SetupStep } from "./presenters";
+export {
+  draftView,
+  readinessView,
+  dryTourView,
+  propertySummary,
+  saveStateView,
+  tourListView,
+  tourDetailView,
+  fixFor,
+  SETUP_STEPS,
+  COMMON_TIME_ZONES,
+  type DraftView,
+  type SetupStep,
+} from "./presenters";
+export type { TourRecord, ConversationItem } from "./workspace";
 export { describeHistory, type HistoryEntry } from "../audit/describe";
 export { validateConfig } from "../config/tourCoreConfig";
 export type { ConfigIssue, ConfigSection } from "../config/validateConfig";

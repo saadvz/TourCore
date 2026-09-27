@@ -104,6 +104,12 @@ export function formatDay(date: Date, timeZone: string): string {
   return clean(date.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone }));
 }
 
+/** "Sep 27, 2:14 PM" */
+export function formatShortDateTime(date: Date, timeZone: string): string {
+  const day = clean(date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone }));
+  return `${day}, ${formatTime(date, timeZone)}`;
+}
+
 export function formatLocalDate(date: LocalDate, timeZone: string): string {
   return formatDay(zonedTimeToUtc({ ...date, hour: 12, minute: 0 }, timeZone), timeZone);
 }

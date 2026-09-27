@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { auditToCsv } from "../audit/audit";
 import { TourCoreConfigSchema, TourCoreConfigShape, validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
 import { ExportBundleSchema, type ExportBundle } from "../export/exportBundle";
-import type { DryTourResult } from "./dryTour";
+import { writeFileAtomic, writeFolderAtomic, writeJsonAtomic } from "../storage/atomicWrite";
+import type { DryTourCheck, DryTourResult } from "./dryTour";
 import { runReadinessCheck, type ReadinessResult } from "./readiness";
 import { SetupInputError } from "./setupActions";
 
@@ -23,7 +24,7 @@ export interface PropertyState {
   configHash: string;
   savedAt: string;
   readiness?: { passed: boolean; checkedAt: string; configHash: string; problems: string[] };
-  dryTour?: { passed: boolean; ranAt: string; configHash: string; failure?: string; recordsFolder?: string };
+  dryTour?: { passed: boolean; ranAt: string; configHash: string; failure?: string; recordsFolder?: string; tourId?: string };
   publishedAt?: string;
 }
 
@@ -39,6 +40,28 @@ export interface PublishBlocker {
 
 export type PublishResult = { published: true; state: PropertyState } | { published: false; blockers: PublishBlocker[] };
 
+export interface ConversationItem {
+  from: "tourcore" | "visitor" | "demo";
+  text: string;
+  at: string;
+}
+
+/** One practice tour or visitor demo, kept so the operator can reopen it later. */
+export interface TourRecord {
+  schemaVersion: 1;
+  tourId: string;
+  kind: "practice" | "visitor-demo";
+  ranAt: string;
+  updatedAt: string;
+  outcome: "passed" | "stopped" | "in-progress" | "finished";
+  unitId?: string;
+  visitorName?: string;
+  checks?: DryTourCheck[];
+  failure?: string;
+  /** The visitor-facing thread as shown, including demo notes (visitor demos). */
+  conversation?: ConversationItem[];
+}
+
 export function configHash(config: TourCoreConfig): string {
   return createHash("sha256").update(JSON.stringify(TourCoreConfigShape.parse(config))).digest("hex").slice(0, 16);
 }
@@ -47,23 +70,24 @@ export function defaultWorkspaceRoot(): string {
   return resolve(process.env.TOURCORE_HOME ?? "tourcore-data");
 }
 
+const TOUR_ID = /^[A-Za-z0-9_-]+$/;
+
 /**
  * Where setups live on disk. The operator never edits these files; the config
- * file is the same canonical TourCoreConfig any setup surface writes.
+ * file is the same canonical TourCoreConfig any setup surface writes. Every
+ * write is atomic (temp file + rename), so a crash leaves old or new, not half.
  *   <root>/properties/<propertyId>/tourcore.config.json
  *   <root>/properties/<propertyId>/status.json
- *   <root>/properties/<propertyId>/draft.json            (unsaved changes, if any)
- *   <root>/properties/<propertyId>/practice-tours/<timestamp>/{tour-export.json,audit.csv}
+ *   <root>/properties/<propertyId>/draft.json            (changes that aren't valid yet)
+ *   <root>/properties/<propertyId>/practice-tours/<tourId>/{record.json,tour-export.json,audit.csv}
  */
 export class PropertyWorkspace {
   constructor(readonly root: string = defaultWorkspaceRoot()) {}
 
   list(): SavedProperty[] {
-    const dir = join(this.root, "properties");
-    if (!existsSync(dir)) return [];
-    return readdirSync(dir, { withFileTypes: true })
-      .filter((e) => e.isDirectory() && existsSync(join(dir, e.name, "tourcore.config.json")))
-      .map((e) => this.load(e.name))
+    return this.propertyIds()
+      .filter((id) => this.has(id))
+      .map((id) => this.load(id))
       .sort((a, b) => a.config.property.name.localeCompare(b.config.property.name));
   }
 
@@ -74,10 +98,14 @@ export class PropertyWorkspace {
   load(propertyId: string): SavedProperty {
     if (!this.has(propertyId)) throw new SetupInputError("PROPERTY_NOT_FOUND", "I couldn't find that property.");
     const config = TourCoreConfigShape.parse(JSON.parse(readFileSync(this.configPath(propertyId), "utf8")));
+    const hash = configHash(config);
     const statePath = this.statePath(propertyId);
-    const state: PropertyState = existsSync(statePath)
-      ? JSON.parse(readFileSync(statePath, "utf8"))
-      : { propertyId, status: "DRAFT", configHash: configHash(config), savedAt: new Date().toISOString() };
+    const stored: PropertyState | undefined = existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : undefined;
+    // If a save was interrupted between the config and status files, fail closed: treat it as an unchecked draft.
+    const state: PropertyState =
+      stored && stored.configHash === hash
+        ? stored
+        : { ...(stored ?? {}), propertyId, status: "DRAFT", configHash: hash, savedAt: stored?.savedAt ?? new Date().toISOString(), publishedAt: undefined };
     return { config, state };
   }
 
@@ -100,8 +128,7 @@ export class PropertyWorkspace {
       const { publishedAt: _dropped, ...rest } = previous ?? { propertyId: id };
       state = { ...rest, propertyId: id, status: "DRAFT", configHash: hash, savedAt: now.toISOString() };
     }
-    mkdirSync(this.dir(id), { recursive: true });
-    writeFileSync(this.configPath(id), JSON.stringify(config, null, 2) + "\n");
+    writeJsonAtomic(this.configPath(id), config);
     this.writeState(state);
     this.discardDraft(id);
     return { config, state };
@@ -128,9 +155,20 @@ export class PropertyWorkspace {
 
   /** Unfinished setups may be invalid; they're kept apart from the saved setup until they pass validation. */
   saveDraft(draft: TourCoreConfig): void {
-    const id = draft.property.id;
-    mkdirSync(this.dir(id), { recursive: true });
-    writeFileSync(this.draftPath(id), JSON.stringify(draft, null, 2) + "\n");
+    writeJsonAtomic(this.draftPath(draft.property.id), draft);
+  }
+
+  /**
+   * Persists an edit as soon as it's safe: a valid setup is saved for real,
+   * an invalid one is kept as a draft. Returns which happened.
+   */
+  persistEdit(draft: TourCoreConfig, now = new Date()): "saved" | "draft" {
+    if (validateConfig(draft).length === 0) {
+      this.save(draft, now);
+      return "saved";
+    }
+    this.saveDraft(draft);
+    return "draft";
   }
 
   discardDraft(propertyId: string): void {
@@ -150,27 +188,17 @@ export class PropertyWorkspace {
     return { draft, unsavedChanges: configHash(draft) !== saved.state.configHash };
   }
 
-  /** Latest practice tour records as downloadable text. */
-  exportLatest(propertyId: string): { json: string; csv: string } | undefined {
-    const latest = this.latestPracticeTour(propertyId);
-    if (!latest) return undefined;
-    return { json: JSON.stringify(latest.bundle, null, 2) + "\n", csv: auditToCsv(latest.bundle.auditEvents) };
-  }
-
   private draftPath(propertyId: string): string {
     return join(this.dir(propertyId), "draft.json");
   }
+
+  // ----------------------------------------------------- checks and publish
 
   recordReadiness(propertyId: string, result: ReadinessResult): PropertyState {
     const { state } = this.load(propertyId);
     const next: PropertyState = {
       ...state,
-      readiness: {
-        passed: result.passed,
-        checkedAt: result.checkedAt,
-        configHash: state.configHash,
-        problems: result.checks.flatMap((c) => c.problems),
-      },
+      readiness: { passed: result.passed, checkedAt: result.checkedAt, configHash: state.configHash, problems: result.checks.flatMap((c) => c.problems) },
     };
     this.writeState(next);
     return next;
@@ -178,12 +206,26 @@ export class PropertyWorkspace {
 
   recordDryTour(propertyId: string, result: DryTourResult): PropertyState {
     const { state } = this.load(propertyId);
-    let recordsFolder: string | undefined;
+    let tourId: string | undefined;
     if (result.bundle) {
-      recordsFolder = join(this.dir(propertyId), "practice-tours", result.ranAt.replace(/[:.]/g, "-"));
-      mkdirSync(recordsFolder, { recursive: true });
-      writeFileSync(join(recordsFolder, "tour-export.json"), JSON.stringify(result.bundle, null, 2) + "\n");
-      writeFileSync(join(recordsFolder, "audit.csv"), auditToCsv(result.bundle.auditEvents));
+      tourId = uniqueTourId(this.toursDir(propertyId), stamp(result.ranAt));
+      const record: TourRecord = {
+        schemaVersion: 1,
+        tourId,
+        kind: "practice",
+        ranAt: result.ranAt,
+        updatedAt: result.ranAt,
+        outcome: result.passed ? "passed" : "stopped",
+        ...(result.unitId ? { unitId: result.unitId } : {}),
+        visitorName: "Pat Practice",
+        checks: result.checks,
+        ...(result.failure ? { failure: result.failure } : {}),
+      };
+      writeFolderAtomic(join(this.toursDir(propertyId), tourId), {
+        "record.json": JSON.stringify(record, null, 2) + "\n",
+        "tour-export.json": JSON.stringify(result.bundle, null, 2) + "\n",
+        "audit.csv": auditToCsv(result.bundle.auditEvents),
+      });
     }
     const next: PropertyState = {
       ...state,
@@ -192,11 +234,20 @@ export class PropertyWorkspace {
         ranAt: result.ranAt,
         configHash: state.configHash,
         ...(result.failure ? { failure: result.failure } : {}),
-        ...(recordsFolder ? { recordsFolder } : {}),
+        ...(tourId ? { tourId, recordsFolder: join(this.toursDir(propertyId), tourId) } : {}),
       },
     };
     this.writeState(next);
     return next;
+  }
+
+  /** Creates or updates a visitor demo's records. Called after every visitor step. */
+  recordVisitorDemo(propertyId: string, record: TourRecord, bundle: ExportBundle): void {
+    if (!TOUR_ID.test(record.tourId)) throw new SetupInputError("TOUR_ID_INVALID", "That tour label isn't valid.");
+    const folder = join(this.toursDir(propertyId), record.tourId);
+    writeJsonAtomic(join(folder, "tour-export.json"), bundle);
+    writeFileAtomic(join(folder, "audit.csv"), auditToCsv(bundle.auditEvents));
+    writeJsonAtomic(join(folder, "record.json"), record);
   }
 
   /** Why this property can't be published for demo yet. Empty = it can. */
@@ -232,14 +283,59 @@ export class PropertyWorkspace {
     return { published: true, state: next };
   }
 
-  latestPracticeTour(propertyId: string): { folder: string; bundle: ExportBundle } | undefined {
-    const dir = join(this.dir(propertyId), "practice-tours");
-    if (!existsSync(dir)) return undefined;
-    const latest = readdirSync(dir).sort().at(-1);
-    if (!latest) return undefined;
-    const folder = join(dir, latest);
+  // ------------------------------------------------------------ tour records
+
+  /** Practice tours and visitor demos, newest first. */
+  listTours(propertyId: string): TourRecord[] {
+    const dir = this.toursDir(propertyId);
+    if (!existsSync(dir)) return [];
+    return readdirSync(dir, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && TOUR_ID.test(e.name) && existsSync(join(dir, e.name, "tour-export.json")))
+      .map((e) => this.readRecord(propertyId, e.name))
+      .sort((a, b) => b.ranAt.localeCompare(a.ranAt));
+  }
+
+  loadTour(propertyId: string, tourId: string): { record: TourRecord; bundle: ExportBundle; folder: string } | undefined {
+    if (!TOUR_ID.test(tourId)) return undefined;
+    const folder = join(this.toursDir(propertyId), tourId);
+    if (!existsSync(join(folder, "tour-export.json"))) return undefined;
     const bundle = ExportBundleSchema.parse(JSON.parse(readFileSync(join(folder, "tour-export.json"), "utf8")));
-    return { folder, bundle };
+    return { record: this.readRecord(propertyId, tourId), bundle, folder };
+  }
+
+  latestPracticeTour(propertyId: string): { folder: string; bundle: ExportBundle } | undefined {
+    const latest = this.listTours(propertyId)[0];
+    return latest ? this.loadTour(propertyId, latest.tourId) : undefined;
+  }
+
+  /** A tour's records as downloadable text; the latest tour when no id is given. */
+  exportTour(propertyId: string, tourId?: string): { json: string; csv: string } | undefined {
+    const id = tourId ?? this.listTours(propertyId)[0]?.tourId;
+    const tour = id ? this.loadTour(propertyId, id) : undefined;
+    if (!tour) return undefined;
+    return { json: JSON.stringify(tour.bundle, null, 2) + "\n", csv: auditToCsv(tour.bundle.auditEvents) };
+  }
+
+  exportLatest(propertyId: string): { json: string; csv: string } | undefined {
+    return this.exportTour(propertyId);
+  }
+
+  /** Folder name for a new visitor demo's records. */
+  newVisitorTourId(propertyId: string, startedAt: Date): string {
+    return uniqueTourId(this.toursDir(propertyId), `${stamp(startedAt.toISOString())}_visitor`);
+  }
+
+  private readRecord(propertyId: string, tourId: string): TourRecord {
+    const path = join(this.toursDir(propertyId), tourId, "record.json");
+    if (existsSync(path)) return JSON.parse(readFileSync(path, "utf8"));
+    // Tours saved before records existed: rebuild the essentials from the export.
+    const bundle = JSON.parse(readFileSync(join(this.toursDir(propertyId), tourId, "tour-export.json"), "utf8")) as ExportBundle;
+    const done = bundle.auditEvents.some((e) => e.type === "TOUR_COMPLETED");
+    return { schemaVersion: 1, tourId, kind: "practice", ranAt: bundle.exportedAt, updatedAt: bundle.exportedAt, outcome: done ? "passed" : "stopped" };
+  }
+
+  private toursDir(propertyId: string): string {
+    return join(this.dir(propertyId), "practice-tours");
   }
 
   private dir(propertyId: string): string {
@@ -256,9 +352,17 @@ export class PropertyWorkspace {
   }
 
   private writeState(state: PropertyState): void {
-    mkdirSync(this.dir(state.propertyId), { recursive: true });
-    writeFileSync(this.statePath(state.propertyId), JSON.stringify(state, null, 2) + "\n");
+    writeJsonAtomic(this.statePath(state.propertyId), state);
   }
+}
+
+function stamp(iso: string): string {
+  return iso.replace(/[:.]/g, "-");
+}
+
+function uniqueTourId(dir: string, base: string): string {
+  if (!existsSync(join(dir, base))) return base;
+  for (let i = 2; ; i++) if (!existsSync(join(dir, `${base}_${i}`))) return `${base}_${i}`;
 }
 
 /** Short operator-facing status. */

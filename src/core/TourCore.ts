@@ -19,7 +19,7 @@ import type { VerificationProvider } from "../verification/basicForm";
 import { AuditLog, type AuditInput } from "../audit/audit";
 import { buildExport, type ExportBundle } from "../export/exportBundle";
 import type { Clock } from "./clock";
-import { approvedFacts, type ApprovedFact } from "./facts";
+import { approvedFacts, findApprovedAnswer, type ApprovedFact } from "./facts";
 import { normalizePhone } from "./phone";
 import { nextTourDay, slotsOn, tourWindow, type TourSlot } from "./schedule";
 import { formatDay as formatDayIn, formatTime as formatTimeIn, localDateOf, type LocalDate } from "./timezone";
@@ -119,7 +119,9 @@ export class TourCore {
     await this.textProspect(
       prospect,
       reservation.id,
-      `Hi ${firstName(prospect.name)}! Happy to set up a self-guided tour of ${unit.name} at ${config.property.name}.\n` +
+      `Hi ${firstName(prospect.name)}! Happy to set up a self-guided tour of ${unit.name} at ${config.property.name}.` +
+        (unit.summary ? ` Here's what the property team shared: ${unit.summary.replace(/\.?$/, ".")}` : "") +
+        "\n" +
         `Open times on ${day}: ${slots.map((s, i) => `${i + 1}) ${s.label}`).join("  ")}\nReply with the number that works for you.`,
     );
     return { prospect, reservation };
@@ -272,10 +274,59 @@ export class TourCore {
       prospect,
       reservation.id,
       `Thanks for touring ${unit.name}, ${firstName(prospect.name)}!${unit.summary ? ` Quick recap: ${unit.summary.replace(/\.$/, "")}.` : ""} The doors are locked again behind you.\n` +
-        "One question: would you like to apply, book another visit, or ask the leasing team something? Just reply here.",
+        "Would you like someone from the property team to follow up? Reply YES or NO.",
     );
-    await this.record("FOLLOW_UP_SENT", { reservationId: reservation.id, prospectId: prospect.id, detail: "recap + next-step question" });
+    await this.record("FOLLOW_UP_SENT", { reservationId: reservation.id, prospectId: prospect.id, detail: "recap + follow-up question" });
     return reservation;
+  }
+
+  /** Records the visitor's answer to the follow-up question. Only the first answer counts. */
+  async recordFollowUpResponse(reservationId: string, wantsContact: boolean): Promise<void> {
+    const reservation = await this.mustGetReservation(reservationId);
+    if (reservation.status !== "COMPLETED") throw new TourCoreError("NOT_COMPLETED", "The tour isn't finished yet");
+    const already = (await this.deps.store.listAudit()).some((e) => e.type === "FOLLOW_UP_RESPONSE" && e.reservationId === reservationId);
+    if (already) return;
+    const prospect = await this.mustGetProspect(reservation.prospectId);
+    await this.recordInbound(prospect.id, reservationId, wantsContact ? "Yes" : "No");
+    await this.record("FOLLOW_UP_RESPONSE", { reservationId, prospectId: prospect.id, detail: wantsContact ? "yes" : "no" });
+    if (wantsContact) {
+      await this.notifyOperator(reservation, `${prospect.name} toured ${this.unitFor(reservation).name} and would like someone to follow up.`);
+      await this.textProspect(prospect, reservationId, `Great. Someone from the ${this.deps.config.operator.name.toLowerCase()} will be in touch soon.`);
+    } else {
+      await this.textProspect(prospect, reservationId, "No problem. Thanks again for visiting!");
+    }
+  }
+
+  /**
+   * Answers only from operator-approved facts for this reservation's unit and
+   * property. With no matching fact, it says so and flags the question.
+   */
+  async answerQuestion(reservationId: string, question: string): Promise<{ answered: boolean; facts: ApprovedFact[] }> {
+    const reservation = await this.mustGetReservation(reservationId);
+    const prospect = await this.mustGetProspect(reservation.prospectId);
+    const asked = question.trim().slice(0, 300);
+    if (!asked) throw new TourCoreError("EMPTY_QUESTION", "Please type a question");
+    await this.recordInbound(prospect.id, reservationId, asked);
+
+    const matches = findApprovedAnswer(approvedFacts(this.deps.config, reservation.unitId), asked);
+    if (matches.length) {
+      await this.record("QUESTION_ANSWERED", { reservationId, prospectId: prospect.id, detail: asked });
+      await this.textProspect(prospect, reservationId, `Here's what the property team shared: ${matches.map((f) => f.text).join(" ")}`);
+      return { answered: true, facts: matches };
+    }
+    await this.record("QUESTION_UNANSWERED", { reservationId, prospectId: prospect.id, detail: asked });
+    await this.textProspect(prospect, reservationId, "I don't have that information for this property. I've flagged it for the property team so they can get back to you.");
+    await this.notifyOperator(reservation, `${prospect.name} asked "${asked}", and there's no approved answer yet.`);
+    return { answered: false, facts: [] };
+  }
+
+  async requestHelp(reservationId: string, where?: string): Promise<void> {
+    const reservation = await this.mustGetReservation(reservationId);
+    const prospect = await this.mustGetProspect(reservation.prospectId);
+    await this.recordInbound(prospect.id, reservationId, "I need help");
+    await this.record("HELP_REQUESTED", { reservationId, prospectId: prospect.id, detail: where ?? "" });
+    await this.notifyOperator(reservation, `${prospect.name} asked for help${where ? ` near ${where}` : ""}.`);
+    await this.textProspect(prospect, reservationId, `I've let the ${this.deps.config.operator.name.toLowerCase()} know. Someone will reach out shortly.`);
   }
 
   // -------------------------------------------------------- operator actions
@@ -438,7 +489,7 @@ export class TourCore {
     await this.textProspect(
       prospect,
       ready.id,
-      `You're all set for ${this.time(start)}! When you arrive, text me "I'm here" and I'll open the entrance.\n` +
+      `You're all set for your tour on ${this.day(start)} at ${this.time(start)}! When you arrive, text me "I'm here" and I'll open the entrance.\n` +
         `Doors will work for you from ${this.time(new Date(ready.windowStart!))} to ${this.time(new Date(ready.windowEnd!))}.`,
     );
     return ready;
