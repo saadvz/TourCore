@@ -8,6 +8,12 @@ import { MessagingLedger } from "../messaging/ledger";
 import { SENDBLUE_WEBHOOK_PATH, sendblueRuntime } from "../messaging/sendblue/runtime";
 import { handleSendblueWebhook } from "../messaging/sendblue/webhook";
 import { createIntentInterpreter, intentModelFromEnv, type IntentInterpreter } from "../intent";
+import { mcpAuthModeFromEnv, type McpAuthMode } from "../mcp/authMode";
+import { authorized, handleMcpMessage, MCP_PATH } from "../mcp/mcpBridge";
+import { endpointsFor, isOAuthLocalPath, isOAuthPublicPath, McpOAuth } from "../mcp/oauth";
+import { grokLegacyCompatFromEnv, redirectPolicyFromEnv } from "../mcp/oauth/clients";
+import { ConfirmationBook } from "../operator/confirmations";
+import type { ToolContext } from "../operator/tools";
 import { PropertyWorkspace } from "../setup";
 import { MessagingEndpoints } from "../messaging/endpoints";
 import { FileRuntimeStore } from "../storage/runtimeStore";
@@ -27,6 +33,9 @@ const STATIC: Record<string, { file: string; type: string }> = {
   "/tours.js": { file: "tours.js", type: JS },
   "/visitor.js": { file: "visitor.js", type: JS },
   "/verify.js": { file: "verify.js", type: JS },
+  "/grok": { file: "grok.html", type: "text/html; charset=utf-8" },
+  "/grok.js": { file: "grok.js", type: JS },
+  "/oauth.js": { file: "oauth.js", type: JS },
   "/styles.css": { file: "styles.css", type: "text/css; charset=utf-8" },
 };
 const MAX_BODY_BYTES = 1_000_000;
@@ -42,12 +51,33 @@ export interface SetupServerOptions {
   /** Live conversations for this process. Tests pass their own to look inside. */
   visitors?: VisitorDemoRegistry;
   log?: (line: string) => void;
+  /** Defaults to TOURCORE_MCP_AUTH_MODE (oauth unless set to static). */
+  mcpAuth?: McpAuthMode;
+  /** Static mode's bearer token. Passing it without `mcpAuth` selects static mode. Unset means the connector is off. */
+  operatorToken?: () => string | undefined;
+  /** Clock for OAuth codes and tokens. */
+  authNow?: () => number;
+  /** Fetches OAuth Client ID Metadata Documents. Tests replace the network here. */
+  fetchClientMetadata?: (clientId: string) => Promise<unknown>;
+  /** A client asked to connect; the owner approves at this local address. */
+  onApprovalRequest?: (approvalPageUrl: string) => void;
+  /** Tests only: turn off the OAuth endpoints' rate limits. */
+  oauthRateLimit?: false;
 }
 
 const LOCAL_HOSTS = ["localhost", "127.0.0.1", "[::1]"];
 
-/** What the public (tunnel) address may reach: the webhook and the identity form. Never the operator app. */
-function publicRouteAllowed(method: string, path: string): boolean {
+export const operatorTokenFromEnv = () => process.env.TOURCORE_OPERATOR_TOKEN?.trim() || undefined;
+
+/**
+ * What the public (tunnel) address may reach: the webhook, the identity form,
+ * the operator tools for an agent host (authorization required) and, in OAuth
+ * mode, the OAuth endpoints. Never the browser operator app, and never the
+ * page where the owner approves a connection.
+ */
+function publicRouteAllowed(method: string, path: string, oauth: boolean): boolean {
+  if (path === MCP_PATH) return true;
+  if (oauth && (isOAuthPublicPath(path, MCP_PATH) || (method === "GET" && path === "/oauth.js"))) return true;
   if (method === "POST" && path === SENDBLUE_WEBHOOK_PATH) return true;
   if (method === "GET" && (/^\/verify\/[A-Za-z0-9_-]+$/.test(path) || path === "/verify.js" || path === "/styles.css")) return true;
   return /^\/api\/verify\/[A-Za-z0-9_-]+$/.test(path) && (method === "GET" || method === "POST");
@@ -107,8 +137,45 @@ export function createSetupServer(options: SetupServerOptions = {}): Server {
     persist: (session: VisitorDemoSession) => conversations.save(session),
     needsAttention: (propertyId: string) => conversations.needsAttention(propertyId),
   };
+  const operatorToken = options.operatorToken ?? operatorTokenFromEnv;
+  const authMode = options.mcpAuth ?? (options.operatorToken ? "static" : mcpAuthModeFromEnv());
+  let server: Server;
+  const approvalPage = () => `${tools.localUrl?.() ?? "http://localhost:4321"}/grok`;
+  let lastApprovalWindow = 0;
+  const oauth =
+    authMode === "oauth"
+      ? new McpOAuth({
+          runtime,
+          mcpPath: MCP_PATH,
+          endpoints: () => {
+            const base = sendblueRuntime.env().publicBaseUrl;
+            return base ? endpointsFor(base, MCP_PATH) : undefined;
+          },
+          redirectPolicy: () => redirectPolicyFromEnv(),
+          now: options.authNow,
+          fetchClientMetadata: options.fetchClientMetadata,
+          onApprovalRequest: (request) => {
+            log(`${request.clientName} is asking to connect to Tour Core (code ${request.matchCode}). Approve or deny it at ${approvalPage()}`);
+            // Anyone with the tunnel URL can ask; one window at a time is enough, the page lists every request.
+            if (request.createdAt - lastApprovalWindow < 20_000) return;
+            lastApprovalWindow = request.createdAt;
+            options.onApprovalRequest?.(approvalPage());
+          },
+          log,
+          rateLimit: options.oauthRateLimit,
+        })
+      : undefined;
+  const tools: ToolContext = {
+    services: api,
+    confirmations: new ConfirmationBook(),
+    now: () => options.now?.() ?? new Date(),
+    localUrl: () => {
+      const address = server?.address();
+      return typeof address === "object" && address ? `http://localhost:${address.port}` : undefined;
+    },
+  };
 
-  return createServer(async (req, res) => {
+  server = createServer(async (req, res) => {
     await restored;
     const send = (status: number, type: string, body: string, extra: Record<string, string> = {}) => {
       res.writeHead(status, { "Content-Type": type, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", ...extra });
@@ -123,11 +190,47 @@ export function createSetupServer(options: SetupServerOptions = {}): Server {
     const url = new URL(req.url ?? "/", "http://localhost");
     const method = req.method ?? "GET";
     const isLocal = LOCAL_HOSTS.includes(host);
-    if (!isLocal && !(publicHost && host === publicHost && publicRouteAllowed(method, url.pathname))) {
+    if (!isLocal && !(publicHost && host === publicHost && publicRouteAllowed(method, url.pathname, !!oauth))) {
       return send(isLocal || host === publicHost ? 404 : 403, "text/plain", isLocal || host === publicHost ? "Not found" : "Forbidden");
     }
 
     try {
+      if (oauth && isOAuthPublicPath(url.pathname, MCP_PATH)) return await oauth.handle(req, res);
+      if (isOAuthLocalPath(url.pathname)) {
+        if (!isLocal) return send(404, "text/plain", "Not found");
+        if (oauth) return await oauth.handleLocal(req, res);
+        return send(200, "application/json; charset=utf-8", JSON.stringify({ mode: typeof authMode === "string" ? authMode : "off" }));
+      }
+      if (url.pathname === MCP_PATH) {
+        const json = "application/json; charset=utf-8";
+        if (typeof authMode !== "string") {
+          return send(503, json, JSON.stringify({ error: { message: "The Tour Core connector is off: TOURCORE_MCP_AUTH_MODE must be oauth or static." } }));
+        }
+        if (oauth) {
+          // Token checked before the body is read; failures have already been answered (401/403).
+          if (!(await oauth.authenticate(req, res))) return;
+        } else {
+          const token = operatorToken();
+          if (!token) return send(503, json, JSON.stringify({ error: { message: "The Tour Core connector is off. Run `npm run grok:connect -- --static` on the Tour Core computer to turn it on." } }));
+          if (!authorized(req.headers.authorization, token)) {
+            return send(401, json, JSON.stringify({ error: { message: "Missing or wrong Tour Core connector token." } }), { "WWW-Authenticate": 'Bearer realm="tour-core"' });
+          }
+        }
+        if (method !== "POST") return send(405, json, JSON.stringify({ error: { message: "Send MCP requests with POST." } }), { Allow: "POST" });
+        if (!String(req.headers["content-type"] ?? "").startsWith("application/json")) return send(415, json, JSON.stringify({ error: { message: "Unsupported request." } }));
+        let message: unknown;
+        try {
+          message = JSON.parse((await readRaw(req)).toString("utf8"));
+        } catch {
+          return send(400, json, JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "That request couldn't be read." } }));
+        }
+        const reply = await handleMcpMessage(tools, message);
+        if (reply.body === undefined) {
+          res.writeHead(reply.status, { "Cache-Control": "no-store" });
+          return res.end();
+        }
+        return send(reply.status, json, JSON.stringify(reply.body));
+      }
       if (method === "POST" && url.pathname === SENDBLUE_WEBHOOK_PATH) {
         // Raw bytes first: authenticity is checked before anything is parsed.
         const rawBody = await readRaw(req);
@@ -159,6 +262,7 @@ export function createSetupServer(options: SetupServerOptions = {}): Server {
       return send(400, "application/json", JSON.stringify({ error: { message: "That request couldn't be read." } }));
     }
   });
+  return server;
 }
 
 function readRaw(req: IncomingMessage): Promise<Buffer> {
@@ -223,7 +327,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const dev = args.includes("--dev") || process.env.npm_config_dev === "true";
   const portArg = args.find((a) => a.startsWith("--port="));
   const open = !args.includes("--no-open") && !process.env.CI;
-  const { server, url } = await startSetupServer({ dev, open, port: portArg ? Number(portArg.split("=")[1]) : undefined });
+  const { server, url } = await startSetupServer({
+    dev,
+    open,
+    port: portArg ? Number(portArg.split("=")[1]) : undefined,
+    onApprovalRequest: (page) => {
+      if (!process.env.CI) openBrowser(page);
+    },
+  });
   console.log("\n  Tour Core setup is running.");
   console.log(`\n  Open this link in your browser:  ${url}\n`);
   console.log(open ? "  (It should open by itself in a moment.)" : "");
@@ -234,6 +345,20 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.log(`  Incoming messages:    ${sb.publicBaseUrl ? `${sb.publicBaseUrl}${SENDBLUE_WEBHOOK_PATH}` : "(set PUBLIC_BASE_URL to receive replies)"}`);
     const model = intentModelFromEnv();
     console.log(`  Reading texts:        built-in rules${model ? ` + language model ${model.name}` : " only"}\n`);
+  }
+  const mcpUrl = sb.publicBaseUrl ? `${new URL(sb.publicBaseUrl).origin}${MCP_PATH}` : "(set PUBLIC_BASE_URL so Grok Bot can reach it)";
+  const mode = mcpAuthModeFromEnv();
+  if (mode === "oauth") {
+    console.log(`  Grok Bot connector:   ${mcpUrl} (OAuth: approve connections at ${url}grok)\n`);
+    if (grokLegacyCompatFromEnv()) {
+      console.log("  WARNING: Grok legacy OAuth compatibility is enabled for this P0 demo. Tour Core is");
+      console.log("  accepting Cursor's known legacy OAuth callback. Disable this mode when Grok");
+      console.log("  no longer requires it. (TOURCORE_GROK_LEGACY_OAUTH_COMPAT=true in .env)\n");
+    }
+  } else if (mode === "static") {
+    console.log(`  Grok Bot connector:   ${mcpUrl} (static token, development only${operatorTokenFromEnv() ? "" : "; no token set, so it's off"})\n`);
+  } else {
+    console.log(`  Grok Bot connector:   off (TOURCORE_MCP_AUTH_MODE="${mode.invalid}" isn't oauth or static)\n`);
   }
   if (dev) console.log(`  Developer mode is on. Records folder: ${new PropertyWorkspace().root}\n  Static files: ${fileURLToPath(PUBLIC_DIR)}\n`);
   const stop = () => {

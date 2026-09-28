@@ -11,7 +11,7 @@ import { writeJsonAtomic } from "./atomicWrite";
  * grants, audit) stay in the tour records; these only point at them.
  */
 
-export type RuntimeNamespace = "sessions" | "verification" | "endpoints" | "messaging-ledger" | "probe";
+export type RuntimeNamespace = "sessions" | "verification" | "endpoints" | "messaging-ledger" | "oauth" | "probe";
 
 /** A stored document that exists but can't be read back. Never treated as empty. */
 export class RuntimeRecordDamaged extends Error {

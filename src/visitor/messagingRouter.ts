@@ -88,8 +88,8 @@ export class MessagingConversations {
     if (trouble && !(await this.answerBroken(trouble, message.text))) return { correlationId: trouble.sessionId };
 
     let session = registry.latestForPhone(propertyId, phone, "messaging");
-    // A finished tour is never reopened: a greeting starts a new one (repeat tour).
-    if (session && ["done", "stopped"].includes(await session.stage()) && isGreeting(message.text) && !session.optedOut) session = undefined;
+    // A finished tour is never reopened: a greeting starts a new one (repeat tour). A paused tour isn't finished.
+    if (session && ["done", "stopped"].includes(await session.stage()) && !(await session.isPaused()) && isGreeting(message.text) && !session.optedOut) session = undefined;
 
     if (!session) {
       const { config, state } = ws.load(propertyId);

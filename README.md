@@ -10,6 +10,12 @@ own policy check allows the request. If policy says no, Durin is never asked.
 This repo is an early vertical slice. Everything runs locally in demo mode: nothing sends real texts or opens
 real doors.
 
+**Operator console: Grok Bot.** The intended way to run Tour Core is by talking to the **Tour Core Bot** in Grok
+Bot: set up a property, map routes, check readiness, run a practice tour, publish, watch live tours, work
+exceptions and export the audit. Grok calls Tour Core's typed tools; Tour Core keeps every record and makes every
+access decision. See [Grok Bot operator console](#grok-bot-operator-console). The browser app below stays as the
+fallback, the debugging surface and a deterministic comparison.
+
 ## Quick start
 
 Requires Node.js 20+ (built on 22). No environment variables or accounts needed.
@@ -261,6 +267,58 @@ later):
    not "Which unit would you like to see?".
 4. Text "I'm done", restart once more, then reply "yes". The follow-up is recorded and the tour shows **Finished**.
 
+## Grok Bot operator console
+
+```
+Operator ─► Tour Core Bot (Grok Bot) ─► PUBLIC_BASE_URL/mcp ─► operator tools ─► Tour Core ─► Durin
+                                          (thin MCP bridge)     src/operator/      state, policy, audit
+Browser app ─► /api ────────────────────────────────────────►  same actions
+Terminal wizard ─────────────────────────────────────────────►  same setup actions
+```
+
+- **Tool contract** (`src/operator/tools.ts`): 32 typed, provider-neutral tools over the existing actions:
+  property setup, units, doors, routes (`preview_route` resolves the operator's words to doors on file; `set_route`
+  saves exact names only), tour hours in everyday words, verification, messaging, review, `run_readiness_check`,
+  `run_dry_tour`, `publish_demo_property`, `list_active_tours`, `inspect_tour`, the exception queue, holds, calling a
+  tour off, answering a flagged question with a new approved fact, and `export_audit`. Every input is validated
+  (unexpected fields are refused); every result is plain language. `npm run grok:tools` lists them.
+- **No door tool.** Nothing opens, unlocks, grants or mints access, changes the door-access mode or touches raw
+  files. Doors open only through a visitor's own tour and Tour Core's policy.
+- **Explicit approval** for publish, pause, resume, call off and new approved facts: the first call changes nothing
+  and returns the exact question plus a short-lived code bound to that action, target and current state; only a
+  second call with the code acts, and only if nothing changed. Publish is also refused unless readiness and a
+  practice tour passed for the exact setup.
+- **Exceptions** (`src/operator/exceptions.ts`) are derived from the canonical tour records: unanswered questions,
+  help requests, off-route attempts, door-system problems, paused tours, failed identity checks, undelivered
+  messages, and text tours that couldn't be restored. Resolutions go in an append-only ledger
+  (`properties/<id>/operator/exception-resolutions.json`) and change nothing else. A paused real-phone tour now tells
+  the visitor it's paused (not ended), and "HI" doesn't start a second tour while it's paused.
+- **Audit export** (`src/operator/auditExport.ts`) writes a day's validated bundles, resolutions and one CSV to
+  `properties/<id>/audit-exports/<day>_<time>/`, downloadable at `/api/properties/<id>/audit-exports/...` locally.
+- **MCP bridge** (`src/mcp/mcpBridge.ts`): stateless Streamable HTTP JSON-RPC (`initialize`, `tools/list`,
+  `tools/call`) on the existing server at `/mcp`. Transport only, no policy.
+- **OAuth for `/mcp`** (`src/mcp/oauth/`): the MCP authorization spec's flow. There's protected-resource and
+  authorization-server metadata, Dynamic Client Registration and Client ID Metadata Documents, authorization code +
+  PKCE S256, one-hour `tourcore.operator` tokens, rotating refresh tokens and revocation. It's built on the official
+  MCP TypeScript SDK's OAuth handlers. Grok connects with just the URL; the owner clicks **Allow** at
+  `http://localhost:4321/grok` on the Tour Core computer, the only place a connection can be approved. Tokens are
+  stored hashed in `tourcore-data/runtime/oauth/`. OAuth only gates the tools: consequential actions still need Tour
+  Core's own confirmation codes. `TOURCORE_MCP_AUTH_MODE=static` swaps in a single bearer token for development
+  (never both).
+- **Skills and template**: the six skills (Setup Property, Map Route, Run Readiness Check, Simulate Tour, Work
+  Exception, Export Audit) are in [`.grok/skills/`](.grok/skills/); the Bot profile, context, safe examples and
+  integration notes are in [`grok-template/`](grok-template/). Setup, team-only publishing and install:
+  [`docs/grok-template-setup.md`](docs/grok-template-setup.md). Manual test with a real Bot:
+  [`docs/grok-manual-test.md`](docs/grok-manual-test.md).
+
+```bash
+npm run grok:connect                       # the URL to add in Grok (OAuth; nothing to paste)
+npm run grok:status                        # mode, URL, what's connected (no token values)
+npm run grok:disconnect                    # revoke Grok's access; nothing else changes
+npm run grok:tools                         # the tools Grok Bot sees
+npm run grok:connect -- --static [--rotate] # development only: static bearer token mode
+```
+
 ## What "Publish for demo" means
 
 Publishing sets the property's status to `PUBLISHED_FOR_DEMO`. That is **not** a production launch. It only means:
@@ -275,9 +333,9 @@ verification and Durin access all stay in demo mode. No physical door is control
 ## Setup engine (UI-independent)
 
 ```
-Terminal wizard (src/cli)      Browser app (src/web)      Future Grok Bot
+Terminal wizard (src/cli)      Browser app (src/web)      Grok Bot (src/mcp -> src/operator/tools)
             \                          |                        /
-             '-------------->  Setup actions (src/setup)  <----'
+             '-------->  Operator flow (src/operator) + setup actions (src/setup)  <----'
                                        |
                                    Tour Core
 ```
@@ -374,13 +432,18 @@ src/storage/       store contract + in-memory store; runtime store (sessions, li
 src/audit/, src/export/   audit formatting/CSV, validated export bundle
 src/createTourCore.ts     the only place config modes map to adapters
 src/setup/         setup engine: actions, commands, presenters, readiness, practice tour, save/publish
+src/operator/      operator actions shared by every surface: readiness/practice/publish flow, live tours,
+                   exceptions, holds, approved-fact answers, audit export, and the typed tool contract
+src/mcp/           thin MCP bridge (transport only) over the operator tools, mounted at /mcp
+.grok/skills/      the six Grok operator skills (SKILL.md)
+grok-template/     Tour Core Bot profile, context, safe examples, integration notes, manifest
 src/intent/        what a typed message means: intent schema, rule-based interpreter, optional language-model
                    interpreter behind a vendor-neutral interface
 src/visitor/       visitor session over the real engine (browser phone and real phones), typed-reply
                    dispatcher, messaging conversation router, identity-form links, phone/live presenters
 src/messaging/     provider-neutral messaging contract, channel-aware wording, ledger; sendblue/ holds the
                    only Sendblue code (adapter, webhook verification, readiness, SDK boundary)
-src/tools/         developer tooling (npm run sendblue:*)
+src/tools/         developer tooling (npm run sendblue:*, npm run grok:*)
 src/web/           local server + API (server.ts, api.ts); pages in public/: app.js (setup), tours.js (history, live),
                    visitor.js (phone), ui.js (shared helpers). No build step.
 src/cli/           terminal wizard (npm run setup:cli)
@@ -391,7 +454,7 @@ src/demo/          scripted demo (npm run demo)
 
 | Component | Now | Next |
 | --- | --- | --- |
-| Messaging | Demo messaging (prints texts) | Bland SMS behind `Messenger` |
+| Messaging | Sendblue for real phones, or demo messaging | Other providers behind the same `Messenger` contract |
 | Storage | On this computer (in-memory, plus JSON/CSV files) | Google Drive behind `TourCoreStore` |
 | Verification | Simulated form response, or practice verification | Real Google Form mapped to `BasicFormResponseSchema` |
 | Access | Durin demo mode | **Stays mocked** until the real Durin contract is ready |

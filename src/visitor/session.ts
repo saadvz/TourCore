@@ -206,6 +206,12 @@ export class VisitorDemoSession {
     }
   }
 
+  /** Paused by the team or by a door-system problem: not over, just waiting for the team. */
+  async isPaused(): Promise<boolean> {
+    const status = (await this.reservation())?.status;
+    return status === "OPERATOR_HOLD" || status === "PROVIDER_FAILURE";
+  }
+
   /** Doors on the reserved route that haven't been opened yet, in order. */
   async remainingStops(): Promise<string[]> {
     const r = await this.reservation();
@@ -348,6 +354,18 @@ export class VisitorDemoSession {
     const { changed } = await this.core.rescheduleReservation({ reservationId: this.reservationId, newStartsAt, ...options });
     await this.syncReplies();
     return { changed };
+  }
+
+  /**
+   * Operator action on this visitor's reservation (hold, resume, revoke) through
+   * the engine; anything Tour Core tells the visitor goes out on this
+   * conversation's own transport.
+   */
+  async operatorChange<T>(run: (core: TourCore, reservationId: string) => Promise<T>): Promise<T> {
+    if (!this.reservationId) throw new SetupInputError("NO_TOUR", "This visitor hasn't booked a tour yet.");
+    const result = await run(this.core, this.reservationId);
+    await this.syncReplies();
+    return result;
   }
 
   /** Developer mode only: the tour starts this minute, even outside tour hours. The clock is not touched. */
@@ -552,7 +570,7 @@ export class VisitorDemoSession {
       kind: this.kind,
       ranAt: this.startedAt.toISOString(),
       updatedAt: this.clock.now().toISOString(),
-      outcome: stage === "done" || stage === "follow-up" ? "finished" : stage === "stopped" ? "stopped" : "in-progress",
+      outcome: stage === "done" || stage === "follow-up" ? "finished" : stage === "stopped" && !(await this.isPaused()) ? "stopped" : "in-progress",
       ...(r ? { unitId: r.unitId } : {}),
       ...(name ? { visitorName: name } : {}),
       ...(this.visitor ? { visitorPhone: this.visitor.phone } : {}),
@@ -581,6 +599,11 @@ export class VisitorDemoRegistry {
     return this.sessions.get(id);
   }
 
+  /** Every conversation in this process, oldest first. */
+  all(): VisitorDemoSession[] {
+    return [...this.sessions.values()];
+  }
+
   /** The most recent conversation with this phone at this property, finished or not. */
   latestForPhone(propertyId: string, phone: string, kind?: TourRecord["kind"]): VisitorDemoSession | undefined {
     const e164 = normalizePhone(phone);
@@ -592,7 +615,7 @@ export class VisitorDemoRegistry {
     const mine = [...this.sessions.values()].filter((s) => s.propertyId === propertyId).reverse();
     for (const s of mine) {
       const stage = await s.stage();
-      if (stage !== "done" && stage !== "stopped") return s;
+      if ((stage !== "done" && stage !== "stopped") || (await s.isPaused())) return s;
     }
     return undefined;
   }

@@ -13,25 +13,22 @@ import {
   propertySummary,
   PropertyWorkspace,
   readinessView,
-  runDryTour,
-  runReadinessCheck,
   SETUP_STEPS,
   SetupInputError,
   tourDetailView,
   tourListView,
-  validateConfig,
   VisitorDemoRegistry,
   VisitorDemoSession,
   visitorView,
 } from "./setupFacade";
 import { z } from "zod";
-import type { TourCoreConfig } from "../config/tourCoreConfig";
 import { checkMessaging } from "../createTourCore";
-import type { MessagingEndpoints } from "../messaging/endpoints";
-import type { RuntimeStore } from "../storage/runtimeStore";
 import { TourCoreError } from "../core/TourCore";
 import { zonedParts, zonedTimeToUtc } from "../core/timezone";
 import { toE164 } from "../messaging/Messenger";
+import { auditExportFile } from "../operator/auditExport";
+import { persistSession, type OperatorServices } from "../operator/services";
+import { checkedConfig as checkedSetup, readinessForProperty, runPracticeTour } from "../operator/setupFlow";
 import type { VerificationLinks } from "../visitor/verificationLinks";
 
 /**
@@ -42,58 +39,14 @@ import type { VerificationLinks } from "../visitor/verificationLinks";
  * codes, adapter names, internal ids or file paths.
  */
 
-export interface ApiContext {
+export interface ApiContext extends OperatorServices {
   workspace: PropertyWorkspace;
   visitors?: VisitorDemoRegistry;
   links?: VerificationLinks;
   dev: boolean;
-  now?: () => Date;
-  /** Where running tours are saved; checked by readiness for real-phone properties. */
-  runtime?: RuntimeStore;
-  /** Which property answers on which texting number. */
-  endpoints?: MessagingEndpoints;
-  /** The texting number this computer sends from (Sendblue today). */
-  messagingLine?: () => string | undefined;
-  /** Saves a conversation's records (and, for text messages, its resume snapshot). */
-  persist?: (session: VisitorDemoSession) => Promise<void>;
-  /** Text-message tours that couldn't be picked up after a restart. */
-  needsAttention?: (propertyId: string) => { visitorPhone: string; problem: string }[];
 }
 
-async function persist(ctx: ApiContext, session: VisitorDemoSession): Promise<void> {
-  if (ctx.persist) return ctx.persist(session);
-  const { record, bundle } = await session.record();
-  ctx.workspace.recordVisitorDemo(session.propertyId, record, bundle);
-}
-
-/**
- * Connects this computer's texting number to a real-phone property before its
- * readiness check (freeing it when the property stops using real phones).
- * Returns why it can't, e.g. another property already answers on it.
- */
-function connectLine(ctx: ApiContext, id: string, messagingMode: string, now: Date): string | undefined {
-  const endpoints = ctx.endpoints;
-  if (!endpoints) return undefined;
-  if (messagingMode !== "sendblue") {
-    endpoints.detach(id);
-    return undefined;
-  }
-  const line = ctx.messagingLine?.();
-  if (!line) return undefined;
-  try {
-    const { changed, previous } = endpoints.attach({ address: line, provider: "sendblue", propertyId: id }, now);
-    if (changed && previous) ctx.workspace.invalidateReadiness(id, "The texting number changed. Run the readiness check again.");
-    return undefined;
-  } catch (err) {
-    if (err instanceof SetupInputError) return err.message;
-    throw err;
-  }
-}
-
-async function checkReadiness(ctx: ApiContext, id: string, config: TourCoreConfig, now: Date) {
-  const lineProblem = connectLine(ctx, id, config.messagingMode, now);
-  return runReadinessCheck(config, { now, runtime: ctx.runtime, ...(lineProblem ? { lineProblem } : {}) });
-}
+const persist = (ctx: ApiContext, session: VisitorDemoSession) => persistSession(ctx, session);
 
 const IdentityForm = z.object({
   firstName: z.string().trim().min(1, "Please enter your first name.").max(80),
@@ -269,38 +222,26 @@ async function route(ctx: ApiContext, method: string, path: string, body: Record
   }
 
   if (method === "POST" && action === "readiness") {
-    const { draft, unsavedChanges } = ws.openDraft(id);
-    if (unsavedChanges) {
-      if (validateConfig(draft).length) {
-        const result = await runReadinessCheck(draft, { now, runtime: ctx.runtime });
-        return ok({ readiness: readinessView(result), savedChanges: false, summary: await summaryFor(ctx, id) });
-      }
-      ws.save(draft, now);
-    }
-    const { config } = ws.load(id);
-    const result = await checkReadiness(ctx, id, config, now);
-    ws.recordReadiness(id, result);
-    return ok({ readiness: readinessView(result), savedChanges: unsavedChanges, summary: await summaryFor(ctx, id) });
+    const { result, savedChanges } = await readinessForProperty(ctx, id, now);
+    return ok({ readiness: readinessView(result), savedChanges, summary: await summaryFor(ctx, id) });
   }
 
-  if (method === "POST" && (action === "practice" || action === "visitor-demos")) {
-    const gate = await checkedConfig(ctx, id, now);
-    if ("readiness" in gate) return ok({ readiness: gate.readiness, summary: await summaryFor(ctx, id) });
-    const { config } = gate;
+  if (method === "POST" && action === "visitor-demos") {
+    const config = await checkedConfig(ctx, id, now);
+    if ("readiness" in config) return ok({ readiness: config.readiness, summary: await summaryFor(ctx, id) });
+    const session = visitors.add(new VisitorDemoSession(id, config.config, ws.newVisitorTourId(id, now)));
+    const { record, bundle } = await session.record();
+    ws.recordVisitorDemo(id, record, bundle);
+    return ok({ sessionId: session.id, visitorUrl: `/visitor?s=${encodeURIComponent(session.id)}`, summary: await summaryFor(ctx, id) });
+  }
 
-    if (action === "visitor-demos") {
-      const session = visitors.add(new VisitorDemoSession(id, config, ws.newVisitorTourId(id, now)));
-      const { record, bundle } = await session.record();
-      ws.recordVisitorDemo(id, record, bundle);
-      return ok({ sessionId: session.id, visitorUrl: `/visitor?s=${encodeURIComponent(session.id)}`, summary: await summaryFor(ctx, id) });
-    }
-
-    const unitId = typeof body.unitId === "string" && config.units.some((u) => u.id === body.unitId) ? body.unitId : undefined;
-    const result = await runDryTour(config, { unitId, now });
-    const saved = ws.recordDryTour(id, result);
-    const view = dryTourView(result);
+  if (method === "POST" && action === "practice") {
+    const outcome = await runPracticeTour(ctx, id, { unitId: typeof body.unitId === "string" ? body.unitId : undefined, now });
+    if (outcome.kind === "unchecked-changes") throw uncheckedChanges();
+    if (outcome.kind === "not-ready") return ok({ readiness: readinessView(outcome.readiness), summary: await summaryFor(ctx, id) });
+    const view = dryTourView(outcome.result);
     return ok({
-      practice: { ...view, tourId: saved.dryTour?.tourId, dev: { ...view.dev, recordsFolder: saved.dryTour?.recordsFolder } },
+      practice: { ...view, tourId: outcome.state.dryTour?.tourId, dev: { ...view.dev, recordsFolder: outcome.state.dryTour?.recordsFolder } },
       summary: await summaryFor(ctx, id),
     });
   }
@@ -359,23 +300,26 @@ async function route(ctx: ApiContext, method: string, path: string, body: Record
 
   if (method === "GET" && action === "export") return download(ws, id, parts[3]);
 
+  // Audit exports made by an operator tool (e.g. "Export today's audit" in Grok Bot).
+  if (method === "GET" && action === "audit-exports" && parts[3] && parts[4]) {
+    const file = auditExportFile(ws, id, parts[3], parts[4]);
+    if (!file) throw new ApiError(404, "NOT_FOUND", "That export doesn't exist.");
+    return { status: 200, download: { filename: `${id}-${parts[3]}-${parts[4]}`, ...file } };
+  }
+
   throw new ApiError(404, "NOT_FOUND", "That page doesn't exist.");
+}
+
+function uncheckedChanges(): ApiError {
+  return new ApiError(409, "UNCHECKED_CHANGES", "Some changes still need fixing. Open the review to see what's left.");
 }
 
 /** The saved setup, once it's free of unchecked changes and passes readiness (run automatically if needed). */
 async function checkedConfig(ctx: ApiContext, id: string, now: Date) {
-  const ws = ctx.workspace;
-  if (!ws.has(id) || ws.openDraft(id).unsavedChanges) {
-    throw new ApiError(409, "UNCHECKED_CHANGES", "Some changes still need fixing. Open the review to see what's left.");
-  }
-  let { config, state } = ws.load(id);
-  if (!state.readiness?.passed || state.readiness.configHash !== state.configHash) {
-    const readiness = await checkReadiness(ctx, id, config, now);
-    ws.recordReadiness(id, readiness);
-    if (!readiness.passed) return { readiness: readinessView(readiness) };
-    ({ config, state } = ws.load(id));
-  }
-  return { config };
+  const gate = await checkedSetup(ctx, id, now);
+  if (gate.kind === "unchecked-changes") throw uncheckedChanges();
+  if (gate.kind === "not-ready") return { readiness: readinessView(gate.readiness) };
+  return { config: gate.config };
 }
 
 function download(ws: PropertyWorkspace, id: string, file: string | undefined, tourId?: string): ApiResult {

@@ -238,6 +238,10 @@ async function byStage(turn: Turn): Promise<void> {
 
     case "done":
     case "stopped":
+      if (await session.isPaused()) {
+        if (intent.type === "REQUEST_HELP") return session.help(turn.said);
+        return turn.respond(`Your tour is paused for a moment. The ${session.config.operator.name.toLowerCase()} will be in touch shortly.`);
+      }
       return turn.respond("This tour has ended. Text HI any time to start a new one.");
   }
 }

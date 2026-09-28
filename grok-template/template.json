@@ -1,0 +1,43 @@
+{
+  "name": "Tour Core",
+  "version": "0.2.0",
+  "distribution": "team",
+  "profile": "bot-profile.md",
+  "context": [
+    "context/tour-core-overview.md",
+    "context/terminology.md",
+    "context/safety-boundaries.md",
+    "context/operator-language.md"
+  ],
+  "skills": [
+    "../.grok/skills/setup-property/SKILL.md",
+    "../.grok/skills/map-route/SKILL.md",
+    "../.grok/skills/run-readiness-check/SKILL.md",
+    "../.grok/skills/simulate-tour/SKILL.md",
+    "../.grok/skills/work-exception/SKILL.md",
+    "../.grok/skills/export-audit/SKILL.md"
+  ],
+  "examples": ["examples/first-run.md", "examples/safe-examples.md"],
+  "integrations": [
+    {
+      "name": "Tour Core",
+      "type": "custom-mcp-server",
+      "doc": "integrations/tour-core-tools.md",
+      "url": "PUBLIC_BASE_URL/mcp",
+      "auth": "OAuth 2.1 (discovered from PUBLIC_BASE_URL/mcp; the owner approves on the Tour Core computer)",
+      "travelsWithTemplate": false
+    }
+  ],
+  "routines": [],
+  "suggestedPrompts": ["Set up a property", "Run a practice tour", "Show active tours", "Show exceptions", "Export today's audit"],
+  "neverIncluded": [
+    "Sendblue API key or secret",
+    "webhook secret",
+    "Tour Core connector token or OAuth tokens",
+    "Durin credentials",
+    "visitor names, phone numbers or other PII",
+    "live property records",
+    "tour history",
+    "any canonical Tour Core state"
+  ]
+}

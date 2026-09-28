@@ -99,7 +99,7 @@ export async function visitorView(session: VisitorDemoSession) {
 
 const CHANNEL_LABELS: Record<string, string | undefined> = { IMESSAGE: "iMessage", SMS: "SMS", RCS: "RCS", WEB: undefined, DEMO: undefined, UNKNOWN: undefined };
 
-const STATUS_LABELS: Record<ReservationStatus, string> = {
+export const STATUS_LABELS: Record<ReservationStatus, string> = {
   INQUIRY: "Choosing a time",
   RESERVED: "Booked",
   AWAITING_CONSENT: "Waiting for consent",
@@ -149,7 +149,7 @@ export async function liveTourView(session: VisitorDemoSession) {
   return {
     sessionId: session.id,
     tourId: session.tourId,
-    active: stage !== "done" && stage !== "stopped",
+    active: (stage !== "done" && stage !== "stopped") || (await session.isPaused()),
     /** A booked tour the operator can move ("Change tour time"). */
     canReschedule: !!r?.slotStart && ["AWAITING_CONSENT", "AWAITING_VERIFICATION", "READY", "TOURING"].includes(r.status),
     source: session.kind === "messaging" ? "Real phone" : "Visitor demo",

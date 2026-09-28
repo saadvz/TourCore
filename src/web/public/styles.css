@@ -149,6 +149,8 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
 .phone-body { padding: 20px; }
 .phone-body form { display: flex; flex-direction: column; gap: 4px; }
 .phone-body form button { margin-top: 14px; }
+.match-code { font-size: 1.6rem; font-weight: 700; letter-spacing: 0.08em; margin: 6px 0; }
+.connect-actions { display: flex; gap: 8px; margin-top: 10px; }
 .status-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
 .channel-chip { font-size: 0.8rem; background: #eef2f8; border-radius: 999px; padding: 2px 8px; margin-left: 6px; }
 
