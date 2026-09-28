@@ -73,6 +73,8 @@ export interface BootstrapReport {
   publicAddressChanged: boolean;
   connectorUrl?: string;
   secureSetupUrl?: string;
+  /** What Grok should tell the operator, in plain words. */
+  operatorMessage: string;
   steps: BootstrapStep[];
   status: InstallationStatus;
 }
@@ -85,13 +87,15 @@ export async function runBootstrap(deps: BootstrapDeps, options: BootstrapOption
   const finish = (runtime: ServiceStatus | undefined, extra: Partial<BootstrapReport> = {}): BootstrapReport => {
     const manifest = inst.files.manifest();
     const status = getInstallationStatus(inst, { workspace: deps.workspace, runtime: inst.runtime }, { runtime: { running: !!runtime?.healthy, message: runtime?.message } });
+    const blocked = steps.find((s) => !s.ok && ["repository", "dependencies", "runtime"].includes(s.step));
     return {
       ok: !!runtime?.healthy,
       ...(manifest ? { installationId: manifest.installationId } : {}),
       createdInstallation: false,
       deploymentMode: options.mode,
       publicAddressChanged: false,
-      ...(status.publicAddress ? { publicAddress: status.publicAddress, connectorUrl: status.connectorUrl } : {}),
+      operatorMessage: blocked ? "I ran into a problem installing Tour Core on my cloud computer. I'm looking into it." : status.nextStep.operatorMessage,
+      ...(status.technical.publicAddress ? { publicAddress: status.technical.publicAddress, connectorUrl: status.technical.connectorUrl } : {}),
       steps,
       status,
       ...extra,
@@ -179,7 +183,11 @@ export function printReport(report: BootstrapReport, say: (line?: string) => voi
   say("Installation status:");
   for (const line of report.status.lines) say(`  ${line}`);
   say();
-  say(`Next: ${report.status.nextStep.operatorMessage}`);
+  say(`Next step: ${report.status.nextStep.action} (${report.status.nextStep.performedBy})`);
+  if (report.status.nextStep.grokInstructions) say(`For Grok: ${report.status.nextStep.grokInstructions}`);
+  say();
+  say(`Tell the operator: "${report.operatorMessage}"`);
+  say("Don't show the operator the addresses, links, commands or process details above.");
   say();
   if (report.deploymentMode === "GROK_MANAGED_P0") say("GROK_MANAGED_P0 is a demo deployment: it runs while this cloud computer does. It isn't 24/7 production hosting.");
 }

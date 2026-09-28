@@ -1,0 +1,229 @@
+import { afterEach, describe, expect, it } from "vitest";
+import { OPERATOR_MESSAGES } from "../src/install/status";
+import { installHarness, ROUTINE_KEY, ROUTINE_URL, SB_KEY, SB_SECRET, type InstallHarness } from "./installHarness";
+
+/**
+ * The onboarding behaviors a real fresh-Grok run exposed: Tour Core, not the
+ * model, owns the order; operator-facing text is plain; and each phase hands
+ * over to the next with the right words. No live Grok involved.
+ */
+
+const cleanups: Array<() => void> = [];
+afterEach(() => cleanups.splice(0).forEach((c) => c()));
+
+const TUNNEL = "https://brave-otter-lamp.trycloudflare.com";
+const TUNNEL_2 = "https://quiet-heron-glass.trycloudflare.com";
+/** Words a landlord shouldn't see in normal conversation. */
+const JARGON = /\/mcp|trycloudflare|https?:\/\/|\bMCP\b|OAuth|\btunnel|connector|\btools?\b|\bnpm\b|localhost|:\d{4}\b|PUBLIC_BASE_URL|TOURCORE_|cloudflared|webhook|routine|\bpid\b|adapter|endpoint/i;
+const SEQUENCING_QUESTION = /what (would you like|should we|do you want) (to )?do next|if you'd rather|doesn't depend on|which (would you like|should we do) first/i;
+
+function harness(): InstallHarness {
+  const h = installHarness({ env: { TOURCORE_DEPLOYMENT_MODE: "GROK_MANAGED_P0" } });
+  cleanups.push(h.cleanup);
+  return h;
+}
+
+const at = (h: InstallHarness) => new Date(h.now()).toISOString();
+const endpointReady = (h: InstallHarness, url = TUNNEL) => {
+  h.inst.files.ensure({ deploymentMode: "GROK_MANAGED_P0" });
+  h.inst.files.setPublicBaseUrl(url, "CLOUDFLARE_QUICK_TUNNEL");
+  h.inst.files.recordCheck("publicEndpointCheck", { ok: true, at: at(h), message: "ok", url });
+};
+const messagingReady = (h: InstallHarness) => {
+  h.inst.secrets.set({ SENDBLUE_API_API_KEY: SB_KEY, SENDBLUE_API_API_SECRET: SB_SECRET, SENDBLUE_FROM_NUMBER: "+15550109999" });
+  h.inst.files.recordCheck("visitorMessaging", { ok: true, at: at(h), message: "ok", problems: [], publicBaseUrl: h.inst.publicBaseUrl()! });
+};
+const alertsReady = (h: InstallHarness) => {
+  h.inst.secrets.set({ TOURCORE_GROK_ROUTINE_URL: ROUTINE_URL, TOURCORE_GROK_ROUTINE_KEY: ROUTINE_KEY });
+  const changed = [h.inst.secrets.updatedAt("TOURCORE_GROK_ROUTINE_URL"), h.inst.secrets.updatedAt("TOURCORE_GROK_ROUTINE_KEY")].sort().at(-1)!;
+  h.inst.files.recordCheck("operatorAlerts", { ok: true, at: at(h), message: "ok", credentialsChangedAt: changed });
+};
+const infraReady = (h: InstallHarness) => {
+  endpointReady(h);
+  h.connectGrok();
+  messagingReady(h);
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const next = (h: InstallHarness): Promise<any> => h.ok("get_next_installation_step");
+
+/** Everything the tools present as safe to say to the operator. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function operatorText(status: any, step: any): string[] {
+  return [status.summary, ...status.lines, ...status.components.map((c: { summary: string }) => c.summary), status.nextStep.operatorMessage, step.operatorMessage, step.summary];
+}
+
+describe("Tour Core owns the onboarding order", () => {
+  it("while infrastructure is incomplete, the next step is infrastructure: property setup isn't offered, even if a property already exists", async () => {
+    const h = harness();
+    await h.setUpAlfredWay(); // e.g. created from the browser app before texting was connected
+    endpointReady(h);
+    h.connectGrok();
+    const step = await next(h);
+    expect(step).toMatchObject({ component: "VISITOR_MESSAGING", action: "CONNECT_VISITOR_MESSAGING", phase: "INFRASTRUCTURE", infrastructureReady: false });
+    expect(step.rule).toMatch(/Tour Core decides the order\. Do this step now\. Don't offer other setup, don't ask the operator what to do next, and don't start property setup/);
+    const property = await h.component("PROPERTY");
+    expect(property.next).toBeUndefined();
+    expect((await h.component("OPERATOR_ALERTS")).next).toBeUndefined();
+    expect((await h.component("READINESS")).next).toBeUndefined();
+  });
+
+  it("a fresh install needs only the connection approval from the operator before texting; Grok does the rest", async () => {
+    const h = harness();
+    const people: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      const step = await next(h);
+      if (step.component === "VISITOR_MESSAGING") break;
+      if (step.performedBy !== "GROK") people.push(`${step.action}:${step.performedBy}`);
+      if (step.action === "ESTABLISH_PUBLIC_ENDPOINT") {
+        h.inst.files.ensure({ deploymentMode: "GROK_MANAGED_P0" });
+        h.inst.files.setPublicBaseUrl(TUNNEL, "CLOUDFLARE_QUICK_TUNNEL");
+      } else if (step.action === "CHECK_PUBLIC_ENDPOINT") h.inst.files.recordCheck("publicEndpointCheck", { ok: true, at: at(h), message: "ok", url: TUNNEL });
+      else if (step.action === "CONNECT_GROK") {
+        expect(step.operatorMessage).toBe("Tour Core is installed and running. I need your approval to connect to it. I've opened the approval screen. Check that the codes match and click Allow.");
+        // Grok continues on its own after approval.
+        expect(step.grokInstructions).toMatch(/After approval, say "Connected\. I'm checking the rest of the setup now\." and call get_installation_status without waiting to be asked\./);
+        expect(step.grokInstructions).toContain(`${TUNNEL}/mcp`);
+        h.connectGrok();
+      }
+    }
+    expect(people).toEqual(["CONNECT_GROK:OPERATOR"]);
+  });
+
+  it("after texting is connected and tested, Tour Core offers the first property, in plain words", async () => {
+    const h = harness();
+    infraReady(h);
+    const status = await h.status();
+    expect(status.infrastructureReady).toBe(true);
+    expect(status.nextStep).toMatchObject({ action: "SET_UP_PROPERTY", phase: "PROPERTY", performedBy: "OPERATOR_DECISION", skill: "setup-property", operatorMessage: OPERATOR_MESSAGES.firstProperty });
+    expect(OPERATOR_MESSAGES.firstProperty).toBe("Everything needed to run Tour Core is connected and tested. Would you like to add your first property?");
+  });
+
+  it("alerts are offered only after the property is saved, as a recommended option Tour Core marks optional", async () => {
+    const h = harness();
+    infraReady(h);
+    expect((await h.component("OPERATOR_ALERTS")).state).toBe("NOT_CONFIGURED");
+    await h.setUpAlfredWay();
+    const offer = await next(h);
+    expect(offer).toMatchObject({ component: "OPERATOR_ALERTS", action: "OFFER_OPERATOR_ALERTS", performedBy: "OPERATOR_DECISION", optional: true, phase: "PROPERTY", operatorMessage: OPERATOR_MESSAGES.offerAlerts });
+    expect(offer.operatorMessage).toMatch(/^Your property is configured\. Would you like me to keep an eye on tours and let you know when a visitor needs help/);
+    expect(offer.grokInstructions).toMatch(/create the Tour Core Exception Alert routine yourself/);
+    expect(offer.grokInstructions).toMatch(/If they say no: call skip_optional_setup with component OPERATOR_ALERTS/);
+    expect((await h.component("OPERATOR_ALERTS")).requirement).toBe("RECOMMENDED");
+  });
+
+  it("declining alerts moves straight on to the automatic readiness check; required components can't be skipped", async () => {
+    const h = harness();
+    infraReady(h);
+    await h.setUpAlfredWay();
+    expect(await h.fails("skip_optional_setup", { component: "VISITOR_MESSAGING" })).toContain("doesn't fit skip_optional_setup");
+    const skipped = await h.ok("skip_optional_setup", { component: "OPERATOR_ALERTS" });
+    expect(skipped.summary).toBe("No problem, that's off for now. You can turn it on any time.");
+    expect(skipped.nextStep).toMatchObject({ action: "RUN_READINESS", performedBy: "GROK", phase: "VALIDATE", operatorMessage: OPERATOR_MESSAGES.validate });
+    expect(OPERATOR_MESSAGES.validate).toMatch(/Prospects can text your touring number to choose a unit and time, verify their details, and complete the self-guided tour in the same conversation\. I'll run a readiness check and a practice tour before we turn it on\./);
+    const alerts = await h.component("OPERATOR_ALERTS");
+    expect(alerts).toMatchObject({ state: "NOT_CONFIGURED", summary: "Alerts are off. You can turn them on any time." });
+  });
+
+  it("property ready → readiness → practice tour run automatically; publish still needs an explicit yes; then operating language", async () => {
+    const h = harness();
+    infraReady(h);
+    await h.setUpAlfredWay();
+    alertsReady(h);
+    expect(await next(h)).toMatchObject({ action: "RUN_READINESS", performedBy: "GROK" });
+    await h.ok("run_readiness_check");
+    expect(await next(h)).toMatchObject({ action: "RUN_PRACTICE_TOUR", performedBy: "GROK", phase: "VALIDATE" });
+    await h.ok("run_dry_tour");
+    const publish = await next(h);
+    expect(publish).toMatchObject({ action: "PUBLISH", performedBy: "OPERATOR_DECISION", phase: "PUBLISH", tool: "publish_demo_property", operatorMessage: "Everything passed. Would you like me to publish 100 Alfred Way for demo?" });
+    // The tool itself refuses to act without the confirmation that follows the operator's yes.
+    const asked = await h.ok("publish_demo_property", {});
+    expect(asked.status).toBe("needs-confirmation");
+    expect(h.workspace.load("prop_100_alfred_way").state.status).not.toBe("PUBLISHED_FOR_DEMO");
+    await h.ok("publish_demo_property", { confirmationCode: asked.confirmation.code });
+    const done = await h.status();
+    expect(done.phase).toBe("OPERATE");
+    expect(done.nextStep).toMatchObject({ action: "DONE", operatorMessage: "Your property is live for demo. I'll keep an eye on tours and let you know when something needs your attention." });
+    expect(done.summary).toBe("Your property is live for demo.");
+    const after = await next(h);
+    expect([done.summary, after.operatorMessage, after.summary].join(" ")).not.toMatch(/connect|install|setup|secure/i);
+  });
+
+  it("published without alerts: no promise to watch tours, just how to ask", async () => {
+    const h = harness();
+    infraReady(h);
+    await h.setUpAlfredWay();
+    await h.ok("skip_optional_setup", { component: "OPERATOR_ALERTS" });
+    await h.ok("run_readiness_check");
+    await h.ok("run_dry_tour");
+    await h.approve("publish_demo_property", {});
+    expect((await next(h)).operatorMessage).toBe(OPERATOR_MESSAGES.operateWithoutAlerts);
+  });
+});
+
+describe("operator-facing text is plain", () => {
+  it("in every onboarding state: no /mcp, tunnel addresses, tool counts, protocols, commands or ports; no sequencing questions", async () => {
+    const h = harness();
+    const seen: string[] = [];
+    const snapshot = async (label: string) => {
+      const status = await h.ok("get_installation_status");
+      const step = await next(h);
+      for (const text of operatorText(status, step)) seen.push(`${label}: ${text}`);
+      // Technical values stay available to Grok, separately.
+      if (h.inst.publicBaseUrl()) expect(status.technical).toMatchObject({ connectorUrl: `${new URL(h.inst.publicBaseUrl()!).origin}/mcp`, note: expect.stringMatching(/Never show these to the operator/) });
+    };
+    await snapshot("blank");
+    h.inst.files.ensure({ deploymentMode: "GROK_MANAGED_P0" });
+    h.inst.files.setPublicBaseUrl(TUNNEL, "CLOUDFLARE_QUICK_TUNNEL");
+    await snapshot("unchecked address");
+    h.inst.files.recordCheck("publicEndpointCheck", { ok: false, at: at(h), message: "Tour Core's public address didn't answer.", url: TUNNEL });
+    await snapshot("address down");
+    h.inst.files.recordCheck("publicEndpointCheck", { ok: true, at: at(h), message: "ok", url: TUNNEL });
+    await snapshot("needs approval");
+    h.connectGrok();
+    await snapshot("texting");
+    h.inst.secrets.set({ SENDBLUE_API_API_KEY: SB_KEY, SENDBLUE_API_API_SECRET: SB_SECRET, SENDBLUE_FROM_NUMBER: "+15550109999" });
+    await snapshot("texting untested");
+    messagingReady(h);
+    await snapshot("infra ready");
+    await h.ok("create_property_setup", { address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way" });
+    await snapshot("property in progress");
+    await h.setUpAlfredWay();
+    await snapshot("alerts offer");
+    h.inst.secrets.set({ TOURCORE_GROK_ROUTINE_URL: ROUTINE_URL, TOURCORE_GROK_ROUTINE_KEY: ROUTINE_KEY });
+    h.inst.files.recordCheck("operatorAlerts", { ok: false, at: at(h), message: "The Grok Routine refused the connection details.", credentialsChangedAt: h.inst.secrets.updatedAt("TOURCORE_GROK_ROUTINE_KEY") });
+    await snapshot("alerts failing");
+    alertsReady(h);
+    await snapshot("validate");
+    await h.ok("run_readiness_check");
+    await h.ok("run_dry_tour");
+    await snapshot("publish");
+    await h.approve("publish_demo_property", {});
+    await snapshot("operate");
+    // The address changed later: reconnecting is still plain.
+    h.inst.files.setPublicBaseUrl(TUNNEL_2, "CLOUDFLARE_QUICK_TUNNEL");
+    await snapshot("address changed");
+    h.inst.files.recordCheck("publicEndpointCheck", { ok: true, at: at(h), message: "ok", url: TUNNEL_2 });
+    await snapshot("reconnect");
+
+    for (const line of seen) {
+      expect(line, line).not.toMatch(JARGON);
+      expect(line, line).not.toMatch(SEQUENCING_QUESTION);
+    }
+    expect(seen.some((l) => l.includes("I need your approval to reconnect"))).toBe(true);
+  });
+
+  it("test and check tools summarize plainly and keep details under technical", async () => {
+    const h = harness();
+    endpointReady(h);
+    h.net.state.health = { ok: true, service: "tour-core" };
+    const summaries = [];
+    for (const name of ["check_runtime_health", "check_public_endpoint", "test_storage", "test_access", "test_operator_alerts", "get_secure_setup_url"]) {
+      const out = await h.ok(name);
+      summaries.push(out.summary as string);
+    }
+    for (const s of summaries) expect(s, s).not.toMatch(JARGON);
+    const link = await h.ok("get_secure_setup_url", { step: "visitor-messaging" });
+    expect(link.instructions).toMatch(/Don't show the link in chat/);
+  });
+});

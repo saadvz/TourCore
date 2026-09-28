@@ -56,6 +56,7 @@ again with the code after the operator's yes.
 | `get_installation_status` | read | Every installation component's state (runtime, public address, Grok connection, messaging, alerts, records, access, property, readiness, practice tour, publish) and the next step |
 | `get_next_installation_step` | read | The one next step Tour Core decided, who does it, and the tool or skill to use |
 | `get_installation_component` | read | One component's status and next step |
+| `skip_optional_setup` | change | Records that the operator declined an optional step Tour Core offered (e.g. alerts) |
 | `check_runtime_health` | read | Whether Tour Core is running and healthy |
 | `check_public_endpoint` | change | Checks from outside that the public address reaches this installation; records the result |
 | `test_visitor_messaging` | change | Checks texting end to end and repairs Tour Core's own incoming-message address; takes no credentials |

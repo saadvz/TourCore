@@ -58,21 +58,24 @@ Send only this (with the real repository address):
 | B1 | Send the prompt above, nothing else | No files attached; Grok asks for nothing before starting |
 | B2 | Watch Grok's cloud computer | Grok clones the repository on **its own** cloud computer, reads `GROK_BOOTSTRAP.md`, loads `.grok/skills/install-tour-core/SKILL.md` (and the other skills from `.grok/skills/`), and runs `npm run bootstrap:grok` |
 | B2a | (Once `repository.url` is set) Repeat with a different repository address in the prompt | Grok stops and asks which repository to trust; `npm run bootstrap:grok` refuses to start ("Not starting an unexpected repository") |
-| B3 | Watch the bootstrap output (Grok may summarize it) | Dependencies installed, installation created, Tour Core started, a `trycloudflare.com` address opened and checked, a secure setup link printed. If cloudflared can't be installed there, one clear step is reported instead |
-| B4 | Grok adds the Tour Core connector at the printed address and opens `http://localhost:4321/grok` in its cloud browser | You take over the browser, check the code matches, click **Allow**. Grok is connected |
-| B5 | Grok calls `get_installation_status` | Visitor messaging and operator alerts need setup; everything else ready or waiting on the property |
-| B6 | Grok opens the secure setup page (visitor texting) in its cloud browser and asks you to take over | You enter the Sendblue API key, secret and number there. Page says "Visitor texting is connected." and Sendblue lists Tour Core's webhook for the tunnel address |
-| B7 | Grok creates the Tour Core Exception Alert routine and opens the secure setup page (operator alerts) | You enter the routine's webhook address and a new key. The routine posts "Operator alerts are connected." |
-| B8 | Grok reports status | The checklist from the Install Tour Core skill ("✓ Grok connection, ✓ Visitor messaging, ✓ Operator alerts, ✓ Demo access ... No property is configured yet. Want to set one up?") |
-| B9 | Configure a property conversationally (Setup Property) | As in the operator demo below |
-| B10 | Readiness, then practice tour | Both pass |
-| B11 | Grok asks to publish; say yes | Published for demo |
+| B3 | Read Grok's first message | Approximately: "I'll handle the technical setup and only ask when I need a login, approval or decision." Grok installs Tour Core without narrating the technical steps |
+| B4 | Wait | "Tour Core is installed and running. I need your approval to connect to it. I've opened the approval screen. Check that the codes match and click Allow." The approval screen is in Grok's cloud browser |
+| B5 | Take over the browser, check the codes match, click **Allow** | Without being asked: "Connected. I'm checking the rest of the setup now." Grok calls `get_installation_status` and `get_next_installation_step` |
+| B6 | Wait | "Visitor texting is the next step. I've opened Tour Core's secure setup page..." Grok does **not** offer property setup or ask what to do next |
+| B7 | Take over the browser, enter the Sendblue key, secret and number, say "done" | Grok tests it itself, then: "Visitor texting is connected and working. Everything needed to run Tour Core is connected and tested. Would you like to add your first property?" |
+| B8 | Say yes and configure a property conversationally | Plain questions ("What's the property address?", "How many units can people self-tour?", "When can people tour?", "How carefully do you want to verify visitors?"); no field names |
+| B9 | Once the property is saved | "Your property is configured. Would you like me to keep an eye on tours and let you know when a visitor needs help...?" Say yes: "I'm setting up alerts...", Grok creates the alert itself, then "I've created the alert. I opened Tour Core's secure setup page so you can finish connecting it without putting any credentials in chat." Enter the details there; Grok sends a test alert. (Saying no instead skips alerts and moves on) |
+| B10 | Wait | Grok explains how prospects use it and says it will run a readiness check and a practice tour, then runs both without asking whether to skip them |
+| B11 | Grok: "Everything passed. Would you like me to publish this property for demo?" Say yes | Published. "Your property is live for demo. I'll keep an eye on tours and let you know when something needs your attention." |
+| B11a | Throughout B3–B11 | None of these appear in the chat: a `trycloudflare.com` address, `/mcp`, a tool count, "connector", "OAuth", "tunnel", ports, commands, environment variables or process ids. Grok never asks which setup step to do next |
 | B12 | Text the property from the real phone, ask something unknown | Proactive alert as in A7–A8 |
 | B13 | On the cloud computer, stop Tour Core (Grok runs `npm run service:stop`), then ask Grok anything | Grok notices Tour Core isn't answering, runs `npm run bootstrap:grok`, and Tour Core is back with the same installation (same records) |
 | B14 | Stop the tunnel too (`npm run service:stop -- --tunnel`) and bootstrap again | New `trycloudflare.com` address. Status shows the Grok connection and visitor messaging need action. Grok reconnects (you approve again) and runs `test_visitor_messaging`, which moves Sendblue's webhook to the new address |
 
 Pass = no attached files, no terminal on the operator's computer, no
-credential in chat, and every row matches.
+credential in chat, no infrastructure jargon in the happy path, the operator
+only approved, signed in, entered credentials on the secure setup page,
+answered property questions and made decisions, and every row matches.
 
 The final template experience is simpler still: install the Tour Core Bot
 template and say *"Set up Tour Core."* The template already knows the

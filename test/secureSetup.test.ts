@@ -146,7 +146,7 @@ describe("secure setup page", () => {
 
     // Grok sees the result, never the values.
     const status = await app.grok("get_installation_status");
-    expect(status.result.components.find((c: { component: string }) => c.component === "VISITOR_MESSAGING")).toMatchObject({ state: "READY", summary: `Visitors can text ${LINE}.` });
+    expect(status.result.components.find((c: { component: string }) => c.component === "VISITOR_MESSAGING")).toMatchObject({ state: "READY", summary: `Visitor texting is connected and working (${LINE}).` });
     const again = await app.setup("GET", "status", token);
     expect(again.body.settings.visitorMessaging).toEqual({ apiKey: true, apiSecret: true, fromNumber: LINE, incomingSecret: true });
 

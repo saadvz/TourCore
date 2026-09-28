@@ -17,7 +17,11 @@ describe("GROK_BOOTSTRAP.md", () => {
     for (const [i, p] of positions.entries()) expect(p, order[i]).toBeGreaterThan(-1);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
     expect(text).toContain("`.grok/skills/`");
-    expect(text).toMatch(/infrastructure → property → readiness check → practice tour →\s+publish/);
+    expect(text).toMatch(/visitor texting → property →\s+alerts \(recommended\) → readiness check → practice tour → publish/);
+    expect(text).toMatch(/Never ask the operator "what next\?" while Tour Core has a next step/);
+    expect(text).toMatch(/don't offer parallel or optional paths while required setup is incomplete/);
+    expect(text).toMatch(/move fully to the property/);
+    expect(text).toMatch(/Keep infrastructure out of the conversation/);
     expect(text).toMatch(/explicit yes/);
   });
 

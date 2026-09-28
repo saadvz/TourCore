@@ -58,6 +58,8 @@ export interface InstallState {
   operatorAlerts?: CheckResult & { credentialsChangedAt?: string };
   /** Exceptions that existed before operator alerts were first set up aren't announced. */
   alertsBaselineAt?: string;
+  /** RECOMMENDED components the operator declined, and when. Turning one on later clears nothing; configuring it wins. */
+  skipped?: Partial<Record<string, string>>;
 }
 
 export class ManifestSecretError extends Error {}

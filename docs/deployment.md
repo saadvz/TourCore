@@ -119,23 +119,39 @@ Protection:
 ## Installation status and next step
 
 `src/install/status.ts`. Components, in the order Tour Core works through
-them: `RUNTIME`, `PUBLIC_ENDPOINT`, `GROK_OPERATOR`, `VISITOR_MESSAGING`,
-`OPERATOR_ALERTS`, `STORAGE`, `ACCESS`, `PROPERTY`, `READINESS`,
-`PRACTICE_TOUR`, `PUBLISH`. States: `NOT_CONFIGURED`, `ACTION_REQUIRED`,
-`CONFIGURING`, `READY`, `DEGRADED`, `ERROR`.
+them, with the requirement Tour Core (not the agent) assigns:
 
-The next step is the first component that isn't ready, with an action, a plain
-message, who does it (`GROK`, `OPERATOR`, `OPERATOR_IN_SECURE_SETUP`,
-`OPERATOR_DECISION`) and the tool, skill or command to use. Property setup
-never comes up until all infrastructure components are ready. A future
-component or provider (Google Drive as `STORAGE`, real Durin as `ACCESS`)
-changes what this returns; the Install Tour Core skill doesn't change.
+| Component | Requirement | Phase |
+| --- | --- | --- |
+| `RUNTIME`, `PUBLIC_ENDPOINT` | required before property | BOOTSTRAP |
+| `GROK_OPERATOR` | required before property | CONNECT |
+| `VISITOR_MESSAGING`, `STORAGE` (LOCAL_DEMO accepted), `ACCESS` (DURIN_DEMO accepted) | required before property | INFRASTRUCTURE |
+| `PROPERTY` | required to publish | PROPERTY |
+| `OPERATOR_ALERTS` | recommended; offered only after the property is saved; can be declined (`skip_optional_setup`) | PROPERTY |
+| `READINESS`, `PRACTICE_TOUR` | required to publish; run automatically | VALIDATE |
+| `PUBLISH` | explicit yes | PUBLISH |
+
+States: `NOT_CONFIGURED`, `ACTION_REQUIRED`, `CONFIGURING`, `READY`,
+`DEGRADED`, `ERROR`. Once published, the phase is `OPERATE`.
+
+The next step is the first component that isn't ready, with an action, its
+phase, who does it (`GROK`, `OPERATOR`, `OPERATOR_IN_SECURE_SETUP`,
+`OPERATOR_DECISION`), the tool or skill to use, an `operatorMessage` that's
+safe to say to a landlord as-is, and `grokInstructions` with anything
+technical (addresses, commands) for Grok only. Nothing on the property path
+has a next step until the infrastructure is ready, so Grok can't offer
+property setup early. Every step carries a `rule`: Tour Core decides the
+order, so Grok doesn't offer alternatives or ask the operator what to do
+next. Technical values (public address, connector address, providers) are
+under `technical`, marked for Grok only. A future component or provider
+(Google Drive as `STORAGE`, real Durin as `ACCESS`) changes what this
+returns; the Install Tour Core skill doesn't change.
 
 ### Installation tools (MCP)
 
 `src/install/tools.ts`: `get_installation_status`,
 `get_next_installation_step`, `get_installation_component`,
-`check_runtime_health`, `check_public_endpoint`, `test_visitor_messaging`,
+`skip_optional_setup`, `check_runtime_health`, `check_public_endpoint`, `test_visitor_messaging`,
 `test_operator_alerts`, `test_storage`, `test_access`, `get_secure_setup_url`.
 
 None takes a credential (no input field may even be named like one; a test
@@ -278,26 +294,33 @@ clone whose git origin isn't the canonical repository.
 3. Grok checks whether Tour Core exists (the connector, then its cloud computer).
 4. If not, Grok clones the canonical repository on its own cloud computer and
    reads `GROK_BOOTSTRAP.md`.
-5. Grok runs `npm run bootstrap:grok`: Tour Core starts.
-6. The bootstrap opens and checks a public address.
-7. Grok adds the connector; **the operator approves** the connection on Tour
-   Core's page in Grok's cloud browser.
-8. Grok calls `get_installation_status`.
-9. Grok opens the secure setup page; **the operator enters** the Sendblue
-   details. Tour Core connects and checks texting.
-10. Grok creates the Tour Core Exception Alert routine and opens the secure
-    setup page; **the operator enters** the routine's webhook address and key.
-    Tour Core sends a test alert.
-11. Tour records: stored with this installation (checked).
-12. Access: Demo (checked).
-13. Grok asks about the property.
-14. Grok configures it conversationally (Setup Property, Map Route).
-15. Grok runs readiness.
-16. Grok runs a practice tour.
-17. Grok asks for an explicit yes to publish.
-18. The property is published for demo.
-19. A real visitor can text the property.
-20. Tour Core wakes Grok (the routine) whenever a visitor needs judgment.
+5. Grok runs `npm run bootstrap:grok`: Tour Core starts and gets its secure
+   public connection. ("I'll handle the technical setup and only ask when I
+   need a login, approval or decision.")
+6. Grok adds the Tour Core connection itself; **the operator approves** it on
+   Tour Core's approval screen in Grok's cloud browser. Grok continues on its
+   own: "Connected. I'm checking the rest of the setup now."
+7. Grok follows `get_next_installation_step`: the secure setup page for
+   texting, where **the operator enters** the Sendblue details; Grok tests it.
+   Tour records (stored with this installation) and access (Demo) need nothing.
+8. "Everything needed to run Tour Core is connected and tested. Would you like
+   to add your first property?"
+9. Grok configures the property conversationally (Setup Property, Map Route).
+10. Tour Core offers alerts (recommended). If yes, Grok creates the Tour Core
+    Exception Alert routine itself, and **the operator enters** its connection
+    details on the secure setup page; Grok sends a test alert. If no, Grok
+    records the choice and moves on.
+11. Grok explains how prospects use it and runs the readiness check and a
+    practice tour without asking whether to skip them.
+12. Grok asks for an explicit yes to publish.
+13. "Your property is live for demo. I'll keep an eye on tours and let you
+    know when something needs your attention."
+14. A real visitor can text the property; Tour Core wakes Grok whenever a
+    visitor needs judgment.
+
+In the happy path the operator never sees addresses, tool counts, connectors,
+tunnels, commands or protocol names, and is never asked to choose the setup
+order.
 
 ### What still needs the operator
 

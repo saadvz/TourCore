@@ -9,65 +9,45 @@ brackets; the operator never sees them.
 
 **Operator:** Set up Tour Core.
 
-[Bot's cloud computer: no `tour-core` folder yet → clone the canonical
-repository → read `GROK_BOOTSTRAP.md` → `npm run bootstrap:grok`. It installs dependencies,
-starts Tour Core, opens a public address and prints the connector address.]
+**Tour Core:** I'll handle the technical setup and only ask when I need a
+login, approval or decision.
 
-**Tour Core:** Tour Core is installed and running on my cloud computer. Next I
-need to connect to it. I've opened its connection page in my browser. Please
-take over the browser, check that the code matches the one on the Grok
-connection screen, and click Allow.
+[Cloud computer: clone the canonical repository → read `GROK_BOOTSTRAP.md` →
+`npm run bootstrap:grok`. Add the Tour Core connection; open the approval
+screen in the cloud browser.]
 
-[Operator takes over the browser and clicks Allow. `get_installation_status`]
+**Tour Core:** Tour Core is installed and running. I need your approval to
+connect to it. I've opened the approval screen. Check that the codes match and
+click Allow.
 
-**Tour Core:** Connected. Here's where things stand:
-✓ Tour Core is running
-✓ Public address
-✓ Grok connection
-• Visitor texting isn't connected yet
-• Operator alerts aren't connected yet
+[Operator takes over the browser and clicks Allow.]
 
-Visitor texting still needs your Sendblue account. I'll open Tour Core's
-secure setup page. Please take over the browser and enter the Sendblue API
-key, API secret and texting number there, not in chat.
+**Tour Core:** Connected. I'm checking the rest of the setup now.
 
-[`get_secure_setup_url` step visitor-messaging → opened in the cloud browser]
+[`get_installation_status`, `get_next_installation_step` →
+CONNECT_VISITOR_MESSAGING. `get_secure_setup_url` step visitor-messaging,
+opened in the cloud browser.]
 
-**Operator:** Done.
-
-[`get_installation_status` → Visitor messaging READY; next step
-CONNECT_OPERATOR_ALERTS. The Bot creates the Tour Core Exception Alert routine
-with a webhook trigger. `get_secure_setup_url` step operator-alerts]
-
-**Tour Core:** Texting is connected. I created the Tour Core Exception Alert
-routine so Tour Core can tell you when a visitor needs you. It needs to be
-connected to Tour Core: I've opened the secure setup page so you can enter the
-routine's webhook address and a newly rotated key without putting them in
+**Tour Core:** Visitor texting is the next step. I've opened Tour Core's secure
+setup page so you can connect your Sendblue messaging account there, not in
 chat.
 
 **Operator:** Done.
 
-[`get_installation_status` → OPERATOR_ALERTS READY (Tour Core sent a test
-alert; the routine posted "Operator alerts are connected.")]
+[`get_next_installation_step` → TEST_VISITOR_MESSAGING → `test_visitor_messaging`
+→ `get_next_installation_step` → SET_UP_PROPERTY]
 
-**Tour Core:** Tour Core is running.
-
-✓ Grok connection
-✓ Visitor messaging
-✓ Operator alerts
-✓ Demo access
-
-Your tour records are stored with this Tour Core installation.
-
-No property is set up yet. Want to set one up?
+**Tour Core:** Visitor texting is connected and working. Everything needed to
+run Tour Core is connected and tested. Would you like to add your first
+property?
 
 ---
 
 ## Part 2: Set up a property
 
-**Operator:** I want to set up my building.
+**Operator:** Yes.
 
-**Tour Core:** Sure. What's the address?
+**Tour Core:** What's the property address?
 [`list_properties`]
 
 **Operator:** 100 Alfred Way, Brooklyn.
@@ -127,19 +107,7 @@ trying things out.
 
 [`set_verification_policy` basic-form]
 
-**Tour Core:** How do you want to text people? For the demo I'd use real texts
-through Sendblue.
-
-**Operator:** Sendblue.
-
-[`set_services` messaging sendblue; `get_services`]
-
-**Tour Core:** Where should I keep the tour records? Right now they're kept on
-the Tour Core computer; Google Drive is coming next.
-
-**Operator:** That's fine.
-
-[`review_property_setup`]
+[`set_services` messaging sendblue (texting is already connected); `review_property_setup`]
 
 **Tour Core:** Here's what I have:
 100 Alfred Way
@@ -153,8 +121,32 @@ Does that look right?
 
 **Operator:** Yes.
 
-**Tour Core:** Great. I'll check the setup and run a practice tour before
-publishing.
+[`get_next_installation_step` → OFFER_OPERATOR_ALERTS]
+
+**Tour Core:** Your property is configured. Would you like me to keep an eye
+on tours and let you know when a visitor needs help or Tour Core needs your
+input? I recommend it.
+
+**Operator:** Sure.
+
+**Tour Core:** I'm setting up alerts so I can notify you when a visitor needs
+your input.
+
+[Creates the Tour Core Exception Alert routine; `get_secure_setup_url` step
+operator-alerts, opened in the cloud browser.]
+
+**Tour Core:** I've created the alert. I opened Tour Core's secure setup page
+so you can finish connecting it without putting any credentials in chat.
+
+**Operator:** Done.
+
+[`get_next_installation_step` → TEST_OPERATOR_ALERTS → `test_operator_alerts`
+→ RUN_READINESS]
+
+**Tour Core:** Alerts are working. Prospects can text your touring number to
+choose a unit and time, verify their details, and complete the self-guided
+tour in the same conversation. I'll run a readiness check and a practice tour
+before we turn it on.
 [`run_readiness_check`]
 
 ✓ Property details
@@ -182,15 +174,15 @@ Practice tour passed:
 
 [`publish_demo_property` → returns a question]
 
-**Tour Core:** Everything passed. Do you want me to publish 100 Alfred Way for
-demo?
+**Tour Core:** Everything passed. Would you like me to publish 100 Alfred Way
+for demo?
 
 **Operator:** Yes.
 
 [`publish_demo_property` with confirmationCode]
 
-**Tour Core:** 100 Alfred Way is published for demo. Visitors can text the
-property number to start a tour.
+**Tour Core:** Your property is live for demo. I'll keep an eye on tours and
+let you know when something needs your attention.
 
 ---
 

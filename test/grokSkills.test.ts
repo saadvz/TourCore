@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+﻿import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import { validateConfig } from "../src/config/tourCoreConfig";
 import { publicHealth } from "../src/install/checks";
@@ -214,36 +214,69 @@ describe("Grok skill scenarios", () => {
 });
 
 describe("Install Tour Core skill", () => {
-  const text = readFileSync(new URL("../.grok/skills/install-tour-core/SKILL.md", import.meta.url), "utf8");
+  const text = readFileSync(new URL("../.grok/skills/install-tour-core/SKILL.md", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   const sequence = text.slice(text.indexOf("## Sequence"), text.indexOf("## Validate"));
+  const phase = (n: number) => sequence.slice(sequence.indexOf(`### Phase ${n}:`), sequence.indexOf(`### Phase ${n + 1}:`) > 0 ? sequence.indexOf(`### Phase ${n + 1}:`) : undefined);
 
-  it("checks status before acting, bootstraps only when the runtime is absent, and uses secure setup for credentials", () => {
-    expect(sequence.indexOf("get_installation_status")).toBeGreaterThan(-1);
-    expect(sequence.indexOf("get_installation_status")).toBeLessThan(sequence.indexOf("npm run bootstrap:grok"));
-    expect(sequence).toContain("Don't reinstall something\nthat's running.".replace(/\n/g, text.includes("\r\n") ? "\r\n" : "\n"));
-    expect(sequence).toMatch(/Install and start on your cloud computer \(only when Tour Core is absent or not answering\)/);
-    expect(sequence).toContain("get_secure_setup_url");
-    expect(sequence).toContain("OPERATOR_IN_SECURE_SETUP");
-    expect(sequence).toContain("get_next_installation_step");
-    // Property setup starts only once the infrastructure is ready.
-    expect(sequence).toMatch(/Only once `infrastructureReady` is true and the next step is PROPERTY/);
+  it("has the seven phases in order: bootstrap, connect, infrastructure, property, validate, publish, operate", () => {
+    const names = ["Bootstrap", "Connect", "Infrastructure", "Property", "Validate", "Publish", "Operate"];
+    const positions = names.map((n, i) => sequence.indexOf(`### Phase ${i + 1}: ${n}`));
+    expect(positions.every((p) => p > -1)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+    expect(sequence).toMatch(/always forward/);
   });
 
-  it("never asks for a secret in chat and never names a private repository", () => {
+  it("checks status before installing, and bootstraps only when Tour Core isn't answering", () => {
+    const p1 = phase(1);
+    expect(p1.indexOf("get_installation_status")).toBeGreaterThan(-1);
+    expect(p1.indexOf("get_installation_status")).toBeLessThan(p1.indexOf("npm run bootstrap:grok"));
+    expect(p1).toMatch(/don't reinstall a running Tour Core/);
+  });
+
+  it("fresh install: the operator only approves the connection, and Grok continues on its own afterwards", () => {
+    const p2 = phase(2);
+    expect(p2).toContain("Tour Core is installed and running. I need your approval to connect to it.");
+    expect(p2).toMatch(/Check that the codes match and click Allow/);
+    expect(p2).toMatch(/As soon as it's approved, without waiting to be asked/);
+    expect(p2).toContain("Connected. I'm checking the rest of the setup now.");
+    expect(p2).toMatch(/old Tour Core connection left over from\s+before is an exception/);
+  });
+
+  it("follows get_next_installation_step while infrastructure is incomplete, never offering alternatives or property setup early", () => {
+    const p3 = phase(3);
+    expect(p3).toContain("get_next_installation_step");
+    expect(p3).toMatch(/While `infrastructureReady` is false/);
+    expect(p3).toMatch(/don't offer other setup, alternatives or shortcuts/);
+    expect(p3).toMatch(/don't ask the operator what to do next/);
+    expect(p3).toMatch(/don't start property setup/);
+    expect(p3).toMatch(/Visitor texting is part of this phase: it's connected and tested before any\s+property/);
+    expect(phase(4)).toContain("Everything needed to run Tour Core is connected and tested. Would you like\n> to add your first property?");
+    expect(text).not.toMatch(/doesn't depend on|if you'd rather|what (would you like|should we) (to )?do next\?/i);
+  });
+
+  it("runs readiness and the practice tour automatically, needs an explicit yes to publish, then talks about operating", () => {
+    expect(phase(5)).toMatch(/without asking\s+whether to skip them/);
+    expect(phase(6)).toMatch(/Publish only after a clear yes/);
+    expect(phase(7)).toContain("Your property is live for demo. I'll keep an eye on tours and let you know\n> when something needs your attention.");
+  });
+
+  it("keeps infrastructure out of normal conversation and never asks for a secret in chat", () => {
+    expect(text).toMatch(/In normal conversation never mention addresses or links, `\/mcp`,\s+`trycloudflare`, tool counts, connectors, OAuth/);
     const requests = [
       /\b(paste|send|share|give|tell|type)\b[^.\n]{0,20}\b(me|us|here)\b[^.\n]{0,40}\b(key|secret|token|password|credential)s?\b/i,
       /\bwhat(?:'s| is) your\b[^.\n]{0,30}\b(key|secret|token|password)\b/i,
-      /\b(key|secret|token|password)s?\b[^.\n]{0,30}\bin (the )?chat\b(?![^.\n]*\b(never|not|don't|without)\b)/i,
     ];
     for (const pattern of requests) expect(text).not.toMatch(pattern);
     expect(text).toMatch(/not in chat/);
     expect(text).not.toMatch(/github\.com\/[\w.-]+\/[\w.-]+/i);
     expect(text).toContain("TOURCORE_REPO_URL");
-    // Outside its list of prohibitions, the skill never asks the operator to run anything.
     expect(text.slice(0, text.indexOf("## Never"))).not.toMatch(/(?<!never )ask (the operator|them) to run/i);
+    // Quoted lines are what Grok says to the operator: no technical words.
+    const quoted = text.split("\n").filter((l) => l.startsWith(">")).join(" ");
+    expect(quoted).not.toMatch(/\/mcp|trycloudflare|https?:\/\/|\bMCP\b|OAuth|tunnel|connector|\bnpm\b|localhost|\btools?\b|webhook/i);
   });
 
-  it("scenario: \"Set up Tour Core\" follows Tour Core's next steps with only the skill's tools, and reaches property setup once infrastructure is ready", async () => {
+  it("scenario: \"Set up Tour Core\" from blank to published, in Tour Core's order, with the operator acting only where a person must", async () => {
     const h = installHarness({ env: { TOURCORE_DEPLOYMENT_MODE: "GROK_MANAGED_P0" } });
     const { tool, used } = skillSession("install-tour-core", h);
     const hooks: Array<{ url: string }> = [];
@@ -252,36 +285,50 @@ describe("Install Tour Core skill", () => {
     fake.client.webhooks.create = async (body) => (hooks.push(...(body.webhooks as Array<{ url: string }>)), create(body));
     cleanups.push(setSendblueRuntime({ client: () => fake.client }));
     h.net.state.health = () => publicHealth(h.inst);
-
-    /** The operator typing into the secure setup page Grok opened (never through Grok). */
     const operatorFillsIn = async (url: string, body: Record<string, string>) => {
       const token = /#s=([^&]+)/.exec(url)![1]!;
       const route = url.includes("step=operator-alerts") ? "operator-alerts" : "visitor-messaging";
-      const out = await handleSecureSetupApi({ installation: h.inst, services: h.services }, "POST", `/api/install/${route}`, { "x-tourcore-setup-session": token }, body);
-      expect(out.status).toBe(200);
+      expect((await handleSecureSetupApi({ installation: h.inst, services: h.services }, "POST", `/api/install/${route}`, { "x-tourcore-setup-session": token }, body)).status).toBe(200);
     };
 
-    // "Set up Tour Core."
     const first = await tool("get_installation_status");
     expect(used[0]).toBe("get_installation_status");
+    const said: string[] = [];
     const performed: string[] = [];
     let step = first.nextStep;
-    for (let i = 0; i < 12 && step.component !== "PROPERTY"; i++) {
+    for (let i = 0; i < 25 && step.action !== "DONE"; i++) {
       performed.push(`${step.action}:${step.performedBy}`);
-      if (step.action === "ESTABLISH_PUBLIC_ENDPOINT") {
-        // Grok runs `npm run bootstrap:grok` in its own terminal (covered in bootstrap.test.ts); here, its outcome.
-        expect(step.command).toBe("npm run bootstrap:grok");
-        h.inst.files.ensure({ deploymentMode: "GROK_MANAGED_P0" });
-        h.inst.files.setPublicBaseUrl("https://brave-otter-lamp.trycloudflare.com", "CLOUDFLARE_QUICK_TUNNEL");
-      } else if (step.action === "CONNECT_GROK") {
-        h.connectGrok(); // the operator clicks Allow on Tour Core's connection page
-      } else if (step.performedBy === "OPERATOR_IN_SECURE_SETUP") {
-        const link = await tool("get_secure_setup_url", { step: step.secureSetupStep });
-        expect(link.url).toContain(`step=${step.secureSetupStep}`);
-        await operatorFillsIn(link.url, step.secureSetupStep === "operator-alerts" ? { webhookUrl: ROUTINE_URL, key: ROUTINE_KEY } : { apiKey: SB_KEY, apiSecret: SB_SECRET, fromNumber: "+15550109999" });
-      } else if (step.performedBy === "GROK" && step.tool) {
-        expect((await tool(step.tool)).ok).not.toBe(false);
-      } else throw new Error(`Unexpected step ${step.action}`);
+      said.push(step.operatorMessage);
+      switch (step.action) {
+        case "ESTABLISH_PUBLIC_ENDPOINT": // Grok runs the bootstrap (bootstrap.test.ts); here, its outcome.
+          h.inst.files.ensure({ deploymentMode: "GROK_MANAGED_P0" });
+          h.inst.files.setPublicBaseUrl("https://brave-otter-lamp.trycloudflare.com", "CLOUDFLARE_QUICK_TUNNEL");
+          break;
+        case "CONNECT_GROK":
+          h.connectGrok(); // the operator clicks Allow
+          break;
+        case "SET_UP_PROPERTY": // "Yes." → Setup Property skill
+          await h.setUpAlfredWay();
+          break;
+        case "OFFER_OPERATOR_ALERTS": // "Sure." → Grok creates the routine, opens secure setup
+        case "CONNECT_VISITOR_MESSAGING": {
+          const link = await tool("get_secure_setup_url", { step: step.secureSetupStep });
+          await operatorFillsIn(link.url, step.secureSetupStep === "operator-alerts" ? { webhookUrl: ROUTINE_URL, key: ROUTINE_KEY } : { apiKey: SB_KEY, apiSecret: SB_SECRET, fromNumber: "+15550109999" });
+          break;
+        }
+        case "RUN_READINESS":
+          expect((await h.ok("run_readiness_check")).passed).toBe(true);
+          break;
+        case "RUN_PRACTICE_TOUR":
+          expect((await h.ok("run_dry_tour")).passed).toBe(true);
+          break;
+        case "PUBLISH":
+          await h.approve("publish_demo_property", {}); // explicit yes
+          break;
+        default:
+          expect(step.performedBy).toBe("GROK");
+          expect((await tool(step.tool)).ok).not.toBe(false);
+      }
       step = (await tool("get_next_installation_step")) as typeof step;
     }
     expect(performed).toEqual([
@@ -289,22 +336,16 @@ describe("Install Tour Core skill", () => {
       "CHECK_PUBLIC_ENDPOINT:GROK",
       "CONNECT_GROK:OPERATOR",
       "CONNECT_VISITOR_MESSAGING:OPERATOR_IN_SECURE_SETUP",
-      "CONNECT_OPERATOR_ALERTS:OPERATOR_IN_SECURE_SETUP",
+      "SET_UP_PROPERTY:OPERATOR_DECISION",
+      "OFFER_OPERATOR_ALERTS:OPERATOR_DECISION",
+      "RUN_READINESS:GROK",
+      "RUN_PRACTICE_TOUR:GROK",
+      "PUBLISH:OPERATOR_DECISION",
     ]);
-    const status = await tool("get_installation_status");
-    expect(status.infrastructureReady).toBe(true);
-    expect(status.nextStep).toMatchObject({ component: "PROPERTY", action: "SET_UP_PROPERTY", skill: "setup-property", operatorMessage: "No property is configured yet. Want to set one up?" });
-    expect(status.lines.slice(0, 7)).toEqual([
-      "\u2713 Tour Core runtime: Tour Core is running.",
-      "\u2713 Public address: Tour Core is reachable at its public address.",
-      "\u2713 Grok connection: Grok is connected.",
-      "\u2713 Visitor messaging: Visitors can text +15550109999.",
-      "\u2713 Operator alerts: Tour Core can alert you when a visitor needs attention.",
-      "\u2713 Tour records: Tour records are stored with this Tour Core installation.",
-      "\u2713 Access system: Demo. No real doors open.",
-    ]);
-    // Nothing Grok saw carries a credential.
+    expect(said).toContain("Everything needed to run Tour Core is connected and tested. Would you like to add your first property?");
+    expect(step.operatorMessage).toBe("Your property is live for demo. I'll keep an eye on tours and let you know when something needs your attention.");
     const seen = JSON.stringify(await tool("get_installation_status")) + JSON.stringify(first);
     for (const secret of [SB_KEY, SB_SECRET, ROUTINE_URL, ROUTINE_KEY]) expect(seen).not.toContain(secret);
   });
 });
+

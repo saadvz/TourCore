@@ -4,7 +4,7 @@ import { SetupInputError } from "../setup/setupActions";
 import { checkPublicEndpoint, runtimeHealth, testAccess, testOperatorAlerts, testStorage, testVisitorMessaging } from "./checks";
 import type { Installation } from "./installation";
 import { DEFAULT_SETUP_SESSION_MINUTES } from "./setupSessions";
-import { getInstallationStatus, INSTALLATION_COMPONENTS, type ComponentStatus } from "./status";
+import { getInstallationStatus, INSTALLATION_COMPONENTS, OPTIONAL_COMPONENTS, type ComponentStatus, type InstallationComponent } from "./status";
 
 /**
  * Installation tools for the operator's agent host. They report and test the
@@ -27,12 +27,18 @@ const componentOut = (c: ComponentStatus) => ({
   component: c.component,
   label: c.label,
   state: c.state,
+  requirement: c.requirement,
   summary: c.summary,
-  ...(c.provider ? { provider: c.provider } : {}),
-  ...(c.details?.length ? { details: c.details } : {}),
   ...(c.next ? { next: c.next } : {}),
   ...(c.optionalActions.length ? { optionalActions: c.optionalActions } : {}),
+  ...(c.provider || c.technical?.length ? { technical: { ...(c.provider ? { provider: c.provider } : {}), ...(c.technical?.length ? { details: c.technical } : {}) } } : {}),
 });
+
+/** Returned with every step: the order is Tour Core's, not the agent's. */
+export const SEQUENCE_RULE =
+  "Tour Core decides the order. Do this step now. Don't offer other setup, don't ask the operator what to do next, and don't start property setup before Tour Core offers it. Say operatorMessage in your own words; never show grokInstructions, technical details, addresses or commands to the operator.";
+
+const TECHNICAL_NOTE = "For your own actions and troubleshooting only. Never show these to the operator.";
 
 const SecureStep = z.enum(["visitor-messaging", "operator-alerts"]);
 
@@ -42,19 +48,19 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
     title: "Installation status",
     kind: "read",
     description:
-      "Where this Tour Core installation stands: runtime, public address, Grok connection, visitor messaging, operator alerts, tour records, access system, property, readiness, practice tour and publish, each READY / ACTION_REQUIRED / etc., plus the next step. The source of truth for \"What's left to set up?\". Never contains credentials.",
+      "Where this Tour Core installation stands, component by component, in the order Tour Core sets them up, with the onboarding phase and the next step. The source of truth for \"What's left to set up?\". summary and lines are safe to say to the operator; technical is for you only. Never contains credentials.",
     input: z.strictObject({}),
     run: async (ctx) => {
       const s = getInstallationStatus(installation(ctx), ctx.services);
       return {
         summary: s.summary,
-        deployment: s.deploymentLabel,
-        deploymentMode: s.deploymentMode,
-        ...(s.publicAddress ? { publicAddress: s.publicAddress, connectorUrl: s.connectorUrl } : {}),
+        phase: s.phase,
         infrastructureReady: s.infrastructureReady,
         lines: s.lines,
-        components: s.components.map(componentOut),
         nextStep: s.nextStep,
+        rule: SEQUENCE_RULE,
+        components: s.components.map(componentOut),
+        technical: { note: TECHNICAL_NOTE, deployment: s.deploymentLabel, ...s.technical },
       };
     },
   }),
@@ -63,11 +69,26 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
     title: "Next installation step",
     kind: "read",
     description:
-      "The one next installation step Tour Core decided: which component, the action, who does it (GROK, OPERATOR, OPERATOR_IN_SECURE_SETUP or OPERATOR_DECISION), the tool or skill to use, and a plain message for the operator. Call it again after each step.",
+      "The one next step Tour Core decided: component, action, phase, who does it (GROK, OPERATOR, OPERATOR_IN_SECURE_SETUP or OPERATOR_DECISION), the tool or skill to use, what to tell the operator (operatorMessage), and what you need to do it (grokInstructions, for you only). Follow it; call it again after each step.",
     input: z.strictObject({}),
     run: async (ctx) => {
       const s = getInstallationStatus(installation(ctx), ctx.services);
-      return { summary: s.nextStep.operatorMessage, ...s.nextStep };
+      return { summary: s.nextStep.operatorMessage, ...s.nextStep, infrastructureReady: s.infrastructureReady, rule: SEQUENCE_RULE };
+    },
+  }),
+  tool({
+    name: "skip_optional_setup",
+    title: "Skip an optional setup step",
+    kind: "change",
+    description:
+      "Records that the operator declined an optional setup step Tour Core offered (only components Tour Core marks RECOMMENDED, e.g. OPERATOR_ALERTS), so the sequence moves on. Only after the operator clearly says no. It can be turned on later.",
+    input: z.strictObject({ component: z.enum(OPTIONAL_COMPONENTS as [InstallationComponent, ...InstallationComponent[]]) }),
+    run: async (ctx, i) => {
+      const inst = installation(ctx);
+      const state = inst.files.state();
+      inst.files.writeState({ ...state, skipped: { ...state.skipped, [i.component]: new Date(inst.now()).toISOString() } });
+      const next = getInstallationStatus(inst, ctx.services).nextStep;
+      return { summary: "No problem, that's off for now. You can turn it on any time.", nextStep: next, rule: SEQUENCE_RULE };
     },
   }),
   tool({
@@ -89,7 +110,7 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
     input: z.strictObject({}),
     run: async (ctx) => {
       const h = runtimeHealth(installation(ctx));
-      return { summary: h.runtimeRecords === "ok" ? "Tour Core is running and healthy." : "Tour Core is running, but it can't save running tours right now.", health: h };
+      return { summary: h.runtimeRecords === "ok" ? "Tour Core is running and healthy." : "Tour Core is running, but it can't save tour progress right now.", ok: h.runtimeRecords === "ok", technical: { note: TECHNICAL_NOTE, ...h } };
     },
   }),
   tool({
@@ -100,7 +121,11 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
     input: z.strictObject({}),
     run: async (ctx) => {
       const r = await checkPublicEndpoint(installation(ctx), { attempts: 2, delayMs: 2000 });
-      return { ok: r.ok, summary: r.message, ...(r.url ? { publicAddress: r.url } : {}) };
+      return {
+        ok: r.ok,
+        summary: r.ok ? "Tour Core has a secure public connection." : "Tour Core's secure public connection isn't working yet.",
+        technical: { note: TECHNICAL_NOTE, detail: r.message, ...(r.url ? { publicAddress: r.url } : {}) },
+      };
     },
   }),
   tool({
@@ -112,7 +137,13 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
     input: z.strictObject({}),
     run: async (ctx) => {
       const r = await testVisitorMessaging(installation(ctx), { onConnected: ctx.resetMessaging });
-      return { summary: r.message, ...r };
+      const { checks, incomingMessages, previousAddress, textingNumber, message } = r;
+      return {
+        ok: r.ok,
+        summary: r.ok ? "Visitor texting is connected and working." : "Visitor texting isn't working yet.",
+        ...(textingNumber ? { textingNumber } : {}),
+        technical: { note: TECHNICAL_NOTE, detail: message, checks, incomingMessages, ...(previousAddress ? { previousAddress } : {}) },
+      };
     },
   }),
   tool({
@@ -123,7 +154,11 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
     input: z.strictObject({}),
     run: async (ctx) => {
       const r = await testOperatorAlerts(installation(ctx));
-      return { summary: r.message, ...r };
+      return {
+        ok: r.ok,
+        summary: r.ok ? "Alerts are working: I sent a test alert." : "The test alert didn't get through yet.",
+        technical: { note: TECHNICAL_NOTE, detail: r.message },
+      };
     },
   }),
   tool({
@@ -161,11 +196,11 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
       const base = ctx.localUrl?.() ?? "http://localhost:4321";
       const minutes = Math.round((expiresAt - inst.now()) / 60_000) || DEFAULT_SETUP_SESSION_MINUTES;
       return {
-        summary: `Here's the secure setup page. It opens only in the browser on the Tour Core computer and expires in ${minutes} minutes.`,
+        summary: "I've opened Tour Core's secure setup page. Please take over the browser to finish there; nothing goes in chat.",
         url: `${base}/install#s=${token}${i.step ? `&step=${i.step}` : ""}`,
         expiresInMinutes: minutes,
         instructions:
-          "Open this link in the browser on the Tour Core computer. If a person needs to type something, ask the operator to take over the browser. Don't ask for the values in chat and don't type them yourself. When they're done, call get_installation_status.",
+          "Open url yourself in your cloud browser (it only works on the Tour Core computer) and hand control to the operator. Don't show the link in chat, don't ask for the values in chat, and don't type them yourself. When they're done, call get_next_installation_step.",
       };
     },
   }),

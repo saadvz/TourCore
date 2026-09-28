@@ -174,19 +174,19 @@ describe("installation status", () => {
       ["PUBLIC_ENDPOINT", "ACTION_REQUIRED"],
       ["GROK_OPERATOR", "NOT_CONFIGURED"],
       ["VISITOR_MESSAGING", "ACTION_REQUIRED"],
-      ["OPERATOR_ALERTS", "ACTION_REQUIRED"],
       ["STORAGE", "READY"],
       ["ACCESS", "READY"],
       ["PROPERTY", "NOT_CONFIGURED"],
+      ["OPERATOR_ALERTS", "NOT_CONFIGURED"],
       ["READINESS", "NOT_CONFIGURED"],
       ["PRACTICE_TOUR", "NOT_CONFIGURED"],
       ["PUBLISH", "NOT_CONFIGURED"],
     ]);
     expect(s.nextStep).toMatchObject({ component: "PUBLIC_ENDPOINT", action: "ESTABLISH_PUBLIC_ENDPOINT", performedBy: "GROK", command: "npm run bootstrap:grok" });
     expect(s.infrastructureReady).toBe(false);
-    const storage = s.components.find((c) => c.component === "STORAGE") as unknown as { provider: string; summary: string };
-    expect(storage).toMatchObject({ provider: "LOCAL_DEMO", summary: "Tour records are stored with this Tour Core installation." });
-    expect(s.components.find((c) => c.component === "ACCESS")).toMatchObject({ provider: "DURIN_DEMO", summary: "Demo. No real doors open." });
+    expect(s.components.find((c) => c.component === "STORAGE")).toMatchObject({ requirement: "REQUIRED_BEFORE_PROPERTY", technical: { provider: "LOCAL_DEMO" }, summary: "Tour records are stored with this Tour Core installation." });
+    expect(s.components.find((c) => c.component === "ACCESS")).toMatchObject({ technical: { provider: "DURIN_DEMO" }, summary: "Demo. No real doors open." });
+    expect(s.components.find((c) => c.component === "OPERATOR_ALERTS")).toMatchObject({ requirement: "RECOMMENDED", summary: "Offered once your first property is set up." });
     expect(s.lines).toContain("\u2713 Access system: Demo. No real doors open.");
   });
 
@@ -205,21 +205,20 @@ describe("installation status", () => {
     h.connectGrok();
     expect(await next()).toEqual(["CONNECT_VISITOR_MESSAGING", "OPERATOR_IN_SECURE_SETUP", "get_secure_setup_url"]);
     expect((await h.ok("get_next_installation_step")).operatorMessage).toBe(
-      "Visitor texting still needs to be connected. I'll open Tour Core's secure setup page so you can enter the Sendblue details there, not in chat.",
+      "Visitor texting is the next step. I've opened Tour Core's secure setup page so you can connect your Sendblue messaging account there, not in chat.",
     );
     h.inst.secrets.set({ SENDBLUE_API_API_KEY: SB_KEY, SENDBLUE_API_API_SECRET: SB_SECRET, SENDBLUE_FROM_NUMBER: "+15550109999" });
     expect(await next()).toEqual(["TEST_VISITOR_MESSAGING", "GROK", "test_visitor_messaging"]);
     markChecked(h, "messaging");
-    expect(await next()).toEqual(["CONNECT_OPERATOR_ALERTS", "OPERATOR_IN_SECURE_SETUP", "get_secure_setup_url"]);
-    expect((await h.ok("get_next_installation_step")).operatorMessage).toMatch(/^Connect operator alerts so Tour Core can notify you when a visitor needs attention\./);
+    // Only now does property setup come up; alerts wait for a property.
+    const infra = await h.status();
+    expect(infra.infrastructureReady).toBe(true);
+    expect(infra.nextStep).toMatchObject({ component: "PROPERTY", action: "SET_UP_PROPERTY", performedBy: "OPERATOR_DECISION", phase: "PROPERTY", operatorMessage: "Everything needed to run Tour Core is connected and tested. Would you like to add your first property?" });
+    await h.setUpAlfredWay();
+    expect(await next()).toEqual(["OFFER_OPERATOR_ALERTS", "OPERATOR_DECISION", "get_secure_setup_url"]);
     h.inst.secrets.set({ TOURCORE_GROK_ROUTINE_URL: ROUTINE_URL, TOURCORE_GROK_ROUTINE_KEY: ROUTINE_KEY });
     expect(await next()).toEqual(["TEST_OPERATOR_ALERTS", "GROK", "test_operator_alerts"]);
     markChecked(h, "alerts");
-    // Only now does property setup come up.
-    const infra = await h.status();
-    expect(infra.infrastructureReady).toBe(true);
-    expect(infra.nextStep).toMatchObject({ component: "PROPERTY", action: "SET_UP_PROPERTY", performedBy: "OPERATOR_DECISION", operatorMessage: "No property is configured yet. Want to set one up?" });
-    await h.setUpAlfredWay();
     expect(await next()).toEqual(["RUN_READINESS", "GROK", "run_readiness_check"]);
     await h.ok("run_readiness_check");
     expect(await next()).toEqual(["RUN_PRACTICE_TOUR", "GROK", "run_dry_tour"]);
@@ -229,7 +228,7 @@ describe("installation status", () => {
     const done = await h.status();
     expect(done.nextStep.action).toBe("DONE");
     expect(done.components.every((c) => c.state === "READY")).toBe(true);
-    expect(done.lines).toContain("\u2713 Visitor messaging: Visitors can text +15550109999.");
+    expect(done.lines).toContain("\u2713 Visitor texting: Visitor texting is connected and working (+15550109999).");
   });
 
   it("a changed public URL marks the Grok connection, messaging and the address itself as needing action", async () => {
@@ -289,10 +288,10 @@ describe("installation status", () => {
     h.inst.files.ensure({ deploymentMode: "GROK_MANAGED_P0" });
     h.inst.files.setPublicBaseUrl(TUNNEL, "CLOUDFLARE_QUICK_TUNNEL");
     h.net.state.health = { ok: true, service: "tour-core", installation: "someone-else" };
-    expect(await h.ok("check_public_endpoint")).toMatchObject({ ok: false, summary: "Tour Core's public address reaches a different Tour Core installation." });
+    expect(await h.ok("check_public_endpoint")).toMatchObject({ ok: false, summary: "Tour Core's secure public connection isn't working yet.", technical: { detail: "Tour Core's public address reaches a different Tour Core installation." } });
     const { publicHealth } = await import("../src/install/checks");
     h.net.state.health = publicHealth(h.inst);
-    expect(await h.ok("check_public_endpoint")).toMatchObject({ ok: true, summary: "Tour Core is reachable at its public address." });
+    expect(await h.ok("check_public_endpoint")).toMatchObject({ ok: true, summary: "Tour Core has a secure public connection.", technical: { publicAddress: TUNNEL } });
     expect((await h.component("PUBLIC_ENDPOINT")).state).toBe("READY");
     expect(h.net.calls.at(-1)!.url).toBe(`${TUNNEL}/healthz`);
   });
@@ -301,6 +300,6 @@ describe("installation status", () => {
     const h = harness();
     expect(await h.ok("test_storage")).toMatchObject({ ok: true, provider: "LOCAL_DEMO" });
     expect(await h.ok("test_access")).toMatchObject({ ok: true, accessSystem: "Demo", summary: "Access system: Demo. It's answering, and no real doors open." });
-    expect(await h.ok("check_runtime_health")).toMatchObject({ summary: "Tour Core is running and healthy.", health: { running: true, deploymentMode: "GROK_MANAGED_P0" } });
+    expect(await h.ok("check_runtime_health")).toMatchObject({ summary: "Tour Core is running and healthy.", ok: true, technical: { running: true, deploymentMode: "GROK_MANAGED_P0" } });
   });
 });

@@ -70,7 +70,15 @@ export function installHarness(options: { env?: NodeJS.ProcessEnv } = {}) {
       accessExpiresAt: h.now() + 3_600_000,
     });
   };
-  const status = async () => (await h.ok("get_installation_status")) as { components: Array<{ component: string; state: string; next?: { action: string } }>; nextStep: { action: string; performedBy: string; tool?: string; component: string | null }; infrastructureReady: boolean; lines: string[] };
+  const status = async () =>
+    (await h.ok("get_installation_status")) as {
+      summary: string;
+      phase: string;
+      components: Array<{ component: string; state: string; requirement: string; summary: string; next?: { action: string } }>;
+      nextStep: { action: string; performedBy: string; tool?: string; component: string | null };
+      infrastructureReady: boolean;
+      lines: string[];
+    };
   const component = async (name: string) => (await status()).components.find((c) => c.component === name)!;
   return { ...h, env, net, inst, runtime, connectGrok, status, component, start: at(7) };
 }

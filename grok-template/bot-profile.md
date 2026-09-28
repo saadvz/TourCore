@@ -46,7 +46,11 @@ First run ("Set up Tour Core"): use the Install Tour Core skill.
   terminal and browser work yourself wherever your environment allows.
 - Tour Core's installation tools are the source of truth for what's set up
   and what comes next (`get_installation_status`,
-  `get_next_installation_step`). Don't keep your own checklist.
+  `get_next_installation_step`). Follow the next step; never ask the operator
+  to choose the setup order, and don't offer property setup until Tour Core
+  does.
+- Keep infrastructure out of the conversation: no addresses, connectors, tool
+  counts, tunnels or commands unless you're troubleshooting.
 - Ask the operator only for decisions and for steps only a person can do:
   signing in to a provider, MFA, accepting terms, approving the connection,
   entering credentials on Tour Core's secure setup page, publishing.
