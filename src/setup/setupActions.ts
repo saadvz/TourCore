@@ -6,6 +6,7 @@ import {
   type TourHours,
   type Unit,
 } from "../config/tourCoreConfig";
+import { parseProfileValue, PROFILE_FIELDS, ProfileValueError, type ProfileField, type UnitProfile } from "../config/unitProfile";
 import type { ConfigIssue, ConfigSection } from "../config/validateConfig";
 import { formatClockTime, friendlyTimeZone, WEEKDAYS, type Weekday } from "../core/timezone";
 import { inferTimeZone, resolveTimeZone, slugify } from "./parse";
@@ -235,6 +236,35 @@ export function setUnitDetails(draft: SetupDraft, unitId: string, input: { summa
   if (!unit) throw new SetupInputError("UNIT_NOT_FOUND", "That unit isn't part of this property.");
   if (input.summary !== undefined) unit.summary = input.summary.trim();
   if (input.facts !== undefined) unit.facts = cleanFacts(input.facts);
+  return next;
+}
+
+/**
+ * Sets unit details (bedrooms, bathrooms, rent, availability, ...) from the
+ * operator's words. "I don't know" / "don't list it" become an explicit
+ * NOT_PROVIDED; anything unreadable is refused, never guessed. Unchanged
+ * values keep their original timestamp.
+ */
+export function setUnitProfile(draft: SetupDraft, unitId: string, values: Partial<Record<ProfileField, string | number | boolean>>, now = new Date()): SetupDraft {
+  const next = clone(draft);
+  const unit = next.units.find((u) => u.id === unitId);
+  if (!unit) throw new SetupInputError("UNIT_NOT_FOUND", "That unit isn't part of this property.");
+  const profile: UnitProfile = { ...(unit.profile ?? {}) };
+  for (const [key, raw] of Object.entries(values) as [ProfileField, string | number | boolean | undefined][]) {
+    if (!PROFILE_FIELDS.includes(key)) throw new SetupInputError("UNIT_DETAIL_UNKNOWN", `"${key}" isn't a unit detail Tour Core keeps.`);
+    if (raw === undefined || (typeof raw === "string" && !raw.trim())) continue;
+    let parsed;
+    try {
+      parsed = parseProfileValue(key, raw, now);
+    } catch (err) {
+      if (err instanceof ProfileValueError) throw new SetupInputError("UNIT_DETAIL_UNREADABLE", `${unit.name}: ${err.message}`);
+      throw err;
+    }
+    const old = profile[key];
+    const same = old && old.status === parsed.status && JSON.stringify("value" in old ? old.value : null) === JSON.stringify("value" in parsed ? parsed.value : null);
+    if (!same) (profile as Record<string, unknown>)[key] = parsed;
+  }
+  unit.profile = profile;
   return next;
 }
 

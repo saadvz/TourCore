@@ -38,8 +38,7 @@ chat.
 → `get_next_installation_step` → SET_UP_PROPERTY]
 
 **Tour Core:** Visitor texting is connected and working. Everything needed to
-run Tour Core is connected and tested. Would you like to add your first
-property?
+start is connected and tested. Would you like to add your first property?
 
 ---
 
@@ -124,8 +123,7 @@ Does that look right?
 [`get_next_installation_step` → OFFER_OPERATOR_ALERTS]
 
 **Tour Core:** Your property is configured. Would you like me to keep an eye
-on tours and let you know when a visitor needs help or Tour Core needs your
-input? I recommend it.
+on tours and alert you when something needs your attention? I recommend it.
 
 **Operator:** Sure.
 

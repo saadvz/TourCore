@@ -16,8 +16,30 @@
     { "id": "unit_102", "name": "Unit 102 Door", "kind": "UNIT" }
   ],
   "units": [
-    { "id": "apt_101", "name": "Unit 101", "doorId": "unit_101", "summary": "Two-bedroom, first floor, south-facing." },
-    { "id": "apt_102", "name": "Unit 102", "doorId": "unit_102", "summary": "One-bedroom, first floor, courtyard view." }
+    {
+      "id": "apt_101",
+      "name": "Unit 101",
+      "doorId": "unit_101",
+      "summary": "Two-bedroom, first floor, south-facing.",
+      "profile": {
+        "bedrooms": { "status": "PROVIDED", "value": 2 },
+        "bathrooms": { "status": "PROVIDED", "value": 1 },
+        "monthlyRent": { "status": "PROVIDED", "value": { "amount": 2300, "currency": "USD" } },
+        "availability": { "status": "PROVIDED", "value": { "text": "now", "now": true } }
+      }
+    },
+    {
+      "id": "apt_102",
+      "name": "Unit 102",
+      "doorId": "unit_102",
+      "summary": "One-bedroom, first floor, courtyard view.",
+      "profile": {
+        "bedrooms": { "status": "PROVIDED", "value": 1 },
+        "bathrooms": { "status": "PROVIDED", "value": 1 },
+        "monthlyRent": { "status": "PROVIDED", "value": { "amount": 1950, "currency": "USD" } },
+        "availability": { "status": "PROVIDED", "value": { "text": "October 15", "date": "2026-10-15" } }
+      }
+    }
   ],
   "routes": [
     {

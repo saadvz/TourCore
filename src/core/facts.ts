@@ -1,4 +1,5 @@
 import type { TourCoreConfig } from "../config/tourCoreConfig";
+import { profileFacts, type ProfileField } from "../config/unitProfile";
 
 /** A statement the operator wrote and approved. Tour guidance may only repeat these. */
 export interface ApprovedFact {
@@ -9,6 +10,8 @@ export interface ApprovedFact {
   subject: string;
   text: string;
   source: "operator";
+  /** Set when the sentence was generated from a structured unit value (bedrooms, rent, ...), never invented. */
+  profileField?: ProfileField;
 }
 
 const STOPWORDS = new Set(
@@ -27,12 +30,17 @@ const SYNONYMS: Record<string, string> = {
   include: "include", included: "include", includes: "include", utilities: "include", utility: "include",
   window: "window", windows: "window", light: "window", sunny: "window",
   sqft: "size", square: "size", feet: "size", size: "size", big: "size", large: "size",
+  rent: "rent", rents: "rent", price: "rent", priced: "rent", cost: "rent", costs: "rent", monthly: "rent", month: "rent", howmuch: "rent",
+  available: "available", availability: "available", vacant: "available", movein: "available",
+  studio: "bedroom", furnished: "furnish", unfurnished: "furnish", floor: "floor", story: "floor",
 };
 
 function keywords(text: string): string[] {
   return text
     .toLowerCase()
     .replace(/['\u2019]/g, "")
+    .replace(/\bhow much\b/g, "howmuch")
+    .replace(/\bmove[\s-]?in\b/g, "movein")
     .split(/[^a-z0-9]+/)
     .filter((w) => w && !STOPWORDS.has(w))
     .map((w) => SYNONYMS[w] ?? w.replace(/(ing|ed|es|s)$/, ""))
@@ -47,22 +55,32 @@ function keywords(text: string): string[] {
 export function findApprovedAnswer(facts: ApprovedFact[], question: string): ApprovedFact[] {
   const asked = new Set(keywords(question));
   if (!asked.size) return [];
-  return facts
+  const scored = facts
     .map((fact) => ({ fact, score: new Set(keywords(fact.text).filter((k) => asked.has(k))).size }))
-    .filter((x) => x.score > 0)
+    .filter((x) => x.score > 0);
+  // A structured unit value (bedrooms, rent, ...) is the canonical answer for its topic.
+  const structured = scored.filter((x) => x.fact.profileField);
+  return (structured.length ? structured : scored)
     .sort((a, b) => b.score - a.score)
     .slice(0, 2)
     .map((x) => x.fact);
 }
 
-/** Property-wide facts plus, when given, one unit's description and facts. Nothing is generated. */
+/** Property-wide facts plus, when given, one unit's structured details, description and facts. Nothing is invented. */
 export function approvedFacts(config: TourCoreConfig, unitId?: string): ApprovedFact[] {
   const out: ApprovedFact[] = config.property.facts.map((text) => ({ scope: "property", subject: config.property.name, text, source: "operator" }));
   const units = unitId ? config.units.filter((u) => u.id === unitId) : config.units;
   for (const unit of units) {
+    for (const f of profileFacts(unit)) out.push({ scope: "unit", unitId: unit.id, subject: unit.name, text: f.text, source: "operator", profileField: f.field });
     for (const text of [unit.summary, ...unit.facts].filter((t) => t.trim())) {
       out.push({ scope: "unit", unitId: unit.id, subject: unit.name, text, source: "operator" });
     }
   }
   return out;
+}
+
+/** How an approved answer reads to the visitor: generated unit details are complete sentences on their own. */
+export function approvedAnswerText(facts: ApprovedFact[]): string {
+  const text = facts.map((f) => f.text).join(" ");
+  return facts.every((f) => f.profileField) ? text : `Here's what the property team shared: ${text}`;
 }

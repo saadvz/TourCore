@@ -21,6 +21,7 @@ export function grokHarness(root = mkdtempSync(join(tmpdir(), "tourcore-grok-"))
   let clock = at(7);
   const workspace = new PropertyWorkspace(root);
   const visitors = new VisitorDemoRegistry();
+  visitors.useApprovedContent((id) => (workspace.has(id) ? workspace.load(id).config : undefined));
   const services: OperatorServices = { workspace, visitors, now: () => new Date(clock) };
   const ctx: ToolContext = { services, confirmations: new ConfirmationBook(10 * 60_000, () => clock), now: () => new Date(clock), localUrl: () => "http://localhost:4321" };
 
@@ -51,6 +52,7 @@ export function grokHarness(root = mkdtempSync(join(tmpdir(), "tourcore-grok-"))
     await ok("add_door", { name: "Lobby Entrance", kind: "entrance" });
     await ok("add_unit", { name: "Unit 101", description: "One-bedroom apartment" });
     await ok("add_unit", { name: "Unit 102", description: "Two-bedroom apartment" });
+    await ok("set_unit_details", { details: "101 is 1 bed 1 bath for $1,950, available now. 102 is 2 bed 1 bath for $2,400, available now." });
     await ok("set_route", { unit: "Unit 101", doors: ["Lobby Entrance", "Unit 101 Door"] });
     await ok("set_route", { unit: "Unit 102", doors: ["Lobby Entrance", "Unit 102 Door"] });
     await ok("set_tour_hours", { days: "weekdays", start: "9am", end: "5pm" });

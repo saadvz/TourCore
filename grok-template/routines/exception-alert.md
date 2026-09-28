@@ -43,11 +43,12 @@ repeat as the same alert.
    source of truth; don't rely on anything in the webhook beyond the ids.
 3. If the issue isn't open any more (it was handled already), stop quietly.
 4. Post one short message in everyday words: who (first name is fine), which
-   unit, what happened, whether the tour is still going, and the choices from
-   `nextSteps`. For an unanswered question:
-   > A visitor touring Unit 101 asked whether the property has a pool. Tour
-   > Core doesn't have an approved answer. The tour is still active. Would you
-   > like to add an approved answer or leave it for the property team?
+   unit, what happened, and whether the tour is still going. For an unanswered
+   question, ask for the answer itself (not a yes/no), so the only
+   confirmation later is Tour Core's:
+   > Testy, touring Unit 1A, asked how many bedrooms it has. Tour Core doesn't
+   > have that yet. The tour is still active. What should I tell them? (Or say
+   > "leave it" and the property team will follow up.)
 5. Don't act on the issue. Answering with a new approved fact, pausing,
    resuming or calling off a tour happen only when the operator replies, via
    the Work Exception skill and its confirmation questions.

@@ -1,7 +1,8 @@
+import { nextProfileQuestion } from "../config/unitProfile";
 import { mcpAuthModeFromEnv } from "../mcp/authMode";
 import { MCP_PATH } from "../mcp/paths";
 import type { OperatorServices } from "../operator/services";
-import type { PropertyWorkspace } from "../setup/workspace";
+import { isCurrent, type PropertyWorkspace } from "../setup/workspace";
 import { probeRuntimeStore } from "../storage/runtimeStore";
 import { DEPLOYMENT_MODE_LABELS, type DeploymentMode } from "./deployment";
 import type { Installation } from "./installation";
@@ -195,8 +196,8 @@ export interface StatusOptions {
 const BOOTSTRAP = "npm run bootstrap:grok";
 
 export const OPERATOR_MESSAGES = {
-  firstProperty: "Everything needed to run Tour Core is connected and tested. Would you like to add your first property?",
-  offerAlerts: "Your property is configured. Would you like me to keep an eye on tours and let you know when a visitor needs help or Tour Core needs your input? I recommend it.",
+  firstProperty: "Everything needed to start is connected and tested. Would you like to add your first property?",
+  offerAlerts: "Your property is configured. Would you like me to keep an eye on tours and alert you when something needs your attention? I recommend it.",
   validate:
     "Prospects can text your touring number to choose a unit and time, verify their details, and complete the self-guided tour in the same conversation. I'll run a readiness check and a practice tour before we turn it on.",
   operate: "Your property is live for demo. I'll keep an eye on tours and let you know when something needs your attention.",
@@ -371,6 +372,20 @@ function propertyStatus(services: OperatorServices): { status: ComponentStatus; 
       }),
     };
   }
+  const question = nextProfileQuestion(draft.units);
+  if (question) {
+    return {
+      ready: false,
+      name,
+      status: component("PROPERTY", "CONFIGURING", `${name} still needs some unit details.`, {
+        next: step("PROPERTY", "FINISH_PROPERTY_SETUP", "OPERATOR_DECISION", question.question, {
+          skill: "setup-property",
+          tool: "set_unit_details",
+          grokInstructions: "Ask this in plain words and save the answer with set_unit_details (the operator's words; \"not sure\" or \"don't list it\" count as answers). get_unit_details shows what's still missing.",
+        }),
+      }),
+    };
+  }
   return { ready: true, name, status: component("PROPERTY", "READY", `${name} is set up.`) };
 }
 
@@ -431,11 +446,10 @@ function validationStatuses(services: OperatorServices, propertyReady: boolean):
   }
   const { config, state } = services.workspace.load(primary.id);
   const name = config.property.name;
-  const hash = state.configHash;
-  const readinessOk = !!state.readiness?.passed && state.readiness.configHash === hash;
-  const dryOk = !!state.dryTour?.passed && state.dryTour.configHash === hash;
+  const readinessOk = !!state.readiness?.passed && isCurrent(state.readiness, state);
+  const dryOk = !!state.dryTour?.passed && isCurrent(state.dryTour, state);
   const published = state.status === "PUBLISHED_FOR_DEMO";
-  const failedReadiness = !!state.readiness && !state.readiness.passed && state.readiness.configHash === hash;
+  const failedReadiness = !!state.readiness && !state.readiness.passed && isCurrent(state.readiness, state);
   return [
     readinessOk
       ? component("READINESS", "READY", `${name} passed its readiness check.`)

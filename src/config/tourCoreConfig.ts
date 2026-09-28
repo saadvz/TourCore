@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { z } from "zod";
 import { WEEKDAYS } from "../core/timezone";
+import { UnitProfileSchema } from "./unitProfile";
 import { semanticIssues, type ConfigIssue, type ConfigSection } from "./validateConfig";
 
 const Id = z.string().regex(/^[a-z0-9_]+$/, "ids use lowercase letters, digits and underscores");
@@ -29,6 +30,8 @@ export const UnitSchema = z.object({
   /** Short operator-written description, e.g. "One-bedroom on the first floor." */
   summary: z.string().default(""),
   facts: ApprovedFacts,
+  /** Minimum leasing information (bedrooms, bathrooms, rent, availability, ...). Absent until asked. */
+  profile: UnitProfileSchema.optional(),
 });
 
 export const RouteSchema = z.object({

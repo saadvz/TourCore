@@ -2,7 +2,7 @@
 name: setup-property
 description: Set up a self-guided touring property in Tour Core through a friendly, one-question-at-a-time conversation, then check it and run a practice tour before offering to publish. Use when the operator wants to add, set up, import or change a building.
 when-to-use: "set up a property", "set up my building", "add a property", "I have a new building", "change the tour hours", "add a unit"
-allowed-tools: list_properties get_property_setup create_property_setup update_property_details list_units add_unit update_unit list_doors add_door preview_route set_route get_tour_hours set_tour_hours get_verification_policy set_verification_policy get_services set_services review_property_setup run_readiness_check run_dry_tour publish_demo_property
+allowed-tools: list_properties get_property_setup create_property_setup update_property_details list_units add_unit update_unit set_unit_details get_unit_details list_doors add_door preview_route set_route get_tour_hours set_tour_hours get_verification_policy set_verification_policy get_services set_services review_property_setup run_readiness_check run_dry_tour publish_demo_property
 argument-hint: "[address]"
 user-invocable: true
 metadata:
@@ -27,10 +27,11 @@ hours, verification or messaging. For route questions on their own, use
 ## Required inputs and access
 
 - The Tour Core connector must be connected (see the template setup guide).
-- From the operator, one at a time: address; how many units people can tour and
-  what they're called; the entrance(s); any hallway doors on the way; tour days
-  and hours; how careful to be about checking IDs; how to text people; where to
-  keep tour records.
+- From the operator, in this order: address; the units people can tour; each
+  unit's basic information (bedrooms, bathrooms, monthly rent, availability are
+  required; square footage, floor, description, parking, laundry, pets,
+  utilities, furnished and features are offered); the entrance(s); any hallway
+  doors on the way; tour days and hours; how careful to be about checking IDs.
 - Never ask for API keys, secrets, passwords or phone-provider credentials.
   Those are connected on the Tour Core computer, never in chat.
 
@@ -49,24 +50,40 @@ the operator correct it.
    101 and 102"). For each unit, `add_unit` with the operator's own name and
    description. Each unit gets its own door automatically ("Unit 101 Door").
    Never write a description or fact yourself.
-4. Ask **"Which door do visitors come in through?"** `add_door` with
+4. **Unit information, before doors and routes.** Ask for bedrooms, bathrooms,
+   rent and availability, and accept a natural answer for several units at
+   once ("1A and 1B are 2 bed 1 bath for $2,200. 2A is 3 bed 2 bath for
+   $2,800"): pass it as `details` to `set_unit_details`. Offer the optional
+   details (square footage, floor, parking, laundry, pets, utilities,
+   furnished, features) once. "I don't know", "not sure", "not available yet"
+   and "don't list the price" are answers: pass them as the operator said
+   them. Never fill in or guess a value. `set_unit_details` returns short lines
+   and, if anything required is still missing, the one `nextQuestion` to ask
+   (e.g. "When are these units available?"). Ask only that; don't re-ask what's
+   known. When nothing is missing, read the lines back and ask **"Does that look
+   right?"**:
+
+   > Unit 1A — 2 bed · 1 bath · $2,300/month · available now
+   > Unit 1B — 1 bed · 1 bath · $1,950/month · available October 15
+
+   Corrections go through `set_unit_details` too. These details are approved
+   facts: visitors' questions ("How many bedrooms?", "How much is it?", "When
+   is it available?") are answered from them.
+5. Ask **"Which door do visitors come in through?"** `add_door` with
    `kind: entrance`. Ask **"Any hallway or inside doors on the way to the
    units?"** Add each as `kind: hallway`. Add only doors the operator named.
-5. Routes: follow the **Map Route** skill for each unit (`preview_route`, show
+6. Routes: follow the **Map Route** skill for each unit (`preview_route`, show
    the operator, then `set_route` with the exact names).
-6. Ask **"When can people tour?"** Pass their words to `set_tour_hours`
+7. Ask **"When can people tour?"** Pass their words to `set_tour_hours`
    ("weekdays", "9 to 5"). Mention the visible defaults once (45-minute tours,
    a new tour every hour, 10 minutes early) and change any they want.
-7. Ask **"How careful do you want to be about checking IDs?"** Offer "Basic
+8. Ask **"How carefully do you want to verify visitors?"** Offer "Basic
    identity form (free, recommended)" or "Practice verification (everyone
    passes; for trying things out)". `set_verification_policy`. Full ID checks
    aren't available yet; say so if asked.
-8. Ask **"How do you want to text people?"** `get_services` shows the choices.
-   Recommend real texts through Sendblue for the demo. `set_services`. If
-   `get_services` says messaging isn't connected, explain that the Tour Core
-   computer still needs its texting setup and carry on; readiness will flag it.
-9. Ask **"Where should I keep the tour records?"** Today the only choice is on
-   the Tour Core computer; Google Drive is coming next. Don't pretend otherwise.
+9. Texting: when Tour Core's texting is already connected (it is in a guided
+   install), `set_services` with `messaging: sendblue` without asking. Tour
+   records are stored with this Tour Core installation; don't ask about it.
 10. `review_property_setup` and read it back as a short list:
 
     > Here's what I have:
@@ -79,13 +96,22 @@ the operator correct it.
     >
     > Does that look right?
 
-11. On yes: "Great. I'll check the setup and run a practice tour before
-    publishing." Then run **Run Readiness Check**. If it fails, explain each
-    problem in plain words and offer the fix; change nothing without the
-    operator's OK. If it passes, run **Simulate Tour**.
+11. On yes, the setup is saved. In a guided install, go back to Tour Core's
+    next step (`get_next_installation_step`, Install Tour Core skill): it
+    offers alerts next, then runs the checks. Otherwise: "I'll run a readiness
+    check and a practice tour before we turn it on." Then run **Run Readiness
+    Check**. If it fails, explain each problem in plain words and offer the fix;
+    change nothing without the operator's OK. If it passes, run **Simulate
+    Tour**.
 12. If both passed, `publish_demo_property`. It returns a question; ask it word
-    for word ("Everything passed. Do you want me to publish 100 Alfred Way for
-    demo?"). Only after a clear yes, call it again with the `confirmationCode`.
+    for word. Only after a clear yes, call it again with the `confirmationCode`.
+
+Later edits: facts and unit details (bedrooms, rent, availability,
+description, amenities, directions) are approved content: saving them keeps
+the property published and active tours use them right away. Doors, routes,
+tour hours, verification and messaging are structural: they send the property
+back to draft until readiness and a practice tour pass again. Tell the operator
+which it is before saving a structural change to a published property.
 
 ## Validate
 

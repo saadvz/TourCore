@@ -136,6 +136,8 @@ export class VisitorDemoSession {
   private readonly links?: VerificationLinks;
   private noted?: InterpretationNote;
   private expected?: { stage: VisitorStage; awaiting: Awaiting };
+  /** Where this tour reads the property's current approved content (set by the registry). */
+  contentSource?: () => TourCoreConfig | undefined;
 
   constructor(
     readonly propertyId: string,
@@ -160,6 +162,7 @@ export class VisitorDemoSession {
       durin: this.durin,
       verification: createVerificationProvider(config),
       correlationId: this.id,
+      approvedContent: () => this.contentSource?.(),
       ...(links ? { verificationLink: ({ reservation, prospect }) => links.issue({ sessionId: this.id, reservationId: reservation.id, phone: prospect.phone }) } : {}),
     });
   }
@@ -583,10 +586,27 @@ export class VisitorDemoSession {
 /** Live visitor conversations for this server process. Records are saved after every step. */
 export class VisitorDemoRegistry {
   private readonly sessions = new Map<string, VisitorDemoSession>();
+  private content?: (propertyId: string) => TourCoreConfig | undefined;
 
   add(session: VisitorDemoSession): VisitorDemoSession {
     this.sessions.set(session.id, session);
+    if (this.content) this.attach(session);
     return session;
+  }
+
+  /**
+   * Where live tours read the property's current approved content (the saved
+   * setup). Applies to tours already running, so an operator's new fact is
+   * used on the very next question.
+   */
+  useApprovedContent(content: (propertyId: string) => TourCoreConfig | undefined): void {
+    this.content = content;
+    for (const s of this.sessions.values()) this.attach(s);
+  }
+
+  private attach(session: VisitorDemoSession): void {
+    const content = this.content!;
+    session.contentSource = () => content(session.propertyId);
   }
 
   get(id: string): VisitorDemoSession {

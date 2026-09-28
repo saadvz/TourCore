@@ -35,6 +35,9 @@ import {
   type DryTourEvent,
   type SetupDraft,
 } from "../setup";
+import { unitDetailsView } from "../setup/presenters";
+import { setUnitProfile } from "../setup/setupActions";
+import { isCurrent } from "../setup/workspace";
 import { InputClosedError, Prompter, style } from "./prompter";
 
 /**
@@ -164,6 +167,22 @@ async function editUnits(start: SetupDraft): Promise<SetupDraft> {
     });
   }
   for (const id of existingIds.slice(count)) draft = removeUnit(draft, id);
+
+  io.say(dim("\nA few basics visitors always ask about. Type \"not provided\" for anything you don't know or don't want listed."));
+  for (const unit of draft.units) {
+    for (const [field, question, hint] of [
+      ["bedrooms", "How many bedrooms", '(0 or "studio" for a studio)'],
+      ["bathrooms", "How many bathrooms", ""],
+      ["monthlyRent", "What's the monthly rent for", "(e.g. $2,200)"],
+      ["availability", "When is it available,", '(e.g. "now" or "October 15")'],
+    ] as const) {
+      const current = unitDetailsView(draft.units.find((u) => u.id === unit.id)!).inputs[field];
+      draft = await retry(async () => {
+        const answer = await io.askRequired(`${question} ${unit.name}? ${hint}`.replace(/\s+$/, ""), current || undefined);
+        return setUnitProfile(draft, unit.id, { [field]: answer });
+      });
+    }
+  }
 
   io.say("");
   const entrance = draft.doors.find((d) => d.kind === "ENTRANCE");
@@ -411,7 +430,7 @@ async function readinessFlow(id: string): Promise<boolean> {
 
 async function practiceFlow(id: string): Promise<boolean> {
   let { config, state } = workspace.load(id);
-  if (!state.readiness?.passed || state.readiness.configHash !== state.configHash) {
+  if (!state.readiness?.passed || !isCurrent(state.readiness, state)) {
     io.say(dim("\nLet's run the readiness check first."));
     if (!(await readinessFlow(id))) return false;
     ({ config, state } = workspace.load(id));

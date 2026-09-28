@@ -62,9 +62,11 @@ Send only this (with the real repository address):
 | B4 | Wait | "Tour Core is installed and running. I need your approval to connect to it. I've opened the approval screen. Check that the codes match and click Allow." The approval screen is in Grok's cloud browser |
 | B5 | Take over the browser, check the codes match, click **Allow** | Without being asked: "Connected. I'm checking the rest of the setup now." Grok calls `get_installation_status` and `get_next_installation_step` |
 | B6 | Wait | "Visitor texting is the next step. I've opened Tour Core's secure setup page..." Grok does **not** offer property setup or ask what to do next |
-| B7 | Take over the browser, enter the Sendblue key, secret and number, say "done" | Grok tests it itself, then: "Visitor texting is connected and working. Everything needed to run Tour Core is connected and tested. Would you like to add your first property?" |
+| B7 | Take over the browser, enter the Sendblue key, secret and number, say "done" | Grok tests it itself, then: "Visitor texting is connected and working. Everything needed to start is connected and tested. Would you like add your first property?" |
+| B7a | Right after texting is connected | Grok does **not** mention alerts, and never calls them required. The secure setup page shows only the texting section |
 | B8 | Say yes and configure a property conversationally | Plain questions ("What's the property address?", "How many units can people self-tour?", "When can people tour?", "How carefully do you want to verify visitors?"); no field names |
-| B9 | Once the property is saved | "Your property is configured. Would you like me to keep an eye on tours and let you know when a visitor needs help...?" Say yes: "I'm setting up alerts...", Grok creates the alert itself, then "I've created the alert. I opened Tour Core's secure setup page so you can finish connecting it without putting any credentials in chat." Enter the details there; Grok sends a test alert. (Saying no instead skips alerts and moves on) |
+| B8a | When asked about the units, answer in one go: *"1A and 1B are 2 bed 1 bath for $2,200. 2A is 3 bed 2 bath for $2,800 and 2B is 2 bed 2 bath for $2,500."* | Grok reads back one line per unit (e.g. "1A — 2 bed · 1 bath · $2,200/month · availability not given yet") and asks only "When are these units available?". Answer *"1A and 1B now, 2A October 15, 2B not sure yet"*. Grok asks "Does that look right?" before doors and routes; nothing was invented, and "not sure yet" shows as not listed |
+| B9 | Once the property is saved | "Your property is configured. Would you like me to keep an eye on tours and alert you when something needs your attention?" Say yes: "I'm setting up alerts...", Grok creates the alert itself, then "I've created the alert. I opened Tour Core's secure setup page so you can finish connecting it without putting any credentials in chat." Enter the details there; Grok sends a test alert. (Saying no instead skips alerts and moves on) |
 | B10 | Wait | Grok explains how prospects use it and says it will run a readiness check and a practice tour, then runs both without asking whether to skip them |
 | B11 | Grok: "Everything passed. Would you like me to publish this property for demo?" Say yes | Published. "Your property is live for demo. I'll keep an eye on tours and let you know when something needs your attention." |
 | B11a | Throughout B3–B11 | None of these appear in the chat: a `trycloudflare.com` address, `/mcp`, a tool count, "connector", "OAuth", "tunnel", ports, commands, environment variables or process ids. Grok never asks which setup step to do next |
@@ -75,7 +77,26 @@ Send only this (with the real repository address):
 Pass = no attached files, no terminal on the operator's computer, no
 credential in chat, no infrastructure jargon in the happy path, the operator
 only approved, signed in, entered credentials on the secure setup page,
-answered property questions and made decisions, and every row matches.
+answered property questions and made decisions, and the order was exactly:
+texting → property (with unit details) → offer alerts → readiness → practice
+tour → publish.
+
+## C. Real visitor question on a published property (approved content)
+
+Continue from B with the property published and alerts on. Leave one unit's
+bedrooms unknown for this test (during setup, answer *"not sure"* for Unit
+1A's bedrooms, and don't mention bedrooms in its description).
+
+| # | Do | Expect |
+| --- | --- | --- |
+| C1 | From the real phone, start a tour of Unit 1A and get inside. Text *"How many bedrooms?"* | Immediately: "I don't have that information for this property. I've flagged it for the property team..." |
+| C2 | Don't say anything to Grok | Grok alerts you on its own and asks for the answer (e.g. "...asked how many bedrooms Unit 1A has... What should I tell them?"), not a yes/no |
+| C3 | Reply *"2 bedrooms."* | Grok asks **once**: "I'll save "Unit 1A has 2 bedrooms" as an approved fact and send that answer to Testy. Continue?" |
+| C4 | Reply *"Yes."* | The phone receives "Unit 1A has 2 bedrooms. Let me know if you have any other questions." (no "About your question..." wording) |
+| C5 | *"What needs attention?"* | Nothing: the question is resolved |
+| C6 | Check the property's status (browser app, or ask Grok) | Still **Published for demo**. No readiness check, practice tour or republish was run or asked for |
+| C7 | From the same phone, in the same tour, text *"how many bedrooms again?"* | "Unit 1A has 2 bedrooms." right away (no restart, no new tour) |
+| C8 | Ask Grok to change the tour hours | Grok says this is a structural change; afterwards the property is back to draft and needs readiness, a practice tour and your yes to republish |
 
 The final template experience is simpler still: install the Tour Core Bot
 template and say *"Set up Tour Core."* The template already knows the

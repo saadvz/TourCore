@@ -140,7 +140,7 @@ async function render(last = {}) {
     h("p", { class: "lead", text: "Enter provider details here, not in chat. They go straight to Tour Core and are never shown again, not even to Grok." }),
     h("p", { class: "hint", text: `This link works only in this computer's browser and expires at ${expires}.` }),
     focus !== "operator-alerts" ? messagingCard(data.settings, last.messaging) : null,
-    focus !== "visitor-messaging" ? alertsCard(data.settings, last.alerts) : null,
+    focus !== "visitor-messaging" && (data.sections?.operatorAlerts || focus === "operator-alerts") ? alertsCard(data.settings, last.alerts) : null,
     focus ? h("button", { type: "button", class: "link", onclick: () => ((location.hash = ""), location.reload()) }, "Show all settings") : null,
     statusCard(data),
     h("p", { class: "muted", text: "When you're done, go back to Grok and say \"done\". Grok will check the installation again." }),

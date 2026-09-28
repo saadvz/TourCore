@@ -14,10 +14,12 @@ import {
   setServices,
   setTourHours,
   setUnitDetails,
+  setUnitProfile,
   setVerificationPolicy,
   SetupInputError,
   type SetupDraft,
 } from "./setupActions";
+import type { ProfileField } from "../config/unitProfile";
 
 /**
  * Every draft edit a setup surface can make, with a typed input schema.
@@ -51,6 +53,10 @@ export const SETUP_COMMANDS = {
   ),
   setUnitDetails: command(z.object({ unitId: Text, summary: Text.optional(), facts: Facts.optional() }), (d, i) =>
     setUnitDetails(d, i.unitId, { summary: i.summary, facts: i.facts }),
+  ),
+  /** Unit details in the operator's words: bedrooms, bathrooms, monthlyRent, availability, squareFeet, floor, parking, laundry, pets, utilities, furnished, features. */
+  setUnitProfile: command(z.object({ unitId: Text, values: z.record(z.string(), z.union([z.string().max(300), z.number(), z.boolean()])) }), (d, i) =>
+    setUnitProfile(d, i.unitId, i.values as Partial<Record<ProfileField, string | number | boolean>>),
   ),
   removeUnit: command(z.object({ unitId: Text }), (d, i) => removeUnit(d, i.unitId)),
   addDoor: command(z.object({ name: Text, kind: z.enum(["ENTRANCE", "COMMON", "UNIT"]), unitId: Text.optional() }), (d, i) => addDoor(d, i).draft),

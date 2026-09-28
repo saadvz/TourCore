@@ -1,4 +1,4 @@
-﻿import { readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import { validateConfig } from "../src/config/tourCoreConfig";
 import { publicHealth } from "../src/install/checks";
@@ -55,6 +55,12 @@ describe("Grok skill scenarios", () => {
     // "Two units, 101 and 102." / "The lobby entrance." / "No hallway doors."
     await tool("add_unit", { name: "Unit 101", description: "One-bedroom" });
     await tool("add_unit", { name: "Unit 102", description: "Two-bedroom" });
+    // "101 is 1 bed 1 bath for $1,950 and 102 is 2 bed 1 bath for $2,400." → only availability is missing.
+    const details = await tool("set_unit_details", { details: "101 is 1 bed 1 bath for $1,950 and 102 is 2 bed 1 bath for $2,400." });
+    expect(details.nextQuestion).toBe("When are these units available?");
+    // "Both now."
+    const complete = await tool("set_unit_details", { units: [{ unit: "101", availability: "now" }, { unit: "102", availability: "now" }] });
+    expect(complete.lines).toEqual(["Unit 101 — 1 bed · 1 bath · $1,950/month · available now", "Unit 102 — 2 bed · 1 bath · $2,400/month · available now"]);
     await tool("add_door", { name: "Lobby Entrance", kind: "entrance" });
     for (const unit of ["101", "102"]) {
       const preview = await tool("preview_route", { unit, doors: ["lobby entrance", "unit door"] });
@@ -159,7 +165,7 @@ describe("Grok skill scenarios", () => {
     expect(opened.issue.recentMessages.at(-1).text).toContain("I've flagged it for the property team");
     // "Yes, parking is included."  Grok offers; "Yes."
     const { asked, done } = await yes("answer_flagged_question", { exceptionId: opened.issue.exceptionId, approvedFact: "Parking is included." });
-    expect(asked.visitorWillReceive).toBe('About your question "Is parking included?": here\'s what the property team shared: Parking is included.');
+    expect(asked.visitorWillReceive).toBe("Parking is included. Let me know if you have any other questions.");
     expect(done.visitorAnswered).toBe(true);
     expect((await tool("list_exceptions")).summary).toBe("Nothing needs attention right now.");
   });
@@ -250,7 +256,8 @@ describe("Install Tour Core skill", () => {
     expect(p3).toMatch(/don't ask the operator what to do next/);
     expect(p3).toMatch(/don't start property setup/);
     expect(p3).toMatch(/Visitor texting is part of this phase: it's connected and tested before any\s+property/);
-    expect(phase(4)).toContain("Everything needed to run Tour Core is connected and tested. Would you like\n> to add your first property?");
+    expect(phase(4)).toContain("Everything needed to start is connected and tested. Would you like to add\n> your first property?");
+    expect(phase(4)).toMatch(/Alerts are not part of this: they come\s+later and are never required/);
     expect(text).not.toMatch(/doesn't depend on|if you'd rather|what (would you like|should we) (to )?do next\?/i);
   });
 
@@ -342,7 +349,7 @@ describe("Install Tour Core skill", () => {
       "RUN_PRACTICE_TOUR:GROK",
       "PUBLISH:OPERATOR_DECISION",
     ]);
-    expect(said).toContain("Everything needed to run Tour Core is connected and tested. Would you like to add your first property?");
+    expect(said).toContain("Everything needed to start is connected and tested. Would you like to add your first property?");
     expect(step.operatorMessage).toBe("Your property is live for demo. I'll keep an eye on tours and let you know when something needs your attention.");
     const seen = JSON.stringify(await tool("get_installation_status")) + JSON.stringify(first);
     for (const secret of [SB_KEY, SB_SECRET, ROUTINE_URL, ROUTINE_KEY]) expect(seen).not.toContain(secret);

@@ -28,6 +28,8 @@ again with the code after the operator's yes.
 | `list_units` | read | Units with description, facts, door, route |
 | `add_unit` | change | Adds a unit and its own door |
 | `update_unit` | change | Renames a unit or changes its description/facts |
+| `set_unit_details` | change | Saves units' bedrooms, bathrooms, rent, availability and optional details from the operator's words (bulk answers welcome); "not sure" is saved as not provided |
+| `get_unit_details` | read | Unit details as short lines, what's still missing, and the one question to ask next |
 | `list_doors` | read | Every door on file |
 | `add_door` | change | Adds an entrance or hallway door the operator named |
 | `get_route` | read | A unit's saved route (or a suggestion) |
@@ -48,7 +50,7 @@ again with the code after the operator's yes.
 | `list_exceptions` | read | The queue of issues that need the team |
 | `inspect_exception` | read | One issue with context and next steps |
 | `resolve_exception` | change | Marks an issue handled with a note; changes nothing else |
-| `answer_flagged_question` | consequential | Adds the operator's own words as an approved fact and texts the visitor exactly that |
+| `answer_flagged_question` | consequential | Saves the operator's answer as an approved fact (a unit detail like bedrooms becomes that unit's value), texts the visitor exactly that, asks one confirmation, keeps the property published |
 | `place_operator_hold` | consequential | Pauses a running tour; its doors are switched off |
 | `clear_operator_hold` | consequential | Resumes a paused tour; policy still decides every door |
 | `revoke_tour_access` | consequential | Calls a tour off for good and tells the visitor |

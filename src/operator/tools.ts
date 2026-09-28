@@ -3,6 +3,7 @@ import type { Installation } from "../install/installation";
 import { secretValues } from "../install/settings";
 import { INSTALLATION_TOOLS } from "../install/tools";
 import { validateConfig } from "../config/tourCoreConfig";
+import { FIELD_WORDS, missingProfileFields, nextProfileQuestion, parseBulkUnitDetails, profileSummaryLine } from "../config/unitProfile";
 import { TourCoreError } from "../core/TourCore";
 import { InvalidTransitionError } from "../domain/stateMachine";
 import { checkMessaging, UnavailableModeError } from "../createTourCore";
@@ -17,7 +18,7 @@ import { exportAudit, parseLocalDate } from "./auditExport";
 import type { ConfirmationBook } from "./confirmations";
 import {
   answerFlaggedQuestion,
-  cleanFact,
+  planFlaggedAnswer,
   clearHold,
   describeChangeTarget,
   findException,
@@ -88,6 +89,7 @@ const TourRef = z.string().min(3).max(200).describe("The tourRef from list_activ
 const ExceptionId = z.string().min(3).max(60).describe("The exceptionId from list_exceptions. Never show it to the operator.");
 const Code = z.string().max(20).optional().describe("Only after the operator explicitly said yes to the exact question this tool returned earlier.");
 const Facts = z.array(z.string().max(300)).max(30);
+const UnitValue = z.union([z.string().max(300), z.number(), z.boolean()]).optional();
 const Duration = z.union([z.number().int(), z.string().max(40)]);
 
 // ----------------------------------------------------------------- helpers
@@ -142,6 +144,23 @@ function setupSnapshot(ctx: ToolContext, id: string) {
     recordsAndMessages: view.services.items.map((s) => s.title),
     alertsGoTo: view.operator.name,
     ...setupState(ctx, id),
+  };
+}
+
+function unitDetailsView(ctx: ToolContext, id: string) {
+  const { draft } = ctx.services.workspace.openDraft(id);
+  const missing = draft.units.map((u) => ({ unit: u.name, missing: missingProfileFields(u).map((f) => FIELD_WORDS[f]) })).filter((m) => m.missing.length);
+  const next = nextProfileQuestion(draft.units);
+  const lines = draft.units.map(profileSummaryLine);
+  return {
+    summary: next ? `${lines.join("\n")}\n\n${next.question}` : `${lines.join("\n")}\n\nDoes that look right?`,
+    lines,
+    complete: !next,
+    missing,
+    ...(next ? { nextQuestion: next.question } : {}),
+    instructions: next
+      ? "Read the lines back, then ask nextQuestion. Only the operator's words count; if they don't know or don't want it listed, pass that as their answer."
+      : 'Read the lines back and ask "Does that look right?" before moving on to doors and routes.',
   };
 }
 
@@ -387,6 +406,71 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const setup = setupSnapshot(ctx, id);
       return { summary: `Updated ${i.newName ?? unit.name}.`, unit: setup.units.find((u) => u.unitId === unit.id), ...setupState(ctx, id) };
     },
+  }),
+  tool({
+    name: "set_unit_details",
+    title: "Save unit details",
+    kind: "change",
+    description:
+      'Saves each unit\'s leasing details from the operator\'s own words: bedrooms, bathrooms, monthly rent and availability (required), plus square footage, floor, parking, laundry, pets, utilities, furnished and features. Pass a natural answer covering several units in "details" (e.g. "1A and 1B are 2 bed 1 bath for $2,200. 2A is 3 bed 2 bath for $2,800"), and/or per-unit values in "units". "I don\'t know", "not sure", "not available yet" or "don\'t list the price" are saved as not provided. Never fill in values yourself. Returns a summary to read back and the one question for anything still missing.',
+    input: z.strictObject({
+      property: Property,
+      details: z.string().max(2000).optional().describe("The operator's answer, as they said it."),
+      units: z
+        .array(
+          z.strictObject({
+            unit: Unit,
+            bedrooms: UnitValue,
+            bathrooms: UnitValue,
+            monthlyRent: UnitValue,
+            availability: UnitValue,
+            squareFeet: UnitValue,
+            floor: UnitValue,
+            parking: UnitValue,
+            laundry: UnitValue,
+            pets: UnitValue,
+            utilities: UnitValue,
+            furnished: UnitValue,
+            features: UnitValue,
+          }),
+        )
+        .max(50)
+        .optional(),
+    }),
+    run: async (ctx, i) => {
+      const { id, draft } = openDraft(ctx, i.property);
+      let next = draft;
+      const touched = new Set<string>();
+      let unknownUnits: string[] = [];
+      if (i.details) {
+        const bulk = parseBulkUnitDetails(i.details, draft.units.map((u) => u.name));
+        unknownUnits = bulk.unknownUnits;
+        for (const entry of bulk.units) {
+          const unit = requireUnit(next, entry.unit);
+          next = applySetupCommand(next, "setUnitProfile", { unitId: unit.id, values: entry.values });
+          touched.add(unit.id);
+        }
+      }
+      for (const entry of i.units ?? []) {
+        const { unit: ref, ...values } = entry;
+        const unit = requireUnit(next, ref);
+        next = applySetupCommand(next, "setUnitProfile", { unitId: unit.id, values: Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined)) });
+        touched.add(unit.id);
+      }
+      if (!touched.size) {
+        throw new SetupInputError("UNIT_DETAILS_NOT_FOUND", `I couldn't match those details to a unit. The units are ${draft.units.map((u) => u.name).join(", ") || "none yet"}.`);
+      }
+      ctx.services.workspace.persistEdit(next, ctx.now());
+      return { ...unitDetailsView(ctx, id), ...(unknownUnits.length ? { notOnFile: unknownUnits } : {}), ...setupState(ctx, id) };
+    },
+  }),
+  tool({
+    name: "get_unit_details",
+    title: "Review unit details",
+    kind: "read",
+    description: "Each unit's leasing details as short lines to read back, which required details are still missing, and the one question to ask next. Read-only.",
+    input: z.strictObject({ property: Property }),
+    run: async (ctx, i) => unitDetailsView(ctx, resolvePropertyId(ctx.services.workspace, i.property)),
   }),
   tool({
     name: "list_doors",
@@ -760,31 +844,27 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Answer a flagged question with a new approved fact",
     kind: "consequential",
     description:
-      "Only when the OPERATOR supplied the answer. Adds their exact words as an approved fact (property or unit), texts the visitor exactly that fact, and marks the question handled. Never make up or reword the fact. First call returns a yes/no question; call again with confirmationCode only after an explicit yes.",
+      "Only when the OPERATOR supplied the answer. As soon as they give it (e.g. \"2 bedrooms\"), call this without a code: Tour Core works out how it will be saved (a unit detail like bedrooms becomes that unit's value and the canonical sentence \"Unit 1A has 2 bedrooms.\"; anything else stays in the operator's words) and returns ONE question to ask. That question is the only confirmation: don't ask a separate yes/no before it. After a clear yes, call again with confirmationCode: the fact is saved, the visitor gets exactly that fact, and the question is marked handled. The property stays published. Never make up or reword the answer.",
     input: z.strictObject({
       exceptionId: ExceptionId,
-      approvedFact: z.string().min(1).max(300).describe("The operator's own words, e.g. \"Parking is included.\""),
-      appliesTo: z.enum(["property", "unit"]).optional().describe("Whole property (default) or just the visitor's unit."),
+      approvedFact: z.string().min(1).max(300).describe("The operator's own words, e.g. \"2 bedrooms\" or \"Parking is included.\""),
+      appliesTo: z.enum(["property", "unit"]).optional().describe("Only if the operator said: the whole property or just the visitor's unit. Tour Core decides otherwise."),
       confirmationCode: Code,
     }),
     run: async (ctx, i) => {
-      const x = await findException(ctx.services, i.exceptionId);
-      if (x.kind !== "unanswered-question" || !x.question) throw new SetupInputError("NOT_A_QUESTION", "That issue isn't an unanswered question.");
-      if (x.status === "resolved") throw new SetupInputError("ALREADY_RESOLVED", "That question has already been handled.");
-      const fact = cleanFact(i.approvedFact);
-      const appliesTo = i.appliesTo ?? "property";
-      const fingerprint = `${x.exceptionId}|${appliesTo}|${fact}`;
+      const plan = await planFlaggedAnswer(ctx.services, { exceptionId: i.exceptionId, approvedFact: i.approvedFact, appliesTo: i.appliesTo }, ctx.now());
+      const x = plan.exception;
+      const first = x.visitorName.split(/\s+/)[0];
+      const fingerprint = `${x.exceptionId}|${plan.appliesTo}|${plan.field ?? ""}|${plan.fact}`;
       if (!i.confirmationCode) {
-        const where = appliesTo === "unit" ? (x.unitName ?? "the unit") : x.property;
-        const first = x.visitorName.split(/\s+/)[0];
-        return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, `I can add "${fact}" to the approved facts for ${where} and answer ${first}. Want me to?`, {
-          visitorWillReceive: visitorAnswerText(x.question, fact),
+        return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, `I'll save "${plan.fact.replace(/\.$/, "")}" as an approved fact and send that answer to ${first}. Continue?`, {
+          visitorWillReceive: visitorAnswerText(x.question!, plan.fact),
         });
       }
       ctx.confirmations.redeem(i.confirmationCode, "answer", x.exceptionId, fingerprint);
-      const out = await answerFlaggedQuestion(ctx.services, { exceptionId: x.exceptionId, approvedFact: fact, appliesTo }, ctx.now());
+      const out = await answerFlaggedQuestion(ctx.services, { exceptionId: x.exceptionId, approvedFact: i.approvedFact, appliesTo: i.appliesTo }, ctx.now());
       return {
-        summary: `Added "${out.approvedFact}" to ${out.addedTo}'s approved facts${out.visitorAnswered ? ` and texted ${x.visitorName.split(/\s+/)[0]}` : "; their tour isn't running, so they weren't texted"}.${out.needsRecheck ? " The setup changed, so run the readiness check and a practice tour again before publishing." : ""}`,
+        summary: `Saved "${out.approvedFact.replace(/\.$/, "")}"${out.visitorAnswered ? ` and sent it to ${first}` : "; their tour isn't running, so they weren't texted"}.${out.needsRecheck ? " The setup changed, so run the readiness check and a practice tour again before publishing." : ""}`,
         ...out,
       };
     },

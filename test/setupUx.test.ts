@@ -24,6 +24,7 @@ function property(withRoutes = true): SetupDraft {
   d = applySetupCommand(d, "addDoor", { name: "Lobby Entrance", kind: "ENTRANCE" });
   d = applySetupCommand(d, "addUnit", { name: "Unit 101", summary: "One-bedroom apartment." });
   d = applySetupCommand(d, "addUnit", { name: "Unit 102" });
+  for (const u of draftView(d).units) d = applySetupCommand(d, "setUnitProfile", { unitId: u.id, values: { bedrooms: "1", bathrooms: "1", monthlyRent: "$1,900", availability: "now" } });
   if (withRoutes) for (const u of draftView(d).units) d = applySetupCommand(d, "setRoute", { unitId: u.id, doorIds: u.suggestedRoute });
   return d;
 }

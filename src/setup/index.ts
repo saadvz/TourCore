@@ -13,6 +13,7 @@ export {
   removeUnit,
   setUnitSummary,
   setUnitDetails,
+  setUnitProfile,
   suggestRoute,
   doorFollowsUnitName,
   defaultUnitDoorName,
@@ -36,7 +37,7 @@ export {
 } from "./setupActions";
 export { runReadinessCheck, type ReadinessResult, type ReadinessCheck } from "./readiness";
 export { runDryTour, type DryTourEvent, type DryTourResult } from "./dryTour";
-export { PropertyWorkspace, statusLabel, configHash, type PropertyState, type PublishResult, type PublicationStatus } from "./workspace";
+export { PropertyWorkspace, statusLabel, configHash, isCurrent, type PropertyState, type PublishResult, type PublicationStatus } from "./workspace";
 
 /** Demo publish only: never a production launch. See PublicationStatus. */
 export function publishDemoProperty(workspace: PropertyWorkspace, propertyId: string, now?: Date): Promise<PublishResult> {

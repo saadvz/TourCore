@@ -1,3 +1,4 @@
+import { FIELD_WORDS, missingProfileFields, PROFILE_FIELDS, profileSummaryLine, type ProfileField } from "../config/unitProfile";
 import type { ConfigIssue, ConfigSection } from "../config/validateConfig";
 import { slotStartMinutes } from "../core/schedule";
 import { formatClockTime, friendlyTimeZone } from "../core/timezone";
@@ -13,7 +14,7 @@ import {
   suggestRoute,
   type SetupDraft,
 } from "./setupActions";
-import { statusLabel, type SavedProperty, type TourRecord } from "./workspace";
+import { isCurrent, statusLabel, type SavedProperty, type TourRecord } from "./workspace";
 import { describeHistory } from "../audit/describe";
 import { validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
 import { formatDay, formatShortDateTime, formatTime } from "../core/timezone";
@@ -174,6 +175,7 @@ export function draftView(draft: SetupDraft) {
       name: u.name,
       summary: u.summary,
       facts: u.facts,
+      details: unitDetailsView(u),
       door: door ? { id: door.id, name: door.name } : undefined,
       doorFollowsName: doorFollowsUnitName(draft, u.id),
       route: route?.stops.length
@@ -319,6 +321,26 @@ export function saveStateView(draft: SetupDraft, unsaved: boolean) {
   };
 }
 
+/** A unit's leasing details for the setup screens: one line, what's missing, and the values as editable text. */
+export function unitDetailsView(u: SetupDraft["units"][number]) {
+  const text = (f: ProfileField): string => {
+    const v = u.profile?.[f];
+    if (!v) return "";
+    if (v.status === "NOT_PROVIDED") return "not provided";
+    const value = v.value as unknown;
+    if (f === "bedrooms") return value === 0 ? "studio" : String(value);
+    if (f === "monthlyRent") return `$${(value as { amount: number }).amount.toLocaleString("en-US")}`;
+    if (f === "availability") return (value as { now?: boolean; text: string }).now ? "now" : (value as { text: string }).text;
+    if (f === "furnished") return value ? "furnished" : "unfurnished";
+    return String(value);
+  };
+  return {
+    line: profileSummaryLine(u),
+    missing: missingProfileFields(u).map((f) => FIELD_WORDS[f]),
+    inputs: Object.fromEntries(PROFILE_FIELDS.map((f) => [f, text(f)])) as Record<ProfileField, string>,
+  };
+}
+
 export function propertySummary(
   saved: SavedProperty | undefined,
   draft: SetupDraft | undefined,
@@ -327,9 +349,8 @@ export function propertySummary(
 ) {
   const config = saved?.config ?? draft!;
   const state = saved?.state;
-  const hash = state?.configHash;
-  const readinessCurrent = !!state?.readiness && state.readiness.configHash === hash;
-  const practiceCurrent = !!state?.dryTour && state.dryTour.configHash === hash;
+  const readinessCurrent = !!state && isCurrent(state.readiness, state);
+  const practiceCurrent = !!state && isCurrent(state.dryTour, state);
   return {
     id: config.property.id,
     name: config.property.name,
@@ -348,7 +369,7 @@ export function propertySummary(
     messagingLine: extra.messagingLine,
     /** Text-message tours that couldn't be picked up after a restart. No doors were opened for them. */
     needsAttention: (extra.needsAttention ?? []).map((n) => ({ message: `A text-message tour with ${n.visitorPhone} couldn't be picked up after a restart. Please reach out to them.`, dev: { problem: n.problem } })),
-    dev: { propertyId: config.property.id, configHash: hash, recordsFolder: state?.dryTour?.recordsFolder },
+    dev: { propertyId: config.property.id, configHash: state?.configHash, safetyHash: state?.safetyHash, recordsFolder: state?.dryTour?.recordsFolder },
   };
 }
 

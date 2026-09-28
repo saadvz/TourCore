@@ -96,7 +96,7 @@ describe("Tour Core owns the onboarding order", () => {
     const status = await h.status();
     expect(status.infrastructureReady).toBe(true);
     expect(status.nextStep).toMatchObject({ action: "SET_UP_PROPERTY", phase: "PROPERTY", performedBy: "OPERATOR_DECISION", skill: "setup-property", operatorMessage: OPERATOR_MESSAGES.firstProperty });
-    expect(OPERATOR_MESSAGES.firstProperty).toBe("Everything needed to run Tour Core is connected and tested. Would you like to add your first property?");
+    expect(OPERATOR_MESSAGES.firstProperty).toBe("Everything needed to start is connected and tested. Would you like to add your first property?");
   });
 
   it("alerts are offered only after the property is saved, as a recommended option Tour Core marks optional", async () => {
@@ -106,7 +106,7 @@ describe("Tour Core owns the onboarding order", () => {
     await h.setUpAlfredWay();
     const offer = await next(h);
     expect(offer).toMatchObject({ component: "OPERATOR_ALERTS", action: "OFFER_OPERATOR_ALERTS", performedBy: "OPERATOR_DECISION", optional: true, phase: "PROPERTY", operatorMessage: OPERATOR_MESSAGES.offerAlerts });
-    expect(offer.operatorMessage).toMatch(/^Your property is configured\. Would you like me to keep an eye on tours and let you know when a visitor needs help/);
+    expect(offer.operatorMessage).toMatch(/^Your property is configured\. Would you like me to keep an eye on tours and alert you when something needs your attention\?/);
     expect(offer.grokInstructions).toMatch(/create the Tour Core Exception Alert routine yourself/);
     expect(offer.grokInstructions).toMatch(/If they say no: call skip_optional_setup with component OPERATOR_ALERTS/);
     expect((await h.component("OPERATOR_ALERTS")).requirement).toBe("RECOMMENDED");

@@ -303,9 +303,11 @@ clone whose git origin isn't the canonical repository.
 7. Grok follows `get_next_installation_step`: the secure setup page for
    texting, where **the operator enters** the Sendblue details; Grok tests it.
    Tour records (stored with this installation) and access (Demo) need nothing.
-8. "Everything needed to run Tour Core is connected and tested. Would you like
-   to add your first property?"
-9. Grok configures the property conversationally (Setup Property, Map Route).
+8. "Everything needed to start is connected and tested. Would you like add your first property?"
+9. Grok configures the property conversationally (Setup Property, Map Route),
+   including each unit's bedrooms, bathrooms, rent and availability (bulk
+   answers welcome; "not sure" is saved as not provided, never guessed).
+   Alerts are not offered before this point and are never required.
 10. Tour Core offers alerts (recommended). If yes, Grok creates the Tour Core
     Exception Alert routine itself, and **the operator enters** its connection
     details on the secure setup page; Grok sends a test alert. If no, Grok

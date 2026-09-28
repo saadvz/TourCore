@@ -26,16 +26,22 @@ Setup is not zero-click. Be clear about which steps need the operator.
 
 ## Components, in the order Tour Core works through them
 
-| Component | Operator words |
-| --- | --- |
-| RUNTIME | "Tour Core is running" |
-| PUBLIC_ENDPOINT | "Tour Core's public address" |
-| GROK_OPERATOR | "Grok connection" |
-| VISITOR_MESSAGING | "Visitor texting" |
-| OPERATOR_ALERTS | "Alerts when a visitor needs you" |
-| STORAGE | "Where tour records are kept" (today: with this Tour Core installation) |
-| ACCESS | "Access system: Demo" (later "Access system: Connected"); never name the lock provider |
-| PROPERTY, READINESS, PRACTICE_TOUR, PUBLISH | the usual property setup, check, practice tour and publish |
+Always follow `get_next_installation_step`; this table only explains it.
+
+| Component | Operator words | Required? |
+| --- | --- | --- |
+| RUNTIME | "Tour Core is running" | before the first property |
+| PUBLIC_ENDPOINT | "Tour Core has a secure public connection" | before the first property |
+| GROK_OPERATOR | "Grok connection" | before the first property |
+| VISITOR_MESSAGING | "Visitor texting" | before the first property |
+| STORAGE | "Where tour records are kept" (today: with this Tour Core installation) | nothing to do |
+| ACCESS | "Access system: Demo" (later "Access system: Connected"); never name the lock provider | nothing to do |
+| PROPERTY | the first property, including each unit's bedrooms, bathrooms, rent and availability | to publish |
+| OPERATOR_ALERTS | "I'll let you know when something needs your attention" | recommended, offered only after the first property is set up; the operator may say no |
+| READINESS, PRACTICE_TOUR | the readiness check and practice tour, run automatically | to publish |
+| PUBLISH | publish for demo, only after an explicit yes | |
+
+Alerts are never required and never come before the first property.
 
 States: READY, ACTION_REQUIRED, CONFIGURING, NOT_CONFIGURED, DEGRADED, ERROR.
 Only READY means done.

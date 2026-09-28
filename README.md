@@ -11,7 +11,7 @@ This is a P0 demo: door access runs in Durin demo mode (no real doors open) and 
 Tour Core installation. Real visitor texting works through Sendblue.
 
 **Grok is the installer and the operator console.** The intended way to run Tour Core is by talking to the
-**Tour Core Bot** in Grok Bot: it installs Tour Core, connects texting and alerts, sets up a property, runs the
+**Tour Core Bot** in Grok Bot: it installs Tour Core, connects texting, sets up a property, offers alerts, runs the
 readiness check and a practice tour, publishes, watches live tours, works exceptions and exports the audit. Grok
 calls Tour Core's typed tools; Tour Core keeps every record and makes every access decision.
 
@@ -397,8 +397,24 @@ Publishing sets the property's status to `PUBLISHED_FOR_DEMO`. That is **not** a
 2. the readiness check passed for this exact setup,
 3. a practice tour passed for this exact setup.
 
-Changing anything afterward puts the property back to draft, and both checks must pass again. Messaging, storage,
-verification and Durin access all stay in demo mode. No physical door is controlled.
+Changes afterward come in two kinds, decided in one place (`src/config/changeKinds.ts`):
+
+- **Approved content** (property facts, unit descriptions and facts, unit details such as bedrooms, bathrooms, rent,
+  availability, square footage and amenities, and route directions): audited in
+  `properties/<id>/content-changes.json`, used by active tours on their next question, and the property **stays
+  published**. No readiness check, practice tour or republish.
+- **Structural / safety** (doors, which doors a route uses, entrances, units themselves, tour hours, verification,
+  messaging, storage, access, alert contact): the property goes back to draft, and both checks must pass again before
+  an explicit republish.
+
+**Unit information.** Each tourable unit needs bedrooms, bathrooms, monthly rent and availability, each either given
+or explicitly marked not provided ("not sure", "don't list the price"); the readiness check names anything missing.
+Square footage, floor, parking, laundry, pets, utilities, furnished and features are optional. Visitors' questions
+("How many bedrooms?", "How much is it?", "When is it available?") are answered from these values; a value marked not
+provided goes through the usual "I don't have that information" flow and operator alert. Nothing is ever invented:
+"$0" rent, a studio (0 bedrooms) and "not provided" are three different things.
+
+Messaging, storage, verification and Durin access all stay in demo mode. No physical door is controlled.
 
 ## Setup engine (UI-independent)
 

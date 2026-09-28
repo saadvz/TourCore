@@ -120,7 +120,9 @@ describe("a real phone over Sendblue", () => {
 
     expect((await app.text("at unit 101")).replies[0]).toContain("Unit 101 Door is open for you now.");
     expect((await app.text("at unit 102")).replies[0]).toContain("That door isn't part of your tour");
-    expect((await app.text("how many bedrooms?")).replies).toEqual(["Here's what the property team shared: Two-bedroom, first floor, south-facing."]);
+    // Structured unit details are the canonical answer for their topic.
+    expect((await app.text("how many bedrooms?")).replies).toEqual(["Unit 101 has 2 bedrooms."]);
+    expect((await app.text("how much is it?")).replies).toEqual(["Unit 101 rents for $2,300 a month."]);
     expect((await app.text("is there a gym?")).replies[0]).toBe("I don't have that information for this property. I've flagged it for the property team so they can get back to you.");
     const help = await app.text("help");
     expect(help.replies.at(-1)).toContain("This is the self-tour assistant for 100 Alfred Way.");

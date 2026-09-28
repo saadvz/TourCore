@@ -331,6 +331,8 @@ function unitCard(id, u) {
           "div",
           {},
           el("h3", {}, u.name),
+          el("p", {}, u.details.line.replace(/^.*? — /, "")),
+          u.details.missing.length ? el("p", { class: "form-error" }, `Still needed: ${u.details.missing.join(", ")}. Edit to add them, or type "not provided".`) : null,
           el("p", { class: u.summary ? "" : "muted" }, u.summary || "No description yet"),
           u.facts.length ? el("ul", {}, u.facts.map((f) => el("li", {}, f))) : null,
           el("p", { class: "muted" }, `Door: ${u.door?.name ?? "not set yet"}`),
@@ -359,16 +361,20 @@ function unitCard(id, u) {
     if (doorLine) name.addEventListener("input", () => (doorLine.hidden = name.value.trim() === u.name));
     const summary = input({ value: u.summary, placeholder: "e.g. One-bedroom apartment on the first floor." });
     const facts = textarea(u.facts.join("\n"), 'e.g. "Washer and dryer in the unit."');
+    const details = detailInputs(u.details.inputs);
     const errors = errorBox();
     const save = action(async () => {
       if (name.value.trim() !== u.name) await command(id, "renameUnit", { unitId: u.id, name: name.value, alsoRenameDoor: !!doorLine && renameDoor.checked });
       await command(id, "setUnitDetails", { unitId: u.id, summary: summary.value, facts: lines(facts.value) });
+      const values = details.values();
+      if (Object.keys(values).length) await command(id, "setUnitProfile", { unitId: u.id, values });
       rerender();
     }, errors);
     set(card, 
       el("h3", {}, `Edit ${u.name}`),
       field("Unit name", name),
       doorLine,
+      ...details.fields,
       field("Short description", summary, "Optional. Visitors may be told this."),
       field("Other facts visitors can ask about", facts, "Optional. One per line."),
       errors.node,
@@ -380,6 +386,26 @@ function unitCard(id, u) {
   return card;
 }
 
+// Minimum leasing information. Blank means "not answered yet"; "not provided" is an explicit answer.
+const DETAIL_FIELDS = [
+  ["bedrooms", "Bedrooms", 'e.g. 2, or "studio"'],
+  ["bathrooms", "Bathrooms", "e.g. 1 or 1.5"],
+  ["monthlyRent", "Monthly rent", "e.g. $2,200"],
+  ["availability", "Available", 'e.g. now, or October 15'],
+  ["squareFeet", "Square feet", "Optional"],
+];
+
+function detailInputs(current) {
+  const inputs = DETAIL_FIELDS.map(([key, , placeholder]) => [key, input({ value: current[key] ?? "", placeholder })]);
+  return {
+    fields: [
+      el("div", { class: "row" }, inputs.map(([key, box]) => field(DETAIL_FIELDS.find((f) => f[0] === key)[1], box))),
+      el("p", { class: "hint" }, 'Visitors are told exactly these. If you don\'t know or don\'t want one listed, type "not provided".'),
+    ],
+    values: () => Object.fromEntries(inputs.map(([key, box]) => [key, box.value.trim()]).filter(([key, v]) => v && v !== (current[key] ?? ""))),
+  };
+}
+
 function addUnitForm(id, open) {
   const card = el("div", { class: "card" });
   const form = () => {
@@ -387,8 +413,14 @@ function addUnitForm(id, open) {
     const summary = input({ placeholder: "e.g. One-bedroom apartment on the first floor." });
     const facts = textarea("", 'e.g. "South-facing windows."');
     const doorName = input({ placeholder: "Leave blank to use the unit name + \"Door\"" });
+    const details = detailInputs({});
     const errors = errorBox();
-    const addIt = () => command(id, "addUnit", { name: name.value, summary: summary.value, facts: lines(facts.value), doorName: doorName.value || undefined });
+    const addIt = async () => {
+      const res = await command(id, "addUnit", { name: name.value, summary: summary.value, facts: lines(facts.value), doorName: doorName.value || undefined });
+      const values = details.values();
+      const added = res.view?.units.find((x) => x.name.toLowerCase() === name.value.trim().toLowerCase());
+      if (added && Object.keys(values).length) await command(id, "setUnitProfile", { unitId: added.id, values });
+    };
     const save = action(async () => {
       await addIt();
       rerender();
@@ -406,6 +438,7 @@ function addUnitForm(id, open) {
     set(card, 
       el("h3", {}, "Add a unit"),
       field("Unit name", name),
+      ...details.fields,
       field("Short description", summary, "Optional."),
       field("Other facts visitors can ask about", facts, "Optional. One per line."),
       field("What's the door to this unit called?", doorName, "Optional."),

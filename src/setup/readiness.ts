@@ -1,4 +1,5 @@
 import { TourCoreConfigShape, validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
+import { FIELD_WORDS, missingProfileFields } from "../config/unitProfile";
 import type { ConfigIssue, ConfigSection } from "../config/validateConfig";
 import { SimulatedClock } from "../core/clock";
 import { nextTourDay } from "../core/schedule";
@@ -8,7 +9,7 @@ import { DemoMessagingAdapter } from "../messaging/Messenger";
 import type { MessagingCheck } from "../messaging/sendblue/readiness";
 import { probeRuntimeStore, type RuntimeStore } from "../storage/runtimeStore";
 
-export type ReadinessCheckId = "property" | "hours" | "routes" | "verification" | "messaging" | "storage" | "progress" | "access" | "audit";
+export type ReadinessCheckId = "property" | "units" | "hours" | "routes" | "verification" | "messaging" | "storage" | "progress" | "access" | "audit";
 
 export interface ReadinessProblem {
   code: string;
@@ -41,6 +42,7 @@ export interface ReadinessResult {
 
 const LABELS: Record<ReadinessCheckId, string> = {
   property: "Property details",
+  units: "Unit information",
   hours: "Tour hours",
   routes: "Unit routes",
   verification: "Verification",
@@ -92,6 +94,19 @@ export async function runReadinessCheck(
     return finish(problems, now);
   }
   const config = shape.data;
+
+  // Every unit needs its basic leasing details, each either given or explicitly marked not provided.
+  for (const unit of config.units) {
+    const missing = missingProfileFields(unit);
+    if (missing.length) {
+      fail("units", {
+        code: "UNIT_INFO_MISSING",
+        message: `${unit.name} still needs ${listWords(missing.map((f) => FIELD_WORDS[f]))} (or say which you don't want listed).`,
+        section: "units",
+        unitId: unit.id,
+      });
+    }
+  }
 
   if (!issues.some((i) => i.section === "hours" || i.code === "TIMEZONE_INVALID")) {
     try {
@@ -146,6 +161,10 @@ export async function runReadinessCheck(
     messaging.label = messaging.ok ? "Visitor messaging connected" : "Visitor messaging";
   }
   return { ...result, messaging: messagingChecks };
+}
+
+function listWords(words: string[]): string {
+  return words.length <= 1 ? (words[0] ?? "") : `${words.slice(0, -1).join(", ")} and ${words.at(-1)}`;
 }
 
 async function probe(

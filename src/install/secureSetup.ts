@@ -58,12 +58,15 @@ export async function handleSecureSetupApi(ctx: SecureSetupContext, method: stri
     const s = getInstallationStatus(inst, ctx.services);
     const env = inst.sendblueEnv();
     const set = (v: string | undefined) => !!v?.trim();
+    const alerts = s.components.find((c) => c.component === "OPERATOR_ALERTS")!;
     return reply(200, {
       ok: true,
       summary: s.summary,
       lines: s.lines,
       components: s.components.map((c) => ({ component: c.component, label: c.label, state: c.state, summary: c.summary })),
       nextStep: s.nextStep,
+      // The page follows Tour Core's order: alerts only once Tour Core offers them (after the first property).
+      sections: { visitorMessaging: true, operatorAlerts: alerts.state !== "NOT_CONFIGURED" || !!alerts.next || alerts.optionalActions.length > 0 },
       settings: {
         visitorMessaging: { apiKey: set(env.apiKey), apiSecret: set(env.apiSecret), fromNumber: env.fromNumber ?? null, incomingSecret: set(env.webhookSecret) },
         operatorAlerts: { webhookUrl: set(inst.env().TOURCORE_GROK_ROUTINE_URL), key: set(inst.env().TOURCORE_GROK_ROUTINE_KEY) },

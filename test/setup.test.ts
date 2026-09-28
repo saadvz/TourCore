@@ -21,6 +21,7 @@ import {
   setPropertyDetails,
   setRoute,
   setTourHours,
+  setUnitProfile,
   setVerificationPolicy,
   SetupInputError,
   validateConfig,
@@ -45,6 +46,8 @@ function buildProperty() {
   draft = d102.draft;
   draft = setRoute(draft, u101.unit.id, [entrance.door.id, d101.door.id], { directions: "straight ahead, first door on the left" });
   draft = setRoute(draft, u102.unit.id, [entrance.door.id, d102.door.id]);
+  draft = setUnitProfile(draft, u101.unit.id, { bedrooms: "2", bathrooms: "1", monthlyRent: "$2,300", availability: "now" });
+  draft = setUnitProfile(draft, u102.unit.id, { bedrooms: "1", bathrooms: "1", monthlyRent: "don't list the price", availability: "not sure" });
   return {
     draft,
     ids: { entrance: entrance.door.id, u101: u101.unit.id, u102: u102.unit.id, d101: d101.door.id, d102: d102.door.id },
@@ -157,6 +160,7 @@ describe("readiness check", () => {
     expect(result.passed).toBe(true);
     expect(result.checks.map((c) => c.label)).toEqual([
       "Property details",
+      "Unit information",
       "Tour hours",
       "Unit routes",
       "Verification",

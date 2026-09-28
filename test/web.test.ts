@@ -38,7 +38,10 @@ async function setUpAlfredWay(app: Awaited<ReturnType<typeof startApp>>) {
   await app.cmd(id, "addDoor", { name: "Lobby Entrance", kind: "ENTRANCE" });
   await app.cmd(id, "addUnit", { name: "Unit 101", summary: "One-bedroom apartment" });
   const last = await app.cmd(id, "addUnit", { name: "Unit 102", summary: "Two-bedroom apartment" });
-  for (const unit of last.body.view.units) await app.cmd(id, "setRoute", { unitId: unit.id, doorIds: unit.suggestedRoute });
+  for (const unit of last.body.view.units) {
+    await app.cmd(id, "setUnitProfile", { unitId: unit.id, values: { bedrooms: unit.name === "Unit 101" ? "1" : "2", bathrooms: "1", monthlyRent: "$2,000", availability: "now" } });
+    await app.cmd(id, "setRoute", { unitId: unit.id, doorIds: unit.suggestedRoute });
+  }
   return { id, created };
 }
 
@@ -64,7 +67,7 @@ describe("browser setup", () => {
     const readiness = await app.call("POST", `/api/properties/${id}/readiness`, {});
     expect(readiness.body.readiness.passed).toBe(true);
     expect(readiness.body.readiness.checks.map((c: { label: string }) => c.label)).toEqual([
-      "Property details", "Tour hours", "Unit routes", "Verification", "Messaging", "Records", "Durin access", "Audit/export",
+      "Property details", "Unit information", "Tour hours", "Unit routes", "Verification", "Messaging", "Records", "Durin access", "Audit/export",
     ]);
     expect(readiness.body.summary.saved).toBe(true);
 

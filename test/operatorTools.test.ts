@@ -175,7 +175,7 @@ describe("readiness, practice tour and publish", () => {
     const h = app();
     await h.setUpAlfredWay();
     const readiness = await h.ok("run_readiness_check");
-    expect(readiness.lines).toEqual(["\u2713 Property details", "\u2713 Tour hours", "\u2713 Unit routes", "\u2713 Verification", "\u2713 Messaging", "\u2713 Records", "\u2713 Durin access", "\u2713 Audit/export"]);
+    expect(readiness.lines).toEqual(["\u2713 Property details", "\u2713 Unit information", "\u2713 Tour hours", "\u2713 Unit routes", "\u2713 Verification", "\u2713 Messaging", "\u2713 Records", "\u2713 Durin access", "\u2713 Audit/export"]);
     const practice = await h.ok("run_dry_tour");
     expect(practice.passed).toBe(true);
     expect(practice.proofPoints).toEqual([
@@ -208,9 +208,9 @@ describe("readiness, practice tour and publish", () => {
     expect(h.workspace.load(id).state.status).toBe("DRAFT");
 
     expect(await h.fails("publish_demo_property", { confirmationCode: "ZZZZZZ" })).toMatch(/expired or was already used/);
-    // A change after the question: the old yes no longer counts, and the gates apply again.
+    // A structural change after the question: the old yes no longer counts, and the gates apply again.
     const again = await h.ok("publish_demo_property");
-    await h.ok("update_unit", { unit: "Unit 102", description: "Two-bedroom with a balcony" });
+    await h.ok("set_tour_hours", { end: "6pm" });
     const stale = await h.ok("publish_demo_property", { confirmationCode: again.confirmation.code });
     expect(stale.status).toBe("blocked");
     expect(h.workspace.load(id).state.status).toBe("DRAFT");
@@ -296,14 +296,14 @@ describe("live tours and exceptions", () => {
     const [issue] = (await h.ok("list_exceptions")).exceptions;
 
     const asked = await h.ok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "Parking is included." });
-    expect(asked.summary).toBe('I can add "Parking is included." to the approved facts for 100 Alfred Way and answer Pat. Want me to?');
+    expect(asked.summary).toBe('I\'ll save "Parking is included" as an approved fact and send that answer to Pat. Continue?');
     expect(h.workspace.load(id).config.property.facts).toEqual([]);
     const threadBefore = v.session.conversation.length;
 
     const done = await h.ok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "Parking is included.", confirmationCode: asked.confirmation.code });
-    expect(done).toMatchObject({ approvedFact: "Parking is included.", visitorAnswered: true, needsRecheck: true, setupStatus: "Draft" });
+    expect(done).toMatchObject({ approvedFact: "Parking is included.", visitorAnswered: true, needsRecheck: false, stillPublished: true, setupStatus: "Published for demo" });
     expect(h.workspace.load(id).config.property.facts).toEqual(["Parking is included."]);
-    expect(v.session.conversation.slice(threadBefore).map((m) => m.text)).toEqual(['About your question "Is parking included?": here\'s what the property team shared: Parking is included.']);
+    expect(v.session.conversation.slice(threadBefore).map((m) => m.text)).toEqual(["Parking is included. Let me know if you have any other questions."]);
     expect((await h.ok("list_exceptions", { includeHandled: true })).exceptions[0]).toMatchObject({ status: "resolved", approvedFact: "Parking is included." });
     // The saved tour record has the message too (canonical, not just in memory).
     const saved = h.workspace.loadTour(id, v.session.tourId)!.bundle.messages.at(-1)!;

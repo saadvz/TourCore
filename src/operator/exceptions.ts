@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { formatShortDateTime } from "../core/timezone";
+import { profileFacts, questionTopic, structuredAnswer, type ProfileField, type UnitProfile } from "../config/unitProfile";
 import { MAX_FACT_LENGTH } from "../config/validateConfig";
 import type { AuditEvent, Reservation, ReservationStatus } from "../domain/model";
 import { applySetupCommand } from "../setup/commands";
@@ -381,35 +382,80 @@ export function cleanFact(fact: string): string {
   return clean;
 }
 
-export function visitorAnswerText(question: string, fact: string): string {
-  return `About your question "${question}": here's what the property team shared: ${fact}`;
+/** What the visitor receives: the approved fact itself, conversationally. */
+export function visitorAnswerText(_question: string, fact: string): string {
+  return `${fact} Let me know if you have any other questions.`;
+}
+
+/** An operator's answer to a flagged question, as Tour Core will save it. */
+export interface FlaggedAnswerPlan {
+  exception: OperatorException;
+  appliesTo: "property" | "unit";
+  unitId?: string;
+  /** Saved as a structured unit detail (e.g. bedrooms) rather than free text. */
+  field?: ProfileField;
+  value?: NonNullable<UnitProfile[ProfileField]>;
+  /** The approved fact exactly as it will be saved and sent. */
+  fact: string;
+  where: string;
 }
 
 /**
- * The operator supplied the answer to a flagged question. It becomes an
- * approved fact through the normal setup edit (so the same validation and
- * draft/publish rules apply), the visitor is sent exactly that fact, and the
- * exception is resolved. Tour Core never writes the answer itself.
+ * Works out how an operator's answer will be saved, without saving anything.
+ * An answer to a question about a unit detail ("How many bedrooms?" / "2
+ * bedrooms") becomes that unit's structured value, and the visitor gets the
+ * canonical sentence ("Unit 1A has 2 bedrooms."). Anything else is kept in the
+ * operator's own words as a unit or property fact.
  */
-export async function answerFlaggedQuestion(
-  services: OperatorServices,
-  input: { exceptionId: string; approvedFact: string; appliesTo: "property" | "unit" },
-  now: Date,
-) {
+export async function planFlaggedAnswer(services: OperatorServices, input: { exceptionId: string; approvedFact: string; appliesTo?: "property" | "unit" }, now: Date): Promise<FlaggedAnswerPlan> {
   const exception = await findException(services, input.exceptionId);
   if (exception.kind !== "unanswered-question" || !exception.question) throw new SetupInputError("NOT_A_QUESTION", "That issue isn't an unanswered question.");
   if (exception.status === "resolved") throw new SetupInputError("ALREADY_RESOLVED", "That question has already been handled.");
-  const fact = cleanFact(input.approvedFact);
+  const words = cleanFact(input.approvedFact);
+  const tour = exception.tourRef ? await findTour(services, exception.tourRef) : undefined;
+  const unitId = tour ? currentReservation(tour)?.unitId : undefined;
+  const { draft } = services.workspace.openDraft(exception.propertyId);
+  const unit = draft.units.find((u) => u.id === unitId);
+  const topic = questionTopic(exception.question);
+  if (unit && topic && input.appliesTo !== "property") {
+    const value = structuredAnswer(topic, words, now);
+    if (value) {
+      const fact = profileFacts({ name: unit.name, profile: { [topic]: value } }).find((f) => f.field === topic)!.text;
+      return { exception, appliesTo: "unit", unitId: unit.id, field: topic, value, fact, where: unit.name };
+    }
+  }
+  const unitTopic = !!topic && ["bedrooms", "bathrooms", "monthlyRent", "availability", "squareFeet", "floor", "furnished", "features"].includes(topic);
+  const appliesTo = input.appliesTo ?? (unit && unitTopic ? "unit" : "property");
+  if (appliesTo === "unit" && !unit) throw new SetupInputError("UNIT_NOT_FOUND", "I couldn't tell which unit that question was about. Add it as a property fact instead.");
+  const fact = /[.!?]$/.test(words) ? words : `${words}.`;
+  return { exception, appliesTo, unitId: unit?.id, fact: fact.charAt(0).toUpperCase() + fact.slice(1), where: appliesTo === "unit" ? unit!.name : exception.property };
+}
+
+/**
+ * The operator supplied the answer to a flagged question. It becomes approved
+ * content through the normal setup edit (content changes keep the property
+ * published), the visitor is sent exactly that fact, and the exception is
+ * resolved. Tour Core never writes the answer itself.
+ */
+export async function answerFlaggedQuestion(
+  services: OperatorServices,
+  input: { exceptionId: string; approvedFact: string; appliesTo?: "property" | "unit" },
+  now: Date,
+) {
+  const plan = await planFlaggedAnswer(services, input, now);
+  const { exception, fact } = plan;
   const ws = services.workspace;
   const tour = exception.tourRef ? await findTour(services, exception.tourRef) : undefined;
   const wasPublished = ws.has(exception.propertyId) && ws.load(exception.propertyId).state.status === "PUBLISHED_FOR_DEMO";
 
   const { draft } = ws.openDraft(exception.propertyId);
-  const unitId = tour ? currentReservation(tour)?.unitId : undefined;
   let next;
-  if (input.appliesTo === "unit") {
-    const unit = draft.units.find((u) => u.id === unitId);
-    if (!unit) throw new SetupInputError("UNIT_NOT_FOUND", "I couldn't tell which unit that question was about. Add it as a property fact instead.");
+  if (plan.field && plan.unitId && plan.value) {
+    next = structuredClone(draft);
+    const unit = next.units.find((u) => u.id === plan.unitId)!;
+    unit.profile = { ...(unit.profile ?? {}), [plan.field]: plan.value };
+  } else if (plan.appliesTo === "unit") {
+    const unit = draft.units.find((u) => u.id === plan.unitId)!;
     next = applySetupCommand(draft, "setUnitDetails", { unitId: unit.id, facts: [...unit.facts, fact] });
   } else {
     next = applySetupCommand(draft, "setPropertyDetails", { facts: [...draft.property.facts, fact] });
@@ -418,7 +464,7 @@ export async function answerFlaggedQuestion(
 
   let visitorAnswered = false;
   if (tour?.live) {
-    await tour.live.reply(visitorAnswerText(exception.question, fact));
+    await tour.live.reply(visitorAnswerText(exception.question!, fact));
     await persistSession(services, tour.live);
     visitorAnswered = true;
   }
@@ -433,12 +479,13 @@ export async function answerFlaggedQuestion(
   const after = ws.has(exception.propertyId) ? ws.load(exception.propertyId) : undefined;
   return {
     approvedFact: fact,
-    addedTo: input.appliesTo === "unit" ? (exception.unitName ?? "the unit") : exception.property,
+    addedTo: plan.where,
     savedToSetup: saved === "saved",
     visitorAnswered,
-    visitorMessage: visitorAnswered ? visitorAnswerText(exception.question, fact) : undefined,
+    visitorMessage: visitorAnswered ? visitorAnswerText(exception.question!, fact) : undefined,
     setupStatus: after ? statusLabel(after) : "Setup in progress",
-    /** The setup changed, so readiness and a practice tour must pass again before it's published for demo. */
+    stillPublished: wasPublished && after?.state.status === "PUBLISHED_FOR_DEMO",
+    /** Only if something structural changed (never for an approved fact). */
     needsRecheck: wasPublished && after?.state.status !== "PUBLISHED_FOR_DEMO",
   };
 }

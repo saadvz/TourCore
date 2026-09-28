@@ -5,7 +5,7 @@ import type { IntentInterpreter } from "../intent";
 import { MessagingEndpoints } from "../messaging/endpoints";
 import type { InboundMessage } from "../messaging/inbound";
 import type { MessagingAdapter } from "../messaging/Messenger";
-import type { PropertyWorkspace } from "../setup/workspace";
+import { isCurrent, type PropertyWorkspace } from "../setup/workspace";
 import { writeJsonAtomic } from "../storage/atomicWrite";
 import { MemoryRuntimeStore, type RuntimeStore } from "../storage/runtimeStore";
 import { handleVisitorText, isGreeting } from "./conversation";
@@ -95,7 +95,7 @@ export class MessagingConversations {
 
     if (!session) {
       const { config, state } = ws.load(propertyId);
-      const ready = state.readiness?.passed && state.readiness.configHash === state.configHash;
+      const ready = state.readiness?.passed && isCurrent(state.readiness, state);
       if (!ready) {
         await transport.send({ to: phone, audience: "PROSPECT", body: `Thanks for reaching out to ${config.property.name}. Self-guided tours by text aren't available right now. Please contact the property team.` }).catch(() => undefined);
         return {};

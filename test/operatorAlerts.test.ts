@@ -140,7 +140,7 @@ describe("proactive operator alerts", () => {
     const [pending] = app.events();
     expect(pending).toMatchObject({ status: "pending", attempts: 1, lastError: "Couldn't reach the Grok Routine right now." });
     // The visitor carries on normally while alerts are down.
-    expect((await app.text("how many bedrooms?"))[0]).toContain("Two-bedroom, first floor, south-facing.");
+    expect((await app.text("how many bedrooms?"))[0]).toBe("Unit 101 has 2 bedrooms.");
     // Not due yet: nothing is re-sent before the backoff.
     await app.installation.outbox.drain();
     expect(app.net.routineCalls()).toHaveLength(1);

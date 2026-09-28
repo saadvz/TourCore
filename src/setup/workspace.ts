@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { auditToCsv } from "../audit/audit";
+import { classifyChange, describeContentChanges, fullHash, safetyHash } from "../config/changeKinds";
 import { TourCoreConfigSchema, TourCoreConfigShape, validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
 import { ExportBundleSchema, type ExportBundle } from "../export/exportBundle";
 import { writeFileAtomic, writeFolderAtomic, writeJsonAtomic } from "../storage/atomicWrite";
@@ -20,12 +20,35 @@ export type PublicationStatus = "DRAFT" | "PUBLISHED_FOR_DEMO";
 export interface PropertyState {
   propertyId: string;
   status: PublicationStatus;
-  /** Fingerprint of the saved config; any edit invalidates earlier checks. */
+  /** Fingerprint of the whole saved config (used to detect unsaved drafts and interrupted saves). */
   configHash: string;
+  /**
+   * Fingerprint of the structural/safety part only (src/config/changeKinds.ts).
+   * Readiness, practice tours and publication are tied to this, so approved
+   * content edits (facts, unit details) don't invalidate them. Always
+   * recomputed on load.
+   */
+  safetyHash?: string;
   savedAt: string;
-  readiness?: { passed: boolean; checkedAt: string; configHash: string; problems: string[] };
-  dryTour?: { passed: boolean; ranAt: string; configHash: string; failure?: string; recordsFolder?: string; tourId?: string };
+  readiness?: { passed: boolean; checkedAt: string; configHash: string; safetyHash?: string; problems: string[] };
+  dryTour?: { passed: boolean; ranAt: string; configHash: string; safetyHash?: string; failure?: string; recordsFolder?: string; tourId?: string };
   publishedAt?: string;
+}
+
+/** An approved-content change, kept in an append-only log next to the setup. */
+export interface ContentChange {
+  at: string;
+  changes: string[];
+}
+
+/**
+ * Whether a readiness or practice-tour result still vouches for the saved
+ * setup. Results recorded before safety fingerprints existed fall back to the
+ * whole-config fingerprint.
+ */
+export function isCurrent(record: { configHash: string; safetyHash?: string } | undefined, state: PropertyState): boolean {
+  if (!record) return false;
+  return record.safetyHash !== undefined && state.safetyHash !== undefined ? record.safetyHash === state.safetyHash : record.configHash === state.configHash;
 }
 
 export interface SavedProperty {
@@ -79,7 +102,7 @@ export interface TourRecord {
 }
 
 export function configHash(config: TourCoreConfig): string {
-  return createHash("sha256").update(JSON.stringify(TourCoreConfigShape.parse(config))).digest("hex").slice(0, 16);
+  return fullHash(config);
 }
 
 export function defaultWorkspaceRoot(): string {
@@ -122,11 +145,15 @@ export class PropertyWorkspace {
       stored && stored.configHash === hash
         ? stored
         : { ...(stored ?? {}), propertyId, status: "DRAFT", configHash: hash, savedAt: stored?.savedAt ?? new Date().toISOString(), publishedAt: undefined };
-    return { config, state };
+    return { config, state: { ...state, safetyHash: safetyHash(config) } };
   }
 
-  /** Only valid setups can be saved. Changing a saved setup sends it back to draft. */
-  save(draft: TourCoreConfig, now = new Date()): SavedProperty {
+  /**
+   * Only valid setups can be saved. A structural change sends a saved setup
+   * back to draft; an approved-content change (facts, unit details) keeps its
+   * checks and publication, and is recorded in the content log.
+   */
+  save(draft: TourCoreConfig, now = new Date()): SavedProperty & { change: "new" | "none" | "content" | "structural" } {
     const parsed = TourCoreConfigSchema.safeParse(draft);
     if (!parsed.success) {
       const error = new SetupInputError("CONFIG_INVALID", "Some answers still need attention before this can be saved.");
@@ -136,18 +163,32 @@ export class PropertyWorkspace {
     const config = parsed.data;
     const id = config.property.id;
     const hash = configHash(config);
-    const previous = this.has(id) ? this.load(id).state : undefined;
+    const before = this.has(id) ? this.load(id) : undefined;
+    const previous = before?.state;
+    const change = before ? classifyChange(before.config, config) : "new";
     let state: PropertyState;
-    if (previous && previous.configHash === hash) state = { ...previous, savedAt: now.toISOString() };
-    else {
+    if (previous && (change === "none" || change === "content")) {
+      state = { ...previous, configHash: hash, safetyHash: safetyHash(config), savedAt: now.toISOString() };
+      if (change === "content") this.appendContentChange(id, { at: now.toISOString(), changes: describeContentChanges(before!.config, config) });
+    } else {
       // Earlier check results stay for history, but their fingerprint no longer matches, so they no longer count.
       const { publishedAt: _dropped, ...rest } = previous ?? { propertyId: id };
-      state = { ...rest, propertyId: id, status: "DRAFT", configHash: hash, savedAt: now.toISOString() };
+      state = { ...rest, propertyId: id, status: "DRAFT", configHash: hash, safetyHash: safetyHash(config), savedAt: now.toISOString() };
     }
     writeJsonAtomic(this.configPath(id), config);
     this.writeState(state);
     this.discardDraft(id);
-    return { config, state };
+    return { config, state, change };
+  }
+
+  /** Approved-content changes, oldest first (append-only). */
+  contentChanges(propertyId: string): ContentChange[] {
+    const path = join(this.dir(propertyId), "content-changes.json");
+    return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as { changes: ContentChange[] }).changes : [];
+  }
+
+  private appendContentChange(propertyId: string, entry: ContentChange): void {
+    writeJsonAtomic(join(this.dir(propertyId), "content-changes.json"), { schemaVersion: 1, changes: [...this.contentChanges(propertyId), entry] });
   }
 
   // ------------------------------------------------ work-in-progress drafts
@@ -214,7 +255,7 @@ export class PropertyWorkspace {
     const { state } = this.load(propertyId);
     const next: PropertyState = {
       ...state,
-      readiness: { passed: result.passed, checkedAt: result.checkedAt, configHash: state.configHash, problems: result.checks.flatMap((c) => c.problems) },
+      readiness: { passed: result.passed, checkedAt: result.checkedAt, configHash: state.configHash, safetyHash: state.safetyHash, problems: result.checks.flatMap((c) => c.problems) },
     };
     this.writeState(next);
     return next;
@@ -266,6 +307,7 @@ export class PropertyWorkspace {
         passed: result.passed,
         ranAt: result.ranAt,
         configHash: state.configHash,
+        safetyHash: state.safetyHash,
         ...(result.failure ? { failure: result.failure } : {}),
         ...(tourId ? { tourId, recordsFolder: join(this.toursDir(propertyId), tourId) } : {}),
       },
@@ -287,13 +329,12 @@ export class PropertyWorkspace {
   async publishBlockers(propertyId: string, now = new Date()): Promise<PublishBlocker[]> {
     const { config, state } = this.load(propertyId);
     const blockers: PublishBlocker[] = [];
-    const hash = configHash(config);
 
     if (validateConfig(config).length) blockers.push({ code: "CONFIG_INVALID", message: "Some setup answers still need attention." });
 
     const r = state.readiness;
     if (!r) blockers.push({ code: "READINESS_NOT_RUN", message: "Run the readiness check first." });
-    else if (r.configHash !== hash) blockers.push({ code: "READINESS_OUT_OF_DATE", message: "The setup changed after the last readiness check. Please check again." });
+    else if (!isCurrent(r, state)) blockers.push({ code: "READINESS_OUT_OF_DATE", message: "The setup changed after the last readiness check. Please check again." });
     else if (!r.passed) blockers.push({ code: "READINESS_FAILED", message: "The last readiness check found problems. Fix them and check again." });
     else if (!(await runReadinessCheck(config, { now })).passed) {
       blockers.push({ code: "READINESS_FAILED_NOW", message: "Something isn't ready anymore. Please run the readiness check again." });
@@ -301,7 +342,7 @@ export class PropertyWorkspace {
 
     const d = state.dryTour;
     if (!d) blockers.push({ code: "DRY_TOUR_NOT_RUN", message: "Run a practice tour first." });
-    else if (d.configHash !== hash) blockers.push({ code: "DRY_TOUR_OUT_OF_DATE", message: "The setup changed after the last practice tour. Please run it again." });
+    else if (!isCurrent(d, state)) blockers.push({ code: "DRY_TOUR_OUT_OF_DATE", message: "The setup changed after the last practice tour. Please run it again." });
     else if (!d.passed) blockers.push({ code: "DRY_TOUR_FAILED", message: "The last practice tour didn't finish cleanly. Fix the problem and run it again." });
 
     return blockers;
@@ -402,8 +443,7 @@ function uniqueTourId(dir: string, base: string): string {
 export function statusLabel(saved: SavedProperty): string {
   const { state } = saved;
   if (state.status === "PUBLISHED_FOR_DEMO") return "Published for demo";
-  const hash = state.configHash;
-  if (state.readiness?.passed && state.readiness.configHash === hash && state.dryTour?.passed && state.dryTour.configHash === hash) {
+  if (state.readiness?.passed && isCurrent(state.readiness, state) && state.dryTour?.passed && isCurrent(state.dryTour, state)) {
     return "Ready to publish for demo";
   }
   return "Draft";

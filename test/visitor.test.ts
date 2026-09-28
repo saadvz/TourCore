@@ -140,7 +140,7 @@ describe("visitor demo on the real engine", () => {
   it("answers from approved facts only", async () => {
     const s = await touring();
     await s.act("ask", { question: "How many bedrooms is this?" });
-    expect(lastFromTourCore(s)).toBe("Here's what the property team shared: Two-bedroom, first floor, south-facing.");
+    expect(lastFromTourCore(s)).toBe("Unit 101 has 2 bedrooms.");
     await s.act("ask", { question: "Does this unit have parking?" });
     expect(lastFromTourCore(s)).toBe("Here's what the property team shared: Street parking only.");
     await s.act("ask", { question: "What's included?" });

@@ -96,7 +96,11 @@ const ok = (json: unknown) => ({ status: 200, json });
 
 async function route(ctx: ApiContext, method: string, path: string, body: Record<string, unknown>): Promise<ApiResult> {
   const ws = ctx.workspace;
-  const visitors = (ctx.visitors ??= new VisitorDemoRegistry());
+  if (!ctx.visitors) {
+    ctx.visitors = new VisitorDemoRegistry();
+    ctx.visitors.useApprovedContent((id) => (ws.has(id) ? ws.load(id).config : undefined));
+  }
+  const visitors = ctx.visitors;
   const now = ctx.now?.() ?? new Date();
   const parts = path.replace(/^\/api\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
 

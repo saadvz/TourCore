@@ -2,7 +2,7 @@ import { validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
 import { runDryTour, type DryTourResult } from "../setup/dryTour";
 import { runReadinessCheck, type ReadinessResult } from "../setup/readiness";
 import { SetupInputError } from "../setup/setupActions";
-import type { PropertyState } from "../setup/workspace";
+import { isCurrent, type PropertyState } from "../setup/workspace";
 import type { OperatorServices } from "./services";
 
 /**
@@ -73,7 +73,7 @@ export async function checkedConfig(services: OperatorServices, propertyId: stri
   const ws = services.workspace;
   if (!ws.has(propertyId) || ws.openDraft(propertyId).unsavedChanges) return { kind: "unchecked-changes" };
   let { config, state } = ws.load(propertyId);
-  if (!state.readiness?.passed || state.readiness.configHash !== state.configHash) {
+  if (!state.readiness?.passed || !isCurrent(state.readiness, state)) {
     const readiness = await checkReadiness(services, propertyId, config, now);
     ws.recordReadiness(propertyId, readiness);
     if (!readiness.passed) return { kind: "not-ready", readiness };

@@ -22,7 +22,7 @@ import type { VerificationProvider } from "../verification/basicForm";
 import { AuditLog, type AuditInput } from "../audit/audit";
 import { buildExport, type ExportBundle } from "../export/exportBundle";
 import type { Clock } from "./clock";
-import { approvedFacts, findApprovedAnswer, type ApprovedFact } from "./facts";
+import { approvedAnswerText, approvedFacts, findApprovedAnswer, type ApprovedFact } from "./facts";
 import { normalizePhone } from "./phone";
 import { nextTourDay, slotsOn, tourWindow, type TourSlot } from "./schedule";
 import { addDays, formatDay as formatDayIn, formatTime as formatTimeIn, localDateOf, type LocalDate } from "./timezone";
@@ -38,6 +38,12 @@ export interface TourCoreDeps {
   verificationLink?: (ctx: { reservation: Reservation; prospect: Prospect }) => string | undefined | Promise<string | undefined>;
   /** Groups messages of one conversation in the records. */
   correlationId?: string;
+  /**
+   * The current approved content (facts, unit details), read at question time
+   * so an active tour sees an operator's new fact immediately. Structural
+   * settings always come from `config`, fixed for the tour.
+   */
+  approvedContent?: () => TourCoreConfig | undefined;
 }
 
 export interface InboundMeta {
@@ -418,16 +424,24 @@ export class TourCore {
     if (!asked) throw new TourCoreError("EMPTY_QUESTION", "Please type a question");
     await this.recordInbound(prospect.id, reservationId, asked, meta);
 
-    const matches = findApprovedAnswer(approvedFacts(this.deps.config, reservation.unitId), asked);
+    const matches = findApprovedAnswer(approvedFacts(this.approvedContent(), reservation.unitId), asked);
     if (matches.length) {
       await this.record("QUESTION_ANSWERED", { reservationId, prospectId: prospect.id, detail: asked });
-      await this.textProspect(prospect, reservationId, `Here's what the property team shared: ${matches.map((f) => f.text).join(" ")}`);
+      await this.textProspect(prospect, reservationId, approvedAnswerText(matches));
       return { answered: true, facts: matches };
     }
     await this.record("QUESTION_UNANSWERED", { reservationId, prospectId: prospect.id, detail: asked });
     await this.textProspect(prospect, reservationId, "I don't have that information for this property. I've flagged it for the property team so they can get back to you.");
     await this.notifyOperator(reservation, `${prospect.name} asked "${asked}", and there's no approved answer yet.`);
     return { answered: false, facts: [] };
+  }
+
+  private approvedContent(): TourCoreConfig {
+    try {
+      return this.deps.approvedContent?.() ?? this.deps.config;
+    } catch {
+      return this.deps.config;
+    }
   }
 
   async requestHelp(reservationId: string, where?: string, inbound?: { text: string; meta?: InboundMeta }): Promise<void> {
@@ -559,7 +573,7 @@ export class TourCore {
   /** The only facts tour guidance may use for this reservation: the property's and the reserved unit's. */
   async approvedFacts(reservationId: string): Promise<ApprovedFact[]> {
     const reservation = await this.mustGetReservation(reservationId);
-    return approvedFacts(this.deps.config, reservation.unitId);
+    return approvedFacts(this.approvedContent(), reservation.unitId);
   }
 
   getReservation(id: string): Promise<Reservation | undefined> {

@@ -1,0 +1,69 @@
+import { createHash } from "node:crypto";
+import { TourCoreConfigShape, type TourCoreConfig } from "./tourCoreConfig";
+
+/**
+ * The one place that decides which setup changes affect safety.
+ *
+ * APPROVED CONTENT is what visitors are told: property facts, unit
+ * descriptions, unit facts, the unit profile (bedrooms, bathrooms, rent,
+ * availability, square footage, amenities, ...), and route directions/stop
+ * wording. Changing it is audited and takes effect immediately, including on
+ * active tours, and never invalidates readiness, the practice tour or
+ * publication.
+ *
+ * Everything else is STRUCTURAL: doors, which doors a route passes through,
+ * entrances, units themselves, tour hours, verification, messaging, storage,
+ * access, the property's identity and time zone, and who gets alerts.
+ * Changing it invalidates earlier checks until readiness and a practice tour
+ * pass again, and needs an explicit republish.
+ */
+
+export type ChangeKind = "none" | "content" | "structural";
+
+/** The config with approved content removed: what readiness and practice tours actually vouch for. */
+export function structuralView(config: TourCoreConfig): unknown {
+  const c = TourCoreConfigShape.parse(config);
+  return {
+    ...c,
+    property: { ...c.property, facts: undefined },
+    units: c.units.map((u) => ({ ...u, summary: undefined, facts: undefined, profile: undefined })),
+    routes: c.routes.map((r) => ({ ...r, directions: undefined, stops: r.stops.map((s) => ({ doorId: s.doorId })) })),
+  };
+}
+
+/** Fingerprint of the structural/safety part of a setup. Readiness, practice tours and publication are tied to this. */
+export function safetyHash(config: TourCoreConfig): string {
+  return createHash("sha256").update(JSON.stringify(structuralView(config))).digest("hex").slice(0, 16);
+}
+
+export function fullHash(config: TourCoreConfig): string {
+  return createHash("sha256").update(JSON.stringify(TourCoreConfigShape.parse(config))).digest("hex").slice(0, 16);
+}
+
+export function classifyChange(before: TourCoreConfig, after: TourCoreConfig): ChangeKind {
+  if (fullHash(before) === fullHash(after)) return "none";
+  return safetyHash(before) === safetyHash(after) ? "content" : "structural";
+}
+
+/** Plain descriptions of what approved content changed, for the audit log. */
+export function describeContentChanges(before: TourCoreConfig, after: TourCoreConfig): string[] {
+  const out: string[] = [];
+  const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  if (!same(before.property.facts, after.property.facts)) out.push(`${after.property.name}: approved facts`);
+  for (const u of after.units) {
+    const old = before.units.find((x) => x.id === u.id);
+    if (!old) continue;
+    if (!same(old.summary, u.summary)) out.push(`${u.name}: description`);
+    if (!same(old.facts, u.facts)) out.push(`${u.name}: approved facts`);
+    for (const key of new Set([...Object.keys(old.profile ?? {}), ...Object.keys(u.profile ?? {})])) {
+      const a = (old.profile as Record<string, { status: string; value?: unknown } | undefined> | undefined)?.[key];
+      const b = (u.profile as Record<string, { status: string; value?: unknown } | undefined> | undefined)?.[key];
+      if (!same(a && { s: a.status, v: a.value }, b && { s: b.status, v: b.value })) out.push(`${u.name}: ${key}`);
+    }
+  }
+  for (const r of after.routes) {
+    const old = before.routes.find((x) => x.id === r.id);
+    if (old && (!same(old.directions, r.directions) || !same(old.stops.map((s) => s.guidance), r.stops.map((s) => s.guidance)))) out.push(`${r.unitId}: directions`);
+  }
+  return out;
+}

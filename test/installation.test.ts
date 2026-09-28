@@ -213,7 +213,7 @@ describe("installation status", () => {
     // Only now does property setup come up; alerts wait for a property.
     const infra = await h.status();
     expect(infra.infrastructureReady).toBe(true);
-    expect(infra.nextStep).toMatchObject({ component: "PROPERTY", action: "SET_UP_PROPERTY", performedBy: "OPERATOR_DECISION", phase: "PROPERTY", operatorMessage: "Everything needed to run Tour Core is connected and tested. Would you like to add your first property?" });
+    expect(infra.nextStep).toMatchObject({ component: "PROPERTY", action: "SET_UP_PROPERTY", performedBy: "OPERATOR_DECISION", phase: "PROPERTY", operatorMessage: "Everything needed to start is connected and tested. Would you like to add your first property?" });
     await h.setUpAlfredWay();
     expect(await next()).toEqual(["OFFER_OPERATOR_ALERTS", "OPERATOR_DECISION", "get_secure_setup_url"]);
     h.inst.secrets.set({ TOURCORE_GROK_ROUTINE_URL: ROUTINE_URL, TOURCORE_GROK_ROUTINE_KEY: ROUTINE_KEY });

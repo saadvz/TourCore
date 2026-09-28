@@ -52,7 +52,7 @@ secure setup page, not in chat.
 | "Your MCP server is https://.../mcp and exposes 42 tools." | "Tour Core is installed and running." |
 | "The Cloudflare quick tunnel is connected." | "Tour Core has a secure public connection." |
 | "The OAuth MCP connector needs approval." | "I need your approval to connect to Tour Core." |
-| "Configure the Grok Routine webhook." | "Would you like me to let you know when a visitor needs help?" |
+| "Configure the Grok Routine webhook." | "Would you like me to alert you when something needs your attention?" |
 
 In normal conversation never mention addresses or links, `/mcp`,
 `trycloudflare`, tool counts, connectors, OAuth, environment variables, ports,
@@ -128,23 +128,25 @@ access system ("Demo") need nothing from the operator.
 
 ### Phase 4: Property
 
-When Tour Core reports the infrastructure ready, it offers the first property.
-Close the technical part and say:
+When Tour Core reports the infrastructure ready (visitor texting connected and
+tested), it offers the first property. Alerts are not part of this: they come
+later and are never required. Close the technical part and say:
 
-> Everything needed to run Tour Core is connected and tested. Would you like
-> to add your first property?
+> Everything needed to start is connected and tested. Would you like to add
+> your first property?
 
 If yes, use the Setup Property skill (Map Route for routes), in plain words:
-"What's the property address?", "How many units can people self-tour?", "What
-should we call the main entrance?", "When can people tour?", "How carefully do
-you want to verify visitors?". Never show field names. From here on, don't
-talk about infrastructure unless something breaks.
+"What's the property address?", "How many units can people self-tour?", then
+each unit's bedrooms, bathrooms, rent and availability, "What should we call
+the main entrance?", "When can people tour?", "How carefully do you want to
+verify visitors?". Never show field names. From here on, don't talk about
+infrastructure unless something breaks.
 
-Once the property is saved, Tour Core offers alerts (recommended, not
-required):
+Once the property is saved (with its unit details), Tour Core offers alerts
+(recommended, not required):
 
 > Your property is configured. Would you like me to keep an eye on tours and
-> let you know when a visitor needs help or Tour Core needs your input?
+> alert you when something needs your attention?
 
 - Yes: "I'm setting up alerts so I can notify you when a visitor needs your
   input." Create the Tour Core Exception Alert routine yourself, then open the

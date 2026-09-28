@@ -56,16 +56,17 @@ use it for "Show active tours".
 
 ### Resolve
 
-- **Unanswered question.** If the operator tells you the answer ("Yes, parking
-  is included"), don't just pass it on. Call `answer_flagged_question` with
-  their words as `approvedFact`. It returns a question such as:
-  > I can add "Parking is included." to the approved property facts and answer
-  > Pat. Want me to?
+- **Unanswered question.** Ask for the answer itself ("What should I tell
+  them?"), not a yes/no. As soon as the operator gives it ("2 bedrooms"), call
+  `answer_flagged_question` with their words as `approvedFact`, before saying
+  anything else. It returns the one confirmation question, such as:
+  > I'll save "Unit 1A has 2 bedrooms" as an approved fact and send that answer
+  > to Pat. Continue?
 
-  Ask it. Only after a clear yes, call again with `confirmationCode`. Tell the
-  operator what Pat was sent. If the result says `needsRecheck`, explain that
-  the setup changed so readiness and a practice tour must pass again before
-  it's published for demo, and offer to run them.
+  Ask exactly that, once. Don't ask a separate "want me to add it?" first.
+  After a clear yes, call again with `confirmationCode`, then say what Pat was
+  sent. The property stays published: an approved fact never needs another
+  readiness check or practice tour.
   If the operator doesn't know the answer, don't guess. Offer to mark it
   handled once they've dealt with it another way.
 - **Mark handled.** `resolve_exception` with a short note in the operator's

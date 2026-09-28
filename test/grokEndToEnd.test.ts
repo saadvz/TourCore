@@ -97,7 +97,7 @@ describe("P0 operator demo through Grok tools, with a real-phone visitor", () =>
     const sentBefore = demo.fake.sent.length;
     const answered = await demo.approve("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "There's a gym on the roof." });
     expect(answered.visitorAnswered).toBe(true);
-    expect(demo.fake.sent.slice(sentBefore).map((s) => s.content)).toEqual(['About your question "is there a gym?": here\'s what the property team shared: There\'s a gym on the roof.']);
+    expect(demo.fake.sent.slice(sentBefore).map((s) => s.content)).toEqual(["There's a gym on the roof. Let me know if you have any other questions."]);
 
     // Operator: "Pause Pat's tour." -> "Yes." The visitor is told it's paused, not ended, and HI doesn't start a second tour.
     await demo.approve("place_operator_hold", { tourRef: tour.tourRef, reason: "Checking the lobby camera" });
