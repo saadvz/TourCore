@@ -13,6 +13,8 @@ export class AuditLog {
   ) {}
 
   async record(type: AuditEventType, input: AuditInput): Promise<AuditEvent> {
+    // A store restored from saved records already has events; keep numbering after them.
+    if (this.seq === 0) this.seq = Math.max(0, ...(await this.store.listAudit()).map((e) => e.seq));
     const event: AuditEvent = { id: newId("evt"), seq: ++this.seq, type, at: this.clock.now().toISOString(), ...input };
     await this.store.appendAudit(event);
     return event;

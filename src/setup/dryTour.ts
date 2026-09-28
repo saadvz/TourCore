@@ -3,7 +3,7 @@ import { SimulatedClock } from "../core/clock";
 import { nextTourDay, slotsOn } from "../core/schedule";
 import { formatLocalDate, formatTime } from "../core/timezone";
 import { TourCore } from "../core/TourCore";
-import { createDurin, createMessenger, createStore, createVerificationProvider } from "../createTourCore";
+import { createDurin, createStore, createVerificationProvider } from "../createTourCore";
 import type { AuditEvent } from "../domain/model";
 import { countDurinCalls } from "../durin/countingDurin";
 import type { ExportBundle } from "../export/exportBundle";
@@ -98,11 +98,14 @@ export async function runDryTour(input: TourCoreConfig, options: DryTourOptions 
   };
 
   const pending: DryTourEvent[] = [];
+  // Practice tours never text anyone, whatever messaging the property uses; they read like a messaging thread.
   const messenger: Messenger = {
-    channel: createMessenger(config, () => {}).channel,
+    provider: "practice",
+    presentation: "MESSAGING",
     async send(message) {
       messages.push({ time: now(), audience: message.audience, body: message.body });
       pending.push({ kind: "text", audience: message.audience, body: message.body });
+      return { provider: "practice", channel: "DEMO", status: "SENT", sentAt: clock.now().toISOString() };
     },
   };
   const flush = async () => {

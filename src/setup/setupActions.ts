@@ -34,7 +34,7 @@ export const SETUP_DEFAULTS = {
   } satisfies TourHours,
   verificationMode: "basic-form",
   verificationValidForDays: 30,
-  messagingMode: "console",
+  messagingMode: "demo",
   storageMode: "memory",
   accessMode: "durin-mock",
 } as const;
@@ -46,7 +46,7 @@ export const CHOICE_LABELS = {
     mock: "Practice verification (everyone passes)",
     "document-check": "Full ID check",
   },
-  messaging: { console: "Demo messaging (texts show on screen)", bland: "Real text messages" },
+  messaging: { demo: "Demo messaging (texts show on screen)", sendblue: "Sendblue (real texts and iMessages)" },
   storage: { memory: "Demo records (kept on this computer)", "google-drive": "Google Drive" },
   access: { "durin-mock": "Durin demo mode (no real doors open)", durin: "Durin" },
 } as const;

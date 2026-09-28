@@ -5,14 +5,17 @@ import {
   type AuditEvent,
   type AuditEventType,
   type Consent,
+  type Message,
   type Prospect,
+  UNNAMED_VISITOR,
   type Reservation,
   type ReservationStatus,
   type Verification,
 } from "../domain/model";
 import { TERMINAL, transition } from "../domain/stateMachine";
 import type { DurinAccessAdapter, DurinAccessResult, DurinHealth } from "../durin/DurinAccessAdapter";
-import type { Messenger } from "../messaging/Messenger";
+import { MessagingError, type DeliveryReceipt, type MessageChannel, type Messenger } from "../messaging/Messenger";
+import { withPrompt, type ReplyPrompt } from "../messaging/presentation";
 import { evaluateAccess, type AccessDecision, type AccessDecisionCode } from "../policy/evaluateAccess";
 import type { TourCoreStore } from "../storage/Store";
 import type { VerificationProvider } from "../verification/basicForm";
@@ -22,7 +25,7 @@ import type { Clock } from "./clock";
 import { approvedFacts, findApprovedAnswer, type ApprovedFact } from "./facts";
 import { normalizePhone } from "./phone";
 import { nextTourDay, slotsOn, tourWindow, type TourSlot } from "./schedule";
-import { formatDay as formatDayIn, formatTime as formatTimeIn, localDateOf, type LocalDate } from "./timezone";
+import { addDays, formatDay as formatDayIn, formatTime as formatTimeIn, localDateOf, type LocalDate } from "./timezone";
 
 export interface TourCoreDeps {
   config: TourCoreConfig;
@@ -31,6 +34,17 @@ export interface TourCoreDeps {
   messenger: Messenger;
   verification: VerificationProvider;
   clock: Clock;
+  /** Issues a personal identity-form link for visitors on a messaging channel. */
+  verificationLink?: (ctx: { reservation: Reservation; prospect: Prospect }) => string | undefined | Promise<string | undefined>;
+  /** Groups messages of one conversation in the records. */
+  correlationId?: string;
+}
+
+export interface InboundMeta {
+  provider?: string;
+  providerMessageId?: string;
+  deliveryChannel?: Message["deliveryChannel"];
+  correlationId?: string;
 }
 
 export interface AccessRequest {
@@ -55,8 +69,7 @@ export class TourCoreError extends Error {
   }
 }
 
-const CONSENT_TEXT =
-  "Is it OK if I text you about this tour and keep a record of your visit (times and doors used)? Reply YES or NO.";
+const CONSENT_TEXT = "Is it OK if I text you about this tour and keep a record of your visit (times and doors used)?";
 
 export class TourCore {
   private readonly audit: AuditLog;
@@ -115,15 +128,19 @@ export class TourCore {
     });
 
     const slots = await this.availableSlots();
-    const day = slots[0] ? this.day(slots[0].start) : "soon";
-    await this.textProspect(
-      prospect,
-      reservation.id,
-      `Hi ${firstName(prospect.name)}! Happy to set up a self-guided tour of ${unit.name} at ${config.property.name}.` +
-        (unit.summary ? ` Here's what the property team shared: ${unit.summary.replace(/\.?$/, ".")}` : "") +
-        "\n" +
-        `Open times on ${day}: ${slots.map((s, i) => `${i + 1}) ${s.label}`).join("  ")}\nReply with the number that works for you.`,
-    );
+    const hello = prospect.name === UNNAMED_VISITOR ? "Hi!" : `Hi ${firstName(prospect.name)}!`;
+    const intro =
+      `${hello} Happy to set up a self-guided tour of ${unit.name} at ${config.property.name}.` +
+      (unit.summary ? ` Here's what the property team shared: ${unit.summary.replace(/\.?$/, ".")}` : "");
+    if (slots.length === 0) {
+      await this.textProspect(prospect, reservation.id, `${intro}\nThere are no open tour times right now. The ${config.operator.name.toLowerCase()} will reach out.`);
+    } else {
+      await this.textProspect(prospect, reservation.id, `${intro}\nOpen times on ${this.day(slots[0]!.start)}:`, {
+        kind: "choose",
+        options: slots.map((s) => s.label),
+        what: "a time",
+      });
+    }
     return { prospect, reservation };
   }
 
@@ -159,7 +176,7 @@ export class TourCore {
     reservation = await this.move(reservation, "AWAITING_CONSENT", "CONSENT_REQUESTED", { detail: "asked permission to text and keep tour records" });
 
     const prospect = await this.mustGetProspect(reservation.prospectId);
-    await this.textProspect(prospect, reservation.id, `Great, you're booked for ${this.time(start)} on ${this.day(start)}.\n${CONSENT_TEXT}`);
+    await this.textProspect(prospect, reservation.id, `Great, you're booked for ${this.time(start)} on ${this.day(start)}.\n${CONSENT_TEXT}`, { kind: "yes-no" });
     return reservation;
   }
 
@@ -207,7 +224,14 @@ export class TourCore {
     }
 
     reservation = await this.move(reservation, "AWAITING_VERIFICATION", "VERIFICATION_REQUESTED", { detail: `method ${this.deps.verification.method}` });
-    await this.textProspect(prospect, reservation.id, this.deps.verification.requestText(prospect));
+    const link =
+      this.presentation === "MESSAGING" && !this.deps.verification.automatic
+        ? this.deps.verificationLink
+          ? await this.deps.verificationLink({ reservation, prospect })
+          : this.deps.verification.defaultLink?.(prospect)
+        : undefined;
+    const ask = this.deps.verification.request(prospect);
+    await this.textProspect(prospect, reservation.id, ask.body, ask.form ? { kind: "form", link } : undefined);
     if (this.deps.verification.automatic) return this.submitVerification(reservation.id, {});
     return reservation;
   }
@@ -248,6 +272,11 @@ export class TourCore {
       prospectId: prospect.id,
       detail: `basic form ${outcome.reference}: ${outcome.claimed.firstName} ${outcome.claimed.lastName} (claimed identity, not document-checked)`,
     });
+    // A visitor who started by text is named by the form they just filled in.
+    if (prospect.name === UNNAMED_VISITOR) {
+      const named = `${outcome.claimed.firstName} ${outcome.claimed.lastName}`.trim();
+      if (named) await this.deps.store.put("prospects", { ...prospect, name: named });
+    }
     return this.markReady(reservation, prospect);
   }
 
@@ -274,20 +303,101 @@ export class TourCore {
       prospect,
       reservation.id,
       `Thanks for touring ${unit.name}, ${firstName(prospect.name)}!${unit.summary ? ` Quick recap: ${unit.summary.replace(/\.$/, "")}.` : ""} The doors are locked again behind you.\n` +
-        "Would you like someone from the property team to follow up? Reply YES or NO.",
+        "Would you like someone from the property team to follow up?",
+      { kind: "yes-no" },
     );
     await this.record("FOLLOW_UP_SENT", { reservationId: reservation.id, prospectId: prospect.id, detail: "recap + follow-up question" });
     return reservation;
   }
 
+  /** Tour times this reservation could move to: configured slots whose window hasn't closed and that nobody else holds. */
+  async rescheduleOptions(reservationId: string, limit = 12): Promise<TourSlot[]> {
+    const reservation = await this.mustGetReservation(reservationId);
+    const now = this.deps.clock.now();
+    const tz = this.deps.config.property.timezone;
+    const taken = await this.takenSlots(reservation.id);
+    const out: TourSlot[] = [];
+    let day = localDateOf(now, tz);
+    for (let i = 0; i < 14 && out.length < limit; i++, day = addDays(day, 1)) {
+      for (const slot of slotsOn(this.deps.config, day)) {
+        if (tourWindow(this.deps.config, slot.start).windowEnd <= now) continue;
+        if (taken.has(slot.start.toISOString()) || slot.start.toISOString() === reservation.slotStart) continue;
+        out.push(slot);
+      }
+    }
+    return out.slice(0, limit);
+  }
+
+  /**
+   * Moves a booked tour to another configured tour time. Same reservation,
+   * prospect, consent and verification; any doors opened for the old time
+   * are switched off, and the visitor is told. Asking for the time it already
+   * has changes nothing. `outsideTourHours` (developer mode only) skips the
+   * tour-hours check; the door window still comes from the tour length.
+   */
+  async rescheduleReservation(input: {
+    reservationId: string;
+    newStartsAt: string;
+    outsideTourHours?: boolean;
+  }): Promise<{ reservation: Reservation; changed: boolean }> {
+    let reservation = await this.mustGetReservation(input.reservationId);
+    const start = new Date(input.newStartsAt);
+    if (Number.isNaN(start.getTime())) throw new TourCoreError("INVALID_SLOT", "That tour time isn't valid.");
+    if (reservation.slotStart === start.toISOString()) return { reservation, changed: false };
+
+    const movable: ReservationStatus[] = ["AWAITING_CONSENT", "AWAITING_VERIFICATION", "READY", "TOURING"];
+    if (!movable.includes(reservation.status) || !reservation.slotStart) {
+      throw new TourCoreError("NOT_RESCHEDULABLE", "Only a booked tour that hasn't finished can be moved.");
+    }
+    const { config, clock } = this.deps;
+    const offered = slotsOn(config, localDateOf(start, config.property.timezone)).some((s) => s.start.getTime() === start.getTime());
+    if (!offered && !input.outsideTourHours) throw new TourCoreError("SLOT_NOT_OFFERED", "That time isn't one of the property's tour times.");
+    const { windowStart, windowEnd } = tourWindow(config, start);
+    if (windowEnd <= clock.now()) throw new TourCoreError("SLOT_PAST", "That tour time has already passed.");
+    if ((await this.takenSlots(reservation.id)).has(start.toISOString())) throw new TourCoreError("SLOT_UNAVAILABLE", "Another visitor already has that time.");
+
+    const from = new Date(reservation.slotStart);
+    await this.revokeGrants(reservation, "tour rescheduled");
+    const moved: Reservation = { ...reservation, slotStart: start.toISOString(), windowStart: windowStart.toISOString(), windowEnd: windowEnd.toISOString() };
+    const detail = `from ${this.day(from)} ${this.time(from)} to ${this.day(start)} ${this.time(start)}; doors usable ${this.time(windowStart)}-${this.time(windowEnd)}`;
+    if (reservation.status === "TOURING") {
+      reservation = await this.move(moved, "READY", "RESERVATION_RESCHEDULED", { detail });
+    } else {
+      reservation = { ...moved, updatedAt: this.nowIso() };
+      await this.deps.store.put("reservations", reservation);
+      await this.record("RESERVATION_RESCHEDULED", { reservationId: reservation.id, prospectId: reservation.prospectId, detail });
+    }
+
+    const prospect = await this.mustGetProspect(reservation.prospectId);
+    const when = `${this.day(start)} at ${this.time(start)}`;
+    if (reservation.status === "READY") {
+      await this.textProspect(prospect, reservation.id, `Your tour has moved to ${when}.\nDoors will work for you from ${this.time(windowStart)} to ${this.time(windowEnd)}.`, {
+        kind: "say",
+        phrase: "I'm here",
+        purpose: "when you arrive and I'll open the entrance",
+      });
+    } else {
+      await this.textProspect(prospect, reservation.id, `Your tour has moved to ${when}. Everything else stays the same.`);
+    }
+    return { reservation, changed: true };
+  }
+
+  private async takenSlots(exceptReservationId: string): Promise<Set<string>> {
+    return new Set(
+      (await this.deps.store.list("reservations"))
+        .filter((r) => r.id !== exceptReservationId && r.slotStart && !TERMINAL.includes(r.status))
+        .map((r) => r.slotStart!),
+    );
+  }
+
   /** Records the visitor's answer to the follow-up question. Only the first answer counts. */
-  async recordFollowUpResponse(reservationId: string, wantsContact: boolean): Promise<void> {
+  async recordFollowUpResponse(reservationId: string, wantsContact: boolean, inbound?: { text: string; meta?: InboundMeta }): Promise<void> {
     const reservation = await this.mustGetReservation(reservationId);
     if (reservation.status !== "COMPLETED") throw new TourCoreError("NOT_COMPLETED", "The tour isn't finished yet");
     const already = (await this.deps.store.listAudit()).some((e) => e.type === "FOLLOW_UP_RESPONSE" && e.reservationId === reservationId);
     if (already) return;
     const prospect = await this.mustGetProspect(reservation.prospectId);
-    await this.recordInbound(prospect.id, reservationId, wantsContact ? "Yes" : "No");
+    await this.recordInbound(prospect.id, reservationId, inbound?.text ?? (wantsContact ? "Yes" : "No"), inbound?.meta);
     await this.record("FOLLOW_UP_RESPONSE", { reservationId, prospectId: prospect.id, detail: wantsContact ? "yes" : "no" });
     if (wantsContact) {
       await this.notifyOperator(reservation, `${prospect.name} toured ${this.unitFor(reservation).name} and would like someone to follow up.`);
@@ -301,12 +411,12 @@ export class TourCore {
    * Answers only from operator-approved facts for this reservation's unit and
    * property. With no matching fact, it says so and flags the question.
    */
-  async answerQuestion(reservationId: string, question: string): Promise<{ answered: boolean; facts: ApprovedFact[] }> {
+  async answerQuestion(reservationId: string, question: string, meta?: InboundMeta): Promise<{ answered: boolean; facts: ApprovedFact[] }> {
     const reservation = await this.mustGetReservation(reservationId);
     const prospect = await this.mustGetProspect(reservation.prospectId);
     const asked = question.trim().slice(0, 300);
     if (!asked) throw new TourCoreError("EMPTY_QUESTION", "Please type a question");
-    await this.recordInbound(prospect.id, reservationId, asked);
+    await this.recordInbound(prospect.id, reservationId, asked, meta);
 
     const matches = findApprovedAnswer(approvedFacts(this.deps.config, reservation.unitId), asked);
     if (matches.length) {
@@ -320,10 +430,10 @@ export class TourCore {
     return { answered: false, facts: [] };
   }
 
-  async requestHelp(reservationId: string, where?: string): Promise<void> {
+  async requestHelp(reservationId: string, where?: string, inbound?: { text: string; meta?: InboundMeta }): Promise<void> {
     const reservation = await this.mustGetReservation(reservationId);
     const prospect = await this.mustGetProspect(reservation.prospectId);
-    await this.recordInbound(prospect.id, reservationId, "I need help");
+    await this.recordInbound(prospect.id, reservationId, inbound?.text ?? "I need help", inbound?.meta);
     await this.record("HELP_REQUESTED", { reservationId, prospectId: prospect.id, detail: where ?? "" });
     await this.notifyOperator(reservation, `${prospect.name} asked for help${where ? ` near ${where}` : ""}.`);
     await this.textProspect(prospect, reservationId, `I've let the ${this.deps.config.operator.name.toLowerCase()} know. Someone will reach out shortly.`);
@@ -359,19 +469,89 @@ export class TourCore {
     return this.move(reservation, reservation.heldFromStatus, "RESERVATION_RESUMED", { detail: "operator resumed the tour" });
   }
 
-  async recordInbound(prospectId: string, reservationId: string | undefined, body: string): Promise<void> {
+  async recordInbound(prospectId: string, reservationId: string | undefined, body: string, meta?: InboundMeta): Promise<void> {
     const prospect = await this.mustGetProspect(prospectId);
+    await this.recordIncoming({ phone: prospect.phone, body, prospectId, reservationId, meta });
+  }
+
+  /** Stores a message from a visitor, including before they have a prospect record (e.g. a first "Hi"). */
+  async recordIncoming(input: { phone: string; body: string; prospectId?: string; reservationId?: string; meta?: InboundMeta }): Promise<void> {
+    const { meta } = input;
     await this.deps.store.put("messages", {
       id: newId("msg"),
       direction: "INBOUND",
       audience: "PROSPECT",
-      channel: this.deps.messenger.channel,
-      counterparty: prospect.phone,
-      body,
-      prospectId,
-      reservationId,
+      channel: meta?.provider ?? this.deps.messenger.provider,
+      counterparty: normalizePhone(input.phone),
+      body: input.body,
+      prospectId: input.prospectId,
+      reservationId: input.reservationId,
       at: this.nowIso(),
+      deliveryStatus: "RECEIVED",
+      ...(meta?.provider ? { provider: meta.provider } : {}),
+      ...(meta?.providerMessageId ? { providerMessageId: meta.providerMessageId } : {}),
+      ...(meta?.deliveryChannel ? { deliveryChannel: meta.deliveryChannel } : {}),
+      ...((meta?.correlationId ?? this.deps.correlationId) ? { correlationId: meta?.correlationId ?? this.deps.correlationId } : {}),
     });
+  }
+
+  /**
+   * A conversation-level text (welcome, help, "didn't catch that"): stored and
+   * sent like any other, and suppressed for anyone who opted out.
+   */
+  async sendConversationText(input: { phone: string; body: string; prompt?: ReplyPrompt; reservationId?: string }): Promise<void> {
+    const phone = normalizePhone(input.phone);
+    const prospect = (await this.deps.store.list("prospects")).find((p) => p.phone === phone);
+    await this.deliver({
+      audience: "PROSPECT",
+      to: phone,
+      toName: prospect?.name,
+      body: withPrompt(input.body, input.prompt, this.presentation),
+      prospectId: prospect?.id,
+      reservationId: input.reservationId,
+      suppressed: !!prospect?.messagingOptedOut,
+    });
+  }
+
+  /**
+   * STOP / UNSUBSCRIBE: no more messages to this person, and a tour that runs
+   * over messages can't continue, so it's ended safely (any open doors are
+   * switched off). Returns whether a tour was ended.
+   */
+  async optOutOfMessaging(phoneRaw: string, keyword: string): Promise<{ endedTour: boolean }> {
+    const phone = normalizePhone(phoneRaw);
+    const prospect = (await this.deps.store.list("prospects")).find((p) => p.phone === phone);
+    if (!prospect) return { endedTour: false };
+    if (!prospect.messagingOptedOut) {
+      await this.deps.store.put("prospects", { ...prospect, messagingOptedOut: true });
+      await this.record("MESSAGING_OPTED_OUT", { prospectId: prospect.id, detail: keyword });
+    }
+    let endedTour = false;
+    for (const reservation of (await this.deps.store.list("reservations")).filter((r) => r.prospectId === prospect.id && !TERMINAL.includes(r.status))) {
+      await this.revokeGrants(reservation, "visitor opted out of messages");
+      if (reservation.status === "TOURING") {
+        await this.move(reservation, "REVOKED", "RESERVATION_REVOKED", { detail: "visitor opted out of messages" });
+      } else {
+        await this.move(reservation, "CANCELLED", "RESERVATION_CANCELLED", { detail: "visitor opted out of messages" });
+      }
+      endedTour = true;
+      await this.notifyOperator(reservation, `${prospect.name} replied ${keyword.toUpperCase()} and won't get more messages. Their tour was ended.`);
+    }
+    return { endedTour };
+  }
+
+  /** START: messages are allowed again. A tour that ended stays ended. */
+  async optInToMessaging(phoneRaw: string): Promise<void> {
+    const phone = normalizePhone(phoneRaw);
+    const prospect = (await this.deps.store.list("prospects")).find((p) => p.phone === phone);
+    if (!prospect?.messagingOptedOut) return;
+    await this.deps.store.put("prospects", { ...prospect, messagingOptedOut: false });
+    await this.record("MESSAGING_OPTED_IN", { prospectId: prospect.id, detail: "START" });
+  }
+
+  /** How replies are phrased for this conversation: buttons (web) or typed replies (messaging). */
+  get presentation(): MessageChannel {
+    return this.deps.messenger.presentation ?? "MESSAGING";
   }
 
   // ------------------------------------------------------------------ reads
@@ -471,7 +651,14 @@ export class TourCore {
     }
 
     const stop = config.routes.find((r) => r.id === approved.routeId)?.stops.find((s) => s.doorId === request.doorId);
-    await this.textProspect(prospect!, approved.id, `${door?.name ?? "The door"} is open for you now. ${stop?.guidance ?? ""}`.trim());
+    const opened = new Set((await this.listGrants(approved.id)).map((g) => g.doorId));
+    const nextStop = approved.allowedRoute.find((d) => !opened.has(d));
+    await this.textProspect(
+      prospect!,
+      approved.id,
+      `${door?.name ?? "The door"} is open for you now. ${stop?.guidance ?? ""}`.trim(),
+      nextStop ? { kind: "say", phrase: `at ${this.stopName(nextStop)}`, purpose: "when you get there" } : { kind: "say", phrase: "finish", purpose: "when you're done" },
+    );
     return { decision, durinCalled: true, grant };
   }
 
@@ -489,10 +676,19 @@ export class TourCore {
     await this.textProspect(
       prospect,
       ready.id,
-      `You're all set for your tour on ${this.day(start)} at ${this.time(start)}! When you arrive, text me "I'm here" and I'll open the entrance.\n` +
+      `You're all set for your tour on ${this.day(start)} at ${this.time(start)}!\n` +
         `Doors will work for you from ${this.time(new Date(ready.windowStart!))} to ${this.time(new Date(ready.windowEnd!))}.`,
+      { kind: "say", phrase: "I'm here", purpose: "when you arrive and I'll open the entrance" },
     );
     return ready;
+  }
+
+  /** How a door is named in guidance: "Unit 101", "the entrance", or the door's own name. */
+  stopName(doorId: string): string {
+    const unit = this.deps.config.units.find((u) => u.doorId === doorId);
+    if (unit) return unit.name;
+    const door = this.deps.config.doors.find((d) => d.id === doorId);
+    return door?.kind === "ENTRANCE" ? "the entrance" : door?.name ?? "the next door";
   }
 
   private async revokeGrants(reservation: Reservation, reason: string): Promise<void> {
@@ -576,36 +772,81 @@ export class TourCore {
     return this.audit.record(type, input);
   }
 
-  private async textProspect(prospect: Prospect, reservationId: string, body: string): Promise<void> {
-    await this.deps.store.put("messages", {
-      id: newId("msg"),
-      direction: "OUTBOUND",
+  private async textProspect(prospect: Prospect, reservationId: string, body: string, prompt?: ReplyPrompt): Promise<void> {
+    const current = (await this.deps.store.get("prospects", prospect.id)) ?? prospect;
+    await this.deliver({
       audience: "PROSPECT",
-      channel: this.deps.messenger.channel,
-      counterparty: prospect.phone,
-      body,
-      prospectId: prospect.id,
+      to: current.phone,
+      toName: current.name,
+      body: withPrompt(body, prompt, this.presentation),
+      prospectId: current.id,
       reservationId,
-      at: this.nowIso(),
+      suppressed: !!current.messagingOptedOut,
     });
-    await this.deps.messenger.send({ to: prospect.name, audience: "PROSPECT", body });
   }
 
   private async notifyOperator(reservation: Reservation | undefined, body: string): Promise<void> {
     const { operator } = this.deps.config;
-    await this.deps.store.put("messages", {
+    await this.record("OPERATOR_NOTIFIED", { reservationId: reservation?.id, prospectId: reservation?.prospectId, detail: body });
+    await this.deliver({ audience: "OPERATOR", to: operator.contact, toName: operator.name, body, prospectId: reservation?.prospectId, reservationId: reservation?.id });
+  }
+
+  /**
+   * The single path out. The message is stored first, then handed to the
+   * adapter, then updated with the provider's receipt. A delivery failure is
+   * recorded, never thrown: it must not undo or fake any tour or access state.
+   */
+  private async deliver(m: {
+    audience: Message["audience"];
+    to: string;
+    toName?: string;
+    body: string;
+    prospectId?: string;
+    reservationId?: string;
+    suppressed?: boolean;
+  }): Promise<void> {
+    const { store, messenger } = this.deps;
+    const message: Message = {
       id: newId("msg"),
       direction: "OUTBOUND",
-      audience: "OPERATOR",
-      channel: this.deps.messenger.channel,
-      counterparty: operator.contact,
-      body,
-      prospectId: reservation?.prospectId,
-      reservationId: reservation?.id,
+      audience: m.audience,
+      channel: messenger.provider,
+      counterparty: m.to,
+      body: m.body,
+      prospectId: m.prospectId,
+      reservationId: m.reservationId,
       at: this.nowIso(),
+      provider: messenger.provider,
+      ...(this.deps.correlationId ? { correlationId: this.deps.correlationId } : {}),
+    };
+    if (m.suppressed) {
+      await store.put("messages", { ...message, deliveryStatus: "SUPPRESSED" });
+      return;
+    }
+    await store.put("messages", message);
+    let receipt: DeliveryReceipt;
+    try {
+      receipt = await messenger.send({ to: m.to, toName: m.toName, audience: m.audience, body: m.body, idempotencyKey: message.id, correlationId: this.deps.correlationId });
+    } catch (err) {
+      const code = err instanceof MessagingError ? err.code : "MESSAGING_FAILED";
+      receipt = { provider: messenger.provider, channel: "UNKNOWN", status: "FAILED", sentAt: this.nowIso(), error: { code, message: err instanceof Error ? err.message : "send failed" } };
+    }
+    await store.put("messages", {
+      ...message,
+      provider: receipt.provider,
+      deliveryChannel: receipt.channel,
+      deliveryStatus: receipt.status,
+      ...(receipt.providerMessageId ? { providerMessageId: receipt.providerMessageId } : {}),
+      ...(receipt.error ? { deliveryError: receipt.error.code } : {}),
     });
-    await this.record("OPERATOR_NOTIFIED", { reservationId: reservation?.id, prospectId: reservation?.prospectId, detail: body });
-    await this.deps.messenger.send({ to: operator.name, audience: "OPERATOR", body });
+    if (receipt.status === "FAILED") {
+      await this.record("MESSAGE_FAILED", {
+        reservationId: m.reservationId,
+        prospectId: m.prospectId,
+        code: receipt.error?.code,
+        detail: `${m.audience === "OPERATOR" ? "alert" : "message"} not delivered`,
+      });
+    }
   }
 
   private unitFor(reservation: Reservation) {

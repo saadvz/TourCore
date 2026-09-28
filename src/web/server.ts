@@ -2,9 +2,17 @@ import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { join } from "node:path";
+import { createLiveMessagingTransport } from "../createTourCore";
+import { MessagingLedger } from "../messaging/ledger";
+import { SENDBLUE_WEBHOOK_PATH, sendblueRuntime } from "../messaging/sendblue/runtime";
+import { handleSendblueWebhook } from "../messaging/sendblue/webhook";
 import { PropertyWorkspace } from "../setup";
 import { VisitorDemoRegistry } from "../visitor";
+import { MessagingConversations } from "../visitor/messagingRouter";
+import { VerificationLinks } from "../visitor/verificationLinks";
 import { handleApi } from "./api";
+import { loadLocalEnv } from "./env";
 
 const PUBLIC_DIR = new URL("./public/", import.meta.url);
 const JS = "text/javascript; charset=utf-8";
@@ -15,6 +23,7 @@ const STATIC: Record<string, { file: string; type: string }> = {
   "/ui.js": { file: "ui.js", type: JS },
   "/tours.js": { file: "tours.js", type: JS },
   "/visitor.js": { file: "visitor.js", type: JS },
+  "/verify.js": { file: "verify.js", type: JS },
   "/styles.css": { file: "styles.css", type: "text/css; charset=utf-8" },
 };
 const MAX_BODY_BYTES = 1_000_000;
@@ -22,32 +31,86 @@ const MAX_BODY_BYTES = 1_000_000;
 export interface SetupServerOptions {
   workspace?: PropertyWorkspace;
   dev?: boolean;
+  now?: () => Date;
+  /** Clock for real-phone conversations; tests move it to reach tour times. */
+  realNow?: () => number;
+  log?: (line: string) => void;
 }
 
-/** Local-only setup app. Serves the page and the setup API; holds no setup logic itself. */
+const LOCAL_HOSTS = ["localhost", "127.0.0.1", "[::1]"];
+
+/** What the public (tunnel) address may reach: the webhook and the identity form. Never the operator app. */
+function publicRouteAllowed(method: string, path: string): boolean {
+  if (method === "POST" && path === SENDBLUE_WEBHOOK_PATH) return true;
+  if (method === "GET" && (/^\/verify\/[A-Za-z0-9_-]+$/.test(path) || path === "/verify.js" || path === "/styles.css")) return true;
+  return /^\/api\/verify\/[A-Za-z0-9_-]+$/.test(path) && (method === "GET" || method === "POST");
+}
+
+/**
+ * The local setup app plus the two things a real phone needs: the Sendblue
+ * receive webhook and the identity-form page. Operator pages and APIs answer
+ * only on this computer's own address.
+ */
 export function createSetupServer(options: SetupServerOptions = {}): Server {
   const workspace = options.workspace ?? new PropertyWorkspace();
   const visitors = new VisitorDemoRegistry();
   const dev = options.dev ?? false;
+  const log = options.log ?? ((line: string) => console.log(`  ${line}`));
+  const ledger = new MessagingLedger(join(workspace.root, "messaging", "ledger.json"));
+  const links = new VerificationLinks({ baseUrl: () => sendblueRuntime.env().publicBaseUrl, now: options.realNow });
+  let transport: ReturnType<typeof createLiveMessagingTransport> | undefined;
+  const conversations = new MessagingConversations({
+    workspace,
+    registry: visitors,
+    links,
+    transport: () => (transport ??= createLiveMessagingTransport(ledger)),
+    now: options.now,
+    realNow: options.realNow,
+    log,
+  });
+  const restored = conversations
+    .restoreSaved()
+    .then((n) => n && log(`Picked up ${n} text-message tour${n === 1 ? "" : "s"} still in progress.`))
+    .catch((err) => log(`Couldn't restore earlier text-message tours: ${err instanceof Error ? err.message : "unknown error"}`));
 
   return createServer(async (req, res) => {
+    await restored;
     const send = (status: number, type: string, body: string, extra: Record<string, string> = {}) => {
       res.writeHead(status, { "Content-Type": type, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", ...extra });
       res.end(body);
     };
 
-    // Only answer requests addressed to this machine (blocks DNS-rebinding tricks).
-    const host = (req.headers.host ?? "").replace(/:\d+$/, "");
-    if (!["localhost", "127.0.0.1", "[::1]"].includes(host)) return send(403, "text/plain", "Forbidden");
-
+    // Local addresses get everything; the configured public address gets only the phone-facing routes.
+    // Anything else is refused (blocks DNS-rebinding tricks).
+    const host = (req.headers.host ?? "").replace(/:\d+$/, "").toLowerCase();
+    const publicBase = sendblueRuntime.env().publicBaseUrl;
+    const publicHost = publicBase ? new URL(publicBase).hostname.toLowerCase() : undefined;
     const url = new URL(req.url ?? "/", "http://localhost");
+    const method = req.method ?? "GET";
+    const isLocal = LOCAL_HOSTS.includes(host);
+    if (!isLocal && !(publicHost && host === publicHost && publicRouteAllowed(method, url.pathname))) {
+      return send(isLocal || host === publicHost ? 404 : 403, "text/plain", isLocal || host === publicHost ? "Not found" : "Forbidden");
+    }
+
     try {
+      if (method === "POST" && url.pathname === SENDBLUE_WEBHOOK_PATH) {
+        // Raw bytes first: authenticity is checked before anything is parsed.
+        const rawBody = await readRaw(req);
+        const result = await handleSendblueWebhook(
+          { rawBody, headers: req.headers },
+          { secret: sendblueRuntime.env().webhookSecret, ledger, receive: (m) => conversations.receive(m), now: options.now, log },
+        );
+        return send(result.status, "application/json; charset=utf-8", JSON.stringify(result.body));
+      }
+      if (method === "GET" && /^\/verify\/[A-Za-z0-9_-]+$/.test(url.pathname)) {
+        return send(200, "text/html; charset=utf-8", readFileSync(new URL("verify.html", PUBLIC_DIR), "utf8"), { "Referrer-Policy": "no-referrer" });
+      }
       if (url.pathname.startsWith("/api/")) {
-        if (req.method === "POST" && !String(req.headers["content-type"] ?? "").startsWith("application/json")) {
+        if (method === "POST" && !String(req.headers["content-type"] ?? "").startsWith("application/json")) {
           return send(415, "application/json", JSON.stringify({ error: { message: "Unsupported request." } }));
         }
-        const body = req.method === "POST" ? await readJson(req) : undefined;
-        const result = await handleApi({ workspace, visitors, dev }, req.method ?? "GET", url.pathname, body);
+        const body = method === "POST" ? JSON.parse((await readRaw(req)).toString("utf8") || "{}") : undefined;
+        const result = await handleApi({ workspace, visitors, links, dev, now: options.now }, method, url.pathname, body);
         if ("download" in result) {
           const { filename, contentType, content } = result.download;
           return send(result.status, `${contentType}; charset=utf-8`, content, { "Content-Disposition": `attachment; filename="${filename}"` });
@@ -63,7 +126,7 @@ export function createSetupServer(options: SetupServerOptions = {}): Server {
   });
 }
 
-function readJson(req: IncomingMessage): Promise<unknown> {
+function readRaw(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks: Buffer[] = [];
@@ -74,13 +137,7 @@ function readJson(req: IncomingMessage): Promise<unknown> {
         req.destroy();
       } else chunks.push(chunk);
     });
-    req.on("end", () => {
-      try {
-        resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {});
-      } catch (err) {
-        reject(err);
-      }
-    });
+    req.on("end", () => resolve(Buffer.concat(chunks)));
     req.on("error", reject);
   });
 }
@@ -125,8 +182,10 @@ export async function startSetupServer(options: SetupServerOptions & { port?: nu
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  loadLocalEnv();
   const args = process.argv.slice(2);
-  const dev = args.includes("--dev");
+  // PowerShell drops the "--" in `npm run setup -- --dev`, so npm keeps the flag and exposes it as npm_config_dev.
+  const dev = args.includes("--dev") || process.env.npm_config_dev === "true";
   const portArg = args.find((a) => a.startsWith("--port="));
   const open = !args.includes("--no-open") && !process.env.CI;
   const { server, url } = await startSetupServer({ dev, open, port: portArg ? Number(portArg.split("=")[1]) : undefined });
@@ -134,6 +193,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   console.log(`\n  Open this link in your browser:  ${url}\n`);
   console.log(open ? "  (It should open by itself in a moment.)" : "");
   console.log("  Keep this window open while you work. Press Ctrl+C to stop.\n");
+  const sb = sendblueRuntime.env();
+  if (sb.apiKey || sb.publicBaseUrl) {
+    console.log(`  Real-phone messaging: Sendblue number ${sb.fromNumber ?? "(not set)"}`);
+    console.log(`  Incoming messages:    ${sb.publicBaseUrl ? `${sb.publicBaseUrl}${SENDBLUE_WEBHOOK_PATH}` : "(set PUBLIC_BASE_URL to receive replies)"}\n`);
+  }
   if (dev) console.log(`  Developer mode is on. Records folder: ${new PropertyWorkspace().root}\n  Static files: ${fileURLToPath(PUBLIC_DIR)}\n`);
   const stop = () => {
     console.log("\n  Tour Core setup stopped. Your work is saved.");

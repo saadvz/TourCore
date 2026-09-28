@@ -90,7 +90,8 @@ app's memory, and its records are saved after every step.
 Other commands:
 
 ```bash
-npm run setup -- --dev      # browser app plus internal ids, codes, adapter names, Durin calls and file paths
+npm run setup:dev           # browser app plus internal ids, codes, adapter names, Durin calls and file paths
+                            # (same as `npm run setup -- --dev`, which also works from PowerShell)
 npm run setup -- --no-open  # don't open the browser automatically
 npm run setup:cli           # the same setup in the terminal (development, scripting, quick debugging)
 npm run setup:cli -- --dev
@@ -99,6 +100,82 @@ npm run demo:auto           # same, without prompts
 npm test                    # vitest
 npm run typecheck           # tsc
 ```
+
+## Real phones with Sendblue
+
+With Sendblue connected, a visitor texts the property's Sendblue number from their own phone and runs the whole tour
+in their normal Messages app:
+
+- inquiry and unit facts;
+- tour times;
+- consent;
+- a personal identity-form link;
+- arrival, where early and on-time answers come from the real policy;
+- door access through Durin demo mode;
+- questions answered from approved facts only;
+- HELP and STOP;
+- the follow-up question.
+
+The operator watches it in the same **Active tour** live view and history.
+
+It is the same visitor engine as the browser phone. Only the transport differs: the browser phone gets button wording,
+and a messaging app gets typed-reply wording ("Reply YES or NO."). Practice tours and the browser visitor demo never
+text anyone.
+
+### Setup (development)
+
+1. **Create a Sendblue account.** The free sandbox is fine for testing.
+2. **Get API credentials.** In the Sendblue dashboard, create an API key and secret.
+3. **Find your Sendblue number.** On the free sandbox this is the shared sandbox line.
+4. **Set up the environment.** Copy `.env.example` to `.env` (git-ignored) and fill in `SENDBLUE_API_API_KEY`,
+   `SENDBLUE_API_API_SECRET` and `SENDBLUE_FROM_NUMBER` (`+1XXXXXXXXXX`).
+5. **Add a verified test contact** (sandbox only): `npm run sendblue:add-contact -- +1XXXXXXXXXX`, then text the
+   shared Sendblue number once from that phone. The sandbox is inbound-first: Sendblue won't deliver Tour Core's
+   messages to a number that hasn't messaged the line first.
+6. **Expose the local server over HTTPS.** Start `npm run setup` (port 4321 by default), then run any secure tunnel:
+   - `cloudflared tunnel --url http://localhost:4321`
+   - `ngrok http 4321`
+
+   Tour Core only cares about the resulting https address.
+7. **Set `PUBLIC_BASE_URL`** in `.env` to that https address. Tour Core serves `PUBLIC_BASE_URL/webhooks/sendblue` and
+   `PUBLIC_BASE_URL/verify/<token>` there, and nothing else: operator pages stay reachable only from this computer.
+8. **Register the webhook:** `npm run sendblue:configure`. This adds Tour Core's receive webhook, limited to your line.
+   If `SENDBLUE_WEBHOOK_SECRET` is empty, it creates one and saves it to `.env` without showing it. It never replaces
+   other webhooks. If this URL is already registered with a different secret, `-- --replace` re-registers only this
+   URL.
+9. **Run Tour Core.** Restart `npm run setup`. In the property's **Records and messages** step, choose **Sendblue**; it
+   should show Sendblue account, messaging number, incoming messages and identity-form link all connected. Then run
+   the readiness check.
+10. **Text the Sendblue number** "Hi" from the verified phone.
+
+Other developer commands (never part of `npm test`):
+
+```bash
+npm run sendblue:status                  # what's configured, lines, webhooks, sandbox contacts (no secrets shown)
+npm run sendblue:test -- --to +1XXXXXXXXXX   # manual: checks the connection, sends one real test message
+```
+
+**Free sandbox vs. production.**
+
+- **Free sandbox:** a shared line, verified contacts only (up to 10), and inbound-first. The tester must text the line
+  before Tour Core can reply. It's for development and testing only; the shared number is not a production sender.
+- **Production:** a dedicated Sendblue line for your AI agent, still inbound-first messaging. Only the environment
+  changes; Tour Core has no sandbox-specific logic.
+
+**Security and safety.**
+
+- **Webhook authenticity.** Every webhook is checked on its raw bytes before anything is parsed: the
+  `X-Sendblue-Signature` HMAC with a 5-minute replay window when present, otherwise the `sb-signing-secret` header.
+  Comparisons are constant-time.
+- **Duplicate deliveries.** Retried webhooks are de-duplicated by Sendblue's `message_handle`, so a retry never books,
+  consents, verifies, opens a door or replies twice.
+- **Duplicate sends.** Sends aren't retried automatically and are keyed by message id.
+- **Secrets.** Secrets live only in the environment and are never written to config, records or logs.
+- **Access.** Messaging never decides access. A failed send is recorded ("couldn't be delivered" in the live view) and
+  never changes a policy decision. A wrong door texted from a phone is refused before Durin is contacted.
+- **STOP, UNSUBSCRIBE, CANCEL, QUIT.** Tour Core stops messaging that person, ends any tour in progress (open doors
+  are switched off), alerts the team, and stays quiet until START.
+- **HELP.** Replies with who this is and how to reach the property team; during a tour it also alerts them.
 
 ## What "Publish for demo" means
 
@@ -213,7 +290,11 @@ src/storage/       store contract + in-memory store
 src/audit/, src/export/   audit formatting/CSV, validated export bundle
 src/createTourCore.ts     the only place config modes map to adapters
 src/setup/         setup engine: actions, commands, presenters, readiness, practice tour, save/publish
-src/visitor/       visitor demo session over the real engine + phone and live-view presenters
+src/visitor/       visitor session over the real engine (browser phone and real phones), typed-reply
+                   interpreter, messaging conversation router, identity-form links, phone/live presenters
+src/messaging/     provider-neutral messaging contract, channel-aware wording, ledger; sendblue/ holds the
+                   only Sendblue code (adapter, webhook verification, readiness, SDK boundary)
+src/tools/         developer tooling (npm run sendblue:*)
 src/web/           local server + API (server.ts, api.ts); pages in public/: app.js (setup), tours.js (history, live),
                    visitor.js (phone), ui.js (shared helpers). No build step.
 src/cli/           terminal wizard (npm run setup:cli)

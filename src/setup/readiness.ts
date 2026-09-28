@@ -3,7 +3,9 @@ import type { ConfigIssue, ConfigSection } from "../config/validateConfig";
 import { SimulatedClock } from "../core/clock";
 import { nextTourDay } from "../core/schedule";
 import { TourCore } from "../core/TourCore";
-import { createDurin, createMessenger, createStore, createVerificationProvider } from "../createTourCore";
+import { checkMessaging, createDurin, createStore, createVerificationProvider } from "../createTourCore";
+import { DemoMessagingAdapter } from "../messaging/Messenger";
+import type { MessagingCheck } from "../messaging/sendblue/readiness";
 
 export type ReadinessCheckId = "property" | "hours" | "routes" | "verification" | "messaging" | "storage" | "access" | "audit";
 
@@ -30,6 +32,8 @@ export interface ReadinessResult {
   passed: boolean;
   checkedAt: string;
   checks: ReadinessCheck[];
+  /** Step-by-step messaging connection checks (empty for demo messaging). */
+  messaging?: MessagingCheck[];
 }
 
 const LABELS: Record<ReadinessCheckId, string> = {
@@ -82,7 +86,10 @@ export async function runReadinessCheck(input: unknown, options: { now?: Date } 
   }
 
   await probe(fail, "verification", "verification", () => createVerificationProvider(config));
-  await probe(fail, "messaging", "services", () => createMessenger(config, () => {}));
+  const messagingChecks = await checkMessaging(config).catch(() => [
+    { id: "account" as const, label: "Visitor messaging", ok: false, code: "MESSAGING_CHECK_FAILED", message: "Couldn't check visitor messaging right now." },
+  ]);
+  for (const c of messagingChecks.filter((c) => !c.ok)) fail("messaging", { code: c.code ?? "MESSAGING_NOT_READY", message: c.message, section: "services" });
   await probe(fail, "storage", "services", async () => {
     const store = createStore(config);
     const record = { id: "readiness_probe", name: "Readiness probe", phone: "+10000000000", createdAt: now.toISOString() };
@@ -100,7 +107,7 @@ export async function runReadinessCheck(input: unknown, options: { now?: Date } 
         config: config as TourCoreConfig,
         clock,
         store: createStore(config),
-        messenger: createMessenger(config, () => {}),
+        messenger: new DemoMessagingAdapter(() => {}),
         verification: createVerificationProvider(config),
         durin: createDurin(config, clock, () => {}),
       });
@@ -110,7 +117,12 @@ export async function runReadinessCheck(input: unknown, options: { now?: Date } 
     fail("audit", { code: "SETUP_INCOMPLETE", message: "Tour records can be checked once the items above are fixed." });
   }
 
-  return finish(problems, now);
+  const result = finish(problems, now);
+  if (config.messagingMode === "sendblue") {
+    const messaging = result.checks.find((c) => c.id === "messaging")!;
+    messaging.label = messaging.ok ? "Visitor messaging connected" : "Visitor messaging";
+  }
+  return { ...result, messaging: messagingChecks };
 }
 
 async function probe(

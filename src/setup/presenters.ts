@@ -120,9 +120,21 @@ export const COMMON_TIME_ZONES = [
 ].map((id) => ({ id, label: `${friendlyTimeZone(id)} (${id.split("/").pop()!.replace(/_/g, " ")})` }));
 
 function servicesView(draft: SetupDraft) {
-  const demo = draft.storageMode === "memory" && draft.messagingMode === "console" && draft.accessMode === "durin-mock";
+  const demo = draft.storageMode === "memory" && draft.messagingMode === "demo" && draft.accessMode === "durin-mock";
+  const sendblue = draft.messagingMode === "sendblue";
   return {
     allDemo: demo,
+    messaging: {
+      mode: draft.messagingMode,
+      options: [
+        { mode: "demo" as const, title: "Demo messaging", explanation: "Messages to visitors appear on screen. Nothing is actually texted." },
+        {
+          mode: "sendblue" as const,
+          title: "Sendblue",
+          explanation: "Visitors text a real number from their own phone and get real replies. Needs Sendblue set up on this computer.",
+        },
+      ],
+    },
     items: [
       {
         title: draft.storageMode === "memory" ? "Demo records" : CHOICE_LABELS.storage[draft.storageMode],
@@ -130,9 +142,12 @@ function servicesView(draft: SetupDraft) {
         dev: { mode: draft.storageMode, adapter: "InMemoryStore" },
       },
       {
-        title: draft.messagingMode === "console" ? "Demo messaging" : CHOICE_LABELS.messaging[draft.messagingMode],
-        text: "Messages to visitors appear on screen. Nothing is actually texted.",
-        dev: { mode: draft.messagingMode, adapter: "ConsoleMessenger" },
+        title: sendblue ? "Sendblue messaging" : "Demo messaging",
+        text: sendblue
+          ? "Visitors text the property's Sendblue number and get real replies. Practice tours and the visitor demo still use demo messaging."
+          : "Messages to visitors appear on screen. Nothing is actually texted.",
+        demo: !sendblue,
+        dev: { mode: draft.messagingMode, adapter: sendblue ? "SendblueMessagingAdapter" : "DemoMessagingAdapter" },
       },
       {
         title: draft.accessMode === "durin-mock" ? "Durin demo mode" : CHOICE_LABELS.access[draft.accessMode],
@@ -342,11 +357,13 @@ const OUTCOME_LABELS: Record<TourRecord["outcome"], string> = {
   finished: "Finished",
 };
 
+const KIND_LABELS: Record<TourRecord["kind"], string> = { practice: "Practice tour", "visitor-demo": "Visitor demo", messaging: "Text message tour" };
+
 export function tourListView(records: TourRecord[], timeZone: string) {
   return records.map((r) => ({
     id: r.tourId,
     label: formatShortDateTime(new Date(r.ranAt), timeZone),
-    kindLabel: r.kind === "practice" ? "Practice tour" : "Visitor demo",
+    kindLabel: KIND_LABELS[r.kind],
     outcomeLabel: OUTCOME_LABELS[r.outcome],
     ok: r.outcome === "passed" || r.outcome === "finished" ? true : r.outcome === "stopped" ? false : null,
     visitorName: r.visitorName,
@@ -360,7 +377,7 @@ export function tourDetailView(record: TourRecord, bundle: ExportBundle, config:
   const tz = config.property.timezone;
   const timeline = describeHistory(bundle.auditEvents, { ...bundle, operatorName: config.operator.name }, tz);
   const conversation =
-    record.conversation?.map((m) => ({ from: m.from, text: m.text, time: formatTime(new Date(m.at), tz) })) ??
+    record.conversation?.map((m) => ({ from: m.from, text: m.text, time: formatTime(new Date(m.at), tz), ...(m.delivery ? { dev: m.delivery } : {}) })) ??
     bundle.messages
       .filter((m) => m.audience === "PROSPECT")
       .map((m) => ({ from: m.direction === "INBOUND" ? ("visitor" as const) : ("tourcore" as const), text: m.body, time: formatTime(new Date(m.at), tz) }));
@@ -368,7 +385,8 @@ export function tourDetailView(record: TourRecord, bundle: ExportBundle, config:
   const reservation = bundle.reservations[0];
   return {
     id: record.tourId,
-    title: record.kind === "practice" ? "Practice tour" : "Visitor demo",
+    title: KIND_LABELS[record.kind],
+    visitorPhone: record.kind === "messaging" ? record.visitorPhone : undefined,
     ranAtLabel: formatShortDateTime(new Date(record.ranAt), tz),
     outcomeLabel: OUTCOME_LABELS[record.outcome],
     ok: record.outcome === "passed" || record.outcome === "finished",

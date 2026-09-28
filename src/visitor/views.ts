@@ -35,7 +35,7 @@ export async function visitorView(session: VisitorDemoSession) {
       for (const u of config.units) choices.push({ label: u.name, action: "chooseUnit", input: { unitId: u.id }, hint: u.summary || undefined });
       break;
     case "choose-time":
-      for (const slot of (await session.core.availableSlots()).slice(0, 6)) {
+      for (const slot of session.offeredSlots) {
         choices.push({ label: `${formatDay(slot.start, tz)} \u00b7 ${slot.label}`, action: "chooseTime", input: { slotStart: slot.start.toISOString() } });
       }
       break;
@@ -97,6 +97,8 @@ export async function visitorView(session: VisitorDemoSession) {
   };
 }
 
+const CHANNEL_LABELS: Record<string, string | undefined> = { IMESSAGE: "iMessage", SMS: "SMS", RCS: "RCS", WEB: undefined, DEMO: undefined, UNKNOWN: undefined };
+
 const STATUS_LABELS: Record<ReservationStatus, string> = {
   INQUIRY: "Choosing a time",
   RESERVED: "Booked",
@@ -140,11 +142,23 @@ export async function liveTourView(session: VisitorDemoSession) {
   else if (r) currentStep = STATUS_LABELS[r.status];
 
   const followUp = audit.find((e) => e.type === "FOLLOW_UP_RESPONSE");
+  const messages = await session.store.list("messages");
+  const lastInbound = [...messages].reverse().find((m) => m.direction === "INBOUND" && m.deliveryChannel);
+  const failed = messages.filter((m) => m.audience === "PROSPECT" && m.deliveryStatus === "FAILED").length;
+  const name = await session.visitorName();
   return {
     sessionId: session.id,
     tourId: session.tourId,
     active: stage !== "done" && stage !== "stopped",
-    visitorName: session.visitor?.name ?? "A visitor (not started yet)",
+    /** A booked tour the operator can move ("Change tour time"). */
+    canReschedule: !!r?.slotStart && ["AWAITING_CONSENT", "AWAITING_VERIFICATION", "READY", "TOURING"].includes(r.status),
+    source: session.kind === "messaging" ? "Real phone" : "Visitor demo",
+    visitorName: name ?? (session.visitor ? "A visitor (name not given yet)" : "A visitor (not started yet)"),
+    visitorPhone: session.kind === "messaging" ? session.visitor?.phone : undefined,
+    channel: lastInbound ? CHANNEL_LABELS[lastInbound.deliveryChannel!] : undefined,
+    optedOut: session.optedOut,
+    messageProblems: failed ? `${failed === 1 ? "1 message" : `${failed} messages`} couldn't be delivered to the visitor.` : undefined,
+    recentMessages: session.conversation.slice(-6).map((m) => ({ from: m.from, text: m.text, time: formatTime(new Date(m.at), tz) })),
     unitName: unit?.name,
     tourTime: r?.slotStart
       ? `${formatDay(new Date(r.slotStart), tz)}, ${formatTime(new Date(r.slotStart), tz)}\u2013${formatTime(new Date(r.windowEnd!), tz)}`

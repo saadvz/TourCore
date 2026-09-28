@@ -145,6 +145,13 @@ summary { cursor: pointer; color: var(--accent); font-weight: 500; }
 .demo-controls { border: 1px dashed #d8b75a; border-radius: 10px; padding: 6px 10px; margin: 0; background: #fffaf0; }
 .demo-control { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
 
+.verify-page { height: auto; }
+.phone-body { padding: 20px; }
+.phone-body form { display: flex; flex-direction: column; gap: 4px; }
+.phone-body form button { margin-top: 14px; }
+.status-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.channel-chip { font-size: 0.8rem; background: #eef2f8; border-radius: 999px; padding: 2px 8px; margin-left: 6px; }
+
 @media (max-width: 560px) {
   .phone { border-radius: 0; margin: 0; height: calc(100vh - 30px); border: none; }
   main { padding: 16px 12px 60px; }

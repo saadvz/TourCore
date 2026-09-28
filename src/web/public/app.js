@@ -804,11 +804,41 @@ function verificationStep(data) {
 
 // Records and messages -------------------------------------------------------
 
+/** Plain-language connection status for real messaging; account details never reach the browser. */
+function messagingStatus(id) {
+  const box = el("div", { class: "card" }, el("p", { class: "muted" }, "Checking visitor messaging..."));
+  api("GET", `/api/properties/${enc(id)}/messaging`)
+    .then((s) =>
+      set(
+        box,
+        el("h3", {}, "Visitor messaging"),
+        s.checks.map((c) => el("div", { class: "status-row" }, mark(c.ok), el("span", {}, c.message, devChip(c.dev?.code)))),
+        s.connected
+          ? el("p", { class: "muted" }, "Visitors can text the property's number now.")
+          : el("p", { class: "hint" }, "Sendblue is set up by whoever runs this computer (see \"Real phones with Sendblue\" in the README). Nothing needs to be typed here."),
+        btn("Check again", () => rerender(), "small"),
+      ),
+    )
+    .catch((e) => set(box, el("p", { class: "form-error" }, e.message)));
+  return box;
+}
+
 function servicesStep(data) {
   const { view, summary } = data;
   const id = summary.id;
   const alertName = input({ value: view.operator.name });
   const errors = errorBox();
+  let mode = view.services.messaging.mode;
+  const choices = view.services.messaging.options.map((o) => {
+    const radio = el("input", { type: "radio", name: "messaging", value: o.mode, checked: o.mode === mode });
+    const node = el("label", { class: `choice ${o.mode === mode ? "selected" : ""}` }, radio, el("div", {}, el("strong", {}, o.title), el("p", { class: "muted" }, o.explanation)));
+    radio.addEventListener("change", async () => {
+      mode = o.mode;
+      await command(id, "setServices", { messagingMode: mode });
+      rerender();
+    });
+    return node;
+  });
   const save = action(async () => {
     await command(id, "setAlertContact", { name: alertName.value });
     go(`${base(id)}/review`);
@@ -820,8 +850,14 @@ function servicesStep(data) {
       "div",
       {},
       el("h1", {}, "Records, messages and doors"),
-      el("p", { class: "lead" }, "For now everything runs as a safe demo. Real texting, record storage and door access come later."),
-      view.services.items.map((s) => el("div", { class: "card" }, el("h3", {}, s.title, " ", el("span", { class: "badge demo" }, "Demo")), el("p", { class: "muted" }, s.text), devBlock(s.dev))),
+      el("p", { class: "lead" }, "Records and door access run as a safe demo. Messages can go to real phones through Sendblue."),
+      el("h2", {}, "How should visitors get messages?"),
+      choices,
+      mode === "sendblue" ? messagingStatus(id) : null,
+      el("h2", {}, "Everything else"),
+      view.services.items.map((s) =>
+        el("div", { class: "card" }, el("h3", {}, s.title, " ", s.demo === false ? null : el("span", { class: "badge demo" }, "Demo")), el("p", { class: "muted" }, s.text), devBlock(s.dev)),
+      ),
       el("div", { class: "card" }, field("Who should we alert if a visitor needs help?", alertName, "For example, your leasing team or your own name."), errors.node),
     ),
     save,

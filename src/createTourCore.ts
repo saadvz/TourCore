@@ -3,7 +3,11 @@ import { systemClock, type Clock } from "./core/clock";
 import { TourCore, type TourCoreDeps } from "./core/TourCore";
 import type { DurinAccessAdapter } from "./durin/DurinAccessAdapter";
 import { MockDurinAccessAdapter } from "./durin/MockDurinAccessAdapter";
-import { ConsoleMessenger, type Messenger } from "./messaging/Messenger";
+import { DemoMessagingAdapter, type Messenger } from "./messaging/Messenger";
+import type { MessagingLedger } from "./messaging/ledger";
+import { SendblueMessagingAdapter } from "./messaging/sendblue/adapter";
+import { checkSendblue, type MessagingCheck } from "./messaging/sendblue/readiness";
+import { sendblueRuntime } from "./messaging/sendblue/runtime";
 import { InMemoryStore, type TourCoreStore } from "./storage/Store";
 import { BasicFormVerification, PracticeVerification, type VerificationProvider } from "./verification/basicForm";
 
@@ -26,9 +30,24 @@ export function createStore(config: TourCoreConfig): TourCoreStore {
   throw new UnavailableModeError("STORAGE_UNAVAILABLE", "Keeping records in Google Drive isn't available yet. Choose \"On this computer\" for now.");
 }
 
-export function createMessenger(config: TourCoreConfig, log?: Log): Messenger {
-  if (config.messagingMode === "console") return new ConsoleMessenger(log);
-  throw new UnavailableModeError("MESSAGING_UNAVAILABLE", "Sending real text messages isn't available yet. Choose demo messaging for now.");
+export function createMessenger(config: TourCoreConfig, log?: Log, options: { ledger?: MessagingLedger } = {}): Messenger {
+  if (config.messagingMode === "demo") return new DemoMessagingAdapter(log);
+  return createLiveMessagingTransport(options.ledger);
+}
+
+/** The real-phone transport (Sendblue today), created from the environment when the first message needs it. */
+export function createLiveMessagingTransport(ledger?: MessagingLedger): SendblueMessagingAdapter {
+  const env = sendblueRuntime.env();
+  if (!env.apiKey || !env.apiSecret || !env.fromNumber) {
+    throw new UnavailableModeError("SENDBLUE_NOT_CONFIGURED", "Visitor messaging isn't connected yet: Sendblue isn't set up on this computer.");
+  }
+  return new SendblueMessagingAdapter({ client: sendblueRuntime.client(env), fromNumber: env.fromNumber, ledger });
+}
+
+/** Whether the chosen messaging can reach visitors, as plain-language checks. Demo messaging always can. */
+export async function checkMessaging(config: TourCoreConfig): Promise<MessagingCheck[]> {
+  if (config.messagingMode === "demo") return [];
+  return checkSendblue();
 }
 
 export function createVerificationProvider(config: TourCoreConfig): VerificationProvider {

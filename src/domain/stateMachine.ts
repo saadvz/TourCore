@@ -6,7 +6,8 @@ const HAPPY_PATH: Partial<Record<ReservationStatus, ReservationStatus[]>> = {
   AWAITING_CONSENT: ["AWAITING_VERIFICATION", "READY"],
   AWAITING_VERIFICATION: ["READY", "VERIFICATION_FAILED"],
   READY: ["TOURING", "EXPIRED"],
-  TOURING: ["COMPLETED", "EXPIRED"],
+  // TOURING -> READY only when a tour is rescheduled: its doors are switched off and it waits for the new time.
+  TOURING: ["COMPLETED", "EXPIRED", "READY"],
 };
 
 /** Statuses where a booked tour is still live and can be interrupted. */

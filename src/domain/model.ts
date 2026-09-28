@@ -27,7 +27,12 @@ export const ProspectSchema = z.object({
   name: z.string(),
   phone: z.string(),
   createdAt: IsoDate,
+  /** The visitor asked Tour Core to stop messaging them (STOP, UNSUBSCRIBE, ...). */
+  messagingOptedOut: z.boolean().optional(),
 });
+
+/** Name used until a visitor who started by text tells us who they are. */
+export const UNNAMED_VISITOR = "Visitor";
 
 export const ReservationSchema = z.object({
   id: z.string(),
@@ -98,6 +103,13 @@ export const MessageSchema = z.object({
   prospectId: z.string().optional(),
   reservationId: z.string().optional(),
   at: IsoDate,
+  /** Delivery details reported by the messaging adapter (never credentials). */
+  provider: z.string().optional(),
+  providerMessageId: z.string().optional(),
+  deliveryChannel: z.enum(["IMESSAGE", "SMS", "RCS", "WEB", "DEMO", "UNKNOWN"]).optional(),
+  deliveryStatus: z.enum(["QUEUED", "SENT", "DELIVERED", "FAILED", "SUPPRESSED", "SKIPPED", "RECEIVED"]).optional(),
+  deliveryError: z.string().optional(),
+  correlationId: z.string().optional(),
 });
 
 export const AuditEventTypeSchema = z.enum([
@@ -129,6 +141,10 @@ export const AuditEventTypeSchema = z.enum([
   "QUESTION_UNANSWERED",
   "HELP_REQUESTED",
   "FOLLOW_UP_RESPONSE",
+  "MESSAGING_OPTED_OUT",
+  "MESSAGING_OPTED_IN",
+  "MESSAGE_FAILED",
+  "RESERVATION_RESCHEDULED",
 ]);
 export type AuditEventType = z.infer<typeof AuditEventTypeSchema>;
 

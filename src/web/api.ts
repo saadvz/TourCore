@@ -24,6 +24,12 @@ import {
   VisitorDemoSession,
   visitorView,
 } from "./setupFacade";
+import { z } from "zod";
+import { checkMessaging } from "../createTourCore";
+import { TourCoreError } from "../core/TourCore";
+import { zonedParts, zonedTimeToUtc } from "../core/timezone";
+import { toE164 } from "../messaging/Messenger";
+import type { VerificationLinks } from "../visitor/verificationLinks";
 
 /**
  * The browser's API for both the operator and the visitor phone. Every
@@ -36,9 +42,23 @@ import {
 export interface ApiContext {
   workspace: PropertyWorkspace;
   visitors?: VisitorDemoRegistry;
+  links?: VerificationLinks;
   dev: boolean;
   now?: () => Date;
 }
+
+const IdentityForm = z.object({
+  firstName: z.string().trim().min(1, "Please enter your first name.").max(80),
+  lastName: z.string().trim().min(1, "Please enter your last name.").max(80),
+  email: z.email("Please enter a valid email address.").max(200),
+  phone: z.string().trim().min(7, "Please enter your phone number.").max(30),
+});
+
+const LINK_PROBLEMS = {
+  unknown: "This link isn't valid. Text the property to get a new one.",
+  expired: "This link has expired. Text the property and I'll send a new one.",
+  used: "This form has already been completed. Check your messages for your tour details.",
+} as const;
 
 export type ApiResult =
   | { status: number; json: unknown }
@@ -60,6 +80,7 @@ export async function handleApi(ctx: ApiContext, method: string, path: string, b
     return "download" in result ? result : { status: result.status, json: ctx.dev ? result.json : stripDev(result.json) };
   } catch (err) {
     if (err instanceof SetupInputError) return errorResult(ctx, 400, err.code, err.message);
+    if (err instanceof TourCoreError) return errorResult(ctx, 400, err.code, err.message);
     if (err instanceof ApiError) return errorResult(ctx, err.status, err.code, err.message);
     return errorResult(ctx, 500, "INTERNAL", "Something went wrong. Your saved setup is safe.", err);
   }
@@ -87,12 +108,78 @@ async function route(ctx: ApiContext, method: string, path: string, body: Record
     return ok({ timezone: guess.timezone, label: friendlyZone(guess.timezone), basis: guess.basis });
   }
 
+  // ------------------------------------------ identity form for real phones
+
+  if (parts[0] === "verify" && parts[1]) {
+    const links = ctx.links;
+    const check = links?.check(parts[1]) ?? ({ ok: false, reason: "unknown" } as const);
+    if (!check.ok) return { status: 410, json: { ok: false, message: LINK_PROBLEMS[check.reason] } };
+    const session = visitors.find(check.entry.sessionId);
+    if (!session) return { status: 410, json: { ok: false, message: LINK_PROBLEMS.unknown } };
+    if (method === "GET") {
+      const minutes = Math.max(1, Math.round((check.entry.expiresAt - (ctx.now?.() ?? new Date()).getTime()) / 60_000));
+      return ok({ ok: true, property: session.config.property.name, expiresInMinutes: minutes });
+    }
+    if (method === "POST") {
+      const form = IdentityForm.safeParse(body);
+      if (!form.success) return { status: 400, json: { ok: false, message: form.error.issues[0]?.message ?? "Please check the form." } };
+      if (toE164(form.data.phone) !== check.entry.phone) {
+        return { status: 400, json: { ok: false, message: "That phone number doesn't match the one you're texting from. Please use the same number." } };
+      }
+      if ((await session.stage()) !== "identity" || session.reservationId !== check.entry.reservationId) {
+        links!.markUsed(parts[1]);
+        return { status: 410, json: { ok: false, message: LINK_PROBLEMS.used } };
+      }
+      links!.markUsed(parts[1]);
+      await session.act("submitIdentity", form.data, { text: "Submitted the identity form." });
+      const { record, bundle } = await session.record();
+      ws.recordVisitorDemo(session.propertyId, record, bundle);
+      const passed = (await session.stage()) === "ready";
+      return ok({
+        ok: passed,
+        message: passed ? "Thanks, you're all set! Check your messages for your tour details." : "Thanks. We couldn't confirm your details, so the property team will reach out.",
+      });
+    }
+  }
+
   // --------------------------------------------------------- visitor phone
 
   if (parts[0] === "visitor-demos" && parts[1]) {
     const session = visitors.get(parts[1]);
     if (method === "GET" && !parts[2]) return ok({ visitor: await visitorView(session) });
     if (method === "GET" && parts[2] === "live") return ok({ live: await liveTourView(session) });
+    if (method === "GET" && parts[2] === "times") {
+      const tz = session.config.property.timezone;
+      const times = (await session.rescheduleOptions()).map((s) => ({ startsAt: s.start.toISOString(), label: `${formatDay(s.start, tz)}, ${s.label}` }));
+      if (!ctx.dev) return ok({ times });
+      const p = zonedParts(session.clock.now(), tz);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      return ok({ times, anyTime: { now: `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}` } });
+    }
+    const saveAndShowLive = async () => {
+      const { record, bundle } = await session.record();
+      ws.recordVisitorDemo(session.propertyId, record, bundle);
+      return ok({ live: await liveTourView(session) });
+    };
+    if (method === "POST" && parts[2] === "reschedule") {
+      if (body.localTime === undefined) await session.reschedule(String(body.startsAt ?? ""));
+      else {
+        // Developer mode only: any wall-clock time at the property, outside tour hours included.
+        if (!ctx.dev) throw new ApiError(404, "NOT_FOUND", "That page doesn't exist.");
+        const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(String(body.localTime));
+        if (!m) throw new ApiError(400, "INVALID_TIME", "Pick a date and time.");
+        const [year, month, day, hour, minute] = m.slice(1).map(Number) as [number, number, number, number, number];
+        const start = zonedTimeToUtc({ year, month, day, hour, minute }, session.config.property.timezone);
+        await session.reschedule(start.toISOString(), { outsideTourHours: true });
+      }
+      return saveAndShowLive();
+    }
+    // Developer mode only: never available to a normal operator.
+    if (method === "POST" && parts[2] === "move-to-now") {
+      if (!ctx.dev) throw new ApiError(404, "NOT_FOUND", "That page doesn't exist.");
+      await session.moveTourToNow();
+      return saveAndShowLive();
+    }
     if (method === "POST" && parts[2] === "actions" && parts[3]) {
       await session.act(parts[3], body.input);
       const { record, bundle } = await session.record();
@@ -179,6 +266,16 @@ async function route(ctx: ApiContext, method: string, path: string, body: Record
       published: false,
       blockers: result.blockers.map((b) => ({ message: b.message, next: nextStepFor(b.code), dev: { code: b.code } })),
       summary: await summaryFor(ctx, id),
+    });
+  }
+
+  if (method === "GET" && action === "messaging") {
+    const { draft } = ws.openDraft(id);
+    const checks = await checkMessaging(draft);
+    return ok({
+      mode: draft.messagingMode,
+      connected: checks.every((c) => c.ok),
+      checks: checks.map((c) => ({ label: c.label, ok: c.ok, message: c.message, dev: { code: c.code } })),
     });
   }
 

@@ -3,9 +3,9 @@ import type { Prospect } from "../domain/model";
 import { normalizePhone } from "../core/phone";
 
 /**
- * Shape of one completed "basic identity" form response. The demo simulates
- * it; the next iteration maps a real Google Form response onto this schema.
- * It records who the visitor says they are. It does not prove identity.
+ * Shape of one completed "basic identity" form response. The browser demo
+ * and the tokenized phone form both produce this. It records who the visitor
+ * says they are; it does not prove identity.
  */
 export const BasicFormResponseSchema = z.object({
   responseId: z.string().min(1),
@@ -27,8 +27,10 @@ export interface VerificationProvider {
   readonly method: "basic-form" | "mock";
   /** True when no visitor action is needed; Tour Core completes the check itself. */
   readonly automatic: boolean;
-  /** What the visitor is told when the check is requested. */
-  requestText(prospect: Prospect): string;
+  /** What the visitor is told when the check is requested, and whether a form follows. */
+  request(prospect: Prospect): { body: string; form: boolean };
+  /** A fallback link when no personal link can be issued (older demos). */
+  defaultLink?(prospect: Prospect): string;
   evaluate(submission: unknown, prospect: Prospect): VerificationOutcome;
 }
 
@@ -37,12 +39,12 @@ export class BasicFormVerification implements VerificationProvider {
   readonly automatic = false;
   constructor(private readonly formUrl: string) {}
 
-  linkFor(prospect: Prospect): string {
+  defaultLink(prospect: Prospect): string {
     return `${this.formUrl}?ref=${encodeURIComponent(prospect.id)}`;
   }
 
-  requestText(prospect: Prospect): string {
-    return `Thanks! One last step before your tour: please fill out this short form with your legal name, email and phone.\n${this.linkFor(prospect)}`;
+  request(): { body: string; form: boolean } {
+    return { body: "Thanks! One last step before your tour: please fill out this short form with your legal name, email and phone.", form: true };
   }
 
   evaluate(submission: unknown, prospect: Prospect): VerificationOutcome {
@@ -74,8 +76,8 @@ export class PracticeVerification implements VerificationProvider {
   readonly method = "mock" as const;
   readonly automatic = true;
 
-  requestText(): string {
-    return "Thanks! This is a practice setup, so there's no ID step. You're checked in automatically.";
+  request(): { body: string; form: boolean } {
+    return { body: "Thanks! This is a practice setup, so there's no ID step. You're checked in automatically.", form: false };
   }
 
   evaluate(_submission: unknown, prospect: Prospect): VerificationOutcome {

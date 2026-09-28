@@ -1,0 +1,136 @@
+import { describe, expect, it } from "vitest";
+import { loadConfig } from "../src/config/tourCoreConfig";
+import { zonedTimeToUtc } from "../src/core/timezone";
+import { DemoMessagingAdapter } from "../src/messaging/Messenger";
+import { withPrompt } from "../src/messaging/presentation";
+import { handleVisitorText, keywordOf } from "../src/visitor/conversation";
+import { VisitorDemoSession, visitorView } from "../src/visitor";
+import { VerificationLinks } from "../src/visitor/verificationLinks";
+
+const MONDAY_7AM = zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour: 7, minute: 0 }, "America/New_York").getTime();
+const PHONE = "+15550102000";
+
+function phoneSession(links?: VerificationLinks) {
+  const sent: string[] = [];
+  const transport = new DemoMessagingAdapter((line) => sent.push(line), "MESSAGING");
+  const session = new VisitorDemoSession("prop_100_alfred_way", loadConfig(), "t", { realNow: () => MONDAY_7AM, transport, kind: "messaging", verificationLinks: links });
+  const say = (text: string) => handleVisitorText(session, PHONE, text, { provider: "test", providerMessageId: `m_${Math.random()}` });
+  const lastReply = () => [...session.conversation].reverse().find((m) => m.from === "tourcore")!.text;
+  return { session, say, lastReply };
+}
+
+describe("channel-aware wording", () => {
+  it("states the same intent as buttons on the web and as typed replies on a phone", () => {
+    expect(withPrompt("Is it OK?", { kind: "yes-no" }, "WEB")).toBe("Is it OK?");
+    expect(withPrompt("Is it OK?", { kind: "yes-no" }, "MESSAGING")).toBe("Is it OK?\nReply YES or NO.");
+    expect(withPrompt("Which unit?", { kind: "choose", options: ["Unit 101", "Unit 102"], what: "a unit" }, "MESSAGING")).toBe("Which unit?\nReply 1 for Unit 101 or 2 for Unit 102.");
+    expect(withPrompt("Which unit?", { kind: "choose", options: ["Unit 101", "Unit 102"], what: "a unit" }, "WEB")).toBe("Which unit?\nPick a unit below.");
+    expect(withPrompt("Fill this in.", { kind: "form", link: "https://x/verify/abc" }, "MESSAGING")).toBe("Fill this in.\nhttps://x/verify/abc");
+  });
+
+  it("the browser phone gets button wording from the same engine step", async () => {
+    const web = new VisitorDemoSession("prop_100_alfred_way", loadConfig(), "w", { realNow: () => MONDAY_7AM });
+    await web.act("begin", { name: "Pat Smith", phone: PHONE });
+    await web.act("chooseUnit", { unitId: "apt_101" });
+    await web.act("chooseTime", (await visitorView(web)).choices[0]!.input);
+    const webConsent = [...web.conversation].reverse().find((m) => m.from === "tourcore")!.text;
+    expect(webConsent).toContain("Is it OK if I text you about this tour");
+    expect(webConsent).not.toContain("Reply YES or NO");
+
+    const { say, lastReply } = phoneSession();
+    await say("hi");
+    await say("1");
+    await say("2:00 pm");
+    expect(lastReply()).toMatch(/Is it OK if I text you about this tour.*\nReply YES or NO\.$/s);
+  });
+});
+
+describe("identity form links", () => {
+  it("are random, carry no personal data, and a new link retires the old one", () => {
+    const links = new VerificationLinks({ baseUrl: () => "https://tour.example", now: () => MONDAY_7AM });
+    const first = links.issue({ sessionId: "s1", reservationId: "r1", phone: PHONE })!;
+    const second = links.issue({ sessionId: "s1", reservationId: "r1", phone: PHONE })!;
+    expect(first).toMatch(/^https:\/\/tour\.example\/verify\/[A-Za-z0-9_-]{24}$/);
+    expect(first).not.toContain("5550102000");
+    expect(links.check(first.split("/").pop()!)).toEqual({ ok: false, reason: "unknown" });
+    expect(links.check(second.split("/").pop()!)).toMatchObject({ ok: true, entry: { reservationId: "r1", phone: PHONE } });
+  });
+
+  it("expire, work once, and can't be issued without a public address", () => {
+    let now = MONDAY_7AM;
+    const links = new VerificationLinks({ baseUrl: () => "https://tour.example", ttlMinutes: 30, now: () => now });
+    const token = links.issue({ sessionId: "s1", reservationId: "r1", phone: PHONE })!.split("/").pop()!;
+    now += 31 * 60_000;
+    expect(links.check(token)).toEqual({ ok: false, reason: "expired" });
+
+    const fresh = links.issue({ sessionId: "s1", reservationId: "r1", phone: PHONE })!.split("/").pop()!;
+    links.markUsed(fresh);
+    expect(links.check(fresh)).toEqual({ ok: false, reason: "used" });
+    expect(new VerificationLinks({ baseUrl: () => undefined }).issue({ sessionId: "s", reservationId: "r", phone: PHONE })).toBeUndefined();
+  });
+
+  it("the phone conversation sends the personal link and continues after the form", async () => {
+    const links = new VerificationLinks({ baseUrl: () => "https://tour.example", now: () => MONDAY_7AM });
+    const { session, say, lastReply } = phoneSession(links);
+    await say("hi");
+    await say("1");
+    await say("1");
+    await say("yes");
+    const token = lastReply().match(/\/verify\/([A-Za-z0-9_-]+)$/)![1]!;
+    expect(links.check(token)).toMatchObject({ ok: true, entry: { sessionId: session.id } });
+
+    await say("where's the form?");
+    expect(lastReply()).toContain("Here's your identity form link again.");
+    expect(links.check(token)).toEqual({ ok: false, reason: "unknown" });
+
+    await session.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: PHONE }, { text: "Submitted the identity form." });
+    expect(await session.stage()).toBe("ready");
+    expect(lastReply()).toContain('Text "I\'m here" when you arrive');
+    expect(await session.visitorName()).toBe("Pat Smith");
+  });
+});
+
+describe("typed replies", () => {
+  it("recognizes messaging keywords only as whole messages", () => {
+    expect(["STOP", "unsubscribe", "Cancel", "quit."].map(keywordOf)).toEqual(["stop", "stop", "stop", "stop"]);
+    expect(keywordOf("START")).toBe("start");
+    expect(keywordOf("HELP")).toBe("help");
+    expect(keywordOf("please don't stop")).toBeUndefined();
+  });
+
+  it("HELP says who this is and how to reach the team; during a tour it also alerts them", async () => {
+    const { session, say, lastReply } = phoneSession();
+    await say("HELP");
+    expect(lastReply()).toBe("This is the self-tour assistant for 100 Alfred Way. For help, contact the leasing team at +15550100000. Reply STOP to stop messages.");
+
+    await say("1");
+    await say("1");
+    await say("yes");
+    await session.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: PHONE });
+    await say("help");
+    expect((await session.store.listAudit()).some((e) => e.type === "HELP_REQUESTED")).toBe(true);
+  });
+
+  it("asks again, with the options, when it doesn't understand", async () => {
+    const { say, lastReply } = phoneSession();
+    await say("hi");
+    await say("the blue one");
+    expect(lastReply()).toBe("Sorry, I didn't catch that. Which unit would you like to see?\nReply 1 for Unit 101 or 2 for Unit 102.");
+  });
+
+  it("a texted wrong door is refused by policy without contacting Durin", async () => {
+    const { session, say, lastReply } = phoneSession();
+    await say("hi");
+    await say("1");
+    await say("1");
+    await say("yes");
+    await session.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: PHONE });
+    session.clock.jumpTo(new Date(zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour: 13, minute: 58 }, "America/New_York")));
+    await say("I'm here");
+    const before = session.durin.requestCount;
+    await say("I'm at unit 102");
+    expect(session.lastAccess).toMatchObject({ doorId: "unit_102", allowed: false, code: "DENY_WRONG_ROUTE", durinCalled: false });
+    expect(session.durin.requestCount).toBe(before);
+    expect(lastReply()).toContain("That door isn't part of your tour");
+  });
+});

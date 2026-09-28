@@ -76,7 +76,7 @@ export const SETUP_COMMANDS = {
   ),
   setServices: command(
     z.object({
-      messagingMode: z.enum(["console", "bland"]).optional(),
+      messagingMode: z.enum(["demo", "sendblue"]).optional(),
       storageMode: z.enum(["memory", "google-drive"]).optional(),
       accessMode: z.enum(["durin-mock", "durin"]).optional(),
     }),

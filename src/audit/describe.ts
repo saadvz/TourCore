@@ -108,6 +108,8 @@ function sentence(
       return blocked(`The door system had a problem during ${c.name}'s tour, so the tour was paused.`);
     case "OPERATOR_NOTIFIED":
       return info(`${c.team} was alerted: ${e.detail}`);
+    case "RESERVATION_RESCHEDULED":
+      return info(`${c.name}'s tour was moved ${e.detail.split(";")[0]}.`);
     case "QUESTION_ANSWERED":
       return good(`${c.name} asked "${e.detail}" and got an answer from your approved facts.`);
     case "QUESTION_UNANSWERED":

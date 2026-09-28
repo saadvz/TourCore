@@ -74,7 +74,8 @@ export const TourCoreConfigShape = z.object({
   verificationFormUrl: z.url().optional(),
   /** How long a passed check can be reused for repeat tours. */
   verificationValidForDays: z.number().int(),
-  messagingMode: z.enum(["console", "bland"]),
+  /** "demo" prints messages; "sendblue" texts real phones. Credentials never live in config. */
+  messagingMode: z.preprocess((v) => (v === "console" ? "demo" : v), z.enum(["demo", "sendblue"])),
   storageMode: z.enum(["memory", "google-drive"]),
   accessMode: z.enum(["durin-mock", "durin"]),
 });

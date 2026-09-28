@@ -42,7 +42,8 @@ import { InputClosedError, Prompter, style } from "./prompter";
  * live in src/setup; this file only asks questions and prints answers.
  */
 
-const DEV = process.argv.includes("--dev");
+// PowerShell drops the "--" in `npm run setup:cli -- --dev`, so npm keeps the flag and exposes it as npm_config_dev.
+const DEV = process.argv.includes("--dev") || process.env.npm_config_dev === "true";
 const io = new Prompter();
 const workspace = new PropertyWorkspace();
 const { bold, dim, green, red, cyan, yellow } = style;
@@ -302,7 +303,8 @@ async function editServices(draft: SetupDraft): Promise<SetupDraft> {
   ]);
   io.say("");
   const messagingMode = await io.choose("How should messages be sent?", [
-    { label: "Demo messaging", hint: "texts show up on this screen instead of on phones", value: "console" as const },
+    { label: "Demo messaging", hint: "texts show up on this screen instead of on phones", value: "demo" as const },
+    { label: "Sendblue", hint: "real texts and iMessages. Needs Sendblue set up on this computer (see the README)", value: "sendblue" as const },
   ]);
   io.say("");
   const accessMode = await io.choose("How should doors be opened?", [

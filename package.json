@@ -7,14 +7,20 @@
   "type": "module",
   "scripts": {
     "setup": "tsx src/web/server.ts",
+    "setup:dev": "tsx src/web/server.ts --dev",
     "setup:web": "tsx src/web/server.ts",
     "setup:cli": "tsx src/cli/setup.ts",
+    "sendblue:status": "tsx src/tools/sendblue.ts status",
+    "sendblue:configure": "tsx src/tools/sendblue.ts configure",
+    "sendblue:add-contact": "tsx src/tools/sendblue.ts add-contact",
+    "sendblue:test": "tsx src/tools/sendblue.ts test",
     "demo": "tsx src/demo/run.ts",
     "demo:auto": "tsx src/demo/run.ts --auto",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "sendblue": "^3.17.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {

@@ -44,18 +44,24 @@ export interface ConversationItem {
   from: "tourcore" | "visitor" | "demo";
   text: string;
   at: string;
+  /** The stored message this item shows, when there is one. */
+  messageId?: string;
+  /** Provider-neutral delivery details (never credentials). */
+  delivery?: { provider?: string; channel?: string; status?: string; providerMessageId?: string };
 }
 
 /** One practice tour or visitor demo, kept so the operator can reopen it later. */
 export interface TourRecord {
   schemaVersion: 1;
   tourId: string;
-  kind: "practice" | "visitor-demo";
+  /** practice = simulated tour; visitor-demo = browser phone; messaging = a real phone over a messaging provider. */
+  kind: "practice" | "visitor-demo" | "messaging";
   ranAt: string;
   updatedAt: string;
   outcome: "passed" | "stopped" | "in-progress" | "finished";
   unitId?: string;
   visitorName?: string;
+  visitorPhone?: string;
   checks?: DryTourCheck[];
   failure?: string;
   /** The visitor-facing thread as shown, including demo notes (visitor demos). */
@@ -320,9 +326,9 @@ export class PropertyWorkspace {
     return this.exportTour(propertyId);
   }
 
-  /** Folder name for a new visitor demo's records. */
-  newVisitorTourId(propertyId: string, startedAt: Date): string {
-    return uniqueTourId(this.toursDir(propertyId), `${stamp(startedAt.toISOString())}_visitor`);
+  /** Folder name for a new visitor conversation's records ("visitor" = browser phone, "text" = real phone). */
+  newVisitorTourId(propertyId: string, startedAt: Date, suffix: "visitor" | "text" = "visitor"): string {
+    return uniqueTourId(this.toursDir(propertyId), `${stamp(startedAt.toISOString())}_${suffix}`);
   }
 
   private readRecord(propertyId: string, tourId: string): TourRecord {

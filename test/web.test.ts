@@ -182,6 +182,36 @@ describe("browser setup", () => {
     expect(detail.conversation.some((m: { from: string; text: string }) => m.from === "visitor" && m.text === "I'm here.")).toBe(true);
   });
 
+  it("lets the operator change a booked visitor's tour time; 'move to now' exists only in developer mode", async () => {
+    for (const dev of [false, true]) {
+      const app = await startApp(dev);
+      const { id } = await setUpAlfredWay(app);
+      await app.call("POST", `/api/properties/${id}/readiness`, {});
+      const sid = (await app.call("POST", `/api/properties/${id}/visitor-demos`, {})).body.sessionId as string;
+      const tap = async (action: string, input: unknown = {}) => (await app.call("POST", `/api/visitor-demos/${sid}/actions/${action}`, { input })).body.visitor;
+      await tap("begin", { name: "Pat Smith", phone: "(555) 010-2000" });
+      const phone = await tap("chooseUnit", { unitId: "unit_101" });
+      await tap("chooseTime", phone.choices[0].input);
+      await tap("consent", { agree: true });
+      await tap("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: "555-010-2000" });
+
+      const { times, anyTime } = (await app.call("GET", `/api/visitor-demos/${sid}/times`)).body;
+      expect(times.length).toBeGreaterThan(0);
+      expect(Boolean(anyTime)).toBe(dev);
+      const moved = await app.call("POST", `/api/visitor-demos/${sid}/reschedule`, { startsAt: times[0].startsAt });
+      expect(moved.body.live).toMatchObject({ status: "Ready, waiting for arrival", canReschedule: true });
+      expect(moved.body.live.recentMessages.at(-1).text).toContain("Your tour has moved to");
+      const bad = await app.call("POST", `/api/visitor-demos/${sid}/reschedule`, { startsAt: "2026-01-01T03:00:00.000Z" });
+      expect(bad.status).toBe(400);
+
+      const now = await app.call("POST", `/api/visitor-demos/${sid}/move-to-now`, {});
+      expect(now.status).toBe(dev ? 200 : 404);
+      const sundayNight = await app.call("POST", `/api/visitor-demos/${sid}/reschedule`, { localTime: "2099-09-27T19:45" });
+      expect(sundayNight.status).toBe(dev ? 200 : 404);
+      if (dev) expect(sundayNight.body.live.tourTime).toContain("7:45 PM");
+    }
+  });
+
   it("shows access codes and Durin call counts on the phone only in developer mode", async () => {
     const app = await startApp(true);
     const { id } = await setUpAlfredWay(app);

@@ -48,7 +48,7 @@
   "verificationMode": "basic-form",
   "verificationFormUrl": "https://forms.example/tour-core-basic-id",
   "verificationValidForDays": 30,
-  "messagingMode": "console",
+  "messagingMode": "demo",
   "storageMode": "memory",
   "accessMode": "durin-mock"
 }

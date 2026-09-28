@@ -1,7 +1,7 @@
 // Operator views of tours: past practice tours and visitor demos, and the live view of a visitor demo.
 // Everything shown comes from Tour Core's presenters; nothing here decides anything.
 
-import { api, banner, base, btn, devBlock, devChip, downloadLink, el, enc, go, mark, set } from "/ui.js";
+import { action, api, banner, base, btn, devBlock, devChip, downloadLink, el, enc, errorBox, go, mark, set, state } from "/ui.js";
 
 const getProperty = (id) => api("GET", `/api/properties/${enc(id)}`);
 
@@ -143,30 +143,86 @@ export async function tourDetailScreen(id, tourId) {
 export async function liveScreen(id, sessionId) {
   const hash = location.hash;
   const root = el("div", {});
+  const picker = el("div", {});
   const visitorUrl = `/visitor?s=${enc(sessionId)}`;
+  let pickerOpen = false;
+  const post = async (what, body = {}) => {
+    draw((await api("POST", `/api/visitor-demos/${enc(sessionId)}/${what}`, body)).live);
+    pickerOpen = false;
+    set(picker);
+  };
+  // "Change tour time": the operator picks one of the property's open tour times; the visitor is told automatically.
+  const openTimes = async () => {
+    pickerOpen = true;
+    root.append(picker);
+    const { times, anyTime } = await api("GET", `/api/visitor-demos/${enc(sessionId)}/times`);
+    const errors = errorBox();
+    // Developer mode only: any date and time at the property, outside tour hours included.
+    const exact = anyTime ? el("input", { type: "datetime-local", value: anyTime.now, "aria-label": "Any time (developer)" }) : null;
+    const anyTimeRow = anyTime
+      ? el(
+          "div",
+          { class: "actions" },
+          el("span", { class: "muted" }, "Dev: any time"),
+          exact,
+          btn("Move to this time", action(() => post("reschedule", { localTime: exact.value }), errors), "small"),
+        )
+      : null;
+    set(
+      picker,
+      el(
+        "div",
+        { class: "card" },
+        el("h3", {}, "Change tour time"),
+        times.length ? el("p", { class: "muted" }, "The visitor keeps their booking, consent and identity check, and gets a message with the new time.") : el("p", {}, "There are no other open tour times in the next two weeks."),
+        el("div", { class: "actions" }, times.map((t) => btn(t.label, action(() => post("reschedule", { startsAt: t.startsAt }), errors), "small"))),
+        anyTimeRow,
+        errors.node,
+        btn("Cancel", () => ((pickerOpen = false), set(picker)), "small"),
+      ),
+    );
+  };
   const draw = (live) => {
+    const realPhone = live.source === "Real phone";
     set(
       root,
-      el("p", { class: "muted" }, "Visitor demo"),
+      el("p", { class: "muted" }, realPhone ? "Text message tour" : "Visitor demo"),
       el("h1", {}, live.active ? "Active tour" : "Tour finished"),
       el(
         "div",
         { class: "card live" },
-        el("div", { class: "card-head" }, el("div", {}, el("h3", {}, live.visitorName), el("p", {}, [live.unitName, live.tourTime].filter(Boolean).join(" \u00b7 ") || "Hasn't picked a unit yet")), el("span", { class: `badge ${live.active ? "" : "good"}` }, live.status)),
+        el(
+          "div",
+          { class: "card-head" },
+          el(
+            "div",
+            {},
+            el("h3", {}, live.visitorName, live.channel ? el("span", { class: "channel-chip" }, live.channel) : null),
+            live.visitorPhone ? el("p", { class: "muted" }, live.visitorPhone) : null,
+            el("p", {}, [live.unitName, live.tourTime].filter(Boolean).join(" \u00b7 ") || "Hasn't picked a unit yet"),
+          ),
+          el("span", { class: `badge ${live.active ? "" : "good"}` }, live.status),
+        ),
         el("p", {}, el("strong", {}, "Current step: "), live.currentStep),
-        el("p", { class: "muted" }, `Demo clock: ${live.demoClock}`),
+        realPhone ? null : el("p", { class: "muted" }, `Demo clock: ${live.demoClock}`),
         live.followUp ? el("p", {}, el("strong", {}, "Follow-up: "), live.followUp) : null,
+        live.optedOut ? el("p", { class: "form-error" }, "This visitor asked to stop messages.") : null,
+        live.messageProblems ? el("p", { class: "form-error" }, live.messageProblems) : null,
       ),
       live.questions.length ? el("div", { class: "notice" }, el("strong", {}, "Needs your attention"), historyList(live.questions)) : null,
-      el("div", { class: "card" }, el("h2", {}, "Recent activity"), live.recent.length ? historyList(live.recent) : el("p", { class: "muted" }, "Nothing yet. Open the visitor's phone to begin.")),
+      live.recentMessages.length ? el("div", { class: "card" }, el("h2", {}, "Recent messages"), conversationView(live.recentMessages)) : null,
+      el("div", { class: "card" }, el("h2", {}, "Recent activity"), live.recent.length ? historyList(live.recent) : el("p", { class: "muted" }, realPhone ? "Nothing yet." : "Nothing yet. Open the visitor's phone to begin.")),
       devBlock(live.dev),
       el(
         "div",
         { class: "actions" },
-        el("a", { class: "button primary", href: visitorUrl, target: "_blank", rel: "noopener" }, "Open the visitor's phone"),
+        live.canReschedule ? btn("Change tour time", () => openTimes(), "") : null,
+        live.canReschedule && state.meta?.dev ? btn("Move tour to now", action(() => post("move-to-now")), "") : null,
+        realPhone ? null : el("a", { class: "button primary", href: visitorUrl, target: "_blank", rel: "noopener" }, "Open the visitor's phone"),
         btn("View this tour's records", () => go(`${base(id)}/tours/${enc(live.tourId)}`)),
         btn("Back to property", () => go("#/")),
       ),
+      pickerOpen ? picker : null,
     );
   };
   const first = await api("GET", `/api/visitor-demos/${enc(sessionId)}/live`);
