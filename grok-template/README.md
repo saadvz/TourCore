@@ -27,9 +27,9 @@ that need a person. See [`docs/deployment.md`](../docs/deployment.md).
 | Integration | `integrations/tour-core-tools.md` | Custom MCP server; connected by every installation |
 | Manifest | `template.json` | For reviewers; lists every item, the repository setting, and what's never included |
 
-The repository address isn't hard-coded: `template.json` → `repository.url`
-(the public open-source repository, once published), or `TOURCORE_REPO_URL` on
-the Bot's cloud computer.
+The repository address is https://github.com/saadvz/TourCore
+(`template.json` → `repository.url`). `TOURCORE_REPO_URL` on the Bot's cloud
+computer overrides it.
 
 ## What's never in the template
 

@@ -4,9 +4,9 @@
   "distribution": "team",
   "profile": "bot-profile.md",
   "repository": {
-    "url": "",
+    "url": "https://github.com/saadvz/TourCore",
     "override": "TOURCORE_REPO_URL",
-    "note": "The public open-source Tour Core repository. Set url once the canonical repository is published; until then set TOURCORE_REPO_URL on the Bot's cloud computer. Never a private repository."
+    "note": "The public open-source Tour Core repository. TOURCORE_REPO_URL on the Bot's cloud computer overrides this address. Never a private repository."
   },
   "context": [
     "context/tour-core-overview.md",
