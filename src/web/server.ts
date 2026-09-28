@@ -7,6 +7,7 @@ import { createLiveMessagingTransport } from "../createTourCore";
 import { MessagingLedger } from "../messaging/ledger";
 import { SENDBLUE_WEBHOOK_PATH, sendblueRuntime } from "../messaging/sendblue/runtime";
 import { handleSendblueWebhook } from "../messaging/sendblue/webhook";
+import { createIntentInterpreter, intentModelFromEnv, type IntentInterpreter } from "../intent";
 import { PropertyWorkspace } from "../setup";
 import { VisitorDemoRegistry } from "../visitor";
 import { MessagingConversations } from "../visitor/messagingRouter";
@@ -34,6 +35,8 @@ export interface SetupServerOptions {
   now?: () => Date;
   /** Clock for real-phone conversations; tests move it to reach tour times. */
   realNow?: () => number;
+  /** How typed visitor messages are read. Defaults to the built-in rules, plus a language model when one is configured. */
+  interpreter?: IntentInterpreter;
   log?: (line: string) => void;
 }
 
@@ -66,6 +69,7 @@ export function createSetupServer(options: SetupServerOptions = {}): Server {
     transport: () => (transport ??= createLiveMessagingTransport(ledger)),
     now: options.now,
     realNow: options.realNow,
+    interpreter: options.interpreter ?? createIntentInterpreter({ log }),
     log,
   });
   const restored = conversations
@@ -196,7 +200,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const sb = sendblueRuntime.env();
   if (sb.apiKey || sb.publicBaseUrl) {
     console.log(`  Real-phone messaging: Sendblue number ${sb.fromNumber ?? "(not set)"}`);
-    console.log(`  Incoming messages:    ${sb.publicBaseUrl ? `${sb.publicBaseUrl}${SENDBLUE_WEBHOOK_PATH}` : "(set PUBLIC_BASE_URL to receive replies)"}\n`);
+    console.log(`  Incoming messages:    ${sb.publicBaseUrl ? `${sb.publicBaseUrl}${SENDBLUE_WEBHOOK_PATH}` : "(set PUBLIC_BASE_URL to receive replies)"}`);
+    const model = intentModelFromEnv();
+    console.log(`  Reading texts:        built-in rules${model ? ` + language model ${model.name}` : " only"}\n`);
   }
   if (dev) console.log(`  Developer mode is on. Records folder: ${new PropertyWorkspace().root}\n  Static files: ${fileURLToPath(PUBLIC_DIR)}\n`);
   const stop = () => {

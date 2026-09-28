@@ -90,8 +90,17 @@ export function conversationView(items) {
   return el(
     "div",
     { class: "thread small-thread" },
-    items.map((m) => el("div", { class: `bubble from-${m.from}` }, el("span", { class: "bubble-text" }, m.text), el("span", { class: "bubble-time" }, m.time))),
+    items.map((m) =>
+      el("div", { class: `bubble from-${m.from}` }, el("span", { class: "bubble-text" }, m.text), el("span", { class: "bubble-time" }, m.time), devChip(readAs(m.dev?.interpretation))),
+    ),
   );
+}
+
+/** Developer mode: how Tour Core read a typed message, e.g. "ARRIVAL 0.96 semantic". */
+function readAs(i) {
+  if (!i) return "";
+  const entities = i.entities ? Object.entries(i.entities).filter(([k]) => k !== "question").map(([, v]) => v) : [];
+  return [i.intent, ...entities, i.confidence, i.interpreter, i.clarification ? "asked back" : "", i.manipulation ? "instruction ignored" : ""].filter((x) => x !== "").join(" ");
 }
 
 export async function tourDetailScreen(id, tourId) {

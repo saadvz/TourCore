@@ -5,7 +5,8 @@ import type { InboundMessage } from "../messaging/inbound";
 import type { MessagingAdapter } from "../messaging/Messenger";
 import type { PropertyWorkspace } from "../setup/workspace";
 import { writeJsonAtomic } from "../storage/atomicWrite";
-import { handleVisitorText, isGreeting, keywordOf } from "./conversation";
+import type { IntentInterpreter } from "../intent";
+import { handleVisitorText, isGreeting } from "./conversation";
 import { VisitorDemoSession, type VisitorDemoRegistry } from "./session";
 import type { VerificationLinks } from "./verificationLinks";
 
@@ -29,6 +30,8 @@ export class MessagingConversations {
       now?: () => Date;
       /** Real-time source for new conversations (tests move it; production uses the system clock). */
       realNow?: () => number;
+      /** Reads what a typed message is trying to do. Defaults to the built-in rules. */
+      interpreter?: IntentInterpreter;
       log?: (line: string) => void;
     },
   ) {}
@@ -44,7 +47,6 @@ export class MessagingConversations {
     transport.noteChannel?.(message.from, message.channel);
     const meta = { provider: message.provider, providerMessageId: message.providerMessageId, deliveryChannel: message.channel };
     const phone = normalizePhone(message.from);
-    const keyword = keywordOf(message.text);
 
     let session = registry.latestForPhone(propertyId, phone, "messaging");
     if (session && ["done", "stopped"].includes(await session.stage()) && isGreeting(message.text) && !session.optedOut) session = undefined;
@@ -68,9 +70,9 @@ export class MessagingConversations {
       session.optedOut = this.isOptedOut(propertyId, phone);
     }
 
-    await handleVisitorText(session, phone, message.text, meta);
-    if (keyword === "stop") this.setOptOut(propertyId, phone, true);
-    if (keyword === "start") this.setOptOut(propertyId, phone, false);
+    const wasOptedOut = session.optedOut;
+    await handleVisitorText(session, phone, message.text, meta, this.deps.interpreter);
+    if (session.optedOut !== wasOptedOut) this.setOptOut(propertyId, phone, session.optedOut);
     await this.save(session);
   }
 

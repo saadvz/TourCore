@@ -48,6 +48,16 @@ export interface ConversationItem {
   messageId?: string;
   /** Provider-neutral delivery details (never credentials). */
   delivery?: { provider?: string; channel?: string; status?: string; providerMessageId?: string };
+  /** For a typed visitor message: how Tour Core read it. Developer details only; no model reasoning is kept. */
+  interpretation?: {
+    intent: string;
+    confidence: number;
+    interpreter: "rules" | "semantic";
+    /** Tour Core asked a question back instead of acting. */
+    clarification: boolean;
+    entities?: Record<string, string>;
+    manipulation?: boolean;
+  };
 }
 
 /** One practice tour or visitor demo, kept so the operator can reopen it later. */

@@ -14,6 +14,7 @@ import type { ReplyPrompt } from "../messaging/presentation";
 import { SetupInputError } from "../setup/setupActions";
 import type { ConversationItem, TourRecord } from "../setup/workspace";
 import type { ExportBundle } from "../export/exportBundle";
+import type { Awaiting, IntentInterpretation } from "../intent";
 import type { TourCoreStore } from "../storage/Store";
 import type { VerificationLinks } from "./verificationLinks";
 
@@ -101,6 +102,9 @@ export interface VisitorSessionOptions {
   startedAt?: Date;
 }
 
+/** How one typed message was read, kept on the visitor's line for developer details. Never model reasoning. */
+export type InterpretationNote = NonNullable<ConversationItem["interpretation"]>;
+
 /** Optional details about the visitor's own message that triggered an action. */
 export interface Said {
   /** What the visitor actually typed or tapped. */
@@ -128,6 +132,8 @@ export class VisitorDemoSession {
   private readonly thread: ConversationItem[] = [];
   private readonly shown = new Set<string>();
   private readonly links?: VerificationLinks;
+  private noted?: InterpretationNote;
+  private expected?: { stage: VisitorStage; awaiting: Awaiting };
 
   constructor(
     readonly propertyId: string,
@@ -227,6 +233,33 @@ export class VisitorDemoSession {
   }
 
   // ------------------------------------------- messaging-channel entry points
+
+  /** Attaches how the next visitor text was read to its line in the thread. The returned note can still be updated. */
+  noteInterpretation(i: IntentInterpretation): InterpretationNote {
+    const { type, ...entities } = i.intent as { type: string } & Record<string, string>;
+    this.noted = {
+      intent: type,
+      confidence: Math.round(i.confidence * 100) / 100,
+      interpreter: i.interpreter,
+      clarification: false,
+      ...(Object.keys(entities).length ? { entities } : {}),
+      ...(i.manipulation ? { manipulation: true } : {}),
+    };
+    return this.noted;
+  }
+
+  /** Remembers what Tour Core just asked, so a bare "yes" or "2" in the next text means something. */
+  expect(stage: VisitorStage, awaiting: Awaiting): void {
+    this.expected = { stage, awaiting };
+  }
+
+  /** What Tour Core was waiting for, if the conversation is still at the same step. One reply only. */
+  takeExpected(stage: VisitorStage): Awaiting | undefined {
+    const e = this.expected;
+    this.expected = undefined;
+    this.noted = undefined;
+    return e?.stage === stage ? e.awaiting : undefined;
+  }
 
   /** A visitor on a real phone is known by their number; their name comes later from the identity form. */
   identify(phone: string): void {
@@ -472,7 +505,12 @@ export class VisitorDemoSession {
   }
 
   private say(from: ConversationItem["from"], text: string): void {
-    this.thread.push({ from, text, at: this.clock.now().toISOString() });
+    const item: ConversationItem = { from, text, at: this.clock.now().toISOString() };
+    if (from === "visitor" && this.noted) {
+      item.interpretation = this.noted;
+      this.noted = undefined;
+    }
+    this.thread.push(item);
   }
 
   /** Appends Tour Core's new messages to the visitor thread (read from the store, in order), with delivery details. */

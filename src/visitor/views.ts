@@ -158,7 +158,9 @@ export async function liveTourView(session: VisitorDemoSession) {
     channel: lastInbound ? CHANNEL_LABELS[lastInbound.deliveryChannel!] : undefined,
     optedOut: session.optedOut,
     messageProblems: failed ? `${failed === 1 ? "1 message" : `${failed} messages`} couldn't be delivered to the visitor.` : undefined,
-    recentMessages: session.conversation.slice(-6).map((m) => ({ from: m.from, text: m.text, time: formatTime(new Date(m.at), tz) })),
+    recentMessages: session.conversation
+      .slice(-6)
+      .map((m) => ({ from: m.from, text: m.text, time: formatTime(new Date(m.at), tz), ...(m.interpretation ? { dev: { interpretation: m.interpretation } } : {}) })),
     unitName: unit?.name,
     tourTime: r?.slotStart
       ? `${formatDay(new Date(r.slotStart), tz)}, ${formatTime(new Date(r.slotStart), tz)}\u2013${formatTime(new Date(r.windowEnd!), tz)}`

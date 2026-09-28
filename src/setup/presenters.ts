@@ -377,7 +377,12 @@ export function tourDetailView(record: TourRecord, bundle: ExportBundle, config:
   const tz = config.property.timezone;
   const timeline = describeHistory(bundle.auditEvents, { ...bundle, operatorName: config.operator.name }, tz);
   const conversation =
-    record.conversation?.map((m) => ({ from: m.from, text: m.text, time: formatTime(new Date(m.at), tz), ...(m.delivery ? { dev: m.delivery } : {}) })) ??
+    record.conversation?.map((m) => ({
+      from: m.from,
+      text: m.text,
+      time: formatTime(new Date(m.at), tz),
+      ...(m.delivery || m.interpretation ? { dev: { ...m.delivery, ...(m.interpretation ? { interpretation: m.interpretation } : {}) } } : {}),
+    })) ??
     bundle.messages
       .filter((m) => m.audience === "PROSPECT")
       .map((m) => ({ from: m.direction === "INBOUND" ? ("visitor" as const) : ("tourcore" as const), text: m.body, time: formatTime(new Date(m.at), tz) }));
