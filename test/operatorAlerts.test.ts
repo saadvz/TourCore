@@ -85,6 +85,7 @@ async function alertApp(options: { root?: string; clock?: { t: number }; net?: R
     await text("Hi");
     await text("1");
     await text("1");
+    await text("1");
     const consent = await text("YES");
     const token = /\/verify\/([A-Za-z0-9_-]+)/.exec(consent.join("\n"))![1]!;
     const form = await fetch(`http://127.0.0.1:${port}/api/verify/${token}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: PHONE }) });

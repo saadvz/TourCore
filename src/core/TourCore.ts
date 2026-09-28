@@ -18,6 +18,7 @@ import type { DurinAccessAdapter, DurinAccessResult, DurinHealth } from "../duri
 import { MessagingError, type DeliveryReceipt, type MessageChannel, type Messenger } from "../messaging/Messenger";
 import { withPrompt, type ReplyPrompt } from "../messaging/presentation";
 import { evaluateAccess, type AccessDecision, type AccessDecisionCode } from "../policy/evaluateAccess";
+import { visitorSubject, visitorTourOf } from "../visitor/identity";
 import type { TourCoreStore } from "../storage/Store";
 import type { VerificationProvider } from "../verification/basicForm";
 import { AuditLog, type AuditInput } from "../audit/audit";
@@ -27,7 +28,7 @@ import { approvedAnswerText, approvedFacts, type ApprovedFact } from "./facts";
 import { normalizePhone } from "./phone";
 import { resolveQuestion } from "./questions";
 import { closestOpenSlots, intervalsOverlap, overlapSummary, placementOf, relativeWhen, tourInterval, touringHoursLabel } from "./customSlot";
-import { nextTourDay, slotsOn, tourWindow, type TourSlot } from "./schedule";
+import { isoDate, nextTourDay, slotsOn, tourWindow, type TourSlot } from "./schedule";
 import { addDays, formatDay as formatDayIn, formatTime as formatTimeIn, localDateOf, type LocalDate } from "./timezone";
 
 export interface TourCoreDeps {
@@ -140,21 +141,36 @@ export class TourCore {
     });
 
     if (options.announce === false) return { prospect, reservation };
-    const slots = await this.availableSlots();
+    const dates = await this.availableDates();
     const hello = prospect.name === UNNAMED_VISITOR ? "Hi!" : `Hi ${firstName(prospect.name)}!`;
+    const place = config.property.propertyType === "SINGLE_FAMILY" ? visitorTourOf(config.property) : `${unit.name} at ${config.property.address}`;
     const intro =
-      `${hello} Happy to set up a self-guided tour of ${unit.name} at ${config.property.name}.` +
+      `${hello} Happy to set up a self-guided tour of ${place}.` +
       (unit.summary ? ` Here's what the property team shared: ${unit.summary.replace(/\.?$/, ".")}` : "");
-    if (slots.length === 0) {
+    if (dates.length === 0) {
       await this.textProspect(prospect, reservation.id, `${intro}\nThere are no open tour times right now. The ${config.operator.name.toLowerCase()} will reach out.`);
     } else {
-      await this.textProspect(prospect, reservation.id, `${intro}\nOpen times on ${this.day(slots[0]!.start)}:`, {
+      await this.textProspect(prospect, reservation.id, `${intro}\nI have tours available. Which day works for you?`, {
         kind: "choose",
-        options: slots.map((s) => s.label),
-        what: "a time",
+        options: dates.map((day) => day.label),
+        what: "a day",
       });
     }
     return { prospect, reservation };
+  }
+
+  /** The next few days that still have an open regular tour time. */
+  async availableDates(limit = 5): Promise<{ date: string; label: string; start: Date }[]> {
+    const now = this.deps.clock.now();
+    const tz = this.deps.config.property.timezone;
+    let day = localDateOf(now, tz);
+    const out: { date: string; label: string; start: Date }[] = [];
+    for (let i = 0; i < 21 && out.length < limit; i++, day = addDays(day, 1)) {
+      const slots = await this.availableSlots(day);
+      if (!slots.length) continue;
+      out.push({ date: isoDate(day), label: formatDayIn(slots[0]!.start, tz), start: slots[0]!.start });
+    }
+    return out;
   }
 
   /** Open tour times on a property-local date (defaults to the next day with openings). */
@@ -311,7 +327,7 @@ export class TourCore {
     await this.textProspect(
       prospect,
       reservation.id,
-      `Thanks for touring ${unit.name}, ${firstName(prospect.name)}!${unit.summary ? ` Quick recap: ${unit.summary.replace(/\.$/, "")}.` : ""} The doors are locked again behind you.\n` +
+      `Thanks for touring ${visitorSubject(this.deps.config.property, unit.name)}, ${firstName(prospect.name)}!${unit.summary ? ` Quick recap: ${unit.summary.replace(/\.$/, "")}.` : ""} The doors are locked again behind you.\n` +
         "Would you like someone from the property team to follow up?",
       { kind: "yes-no" },
     );
@@ -412,7 +428,7 @@ export class TourCore {
     const prospect = await this.mustGetProspect(reservation.prospectId);
     const when = `${this.day(start)} at ${this.time(start)}`;
     if (input.notice === "moved") {
-      await this.textProspect(prospect, reservation.id, `Your tour of ${config.property.name} has been moved to ${this.whenPhrase(start)}. You're all set.`);
+      await this.textProspect(prospect, reservation.id, `Your tour of ${visitorTourOf(config.property)} has been moved to ${this.whenPhrase(start)}. You're all set.`);
     } else if (reservation.status === "READY") {
       await this.textProspect(prospect, reservation.id, `Your tour has moved to ${when}.\nDoors will work for you from ${this.time(windowStart)} to ${this.time(windowEnd)}.`, {
         kind: "say",
@@ -973,7 +989,7 @@ export class TourCore {
       const text: Partial<Record<AccessDecisionCode, string>> = {
         DENY_TOO_EARLY: `You're a little early! I can open the doors from ${reservation.windowStart ? this.time(new Date(reservation.windowStart)) : "your tour time"}.`,
         DENY_EXPIRED: "Your tour time has ended, so I can't open doors anymore. Want me to find you another time?",
-        DENY_WRONG_ROUTE: `That door isn't part of your tour, so I can't open it. You're here to see ${unit.name}. I've let the ${team} know in case you need a hand.`,
+        DENY_WRONG_ROUTE: `That door isn't part of your tour, so I can't open it. You're here to see ${visitorSubject(this.deps.config.property, unit.name)}. I've let the ${team} know in case you need a hand.`,
         DENY_DURIN_UNHEALTHY: `Sorry, the doors aren't responding right now. I've let the ${team} know and someone will reach out shortly.`,
         DENY_PROVIDER_FAILURE: `Sorry, the doors aren't responding right now. I've let the ${team} know and someone will reach out shortly.`,
         DENY_TOUR_COMPLETED: "Your tour is finished, so the doors are locked again. Want to book another visit?",

@@ -15,7 +15,8 @@ afterEach(() => cleanups.splice(0).forEach((c) => c()));
 const app = () => liveApp({ cleanups });
 
 const UNIT_MENU = "Reply 1 for Unit 1A or 2 for Unit 2B.";
-const TIMES = "I have 2:00 PM and 3:30 PM available on Monday, Sep 28. Which works for you?\nReply 1 for 2:00 PM or 2 for 3:30 PM.";
+const TIMES = "I have these times available Monday, Sep 28:\nReply 1 for 2:00 PM or 2 for 3:30 PM.";
+const DATE_MENU = "I have tours available. Which day works for you?\n1) Monday, Sep 28\n2) Tuesday, Sep 29\n3) Wednesday, Sep 30\n4) Thursday, Oct 1\n5) Friday, Oct 2\nReply with the number.";
 const CONSENT = "Is it OK if I text you about this tour and keep a record of your visit?\nReply YES or NO.";
 
 describe("approved-fact resolution", () => {
@@ -75,6 +76,7 @@ describe("questions at every stage of a text conversation", () => {
     const a = await app();
     await a.text("Hi");
     await a.text("1");
+    await a.text("1");
     expect(await a.text("Does it have laundry?")).toEqual(["Here's what the property team shared: In-unit laundry.", TIMES]);
     expect(await a.text("Does 1A have laundry?")).toEqual(["Here's what the property team shared: In-unit laundry.", TIMES]);
     expect((await a.text("2"))[0]).toContain("Great, you're booked for 3:30 PM");
@@ -83,6 +85,7 @@ describe("questions at every stage of a text conversation", () => {
   it("before consent and during the identity form: answered, then the same question or reminder; consent and the form link still work", async () => {
     const a = await app();
     await a.text("Hi");
+    await a.text("1");
     await a.text("1");
     await a.text("1");
     expect(await a.text("Is parking included?")).toEqual(["Here's what the property team shared: Street parking only.", CONSENT]);
@@ -117,9 +120,10 @@ describe("questions at every stage of a text conversation", () => {
     const a = await app();
     expect(await a.text("Is there a gym?")).toEqual([FALLBACK, expect.stringContaining("Which unit would you like to see?")]);
     await a.text("1");
-    expect(await a.text("Is there a pool?")).toEqual([FALLBACK, TIMES]);
+    expect(await a.text("Is there a pool?")).toEqual([FALLBACK, DATE_MENU]);
     await a.text("1");
-    expect(await a.text("Can I bring my bike inside?")).toEqual([FALLBACK, CONSENT]);
+    expect(await a.text("Can I bring my bike inside?")).toEqual([FALLBACK, TIMES]);
+    await a.text("1");
     const issues = (await a.grok("list_exceptions")).exceptions;
     expect(issues.map((x: { summary: string }) => x.summary).sort()).toEqual(
       ['Asked "Can I bring my bike inside?". There\'s no approved answer yet.', 'Asked "Is there a gym?". There\'s no approved answer yet.', 'Asked "Is there a pool?". There\'s no approved answer yet.'],
@@ -132,6 +136,7 @@ describe("questions at every stage of a text conversation", () => {
   it("the operator's answer reaches the visitor and puts them back on the step they were on", async () => {
     const a = await app();
     await a.text("Hi");
+    await a.text("1");
     await a.text("1");
     expect(await a.text("Is there a gym?")).toEqual([FALLBACK, TIMES]);
     const [issue] = (await a.grok("list_exceptions")).exceptions;

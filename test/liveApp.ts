@@ -120,6 +120,7 @@ export async function liveApp(
     await text("Hi");
     await text("1");
     await text("1");
+    await text("1");
     return fillForm(await text("YES"));
   };
   const routineEvents = () => net.routineCalls().map((c) => JSON.parse(c.body!) as { eventType: string; eventId: string } & Record<string, string>);

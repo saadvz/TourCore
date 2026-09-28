@@ -243,7 +243,7 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
     title: "Open secure setup",
     kind: "change",
     description:
-      "A short-lived link to Tour Core's secure setup page, which only opens in the browser on the Tour Core computer (Grok's cloud computer in a Grok-managed install). Open it there and ask the operator to take over the browser to enter credentials. The values go straight to Tour Core: never ask for them in chat and never type them yourself.",
+      "A short-lived link to Tour Core's secure setup page, which only opens in the browser on the Tour Core computer (Grok's cloud computer in a Grok-managed install). Prefer a secure secret input that fills the form without the values entering chat. Hand the browser to the operator only if that fill isn't available. Never ask for credentials in chat and never pass them as tool arguments.",
     input: z.strictObject({ step: SecureStep.optional().describe("Which part to open: visitor-messaging (Sendblue) or operator-alerts (Grok Routine).") }),
     run: async (ctx, i) => {
       const inst = installation(ctx);
@@ -251,11 +251,11 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
       const base = ctx.localUrl?.() ?? "http://localhost:4321";
       const minutes = Math.round((expiresAt - inst.now()) / 60_000) || DEFAULT_SETUP_SESSION_MINUTES;
       return {
-        summary: "I've opened Tour Core's secure setup page. Please take over the browser to finish there; nothing goes in chat.",
+        summary: "I'll ask for these credentials securely; they won't be shown in chat. Then I'll fill Tour Core's setup form.",
         url: `${base}/install#s=${token}${i.step ? `&step=${i.step}` : ""}`,
         expiresInMinutes: minutes,
         instructions:
-          "Open url yourself in your cloud browser (it only works on the Tour Core computer) and hand control to the operator. Don't show the link in chat, don't ask for the values in chat, and don't type them yourself. When they're done, call get_next_installation_step.",
+          "Open url yourself in your cloud browser (it only works on the Tour Core computer). Prefer Grok's secure secret input and fill the form yourself. Do not show the link, do not ask for the values in chat, and do not pass them as tool arguments. Use a provider login when that provider has one. Hand the browser to the operator only if secure fill isn't available for a field. When they're saved, call get_next_installation_step.",
       };
     },
   }),

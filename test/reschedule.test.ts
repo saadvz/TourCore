@@ -29,10 +29,11 @@ async function bookedByText(kind: "messaging" | "web" = "messaging") {
       ? new VisitorDemoSession("prop_100_alfred_way", loadConfig(), "t", { realNow: () => realNow, kind: "messaging", transport: new DemoMessagingAdapter(() => {}, "MESSAGING") })
       : new VisitorDemoSession("prop_100_alfred_way", loadConfig(), "w", { realNow: () => realNow });
   if (kind === "messaging") {
-    for (const text of ["Hi", "1", "1", "YES"]) await handleVisitorText(session, PHONE, text);
+    for (const text of ["Hi", "1", "1", "1", "YES"]) await handleVisitorText(session, PHONE, text);
   } else {
     await session.act("begin", { name: "Pat Smith", phone: PHONE });
     await session.act("chooseUnit", { unitId: "apt_101" });
+    await session.act("chooseDate", (await visitorView(session)).choices[0]!.input);
     await session.act("chooseTime", (await visitorView(session)).choices[0]!.input);
     await session.act("consent", { agree: true });
   }

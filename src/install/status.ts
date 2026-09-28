@@ -131,7 +131,7 @@ export type InstallationAction =
 /**
  *  GROK                      Grok does it itself (a tool call, or a command on its computer), without asking.
  *  OPERATOR                  a human step Grok can't do (e.g. approving the connection).
- *  OPERATOR_IN_SECURE_SETUP  the operator enters credentials on Tour Core's secure setup page.
+ *  OPERATOR_IN_SECURE_SETUP  credentials, collected by secure secret input when Grok can fill the form, otherwise on Tour Core's secure setup page.
  *  OPERATOR_DECISION         Grok asks the question in operatorMessage; the operator decides.
  */
 export type PerformedBy = "GROK" | "OPERATOR" | "OPERATOR_IN_SECURE_SETUP" | "OPERATOR_DECISION";
@@ -204,7 +204,7 @@ export const OPERATOR_MESSAGES = {
   offerAlerts: "Your property is configured. Would you like me to keep you updated when someone books, starts or finishes a tour, and alert you if something needs your input?",
   recommendUpdates: "I recommend alerts for bookings, tour starts, completions and anything that needs your attention. Want to use those defaults?",
   validate:
-    "Prospects can text your touring number to ask questions, choose a unit and time, verify their details, and complete the self-guided tour in the same conversation. I'll run a readiness check and a practice tour before we turn it on.",
+    "Prospects can text your touring number to ask questions, choose a day and time, verify their details, and complete the self-guided tour in the same conversation. I'll run a readiness check and a practice tour before we turn it on.",
   operate: "Your property is published. Visitor texting is live. Door access is still in demo mode, so no physical locks will open. I'll keep you updated on your tours and let you know when something needs your attention.",
   operateWithoutAlerts: "Your property is published. Visitor texting is live. Door access is still in demo mode, so no physical locks will open. Ask me any time to show active tours or what needs your attention.",
 } as const;
@@ -219,10 +219,9 @@ const ROUTINE_DOC = "grok-template/routines/operator-updates.md";
  */
 const ROUTINE_SETUP =
   `Create the Tour Core Operator Updates routine yourself (authenticated webhook trigger; instructions in ${ROUTINE_DOC}). ` +
-  "Then call get_secure_setup_url with step operator-alerts and open it in your cloud browser next to the routine's webhook trigger panel. " +
-  "If that panel lets you copy the webhook address and key with copy buttons while both stay hidden on screen, you may copy each one and paste it into the matching Tour Core field yourself (both fields are masked), without reading, repeating or storing it. " +
-  "If either value is shown on screen, don't transfer it: hand control of the browser to the operator and ask them to copy both values across (or to paste the whole webhook example into Tour Core's paste box). " +
-  "Never put the address or key in chat, tool arguments, files or commands.";
+  "Then call get_secure_setup_url with step operator-alerts. Prefer Grok's secure secret input: ask for the webhook address and key securely and fill Tour Core's form yourself. They are not shown in chat and are not tool arguments. " +
+  "If the routine panel lets you copy both values with copy buttons while they stay hidden on screen, you may paste those hidden values into the matching masked fields yourself, without reading or repeating them. " +
+  "Hand the browser to the operator only when secure fill isn't available or a value is shown on screen. Never put the address or key in chat, tool arguments, files or commands.";
 
 function component(c: InstallationComponent, state: ComponentState, summary: string, extra: Partial<ComponentStatus> = {}): ComponentStatus {
   return { component: c, label: COMPONENT_LABELS[c], state, requirement: REQUIREMENTS[c], summary, optionalActions: [], ...extra };
@@ -318,10 +317,11 @@ function grokStatus(inst: Installation): ComponentStatus {
 
 function messagingStatus(inst: Installation): ComponentStatus {
   const env = inst.sendblueEnv();
-  const connect = step("VISITOR_MESSAGING", "CONNECT_VISITOR_MESSAGING", "OPERATOR_IN_SECURE_SETUP", "Visitor texting is the next step. I've opened Tour Core's secure setup page so you can connect your Sendblue messaging account there, not in chat.", {
+  const connect = step("VISITOR_MESSAGING", "CONNECT_VISITOR_MESSAGING", "OPERATOR_IN_SECURE_SETUP", "Visitor texting needs your Sendblue credentials. I'll ask for them securely; they won't be shown to me in chat.", {
     tool: "get_secure_setup_url",
     secureSetupStep: "visitor-messaging",
-    grokInstructions: "Call get_secure_setup_url with step visitor-messaging, open the link in your cloud browser, and hand control to the operator. Don't show the link in chat. When they're done, call get_next_installation_step.",
+    grokInstructions:
+      "Call get_secure_setup_url with step visitor-messaging and open it in your cloud browser. Prefer Grok's secure secret input: collect the API key, API secret and touring number securely and fill Tour Core's form yourself. Do not put them in chat or in tool arguments. Hand the browser to the operator only if secure fill isn't available for a field. When they're saved, call get_next_installation_step.",
   });
   if (!env.apiKey || !env.apiSecret || !env.fromNumberRaw) return component("VISITOR_MESSAGING", "ACTION_REQUIRED", "Visitor texting isn't connected yet.", { provider: "SENDBLUE", next: connect });
   const check = inst.files.state().visitorMessaging;
@@ -339,7 +339,7 @@ function messagingStatus(inst: Installation): ComponentStatus {
     return component("VISITOR_MESSAGING", "ERROR", check.problems[0] ?? check.message, {
       provider: "SENDBLUE",
       technical: check.problems,
-      next: accountProblem ? { ...connect, action: "FIX_VISITOR_MESSAGING", operatorMessage: `${check.problems[0] ?? check.message} I've opened Tour Core's secure setup page so you can fix the Sendblue details there.` } : test,
+      next: accountProblem ? { ...connect, action: "FIX_VISITOR_MESSAGING", operatorMessage: `${check.problems[0] ?? check.message} I'll ask for the Sendblue details securely; they won't be shown in chat.` } : test,
     });
   }
   return component("VISITOR_MESSAGING", "READY", `Visitor texting is connected and working (${env.fromNumber ?? "your touring number"}).`, { provider: "SENDBLUE" });
@@ -455,7 +455,7 @@ function alertsStatus(inst: Installation, propertyReady: boolean): ComponentStat
     if (state.operatorUpdates) {
       return component("OPERATOR_ALERTS", "ACTION_REQUIRED", "Tour updates are chosen but not connected yet.", {
         provider: "GROK_ROUTINE",
-        next: connect("I'm setting up your tour updates. I've opened Tour Core's secure setup page so the connection details go straight to Tour Core, not in chat.", "CONNECT_OPERATOR_ALERTS"),
+        next: connect("I'm setting up your tour updates. I'll ask for the connection securely; it won't be shown in chat.", "CONNECT_OPERATOR_ALERTS"),
       });
     }
     return component("OPERATOR_ALERTS", "ACTION_REQUIRED", "Tour updates aren't turned on yet.", { provider: "GROK_ROUTINE", next: offer });
@@ -468,7 +468,7 @@ function alertsStatus(inst: Installation, propertyReady: boolean): ComponentStat
     return component("OPERATOR_ALERTS", "ERROR", "Tour updates aren't reaching you.", {
       provider: "GROK_ROUTINE",
       technical: [check.message],
-      next: connect("Tour updates aren't reaching you yet. I've opened Tour Core's secure setup page so the connection details can be entered again there, not in chat.", "FIX_OPERATOR_ALERTS"),
+      next: connect("Tour updates aren't reaching you yet. I'll ask for the connection again, securely; it won't be shown in chat.", "FIX_OPERATOR_ALERTS"),
     });
   }
   let health;
@@ -532,7 +532,8 @@ function validationStatuses(services: OperatorServices, propertyReady: boolean, 
             next: step("PUBLISH", "PUBLISH", "OPERATOR_DECISION", `Everything passed. Would you like me to publish ${name} for demo?`, {
               tool: "publish_demo_property",
               skill: "setup-property",
-              grokInstructions: "Publish only after the operator's explicit yes, through publish_demo_property's confirmation question.",
+              grokInstructions:
+                "The operator's yes to the publish question is the approval. Call publish_demo_property and ask only the confirmation it returns. After it reports published, call get_installation_status and use that. Do not say publishing still needs a yes once the status is published. A tour update during install does not undo this: re-read get_next_installation_step and follow that.",
             }),
           }),
   ];

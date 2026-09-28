@@ -12,6 +12,7 @@ import { writeJsonAtomic } from "../storage/atomicWrite";
 import { resumeStep } from "../visitor/conversation";
 import type { OperatorServices } from "./services";
 import { persistSession } from "./services";
+import { visitorSubject } from "../visitor/identity";
 import {
   currentReservation,
   findTour,
@@ -423,7 +424,7 @@ export async function planFlaggedAnswer(services: OperatorServices, input: { exc
   if (unit && topic && input.appliesTo !== "property") {
     const value = structuredAnswer(topic, words, now);
     if (value) {
-      const fact = profileFacts({ name: unit.name, profile: { [topic]: value } }).find((f) => f.field === topic)!.text;
+      const fact = profileFacts({ name: visitorSubject(draft.property, unit.name), profile: { [topic]: value } }).find((f) => f.field === topic)!.text;
       return { exception, appliesTo: "unit", unitId: unit.id, field: topic, value, fact, where: unit.name };
     }
   }

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { validateConfig } from "../src/config/tourCoreConfig";
+import { resolveQuestion } from "../src/core/questions";
 import { OPERATOR_MESSAGES } from "../src/install/status";
 import { TEXTING_NOT_USED } from "../src/operator/setupFlow";
 import { handleVisitorText } from "../src/visitor/conversation";
@@ -86,13 +87,20 @@ describe("canonical property identity", () => {
 });
 
 describe("property type", () => {
-  it("is asked right after the address, is required, and is never guessed", async () => {
+  it("asks for a missing ZIP, then confirms the address, before property type", async () => {
     const h = harness();
     const created = await h.ok("create_property_setup", { address: "144 Hillside Ave, Teaneck, NJ" });
-    expect(created).toMatchObject({ nextQuestion: "What type of property is this?" });
-    expect(created.choices.map((c: { label: string }) => c.label)).toEqual(["Single-family home", "Multifamily home", "Apartment building", "Other"]);
+    expect(created.nextQuestion).toBe("What ZIP code should I use?");
+    expect(created.choices).toBeUndefined();
+    const zipped = await h.ok("update_property_details", { postalCode: "07666" });
+    expect(zipped.nextQuestion).toBe("I have:\n144 Hillside Ave\nTeaneck, NJ 07666\nIs that the address?");
+    const confirmed = await h.ok("update_property_details", { confirmAddress: true });
+    expect(confirmed).toMatchObject({ nextQuestion: "What type of property is this?" });
+    expect(confirmed.choices.map((c: { label: string }) => c.label)).toEqual(["Single-family home", "Multifamily home", "Apartment building", "Other"]);
     const draft = h.workspace.openDraft(created.setup.propertyId).draft;
     expect(draft.property.propertyType).toBeUndefined();
+    expect(draft.property.canonicalAddress).toMatchObject({ street: "144 Hillside Ave", city: "Teaneck", state: "NJ", postalCode: "07666" });
+    expect(draft.property.addressConfirmed).toBe(true);
     expect(validateConfig(draft).map((i) => i.code)).toContain("PROPERTY_TYPE_MISSING");
     expect(await h.fails("update_property_details", { propertyType: "CASTLE" })).toContain("doesn't fit update_property_details");
   });
@@ -100,6 +108,8 @@ describe("property type", () => {
   it("apartment buildings and multifamily homes ask for units, and a unit needs the operator's own name", async () => {
     const h = harness();
     await h.ok("create_property_setup", { address: "12 Elm St, Brooklyn, NY" });
+    await h.ok("update_property_details", { postalCode: "11201" });
+    await h.ok("update_property_details", { confirmAddress: true });
     expect((await h.ok("update_property_details", { propertyType: "MULTIFAMILY_HOME" })).nextQuestion).toBe("Which units can people tour?");
     expect(await h.fails("add_unit", {})).toContain("What's the unit called?");
     expect((await h.ok("add_unit", { name: "Unit 1A" })).unit).toMatchObject({ name: "Unit 1A", door: "Unit 1A Door" });
@@ -108,12 +118,16 @@ describe("property type", () => {
   it("other properties ask how the spaces are named", async () => {
     const h = harness();
     await h.ok("create_property_setup", { address: "9 Mill Rd, Hudson, NY" });
+    await h.ok("update_property_details", { postalCode: "12534" });
+    await h.ok("update_property_details", { confirmAddress: true });
     expect((await h.ok("update_property_details", { propertyType: "OTHER" })).nextQuestion).toBe("How would you like the spaces people tour to be named?");
   });
 
   it("a single-family home has one space on its own front door, no fake unit number, and goes all the way to published", async () => {
     const h = harness();
     await h.ok("create_property_setup", { address: "27 Oak Ln, Teaneck, NJ" });
+    await h.ok("update_property_details", { postalCode: "07666" });
+    await h.ok("update_property_details", { confirmAddress: true });
     const typed = await h.ok("update_property_details", { propertyType: "SINGLE_FAMILY" });
     expect(typed).toMatchObject({ nextQuestion: 'People will tour the whole home. Should I call it "Main Home", or would you like another name?', suggestedName: "Main Home" });
     const added = await h.ok("add_unit", {});
@@ -129,11 +143,19 @@ describe("property type", () => {
     expect((await h.approve("publish_demo_property", {})).done.published).toBe(true);
     // Visitors aren't asked to pick from a one-item unit menu.
     const welcome = await welcomeFor(h, id);
-    expect(welcome).toContain("Hi! Welcome to the self-guided tour for 27 Oak Ln, Teaneck, NJ.");
+    expect(welcome).toContain("Hi! Welcome to the self-guided tour for 27 Oak Ln, Teaneck, NJ 07666.");
     expect(welcome).toContain("questions about the home");
-    expect(welcome).toContain("I have");
+    expect(welcome).toContain("Which day works for you?");
     expect(welcome).not.toContain("Which unit");
+    expect(welcome).not.toContain("Main Home");
     expect(welcome).not.toContain("Happy to set up");
+    const config = h.workspace.load(id).config;
+    const rent = resolveQuestion(config, "How much is the rent for this home?");
+    expect(rent).toMatchObject({ kind: "answer", facts: [{ text: "27 Oak Ln rents for $3,400 a month." }] });
+    expect(rent.kind === "answer" ? rent.facts.map((fact) => fact.text).join(" ") : "").not.toMatch(/Main Home|\bunit\b/i);
+    const guidance = config.routes[0]!.stops.map((stop) => stop.guidance).join(" ");
+    expect(guidance).toContain("Welcome to 27 Oak Ln");
+    expect(guidance).not.toContain("Main Home");
   });
 });
 

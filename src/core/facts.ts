@@ -1,5 +1,6 @@
 import type { TourCoreConfig } from "../config/tourCoreConfig";
 import { profileFacts, type ProfileField } from "../config/unitProfile";
+import { visitorSubject } from "../visitor/identity";
 
 /** A statement the operator wrote and approved. Tour guidance may only repeat these. */
 export interface ApprovedFact {
@@ -71,7 +72,8 @@ export function approvedFacts(config: TourCoreConfig, unitId?: string): Approved
   const out: ApprovedFact[] = config.property.facts.map((text) => ({ scope: "property", subject: config.property.name, text, source: "operator" }));
   const units = unitId ? config.units.filter((u) => u.id === unitId) : config.units;
   for (const unit of units) {
-    for (const f of profileFacts(unit)) out.push({ scope: "unit", unitId: unit.id, subject: unit.name, text: f.text, source: "operator", profileField: f.field });
+    const subject = visitorSubject(config.property, unit.name);
+    for (const f of profileFacts(unit, subject)) out.push({ scope: "unit", unitId: unit.id, subject, text: f.text, source: "operator", profileField: f.field });
     for (const text of [unit.summary, ...unit.facts].filter((t) => t.trim())) {
       out.push({ scope: "unit", unitId: unit.id, subject: unit.name, text, source: "operator" });
     }

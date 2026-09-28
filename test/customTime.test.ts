@@ -21,6 +21,7 @@ const atTime = (hour: number, minute = 0) => zonedTimeToUtc({ year: 2026, month:
 async function chooseUnit(a: LiveApp) {
   await a.text("Hi");
   await a.text("1");
+  await a.text("1");
 }
 
 async function ask(a: LiveApp, message: string) {

@@ -80,9 +80,9 @@ const sentence = (s: string) => {
 };
 
 /** One plain sentence per provided value. NOT_PROVIDED and absent fields produce nothing (so visitors get the safe unknown flow). */
-export function profileFacts(unit: UnitLike): { field: ProfileField; text: string }[] {
+export function profileFacts(unit: UnitLike, subject = unit.name): { field: ProfileField; text: string }[] {
   const p = unit.profile ?? {};
-  const n = unit.name;
+  const n = subject;
   const out: { field: ProfileField; text: string }[] = [];
   const add = (f: ProfileField, text: string) => out.push({ field: f, text });
   if (p.bedrooms?.status === "PROVIDED") add("bedrooms", p.bedrooms.value === 0 ? `${n} is a studio (no separate bedroom).` : `${n} has ${plural(p.bedrooms.value, "bedroom", "bedrooms")}.`);

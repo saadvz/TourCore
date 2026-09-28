@@ -212,6 +212,7 @@ export class MessagingConversations {
           step: "intro",
           visitorPhone: record.visitorPhone,
           offeredSlots: [],
+          offeredDates: [],
           optedOut: false,
           createdAt: record.ranAt,
           updatedAt: record.updatedAt,

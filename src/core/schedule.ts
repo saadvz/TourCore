@@ -40,6 +40,17 @@ export function nextTourDay(config: TourCoreConfig, from: Date): LocalDate {
   throw new Error("No tour times are available in the next two weeks");
 }
 
+/** "2026-09-28" */
+export function isoDate(day: LocalDate): string {
+  return `${day.year}-${String(day.month).padStart(2, "0")}-${String(day.day).padStart(2, "0")}`;
+}
+
+export function parseIsoDate(value: string): LocalDate | undefined {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return undefined;
+  return { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) };
+}
+
 export function tourWindow(config: TourCoreConfig, slotStart: Date): { windowStart: Date; windowEnd: Date } {
   return {
     windowStart: new Date(slotStart.getTime() - config.tourHours.earlyArrivalMinutes * 60_000),

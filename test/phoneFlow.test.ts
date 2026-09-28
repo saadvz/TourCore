@@ -71,6 +71,7 @@ async function bookByText(app: Awaited<ReturnType<typeof startPhoneApp>>) {
   await app.text("Hi");
   await app.text("1");
   await app.text("1");
+  await app.text("1");
   const consent = await app.text("YES");
   const link = consent.replies.join("\n").match(/https:\/\/tour\.example\/verify\/([A-Za-z0-9_-]+)/);
   return link![1]!;
@@ -87,7 +88,11 @@ describe("a real phone over Sendblue", () => {
 
     const unit = await app.text("1");
     expect(unit.replies[0]).toContain("Here's what the property team shared: Two-bedroom, first floor, south-facing.");
-    expect(unit.replies[0]).toContain("Reply 1 for 2:00 PM or 2 for 3:30 PM.");
+    expect(unit.replies[0]).toContain("Which day works for you?");
+
+    const day = await app.text("1");
+    expect(day.replies[0]).toContain("I have these times available");
+    expect(day.replies[0]).toContain("Reply 1 for 2:00 PM or 2 for 3:30 PM.");
 
     const time = await app.text("1");
     expect(time.replies[0]).toContain("Is it OK if I text you about this tour");
@@ -151,6 +156,7 @@ describe("a real phone over Sendblue", () => {
     const app = await startPhoneApp();
     await app.text("Hi", "dup-1");
     await app.text("1", "dup-2");
+    await app.text("1", "dup-day");
     const first = await app.text("1", "dup-3");
     const retry = await app.text("1", "dup-3");
     expect(first.replies).toHaveLength(1);
@@ -165,6 +171,7 @@ describe("a real phone over Sendblue", () => {
   it("understands natural texts over Sendblue; a retried one still acts once; how it was read stays developer-only", async () => {
     const app = await startPhoneApp();
     await app.text("hey I wanna see 101");
+    await app.text("monday");
     await app.text("1 works");
     const consent = await app.text("yeah that's fine");
     const token = consent.replies[0]!.match(/\/verify\/([A-Za-z0-9_-]+)$/)![1]!;

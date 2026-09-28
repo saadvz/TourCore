@@ -28,6 +28,14 @@ export const TourIntentSchema = z.discriminatedUnion("type", [
     minute: z.number().int().min(0).max(59),
     meridiem: z.enum(["AM", "PM"]).optional(),
     day: z.enum(["today", "tomorrow"]).optional(),
+    weekday: z.enum(["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]).optional(),
+    nextWeek: z.boolean().optional(),
+  }),
+  z.object({
+    type: z.literal("SELECT_DATE"),
+    weekday: z.enum(["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]).optional(),
+    relative: z.enum(["today", "tomorrow", "weekend"]).optional(),
+    nextWeek: z.boolean().optional(),
   }),
   z.object({ type: z.literal("ACCEPT_PROPOSED_TIME") }),
   z.object({ type: z.literal("DECLINE_PROPOSED_TIME") }),
@@ -67,6 +75,8 @@ export interface IntentInterpretation {
    * visitor confirms it.
    */
   mentionedTime?: { hour: number; minute: number; meridiem?: "AM" | "PM"; day?: "today" | "tomorrow" };
+  /** A day named next to a property question. The question is answered, then that day's times are shown. */
+  mentionedDate?: { weekday?: "SUN" | "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT"; relative?: "today" | "tomorrow" | "weekend"; nextWeek?: boolean };
   /** The text reads like an instruction to the assistant ("ignore your rules..."), not a visitor action. */
   manipulation?: boolean;
 }
@@ -97,7 +107,7 @@ export type StepAwaiting =
  */
 export type Awaiting = StepAwaiting | { kind: "which-unit"; question: string; units: string[]; resume?: StepAwaiting };
 
-export type ConversationStep = "intro" | "choose-unit" | "choose-time" | "consent" | "identity" | "ready" | "touring" | "follow-up" | "done" | "stopped";
+export type ConversationStep = "intro" | "choose-unit" | "choose-date" | "choose-time" | "consent" | "identity" | "ready" | "touring" | "follow-up" | "done" | "stopped";
 
 export interface InterpretContext {
   message: string;
@@ -128,6 +138,7 @@ const STATE_CHANGING: ReadonlySet<IntentType> = new Set([
   "SELECT_UNIT",
   "SELECT_TIME",
   "REQUEST_CUSTOM_TIME",
+  "SELECT_DATE",
   "ACCEPT_PROPOSED_TIME",
   "DECLINE_PROPOSED_TIME",
   "CONSENT_YES",

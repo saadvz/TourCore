@@ -12,7 +12,9 @@ import {
 import { parseProfileValue, PROFILE_FIELDS, ProfileValueError, type ProfileField, type UnitProfile } from "../config/unitProfile";
 import type { ConfigIssue, ConfigSection } from "../config/validateConfig";
 import { formatClockTime, friendlyTimeZone, WEEKDAYS, type Weekday } from "../core/timezone";
+import { visitorSubject } from "../visitor/identity";
 import { inferTimeZone, resolveTimeZone, slugify } from "./parse";
+import { formatCanonical, parseUsAddress } from "./address";
 
 /**
  * Setup actions. Each takes the current draft and returns a new one; nothing
@@ -126,16 +128,21 @@ export function createPropertySetup(input: {
   /** The installation's real visitor texting, when it has one: a new property uses it instead of demo messaging. */
   messagingMode?: SetupDraft["messagingMode"];
 }): SetupDraft {
-  const address = requireName(input.address, "ADDRESS_MISSING", "Please enter the property's address.");
+  const parsed = parseUsAddress(input.address);
+  const address = parsed?.address.formatted || requireName(input.address, "ADDRESS_MISSING", "Please enter the property's address.");
   const displayName = input.name?.trim() || undefined;
   const timezone = input.timezone ? requireTimeZone(input.timezone) : inferTimeZone(address).timezone;
   const propertyType = input.propertyType ? requirePropertyType(input.propertyType) : undefined;
+  const zip = parsed?.address.postalCode;
+  const confirmed = !!zip && !!propertyType && !parsed!.missing.some((part) => part !== "postalCode");
   return {
     schemaVersion: 1,
     property: withLabel({
       id: uniqueId(`prop_${slugify(displayName ?? address)}`, input.existingPropertyIds ?? [], "prop_property"),
       name: "",
       address,
+      ...(parsed ? { canonicalAddress: parsed.address } : {}),
+      addressConfirmed: confirmed,
       ...(displayName ? { displayName } : {}),
       ...(propertyType ? { propertyType } : {}),
       timezone,
@@ -161,13 +168,32 @@ export function createPropertySetup(input: {
  */
 export function setPropertyDetails(
   draft: SetupDraft,
-  input: { name?: string; address?: string; propertyType?: string; timezone?: string; facts?: string[] },
+  input: { name?: string; address?: string; propertyType?: string; timezone?: string; facts?: string[]; postalCode?: string; confirmAddress?: boolean },
 ): SetupDraft {
   const next = clone(draft);
   // A setup saved before names and addresses were kept apart: an earlier name that isn't the address was the operator's.
   if (next.property.displayName === undefined && next.property.name.trim() && next.property.name.trim() !== next.property.address.trim()) next.property.displayName = next.property.name.trim();
   if (input.name !== undefined) next.property.displayName = input.name.trim() || undefined;
-  if (input.address !== undefined) next.property.address = requireName(input.address, "ADDRESS_MISSING", "Please enter the property's address.");
+  if (input.address !== undefined) {
+    const parsed = parseUsAddress(input.address);
+    next.property.address = parsed?.address.formatted || requireName(input.address, "ADDRESS_MISSING", "Please enter the property's address.");
+    if (parsed) next.property.canonicalAddress = parsed.address;
+    next.property.addressConfirmed = false;
+  }
+  if (input.postalCode !== undefined) {
+    const zip = input.postalCode.trim();
+    if (!/^\d{5}(?:-\d{4})?$/.test(zip)) throw new SetupInputError("ZIP_INVALID", "A ZIP code is five digits, like 07666.");
+    const current = next.property.canonicalAddress ?? parseUsAddress(next.property.address)?.address;
+    if (!current?.street || !current.city || !current.state) throw new SetupInputError("ADDRESS_INCOMPLETE", "I still need the street, city and state before a ZIP code.");
+    const canonicalAddress = { ...current, postalCode: zip.slice(0, 5), formatted: formatCanonical({ ...current, postalCode: zip.slice(0, 5) }) };
+    next.property.canonicalAddress = canonicalAddress;
+    next.property.address = canonicalAddress.formatted;
+    next.property.addressConfirmed = false;
+  }
+  if (input.confirmAddress) {
+    if (!next.property.canonicalAddress?.postalCode) throw new SetupInputError("ADDRESS_INCOMPLETE", "I still need the ZIP code before that address can be confirmed.");
+    next.property.addressConfirmed = true;
+  }
   if (input.propertyType !== undefined) next.property.propertyType = requirePropertyType(input.propertyType);
   if (input.timezone !== undefined) next.property.timezone = requireTimeZone(input.timezone);
   if (input.facts !== undefined) next.property.facts = cleanFacts(input.facts);
@@ -410,12 +436,13 @@ export function setRoute(draft: SetupDraft, unitId: string, doorIds: string[], o
 }
 
 function guidanceFor(draft: SetupDraft, unit: Unit, doorId: string, isLast: boolean, directions?: string): string {
-  if (isLast) return `Welcome to ${unit.name}! Take your time, and text me any questions.`;
+  const place = draft.property.propertyType === "SINGLE_FAMILY" ? visitorSubject(draft.property, unit.name) : unit.name;
+  if (isLast) return `Welcome to ${place}! Take your time, and text me any questions.`;
   const door = draft.doors.find((d) => d.id === doorId);
   if (door?.kind === "ENTRANCE") {
-    return `Come on in. ${directions ? `To get to ${unit.name}: ${directions.replace(/[.!]?$/, ".")}` : `Head to ${unit.name}.`}`;
+    return `Come on in. ${directions ? `To get to ${place}: ${directions.replace(/[.!]?$/, ".")}` : `Head to ${place}.`}`;
   }
-  return `Keep going toward ${unit.name}.`;
+  return `Keep going toward ${place}.`;
 }
 
 // ---------------------------------------------------------- hours, policies

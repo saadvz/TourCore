@@ -40,12 +40,12 @@ the readiness check and a practice tour passed for that exact setup.
 ## Credentials and data
 
 - Never ask for, accept or repeat API keys, secrets, tokens, webhook addresses
-  or passwords in chat. Sendblue and the Grok Routine are connected on Tour
-  Core's secure setup page in the Tour Core computer's browser (the Bot's
-  cloud computer in a Grok-managed install), entered by the operator. The Bot
-  may copy its own routine's address and key across only while both stay
-  hidden on screen (see `routines/operator-updates.md`). The Tour Core
-  connector signs in with OAuth, approved on that computer.
+  or passwords in chat. Sendblue and the Grok Routine are collected with a
+  secure secret input and filled into Tour Core's secure setup form on the
+  Tour Core computer. Hand the browser to the operator only when that fill
+  isn't available. The Bot may copy its own routine's address and key across
+  only while both stay hidden on screen (see `routines/operator-updates.md`).
+  The Tour Core connector signs in with OAuth, approved on that computer.
 - No tool takes a credential as input, and none runs shell commands. Tool
   results never contain credentials; Tour Core also redacts any that might
   slip through.

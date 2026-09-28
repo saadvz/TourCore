@@ -90,11 +90,16 @@ published; an approved fact doesn't need another readiness check.
 **Operator:** Set up 12 Maple St, Springfield. Call it Maple House.
 
 [`create_property_setup` address "12 Maple St, Springfield", name "Maple House"
-(the operator said it) → nextQuestion "What type of property is this?"]
+(the operator said it). A US address still needs a ZIP before it is confirmed.
+Missing ZIP → "What ZIP code should I use?", then a read-back, then property
+type. Never invent the ZIP.]
 
-**Tour Core:** Got it: 12 Maple St, Springfield, called Maple House. What type
-of property is this: a single-family home, a multifamily home, an apartment
-building, or something else?
+**Tour Core:** What ZIP code should I use?
+
+**Operator:** 01103.
+
+[`update_property_details` postalCode, then confirmAddress after the read-back
+→ "What type of property is this?"]
 
 **Operator:** Single-family.
 

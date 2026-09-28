@@ -115,6 +115,7 @@ async function bookToConsent(app: App) {
   await app.text("Hi");
   await app.text("1");
   await app.text("1");
+  await app.text("1");
 }
 
 async function bookAndVerify(app: App) {
@@ -136,9 +137,11 @@ describe("a text-message tour picks up where it left off after a restart", () =>
     const app = await durableApp();
     await app.text("Hi");
     const unit = await app.text("1");
-    expect(unit.reply).toContain("Reply 1 for 2:00 PM or 2 for 3:30 PM.");
+    expect(unit.reply).toContain("Which day works for you?");
 
     await app.restart();
+    const day = await app.text("1");
+    expect(day.reply).toContain("Reply 1 for 2:00 PM or 2 for 3:30 PM.");
     const time = await app.text("1");
     expect(time.reply).toContain("you're booked for 2:00 PM");
     expect(time.reply).toContain("Is it OK if I text you about this tour");
@@ -148,6 +151,21 @@ describe("a text-message tour picks up where it left off after a restart", () =>
     expect(b.reservations).toHaveLength(1);
     expect(b.auditEvents.filter((e) => e.type === "RESERVATION_CREATED")).toHaveLength(1);
     expect(new Set(b.messages.map((m) => m.correlationId))).toEqual(new Set([b.messages[0]!.correlationId]));
+  });
+
+  it("keeps the chosen day through a restart, so the next number is that day's time", async () => {
+    const app = await durableApp();
+    await app.text("Hi");
+    await app.text("1");
+    const thursday = await app.text("Thursday");
+    expect(thursday.reply).toContain("Thursday, Oct 1");
+    expect(thursday.reply).toContain("Reply 1 for 2:00 PM or 2 for 3:30 PM.");
+
+    await app.restart();
+    const time = await app.text("1");
+    expect(time.reply).toContain("you're booked for 2:00 PM");
+    expect(time.reply).toContain("Thursday, Oct 1");
+    expect(time.reply).not.toContain("Monday, Sep 28");
   });
 
   it("consent: a natural yes after the restart answers the consent question", async () => {
@@ -308,6 +326,7 @@ describe("retried webhooks after a restart", () => {
     const app = await durableApp();
     await app.text("Hi", "evt-1");
     await app.text("1", "evt-2");
+    await app.text("1", "evt-3");
     const first = await app.text("1", "ABC");
     expect(first.replies).toHaveLength(1);
 

@@ -3,6 +3,7 @@ import type { Installation } from "../install/installation";
 import { secretValues } from "../install/settings";
 import { INSTALLATION_TOOLS } from "../install/tools";
 import { installedMessaging } from "../install/status";
+import { addressReadback } from "../setup/address";
 import { PROPERTY_TYPE_LABELS, PROPERTY_TYPES, validateConfig } from "../config/tourCoreConfig";
 import { FIELD_WORDS, missingProfileFields, nextProfileQuestion, parseBulkUnitDetails, profileSummaryLine } from "../config/unitProfile";
 import { TourCoreError } from "../core/TourCore";
@@ -106,7 +107,12 @@ function servicesOf(ctx: ToolContext): OperatorServices {
 const PROPERTY_TYPE_CHOICES = PROPERTY_TYPES.map((t) => ({ choice: t, label: PROPERTY_TYPE_LABELS[t] }));
 
 /** The next property question Tour Core wants asked, so the setup order depends on the property type. */
-function propertyNextQuestion(draft: SetupDraft): { nextQuestion: string; choices?: typeof PROPERTY_TYPE_CHOICES; suggestedName?: string } | undefined {
+function propertyNextQuestion(draft: SetupDraft): { nextQuestion: string; choices?: typeof PROPERTY_TYPE_CHOICES; suggestedName?: string; confirmAddress?: boolean } | undefined {
+  const canonical = draft.property.canonicalAddress;
+  if (canonical && !canonical.postalCode) return { nextQuestion: "What ZIP code should I use?" };
+  if (canonical?.postalCode && !draft.property.addressConfirmed) {
+    return { nextQuestion: `I have:\n${addressReadback(canonical)}\nIs that the address?`, confirmAddress: true };
+  }
   if (!draft.property.propertyType) return { nextQuestion: "What type of property is this?", choices: PROPERTY_TYPE_CHOICES };
   if (draft.units.length) return undefined;
   const spaces = tourableSpacesQuestion(draft);
@@ -337,7 +343,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Start a property setup",
     kind: "change",
     description:
-      "Starts a new property from its canonical street address. The address is the property's identity and is what visitors hear unless the operator gives a property or building name themselves: never suggest, invent or \"improve\" a name. Right after, ask nextQuestion (\"What type of property is this?\") and save the answer with update_property_details; never guess the type from the address. The time zone is guessed from the address: confirm it. Visitor texting is connected automatically when this Tour Core has it; don't ask how to text people. If a property with that address already exists, it's returned instead of creating a second one.",
+      "Starts a new property from its street address. The address is what visitors hear unless the operator gives a public property name themselves: never suggest or invent one. A US address needs a street, city, state and ZIP. If the ZIP is missing, ask nextQuestion (\"What ZIP code should I use?\") and save it with update_property_details postalCode. Then ask them to confirm the read-back before property type. Never guess the type from the address. The time zone is guessed from the address: confirm it. Visitor texting is connected automatically when this Tour Core has it. If a property with that address already exists, it's returned instead of creating a second one.",
     input: z.strictObject({
       address: z.string().min(1).max(200).describe("The property's street address, as the operator confirmed it."),
       name: z.string().max(120).optional().describe("Only a property or building name the operator said themselves. Leave out otherwise; the address is used."),
@@ -366,12 +372,14 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Update property details",
     kind: "change",
     description:
-      "Changes the property's type, address, operator-given name, time zone, approved property facts (replaces the whole list), or who gets alerts. The name is only one the operator said (an empty name goes back to using the address). Facts must be the operator's own words; never write facts yourself. Returns nextQuestion when Tour Core wants something asked next (e.g. how to name the tourable spaces for this property type).",
+      "Changes the property's type, address, ZIP, public name, time zone or approved property facts. The name is only one the operator said (an empty name goes back to using the address). A ZIP code does not invent the rest of the address. confirmAddress is true only after they agree to the read-back. Facts must be the operator's own words. Returns nextQuestion when something still has to be asked, and that question comes before property type until the address is confirmed.",
     input: z.strictObject({
       property: Property,
       propertyType: z.enum(PROPERTY_TYPES).optional().describe("From the operator's answer to \"What type of property is this?\"."),
       name: z.string().max(120).optional().describe("Only a property or building name the operator said. Empty removes it."),
       address: z.string().max(200).optional(),
+      postalCode: z.string().max(10).optional().describe("The ZIP code the operator gave. Five digits. Don't invent one."),
+      confirmAddress: z.boolean().optional().describe("True only after the operator agreed the read-back address is right."),
       timezone: z.string().max(60).optional(),
       facts: Facts.optional().describe("The full list of approved property facts, in the operator's words."),
       alertName: z.string().max(120).optional().describe("Who should hear about problems, e.g. \"Leasing team\"."),
@@ -379,7 +387,15 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
-      let next = applySetupCommand(draft, "setPropertyDetails", { name: i.name, address: i.address, propertyType: i.propertyType, timezone: i.timezone, facts: i.facts });
+      let next = applySetupCommand(draft, "setPropertyDetails", {
+        name: i.name,
+        address: i.address,
+        propertyType: i.propertyType,
+        timezone: i.timezone,
+        facts: i.facts,
+        postalCode: i.postalCode,
+        confirmAddress: i.confirmAddress,
+      });
       if (i.alertName !== undefined || i.alertContact !== undefined) next = applySetupCommand(next, "setAlertContact", { name: i.alertName, contact: i.alertContact });
       ctx.services.workspace.persistEdit(next, ctx.now());
       const setup = setupSnapshot(ctx, id);
@@ -852,14 +868,28 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       if (blockers.length) return blocked(blockers);
       const { config, state } = saved!;
       const modes = subsystemLines(ctx, id, config).sentence;
-      if (state.status === "PUBLISHED_FOR_DEMO") return { published: true, status: "already-published", summary: `${config.property.name} is already published for demo. ${modes}` };
+      if (state.status === "PUBLISHED_FOR_DEMO") {
+        return {
+          published: true,
+          status: "already-published",
+          summary: `${config.property.name} is already published for demo. ${modes}`,
+          instructions: "This property is already published. Tell the operator that. Do not ask them to publish again.",
+        };
+      }
       const fingerprint = `${state.configHash}|${state.readiness?.checkedAt}|${state.dryTour?.ranAt}`;
       if (!i.confirmationCode) return needsConfirmation(ctx, "publish", id, fingerprint, `Everything passed. Do you want me to publish ${config.property.name} for demo?`);
       ctx.confirmations.redeem(i.confirmationCode, "publish", id, fingerprint);
       const result = await publishProperty(services, id, ctx.now());
       if (!result.published) return blocked(result.blockers);
       const live = subsystemLines(ctx, id, config).texting.state === "connected";
-      return { published: true, status: "published", summary: `${config.property.name} is published for demo.${live ? " Visitors can start a tour by texting your touring number." : ""} ${modes}`, modes };
+      const again = ctx.services.workspace.load(id);
+      return {
+        published: true,
+        status: again.state.status === "PUBLISHED_FOR_DEMO" ? "published" : "unpublished",
+        summary: `${config.property.name} is published for demo.${live ? " Visitors can start a tour by texting your touring number." : ""} ${modes}`,
+        modes,
+        instructions: "Publishing finished. Tell the operator the property is published, using summary. Do not say it still needs a yes.",
+      };
     },
   }),
 

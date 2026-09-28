@@ -314,6 +314,7 @@ async function readyForTour(p: ReturnType<typeof phone>, time = at(13, 58)) {
   await p.say("hi");
   await p.say("1");
   await p.say("1");
+  await p.say("1");
   await p.say("yes");
   await p.session.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: PHONE });
   p.session.clock.jumpTo(new Date(time));
@@ -330,6 +331,7 @@ describe("natural texts drive the real tour", () => {
     const p = phone();
     await p.say("hey I wanna see 101");
     expect(p.lastReply()).toContain("Happy to set up a self-guided tour of Unit 101");
+    await p.say("1");
     await p.say("2 works");
     expect(p.lastReply()).toContain("you're booked for 3:30 PM");
     await p.say("yeah that's fine");
@@ -417,6 +419,7 @@ describe("natural texts drive the real tour", () => {
     await p.say("hi");
     await p.say("2");
     expect(p.lastReply()).toContain("Unit 102");
+    await p.say("1");
     await p.say("1");
     await p.say("NO");
     expect(await p.session.stage()).toBe("stopped");

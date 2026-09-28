@@ -28,9 +28,8 @@ click Allow.
 CONNECT_VISITOR_MESSAGING. `get_secure_setup_url` step visitor-messaging,
 opened in the cloud browser.]
 
-**Tour Core:** Visitor texting is the next step. I've opened Tour Core's secure
-setup page so you can connect your Sendblue messaging account there, not in
-chat.
+**Tour Core:** Visitor texting needs your Sendblue credentials. I'll ask for
+them securely; they won't be shown to me in chat.
 
 **Operator:** Done.
 
@@ -49,16 +48,30 @@ start is connected and tested. Would you like to add your first property?
 **Tour Core:** What's the property address?
 [`list_properties`]
 
-**Operator:** 144 Hillside Ave, Teaneck.
+**Operator:** 144 Hillside Ave, Teaneck NJ.
 
 [`create_property_setup` address "144 Hillside Ave, Teaneck NJ" (no name: the
-operator didn't give one) → nextQuestion "What type of property is this?"]
+operator didn't give one) → nextQuestion "What ZIP code should I use?"]
 
-**Tour Core:** I have 144 Hillside Ave, Teaneck NJ, on Eastern Time. Right?
-And what type of property is this: a single-family home, a multifamily home,
-an apartment building, or something else?
+**Tour Core:** What ZIP code should I use?
 
-**Operator:** Yes. It's an apartment building.
+**Operator:** 07666.
+
+[`update_property_details` postalCode "07666" → read the address back]
+
+**Tour Core:** I have:
+144 Hillside Ave
+Teaneck, NJ 07666
+Is that the address?
+
+**Operator:** Yes.
+
+[`update_property_details` confirmAddress true → "What type of property is this?"]
+
+**Tour Core:** What type of property is this: a single-family home, a
+multifamily home, an apartment building, or something else?
+
+**Operator:** An apartment building.
 
 [`update_property_details` propertyType APARTMENT_BUILDING → nextQuestion
 "Which units can people tour?"]

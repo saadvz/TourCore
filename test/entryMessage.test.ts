@@ -45,9 +45,9 @@ describe("the opening text", () => {
     expect(replies).toHaveLength(1);
     expect(replies[0]).toContain("Hi! Welcome to the self-guided tour for Teaneck Home at 144 Hillside Ave, Teaneck, NJ 07666.");
     expect(replies[0]).toContain("questions about the home");
-    expect(replies[0]).toContain("I have");
-    expect(replies[0]).toContain("Reply 1 for");
+    expect(replies[0]).toContain("Which day works for you?");
     expect(replies[0]).not.toContain("Which unit");
+    expect(replies[0]).not.toContain("Main Home");
     expect(replies[0]).not.toContain("Happy to set up");
   });
 

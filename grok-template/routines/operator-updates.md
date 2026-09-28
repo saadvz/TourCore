@@ -92,18 +92,16 @@ saved. If the operator says yes:
 1. Grok saves their choice (`set_notification_preferences`) and creates this
    routine itself, with an authenticated webhook trigger and the instructions
    above.
-2. Grok opens Tour Core's secure setup page (`get_secure_setup_url`, step
-   `operator-alerts`) in its cloud browser, next to the routine's trigger
-   panel. The **Tour updates (Grok Routine)** card has two masked fields
-   (webhook address and key) and a masked paste box, "Or paste the routine's
-   whole webhook example"; Tour Core pulls the address and bearer key out of
-   the example itself.
-3. If the routine panel has copy buttons and both values stay hidden on
-   screen, Grok may copy each one into the matching masked Tour Core field
-   itself, without reading, repeating or storing it.
-4. If either value is shown on screen, Grok doesn't move it. It hands control
-   of the browser to the operator, who copies both values across (or pastes
-   the whole webhook example into the paste box).
+2. Grok asks for the webhook address and key with a secure secret input and
+   fills Tour Core's form (`get_secure_setup_url`, step `operator-alerts`).
+   The values are not shown in chat and are not tool arguments.
+3. If that secure fill isn't available, and the routine panel has copy
+   buttons that keep both values hidden on screen, Grok may paste those
+   hidden values into the matching masked fields, without reading or
+   repeating them.
+4. If a value is shown on screen, or secure fill isn't available, Grok hands
+   the browser to the operator. The operator copies both values, or pastes
+   the routine's whole webhook example into Tour Core's paste box.
 5. The address and key never go in chat, tool arguments, files or commands.
    Tour Core then has Grok send a test update (`test_operator_alerts`).
 
@@ -118,6 +116,13 @@ credentials are never MCP tool arguments.
 
 This policy was written from Tour Core's side; it has not been verified
 against a live Grok Routine panel from this environment.
+
+## During installation
+
+If this routine wakes you while installation or publishing is still going,
+call `get_next_installation_step` before you continue that work. Tour Core's
+status wins over what you remember from earlier in the chat. A published
+property is not unpublished by an update.
 
 ## Allowed tools
 

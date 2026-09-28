@@ -74,6 +74,7 @@ describe("P0 operator demo through Grok tools, with a real-phone visitor", () =>
     await demo.text("Hi");
     await demo.text("1");
     await demo.text("1");
+    await demo.text("1");
     const consent = await demo.text("YES");
     const token = /\/verify\/([A-Za-z0-9_-]+)/.exec(consent)![1]!;
     await fetch(`http://127.0.0.1:${demo.port}/api/verify/${token}`, {

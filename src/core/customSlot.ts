@@ -80,19 +80,26 @@ function clockLabel(hour: number, minute: number): string {
 export function resolveSpokenTime(config: TourCoreConfig, now: Date, spoken: SpokenTime, contextDay?: LocalDate): ResolvedTime {
   const tz = config.property.timezone;
   const today = localDateOf(now, tz);
-  const day = spoken.day === "tomorrow" ? addDays(today, 1) : spoken.day === "today" ? today : (contextDay ?? today);
+  const named = spoken.weekday ? weekdayOnOrAfter(spoken.nextWeek ? addDays(today, 1) : today, spoken.weekday) : undefined;
+  const day = spoken.day === "tomorrow" ? addDays(today, 1) : spoken.day === "today" ? today : (named ?? contextDay ?? today);
   const meridiem = chooseMeridiem(config, day, spoken);
   if (!meridiem) {
     return { ok: false, ask: `Did you mean ${clockLabel(spoken.hour, spoken.minute)} AM or ${clockLabel(spoken.hour, spoken.minute)} PM?` };
   }
   const start = at(day, spoken.hour, spoken.minute, meridiem, tz);
   if (start.getTime() <= now.getTime()) {
-    if (spoken.day === "today" || (contextDay && sameDay(day, today) && !spoken.day)) {
+    if (spoken.day === "today" || (contextDay && sameDay(day, today) && !spoken.day && !spoken.weekday)) {
       return { ok: false, ask: "That time has already passed. What time would you like?" };
     }
-    if (!spoken.day) return { ok: false, ask: "That time today has already passed. Did you mean tomorrow?" };
+    if (!spoken.day && !spoken.weekday) return { ok: false, ask: "That time today has already passed. Did you mean tomorrow?" };
   }
   return { ok: true, start, placement: placementOf(config, start), label: formatTime(start, tz) };
+}
+
+function weekdayOnOrAfter(start: LocalDate, weekday: NonNullable<SpokenTime["weekday"]>): LocalDate {
+  let day = start;
+  for (let i = 0; i < 14; i++, day = addDays(day, 1)) if (weekdayOf(day) === weekday) return day;
+  return start;
 }
 
 /** An ISO instant, or everyday words ("3:15 PM", "tomorrow at 11:15"). */

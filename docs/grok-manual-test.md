@@ -59,11 +59,12 @@ Send only this (with the real repository address):
 | B3 | Read Grok's first message | Approximately: "I'll handle the technical setup and only ask when I need a login, approval or decision." Grok installs Tour Core without narrating the technical steps |
 | B4 | Wait | "Tour Core is installed and running. I need your approval to connect to it. I've opened the approval screen. Check that the codes match and click Allow." The approval screen is in Grok's cloud browser |
 | B5 | Take over the browser, check the codes match, click **Allow** | Without being asked: "Connected. I'm checking the rest of the setup now." Grok calls `get_installation_status` and `get_next_installation_step` |
-| B6 | Wait (**step 2: connect Sendblue**) | "Visitor texting is the next step. I've opened Tour Core's secure setup page..." Grok does **not** offer property setup or ask what to do next |
+| B6 | Wait (**step 2: connect Sendblue**) | "Visitor texting needs your Sendblue credentials. I'll ask for them securely; they won't be shown to me in chat." Grok fills Tour Core's form from that secure input. Computer takeover only if secure fill isn't available. Grok does **not** offer property setup, ask what to do next, or ask for the key in chat |
 | B7 | Take over the browser, enter the Sendblue key, secret and number, say "done" | Grok tests it itself, then: "Visitor texting is connected and working. Everything needed to start is connected and tested. Would you like to add your first property?" |
 | B7a | Right after texting is connected | Grok does **not** mention tour updates, and never calls them required. The secure setup page shows only the texting section |
-| B8 | Say yes (**step 3: create property**). Grok asks "What's the property address?"; answer *"144 Hillside Ave, Teaneck"* | Grok calls `create_property_setup` with the address only. It never suggests or invents a building name |
-| B9 | **Step 4: confirm canonical address** | Grok reads back the address as Tour Core saved it ("144 Hillside Ave, Teaneck NJ") and the guessed time zone, and asks if that's right |
+| B8 | Say yes (**step 3: create property**). Grok asks "What's the property address?"; answer *"144 Hillside Ave, Teaneck NJ"* | Grok calls `create_property_setup` with the address only. It asks "What ZIP code should I use?" and does not invent one |
+| B8a | Answer *"07666"* | Grok reads back 144 Hillside Ave / Teaneck, NJ 07666 and waits for yes before property type |
+| B9 | **Step 4: confirm canonical address** | After yes, Grok saves the confirmation and the guessed time zone, and asks if the time zone is right |
 | B10 | **Step 5: property type** | "What type of property is this?" with single-family home, multifamily home, apartment building, other. Answer *"Apartment building"*: Grok saves it (`update_property_details`) and asks "Which units can people tour?" (A single-family answer would get "Should I call it "Main Home"...?" instead, never a made-up unit number) |
 | B11 | **Step 6: units and unit profiles.** Answer *"1A, 1B, 2A and 2B."*, then in one go: *"1A and 1B are 2 bed 1 bath for $2,200. 2A is 3 bed 2 bath for $2,800 and 2B is 2 bed 2 bath for $2,500."* | Grok reads back one line per unit (e.g. "Unit 1A — 2 bed · 1 bath · $2,200/month · availability not given yet") and asks only "When are these units available?". Answer *"1A and 1B now, 2A October 15, 2B not sure yet"*, and when optional details are offered: *"All units have in-unit laundry."* Grok asks "Does that look right?" before doors; nothing was invented, and "not sure yet" shows as not listed |
 | B12 | **Step 7: map routes.** *"Visitors come in the main entrance. No inside doors."* | `add_door` Main Entrance; Grok shows "Main Entrance → Unit 1A Door" (etc.) and asks "Is that right?" before saving each route |
@@ -74,9 +75,9 @@ Send only this (with the real repository address):
 | B16a | Watch Grok's cloud computer | Grok creates the **Tour Core Operator Updates** routine itself (authenticated webhook trigger), then opens Tour Core's secure setup page next to the routine's trigger panel. Record how the panel shows the webhook address and key |
 | B16b | Handoff | If both values stay hidden behind copy buttons, Grok copies each into the masked Tour Core fields itself without reading them. If either is visible on screen, Grok does **not** move it: it hands you the browser and asks you to copy both values across, or to paste the whole webhook example into Tour Core's paste box. Neither value appears in chat, tool arguments, files or commands |
 | B16c | After saving | Grok runs `test_operator_alerts`; the routine posts "Tour updates are connected. I'll let you know about your tours here." |
-| B17 | Wait (**step 12: readiness**) | "Prospects can text your touring number to ask questions, choose a unit and time, verify their details, and complete the self-guided tour in the same conversation. I'll run a readiness check and a practice tour before we turn it on." Grok runs the readiness check without asking whether to skip it |
+| B17 | Wait (**step 12: readiness**) | "Prospects can text your touring number to ask questions, choose a day and time, verify their details, and complete the self-guided tour in the same conversation. I'll run a readiness check and a practice tour before we turn it on." Grok runs the readiness check without asking whether to skip it |
 | B18 | Wait (**step 13: practice tour**) | Practice tour passes with its proof points; no text reaches your phone, and no tour update is posted for it |
-| B19 | **Step 14: publish.** Grok: "Everything passed. Would you like me to publish 144 Hillside Ave for demo?" Say *"not yet"*, then *"yes"* | "not yet": still Draft. "yes": published, and Grok says "Your property is published. Visitor texting is live. Door access is still in demo mode, so no physical locks will open. I'll keep you updated on your tours and let you know when something needs your attention." Never "everything runs in demo mode" |
+| B19 | **Step 14: publish.** Grok: "Everything passed. Would you like me to publish 144 Hillside Ave for demo?" Say *"not yet"*, then *"yes"* | "not yet": still Draft. "yes": Grok publishes once, waits for the result, then says "Your property is published. Visitor texting is live. Door access is still in demo mode, so no physical locks will open. I'll keep you updated on your tours and let you know when something needs your attention." It does not ask for another yes, and it does not say publishing still needs a yes. Never "everything runs in demo mode" |
 | B19a | Throughout B3–B19 | None of these appear in the chat: a `trycloudflare.com` address, `/mcp`, a tool count, "connector", "OAuth", "tunnel", "webhook", "routine", ports, commands, environment variables or process ids. Grok never asks which setup step to do next |
 | B20 | On the cloud computer, stop Tour Core (Grok runs `npm run service:stop`), then ask Grok anything | Grok notices Tour Core isn't answering, runs `npm run bootstrap:grok`, and Tour Core is back with the same installation (same records) |
 | B21 | Stop the tunnel too (`npm run service:stop -- --tunnel`) and bootstrap again | New `trycloudflare.com` address. Status shows the Grok connection and visitor texting need action. Grok reconnects (you approve again) and runs `test_visitor_messaging`, which moves Sendblue's webhook to the new address |
@@ -259,4 +260,18 @@ changing that schedule.
 | E3 | "Approve 3:15." | Grok asks once to confirm |
 | E4 | "Yes." | The tour moves to 3:15 PM. The visitor is told. The property stays published. A new visitor is still offered the regular hourly times, not 3:15 |
 | E5 | "Move them to 3:30." | Same one confirmation, then the tour moves to 3:30 PM and the visitor is told. Regular hours are unchanged |
-| E6 | A visitor texts "Hi" | One opening message, with the address (and the property's own name only if one was given) and the next choice. Not a generic hello followed by a second introduction |
+
+## F. Date-first booking and property identity
+
+Fresh Grok install. Property address given as "144 Hillside Ave, Teaneck, NJ"
+with no ZIP. Single-family internal space: Main Home. No public property name.
+
+| # | Do | Expect |
+| --- | --- | --- |
+| F1 | Give the address without a ZIP | Grok asks "What ZIP code should I use?" and does not save a made-up ZIP |
+| F2 | Say the ZIP, then yes to the read-back | The address shown back is 144 Hillside Ave, Teaneck, NJ, plus that ZIP, before property type |
+| F3 | A visitor texts "Hi" | One opening message naming 144 Hillside Ave, not "Main Home". Then several upcoming tour days, not every time for one day |
+| F4 | "What availability do you have?" | The same kind of short date list |
+| F5 | "What about Thursday?" | Thursday's times. No exception for the property team |
+| F6 | "How much is rent?" | The answer uses the address (or "this home"), then Thursday's times again. Not "Main Home" |
+| F7 | Readiness, practice tour, then "Yes, publish it." | One publish. Grok says it is published only after the tool result and a fresh status read. No second publish question and no "still needs a yes" |

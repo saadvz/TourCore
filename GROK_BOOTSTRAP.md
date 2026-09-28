@@ -50,10 +50,10 @@ there once the repository is on your computer.
   tunnels, commands) unless troubleshooting.
 - Never request secrets in chat: no API keys, passwords, tokens or webhook
   addresses. If the operator pastes one, don't repeat it; ask them to rotate it.
-- Credentials and anything that needs a person (signing in, MFA, approving
-  Grok's connection) go through Tour Core's secure setup page or the
-  provider's own page, opened in your cloud browser, with the operator taking
-  over the browser.
+- Collect credentials in this order: secure secret input that fills Tour
+  Core's setup form, then a provider login when one exists, and only then
+  the operator taking over that page. Never put a secret in ordinary chat
+  or a tool argument. The Install Tour Core skill has the sentence to say.
 - Do everything else yourself. Never ask the operator to run a command.
 - Tour updates reach the operator through a Grok Routine (Tour Core Operator
   Updates) that you build when Tour Core offers them; its address and key

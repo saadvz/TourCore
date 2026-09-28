@@ -163,6 +163,7 @@ describe("browser setup", () => {
     const tap = async (action: string, input: unknown = {}) => (await app.call("POST", `/api/visitor-demos/${sid}/actions/${action}`, { input })).body.visitor;
     await tap("begin", { name: "Pat Smith", phone: "(555) 010-2000" });
     let phone = await tap("chooseUnit", { unitId: "unit_101" });
+    phone = await tap("chooseDate", phone.choices[0].input);
     phone = await tap("chooseTime", phone.choices[0].input);
     await tap("consent", { agree: true });
     phone = await tap("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: "555-010-2000" });
@@ -193,7 +194,8 @@ describe("browser setup", () => {
       const sid = (await app.call("POST", `/api/properties/${id}/visitor-demos`, {})).body.sessionId as string;
       const tap = async (action: string, input: unknown = {}) => (await app.call("POST", `/api/visitor-demos/${sid}/actions/${action}`, { input })).body.visitor;
       await tap("begin", { name: "Pat Smith", phone: "(555) 010-2000" });
-      const phone = await tap("chooseUnit", { unitId: "unit_101" });
+      let phone = await tap("chooseUnit", { unitId: "unit_101" });
+      phone = await tap("chooseDate", phone.choices[0].input);
       await tap("chooseTime", phone.choices[0].input);
       await tap("consent", { agree: true });
       await tap("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: "555-010-2000" });

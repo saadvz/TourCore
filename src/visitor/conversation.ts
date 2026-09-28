@@ -1,7 +1,8 @@
 import { resolveSpokenTime } from "../core/customSlot";
 import { orList, unitsNamedIn } from "../core/questions";
-import type { SpokenTime } from "../core/spokenTime";
-import { formatDay, localDateOf, zonedParts, type LocalDate } from "../core/timezone";
+import { isoDate, parseIsoDate } from "../core/schedule";
+import { type DayReference, type SpokenTime } from "../core/spokenTime";
+import { addDays, formatDay, localDateOf, weekdayOf, zonedParts, zonedTimeToUtc, type LocalDate } from "../core/timezone";
 import type { InboundMeta } from "../core/TourCore";
 import {
   isConfident,
@@ -17,6 +18,7 @@ import {
   type TourIntent,
 } from "../intent";
 import type { ReplyPrompt } from "../messaging/presentation";
+import { timeMenu } from "./entry";
 import type { InterpretationNote, Said, VisitorDemoSession, VisitorStage } from "./session";
 
 /**
@@ -53,7 +55,7 @@ async function contextFor(session: VisitorDemoSession, message: string, step: Vi
     step,
     ...(awaiting ? { awaiting } : {}),
     units: session.config.units.map((u) => ({ name: u.name, ...(u.summary ? { summary: u.summary } : {}) })),
-    timeChoices: session.offeredSlots.map((s) => s.label),
+    timeChoices: step === "choose-date" ? session.offeredDates.map((day) => day.label) : session.offeredSlots.map((s) => s.label),
     ...(r ? { reservedUnit: session.config.units.find((u) => u.id === r.unitId)?.name } : {}),
     remainingStops: remaining.map((id) => stopRef(session, id)),
     doors: session.config.doors.map((d) => stopRef(session, d.id)),
@@ -217,6 +219,10 @@ async function ask(turn: Turn, question: string, resume?: () => Promise<void>): 
     await confirmMentionedTime(turn, turn.interpretation.mentionedTime);
     return;
   }
+  if (turn.interpretation.mentionedDate && out.outcome !== "which-unit") {
+    await showAskedDay(turn, turn.interpretation.mentionedDate, true);
+    return;
+  }
   if (out.outcome === "which-unit") {
     const units = out.units ?? [];
     turn.markClarification();
@@ -234,12 +240,20 @@ async function contextDay(session: VisitorDemoSession): Promise<LocalDate | unde
   const reservation = await session.reservation();
   const tz = session.config.property.timezone;
   if (reservation?.slotStart) return localDateOf(new Date(reservation.slotStart), tz);
+  if (session.selectedDate) return parseIsoDate(session.selectedDate);
   const offered = session.offeredSlots[0];
   return offered ? localDateOf(offered.start, tz) : undefined;
 }
 
 function asSpoken(intent: Extract<TourIntent, { type: "REQUEST_CUSTOM_TIME" }> | SpokenTime): SpokenTime {
-  return { hour: intent.hour, minute: intent.minute, ...(intent.meridiem ? { meridiem: intent.meridiem } : {}), ...(intent.day ? { day: intent.day } : {}) };
+  return {
+    hour: intent.hour,
+    minute: intent.minute,
+    ...(intent.meridiem ? { meridiem: intent.meridiem } : {}),
+    ...(intent.day ? { day: intent.day } : {}),
+    ...("weekday" in intent && intent.weekday ? { weekday: intent.weekday } : {}),
+    ...("nextWeek" in intent && intent.nextWeek ? { nextWeek: true } : {}),
+  };
 }
 
 function meridiemOf(session: VisitorDemoSession, start: Date): "AM" | "PM" {
@@ -261,8 +275,8 @@ async function fileCustomTime(turn: Turn, spoken: SpokenTime, alreadyRecorded = 
   }
   const reservation = await session.reservation();
   if (reservation?.status === "INQUIRY" && resolved.placement === "ON_GRID") {
-    if (alreadyRecorded) return session.bookOffered(resolved.start.toISOString());
-    return turn.act("chooseTime", { slotStart: resolved.start.toISOString() });
+    if (!alreadyRecorded) await session.recordText(turn.said);
+    return session.bookOffered(resolved.start.toISOString());
   }
   if (!reservation) {
     session.holdTime(spoken);
@@ -337,11 +351,16 @@ function stepPrompt(session: VisitorDemoSession, stage: VisitorStage, awaiting?:
   switch (stage) {
     case "choose-unit":
       return { body: "Which unit would you like to see?", prompt: { kind: "choose", options: session.config.units.map((u) => u.name), what: "a unit" } };
+    case "choose-date": {
+      const labels = session.offeredDates.map((day) => day.label);
+      if (!labels.length) return undefined;
+      return { body: "I have tours available. Which day works for you?", prompt: { kind: "choose", options: labels, what: "a day" } };
+    }
     case "choose-time": {
       const labels = session.offeredSlots.map((s) => s.label);
       if (!labels.length) return undefined;
-      const day = formatDay(session.offeredSlots[0]!.start, session.config.property.timezone);
-      return { body: `I have ${listOf(labels)} available on ${day}. Which works for you?`, prompt: { kind: "choose", options: labels, what: "a time" } };
+      const day = session.selectedDate ? formatDay(session.offeredSlots[0]!.start, session.config.property.timezone) : formatDay(session.offeredSlots[0]!.start, session.config.property.timezone);
+      return timeMenu(day, labels);
     }
     case "consent":
       return { body: CONSENT_QUESTION, prompt: yesNo };
@@ -372,6 +391,67 @@ async function chooseUnit(turn: Turn): Promise<void> {
   return turn.clarify(`Sure — ${which}`, menu);
 }
 
+function dayOnOrAfter(start: LocalDate, weekday: NonNullable<DayReference["weekday"]>): LocalDate {
+  let day = start;
+  for (let i = 0; i < 14; i++) {
+    if (weekdayOf(day) === weekday) return day;
+    day = addDays(day, 1);
+  }
+  return start;
+}
+
+async function showAskedDay(turn: Turn, ask: DayReference, alreadyRecorded = false): Promise<void> {
+  const { session } = turn;
+  const dates = session.offeredDates;
+  const dateMenu = { kind: "choose" as const, options: dates.map((day) => day.label), what: "a day" };
+  if (!ask.weekday && !ask.relative) {
+    const index = /^\s*(?:#|number |option )?(\d{1,2})\s*[.!]?\s*$/i.exec(turn.said.text ?? "")?.[1];
+    const picked = index ? dates[Number(index) - 1] : undefined;
+    if (picked) return presentDay(turn, picked.date, alreadyRecorded);
+    if (alreadyRecorded) await session.reply("I have tours available. Which day works for you?", dateMenu);
+    else await turn.respond("I have tours available. Which day works for you?", dateMenu);
+    return;
+  }
+  if (ask.relative === "weekend") {
+    const weekend = dates.filter((day) => {
+      const local = parseIsoDate(day.date);
+      const name = local ? weekdayOf(local) : undefined;
+      return name === "SAT" || name === "SUN";
+    });
+    if (!alreadyRecorded) await session.recordText(turn.said);
+    if (weekend.length === 1) return presentDay(turn, weekend[0]!.date, true);
+    const options = (weekend.length ? weekend : dates).map((day) => day.label);
+    const lead = weekend.length ? "I have tours available. Which day works for you?" : "I don't have weekend tours. I have tours available. Which day works for you?";
+    await session.reply(lead, { kind: "choose", options, what: "a day" });
+    return;
+  }
+  const tz = session.config.property.timezone;
+  const today = localDateOf(session.clock.now(), tz);
+  const start = ask.relative === "today" ? today : ask.relative === "tomorrow" || ask.nextWeek ? addDays(today, 1) : today;
+  const day = ask.weekday ? dayOnOrAfter(start, ask.weekday) : start;
+  await presentDay(turn, isoDate(day), alreadyRecorded);
+}
+
+async function presentDay(turn: Turn, date: string, alreadyRecorded = false): Promise<void> {
+  const { session } = turn;
+  if (!alreadyRecorded) await session.recordText(turn.said);
+  const slots = await session.selectDate(date);
+  const tz = session.config.property.timezone;
+  const local = parseIsoDate(date);
+  const label = slots[0] ? formatDay(slots[0].start, tz) : local ? formatDay(zonedTimeToUtc({ ...local, hour: 12, minute: 0 }, tz), tz) : date;
+  if (!slots.length) {
+    session.selectedDate = undefined;
+    await session.reply(`I don't have tours on ${label}. I have tours available. Which day works for you?`, {
+      kind: "choose",
+      options: session.offeredDates.map((day) => day.label),
+      what: "a day",
+    });
+    return;
+  }
+  const menu = timeMenu(formatDay(slots[0]!.start, tz), slots.map((slot) => slot.label));
+  await session.reply(menu.body, menu.prompt);
+}
+
 async function byStage(turn: Turn): Promise<void> {
   const { session, intent } = turn;
   const yesNo: ReplyPrompt = { kind: "yes-no" };
@@ -399,6 +479,7 @@ async function byStage(turn: Turn): Promise<void> {
 
     case "choose-unit": {
       const menu: ReplyPrompt = { kind: "choose", options: session.config.units.map((u) => u.name), what: "a unit" };
+      if (intent.type === "SELECT_DATE") return showAskedDay(turn, intent);
       if (intent.type === "SELECT_UNIT") return chooseUnit(turn);
       if (intent.type === "REQUEST_HELP") return session.help(turn.said);
       if (intent.type === "START_INQUIRY") return turn.respond("Hi! Which unit would you like to see?", menu);
@@ -406,9 +487,16 @@ async function byStage(turn: Turn): Promise<void> {
       return turn.fallback(`${SORRY} Which unit would you like to see?`, menu);
     }
 
+    case "choose-date": {
+      if (intent.type === "SELECT_DATE") return showAskedDay(turn, intent);
+      if (intent.type === "REQUEST_HELP") return session.help(turn.said);
+      return turn.fallback(`${SORRY} Which day works for you?`, { kind: "choose", options: session.offeredDates.map((day) => day.label), what: "a day" });
+    }
+
     case "choose-time": {
       const labels = session.offeredSlots.map((s) => s.label);
       const menu: ReplyPrompt = { kind: "choose", options: labels, what: "a time" };
+      if (intent.type === "SELECT_DATE") return showAskedDay(turn, intent);
       if (intent.type === "SELECT_TIME") {
         const slot = session.offeredSlots.find((s) => same(s.label, intent.timeLabel));
         if (slot && turn.confident) return turn.act("chooseTime", { slotStart: slot.start.toISOString() });

@@ -35,7 +35,7 @@ doors, tour hours, verification or messaging. For route questions on their own, 
   to be about checking IDs. A property or building name only if the operator
   offers one.
 - Never ask for API keys, secrets, passwords or phone-provider credentials.
-  Those are connected on the Tour Core computer, never in chat.
+  Those are collected with a secure secret input during install, never in chat.
 
 ## Sequence
 
@@ -45,12 +45,13 @@ the operator correct it.
 1. `list_properties`. If the address already exists, say so and continue with
    that property.
 2. Ask **"What's the property address?"** Then `create_property_setup` with the
-   address. The address is the property's identity and what visitors hear.
-   Pass `name` only if the operator said a property or building name
-   themselves; never suggest, invent or "improve" one. Confirm the canonical
-   address and the time zone Tour Core guessed ("I have 144 Hillside Ave,
-   Teaneck NJ, on Eastern Time. Right?") and fix either with
-   `update_property_details` if they say no.
+   address. A US address needs a street, city, state and ZIP. If `nextQuestion`
+   is "What ZIP code should I use?", ask that and save the answer with
+   `update_property_details` `postalCode`. Do not invent a ZIP. Then read the
+   address back exactly as Tour Core shows it and wait for yes. Only after
+   `confirmAddress: true` ask property type. Pass `name` only if the operator
+   said a public property or building name themselves; never suggest one, and
+   never treat an internal space name such as "Main Home" as the property name.
 3. Ask Tour Core's `nextQuestion`, **"What type of property is this?"**, with
    its `choices` in plain words: single-family home, multifamily home,
    apartment building, or other. Never guess the type from the address. Save
@@ -140,8 +141,12 @@ the operator correct it.
     Readiness Check**. If it fails, explain each problem in plain words and
     offer the fix; change nothing without the operator's OK. If it passes, run
     **Simulate Tour**.
-13. If both passed, `publish_demo_property`. It returns a question; ask it word
-    for word. Only after a clear yes, call it again with the `confirmationCode`.
+13. If both passed, `publish_demo_property`. It returns one question; ask it
+    word for word. Only after a clear yes, call it again with the
+    `confirmationCode` and wait for the result. Then `get_property_setup` or
+    `get_installation_status` and say it is published only if that says so.
+    Do not ask again, and do not say it still needs a yes, after a successful
+    publish. Calling it again when it is already published changes nothing.
     If it refuses because visitor texting is connected but the property isn't
     using it yet, follow its `remediation` yourself: `set_services` with
     `messaging: sendblue`, `run_readiness_check`, `run_dry_tour`, then ask the

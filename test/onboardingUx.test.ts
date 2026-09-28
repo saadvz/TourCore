@@ -112,7 +112,8 @@ describe("Tour Core owns the onboarding order", () => {
     expect(offer.grokInstructions).toContain(OPERATOR_MESSAGES.recommendUpdates);
     expect(offer.grokInstructions).toMatch(/If they say no: call skip_optional_setup with component OPERATOR_ALERTS/);
     // Moving the routine's details: only values that stay hidden on screen may be moved by Grok itself.
-    expect(offer.grokInstructions).toMatch(/If either value is shown on screen, don't transfer it: hand control of the browser to the operator/);
+    expect(offer.grokInstructions).toMatch(/Prefer Grok's secure secret input/);
+    expect(offer.grokInstructions).toMatch(/Hand the browser to the operator only when secure fill isn't available/);
     expect((await h.component("OPERATOR_ALERTS")).requirement).toBe("RECOMMENDED");
   });
 
@@ -124,7 +125,7 @@ describe("Tour Core owns the onboarding order", () => {
     const skipped = await h.ok("skip_optional_setup", { component: "OPERATOR_ALERTS" });
     expect(skipped.summary).toBe("No problem, that's off for now. You can turn it on any time.");
     expect(skipped.nextStep).toMatchObject({ action: "RUN_READINESS", performedBy: "GROK", phase: "VALIDATE", operatorMessage: OPERATOR_MESSAGES.validate });
-    expect(OPERATOR_MESSAGES.validate).toMatch(/Prospects can text your touring number to ask questions, choose a unit and time, verify their details, and complete the self-guided tour in the same conversation\. I'll run a readiness check and a practice tour before we turn it on\./);
+    expect(OPERATOR_MESSAGES.validate).toMatch(/Prospects can text your touring number to ask questions, choose a day and time, verify their details, and complete the self-guided tour in the same conversation\. I'll run a readiness check and a practice tour before we turn it on\./);
     const alerts = await h.component("OPERATOR_ALERTS");
     expect(alerts).toMatchObject({ state: "NOT_CONFIGURED", summary: "Tour updates are off. You can turn them on any time." });
   });
@@ -153,7 +154,16 @@ describe("Tour Core owns the onboarding order", () => {
     });
     expect(done.summary).toBe("Your property is published.");
     expect(JSON.stringify(done.nextStep)).not.toMatch(/everything (runs|is) in demo/i);
+    const publishedAt = h.workspace.load("prop_100_alfred_way").state.publishedAt;
+    const again = await h.ok("publish_demo_property", {});
+    expect(again).toMatchObject({ published: true, status: "already-published" });
+    expect(again.instructions).toMatch(/already published/i);
+    expect(`${again.summary} ${again.instructions}`).not.toMatch(/still needs a yes|Would you like me to publish/i);
+    expect(h.workspace.load("prop_100_alfred_way").state.publishedAt).toBe(publishedAt);
+    expect(h.workspace.load("prop_100_alfred_way").state.status).toBe("PUBLISHED_FOR_DEMO");
     const after = await next(h);
+    expect(after.action).toBe("DONE");
+    expect(after.operatorMessage).not.toMatch(/Would you like me to publish|still needs a yes/i);
     expect([done.summary, after.operatorMessage, after.summary].join(" ")).not.toMatch(/connect|install|setup|secure/i);
   });
 
@@ -232,6 +242,7 @@ describe("operator-facing text is plain", () => {
     }
     for (const s of summaries) expect(s, s).not.toMatch(JARGON);
     const link = await h.ok("get_secure_setup_url", { step: "visitor-messaging" });
-    expect(link.instructions).toMatch(/Don't show the link in chat/);
+    expect(link.instructions).toMatch(/Do not show the link/);
+    expect(link.instructions).toMatch(/secure secret input/);
   });
 });

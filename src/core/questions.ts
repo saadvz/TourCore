@@ -1,5 +1,6 @@
 import type { TourCoreConfig, Unit } from "../config/tourCoreConfig";
 import { profileFacts, questionTopic, type ProfileField } from "../config/unitProfile";
+import { visitorSubject } from "../visitor/identity";
 import { approvedFacts, findApprovedAnswer, type ApprovedFact } from "./facts";
 
 /**
@@ -43,8 +44,9 @@ export function unitsNamedIn(question: string, units: Pick<Unit, "id" | "name">[
 }
 
 function unitAnswer(config: TourCoreConfig, unit: Unit, field: ProfileField): ApprovedFact | undefined {
-  const fact = profileFacts(unit).find((f) => f.field === field);
-  return fact ? { scope: "unit", unitId: unit.id, subject: unit.name, text: fact.text, source: "operator", profileField: field } : undefined;
+  const subject = visitorSubject(config.property, unit.name);
+  const fact = profileFacts(unit, subject).find((f) => f.field === field);
+  return fact ? { scope: "unit", unitId: unit.id, subject, text: fact.text, source: "operator", profileField: field } : undefined;
 }
 
 function propertyFacts(config: TourCoreConfig): ApprovedFact[] {

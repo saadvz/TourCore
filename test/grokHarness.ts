@@ -78,6 +78,8 @@ export function grokHarness(root = mkdtempSync(join(tmpdir(), "tourcore-grok-"))
     };
     await act("begin", { name: options.name ?? "Pat Smith", phone: options.phone ?? "(555) 010-2000" });
     await act("chooseUnit", { unitId: options.unitId ?? "unit_101" });
+    const day = session.offeredDates[0];
+    if (day) await act("chooseDate", { date: day.date });
     return { session, act, slot: () => session.offeredSlots[0]!.start };
   };
 

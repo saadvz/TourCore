@@ -53,17 +53,19 @@ Only READY means done.
 
 ## Credentials
 
-Sendblue's API key, API secret and number are entered by the operator on the
-secure setup page in your cloud browser. They go straight to Tour Core. You
-never see them, never type them, and never put them in chat, commands or tool
-arguments.
+Sendblue's API key, API secret and touring number, and a routine's webhook
+address and key, are collected in this order:
 
-The Grok Routine's webhook address and key go into the same page's **Tour
-updates (Grok Routine)** card: two masked fields, or a masked box for the
-routine's whole webhook example. You may copy them across yourself only if
-the routine panel's copy buttons keep both values hidden on screen; if either
-is shown, hand the browser to the operator. Never in chat, tool arguments,
-files or commands.
+1. Grok's secure secret input, which fills Tour Core's secure setup form.
+   The values are not shown in chat.
+2. The provider's own login, when it has one.
+3. The operator taking over the secure setup page, only when secure fill
+   isn't available for that field.
+
+Never put a secret in ordinary chat, a command, a file, or a tool argument.
+If the routine panel's copy buttons keep both values hidden on screen, those
+hidden values may be pasted into the matching masked fields. If a value is
+shown on screen, don't read it into chat: hand over the browser.
 
 ## Later components
 

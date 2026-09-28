@@ -1,6 +1,6 @@
 ---
 name: install-tour-core
-description: Install and run Tour Core on your own cloud computer, then take the operator from a blank setup to a published property by following Tour Core's own next steps, asking only for approvals, logins, credentials on Tour Core's secure setup page, property information and decisions.
+description: Install and run Tour Core on your own cloud computer, then take the operator from a blank setup to a published property by following Tour Core's own next steps, asking only for approvals, logins, credentials through a secure handoff, property information and decisions.
 when-to-use: "set up Tour Core", "install Tour Core", "what's left to set up", "check my Tour Core installation", "is Tour Core running", "restart Tour Core", "test alerts", "connect texting", "turn on alerts", "tour updates", "change my notifications"
 allowed-tools: get_installation_status get_next_installation_step get_installation_component skip_optional_setup check_runtime_health check_public_endpoint test_visitor_messaging get_notification_preferences set_notification_preferences get_operator_update test_operator_alerts test_storage test_access get_secure_setup_url
 argument-hint: "[what to check or connect]"
@@ -16,7 +16,7 @@ metadata:
 You do the technical work yourself on your own cloud computer. Tour Core
 decides the order of everything that follows and tells you, one step at a
 time, through `get_next_installation_step`. The operator only approves,
-signs in, enters credentials on Tour Core's secure setup page, gives property
+signs in, gives credentials through a secure handoff, gives property
 information and makes decisions.
 
 ## When to use
@@ -44,8 +44,8 @@ stops answering.
 ## How you talk
 
 Say what's happening, in plain words. Say `operatorMessage` (in your own
-words if you like) and nothing technical. Credentials go on Tour Core's
-secure setup page, not in chat.
+words if you like) and nothing technical. Credentials are collected with a
+secure secret input and filled into Tour Core's form, not in chat.
 
 | Instead of | Say |
 | --- | --- |
@@ -115,10 +115,17 @@ By `performedBy`:
 - **GROK**: do it yourself (the `tool`, or the `command` on your computer),
   then say briefly what happened ("Visitor texting is connected and working.").
 - **OPERATOR_IN_SECURE_SETUP**: call `get_secure_setup_url` with its
-  `secureSetupStep`, open the link yourself in your cloud browser, hand control
-  to the operator, and say `operatorMessage`. Don't show the link, don't type
-  or read the values, and don't ask for them in chat. When they're done, call
-  `get_next_installation_step` (Tour Core then has you test it).
+  `secureSetupStep`. Prefer Grok's secure secret input: ask for the values
+  securely, then fill and submit Tour Core's form yourself. They are not
+  shown in chat and are not tool arguments. Say:
+
+  > Visitor texting needs your Sendblue credentials. I'll ask for them securely; they won't be shown to me in chat.
+
+  The same order applies to a routine webhook address and key, and to future
+  provider credentials. If that provider has its own login, use that. Hand
+  the browser to the operator only when secure fill isn't available for that
+  field. Don't show the link, don't read the values back, and don't ask for
+  them in chat. When they're saved, call `get_next_installation_step`.
 - **OPERATOR**: say `operatorMessage` and wait (a login, MFA, provider terms,
   an approval).
 - **OPERATOR_DECISION**: ask `operatorMessage` and wait for the answer.
@@ -172,21 +179,14 @@ updates (recommended, not required):
 
   1. Create the Tour Core Operator Updates routine yourself (authenticated
      webhook trigger; instructions in `grok-template/routines/operator-updates.md`).
-  2. Call `get_secure_setup_url` with step `operator-alerts` and open it in
-     your cloud browser next to the routine's trigger panel.
-  3. If that panel has copy buttons and both the address and the key stay
-     hidden on screen, copy each one into the matching Tour Core field
-     yourself (both fields are masked), without reading, repeating or storing
-     it.
-  4. If either value is shown on screen, don't move it. Hand control of the
-     browser to the operator:
-
-     > I've opened Tour Core's secure setup page next to the update settings I
-     > created. Please copy the two connection details across, or put the
-     > whole example into the box on Tour Core's page. They go straight to
-     > Tour Core, not in chat.
-
-  5. Never put the address or key in chat, tool arguments, files or commands.
+  2. Call `get_secure_setup_url` with step `operator-alerts`.
+  3. Ask for the routine address and key through secure secret input and fill
+     Tour Core's form yourself. They stay out of chat and out of tool
+     arguments. If secure fill isn't available and the values stay hidden
+     behind copy buttons, copy them into the masked fields without reading
+     them. If either value is shown on screen, hand the browser to the
+     operator instead of moving it.
+  4. Never put the address or key in chat, tool arguments, files or commands.
 
   Then call `get_next_installation_step`: Tour Core has you send a test update
   (`test_operator_alerts`), and the routine posts "Tour updates are connected."
@@ -207,7 +207,7 @@ one (`requirement`).
 Tell the operator how visitors use it, then run the checks without asking
 whether to skip them:
 
-> Prospects can text your touring number to ask questions, choose a unit and
+> Prospects can text your touring number to ask questions, choose a day and
 > time, verify their details, and complete the self-guided tour in the same
 > conversation. I'll run a readiness check and a practice tour before we turn
 > it on.
@@ -220,11 +220,17 @@ plain words and fix it with the operator.
 > Everything passed. Would you like me to publish this property for demo?
 
 Publish only after a clear yes, through the publish tool's own confirmation
-question. If publishing is refused because visitor texting is connected but
-the property isn't using it yet, fix it yourself with Setup Property (its
-`remediation`: switch the property to real texts, run the readiness check and
-practice tour again, then ask the publish question again). Don't ask the
-operator how to text people.
+question. Ask that question once. When the operator says yes, call the tool
+with the code, wait for the result, then call `get_installation_status`. Say
+the property is published only when that status says so. Do not repeat the
+pre-publish question, and do not say publishing still needs a yes, after the
+tool has published it. A later call that finds it already published changes
+nothing. If a tour update arrives while you are installing, ignore your
+memory of the previous step and call `get_next_installation_step` again.
+Tour Core's status wins. If publishing is refused because visitor texting is
+connected but the property isn't using it yet, fix it yourself (switch the
+property to real texts, run the readiness check and practice tour again, then
+ask the publish question again). Don't ask the operator how to text people.
 
 ### Phase 7: Operate
 
@@ -254,9 +260,9 @@ first property?"
 
 ## Requires approval
 
-Approving the connection to Tour Core (the operator clicks Allow), entering
-credentials on the secure setup page (the operator, unless both values stay
-hidden on screen as described in Phase 4), choosing or declining tour updates
+Approving the connection to Tour Core (the operator clicks Allow), giving
+credentials through a secure handoff (or taking over the secure setup page
+when that fill isn't available), choosing or declining tour updates
 (the operator's choice), and publishing (explicit yes).
 
 ## Stop when

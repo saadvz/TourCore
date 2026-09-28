@@ -34,6 +34,9 @@ export async function visitorView(session: VisitorDemoSession) {
     case "choose-unit":
       for (const u of config.units) choices.push({ label: u.name, action: "chooseUnit", input: { unitId: u.id }, hint: u.summary || undefined });
       break;
+    case "choose-date":
+      for (const day of session.offeredDates) choices.push({ label: day.label, action: "chooseDate", input: { date: day.date } });
+      break;
     case "choose-time":
       for (const slot of session.offeredSlots) {
         choices.push({ label: `${formatDay(slot.start, tz)} \u00b7 ${slot.label}`, action: "chooseTime", input: { slotStart: slot.start.toISOString() } });

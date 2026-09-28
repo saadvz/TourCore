@@ -1,4 +1,4 @@
-import { spokenTimes, vagueTimeRequest, type SpokenTime } from "../core/spokenTime";
+import { dayReference, spokenTimes, vagueTimeRequest, type SpokenTime } from "../core/spokenTime";
 import type { IntentInterpretation, IntentInterpreter, InterpretContext, StepAwaiting, StopRef, TourIntent } from "./model";
 import { normalize, numberWord, ordinalWord, stripFiller } from "./normalize";
 
@@ -217,6 +217,8 @@ function clockIntent(spoken: SpokenTime): TourIntent {
     minute: spoken.minute,
     ...(spoken.meridiem ? { meridiem: spoken.meridiem } : {}),
     ...(spoken.day ? { day: spoken.day } : {}),
+    ...(spoken.weekday ? { weekday: spoken.weekday } : {}),
+    ...(spoken.nextWeek ? { nextWeek: true } : {}),
   };
 }
 
@@ -244,6 +246,30 @@ function schedulingIntent(
   if (spoken && (allowBareClock || asking)) return result(clockIntent(spoken), 0.9);
   if (!spoken && vagueTimeRequest(t)) return unknown({ clarificationNeeded: true, clarificationQuestion: "What time would you like?" });
   return undefined;
+}
+
+function dateIntent(
+  raw: string,
+  t: string,
+  result: (intent: TourIntent, confidence: number, extra?: Partial<IntentInterpretation>) => IntentInterpretation,
+): IntentInterpretation | undefined {
+  const asked = dayReference(t);
+  if (!asked) return undefined;
+  // "available" names a day in a booking, not a missing property fact.
+  const aside = t.replace(/\b(available|availability)\b/g, " ");
+  if (asked !== "menu" && (TOPIC.test(aside) || WANTS_TO_KNOW.test(t))) {
+    return result({ type: "ASK_PROPERTY_QUESTION", question: raw.trim().slice(0, 300) }, 0.9, { mentionedDate: asked });
+  }
+  if (asked === "menu") return result({ type: "SELECT_DATE" }, 0.9);
+  return result(
+    {
+      type: "SELECT_DATE",
+      ...(asked.weekday ? { weekday: asked.weekday } : {}),
+      ...(asked.relative ? { relative: asked.relative } : {}),
+      ...(asked.nextWeek ? { nextWeek: true } : {}),
+    },
+    0.9,
+  );
 }
 
 function answerScheduling(
@@ -328,6 +354,8 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
       if (pick) return result({ type: "SELECT_UNIT", unitName: ctx.units[pick.index]!.name }, pick.confidence);
       const customUnit = schedulingIntent(raw, t, true, result, unknown);
       if (customUnit) return customUnit;
+      const dateUnit = dateIntent(raw, t, result);
+      if (dateUnit) return dateUnit;
       const h = help();
       if (h) return h;
       const info = informational();
@@ -336,6 +364,24 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
       if (GENERIC_UNIT.test(t) || /\b(any|either|whichever)\b/.test(t)) {
         return ctx.units.length === 1 ? result({ type: "SELECT_UNIT", unitName: ctx.units[0]!.name }, 0.9) : unknown({ clarificationNeeded: true });
       }
+      return unknown();
+    }
+
+    case "choose-date": {
+      const labels = ctx.timeChoices;
+      const bare = t.match(/^(#|number |option |no |choice )?(\S+)$/);
+      const bareN = bare ? numberWord(bare[2]!) : undefined;
+      if (bareN !== undefined && bareN >= 1 && bareN <= Math.max(labels.length, 1) && labels.length) {
+        return result({ type: "SELECT_DATE" }, 1, {});
+      }
+      const customDate = schedulingIntent(raw, t, true, result, unknown);
+      if (customDate) return customDate;
+      const picked = dateIntent(raw, t, result);
+      if (picked) return picked;
+      const h = help();
+      if (h) return h;
+      const info = informational();
+      if (info) return info;
       return unknown();
     }
 
@@ -348,6 +394,8 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
       if (time.label) return result({ type: "SELECT_TIME", timeLabel: time.label }, 0.95);
       const customTime = schedulingIntent(raw, t, true, result, unknown);
       if (customTime) return customTime;
+      const anotherDay = dateIntent(raw, t, result);
+      if (anotherDay) return anotherDay;
       // "Does 1A have laundry?" names a unit, not 1 AM.
       if (asked && !time.label && (detailQuestion || ctx.units.some((u) => namesUnitLoosely(t, u.name)))) return question(0.9);
       if (time.mentioned) return unknown({ clarificationNeeded: true, clarificationQuestion: "That time isn't open." });
@@ -396,6 +444,8 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
     default: {
       const customOpen = schedulingIntent(raw, t, true, result, unknown);
       if (customOpen) return customOpen;
+      const openDate = dateIntent(raw, t, result);
+      if (openDate) return openDate;
       return help() ?? clearQuestion() ?? unknown();
     }
   }

@@ -23,7 +23,7 @@ again with the code after the operator's yes.
 | --- | --- | --- |
 | `list_properties` | read | Every property and its status |
 | `get_property_setup` | read | Full setup: units, doors, routes, hours, verification, messaging, problems |
-| `create_property_setup` | change | Starts a property from its canonical address (the property's identity), an optional name only the operator said, and an optional property type; returns `nextQuestion` ("What type of property is this?" with `choices`). Uses the installed visitor texting automatically. No duplicate for the same address |
+| `create_property_setup` | change | Starts a property from its street address. A US address needs street, city, state and ZIP; a missing ZIP is the next question, then a read-back to confirm, then property type. An optional public name only if the operator said one. Uses the installed visitor texting automatically |
 | `update_property_details` | change | Property type, address, operator-given name, time zone, approved property facts, who gets alerts; returns `nextQuestion` (how to name the tourable spaces for that type) |
 | `list_units` | read | Units with description, facts, door, route |
 | `add_unit` | change | Adds a unit and its own door. For a single-family home the name is optional ("Main Home"), its door is the home's entrance ("Front Door" unless named) and its route is set automatically. Never a made-up unit number |
@@ -74,7 +74,7 @@ again with the code after the operator's yes.
 | `test_operator_alerts` | change | Test tour updates: sends one test update to the Tour Core Operator Updates routine; takes no credentials |
 | `test_storage` | change | Saves and reads back a test record where tour records are kept |
 | `test_access` | read | Checks the access system answers ("Access system: Demo") |
-| `get_secure_setup_url` | change | A short-lived link to Tour Core's secure setup page, for the Tour Core computer's browser only |
+| `get_secure_setup_url` | change | A short-lived link to Tour Core's secure setup page. Fill it with a secure secret input; hand over the browser only if that fill isn't available |
 
 There is intentionally no tool to open, unlock or grant a door, mint access,
 change the door-access mode, or read or write raw files. There is also no

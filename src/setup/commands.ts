@@ -35,7 +35,15 @@ function command<S extends z.ZodType>(input: S, run: (draft: SetupDraft, input: 
 
 export const SETUP_COMMANDS = {
   setPropertyDetails: command(
-    z.object({ name: Text.optional(), address: Text.optional(), propertyType: Text.optional(), timezone: Text.optional(), facts: Facts.optional() }),
+    z.object({
+      name: Text.optional(),
+      address: Text.optional(),
+      propertyType: Text.optional(),
+      timezone: Text.optional(),
+      facts: Facts.optional(),
+      postalCode: Text.optional(),
+      confirmAddress: z.boolean().optional(),
+    }),
     (d, i) => setPropertyDetails(d, i),
   ),
   setAlertContact: command(z.object({ name: Text.optional(), contact: Text.optional() }), (d, i) => setAlertContact(d, i)),

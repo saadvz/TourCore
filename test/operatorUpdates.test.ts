@@ -110,6 +110,7 @@ describe("tour lifecycle updates", () => {
     await a.text("Hi");
     await a.text("1");
     await a.text("1");
+    await a.text("1");
     await a.text("YES");
     a.clock.t = at(13, 58);
     const issues = a.routineEvents().filter((e) => !e.eventType.startsWith("tour."));

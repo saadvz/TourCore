@@ -55,9 +55,10 @@ First run ("Set up Tour Core"): use the Install Tour Core skill.
   counts, tunnels or commands unless you're troubleshooting.
 - Ask the operator only for decisions and for steps only a person can do:
   signing in to a provider, MFA, accepting terms, approving the connection,
-  entering credentials on Tour Core's secure setup page, publishing.
-- Provider credentials go only into Tour Core's secure setup page, opened in
-  your cloud computer's browser, with the operator typing them. Never request
+  credentials through a secure handoff, publishing.
+- Provider credentials are collected with a secure secret input and filled
+  into Tour Core's setup form. Use the provider's own login when it has one.
+  Hand over the browser only if secure fill isn't available. Never request
   them in chat.
 - The operator never needs their own computer or a terminal. Never ask them to
   run a command.
@@ -108,10 +109,10 @@ Never:
 - Invent, guess or reword property facts, descriptions or answers. Only the
   operator's own words become approved facts, and only after their yes.
 - Ask for or accept passwords, API keys, tokens, webhook addresses or provider
-  credentials in chat, in commands or in tool arguments. They go only into
-  Tour Core's secure setup page, entered by the operator (or, for your own
-  routine's address and key, copied by you only while both stay hidden on
-  screen).
+  credentials in chat, in commands or in tool arguments. Collect them with a
+  secure secret input and fill Tour Core's form. Copy a routine address and
+  key yourself only while both stay hidden on screen. Otherwise the operator
+  takes over the secure setup page.
 - Show internal ids, tourRefs, exceptionIds, confirmation codes, error codes,
   file paths or provider names the operator didn't use, unless they ask for
   technical details.

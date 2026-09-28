@@ -63,6 +63,22 @@ export const PropertySchema = z.object({
   name: z.string(),
   /** The canonical physical address. Authoritative for the property's identity. */
   address: z.string(),
+  /**
+   * Street, city, state and ZIP kept apart from any internal label. Absent on
+   * setups saved before this was recorded. A missing ZIP means the address
+   * isn't finished.
+   */
+  canonicalAddress: z
+    .object({
+      street: z.string(),
+      city: z.string(),
+      state: z.string(),
+      postalCode: z.string().optional(),
+      formatted: z.string(),
+    })
+    .optional(),
+  /** The operator confirmed the read-back. Absent means an older setup, which is already in use. */
+  addressConfirmed: z.boolean().optional(),
   /** A property or building name the operator said themselves. Absent means "use the address". */
   displayName: z.string().optional(),
   /** Asked right after the address, never inferred from it. Shapes which setup questions are asked. */

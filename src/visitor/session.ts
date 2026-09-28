@@ -4,9 +4,10 @@ import type { TourCoreConfig } from "../config/tourCoreConfig";
 import { DemoClock } from "../core/clock";
 import { normalizePhone } from "../core/phone";
 import { orList } from "../core/questions";
-import { formatTime } from "../core/timezone";
+import { formatDay, formatTime } from "../core/timezone";
 import type { SpokenTime } from "../core/spokenTime";
 import { entryReply } from "./entry";
+import { visitorTourOf } from "./identity";
 import { TourCore, type AccessOutcome, type InboundMeta } from "../core/TourCore";
 import type { TourSlot } from "../core/schedule";
 import { createDurin, createStore, createVerificationProvider } from "../createTourCore";
@@ -31,6 +32,7 @@ import type { VerificationLinks } from "./verificationLinks";
 export type VisitorStage =
   | "intro"
   | "choose-unit"
+  | "choose-date"
   | "choose-time"
   | "consent"
   | "identity"
@@ -56,6 +58,7 @@ const ACTIONS = {
   begin: z.object({ name: Text, phone: Text }),
   chooseUnit: z.object({ unitId: Text }),
   chooseTime: z.object({ slotStart: Text }),
+  chooseDate: z.object({ date: Text }),
   consent: z.object({ agree: z.boolean() }),
   submitIdentity: z.object({ firstName: Text, lastName: Text, email: Text, phone: Text }),
   arrive: z.object({}),
@@ -73,6 +76,7 @@ export type VisitorAction = keyof typeof ACTIONS;
 const ALLOWED: Record<VisitorStage, VisitorAction[]> = {
   intro: ["begin"],
   "choose-unit": ["chooseUnit", "ask"],
+  "choose-date": ["chooseDate", "ask"],
   "choose-time": ["chooseTime", "ask"],
   consent: ["consent", "ask"],
   identity: ["submitIdentity", "ask"],
@@ -133,6 +137,10 @@ export class VisitorDemoSession {
   prospectId?: string;
   reservationId?: string;
   lastAccess?: LastAccess;
+  /** Dates offered before a day is chosen. */
+  offeredDates: { date: string; label: string }[] = [];
+  /** YYYY-MM-DD once the visitor picked a day. Times in offeredSlots belong to this day. */
+  selectedDate?: string;
   /** Times offered at inquiry; typed replies ("2") and buttons both pick from this list. */
   offeredSlots: TourSlot[] = [];
   /** A custom time named before a unit was chosen. Filed once the unit is picked. */
@@ -202,7 +210,7 @@ export class VisitorDemoSession {
     if (!r) return "choose-unit";
     switch (r.status) {
       case "INQUIRY":
-        return "choose-time";
+        return this.selectedDate ? "choose-time" : "choose-date";
       case "RESERVED":
       case "AWAITING_CONSENT":
         return "consent";
@@ -280,8 +288,10 @@ export class VisitorDemoSession {
   }
 
   /** Puts back what only the conversation knew: the times offered and an unanswered confirmation. */
-  resume(state: { offeredSlots?: TourSlot[]; pending?: { stage: VisitorStage; awaiting: Awaiting }; heldTime?: SpokenTime }): void {
+  resume(state: { offeredSlots?: TourSlot[]; offeredDates?: { date: string; label: string }[]; selectedDate?: string; pending?: { stage: VisitorStage; awaiting: Awaiting }; heldTime?: SpokenTime }): void {
     if (state.offeredSlots) this.offeredSlots = state.offeredSlots;
+    if (state.offeredDates) this.offeredDates = state.offeredDates;
+    if (state.selectedDate) this.selectedDate = state.selectedDate;
     this.expected = state.pending;
     if (state.heldTime) this.heldTime = state.heldTime;
   }
@@ -339,14 +349,14 @@ export class VisitorDemoSession {
     await this.recordText(said);
     this.optedOut = false;
     await this.core.optInToMessaging(this.visitor?.phone ?? "");
-    await this.reply(`You'll get messages from ${this.config.property.name} again. Text HI any time to start a tour.`);
+    await this.reply(`You'll get messages from ${visitorTourOf(this.config.property)} again. Text HI any time to start a tour.`);
   }
 
   /** HELP: who this is and how to reach the property team; during a tour, the team is also alerted. */
   async help(said: Said): Promise<void> {
     const stage = await this.stage();
     const contact = /[@\d]{3,}/.test(this.config.operator.contact) ? ` at ${this.config.operator.contact}` : "";
-    const info = `This is the self-tour assistant for ${this.config.property.name}. For help, contact the ${this.config.operator.name.toLowerCase()}${contact}. Reply STOP to stop messages.`;
+    const info = `This is the self-tour assistant for ${visitorTourOf(this.config.property)}. For help, contact the ${this.config.operator.name.toLowerCase()}${contact}. Reply STOP to stop messages.`;
     if ((stage === "ready" || stage === "touring" || stage === "stopped") && this.reservationId) {
       this.say("visitor", said.text ?? "HELP");
       await this.core.requestHelp(this.reservationId, await this.currentPlace(), { text: said.text ?? "HELP", meta: said.meta });
@@ -532,6 +542,22 @@ export class VisitorDemoSession {
         await this.core.recordInbound(this.prospectId!, this.reservationId, text, said.meta);
         return;
       }
+      case "chooseDate": {
+        const slots = await this.selectDate(String(input.date));
+        const day = slots[0] ? formatDay(slots[0].start, this.config.property.timezone) : String(input.date);
+        this.say("visitor", said.text ?? day);
+        if (!slots.length) {
+          this.selectedDate = undefined;
+          await this.reply(`I don't have tours on ${day}. I have tours available. Which day works for you?`, {
+            kind: "choose",
+            options: this.offeredDates.map((item) => item.label),
+            what: "a day",
+          });
+          return;
+        }
+        await this.reply(`I have these times available ${day}:`, { kind: "choose", options: slots.map((slot) => slot.label), what: "a time" });
+        return;
+      }
       case "chooseTime": {
         const start = new Date(String(input.slotStart));
         const label = Number.isNaN(start.getTime()) ? String(input.slotStart) : formatTime(start, this.config.property.timezone);
@@ -616,7 +642,19 @@ export class VisitorDemoSession {
     const { prospect, reservation } = await this.core.startInquiry({ ...this.visitor!, unitId }, options);
     this.prospectId = prospect.id;
     this.reservationId = reservation.id;
-    this.offeredSlots = await this.core.availableSlots();
+    this.offeredDates = await this.core.availableDates();
+    this.selectedDate = undefined;
+    this.offeredSlots = [];
+  }
+
+  /** Times for one day. An empty list means that day has no open regular tours. */
+  async selectDate(date: string): Promise<TourSlot[]> {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+    if (!match) throw new SetupInputError("DATE_INVALID", "That date isn't valid.");
+    const day = { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) };
+    this.selectedDate = date;
+    this.offeredSlots = await this.core.availableSlots(day);
+    return this.offeredSlots;
   }
 
   /**
@@ -627,7 +665,7 @@ export class VisitorDemoSession {
   async welcome(): Promise<void> {
     const only = this.config.units.length === 1 && this.config.property.propertyType === "SINGLE_FAMILY" ? this.config.units[0] : undefined;
     if (only && !this.reservationId) await this.inquire(only.id, { announce: false });
-    const { body, prompt } = entryReply(this.config, this.clock.now(), this.offeredSlots);
+    const { body, prompt } = entryReply(this.config, this.offeredDates);
     await this.reply(body, prompt);
   }
 

@@ -4,6 +4,8 @@ import type { Reservation } from "../domain/model";
 import type { MessagingAdapter } from "../messaging/Messenger";
 import type { PropertyWorkspace } from "../setup/workspace";
 import type { RuntimeStore } from "../storage/runtimeStore";
+import { localDateOf } from "../core/timezone";
+import { parseIsoDate } from "../core/schedule";
 import { VisitorDemoSession, type VisitorStage } from "./session";
 import type { VerificationLinks } from "./verificationLinks";
 
@@ -16,7 +18,7 @@ import type { VerificationLinks } from "./verificationLinks";
  */
 
 const Iso = z.iso.datetime({ offset: true });
-const STAGES = ["intro", "choose-unit", "choose-time", "consent", "identity", "ready", "touring", "follow-up", "done", "stopped"] as const;
+const STAGES = ["intro", "choose-unit", "choose-date", "choose-time", "consent", "identity", "ready", "touring", "follow-up", "done", "stopped"] as const;
 
 const StopRefSchema = z.object({
   doorName: z.string(),
@@ -65,6 +67,8 @@ export const DurableSessionSchema = z.object({
   unitId: z.string().optional(),
   /** Tour times offered in the last menu, so "2" still means the same time. */
   offeredSlots: z.array(z.object({ start: Iso, label: z.string() })).default([]),
+  offeredDates: z.array(z.object({ date: z.string(), label: z.string() })).default([]),
+  selectedDate: z.string().optional(),
   /** A custom time named before a unit was chosen. */
   heldTime: z
     .object({
@@ -117,6 +121,8 @@ export async function snapshotOf(session: VisitorDemoSession, links?: Verificati
     ...(session.prospectId ? { prospectId: session.prospectId } : {}),
     ...(r ? { reservationId: r.id, unitId: r.unitId } : {}),
     offeredSlots: session.offeredSlots.map((s) => ({ start: s.start.toISOString(), label: s.label })),
+    offeredDates: session.offeredDates,
+    ...(session.selectedDate ? { selectedDate: session.selectedDate } : {}),
     ...(session.heldTime ? { heldTime: session.heldTime } : {}),
     ...(session.pendingClarification ? { pending: session.pendingClarification } : {}),
     ...(r ? { routeProgress: { opened, ...(r.allowedRoute.find((d) => !opened.includes(d)) ? { next: r.allowedRoute.find((d) => !opened.includes(d)) } : {}) } } : {}),
@@ -174,6 +180,13 @@ export async function restoreSession(snapshot: DurableSession, deps: RestoreDeps
 
   await validateCanonical(session, snapshot, config);
 
+  session.offeredDates = snapshot.offeredDates ?? [];
+  session.selectedDate = snapshot.selectedDate;
+  if (!session.selectedDate && snapshot.offeredSlots[0]) {
+    const local = localDateOf(new Date(snapshot.offeredSlots[0].start), config.property.timezone);
+    session.selectedDate = `${local.year}-${String(local.month).padStart(2, "0")}-${String(local.day).padStart(2, "0")}`;
+  }
+
   const stage = await session.stage();
   let pending = snapshot.pending;
   if (pending && (pending.stage !== stage || !stopsExist(pending.awaiting, config))) {
@@ -181,12 +194,21 @@ export async function restoreSession(snapshot: DurableSession, deps: RestoreDeps
     pending = undefined;
   }
   let offeredSlots = snapshot.offeredSlots.map((s) => ({ start: new Date(s.start), label: s.label }));
-  if (stage === "choose-time" && offeredSlots.length === 0) {
-    // Old records didn't keep the menu; offer the same way a new inquiry would.
-    offeredSlots = await session.core.availableSlots();
-    notes.push("The tour-time menu was rebuilt from the schedule.");
+  const selectedDate = session.selectedDate;
+  if (stage === "choose-time" && offeredSlots.length === 0 && selectedDate) {
+    const local = parseIsoDate(selectedDate);
+    if (local) {
+      offeredSlots = await session.core.availableSlots(local);
+      notes.push("The tour-time menu was rebuilt from the schedule.");
+    }
   }
-  session.resume({ offeredSlots, ...(pending ? { pending } : {}), ...(snapshot.heldTime ? { heldTime: snapshot.heldTime } : {}) });
+  session.resume({
+    offeredSlots,
+    offeredDates: snapshot.offeredDates,
+    ...(selectedDate ? { selectedDate } : {}),
+    ...(pending ? { pending } : {}),
+    ...(snapshot.heldTime ? { heldTime: snapshot.heldTime } : {}),
+  });
   if (snapshot.step !== stage) notes.push(`Saved step "${snapshot.step}" was behind the tour records ("${stage}"); the tour records were used.`);
   return { session, notes };
 }

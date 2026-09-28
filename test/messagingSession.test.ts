@@ -32,6 +32,7 @@ describe("channel-aware wording", () => {
     const web = new VisitorDemoSession("prop_100_alfred_way", loadConfig(), "w", { realNow: () => MONDAY_7AM });
     await web.act("begin", { name: "Pat Smith", phone: PHONE });
     await web.act("chooseUnit", { unitId: "apt_101" });
+    await web.act("chooseDate", (await visitorView(web)).choices[0]!.input);
     await web.act("chooseTime", (await visitorView(web)).choices[0]!.input);
     const webConsent = [...web.conversation].reverse().find((m) => m.from === "tourcore")!.text;
     expect(webConsent).toContain("Is it OK if I text you about this tour");
@@ -75,6 +76,7 @@ describe("identity form links", () => {
     await say("hi");
     await say("1");
     await say("1");
+    await say("1");
     await say("yes");
     const token = lastReply().match(/\/verify\/([A-Za-z0-9_-]+)$/)![1]!;
     expect(links.check(token)).toMatchObject({ ok: true, entry: { sessionId: session.id } });
@@ -105,6 +107,7 @@ describe("typed replies", () => {
 
     await say("1");
     await say("1");
+    await say("1");
     await say("yes");
     await session.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: PHONE });
     await say("help");
@@ -121,6 +124,7 @@ describe("typed replies", () => {
   it("a texted wrong door is refused by policy without contacting Durin", async () => {
     const { session, say, lastReply } = phoneSession();
     await say("hi");
+    await say("1");
     await say("1");
     await say("1");
     await say("yes");

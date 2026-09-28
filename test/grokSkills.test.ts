@@ -264,6 +264,9 @@ describe("Install Tour Core skill", () => {
   it("runs readiness and the practice tour automatically, needs an explicit yes to publish, then talks about operating", () => {
     expect(phase(5)).toMatch(/without asking\s+whether to skip them/);
     expect(phase(6)).toMatch(/Publish only after a clear yes/);
+    expect(phase(6)).toMatch(/wait for the result/);
+    expect(phase(6)).toMatch(/already published changes\s+nothing/);
+    expect(phase(6)).toMatch(/get_next_installation_step/);
     expect(phase(7)).toContain(
       "Your property is published. Visitor texting is live. Door access is still in\n> demo mode, so no physical locks will open. I'll keep you updated on your\n> tours and let you know when something needs your attention.",
     );
@@ -279,6 +282,9 @@ describe("Install Tour Core skill", () => {
     ];
     for (const pattern of requests) expect(text).not.toMatch(pattern);
     expect(text).toMatch(/not in chat/);
+    expect(text).toMatch(/Prefer Grok's secure secret input/);
+    expect(text).toMatch(/I'll ask for them securely; they won't be shown to me in chat/);
+    expect(text).toMatch(/hand\s+the browser to the operator/i);
     expect(text).not.toMatch(/github\.com\/[\w.-]+\/[\w.-]+/i);
     expect(text).toContain("TOURCORE_REPO_URL");
     expect(text.slice(0, text.indexOf("## Never"))).not.toMatch(/(?<!never )ask (the operator|them) to run/i);

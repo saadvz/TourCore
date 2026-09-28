@@ -205,7 +205,7 @@ describe("installation status", () => {
     h.connectGrok();
     expect(await next()).toEqual(["CONNECT_VISITOR_MESSAGING", "OPERATOR_IN_SECURE_SETUP", "get_secure_setup_url"]);
     expect((await h.ok("get_next_installation_step")).operatorMessage).toBe(
-      "Visitor texting is the next step. I've opened Tour Core's secure setup page so you can connect your Sendblue messaging account there, not in chat.",
+      "Visitor texting needs your Sendblue credentials. I'll ask for them securely; they won't be shown to me in chat.",
     );
     h.inst.secrets.set({ SENDBLUE_API_API_KEY: SB_KEY, SENDBLUE_API_API_SECRET: SB_SECRET, SENDBLUE_FROM_NUMBER: "+15550109999" });
     expect(await next()).toEqual(["TEST_VISITOR_MESSAGING", "GROK", "test_visitor_messaging"]);

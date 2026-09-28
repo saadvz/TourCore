@@ -25,13 +25,20 @@ function newSession() {
 
 const lastFromTourCore = (s: VisitorDemoSession) => [...s.conversation].reverse().find((m) => m.from === "tourcore")!.text;
 
+/** The first open day, then its first time. */
+async function chooseFirstTime(s: VisitorDemoSession) {
+  const day = (await visitorView(s)).choices[0]!;
+  await s.act(day.action, day.input);
+  const slot = (await visitorView(s)).choices[0]!;
+  await s.act(slot.action, slot.input);
+}
+
 /** Runs the visitor through booking and verification for Unit 101 at the first tour time. */
 async function bookedAndReady() {
   const s = newSession();
   await s.act("begin", { name: "Pat Smith", phone: "(555) 010-2000" });
   await s.act("chooseUnit", { unitId: "apt_101" });
-  const slot = (await visitorView(s)).choices[0]!;
-  await s.act("chooseTime", slot.input);
+  await chooseFirstTime(s);
   await s.act("consent", { agree: true });
   await s.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: "555-010-2000" });
   return s;
@@ -61,8 +68,13 @@ describe("visitor demo on the real engine", () => {
     const s = newSession();
     await s.act("begin", { name: "Pat Smith", phone: "(555) 010-2000" });
     await s.act("chooseUnit", { unitId: "apt_101" });
-    expect(await s.stage()).toBe("choose-time");
+    expect(await s.stage()).toBe("choose-date");
     expect(lastFromTourCore(s)).toContain("Here's what the property team shared: Two-bedroom, first floor, south-facing.");
+    expect(lastFromTourCore(s)).toContain("Which day works for you?");
+    const days = await visitorView(s);
+    expect(days.choices.map((c) => c.label).slice(0, 2)).toEqual(["Monday, Sep 28", "Tuesday, Sep 29"]);
+    await s.act(days.choices[0]!.action, days.choices[0]!.input);
+    expect(await s.stage()).toBe("choose-time");
     const v = await visitorView(s);
     expect(v.choices.map((c) => c.label)).toEqual(["Monday, Sep 28 \u00b7 2:00 PM", "Monday, Sep 28 \u00b7 3:30 PM"]);
   });
@@ -71,7 +83,7 @@ describe("visitor demo on the real engine", () => {
     const s = newSession();
     await s.act("begin", { name: "Pat Smith", phone: "(555) 010-2000" });
     await s.act("chooseUnit", { unitId: "apt_101" });
-    await s.act("chooseTime", (await visitorView(s)).choices[0]!.input);
+    await chooseFirstTime(s);
     expect(await s.stage()).toBe("consent");
     expect(lastFromTourCore(s)).toContain("Is it OK if I text you about this tour");
 
@@ -90,7 +102,7 @@ describe("visitor demo on the real engine", () => {
     const s = newSession();
     await s.act("begin", { name: "Pat Smith", phone: "(555) 010-2000" });
     await s.act("chooseUnit", { unitId: "apt_101" });
-    await s.act("chooseTime", (await visitorView(s)).choices[0]!.input);
+    await chooseFirstTime(s);
     await s.act("consent", { agree: true });
     await s.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: "555-999-0000" });
     expect(await s.stage()).toBe("stopped");

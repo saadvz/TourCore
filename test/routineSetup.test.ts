@@ -49,9 +49,8 @@ describe("routine secrets stay outside MCP and the template", () => {
     const words = (field: string) => field.split(/(?=[A-Z])|_/).map((w) => w.toLowerCase());
     for (const t of OPERATOR_TOOLS) {
       for (const field of Object.keys(t.input.shape)) {
-        // A property's street address is setup data, not a credential.
-        if (field === "address") continue;
-        expect(words(field).filter((w) => CREDENTIAL.has(w)), `${t.name}.${field}`).toEqual([]);
+        // A property street address, and confirming it, is setup data, not a credential.
+        expect(words(field).filter((w) => CREDENTIAL.has(w) && w !== "address"), `${t.name}.${field}`).toEqual([]);
       }
     }
   });
