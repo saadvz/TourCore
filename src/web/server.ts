@@ -20,6 +20,13 @@ import { FileRuntimeStore } from "../storage/runtimeStore";
 import { VisitorDemoRegistry, type VisitorDemoSession } from "../visitor";
 import { adoptLegacyLine, MessagingConversations } from "../visitor/messagingRouter";
 import { VerificationLinks } from "../visitor/verificationLinks";
+import { ExceptionAlerts } from "../alerts/exceptionAlerts";
+import { HEALTH_PATH, publicHealth, runtimeHealth } from "../install/checks";
+import { resolveDeploymentMode } from "../install/deployment";
+import { Installation } from "../install/installation";
+import { handleSecureSetupApi, INSTALL_PAGE_PATHS, isInstallApiPath, PROXY_HEADERS } from "../install/secureSetup";
+import { clearRuntimeInfo, writeRuntimeInfo } from "../install/service";
+import { useSettingsSource } from "../install/settings";
 import { handleApi } from "./api";
 import { loadLocalEnv } from "./env";
 
@@ -36,6 +43,8 @@ const STATIC: Record<string, { file: string; type: string }> = {
   "/grok": { file: "grok.html", type: "text/html; charset=utf-8" },
   "/grok.js": { file: "grok.js", type: JS },
   "/oauth.js": { file: "oauth.js", type: JS },
+  "/install": { file: "install.html", type: "text/html; charset=utf-8" },
+  "/install.js": { file: "install.js", type: JS },
   "/styles.css": { file: "styles.css", type: "text/css; charset=utf-8" },
 };
 const MAX_BODY_BYTES = 1_000_000;
@@ -63,6 +72,20 @@ export interface SetupServerOptions {
   onApprovalRequest?: (approvalPageUrl: string) => void;
   /** Tests only: turn off the OAuth endpoints' rate limits. */
   oauthRateLimit?: false;
+  /** This installation (manifest, provider settings, alert outbox). Defaults to one in the workspace's folder. */
+  installation?: Installation;
+  /** How often pending operator alerts are retried. */
+  alertRetryMs?: number;
+}
+
+/** The server plus a handle tests use to wait for background operator alerts. */
+export interface TourCoreServer extends Server {
+  tourCore: {
+    installation: Installation;
+    alerts: ExceptionAlerts;
+    /** Resolves once every alert scan and delivery started so far has finished. */
+    settled(): Promise<void>;
+  };
 }
 
 const LOCAL_HOSTS = ["localhost", "127.0.0.1", "[::1]"];
@@ -77,6 +100,7 @@ export const operatorTokenFromEnv = () => process.env.TOURCORE_OPERATOR_TOKEN?.t
  */
 function publicRouteAllowed(method: string, path: string, oauth: boolean): boolean {
   if (path === MCP_PATH) return true;
+  if (method === "GET" && path === HEALTH_PATH) return true;
   if (oauth && (isOAuthPublicPath(path, MCP_PATH) || (method === "GET" && path === "/oauth.js"))) return true;
   if (method === "POST" && path === SENDBLUE_WEBHOOK_PATH) return true;
   if (method === "GET" && (/^\/verify\/[A-Za-z0-9_-]+$/.test(path) || path === "/verify.js" || path === "/styles.css")) return true;
@@ -88,13 +112,16 @@ function publicRouteAllowed(method: string, path: string, oauth: boolean): boole
  * receive webhook and the identity-form page. Operator pages and APIs answer
  * only on this computer's own address.
  */
-export function createSetupServer(options: SetupServerOptions = {}): Server {
+export function createSetupServer(options: SetupServerOptions = {}): TourCoreServer {
   const workspace = options.workspace ?? new PropertyWorkspace();
   const visitors = options.visitors ?? new VisitorDemoRegistry();
   const dev = options.dev ?? false;
   const log = options.log ?? ((line: string) => console.log(`  ${line}`));
-  const runtime = new FileRuntimeStore(join(workspace.root, "runtime"));
-  const ledger = new MessagingLedger(join(runtime.root, "messaging-ledger", "ledger.json"), 5000, join(workspace.root, "messaging", "ledger.json"));
+  const runtime = options.installation?.runtime ?? new FileRuntimeStore(join(workspace.root, "runtime"));
+  const installation = options.installation ?? new Installation({ root: workspace.root, runtime, log });
+  // Adapters read credentials through the settings layer; this installation's secure-setup values join the environment's.
+  const restoreSettings = useSettingsSource(installation.settingsSource());
+  const ledger = new MessagingLedger(join(workspace.root, "runtime", "messaging-ledger", "ledger.json"), 5000, join(workspace.root, "messaging", "ledger.json"));
   const links = new VerificationLinks({ baseUrl: () => sendblueRuntime.env().publicBaseUrl, now: options.realNow, store: runtime });
   const endpoints = new MessagingEndpoints(runtime);
   const messagingLine = () => sendblueRuntime.env().fromNumber;
@@ -104,6 +131,18 @@ export function createSetupServer(options: SetupServerOptions = {}): Server {
     log(`Couldn't connect the texting number to a property: ${err instanceof Error ? err.message : "unknown error"}`);
   }
   let transport: ReturnType<typeof createLiveMessagingTransport> | undefined;
+  const resetMessaging = () => {
+    transport = undefined;
+  };
+  // Operator alerts run after the visitor has been answered and saved; a failure here never reaches the visitor.
+  let alertWork: Promise<void> = Promise.resolve();
+  const afterSave = (propertyId: string) => {
+    alertWork = alertWork
+      .then(async () => {
+        if (await alerts.scan(propertyId)) await installation.outbox.drain();
+      })
+      .catch((err) => log(`Couldn't queue an operator alert: ${err instanceof Error ? err.message : "unknown error"}`));
+  };
   const conversations = new MessagingConversations({
     workspace,
     registry: visitors,
@@ -116,6 +155,7 @@ export function createSetupServer(options: SetupServerOptions = {}): Server {
     realNow: options.realNow,
     interpreter: options.interpreter ?? createIntentInterpreter({ log }),
     log,
+    onSaved: (session) => afterSave(session.propertyId),
   });
   const restored = conversations
     .restoreSaved()
@@ -125,6 +165,19 @@ export function createSetupServer(options: SetupServerOptions = {}): Server {
       if (needsAttention) log(`${needsAttention} text-message tour${needsAttention === 1 ? "" : "s"} couldn't be restored safely and need${needsAttention === 1 ? "s" : ""} attention.`);
     })
     .catch((err) => log(`Couldn't restore earlier text-message tours: ${err instanceof Error ? err.message : "unknown error"}`));
+  // First start with alerts: issues that already exist are recorded, not announced. Then retry anything left pending before a restart.
+  alertWork = restored.then(async () => {
+    try {
+      const state = installation.files.state();
+      if (!state.alertsBaselineAt) {
+        await alerts.baseline();
+        installation.files.writeState({ ...installation.files.state(), alertsBaselineAt: new Date(installation.now()).toISOString() });
+      }
+      await installation.outbox.drain();
+    } catch (err) {
+      log(`Couldn't check for pending operator alerts: ${err instanceof Error ? err.message : "unknown error"}`);
+    }
+  });
   const api = {
     workspace,
     visitors,
@@ -137,6 +190,8 @@ export function createSetupServer(options: SetupServerOptions = {}): Server {
     persist: (session: VisitorDemoSession) => conversations.save(session),
     needsAttention: (propertyId: string) => conversations.needsAttention(propertyId),
   };
+  const alerts = new ExceptionAlerts({ services: api, outbox: installation.outbox, log });
+  installation.setRelevanceCheck((event) => alerts.stillOpen(event));
   const operatorToken = options.operatorToken ?? operatorTokenFromEnv;
   const authMode = options.mcpAuth ?? (options.operatorToken ? "static" : mcpAuthModeFromEnv());
   let server: Server;
@@ -173,6 +228,8 @@ export function createSetupServer(options: SetupServerOptions = {}): Server {
       const address = server?.address();
       return typeof address === "object" && address ? `http://localhost:${address.port}` : undefined;
     },
+    installation,
+    resetMessaging,
   };
 
   server = createServer(async (req, res) => {
@@ -194,7 +251,23 @@ export function createSetupServer(options: SetupServerOptions = {}): Server {
       return send(isLocal || host === publicHost ? 404 : 403, "text/plain", isLocal || host === publicHost ? "Not found" : "Forbidden");
     }
 
+    // Secure setup: this computer's own browser only. Anything relayed by a proxy or tunnel is refused, whatever its Host.
+    if (INSTALL_PAGE_PATHS.includes(url.pathname) || isInstallApiPath(url.pathname)) {
+      if (!isLocal || PROXY_HEADERS.some((h) => req.headers[h] !== undefined)) return send(404, "text/plain", "Not found");
+    }
+
     try {
+      if (method === "GET" && url.pathname === HEALTH_PATH) {
+        return send(200, "application/json; charset=utf-8", JSON.stringify(isLocal ? { ...publicHealth(installation), ...runtimeHealth(installation) } : publicHealth(installation)));
+      }
+      if (isInstallApiPath(url.pathname)) {
+        if (method === "POST" && !String(req.headers["content-type"] ?? "").startsWith("application/json")) {
+          return send(415, "application/json", JSON.stringify({ error: { message: "Unsupported request." } }));
+        }
+        const body = method === "POST" ? JSON.parse((await readRaw(req)).toString("utf8") || "{}") : undefined;
+        const result = await handleSecureSetupApi({ installation, services: api, resetMessaging }, method, url.pathname, req.headers, body);
+        return send(result.status, "application/json; charset=utf-8", JSON.stringify(result.json), { "Referrer-Policy": "no-referrer" });
+      }
       if (oauth && isOAuthPublicPath(url.pathname, MCP_PATH)) return await oauth.handle(req, res);
       if (isOAuthLocalPath(url.pathname)) {
         if (!isLocal) return send(404, "text/plain", "Not found");
@@ -257,12 +330,34 @@ export function createSetupServer(options: SetupServerOptions = {}): Server {
       }
       const asset = req.method === "GET" ? STATIC[url.pathname] : undefined;
       if (!asset) return send(404, "text/plain", "Not found");
-      return send(200, asset.type, readFileSync(new URL(asset.file, PUBLIC_DIR), "utf8"));
+      const pageHeaders: Record<string, string> = url.pathname === "/install" ? { "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY" } : {};
+      return send(200, asset.type, readFileSync(new URL(asset.file, PUBLIC_DIR), "utf8"), pageHeaders);
     } catch {
       return send(400, "application/json", JSON.stringify({ error: { message: "That request couldn't be read." } }));
     }
   });
-  return server;
+  const retry = setInterval(() => {
+    alertWork = alertWork.then(() => installation.outbox.drain().then(() => undefined)).catch(() => undefined);
+  }, options.alertRetryMs ?? 15_000);
+  retry.unref();
+  server.on("close", () => {
+    clearInterval(retry);
+    restoreSettings();
+  });
+  return Object.assign(server, {
+    tourCore: {
+      installation,
+      alerts,
+      settled: async () => {
+        await restored;
+        let seen: Promise<void>;
+        do {
+          seen = alertWork;
+          await seen;
+        } while (seen !== alertWork);
+      },
+    },
+  });
 }
 
 function readRaw(req: IncomingMessage): Promise<Buffer> {
@@ -304,7 +399,7 @@ function openBrowser(url: string): void {
   }
 }
 
-export async function startSetupServer(options: SetupServerOptions & { port?: number; open?: boolean } = {}): Promise<{ server: Server; url: string }> {
+export async function startSetupServer(options: SetupServerOptions & { port?: number; open?: boolean } = {}): Promise<{ server: TourCoreServer; url: string }> {
   const server = createSetupServer(options);
   const first = options.port ?? 4321;
   for (let port = first; port < first + 20; port++) {
@@ -327,18 +422,36 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const dev = args.includes("--dev") || process.env.npm_config_dev === "true";
   const portArg = args.find((a) => a.startsWith("--port="));
   const open = !args.includes("--no-open") && !process.env.CI;
+  const workspace = new PropertyWorkspace();
+  const installation = new Installation({ root: workspace.root, runtime: new FileRuntimeStore(join(workspace.root, "runtime")) });
+  const recorded = (() => {
+    try {
+      return installation.files.manifest();
+    } catch {
+      return undefined;
+    }
+  })();
+  const deployment = resolveDeploymentMode(process.env, recorded?.deploymentMode);
+  const { manifest } = installation.files.ensure({ deploymentMode: deployment.mode });
+  if (manifest.options?.grokLegacyOAuthCompat && process.env.TOURCORE_GROK_LEGACY_OAUTH_COMPAT === undefined) process.env.TOURCORE_GROK_LEGACY_OAUTH_COMPAT = "true";
   const { server, url } = await startSetupServer({
     dev,
     open,
+    workspace,
+    installation,
     port: portArg ? Number(portArg.split("=")[1]) : undefined,
     onApprovalRequest: (page) => {
       if (!process.env.CI) openBrowser(page);
     },
   });
+  const port = Number(new URL(url).port);
+  writeRuntimeInfo(workspace.root, { pid: process.pid, port, url: url.replace(/\/$/, ""), startedAt: new Date().toISOString() });
   console.log("\n  Tour Core setup is running.");
   console.log(`\n  Open this link in your browser:  ${url}\n`);
   console.log(open ? "  (It should open by itself in a moment.)" : "");
   console.log("  Keep this window open while you work. Press Ctrl+C to stop.\n");
+  console.log(`  Deployment:           ${deployment.mode}${deployment.invalid ? ` (TOURCORE_DEPLOYMENT_MODE "${deployment.invalid}" isn't recognized)` : ""}, installation ${manifest.installationId}`);
+  console.log(`  Secure setup:         ${url}install#s=${installation.sessions.mint().token}  (this computer only; expires in 30 minutes)\n`);
   const sb = sendblueRuntime.env();
   if (sb.apiKey || sb.publicBaseUrl) {
     console.log(`  Real-phone messaging: Sendblue number ${sb.fromNumber ?? "(not set)"}`);
@@ -360,9 +473,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   } else {
     console.log(`  Grok Bot connector:   off (TOURCORE_MCP_AUTH_MODE="${mode.invalid}" isn't oauth or static)\n`);
   }
-  if (dev) console.log(`  Developer mode is on. Records folder: ${new PropertyWorkspace().root}\n  Static files: ${fileURLToPath(PUBLIC_DIR)}\n`);
+  if (dev) console.log(`  Developer mode is on. Records folder: ${workspace.root}\n  Static files: ${fileURLToPath(PUBLIC_DIR)}\n`);
   const stop = () => {
     console.log("\n  Tour Core setup stopped. Your work is saved.");
+    clearRuntimeInfo(workspace.root, process.pid);
     server.close();
     process.exit(0);
   };

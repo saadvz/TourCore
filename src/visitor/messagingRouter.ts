@@ -55,6 +55,8 @@ export class MessagingConversations {
       /** Reads what a typed message is trying to do. Defaults to the built-in rules. */
       interpreter?: IntentInterpreter;
       log?: (line: string) => void;
+      /** Called after a conversation's records are saved, from any surface (e.g. to look for new exceptions). */
+      onSaved?: (session: VisitorDemoSession) => void;
     },
   ) {
     const runtime = deps.runtime ?? new MemoryRuntimeStore();
@@ -119,8 +121,9 @@ export class MessagingConversations {
   }
 
   /** Saves a conversation's tour records and its snapshot. Use after any change, from any surface. */
-  save(session: VisitorDemoSession): Promise<void> {
-    return this.persistence.save(session);
+  async save(session: VisitorDemoSession): Promise<void> {
+    await this.persistence.save(session);
+    this.deps.onSaved?.(session);
   }
 
   /** Conversations the operator should look at because they couldn't be picked up after a restart. */

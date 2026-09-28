@@ -1,4 +1,7 @@
 import { z } from "zod";
+import type { Installation } from "../install/installation";
+import { secretValues } from "../install/settings";
+import { INSTALLATION_TOOLS } from "../install/tools";
 import { validateConfig } from "../config/tourCoreConfig";
 import { TourCoreError } from "../core/TourCore";
 import { InvalidTransitionError } from "../domain/stateMachine";
@@ -47,8 +50,12 @@ export interface ToolContext {
   services: OperatorServices;
   confirmations: ConfirmationBook;
   now: () => Date;
-  /** Where the operator can open Tour Core on this computer (for export downloads). */
+  /** Where the operator can open Tour Core on this computer (for export downloads and secure setup). */
   localUrl?: () => string | undefined;
+  /** This installation (manifest, provider settings, alerts), for the installation tools. */
+  installation?: Installation;
+  /** Visitor messaging settings changed: drop any cached connection so the next message uses them. */
+  resetMessaging?: () => void;
 }
 
 export type ToolKind = "read" | "change" | "consequential";
@@ -853,6 +860,9 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       };
     },
   }),
+
+  // ------------------------------------------------------ installation
+  ...INSTALLATION_TOOLS,
 ];
 
 export const OPERATOR_TOOL_NAMES = OPERATOR_TOOLS.map((t) => t.name);
@@ -883,11 +893,9 @@ export async function callOperatorTool(ctx: ToolContext, name: string, args: unk
   }
 }
 
-const SECRET_ENV = ["SENDBLUE_API_API_KEY", "SENDBLUE_API_API_SECRET", "SENDBLUE_WEBHOOK_SECRET", "TOURCORE_OPERATOR_TOKEN", "TOURCORE_INTENT_MODEL_KEY"];
-
-/** Defense in depth: no tool result may carry a configured secret, whatever path produced it. */
+/** Defense in depth: no tool result may carry a configured secret (environment or secure setup), whatever path produced it. */
 export function redactSecrets(value: unknown, env: NodeJS.ProcessEnv = process.env): unknown {
-  const secrets = SECRET_ENV.map((k) => env[k]?.trim()).filter((s): s is string => !!s && s.length >= 6);
+  const secrets = secretValues(env);
   if (!secrets.length) return value;
   const text = JSON.stringify(value);
   if (!secrets.some((s) => text.includes(s))) return value;

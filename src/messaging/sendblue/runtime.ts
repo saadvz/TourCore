@@ -1,10 +1,12 @@
 import SendblueAPI from "sendblue";
+import { effectiveEnv } from "../../install/settings";
 import { toE164 } from "../Messenger";
 
 /**
- * Everything Sendblue-specific that comes from the environment. Secrets are
- * read only from environment variables (a local .env is loaded into them at
- * startup) and never written to config, records or logs.
+ * Everything Sendblue-specific that comes from the settings layer: the
+ * environment (a local .env is loaded into it at startup) plus anything saved
+ * through the secure setup page. Secrets are never written to config,
+ * records or logs.
  */
 export interface SendblueEnv {
   apiKey?: string;
@@ -84,7 +86,7 @@ export interface SendblueContactData {
 
 let clientFactory: (env: SendblueEnv) => SendblueClient = (env) =>
   new SendblueAPI({ apiKey: env.apiKey, apiSecret: env.apiSecret, maxRetries: 2, timeout: 20_000, logLevel: "off" }) as unknown as SendblueClient;
-let envReader: () => SendblueEnv = () => readSendblueEnv();
+let envReader: () => SendblueEnv = () => readSendblueEnv(effectiveEnv());
 
 export const sendblueRuntime = {
   env: () => envReader(),

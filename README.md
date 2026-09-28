@@ -7,16 +7,63 @@ route, and only during their reserved window. Afterward it sends a follow-up and
 **Tour Core does not control locks.** It requests authorized access through **Durin**, and only after its
 own policy check allows the request. If policy says no, Durin is never asked.
 
-This repo is an early vertical slice. Everything runs locally in demo mode: nothing sends real texts or opens
-real doors.
+This is a P0 demo: door access runs in Durin demo mode (no real doors open) and tour records are stored with the
+Tour Core installation. Real visitor texting works through Sendblue.
 
-**Operator console: Grok Bot.** The intended way to run Tour Core is by talking to the **Tour Core Bot** in Grok
-Bot: set up a property, map routes, check readiness, run a practice tour, publish, watch live tours, work
-exceptions and export the audit. Grok calls Tour Core's typed tools; Tour Core keeps every record and makes every
-access decision. See [Grok Bot operator console](#grok-bot-operator-console). The browser app below stays as the
+**Grok is the installer and the operator console.** The intended way to run Tour Core is by talking to the
+**Tour Core Bot** in Grok Bot: it installs Tour Core, connects texting and alerts, sets up a property, runs the
+readiness check and a practice tour, publishes, watches live tours, works exceptions and exports the audit. Grok
+calls Tour Core's typed tools; Tour Core keeps every record and makes every access decision.
+
+## Getting started: pick a path
+
+### Path A: Grok-managed demo (recommended for P0)
+
+1. Install (copy) the **Tour Core** Grok Bot template ([`grok-template/`](grok-template/)).
+2. Say **"Set up Tour Core."**
+
+Grok installs and runs Tour Core **on its own cloud computer** (`npm run bootstrap:grok`), opens a public
+address, connects to it, and then walks you through only the steps that need a person. Your own computer isn't
+needed: no Node.js, no terminal, no `.env`, nothing to know about MCP or OAuth.
+
+What Grok does itself: clone the code, install and start Tour Core, open a public address, open Tour Core's pages
+in its cloud browser, fill in non-sensitive settings, and run every check.
+
+What you may still need to do (it isn't zero-click):
+
+- create or sign in to a Sendblue account, pass MFA, accept provider terms;
+- approve Grok's connection on Tour Core's page (Grok opens it; you take over the browser and click Allow);
+- type the Sendblue details and the Grok Routine's connection details into **Tour Core's secure setup page**,
+  which Grok opens in its cloud browser. Credentials never go into the chat, and Grok never sees them;
+- make the decisions: property facts, tour hours, and the explicit yes to publish.
+
+Grok-managed is a **demo deployment**: Tour Core runs while Grok's cloud computer does, and its temporary public
+address changes if the tunnel restarts (Tour Core notices and says what to reconnect). Details, limits and the
+path to production: [`docs/deployment.md`](docs/deployment.md).
+
+### Path B: Self-hosted
+
+1. Deploy Tour Core at a stable https URL (any host that runs Node.js 20+). Set `TOURCORE_DEPLOYMENT_MODE=SELF_HOSTED`
+   and `PUBLIC_BASE_URL`, then `npm run bootstrap:self-hosted` (or run `npm run setup -- --no-open` under your
+   host's process manager).
+2. In Grok, add Tour Core as a custom connector at `PUBLIC_BASE_URL/mcp` (OAuth; approve it on the server's
+   `/grok` page).
+3. Say **"Set up Tour Core."** Grok skips installing and drives configuration through the same installation
+   status and secure setup page.
+
+### Path C: Local developer
+
+```bash
+git clone <this repository> && cd tour-core
+npm install
+npm run setup
+```
+
+Everything below is the technical and manual documentation for this path: the browser app, real phones with
+Sendblue and a manual tunnel, `.env`, the Grok connector, and the engine itself. The browser app stays as the
 fallback, the debugging surface and a deterministic comparison.
 
-## Quick start
+## Quick start (developer)
 
 Requires Node.js 20+ (built on 22). No environment variables or accounts needed.
 
@@ -176,7 +223,9 @@ npm run sendblue:test -- --to +1XXXXXXXXXX   # manual: checks the connection, se
 - **Duplicate deliveries.** Retried webhooks are de-duplicated by Sendblue's `message_handle`, so a retry never books,
   consents, verifies, opens a door or replies twice.
 - **Duplicate sends.** Sends aren't retried automatically and are keyed by message id.
-- **Secrets.** Secrets live only in the environment and are never written to config, records or logs.
+- **Secrets.** Secrets live in the environment (`.env`) or in the SecretStore (entered on the secure setup page,
+  `http://localhost:4321/install`, which wins over `.env`). They're never written to config, the installation
+  manifest, records, exports or logs, and never returned by a tool.
 - **Access.** Messaging never decides access. A failed send is recorded ("couldn't be delivered" in the live view) and
   never changes a policy decision. A wrong door texted from a phone is refused before Durin is contacted.
 - **STOP, UNSUBSCRIBE, CANCEL, QUIT.** Tour Core stops messaging that person, ends any tour in progress (open doors
@@ -276,7 +325,10 @@ Browser app ─► /api ──────────────────�
 Terminal wizard ─────────────────────────────────────────────►  same setup actions
 ```
 
-- **Tool contract** (`src/operator/tools.ts`): 32 typed, provider-neutral tools over the existing actions:
+- **Installation tools** (`src/install/tools.ts`): 10 more tools report and test the installation
+  (`get_installation_status`, `get_next_installation_step`, ...) and open the secure setup page. None takes or
+  returns a credential or runs a command. See [`docs/deployment.md`](docs/deployment.md).
+- **Tool contract** (`src/operator/tools.ts`): 32 typed, provider-neutral operator tools over the existing actions:
   property setup, units, doors, routes (`preview_route` resolves the operator's words to doors on file; `set_route`
   saves exact names only), tour hours in everyday words, verification, messaging, review, `run_readiness_check`,
   `run_dry_tour`, `publish_demo_property`, `list_active_tours`, `inspect_tour`, the exception queue, holds, calling a
@@ -305,9 +357,13 @@ Terminal wizard ─────────────────────�
   stored hashed in `tourcore-data/runtime/oauth/`. OAuth only gates the tools: consequential actions still need Tour
   Core's own confirmation codes. `TOURCORE_MCP_AUTH_MODE=static` swaps in a single bearer token for development
   (never both).
-- **Skills and template**: the six skills (Setup Property, Map Route, Run Readiness Check, Simulate Tour, Work
-  Exception, Export Audit) are in [`.grok/skills/`](.grok/skills/); the Bot profile, context, safe examples and
-  integration notes are in [`grok-template/`](grok-template/). Setup, team-only publishing and install:
+- **Operator alerts** (`src/alerts/`): when a visitor needs judgment (e.g. a question with no approved answer),
+  the visitor gets the safe fallback at once and Tour Core wakes the **Tour Core Exception Alert** Grok Routine
+  through a durable outbox (minimal payload, stable event ids, bounded retries, retried after restarts). Grok
+  then reads the exception with `inspect_exception` and tells the operator without being asked.
+- **Skills and template**: Install Tour Core plus the six operator skills (Setup Property, Map Route, Run
+  Readiness Check, Simulate Tour, Work Exception, Export Audit) are in [`.grok/skills/`](.grok/skills/); the Bot
+  profile, context, routine, safe examples and integration notes are in [`grok-template/`](grok-template/). Setup, team-only publishing and install:
   [`docs/grok-template-setup.md`](docs/grok-template-setup.md). Manual test with a real Bot:
   [`docs/grok-manual-test.md`](docs/grok-manual-test.md).
 
@@ -317,6 +373,16 @@ npm run grok:status                        # mode, URL, what's connected (no tok
 npm run grok:disconnect                    # revoke Grok's access; nothing else changes
 npm run grok:tools                         # the tools Grok Bot sees
 npm run grok:connect -- --static [--rotate] # development only: static bearer token mode
+```
+
+Installation and runtime (the same commands Grok runs on its cloud computer):
+
+```bash
+npm run bootstrap:grok        # install/repair, start, public tunnel, checks, status (idempotent)
+npm run bootstrap:self-hosted # same, using PUBLIC_BASE_URL instead of a tunnel
+npm run service:status        # running? healthy?   (also service:start, service:stop, service:restart)
+npm run install:status        # installation status, component by component
+npm run install:link          # a fresh secure setup link for this computer's browser
 ```
 
 ## What "Publish for demo" means
@@ -435,8 +501,12 @@ src/setup/         setup engine: actions, commands, presenters, readiness, pract
 src/operator/      operator actions shared by every surface: readiness/practice/publish flow, live tours,
                    exceptions, holds, approved-fact answers, audit export, and the typed tool contract
 src/mcp/           thin MCP bridge (transport only) over the operator tools, mounted at /mcp
-.grok/skills/      the six Grok operator skills (SKILL.md)
-grok-template/     Tour Core Bot profile, context, safe examples, integration notes, manifest
+src/install/       deployment modes, installation manifest, SecretStore, settings layer, installation status and
+                   tools, secure setup API, public endpoint providers, service manager, bootstrap
+src/alerts/        operator events, notification sinks (Grok Routine), durable outbox, exception scanner
+scripts/           bootstrap-grok.mjs (dependency-installing entry point for npm run bootstrap:grok)
+.grok/skills/      Install Tour Core plus the six Grok operator skills (SKILL.md)
+grok-template/     Tour Core Bot profile, context, routine, safe examples, integration notes, manifest
 src/intent/        what a typed message means: intent schema, rule-based interpreter, optional language-model
                    interpreter behind a vendor-neutral interface
 src/visitor/       visitor session over the real engine (browser phone and real phones), typed-reply

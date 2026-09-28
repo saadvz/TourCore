@@ -10,6 +10,14 @@ Everything the Bot knows about properties and tours comes from Tour Core's
 tools. Tour Core keeps working without Grok: the browser app (`npm run setup`)
 and the terminal wizard (`npm run setup:cli`) use the same actions.
 
+**Recommended P0 path: Grok-managed.** Once the Bot exists (steps 3, 4 and the
+routine below), the operator just says *"Set up Tour Core."* The Bot installs
+Tour Core on its own cloud computer (`npm run bootstrap:grok`), connects to it,
+and opens Tour Core's secure setup page for credentials. Steps 1, 2 and 5
+below are then done by the Bot, not by hand. See
+[`deployment.md`](deployment.md). The manual steps stay here for self-hosted
+and developer installs.
+
 ---
 
 ## 1. Prerequisites
@@ -57,7 +65,8 @@ for a short-lived token (`/token`, PKCE S256). Through the tunnel address,
 and the page where you approve connections, answer only on this computer.
 
 `npm run grok:status` shows the mode, the URL and what's connected (never token
-values). `npm run grok:tools` lists the 32 tools.
+values). `npm run grok:tools` lists the 42 tools (32 operator tools plus 10
+installation tools).
 
 ## 3. Create the Tour Core Bot
 
@@ -67,21 +76,31 @@ values). `npm run grok:tools` lists the 32 tools.
 3. In the Bot's conversation, paste the **Standing instructions** section from
    `bot-profile.md` and ask: *"These are your standing instructions as the Tour
    Core Bot. Keep them."*
-4. Attach the four files in `grok-template/context/` and the two in
+4. Attach the five files in `grok-template/context/` and the two in
    `grok-template/examples/` and ask the Bot to keep them as reference for this
    role.
 
-## 4. Add the six skills
+## 4. Add the seven skills
 
-The skills live in [`.grok/skills/`](../.grok/skills/). For each of the six
+The skills live in [`.grok/skills/`](../.grok/skills/). For each of the seven
 folders:
 
 1. Attach (or paste) its `SKILL.md` in the Bot conversation.
 2. Ask: *"Save this as a skill called Setup Property. Keep the instructions,
    the allowed tools, the approval rules and the stop condition exactly as
-   written."* (Use the matching name: Setup Property, Map Route, Run Readiness
-   Check, Simulate Tour, Work Exception, Export Audit.)
+   written."* (Use the matching name: Install Tour Core, Setup Property, Map
+   Route, Run Readiness Check, Simulate Tour, Work Exception, Export Audit.)
 3. Review what the Bot saved; it should match the file.
+
+### Add the Tour Core Exception Alert routine
+
+Create a routine named **Tour Core Exception Alert** with an **authenticated
+webhook** trigger and the instructions in
+[`grok-template/routines/exception-alert.md`](../grok-template/routines/exception-alert.md).
+Grok shows the routine's webhook address and sender key. Don't paste them
+anywhere: the Install Tour Core skill opens Tour Core's secure setup page, and
+the operator types them there. (Rotate the key first if it has been shown
+anywhere else.)
 
 Private skills are one library shared by your Bots. If one doesn't appear in
 the `/` menu, open **Marketplace → Your plugins → Manage plugins and skills**
@@ -135,10 +154,14 @@ in a running Tour Core. Properties, tour history, Sendblue, visitor sessions
 and Durin settings are untouched. To connect again, reconnect Tour Core in
 Grok and approve.
 
-**If the tunnel address changes** (a new `trycloudflare.com` URL): update
-`PUBLIC_BASE_URL`, restart Tour Core, then remove the Tour Core connector in
-Grok and add it again with the new URL. Tokens and registrations are tied to
-the address they were issued for, so the old ones stop working by design.
+**If the tunnel address changes** (a new `trycloudflare.com` URL): in a
+Grok-managed install the bootstrap records the new address and the
+installation status marks Grok's connection and visitor messaging as needing
+action. Otherwise update `PUBLIC_BASE_URL` and restart Tour Core. Either way,
+remove the Tour Core connector in Grok and add it again with the new URL, then
+run `test_visitor_messaging` (or ask the Bot to "check texting") so Sendblue
+gets the new address. Tokens and registrations are tied to the address they
+were issued for, so the old ones stop working by design.
 
 **If Grok says the connection failed during registration**, look at the Tour
 Core window. If the refused redirects are `scheme=cursor host=anysphere.cursor-mcp`
@@ -211,8 +234,8 @@ Publishing is manual. There's no official API for it, and P0 doesn't need one.
 1. Open the Tour Core Bot's settings and choose **Share as template** (or ask
    the Bot to create a shareable copy of itself). Nothing goes live yet: Grok
    Bot prepares an unpublished, anonymized template.
-2. **Review what's included**: instructions, selected memories, the six skills,
-   and integrations. Remove anything personal, any real visitor or property
+2. **Review what's included**: instructions, selected memories, the seven
+   skills, the Tour Core Exception Alert routine, and integrations. Remove anything personal, any real visitor or property
    data, and anything that looks like a credential. Custom MCP servers and
    secrets aren't copied; confirm the Tour Core connector isn't listed as
    included.
@@ -231,11 +254,11 @@ Publishing is manual. There's no official API for it, and P0 doesn't need one.
 3. Review the **context and integrations**; it should match
    `grok-template/template.json` and include no secrets or live data.
 4. Choose **Add Bot**. You get your own independent copy.
-5. Do steps 2 and 5 above with **your** Tour Core computer: check the
-   connector is on, add the Tour Core connector with your own URL, and approve
-   it on your Tour Core computer.
-6. Run one safe task (*"List the Tour Core tools you can use"*, then *"Run a
-   practice tour"*) before anything consequential.
+5. Say *"Set up Tour Core."* The Bot installs and connects its own Tour Core
+   and asks you only for what needs a person. (Self-hosted instead: do steps 2
+   and 5 above with your Tour Core's URL.)
+6. Run one safe task (*"What's left to set up?"*, then *"Run a practice
+   tour"*) before anything consequential.
 
 ## Limits to know about
 

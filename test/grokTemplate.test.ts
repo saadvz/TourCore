@@ -9,7 +9,7 @@ import { OPERATOR_TOOL_NAMES } from "../src/operator/tools";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SKILLS = join(ROOT, ".grok", "skills");
 const TEMPLATE = join(ROOT, "grok-template");
-const SKILL_NAMES = ["setup-property", "map-route", "run-readiness-check", "simulate-tour", "work-exception", "export-audit"];
+const SKILL_NAMES = ["install-tour-core", "setup-property", "map-route", "run-readiness-check", "simulate-tour", "work-exception", "export-audit"];
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -25,7 +25,7 @@ function frontmatter(text: string): Record<string, string> {
 }
 
 describe("Grok skills", () => {
-  it("are exactly the six PRD operator skills, in SKILL.md format", () => {
+  it("are Install Tour Core plus the six PRD operator skills, in SKILL.md format", () => {
     expect(readdirSync(SKILLS).sort()).toEqual([...SKILL_NAMES].sort());
     for (const name of SKILL_NAMES) {
       const text = readFileSync(join(SKILLS, name, "SKILL.md"), "utf8");
@@ -61,12 +61,13 @@ describe("Grok template package", () => {
     expect(listed.sort()).toEqual([...OPERATOR_TOOL_NAMES].sort());
   });
 
-  it("has a manifest whose files exist, with no routines and the PRD's starting prompts", () => {
+  it("has a manifest whose files exist, with the exception-alert routine and the PRD's starting prompts", () => {
     const manifest = JSON.parse(readFileSync(join(TEMPLATE, "template.json"), "utf8"));
-    for (const f of [manifest.profile, ...manifest.context, ...manifest.skills, ...manifest.examples, ...manifest.integrations.map((i: { doc: string }) => i.doc)]) {
+    for (const f of [manifest.profile, ...manifest.context, ...manifest.skills, ...manifest.examples, ...manifest.integrations.map((i: { doc: string }) => i.doc), ...manifest.routines.map((r: { doc: string }) => r.doc)]) {
       expect(existsSync(join(TEMPLATE, f)), f).toBe(true);
     }
-    expect(manifest.routines).toEqual([]);
+    expect(manifest.routines).toEqual([expect.objectContaining({ name: "Tour Core Exception Alert", trigger: "authenticated-webhook", credentialsTravelWithTemplate: false })]);
+    for (const t of manifest.routines[0].allowedTools) expect(OPERATOR_TOOL_NAMES).toContain(t);
     expect(manifest.distribution).toBe("team");
     expect(manifest.integrations[0].travelsWithTemplate).toBe(false);
     const profile = readFileSync(join(TEMPLATE, "bot-profile.md"), "utf8");

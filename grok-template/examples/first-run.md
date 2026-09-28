@@ -1,9 +1,69 @@
 # First-run conversation (safe example)
 
-A made-up property and visitor. Tool calls are shown in brackets; the operator
-never sees them.
+A made-up property and visitor. Tool calls and computer actions are shown in
+brackets; the operator never sees them.
 
 ---
+
+## Part 1: Set up Tour Core
+
+**Operator:** Set up Tour Core.
+
+[Bot's cloud computer: no `tour-core` folder yet → clone the repository from
+`TOURCORE_REPO_URL` → `npm run bootstrap:grok`. It installs dependencies,
+starts Tour Core, opens a public address and prints the connector address.]
+
+**Tour Core:** Tour Core is installed and running on my cloud computer. Next I
+need to connect to it. I've opened its connection page in my browser. Please
+take over the browser, check that the code matches the one on the Grok
+connection screen, and click Allow.
+
+[Operator takes over the browser and clicks Allow. `get_installation_status`]
+
+**Tour Core:** Connected. Here's where things stand:
+✓ Tour Core is running
+✓ Public address
+✓ Grok connection
+• Visitor texting isn't connected yet
+• Operator alerts aren't connected yet
+
+Visitor texting still needs your Sendblue account. I'll open Tour Core's
+secure setup page. Please take over the browser and enter the Sendblue API
+key, API secret and texting number there, not in chat.
+
+[`get_secure_setup_url` step visitor-messaging → opened in the cloud browser]
+
+**Operator:** Done.
+
+[`get_installation_status` → Visitor messaging READY; next step
+CONNECT_OPERATOR_ALERTS. The Bot creates the Tour Core Exception Alert routine
+with a webhook trigger. `get_secure_setup_url` step operator-alerts]
+
+**Tour Core:** Texting is connected. I created the Tour Core Exception Alert
+routine so Tour Core can tell you when a visitor needs you. It needs to be
+connected to Tour Core: I've opened the secure setup page so you can enter the
+routine's webhook address and a newly rotated key without putting them in
+chat.
+
+**Operator:** Done.
+
+[`get_installation_status` → OPERATOR_ALERTS READY (Tour Core sent a test
+alert; the routine posted "Operator alerts are connected.")]
+
+**Tour Core:** Tour Core is running.
+
+✓ Grok connection
+✓ Visitor messaging
+✓ Operator alerts
+✓ Demo access
+
+Your tour records are stored with this Tour Core installation.
+
+No property is set up yet. Want to set one up?
+
+---
+
+## Part 2: Set up a property
 
 **Operator:** I want to set up my building.
 
@@ -131,6 +191,28 @@ demo?
 
 **Tour Core:** 100 Alfred Way is published for demo. Visitors can text the
 property number to start a tour.
+
+---
+
+## Part 3: A visitor needs you (nobody asked)
+
+[A visitor texts "Is there a pool?". Tour Core answers them right away that it
+doesn't have that information, records the question, and wakes the Tour Core
+Exception Alert routine with only the issue reference. The routine calls
+`inspect_exception`.]
+
+**Tour Core:** A visitor touring Unit 101 asked whether the property has a
+pool. Tour Core doesn't have an approved answer. The tour is still active.
+Would you like to add an approved answer or leave it for the property team?
+
+**Operator:** No pool. Say "There's no pool, but there's a gym on the roof."
+
+[`answer_flagged_question` → returns a question]
+
+**Tour Core:** I can add "There's no pool, but there's a gym on the roof." to
+the approved facts for 100 Alfred Way and answer Pat. Want me to?
+
+**Operator:** Yes.
 
 ---
 

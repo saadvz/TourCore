@@ -10,12 +10,13 @@ import { callOperatorTool, OPERATOR_TOOLS, UnknownToolError, type ToolContext } 
  * is no business or policy logic here.
  */
 
-export const MCP_PATH = "/mcp";
+export { MCP_PATH } from "./paths";
 export const SUPPORTED_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const SERVER_INFO = { name: "tour-core", title: "Tour Core", version: "0.2.0" };
 
 const INSTRUCTIONS =
   "Tour Core is the system of record and policy authority for self-guided tours. Use these tools to set up a property, map routes, run the readiness check and a practice tour, publish for demo (only after an explicit yes), watch active tours, work exceptions and export the audit. " +
+  "For installation, get_installation_status and get_next_installation_step are the source of truth for what's set up and what comes next. Provider credentials are entered only by the operator on Tour Core's secure setup page (get_secure_setup_url); never ask for them in chat. " +
   "Speak to the operator in plain, everyday words. Never show ids, handles or codes. Never invent property facts. There is no tool to open a door: access is decided by Tour Core's policy on each visitor request and carried out by Durin.";
 
 type JsonRpcId = string | number | null;

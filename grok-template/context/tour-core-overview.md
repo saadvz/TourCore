@@ -25,6 +25,9 @@ decided before Durin is contacted.
 
 ## What an operator does with the Bot
 
+0. **Set up Tour Core**: the Bot installs and starts Tour Core on its own cloud
+   computer, then asks the operator only for what needs a person (see
+   `installation.md`).
 1. **Set up a property**: address, units, doors, routes, tour hours, visitor
    verification, messaging.
 2. **Check readiness**: real checks against the pieces the setup uses.
@@ -33,12 +36,17 @@ decided before Durin is contacted.
 4. **Publish for demo**: only after both pass, and only after the operator's yes.
 5. **Watch active tours** and **work exceptions**: unanswered questions, help
    requests, door problems, paused tours, tours that couldn't be restored.
+   Tour Core also wakes the Bot (Tour Core Exception Alert routine) when a
+   visitor needs judgment, so the operator hears about it without asking.
 6. **Export the audit**: a validated, provider-neutral record of the day.
 
 ## Current P0 demo configuration
 
+- Tour Core runs on the Bot's cloud computer (a demo deployment) or at a
+  stable self-hosted address.
 - Visitor messaging: Sendblue (real texts and iMessages).
-- Tour records: on the Tour Core computer. Google Drive is the next step.
+- Operator alerts: the Tour Core Exception Alert Grok Routine.
+- Tour records: stored with the Tour Core installation. Google Drive is the next step.
 - Door access: Durin demo mode. No physical door is controlled.
 - Visitor verification: basic identity form (records claimed identity; it
   doesn't prove it).

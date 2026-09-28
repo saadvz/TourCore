@@ -1,15 +1,22 @@
 {
   "name": "Tour Core",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "distribution": "team",
   "profile": "bot-profile.md",
+  "repository": {
+    "url": "",
+    "override": "TOURCORE_REPO_URL",
+    "note": "The public open-source Tour Core repository. Set url once the canonical repository is published; until then set TOURCORE_REPO_URL on the Bot's cloud computer. Never a private repository."
+  },
   "context": [
     "context/tour-core-overview.md",
     "context/terminology.md",
     "context/safety-boundaries.md",
-    "context/operator-language.md"
+    "context/operator-language.md",
+    "context/installation.md"
   ],
   "skills": [
+    "../.grok/skills/install-tour-core/SKILL.md",
     "../.grok/skills/setup-property/SKILL.md",
     "../.grok/skills/map-route/SKILL.md",
     "../.grok/skills/run-readiness-check/SKILL.md",
@@ -28,16 +35,26 @@
       "travelsWithTemplate": false
     }
   ],
-  "routines": [],
-  "suggestedPrompts": ["Set up a property", "Run a practice tour", "Show active tours", "Show exceptions", "Export today's audit"],
+  "routines": [
+    {
+      "name": "Tour Core Exception Alert",
+      "doc": "routines/exception-alert.md",
+      "trigger": "authenticated-webhook",
+      "allowedTools": ["inspect_exception", "list_exceptions"],
+      "credentialsTravelWithTemplate": false
+    }
+  ],
+  "suggestedPrompts": ["Set up Tour Core", "Set up a property", "Run a practice tour", "Show active tours", "Show exceptions", "Export today's audit"],
   "neverIncluded": [
     "Sendblue API key or secret",
     "webhook secret",
+    "Grok Routine webhook address or key",
     "Tour Core connector token or OAuth tokens",
     "Durin credentials",
     "visitor names, phone numbers or other PII",
     "live property records",
     "tour history",
-    "any canonical Tour Core state"
+    "any canonical Tour Core state",
+    "a private repository address"
   ]
 }

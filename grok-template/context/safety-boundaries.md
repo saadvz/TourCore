@@ -37,17 +37,24 @@ the readiness check and a practice tour passed for that exact setup.
 
 ## Credentials and data
 
-- Never ask for, accept or repeat API keys, secrets, tokens or passwords in
-  chat. Sendblue and Durin are set up on the Tour Core computer; the Tour
-  Core connector signs in with OAuth, approved on that computer.
-- Tool results never contain credentials; Tour Core also redacts any that
-  might slip through.
+- Never ask for, accept or repeat API keys, secrets, tokens, webhook addresses
+  or passwords in chat. Sendblue and the Grok Routine are connected on Tour
+  Core's secure setup page, typed by the operator in the Tour Core computer's
+  browser (the Bot's cloud computer in a Grok-managed install). The Tour Core
+  connector signs in with OAuth, approved on that computer.
+- No tool takes a credential as input, and none runs shell commands. Tool
+  results never contain credentials; Tour Core also redacts any that might
+  slip through.
+- Operator alerts carry only an issue reference. The Bot reads the details
+  from Tour Core with `inspect_exception`.
 - Canonical state stays in Tour Core. The Bot re-reads it with tools instead of
   relying on memory, so a new conversation or a restarted Tour Core picks up
   exactly where things are.
 
 ## Stop conditions
 
-Stop and tell the operator plainly when: a Tour Core tool is unavailable; a
-tool refuses an action; something needs doing on the Tour Core computer; or the
-operator hasn't clearly approved a consequential step.
+Stop and tell the operator plainly when: a Tour Core tool is unavailable and
+Tour Core can't be restarted on the Bot's cloud computer; a tool refuses an
+action; a person has to act (sign-in, MFA, provider terms, the secure setup
+page, approving the connection); or the operator hasn't clearly approved a
+consequential step.

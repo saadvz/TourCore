@@ -1,7 +1,12 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import { validateConfig } from "../src/config/tourCoreConfig";
+import { publicHealth } from "../src/install/checks";
+import { handleSecureSetupApi } from "../src/install/secureSetup";
+import { setSendblueRuntime } from "../src/messaging/sendblue/runtime";
+import { fakeSendblue } from "./fakeSendblue";
 import { at, grokHarness, type GrokHarness } from "./grokHarness";
+import { installHarness, ROUTINE_KEY, ROUTINE_URL, SB_KEY, SB_SECRET } from "./installHarness";
 
 /**
  * One deterministic scenario per Grok operator skill. Each follows the
@@ -205,5 +210,101 @@ describe("Grok skill scenarios", () => {
     const exportId = /^Audit export (\S+),/.exec(out.reference)![1]!;
     const file = await handleApi({ workspace: h.workspace, dev: false }, "GET", `/api/properties/${id}/audit-exports/${exportId}/audit-export.json`, undefined);
     expect("download" in file && JSON.parse(file.download.content).summary.tours).toBe(1);
+  });
+});
+
+describe("Install Tour Core skill", () => {
+  const text = readFileSync(new URL("../.grok/skills/install-tour-core/SKILL.md", import.meta.url), "utf8");
+  const sequence = text.slice(text.indexOf("## Sequence"), text.indexOf("## Validate"));
+
+  it("checks status before acting, bootstraps only when the runtime is absent, and uses secure setup for credentials", () => {
+    expect(sequence.indexOf("get_installation_status")).toBeGreaterThan(-1);
+    expect(sequence.indexOf("get_installation_status")).toBeLessThan(sequence.indexOf("npm run bootstrap:grok"));
+    expect(sequence).toContain("Don't reinstall something\nthat's running.".replace(/\n/g, text.includes("\r\n") ? "\r\n" : "\n"));
+    expect(sequence).toMatch(/Install and start on your cloud computer \(only when Tour Core is absent or not answering\)/);
+    expect(sequence).toContain("get_secure_setup_url");
+    expect(sequence).toContain("OPERATOR_IN_SECURE_SETUP");
+    expect(sequence).toContain("get_next_installation_step");
+    // Property setup starts only once the infrastructure is ready.
+    expect(sequence).toMatch(/Only once `infrastructureReady` is true and the next step is PROPERTY/);
+  });
+
+  it("never asks for a secret in chat and never names a private repository", () => {
+    const requests = [
+      /\b(paste|send|share|give|tell|type)\b[^.\n]{0,20}\b(me|us|here)\b[^.\n]{0,40}\b(key|secret|token|password|credential)s?\b/i,
+      /\bwhat(?:'s| is) your\b[^.\n]{0,30}\b(key|secret|token|password)\b/i,
+      /\b(key|secret|token|password)s?\b[^.\n]{0,30}\bin (the )?chat\b(?![^.\n]*\b(never|not|don't|without)\b)/i,
+    ];
+    for (const pattern of requests) expect(text).not.toMatch(pattern);
+    expect(text).toMatch(/not in chat/);
+    expect(text).not.toMatch(/github\.com\/[\w.-]+\/[\w.-]+/i);
+    expect(text).toContain("TOURCORE_REPO_URL");
+    // Outside its list of prohibitions, the skill never asks the operator to run anything.
+    expect(text.slice(0, text.indexOf("## Never"))).not.toMatch(/(?<!never )ask (the operator|them) to run/i);
+  });
+
+  it("scenario: \"Set up Tour Core\" follows Tour Core's next steps with only the skill's tools, and reaches property setup once infrastructure is ready", async () => {
+    const h = installHarness({ env: { TOURCORE_DEPLOYMENT_MODE: "GROK_MANAGED_P0" } });
+    const { tool, used } = skillSession("install-tour-core", h);
+    const hooks: Array<{ url: string }> = [];
+    const fake = fakeSendblue({ hooks, lines: [{ sendblue_number: "+15550109999", status: "ONLINE" }] });
+    const create = fake.client.webhooks.create.bind(fake.client.webhooks);
+    fake.client.webhooks.create = async (body) => (hooks.push(...(body.webhooks as Array<{ url: string }>)), create(body));
+    cleanups.push(setSendblueRuntime({ client: () => fake.client }));
+    h.net.state.health = () => publicHealth(h.inst);
+
+    /** The operator typing into the secure setup page Grok opened (never through Grok). */
+    const operatorFillsIn = async (url: string, body: Record<string, string>) => {
+      const token = /#s=([^&]+)/.exec(url)![1]!;
+      const route = url.includes("step=operator-alerts") ? "operator-alerts" : "visitor-messaging";
+      const out = await handleSecureSetupApi({ installation: h.inst, services: h.services }, "POST", `/api/install/${route}`, { "x-tourcore-setup-session": token }, body);
+      expect(out.status).toBe(200);
+    };
+
+    // "Set up Tour Core."
+    const first = await tool("get_installation_status");
+    expect(used[0]).toBe("get_installation_status");
+    const performed: string[] = [];
+    let step = first.nextStep;
+    for (let i = 0; i < 12 && step.component !== "PROPERTY"; i++) {
+      performed.push(`${step.action}:${step.performedBy}`);
+      if (step.action === "ESTABLISH_PUBLIC_ENDPOINT") {
+        // Grok runs `npm run bootstrap:grok` in its own terminal (covered in bootstrap.test.ts); here, its outcome.
+        expect(step.command).toBe("npm run bootstrap:grok");
+        h.inst.files.ensure({ deploymentMode: "GROK_MANAGED_P0" });
+        h.inst.files.setPublicBaseUrl("https://brave-otter-lamp.trycloudflare.com", "CLOUDFLARE_QUICK_TUNNEL");
+      } else if (step.action === "CONNECT_GROK") {
+        h.connectGrok(); // the operator clicks Allow on Tour Core's connection page
+      } else if (step.performedBy === "OPERATOR_IN_SECURE_SETUP") {
+        const link = await tool("get_secure_setup_url", { step: step.secureSetupStep });
+        expect(link.url).toContain(`step=${step.secureSetupStep}`);
+        await operatorFillsIn(link.url, step.secureSetupStep === "operator-alerts" ? { webhookUrl: ROUTINE_URL, key: ROUTINE_KEY } : { apiKey: SB_KEY, apiSecret: SB_SECRET, fromNumber: "+15550109999" });
+      } else if (step.performedBy === "GROK" && step.tool) {
+        expect((await tool(step.tool)).ok).not.toBe(false);
+      } else throw new Error(`Unexpected step ${step.action}`);
+      step = (await tool("get_next_installation_step")) as typeof step;
+    }
+    expect(performed).toEqual([
+      "ESTABLISH_PUBLIC_ENDPOINT:GROK",
+      "CHECK_PUBLIC_ENDPOINT:GROK",
+      "CONNECT_GROK:OPERATOR",
+      "CONNECT_VISITOR_MESSAGING:OPERATOR_IN_SECURE_SETUP",
+      "CONNECT_OPERATOR_ALERTS:OPERATOR_IN_SECURE_SETUP",
+    ]);
+    const status = await tool("get_installation_status");
+    expect(status.infrastructureReady).toBe(true);
+    expect(status.nextStep).toMatchObject({ component: "PROPERTY", action: "SET_UP_PROPERTY", skill: "setup-property", operatorMessage: "No property is configured yet. Want to set one up?" });
+    expect(status.lines.slice(0, 7)).toEqual([
+      "\u2713 Tour Core runtime: Tour Core is running.",
+      "\u2713 Public address: Tour Core is reachable at its public address.",
+      "\u2713 Grok connection: Grok is connected.",
+      "\u2713 Visitor messaging: Visitors can text +15550109999.",
+      "\u2713 Operator alerts: Tour Core can alert you when a visitor needs attention.",
+      "\u2713 Tour records: Tour records are stored with this Tour Core installation.",
+      "\u2713 Access system: Demo. No real doors open.",
+    ]);
+    // Nothing Grok saw carries a credential.
+    const seen = JSON.stringify(await tool("get_installation_status")) + JSON.stringify(first);
+    for (const secret of [SB_KEY, SB_SECRET, ROUTINE_URL, ROUTINE_KEY]) expect(seen).not.toContain(secret);
   });
 });

@@ -53,6 +53,21 @@ again with the code after the operator's yes.
 | `clear_operator_hold` | consequential | Resumes a paused tour; policy still decides every door |
 | `revoke_tour_access` | consequential | Calls a tour off for good and tells the visitor |
 | `export_audit` | change | Writes a validated day's audit export (JSON + CSV) and summarizes it |
+| `get_installation_status` | read | Every installation component's state (runtime, public address, Grok connection, messaging, alerts, records, access, property, readiness, practice tour, publish) and the next step |
+| `get_next_installation_step` | read | The one next step Tour Core decided, who does it, and the tool or skill to use |
+| `get_installation_component` | read | One component's status and next step |
+| `check_runtime_health` | read | Whether Tour Core is running and healthy |
+| `check_public_endpoint` | change | Checks from outside that the public address reaches this installation; records the result |
+| `test_visitor_messaging` | change | Checks texting end to end and repairs Tour Core's own incoming-message address; takes no credentials |
+| `test_operator_alerts` | change | Sends a test alert to the Tour Core Exception Alert routine |
+| `test_storage` | change | Saves and reads back a test record where tour records are kept |
+| `test_access` | read | Checks the access system answers ("Access system: Demo") |
+| `get_secure_setup_url` | change | A short-lived link to Tour Core's secure setup page, for the Tour Core computer's browser only |
 
 There is intentionally no tool to open, unlock or grant a door, mint access,
-change the door-access mode, or read or write raw files.
+change the door-access mode, or read or write raw files. There is also no
+tool that sets an API key, sender key, webhook secret or any other
+credential, and none that runs a shell command: credentials go in only
+through the secure setup page, and runtime management (install, start,
+restart) is done by Grok in its own terminal with `npm run bootstrap:grok`
+and `npm run service:*`.

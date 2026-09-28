@@ -1,5 +1,63 @@
 # Manual test: Tour Core Bot in a real Grok Bot (P0 operator demo)
 
+Two new tests come first: **A** (an existing install gets proactive operator
+alerts) and **B** (a fresh Grok-managed install where the operator never
+touches their own terminal). The original connection and operator-demo tests
+follow.
+
+## A. Existing install: operator alerts
+
+Needs: Grok connected to your current Tour Core (the connection tests below
+pass), a real phone that's a verified Sendblue contact, and the **Tour Core
+Exception Alert** routine created in Grok with an authenticated webhook trigger
+([routine instructions](../grok-template/routines/exception-alert.md)). Rotate
+the routine's sender key first so the value you use has never been shown
+anywhere.
+
+| # | Do | Expect |
+| --- | --- | --- |
+| A1 | Update Tour Core (restart `npm run setup` or `npm run service:restart`). Ask Grok *"Check my Tour Core installation."* | Grok calls `get_installation_status` and answers with a checklist: runtime, public address, Grok connection, visitor messaging (if it says "hasn't been checked", Grok runs `test_visitor_messaging` itself), operator alerts not connected, tour records stored with this installation, access system Demo |
+| A2 | Grok offers to connect alerts. It calls `get_secure_setup_url` | A link `http://localhost:4321/install#s=...` for the Tour Core computer's browser. On the Tour Core computer you can also run `npm run install:link` |
+| A3 | Open the link on the Tour Core computer. Enter the routine's webhook address and the **new** key. Click **Save and send a test alert** | "Sent a test alert..." on the page. The routine wakes and posts "Operator alerts are connected." Nothing was typed into chat |
+| A4 | Open the same link from another device, or `https://<tunnel>/install` | Not found |
+| A5 | Ask Grok *"Test operator alerts."* | Grok calls `test_operator_alerts`; the routine posts again; Grok never shows the address or key. Search the chat: neither value appears |
+| A6 | From the real phone, start a tour and get into Unit 101 (developer mode "Move tour to now" if needed) | Normal visitor flow |
+| A7 | Text *"Is there a pool?"* | Immediately: "I don't have that information for this property. I've flagged it for the property team..." |
+| A8 | Don't say anything to Grok | Within seconds the routine wakes, calls `inspect_exception`, and posts something like: "A visitor touring Unit 101 asked whether the property has a pool. Tour Core doesn't have an approved answer. The tour is still active. Would you like to add an approved answer or leave it for the property team?" |
+| A9 | Reply *"There's no pool, but there's a gym on the roof."*, then *"yes"* | Work Exception flow: Grok asks before adding the fact; after yes the phone gets exactly that text |
+| A10 | Text another message from the phone | No second alert for the pool question |
+| A11 | Break alerts on purpose: on the secure setup page enter a wrong key; text a new unknown question | The visitor still gets the fallback at once. `get_installation_status` shows operator alerts as an error. Enter the right key again: the pending alert is delivered once, with no duplicate |
+
+## B. Fresh Grok-managed install
+
+Use a fresh Grok Bot copy (or a clean cloud-computer folder) and a fresh
+Sendblue test setup. The operator must not open a terminal on their own
+computer at any point. Record where a person had to act.
+
+| # | Do | Expect |
+| --- | --- | --- |
+| B1 | Install the Tour Core template (seven skills, routine, profile). Make sure `TOURCORE_REPO_URL` is set on the Bot's cloud computer (or `repository.url` in the template) | The template review screen shows no credentials |
+| B2 | Say *"Set up Tour Core."* | Grok checks for a Tour Core (none), clones the repository on **its own** cloud computer and runs `npm run bootstrap:grok` |
+| B3 | Watch the bootstrap output (Grok may summarize it) | Dependencies installed, installation created, Tour Core started, a `trycloudflare.com` address opened and checked, a secure setup link printed. If cloudflared can't be installed there, one clear step is reported instead |
+| B4 | Grok adds the Tour Core connector at the printed address and opens `http://localhost:4321/grok` in its cloud browser | You take over the browser, check the code matches, click **Allow**. Grok is connected |
+| B5 | Grok calls `get_installation_status` | Visitor messaging and operator alerts need setup; everything else ready or waiting on the property |
+| B6 | Grok opens the secure setup page (visitor texting) in its cloud browser and asks you to take over | You enter the Sendblue API key, secret and number there. Page says "Visitor texting is connected." and Sendblue lists Tour Core's webhook for the tunnel address |
+| B7 | Grok creates the Tour Core Exception Alert routine and opens the secure setup page (operator alerts) | You enter the routine's webhook address and a new key. The routine posts "Operator alerts are connected." |
+| B8 | Grok reports status | The checklist from the Install Tour Core skill ("✓ Grok connection, ✓ Visitor messaging, ✓ Operator alerts, ✓ Demo access ... No property is configured yet. Want to set one up?") |
+| B9 | Configure a property conversationally (Setup Property) | As in the operator demo below |
+| B10 | Readiness, then practice tour | Both pass |
+| B11 | Grok asks to publish; say yes | Published for demo |
+| B12 | Text the property from the real phone, ask something unknown | Proactive alert as in A7–A8 |
+| B13 | On the cloud computer, stop Tour Core (Grok runs `npm run service:stop`), then ask Grok anything | Grok notices Tour Core isn't answering, runs `npm run bootstrap:grok`, and Tour Core is back with the same installation (same records) |
+| B14 | Stop the tunnel too (`npm run service:stop -- --tunnel`) and bootstrap again | New `trycloudflare.com` address. Status shows the Grok connection and visitor messaging need action. Grok reconnects (you approve again) and runs `test_visitor_messaging`, which moves Sendblue's webhook to the new address |
+
+Pass = no terminal on the operator's computer, no credential in chat, and
+every row matches.
+
+---
+
+## Connection and operator demo
+
 Not part of `npm test`. Needs a Grok Bot account, the Tour Core computer with
 Sendblue and a tunnel (README), and one real phone that's a verified Sendblue
 contact. Use a fresh `TOURCORE_HOME` so earlier properties don't interfere:
@@ -74,7 +132,7 @@ reconnecting. Tour Core refuses those callbacks immediately once the flag is off
 | C4 | On the Tour Core computer | A **Connect Grok** window opened by itself (else open `http://localhost:4321/grok`); same code as the Grok page |
 | C5 | On the Grok-opened page, try to approve: there's no Allow there. From another device, open `https://<tunnel>/grok` | Only Deny on the public page; `/grok` through the tunnel is "Not found" |
 | C6 | Click **Allow** on the Connect Grok window | Grok's page returns to Grok; Grok shows Tour Core connected; Connect Grok lists "Grok since ..." |
-| C7 | Ask Grok *"List the Tour Core tools you can use."* then *"List my properties."* | 32 tools, nothing that unlocks a door; `list_properties` runs and returns this Tour Core's real properties |
+| C7 | Ask Grok *"List the Tour Core tools you can use."* then *"List my properties."* | 42 tools (32 operator + 10 installation), nothing that unlocks a door or sets a credential; `list_properties` runs and returns this Tour Core's real properties |
 | C8 | Search the Grok chat for any Tour Core token | None: no credential was ever typed or shown |
 | C9 | (Later) Click **Disconnect Grok** (or `npm run grok:disconnect`), then ask Grok to list properties | Grok gets an authorization error and asks to reconnect; properties, tours and Sendblue unchanged. Reconnect (C3–C6) before continuing |
 | C10 | Connect again, but click **Deny** | Grok reports the connection was refused; nothing connected |
@@ -87,7 +145,7 @@ the [setup guide](grok-template-setup.md).
 
 | # | Do | Expect |
 | --- | --- | --- |
-| 1 | Add/install the Tour Core Bot ([setup guide](grok-template-setup.md) steps 3–5, or install from the team template and reconnect with OAuth as above). Ask *"List the Tour Core tools you can use."* | 32 Tour Core tools; nothing that unlocks or opens a door |
+| 1 | Add/install the Tour Core Bot ([setup guide](grok-template-setup.md) steps 3–5, or install from the team template and reconnect with OAuth as above). Ask *"List the Tour Core tools you can use."* | 42 Tour Core tools; nothing that unlocks or opens a door, and nothing that takes a credential |
 | 2 | *"Set up a property"* | Bot asks "What's the property address?"; one question at a time; no field names or codes |
 | 3 | Answer: 100 Alfred Way, Brooklyn NY; two units (101, 102); one entrance ("Lobby Entrance"); no hallway doors. Confirm routes when shown | Bot shows "Lobby Entrance → Unit 101 Door" and asks "Is that right?" before saving; in the browser app the same property shows both routes |
 | 3a | Say *"Unit 102 goes through the side gate"* | Bot says it doesn't have a side gate on file and lists the doors; nothing saved |

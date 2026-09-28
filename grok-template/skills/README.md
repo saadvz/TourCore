@@ -1,6 +1,6 @@
 # Skills
 
-The six Tour Core operator skills live in one place only:
+The Tour Core skills live in one place only:
 [`/.grok/skills/`](../../.grok/skills/). They use the `SKILL.md` format
 (YAML frontmatter: `name`, `description`, `when-to-use`, `allowed-tools`,
 `metadata`), so the same files load in Grok Build and other agents that read
@@ -8,6 +8,7 @@ The six Tour Core operator skills live in one place only:
 
 | Skill | File |
 | --- | --- |
+| Install Tour Core | `.grok/skills/install-tour-core/SKILL.md` |
 | Setup Property | `.grok/skills/setup-property/SKILL.md` |
 | Map Route | `.grok/skills/map-route/SKILL.md` |
 | Run Readiness Check | `.grok/skills/run-readiness-check/SKILL.md` |
@@ -15,5 +16,6 @@ The six Tour Core operator skills live in one place only:
 | Work Exception | `.grok/skills/work-exception/SKILL.md` |
 | Export Audit | `.grok/skills/export-audit/SKILL.md` |
 
-They aren't copied here, so there's one source of truth. `template.json`
-lists them as part of the template.
+Install Tour Core is the installer skill; the other six are the PRD's operator
+skills. They aren't copied here, so there's one source of truth.
+`template.json` lists them as part of the template.
