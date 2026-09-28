@@ -9,8 +9,8 @@ brackets; the operator never sees them.
 
 **Operator:** Set up Tour Core.
 
-[Bot's cloud computer: no `tour-core` folder yet → clone the repository from
-`TOURCORE_REPO_URL` → `npm run bootstrap:grok`. It installs dependencies,
+[Bot's cloud computer: no `tour-core` folder yet → clone the canonical
+repository → read `GROK_BOOTSTRAP.md` → `npm run bootstrap:grok`. It installs dependencies,
 starts Tour Core, opens a public address and prints the connector address.]
 
 **Tour Core:** Tour Core is installed and running on my cloud computer. Next I

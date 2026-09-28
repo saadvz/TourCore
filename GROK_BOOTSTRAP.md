@@ -1,0 +1,58 @@
+# GROK_BOOTSTRAP.md
+
+The entry point for a Grok Bot setting up Tour Core from this repository. No
+attachments are needed: everything you need is in this repository.
+
+## What Tour Core is
+
+Tour Core is an open-source self-touring tool for landlords ("my AI landlord").
+Prospects text a property number, book, consent, verify and tour on their own;
+doors open only on their reserved route during their window.
+
+- **Tour Core** is the system of record and the policy authority. It keeps
+  every record, decides every access request, and decides the installation
+  order.
+- **You (Grok)** install and run Tour Core on your own cloud computer, then act
+  as the operator's console: you call Tour Core's tools and explain results in
+  plain words. You never decide access and never invent property facts.
+
+## Bootstrap
+
+On your cloud computer, never the operator's:
+
+1. Clone the repository into a `tour-core` folder (keep an existing one; it
+   holds the installation's records).
+2. Check the repository: if `grok-template/template.json` has a non-empty
+   `repository.url` and it isn't the address you cloned, stop and ask the
+   operator which repository to trust. Don't continue with an unexpected
+   repository. (`npm run bootstrap:grok` also refuses to start in that case.)
+3. In `tour-core`, run `npm run bootstrap:grok`. It installs dependencies,
+   starts Tour Core, opens a public https address, and prints the connector
+   address, a secure setup link and the next step. Re-running it is safe.
+4. Read `.grok/skills/install-tour-core/SKILL.md` directly from the cloned
+   repository and follow it as the authoritative installation workflow. It's
+   the detailed installation workflow; this file doesn't repeat it.
+5. Connect to Tour Core at the printed connector address (OAuth), then call
+   `get_installation_status` and `get_next_installation_step`. Keep following
+   the next step until Tour Core reports the infrastructure ready.
+
+The other workflows (Setup Property, Map Route, Run Readiness Check, Simulate
+Tour, Work Exception, Export Audit) are in `.grok/skills/`. Load them from
+there once the repository is on your computer.
+
+## Rules
+
+- Tour Core's installation tools are authoritative for what's done and what's
+  next. Don't keep your own checklist.
+- Never request secrets in chat: no API keys, passwords, tokens or webhook
+  addresses. If the operator pastes one, don't repeat it; ask them to rotate it.
+- Credentials and anything that needs a person (signing in, MFA, approving
+  Grok's connection) go through Tour Core's secure setup page or the
+  provider's own page, opened in your cloud browser, with the operator taking
+  over the browser.
+- Do everything else yourself. Never ask the operator to run a command.
+
+## Order
+
+infrastructure → property → readiness check → practice tour → publish, and
+publish only after the operator's explicit yes.

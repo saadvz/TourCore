@@ -206,6 +206,25 @@ describe("bootstrap:grok", () => {
     expect(repaired.status.nextStep.action).toBe("RECONNECT_GROK");
   });
 
+  it("refuses to start a clone of an unexpected repository", async () => {
+    const w = world();
+    const report = await runBootstrap(
+      {
+        installation: w.h.inst,
+        workspace: w.h.workspace,
+        service: w.service,
+        endpoint: w.tunnel,
+        dependencies: () => ({ ok: true, message: "deps ok" }),
+        repository: () => ({ ok: false, message: "Not starting an unexpected repository." }),
+      },
+      { mode: "GROK_MANAGED_P0" },
+    );
+    expect(report.ok).toBe(false);
+    expect(report.steps.map((s) => s.step)).toEqual(["detect", "repository"]);
+    expect(w.spawned).toHaveLength(0);
+    expect(w.h.inst.files.manifest()).toBeUndefined();
+  });
+
   it("stops at dependencies with a clear message when they're missing", async () => {
     const w = world();
     const report = await runBootstrap(

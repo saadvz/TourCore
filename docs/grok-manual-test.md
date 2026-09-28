@@ -28,16 +28,36 @@ anywhere.
 | A10 | Text another message from the phone | No second alert for the pool question |
 | A11 | Break alerts on purpose: on the secure setup page enter a wrong key; text a new unknown question | The visitor still gets the fallback at once. `get_installation_status` shows operator alerts as an error. Enter the right key again: the pending alert is delivered once, with no duplicate |
 
-## B. Fresh Grok-managed install
+## B. Fresh Grok Bot, one prompt, no attachments
 
-Use a fresh Grok Bot copy (or a clean cloud-computer folder) and a fresh
-Sendblue test setup. The operator must not open a terminal on their own
-computer at any point. Record where a person had to act.
+This is the development / open-source bootstrap. Start with a **completely
+fresh** Grok Bot and a fresh Sendblue test setup. Do **not** attach
+`bot-profile.md`, any `SKILL.md`, `template.json` or the `grok-template`
+folder. The operator must not open a terminal on their own computer at any
+point. Record where a person had to act.
+
+Send only this (with the real repository address):
+
+> Set up Tour Core, my AI landlord, using the open-source repository at
+> https://github.com/&lt;owner&gt;/&lt;repo&gt;.
+>
+> Use your cloud computer to clone the repository. Read and follow the
+> repository's GROK_BOOTSTRAP.md instructions as the authoritative installation
+> guide.
+>
+> Do as much of the setup yourself as possible. Never ask me to paste secrets
+> into chat. Use Tour Core's secure setup flow for credentials or
+> authentication. After Tour Core is running, use its installation-status tools
+> to determine what remains, test every component, then offer to configure my
+> first property.
+>
+> Start now.
 
 | # | Do | Expect |
 | --- | --- | --- |
-| B1 | Install the Tour Core template (seven skills, routine, profile). Make sure `TOURCORE_REPO_URL` is set on the Bot's cloud computer (or `repository.url` in the template) | The template review screen shows no credentials |
-| B2 | Say *"Set up Tour Core."* | Grok checks for a Tour Core (none), clones the repository on **its own** cloud computer and runs `npm run bootstrap:grok` |
+| B1 | Send the prompt above, nothing else | No files attached; Grok asks for nothing before starting |
+| B2 | Watch Grok's cloud computer | Grok clones the repository on **its own** cloud computer, reads `GROK_BOOTSTRAP.md`, loads `.grok/skills/install-tour-core/SKILL.md` (and the other skills from `.grok/skills/`), and runs `npm run bootstrap:grok` |
+| B2a | (Once `repository.url` is set) Repeat with a different repository address in the prompt | Grok stops and asks which repository to trust; `npm run bootstrap:grok` refuses to start ("Not starting an unexpected repository") |
 | B3 | Watch the bootstrap output (Grok may summarize it) | Dependencies installed, installation created, Tour Core started, a `trycloudflare.com` address opened and checked, a secure setup link printed. If cloudflared can't be installed there, one clear step is reported instead |
 | B4 | Grok adds the Tour Core connector at the printed address and opens `http://localhost:4321/grok` in its cloud browser | You take over the browser, check the code matches, click **Allow**. Grok is connected |
 | B5 | Grok calls `get_installation_status` | Visitor messaging and operator alerts need setup; everything else ready or waiting on the property |
@@ -51,8 +71,13 @@ computer at any point. Record where a person had to act.
 | B13 | On the cloud computer, stop Tour Core (Grok runs `npm run service:stop`), then ask Grok anything | Grok notices Tour Core isn't answering, runs `npm run bootstrap:grok`, and Tour Core is back with the same installation (same records) |
 | B14 | Stop the tunnel too (`npm run service:stop -- --tunnel`) and bootstrap again | New `trycloudflare.com` address. Status shows the Grok connection and visitor messaging need action. Grok reconnects (you approve again) and runs `test_visitor_messaging`, which moves Sendblue's webhook to the new address |
 
-Pass = no terminal on the operator's computer, no credential in chat, and
-every row matches.
+Pass = no attached files, no terminal on the operator's computer, no
+credential in chat, and every row matches.
+
+The final template experience is simpler still: install the Tour Core Bot
+template and say *"Set up Tour Core."* The template already knows the
+canonical repository and the bootstrap behavior, so rows B2 onward apply
+unchanged.
 
 ---
 

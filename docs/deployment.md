@@ -253,11 +253,31 @@ visitor asks something with no approved answer
 
 ## Full new-user experience (Grok-managed)
 
-1. The operator installs (copies) the Tour Core Grok template.
+Instruction hierarchy, with nothing duplicated between levels:
+`GROK_BOOTSTRAP.md` (entry point) → `.grok/skills/install-tour-core/SKILL.md`
+(detailed installation workflow) → the other `.grok/skills/*/SKILL.md`
+(specific workflows) → Tour Core's MCP tools (actual state and actions).
+
+Two ways in:
+
+- **Final template experience:** add the Tour Core Bot, say "Set up Tour
+  Core." The template knows the canonical repository and bootstrap behavior.
+- **Development / open-source fallback:** a blank Grok Bot, no attachments,
+  one prompt that names the repository URL and asks Grok to follow
+  `GROK_BOOTSTRAP.md` (prompt in `docs/grok-manual-test.md`, test B). Grok
+  discovers everything else from the clone.
+
+The canonical repository is `repository.url` in `grok-template/template.json`.
+An address from the operator's message (or `TOURCORE_REPO_URL`) is a fallback;
+if it differs, Grok asks the operator, and the bootstrap refuses to start a
+clone whose git origin isn't the canonical repository.
+
+1. The operator installs the Tour Core Grok template (or sends the one-prompt
+   bootstrap to a blank Bot).
 2. They say **"Set up Tour Core."**
 3. Grok checks whether Tour Core exists (the connector, then its cloud computer).
-4. If not, Grok clones the repository (`TOURCORE_REPO_URL`, or the template's
-   `repository.url`) on its own cloud computer.
+4. If not, Grok clones the canonical repository on its own cloud computer and
+   reads `GROK_BOOTSTRAP.md`.
 5. Grok runs `npm run bootstrap:grok`: Tour Core starts.
 6. The bootstrap opens and checks a public address.
 7. Grok adds the connector; **the operator approves** the connection on Tour

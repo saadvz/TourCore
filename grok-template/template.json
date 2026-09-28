@@ -5,8 +5,9 @@
   "profile": "bot-profile.md",
   "repository": {
     "url": "https://github.com/saadvz/TourCore",
-    "override": "TOURCORE_REPO_URL",
-    "note": "The public open-source Tour Core repository. TOURCORE_REPO_URL on the Bot's cloud computer overrides this address. Never a private repository."
+    "fallback": "TOURCORE_REPO_URL",
+    "bootstrap": "GROK_BOOTSTRAP.md",
+    "note": "The canonical public Tour Core repository. An address from the operator's message or TOURCORE_REPO_URL is only a fallback; if it differs from this one, Grok asks the operator, and npm run bootstrap:grok refuses a clone whose origin differs. Never a private repository."
   },
   "context": [
     "context/tour-core-overview.md",

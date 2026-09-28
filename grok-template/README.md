@@ -15,6 +15,17 @@ First run: the operator says **"Set up Tour Core."** The Bot installs Tour
 Core on its own cloud computer and walks the operator through only the steps
 that need a person. See [`docs/deployment.md`](../docs/deployment.md).
 
+Two ways in:
+
+- **Final template experience:** add the Tour Core Bot from the template and
+  say *"Set up Tour Core."* The template already knows the canonical
+  repository and the bootstrap behavior.
+- **Development / open-source fallback:** a completely blank Grok Bot, one
+  prompt with the repository URL, no attachments. Grok clones the repository
+  and follows [`GROK_BOOTSTRAP.md`](../GROK_BOOTSTRAP.md), which points it to
+  the skills in `.grok/skills/`. The files in this folder aren't needed for
+  that path. The prompt is in [`docs/grok-manual-test.md`](../docs/grok-manual-test.md), test B.
+
 ## What's in the template
 
 | Part | File(s) | How it gets into Grok Bot |
@@ -28,8 +39,9 @@ that need a person. See [`docs/deployment.md`](../docs/deployment.md).
 | Manifest | `template.json` | For reviewers; lists every item, the repository setting, and what's never included |
 
 The repository address is https://github.com/saadvz/TourCore
-(`template.json` → `repository.url`). `TOURCORE_REPO_URL` on the Bot's cloud
-computer overrides it.
+(`template.json` → `repository.url`). An address in the operator's message or
+`TOURCORE_REPO_URL` is only a fallback: if it differs, Grok asks the operator,
+and `npm run bootstrap:grok` refuses to start a clone from another origin.
 
 ## What's never in the template
 

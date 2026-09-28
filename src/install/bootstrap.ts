@@ -8,6 +8,7 @@ import { loadLocalEnv } from "../web/env";
 import { checkPublicEndpoint } from "./checks";
 import { DEPLOYMENT_MODE_LABELS, parseDeploymentMode, type DeploymentMode } from "./deployment";
 import { Installation } from "./installation";
+import { canonicalRepoUrl, checkRepositorySource, originUrl } from "./repoSource";
 import { CloudflareQuickTunnelProvider, downloadFile, ManualPublicEndpointProvider, type PublicEndpointProvider } from "./publicEndpoint";
 import { ServiceManager, serviceDir, type ServiceStatus } from "./service";
 import { useSettingsSource } from "./settings";
@@ -50,6 +51,8 @@ export interface BootstrapDeps {
   service: Pick<ServiceManager, "status" | "start">;
   endpoint: PublicEndpointProvider | undefined;
   dependencies: () => { ok: boolean; message: string };
+  /** Whether this clone is the canonical repository (or no canonical one is recorded). */
+  repository?: () => { ok: boolean; message: string };
   endpointCheck?: { attempts: number; delayMs: number };
   now?: () => Date;
 }
@@ -98,6 +101,13 @@ export async function runBootstrap(deps: BootstrapDeps, options: BootstrapOption
   // 1. What's already here.
   const before = safe(() => inst.files.manifest());
   add("detect", true, before ? `Found installation ${before.installationId} (${DEPLOYMENT_MODE_LABELS[before.deploymentMode]}).` : "No Tour Core installation here yet; creating one.");
+
+  // Never start an unexpected repository.
+  if (deps.repository) {
+    const repo = deps.repository();
+    add("repository", repo.ok, repo.message);
+    if (!repo.ok) return finish(undefined);
+  }
 
   // 2. Dependencies (the launcher installs them when missing).
   const dependencies = deps.dependencies();
@@ -207,6 +217,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       service: new ServiceManager({ root, repoDir, port, env: { ...process.env, TOURCORE_DEPLOYMENT_MODE: mode } }),
       endpoint,
       dependencies: () => checkDependencies(repoDir),
+      repository: () => checkRepositorySource({ canonical: canonicalRepoUrl(repoDir), actual: originUrl(repoDir) }),
     },
     { mode, publicUrl, legacyOAuthCompat },
   );

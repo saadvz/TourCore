@@ -30,13 +30,19 @@ Tour Core tool stops answering (Tour Core may have stopped).
 
 ## Required inputs and access
 
-- Nothing from the operator to start.
+- Nothing from the operator to start. No attached files: the repository's
+  `GROK_BOOTSTRAP.md` is the entry point and this skill is the detailed
+  workflow.
 - Your cloud computer, with a terminal and a browser.
-- The Tour Core repository address: the `TOURCORE_REPO_URL` environment
-  variable on your computer if it's set, otherwise the repository address in
-  this template's settings (`repository.url` in `template.json`). If neither
-  is set, ask the operator for the public Tour Core repository link. That's
-  the only thing you may ask for before installing.
+- The Tour Core repository address, first found of: the canonical
+  `repository.url` in `grok-template/template.json` (once published, an
+  installed template already knows it), the address in the operator's
+  message, or `TOURCORE_REPO_URL` on your computer. If none is available, ask
+  the operator for the public Tour Core repository link. That's the only thing
+  you may ask for before installing.
+- If the address you were given and the canonical `repository.url` disagree,
+  stop and ask the operator which to trust. Never continue with an unexpected
+  repository; `npm run bootstrap:grok` refuses to start one.
 
 ## Sequence
 
@@ -52,7 +58,8 @@ Do this yourself in your computer's terminal:
 
 1. If a `tour-core` folder doesn't exist yet, clone the repository address
    from "Required inputs" into it. If it exists, keep it (it holds the
-   installation's records).
+   installation's records). Once cloned, load the other skills from
+   `.grok/skills/` in that folder.
 2. In that folder run `npm run bootstrap:grok`. It installs dependencies,
    creates or repairs the one installation, starts Tour Core in the
    background, checks its health, opens a public https address, checks that

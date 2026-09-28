@@ -22,6 +22,10 @@ calls Tour Core's typed tools; Tour Core keeps every record and makes every acce
 1. Install (copy) the **Tour Core** Grok Bot template ([`grok-template/`](grok-template/)).
 2. Say **"Set up Tour Core."**
 
+Development / open-source fallback, with no template and no attachments: give a blank Grok Bot one prompt with
+this repository's URL and ask it to clone the repository and follow [`GROK_BOOTSTRAP.md`](GROK_BOOTSTRAP.md) (full
+prompt: [`docs/grok-manual-test.md`](docs/grok-manual-test.md), test B).
+
 Grok installs and runs Tour Core **on its own cloud computer** (`npm run bootstrap:grok`), opens a public
 address, connects to it, and then walks you through only the steps that need a person. Your own computer isn't
 needed: no Node.js, no terminal, no `.env`, nothing to know about MCP or OAuth.
