@@ -136,7 +136,7 @@ describe("rule-based interpretation", () => {
       expect(readAs("choose-time", m), m).toEqual({ type: "SELECT_TIME", timeLabel: "3:30 PM" });
     }
     for (const m of ["2pm", "2:00 pm", "at 2", "1", "earliest"]) expect(readAs("choose-time", m), m).toEqual({ type: "SELECT_TIME", timeLabel: "2:00 PM" });
-    expect(read("choose-time", "5pm")).toMatchObject({ clarificationQuestion: "That time isn't open." });
+    expect(read("choose-time", "5pm").intent).toEqual({ type: "REQUEST_CUSTOM_TIME", hour: 5, minute: 0, meridiem: "PM" });
   });
 
   it("ASK_PROPERTY_QUESTION keeps the visitor's own words for the approved-facts lookup", () => {

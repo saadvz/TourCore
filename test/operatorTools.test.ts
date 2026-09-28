@@ -78,7 +78,7 @@ describe("operator tool contract: boundary", () => {
     await h.setUpAlfredWay();
     await h.ok("set_services", { messaging: "sendblue" });
     const outputs = [];
-    for (const t of OPERATOR_TOOLS.filter((t) => t.kind === "read" && !t.input.shape.tourRef && !t.input.shape.exceptionId && !t.input.shape.unit)) outputs.push(await h.call(t.name, {}));
+    for (const t of OPERATOR_TOOLS.filter((t) => t.kind === "read" && !t.input.shape.tourRef && !t.input.shape.exceptionId && !t.input.shape.unit && !t.input.shape.tourTimeRequestId)) outputs.push(await h.call(t.name, {}));
     outputs.push(await h.call("get_route", { unit: "101" }));
     outputs.push(await h.mcp("tools/list"));
     const text = JSON.stringify(outputs);

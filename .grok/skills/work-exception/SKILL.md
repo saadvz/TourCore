@@ -2,7 +2,7 @@
 name: work-exception
 description: Show what needs the team's attention on live and recent tours (unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored), open one, and resolve it using only Tour Core's actions and the operator's own facts.
 when-to-use: "what needs attention", "show exceptions", "any problems", "open Pat's issue", "what's happening with Pat's tour", "show active tours", "pause the tour", "call off the tour", a Tour Core Operator Updates routine run
-allowed-tools: get_operator_update list_active_tours inspect_tour list_exceptions inspect_exception resolve_exception answer_flagged_question place_operator_hold clear_operator_hold revoke_tour_access
+allowed-tools: get_operator_update list_active_tours inspect_tour list_exceptions inspect_exception resolve_exception answer_flagged_question place_operator_hold clear_operator_hold revoke_tour_access list_tour_time_requests inspect_tour_time_request approve_tour_time_request decline_tour_time_request propose_tour_time reschedule_tour
 argument-hint: "[visitor or issue]"
 user-invocable: true
 metadata:
@@ -100,6 +100,34 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   words, suggest reaching out to the visitor, and resume only once the operator
   says the doors are working.
 
+### Custom tour times
+
+A visitor can ask for a time that isn't one of the regular slots, or to move
+a tour they already have. `tour.time_requested` wakes you even when ordinary
+tour updates are off, because someone has to decide. The regular hours do
+not change.
+
+1. Call `get_operator_update` with the `eventId` and post its `summary`.
+   It names the visitor, the time they want, and whether that time is outside
+   normal touring hours.
+2. The landlord can say it naturally:
+   - "Approve 3:15" → `approve_tour_time_request`. Ask the question it returns, once. After a clear yes, call it again with `confirmationCode`.
+   - "Offer them 3:30" → `propose_tour_time`. The current booking stays until the visitor agrees.
+   - "Decline" or "Keep the 4 PM booking" → `decline_tour_time_request`.
+   - "Move Testa to 3:15" → `reschedule_tour` with their name and the time. Ask the one question it returns, then call again after yes.
+   - "Who's waiting for a different time?" → `list_tour_time_requests`.
+3. A time outside normal touring hours returns a stronger question. Call again
+   with `confirmationCode` and `acknowledgeOutsideHours` true only after they
+   agree to that one-time exception.
+4. If Tour Core says the time overlaps another tour, tell them the options it
+   names. Don't approve it.
+5. Never describe this as a schedule change. Future visitors still get the
+   regular times.
+
+One visitor text is one intent. If they ask a question and name a custom time
+in the same message, Tour Core answers the question and asks them to confirm
+the time. It does not file the request until they say yes.
+
 ## Validate
 
 - After each action, re-read the item (`inspect_exception` or `inspect_tour`)
@@ -113,9 +141,11 @@ The short queue, or the one item and what was done.
 
 ## Requires approval
 
-Answering with a new approved fact, pausing, resuming and calling off a tour.
-Marking an item handled doesn't need a confirmation code but should follow the
-operator's instruction.
+Answering with a new approved fact, pausing, resuming and calling off a tour,
+approving a custom time, and moving a tour. A time outside normal touring
+hours needs the stronger confirmation. Marking an item handled, declining a
+time request, or offering another time doesn't need a confirmation code but
+should follow the operator's instruction.
 
 ## Stop when
 

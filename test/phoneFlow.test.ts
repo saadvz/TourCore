@@ -82,7 +82,7 @@ describe("a real phone over Sendblue", () => {
 
     const hi = await app.text("Hi");
     expect(hi.replies).toEqual([
-      "Welcome to the self-guided tour for 100 Alfred Way! I can answer questions about the property and help you tour on your own. Which unit would you like to see?\nReply 1 for Unit 101 or 2 for Unit 102.",
+      "Hi! Welcome to the self-guided tours at 100 Alfred Way. I can answer questions about the property and help you book a tour.\n\nWhich unit would you like to see?\nReply 1 for Unit 101 or 2 for Unit 102.",
     ]);
 
     const unit = await app.text("1");

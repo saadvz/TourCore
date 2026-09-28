@@ -48,6 +48,16 @@ export const ReservationSchema = z.object({
   slotStart: IsoDate.optional(),
   windowStart: IsoDate.optional(),
   windowEnd: IsoDate.optional(),
+  /**
+   * A one-off time outside the property's normal touring hours. The recurring
+   * schedule is unchanged; access uses this reservation's own times.
+   */
+  scheduleOverride: z
+    .object({
+      kind: z.literal("OUTSIDE_HOURS"),
+      approvedAt: IsoDate,
+    })
+    .optional(),
   consentId: z.string().optional(),
   verificationId: z.string().optional(),
   createdAt: IsoDate,
@@ -145,6 +155,12 @@ export const AuditEventTypeSchema = z.enum([
   "MESSAGING_OPTED_IN",
   "MESSAGE_FAILED",
   "RESERVATION_RESCHEDULED",
+  "TOUR_TIME_REQUESTED",
+  "TOUR_TIME_REQUEST_APPROVED",
+  "TOUR_TIME_REQUEST_DECLINED",
+  "TOUR_TIME_ALTERNATIVE_PROPOSED",
+  "TOUR_RESCHEDULED",
+  "TOUR_TIME_OVERRIDE_APPROVED",
 ]);
 export type AuditEventType = z.infer<typeof AuditEventTypeSchema>;
 
@@ -168,8 +184,31 @@ export type Reservation = z.infer<typeof ReservationSchema>;
 export type Consent = z.infer<typeof ConsentSchema>;
 export type Verification = z.infer<typeof VerificationSchema>;
 export type AccessGrant = z.infer<typeof AccessGrantSchema>;
+export const TourTimeRequestSchema = z.object({
+  id: z.string(),
+  propertyId: z.string(),
+  prospectId: z.string(),
+  /** Set when the visitor already has a reservation, including one that is only an inquiry. */
+  reservationId: z.string().optional(),
+  /** The unit they had selected, so a request before a confirmed time doesn't lose it. */
+  unitId: z.string().optional(),
+  requestedStartsAt: IsoDate,
+  requestedEndsAt: IsoDate,
+  requestSource: z.enum(["VISITOR", "OPERATOR"]),
+  status: z.enum(["PENDING", "APPROVED", "DECLINED", "SUPERSEDED"]),
+  createdAt: IsoDate,
+  resolvedAt: IsoDate.optional(),
+  resolvedBy: z.enum(["OPERATOR", "VISITOR"]).optional(),
+  operatorNote: z.string().optional(),
+  /** A time the property team offered instead. The booking stays put until the visitor accepts. */
+  proposedAlternativeAt: IsoDate.optional(),
+  /** The provider's message id, so a retried text cannot open a second request. */
+  sourceMessageId: z.string().optional(),
+});
+
 export type Message = z.infer<typeof MessageSchema>;
 export type AuditEvent = z.infer<typeof AuditEventSchema>;
+export type TourTimeRequest = z.infer<typeof TourTimeRequestSchema>;
 
 /** Stable ids: assigned once, never reused or rewritten. */
 export function newId(prefix: string): string {

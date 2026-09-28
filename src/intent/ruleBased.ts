@@ -1,3 +1,4 @@
+import { spokenTimes, vagueTimeRequest, type SpokenTime } from "../core/spokenTime";
 import type { IntentInterpretation, IntentInterpreter, InterpretContext, StepAwaiting, StopRef, TourIntent } from "./model";
 import { normalize, numberWord, ordinalWord, stripFiller } from "./normalize";
 
@@ -209,6 +210,65 @@ function pickTimeLabel(t: string, labels: string[]): { label?: string; mentioned
   return { label: found.size === 1 ? [...found][0] : undefined, mentioned };
 }
 
+function clockIntent(spoken: SpokenTime): TourIntent {
+  return {
+    type: "REQUEST_CUSTOM_TIME",
+    hour: spoken.hour,
+    minute: spoken.minute,
+    ...(spoken.meridiem ? { meridiem: spoken.meridiem } : {}),
+    ...(spoken.day ? { day: spoken.day } : {}),
+  };
+}
+
+/**
+ * A specific time the visitor asked for. A property question in the same
+ * text stays a question and carries the clock aside, so the time isn't dropped
+ * and isn't booked until they confirm it.
+ */
+function schedulingIntent(
+  raw: string,
+  t: string,
+  allowBareClock: boolean,
+  result: (intent: TourIntent, confidence: number, extra?: Partial<IntentInterpretation>) => IntentInterpretation,
+  unknown: (extra?: Partial<IntentInterpretation>) => IntentInterpretation,
+): IntentInterpretation | undefined {
+  const times = spokenTimes(t);
+  if (times.length > 1) return unknown({ clarificationNeeded: true, clarificationQuestion: "Which time did you mean?" });
+  const spoken = times[0];
+  if (spoken && (TOPIC.test(t) || WANTS_TO_KNOW.test(t))) {
+    return result({ type: "ASK_PROPERTY_QUESTION", question: raw.trim().slice(0, 300) }, 0.9, {
+      mentionedTime: { hour: spoken.hour, minute: spoken.minute, ...(spoken.meridiem ? { meridiem: spoken.meridiem } : {}), ...(spoken.day ? { day: spoken.day } : {}) },
+    });
+  }
+  const asking = /\b(can i|could i|can we|could we|how about|what about|instead|move|change|reschedule|switch|come at|tour at|book|make it)\b/.test(t);
+  if (spoken && (allowBareClock || asking)) return result(clockIntent(spoken), 0.9);
+  if (!spoken && vagueTimeRequest(t)) return unknown({ clarificationNeeded: true, clarificationQuestion: "What time would you like?" });
+  return undefined;
+}
+
+function answerScheduling(
+  awaiting: Extract<StepAwaiting, { kind: "confirm-custom-time" | "confirm-alternative" }>,
+  t: string,
+  result: (intent: TourIntent, confidence: number, extra?: Partial<IntentInterpretation>) => IntentInterpretation,
+): IntentInterpretation | undefined {
+  if (awaiting.kind === "confirm-alternative") {
+    const yn = yesNo(t);
+    if (yn.answer === "yes" && yn.confidence >= 0.75) return result({ type: "ACCEPT_PROPOSED_TIME" }, yn.confidence);
+    if (yn.answer === "no" && yn.confidence >= 0.75) return result({ type: "DECLINE_PROPOSED_TIME" }, yn.confidence);
+    return undefined;
+  }
+  const meridiemWord = /^(am|pm|a m|p m)$/.exec(t)?.[1];
+  if (meridiemWord) return result(clockIntent({ hour: awaiting.hour, minute: awaiting.minute, meridiem: meridiemWord.startsWith("a") ? "AM" : "PM", ...(awaiting.day ? { day: awaiting.day } : {}) }), 0.95);
+  const yn = yesNo(t);
+  if (yn.answer === "no" && yn.confidence >= 0.75) return result({ type: "UNKNOWN" }, 0, { clarificationNeeded: true, clarificationQuestion: "No problem." });
+  if (yn.answer === "yes" && yn.confidence >= 0.75 && awaiting.meridiem) return result(clockIntent(awaiting), yn.confidence);
+  if (yn.answer === "yes" && !awaiting.meridiem) {
+    const label = `${awaiting.hour}:${String(awaiting.minute).padStart(2, "0")}`;
+    return result({ type: "UNKNOWN" }, 0, { clarificationNeeded: true, clarificationQuestion: `Did you mean ${label} AM or ${label} PM?` });
+  }
+  return undefined;
+}
+
 const BEDROOMS = /\b(studio)\b|\b(one|two|three|four|1|2|3|4)\s*(bed|beds|bedroom|bedrooms|br|bd)\b/;
 
 function bedroomCount(text: string): number | undefined {
@@ -238,6 +298,11 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
   if (NATURAL_STOP.test(t)) return result({ type: "STOP_MESSAGES" }, 0.95);
   if (MANIPULATION.test(t)) return unknown({ manipulation: true, clarificationNeeded: true });
 
+  if (ctx.awaiting?.kind === "confirm-custom-time" || ctx.awaiting?.kind === "confirm-alternative") {
+    const answered = answerScheduling(ctx.awaiting, t, result);
+    if (answered) return answered;
+  }
+
   const asked = /\?\s*$/.test(raw.trim()) || QUESTION_START.test(t);
   const question = (confidence: number) => result({ type: "ASK_PROPERTY_QUESTION", question: raw.trim().slice(0, 300) }, confidence);
   const help = (): IntentInterpretation | undefined => {
@@ -261,6 +326,8 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
       }
       const pick = pickOption(t, ctx.units.length);
       if (pick) return result({ type: "SELECT_UNIT", unitName: ctx.units[pick.index]!.name }, pick.confidence);
+      const customUnit = schedulingIntent(raw, t, true, result, unknown);
+      if (customUnit) return customUnit;
       const h = help();
       if (h) return h;
       const info = informational();
@@ -278,9 +345,11 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
       const bareN = bare ? numberWord(bare[2]!) : undefined;
       if (bareN !== undefined && bareN >= 1 && bareN <= labels.length) return result({ type: "SELECT_TIME", timeLabel: labels[bareN - 1]! }, 1);
       const time = pickTimeLabel(t, labels);
+      if (time.label) return result({ type: "SELECT_TIME", timeLabel: time.label }, 0.95);
+      const customTime = schedulingIntent(raw, t, true, result, unknown);
+      if (customTime) return customTime;
       // "Does 1A have laundry?" names a unit, not 1 AM.
       if (asked && !time.label && (detailQuestion || ctx.units.some((u) => namesUnitLoosely(t, u.name)))) return question(0.9);
-      if (time.label) return result({ type: "SELECT_TIME", timeLabel: time.label }, 0.95);
       if (time.mentioned) return unknown({ clarificationNeeded: true, clarificationQuestion: "That time isn't open." });
       const pick = pickOption(t, labels.length);
       if (pick) return result({ type: "SELECT_TIME", timeLabel: labels[pick.index]! }, pick.confidence);
@@ -294,6 +363,8 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
     }
 
     case "consent": {
+      const customConsent = schedulingIntent(raw, t, false, result, unknown);
+      if (customConsent?.intent.type === "REQUEST_CUSTOM_TIME" || customConsent?.mentionedTime) return customConsent;
       const yn = yesNo(t);
       if (yn.answer === "yes") return result({ type: "CONSENT_YES" }, yn.confidence);
       // "I'm good" could mean "fine by me" or "no thanks"; saying no ends the booking, so it has to be clear.
@@ -302,23 +373,31 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
     }
 
     case "follow-up": {
+      const customFollow = schedulingIntent(raw, t, false, result, unknown);
+      if (customFollow) return customFollow;
       const yn = yesNo(t);
       if (yn.answer === "yes") return result({ type: "FOLLOW_UP_YES" }, yn.confidence);
       if (yn.answer === "no") return result({ type: "FOLLOW_UP_NO" }, yn.confidence);
       return help() ?? informational() ?? unknown();
     }
 
-    case "identity":
+    case "identity": {
       // "Where's the form?" is about the identity form (Tour Core resends the link), not about the property.
+      const customIdentity = schedulingIntent(raw, t, false, result, unknown);
+      if (customIdentity) return customIdentity;
       if (FORM_WORDS.test(t)) return help() ?? unknown();
       return help() ?? clearQuestion() ?? unknown();
+    }
 
     case "ready":
     case "touring":
       return interpretOnTour(ctx, t, asked, { result, unknown, question, help, informational });
 
-    default:
+    default: {
+      const customOpen = schedulingIntent(raw, t, true, result, unknown);
+      if (customOpen) return customOpen;
       return help() ?? clearQuestion() ?? unknown();
+    }
   }
 
   /** Where nothing else is expected, only an unmistakable question counts: a bare "anything" or "ok?" isn't one. */
@@ -371,6 +450,8 @@ function answerToAwaiting(awaiting: StepAwaiting, t: string, { result, unknown }
 function interpretOnTour(ctx: InterpretContext, t: string, asked: boolean, h: Helpers): IntentInterpretation {
   const { result, unknown, question, help, informational } = h;
   const touring = ctx.step === "touring";
+  const custom = schedulingIntent(ctx.message, t, false, result, unknown);
+  if (custom) return custom;
 
   if (ctx.awaiting) {
     const answered = answerToAwaiting(ctx.awaiting, t, h);

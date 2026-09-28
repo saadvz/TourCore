@@ -65,7 +65,7 @@ for a short-lived token (`/token`, PKCE S256). Through the tunnel address,
 and the page where you approve connections, answer only on this computer.
 
 `npm run grok:status` shows the mode, the URL and what's connected (never token
-values). `npm run grok:tools` lists the 48 tools (34 property and tour tools
+values). `npm run grok:tools` lists the 54 tools (40 property and tour tools
 plus 14 installation tools).
 
 ## 3. Create the Tour Core Bot

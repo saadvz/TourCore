@@ -2,7 +2,7 @@ import type { AuditEvent } from "../domain/model";
 import { listExceptions, type ExceptionKind } from "../operator/exceptions";
 import type { OperatorServices } from "../operator/services";
 import { tourRef, tourSnapshots } from "../operator/tours";
-import { exceptionCreatedEvent, isIssueEvent, tourEvent, type IssueEventType, type OperatorEvent, type TourEventType } from "./operatorEvents";
+import { exceptionCreatedEvent, isIssueEvent, timeRequestedEvent, tourEvent, type IssueEventType, type OperatorEvent, type TourEventType } from "./operatorEvents";
 import type { OperatorEventOutbox } from "./outbox";
 import { wants, type NotificationPreferences } from "./preferences";
 
@@ -67,6 +67,7 @@ export class OperatorUpdates {
       queue(exceptionCreatedEvent({ propertyId: x.propertyId, exceptionId: x.exceptionId, occurredAt: x.happenedAt, eventType: ISSUE_TYPE[x.kind] ?? "exception.created" }));
     }
     for (const event of await this.tourEvents(propertyId)) queue(event);
+    for (const event of await this.timeRequestEvents(propertyId)) queue(event);
     return created;
   }
 
@@ -97,8 +98,29 @@ export class OperatorUpdates {
     return out;
   }
 
-  /** Delivered only while it still matters: an issue while it's open, a tour update while the landlord still wants it. */
+  /** Pending custom-time requests. A repeated scan uses the same event id, so a retried text is not announced twice. */
+  private async timeRequestEvents(propertyId?: string): Promise<OperatorEvent[]> {
+    const out: OperatorEvent[] = [];
+    for (const tour of await tourSnapshots(this.deps.services, { propertyId })) {
+      if (tour.kind !== "messaging") continue;
+      for (const request of tour.bundle.tourTimeRequests) {
+        if (request.status !== "PENDING") continue;
+        out.push(timeRequestedEvent({ propertyId: tour.propertyId, tourTimeRequestId: request.id, occurredAt: request.createdAt }));
+      }
+    }
+    return out;
+  }
+
+  /** Delivered only while it still matters: an issue while it's open, a time request while it's pending, a tour update while the landlord still wants it. */
   async stillRelevant(event: OperatorEvent): Promise<boolean> {
+    if (event.eventType === "tour.time_requested") {
+      if (!event.tourTimeRequestId) return false;
+      for (const tour of await tourSnapshots(this.deps.services, { propertyId: event.propertyId })) {
+        const request = tour.bundle.tourTimeRequests.find((item) => item.id === event.tourTimeRequestId);
+        if (request) return request.status === "PENDING";
+      }
+      return false;
+    }
     if (!wants(this.prefs(), event)) return false;
     if (!isIssueEvent(event.eventType) || !event.exceptionId) return true;
     const open = await listExceptions(this.deps.services, { propertyId: event.propertyId });

@@ -15,6 +15,7 @@ import type { VerificationLinks } from "./verificationLinks";
  * if the two disagree the tour records win.
  */
 
+const Iso = z.iso.datetime({ offset: true });
 const STAGES = ["intro", "choose-unit", "choose-time", "consent", "identity", "ready", "touring", "follow-up", "done", "stopped"] as const;
 
 const StopRefSchema = z.object({
@@ -29,6 +30,14 @@ const STEP_AWAITING = [
   z.object({ kind: z.literal("confirm-stop"), stop: StopRefSchema }),
   z.object({ kind: z.literal("choose-stop"), stops: z.array(StopRefSchema).min(1) }),
   z.object({ kind: z.literal("confirm-finish") }),
+  z.object({
+    kind: z.literal("confirm-custom-time"),
+    hour: z.number().int().min(1).max(12),
+    minute: z.number().int().min(0).max(59),
+    meridiem: z.enum(["AM", "PM"]).optional(),
+    day: z.enum(["today", "tomorrow"]).optional(),
+  }),
+  z.object({ kind: z.literal("confirm-alternative"), requestId: z.string(), startsAt: Iso }),
 ] as const;
 const StepAwaitingSchema = z.discriminatedUnion("kind", [...STEP_AWAITING]);
 
@@ -37,8 +46,6 @@ const AwaitingSchema = z.discriminatedUnion("kind", [
   ...STEP_AWAITING,
   z.object({ kind: z.literal("which-unit"), question: z.string().max(300), units: z.array(z.string()).min(1), resume: StepAwaitingSchema.optional() }),
 ]);
-
-const Iso = z.iso.datetime({ offset: true });
 
 export const DurableSessionSchema = z.object({
   schemaVersion: z.literal(1),
@@ -58,6 +65,15 @@ export const DurableSessionSchema = z.object({
   unitId: z.string().optional(),
   /** Tour times offered in the last menu, so "2" still means the same time. */
   offeredSlots: z.array(z.object({ start: Iso, label: z.string() })).default([]),
+  /** A custom time named before a unit was chosen. */
+  heldTime: z
+    .object({
+      hour: z.number().int().min(1).max(12),
+      minute: z.number().int().min(0).max(59),
+      meridiem: z.enum(["AM", "PM"]).optional(),
+      day: z.enum(["today", "tomorrow"]).optional(),
+    })
+    .optional(),
   /** A question Tour Core asked and is waiting on ("Are you at the property now?"). */
   pending: z.object({ stage: z.enum(STAGES), awaiting: AwaitingSchema }).optional(),
   routeProgress: z.object({ opened: z.array(z.string()), next: z.string().optional() }).optional(),
@@ -101,6 +117,7 @@ export async function snapshotOf(session: VisitorDemoSession, links?: Verificati
     ...(session.prospectId ? { prospectId: session.prospectId } : {}),
     ...(r ? { reservationId: r.id, unitId: r.unitId } : {}),
     offeredSlots: session.offeredSlots.map((s) => ({ start: s.start.toISOString(), label: s.label })),
+    ...(session.heldTime ? { heldTime: session.heldTime } : {}),
     ...(session.pendingClarification ? { pending: session.pendingClarification } : {}),
     ...(r ? { routeProgress: { opened, ...(r.allowedRoute.find((d) => !opened.includes(d)) ? { next: r.allowedRoute.find((d) => !opened.includes(d)) } : {}) } } : {}),
     ...(link ? { verification: { issuedAt: new Date(link.issuedAt).toISOString(), expiresAt: new Date(link.expiresAt).toISOString() } } : {}),
@@ -169,7 +186,7 @@ export async function restoreSession(snapshot: DurableSession, deps: RestoreDeps
     offeredSlots = await session.core.availableSlots();
     notes.push("The tour-time menu was rebuilt from the schedule.");
   }
-  session.resume({ offeredSlots, ...(pending ? { pending } : {}) });
+  session.resume({ offeredSlots, ...(pending ? { pending } : {}), ...(snapshot.heldTime ? { heldTime: snapshot.heldTime } : {}) });
   if (snapshot.step !== stage) notes.push(`Saved step "${snapshot.step}" was behind the tour records ("${stage}"); the tour records were used.`);
   return { session, notes };
 }

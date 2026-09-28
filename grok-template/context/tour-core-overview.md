@@ -6,10 +6,11 @@ and tours one unit on their own. The text thread stays live through the tour:
 Tour Core guides them door by door. Afterwards it sends a recap and one
 follow-up question.
 
-The welcome names the property by its address, or by a name the operator gave
-it: "Welcome to the self-guided tour for 144 Hillside Ave! I can answer
-questions about the property and help you tour on your own. Which unit would
-you like to see?" A single-family home skips the unit menu.
+The welcome is one message. It names the property by its address, and by a
+name the operator gave it only when there is one: "Hi! Welcome to the
+self-guided tours at 144 Hillside Ave. I can answer questions about the
+property and help you book a tour." Then the unit menu. A single-family home
+says "home" and offers the next regular tour time instead of a unit menu.
 
 ## Visitor questions, at every stage
 

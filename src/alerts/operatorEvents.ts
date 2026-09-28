@@ -14,7 +14,9 @@ import { z } from "zod";
 export const TOUR_EVENT_TYPES = ["tour.booked", "tour.started", "tour.completed", "tour.cancelled"] as const;
 /** Something that needs the landlord's judgment. Each points at one open issue. */
 export const ISSUE_EVENT_TYPES = ["exception.created", "access.problem", "verification.problem"] as const;
-export const OPERATOR_EVENT_TYPES = [...TOUR_EVENT_TYPES, ...ISSUE_EVENT_TYPES, "installation.test"] as const;
+/** A visitor asked for a time that needs the landlord. Not optional: a person has to decide. */
+export const TIME_REQUEST_EVENT = "tour.time_requested" as const;
+export const OPERATOR_EVENT_TYPES = [...TOUR_EVENT_TYPES, ...ISSUE_EVENT_TYPES, TIME_REQUEST_EVENT, "installation.test"] as const;
 export type OperatorEventType = (typeof OPERATOR_EVENT_TYPES)[number];
 export type TourEventType = (typeof TOUR_EVENT_TYPES)[number];
 export type IssueEventType = (typeof ISSUE_EVENT_TYPES)[number];
@@ -27,6 +29,7 @@ export const OperatorEventSchema = z.strictObject({
   /** The tour's handle (inspect_tour's tourRef). A date-and-channel label; never a name or number. */
   tourId: z.string().regex(/^[a-z0-9_]+~[A-Za-z0-9_-]+$/).optional(),
   exceptionId: z.string().regex(/^exc_[a-f0-9]{12}$/).optional(),
+  tourTimeRequestId: z.string().regex(/^ttr_[a-f0-9]{12}$/).optional(),
   occurredAt: z.string(),
 });
 export type OperatorEvent = z.infer<typeof OperatorEventSchema>;
@@ -62,6 +65,21 @@ export function tourEvent(input: { eventType: TourEventType; propertyId: string;
     eventType: input.eventType,
     propertyId: input.propertyId,
     tourId: input.tourRef,
+    occurredAt: input.occurredAt,
+  });
+}
+
+export const timeRequestEventId = (tourTimeRequestId: string) =>
+  `evt_${createHash("sha256").update(`tour.time_requested|${tourTimeRequestId}`).digest("hex").slice(0, 24)}`;
+
+/** Minimal on purpose: no visitor name, number, unit or message. Grok reads the request over MCP. */
+export function timeRequestedEvent(input: { propertyId: string; tourTimeRequestId: string; occurredAt: string }): OperatorEvent {
+  return OperatorEventSchema.parse({
+    schemaVersion: 1,
+    eventId: timeRequestEventId(input.tourTimeRequestId),
+    eventType: "tour.time_requested",
+    propertyId: input.propertyId,
+    tourTimeRequestId: input.tourTimeRequestId,
     occurredAt: input.occurredAt,
   });
 }

@@ -1,4 +1,4 @@
-import type { AccessGrant, AuditEvent, Consent, Message, Prospect, Reservation, Verification } from "../domain/model";
+import type { AccessGrant, AuditEvent, Consent, Message, Prospect, Reservation, TourTimeRequest, Verification } from "../domain/model";
 
 export interface Collections {
   prospects: Prospect;
@@ -7,6 +7,7 @@ export interface Collections {
   verifications: Verification;
   accessGrants: AccessGrant;
   messages: Message;
+  tourTimeRequests: TourTimeRequest;
 }
 export type CollectionName = keyof Collections;
 
@@ -31,6 +32,7 @@ export class InMemoryStore implements TourCoreStore {
     verifications: new Map(),
     accessGrants: new Map(),
     messages: new Map(),
+    tourTimeRequests: new Map(),
   };
   private audit: AuditEvent[] = [];
 

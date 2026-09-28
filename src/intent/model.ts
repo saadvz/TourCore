@@ -18,6 +18,19 @@ export const TourIntentSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("SELECT_UNIT"), unitName: Name }),
   /** `timeLabel` is one of the time labels Tour Core offered ("2:00 PM"). */
   z.object({ type: z.literal("SELECT_TIME"), timeLabel: Name }),
+  /**
+   * A specific time that isn't being booked as a normal slot. Hour is 1–12.
+   * Meridiem and day are present only when the visitor said them.
+   */
+  z.object({
+    type: z.literal("REQUEST_CUSTOM_TIME"),
+    hour: z.number().int().min(1).max(12),
+    minute: z.number().int().min(0).max(59),
+    meridiem: z.enum(["AM", "PM"]).optional(),
+    day: z.enum(["today", "tomorrow"]).optional(),
+  }),
+  z.object({ type: z.literal("ACCEPT_PROPOSED_TIME") }),
+  z.object({ type: z.literal("DECLINE_PROPOSED_TIME") }),
   z.object({ type: z.literal("CONSENT_YES") }),
   z.object({ type: z.literal("CONSENT_NO") }),
   z.object({ type: z.literal("ARRIVAL") }),
@@ -48,6 +61,12 @@ export interface IntentInterpretation {
   clarificationNeeded: boolean;
   /** Tour Core-authored wording for the clarification, when the rules have a specific one. */
   clarificationQuestion?: string;
+  /**
+   * A clock time mentioned next to a property question. One message still has
+   * one intent: the question is answered, and the time is filed only after the
+   * visitor confirms it.
+   */
+  mentionedTime?: { hour: number; minute: number; meridiem?: "AM" | "PM"; day?: "today" | "tomorrow" };
   /** The text reads like an instruction to the assistant ("ignore your rules..."), not a visitor action. */
   manipulation?: boolean;
 }
@@ -67,7 +86,9 @@ export type StepAwaiting =
   | { kind: "confirm-arrival" }
   | { kind: "confirm-stop"; stop: StopRef }
   | { kind: "choose-stop"; stops: StopRef[] }
-  | { kind: "confirm-finish" };
+  | { kind: "confirm-finish" }
+  | { kind: "confirm-custom-time"; hour: number; minute: number; meridiem?: "AM" | "PM"; day?: "today" | "tomorrow" }
+  | { kind: "confirm-alternative"; requestId: string; startsAt: string };
 
 /**
  * Something Tour Core just asked the visitor. `which-unit` interrupts the
@@ -106,6 +127,9 @@ export const ACCESS_INTENTS: ReadonlySet<IntentType> = new Set(["ARRIVAL", "AT_R
 const STATE_CHANGING: ReadonlySet<IntentType> = new Set([
   "SELECT_UNIT",
   "SELECT_TIME",
+  "REQUEST_CUSTOM_TIME",
+  "ACCEPT_PROPOSED_TIME",
+  "DECLINE_PROPOSED_TIME",
   "CONSENT_YES",
   "CONSENT_NO",
   "FINISH_TOUR",

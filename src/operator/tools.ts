@@ -35,6 +35,7 @@ import { matchDoor, requireUnit, resolvePropertyId } from "./resolve";
 import { defaultMessagingMode, type OperatorServices } from "./services";
 import { publishGuards, publishProperty, readinessForProperty, runPracticeTour, visitorTexting } from "./setupFlow";
 import { findTour, inspectTourView, listActiveTours } from "./tours";
+import { approveTourTimeRequest, declineTourTimeRequest, inspectTourTimeRequest, listTourTimeRequests, proposeTourTime, rescheduleTour } from "./tourTimes";
 
 /**
  * Tour Core's operator tool contract: a narrow, provider-neutral list of
@@ -1025,6 +1026,82 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         files: out.files.map((f) => ({ file: f, ...(base ? { openOnTourCoreComputer: `${base}/api/properties/${id}/audit-exports/${out.exportId}/${f}` } : {}) })),
       };
     },
+  }),
+
+  // ------------------------------------------------- custom tour times
+  tool({
+    name: "list_tour_time_requests",
+    title: "List custom time requests",
+    kind: "read",
+    description:
+      "Who is waiting on a tour time that isn't a regular slot, or on moving a tour. Say this when the operator asks who wants a different time or to show custom-time requests. Pending only, unless includeHandled is set. No schedule jargon.",
+    input: z.strictObject({
+      property: Property,
+      includeHandled: z.boolean().optional().describe("Include requests that were already approved, declined or replaced."),
+    }),
+    run: (ctx, i) => listTourTimeRequests(ctx, i),
+  }),
+  tool({
+    name: "inspect_tour_time_request",
+    title: "Inspect a custom time request",
+    kind: "read",
+    description: "One custom-time request in plain language: who, which unit, the time they want, their current booking if they have one, and whether that time is outside normal touring hours.",
+    input: z.strictObject({
+      tourTimeRequestId: z.string().min(3).max(40).describe("The tourTimeRequestId from list_tour_time_requests or a tour update. Never show it to the operator."),
+    }),
+    run: (ctx, i) => inspectTourTimeRequest(ctx, i.tourTimeRequestId),
+  }),
+  tool({
+    name: "approve_tour_time_request",
+    title: "Approve a custom time",
+    kind: "consequential",
+    description:
+      "Approves a visitor's requested tour time as a one-off. Does not change the property's regular hours or which times are offered. First call returns a yes/no question; call again with confirmationCode only after an explicit yes. If the result says outsideHours, the question is the stronger outside-hours confirmation: call again with confirmationCode and acknowledgeOutsideHours true only after they agree to that.",
+    input: z.strictObject({
+      tourTimeRequestId: z.string().min(3).max(40).describe("The tourTimeRequestId. Never show it to the operator."),
+      confirmationCode: Code,
+      acknowledgeOutsideHours: z.boolean().optional().describe("True only after the operator agreed to a one-time tour outside normal touring hours."),
+    }),
+    run: (ctx, i) => approveTourTimeRequest(ctx, i),
+  }),
+  tool({
+    name: "decline_tour_time_request",
+    title: "Decline a custom time",
+    kind: "change",
+    description: "Declines a requested time and tells the visitor. Their current booking, if they have one, stays confirmed. Use this for \"decline\" or \"keep the current booking\".",
+    input: z.strictObject({
+      tourTimeRequestId: z.string().min(3).max(40).describe("The tourTimeRequestId. Never show it to the operator."),
+      note: z.string().max(300).optional().describe("A short note in the operator's words. Optional."),
+    }),
+    run: (ctx, i) => declineTourTimeRequest(ctx, i),
+  }),
+  tool({
+    name: "propose_tour_time",
+    title: "Offer another time",
+    kind: "change",
+    description:
+      "Offers the visitor a different time. Their current booking stays until they agree. Say the time in everyday words, like \"3:30 PM\". Use this when the operator wants to suggest another time.",
+    input: z.strictObject({
+      tourTimeRequestId: z.string().min(3).max(40).describe("The tourTimeRequestId. Never show it to the operator."),
+      newStartsAt: z.string().min(1).max(80).describe('The time to offer, such as "3:30 PM" or "tomorrow at 11:15 AM".'),
+    }),
+    run: (ctx, i) => proposeTourTime(ctx, i),
+  }),
+  tool({
+    name: "reschedule_tour",
+    title: "Move a tour",
+    kind: "consequential",
+    description:
+      "Moves a visitor's tour to a time the landlord is directing, including a one-off time that isn't a regular slot. Pass the visitor's name and the new time in everyday words. Does not change the property's regular hours. First call returns one yes/no question; call again with confirmationCode only after an explicit yes. A time outside normal touring hours returns a stronger question; call again with confirmationCode and acknowledgeOutsideHours true only after they agree.",
+    input: z.strictObject({
+      reservationId: z.string().min(3).max(40).optional().describe("The reservation, when you already have it. Never show it."),
+      tourRef: TourRef.optional(),
+      visitor: z.string().min(1).max(80).optional().describe('The visitor, as the operator said the name, e.g. "Testa".'),
+      newStartsAt: z.string().min(1).max(80).describe('The new time, such as "3:15 PM today".'),
+      confirmationCode: Code,
+      acknowledgeOutsideHours: z.boolean().optional().describe("True only after the operator agreed to a one-time tour outside normal touring hours."),
+    }),
+    run: (ctx, i) => rescheduleTour(ctx, i),
   }),
 
   // ------------------------------------------------------ installation

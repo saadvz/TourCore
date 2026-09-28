@@ -51,7 +51,7 @@ describe("questions at every stage of a text conversation", () => {
     const replies = await a.text("How much is 1A?");
     expect(replies).toEqual([
       "Unit 1A rents for $2,300 a month.",
-      `Welcome to the self-guided tour for 100 Alfred Way! I can answer questions about the property and help you tour on your own. Which unit would you like to see?\n${UNIT_MENU}`,
+      `Hi! Welcome to the self-guided tours at 100 Alfred Way. I can answer questions about the property and help you book a tour.\n\nWhich unit would you like to see?\n${UNIT_MENU}`,
     ]);
     expect(a.ws.listTours("prop_100_alfred_way")[0]).toMatchObject({ kind: "messaging", outcome: "in-progress" });
     const tour = (await a.grok("list_active_tours")).tours[0];

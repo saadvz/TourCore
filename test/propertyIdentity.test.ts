@@ -64,7 +64,7 @@ describe("canonical property identity", () => {
     const review = await h.ok("review_property_setup");
     expect(review.lines.slice(0, 3)).toEqual(["144 Hillside Ave, Teaneck, NJ", "Apartment building", ""]);
     expect(review.lines.join("\n")).not.toMatch(/Called:/);
-    expect(await welcomeFor(h, id)).toContain("Welcome to the self-guided tour for 144 Hillside Ave, Teaneck, NJ!");
+    expect(await welcomeFor(h, id)).toContain("Hi! Welcome to the self-guided tours at 144 Hillside Ave, Teaneck, NJ.");
   });
 
   it("stores an operator-given name separately; visitors hear it, the address stays canonical, and it can be removed", async () => {
@@ -74,7 +74,9 @@ describe("canonical property identity", () => {
     expect(h.workspace.openDraft(id).draft.property).toMatchObject({ address: "144 Hillside Ave, Teaneck, NJ", displayName: "Hillside Apartments", name: "Hillside Apartments" });
     await finishHillside(h);
     expect((await h.ok("review_property_setup")).lines.slice(0, 3)).toEqual(["144 Hillside Ave, Teaneck, NJ", "Called: Hillside Apartments", "Apartment building"]);
-    expect(await welcomeFor(h, id)).toContain("Welcome to the self-guided tour for Hillside Apartments!");
+    const named = await welcomeFor(h, id);
+    expect(named).toContain("Hillside Apartments");
+    expect(named).toContain("144 Hillside Ave, Teaneck, NJ");
 
     await h.ok("update_property_details", { name: "" });
     const property = h.workspace.load(id).config.property;
@@ -127,9 +129,11 @@ describe("property type", () => {
     expect((await h.approve("publish_demo_property", {})).done.published).toBe(true);
     // Visitors aren't asked to pick from a one-item unit menu.
     const welcome = await welcomeFor(h, id);
-    expect(welcome).toContain("Welcome to the self-guided tour for 27 Oak Ln, Teaneck, NJ!");
+    expect(welcome).toContain("Hi! Welcome to the self-guided tour for 27 Oak Ln, Teaneck, NJ.");
+    expect(welcome).toContain("questions about the home");
+    expect(welcome).toContain("I have");
     expect(welcome).not.toContain("Which unit");
-    expect(welcome).toContain("Happy to set up a self-guided tour of Main Home");
+    expect(welcome).not.toContain("Happy to set up");
   });
 });
 

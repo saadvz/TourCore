@@ -45,6 +45,7 @@ credentials:
 | `exception.created` | a visitor needs the team (e.g. a question with no approved answer) | `exceptionId` |
 | `access.problem` | a door or access problem on a tour | `exceptionId` |
 | `verification.problem` | an identity check didn't pass | `exceptionId` |
+| `tour.time_requested` | a visitor asked for a time that needs a decision, including one that isn't a regular slot. Sent even when ordinary tour updates are off | `tourTimeRequestId` |
 | `installation.test` | a test update (no property, tour or issue) | nothing |
 
 `tourId` is the tour handle (`inspect_tour`'s `tourRef`). Only the kinds the
@@ -121,4 +122,7 @@ against a live Grok Routine panel from this environment.
 ## Allowed tools
 
 `get_operator_update`, `inspect_exception`, `inspect_tour`, and
-`list_exceptions` if an issue can't be found.
+`list_exceptions` if an issue can't be found. A `tour.time_requested` update
+needs a decision: `list_tour_time_requests`, `inspect_tour_time_request`,
+`approve_tour_time_request`, `decline_tour_time_request`, `propose_tour_time`,
+and `reschedule_tour`.

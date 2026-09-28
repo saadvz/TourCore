@@ -96,7 +96,7 @@ phone. "Testy" below is whatever first name you give on the identity form.
 
 | # | Do | Expect |
 | --- | --- | --- |
-| C1 | Text the touring number *"Hi"* | "Welcome to the self-guided tour for 144 Hillside Ave! I can answer questions about the property and help you tour on your own. Which unit would you like to see?" and the unit menu |
+| C1 | Text the touring number *"Hi"* | One message: "Hi! Welcome to the self-guided tours at 144 Hillside Ave. I can answer questions about the property and help you book a tour." plus the unit menu. Not a second introduction |
 | C2 | Before choosing, text *"How much is 1A?"* | The answer from Unit 1A's details ($2,200/month), then the same unit menu again. No booking was needed to ask |
 | C3 | Choose Unit 1A | Offered times, e.g. "I have 2:00 PM and 3:30 PM available on ... Which works for you?" |
 | C4 | While choosing a time, text *"Does it have laundry?"* | The laundry answer from the unit details, then the **same** times re-presented |
@@ -203,7 +203,7 @@ reconnecting. Tour Core refuses those callbacks immediately once the flag is off
 | C4 | On the Tour Core computer | A **Connect Grok** window opened by itself (else open `http://localhost:4321/grok`); same code as the Grok page |
 | C5 | On the Grok-opened page, try to approve: there's no Allow there. From another device, open `https://<tunnel>/grok` | Only Deny on the public page; `/grok` through the tunnel is "Not found" |
 | C6 | Click **Allow** on the Connect Grok window | Grok's page returns to Grok; Grok shows Tour Core connected; Connect Grok lists "Grok since ..." |
-| C7 | Ask Grok *"List the Tour Core tools you can use."* then *"List my properties."* | 48 tools (34 property and tour + 14 installation), nothing that unlocks a door or sets a credential; `list_properties` runs and returns this Tour Core's real properties |
+| C7 | Ask Grok *"List the Tour Core tools you can use."* then *"List my properties."* | 54 tools (40 property and tour + 14 installation), nothing that unlocks a door or sets a credential; `list_properties` runs and returns this Tour Core's real properties |
 | C8 | Search the Grok chat for any Tour Core token | None: no credential was ever typed or shown |
 | C9 | (Later) Click **Disconnect Grok** (or `npm run grok:disconnect`), then ask Grok to list properties | Grok gets an authorization error and asks to reconnect; properties, tours and Sendblue unchanged. Reconnect (C3–C6) before continuing |
 | C10 | Connect again, but click **Deny** | Grok reports the connection was refused; nothing connected |
@@ -216,7 +216,7 @@ the [setup guide](grok-template-setup.md).
 
 | # | Do | Expect |
 | --- | --- | --- |
-| 1 | Add/install the Tour Core Bot ([setup guide](grok-template-setup.md) steps 3–5, or install from the team template and reconnect with OAuth as above). Ask *"List the Tour Core tools you can use."* | 48 Tour Core tools; nothing that unlocks or opens a door, and nothing that takes a credential |
+| 1 | Add/install the Tour Core Bot ([setup guide](grok-template-setup.md) steps 3–5, or install from the team template and reconnect with OAuth as above). Ask *"List the Tour Core tools you can use."* | 54 Tour Core tools; nothing that unlocks or opens a door, and nothing that takes a credential |
 | 2 | *"Set up a property"* | Bot asks "What's the property address?"; one question at a time; no field names or codes |
 | 3 | Answer: 100 Alfred Way, Brooklyn NY; apartment building; two units (101, 102); one entrance ("Lobby Entrance"); no hallway doors. Confirm routes when shown | Bot confirms the address, asks "What type of property is this?", never invents a building name; shows "Lobby Entrance → Unit 101 Door" and asks "Is that right?" before saving; in the browser app the same property shows both routes |
 | 3a | Say *"Unit 102 goes through the side gate"* | Bot says it doesn't have a side gate on file and lists the doors; nothing saved |
@@ -245,3 +245,18 @@ refresh tokens. Those facts aren't in xAI's public docs.
 
 Pass = every row matches. The browser app stays usable throughout and shows
 the same property, tours and history.
+
+## E. Custom tour times
+
+Property regular starts stay hourly (or whatever spacing was saved). A visitor
+can ask for another minute, and the landlord can approve it once, without
+changing that schedule.
+
+| # | Do | Expect |
+| --- | --- | --- |
+| E1 | Visitor books 4:00 PM, then texts "Can I move it to 3:15?" | The visitor is told their 4:00 PM tour stays confirmed while Tour Core asks the property team. No second booking |
+| E2 | Watch Grok | Grok says, unprompted, that the visitor wants to move today's tour to 3:15 PM, and that 3:15 isn't a regular start. The webhook itself has no name or phone number |
+| E3 | "Approve 3:15." | Grok asks once to confirm |
+| E4 | "Yes." | The tour moves to 3:15 PM. The visitor is told. The property stays published. A new visitor is still offered the regular hourly times, not 3:15 |
+| E5 | "Move them to 3:30." | Same one confirmation, then the tour moves to 3:30 PM and the visitor is told. Regular hours are unchanged |
+| E6 | A visitor texts "Hi" | One opening message, with the address (and the property's own name only if one was given) and the next choice. Not a generic hello followed by a second introduction |

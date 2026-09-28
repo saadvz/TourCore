@@ -1,8 +1,9 @@
+import { placementOf, touringHoursLabel } from "../core/customSlot";
 import { addDays, formatDay, formatTime, localDateOf } from "../core/timezone";
 import { UNNAMED_VISITOR } from "../domain/model";
 import { inspectException } from "../operator/exceptions";
 import type { OperatorServices } from "../operator/services";
-import { currentReservation, findTour, tourSummary, unitNameOf, type TourSnapshot } from "../operator/tours";
+import { currentReservation, findTour, tourRef, tourSnapshots, tourSummary, unitNameOf, visitorNameOf, type TourSnapshot } from "../operator/tours";
 import { SetupInputError } from "../setup/setupActions";
 import { isIssueEvent, type OperatorEvent } from "./operatorEvents";
 
@@ -31,6 +32,7 @@ export async function describeOperatorUpdate(services: OperatorServices, event: 
   if (event.eventType === "installation.test") {
     return { eventType: event.eventType, summary: "Tour updates are connected. I'll let you know about your tours here." };
   }
+  if (event.eventType === "tour.time_requested") return describeTimeRequest(services, event, now);
   if (isIssueEvent(event.eventType)) {
     if (!event.exceptionId) throw new SetupInputError("UPDATE_INCOMPLETE", "That update doesn't point at an issue.");
     const x = await inspectException(services, event.exceptionId);
@@ -60,4 +62,52 @@ export async function describeOperatorUpdate(services: OperatorServices, event: 
     "tour.cancelled": `${who}'s ${unit} tour${slot ? ` ${slot}` : ""} was cancelled.`,
   }[event.eventType];
   return { eventType: event.eventType, summary, tour: tourSummary(tour), instructions: "Post summary as-is in your own short words. Don't act on the tour." };
+}
+
+async function describeTimeRequest(services: OperatorServices, event: OperatorEvent, now: Date) {
+  if (!event.tourTimeRequestId) throw new SetupInputError("UPDATE_INCOMPLETE", "That update doesn't point at a time request.");
+  let match: { tour: TourSnapshot; request: TourSnapshot["bundle"]["tourTimeRequests"][number] } | undefined;
+  for (const tour of await tourSnapshots(services, { propertyId: event.propertyId })) {
+    const request = tour.bundle.tourTimeRequests.find((item) => item.id === event.tourTimeRequestId);
+    if (request) match = { tour, request };
+  }
+  if (!match) throw new SetupInputError("UPDATE_INCOMPLETE", "That update doesn't point at a time request.");
+  const { tour, request } = match;
+  const tz = tour.config.property.timezone;
+  const who = firstName(tour);
+  const unit = unitNameOf(tour) ?? "their unit";
+  const requestedAt = new Date(request.requestedStartsAt);
+  const requestedClock = formatTime(requestedAt, tz);
+  const requested = when(requestedAt, now, tz);
+  const reservation = tour.bundle.reservations.find((item) => item.id === request.reservationId) ?? currentReservation(tour);
+  const currentAt = reservation?.slotStart ? new Date(reservation.slotStart) : undefined;
+  const placement = placementOf(tour.config, requestedAt);
+  const asking = currentAt
+    ? `${who} is asking to move the ${unit} tour from ${formatTime(currentAt, tz)} to ${requestedClock}.`
+    : `${who} is asking to tour ${unit} ${requested}.`;
+  const note =
+    placement === "OUTSIDE_HOURS"
+      ? ` ${requestedClock} is outside the property's normal ${touringHoursLabel(tour.config)} touring hours.`
+      : placement === "ON_GRID"
+        ? ""
+        : ` ${requestedClock} isn't one of the regular tour times.`;
+  const choices = currentAt
+    ? "Would you like to approve that time, suggest another time, decline the request, or keep the current booking?"
+    : "Would you like to approve that time, suggest another time, or decline the request?";
+  return {
+    eventType: event.eventType,
+    summary: `${asking}${note} ${choices}`,
+    outsideHours: placement === "OUTSIDE_HOURS",
+    request: {
+      tourTimeRequestId: request.id,
+      tourRef: tourRef(tour.propertyId, tour.tourId),
+      visitorName: visitorNameOf(tour),
+      unitName: unitNameOf(tour),
+      requestedTime: requested,
+      ...(currentAt ? { currentTime: when(currentAt, now, tz) } : {}),
+      status: request.status === "PENDING" ? "waiting" : request.status.toLowerCase(),
+    },
+    instructions:
+      "A decision is required. Use approve_tour_time_request, propose_tour_time, or decline_tour_time_request. For a move the landlord is directing, use reschedule_tour. Ask once, using the question Tour Core returns, before approving or moving a tour. A time outside normal touring hours needs the stronger confirmation Tour Core returns. Don't change the property's regular hours. If the time overlaps another tour, say so and don't approve it.",
+  };
 }

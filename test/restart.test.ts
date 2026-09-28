@@ -342,7 +342,7 @@ describe("retried webhooks after a restart", () => {
 describe("which property answers on which texting number", () => {
   it("resolves the property from the number texted; an unknown number gets no answer and creates nothing", async () => {
     const app = await durableApp();
-    expect((await app.text("Hi")).reply).toContain("Welcome to the self-guided tour for 100 Alfred Way!");
+    expect((await app.text("Hi")).reply).toContain("Hi! Welcome to the self-guided tours at 100 Alfred Way.");
     const stranger = await app.text("Hi", "x-1", "+15558887777");
     expect(stranger).toMatchObject({ status: 200, replies: [] });
     expect(app.tours()).toHaveLength(1);

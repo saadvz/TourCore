@@ -110,6 +110,18 @@ function sentence(
       return info(`${c.team} was alerted: ${e.detail}`);
     case "RESERVATION_RESCHEDULED":
       return info(`${c.name}'s tour was moved ${e.detail.split(";")[0]}.`);
+    case "TOUR_TIME_REQUESTED":
+      return info(`${c.name} asked for a different tour time.`);
+    case "TOUR_TIME_REQUEST_APPROVED":
+      return good(`The property team approved ${c.name}'s requested tour time.`);
+    case "TOUR_TIME_REQUEST_DECLINED":
+      return info(`The property team couldn't do ${c.name}'s requested tour time.`);
+    case "TOUR_TIME_ALTERNATIVE_PROPOSED":
+      return info(`The property team offered ${c.name} a different tour time.`);
+    case "TOUR_RESCHEDULED":
+      return info(`${c.name}'s tour was moved ${e.detail}.`);
+    case "TOUR_TIME_OVERRIDE_APPROVED":
+      return info(`The property team approved a one-time tour for ${c.name} outside the normal touring hours.`);
     case "QUESTION_ANSWERED":
       return good(`${c.name} asked "${e.detail}" and got an answer from your approved facts.`);
     case "QUESTION_UNANSWERED":

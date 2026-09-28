@@ -5,10 +5,12 @@ import { DemoClock } from "../core/clock";
 import { normalizePhone } from "../core/phone";
 import { orList } from "../core/questions";
 import { formatTime } from "../core/timezone";
+import type { SpokenTime } from "../core/spokenTime";
+import { entryReply } from "./entry";
 import { TourCore, type AccessOutcome, type InboundMeta } from "../core/TourCore";
 import type { TourSlot } from "../core/schedule";
 import { createDurin, createStore, createVerificationProvider } from "../createTourCore";
-import { UNNAMED_VISITOR, type Reservation } from "../domain/model";
+import { UNNAMED_VISITOR, type Reservation, type TourTimeRequest } from "../domain/model";
 import { countDurinCalls, type CountingDurin } from "../durin/countingDurin";
 import type { DeliveryReceipt, MessagingAdapter, OutgoingMessage } from "../messaging/Messenger";
 import type { ReplyPrompt } from "../messaging/presentation";
@@ -133,6 +135,8 @@ export class VisitorDemoSession {
   lastAccess?: LastAccess;
   /** Times offered at inquiry; typed replies ("2") and buttons both pick from this list. */
   offeredSlots: TourSlot[] = [];
+  /** A custom time named before a unit was chosen. Filed once the unit is picked. */
+  heldTime?: SpokenTime;
   optedOut = false;
   /** The messaging line this visitor texts (E.164), for text-message conversations. */
   line?: string;
@@ -276,9 +280,20 @@ export class VisitorDemoSession {
   }
 
   /** Puts back what only the conversation knew: the times offered and an unanswered confirmation. */
-  resume(state: { offeredSlots?: TourSlot[]; pending?: { stage: VisitorStage; awaiting: Awaiting } }): void {
+  resume(state: { offeredSlots?: TourSlot[]; pending?: { stage: VisitorStage; awaiting: Awaiting }; heldTime?: SpokenTime }): void {
     if (state.offeredSlots) this.offeredSlots = state.offeredSlots;
     this.expected = state.pending;
+    if (state.heldTime) this.heldTime = state.heldTime;
+  }
+
+  holdTime(time: SpokenTime): void {
+    this.heldTime = time;
+  }
+
+  takeHeldTime(): SpokenTime | undefined {
+    const time = this.heldTime;
+    this.heldTime = undefined;
+    return time;
   }
 
   /** What Tour Core was waiting for, if the conversation is still at the same step. One reply only. */
@@ -378,11 +393,74 @@ export class VisitorDemoSession {
   }
 
   /** Operator action: move the tour. The visitor is told through this conversation's own transport. */
-  async reschedule(newStartsAt: string, options: { outsideTourHours?: boolean } = {}): Promise<{ changed: boolean }> {
+  async reschedule(newStartsAt: string, options: { outsideTourHours?: boolean; customTime?: boolean; notice?: "default" | "moved" } = {}): Promise<{ changed: boolean }> {
     if (!this.reservationId) throw new SetupInputError("NO_TOUR", "This visitor hasn't booked a tour yet.");
     const { changed } = await this.core.rescheduleReservation({ reservationId: this.reservationId, newStartsAt, ...options });
     await this.syncReplies();
     return { changed };
+  }
+
+  /** Books one of the regular offered times without recording another visitor line. */
+  async bookOffered(slotStart: string): Promise<void> {
+    const reservation = await this.reservation();
+    if (!reservation) throw new SetupInputError("NO_TOUR", "Choose a unit before choosing a time.");
+    await this.core.reserveSlot(reservation.id, slotStart);
+    await this.syncReplies();
+  }
+
+  /** Asks the property team about a one-off time. An existing booking stays as it is. */
+  async requestCustomTime(start: Date, sourceMessageId?: string): Promise<{ created: boolean; request: TourTimeRequest }> {
+    const reservation = await this.reservation();
+    if (!this.prospectId || !reservation) throw new SetupInputError("NO_TOUR", "Choose a unit before asking for a time.");
+    const { request, created } = await this.core.createTourTimeRequest({
+      prospectId: this.prospectId,
+      reservationId: reservation.id,
+      unitId: reservation.unitId,
+      requestedStartsAt: start.toISOString(),
+      requestSource: "VISITOR",
+      ...(sourceMessageId ? { sourceMessageId } : {}),
+    });
+    const label = formatTime(start, this.config.property.timezone);
+    if (!created) {
+      await this.reply(`I've already asked the property team about ${label}. I'll let you know when they respond.`);
+    } else if (reservation.slotStart) {
+      const current = formatTime(new Date(reservation.slotStart), this.config.property.timezone);
+      await this.reply(`I've asked the property team about moving your tour to ${label}. Your ${current} tour is still confirmed until they approve a change.`);
+    } else {
+      await this.reply(`${label} isn't one of the regular tour times, but I can ask the property team. I'll let you know once they respond.`);
+    }
+    return { created, request };
+  }
+
+  async approveTimeRequest(requestId: string, options: { outsideTourHours?: boolean } = {}) {
+    const result = await this.core.approveTourTimeRequest(requestId, options);
+    await this.syncReplies();
+    return result;
+  }
+
+  async declineTimeRequest(requestId: string, note?: string) {
+    const request = await this.core.declineTourTimeRequest(requestId, note);
+    await this.syncReplies();
+    return request;
+  }
+
+  async proposeAlternative(requestId: string, startsAt: string) {
+    const request = await this.core.proposeTourTime(requestId, startsAt);
+    this.expect(await this.stage(), { kind: "confirm-alternative", requestId, startsAt: request.proposedAlternativeAt! });
+    await this.syncReplies();
+    return request;
+  }
+
+  async acceptAlternative(requestId: string) {
+    const result = await this.core.acceptProposedTime(requestId);
+    await this.syncReplies();
+    return result;
+  }
+
+  async declineAlternative(requestId: string) {
+    const request = await this.core.declineProposedTime(requestId);
+    await this.syncReplies();
+    return request;
   }
 
   /**
@@ -410,6 +488,7 @@ export class VisitorDemoSession {
     for (const c of bundle.consents) await this.store.put("consents", c);
     for (const v of bundle.verifications) await this.store.put("verifications", v);
     for (const g of bundle.accessGrants) await this.store.put("accessGrants", g);
+    for (const request of bundle.tourTimeRequests ?? []) await this.store.put("tourTimeRequests", request);
     for (const m of bundle.messages) {
       await this.store.put("messages", m);
       this.shown.add(m.id);
@@ -533,28 +612,23 @@ export class VisitorDemoSession {
     }
   }
 
-  private async inquire(unitId: string): Promise<void> {
-    const { prospect, reservation } = await this.core.startInquiry({ ...this.visitor!, unitId });
+  private async inquire(unitId: string, options: { announce?: boolean } = {}): Promise<void> {
+    const { prospect, reservation } = await this.core.startInquiry({ ...this.visitor!, unitId }, options);
     this.prospectId = prospect.id;
     this.reservationId = reservation.id;
     this.offeredSlots = await this.core.availableSlots();
   }
 
   /**
-   * The first thing a visitor hears. The property is named by its address or
-   * the operator's own name for it, never a made-up one. A single-family home
-   * has one space to tour, so there's no unit to pick: its tour times come next.
+   * The first thing a visitor hears: one message, named by the canonical
+   * address and an operator-given name only when there is one. A single-family
+   * home offers its next regular times; a building asks which unit.
    */
   async welcome(): Promise<void> {
-    const hello = `Welcome to the self-guided tour for ${this.config.property.name}! I can answer questions about the property and help you tour on your own.`;
     const only = this.config.units.length === 1 && this.config.property.propertyType === "SINGLE_FAMILY" ? this.config.units[0] : undefined;
-    if (only && !this.reservationId) {
-      await this.reply(hello);
-      await this.inquire(only.id);
-      await this.syncReplies();
-      return;
-    }
-    await this.reply(`${hello} Which unit would you like to see?`, { kind: "choose", options: this.config.units.map((u) => u.name), what: "a unit" });
+    if (only && !this.reservationId) await this.inquire(only.id, { announce: false });
+    const { body, prompt } = entryReply(this.config, this.clock.now(), this.offeredSlots);
+    await this.reply(body, prompt);
   }
 
   private async currentPlace(): Promise<string | undefined> {

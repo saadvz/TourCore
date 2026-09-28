@@ -41,7 +41,7 @@
       "name": "Tour Core Operator Updates",
       "doc": "routines/operator-updates.md",
       "trigger": "authenticated-webhook",
-      "allowedTools": ["get_operator_update", "inspect_exception", "inspect_tour", "list_exceptions"],
+      "allowedTools": ["get_operator_update", "inspect_exception", "inspect_tour", "list_exceptions", "list_tour_time_requests", "inspect_tour_time_request", "approve_tour_time_request", "decline_tour_time_request", "propose_tour_time", "reschedule_tour"],
       "credentialsTravelWithTemplate": false
     }
   ],

@@ -1,5 +1,7 @@
+import { resolveSpokenTime } from "../core/customSlot";
 import { orList, unitsNamedIn } from "../core/questions";
-import { formatDay } from "../core/timezone";
+import type { SpokenTime } from "../core/spokenTime";
+import { formatDay, localDateOf, zonedParts, type LocalDate } from "../core/timezone";
 import type { InboundMeta } from "../core/TourCore";
 import {
   isConfident,
@@ -24,6 +26,10 @@ import type { InterpretationNote, Said, VisitorDemoSession, VisitorStage } from 
  * file decides, deterministically, whether that's clear enough to act on or
  * needs a question back. Whether a door opens is still decided only by Tour
  * Core's policy, exactly as for a button tap.
+ *
+ * A text is one intent. If it asks a property question and names a custom
+ * time, the question is answered and the time is filed only after the visitor
+ * confirms it. The time is not dropped.
  */
 
 export { keywordOf, type Keyword } from "../intent";
@@ -180,6 +186,7 @@ export async function handleVisitorText(
   else if (keyword === "help") await session.help(said);
   else if (firstMessage) {
     if (intent.type === "SELECT_UNIT" && turn.confident) await chooseUnit(turn);
+    else if (intent.type === "REQUEST_CUSTOM_TIME" && turn.confident) await openWithCustomTime(turn);
     else if (intent.type === "ASK_PROPERTY_QUESTION") await ask(turn, intent.question, () => session.welcome());
     else await session.greet(said);
   } else await byStage(turn);
@@ -206,6 +213,10 @@ async function ask(turn: Turn, question: string, resume?: () => Promise<void>): 
   const { session } = turn;
   await session.recordText(turn.said);
   const out = await session.askQuestion(question, { meta: turn.said.meta, alreadyRecorded: true });
+  if (turn.interpretation.mentionedTime && out.outcome !== "which-unit") {
+    await confirmMentionedTime(turn, turn.interpretation.mentionedTime);
+    return;
+  }
   if (out.outcome === "which-unit") {
     const units = out.units ?? [];
     turn.markClarification();
@@ -218,6 +229,81 @@ async function ask(turn: Turn, question: string, resume?: () => Promise<void>): 
 }
 
 const listOf = (items: string[]) => (items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`);
+
+async function contextDay(session: VisitorDemoSession): Promise<LocalDate | undefined> {
+  const reservation = await session.reservation();
+  const tz = session.config.property.timezone;
+  if (reservation?.slotStart) return localDateOf(new Date(reservation.slotStart), tz);
+  const offered = session.offeredSlots[0];
+  return offered ? localDateOf(offered.start, tz) : undefined;
+}
+
+function asSpoken(intent: Extract<TourIntent, { type: "REQUEST_CUSTOM_TIME" }> | SpokenTime): SpokenTime {
+  return { hour: intent.hour, minute: intent.minute, ...(intent.meridiem ? { meridiem: intent.meridiem } : {}), ...(intent.day ? { day: intent.day } : {}) };
+}
+
+function meridiemOf(session: VisitorDemoSession, start: Date): "AM" | "PM" {
+  return zonedParts(start, session.config.property.timezone).hour >= 12 ? "PM" : "AM";
+}
+
+/** Files a custom-time request, or books a regular slot when that's what they named. */
+async function fileCustomTime(turn: Turn, spoken: SpokenTime, alreadyRecorded = false): Promise<void> {
+  const { session } = turn;
+  const resolved = resolveSpokenTime(session.config, session.clock.now(), spoken, await contextDay(session));
+  if (!resolved.ok) {
+    const awaiting = { kind: "confirm-custom-time" as const, hour: spoken.hour, minute: spoken.minute, ...(spoken.day ? { day: spoken.day } : {}) };
+    if (alreadyRecorded) {
+      turn.markClarification();
+      session.expect(await session.stage(), awaiting);
+      await session.reply(resolved.ask);
+    } else await turn.clarify(resolved.ask, undefined, awaiting);
+    return;
+  }
+  const reservation = await session.reservation();
+  if (reservation?.status === "INQUIRY" && resolved.placement === "ON_GRID") {
+    if (alreadyRecorded) return session.bookOffered(resolved.start.toISOString());
+    return turn.act("chooseTime", { slotStart: resolved.start.toISOString() });
+  }
+  if (!reservation) {
+    session.holdTime(spoken);
+    const menu: ReplyPrompt = { kind: "choose", options: session.config.units.map((unit) => unit.name), what: "a unit" };
+    const body = `${resolved.label} isn't one of the regular tour times. Which unit should I ask the property team about?`;
+    if (alreadyRecorded) {
+      turn.markClarification();
+      await session.reply(body, menu);
+    } else await turn.clarify(body, menu);
+    return;
+  }
+  if (!alreadyRecorded) await session.recordText(turn.said);
+  await session.requestCustomTime(resolved.start, turn.said.meta?.providerMessageId);
+}
+
+async function confirmMentionedTime(turn: Turn, spoken: SpokenTime): Promise<void> {
+  const { session } = turn;
+  const resolved = resolveSpokenTime(session.config, session.clock.now(), spoken, await contextDay(session));
+  if (!resolved.ok) {
+    session.expect(turn.stage, { kind: "confirm-custom-time", hour: spoken.hour, minute: spoken.minute, ...(spoken.day ? { day: spoken.day } : {}) });
+    await session.reply(resolved.ask);
+    return;
+  }
+  session.expect(turn.stage, {
+    kind: "confirm-custom-time",
+    hour: spoken.hour,
+    minute: spoken.minute,
+    meridiem: meridiemOf(session, resolved.start),
+    ...(spoken.day ? { day: spoken.day } : {}),
+  });
+  await session.reply(`If you'd like ${resolved.label}, reply YES and I'll ask the property team.`, { kind: "yes-no" });
+}
+
+async function openWithCustomTime(turn: Turn): Promise<void> {
+  if (turn.intent.type !== "REQUEST_CUSTOM_TIME") return;
+  const spoken = asSpoken(turn.intent);
+  await turn.session.recordText(turn.said);
+  await turn.session.welcome();
+  if (await turn.session.reservation()) await fileCustomTime(turn, spoken, true);
+  else turn.session.holdTime(spoken);
+}
 
 /**
  * What Tour Core was asking before a question interrupted it, asked again
@@ -275,7 +361,12 @@ async function chooseUnit(turn: Turn): Promise<void> {
   const units = turn.session.config.units;
   const unit = turn.intent.type === "SELECT_UNIT" ? units.find((u) => same(u.name, (turn.intent as { unitName: string }).unitName)) : undefined;
   const menu: ReplyPrompt = { kind: "choose", options: units.map((u) => u.name), what: "a unit" };
-  if (unit && turn.confident) return turn.act("chooseUnit", { unitId: unit.id });
+  if (unit && turn.confident) {
+    await turn.act("chooseUnit", { unitId: unit.id });
+    const held = turn.session.takeHeldTime();
+    if (held) await fileCustomTime(turn, held, true);
+    return;
+  }
   const names = units.map((u) => u.name);
   const which = names.length === 2 ? `did you mean ${names[0]} or ${names[1]}?` : "which unit did you mean?";
   return turn.clarify(`Sure — ${which}`, menu);
@@ -284,6 +375,22 @@ async function chooseUnit(turn: Turn): Promise<void> {
 async function byStage(turn: Turn): Promise<void> {
   const { session, intent } = turn;
   const yesNo: ReplyPrompt = { kind: "yes-no" };
+  if (turn.awaiting?.kind === "confirm-custom-time" && turn.interpretation.clarificationQuestion === "No problem.") {
+    await turn.respond("No problem.");
+    await resumeStep(session, turn.stage);
+    return;
+  }
+  if (intent.type === "ACCEPT_PROPOSED_TIME" && turn.awaiting?.kind === "confirm-alternative" && turn.confident) {
+    await session.recordText(turn.said);
+    await session.acceptAlternative(turn.awaiting.requestId);
+    return;
+  }
+  if (intent.type === "DECLINE_PROPOSED_TIME" && turn.awaiting?.kind === "confirm-alternative" && turn.confident) {
+    await session.recordText(turn.said);
+    await session.declineAlternative(turn.awaiting.requestId);
+    return;
+  }
+  if (intent.type === "REQUEST_CUSTOM_TIME" && turn.confident) return fileCustomTime(turn, asSpoken(intent));
   if (intent.type === "ASK_PROPERTY_QUESTION" && turn.stage !== "stopped" && turn.stage !== "intro") return ask(turn, intent.question);
 
   switch (turn.stage) {

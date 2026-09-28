@@ -24,7 +24,7 @@ export const UPDATE_LABELS: Record<UpdateKind, string> = {
   VERIFICATION_PROBLEM: "a visitor's identity check doesn't pass",
 };
 
-export const KIND_OF: Record<Exclude<OperatorEventType, "installation.test">, UpdateKind> = {
+export const KIND_OF: Record<Exclude<OperatorEventType, "installation.test" | "tour.time_requested">, UpdateKind> = {
   "tour.booked": "TOUR_BOOKED",
   "tour.started": "TOUR_STARTED",
   "tour.completed": "TOUR_COMPLETED",
@@ -51,7 +51,7 @@ export function enabledUpdates(prefs: NotificationPreferences | undefined): Upda
 
 /** Whether this event is one the landlord asked to hear about, and happened after they asked. */
 export function wants(prefs: NotificationPreferences | undefined, event: OperatorEvent): boolean {
-  if (event.eventType === "installation.test") return true;
+  if (event.eventType === "installation.test" || event.eventType === "tour.time_requested") return true;
   const kind = KIND_OF[event.eventType];
   if (!enabledUpdates(prefs).includes(kind)) return false;
   const since = prefs?.since[kind];
