@@ -1,0 +1,111 @@
+import type { TourCoreConfig, Unit } from "../config/tourCoreConfig";
+import { profileFacts, questionTopic, type ProfileField } from "../config/unitProfile";
+import { approvedFacts, findApprovedAnswer, type ApprovedFact } from "./facts";
+
+/**
+ * Which approved facts answer a visitor's question, and about which unit.
+ * Pure and deterministic; nothing here writes an answer. Context is used
+ * conservatively: a unit the visitor named wins, then the unit they chose,
+ * then the only unit there is. A question about one unit's details with no
+ * unit to go on is asked back ("Which unit do you mean?"), never guessed.
+ */
+
+export type QuestionResolution =
+  | { kind: "answer"; facts: ApprovedFact[]; unitId?: string }
+  | { kind: "which-unit"; units: string[] }
+  | { kind: "unknown"; unitId?: string };
+
+/** Details that belong to one unit; the description is never read for these once the unit has structured details. */
+const UNIT_FIELDS: ProfileField[] = ["bedrooms", "bathrooms", "monthlyRent", "availability", "squareFeet", "floor", "furnished", "features"];
+/** Often building-wide ("Is there parking?"): property facts can answer them without a unit. */
+const SHARED_FIELDS: ProfileField[] = ["parking", "laundry", "pets", "utilities"];
+
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const norm = (s: string) => s.toLowerCase().replace(/['\u2019]/g, "").replace(/\s+/g, " ").trim();
+
+/**
+ * Units named in a question: "Unit 1A", "unit 1a", "apt 1A", or the bare "1A"
+ * / "101". A bare label counts only when it can't be an ordinary number or
+ * word ("1" is a menu choice, not Unit 1).
+ */
+export function unitsNamedIn(question: string, units: Pick<Unit, "id" | "name">[]): Pick<Unit, "id" | "name">[] {
+  const t = ` ${norm(question).replace(/[^a-z0-9# ]+/g, " ")} `;
+  return units.filter((u) => {
+    const name = norm(u.name).replace(/[^a-z0-9# ]+/g, " ").trim();
+    if (!name) return false;
+    if (new RegExp(`\\s${esc(name)}\\s`).test(t)) return true;
+    const label = name.replace(/^(unit|apt|apartment|suite|#)\s*/, "");
+    if (!label || label === name) return false;
+    if (new RegExp(`\\s(unit|apt|apartment|suite|number|#)\\s*${esc(label)}\\s`).test(t)) return true;
+    const distinctive = /\d/.test(label) && (/[a-z]/.test(label) || label.length >= 2);
+    return distinctive && new RegExp(`\\s#?${esc(label)}\\s`).test(t);
+  });
+}
+
+function unitAnswer(config: TourCoreConfig, unit: Unit, field: ProfileField): ApprovedFact | undefined {
+  const fact = profileFacts(unit).find((f) => f.field === field);
+  return fact ? { scope: "unit", unitId: unit.id, subject: unit.name, text: fact.text, source: "operator", profileField: field } : undefined;
+}
+
+function propertyFacts(config: TourCoreConfig): ApprovedFact[] {
+  return approvedFacts(config).filter((f) => f.scope === "property");
+}
+
+/** A unit's facts for keyword matching. Its description is left out for topics its structured details cover. */
+function unitFacts(config: TourCoreConfig, unitId: string, topic: ProfileField | undefined): ApprovedFact[] {
+  const unit = config.units.find((u) => u.id === unitId);
+  const all = approvedFacts(config, unitId).filter((f) => f.scope === "unit");
+  if (!unit || !topic || !UNIT_FIELDS.includes(topic) || !unit.profile?.[topic]) return all;
+  return all.filter((f) => f.profileField || f.text !== unit.summary);
+}
+
+/** The question without unit names in it: "1A" says which unit, not what about it, so it never matches a fact on its own. */
+function withoutUnitNames(question: string, units: Pick<Unit, "name">[]): string {
+  let out = question;
+  for (const u of units) {
+    const label = u.name.replace(/^(unit|apt\.?|apartment|suite)\s+/i, "");
+    for (const n of [...new Set([u.name, label])].filter((x) => x.trim())) out = out.replace(new RegExp(`(?<![A-Za-z0-9])#?${esc(n)}(?![A-Za-z0-9])`, "gi"), " ");
+  }
+  return out;
+}
+
+export function resolveQuestion(config: TourCoreConfig, asked: string, context: { selectedUnitId?: string } = {}): QuestionResolution {
+  const named = unitsNamedIn(asked, config.units);
+  const question = withoutUnitNames(asked, config.units);
+  if (named.length > 1) return { kind: "which-unit", units: named.map((u) => u.name) };
+  const unitId =
+    named[0]?.id ?? (context.selectedUnitId && config.units.some((u) => u.id === context.selectedUnitId) ? context.selectedUnitId : undefined) ?? (config.units.length === 1 ? config.units[0]!.id : undefined);
+  const unit = config.units.find((u) => u.id === unitId);
+  const topic = questionTopic(question);
+
+  // 1. Structured unit details first (bedrooms, rent, availability, ...).
+  if (unit && topic) {
+    const structured = unitAnswer(config, unit, topic);
+    if (structured) return { kind: "answer", facts: [structured], unitId: unit.id };
+    // The operator gave (or explicitly withheld) this detail; the description isn't a second source for it.
+    if (UNIT_FIELDS.includes(topic) && unit.profile?.[topic]) return { kind: "unknown", unitId: unit.id };
+  }
+
+  const unitScoped = !!topic && UNIT_FIELDS.includes(topic);
+  const property = findApprovedAnswer(propertyFacts(config), question);
+
+  // 2. With a unit: its own approved facts, then building-wide ones (never for a unit-only detail like rent).
+  if (unit) {
+    const own = findApprovedAnswer(unitFacts(config, unit.id, topic), question);
+    if (own.length) return { kind: "answer", facts: own, unitId: unit.id };
+    if (property.length && !unitScoped) return { kind: "answer", facts: property, unitId: unit.id };
+    return { kind: "unknown", unitId: unit.id };
+  }
+
+  // 3. No unit to go on. A unit-only detail is always asked back; a general question can be answered building-wide.
+  const whichUnit: QuestionResolution = { kind: "which-unit", units: config.units.map((u) => u.name) };
+  if (unitScoped) return config.units.length > 1 ? whichUnit : { kind: "unknown" };
+  if (property.length) return { kind: "answer", facts: property };
+  const onFileForSomeUnit = config.units.some((u) => (topic && SHARED_FIELDS.includes(topic) && unitAnswer(config, u, topic)) || findApprovedAnswer(unitFacts(config, u.id, topic), question).length);
+  return onFileForSomeUnit && config.units.length > 1 ? whichUnit : { kind: "unknown" };
+}
+
+/** "1A, 1B, 2A or 2B" */
+export function orList(names: string[]): string {
+  return names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} or ${names.at(-1)}`;
+}

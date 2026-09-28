@@ -215,7 +215,9 @@ describe("installation status", () => {
     expect(infra.infrastructureReady).toBe(true);
     expect(infra.nextStep).toMatchObject({ component: "PROPERTY", action: "SET_UP_PROPERTY", performedBy: "OPERATOR_DECISION", phase: "PROPERTY", operatorMessage: "Everything needed to start is connected and tested. Would you like to add your first property?" });
     await h.setUpAlfredWay();
-    expect(await next()).toEqual(["OFFER_OPERATOR_ALERTS", "OPERATOR_DECISION", "get_secure_setup_url"]);
+    expect(await next()).toEqual(["OFFER_OPERATOR_ALERTS", "OPERATOR_DECISION", "set_notification_preferences"]);
+    await h.ok("set_notification_preferences", { preset: "recommended" });
+    expect(await next()).toEqual(["CONNECT_OPERATOR_ALERTS", "OPERATOR_IN_SECURE_SETUP", "get_secure_setup_url"]);
     h.inst.secrets.set({ TOURCORE_GROK_ROUTINE_URL: ROUTINE_URL, TOURCORE_GROK_ROUTINE_KEY: ROUTINE_KEY });
     expect(await next()).toEqual(["TEST_OPERATOR_ALERTS", "GROK", "test_operator_alerts"]);
     markChecked(h, "alerts");

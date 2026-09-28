@@ -16,7 +16,7 @@ import {
 } from "./setupActions";
 import { isCurrent, statusLabel, type SavedProperty, type TourRecord } from "./workspace";
 import { describeHistory } from "../audit/describe";
-import { validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
+import { PROPERTY_TYPE_LABELS, validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
 import { formatDay, formatShortDateTime, formatTime } from "../core/timezone";
 import type { ExportBundle } from "../export/exportBundle";
 
@@ -207,6 +207,9 @@ export function draftView(draft: SetupDraft) {
     id: draft.property.id,
     name: draft.property.name,
     address: draft.property.address,
+    displayName: draft.property.displayName,
+    propertyType: draft.property.propertyType,
+    propertyTypeLabel: draft.property.propertyType ? PROPERTY_TYPE_LABELS[draft.property.propertyType] : undefined,
     timezone: draft.property.timezone,
     timezoneLabel: friendlyTimeZone(draft.property.timezone),
     facts: draft.property.facts,
@@ -219,6 +222,7 @@ export function draftView(draft: SetupDraft) {
       title: property.name,
       rows: [
         ...(property.address !== property.name ? [property.address] : []),
+        property.propertyTypeLabel ?? "Property type not chosen yet",
         `Timezone: ${property.timezoneLabel}`,
         ...property.facts,
       ],

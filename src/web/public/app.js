@@ -246,8 +246,16 @@ function timezonePicker(current) {
 async function propertyStep(id) {
   const data = id ? await getProperty(id) : null;
   const p = data?.view.property;
-  const name = input({ value: p?.name ?? "", placeholder: "e.g. 100 Alfred Way", autocomplete: "off" });
+  const name = input({ value: p?.displayName ?? "", placeholder: "e.g. Hillside Apartments", autocomplete: "off" });
   const address = input({ value: p?.address ?? "", placeholder: "Street, city and state", autocomplete: "off" });
+  const types = [
+    ["", "Choose one"],
+    ["SINGLE_FAMILY", "Single-family home"],
+    ["MULTIFAMILY_HOME", "Multifamily home"],
+    ["APARTMENT_BUILDING", "Apartment building"],
+    ["OTHER", "Other"],
+  ];
+  const propertyType = el("select", { required: true }, ...types.map(([value, label]) => el("option", { value, ...(value === (p?.propertyType ?? "") ? { selected: true } : {}) }, label)));
   const tz = timezonePicker(p?.timezone);
   const tzNote = el("span", { class: "hint" });
   const facts = textarea(p?.facts.join("\n") ?? "", 'e.g. "Parking is on the street."');
@@ -266,7 +274,7 @@ async function propertyStep(id) {
   if (!id) suggest();
 
   const save = action(async () => {
-    const body = { name: name.value.trim() || address.value.trim(), address: address.value, timezone: tz.value() };
+    const body = { name: name.value.trim(), address: address.value, ...(propertyType.value ? { propertyType: propertyType.value } : {}), timezone: tz.value() };
     const factList = lines(facts.value);
     let propertyId = id;
     if (!id) {
@@ -289,7 +297,8 @@ async function propertyStep(id) {
       el("p", { class: "lead" }, "Start with the basics. You can change any of this later."),
       el("div", { class: "card" }, [
         field("Property address", address),
-        field("What should we call it?", name, "Leave blank to use the address."),
+        field("What type of property is this?", propertyType),
+        field("Property or building name (optional)", name, "Only if it has one. Visitors hear the address otherwise."),
         el("label", {}, "Timezone", tzNote, tz.node),
         field("Anything visitors often ask about the building?", facts, "Optional. One fact per line. Tour Core only ever repeats what you write here."),
         errors.node,

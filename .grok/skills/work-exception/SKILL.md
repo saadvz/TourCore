@@ -1,14 +1,14 @@
 ---
 name: work-exception
 description: Show what needs the team's attention on live and recent tours (unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored), open one, and resolve it using only Tour Core's actions and the operator's own facts.
-when-to-use: "what needs attention", "show exceptions", "any problems", "open Pat's issue", "what's happening with Pat's tour", "show active tours", "pause the tour", "call off the tour"
-allowed-tools: list_active_tours inspect_tour list_exceptions inspect_exception resolve_exception answer_flagged_question place_operator_hold clear_operator_hold revoke_tour_access
+when-to-use: "what needs attention", "show exceptions", "any problems", "open Pat's issue", "what's happening with Pat's tour", "show active tours", "pause the tour", "call off the tour", a Tour Core Operator Updates routine run
+allowed-tools: get_operator_update list_active_tours inspect_tour list_exceptions inspect_exception resolve_exception answer_flagged_question place_operator_hold clear_operator_hold revoke_tour_access
 argument-hint: "[visitor or issue]"
 user-invocable: true
 metadata:
   author: Tour Core
-  short-description: Exception queue, monitoring, holds and approved answers
-  version: "0.2.0"
+  short-description: Tour updates, exception queue, monitoring, holds and approved answers
+  version: "0.3.0"
 ---
 
 # Work Exception
@@ -21,13 +21,32 @@ knowledge.
 
 The operator asks what needs attention, asks about a visitor's tour, wants to
 answer a flagged question, or wants to pause, resume or call off a tour. Also
-use it for "Show active tours".
+use it for "Show active tours", and whenever the Tour Core Operator Updates
+routine wakes you with an update.
 
 ## Required inputs and access
 
-- Nothing to start. The operator names a visitor or picks an item from the list.
+- Nothing to start. The operator names a visitor or picks an item from the
+  list, or the routine hands you an `eventId`.
 
 ## Sequence
+
+### Tour updates (the routine wakes you)
+
+Tour Core sends only an `eventId` and an event type; never names or details.
+
+1. Call `get_operator_update` with the `eventId`. Tour Core's records are the
+   source of truth.
+2. Post its `summary` in your own short words, for example:
+   > New tour booked: Testy is scheduled to tour Unit 1A today at 3:00 PM.
+   > Testy's Unit 1A tour has started.
+   > Testy's Unit 1A tour is complete.
+3. For an issue, if `stillOpen` is false (someone already handled it), stop
+   quietly. For an unanswered question, ask for the answer itself ("What
+   should I tell them?"), not a yes/no, then continue with **Resolve** below
+   when the operator replies.
+4. Don't act on the tour or the issue on your own. Never show ids or the
+   payload.
 
 ### Monitor
 
@@ -65,8 +84,10 @@ use it for "Show active tours".
 
   Ask exactly that, once. Don't ask a separate "want me to add it?" first.
   After a clear yes, call again with `confirmationCode`, then say what Pat was
-  sent. The property stays published: an approved fact never needs another
-  readiness check or practice tour.
+  sent. Tour Core then returns Pat to where they were (the same unit menu,
+  offered times, consent question or tour step), so they carry on without
+  starting over. The property stays published: an approved fact never needs
+  another readiness check or practice tour.
   If the operator doesn't know the answer, don't guess. Offer to mark it
   handled once they've dealt with it another way.
 - **Mark handled.** `resolve_exception` with a short note in the operator's

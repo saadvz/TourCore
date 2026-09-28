@@ -3,8 +3,31 @@
 Tour Core is an open-source self-touring tool. A prospect texts the property's
 number, books a time, agrees to texts and tour records, confirms who they are,
 and tours one unit on their own. The text thread stays live through the tour:
-Tour Core guides them door by door and answers questions only from facts the
-property team approved. Afterwards it sends a recap and one follow-up question.
+Tour Core guides them door by door. Afterwards it sends a recap and one
+follow-up question.
+
+The welcome names the property by its address, or by a name the operator gave
+it: "Welcome to the self-guided tour for 144 Hillside Ave! I can answer
+questions about the property and help you tour on your own. Which unit would
+you like to see?" A single-family home skips the unit menu.
+
+## Visitor questions, at every stage
+
+Prospects can ask about the property at any point: before choosing a unit,
+while choosing a time, before agreeing, during the identity form, after
+booking, before arriving, during and after the tour. No booking is needed to
+ask. Answers come only from approved facts, with the structured unit details
+first (bedrooms, bathrooms, rent, availability, square footage); the
+description isn't used for those. If the question is ambiguous ("How much is
+it?" with several units and none chosen), Tour Core asks "Which unit do you
+mean: 1A, 1B or 2A?".
+
+After the answer, Tour Core puts the interrupted step back in front of them
+(the same unit menu, the same offered times, the same consent question or
+pending confirmation). A question it can't answer gets a safe reply, "I don't
+have that information for this property. I've flagged it for the property
+team so they can get back to you.", plus an issue and an operator update. When
+the operator answers, the visitor gets the answer and the step they were on.
 
 ## Who does what
 
@@ -28,16 +51,19 @@ decided before Durin is contacted.
 0. **Set up Tour Core**: the Bot installs and starts Tour Core on its own cloud
    computer, then asks the operator only for what needs a person (see
    `installation.md`).
-1. **Set up a property**: address, units, doors, routes, tour hours, visitor
-   verification, messaging.
+1. **Set up a property**: address (the property's identity; a name only if the
+   operator gives one), property type (single-family home, multifamily home,
+   apartment building or other), units, doors, routes, tour hours, visitor
+   verification. Visitor texting is used automatically when it's installed.
 2. **Check readiness**: real checks against the pieces the setup uses.
 3. **Run a practice tour**: a full pretend tour with safety checks. Nobody is
    texted and no real door opens.
 4. **Publish for demo**: only after both pass, and only after the operator's yes.
 5. **Watch active tours** and **work exceptions**: unanswered questions, help
    requests, door problems, paused tours, tours that couldn't be restored.
-   Tour Core also wakes the Bot (Tour Core Exception Alert routine) when a
-   visitor needs judgment, so the operator hears about it without asking.
+   Tour Core also wakes the Bot (Tour Core Operator Updates routine) for the
+   updates the operator chose: bookings, tour starts, completions and anything
+   that needs their judgment. Only real text-message tours produce updates.
 6. **Export the audit**: a validated, provider-neutral record of the day.
 
 ## Current P0 demo configuration
@@ -45,10 +71,12 @@ decided before Durin is contacted.
 - Tour Core runs on the Bot's cloud computer (a demo deployment) or at a
   stable self-hosted address.
 - Visitor messaging: Sendblue (real texts and iMessages).
-- Operator alerts: the Tour Core Exception Alert Grok Routine.
+- Operator updates: the Tour Core Operator Updates Grok Routine.
 - Tour records: stored with the Tour Core installation. Google Drive is the next step.
 - Door access: Durin demo mode. No physical door is controlled.
 - Visitor verification: basic identity form (records claimed identity; it
   doesn't prove it).
 
-"Published for demo" is not a production launch.
+"Published for demo" is not a production launch. Describe each part as it is
+("Visitor texting is live. Door access is still in demo mode, so no physical
+locks will open."); never say "everything runs in demo mode".

@@ -1,7 +1,10 @@
 import { nextProfileQuestion } from "../config/unitProfile";
 import { mcpAuthModeFromEnv } from "../mcp/authMode";
 import { MCP_PATH } from "../mcp/paths";
-import type { OperatorServices } from "../operator/services";
+import { describeUpdates, enabledUpdates } from "../alerts/preferences";
+import type { InstalledMessaging, OperatorServices } from "../operator/services";
+import { publishGuards, visitorTexting } from "../operator/setupFlow";
+import { modeSentence } from "../setup/setupActions";
 import { isCurrent, type PropertyWorkspace } from "../setup/workspace";
 import { probeRuntimeStore } from "../storage/runtimeStore";
 import { DEPLOYMENT_MODE_LABELS, type DeploymentMode } from "./deployment";
@@ -78,7 +81,7 @@ export const COMPONENT_LABELS: Record<InstallationComponent, string> = {
   STORAGE: "Tour records",
   ACCESS: "Access system",
   PROPERTY: "Property",
-  OPERATOR_ALERTS: "Alerts",
+  OPERATOR_ALERTS: "Tour updates",
   READINESS: "Readiness check",
   PRACTICE_TOUR: "Practice tour",
   PUBLISH: "Publish",
@@ -122,6 +125,7 @@ export type InstallationAction =
   | "RUN_READINESS"
   | "RUN_PRACTICE_TOUR"
   | "PUBLISH"
+  | "FIX_PROPERTY_TEXTING"
   | "DONE";
 
 /**
@@ -197,12 +201,28 @@ const BOOTSTRAP = "npm run bootstrap:grok";
 
 export const OPERATOR_MESSAGES = {
   firstProperty: "Everything needed to start is connected and tested. Would you like to add your first property?",
-  offerAlerts: "Your property is configured. Would you like me to keep an eye on tours and alert you when something needs your attention? I recommend it.",
+  offerAlerts: "Your property is configured. Would you like me to keep you updated when someone books, starts or finishes a tour, and alert you if something needs your input?",
+  recommendUpdates: "I recommend alerts for bookings, tour starts, completions and anything that needs your attention. Want to use those defaults?",
   validate:
-    "Prospects can text your touring number to choose a unit and time, verify their details, and complete the self-guided tour in the same conversation. I'll run a readiness check and a practice tour before we turn it on.",
-  operate: "Your property is live for demo. I'll keep an eye on tours and let you know when something needs your attention.",
-  operateWithoutAlerts: "Your property is live for demo. Ask me any time to show active tours or what needs your attention.",
+    "Prospects can text your touring number to ask questions, choose a unit and time, verify their details, and complete the self-guided tour in the same conversation. I'll run a readiness check and a practice tour before we turn it on.",
+  operate: "Your property is published. Visitor texting is live. Door access is still in demo mode, so no physical locks will open. I'll keep you updated on your tours and let you know when something needs your attention.",
+  operateWithoutAlerts: "Your property is published. Visitor texting is live. Door access is still in demo mode, so no physical locks will open. Ask me any time to show active tours or what needs your attention.",
 } as const;
+
+const ROUTINE_DOC = "grok-template/routines/operator-updates.md";
+
+/**
+ * How Grok connects its own routine without the address or key entering the
+ * conversation. Grok's computer-use sees the screen, so a value that's shown
+ * on screen is in its context; only a value it never displays can be moved by
+ * Grok itself.
+ */
+const ROUTINE_SETUP =
+  `Create the Tour Core Operator Updates routine yourself (authenticated webhook trigger; instructions in ${ROUTINE_DOC}). ` +
+  "Then call get_secure_setup_url with step operator-alerts and open it in your cloud browser next to the routine's webhook trigger panel. " +
+  "If that panel lets you copy the webhook address and key with copy buttons while both stay hidden on screen, you may copy each one and paste it into the matching Tour Core field yourself (both fields are masked), without reading, repeating or storing it. " +
+  "If either value is shown on screen, don't transfer it: hand control of the browser to the operator and ask them to copy both values across (or to paste the whole webhook example into Tour Core's paste box). " +
+  "Never put the address or key in chat, tool arguments, files or commands.";
 
 function component(c: InstallationComponent, state: ComponentState, summary: string, extra: Partial<ComponentStatus> = {}): ComponentStatus {
   return { component: c, label: COMPONENT_LABELS[c], state, requirement: REQUIREMENTS[c], summary, optionalActions: [], ...extra };
@@ -325,6 +345,17 @@ function messagingStatus(inst: Installation): ComponentStatus {
   return component("VISITOR_MESSAGING", "READY", `Visitor texting is connected and working (${env.fromNumber ?? "your touring number"}).`, { provider: "SENDBLUE" });
 }
 
+/**
+ * The installation's real visitor texting, for property setup: a new property
+ * uses it, and in a Grok-managed install a property can't be published
+ * without it. Undefined when no texting account is set up.
+ */
+export function installedMessaging(inst: Installation): InstalledMessaging | undefined {
+  const env = safe(() => inst.sendblueEnv());
+  if (!env?.apiKey || !env.apiSecret || !env.fromNumberRaw) return undefined;
+  return { mode: "sendblue", ready: messagingStatus(inst).state === "READY", requiredForPublish: inst.deploymentMode() === "GROK_MANAGED_P0" };
+}
+
 function storageStatus(inst: Installation): ComponentStatus {
   try {
     probeRuntimeStore(inst.runtime, new Date(inst.now()));
@@ -350,7 +381,7 @@ export function primaryProperty(ws: PropertyWorkspace): { id: string; saved: boo
   return { id: ids[0]!, saved: false };
 }
 
-function propertyStatus(services: OperatorServices): { status: ComponentStatus; ready: boolean; name?: string } {
+function propertyStatus(services: OperatorServices, installed: InstalledMessaging | undefined): { status: ComponentStatus; ready: boolean; name?: string } {
   const ws = services.workspace;
   const primary = primaryProperty(ws);
   if (!primary) {
@@ -369,6 +400,19 @@ function propertyStatus(services: OperatorServices): { status: ComponentStatus; 
       name,
       status: component("PROPERTY", "CONFIGURING", `${name} is still being set up.`, {
         next: step("PROPERTY", "FINISH_PROPERTY_SETUP", "OPERATOR_DECISION", `Let's finish setting up ${name}.`, { skill: "setup-property", tool: "review_property_setup" }),
+      }),
+    };
+  }
+  const texting = visitorTexting(services, primary.id, draft.messagingMode, installed);
+  if (texting.state === "not-using-it" && installed?.requiredForPublish) {
+    return {
+      ready: false,
+      name,
+      status: component("PROPERTY", "CONFIGURING", `${name} isn't using your touring number yet.`, {
+        next: step("PROPERTY", "FINISH_PROPERTY_SETUP", "GROK", "Visitor texting is connected, but this property isn't using it yet. I'm connecting the property to your touring number.", {
+          tool: "set_services",
+          grokInstructions: "Call set_services with messaging sendblue for this property yourself; don't ask the operator how to text people. Then call get_next_installation_step.",
+        }),
       }),
     };
   }
@@ -392,34 +436,39 @@ function propertyStatus(services: OperatorServices): { status: ComponentStatus; 
 function alertsStatus(inst: Installation, propertyReady: boolean): ComponentStatus {
   const env = inst.env();
   const configured = !!env.TOURCORE_GROK_ROUTINE_URL?.trim() && !!env.TOURCORE_GROK_ROUTINE_KEY?.trim();
-  const skipped = inst.files.state().skipped?.OPERATOR_ALERTS;
+  const state = inst.files.state();
+  const skipped = state.skipped?.OPERATOR_ALERTS;
   const connect = (operatorMessage: string, action: InstallationAction = "CONNECT_OPERATOR_ALERTS", performedBy: PerformedBy = "OPERATOR_IN_SECURE_SETUP") =>
-    step("OPERATOR_ALERTS", action, performedBy, operatorMessage, {
-      tool: "get_secure_setup_url",
-      secureSetupStep: "operator-alerts",
-      grokInstructions:
-        "Create the Tour Core Exception Alert routine yourself (authenticated webhook trigger; instructions in grok-template/routines/exception-alert.md). Then call get_secure_setup_url with step operator-alerts, open it in your cloud browser and hand control to the operator to enter the routine's connection details. Never show the webhook address or key in chat.",
-    });
+    step("OPERATOR_ALERTS", action, performedBy, operatorMessage, { tool: "get_secure_setup_url", secureSetupStep: "operator-alerts", grokInstructions: ROUTINE_SETUP });
   const offer = step("OPERATOR_ALERTS", "OFFER_OPERATOR_ALERTS", "OPERATOR_DECISION", OPERATOR_MESSAGES.offerAlerts, {
-    tool: "get_secure_setup_url",
+    tool: "set_notification_preferences",
     secureSetupStep: "operator-alerts",
     grokInstructions:
-      "If they say yes: say \"I'm setting up alerts so I can notify you when a visitor needs your input.\", create the Tour Core Exception Alert routine yourself (authenticated webhook trigger; grok-template/routines/exception-alert.md), call get_secure_setup_url with step operator-alerts, open it and hand control to the operator. If they say no: call skip_optional_setup with component OPERATOR_ALERTS.",
+      `If they say yes: only if it helps, confirm the defaults ("${OPERATOR_MESSAGES.recommendUpdates}"), then call set_notification_preferences (preset recommended unless they chose otherwise). ` +
+      `Say "I'm setting up your tour updates." ${ROUTINE_SETUP} ` +
+      "If they say no: call skip_optional_setup with component OPERATOR_ALERTS. Never say \"webhook\" or \"routine\" to the operator.",
   });
+  const chosen = describeUpdates(enabledUpdates(state.operatorUpdates));
   if (!configured) {
     if (!propertyReady) return component("OPERATOR_ALERTS", "NOT_CONFIGURED", "Offered once your first property is set up.", { provider: "GROK_ROUTINE" });
-    if (skipped) return component("OPERATOR_ALERTS", "NOT_CONFIGURED", "Alerts are off. You can turn them on any time.", { provider: "GROK_ROUTINE", optionalActions: [offer] });
-    return component("OPERATOR_ALERTS", "ACTION_REQUIRED", "Alerts aren't turned on yet.", { provider: "GROK_ROUTINE", next: offer });
+    if (skipped) return component("OPERATOR_ALERTS", "NOT_CONFIGURED", "Tour updates are off. You can turn them on any time.", { provider: "GROK_ROUTINE", optionalActions: [offer] });
+    if (state.operatorUpdates) {
+      return component("OPERATOR_ALERTS", "ACTION_REQUIRED", "Tour updates are chosen but not connected yet.", {
+        provider: "GROK_ROUTINE",
+        next: connect("I'm setting up your tour updates. I've opened Tour Core's secure setup page so the connection details go straight to Tour Core, not in chat.", "CONNECT_OPERATOR_ALERTS"),
+      });
+    }
+    return component("OPERATOR_ALERTS", "ACTION_REQUIRED", "Tour updates aren't turned on yet.", { provider: "GROK_ROUTINE", next: offer });
   }
   const changedAt = latest(inst.secrets.updatedAt("TOURCORE_GROK_ROUTINE_URL"), inst.secrets.updatedAt("TOURCORE_GROK_ROUTINE_KEY"));
   const check = inst.files.state().operatorAlerts;
-  const test = step("OPERATOR_ALERTS", "TEST_OPERATOR_ALERTS", "GROK", "I'm sending a test alert.", { tool: "test_operator_alerts" });
-  if (!check || check.credentialsChangedAt !== changedAt) return component("OPERATOR_ALERTS", "ACTION_REQUIRED", "Alerts are set up but haven't been tested yet.", { provider: "GROK_ROUTINE", next: test });
+  const test = step("OPERATOR_ALERTS", "TEST_OPERATOR_ALERTS", "GROK", "I'm sending a test update.", { tool: "test_operator_alerts" });
+  if (!check || check.credentialsChangedAt !== changedAt) return component("OPERATOR_ALERTS", "ACTION_REQUIRED", "Tour updates are set up but haven't been tested yet.", { provider: "GROK_ROUTINE", next: test });
   if (!check.ok) {
-    return component("OPERATOR_ALERTS", "ERROR", "Alerts aren't reaching you.", {
+    return component("OPERATOR_ALERTS", "ERROR", "Tour updates aren't reaching you.", {
       provider: "GROK_ROUTINE",
       technical: [check.message],
-      next: connect("Alerts aren't reaching you yet. I've opened Tour Core's secure setup page so you can re-enter the alert's connection details there, not in chat.", "FIX_OPERATOR_ALERTS"),
+      next: connect("Tour updates aren't reaching you yet. I've opened Tour Core's secure setup page so the connection details can be entered again there, not in chat.", "FIX_OPERATOR_ALERTS"),
     });
   }
   let health;
@@ -429,16 +478,16 @@ function alertsStatus(inst: Installation, propertyReady: boolean): ComponentStat
     health = undefined;
   }
   if (health && (health.retrying > 0 || health.failed > 0)) {
-    return component("OPERATOR_ALERTS", "DEGRADED", "Some alerts haven't reached you yet.", {
+    return component("OPERATOR_ALERTS", "DEGRADED", "Some tour updates haven't reached you yet.", {
       provider: "GROK_ROUTINE",
       technical: [`${health.retrying} waiting to retry, ${health.failed} gave up.`, ...(health.lastError ? [health.lastError] : [])],
       next: test,
     });
   }
-  return component("OPERATOR_ALERTS", "READY", "I'll let you know when a visitor needs your attention.", { provider: "GROK_ROUTINE" });
+  return component("OPERATOR_ALERTS", "READY", `I'll keep you posted on ${chosen}.`, { provider: "GROK_ROUTINE" });
 }
 
-function validationStatuses(services: OperatorServices, propertyReady: boolean): ComponentStatus[] {
+function validationStatuses(services: OperatorServices, propertyReady: boolean, installed: InstalledMessaging | undefined): ComponentStatus[] {
   const blocked = (c: InstallationComponent, summary: string) => component(c, "NOT_CONFIGURED", summary);
   const primary = propertyReady ? primaryProperty(services.workspace) : undefined;
   if (!primary) {
@@ -446,6 +495,9 @@ function validationStatuses(services: OperatorServices, propertyReady: boolean):
   }
   const { config, state } = services.workspace.load(primary.id);
   const name = config.property.name;
+  const guards = publishGuards(services, primary.id, config.messagingMode, installed);
+  const texting = visitorTexting(services, primary.id, config.messagingMode, installed);
+  const liveSummary = `${name} is published. Visitor texting: ${texting.state === "connected" ? "live" : "practice only"}. Door access: ${config.accessMode === "durin-mock" ? "demo" : "connected"}.`;
   const readinessOk = !!state.readiness?.passed && isCurrent(state.readiness, state);
   const dryOk = !!state.dryTour?.passed && isCurrent(state.dryTour, state);
   const published = state.status === "PUBLISHED_FOR_DEMO";
@@ -463,8 +515,17 @@ function validationStatuses(services: OperatorServices, propertyReady: boolean):
         : component("PRACTICE_TOUR", "ACTION_REQUIRED", `${name} needs a practice tour.`, {
             next: step("PRACTICE_TOUR", "RUN_PRACTICE_TOUR", "GROK", `I'm running a practice tour of ${name}. Nobody is texted and no real door opens.`, { tool: "run_dry_tour", skill: "simulate-tour" }),
           }),
-    published
-      ? component("PUBLISH", "READY", `${name} is live for demo.`)
+    published && guards.length
+      ? component("PUBLISH", "ERROR", `${name} is published, but texts to your touring number aren't reaching it.`, {
+          technical: guards.map((g) => g.message),
+          next: step("PUBLISH", "FIX_PROPERTY_TEXTING", "GROK", `${guards[0]!.message.replace(/ I'll connect.*$/, "")} I'm fixing that now.`, {
+            tool: guards[0]!.code === "TEXTING_NOT_CONNECTED" ? "set_services" : "run_readiness_check",
+            grokInstructions:
+              "Fix it yourself through Tour Core: set_services with messaging sendblue if the property still uses practice texts, then run_readiness_check and run_dry_tour, then ask the publish question again. Don't tell the operator the property is live until PUBLISH is READY.",
+          }),
+        })
+      : published
+      ? component("PUBLISH", "READY", liveSummary)
       : !(readinessOk && dryOk)
         ? blocked("PUBLISH", "Available once the readiness check and practice tour pass.")
         : component("PUBLISH", "ACTION_REQUIRED", `${name} is ready to publish.`, {
@@ -485,21 +546,24 @@ export function getInstallationStatus(inst: Installation, services: OperatorServ
   const infra = [runtimeStatus(options), endpointStatus(inst, mode), grokStatus(inst), messagingStatus(inst), storageStatus(inst), accessStatus()];
   if (deployment.invalid) infra[0]!.technical = [...(infra[0]!.technical ?? []), `TOURCORE_DEPLOYMENT_MODE "${deployment.invalid}" isn't recognized; using ${mode}.`];
   const infrastructureReady = infra.every((c) => c.state === "READY");
-  const property = propertyStatus(services);
+  const installed = installedMessaging(inst);
+  const property = propertyStatus(services, installed);
   const components: ComponentStatus[] = [
     ...infra,
     // Nothing on the property path is offered until the infrastructure is ready.
     infrastructureReady ? property.status : component("PROPERTY", property.ready ? "READY" : "NOT_CONFIGURED", property.ready ? property.status.summary : "Set up once Tour Core is connected and tested."),
     alertsStatus(inst, infrastructureReady && property.ready),
-    ...validationStatuses(services, infrastructureReady && property.ready),
+    ...validationStatuses(services, infrastructureReady && property.ready, installed),
   ];
   const alertsOn = components.find((c) => c.component === "OPERATOR_ALERTS")!.state === "READY";
+  const primary = primaryProperty(services.workspace);
+  const textingLive = !!primary && services.workspace.has(primary.id) && visitorTexting(services, primary.id, services.workspace.load(primary.id).config.messagingMode, installed).state === "connected";
   const nextStep = components.find((c) => c.state !== "READY" && c.next)?.next ?? {
     component: null,
     action: "DONE" as const,
     phase: "OPERATE" as const,
     performedBy: "GROK" as const,
-    operatorMessage: alertsOn ? OPERATOR_MESSAGES.operate : OPERATOR_MESSAGES.operateWithoutAlerts,
+    operatorMessage: operateMessage(textingLive, alertsOn),
   };
   const phase: OnboardingPhase = nextStep.phase;
   const url = inst.publicBaseUrl();
@@ -520,8 +584,14 @@ export function getInstallationStatus(inst: Installation, services: OperatorServ
   };
 }
 
+/** What operating means today, per subsystem: texting can be live while door access is still demo. */
+export function operateMessage(textingLive: boolean, alertsOn: boolean): string {
+  if (textingLive) return alertsOn ? OPERATOR_MESSAGES.operate : OPERATOR_MESSAGES.operateWithoutAlerts;
+  return `Your property is published. ${modeSentence(false, true)} ${alertsOn ? "I'll keep you updated on your tours and let you know when something needs your attention." : "Ask me any time to show active tours or what needs your attention."}`;
+}
+
 function summaryFor(phase: OnboardingPhase, infrastructureReady: boolean, components: ComponentStatus[]): string {
-  if (phase === "OPERATE") return "Your property is live for demo.";
+  if (phase === "OPERATE") return "Your property is published.";
   if (!infrastructureReady) {
     const left = components.filter((c) => INFRASTRUCTURE.includes(c.component) && c.state !== "READY").length;
     return `${components[0]!.state === "READY" ? "Tour Core is running. " : ""}${left} more thing${left === 1 ? "" : "s"} to connect before your first property.`;

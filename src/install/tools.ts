@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { describeOperatorUpdate } from "../alerts/describeUpdate";
+import { choosePreferences, describeUpdates, enabledUpdates, PROBLEMS_ONLY, RECOMMENDED_UPDATES, UPDATE_KINDS, UPDATE_LABELS } from "../alerts/preferences";
 import type { OperatorTool, ToolContext, ToolKind } from "../operator/tools";
 import { SetupInputError } from "../setup/setupActions";
 import { checkPublicEndpoint, runtimeHealth, testAccess, testOperatorAlerts, testStorage, testVisitorMessaging } from "./checks";
@@ -147,16 +149,69 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
     },
   }),
   tool({
-    name: "test_operator_alerts",
-    title: "Test operator alerts",
+    name: "get_notification_preferences",
+    title: "Tour update preferences",
+    kind: "read",
+    description:
+      "Which tour updates the operator gets (tour booked, started, finished, cancelled) and which problems they're alerted to (a visitor needs input, a door problem, an identity check that didn't pass), plus Tour Core's recommended default. Normal texts and door requests never wake the operator. Missed tours (no-shows) aren't detected yet.",
+    input: z.strictObject({}),
+    run: async (ctx) => {
+      const prefs = installation(ctx).files.state().operatorUpdates;
+      const enabled = enabledUpdates(prefs);
+      return {
+        summary: `I'll keep you posted on ${describeUpdates(enabled)}.`,
+        chosen: !!prefs,
+        enabled,
+        recommended: RECOMMENDED_UPDATES,
+        recommendation: `I recommend alerts for ${describeUpdates(RECOMMENDED_UPDATES)}.`,
+        choices: UPDATE_KINDS.map((k) => ({ update: k, when: UPDATE_LABELS[k], on: enabled.includes(k), recommended: RECOMMENDED_UPDATES.includes(k) })),
+      };
+    },
+  }),
+  tool({
+    name: "set_notification_preferences",
+    title: "Choose tour updates",
     kind: "change",
-    description: "Sends one test alert to the connected Grok Routine (Tour Core Exception Alert) and reports whether it was accepted. Takes no credentials.",
+    description:
+      'Saves which tour updates the operator wants, after they answered "Would you like me to keep you updated when someone books, starts or finishes a tour, and alert you if something needs your input?". preset "recommended" = bookings, tour starts, completions and anything that needs attention; "problems-only" = only what needs their input. Or pass the exact updates they asked for. Things that happened before a kind was turned on are never announced late.',
+    input: z.strictObject({
+      preset: z.enum(["recommended", "problems-only"]).optional(),
+      updates: z.array(z.enum(UPDATE_KINDS)).max(UPDATE_KINDS.length).optional().describe("Only when the operator picked specific updates."),
+    }),
+    run: async (ctx, i) => {
+      const inst = installation(ctx);
+      const enabled = i.updates ?? (i.preset === "problems-only" ? PROBLEMS_ONLY : RECOMMENDED_UPDATES);
+      const state = inst.files.state();
+      const prefs = choosePreferences(state.operatorUpdates, enabled, new Date(inst.now()));
+      inst.files.writeState({ ...state, operatorUpdates: prefs });
+      const next = getInstallationStatus(inst, ctx.services).nextStep;
+      return { summary: `Got it. I'll keep you posted on ${describeUpdates(prefs.enabled)}.`, enabled: prefs.enabled, nextStep: next, rule: SEQUENCE_RULE };
+    },
+  }),
+  tool({
+    name: "get_operator_update",
+    title: "Read a tour update",
+    kind: "read",
+    description:
+      "What one operator update is about, from Tour Core's records: call it with the eventId when the Tour Core Operator Updates routine wakes you. Returns summary, one plain sentence to tell the operator (e.g. \"New tour booked: Testy is scheduled to tour Unit 1A today at 3:00 PM.\"), plus the tour or issue behind it. The webhook itself never carries names or details.",
+    input: z.strictObject({ eventId: z.string().min(8).max(90).describe("The eventId from the routine's webhook payload. Never show it to the operator.") }),
+    run: async (ctx, i) => {
+      const record = installation(ctx).outbox.get(i.eventId);
+      if (!record) throw new SetupInputError("UPDATE_NOT_FOUND", "I couldn't find that update.");
+      return describeOperatorUpdate(ctx.services, record.event, ctx.now());
+    },
+  }),
+  tool({
+    name: "test_operator_alerts",
+    title: "Test tour updates",
+    kind: "change",
+    description: "Sends one test update to the connected Grok Routine (Tour Core Operator Updates) and reports whether it was accepted. Takes no credentials.",
     input: z.strictObject({}),
     run: async (ctx) => {
       const r = await testOperatorAlerts(installation(ctx));
       return {
         ok: r.ok,
-        summary: r.ok ? "Alerts are working: I sent a test alert." : "The test alert didn't get through yet.",
+        summary: r.ok ? "Tour updates are working: I sent a test update." : "The test update didn't get through yet.",
         technical: { note: TECHNICAL_NOTE, detail: r.message },
       };
     },

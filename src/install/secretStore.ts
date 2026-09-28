@@ -55,7 +55,10 @@ export class LocalSecretStore implements SecretStore {
   /** Re-read only when the file changes; adapters look settings up on every request. */
   private cached?: { stamp: string; doc: SecretFile };
 
-  constructor(readonly path: string) {}
+  constructor(
+    readonly path: string,
+    private readonly clock: () => number = Date.now,
+  ) {}
 
   private read(): SecretFile {
     if (!existsSync(this.path)) return empty();
@@ -86,7 +89,7 @@ export class LocalSecretStore implements SecretStore {
     return this.read().values[name]?.trim() || undefined;
   }
 
-  set(values: Partial<Record<SettingName, string>>, now = new Date()): void {
+  set(values: Partial<Record<SettingName, string>>, now = new Date(this.clock())): void {
     const doc = this.read();
     for (const [name, value] of Object.entries(values) as [SettingName, string | undefined][]) {
       if (!(name in SETTINGS)) throw new Error(`Unknown provider setting ${name}.`);
@@ -98,7 +101,7 @@ export class LocalSecretStore implements SecretStore {
     this.write(doc);
   }
 
-  delete(names: SettingName[], now = new Date()): void {
+  delete(names: SettingName[], now = new Date(this.clock())): void {
     const doc = this.read();
     for (const name of names) {
       delete doc.values[name];

@@ -1,8 +1,8 @@
 ---
 name: install-tour-core
 description: Install and run Tour Core on your own cloud computer, then take the operator from a blank setup to a published property by following Tour Core's own next steps, asking only for approvals, logins, credentials on Tour Core's secure setup page, property information and decisions.
-when-to-use: "set up Tour Core", "install Tour Core", "what's left to set up", "check my Tour Core installation", "is Tour Core running", "restart Tour Core", "test alerts", "connect texting", "turn on alerts"
-allowed-tools: get_installation_status get_next_installation_step get_installation_component skip_optional_setup check_runtime_health check_public_endpoint test_visitor_messaging test_operator_alerts test_storage test_access get_secure_setup_url
+when-to-use: "set up Tour Core", "install Tour Core", "what's left to set up", "check my Tour Core installation", "is Tour Core running", "restart Tour Core", "test alerts", "connect texting", "turn on alerts", "tour updates", "change my notifications"
+allowed-tools: get_installation_status get_next_installation_step get_installation_component skip_optional_setup check_runtime_health check_public_endpoint test_visitor_messaging get_notification_preferences set_notification_preferences get_operator_update test_operator_alerts test_storage test_access get_secure_setup_url
 argument-hint: "[what to check or connect]"
 user-invocable: true
 metadata:
@@ -52,7 +52,8 @@ secure setup page, not in chat.
 | "Your MCP server is https://.../mcp and exposes 42 tools." | "Tour Core is installed and running." |
 | "The Cloudflare quick tunnel is connected." | "Tour Core has a secure public connection." |
 | "The OAuth MCP connector needs approval." | "I need your approval to connect to Tour Core." |
-| "Configure the Grok Routine webhook." | "Would you like me to alert you when something needs your attention?" |
+| "I'm creating a Grok Routine with an authenticated trigger." | "I'm setting up your tour updates." |
+| "Everything runs in demo mode." | "Visitor texting is live. Door access is still in demo mode, so no physical locks will open." |
 
 In normal conversation never mention addresses or links, `/mcp`,
 `trycloudflare`, tool counts, connectors, OAuth, environment variables, ports,
@@ -136,24 +137,67 @@ later and are never required. Close the technical part and say:
 > your first property?
 
 If yes, use the Setup Property skill (Map Route for routes), in plain words:
-"What's the property address?", "How many units can people self-tour?", then
-each unit's bedrooms, bathrooms, rent and availability, "What should we call
-the main entrance?", "When can people tour?", "How carefully do you want to
-verify visitors?". Never show field names. From here on, don't talk about
-infrastructure unless something breaks.
+"What's the property address?" (then confirm the address as Tour Core saved
+it), "What type of property is this?" (single-family home, multifamily home,
+apartment building or other), then the question Tour Core returns about the
+spaces people tour, each unit's bedrooms, bathrooms, rent and availability,
+"Which door do visitors come in through?", "When can people tour?", "How
+carefully do you want to verify visitors?". Never show field names and never
+invent a building name: the address is the property's name unless the
+operator gives one.
 
-Once the property is saved (with its unit details), Tour Core offers alerts
-(recommended, not required):
+Visitor texting was connected in Phase 3, so the new property uses it on its
+own and the review reads "Visitor texting: Connected" and "Door access: Demo".
+Don't ask how to text people. From here on, don't talk about infrastructure
+unless something breaks.
 
-> Your property is configured. Would you like me to keep an eye on tours and
-> alert you when something needs your attention?
+Once the property is saved (with its unit details), Tour Core offers tour
+updates (recommended, not required):
 
-- Yes: "I'm setting up alerts so I can notify you when a visitor needs your
-  input." Create the Tour Core Exception Alert routine yourself, then open the
-  secure setup page: "I've created the alert. I opened Tour Core's secure setup
-  page so you can finish connecting it without putting any credentials in
-  chat." Tour Core then has you send a test alert.
-- No: call `skip_optional_setup` with `OPERATOR_ALERTS` and continue.
+> Your property is configured. Would you like me to keep you updated when
+> someone books, starts or finishes a tour, and alert you if something needs
+> your input?
+
+- **Yes.** If it helps, confirm the defaults:
+
+  > I recommend alerts for bookings, tour starts, completions and anything
+  > that needs your attention. Want to use those defaults?
+
+  Call `set_notification_preferences` (`preset: recommended`, `problems-only`
+  if they only want problems, or the exact `updates` they asked for). Then:
+
+  > I'm setting up your tour updates.
+
+  Connect the updates yourself, in this order:
+
+  1. Create the Tour Core Operator Updates routine yourself (authenticated
+     webhook trigger; instructions in `grok-template/routines/operator-updates.md`).
+  2. Call `get_secure_setup_url` with step `operator-alerts` and open it in
+     your cloud browser next to the routine's trigger panel.
+  3. If that panel has copy buttons and both the address and the key stay
+     hidden on screen, copy each one into the matching Tour Core field
+     yourself (both fields are masked), without reading, repeating or storing
+     it.
+  4. If either value is shown on screen, don't move it. Hand control of the
+     browser to the operator:
+
+     > I've opened Tour Core's secure setup page next to the update settings I
+     > created. Please copy the two connection details across, or put the
+     > whole example into the box on Tour Core's page. They go straight to
+     > Tour Core, not in chat.
+
+  5. Never put the address or key in chat, tool arguments, files or commands.
+
+  Then call `get_next_installation_step`: Tour Core has you send a test update
+  (`test_operator_alerts`), and the routine posts "Tour updates are connected."
+  If preferences are saved but the connection isn't finished, the next step is
+  `CONNECT_OPERATOR_ALERTS`: pick up at step 2.
+- **No.** Call `skip_optional_setup` with `OPERATOR_ALERTS` and continue. They
+  can turn updates on any time later.
+
+To see or change what they get later, use `get_notification_preferences` and
+`set_notification_preferences`. Missed tours (no-shows) aren't detected yet;
+don't promise them.
 
 Never decide yourself whether a component is required: Tour Core marks each
 one (`requirement`).
@@ -163,9 +207,10 @@ one (`requirement`).
 Tell the operator how visitors use it, then run the checks without asking
 whether to skip them:
 
-> Prospects can text your touring number to choose a unit and time, verify
-> their details, and complete the self-guided tour in the same conversation.
-> I'll run a readiness check and a practice tour before we turn it on.
+> Prospects can text your touring number to ask questions, choose a unit and
+> time, verify their details, and complete the self-guided tour in the same
+> conversation. I'll run a readiness check and a practice tour before we turn
+> it on.
 
 Use Run Readiness Check, then Simulate Tour. If something fails, say what in
 plain words and fix it with the operator.
@@ -175,15 +220,23 @@ plain words and fix it with the operator.
 > Everything passed. Would you like me to publish this property for demo?
 
 Publish only after a clear yes, through the publish tool's own confirmation
-question.
+question. If publishing is refused because visitor texting is connected but
+the property isn't using it yet, fix it yourself with Setup Property (its
+`remediation`: switch the property to real texts, run the readiness check and
+practice tour again, then ask the publish question again). Don't ask the
+operator how to text people.
 
 ### Phase 7: Operate
 
-> Your property is live for demo. I'll keep an eye on tours and let you know
-> when something needs your attention.
+> Your property is published. Visitor texting is live. Door access is still in
+> demo mode, so no physical locks will open. I'll keep you updated on your
+> tours and let you know when something needs your attention.
 
-From here, work exceptions (Work Exception) when alerts wake you or the
-operator asks.
+Describe each part as it is (texting live, door access demo); never say
+"everything runs in demo mode". From here, when the Tour Core Operator Updates
+routine wakes you, call `get_operator_update` with its `eventId` and post the
+`summary` (Work Exception covers issues). Work exceptions when the operator
+asks.
 
 ## Validate
 
@@ -202,8 +255,9 @@ first property?"
 ## Requires approval
 
 Approving the connection to Tour Core (the operator clicks Allow), entering
-credentials on the secure setup page (the operator only), declining optional
-alerts (the operator's choice), and publishing (explicit yes).
+credentials on the secure setup page (the operator, unless both values stay
+hidden on screen as described in Phase 4), choosing or declining tour updates
+(the operator's choice), and publishing (explicit yes).
 
 ## Stop when
 

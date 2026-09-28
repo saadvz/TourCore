@@ -2,7 +2,8 @@ import { z } from "zod";
 import type { Installation } from "../install/installation";
 import { secretValues } from "../install/settings";
 import { INSTALLATION_TOOLS } from "../install/tools";
-import { validateConfig } from "../config/tourCoreConfig";
+import { installedMessaging } from "../install/status";
+import { PROPERTY_TYPE_LABELS, PROPERTY_TYPES, validateConfig } from "../config/tourCoreConfig";
 import { FIELD_WORDS, missingProfileFields, nextProfileQuestion, parseBulkUnitDetails, profileSummaryLine } from "../config/unitProfile";
 import { TourCoreError } from "../core/TourCore";
 import { InvalidTransitionError } from "../domain/stateMachine";
@@ -12,8 +13,8 @@ import { draftView, readinessView, saveStateView } from "../setup/presenters";
 import { parseDays, parseMinutes, parseTimeOfDay } from "../setup/parse";
 import type { DryTourCheck, DryTourResult } from "../setup/dryTour";
 import type { ReadinessResult } from "../setup/readiness";
-import { createPropertySetup, SetupInputError, type SetupDraft } from "../setup/setupActions";
-import { statusLabel } from "../setup/workspace";
+import { createPropertySetup, modeSentence, SetupInputError, tourableSpacesQuestion, type SetupDraft } from "../setup/setupActions";
+import { statusLabel, type PublishBlocker } from "../setup/workspace";
 import { exportAudit, parseLocalDate } from "./auditExport";
 import type { ConfirmationBook } from "./confirmations";
 import {
@@ -31,8 +32,8 @@ import {
   type OperatorException,
 } from "./exceptions";
 import { matchDoor, requireUnit, resolvePropertyId } from "./resolve";
-import type { OperatorServices } from "./services";
-import { readinessForProperty, runPracticeTour } from "./setupFlow";
+import { defaultMessagingMode, type OperatorServices } from "./services";
+import { publishGuards, publishProperty, readinessForProperty, runPracticeTour, visitorTexting } from "./setupFlow";
 import { findTour, inspectTourView, listActiveTours } from "./tours";
 
 /**
@@ -94,6 +95,33 @@ const Duration = z.union([z.number().int(), z.string().max(40)]);
 
 // ----------------------------------------------------------------- helpers
 
+/** The shared services, with this installation's texting (when there is one) visible to setup and publishing. */
+function servicesOf(ctx: ToolContext): OperatorServices {
+  const installation = ctx.installation;
+  if (!installation) return ctx.services;
+  return { ...ctx.services, installedMessaging: () => installedMessaging(installation) };
+}
+
+const PROPERTY_TYPE_CHOICES = PROPERTY_TYPES.map((t) => ({ choice: t, label: PROPERTY_TYPE_LABELS[t] }));
+
+/** The next property question Tour Core wants asked, so the setup order depends on the property type. */
+function propertyNextQuestion(draft: SetupDraft): { nextQuestion: string; choices?: typeof PROPERTY_TYPE_CHOICES; suggestedName?: string } | undefined {
+  if (!draft.property.propertyType) return { nextQuestion: "What type of property is this?", choices: PROPERTY_TYPE_CHOICES };
+  if (draft.units.length) return undefined;
+  const spaces = tourableSpacesQuestion(draft);
+  return spaces ? { nextQuestion: spaces.question, ...(spaces.suggestedName ? { suggestedName: spaces.suggestedName } : {}) } : undefined;
+}
+
+/** The visitor-facing texting and door lines, kept apart: texting can be live while door access is demo. */
+function subsystemLines(ctx: ToolContext, id: string, draft: SetupDraft) {
+  const texting = visitorTexting(servicesOf(ctx), id, draft.messagingMode);
+  return {
+    texting,
+    lines: [`Visitor texting: ${texting.label}`, `Door access: ${draft.accessMode === "durin-mock" ? "Demo" : "Connected"}`],
+    sentence: modeSentence(texting.state === "connected", draft.accessMode === "durin-mock"),
+  };
+}
+
 function openDraft(ctx: ToolContext, property: string | undefined): { id: string; draft: SetupDraft } {
   const id = resolvePropertyId(ctx.services.workspace, property);
   return { id, draft: ctx.services.workspace.openDraft(id).draft };
@@ -124,6 +152,8 @@ function setupSnapshot(ctx: ToolContext, id: string) {
     propertyId: id,
     name: view.property.name,
     address: view.property.address,
+    ...(draft.property.displayName ? { propertyName: draft.property.displayName } : {}),
+    propertyType: draft.property.propertyType ? PROPERTY_TYPE_LABELS[draft.property.propertyType] : "Not chosen yet",
     timezone: `${view.property.timezoneLabel} (${view.property.timezone})`,
     propertyFacts: view.property.facts,
     units: view.units.map((u) => ({
@@ -142,6 +172,8 @@ function setupSnapshot(ctx: ToolContext, id: string) {
     earlyArrival: view.tourHours.earlyLabel,
     verification: view.reviewCards.find((c) => c.step === "verification")?.rows ?? [],
     recordsAndMessages: view.services.items.map((s) => s.title),
+    visitorTexting: subsystemLines(ctx, id, draft).texting.label,
+    doorAccess: draft.accessMode === "durin-mock" ? "Demo" : "Connected",
     alertsGoTo: view.operator.name,
     ...setupState(ctx, id),
   };
@@ -304,23 +336,26 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Start a property setup",
     kind: "change",
     description:
-      "Starts a new property from its address (and optional name). The time zone is guessed from the address: always confirm it with the operator. If a property with that address already exists, it's returned instead of creating a second one.",
+      "Starts a new property from its canonical street address. The address is the property's identity and is what visitors hear unless the operator gives a property or building name themselves: never suggest, invent or \"improve\" a name. Right after, ask nextQuestion (\"What type of property is this?\") and save the answer with update_property_details; never guess the type from the address. The time zone is guessed from the address: confirm it. Visitor texting is connected automatically when this Tour Core has it; don't ask how to text people. If a property with that address already exists, it's returned instead of creating a second one.",
     input: z.strictObject({
-      address: z.string().min(1).max(200).describe("The property's street address, as the operator said it."),
-      name: z.string().max(120).optional().describe("A friendly name. Defaults to the address."),
+      address: z.string().min(1).max(200).describe("The property's street address, as the operator confirmed it."),
+      name: z.string().max(120).optional().describe("Only a property or building name the operator said themselves. Leave out otherwise; the address is used."),
+      propertyType: z.enum(PROPERTY_TYPES).optional().describe("Only once the operator said which type it is."),
       timezone: z.string().max(60).optional().describe('Only if the operator said it, e.g. "Eastern" or "America/Chicago".'),
     }),
     run: async (ctx, i) => {
       const ws = ctx.services.workspace;
       const existing = ws.propertyIds().find((id) => ws.openDraft(id).draft.property.address.trim().toLowerCase() === i.address.trim().toLowerCase());
       if (existing) return { status: "already-exists", summary: `${i.address} is already set up. I'll keep working on that one.`, setup: setupSnapshot(ctx, existing) };
-      const draft = createPropertySetup({ address: i.address, name: i.name, timezone: i.timezone, existingPropertyIds: ws.propertyIds() });
+      const messagingMode = defaultMessagingMode(servicesOf(ctx).installedMessaging?.());
+      const draft = createPropertySetup({ address: i.address, name: i.name, propertyType: i.propertyType, timezone: i.timezone, existingPropertyIds: ws.propertyIds(), messagingMode });
       ws.saveDraft(draft);
       const view = draftView(draft);
       return {
         status: "created",
         summary: `Started ${draft.property.name}. I guessed ${view.property.timezoneLabel} for the time zone; please confirm.`,
         timezoneGuess: view.property.timezoneLabel,
+        ...propertyNextQuestion(draft),
         setup: setupSnapshot(ctx, draft.property.id),
       };
     },
@@ -330,10 +365,11 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Update property details",
     kind: "change",
     description:
-      "Changes the property's name, address, time zone, approved property facts (replaces the whole list), or who gets alerts. Facts must be the operator's own words; never write facts yourself.",
+      "Changes the property's type, address, operator-given name, time zone, approved property facts (replaces the whole list), or who gets alerts. The name is only one the operator said (an empty name goes back to using the address). Facts must be the operator's own words; never write facts yourself. Returns nextQuestion when Tour Core wants something asked next (e.g. how to name the tourable spaces for this property type).",
     input: z.strictObject({
       property: Property,
-      name: z.string().max(120).optional(),
+      propertyType: z.enum(PROPERTY_TYPES).optional().describe("From the operator's answer to \"What type of property is this?\"."),
+      name: z.string().max(120).optional().describe("Only a property or building name the operator said. Empty removes it."),
       address: z.string().max(200).optional(),
       timezone: z.string().max(60).optional(),
       facts: Facts.optional().describe("The full list of approved property facts, in the operator's words."),
@@ -342,11 +378,11 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
-      let next = applySetupCommand(draft, "setPropertyDetails", { name: i.name, address: i.address, timezone: i.timezone, facts: i.facts });
+      let next = applySetupCommand(draft, "setPropertyDetails", { name: i.name, address: i.address, propertyType: i.propertyType, timezone: i.timezone, facts: i.facts });
       if (i.alertName !== undefined || i.alertContact !== undefined) next = applySetupCommand(next, "setAlertContact", { name: i.alertName, contact: i.alertContact });
       ctx.services.workspace.persistEdit(next, ctx.now());
       const setup = setupSnapshot(ctx, id);
-      return { summary: `Updated ${setup.name}. ${setup.saved}.`, setup };
+      return { summary: `Updated ${setup.name}. ${setup.saved}.`, ...propertyNextQuestion(next), setup };
     },
   }),
 
@@ -367,20 +403,22 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "add_unit",
     title: "Add a unit",
     kind: "change",
-    description: 'Adds one tourable unit. Its own door is added with it (named "<unit> Door" unless the operator names it). Description and facts must be the operator\'s words.',
+    description:
+      'Adds one tourable unit or space. In an apartment building or multifamily home its own door is added with it (named "<unit> Door" unless the operator names it). In a single-family home there\'s one space, the whole home: leave name out to call it "Main Home" (or pass the operator\'s own name); its door is the home\'s entrance ("Front Door" unless the operator names it) and its route is set automatically. Never make up a unit number. Description and facts must be the operator\'s words.',
     input: z.strictObject({
       property: Property,
-      name: z.string().min(1).max(100),
+      name: z.string().min(1).max(100).optional().describe("The unit or space name the operator gave. Required except for a single-family home."),
       description: z.string().max(300).optional(),
       facts: Facts.optional(),
       doorName: z.string().max(100).optional(),
     }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
+      if (!i.name && draft.property.propertyType !== "SINGLE_FAMILY") throw new SetupInputError("UNIT_NAME_MISSING", "What's the unit called? Use the operator's own name for it, like \"1A\".");
       const state = edit(ctx, id, draft, "addUnit", { name: i.name, summary: i.description, facts: i.facts, doorName: i.doorName });
       const setup = setupSnapshot(ctx, id);
-      const unit = setup.units.find((u) => u.name.toLowerCase() === i.name.trim().toLowerCase());
-      return { summary: `Added ${unit?.name} with ${unit?.door}.`, unit, ...state };
+      const unit = setup.units.find((u) => !draft.units.some((d) => d.id === u.unitId));
+      return { summary: `Added ${unit?.name} with ${unit?.door}.${unit?.route ? ` Route: ${unit.route}.` : ""}`, unit, ...state };
     },
   }),
   tool({
@@ -671,23 +709,28 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "get_services",
     title: "Get messaging and records",
     kind: "read",
-    description: "How visitors are texted, whether that's connected, where tour records are kept, and door access mode. Never contains credentials.",
+    description:
+      "How visitors are texted and whether this property is connected to the touring number, where tour records are kept, and door access mode, each on its own (texting can be live while door access is demo). Never contains credentials.",
     input: z.strictObject({ property: Property }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
       const checks = await checkMessaging(draft).catch(() => [{ label: "Visitor messaging", ok: false, message: "Couldn't check visitor messaging right now." }]);
       const line = ctx.services.endpoints?.forProperty(id)?.address;
+      const modes = subsystemLines(ctx, id, draft);
       return {
-        summary: setupSnapshot(ctx, id).recordsAndMessages.join(". "),
+        summary: modes.sentence,
+        lines: modes.lines,
         messaging: {
           current: draft.messagingMode,
+          visitorTexting: modes.texting.label,
           connected: checks.every((c) => c.ok),
           checks: checks.map((c) => ({ check: c.label, ok: c.ok, message: c.message })),
           ...(line ? { textingNumber: line } : {}),
+          ...("problem" in modes.texting ? { problem: modes.texting.problem } : {}),
           choices: MESSAGING_CHOICES,
         },
         records: { current: "this-computer", choices: RECORDS_CHOICES },
-        doorAccess: "Durin demo mode: no real doors open. Tour Core asks Durin only after its own checks pass.",
+        doorAccess: "Demo: no physical locks open. Tour Core asks the access system only after its own checks pass.",
         alertsGoTo: draft.operator.name,
       };
     },
@@ -703,7 +746,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       if (i.records === "google-drive") throw new SetupInputError("STORAGE_UNAVAILABLE", "Keeping records in Google Drive isn't available yet. They'll stay on this computer for now.");
       const { id, draft } = openDraft(ctx, i.property);
       const state = edit(ctx, id, draft, "setServices", { messagingMode: i.messaging });
-      return { summary: setupSnapshot(ctx, id).recordsAndMessages.join(". "), ...state };
+      return { summary: subsystemLines(ctx, id, ctx.services.workspace.openDraft(id).draft).sentence, ...state };
     },
   }),
 
@@ -712,13 +755,33 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "review_property_setup",
     title: "Review the setup",
     kind: "read",
-    description: 'Everything on one page, as short lines to read back to the operator ("Here\'s what I have: ..."), plus anything still missing.',
+    description:
+      'Everything on one page, as short lines to read back to the operator ("Here\'s what I have: ..."): the address, property type, each tourable unit with its details and route, tour hours, verification, visitor texting and door access. Plus anything still missing. No addresses of Tour Core itself or other technical details.',
     input: z.strictObject({ property: Property }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
       const view = draftView(draft);
-      const lines = view.reviewCards.flatMap((c) => [c.title, ...c.rows.map((r) => `  ${r}`), ...("route" in c && c.route ? [`  Route: ${c.route.text}`] : [])]);
-      return { summary: view.canSave ? "Setup looks complete." : `${view.issues.length} thing${view.issues.length === 1 ? "" : "s"} still need${view.issues.length === 1 ? "s" : ""} an answer.`, lines, canSave: view.canSave, ...setupState(ctx, id) };
+      const modes = subsystemLines(ctx, id, draft);
+      const lines = [
+        draft.property.address,
+        ...(draft.property.displayName ? [`Called: ${draft.property.displayName}`] : []),
+        draft.property.propertyType ? PROPERTY_TYPE_LABELS[draft.property.propertyType] : "Property type: not chosen yet",
+        "",
+        ...view.units.flatMap((u) => [u.name, `  ${u.details.line.slice(u.details.line.indexOf(" \u2014 ") + 3)}`, `  Route: ${u.route ? u.route.doorNames.join(" \u2192 ") : "not set yet"}`]),
+        ...(view.units.length ? [] : ["No tourable units yet"]),
+        "",
+        `Tours: ${view.tourHours.summary ?? `${view.tourHours.daysLabel}, ${view.tourHours.hoursLabel}`}`,
+        `Verification: ${view.reviewCards.find((c) => c.step === "verification")!.rows[0]}`,
+        ...modes.lines,
+      ];
+      return {
+        summary: view.canSave ? "Setup looks complete." : `${view.issues.length} thing${view.issues.length === 1 ? "" : "s"} still need${view.issues.length === 1 ? "s" : ""} an answer.`,
+        lines,
+        modes: modes.sentence,
+        ...("problem" in modes.texting ? { textingProblem: modes.texting.problem } : {}),
+        canSave: view.canSave,
+        ...setupState(ctx, id),
+      };
     },
   }),
   tool({
@@ -762,17 +825,40 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     input: z.strictObject({ property: Property, confirmationCode: Code }),
     run: async (ctx, i) => {
       const ws = ctx.services.workspace;
+      const services = servicesOf(ctx);
       const id = resolvePropertyId(ws, i.property);
-      const blockers = ws.has(id) ? await ws.publishBlockers(id, ctx.now()) : [{ code: "NOT_SAVED", message: "Finish the setup answers first." }];
-      if (blockers.length) return { published: false, status: "blocked", summary: "It can't be published yet.", blockers: blockers.map((b) => b.message) };
-      const { config, state } = ws.load(id);
-      if (state.status === "PUBLISHED_FOR_DEMO") return { published: true, status: "already-published", summary: `${config.property.name} is already published for demo.` };
+      const blocked = (list: PublishBlocker[]) => {
+        const texting = list.find((b) => b.code.startsWith("TEXTING_"));
+        return {
+          published: false,
+          status: "blocked",
+          summary: texting ? texting.message : "It can't be published yet.",
+          blockers: list.map((b) => b.message),
+          ...(texting
+            ? {
+                remediation:
+                  texting.code === "TEXTING_NOT_CONNECTED"
+                    ? "Fix it yourself: call set_services with messaging sendblue, then run_readiness_check and run_dry_tour again, then ask the publish question again. Don't ask the operator how to text people."
+                    : "Call run_readiness_check (it connects the touring number to this property and says what's wrong), fix what it reports, run_dry_tour, then ask the publish question again.",
+              }
+            : {}),
+        };
+      };
+      const saved = ws.has(id) ? ws.load(id) : undefined;
+      const blockers = saved
+        ? [...publishGuards(services, id, saved.config.messagingMode), ...(await ws.publishBlockers(id, ctx.now()))]
+        : [{ code: "NOT_SAVED", message: "Finish the setup answers first." }];
+      if (blockers.length) return blocked(blockers);
+      const { config, state } = saved!;
+      const modes = subsystemLines(ctx, id, config).sentence;
+      if (state.status === "PUBLISHED_FOR_DEMO") return { published: true, status: "already-published", summary: `${config.property.name} is already published for demo. ${modes}` };
       const fingerprint = `${state.configHash}|${state.readiness?.checkedAt}|${state.dryTour?.ranAt}`;
       if (!i.confirmationCode) return needsConfirmation(ctx, "publish", id, fingerprint, `Everything passed. Do you want me to publish ${config.property.name} for demo?`);
       ctx.confirmations.redeem(i.confirmationCode, "publish", id, fingerprint);
-      const result = await ws.publishDemoProperty(id, ctx.now());
-      if (!result.published) return { published: false, status: "blocked", summary: "It can't be published yet.", blockers: result.blockers.map((b) => b.message) };
-      return { published: true, status: "published", summary: `${config.property.name} is published for demo. Visitors can start a tour by text.` };
+      const result = await publishProperty(services, id, ctx.now());
+      if (!result.published) return blocked(result.blockers);
+      const live = subsystemLines(ctx, id, config).texting.state === "connected";
+      return { published: true, status: "published", summary: `${config.property.name} is published for demo.${live ? " Visitors can start a tour by texting your touring number." : ""} ${modes}`, modes };
     },
   }),
 

@@ -48,7 +48,7 @@ export function grokHarness(root = mkdtempSync(join(tmpdir(), "tourcore-grok-"))
 
   /** The operator's first-run conversation, as the tool calls Grok makes. */
   const setUpAlfredWay = async () => {
-    const created = await ok("create_property_setup", { address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way" });
+    const created = await ok("create_property_setup", { address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way", propertyType: "APARTMENT_BUILDING" });
     await ok("add_door", { name: "Lobby Entrance", kind: "entrance" });
     await ok("add_unit", { name: "Unit 101", description: "One-bedroom apartment" });
     await ok("add_unit", { name: "Unit 102", description: "Two-bedroom apartment" });

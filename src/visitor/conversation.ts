@@ -1,3 +1,5 @@
+import { orList, unitsNamedIn } from "../core/questions";
+import { formatDay } from "../core/timezone";
 import type { InboundMeta } from "../core/TourCore";
 import {
   isConfident,
@@ -8,6 +10,7 @@ import {
   type IntentInterpretation,
   type IntentInterpreter,
   type InterpretContext,
+  type StepAwaiting,
   type StopRef,
   type TourIntent,
 } from "../intent";
@@ -36,7 +39,7 @@ function stopRef(session: VisitorDemoSession, doorId: string): StopRef {
   return { doorName: door?.name ?? doorId, kind: door?.kind ?? "COMMON", ...(unit ? { unitName: unit.name } : {}), label: session.stopLabel(doorId) };
 }
 
-async function contextFor(session: VisitorDemoSession, message: string, step: VisitorStage, awaiting?: Awaiting): Promise<InterpretContext> {
+async function contextFor(session: VisitorDemoSession, message: string, step: VisitorStage, awaiting?: StepAwaiting): Promise<InterpretContext> {
   const r = await session.reservation();
   const remaining = step === "ready" || step === "touring" ? await session.remainingStops() : [];
   return {
@@ -84,7 +87,13 @@ class Turn {
     readonly stage: VisitorStage,
     readonly interpretation: IntentInterpretation,
     private readonly note: InterpretationNote,
+    /** The step confirmation Tour Core was waiting on when this message arrived. */
+    readonly awaiting?: StepAwaiting,
   ) {}
+
+  markClarification(): void {
+    this.note.clarification = true;
+  }
 
   get intent(): TourIntent {
     return this.interpretation.intent;
@@ -145,10 +154,25 @@ export async function handleVisitorText(
   }
 
   const stage = await session.stage();
-  const awaiting = session.takeExpected(stage);
+  const pending = session.takeExpected(stage);
+  const awaiting = pending?.kind === "which-unit" ? pending.resume : pending;
+
+  // "Which unit do you mean?" was asked for a question: a reply naming one answers that question, then the step resumes.
+  if (pending?.kind === "which-unit" && !keyword) {
+    const unit = unitFromReply(session, text, pending.units);
+    if (unit) {
+      const interpretation: IntentInterpretation = { intent: { type: "ASK_PROPERTY_QUESTION", question: pending.question }, confidence: 1, interpreter: "rules", clarificationNeeded: false };
+      session.noteInterpretation(interpretation);
+      await session.recordText(said);
+      const out = await session.askQuestion(pending.question, { meta, unitId: unit.id, alreadyRecorded: true });
+      if (out.outcome !== "which-unit") await resumeStep(session, stage, pending.resume);
+      return interpretation;
+    }
+  }
+
   const interpretation = await interpreter.interpret(await contextFor(session, text, stage, awaiting));
   const note = session.noteInterpretation(interpretation);
-  const turn = new Turn(session, said, stage, interpretation, note);
+  const turn = new Turn(session, said, stage, interpretation, note, awaiting);
   const { intent } = interpretation;
 
   if (intent.type === "STOP_MESSAGES" && turn.confident) await session.optOut(said);
@@ -156,10 +180,96 @@ export async function handleVisitorText(
   else if (keyword === "help") await session.help(said);
   else if (firstMessage) {
     if (intent.type === "SELECT_UNIT" && turn.confident) await chooseUnit(turn);
+    else if (intent.type === "ASK_PROPERTY_QUESTION") await ask(turn, intent.question, () => session.welcome());
     else await session.greet(said);
   } else await byStage(turn);
   return interpretation;
 }
+
+/** The unit a short reply points at, among the ones offered: its name ("1A") or its number in the list ("2"). */
+function unitFromReply(session: VisitorDemoSession, text: string, offered: string[]) {
+  const units = session.config.units.filter((u) => offered.includes(u.name));
+  const named = unitsNamedIn(text, units);
+  if (named.length === 1) return units.find((u) => u.id === named[0]!.id);
+  const n = /^\s*(?:#|number |option )?(\d{1,2})\s*[.!]?\s*$/i.exec(text)?.[1];
+  const pick = n ? offered[Number(n) - 1] : undefined;
+  return pick ? units.find((u) => u.name === pick) : undefined;
+}
+
+/**
+ * A property question, at any step. It's answered from approved facts only
+ * (or flagged for the team), then the visitor is shown exactly where they
+ * were: the same menu, the same offered times, the same pending
+ * confirmation. Nothing about the booking changes.
+ */
+async function ask(turn: Turn, question: string, resume?: () => Promise<void>): Promise<void> {
+  const { session } = turn;
+  await session.recordText(turn.said);
+  const out = await session.askQuestion(question, { meta: turn.said.meta, alreadyRecorded: true });
+  if (out.outcome === "which-unit") {
+    const units = out.units ?? [];
+    turn.markClarification();
+    session.expect(turn.stage, { kind: "which-unit", question, units, ...(turn.awaiting ? { resume: turn.awaiting } : {}) });
+    await session.reply(`Which unit do you mean: ${orList(units)}?`, { kind: "choose", options: units, what: "a unit" });
+    return;
+  }
+  if (resume) await resume();
+  else await resumeStep(session, turn.stage, turn.awaiting);
+}
+
+const listOf = (items: string[]) => (items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`);
+
+/**
+ * What Tour Core was asking before a question interrupted it, asked again
+ * from the saved conversation (menus keep their numbering). During a booked
+ * or running tour there's no menu to repeat, so only an open confirmation is
+ * asked again.
+ */
+export async function resumeStep(session: VisitorDemoSession, stage?: VisitorStage, awaiting?: StepAwaiting): Promise<void> {
+  const now = await session.stage();
+  // Called from outside a text (e.g. the operator answered later): repeat whatever confirmation is still open.
+  const open = stage === undefined ? session.pendingClarification : undefined;
+  const pending = open && open.stage === now && open.awaiting.kind !== "which-unit" ? open.awaiting : undefined;
+  const p = stepPrompt(session, now, stage === undefined ? pending : stage === now ? awaiting : undefined);
+  if (!p) return;
+  if (p.awaiting) session.expect(now, p.awaiting);
+  await session.reply(p.body, p.prompt);
+}
+
+function stepPrompt(session: VisitorDemoSession, stage: VisitorStage, awaiting?: StepAwaiting): { body: string; prompt?: ReplyPrompt; awaiting?: StepAwaiting } | undefined {
+  const yesNo: ReplyPrompt = { kind: "yes-no" };
+  switch (awaiting?.kind) {
+    case "confirm-arrival":
+      return { body: "Are you at the property now?", prompt: yesNo, awaiting };
+    case "confirm-stop":
+      return { body: `Are you at ${awaiting.stop.label} now?`, prompt: yesNo, awaiting };
+    case "choose-stop":
+      return { body: `Which door are you at: ${awaiting.stops.map((s) => s.label).join(" or ")}?`, prompt: { kind: "choose", options: awaiting.stops.map((s) => s.label), what: "a door" }, awaiting };
+    case "confirm-finish":
+      return { body: "Are you finished with your tour?", prompt: yesNo, awaiting };
+  }
+  switch (stage) {
+    case "choose-unit":
+      return { body: "Which unit would you like to see?", prompt: { kind: "choose", options: session.config.units.map((u) => u.name), what: "a unit" } };
+    case "choose-time": {
+      const labels = session.offeredSlots.map((s) => s.label);
+      if (!labels.length) return undefined;
+      const day = formatDay(session.offeredSlots[0]!.start, session.config.property.timezone);
+      return { body: `I have ${listOf(labels)} available on ${day}. Which works for you?`, prompt: { kind: "choose", options: labels, what: "a time" } };
+    }
+    case "consent":
+      return { body: CONSENT_QUESTION, prompt: yesNo };
+    case "identity":
+      return { body: "Your identity form is in my earlier message. Once it's filled out, I'll confirm your tour." };
+    case "follow-up":
+      return { body: FOLLOW_UP_QUESTION, prompt: yesNo };
+    default:
+      return undefined;
+  }
+}
+
+const CONSENT_QUESTION = "Is it OK if I text you about this tour and keep a record of your visit?";
+const FOLLOW_UP_QUESTION = "Would you like someone from the property team to follow up?";
 
 async function chooseUnit(turn: Turn): Promise<void> {
   const units = turn.session.config.units;
@@ -174,7 +284,7 @@ async function chooseUnit(turn: Turn): Promise<void> {
 async function byStage(turn: Turn): Promise<void> {
   const { session, intent } = turn;
   const yesNo: ReplyPrompt = { kind: "yes-no" };
-  const later = (what: string) => `Good question! I can answer questions about the property once ${what}.`;
+  if (intent.type === "ASK_PROPERTY_QUESTION" && turn.stage !== "stopped" && turn.stage !== "intro") return ask(turn, intent.question);
 
   switch (turn.stage) {
     case "intro":
@@ -184,7 +294,6 @@ async function byStage(turn: Turn): Promise<void> {
       const menu: ReplyPrompt = { kind: "choose", options: session.config.units.map((u) => u.name), what: "a unit" };
       if (intent.type === "SELECT_UNIT") return chooseUnit(turn);
       if (intent.type === "REQUEST_HELP") return session.help(turn.said);
-      if (intent.type === "ASK_PROPERTY_QUESTION") return turn.clarify(`${later("you've picked a unit")} Which unit would you like to see?`, menu);
       if (intent.type === "START_INQUIRY") return turn.respond("Hi! Which unit would you like to see?", menu);
       if (turn.interpretation.clarificationNeeded && !turn.interpretation.manipulation) return chooseUnit(turn);
       return turn.fallback(`${SORRY} Which unit would you like to see?`, menu);
@@ -199,20 +308,18 @@ async function byStage(turn: Turn): Promise<void> {
         return turn.clarify("Which time works for you?", menu);
       }
       if (intent.type === "REQUEST_HELP") return session.help(turn.said);
-      if (intent.type === "ASK_PROPERTY_QUESTION") return turn.clarify(`${later("your tour is booked")} Which time works for you?`, menu);
       if (turn.interpretation.clarificationQuestion) return turn.clarify(`${turn.interpretation.clarificationQuestion} Which time works for you?`, menu);
       if (turn.interpretation.clarificationNeeded && !turn.interpretation.manipulation) return turn.clarify("Sure — which time works for you?", menu);
       return turn.fallback(`${SORRY} Which time works for you?`, menu);
     }
 
     case "consent": {
-      const question = "Is it OK if I text you about this tour and keep a record of your visit?";
+      const question = CONSENT_QUESTION;
       if (intent.type === "CONSENT_YES" || intent.type === "CONSENT_NO") {
         if (turn.confident) return turn.act("consent", { agree: intent.type === "CONSENT_YES" });
         return turn.clarify(`Just to check: ${question.charAt(0).toLowerCase()}${question.slice(1)}`, yesNo);
       }
       if (intent.type === "REQUEST_HELP") return session.help(turn.said);
-      if (intent.type === "ASK_PROPERTY_QUESTION") return turn.clarify(`${later("your tour is booked")} First: ${question}`, yesNo);
       return turn.fallback(`${SORRY} ${question}`, yesNo);
     }
 
@@ -227,7 +334,7 @@ async function byStage(turn: Turn): Promise<void> {
       return onTour(turn);
 
     case "follow-up": {
-      const question = "Would you like someone from the property team to follow up?";
+      const question = FOLLOW_UP_QUESTION;
       if (intent.type === "FOLLOW_UP_YES" || intent.type === "FOLLOW_UP_NO") {
         if (turn.confident) return turn.act("followUp", { wantsContact: intent.type === "FOLLOW_UP_YES" });
         return turn.clarify(`Just to check: ${question.charAt(0).toLowerCase()}${question.slice(1)}`, yesNo);
@@ -265,8 +372,6 @@ async function onArrival(turn: Turn): Promise<void> {
       // A later stop, or a door off the route: start at the first stop, and only once they confirm they're there.
       return turn.clarify(`Let's start at ${session.stopLabel(first)}. Are you there now?`, yesNo, { kind: "confirm-arrival" });
     }
-    case "ASK_PROPERTY_QUESTION":
-      return turn.act("ask", { question: intent.question });
     case "REQUEST_HELP":
       return session.help(turn.said);
     case "FINISH_TOUR":
@@ -305,8 +410,6 @@ async function onTour(turn: Turn): Promise<void> {
     }
     case "ARRIVAL":
       return turn.respond(`You're all set.${nextHint}`);
-    case "ASK_PROPERTY_QUESTION":
-      return turn.act("ask", { question: intent.question });
     case "REQUEST_HELP":
       return session.help(turn.said);
     default:

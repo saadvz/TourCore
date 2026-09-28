@@ -23,10 +23,10 @@ again with the code after the operator's yes.
 | --- | --- | --- |
 | `list_properties` | read | Every property and its status |
 | `get_property_setup` | read | Full setup: units, doors, routes, hours, verification, messaging, problems |
-| `create_property_setup` | change | Starts a property from its address (no duplicate for the same address) |
-| `update_property_details` | change | Name, address, time zone, approved property facts, who gets alerts |
+| `create_property_setup` | change | Starts a property from its canonical address (the property's identity), an optional name only the operator said, and an optional property type; returns `nextQuestion` ("What type of property is this?" with `choices`). Uses the installed visitor texting automatically. No duplicate for the same address |
+| `update_property_details` | change | Property type, address, operator-given name, time zone, approved property facts, who gets alerts; returns `nextQuestion` (how to name the tourable spaces for that type) |
 | `list_units` | read | Units with description, facts, door, route |
-| `add_unit` | change | Adds a unit and its own door |
+| `add_unit` | change | Adds a unit and its own door. For a single-family home the name is optional ("Main Home"), its door is the home's entrance ("Front Door" unless named) and its route is set automatically. Never a made-up unit number |
 | `update_unit` | change | Renames a unit or changes its description/facts |
 | `set_unit_details` | change | Saves units' bedrooms, bathrooms, rent, availability and optional details from the operator's words (bulk answers welcome); "not sure" is saved as not provided |
 | `get_unit_details` | read | Unit details as short lines, what's still missing, and the one question to ask next |
@@ -41,10 +41,10 @@ again with the code after the operator's yes.
 | `set_verification_policy` | change | Basic identity form or practice verification |
 | `get_services` | read | Messaging choice and connection, records location, door access mode |
 | `set_services` | change | Real texts (Sendblue) or practice texts; records location |
-| `review_property_setup` | read | The setup as short lines to read back |
+| `review_property_setup` | read | The setup as short lines to read back: address, "Called: ..." if named, property type, each unit with its details and route, "Tours: ...", "Verification: ...", "Visitor texting: Connected", "Door access: Demo" |
 | `run_readiness_check` | change | The real readiness checks, recorded for publish |
 | `run_dry_tour` | change | A full practice tour with safety proof points, recorded for publish |
-| `publish_demo_property` | consequential | Publishes for demo, only when readiness and a practice tour passed for this exact setup |
+| `publish_demo_property` | consequential | Publishes for demo, only when readiness and a practice tour passed for this exact setup. In a Grok-managed install it refuses while the property still uses practice texts although texting is installed, returning a `summary` and a `remediation` (switch to real texts, re-run readiness and the practice tour, ask again) |
 | `list_active_tours` | read | Tours happening now |
 | `inspect_tour` | read | One tour: status, activity, questions, denials, what needs attention |
 | `list_exceptions` | read | The queue of issues that need the team |
@@ -55,14 +55,17 @@ again with the code after the operator's yes.
 | `clear_operator_hold` | consequential | Resumes a paused tour; policy still decides every door |
 | `revoke_tour_access` | consequential | Calls a tour off for good and tells the visitor |
 | `export_audit` | change | Writes a validated day's audit export (JSON + CSV) and summarizes it |
-| `get_installation_status` | read | Every installation component's state (runtime, public address, Grok connection, messaging, alerts, records, access, property, readiness, practice tour, publish) and the next step |
+| `get_installation_status` | read | Every installation component's state (runtime, public address, Grok connection, messaging, tour updates, records, access, property, readiness, practice tour, publish) and the next step |
 | `get_next_installation_step` | read | The one next step Tour Core decided, who does it, and the tool or skill to use |
 | `get_installation_component` | read | One component's status and next step |
-| `skip_optional_setup` | change | Records that the operator declined an optional step Tour Core offered (e.g. alerts) |
+| `skip_optional_setup` | change | Records that the operator declined an optional step Tour Core offered (e.g. tour updates) |
 | `check_runtime_health` | read | Whether Tour Core is running and healthy |
 | `check_public_endpoint` | change | Checks from outside that the public address reaches this installation; records the result |
 | `test_visitor_messaging` | change | Checks texting end to end and repairs Tour Core's own incoming-message address; takes no credentials |
-| `test_operator_alerts` | change | Sends a test alert to the Tour Core Exception Alert routine |
+| `get_notification_preferences` | read | Which tour updates and problem alerts the operator gets, and Tour Core's recommended default |
+| `set_notification_preferences` | change | Saves the operator's choice: preset `recommended` (bookings, starts, completions, anything needing attention) or `problems-only`, or an exact `updates` list |
+| `get_operator_update` | read | What one update is about, from its `eventId`: a plain `summary` sentence to post plus the tour or issue behind it |
+| `test_operator_alerts` | change | Test tour updates: sends one test update to the Tour Core Operator Updates routine; takes no credentials |
 | `test_storage` | change | Saves and reads back a test record where tour records are kept |
 | `test_access` | read | Checks the access system answers ("Access system: Demo") |
 | `get_secure_setup_url` | change | A short-lived link to Tour Core's secure setup page, for the Tour Core computer's browser only |

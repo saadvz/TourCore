@@ -156,6 +156,8 @@ export const AuditEventSchema = z.object({
   reservationId: z.string().optional(),
   prospectId: z.string().optional(),
   doorId: z.string().optional(),
+  /** The unit a visitor's question was about, when it was asked before (or apart from) a booking. */
+  unitId: z.string().optional(),
   code: z.string().optional(),
   detail: z.string(),
   statusChange: z.object({ from: ReservationStatusSchema, to: ReservationStatusSchema }).optional(),

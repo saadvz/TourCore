@@ -117,7 +117,7 @@ describe("real fresh-install sequence (HTTP, MCP, secure setup page)", () => {
     expect((await page("GET", "status", session)).body.sections.operatorAlerts).toBe(false);
 
     // The operator sets up the property (Setup Property skill), including unit details.
-    await grok("create_property_setup", { address: "12 Elm St, Brooklyn, NY", name: "12 Elm St" });
+    await grok("create_property_setup", { address: "12 Elm St, Brooklyn, NY", name: "12 Elm St", propertyType: "APARTMENT_BUILDING" });
     await grok("add_unit", { name: "Unit 1A" });
     await grok("add_unit", { name: "Unit 1B" });
     const partial = await grok("set_unit_details", { details: "1A is 2 bed 1 bath for $2,300 and 1B is 1 bed 1 bath for $1,950" });
@@ -132,7 +132,14 @@ describe("real fresh-install sequence (HTTP, MCP, secure setup page)", () => {
 
     // Only now: alerts are offered, and the page shows them.
     const offer = await nextStep();
-    expect(offer).toMatchObject({ component: "OPERATOR_ALERTS", action: "OFFER_OPERATOR_ALERTS", optional: true, operatorMessage: "Your property is configured. Would you like me to keep an eye on tours and alert you when something needs your attention? I recommend it." });
+    expect(offer).toMatchObject({
+      component: "OPERATOR_ALERTS",
+      action: "OFFER_OPERATOR_ALERTS",
+      optional: true,
+      operatorMessage: "Your property is configured. Would you like me to keep you updated when someone books, starts or finishes a tour, and alert you if something needs your input?",
+    });
+    // Texting was connected before the property, so the property uses it without being asked.
+    expect((await grok("get_property_setup")).setup.visitorTexting).toBe("Connected");
     expect((await page("GET", "status", session)).body.sections.operatorAlerts).toBe(true);
     // "No thanks."
     await grok("skip_optional_setup", { component: "OPERATOR_ALERTS" });
@@ -284,7 +291,7 @@ describe("minimum unit information", () => {
 
   it("setup asks only for what's still missing, and summarizes concisely", async () => {
     const h = harness();
-    await h.ok("create_property_setup", { address: "12 Elm St, Brooklyn, NY", name: "12 Elm St" });
+    await h.ok("create_property_setup", { address: "12 Elm St, Brooklyn, NY", name: "12 Elm St", propertyType: "APARTMENT_BUILDING" });
     for (const n of ["1A", "1B", "2A", "2B"]) await h.ok("add_unit", { name: n });
     const out = await h.ok("set_unit_details", { details: "1A and 1B are 2 bed 1 bath for $2,200. 2A is 3 bed 2 bath for $2,800 and 2B is 2 bed 2 bath for $2,500." });
     expect(out.lines).toEqual([
@@ -310,7 +317,7 @@ describe("minimum unit information", () => {
 
   it("a unit can't silently skip its basic information: readiness names what's missing; NOT_PROVIDED counts as answered", async () => {
     const h = harness();
-    await h.ok("create_property_setup", { address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way" });
+    await h.ok("create_property_setup", { address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way", propertyType: "APARTMENT_BUILDING" });
     await h.ok("add_door", { name: "Lobby Entrance", kind: "entrance" });
     await h.ok("add_unit", { name: "Unit 101" });
     await h.ok("set_route", { unit: "Unit 101", doors: ["Lobby Entrance", "Unit 101 Door"] });

@@ -42,10 +42,31 @@ export const RouteSchema = z.object({
   stops: z.array(z.object({ doorId: z.string(), guidance: z.string() })),
 });
 
+export const PROPERTY_TYPES = ["SINGLE_FAMILY", "MULTIFAMILY_HOME", "APARTMENT_BUILDING", "OTHER"] as const;
+export const PropertyTypeSchema = z.enum(PROPERTY_TYPES);
+export type PropertyType = z.infer<typeof PropertyTypeSchema>;
+
+export const PROPERTY_TYPE_LABELS: Record<PropertyType, string> = {
+  SINGLE_FAMILY: "Single-family home",
+  MULTIFAMILY_HOME: "Multifamily home",
+  APARTMENT_BUILDING: "Apartment building",
+  OTHER: "Other",
+};
+
 export const PropertySchema = z.object({
   id: Id,
+  /**
+   * How visitors and the operator hear the property named: the operator's own
+   * displayName when they gave one, otherwise the canonical address. Kept in
+   * step with those two by the setup actions; never an invented nickname.
+   */
   name: z.string(),
+  /** The canonical physical address. Authoritative for the property's identity. */
   address: z.string(),
+  /** A property or building name the operator said themselves. Absent means "use the address". */
+  displayName: z.string().optional(),
+  /** Asked right after the address, never inferred from it. Shapes which setup questions are asked. */
+  propertyType: PropertyTypeSchema.optional(),
   /** IANA zone, e.g. America/New_York. All tour hours are read in this zone. */
   timezone: z.string(),
   facts: ApprovedFacts,

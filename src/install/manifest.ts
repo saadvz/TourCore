@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
+import type { NotificationPreferences } from "../alerts/preferences";
 import { writeJsonAtomic } from "../storage/atomicWrite";
 import { DEPLOYMENT_MODES, type DeploymentMode } from "./deployment";
 
@@ -58,6 +59,8 @@ export interface InstallState {
   operatorAlerts?: CheckResult & { credentialsChangedAt?: string };
   /** Exceptions that existed before operator alerts were first set up aren't announced. */
   alertsBaselineAt?: string;
+  /** Which operator updates the landlord chose. Unset: only issues that need them. */
+  operatorUpdates?: NotificationPreferences;
   /** RECOMMENDED components the operator declined, and when. Turning one on later clears nothing; configuring it wins. */
   skipped?: Partial<Record<string, string>>;
 }

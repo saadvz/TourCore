@@ -33,7 +33,7 @@ import {
 const MONDAY_MORNING = zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour: 7, minute: 0 }, "America/New_York");
 
 function buildProperty() {
-  let draft = createPropertySetup({ address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way" });
+  let draft = createPropertySetup({ address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way", propertyType: "APARTMENT_BUILDING" });
   const entrance = addDoor(draft, { name: "Lobby Entrance", kind: "ENTRANCE" });
   draft = entrance.draft;
   const u101 = addUnit(draft, { name: "Unit 101" });
@@ -75,7 +75,7 @@ describe("guided setup actions", () => {
     const review = reviewSetup(draft);
     expect(review.canSave).toBe(true);
     const section = (title: string) => review.sections.find((s) => s.title === title)?.lines;
-    expect(section("PROPERTY")?.[0]).toBe("100 Alfred Way");
+    expect(section("PROPERTY")).toEqual(["100 Alfred Way, Brooklyn, NY", "Called: 100 Alfred Way", "Apartment building"]);
     expect(section("TOUR HOURS")?.slice(0, 2)).toEqual(["Monday-Friday", "9:00 AM-5:00 PM"]);
     expect(section("UNITS")).toEqual(["Unit 101", "Unit 102"]);
     expect(section("ROUTE: UNIT 101")).toEqual(["Lobby Entrance", "Unit 101 Door"]);
@@ -213,7 +213,7 @@ describe("practice tour", () => {
   });
 
   it("works with practice verification and a single unit", async () => {
-    let draft = createPropertySetup({ address: "5 Elm St, Austin, TX" });
+    let draft = createPropertySetup({ address: "5 Elm St, Austin, TX", propertyType: "MULTIFAMILY_HOME" });
     const e = addDoor(draft, { name: "Front Door", kind: "ENTRANCE" });
     const u = addUnit(e.draft, { name: "Loft" });
     const d = addDoor(u.draft, { name: "Loft Door", kind: "UNIT", unitId: u.unit.id });

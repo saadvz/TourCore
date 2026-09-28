@@ -65,8 +65,8 @@ for a short-lived token (`/token`, PKCE S256). Through the tunnel address,
 and the page where you approve connections, answer only on this computer.
 
 `npm run grok:status` shows the mode, the URL and what's connected (never token
-values). `npm run grok:tools` lists the 42 tools (32 operator tools plus 10
-installation tools).
+values). `npm run grok:tools` lists the 48 tools (34 property and tour tools
+plus 14 installation tools).
 
 ## 3. Create the Tour Core Bot
 
@@ -92,15 +92,22 @@ folders:
    Route, Run Readiness Check, Simulate Tour, Work Exception, Export Audit.)
 3. Review what the Bot saved; it should match the file.
 
-### Add the Tour Core Exception Alert routine
+### The Tour Core Operator Updates routine
 
-Create a routine named **Tour Core Exception Alert** with an **authenticated
-webhook** trigger and the instructions in
-[`grok-template/routines/exception-alert.md`](../grok-template/routines/exception-alert.md).
-Grok shows the routine's webhook address and sender key. Don't paste them
-anywhere: the Install Tour Core skill opens Tour Core's secure setup page, and
-the operator types them there. (Rotate the key first if it has been shown
-anywhere else.)
+You don't create this by hand. When the operator turns on tour updates (after
+the first property is saved), the Bot creates a routine named **Tour Core
+Operator Updates** with an **authenticated webhook** trigger and the
+instructions in
+[`grok-template/routines/operator-updates.md`](../grok-template/routines/operator-updates.md),
+then opens Tour Core's secure setup page next to the routine's trigger panel.
+The webhook address and sender key go into the **Tour updates (Grok Routine)**
+card there: the Bot copies them itself only if both stay hidden on screen
+(copy buttons); otherwise the operator copies both values, or pastes the
+routine's whole webhook example into the page's paste box. They never go in
+chat, tool arguments, files or commands. (Rotate the key first if it has been
+shown anywhere else.) If you're building the Bot by hand for a self-hosted
+install, you can create the routine the same way and connect it on the same
+page.
 
 Private skills are one library shared by your Bots. If one doesn't appear in
 the `/` menu, open **Marketplace → Your plugins → Manage plugins and skills**
@@ -188,9 +195,13 @@ into the Bot yourself is up to you to review.
 ## 7. Run "Set up a property"
 
 Type `/` and pick **Setup Property**, or just say *"Set up a property"*. The Bot
-asks one question at a time (address, units, entrance, hallway doors, routes,
-tour hours, verification, texting, records), shows what it inferred, and reads
-the setup back. See [`grok-template/examples/first-run.md`](../grok-template/examples/first-run.md).
+asks one question at a time (address, then "What type of property is this?",
+units or the whole home, unit details, entrance, hallway doors, routes, tour
+hours, verification), shows what it inferred, and reads the setup back. The
+address is the property's name unless you give one; the Bot never invents a
+building name. When texting is installed the property uses it automatically,
+so the Bot doesn't ask how to text people. See
+[`grok-template/examples/first-run.md`](../grok-template/examples/first-run.md).
 
 ## 8. Run readiness
 
@@ -206,7 +217,9 @@ opens. The Bot lists the proof points.
 
 The Bot asks *"Everything passed. Do you want me to publish 100 Alfred Way for
 demo?"* Only a clear yes publishes, and only if readiness and the practice tour
-passed for this exact setup. "Published for demo" is not a production launch.
+passed for this exact setup. "Published for demo" is not a production launch:
+the Bot says "Visitor texting is live. Door access is still in demo mode, so no
+physical locks will open."
 
 ## 11. Show active tours
 
@@ -218,7 +231,9 @@ happening with Pat's tour?"*
 Have the visitor ask something the approved facts don't cover. Then: *"What
 needs attention?"*, *"Open Pat's issue."*, and give the answer (*"Yes, parking
 is included."*). The Bot offers to add it as an approved fact and text Pat, and
-does so only after your yes.
+does so only after your yes; Pat then carries on from the step they were on.
+With tour updates on, the Bot tells you about the question (and about
+bookings, tour starts and completions) without being asked.
 
 ## 13. Export the audit
 
@@ -235,7 +250,7 @@ Publishing is manual. There's no official API for it, and P0 doesn't need one.
    the Bot to create a shareable copy of itself). Nothing goes live yet: Grok
    Bot prepares an unpublished, anonymized template.
 2. **Review what's included**: instructions, selected memories, the seven
-   skills, the Tour Core Exception Alert routine, and integrations. Remove anything personal, any real visitor or property
+   skills, the Tour Core Operator Updates routine definition, and integrations. Remove anything personal, any real visitor or property
    data, and anything that looks like a credential. Custom MCP servers and
    secrets aren't copied; confirm the Tour Core connector isn't listed as
    included.
@@ -255,8 +270,11 @@ Publishing is manual. There's no official API for it, and P0 doesn't need one.
    `grok-template/template.json` and include no secrets or live data.
 4. Choose **Add Bot**. You get your own independent copy.
 5. Say *"Set up Tour Core."* The Bot installs and connects its own Tour Core
-   and asks you only for what needs a person. (Self-hosted instead: do steps 2
-   and 5 above with your Tour Core's URL.)
+   and asks you only for what needs a person, including authorizing the tour
+   updates routine connection once on Tour Core's secure setup page. No
+   webhook secrets, Sendblue secrets, Tour Core OAuth tokens or live property
+   data come with the template. (Self-hosted instead: do steps 2 and 5 above
+   with your Tour Core's URL.)
 6. Run one safe task (*"What's left to set up?"*, then *"Run a practice
    tour"*) before anything consequential.
 

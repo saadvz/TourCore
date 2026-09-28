@@ -22,8 +22,9 @@ import type { VerificationProvider } from "../verification/basicForm";
 import { AuditLog, type AuditInput } from "../audit/audit";
 import { buildExport, type ExportBundle } from "../export/exportBundle";
 import type { Clock } from "./clock";
-import { approvedAnswerText, approvedFacts, findApprovedAnswer, type ApprovedFact } from "./facts";
+import { approvedAnswerText, approvedFacts, type ApprovedFact } from "./facts";
 import { normalizePhone } from "./phone";
+import { resolveQuestion } from "./questions";
 import { nextTourDay, slotsOn, tourWindow, type TourSlot } from "./schedule";
 import { addDays, formatDay as formatDayIn, formatTime as formatTimeIn, localDateOf, type LocalDate } from "./timezone";
 
@@ -76,6 +77,9 @@ export class TourCoreError extends Error {
 }
 
 const CONSENT_TEXT = "Is it OK if I text you about this tour and keep a record of your visit (times and doors used)?";
+
+/** What a visitor hears when the approved facts don't cover their question. The team is alerted at the same time. */
+export const UNKNOWN_ANSWER = "I don't have that information for this property. I've flagged it for the property team so they can get back to you.";
 
 export class TourCore {
   private readonly audit: AuditLog;
@@ -420,20 +424,49 @@ export class TourCore {
   async answerQuestion(reservationId: string, question: string, meta?: InboundMeta): Promise<{ answered: boolean; facts: ApprovedFact[] }> {
     const reservation = await this.mustGetReservation(reservationId);
     const prospect = await this.mustGetProspect(reservation.prospectId);
-    const asked = question.trim().slice(0, 300);
-    if (!asked) throw new TourCoreError("EMPTY_QUESTION", "Please type a question");
-    await this.recordInbound(prospect.id, reservationId, asked, meta);
+    const out = await this.answerPropertyQuestion({ phone: prospect.phone, question, reservationId, unitId: reservation.unitId, meta });
+    return { answered: out.outcome === "answered", facts: out.facts };
+  }
 
-    const matches = findApprovedAnswer(approvedFacts(this.approvedContent(), reservation.unitId), asked);
-    if (matches.length) {
-      await this.record("QUESTION_ANSWERED", { reservationId, prospectId: prospect.id, detail: asked });
-      await this.textProspect(prospect, reservationId, approvedAnswerText(matches));
-      return { answered: true, facts: matches };
+  /**
+   * A visitor's question at any point in the conversation, booked or not.
+   * Answers come only from approved facts: the property's, plus the unit the
+   * visitor named or chose (`unitId`). A unit-specific question with no unit
+   * to go on is asked back instead of guessed; nothing is sent in that case,
+   * so the caller asks "Which unit do you mean?". With no matching fact the
+   * visitor gets the safe fallback and the question is flagged for the team.
+   * `recordInbound: false` when the visitor's words were already stored
+   * (e.g. the reply naming the unit for an earlier question).
+   */
+  async answerPropertyQuestion(input: {
+    phone: string;
+    question: string;
+    reservationId?: string;
+    unitId?: string;
+    meta?: InboundMeta;
+    recordInbound?: boolean;
+  }): Promise<{ outcome: "answered" | "unknown" | "which-unit"; facts: ApprovedFact[]; unitId?: string; units?: string[] }> {
+    const phone = normalizePhone(input.phone);
+    const prospect = (await this.deps.store.list("prospects")).find((p) => p.phone === phone);
+    const reservation = input.reservationId ? await this.deps.store.get("reservations", input.reservationId) : undefined;
+    const asked = input.question.trim().slice(0, 300);
+    if (!asked) throw new TourCoreError("EMPTY_QUESTION", "Please type a question");
+    if (input.recordInbound !== false) await this.recordIncoming({ phone, body: asked, prospectId: prospect?.id, reservationId: reservation?.id, meta: input.meta });
+
+    const resolved = resolveQuestion(this.approvedContent(), asked, { selectedUnitId: input.unitId });
+    const base = { reservationId: reservation?.id, prospectId: prospect?.id, ...(resolved.kind !== "which-unit" && resolved.unitId ? { unitId: resolved.unitId } : {}) };
+    if (resolved.kind === "which-unit") return { outcome: "which-unit", facts: [], units: resolved.units };
+    if (resolved.kind === "answer") {
+      await this.record("QUESTION_ANSWERED", { ...base, detail: asked });
+      await this.sendConversationText({ phone, body: approvedAnswerText(resolved.facts), reservationId: reservation?.id });
+      return { outcome: "answered", facts: resolved.facts, ...(resolved.unitId ? { unitId: resolved.unitId } : {}) };
     }
-    await this.record("QUESTION_UNANSWERED", { reservationId, prospectId: prospect.id, detail: asked });
-    await this.textProspect(prospect, reservationId, "I don't have that information for this property. I've flagged it for the property team so they can get back to you.");
-    await this.notifyOperator(reservation, `${prospect.name} asked "${asked}", and there's no approved answer yet.`);
-    return { answered: false, facts: [] };
+    await this.record("QUESTION_UNANSWERED", { ...base, detail: asked });
+    await this.sendConversationText({ phone, body: UNKNOWN_ANSWER, reservationId: reservation?.id });
+    const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : `A visitor texting from ${phone}`;
+    const about = !reservation && resolved.unitId ? ` about ${this.deps.config.units.find((u) => u.id === resolved.unitId)?.name ?? "a unit"}` : "";
+    await this.notifyOperator(reservation, `${who} asked "${asked}"${about}, and there's no approved answer yet.`);
+    return { outcome: "unknown", facts: [], ...(resolved.unitId ? { unitId: resolved.unitId } : {}) };
   }
 
   private approvedContent(): TourCoreConfig {

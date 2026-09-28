@@ -3,6 +3,15 @@ import type { PropertyWorkspace } from "../setup/workspace";
 import type { RuntimeStore } from "../storage/runtimeStore";
 import type { VisitorDemoRegistry, VisitorDemoSession } from "../visitor/session";
 
+/** The installation's real visitor texting, as property setup and publishing need it. Never a credential. */
+export interface InstalledMessaging {
+  mode: "sendblue";
+  /** Connected and tested. */
+  ready: boolean;
+  /** Grok-managed installs: a property can't be published while it still uses demo messaging. */
+  requiredForPublish: boolean;
+}
+
 /**
  * What every operator surface (browser, terminal, Grok Bot) runs against:
  * the same workspace, live conversations and runtime records. Canonical
@@ -22,7 +31,14 @@ export interface OperatorServices {
   persist?: (session: VisitorDemoSession) => Promise<void>;
   /** Text-message tours that couldn't be picked up after a restart. */
   needsAttention?: (propertyId: string) => { visitorPhone: string; problem: string; at?: string }[];
+  /** Real visitor texting set up for this installation, if any. New properties use it. */
+  installedMessaging?: () => InstalledMessaging | undefined;
   now?: () => Date;
+}
+
+/** Messaging a new property starts with: the installation's real texting when it has any, otherwise demo. */
+export function defaultMessagingMode(installed: InstalledMessaging | undefined): "sendblue" | "demo" {
+  return installed && (installed.ready || installed.requiredForPublish) ? installed.mode : "demo";
 }
 
 export async function persistSession(services: OperatorServices, session: VisitorDemoSession): Promise<void> {

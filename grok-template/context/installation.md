@@ -36,22 +36,34 @@ Always follow `get_next_installation_step`; this table only explains it.
 | VISITOR_MESSAGING | "Visitor texting" | before the first property |
 | STORAGE | "Where tour records are kept" (today: with this Tour Core installation) | nothing to do |
 | ACCESS | "Access system: Demo" (later "Access system: Connected"); never name the lock provider | nothing to do |
-| PROPERTY | the first property, including each unit's bedrooms, bathrooms, rent and availability | to publish |
-| OPERATOR_ALERTS | "I'll let you know when something needs your attention" | recommended, offered only after the first property is set up; the operator may say no |
+| PROPERTY | the first property: its address, property type, and each unit's bedrooms, bathrooms, rent and availability; it uses the installed visitor texting automatically | to publish |
+| OPERATOR_ALERTS | "Tour updates": bookings, tour starts, completions and anything that needs your attention | recommended, offered only after the first property is set up; the operator may say no |
 | READINESS, PRACTICE_TOUR | the readiness check and practice tour, run automatically | to publish |
 | PUBLISH | publish for demo, only after an explicit yes | |
 
-Alerts are never required and never come before the first property.
+Alerts are never required and never come before the first property. When the
+operator says yes, you save their choice (`set_notification_preferences`),
+create the Tour Core Operator Updates routine yourself, and connect it through
+the secure setup page (`routines/operator-updates.md`). If preferences are
+chosen but the routine isn't connected, the next step is
+CONNECT_OPERATOR_ALERTS.
 
 States: READY, ACTION_REQUIRED, CONFIGURING, NOT_CONFIGURED, DEGRADED, ERROR.
 Only READY means done.
 
 ## Credentials
 
-Sendblue's API key, API secret and number, and the Grok Routine's webhook
-address and key, are entered by the operator on the secure setup page in your
-cloud browser. They go straight to Tour Core. You never see them, never type
-them, and never put them in chat, commands or tool arguments.
+Sendblue's API key, API secret and number are entered by the operator on the
+secure setup page in your cloud browser. They go straight to Tour Core. You
+never see them, never type them, and never put them in chat, commands or tool
+arguments.
+
+The Grok Routine's webhook address and key go into the same page's **Tour
+updates (Grok Routine)** card: two masked fields, or a masked box for the
+routine's whole webhook example. You may copy them across yourself only if
+the routine panel's copy buttons keep both values hidden on screen; if either
+is shown, hand the browser to the operator. Never in chat, tool arguments,
+files or commands.
 
 ## Later components
 

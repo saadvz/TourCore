@@ -1,6 +1,6 @@
 {
   "name": "Tour Core",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "distribution": "team",
   "profile": "bot-profile.md",
   "repository": {
@@ -38,13 +38,18 @@
   ],
   "routines": [
     {
-      "name": "Tour Core Exception Alert",
-      "doc": "routines/exception-alert.md",
+      "name": "Tour Core Operator Updates",
+      "doc": "routines/operator-updates.md",
       "trigger": "authenticated-webhook",
-      "allowedTools": ["inspect_exception", "list_exceptions"],
+      "allowedTools": ["get_operator_update", "inspect_exception", "inspect_tour", "list_exceptions"],
       "credentialsTravelWithTemplate": false
     }
   ],
+  "marketplace": {
+    "ships": ["Bot instructions and profile", "the seven Tour Core skills", "the Tour Core Operator Updates routine definition", "integration references for the Tour Core tools"],
+    "neverShips": ["installation webhook secrets", "Sendblue secrets", "Tour Core OAuth tokens", "live property data"],
+    "activation": "A new user installs their own Tour Core, approves the Tour Core connection, and activates and authorizes the routine connection once, on Tour Core's secure setup page."
+  },
   "suggestedPrompts": ["Set up Tour Core", "Set up a property", "Run a practice tour", "Show active tours", "Show exceptions", "Export today's audit"],
   "neverIncluded": [
     "Sendblue API key or secret",

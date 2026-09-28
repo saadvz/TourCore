@@ -20,10 +20,11 @@ import { FileRuntimeStore } from "../storage/runtimeStore";
 import { VisitorDemoRegistry, type VisitorDemoSession } from "../visitor";
 import { adoptLegacyLine, MessagingConversations } from "../visitor/messagingRouter";
 import { VerificationLinks } from "../visitor/verificationLinks";
-import { ExceptionAlerts } from "../alerts/exceptionAlerts";
+import { OperatorUpdates } from "../alerts/operatorUpdates";
 import { HEALTH_PATH, publicHealth, runtimeHealth } from "../install/checks";
 import { resolveDeploymentMode } from "../install/deployment";
 import { Installation } from "../install/installation";
+import { installedMessaging } from "../install/status";
 import { handleSecureSetupApi, INSTALL_PAGE_PATHS, isInstallApiPath, PROXY_HEADERS } from "../install/secureSetup";
 import { clearRuntimeInfo, writeRuntimeInfo } from "../install/service";
 import { useSettingsSource } from "../install/settings";
@@ -82,7 +83,7 @@ export interface SetupServerOptions {
 export interface TourCoreServer extends Server {
   tourCore: {
     installation: Installation;
-    alerts: ExceptionAlerts;
+    alerts: OperatorUpdates;
     /** Resolves once every alert scan and delivery started so far has finished. */
     settled(): Promise<void>;
   };
@@ -135,7 +136,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
   const resetMessaging = () => {
     transport = undefined;
   };
-  // Operator alerts run after the visitor has been answered and saved; a failure here never reaches the visitor.
+  // Operator updates run after the visitor has been answered and saved; a failure here never reaches the visitor.
   let alertWork: Promise<void> = Promise.resolve();
   const afterSave = (propertyId: string) => {
     alertWork = alertWork
@@ -190,9 +191,10 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
     messagingLine,
     persist: (session: VisitorDemoSession) => conversations.save(session),
     needsAttention: (propertyId: string) => conversations.needsAttention(propertyId),
+    installedMessaging: () => installedMessaging(installation),
   };
-  const alerts = new ExceptionAlerts({ services: api, outbox: installation.outbox, log });
-  installation.setRelevanceCheck((event) => alerts.stillOpen(event));
+  const alerts = new OperatorUpdates({ services: api, outbox: installation.outbox, preferences: () => installation.files.state().operatorUpdates, log });
+  installation.setRelevanceCheck((event) => alerts.stillRelevant(event));
   const operatorToken = options.operatorToken ?? operatorTokenFromEnv;
   const authMode = options.mcpAuth ?? (options.operatorToken ? "static" : mcpAuthModeFromEnv());
   let server: Server;

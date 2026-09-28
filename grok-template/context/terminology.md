@@ -5,8 +5,9 @@ calls it internally; use it only if the operator asks for technical detail.
 
 | Say this | Tour Core means |
 | --- | --- |
-| property, building | a property setup |
-| unit | a tourable unit |
+| property, building, the address | a property setup (identified by its canonical address; `displayName` only if the operator gave one) |
+| single-family home, multifamily home, apartment building, other | the property type (`SINGLE_FAMILY`, `MULTIFAMILY_HOME`, `APARTMENT_BUILDING`, `OTHER`) |
+| unit, "Main Home" | a tourable unit (a single-family home has one, the whole home) |
 | entrance | an ENTRANCE door |
 | hallway door, inside door | a COMMON door on a route |
 | the unit's door | the unit's own UNIT door |
@@ -24,7 +25,9 @@ calls it internally; use it only if the operator asks for technical detail.
 | called off | revoked |
 | needs attention, issue | an exception |
 | approved fact | an operator-written property or unit fact |
-| door system | Durin (demo mode in P0) |
+| door system, door access | Durin (demo mode in P0) |
+| tour updates | operator events delivered to the Tour Core Operator Updates Grok Routine |
+| visitor texting is live | the property uses the installation's Sendblue messaging |
 
 Handles you'll see in tool results and must never show: `propertyId`,
-`unitId`, `doorId`, `tourRef`, `exceptionId`, `confirmation.code`.
+`unitId`, `doorId`, `tourRef`, `exceptionId`, `eventId`, `confirmation.code`.

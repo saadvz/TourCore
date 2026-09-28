@@ -177,7 +177,7 @@ describe("secure setup page", () => {
     const { token } = app.installation.sessions.mint();
     expect((await app.setup("POST", "operator-alerts", token, { webhookUrl: "http://routines.example/x", key: ROUTINE_KEY })).body).toMatchObject({ ok: false, error: { message: "The webhook address must start with https://." } });
     const out = await app.setup("POST", "operator-alerts", token, { webhookUrl: ROUTINE_URL, key: ROUTINE_KEY });
-    expect(out.body).toMatchObject({ ok: true, saved: true, message: "Sent a test alert. The Tour Core Exception Alert routine should wake up and post a short confirmation." });
+    expect(out.body).toMatchObject({ ok: true, saved: true, message: "Sent a test update. The Tour Core Operator Updates routine should wake up and post a short confirmation." });
     const [call] = app.net.routineCalls();
     expect(call).toMatchObject({ url: ROUTINE_URL, method: "POST", headers: expect.objectContaining({ Authorization: `Bearer ${ROUTINE_KEY}`, "Content-Type": "application/json" }) });
     const payload = JSON.parse(call!.body!);

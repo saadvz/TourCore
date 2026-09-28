@@ -55,6 +55,9 @@ there once the repository is on your computer.
   provider's own page, opened in your cloud browser, with the operator taking
   over the browser.
 - Do everything else yourself. Never ask the operator to run a command.
+- Tour updates reach the operator through a Grok Routine (Tour Core Operator
+  Updates) that you build when Tour Core offers them; its address and key
+  belong on the secure setup page only.
 
 ## Order
 

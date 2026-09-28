@@ -61,12 +61,12 @@ describe("Grok template package", () => {
     expect(listed.sort()).toEqual([...OPERATOR_TOOL_NAMES].sort());
   });
 
-  it("has a manifest whose files exist, with the exception-alert routine and the PRD's starting prompts", () => {
+  it("has a manifest whose files exist, with the operator-updates routine and the PRD's starting prompts", () => {
     const manifest = JSON.parse(readFileSync(join(TEMPLATE, "template.json"), "utf8"));
     for (const f of [manifest.profile, ...manifest.context, ...manifest.skills, ...manifest.examples, ...manifest.integrations.map((i: { doc: string }) => i.doc), ...manifest.routines.map((r: { doc: string }) => r.doc)]) {
       expect(existsSync(join(TEMPLATE, f)), f).toBe(true);
     }
-    expect(manifest.routines).toEqual([expect.objectContaining({ name: "Tour Core Exception Alert", trigger: "authenticated-webhook", credentialsTravelWithTemplate: false })]);
+    expect(manifest.routines).toEqual([expect.objectContaining({ name: "Tour Core Operator Updates", trigger: "authenticated-webhook", credentialsTravelWithTemplate: false })]);
     for (const t of manifest.routines[0].allowedTools) expect(OPERATOR_TOOL_NAMES).toContain(t);
     expect(manifest.distribution).toBe("team");
     expect(manifest.integrations[0].travelsWithTemplate).toBe(false);

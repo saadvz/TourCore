@@ -92,6 +92,7 @@ function messagingCard(settings, last) {
 
 function alertsCard(settings, last) {
   const s = settings.operatorAlerts;
+  const done = (out) => render({ alerts: out.data.error ? { ok: false, message: out.data.error.message } : out.data });
   const form = h(
     "form",
     {
@@ -101,22 +102,40 @@ function alertsCard(settings, last) {
         busy(form, true);
         const out = await api("POST", "operator-alerts", { webhookUrl: f.get("webhookUrl"), key: f.get("key") });
         form.reset();
-        render({ alerts: out.data.error ? { ok: false, message: out.data.error.message } : out.data });
+        done(out);
       },
     },
-    h("label", { for: "webhookUrl" }, "Routine webhook address", h("span", { class: "hint", text: s.webhookUrl ? "Already saved. Enter both values again to replace them." : "From the Tour Core Exception Alert routine's webhook trigger in Grok." })),
+    h("label", { for: "webhookUrl" }, "Routine webhook address", h("span", { class: "hint", text: s.webhookUrl ? "Already saved. Enter both values again to replace them." : "From the Tour Core Operator Updates routine's webhook trigger in Grok." })),
     h("input", { id: "webhookUrl", name: "webhookUrl", type: "password", autocomplete: "off", spellcheck: "false", required: true }),
     ...secretInput("key", "Routine key", "The routine's sender (bearer) key. Use a newly rotated one.", false),
-    h("div", { class: "actions" }, h("button", { type: "submit", class: "primary" }, "Save and send a test alert")),
+    h("div", { class: "actions" }, h("button", { type: "submit", class: "primary" }, "Save and send a test update")),
+  );
+  // One paste instead of two: the routine panel's whole webhook example. Masked like the fields above.
+  const paste = h(
+    "form",
+    {
+      onsubmit: async (e) => {
+        e.preventDefault();
+        const f = new FormData(paste);
+        busy(paste, true);
+        const out = await api("POST", "operator-alerts", { snippet: f.get("snippet") });
+        paste.reset();
+        done(out);
+      },
+    },
+    h("label", { for: "snippet" }, "Or paste the routine's whole webhook example", h("span", { class: "hint", text: "Copy the example the routine shows for its webhook (it has the address and the key) and paste it here. Tour Core picks out the two values." })),
+    h("textarea", { id: "snippet", name: "snippet", rows: "3", autocomplete: "off", spellcheck: "false", required: true, style: "-webkit-text-security: disc; font-family: monospace" }),
+    h("div", { class: "actions" }, h("button", { type: "submit" }, "Save from paste and send a test update")),
   );
   return h(
     "section",
     { class: `card${focus === "operator-alerts" ? " highlight" : ""}`, id: "operator-alerts" },
-    h("h2", { text: "Operator alerts (Grok Routine)" }),
-    h("p", { class: "muted", text: "When a visitor needs a person, Tour Core wakes the routine with only an issue reference. Grok then reads the details from Tour Core and tells you." }),
+    h("h2", { text: "Tour updates (Grok Routine)" }),
+    h("p", { class: "muted", text: "When a tour is booked, starts or finishes, or a visitor needs a person, Tour Core wakes the routine with only a reference. Grok then reads the details from Tour Core and tells you." }),
     resultBox(last),
     form,
-    s.webhookUrl && s.key ? h("button", { type: "button", class: "link", onclick: async () => render({ alerts: (await api("POST", "operator-alerts/test")).data }) }, "Send another test alert") : null,
+    paste,
+    s.webhookUrl && s.key ? h("button", { type: "button", class: "link", onclick: async () => render({ alerts: (await api("POST", "operator-alerts/test")).data }) }, "Send another test update") : null,
   );
 }
 

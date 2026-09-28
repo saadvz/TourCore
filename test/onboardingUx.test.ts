@@ -106,9 +106,13 @@ describe("Tour Core owns the onboarding order", () => {
     await h.setUpAlfredWay();
     const offer = await next(h);
     expect(offer).toMatchObject({ component: "OPERATOR_ALERTS", action: "OFFER_OPERATOR_ALERTS", performedBy: "OPERATOR_DECISION", optional: true, phase: "PROPERTY", operatorMessage: OPERATOR_MESSAGES.offerAlerts });
-    expect(offer.operatorMessage).toMatch(/^Your property is configured\. Would you like me to keep an eye on tours and alert you when something needs your attention\?/);
-    expect(offer.grokInstructions).toMatch(/create the Tour Core Exception Alert routine yourself/);
+    expect(offer.operatorMessage).toBe("Your property is configured. Would you like me to keep you updated when someone books, starts or finishes a tour, and alert you if something needs your input?");
+    expect(offer.grokInstructions).toMatch(/Create the Tour Core Operator Updates routine yourself/);
+    expect(offer.grokInstructions).toMatch(/set_notification_preferences \(preset recommended/);
+    expect(offer.grokInstructions).toContain(OPERATOR_MESSAGES.recommendUpdates);
     expect(offer.grokInstructions).toMatch(/If they say no: call skip_optional_setup with component OPERATOR_ALERTS/);
+    // Moving the routine's details: only values that stay hidden on screen may be moved by Grok itself.
+    expect(offer.grokInstructions).toMatch(/If either value is shown on screen, don't transfer it: hand control of the browser to the operator/);
     expect((await h.component("OPERATOR_ALERTS")).requirement).toBe("RECOMMENDED");
   });
 
@@ -120,9 +124,9 @@ describe("Tour Core owns the onboarding order", () => {
     const skipped = await h.ok("skip_optional_setup", { component: "OPERATOR_ALERTS" });
     expect(skipped.summary).toBe("No problem, that's off for now. You can turn it on any time.");
     expect(skipped.nextStep).toMatchObject({ action: "RUN_READINESS", performedBy: "GROK", phase: "VALIDATE", operatorMessage: OPERATOR_MESSAGES.validate });
-    expect(OPERATOR_MESSAGES.validate).toMatch(/Prospects can text your touring number to choose a unit and time, verify their details, and complete the self-guided tour in the same conversation\. I'll run a readiness check and a practice tour before we turn it on\./);
+    expect(OPERATOR_MESSAGES.validate).toMatch(/Prospects can text your touring number to ask questions, choose a unit and time, verify their details, and complete the self-guided tour in the same conversation\. I'll run a readiness check and a practice tour before we turn it on\./);
     const alerts = await h.component("OPERATOR_ALERTS");
-    expect(alerts).toMatchObject({ state: "NOT_CONFIGURED", summary: "Alerts are off. You can turn them on any time." });
+    expect(alerts).toMatchObject({ state: "NOT_CONFIGURED", summary: "Tour updates are off. You can turn them on any time." });
   });
 
   it("property ready → readiness → practice tour run automatically; publish still needs an explicit yes; then operating language", async () => {
@@ -143,8 +147,12 @@ describe("Tour Core owns the onboarding order", () => {
     await h.ok("publish_demo_property", { confirmationCode: asked.confirmation.code });
     const done = await h.status();
     expect(done.phase).toBe("OPERATE");
-    expect(done.nextStep).toMatchObject({ action: "DONE", operatorMessage: "Your property is live for demo. I'll keep an eye on tours and let you know when something needs your attention." });
-    expect(done.summary).toBe("Your property is live for demo.");
+    expect(done.nextStep).toMatchObject({
+      action: "DONE",
+      operatorMessage: "Your property is published. Visitor texting is live. Door access is still in demo mode, so no physical locks will open. I'll keep you updated on your tours and let you know when something needs your attention.",
+    });
+    expect(done.summary).toBe("Your property is published.");
+    expect(JSON.stringify(done.nextStep)).not.toMatch(/everything (runs|is) in demo/i);
     const after = await next(h);
     expect([done.summary, after.operatorMessage, after.summary].join(" ")).not.toMatch(/connect|install|setup|secure/i);
   });
@@ -186,7 +194,7 @@ describe("operator-facing text is plain", () => {
     await snapshot("texting untested");
     messagingReady(h);
     await snapshot("infra ready");
-    await h.ok("create_property_setup", { address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way" });
+    await h.ok("create_property_setup", { address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way", propertyType: "APARTMENT_BUILDING" });
     await snapshot("property in progress");
     await h.setUpAlfredWay();
     await snapshot("alerts offer");

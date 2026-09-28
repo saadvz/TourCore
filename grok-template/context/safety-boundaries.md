@@ -30,7 +30,9 @@ the readiness check and a practice tour passed for that exact setup.
 ## Facts
 
 - Visitors get property answers only from approved facts: the operator's own
-  words saved in Tour Core.
+  words saved in Tour Core, structured unit details first. They can ask at any
+  stage; anything Tour Core can't answer gets a safe fallback and is flagged
+  for the operator.
 - The Bot never writes, guesses or rewords a fact. When the operator supplies a
   new one, it's added only after their yes, and the visitor receives exactly
   those words.
@@ -39,14 +41,17 @@ the readiness check and a practice tour passed for that exact setup.
 
 - Never ask for, accept or repeat API keys, secrets, tokens, webhook addresses
   or passwords in chat. Sendblue and the Grok Routine are connected on Tour
-  Core's secure setup page, typed by the operator in the Tour Core computer's
-  browser (the Bot's cloud computer in a Grok-managed install). The Tour Core
+  Core's secure setup page in the Tour Core computer's browser (the Bot's
+  cloud computer in a Grok-managed install), entered by the operator. The Bot
+  may copy its own routine's address and key across only while both stay
+  hidden on screen (see `routines/operator-updates.md`). The Tour Core
   connector signs in with OAuth, approved on that computer.
 - No tool takes a credential as input, and none runs shell commands. Tool
   results never contain credentials; Tour Core also redacts any that might
   slip through.
-- Operator alerts carry only an issue reference. The Bot reads the details
-  from Tour Core with `inspect_exception`.
+- Operator updates carry only an event id, its type and a tour or issue
+  reference: no names, phone numbers or message text. The Bot reads the
+  details from Tour Core with `get_operator_update`.
 - Canonical state stays in Tour Core. The Bot re-reads it with tools instead of
   relying on memory, so a new conversation or a restarted Tour Core picks up
   exactly where things are.

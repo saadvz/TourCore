@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { HelpProblemSchema, type Awaiting, type ConversationStep, type IntentInterpretation, type IntentInterpreter, type InterpretContext, type TourIntent } from "./model";
+import { HelpProblemSchema, type StepAwaiting, type ConversationStep, type IntentInterpretation, type IntentInterpreter, type InterpretContext, type TourIntent } from "./model";
 
 /**
  * Semantic fallback: asks a language model to place a message into Tour
@@ -72,7 +72,7 @@ Use the conversation step and "lastAsked" to read short replies: "sure" answers 
 Use low confidence when the message is vague. Use UNKNOWN when the visitor is only on the way or nearby, or when you cannot tell where they are.
 Never name a unit, door or time the visitor did not clearly refer to.`;
 
-function lastAsked(step: ConversationStep, awaiting?: Awaiting): string {
+function lastAsked(step: ConversationStep, awaiting?: StepAwaiting): string {
   if (awaiting?.kind === "confirm-arrival") return "Are you at the property now?";
   if (awaiting?.kind === "confirm-stop") return `Are you at ${awaiting.stop.label} now?`;
   if (awaiting?.kind === "choose-stop") return `Which door are you at: ${awaiting.stops.map((s) => s.label).join(" or ")}?`;

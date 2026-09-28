@@ -2,8 +2,7 @@ import { z } from "zod";
 import { TourHoursSchema, validateConfig } from "../config/tourCoreConfig";
 import {
   addDoor,
-  addUnit,
-  defaultUnitDoorName,
+  addTourableSpace,
   removeDoor,
   removeUnit,
   renameDoor,
@@ -36,18 +35,12 @@ function command<S extends z.ZodType>(input: S, run: (draft: SetupDraft, input: 
 
 export const SETUP_COMMANDS = {
   setPropertyDetails: command(
-    z.object({ name: Text.optional(), address: Text.optional(), timezone: Text.optional(), facts: Facts.optional() }),
+    z.object({ name: Text.optional(), address: Text.optional(), propertyType: Text.optional(), timezone: Text.optional(), facts: Facts.optional() }),
     (d, i) => setPropertyDetails(d, i),
   ),
   setAlertContact: command(z.object({ name: Text.optional(), contact: Text.optional() }), (d, i) => setAlertContact(d, i)),
-  /** Adds a unit together with its own door (named "<unit> Door" unless given). */
-  addUnit: command(
-    z.object({ name: Text, summary: Text.optional(), facts: Facts.optional(), doorName: Text.optional() }),
-    (d, i) => {
-      const { draft, unit } = addUnit(d, i);
-      return addDoor(draft, { name: i.doorName?.trim() || defaultUnitDoorName(unit.name), kind: "UNIT", unitId: unit.id }).draft;
-    },
-  ),
+  /** Adds a unit together with its own door (named "<unit> Door" unless given). A single-family home's one space uses the home's entrance. */
+  addUnit: command(z.object({ name: Text.optional(), summary: Text.optional(), facts: Facts.optional(), doorName: Text.optional() }), (d, i) => addTourableSpace(d, i)),
   renameUnit: command(z.object({ unitId: Text, name: Text, alsoRenameDoor: z.boolean().optional() }), (d, i) =>
     renameUnit(d, i.unitId, i.name, { alsoRenameDoor: i.alsoRenameDoor }),
   ),

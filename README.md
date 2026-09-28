@@ -11,7 +11,7 @@ This is a P0 demo: door access runs in Durin demo mode (no real doors open) and 
 Tour Core installation. Real visitor texting works through Sendblue.
 
 **Grok is the installer and the operator console.** The intended way to run Tour Core is by talking to the
-**Tour Core Bot** in Grok Bot: it installs Tour Core, connects texting, sets up a property, offers alerts, runs the
+**Tour Core Bot** in Grok Bot: it installs Tour Core, connects texting, sets up a property, offers tour updates, runs the
 readiness check and a practice tour, publishes, watches live tours, works exceptions and exports the audit. Grok
 calls Tour Core's typed tools; Tour Core keeps every record and makes every access decision.
 
@@ -37,8 +37,9 @@ What you may still need to do (it isn't zero-click):
 
 - create or sign in to a Sendblue account, pass MFA, accept provider terms;
 - approve Grok's connection on Tour Core's page (Grok opens it; you take over the browser and click Allow);
-- type the Sendblue details and the Grok Routine's connection details into **Tour Core's secure setup page**,
-  which Grok opens in its cloud browser. Credentials never go into the chat, and Grok never sees them;
+- type the Sendblue details into **Tour Core's secure setup page**, which Grok opens in its cloud browser, and
+  copy the Grok Routine's connection details there too (Grok copies them itself only when they stay hidden on
+  screen). Credentials never go into the chat;
 - make the decisions: property facts, tour hours, and the explicit yes to publish.
 
 Grok-managed is a **demo deployment**: Tour Core runs while Grok's cloud computer does, and its temporary public
@@ -81,8 +82,8 @@ your browser. Keep the window open while you work and press Ctrl+C to stop. Your
 
 In the browser you:
 
-1. **Set up a property**: address, name, time zone (guessed from the address; you confirm it) and optional
-   building facts.
+1. **Set up a property**: address, property type, an optional name, time zone (guessed from the address; you
+   confirm it) and optional building facts.
 2. **Units**: add each tourable unit with an optional short description and other facts. Only what you write is ever
    shared with visitors.
 3. **Doors**: the main entrance, each unit's door, and any hallway doors or extra entrances.
@@ -332,7 +333,7 @@ Terminal wizard ─────────────────────�
 - **Installation tools** (`src/install/tools.ts`): 10 more tools report and test the installation
   (`get_installation_status`, `get_next_installation_step`, ...) and open the secure setup page. None takes or
   returns a credential or runs a command. See [`docs/deployment.md`](docs/deployment.md).
-- **Tool contract** (`src/operator/tools.ts`): 32 typed, provider-neutral operator tools over the existing actions:
+- **Tool contract** (`src/operator/tools.ts`): 34 typed, provider-neutral operator tools over the existing actions:
   property setup, units, doors, routes (`preview_route` resolves the operator's words to doors on file; `set_route`
   saves exact names only), tour hours in everyday words, verification, messaging, review, `run_readiness_check`,
   `run_dry_tour`, `publish_demo_property`, `list_active_tours`, `inspect_tour`, the exception queue, holds, calling a
@@ -361,10 +362,7 @@ Terminal wizard ─────────────────────�
   stored hashed in `tourcore-data/runtime/oauth/`. OAuth only gates the tools: consequential actions still need Tour
   Core's own confirmation codes. `TOURCORE_MCP_AUTH_MODE=static` swaps in a single bearer token for development
   (never both).
-- **Operator alerts** (`src/alerts/`): when a visitor needs judgment (e.g. a question with no approved answer),
-  the visitor gets the safe fallback at once and Tour Core wakes the **Tour Core Exception Alert** Grok Routine
-  through a durable outbox (minimal payload, stable event ids, bounded retries, retried after restarts). Grok
-  then reads the exception with `inspect_exception` and tells the operator without being asked.
+- **Operator updates** (`src/alerts/`): see "Operator updates" below.
 - **Skills and template**: Install Tour Core plus the six operator skills (Setup Property, Map Route, Run
   Readiness Check, Simulate Tour, Work Exception, Export Audit) are in [`.grok/skills/`](.grok/skills/); the Bot
   profile, context, routine, safe examples and integration notes are in [`grok-template/`](grok-template/). Setup, team-only publishing and install:
@@ -388,6 +386,32 @@ npm run service:status        # running? healthy?   (also service:start, service
 npm run install:status        # installation status, component by component
 npm run install:link          # a fresh secure setup link for this computer's browser
 ```
+
+### Property identity and type
+
+The street address is the property's identity and what visitors hear ("Welcome to the self-guided tour for 144
+Hillside Ave! ..."). A property or building name is used only if the operator gives one; Grok never invents one.
+Right after the address, Grok asks "What type of property is this?" (single-family home, multifamily home,
+apartment building, other), and the next questions follow the type: a single-family home is one space, "Main
+Home" by default, with its front door as the route and no unit menu for visitors; buildings get their units. A new
+property uses the installation's visitor texting automatically, so Grok never asks how to text people. The review
+reads back the address, type, each unit with its details and route, tours, verification, "Visitor texting:
+Connected" and "Door access: Demo".
+
+### Operator updates
+
+After the first property, Grok offers to keep the operator updated when someone books, starts or finishes a tour,
+and to alert them when something needs their input (the recommended default; cancellations can be added,
+"problems only" is an option, and no-shows aren't detected yet). Tour Core sends a minimal event (`eventId`,
+`eventType`, property and tour or issue reference, time; no names, numbers or message text) through a durable
+outbox to the **Tour Core Operator Updates** Grok Routine, which Grok creates itself. The routine calls
+`get_operator_update` and posts a plain sentence such as "New tour booked: Testy is scheduled to tour Unit 1A today
+at 3:00 PM." Only real text-message tours produce updates. The routine's address and key go only into the secure
+setup page's **Tour updates (Grok Routine)** card, never into chat or tool arguments; see
+[`grok-template/routines/operator-updates.md`](grok-template/routines/operator-updates.md).
+
+After publishing, Grok describes each part as it is: "Visitor texting is live. Door access is still in demo mode,
+so no physical locks will open."
 
 ## What "Publish for demo" means
 

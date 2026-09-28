@@ -1,7 +1,10 @@
 import {
   DEMO_VERIFICATION_FORM_URL,
+  PROPERTY_TYPE_LABELS,
+  PropertyTypeSchema,
   validateConfig,
   type Door,
+  type PropertyType,
   type TourCoreConfig,
   type TourHours,
   type Unit,
@@ -52,6 +55,17 @@ export const CHOICE_LABELS = {
   access: { "durin-mock": "Durin demo mode (no real doors open)", durin: "Durin" },
 } as const;
 
+/**
+ * One sentence about what's real and what's demo, per subsystem. Never a
+ * blanket "everything is in demo mode": visitor texting can be live while
+ * door access is still demo.
+ */
+export function modeSentence(textingLive: boolean, accessDemo: boolean): string {
+  const texting = textingLive ? "Visitor texting is live." : "Visitor texts are practice only, so nobody is texted.";
+  const doors = accessDemo ? "Door access is still in demo mode, so no physical locks will open." : "Door access is connected.";
+  return `${texting} ${doors}`;
+}
+
 export class SetupInputError extends Error {
   constructor(
     readonly code: string,
@@ -84,19 +98,49 @@ function requireTimeZone(input: string): string {
 
 // ------------------------------------------------------------------ property
 
+/** How the property is named to visitors and the operator: their own name for it, otherwise the canonical address. */
+export function propertyLabel(property: { address: string; displayName?: string; name?: string }): string {
+  return property.displayName?.trim() || property.address.trim() || property.name?.trim() || "";
+}
+
+function withLabel(property: SetupDraft["property"]): SetupDraft["property"] {
+  const displayName = property.displayName?.trim();
+  const { displayName: _dropped, ...rest } = property;
+  return { ...rest, ...(displayName ? { displayName } : {}), name: displayName || property.address.trim() };
+}
+
+function requirePropertyType(input: string): PropertyType {
+  const parsed = PropertyTypeSchema.safeParse(input);
+  if (!parsed.success) throw new SetupInputError("PROPERTY_TYPE_UNKNOWN", "Choose a single-family home, a multifamily home, an apartment building, or other.");
+  return parsed.data;
+}
+
 export function createPropertySetup(input: {
   address: string;
+  /** Only a name the operator gave themselves. Leave out to use the address. */
   name?: string;
+  propertyType?: string;
   timezone?: string;
   /** Property ids already in use, so a new one never collides. */
   existingPropertyIds?: string[];
+  /** The installation's real visitor texting, when it has one: a new property uses it instead of demo messaging. */
+  messagingMode?: SetupDraft["messagingMode"];
 }): SetupDraft {
   const address = requireName(input.address, "ADDRESS_MISSING", "Please enter the property's address.");
-  const name = input.name?.trim() || address;
+  const displayName = input.name?.trim() || undefined;
   const timezone = input.timezone ? requireTimeZone(input.timezone) : inferTimeZone(address).timezone;
+  const propertyType = input.propertyType ? requirePropertyType(input.propertyType) : undefined;
   return {
     schemaVersion: 1,
-    property: { id: uniqueId(`prop_${slugify(name)}`, input.existingPropertyIds ?? [], "prop_property"), name, address, timezone, facts: [] },
+    property: withLabel({
+      id: uniqueId(`prop_${slugify(displayName ?? address)}`, input.existingPropertyIds ?? [], "prop_property"),
+      name: "",
+      address,
+      ...(displayName ? { displayName } : {}),
+      ...(propertyType ? { propertyType } : {}),
+      timezone,
+      facts: [],
+    }),
     operator: { name: SETUP_DEFAULTS.operatorName, contact: SETUP_DEFAULTS.operatorContact },
     doors: [],
     units: [],
@@ -105,23 +149,53 @@ export function createPropertySetup(input: {
     verificationMode: SETUP_DEFAULTS.verificationMode,
     verificationFormUrl: DEMO_VERIFICATION_FORM_URL,
     verificationValidForDays: SETUP_DEFAULTS.verificationValidForDays,
-    messagingMode: SETUP_DEFAULTS.messagingMode,
+    messagingMode: input.messagingMode ?? SETUP_DEFAULTS.messagingMode,
     storageMode: SETUP_DEFAULTS.storageMode,
     accessMode: SETUP_DEFAULTS.accessMode,
   };
 }
 
-/** The property id never changes after creation, even if the name does. */
+/**
+ * The property id never changes after creation, even if the name does. An
+ * empty name removes the operator's own name, so the address is used again.
+ */
 export function setPropertyDetails(
   draft: SetupDraft,
-  input: { name?: string; address?: string; timezone?: string; facts?: string[] },
+  input: { name?: string; address?: string; propertyType?: string; timezone?: string; facts?: string[] },
 ): SetupDraft {
   const next = clone(draft);
-  if (input.name !== undefined) next.property.name = requireName(input.name, "PROPERTY_NAME_MISSING", "Please give the property a name.");
+  // A setup saved before names and addresses were kept apart: an earlier name that isn't the address was the operator's.
+  if (next.property.displayName === undefined && next.property.name.trim() && next.property.name.trim() !== next.property.address.trim()) next.property.displayName = next.property.name.trim();
+  if (input.name !== undefined) next.property.displayName = input.name.trim() || undefined;
   if (input.address !== undefined) next.property.address = requireName(input.address, "ADDRESS_MISSING", "Please enter the property's address.");
+  if (input.propertyType !== undefined) next.property.propertyType = requirePropertyType(input.propertyType);
   if (input.timezone !== undefined) next.property.timezone = requireTimeZone(input.timezone);
   if (input.facts !== undefined) next.property.facts = cleanFacts(input.facts);
+  next.property = withLabel(next.property);
   return next;
+}
+
+/** What Tour Core suggests calling the one tourable space of a single-family home. The operator can rename it. */
+export const SINGLE_FAMILY_SPACE_NAME = "Main Home";
+/** The single-family home's own door, when the operator hasn't named one. */
+export const SINGLE_FAMILY_DOOR_NAME = "Front Door";
+
+/**
+ * The one setup question that depends on the property type: how to ask about
+ * the tourable spaces. Undefined until the type is known.
+ */
+export function tourableSpacesQuestion(draft: SetupDraft): { question: string; suggestedName?: string } | undefined {
+  switch (draft.property.propertyType) {
+    case "SINGLE_FAMILY":
+      return { question: `People will tour the whole home. Should I call it "${SINGLE_FAMILY_SPACE_NAME}", or would you like another name?`, suggestedName: SINGLE_FAMILY_SPACE_NAME };
+    case "MULTIFAMILY_HOME":
+    case "APARTMENT_BUILDING":
+      return { question: "Which units can people tour?" };
+    case "OTHER":
+      return { question: "How would you like the spaces people tour to be named?" };
+    default:
+      return undefined;
+  }
 }
 
 /** Keeps operator wording as written; only trims and drops blanks. */
@@ -272,7 +346,29 @@ export function setUnitProfile(draft: SetupDraft, unitId: string, values: Partia
 export function suggestRoute(draft: SetupDraft, unitId: string): string[] {
   const unit = draft.units.find((u) => u.id === unitId);
   const entrance = draft.doors.find((d) => d.kind === "ENTRANCE");
-  return [entrance?.id, unit?.doorId].filter((id): id is string => !!id && draft.doors.some((d) => d.id === id));
+  return [...new Set([entrance?.id, unit?.doorId].filter((id): id is string => !!id && draft.doors.some((d) => d.id === id)))];
+}
+
+/**
+ * Adds a tourable space with its own door. In a single-family home the space
+ * is the whole home: it's named "Main Home" unless the operator says
+ * otherwise, its door is the home's entrance (added as "Front Door" if there
+ * isn't one yet), and its route is just that door.
+ */
+export function addTourableSpace(draft: SetupDraft, input: { name?: string; summary?: string; facts?: string[]; doorName?: string }): SetupDraft {
+  if (draft.property.propertyType !== "SINGLE_FAMILY") {
+    const { draft: withUnit, unit } = addUnit(draft, { ...input, name: input.name ?? "" });
+    return addDoor(withUnit, { name: input.doorName?.trim() || defaultUnitDoorName(unit.name), kind: "UNIT", unitId: unit.id }).draft;
+  }
+  if (draft.units.length) throw new SetupInputError("SINGLE_FAMILY_ONE_SPACE", `A single-family home has one tourable space, and it's already set up as ${draft.units[0]!.name}.`);
+  const { draft: withUnit, unit } = addUnit(draft, { ...input, name: input.name?.trim() || SINGLE_FAMILY_SPACE_NAME });
+  const named = input.doorName?.trim();
+  let entrance = withUnit.doors.find((d) => d.kind === "ENTRANCE" && (!named || d.name.toLowerCase() === named.toLowerCase()));
+  let next = withUnit;
+  if (!entrance) ({ draft: next, door: entrance } = addDoor(withUnit, { name: named || SINGLE_FAMILY_DOOR_NAME, kind: "ENTRANCE" }));
+  next = clone(next);
+  next.units.find((u) => u.id === unit.id)!.doorId = entrance.id;
+  return setRoute(next, unit.id, [entrance.id]);
 }
 
 /** Removes the unit, its route, and its own door. */
@@ -386,7 +482,15 @@ export function reviewSetup(draft: SetupDraft): SetupReview {
   const doorName = (id: string) => draft.doors.find((d) => d.id === id)?.name ?? "(missing door)";
   const th = draft.tourHours;
   const sections: ReviewSection[] = [
-    { editSection: "property", title: "PROPERTY", lines: [draft.property.name, ...(draft.property.address !== draft.property.name ? [draft.property.address] : [])] },
+    {
+      editSection: "property",
+      title: "PROPERTY",
+      lines: [
+        draft.property.address,
+        ...(draft.property.displayName ? [`Called: ${draft.property.displayName}`] : []),
+        draft.property.propertyType ? PROPERTY_TYPE_LABELS[draft.property.propertyType] : "(property type not chosen yet)",
+      ],
+    },
     { editSection: "property", title: "TIMEZONE", lines: [`${draft.property.timezone} (${friendlyTimeZone(draft.property.timezone)})`] },
     {
       editSection: "hours",

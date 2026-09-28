@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { TourCoreConfig } from "../config/tourCoreConfig";
 import { DemoClock } from "../core/clock";
 import { normalizePhone } from "../core/phone";
+import { orList } from "../core/questions";
 import { formatTime } from "../core/timezone";
 import { TourCore, type AccessOutcome, type InboundMeta } from "../core/TourCore";
 import type { TourSlot } from "../core/schedule";
@@ -66,19 +67,24 @@ const ACTIONS = {
 };
 export type VisitorAction = keyof typeof ACTIONS;
 
-/** Which actions make sense at each stage. Anything else is refused. */
+/** Which actions make sense at each stage. Anything else is refused. Property questions can be asked at every stage once someone's there. */
 const ALLOWED: Record<VisitorStage, VisitorAction[]> = {
   intro: ["begin"],
-  "choose-unit": ["chooseUnit"],
-  "choose-time": ["chooseTime"],
-  consent: ["consent"],
-  identity: ["submitIdentity"],
+  "choose-unit": ["chooseUnit", "ask"],
+  "choose-time": ["chooseTime", "ask"],
+  consent: ["consent", "ask"],
+  identity: ["submitIdentity", "ask"],
   ready: ["arrive", "ask", "help", "demoSkipAhead", "demoWrongDoor"],
   touring: ["atStop", "ask", "help", "finish", "demoWrongDoor"],
-  "follow-up": ["followUp"],
-  done: [],
+  "follow-up": ["followUp", "ask"],
+  done: ["ask"],
   stopped: ["help"],
 };
+
+export interface QuestionOutcome {
+  outcome: "answered" | "unknown" | "which-unit";
+  units?: string[];
+}
 
 export interface LastAccess {
   doorId: string;
@@ -336,6 +342,26 @@ export class VisitorDemoSession {
     await this.reply(info);
   }
 
+  /**
+   * Answers a property question from approved facts wherever the visitor is:
+   * the unit they named or chose (if any) and the property. Nothing about the
+   * conversation's own step changes. `unitId` overrides the unit context (the
+   * visitor just said which unit they meant).
+   */
+  async askQuestion(question: string, options: { meta?: InboundMeta; unitId?: string; alreadyRecorded?: boolean } = {}): Promise<QuestionOutcome> {
+    const r = await this.reservation();
+    const out = await this.core.answerPropertyQuestion({
+      phone: this.visitor?.phone ?? "",
+      question,
+      reservationId: r?.id,
+      unitId: options.unitId ?? r?.unitId,
+      meta: options.meta,
+      recordInbound: !options.alreadyRecorded,
+    });
+    await this.syncReplies();
+    return { outcome: out.outcome, ...(out.units ? { units: out.units } : {}) };
+  }
+
   /** Sends a fresh identity-form link (the earlier one stops working). */
   async resendVerificationLink(said: Said): Promise<void> {
     await this.recordText(said);
@@ -423,11 +449,8 @@ export class VisitorDemoSession {
         if (!unit) throw new SetupInputError("UNIT_NOT_FOUND", "That unit isn't available.");
         const text = said.text ?? `I'd like to see ${unit.name}.`;
         this.say("visitor", text);
-        const { prospect, reservation } = await this.core.startInquiry({ ...this.visitor!, unitId: unit.id });
-        this.prospectId = prospect.id;
-        this.reservationId = reservation.id;
-        this.offeredSlots = await this.core.availableSlots();
-        await this.core.recordInbound(prospect.id, reservation.id, text, said.meta);
+        await this.inquire(unit.id);
+        await this.core.recordInbound(this.prospectId!, this.reservationId, text, said.meta);
         return;
       }
       case "chooseTime": {
@@ -467,10 +490,13 @@ export class VisitorDemoSession {
         await this.requestDoor(String(input.doorId));
         return;
       }
-      case "ask":
+      case "ask": {
         this.say("visitor", said.text ?? String(input.question).trim());
-        await this.core.answerQuestion(r!.id, String(input.question), said.meta);
+        const out = await this.askQuestion(String(input.question), { meta: said.meta });
+        // The browser phone asks again with the unit named; a text conversation handles this itself (see conversation.ts).
+        if (out.outcome === "which-unit" && !said.text) await this.reply(`Which unit do you mean: ${orList(out.units ?? [])}?`);
         return;
+      }
       case "help":
         this.say("visitor", said.text ?? "I need help.");
         await this.core.requestHelp(r!.id, await this.currentPlace(), { text: said.text ?? "I need help", meta: said.meta });
@@ -507,12 +533,28 @@ export class VisitorDemoSession {
     }
   }
 
-  private async welcome(): Promise<void> {
-    await this.reply(`Hi! I'm the self-tour assistant for ${this.config.property.name}. I can help you tour on your own. Which unit would you like to see?`, {
-      kind: "choose",
-      options: this.config.units.map((u) => u.name),
-      what: "a unit",
-    });
+  private async inquire(unitId: string): Promise<void> {
+    const { prospect, reservation } = await this.core.startInquiry({ ...this.visitor!, unitId });
+    this.prospectId = prospect.id;
+    this.reservationId = reservation.id;
+    this.offeredSlots = await this.core.availableSlots();
+  }
+
+  /**
+   * The first thing a visitor hears. The property is named by its address or
+   * the operator's own name for it, never a made-up one. A single-family home
+   * has one space to tour, so there's no unit to pick: its tour times come next.
+   */
+  async welcome(): Promise<void> {
+    const hello = `Welcome to the self-guided tour for ${this.config.property.name}! I can answer questions about the property and help you tour on your own.`;
+    const only = this.config.units.length === 1 && this.config.property.propertyType === "SINGLE_FAMILY" ? this.config.units[0] : undefined;
+    if (only && !this.reservationId) {
+      await this.reply(hello);
+      await this.inquire(only.id);
+      await this.syncReplies();
+      return;
+    }
+    await this.reply(`${hello} Which unit would you like to see?`, { kind: "choose", options: this.config.units.map((u) => u.name), what: "a unit" });
   }
 
   private async currentPlace(): Promise<string | undefined> {

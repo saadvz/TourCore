@@ -19,7 +19,7 @@ Tour Core runtime (src/web/server.ts)
    │     ├── /install             secure setup page (credentials go in here)
    │     ├── /grok                approve Grok's connection
    │     └── /                    browser operator app
-   ├── outbound → Grok Routine webhook (operator alerts, durable outbox)
+   ├── outbound → Grok Routine webhook (operator updates, durable outbox)
    ▼
 Tour Core state, policy and audit (tourcore-data/)
 ```
@@ -127,7 +127,7 @@ them, with the requirement Tour Core (not the agent) assigns:
 | `GROK_OPERATOR` | required before property | CONNECT |
 | `VISITOR_MESSAGING`, `STORAGE` (LOCAL_DEMO accepted), `ACCESS` (DURIN_DEMO accepted) | required before property | INFRASTRUCTURE |
 | `PROPERTY` | required to publish | PROPERTY |
-| `OPERATOR_ALERTS` | recommended; offered only after the property is saved; can be declined (`skip_optional_setup`) | PROPERTY |
+| `OPERATOR_ALERTS` ("Tour updates") | recommended; offered only after the property is saved (`set_notification_preferences`); can be declined (`skip_optional_setup`); chosen but not connected → `CONNECT_OPERATOR_ALERTS` | PROPERTY |
 | `READINESS`, `PRACTICE_TOUR` | required to publish; run automatically | VALIDATE |
 | `PUBLISH` | explicit yes | PUBLISH |
 
@@ -152,7 +152,9 @@ returns; the Install Tour Core skill doesn't change.
 `src/install/tools.ts`: `get_installation_status`,
 `get_next_installation_step`, `get_installation_component`,
 `skip_optional_setup`, `check_runtime_health`, `check_public_endpoint`, `test_visitor_messaging`,
-`test_operator_alerts`, `test_storage`, `test_access`, `get_secure_setup_url`.
+`get_notification_preferences`, `set_notification_preferences`,
+`get_operator_update`, `test_operator_alerts`, `test_storage`, `test_access`,
+`get_secure_setup_url`.
 
 None takes a credential (no input field may even be named like one; a test
 enforces it), none returns one, and none runs a shell command. There is no
@@ -203,7 +205,7 @@ with the process table and `/healthz`. Output goes to
 cloud computer) and Windows (developers).
 
 **Self-healing (P0):** if Tour Core stopped, `npm run bootstrap:grok` (or
-`service:start`) starts it again, and pending operator alerts are retried on
+`service:start`) starts it again, and pending operator updates are retried on
 startup. There is no supervisor process: no systemd, no containers.
 
 ## Public address
@@ -239,23 +241,39 @@ old address, and runs the readiness checks (`src/messaging/sendblue/connect.ts`)
 Other webhooks on the account are never touched. The running server uses new
 values immediately. `.env`-based setups and `npm run sendblue:*` keep working.
 
-## Operator alerts
+## Operator updates
 
 ```
-visitor asks something with no approved answer
-   → safe fallback texted to the visitor right away
-   → exception derived from the canonical records (unchanged)
-   → operator event saved in the durable outbox (runtime/operator-events/)
+a tour is booked / starts / finishes / is cancelled, or a visitor needs judgment
+   → (for a question with no approved answer) safe fallback texted to the visitor right away
+   → operator event saved in the durable outbox (runtime/operator-events/),
+     only for the update kinds the operator chose
    → POST to the Grok Routine webhook (Authorization: Bearer <routine key>)
-   → Tour Core Exception Alert routine wakes, calls inspect_exception
-   → the operator gets a plain message, without having asked
+   → Tour Core Operator Updates routine wakes, calls get_operator_update(eventId)
+   → the operator gets a plain sentence ("New tour booked: Testy is scheduled
+     to tour Unit 1A today at 3:00 PM."), without having asked
 ```
 
 - `OperatorNotificationSink` with `NoopOperatorNotificationSink` and
   `GrokRoutineWebhookSink` (`src/alerts/operatorEvents.ts`).
-- Event payload: `schemaVersion`, `eventId`, `eventType`
-  (`exception.created` or `installation.test`), `propertyId`, `exceptionId`,
-  `occurredAt`. No visitor PII, message text or credentials.
+- Event payload: `schemaVersion`, `eventId`, `eventType`, `propertyId`,
+  `tourId` (the tour handle, `inspect_tour`'s `tourRef`) or `exceptionId`,
+  `occurredAt`. `eventType` is `tour.booked`, `tour.started`,
+  `tour.completed`, `tour.cancelled`, `exception.created`, `access.problem`,
+  `verification.problem` or `installation.test`. No visitor PII, message text
+  or credentials.
+- Preferences (`src/alerts/preferences.ts`, `set_notification_preferences`):
+  the recommended default is everything except cancellations; before the
+  operator chooses, only the three problem kinds are sent. "Booked" means a
+  time was chosen, consent given and the identity check passed. Only real
+  text-message tours produce updates (not practice tours or the browser
+  demo), and something that happened before its kind was turned on is never
+  sent late. No-shows aren't detected yet.
+- Connecting the routine: Grok creates it and opens the secure setup page's
+  **Tour updates (Grok Routine)** card (two masked fields, or a masked box for
+  the routine's whole webhook example). Grok copies the values itself only if
+  both stay hidden on screen; otherwise the operator copies them. See
+  `grok-template/routines/operator-updates.md`.
 - `src/alerts/outbox.ts`: saved before delivery, keyed by a stable `eventId`
   derived from the exception (so the same exception is never queued twice),
   delivered after the visitor has been answered, retried with exponential
@@ -265,7 +283,7 @@ visitor asks something with no approved answer
 - On the first start with alerts, exceptions that already exist are recorded
   but not announced.
 - A delivery failure never affects the visitor; the installation status shows
-  operator alerts as degraded until deliveries go through.
+  tour updates as degraded until deliveries go through.
 
 ## Full new-user experience (Grok-managed)
 
@@ -303,22 +321,30 @@ clone whose git origin isn't the canonical repository.
 7. Grok follows `get_next_installation_step`: the secure setup page for
    texting, where **the operator enters** the Sendblue details; Grok tests it.
    Tour records (stored with this installation) and access (Demo) need nothing.
-8. "Everything needed to start is connected and tested. Would you like add your first property?"
-9. Grok configures the property conversationally (Setup Property, Map Route),
-   including each unit's bedrooms, bathrooms, rent and availability (bulk
-   answers welcome; "not sure" is saved as not provided, never guessed).
+8. "Everything needed to start is connected and tested. Would you like to add your first property?"
+9. Grok configures the property conversationally (Setup Property, Map Route):
+   the address (confirmed as Tour Core saved it; a name only if the operator
+   gives one), "What type of property is this?", the units (or "Main Home"
+   for a single-family home), each unit's bedrooms, bathrooms, rent and
+   availability (bulk answers welcome; "not sure" is saved as not provided,
+   never guessed), doors, routes, hours and verification. The property uses
+   the installed texting automatically; nobody is asked how to text people.
    Alerts are not offered before this point and are never required.
-10. Tour Core offers alerts (recommended). If yes, Grok creates the Tour Core
-    Exception Alert routine itself, and **the operator enters** its connection
-    details on the secure setup page; Grok sends a test alert. If no, Grok
-    records the choice and moves on.
+10. Tour Core offers tour updates (recommended): "Would you like me to keep
+    you updated when someone books, starts or finishes a tour, and alert you
+    if something needs your input?" If yes, Grok saves the choice, creates the
+    Tour Core Operator Updates routine itself, and connects it through the
+    secure setup page (the operator copies the values unless both stay hidden
+    on screen); Grok sends a test update. If no, Grok records the choice and
+    moves on.
 11. Grok explains how prospects use it and runs the readiness check and a
     practice tour without asking whether to skip them.
 12. Grok asks for an explicit yes to publish.
-13. "Your property is live for demo. I'll keep an eye on tours and let you
-    know when something needs your attention."
-14. A real visitor can text the property; Tour Core wakes Grok whenever a
-    visitor needs judgment.
+13. "Your property is published. Visitor texting is live. Door access is still
+    in demo mode, so no physical locks will open. I'll keep you updated on
+    your tours and let you know when something needs your attention."
+14. A real visitor can text the property; Tour Core wakes Grok for bookings,
+    tour starts, completions and whenever a visitor needs judgment.
 
 In the happy path the operator never sees addresses, tool counts, connectors,
 tunnels, commands or protocol names, and is never asked to choose the setup

@@ -50,7 +50,7 @@ describe("Grok skill scenarios", () => {
     // "I want to set up my building."  Grok: "Sure. What's the address?"
     expect((await tool("list_properties")).properties).toEqual([]);
     // "100 Alfred Way, Brooklyn NY."
-    const created = await tool("create_property_setup", { address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way" });
+    const created = await tool("create_property_setup", { address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way", propertyType: "APARTMENT_BUILDING" });
     expect(created.summary).toBe("Started 100 Alfred Way. I guessed Eastern Time for the time zone; please confirm.");
     // "Two units, 101 and 102." / "The lobby entrance." / "No hallway doors."
     await tool("add_unit", { name: "Unit 101", description: "One-bedroom" });
@@ -88,7 +88,7 @@ describe("Grok skill scenarios", () => {
   it("Map Route: an ambiguous route gets a question back, and nothing is saved until it's clear", async () => {
     const h = grokHarness();
     const { tool } = skillSession("map-route", h);
-    await h.ok("create_property_setup", { address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way" });
+    await h.ok("create_property_setup", { address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way", propertyType: "APARTMENT_BUILDING" });
     await h.ok("add_door", { name: "Lobby Entrance", kind: "entrance" });
     await h.ok("add_door", { name: "Garden Entrance", kind: "entrance" });
     await h.ok("add_door", { name: "Second Floor Hallway", kind: "hallway" });
@@ -264,7 +264,11 @@ describe("Install Tour Core skill", () => {
   it("runs readiness and the practice tour automatically, needs an explicit yes to publish, then talks about operating", () => {
     expect(phase(5)).toMatch(/without asking\s+whether to skip them/);
     expect(phase(6)).toMatch(/Publish only after a clear yes/);
-    expect(phase(7)).toContain("Your property is live for demo. I'll keep an eye on tours and let you know\n> when something needs your attention.");
+    expect(phase(7)).toContain(
+      "Your property is published. Visitor texting is live. Door access is still in\n> demo mode, so no physical locks will open. I'll keep you updated on your\n> tours and let you know when something needs your attention.",
+    );
+    const said = text.split("\n").filter((l) => l.startsWith(">")).join(" ");
+    expect(said).not.toMatch(/everything (runs|is) in demo mode/i);
   });
 
   it("keeps infrastructure out of normal conversation and never asks for a secret in chat", () => {
@@ -290,7 +294,7 @@ describe("Install Tour Core skill", () => {
     const fake = fakeSendblue({ hooks, lines: [{ sendblue_number: "+15550109999", status: "ONLINE" }] });
     const create = fake.client.webhooks.create.bind(fake.client.webhooks);
     fake.client.webhooks.create = async (body) => (hooks.push(...(body.webhooks as Array<{ url: string }>)), create(body));
-    cleanups.push(setSendblueRuntime({ client: () => fake.client }));
+    cleanups.push(setSendblueRuntime({ env: () => h.inst.sendblueEnv(), client: () => fake.client }));
     h.net.state.health = () => publicHealth(h.inst);
     const operatorFillsIn = async (url: string, body: Record<string, string>) => {
       const token = /#s=([^&]+)/.exec(url)![1]!;
@@ -317,7 +321,10 @@ describe("Install Tour Core skill", () => {
         case "SET_UP_PROPERTY": // "Yes." → Setup Property skill
           await h.setUpAlfredWay();
           break;
-        case "OFFER_OPERATOR_ALERTS": // "Sure." → Grok creates the routine, opens secure setup
+        case "OFFER_OPERATOR_ALERTS": // "Sure, use the defaults." → Grok saves the choice, creates the routine, opens secure setup
+          await tool("set_notification_preferences", { preset: "recommended" });
+        // falls through
+        case "CONNECT_OPERATOR_ALERTS":
         case "CONNECT_VISITOR_MESSAGING": {
           const link = await tool("get_secure_setup_url", { step: step.secureSetupStep });
           await operatorFillsIn(link.url, step.secureSetupStep === "operator-alerts" ? { webhookUrl: ROUTINE_URL, key: ROUTINE_KEY } : { apiKey: SB_KEY, apiSecret: SB_SECRET, fromNumber: "+15550109999" });
@@ -350,7 +357,11 @@ describe("Install Tour Core skill", () => {
       "PUBLISH:OPERATOR_DECISION",
     ]);
     expect(said).toContain("Everything needed to start is connected and tested. Would you like to add your first property?");
-    expect(step.operatorMessage).toBe("Your property is live for demo. I'll keep an eye on tours and let you know when something needs your attention.");
+    // The property used the installed texting on its own: nobody was asked how to text people.
+    expect(h.workspace.load("prop_100_alfred_way").config.messagingMode).toBe("sendblue");
+    expect(step.operatorMessage).toBe(
+      "Your property is published. Visitor texting is live. Door access is still in demo mode, so no physical locks will open. I'll keep you updated on your tours and let you know when something needs your attention.",
+    );
     const seen = JSON.stringify(await tool("get_installation_status")) + JSON.stringify(first);
     for (const secret of [SB_KEY, SB_SECRET, ROUTINE_URL, ROUTINE_KEY]) expect(seen).not.toContain(secret);
   });

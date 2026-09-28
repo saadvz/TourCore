@@ -2,7 +2,9 @@ import { join } from "node:path";
 import { Installation } from "../src/install/installation";
 import { LocalSecretStore } from "../src/install/secretStore";
 import { OAuthGrantStore } from "../src/mcp/oauth/store";
-import { readSendblueEnv } from "../src/messaging/sendblue/runtime";
+import { installedMessaging } from "../src/install/status";
+import { readSendblueEnv, setSendblueRuntime } from "../src/messaging/sendblue/runtime";
+import { fakeSendblue, sendblueEnv } from "./fakeSendblue";
 import { FileRuntimeStore } from "../src/storage/runtimeStore";
 import { at, grokHarness } from "./grokHarness";
 
@@ -47,7 +49,7 @@ export function installHarness(options: { env?: NodeJS.ProcessEnv } = {}) {
   inst = new Installation({
     root: h.root,
     runtime,
-    secrets: new LocalSecretStore(join(h.root, "install", "secrets.json")),
+    secrets: new LocalSecretStore(join(h.root, "install", "secrets.json"), () => h.now()),
     env: () => env,
     sendblueEnv: () => readSendblueEnv(inst.env()),
     now: () => h.now(),
@@ -56,6 +58,10 @@ export function installHarness(options: { env?: NodeJS.ProcessEnv } = {}) {
   });
   h.ctx.installation = inst;
   h.services.runtime = runtime;
+  h.services.installedMessaging = () => installedMessaging(inst);
+  // Readiness checks a real-texting property's Sendblue account; the SDK is faked at the network boundary.
+  const sendblue = fakeSendblue();
+  const restoreSendblue = setSendblueRuntime({ env: () => sendblueEnv(), client: () => sendblue.client });
   const connectGrok = (url = inst.publicBaseUrl()!) => {
     const origin = new URL(url).origin;
     new OAuthGrantStore(runtime, () => h.now()).addGrant({
@@ -80,6 +86,10 @@ export function installHarness(options: { env?: NodeJS.ProcessEnv } = {}) {
       lines: string[];
     };
   const component = async (name: string) => (await status()).components.find((c) => c.component === name)!;
-  return { ...h, env, net, inst, runtime, connectGrok, status, component, start: at(7) };
+  const cleanup = () => {
+    restoreSendblue();
+    h.cleanup();
+  };
+  return { ...h, env, net, inst, runtime, sendblue, connectGrok, status, component, start: at(7), cleanup };
 }
 export type InstallHarness = ReturnType<typeof installHarness>;

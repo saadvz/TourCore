@@ -40,6 +40,9 @@ export function semanticIssues(cfg: TourCoreConfig): ConfigIssue[] {
   // Property
   if (!cfg.property.name.trim()) add("property", "PROPERTY_NAME_MISSING", "The property needs a name.");
   if (!cfg.property.address.trim()) add("property", "PROPERTY_ADDRESS_MISSING", "The property needs an address.");
+  if (!cfg.property.propertyType) add("property", "PROPERTY_TYPE_MISSING", "Say what type of property this is: a single-family home, a multifamily home, an apartment building, or something else.");
+  const singleFamily = cfg.property.propertyType === "SINGLE_FAMILY";
+  if (singleFamily && cfg.units.length > 1) add("units", "SINGLE_FAMILY_ONE_SPACE", "A single-family home has one tourable space. If people tour more than one space here, choose \"Other\" as the property type.");
   if (!isValidTimeZone(cfg.property.timezone)) {
     add("property", "TIMEZONE_INVALID", `We don't recognize the time zone "${cfg.property.timezone}". Try something like America/New_York.`);
   }
@@ -67,7 +70,8 @@ export function semanticIssues(cfg: TourCoreConfig): ConfigIssue[] {
     }
     const door = doorById.get(unit.doorId);
     if (!door) add("units", "UNIT_DOOR_UNKNOWN", `${label} is linked to a door that no longer exists.`);
-    else if (door.kind !== "UNIT") add("units", "UNIT_DOOR_NOT_UNIT", `${label} is linked to ${door.name}, which isn't a unit door. Give the unit its own door.`);
+    // A single-family home's own door is its entrance; everywhere else a unit has its own unit door.
+    else if (door.kind !== "UNIT" && !(singleFamily && door.kind === "ENTRANCE")) add("units", "UNIT_DOOR_NOT_UNIT", `${label} is linked to ${door.name}, which isn't a unit door. Give the unit its own door.`);
     unitDoorOwners.set(unit.doorId, [...(unitDoorOwners.get(unit.doorId) ?? []), label]);
   }
   currentUnit = undefined;

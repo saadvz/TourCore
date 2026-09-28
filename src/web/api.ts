@@ -27,8 +27,8 @@ import { TourCoreError } from "../core/TourCore";
 import { zonedParts, zonedTimeToUtc } from "../core/timezone";
 import { toE164 } from "../messaging/Messenger";
 import { auditExportFile } from "../operator/auditExport";
-import { persistSession, type OperatorServices } from "../operator/services";
-import { checkedConfig as checkedSetup, readinessForProperty, runPracticeTour } from "../operator/setupFlow";
+import { defaultMessagingMode, persistSession, type OperatorServices } from "../operator/services";
+import { checkedConfig as checkedSetup, publishProperty, readinessForProperty, runPracticeTour } from "../operator/setupFlow";
 import type { VerificationLinks } from "../visitor/verificationLinks";
 
 /**
@@ -201,8 +201,10 @@ async function route(ctx: ApiContext, method: string, path: string, body: Record
       const draft = createPropertySetup({
         address: String(body.address ?? ""),
         name: body.name === undefined ? undefined : String(body.name),
+        propertyType: body.propertyType ? String(body.propertyType) : undefined,
         timezone: body.timezone ? String(body.timezone) : undefined,
         existingPropertyIds: ws.propertyIds(),
+        messagingMode: defaultMessagingMode(ctx.installedMessaging?.()),
       });
       ws.saveDraft(draft);
       return ok(await propertyPayload(ctx, draft.property.id));
@@ -251,7 +253,7 @@ async function route(ctx: ApiContext, method: string, path: string, body: Record
   }
 
   if (method === "POST" && action === "publish") {
-    const result = await ws.publishDemoProperty(id, now);
+    const result = await publishProperty(ctx, id, now);
     if (result.published) return ok({ published: true, summary: await summaryFor(ctx, id) });
     return ok({
       published: false,
@@ -342,7 +344,7 @@ function download(ws: PropertyWorkspace, id: string, file: string | undefined, t
 }
 
 function nextStepFor(code: string): { action: "readiness" | "practice" | "review"; label: string } {
-  if (code.startsWith("READINESS")) return { action: "readiness", label: "Run readiness check" };
+  if (code.startsWith("READINESS") || code === "TEXTING_NOT_ATTACHED") return { action: "readiness", label: "Run readiness check" };
   if (code.startsWith("DRY_TOUR")) return { action: "practice", label: "Run a practice tour" };
   return { action: "review", label: "Review setup" };
 }

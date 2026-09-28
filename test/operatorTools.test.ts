@@ -98,7 +98,20 @@ describe("setup through the tools", () => {
     expect(state.status).toBe("DRAFT");
 
     const review = await h.ok("review_property_setup");
-    expect(review.lines).toEqual(expect.arrayContaining(["100 Alfred Way", "  Timezone: Eastern Time", "Unit 101", "  Route: Lobby Entrance \u2192 Unit 101 Door", "  Monday-Friday", "  Basic identity form"]));
+    expect(review.lines).toEqual(
+      expect.arrayContaining([
+        "100 Alfred Way, Brooklyn, NY",
+        "Called: 100 Alfred Way",
+        "Apartment building",
+        "Unit 101",
+        "  1 bed \u00b7 1 bath \u00b7 $1,950/month \u00b7 available now",
+        "  Route: Lobby Entrance \u2192 Unit 101 Door",
+        "Verification: Basic identity form",
+        "Visitor texting: Practice only (nobody is texted)",
+        "Door access: Demo",
+      ]),
+    );
+    expect(review.lines.join("\n")).not.toMatch(/https?:|\/mcp|localhost/);
     expect(review.canSave).toBe(true);
   });
 
@@ -112,7 +125,7 @@ describe("setup through the tools", () => {
 
   it("maps routes from the operator's words but only saves exact, known doors", async () => {
     const h = app();
-    await h.ok("create_property_setup", { address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way" });
+    await h.ok("create_property_setup", { address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way", propertyType: "APARTMENT_BUILDING" });
     await h.ok("add_door", { name: "Lobby Entrance", kind: "entrance" });
     await h.ok("add_door", { name: "Garden Entrance", kind: "entrance" });
     await h.ok("add_unit", { name: "Unit 101" });
@@ -160,7 +173,7 @@ describe("setup through the tools", () => {
 describe("readiness, practice tour and publish", () => {
   it("surfaces a real readiness failure in plain language", async () => {
     const h = app();
-    await h.ok("create_property_setup", { address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way" });
+    await h.ok("create_property_setup", { address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way", propertyType: "APARTMENT_BUILDING" });
     await h.ok("add_door", { name: "Lobby Entrance", kind: "entrance" });
     await h.ok("add_unit", { name: "Unit 101" });
     await h.ok("add_unit", { name: "Unit 102" });

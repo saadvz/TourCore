@@ -46,7 +46,7 @@ export class Installation {
 
   constructor(readonly options: InstallationOptions) {
     const now = options.now ?? Date.now;
-    this.secrets = options.secrets ?? new LocalSecretStore(new InstallationFiles(options.root).paths.secrets);
+    this.secrets = options.secrets ?? new LocalSecretStore(new InstallationFiles(options.root).paths.secrets, now);
     this.files = new InstallationFiles(options.root, () => secretValues(this.rawEnv(), { secrets: this.secrets }));
     this.sessions = new SetupSessions(options.runtime, now);
     this.grants = new OAuthGrantStore(options.runtime, now);

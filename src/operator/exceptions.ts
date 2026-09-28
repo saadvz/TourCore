@@ -9,6 +9,7 @@ import { applySetupCommand } from "../setup/commands";
 import { SetupInputError } from "../setup/setupActions";
 import { statusLabel } from "../setup/workspace";
 import { writeJsonAtomic } from "../storage/atomicWrite";
+import { resumeStep } from "../visitor/conversation";
 import type { OperatorServices } from "./services";
 import { persistSession } from "./services";
 import {
@@ -85,6 +86,8 @@ export interface OperatorException {
   accessBlocked: boolean;
   /** The visitor's own words, for an unanswered question. */
   question?: string;
+  /** The unit an unanswered question was about, when the visitor named one before booking. */
+  questionUnitId?: string;
   /** open = needs a decision; cleared = no longer applies (e.g. the hold was lifted); resolved = the team closed it. */
   status: "open" | "cleared" | "resolved";
   resolution?: ExceptionResolution;
@@ -232,12 +235,12 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
     title: TITLES[kind],
     summary: summaryFor(kind, e, tour),
     visitorName: visitorNameOf(tour),
-    unitName: unitNameOf(tour),
+    unitName: unitNameOf(tour) ?? tour.config.units.find((u) => u.id === e.unitId)?.name,
     tourRef: tourRef(tour.propertyId, tour.tourId),
     happenedAt: e.at,
     when: formatShortDateTime(new Date(e.at), tour.config.property.timezone),
     ...tourStatusFor(tour),
-    ...(kind === "unanswered-question" ? { question: e.detail } : {}),
+    ...(kind === "unanswered-question" ? { question: e.detail, ...(e.unitId ? { questionUnitId: e.unitId } : {}) } : {}),
     status,
     ...(resolution ? { resolution } : {}),
     nextSteps: status === "open" ? nextStepsFor(kind, tour, paused) : [],
@@ -413,7 +416,7 @@ export async function planFlaggedAnswer(services: OperatorServices, input: { exc
   if (exception.status === "resolved") throw new SetupInputError("ALREADY_RESOLVED", "That question has already been handled.");
   const words = cleanFact(input.approvedFact);
   const tour = exception.tourRef ? await findTour(services, exception.tourRef) : undefined;
-  const unitId = tour ? currentReservation(tour)?.unitId : undefined;
+  const unitId = exception.questionUnitId ?? (tour ? currentReservation(tour)?.unitId : undefined);
   const { draft } = services.workspace.openDraft(exception.propertyId);
   const unit = draft.units.find((u) => u.id === unitId);
   const topic = questionTopic(exception.question);
@@ -465,6 +468,8 @@ export async function answerFlaggedQuestion(
   let visitorAnswered = false;
   if (tour?.live) {
     await tour.live.reply(visitorAnswerText(exception.question!, fact));
+    // Then back to where the visitor is now: the same menu, times or confirmation they were on.
+    await resumeStep(tour.live);
     await persistSession(services, tour.live);
     visitorAnswered = true;
   }

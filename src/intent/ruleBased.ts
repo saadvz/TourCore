@@ -1,4 +1,4 @@
-import type { Awaiting, IntentInterpretation, IntentInterpreter, InterpretContext, StopRef, TourIntent } from "./model";
+import type { IntentInterpretation, IntentInterpreter, InterpretContext, StepAwaiting, StopRef, TourIntent } from "./model";
 import { normalize, numberWord, ordinalWord, stripFiller } from "./normalize";
 
 /**
@@ -245,9 +245,12 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
     return undefined;
   };
   const informational = () => (asked ? question(0.9) : WANTS_TO_KNOW.test(t) ? question(0.8) : t.split(" ").length <= 3 && TOPIC.test(t) ? question(0.7) : undefined);
+  // Asking about a detail ("How much is Unit 1A?", "Does 1A have laundry?") isn't choosing it.
+  const detailQuestion = asked && (TOPIC.test(t) || /\bhow (much|many|big)\b/.test(t));
 
   switch (ctx.step) {
     case "choose-unit": {
+      if (detailQuestion) return question(0.9);
       const named = ctx.units.filter((u) => mentionsUnit(t, u.name));
       if (named.length === 1) return result({ type: "SELECT_UNIT", unitName: named[0]!.name }, 0.95);
       if (named.length > 1) return unknown({ clarificationNeeded: true });
@@ -275,6 +278,8 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
       const bareN = bare ? numberWord(bare[2]!) : undefined;
       if (bareN !== undefined && bareN >= 1 && bareN <= labels.length) return result({ type: "SELECT_TIME", timeLabel: labels[bareN - 1]! }, 1);
       const time = pickTimeLabel(t, labels);
+      // "Does 1A have laundry?" names a unit, not 1 AM.
+      if (asked && !time.label && (detailQuestion || ctx.units.some((u) => namesUnitLoosely(t, u.name)))) return question(0.9);
       if (time.label) return result({ type: "SELECT_TIME", timeLabel: time.label }, 0.95);
       if (time.mentioned) return unknown({ clarificationNeeded: true, clarificationQuestion: "That time isn't open." });
       const pick = pickOption(t, labels.length);
@@ -304,15 +309,33 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
     }
 
     case "identity":
-      return help() ?? unknown();
+      // "Where's the form?" is about the identity form (Tour Core resends the link), not about the property.
+      if (FORM_WORDS.test(t)) return help() ?? unknown();
+      return help() ?? clearQuestion() ?? unknown();
 
     case "ready":
     case "touring":
       return interpretOnTour(ctx, t, asked, { result, unknown, question, help, informational });
 
     default:
-      return help() ?? unknown();
+      return help() ?? clearQuestion() ?? unknown();
   }
+
+  /** Where nothing else is expected, only an unmistakable question counts: a bare "anything" or "ok?" isn't one. */
+  function clearQuestion(): IntentInterpretation | undefined {
+    const words = t.split(" ").length;
+    if ((asked && words >= 2) || WANTS_TO_KNOW.test(t) || (words <= 3 && TOPIC.test(t))) return question(0.85);
+    return undefined;
+  }
+}
+
+const FORM_WORDS = /\b(form|link|verif\w*|identity|id check|my id)\b/;
+
+/** A unit label written on its own ("1a", "2b", "101"), not just "unit 1A". Used only to tell a question from a time. */
+function namesUnitLoosely(t: string, unitName: string): boolean {
+  if (mentionsUnit(t, unitName)) return true;
+  const label = normalize(unitName).replace(/^(unit|apt|apartment|suite)\s+/, "");
+  return /\d/.test(label) && (/[a-z]/.test(label) || label.length >= 2) && new RegExp(`(^|\\s|#)${esc(label)}(\\s|$)`).test(t);
 }
 
 interface Helpers {
@@ -323,7 +346,7 @@ interface Helpers {
   informational: () => IntentInterpretation | undefined;
 }
 
-function answerToAwaiting(awaiting: Awaiting, t: string, { result, unknown }: Helpers): IntentInterpretation | undefined {
+function answerToAwaiting(awaiting: StepAwaiting, t: string, { result, unknown }: Helpers): IntentInterpretation | undefined {
   if (awaiting.kind === "choose-stop") {
     const pick = pickOption(t, awaiting.stops.length);
     return pick ? result(stopIntent(awaiting.stops[pick.index]!), 0.95) : undefined;

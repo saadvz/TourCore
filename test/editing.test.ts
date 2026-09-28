@@ -25,7 +25,7 @@ const MONDAY_MORNING = zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour: 7, 
 
 /** Builds a property only through the named commands the browser uses. */
 function viaCommands(): SetupDraft {
-  let d = createPropertySetup({ address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way" });
+  let d = createPropertySetup({ address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way", propertyType: "APARTMENT_BUILDING" });
   const run = (name: string, input: unknown) => (d = applySetupCommand(d, name, input));
   run("addDoor", { name: "Lobby Entrance", kind: "ENTRANCE" });
   run("addUnit", { name: "Unit 101", summary: "One-bedroom apartment on the first floor.", facts: ["South-facing windows."] });

@@ -36,7 +36,8 @@ import {
   type SetupDraft,
 } from "../setup";
 import { unitDetailsView } from "../setup/presenters";
-import { setUnitProfile } from "../setup/setupActions";
+import { addTourableSpace, setUnitProfile, SINGLE_FAMILY_SPACE_NAME } from "../setup/setupActions";
+import { PROPERTY_TYPE_LABELS, PROPERTY_TYPES, type PropertyType } from "../config/tourCoreConfig";
 import { isCurrent } from "../setup/workspace";
 import { InputClosedError, Prompter, style } from "./prompter";
 
@@ -127,9 +128,10 @@ async function newProperty(): Promise<void> {
   io.say(dim("I'll ask one thing at a time. Press Enter to accept a suggestion shown in [brackets]."));
   io.say("");
   const address = await io.askRequired("What's the property address?", undefined, "Please type the street address, like 100 Alfred Way, Brooklyn, NY.");
-  const name = await io.ask("What should we call this property?", address);
+  const propertyType = await askPropertyType();
+  const name = await io.ask("Does it have a property or building name? Leave blank to use the address.");
   const timezone = await askTimeZone(address);
-  let draft = createPropertySetup({ address, name, timezone, existingPropertyIds: workspace.list().map((s) => s.config.property.id) });
+  let draft = createPropertySetup({ address, name, propertyType, timezone, existingPropertyIds: workspace.list().map((s) => s.config.property.id) });
   draft = await editUnits(draft);
   draft = await editRoutes(draft, "all");
   draft = await editHours(draft, false);
@@ -137,6 +139,12 @@ async function newProperty(): Promise<void> {
   draft = await editServices(draft);
   draft = await editAlerts(draft);
   await reviewAndSave(draft, false);
+}
+
+function askPropertyType(current?: PropertyType): Promise<PropertyType> {
+  io.say("");
+  const choices = PROPERTY_TYPES.map((t) => ({ label: PROPERTY_TYPE_LABELS[t], value: t }));
+  return io.choose("What type of property is this?", choices, current ? PROPERTY_TYPES.indexOf(current) + 1 : 3);
 }
 
 async function askTimeZone(address: string, current?: string): Promise<string> {
@@ -157,9 +165,17 @@ async function editUnits(start: SetupDraft): Promise<SetupDraft> {
   let draft = start;
   const existingIds = draft.units.map((u) => u.id);
   io.say("");
-  const count = await io.askParsed("How many units can people self-tour?", String(existingIds.length || 1), numberBetween(1, 50), "Please enter a number from 1 to 50.");
+  const singleFamily = draft.property.propertyType === "SINGLE_FAMILY";
+  const count = singleFamily ? 1 : await io.askParsed("How many units can people self-tour?", String(existingIds.length || 1), numberBetween(1, 50), "Please enter a number from 1 to 50.");
 
-  for (let i = 0; i < count; i++) {
+  if (singleFamily) {
+    const current = draft.units[0];
+    draft = await retry(async () => {
+      const name = await io.askRequired("People will tour the whole home. What should we call it?", current?.name ?? SINGLE_FAMILY_SPACE_NAME);
+      return current ? renameUnit(draft, current.id, name) : addTourableSpace(draft, { name });
+    });
+  }
+  for (let i = 0; i < count && !singleFamily; i++) {
     const current = existingIds[i] ? draft.units.find((u) => u.id === existingIds[i]) : undefined;
     draft = await retry(async () => {
       const name = await io.askRequired(`What's unit ${i + 1} called?`, current?.name ?? `Unit ${i + 1}`);
@@ -340,10 +356,11 @@ async function editAlerts(draft: SetupDraft): Promise<SetupDraft> {
 async function editPropertyDetails(draft: SetupDraft): Promise<SetupDraft> {
   io.say("");
   return retry(async () => {
-    const name = await io.askRequired("What should we call this property?", draft.property.name);
     const address = await io.askRequired("What's the property address?", draft.property.address);
+    const propertyType = await askPropertyType(draft.property.propertyType);
+    const name = await io.ask("Property or building name (leave blank to use the address)", draft.property.displayName);
     const timezone = await askTimeZone(address, draft.property.timezone);
-    return setPropertyDetails(draft, { name, address, timezone });
+    return setPropertyDetails(draft, { name, address, propertyType, timezone });
   });
 }
 

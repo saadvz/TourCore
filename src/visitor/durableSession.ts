@@ -24,11 +24,18 @@ const StopRefSchema = z.object({
   label: z.string(),
 });
 
-const AwaitingSchema = z.discriminatedUnion("kind", [
+const STEP_AWAITING = [
   z.object({ kind: z.literal("confirm-arrival") }),
   z.object({ kind: z.literal("confirm-stop"), stop: StopRefSchema }),
   z.object({ kind: z.literal("choose-stop"), stops: z.array(StopRefSchema).min(1) }),
   z.object({ kind: z.literal("confirm-finish") }),
+] as const;
+const StepAwaitingSchema = z.discriminatedUnion("kind", [...STEP_AWAITING]);
+
+/** A question Tour Core asked back ("Which unit do you mean?"), and the step confirmation to restore after it. */
+const AwaitingSchema = z.discriminatedUnion("kind", [
+  ...STEP_AWAITING,
+  z.object({ kind: z.literal("which-unit"), question: z.string().max(300), units: z.array(z.string()).min(1), resume: StepAwaitingSchema.optional() }),
 ]);
 
 const Iso = z.iso.datetime({ offset: true });
@@ -171,6 +178,7 @@ function stopsExist(awaiting: z.infer<typeof AwaitingSchema>, config: TourCoreCo
   const names = new Set(config.doors.map((d) => d.name));
   if (awaiting.kind === "confirm-stop") return names.has(awaiting.stop.doorName);
   if (awaiting.kind === "choose-stop") return awaiting.stops.every((s) => names.has(s.doorName));
+  if (awaiting.kind === "which-unit") return awaiting.units.every((u) => config.units.some((x) => x.name === u)) && (!awaiting.resume || stopsExist(awaiting.resume, config));
   return true;
 }
 

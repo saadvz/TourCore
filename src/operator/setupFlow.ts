@@ -2,8 +2,8 @@ import { validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
 import { runDryTour, type DryTourResult } from "../setup/dryTour";
 import { runReadinessCheck, type ReadinessResult } from "../setup/readiness";
 import { SetupInputError } from "../setup/setupActions";
-import { isCurrent, type PropertyState } from "../setup/workspace";
-import type { OperatorServices } from "./services";
+import { isCurrent, type PropertyState, type PublishBlocker, type PublishResult } from "../setup/workspace";
+import type { InstalledMessaging, OperatorServices } from "./services";
 
 /**
  * The readiness, practice-tour and publish flow shared by every operator
@@ -33,6 +33,59 @@ export function connectLine(services: OperatorServices, propertyId: string, mess
     if (err instanceof SetupInputError) return err.message;
     throw err;
   }
+}
+
+/**
+ * Whether visitors who text this property's number reach it, in the words
+ * the operator hears. Separate from door access and records, which have
+ * their own modes.
+ */
+export type VisitorTexting =
+  | { state: "connected"; label: "Connected"; line?: string }
+  | { state: "not-using-it"; label: "Not connected to this property yet"; problem: string }
+  | { state: "not-working"; label: "Not working yet"; problem: string }
+  | { state: "number-in-use"; label: "Number used by another property"; problem: string }
+  | { state: "practice"; label: "Practice only (nobody is texted)" };
+
+export const TEXTING_NOT_USED =
+  "Visitor texting is connected, but this property isn't using it yet. I'll connect the property to your touring number before publishing.";
+
+export function visitorTexting(services: OperatorServices, propertyId: string, messagingMode: string, installed = services.installedMessaging?.()): VisitorTexting {
+  if (messagingMode !== "sendblue") {
+    return installed ? { state: "not-using-it", label: "Not connected to this property yet", problem: TEXTING_NOT_USED } : { state: "practice", label: "Practice only (nobody is texted)" };
+  }
+  if (installed && !installed.ready) return { state: "not-working", label: "Not working yet", problem: "Visitor texting isn't working yet, so texts to your touring number wouldn't reach this property." };
+  const line = services.messagingLine?.();
+  const owner = line ? services.endpoints?.resolve(line) : undefined;
+  if (owner && owner.propertyId !== propertyId) {
+    return { state: "number-in-use", label: "Number used by another property", problem: "Your touring number already answers for another property, so texts wouldn't reach this one." };
+  }
+  return { state: "connected", label: "Connected", ...(line ? { line } : {}) };
+}
+
+/**
+ * Publish rules that depend on the installation, not the setup answers: a
+ * property must never look live while real texts to it have nowhere to go.
+ */
+export function publishGuards(services: OperatorServices, propertyId: string, messagingMode: string, installed: InstalledMessaging | undefined = services.installedMessaging?.()): PublishBlocker[] {
+  if (!installed?.requiredForPublish) return [];
+  const texting = visitorTexting(services, propertyId, messagingMode, installed);
+  if (texting.state === "not-using-it") return [{ code: "TEXTING_NOT_CONNECTED", message: texting.problem }];
+  if (texting.state === "not-working" || texting.state === "number-in-use") return [{ code: "TEXTING_NOT_WORKING", message: texting.problem }];
+  const attached = services.endpoints?.forProperty(propertyId);
+  if (services.endpoints && services.messagingLine?.() && !attached) {
+    return [{ code: "TEXTING_NOT_ATTACHED", message: "Visitor texting isn't pointed at this property yet. Run the readiness check again and I'll connect it." }];
+  }
+  return [];
+}
+
+/** Publish for demo through every gate: the saved setup's checks plus the installation's own rules. */
+export async function publishProperty(services: OperatorServices, propertyId: string, now: Date): Promise<PublishResult> {
+  const ws = services.workspace;
+  const guards = ws.has(propertyId) ? publishGuards(services, propertyId, ws.load(propertyId).config.messagingMode) : [];
+  const blockers = [...guards, ...(await ws.publishBlockers(propertyId, now))];
+  if (blockers.length) return { published: false, blockers };
+  return ws.publishDemoProperty(propertyId, now);
 }
 
 export async function checkReadiness(services: OperatorServices, propertyId: string, config: TourCoreConfig, now: Date): Promise<ReadinessResult> {

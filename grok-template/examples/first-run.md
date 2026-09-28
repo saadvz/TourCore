@@ -49,41 +49,68 @@ start is connected and tested. Would you like to add your first property?
 **Tour Core:** What's the property address?
 [`list_properties`]
 
-**Operator:** 100 Alfred Way, Brooklyn.
+**Operator:** 144 Hillside Ave, Teaneck.
 
-[`create_property_setup` address "100 Alfred Way, Brooklyn", name "100 Alfred Way"]
+[`create_property_setup` address "144 Hillside Ave, Teaneck NJ" (no name: the
+operator didn't give one) → nextQuestion "What type of property is this?"]
 
-**Tour Core:** Got it. I've set 100 Alfred Way to Eastern Time. Right?
+**Tour Core:** I have 144 Hillside Ave, Teaneck NJ, on Eastern Time. Right?
+And what type of property is this: a single-family home, a multifamily home,
+an apartment building, or something else?
+
+**Operator:** Yes. It's an apartment building.
+
+[`update_property_details` propertyType APARTMENT_BUILDING → nextQuestion
+"Which units can people tour?"]
+
+**Tour Core:** Which units can people tour?
+
+**Operator:** 1A and 1B.
+
+[`add_unit` "Unit 1A"; `add_unit` "Unit 1B"]
+
+**Tour Core:** Added Unit 1A and Unit 1B, each with its own door. How many
+bedrooms and bathrooms does each have, and what's the rent?
+
+**Operator:** 1A is 2 bed 1 bath for $2,300. 1B is 1 bed 1 bath for $1,950.
+
+[`set_unit_details` details "1A is 2 bed 1 bath for $2,300. 1B is 1 bed 1 bath
+for $1,950." → nextQuestion "When are these units available?"]
+
+**Tour Core:** When are these units available?
+
+**Operator:** 1A now, 1B October 15.
+
+[`set_unit_details` units 1A availability "now", 1B availability "October 15"]
+
+**Tour Core:** Here's what I have:
+Unit 1A — 2 bed · 1 bath · $2,300/month · available now
+Unit 1B — 1 bed · 1 bath · $1,950/month · available October 15
+Does that look right?
 
 **Operator:** Yes.
 
-**Tour Core:** How many units can people self-tour, and what are they called?
+**Tour Core:** Which door do visitors come in through?
 
-**Operator:** Two. 101 is a one-bedroom and 102 is a two-bedroom.
+**Operator:** The main entrance.
 
-[`add_unit` "Unit 101", description "One-bedroom"; `add_unit` "Unit 102", description "Two-bedroom"]
+[`add_door` "Main Entrance", entrance]
 
-**Tour Core:** Added Unit 101 and Unit 102, each with its own door. Which door
-do visitors come in through?
-
-**Operator:** The lobby entrance.
-
-[`add_door` "Lobby Entrance", entrance]
-
-**Tour Core:** Any hallway or inside doors between the lobby and the units?
+**Tour Core:** Any hallway or inside doors between the main entrance and the
+units?
 
 **Operator:** No, the units are right off the lobby.
 
-[`preview_route` Unit 101: "lobby entrance", "unit door"; same for Unit 102]
+[`preview_route` Unit 1A: "main entrance", "unit door"; same for Unit 1B]
 
 **Tour Core:** I have:
-Unit 101: Lobby Entrance → Unit 101 Door
-Unit 102: Lobby Entrance → Unit 102 Door
+Unit 1A: Main Entrance → Unit 1A Door
+Unit 1B: Main Entrance → Unit 1B Door
 Is that right?
 
 **Operator:** Yep.
 
-[`set_route` Unit 101 ["Lobby Entrance", "Unit 101 Door"]; `set_route` Unit 102 ["Lobby Entrance", "Unit 102 Door"]]
+[`set_route` for each unit with the exact door names]
 
 **Tour Core:** When can people tour?
 
@@ -104,17 +131,25 @@ trying things out.
 
 **Operator:** Basic form.
 
-[`set_verification_policy` basic-form]
-
-[`set_services` messaging sendblue (texting is already connected); `review_property_setup`]
+[`set_verification_policy` basic-form. Texting isn't asked about: the property
+already uses the installed touring number. `review_property_setup`]
 
 **Tour Core:** Here's what I have:
-100 Alfred Way
-2 tourable units
-Lobby Entrance
-Weekdays, 9 AM–5 PM
-Basic visitor verification
-Sendblue visitor messaging
+144 Hillside Ave, Teaneck NJ
+Apartment building
+
+Unit 1A
+2 bed · 1 bath · $2,300/month · available now
+Route: Main Entrance → Unit 1A Door
+
+Unit 1B
+1 bed · 1 bath · $1,950/month · available October 15
+Route: Main Entrance → Unit 1B Door
+
+Tours: Monday-Friday, 9:00 AM-5:00 PM
+Verification: Basic identity form
+Visitor texting: Connected
+Door access: Demo
 
 Does that look right?
 
@@ -122,29 +157,44 @@ Does that look right?
 
 [`get_next_installation_step` → OFFER_OPERATOR_ALERTS]
 
-**Tour Core:** Your property is configured. Would you like me to keep an eye
-on tours and alert you when something needs your attention? I recommend it.
+**Tour Core:** Your property is configured. Would you like me to keep you
+updated when someone books, starts or finishes a tour, and alert you if
+something needs your input?
 
 **Operator:** Sure.
 
-**Tour Core:** I'm setting up alerts so I can notify you when a visitor needs
-your input.
+**Tour Core:** I recommend alerts for bookings, tour starts, completions and
+anything that needs your attention. Want to use those defaults?
 
-[Creates the Tour Core Exception Alert routine; `get_secure_setup_url` step
-operator-alerts, opened in the cloud browser.]
+**Operator:** Yes.
 
-**Tour Core:** I've created the alert. I opened Tour Core's secure setup page
-so you can finish connecting it without putting any credentials in chat.
+[`set_notification_preferences` preset recommended]
+
+**Tour Core:** I'm setting up your tour updates.
+
+[Creates the Tour Core Operator Updates routine; `get_secure_setup_url` step
+operator-alerts, opened next to the routine's trigger panel. The panel shows
+the address on screen, so Grok doesn't move it and hands the browser over.]
+
+**Tour Core:** I've opened Tour Core's secure setup page next to the update
+settings I created. Please copy the two connection details across, or put the
+whole example into the box on Tour Core's page. They go straight to Tour Core,
+not in chat.
 
 **Operator:** Done.
 
-[`get_next_installation_step` → TEST_OPERATOR_ALERTS → `test_operator_alerts`
-→ RUN_READINESS]
+[`get_next_installation_step` → TEST_OPERATOR_ALERTS → `test_operator_alerts`.
+The routine wakes with `installation.test` and posts:]
 
-**Tour Core:** Alerts are working. Prospects can text your touring number to
-choose a unit and time, verify their details, and complete the self-guided
-tour in the same conversation. I'll run a readiness check and a practice tour
-before we turn it on.
+**Tour Core:** Tour updates are connected. I'll let you know about your tours
+here.
+
+[`get_next_installation_step` → RUN_READINESS]
+
+**Tour Core:** Prospects can text your touring number to ask questions, choose
+a unit and time, verify their details, and complete the self-guided tour in
+the same conversation. I'll run a readiness check and a practice tour before
+we turn it on.
 [`run_readiness_check`]
 
 ✓ Property details
@@ -164,53 +214,72 @@ Practice tour passed:
 ✓ Verification worked
 ✓ Early arrival was denied
 ✓ Entrance access was allowed at the right time
-✓ Unit 101 access was allowed
-✓ Unit 102 Door (not on the route) was denied before Durin was contacted
+✓ Unit 1A access was allowed
+✓ Unit 1B Door (not on the route) was denied before Durin was contacted
 ✓ A repeated request didn't create a second access grant
 ✓ Tour completed
 ✓ Follow-up worked
 
 [`publish_demo_property` → returns a question]
 
-**Tour Core:** Everything passed. Would you like me to publish 100 Alfred Way
+**Tour Core:** Everything passed. Would you like me to publish 144 Hillside Ave
 for demo?
 
 **Operator:** Yes.
 
 [`publish_demo_property` with confirmationCode]
 
-**Tour Core:** Your property is live for demo. I'll keep an eye on tours and
-let you know when something needs your attention.
+**Tour Core:** Your property is published. Visitor texting is live. Door
+access is still in demo mode, so no physical locks will open. I'll keep you
+updated on your tours and let you know when something needs your attention.
 
 ---
 
-## Part 3: A visitor needs you (nobody asked)
+## Part 3: Tour updates (nobody asked)
 
-[A visitor texts "Is there a pool?". Tour Core answers them right away that it
-doesn't have that information, records the question, and wakes the Tour Core
-Exception Alert routine with only the issue reference. The routine calls
-`inspect_exception`.]
+[A visitor, Testy, books Unit 1A by text. Tour Core wakes the Tour Core
+Operator Updates routine with only an event id and `tour.booked`. The routine
+calls `get_operator_update`.]
 
-**Tour Core:** A visitor touring Unit 101 asked whether the property has a
-pool. Tour Core doesn't have an approved answer. The tour is still active.
-Would you like to add an approved answer or leave it for the property team?
+**Tour Core:** New tour booked: Testy is scheduled to tour Unit 1A today at
+3:00 PM.
 
-**Operator:** No pool. Say "There's no pool, but there's a gym on the roof."
+[Later: `tour.started`.]
 
-[`answer_flagged_question` → returns a question]
+**Tour Core:** Testy's Unit 1A tour has started.
 
-**Tour Core:** I can add "There's no pool, but there's a gym on the roof." to
-the approved facts for 100 Alfred Way and answer Pat. Want me to?
+[Inside, Testy texts "Is there a pool?". Tour Core replies "I don't have that
+information for this property. I've flagged it for the property team so they
+can get back to you." and sends `exception.created`. The routine calls
+`get_operator_update`.]
+
+**Tour Core:** Testy, touring Unit 1A, asked whether the property has a pool.
+Tour Core doesn't have that yet. The tour is still active. What should I tell
+them?
+
+**Operator:** No pool, but there's a gym on the roof.
+
+[`answer_flagged_question` approvedFact "There's no pool, but there's a gym on
+the roof." → returns a question]
+
+**Tour Core:** I'll save "There's no pool, but there's a gym on the roof." as
+an approved fact and send that answer to Testy. Continue?
 
 **Operator:** Yes.
+
+[`answer_flagged_question` with confirmationCode. Testy gets the answer, then
+Tour Core puts their tour step back in front of them.]
+
+[Later: `tour.completed`.]
+
+**Tour Core:** Testy's Unit 1A tour is complete.
 
 ---
 
 ## If readiness fails
 
-**Tour Core:** Almost there. One thing: Unit 102 doesn't have a complete route
-yet. Want me to set it up the same as Unit 101 (Lobby Entrance → Unit 102
-Door)?
+**Tour Core:** Almost there. One thing: Unit 1B doesn't have a complete route
+yet. Want me to set it up the same as Unit 1A (Main Entrance → Unit 1B Door)?
 
 **Operator:** Yes.
 

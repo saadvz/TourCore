@@ -1,4 +1,4 @@
-# Tour Core Grok Bot template (v0.3.0)
+# Tour Core Grok Bot template (v0.4.0)
 
 Everything that belongs in the **Tour Core** Grok Bot team template, versioned
 with the code. Grok Bot is the installer and operator console; Tour Core stays
@@ -33,7 +33,7 @@ Two ways in:
 | Profile (name, title, description, standing instructions, starting prompts) | `bot-profile.md` | Bot actions → Edit Profile, and the Bot's instructions |
 | Reusable context | `context/*.md` | Attach or paste into the Bot conversation and ask it to remember them |
 | Seven skills: Install Tour Core plus the six operator skills | `../.grok/skills/*/SKILL.md` (canonical, not copied) | Ask the Bot to save each as a private skill |
-| Routine: Tour Core Exception Alert | `routines/exception-alert.md` | Create a routine with an authenticated webhook trigger and these instructions |
+| Routine: Tour Core Operator Updates | `routines/operator-updates.md` | Grok creates it (authenticated webhook trigger, these instructions) when the operator turns on tour updates |
 | Safe examples | `examples/*.md` | Context for the Bot; made-up data only |
 | Integration | `integrations/tour-core-tools.md` | Custom MCP server; connected by every installation |
 | Manifest | `template.json` | For reviewers; lists every item, the repository setting, and what's never included |
@@ -54,8 +54,26 @@ folder or the skills.
 
 Custom MCP servers and credentials don't travel with a Grok Bot template.
 After adding the Bot, each installation gets its own Tour Core, its own
-connection, and its own routine credentials (entered on Tour Core's secure
-setup page).
+connection, and its own routine credentials (connected once on Tour Core's
+secure setup page). `template.json` → `marketplace` spells out what ships
+(instructions, skills, the routine definition, integration references) and
+what never does.
+
+## What the Bot does for the operator
+
+- **Property identity and type.** The address is the property's name unless
+  the operator gives one; the Bot never invents a building name. It asks
+  "What type of property is this?" (single-family home, multifamily home,
+  apartment building, other) and shapes the units question to match. A new
+  property uses the installed visitor texting automatically.
+- **Tour updates.** After the first property, the Bot offers to keep the
+  operator posted on bookings, tour starts, completions and anything that
+  needs their input, through the Tour Core Operator Updates routine.
+- **Plain status.** "Visitor texting is live. Door access is still in demo
+  mode, so no physical locks will open." Never "everything runs in demo mode".
+- **Visitor questions at every stage.** Answered only from approved facts;
+  anything unknown is flagged to the operator, and the visitor picks up where
+  they left off once it's answered.
 
 Install and publishing steps: [`docs/grok-template-setup.md`](../docs/grok-template-setup.md).
 Manual test: [`docs/grok-manual-test.md`](../docs/grok-manual-test.md).

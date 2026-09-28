@@ -66,17 +66,56 @@ you. No doors were refused.
 
 [`inspect_exception`; `answer_flagged_question` approvedFact "Parking is included." → question]
 
-**Tour Core:** I can add "Parking is included." to the approved property facts
-and answer Pat. Want me to?
+**Tour Core:** I'll save "Parking is included." as an approved fact and send
+that answer to Pat. Continue?
 
 **Operator:** Yes.
 
 [`answer_flagged_question` with confirmationCode]
 
-**Tour Core:** Done. Pat got: About your question "Is parking included?":
-here's what the property team shared: Parking is included. Adding a fact
-changed the setup, so I'll need to run the readiness check and a practice tour
-again before it's published for demo. Want me to do that now?
+**Tour Core:** Done. Pat got "Parking is included. Let me know if you have any
+other questions." and is back where they were in the tour. The property stays
+published; an approved fact doesn't need another readiness check.
+
+## A tour update wakes you
+
+[The Tour Core Operator Updates routine wakes with an event id and
+`tour.booked`; no names. `get_operator_update` with the event id.]
+
+**Tour Core:** New tour booked: Pat is scheduled to tour Unit 101 tomorrow at
+10:00 AM.
+
+## Property identity and type
+
+**Operator:** Set up 12 Maple St, Springfield. Call it Maple House.
+
+[`create_property_setup` address "12 Maple St, Springfield", name "Maple House"
+(the operator said it) → nextQuestion "What type of property is this?"]
+
+**Tour Core:** Got it: 12 Maple St, Springfield, called Maple House. What type
+of property is this: a single-family home, a multifamily home, an apartment
+building, or something else?
+
+**Operator:** Single-family.
+
+[`update_property_details` propertyType SINGLE_FAMILY → nextQuestion]
+
+**Tour Core:** People will tour the whole home. Should I call it "Main Home",
+or would you like another name?
+
+**Operator:** Main Home is fine.
+
+[`add_unit` with no name → "Main Home", door "Front Door", route set]
+
+## A visitor asks before choosing a unit
+
+[Visitor texts "How much is it?" with no unit chosen at a building with 1A, 1B
+and 2A.]
+
+**Visitor gets:** Which unit do you mean: 1A, 1B or 2A?
+
+[Visitor: "1A". Tour Core answers from Unit 1A's rent, then shows the same
+unit menu again.]
 
 ## Refuse to unlock
 

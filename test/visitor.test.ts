@@ -53,7 +53,7 @@ describe("visitor demo on the real engine", () => {
     expect((await visitorView(s)).input.kind).toBe("intro");
     await s.act("begin", { name: "Pat Smith", phone: "(555) 010-2000" });
     const v = await visitorView(s);
-    expect(v.thread[0]!.text).toContain("self-tour assistant for 100 Alfred Way");
+    expect(v.thread[0]!.text).toContain("Welcome to the self-guided tour for 100 Alfred Way!");
     expect(v.choices.map((c) => c.label)).toEqual(["Unit 101", "Unit 102"]);
   });
 

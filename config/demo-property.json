@@ -4,6 +4,7 @@
     "id": "prop_100_alfred_way",
     "name": "100 Alfred Way",
     "address": "100 Alfred Way",
+    "propertyType": "APARTMENT_BUILDING",
     "timezone": "America/New_York"
   },
   "operator": {

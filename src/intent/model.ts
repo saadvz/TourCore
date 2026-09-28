@@ -62,12 +62,19 @@ export interface StopRef {
   label: string;
 }
 
-/** Something Tour Core just asked the visitor to confirm, so a bare "yes" or "2" has a meaning. */
-export type Awaiting =
+/** A tour-step confirmation Tour Core is waiting on, so a bare "yes" or "2" has a meaning. */
+export type StepAwaiting =
   | { kind: "confirm-arrival" }
   | { kind: "confirm-stop"; stop: StopRef }
   | { kind: "choose-stop"; stops: StopRef[] }
   | { kind: "confirm-finish" };
+
+/**
+ * Something Tour Core just asked the visitor. `which-unit` interrupts the
+ * step for a question ("Which unit do you mean: 1A or 2B?"); `resume` is the
+ * step confirmation that was open before, restored once the question is done.
+ */
+export type Awaiting = StepAwaiting | { kind: "which-unit"; question: string; units: string[]; resume?: StepAwaiting };
 
 export type ConversationStep = "intro" | "choose-unit" | "choose-time" | "consent" | "identity" | "ready" | "touring" | "follow-up" | "done" | "stopped";
 
@@ -75,7 +82,7 @@ export interface InterpretContext {
   message: string;
   /** Where the conversation is, which also says what Tour Core last asked for. */
   step: ConversationStep;
-  awaiting?: Awaiting;
+  awaiting?: StepAwaiting;
   units: { name: string; summary?: string }[];
   /** Tour times offered, in menu order. */
   timeChoices: string[];

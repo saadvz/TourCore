@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Guided property setup, checked and practiced before publish
-  version: "0.2.0"
+  version: "0.3.0"
 ---
 
 # Setup Property
@@ -20,18 +20,20 @@ is kept only in this conversation. Read `context/operator-language.md` and
 
 ## When to use
 
-The operator wants to set up a building, add or change units, doors, tour
-hours, verification or messaging. For route questions on their own, use
+The operator wants to set up a property, change its type, add or change units,
+doors, tour hours, verification or messaging. For route questions on their own, use
 **Map Route**.
 
 ## Required inputs and access
 
 - The Tour Core connector must be connected (see the template setup guide).
-- From the operator, in this order: address; the units people can tour; each
-  unit's basic information (bedrooms, bathrooms, monthly rent, availability are
-  required; square footage, floor, description, parking, laundry, pets,
-  utilities, furnished and features are offered); the entrance(s); any hallway
-  doors on the way; tour days and hours; how careful to be about checking IDs.
+- From the operator, in this order: address; property type; the units or
+  spaces people can tour; each unit's basic information (bedrooms, bathrooms,
+  monthly rent, availability are required; square footage, floor, description,
+  parking, laundry, pets, utilities, furnished and features are offered); the
+  entrance(s); any hallway doors on the way; tour days and hours; how careful
+  to be about checking IDs. A property or building name only if the operator
+  offers one.
 - Never ask for API keys, secrets, passwords or phone-provider credentials.
   Those are connected on the Tour Core computer, never in chat.
 
@@ -43,14 +45,31 @@ the operator correct it.
 1. `list_properties`. If the address already exists, say so and continue with
    that property.
 2. Ask **"What's the property address?"** Then `create_property_setup` with the
-   address (and a name if they gave one). Tell them the time zone Tour Core
-   guessed ("I've got Eastern Time for that address. Right?") and fix it with
+   address. The address is the property's identity and what visitors hear.
+   Pass `name` only if the operator said a property or building name
+   themselves; never suggest, invent or "improve" one. Confirm the canonical
+   address and the time zone Tour Core guessed ("I have 144 Hillside Ave,
+   Teaneck NJ, on Eastern Time. Right?") and fix either with
    `update_property_details` if they say no.
-3. Ask **"Can you tell me about the units people can tour?"** (e.g. "Two units,
-   101 and 102"). For each unit, `add_unit` with the operator's own name and
-   description. Each unit gets its own door automatically ("Unit 101 Door").
+3. Ask Tour Core's `nextQuestion`, **"What type of property is this?"**, with
+   its `choices` in plain words: single-family home, multifamily home,
+   apartment building, or other. Never guess the type from the address. Save
+   the answer with `update_property_details` (`propertyType`). It returns the
+   next question about the spaces people tour.
+4. Ask about the tourable spaces the way that type needs:
+   - **Single-family home:** people tour the whole home. Ask whether to call it
+     "Main Home" or something else, then `add_unit` (leave `name` out for
+     "Main Home"). Its door is the home's entrance ("Front Door" unless the
+     operator names it) and its route is set on its own. Never make up a unit
+     number.
+   - **Multifamily home or apartment building:** ask **"Which units can people
+     tour?"** For each, `add_unit` with the operator's own name and
+     description. Each unit gets its own door automatically ("Unit 1A Door").
+   - **Other:** ask how they'd like the spaces people tour to be named, then
+     `add_unit` with their names.
+
    Never write a description or fact yourself.
-4. **Unit information, before doors and routes.** Ask for bedrooms, bathrooms,
+5. **Unit information, before doors and routes.** Ask for bedrooms, bathrooms,
    rent and availability, and accept a natural answer for several units at
    once ("1A and 1B are 2 bed 1 bath for $2,200. 2A is 3 bed 2 bath for
    $2,800"): pass it as `details` to `set_unit_details`. Offer the optional
@@ -68,43 +87,67 @@ the operator correct it.
 
    Corrections go through `set_unit_details` too. These details are approved
    facts: visitors' questions ("How many bedrooms?", "How much is it?", "When
-   is it available?") are answered from them.
-5. Ask **"Which door do visitors come in through?"** `add_door` with
+   is it available?") are answered from them first, at any point in their
+   conversation.
+6. Doors: ask **"Which door do visitors come in through?"** `add_door` with
    `kind: entrance`. Ask **"Any hallway or inside doors on the way to the
-   units?"** Add each as `kind: hallway`. Add only doors the operator named.
-6. Routes: follow the **Map Route** skill for each unit (`preview_route`, show
-   the operator, then `set_route` with the exact names).
-7. Ask **"When can people tour?"** Pass their words to `set_tour_hours`
+   units?"** Add each as `kind: hallway`. Add only doors the operator named. A
+   single-family home already has its entrance; ask only if they want to
+   rename it or there are inside doors.
+7. Routes: follow the **Map Route** skill for each unit (`preview_route`, show
+   the operator, then `set_route` with the exact names). A single-family
+   home's route is already set.
+8. Ask **"When can people tour?"** Pass their words to `set_tour_hours`
    ("weekdays", "9 to 5"). Mention the visible defaults once (45-minute tours,
    a new tour every hour, 10 minutes early) and change any they want.
-8. Ask **"How carefully do you want to verify visitors?"** Offer "Basic
+9. Ask **"How carefully do you want to verify visitors?"** Offer "Basic
    identity form (free, recommended)" or "Practice verification (everyone
    passes; for trying things out)". `set_verification_policy`. Full ID checks
    aren't available yet; say so if asked.
-9. Texting: when Tour Core's texting is already connected (it is in a guided
-   install), `set_services` with `messaging: sendblue` without asking. Tour
-   records are stored with this Tour Core installation; don't ask about it.
-10. `review_property_setup` and read it back as a short list:
+10. Texting is automatic: when this Tour Core has visitor texting installed,
+    a new property uses it on its own. Don't ask "How do you want to text
+    people?". If `get_services` shows the property still on practice texts
+    while texting is installed, `set_services` with `messaging: sendblue`
+    yourself. Tour records are stored with this Tour Core installation; don't
+    ask about it.
+11. `review_property_setup` and read its `lines` back as a short list:
 
     > Here's what I have:
-    > 100 Alfred Way
-    > 2 tourable units
-    > Lobby Entrance
-    > Weekdays, 9 AM–5 PM
-    > Basic visitor verification
-    > Real texts through Sendblue
+    > 144 Hillside Ave, Teaneck NJ
+    > Apartment building
+    >
+    > Unit 1A
+    > 2 bed · 1 bath · $2,300/month · available now
+    > Route: Main Entrance → Unit 1A Door
+    >
+    > Unit 1B
+    > 1 bed · 1 bath · $1,950/month · available October 15
+    > Route: Main Entrance → Unit 1B Door
+    >
+    > Tours: Monday-Friday, 9:00 AM-5:00 PM
+    > Verification: Basic identity form
+    > Visitor texting: Connected
+    > Door access: Demo
     >
     > Does that look right?
 
-11. On yes, the setup is saved. In a guided install, go back to Tour Core's
+    If the operator gave the property a name, a "Called: ..." line follows the
+    address.
+12. On yes, the setup is saved. In a guided install, go back to Tour Core's
     next step (`get_next_installation_step`, Install Tour Core skill): it
-    offers alerts next, then runs the checks. Otherwise: "I'll run a readiness
-    check and a practice tour before we turn it on." Then run **Run Readiness
-    Check**. If it fails, explain each problem in plain words and offer the fix;
-    change nothing without the operator's OK. If it passes, run **Simulate
-    Tour**.
-12. If both passed, `publish_demo_property`. It returns a question; ask it word
+    offers tour updates next, then runs the checks. Otherwise: "I'll run a
+    readiness check and a practice tour before we turn it on." Then run **Run
+    Readiness Check**. If it fails, explain each problem in plain words and
+    offer the fix; change nothing without the operator's OK. If it passes, run
+    **Simulate Tour**.
+13. If both passed, `publish_demo_property`. It returns a question; ask it word
     for word. Only after a clear yes, call it again with the `confirmationCode`.
+    If it refuses because visitor texting is connected but the property isn't
+    using it yet, follow its `remediation` yourself: `set_services` with
+    `messaging: sendblue`, `run_readiness_check`, `run_dry_tour`, then ask the
+    publish question again. After publishing, say each part as it is: "Visitor
+    texting is live. Door access is still in demo mode, so no physical locks
+    will open." Never say "everything runs in demo mode".
 
 Later edits: facts and unit details (bedrooms, rent, availability,
 description, amenities, directions) are approved content: saving them keeps

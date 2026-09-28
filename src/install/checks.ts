@@ -140,7 +140,7 @@ export async function testOperatorAlerts(inst: Installation) {
   try {
     await sink.deliver(testEvent(at));
     ok = true;
-    message = "Sent a test alert. The Tour Core Exception Alert routine should wake up and post a short confirmation.";
+    message = "Sent a test update. The Tour Core Operator Updates routine should wake up and post a short confirmation.";
   } catch (err) {
     message = err instanceof Error ? err.message : "The test alert couldn't be delivered.";
   }

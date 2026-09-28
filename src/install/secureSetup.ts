@@ -36,10 +36,29 @@ const Messaging = z.strictObject({
   fromNumber: z.string().trim().max(30).optional(),
 });
 
-const Alerts = z.strictObject({
-  webhookUrl: z.string().trim().max(2000),
-  key: z.string().trim().max(1000),
-});
+const Alerts = z.union([
+  z.strictObject({ webhookUrl: z.string().trim().max(2000), key: z.string().trim().max(1000) }),
+  /** The routine panel's whole webhook example (e.g. a curl command), pasted in one go. */
+  z.strictObject({ snippet: z.string().trim().min(1).max(5000) }),
+]);
+
+/**
+ * Finds the webhook address and bearer key in whatever the routine panel
+ * shows for its trigger: a curl example, "URL: ... Key: ...", or the two
+ * values on separate lines. Only runs on this page; nothing is logged.
+ */
+export function parseRoutineSnippet(text: string): { webhookUrl: string; key: string } | undefined {
+  const url = /https:\/\/[^\s"'<>`]+/i.exec(text)?.[0]?.replace(/[),.;]+$/, "");
+  const key =
+    /authorization\s*[:=]\s*["']?\s*bearer\s+([^\s"'`]+)/i.exec(text)?.[1] ??
+    /\bbearer\s+([A-Za-z0-9._~+/=-]{8,})/i.exec(text)?.[1] ??
+    /\b(?:key|token|secret)\b["']?\s*[:=]\s*["']?([A-Za-z0-9._~+/=-]{8,})/i.exec(text)?.[1] ??
+    text
+      .split(/\s+/)
+      .map((w) => w.replace(/^["'`]+|["'`,;]+$/g, ""))
+      .find((w) => w.length >= 16 && !/^https?:/i.test(w) && /^[A-Za-z0-9._~+/=-]+$/.test(w) && /\d/.test(w) && /[A-Za-z]/.test(w));
+  return url && key ? { webhookUrl: url, key } : undefined;
+}
 
 const fail = (status: number, message: string): SecureSetupResult => ({ status, json: { ok: false, error: { message } } });
 
@@ -98,15 +117,17 @@ export async function handleSecureSetupApi(ctx: SecureSetupContext, method: stri
   if (method === "POST" && route === "operator-alerts") {
     const parsed = Alerts.safeParse(body ?? {});
     if (!parsed.success) return fail(400, "Enter the routine's webhook address and key.");
+    const values = "snippet" in parsed.data ? parseRoutineSnippet(parsed.data.snippet) : parsed.data;
+    if (!values) return fail(400, "I couldn't find both the webhook address and the key in what you pasted. Paste them into the two fields instead.");
     let url: URL;
     try {
-      url = new URL(parsed.data.webhookUrl);
+      url = new URL(values.webhookUrl);
     } catch {
       return fail(400, "That webhook address isn't a web address.");
     }
     if (url.protocol !== "https:") return fail(400, "The webhook address must start with https://.");
-    if (parsed.data.key.length < 8) return fail(400, "That key looks too short.");
-    inst.secrets.set({ TOURCORE_GROK_ROUTINE_URL: url.toString(), TOURCORE_GROK_ROUTINE_KEY: parsed.data.key }, at());
+    if (values.key.length < 8) return fail(400, "That key looks too short.");
+    inst.secrets.set({ TOURCORE_GROK_ROUTINE_URL: url.toString(), TOURCORE_GROK_ROUTINE_KEY: values.key }, at());
     inst.files.update({ operatorNotificationProvider: "GROK_ROUTINE" }, at());
     const result = await testOperatorAlerts(inst);
     return reply(200, { ok: result.ok, saved: true, message: result.message });

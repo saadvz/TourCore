@@ -33,7 +33,7 @@ async function startApp(dev = false) {
 
 /** What an operator does in the browser, as the API calls the page makes. */
 async function setUpAlfredWay(app: Awaited<ReturnType<typeof startApp>>) {
-  const created = await app.call("POST", "/api/properties", { address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way" });
+  const created = await app.call("POST", "/api/properties", { address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way", propertyType: "APARTMENT_BUILDING" });
   const id = created.body.summary.id as string;
   await app.cmd(id, "addDoor", { name: "Lobby Entrance", kind: "ENTRANCE" });
   await app.cmd(id, "addUnit", { name: "Unit 101", summary: "One-bedroom apartment" });
@@ -117,7 +117,7 @@ describe("browser setup", () => {
 
   it("points readiness failures at the exact thing to fix", async () => {
     const app = await startApp();
-    const created = await app.call("POST", "/api/properties", { address: "5 Elm St, Austin, TX" });
+    const created = await app.call("POST", "/api/properties", { address: "5 Elm St, Austin, TX", propertyType: "MULTIFAMILY_HOME" });
     const id = created.body.summary.id;
     await app.cmd(id, "addDoor", { name: "Front Door", kind: "ENTRANCE" });
     await app.cmd(id, "addUnit", { name: "Loft" });
