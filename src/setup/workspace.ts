@@ -220,6 +220,23 @@ export class PropertyWorkspace {
     return next;
   }
 
+  /**
+   * Something outside the setup answers changed (e.g. the texting number), so
+   * earlier checks no longer prove anything: back to draft until readiness
+   * passes again. Kept for history, but no longer counted.
+   */
+  invalidateReadiness(propertyId: string, reason: string): PropertyState {
+    const { state } = this.load(propertyId);
+    const { publishedAt: _dropped, ...rest } = state;
+    const next: PropertyState = {
+      ...rest,
+      status: "DRAFT",
+      ...(state.readiness ? { readiness: { ...state.readiness, passed: false, problems: [reason] } } : {}),
+    };
+    this.writeState(next);
+    return next;
+  }
+
   recordDryTour(propertyId: string, result: DryTourResult): PropertyState {
     const { state } = this.load(propertyId);
     let tourId: string | undefined;

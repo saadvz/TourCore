@@ -102,7 +102,8 @@ export async function handleSendblueWebhook(
   deps: {
     secret: string | undefined;
     ledger: MessagingLedger;
-    receive: (message: InboundMessage) => Promise<void>;
+    /** Hands the message to Tour Core; may say which conversation took it, for the ledger. */
+    receive: (message: InboundMessage) => Promise<{ correlationId?: string } | void>;
     now?: () => Date;
     log?: (line: string) => void;
   },
@@ -124,10 +125,10 @@ export async function handleSendblueWebhook(
   if ("ignored" in parsed) return { status: 200, body: { ignored: parsed.ignored } };
 
   const key = `sendblue:in:${parsed.message.providerMessageId}`;
-  if (!deps.ledger.claim(key, now)) return { status: 200, body: { duplicate: true } };
+  if (!deps.ledger.claim(key, now, { provider: "sendblue", messageId: parsed.message.providerMessageId })) return { status: 200, body: { duplicate: true } };
   try {
-    await deps.receive(parsed.message);
-    deps.ledger.complete(key);
+    const handled = await deps.receive(parsed.message);
+    deps.ledger.complete(key, undefined, { correlationId: handled ? handled.correlationId : undefined, at: deps.now?.() });
     return { status: 200, body: { ok: true } };
   } catch (err) {
     // Retrying won't help and could repeat half-done work; acknowledge and keep the failure on record.

@@ -207,6 +207,60 @@ visitor text ─► interpreter ─► typed intent (ARRIVAL, AT_UNIT "Unit 101"
 - **Developer mode** shows how each text was read (intent, confidence, rules or model, whether Tour Core asked back).
   No model reasoning is stored.
 
+### Restarting Tour Core mid-tour
+
+A text-message tour survives Tour Core stopping and starting again. A visitor can be halfway through booking, waiting on
+a confirmation ("Are you at the property now?"), holding an identity-form link, or standing in Unit 101, and simply
+keep texting after the restart.
+
+- **Canonical records first.** After every message, the tour's records (`tour-export.json`, `audit.csv`,
+  `record.json`) are written atomically, then a small snapshot that points at them. If Tour Core stops between the
+  two, the snapshot is at most one step behind, and the tour records win on restore.
+- **What the snapshot keeps** (`runtime/sessions/<id>.json`, schema version 1): the visitor's number and line,
+  prospect and reservation ids, the tour-time menu last offered, an unanswered confirmation, route progress, the open
+  identity-form link's times, the follow-up state, and timestamps. It never copies reservation, consent,
+  verification or grant data.
+- **Restore checks before resuming.** The property, prospect, reservation, unit, route and doors must exist and agree,
+  and a tour past identity must have its consent and passing check on file. Anything that doesn't check out is held
+  for the team: the visitor is told "I'm having trouble restoring your tour. I've alerted the property team.", the
+  property card shows it, and nothing opens. The rest of the server keeps running.
+- **Access is re-decided every time.** Time windows, holds, revocations, completion and routes come from the tour
+  records and the normal policy, so a restart can't make access looser. An opened door's grant is reused, not
+  re-requested from Durin.
+- **Identity-form links** are saved by the hash of the token (never the token), with expiry, single use and
+  replacement intact across restarts.
+- **Retried webhooks** are recognised after a restart (`runtime/messaging-ledger/`), with provider, message id,
+  processed time and conversation id.
+- **Finished tours stay finished.** After a restart, a finished visitor gets "This tour has ended. Text HI..." and HI
+  starts a new tour.
+- **One texting number, one property** (`runtime/endpoints/`). The number is connected to a property by its readiness
+  check, the same number can't be claimed by a second property, a text to an unconnected number isn't answered, and
+  a changed number sends the property back to draft until readiness passes again. Setups from earlier versions are
+  connected automatically on first start.
+
+The readiness check for a real-phone property includes **Tour progress can be safely saved**.
+
+**Manual restart test with your real phone.** Keep the tunnel and `PUBLIC_BASE_URL` as they are; nothing in Sendblue
+needs to change.
+
+1. Start Tour Core: `npm run setup`.
+2. From your phone, text the Sendblue number "Hi" and reply `1` for Unit 101. Pick a time and stop when you're asked
+   "Is it OK if I text you about this tour...?".
+3. Press **Ctrl+C** in the Tour Core window, then run `npm run setup` again. It prints "Picked up 1 text-message tour
+   where it left off."
+4. Reply "yeah that's fine". You should get the identity-form link, not the welcome message.
+5. Restart once more (Ctrl+C, `npm run setup`), then open the link from step 4 and submit the form. You should get
+   "You're all set for your tour...".
+
+Second scenario, during a tour (use **Move tour to now** in developer mode, `npm run setup:dev`, if the tour time is
+later):
+
+1. Text "I'm here", then "I'm at unit 101". Both doors open.
+2. Restart Tour Core (Ctrl+C, `npm run setup`). Refresh the **Watch live tour** page: it shows you at Unit 101.
+3. Text "does this have laundry?". You get the approved answer (or the "I don't have that information" fallback),
+   not "Which unit would you like to see?".
+4. Text "I'm done", restart once more, then reply "yes". The follow-up is recorded and the tour shows **Finished**.
+
 ## What "Publish for demo" means
 
 Publishing sets the property's status to `PUBLISHED_FOR_DEMO`. That is **not** a production launch. It only means:
@@ -316,7 +370,7 @@ src/policy/        evaluateAccess
 src/durin/         Durin contract + demo mode
 src/messaging/     Messenger contract + demo messaging
 src/verification/  basic identity form + practice verification
-src/storage/       store contract + in-memory store
+src/storage/       store contract + in-memory store; runtime store (sessions, links, lines, ledger) + atomic writes
 src/audit/, src/export/   audit formatting/CSV, validated export bundle
 src/createTourCore.ts     the only place config modes map to adapters
 src/setup/         setup engine: actions, commands, presenters, readiness, practice tour, save/publish

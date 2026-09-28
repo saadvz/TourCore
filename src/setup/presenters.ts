@@ -280,7 +280,7 @@ export function readinessView(result: ReadinessResult) {
       ok: c.ok,
       problems: c.details.map((p) => {
         const fix = fixFor(p.code, p.section, p.unitId);
-        return { message: p.message, ...(fix ? { fix } : {}), dev: { code: p.code } };
+        return { message: p.message, ...(fix ? { fix } : {}), dev: { code: p.code, ...(p.detail ? { detail: p.detail } : {}) } };
       }),
     })),
   };
@@ -323,7 +323,7 @@ export function propertySummary(
   saved: SavedProperty | undefined,
   draft: SetupDraft | undefined,
   unsaved: boolean,
-  extra: { tourCount?: number; activeVisitorDemo?: string } = {},
+  extra: { tourCount?: number; activeVisitorDemo?: string; messagingLine?: string; needsAttention?: { visitorPhone: string; problem: string }[] } = {},
 ) {
   const config = saved?.config ?? draft!;
   const state = saved?.state;
@@ -344,6 +344,10 @@ export function propertySummary(
     practicePassed: practiceCurrent && !!state?.dryTour?.passed,
     hasHistory: (extra.tourCount ?? 0) > 0,
     activeVisitorDemo: extra.activeVisitorDemo,
+    /** The texting number visitors use for this property, when one is connected. */
+    messagingLine: extra.messagingLine,
+    /** Text-message tours that couldn't be picked up after a restart. No doors were opened for them. */
+    needsAttention: (extra.needsAttention ?? []).map((n) => ({ message: `A text-message tour with ${n.visitorPhone} couldn't be picked up after a restart. Please reach out to them.`, dev: { problem: n.problem } })),
     dev: { propertyId: config.property.id, configHash: hash, recordsFolder: state?.dryTour?.recordsFolder },
   };
 }

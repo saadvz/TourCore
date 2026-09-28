@@ -25,7 +25,10 @@ import {
   visitorView,
 } from "./setupFacade";
 import { z } from "zod";
+import type { TourCoreConfig } from "../config/tourCoreConfig";
 import { checkMessaging } from "../createTourCore";
+import type { MessagingEndpoints } from "../messaging/endpoints";
+import type { RuntimeStore } from "../storage/runtimeStore";
 import { TourCoreError } from "../core/TourCore";
 import { zonedParts, zonedTimeToUtc } from "../core/timezone";
 import { toE164 } from "../messaging/Messenger";
@@ -45,6 +48,51 @@ export interface ApiContext {
   links?: VerificationLinks;
   dev: boolean;
   now?: () => Date;
+  /** Where running tours are saved; checked by readiness for real-phone properties. */
+  runtime?: RuntimeStore;
+  /** Which property answers on which texting number. */
+  endpoints?: MessagingEndpoints;
+  /** The texting number this computer sends from (Sendblue today). */
+  messagingLine?: () => string | undefined;
+  /** Saves a conversation's records (and, for text messages, its resume snapshot). */
+  persist?: (session: VisitorDemoSession) => Promise<void>;
+  /** Text-message tours that couldn't be picked up after a restart. */
+  needsAttention?: (propertyId: string) => { visitorPhone: string; problem: string }[];
+}
+
+async function persist(ctx: ApiContext, session: VisitorDemoSession): Promise<void> {
+  if (ctx.persist) return ctx.persist(session);
+  const { record, bundle } = await session.record();
+  ctx.workspace.recordVisitorDemo(session.propertyId, record, bundle);
+}
+
+/**
+ * Connects this computer's texting number to a real-phone property before its
+ * readiness check (freeing it when the property stops using real phones).
+ * Returns why it can't, e.g. another property already answers on it.
+ */
+function connectLine(ctx: ApiContext, id: string, messagingMode: string, now: Date): string | undefined {
+  const endpoints = ctx.endpoints;
+  if (!endpoints) return undefined;
+  if (messagingMode !== "sendblue") {
+    endpoints.detach(id);
+    return undefined;
+  }
+  const line = ctx.messagingLine?.();
+  if (!line) return undefined;
+  try {
+    const { changed, previous } = endpoints.attach({ address: line, provider: "sendblue", propertyId: id }, now);
+    if (changed && previous) ctx.workspace.invalidateReadiness(id, "The texting number changed. Run the readiness check again.");
+    return undefined;
+  } catch (err) {
+    if (err instanceof SetupInputError) return err.message;
+    throw err;
+  }
+}
+
+async function checkReadiness(ctx: ApiContext, id: string, config: TourCoreConfig, now: Date) {
+  const lineProblem = connectLine(ctx, id, config.messagingMode, now);
+  return runReadinessCheck(config, { now, runtime: ctx.runtime, ...(lineProblem ? { lineProblem } : {}) });
 }
 
 const IdentityForm = z.object({
@@ -130,10 +178,10 @@ async function route(ctx: ApiContext, method: string, path: string, body: Record
         links!.markUsed(parts[1]);
         return { status: 410, json: { ok: false, message: LINK_PROBLEMS.used } };
       }
+      // Used before acting, so a crash mid-submit can never let the same link be used twice.
       links!.markUsed(parts[1]);
       await session.act("submitIdentity", form.data, { text: "Submitted the identity form." });
-      const { record, bundle } = await session.record();
-      ws.recordVisitorDemo(session.propertyId, record, bundle);
+      await persist(ctx, session);
       const passed = (await session.stage()) === "ready";
       return ok({
         ok: passed,
@@ -157,8 +205,7 @@ async function route(ctx: ApiContext, method: string, path: string, body: Record
       return ok({ times, anyTime: { now: `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}` } });
     }
     const saveAndShowLive = async () => {
-      const { record, bundle } = await session.record();
-      ws.recordVisitorDemo(session.propertyId, record, bundle);
+      await persist(ctx, session);
       return ok({ live: await liveTourView(session) });
     };
     if (method === "POST" && parts[2] === "reschedule") {
@@ -182,8 +229,7 @@ async function route(ctx: ApiContext, method: string, path: string, body: Record
     }
     if (method === "POST" && parts[2] === "actions" && parts[3]) {
       await session.act(parts[3], body.input);
-      const { record, bundle } = await session.record();
-      ws.recordVisitorDemo(session.propertyId, record, bundle);
+      await persist(ctx, session);
       return ok({ visitor: await visitorView(session) });
     }
   }
@@ -226,13 +272,13 @@ async function route(ctx: ApiContext, method: string, path: string, body: Record
     const { draft, unsavedChanges } = ws.openDraft(id);
     if (unsavedChanges) {
       if (validateConfig(draft).length) {
-        const result = await runReadinessCheck(draft, { now });
+        const result = await runReadinessCheck(draft, { now, runtime: ctx.runtime });
         return ok({ readiness: readinessView(result), savedChanges: false, summary: await summaryFor(ctx, id) });
       }
       ws.save(draft, now);
     }
     const { config } = ws.load(id);
-    const result = await runReadinessCheck(config, { now });
+    const result = await checkReadiness(ctx, id, config, now);
     ws.recordReadiness(id, result);
     return ok({ readiness: readinessView(result), savedChanges: unsavedChanges, summary: await summaryFor(ctx, id) });
   }
@@ -274,6 +320,7 @@ async function route(ctx: ApiContext, method: string, path: string, body: Record
     const checks = await checkMessaging(draft);
     return ok({
       mode: draft.messagingMode,
+      line: ctx.endpoints?.forProperty(id)?.address,
       connected: checks.every((c) => c.ok),
       checks: checks.map((c) => ({ label: c.label, ok: c.ok, message: c.message, dev: { code: c.code } })),
     });
@@ -323,7 +370,7 @@ async function checkedConfig(ctx: ApiContext, id: string, now: Date) {
   }
   let { config, state } = ws.load(id);
   if (!state.readiness?.passed || state.readiness.configHash !== state.configHash) {
-    const readiness = await runReadinessCheck(config, { now });
+    const readiness = await checkReadiness(ctx, id, config, now);
     ws.recordReadiness(id, readiness);
     if (!readiness.passed) return { readiness: readinessView(readiness) };
     ({ config, state } = ws.load(id));
@@ -359,6 +406,8 @@ async function summaryFor(ctx: ApiContext, id: string) {
   return propertySummary(ws.has(id) ? ws.load(id) : undefined, draft, unsavedChanges, {
     tourCount: ws.has(id) ? ws.listTours(id).length : 0,
     activeVisitorDemo: active?.id,
+    messagingLine: ctx.endpoints?.forProperty(id)?.address,
+    needsAttention: ctx.needsAttention?.(id),
   });
 }
 

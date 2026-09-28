@@ -9,8 +9,10 @@ import { SENDBLUE_WEBHOOK_PATH, sendblueRuntime } from "../messaging/sendblue/ru
 import { handleSendblueWebhook } from "../messaging/sendblue/webhook";
 import { createIntentInterpreter, intentModelFromEnv, type IntentInterpreter } from "../intent";
 import { PropertyWorkspace } from "../setup";
-import { VisitorDemoRegistry } from "../visitor";
-import { MessagingConversations } from "../visitor/messagingRouter";
+import { MessagingEndpoints } from "../messaging/endpoints";
+import { FileRuntimeStore } from "../storage/runtimeStore";
+import { VisitorDemoRegistry, type VisitorDemoSession } from "../visitor";
+import { adoptLegacyLine, MessagingConversations } from "../visitor/messagingRouter";
 import { VerificationLinks } from "../visitor/verificationLinks";
 import { handleApi } from "./api";
 import { loadLocalEnv } from "./env";
@@ -37,6 +39,8 @@ export interface SetupServerOptions {
   realNow?: () => number;
   /** How typed visitor messages are read. Defaults to the built-in rules, plus a language model when one is configured. */
   interpreter?: IntentInterpreter;
+  /** Live conversations for this process. Tests pass their own to look inside. */
+  visitors?: VisitorDemoRegistry;
   log?: (line: string) => void;
 }
 
@@ -56,16 +60,27 @@ function publicRouteAllowed(method: string, path: string): boolean {
  */
 export function createSetupServer(options: SetupServerOptions = {}): Server {
   const workspace = options.workspace ?? new PropertyWorkspace();
-  const visitors = new VisitorDemoRegistry();
+  const visitors = options.visitors ?? new VisitorDemoRegistry();
   const dev = options.dev ?? false;
   const log = options.log ?? ((line: string) => console.log(`  ${line}`));
-  const ledger = new MessagingLedger(join(workspace.root, "messaging", "ledger.json"));
-  const links = new VerificationLinks({ baseUrl: () => sendblueRuntime.env().publicBaseUrl, now: options.realNow });
+  const runtime = new FileRuntimeStore(join(workspace.root, "runtime"));
+  const ledger = new MessagingLedger(join(runtime.root, "messaging-ledger", "ledger.json"), 5000, join(workspace.root, "messaging", "ledger.json"));
+  const links = new VerificationLinks({ baseUrl: () => sendblueRuntime.env().publicBaseUrl, now: options.realNow, store: runtime });
+  const endpoints = new MessagingEndpoints(runtime);
+  const messagingLine = () => sendblueRuntime.env().fromNumber;
+  try {
+    adoptLegacyLine(workspace, endpoints, messagingLine(), log);
+  } catch (err) {
+    log(`Couldn't connect the texting number to a property: ${err instanceof Error ? err.message : "unknown error"}`);
+  }
   let transport: ReturnType<typeof createLiveMessagingTransport> | undefined;
   const conversations = new MessagingConversations({
     workspace,
     registry: visitors,
     links,
+    runtime,
+    endpoints,
+    defaultLine: messagingLine,
     transport: () => (transport ??= createLiveMessagingTransport(ledger)),
     now: options.now,
     realNow: options.realNow,
@@ -74,8 +89,24 @@ export function createSetupServer(options: SetupServerOptions = {}): Server {
   });
   const restored = conversations
     .restoreSaved()
-    .then((n) => n && log(`Picked up ${n} text-message tour${n === 1 ? "" : "s"} still in progress.`))
+    .then((n) => {
+      const needsAttention = conversations.attentionCount;
+      if (n) log(`Picked up ${n} text-message tour${n === 1 ? "" : "s"} where ${n === 1 ? "it" : "they"} left off.`);
+      if (needsAttention) log(`${needsAttention} text-message tour${needsAttention === 1 ? "" : "s"} couldn't be restored safely and need${needsAttention === 1 ? "s" : ""} attention.`);
+    })
     .catch((err) => log(`Couldn't restore earlier text-message tours: ${err instanceof Error ? err.message : "unknown error"}`));
+  const api = {
+    workspace,
+    visitors,
+    links,
+    dev,
+    now: options.now,
+    runtime,
+    endpoints,
+    messagingLine,
+    persist: (session: VisitorDemoSession) => conversations.save(session),
+    needsAttention: (propertyId: string) => conversations.needsAttention(propertyId),
+  };
 
   return createServer(async (req, res) => {
     await restored;
@@ -114,7 +145,7 @@ export function createSetupServer(options: SetupServerOptions = {}): Server {
           return send(415, "application/json", JSON.stringify({ error: { message: "Unsupported request." } }));
         }
         const body = method === "POST" ? JSON.parse((await readRaw(req)).toString("utf8") || "{}") : undefined;
-        const result = await handleApi({ workspace, visitors, links, dev, now: options.now }, method, url.pathname, body);
+        const result = await handleApi(api, method, url.pathname, body);
         if ("download" in result) {
           const { filename, contentType, content } = result.download;
           return send(result.status, `${contentType}; charset=utf-8`, content, { "Content-Disposition": `attachment; filename="${filename}"` });

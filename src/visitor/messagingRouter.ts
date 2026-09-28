@@ -1,23 +1,41 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { normalizePhone } from "../core/phone";
+import type { IntentInterpreter } from "../intent";
+import { MessagingEndpoints } from "../messaging/endpoints";
 import type { InboundMessage } from "../messaging/inbound";
 import type { MessagingAdapter } from "../messaging/Messenger";
 import type { PropertyWorkspace } from "../setup/workspace";
 import { writeJsonAtomic } from "../storage/atomicWrite";
-import type { IntentInterpreter } from "../intent";
+import { MemoryRuntimeStore, type RuntimeStore } from "../storage/runtimeStore";
 import { handleVisitorText, isGreeting } from "./conversation";
+import { restoreSession, RestoreError, SessionPersistence, type DurableSession } from "./durableSession";
 import { VisitorDemoSession, type VisitorDemoRegistry } from "./session";
 import type { VerificationLinks } from "./verificationLinks";
 
 type Transport = MessagingAdapter & { noteChannel?: (number: string, channel: InboundMessage["channel"]) => void };
 
+export const RESTORE_TROUBLE = "I'm having trouble restoring your tour. I've alerted the property team.";
+
+/** A conversation that couldn't be restored safely, as the operator sees it. */
+export interface NeedsAttention {
+  visitorPhone: string;
+  problem: string;
+  at: string;
+}
+
 /**
  * Hands a verified, de-duplicated inbound message to the right visitor
  * conversation (the same session type the browser phone uses) and saves the
  * records afterwards. Provider-neutral: any messaging webhook can call it.
+ * The receiving line decides the property; conversations are saved after
+ * every message and picked up again after a restart.
  */
 export class MessagingConversations {
+  private readonly persistence: SessionPersistence;
+  /** Conversations that couldn't be restored safely, by "<propertyId>:<phone>". */
+  private readonly broken = new Map<string, DurableSession>();
+
   constructor(
     private readonly deps: {
       workspace: PropertyWorkspace;
@@ -25,8 +43,12 @@ export class MessagingConversations {
       /** The live transport, e.g. the Sendblue adapter. */
       transport: () => Transport;
       links: VerificationLinks;
-      /** Which saved property answers this line; defaults to the one set to use real messaging. */
-      propertyFor?: (line: string | undefined) => string | undefined;
+      /** Where conversation snapshots are kept. Defaults to memory only (nothing survives a restart). */
+      runtime?: RuntimeStore;
+      /** Which property answers on which line. Defaults to adopting the line for the one real-phone property. */
+      endpoints?: MessagingEndpoints;
+      /** The line to assume when a provider doesn't say which number was texted. */
+      defaultLine?: () => string | undefined;
       now?: () => Date;
       /** Real-time source for new conversations (tests move it; production uses the system clock). */
       realNow?: () => number;
@@ -34,21 +56,39 @@ export class MessagingConversations {
       interpreter?: IntentInterpreter;
       log?: (line: string) => void;
     },
-  ) {}
+  ) {
+    const runtime = deps.runtime ?? new MemoryRuntimeStore();
+    this.persistence = new SessionPersistence(deps.workspace, runtime, deps.links);
+    this.endpoints = deps.endpoints ?? new MessagingEndpoints(runtime);
+  }
 
-  async receive(message: InboundMessage): Promise<void> {
+  private readonly endpoints: MessagingEndpoints;
+
+  /** How many conversations are held for the operator after the last restore. */
+  get attentionCount(): number {
+    return this.broken.size;
+  }
+
+  async receive(message: InboundMessage): Promise<{ correlationId?: string }> {
     const { workspace: ws, registry } = this.deps;
-    const propertyId = (this.deps.propertyFor ?? ((line) => this.defaultProperty(line)))(message.to);
-    if (!propertyId) {
-      this.deps.log?.("A message arrived, but no property is set up to use real messaging.");
-      return;
+    const line = message.to ?? this.deps.defaultLine?.();
+    if (!this.deps.endpoints) adoptLegacyLine(ws, this.endpoints, line);
+    const endpoint = this.endpoints.resolve(line);
+    if (!endpoint || !ws.has(endpoint.propertyId)) {
+      this.deps.log?.("A message arrived on a texting number that isn't connected to a property. It was not answered.");
+      return {};
     }
+    const propertyId = endpoint.propertyId;
     const transport = this.deps.transport();
     transport.noteChannel?.(message.from, message.channel);
     const meta = { provider: message.provider, providerMessageId: message.providerMessageId, deliveryChannel: message.channel };
     const phone = normalizePhone(message.from);
 
+    const trouble = this.broken.get(`${propertyId}:${phone}`);
+    if (trouble && !(await this.answerBroken(trouble, message.text))) return { correlationId: trouble.sessionId };
+
     let session = registry.latestForPhone(propertyId, phone, "messaging");
+    // A finished tour is never reopened: a greeting starts a new one (repeat tour).
     if (session && ["done", "stopped"].includes(await session.stage()) && isGreeting(message.text) && !session.optedOut) session = undefined;
 
     if (!session) {
@@ -56,7 +96,7 @@ export class MessagingConversations {
       const ready = state.readiness?.passed && state.readiness.configHash === state.configHash;
       if (!ready) {
         await transport.send({ to: phone, audience: "PROSPECT", body: `Thanks for reaching out to ${config.property.name}. Self-guided tours by text aren't available right now. Please contact the property team.` }).catch(() => undefined);
-        return;
+        return {};
       }
       session = registry.add(
         new VisitorDemoSession(propertyId, config, ws.newVisitorTourId(propertyId, this.deps.now?.() ?? new Date(), "text"), {
@@ -69,11 +109,25 @@ export class MessagingConversations {
       // Someone who texted STOP earlier stays opted out until they text START.
       session.optedOut = this.isOptedOut(propertyId, phone);
     }
+    session.line = endpoint.address;
 
     const wasOptedOut = session.optedOut;
     await handleVisitorText(session, phone, message.text, meta, this.deps.interpreter);
     if (session.optedOut !== wasOptedOut) this.setOptOut(propertyId, phone, session.optedOut);
     await this.save(session);
+    return { correlationId: session.id };
+  }
+
+  /** Saves a conversation's tour records and its snapshot. Use after any change, from any surface. */
+  save(session: VisitorDemoSession): Promise<void> {
+    return this.persistence.save(session);
+  }
+
+  /** Conversations the operator should look at because they couldn't be picked up after a restart. */
+  needsAttention(propertyId: string): NeedsAttention[] {
+    return [...this.broken.values()]
+      .filter((s) => s.propertyId === propertyId)
+      .map((s) => ({ visitorPhone: s.visitorPhone, problem: s.recovery?.problem ?? "Couldn't be restored.", at: s.recovery?.at ?? s.updatedAt }));
   }
 
   /** Sends through the live transport, created only when a message actually goes out. */
@@ -87,11 +141,52 @@ export class MessagingConversations {
   }
 
   /**
-   * After a restart, brings back text-message tours that were still in
-   * progress (the latest one per phone), so a booked visitor can carry on.
+   * After a restart, brings back text-message conversations: the latest one
+   * per phone at each property, finished or not, so a visitor mid-tour carries
+   * on and a finished one gets the usual "text HI for a new tour". Anything
+   * that doesn't check out against the tour records is held for the operator
+   * and never resumed.
    */
   async restoreSaved(): Promise<number> {
+    const log = this.deps.log ?? (() => {});
+    const { snapshots, unreadable } = this.persistence.all();
+    for (const key of unreadable) log(`A saved text-message conversation (${key}) couldn't be read. It was not resumed.`);
+
+    const latest = new Map<string, DurableSession>();
+    for (const s of snapshots.sort((a, b) => a.createdAt.localeCompare(b.createdAt))) latest.set(`${s.propertyId}:${s.visitorPhone}`, s);
+
+    let restored = 0;
+    for (const [key, snapshot] of latest) {
+      if (snapshot.status === "needs-attention") {
+        this.broken.set(key, snapshot);
+        continue;
+      }
+      if (this.deps.registry.find(snapshot.sessionId)) continue;
+      try {
+        const { session, notes } = await restoreSession(snapshot, { workspace: this.deps.workspace, transport: this.lazyTransport(), links: this.deps.links, realNow: this.deps.realNow });
+        this.deps.registry.add(session);
+        for (const note of notes) log(`Restoring a text-message tour: ${note}`);
+        restored++;
+      } catch (err) {
+        const problem = err instanceof RestoreError ? err.message : `Unexpected problem: ${err instanceof Error ? err.message : "unknown"}`;
+        // A finished tour has nothing to resume; its history stays readable and the next text starts fresh.
+        if (snapshot.status !== "active") {
+          log(`A finished text-message tour wasn't reloaded (${problem}). Its history is unchanged.`);
+          continue;
+        }
+        this.broken.set(key, this.persistence.markNeedsAttention(snapshot, problem, this.deps.now?.()));
+        log(`A text-message tour couldn't be restored safely and needs attention: ${problem}`);
+      }
+    }
+    restored += await this.restoreLegacy(latest);
+    return restored;
+  }
+
+  /** Tours saved before conversations had snapshots: rebuilt from their records once, then saved the new way. */
+  private async restoreLegacy(known: Map<string, DurableSession>): Promise<number> {
     const { workspace: ws, registry } = this.deps;
+    const knownTours = new Set([...known.values()].map((s) => `${s.propertyId}:${s.tourId}`));
+    const withSnapshot = new Set(this.persistence.all().snapshots.map((s) => `${s.propertyId}:${s.tourId}`));
     let restored = 0;
     for (const saved of ws.list().filter((p) => p.config.messagingMode === "sendblue")) {
       const propertyId = saved.config.property.id;
@@ -99,33 +194,71 @@ export class MessagingConversations {
       for (const record of ws.listTours(propertyId)) {
         if (record.kind !== "messaging" || !record.visitorPhone || seen.has(record.visitorPhone)) continue;
         seen.add(record.visitorPhone);
+        if (known.has(`${propertyId}:${record.visitorPhone}`) || knownTours.has(`${propertyId}:${record.tourId}`) || withSnapshot.has(`${propertyId}:${record.tourId}`)) continue;
         if (record.outcome !== "in-progress" || registry.latestForPhone(propertyId, record.visitorPhone, "messaging")) continue;
         const tour = ws.loadTour(propertyId, record.tourId);
         if (!tour) continue;
-        const session = new VisitorDemoSession(propertyId, saved.config, record.tourId, {
-          transport: this.lazyTransport(),
+        const sessionId = tour.bundle.messages.find((m) => m.correlationId)?.correlationId ?? `vd_${record.tourId.replace(/[^A-Za-z0-9]/g, "").slice(-12)}`;
+        const pseudo: DurableSession = {
+          schemaVersion: 1,
+          sessionId,
+          propertyId,
+          tourId: record.tourId,
           kind: "messaging",
-          verificationLinks: this.deps.links,
-          realNow: this.deps.realNow,
-          id: tour.bundle.messages.find((m) => m.correlationId)?.correlationId,
-          startedAt: new Date(record.ranAt),
-        });
-        await session.hydrate(record, tour.bundle);
-        registry.add(session);
-        restored++;
+          status: "active",
+          step: "intro",
+          visitorPhone: record.visitorPhone,
+          offeredSlots: [],
+          optedOut: false,
+          createdAt: record.ranAt,
+          updatedAt: record.updatedAt,
+        };
+        try {
+          const { session } = await restoreSession(pseudo, { workspace: ws, transport: this.lazyTransport(), links: this.deps.links, realNow: this.deps.realNow });
+          registry.add(session);
+          await this.save(session);
+          restored++;
+        } catch (err) {
+          const problem = err instanceof RestoreError ? err.message : "Unexpected problem restoring older records.";
+          this.broken.set(`${propertyId}:${record.visitorPhone}`, this.persistence.markNeedsAttention(pseudo, problem, this.deps.now?.()));
+          this.deps.log?.(`An older text-message tour couldn't be restored safely and needs attention: ${problem}`);
+        }
       }
     }
     return restored;
   }
 
-  private async save(session: VisitorDemoSession): Promise<void> {
-    const { record, bundle } = await session.record();
-    this.deps.workspace.recordVisitorDemo(session.propertyId, record, bundle);
-  }
-
-  private defaultProperty(_line: string | undefined): string | undefined {
-    const candidates = this.deps.workspace.list().filter((p) => p.config.messagingMode === "sendblue");
-    return (candidates.find((p) => p.state.status === "PUBLISHED_FOR_DEMO") ?? candidates[0])?.config.property.id;
+  /**
+   * A text from someone whose tour couldn't be restored. They're told once
+   * (and the team alerted once); after that, a greeting starts a fresh tour.
+   * Returns true when the message should go on to a new conversation.
+   */
+  private async answerBroken(snapshot: DurableSession, text: string): Promise<boolean> {
+    const key = `${snapshot.propertyId}:${snapshot.visitorPhone}`;
+    if (snapshot.recovery?.visitorTold && isGreeting(text)) {
+      this.broken.delete(key);
+      return true;
+    }
+    const transport = this.deps.transport();
+    const optedOut = this.isOptedOut(snapshot.propertyId, snapshot.visitorPhone);
+    if (!snapshot.recovery?.visitorTold) {
+      if (!optedOut) await transport.send({ to: snapshot.visitorPhone, audience: "PROSPECT", body: RESTORE_TROUBLE }).catch(() => undefined);
+      const { config } = this.deps.workspace.load(snapshot.propertyId);
+      await transport
+        .send({
+          to: config.operator.contact,
+          toName: config.operator.name,
+          audience: "OPERATOR",
+          body: `A text-message tour for ${snapshot.visitorPhone} couldn't be picked up after a restart (${snapshot.recovery?.problem ?? "unknown problem"}). No doors were opened. Please reach out to them.`,
+        })
+        .catch(() => undefined);
+      const told: DurableSession = { ...snapshot, recovery: { problem: snapshot.recovery?.problem ?? "Couldn't be restored.", at: snapshot.recovery?.at ?? snapshot.updatedAt, visitorTold: true } };
+      this.persistence.put(told);
+      this.broken.set(key, told);
+    } else if (!optedOut) {
+      await transport.send({ to: snapshot.visitorPhone, audience: "PROSPECT", body: `${RESTORE_TROUBLE} Text HI to start a new tour.` }).catch(() => undefined);
+    }
+    return false;
   }
 
   // Opt-outs outlive any one conversation, so they're kept per property on disk.
@@ -150,4 +283,20 @@ export class MessagingConversations {
     else delete current[phone];
     writeJsonAtomic(file, current);
   }
+}
+
+/**
+ * Setups saved before lines were mapped explicitly: connect the one texting
+ * number this computer uses to the property that was already answering on it
+ * (the published one, or the only one using real messaging). Ambiguous cases
+ * are left for the operator's readiness check.
+ */
+export function adoptLegacyLine(workspace: PropertyWorkspace, endpoints: MessagingEndpoints, line: string | undefined, log?: (line: string) => void): void {
+  if (!line || endpoints.resolve(line)) return;
+  const candidates = workspace.list().filter((p) => p.config.messagingMode === "sendblue" && !endpoints.forProperty(p.config.property.id));
+  const published = candidates.filter((p) => p.state.status === "PUBLISHED_FOR_DEMO");
+  const pick = published.length === 1 ? published[0] : candidates.length === 1 ? candidates[0] : undefined;
+  if (!pick) return;
+  endpoints.attach({ address: line, provider: "sendblue", propertyId: pick.config.property.id });
+  log?.(`Connected texting number ${line} to ${pick.config.property.name}.`);
 }

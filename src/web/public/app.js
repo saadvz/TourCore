@@ -125,6 +125,8 @@ function propertyCard(p) {
     { class: "card" },
     el("div", { class: "card-head" }, el("div", {}, el("h3", {}, p.name), p.address !== p.name ? el("p", { class: "muted" }, p.address) : null), statusBadge(p)),
     p.saved && p.unsavedChanges ? el("p", { class: "muted" }, `${p.save.label}.`) : null,
+    p.messagingLine ? el("p", { class: "muted" }, `Visitors text ${p.messagingLine}.`) : null,
+    (p.needsAttention ?? []).map((n) => el("p", { class: "form-error", role: "alert" }, n.message, devChip(n.dev?.problem))),
     devBlock(p.dev),
     el("div", { class: "actions" }, actions),
   );
@@ -813,6 +815,11 @@ function messagingStatus(id) {
         box,
         el("h3", {}, "Visitor messaging"),
         s.checks.map((c) => el("div", { class: "status-row" }, mark(c.ok), el("span", {}, c.message, devChip(c.dev?.code)))),
+        s.line
+          ? el("p", {}, `Texting number for this property: ${s.line}`)
+          : s.mode === "sendblue"
+            ? el("p", { class: "muted" }, "The texting number is connected to this property when you run the readiness check.")
+            : null,
         s.connected
           ? el("p", { class: "muted" }, "Visitors can text the property's number now.")
           : el("p", { class: "hint" }, "Sendblue is set up by whoever runs this computer (see \"Real phones with Sendblue\" in the README). Nothing needs to be typed here."),

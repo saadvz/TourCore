@@ -6,12 +6,15 @@ import { TourCore } from "../core/TourCore";
 import { checkMessaging, createDurin, createStore, createVerificationProvider } from "../createTourCore";
 import { DemoMessagingAdapter } from "../messaging/Messenger";
 import type { MessagingCheck } from "../messaging/sendblue/readiness";
+import { probeRuntimeStore, type RuntimeStore } from "../storage/runtimeStore";
 
-export type ReadinessCheckId = "property" | "hours" | "routes" | "verification" | "messaging" | "storage" | "access" | "audit";
+export type ReadinessCheckId = "property" | "hours" | "routes" | "verification" | "messaging" | "storage" | "progress" | "access" | "audit";
 
 export interface ReadinessProblem {
   code: string;
   message: string;
+  /** Underlying technical error, for developer mode only. */
+  detail?: string;
   /** Which part of setup the problem lives in, when it comes from the setup answers. */
   section?: ConfigSection;
   unitId?: string;
@@ -43,6 +46,7 @@ const LABELS: Record<ReadinessCheckId, string> = {
   verification: "Verification",
   messaging: "Messaging",
   storage: "Records",
+  progress: "Tour progress can be safely saved",
   access: "Durin access",
   audit: "Audit/export",
 };
@@ -60,10 +64,22 @@ const SECTION_TO_CHECK: Record<ConfigSection, ReadinessCheckId> = {
  * Deterministic: the same config and clock give the same answer. Each check
  * exercises the real application pieces the config selects, not canned text.
  */
-export async function runReadinessCheck(input: unknown, options: { now?: Date } = {}): Promise<ReadinessResult> {
+export async function runReadinessCheck(
+  input: unknown,
+  options: {
+    now?: Date;
+    /** Where running text-message tours are saved. When given, real-phone properties also check it works. */
+    runtime?: RuntimeStore;
+    /** Why this property can't have its texting number (e.g. another property already uses it). */
+    lineProblem?: string;
+  } = {},
+): Promise<ReadinessResult> {
   const now = options.now ?? new Date();
-  const problems = new Map<ReadinessCheckId, ReadinessProblem[]>(Object.keys(LABELS).map((k) => [k as ReadinessCheckId, []]));
+  const realPhones = (input as { messagingMode?: string } | undefined)?.messagingMode === "sendblue";
+  const ids = (Object.keys(LABELS) as ReadinessCheckId[]).filter((id) => id !== "progress" || (realPhones && options.runtime));
+  const problems = new Map<ReadinessCheckId, ReadinessProblem[]>(ids.map((k) => [k, []]));
   const fail = (id: ReadinessCheckId, problem: ReadinessProblem) => problems.get(id)!.push(problem);
+  if (options.lineProblem) fail("messaging", { code: "LINE_IN_USE", message: options.lineProblem, section: "services" });
 
   const issues: ConfigIssue[] = validateConfig(input);
   for (const issue of issues) {
@@ -96,6 +112,13 @@ export async function runReadinessCheck(input: unknown, options: { now?: Date } 
     await store.put("prospects", record);
     if ((await store.get("prospects", record.id))?.id !== record.id) throw new Error("Tour records couldn't be saved and read back.");
   });
+  if (problems.has("progress")) {
+    try {
+      probeRuntimeStore(options.runtime!, now);
+    } catch (err) {
+      fail("progress", { code: "PROGRESS_NOT_SAVEABLE", message: "Tour Core can't safely save active tours right now.", detail: err instanceof Error ? err.message : String(err) });
+    }
+  }
   await probe(fail, "access", "services", async () => {
     const health = await createDurin(config, new SimulatedClock(now), () => {}).getHealth();
     if (!health.healthy) throw new Error("Durin isn't responding right now, so doors would stay locked.");
@@ -140,9 +163,12 @@ async function probe(
 }
 
 function finish(problems: Map<ReadinessCheckId, ReadinessProblem[]>, now: Date): ReadinessResult {
-  const checks = (Object.keys(LABELS) as ReadinessCheckId[]).map((id) => {
-    const list = problems.get(id)!;
-    return { id, label: LABELS[id], ok: list.length === 0, problems: list.map((p) => p.message), codes: list.map((p) => p.code), details: list };
-  });
+  const checks = (Object.keys(LABELS) as ReadinessCheckId[])
+    .filter((id) => problems.has(id))
+    .map((id) => {
+      const list = problems.get(id)!;
+      const label = id === "progress" && list.length ? "Saving tour progress" : LABELS[id];
+      return { id, label, ok: list.length === 0, problems: list.map((p) => p.message), codes: list.map((p) => p.code), details: list };
+    });
   return { passed: checks.every((c) => c.ok), checkedAt: now.toISOString(), checks };
 }

@@ -128,6 +128,8 @@ export class VisitorDemoSession {
   /** Times offered at inquiry; typed replies ("2") and buttons both pick from this list. */
   offeredSlots: TourSlot[] = [];
   optedOut = false;
+  /** The messaging line this visitor texts (E.164), for text-message conversations. */
+  line?: string;
   readonly durinLines: string[] = [];
   private readonly thread: ConversationItem[] = [];
   private readonly shown = new Set<string>();
@@ -251,6 +253,17 @@ export class VisitorDemoSession {
   /** Remembers what Tour Core just asked, so a bare "yes" or "2" in the next text means something. */
   expect(stage: VisitorStage, awaiting: Awaiting): void {
     this.expected = { stage, awaiting };
+  }
+
+  /** The confirmation Tour Core is waiting on, if any (saved so it survives a restart). */
+  get pendingClarification(): { stage: VisitorStage; awaiting: Awaiting } | undefined {
+    return this.expected;
+  }
+
+  /** Puts back what only the conversation knew: the times offered and an unanswered confirmation. */
+  resume(state: { offeredSlots?: TourSlot[]; pending?: { stage: VisitorStage; awaiting: Awaiting } }): void {
+    if (state.offeredSlots) this.offeredSlots = state.offeredSlots;
+    this.expected = state.pending;
   }
 
   /** What Tour Core was waiting for, if the conversation is still at the same step. One reply only. */
