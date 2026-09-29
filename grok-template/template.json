@@ -3,7 +3,7 @@
   "version": "0.5.0",
   "distribution": "team",
   "profile": "bot-profile.md",
-  "hostedTourCoreUrl": "",
+  "hostedTourCoreUrl": "https://tourcore-production.up.railway.app",
   "repository": {
     "url": "https://github.com/saadvz/TourCore",
     "fallback": "TOURCORE_REPO_URL",

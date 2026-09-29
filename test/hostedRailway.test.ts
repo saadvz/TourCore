@@ -361,9 +361,9 @@ describe("hosted Grok instructions", () => {
   const bootstrap = () => readFileSync(new URL("../GROK_BOOTSTRAP.md", import.meta.url), "utf8");
   const template = () => JSON.parse(readFileSync(new URL("../grok-template/template.json", import.meta.url), "utf8")) as { hostedTourCoreUrl: string };
 
-  it("keeps one hosted URL setting and does not hardcode a Railway domain", () => {
+  it("keeps the hosted URL in the template and does not hardcode a Railway domain in the skill or bootstrap", () => {
     expect(template()).toHaveProperty("hostedTourCoreUrl");
-    expect(template().hostedTourCoreUrl).toBe("");
+    expect(template().hostedTourCoreUrl).toBe("https://tourcore-production.up.railway.app");
     const text = `${skill()}\n${bootstrap()}`;
     expect(text).toContain("hostedTourCoreUrl");
     expect(text).not.toMatch(/up\.railway\.app/);
