@@ -443,8 +443,10 @@ Checked against Railway's docs as of September 2026:
   ([config as code](https://docs.railway.com/config-as-code)). The desired
   service is `.railway/railway.ts` (Infrastructure as Code). Applying it is
   `railway config plan` then `railway config apply`. A git push deploys the
-  connected branch; it does not apply that file by itself. Railpack builds
-  the Node app from `npm run build` and `npm start`. No Docker image.
+  connected branch; it does not apply that file by itself. Railpack installs
+  with `npm ci` (`RAILPACK_NODE_NPM_INSTALL`) so the lockfile is the install,
+  then runs `npm run build` and `npm start`. `NPM_CONFIG_PRODUCTION=false`
+  keeps the build tools installed for that build. No Docker image.
 
 Production start is `npm run build` then `npm start` (`node dist/server.js`).
 `npm run setup` stays the developer process. The hosted process exits if
