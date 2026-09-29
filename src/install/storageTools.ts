@@ -77,7 +77,11 @@ export const STORAGE_TOOLS: OperatorTool[] = [
     kind: "change",
     description: "Records that the operator declined Google Drive. Tell them the records stay on this computer and are not portable. Only after they say no.",
     input: z.strictObject({}),
-    run: async (ctx) => installation(ctx).records.useLocalDemo(),
+    run: async (ctx) => {
+      const inst = installation(ctx);
+      if (inst.records.model() === "HOSTED_P0_VOLUME") return inst.backups.decline();
+      return inst.records.useLocalDemo();
+    },
   }),
   tool({
     name: "prepare_storage_migration",

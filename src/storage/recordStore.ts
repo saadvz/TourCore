@@ -23,6 +23,7 @@ import { DurableTourStore } from "./durableTourStore";
 import { StorageUnavailableError, StoreBusyError } from "./errors";
 import { GoogleDriveStore, type DriveClient } from "./googleDrive";
 import { authorizationUrl, checkState, createPending, exchangeCode, googleClientConfig, googleEmail, redirectUriFor, refreshAccess, revokeToken, type OAuthPending } from "./googleOAuth";
+import { resolveStorageModel, type StorageModel } from "./storageModel";
 import { HttpDriveClient } from "./httpDrive";
 
 const LEASE_TTL_MS = 2 * 60_000;
@@ -53,13 +54,22 @@ export class RecordStore {
 
   constructor(private readonly deps: RecordStoreDeps) {}
 
-  /** Test hook: Drive answers or doesn't. */
+  /** Test hook: Drive answers or doesn't. Direct Google Drive mode only. */
   setDriveReachable(up: boolean, cacheValidatedAt?: number): void {
     this.down = !up;
     if (cacheValidatedAt !== undefined) this.cacheValidatedAt = cacheValidatedAt;
   }
 
-  provider(): "NOT_CONFIGURED" | "LOCAL_DEMO" | "GOOGLE_DRIVE_CONNECTING" | "GOOGLE_DRIVE_READY" | "ERROR" {
+  model(): StorageModel {
+    return resolveStorageModel({
+      deploymentMode: this.deps.deploymentMode(),
+      env: this.deps.env(),
+      manifestProvider: this.safeManifest()?.storageProvider,
+    });
+  }
+
+  provider(): "NOT_CONFIGURED" | "LOCAL_DEMO" | "HOSTED_VOLUME" | "GOOGLE_DRIVE_CONNECTING" | "GOOGLE_DRIVE_READY" | "ERROR" {
+    if (this.model() === "HOSTED_P0_VOLUME") return "HOSTED_VOLUME";
     const state = this.deps.files.state().storage;
     const manifest = this.safeManifest();
     if (state?.phase === "MIGRATING") return "GOOGLE_DRIVE_CONNECTING";
@@ -101,9 +111,17 @@ export class RecordStore {
         return this.deps.files.state().storage?.error ?? "Google Drive isn't available right now.";
       case "LOCAL_DEMO":
         return "Tour records: Stored locally.";
+      case "HOSTED_VOLUME":
+        return this.hostedSummary();
       default:
         return "Offered once visitor texting is working.";
     }
+  }
+
+  private hostedSummary(): string {
+    const backup = this.deps.files.state().portableBackup;
+    const portable = backup?.destination ? "Google Drive connected" : "not connected";
+    return `Operational records: Stored by hosted Tour Core. Portable backup: ${portable}.`;
   }
 
   location(): { provider: string; folderName?: string; folderId?: string; description: string } {
@@ -115,6 +133,14 @@ export class RecordStore {
         ...(state?.folderName ? { folderName: state.folderName } : { folderName: "Tour Core" }),
         ...(state?.folderId ? { folderId: state.folderId } : {}),
         description: state?.accountEmail ? `Tour Core folder in Google Drive (${state.accountEmail}).` : "Tour Core folder in Google Drive.",
+      };
+    }
+    if (provider === "HOSTED_VOLUME") {
+      const backup = this.deps.files.state().portableBackup;
+      return {
+        provider,
+        description: backup?.destination ? "Operational records are stored by hosted Tour Core. Portable backups go to the Tour Core folder in Google Drive." : "Operational records are stored by hosted Tour Core. Portable Google Drive backup is not connected.",
+        ...(backup?.destination ? { folderName: backup.destination.folderName } : {}),
       };
     }
     return { provider: provider === "NOT_CONFIGURED" ? "NOT_CONFIGURED" : "LOCAL_DEMO", description: "Stored on this Tour Core computer. These records are not portable." };
@@ -131,6 +157,14 @@ export class RecordStore {
   }
 
   beginConnect(): { configured: true; authorizationUrl: string; summary: string; grok: string } | { configured: false; summary: string; technical: string } {
+    if (this.model() === "HOSTED_P0_VOLUME") {
+      return {
+        configured: false,
+        summary: "On hosted Tour Core, connect Google Drive through me for portable backups. Tour Core does not use a separate Google approval.",
+        technical:
+          "HOSTED_P0_VOLUME does not use Tour Core Google OAuth. Do not ask for TOURCORE_GOOGLE_WEB_CLIENT_ID, TOURCORE_GOOGLE_WEB_CLIENT_SECRET, TOURCORE_GOOGLE_OAUTH_CLIENT_ID, or a refresh token. Use Grok's native Google Drive connector, create or find the private Tour Core folder, then call confirm_backup_destination. DIRECT_GOOGLE_DRIVE is optional and only when TOURCORE_STORAGE_MODEL=DIRECT_GOOGLE_DRIVE.",
+      };
+    }
     const config = googleClientConfig(this.deps.env(), (name) => this.deps.secrets.get(name as SettingName));
     if (!config.clientId || !config.clientSecret) {
       return {
@@ -154,6 +188,7 @@ export class RecordStore {
   }
 
   async completeCallback(query: URLSearchParams): Promise<{ ok: boolean; summary: string }> {
+    if (this.model() === "HOSTED_P0_VOLUME") return { ok: false, summary: "Hosted Tour Core does not use a separate Google approval." };
     const pending = this.pending();
     try {
       checkState(pending, query.get("state") ?? undefined, this.deps.now());
@@ -181,6 +216,9 @@ export class RecordStore {
   }
 
   async finish(): Promise<{ ok: boolean; summary: string; folderId?: string; folderName?: string }> {
+    if (this.model() === "HOSTED_P0_VOLUME") {
+      return { ok: false, summary: "Hosted Tour Core keeps operational records on its own store. Confirm the Google Drive backup folder instead." };
+    }
     if (!this.refreshToken()) return { ok: false, summary: "Google hasn't approved Tour Core yet." };
     const client = await this.client();
     const storeId = this.ensureHost().storeId;
@@ -238,6 +276,7 @@ export class RecordStore {
   }
 
   prepare(now = new Date(this.deps.now())): MigrationProgress {
+    this.requireDirectDrive();
     const progress = prepareMigration(this.deps.root, now, this.secretValues());
     this.writeMigration(progress);
     this.audit("STORAGE_MIGRATION_STARTED", "Copying tour records to Google Drive.");
@@ -245,6 +284,7 @@ export class RecordStore {
   }
 
   async migrate(): Promise<MigrationProgress> {
+    this.requireDirectDrive();
     const progress = this.deps.files.state().storage?.migration ?? this.prepare();
     const remote = await this.remoteStore();
     try {
@@ -260,6 +300,7 @@ export class RecordStore {
   }
 
   async verify(): Promise<MigrationProgress> {
+    this.requireDirectDrive();
     const progress = this.migration();
     const next = await verifyMigration(await this.remoteStore(), progress, new Date(this.deps.now()));
     this.writeMigration(next);
@@ -268,6 +309,7 @@ export class RecordStore {
   }
 
   async activate(): Promise<{ summary: string }> {
+    this.requireDirectDrive();
     const progress = this.migration();
     if (progress.phase !== "VERIFIED") throw new StorageUnavailableError("Google Drive isn't the canonical store until the copy has been checked.");
     const finished = await this.finish();
@@ -278,12 +320,14 @@ export class RecordStore {
   }
 
   async discover(): Promise<{ stores: { folderName: string; folderId: string; storeId?: string }[] }> {
+    this.requireDirectDrive();
     const client = await this.client();
     const folders = await client.listByAppProperty("tourCoreRole", "store");
     return { stores: folders.map((folder) => ({ folderName: folder.name, folderId: folder.id, ...(folder.appProperties.storeId ? { storeId: folder.appProperties.storeId } : {}) })) };
   }
 
   async takeover(storeId: string, explicit: boolean): Promise<{ summary: string; tookOver: boolean }> {
+    this.requireDirectDrive();
     const client = await this.client();
     const remote = await GoogleDriveStore.open(client, "Tour Core", storeId);
     this.remote = remote;
@@ -304,6 +348,7 @@ export class RecordStore {
   }
 
   async disconnect(choice: "local" | "another" | "remain"): Promise<{ summary: string }> {
+    this.requireDirectDrive();
     if (choice === "remain") return { summary: "Google Drive stays connected." };
     const remote = this.remote;
     const host = this.deps.files.state().storage?.hostId;
@@ -350,6 +395,7 @@ export class RecordStore {
    * fall back to a writable local canonical store.
    */
   async resumeCanonical(): Promise<{ ok: boolean; summary: string }> {
+    if (this.model() === "HOSTED_P0_VOLUME") return { ok: true, summary: "Operational records are stored by hosted Tour Core." };
     const provider = this.provider();
     if (provider === "LOCAL_DEMO" || provider === "NOT_CONFIGURED") return { ok: true, summary: provider === "LOCAL_DEMO" ? "local demo" : "storage not configured" };
     if (provider === "GOOGLE_DRIVE_CONNECTING") return { ok: true, summary: "Google Drive is not canonical yet" };
@@ -436,6 +482,10 @@ export class RecordStore {
 
   private audit(type: Parameters<typeof appendStorageAudit>[1]["type"], detail: string): void {
     appendStorageAudit(this.deps.root, { type, at: new Date(this.deps.now()).toISOString(), detail }, this.secretValues());
+  }
+
+  private requireDirectDrive(): void {
+    if (this.model() === "HOSTED_P0_VOLUME") throw new StorageUnavailableError("Hosted Tour Core does not use Google Drive as its live store. Use a portable backup instead.");
   }
 
   private secretValues(): string[] {

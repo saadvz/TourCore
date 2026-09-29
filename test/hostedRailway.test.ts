@@ -257,7 +257,7 @@ describe("hosted storage, secrets, and one demo tenant", () => {
     mkdirSync(join(origin, "runtime", "operator-events"), { recursive: true });
     writeFileSync(join(origin, "properties", "prop_elm", "tourcore.config.json"), JSON.stringify({ schemaVersion: 1, property: { id: "prop_elm", name: "Elm" } }));
     writeFileSync(join(origin, "runtime", "operator-events", "evt_booked01.json"), JSON.stringify({ schemaVersion: 1, event: { eventId: "evt_booked01", eventType: "tour.booked", occurredAt: "2026-09-28T15:00:00.000Z" }, status: "delivered", attempts: 1 }));
-    const local = installation(origin, hostedEnv(origin), () => clock.t, fake);
+    const local = installation(origin, hostedEnv(origin, { TOURCORE_STORAGE_MODEL: "DIRECT_GOOGLE_DRIVE" }), () => clock.t, fake);
     local.files.ensure({ deploymentMode: "HOSTED_RAILWAY_P0" });
     local.secrets.set({ GOOGLE_OAUTH_REFRESH_TOKEN: REFRESH });
     local.files.update({ storageProvider: "GOOGLE_DRIVE" });
@@ -267,7 +267,7 @@ describe("hosted storage, secrets, and one demo tenant", () => {
 
     const storeId = local.files.state().storage?.storeId!;
     const hostedRoot = tempDir();
-    const hosted = installation(hostedRoot, hostedEnv(hostedRoot), () => clock.t + 30_000, fake);
+    const hosted = installation(hostedRoot, hostedEnv(hostedRoot, { TOURCORE_STORAGE_MODEL: "DIRECT_GOOGLE_DRIVE" }), () => clock.t + 30_000, fake);
     hosted.files.ensure({ deploymentMode: "HOSTED_RAILWAY_P0" });
     hosted.secrets.set({ GOOGLE_OAUTH_REFRESH_TOKEN: REFRESH });
     hosted.files.update({ storageProvider: "GOOGLE_DRIVE" });
@@ -278,7 +278,7 @@ describe("hosted storage, secrets, and one demo tenant", () => {
 
     const laterRoot = tempDir();
     mkdirSync(join(laterRoot, "properties", "prop_elm"), { recursive: true });
-    const later = installation(laterRoot, hostedEnv(laterRoot), () => clock.t + 5 * 60_000, fake);
+    const later = installation(laterRoot, hostedEnv(laterRoot, { TOURCORE_STORAGE_MODEL: "DIRECT_GOOGLE_DRIVE" }), () => clock.t + 5 * 60_000, fake);
     later.files.ensure({ deploymentMode: "HOSTED_RAILWAY_P0" });
     later.secrets.set({ GOOGLE_OAUTH_REFRESH_TOKEN: REFRESH });
     later.files.update({ storageProvider: "GOOGLE_DRIVE" });

@@ -38,7 +38,7 @@ Always follow `get_next_installation_step`; this table only explains it.
 | PUBLIC_ENDPOINT | "Tour Core has a secure public connection" | before the first property |
 | GROK_OPERATOR | "Grok connection" | before the first property |
 | VISITOR_MESSAGING | "Visitor texting" | before the first property |
-| STORAGE | "Tour records: Stored locally" or "Tour records: Google Drive connected". On a Grok-managed install, offered after visitor texting and before the first property | before the first property. Google Drive is recommended. Local demo is only if they decline, and it is not portable |
+| STORAGE | Hosted: "Operational records: Stored by hosted Tour Core" and "Portable backup: Google Drive connected" or "not connected". Open-source: "Tour records: Stored locally" or "Tour records: Google Drive connected" when optional direct Drive is on | before the first property. On the hosted product, Drive is a recommended backup, not a second Google approval. Declining it does not stop property setup |
 | ACCESS | "Access system: Demo" (later "Access system: Connected"); never name the lock provider | nothing to do |
 | PROPERTY | the first property: its address, property type, and each unit's bedrooms, bathrooms, rent and availability; it uses the installed visitor texting automatically | to publish |
 | OPERATOR_ALERTS | "Tour updates": bookings, tour starts, completions and anything that needs your attention | recommended, offered only after the first property is set up; the operator may say no |

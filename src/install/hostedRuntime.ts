@@ -5,10 +5,10 @@ import type { DeploymentMode } from "./deployment";
  * HOSTED_RAILWAY_P0 runtime decisions. Railway injects PORT and
  * RAILWAY_PUBLIC_DOMAIN. Tour Core does not call the Railway API.
  *
- * P0 secret persistence: a Railway volume mounted at /data (or
+ * P0 persistence: a Railway volume mounted at /data (or
  * RAILWAY_VOLUME_MOUNT_PATH). The container disk is wiped on every deploy.
- * The volume holds SecretStore, OAuth grants, setup sessions and a
- * rebuildable cache. Canonical business records stay in Google Drive.
+ * For HOSTED_P0_VOLUME the volume is the live operational store, including
+ * secrets. Portable backups live in the user's Google Drive, not here.
  */
 
 const TRYCLOUDFLARE = /trycloudflare\.com/i;
@@ -102,7 +102,7 @@ export function hostedStateDir(env: NodeJS.ProcessEnv): { dir: string } | { prob
   }
   const dir = home || mount;
   if (!dir || dir === "tourcore-data") {
-    return { problem: "HOSTED_RAILWAY_P0 needs a Railway volume mounted at /data. Set TOURCORE_HOME to that mount. Secrets are not stored in Google Drive, and the container filesystem is wiped on deploy." };
+    return { problem: "HOSTED_RAILWAY_P0 needs a Railway volume mounted at /data. Set TOURCORE_HOME to that mount. That volume is the live operational store. The container filesystem is wiped on deploy." };
   }
   return { dir };
 }

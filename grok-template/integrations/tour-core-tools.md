@@ -86,7 +86,16 @@ again with the code after the operator's yes.
 | `activate_google_drive_storage` | consequential | Makes Google Drive canonical only after the copy checked out. Asks once |
 | `discover_storage` | read | Lists existing Tour Core folders in the connected Google account |
 | `takeover_storage_writer` | consequential | Restores a Drive folder onto this computer. Asks before taking over another writer |
-| `disconnect_google_drive_storage` | consequential | Disconnects Drive after confirmation. Can move back to this computer, connect another Drive, or stay. Does not delete the folder |
+| `disconnect_google_drive_storage` | consequential | Optional direct-Drive mode only. Disconnects Drive after confirmation. Does not delete the folder. Not used for hosted backups |
+| `confirm_backup_destination` | change | Hosted setup. Records that Grok's Google Drive connector will hold portable backups in the Tour Core folder. No tokens |
+| `decline_portable_backup` | change | Hosted setup. Records that portable backups were declined. Operational records stay on hosted Tour Core |
+| `get_backup_status` | read | Whether a portable backup is due, and non-secret metadata about the last one. Does not look inside Drive |
+| `create_portable_backup` | change | Builds a validated secret-free snapshot and a short-lived download. Does not upload to Drive |
+| `confirm_backup_stored` | change | After you have saved that file in Google Drive, record the file name and checksum. Tour Core does not see Drive itself |
+| `create_readable_export` | change | A human-readable export, separate from a backup, as a short-lived download for Tour Core/Exports |
+| `begin_restore_upload` | change | Opens a short-lived upload for one backup file. Nothing is imported yet |
+| `preview_portable_restore` | read | Checks an uploaded backup and returns a plain preview. Does not change records |
+| `import_portable_backup` | consequential | Restores a previewed backup after an explicit yes. Replacement of existing records needs a separate explicit choice. Provider logins are not restored |
 
 There is intentionally no tool to open, unlock or grant a door, mint access,
 change the door-access mode, or read or write raw files. There is also no

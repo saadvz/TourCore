@@ -32,6 +32,7 @@ import { installedMessaging } from "../install/status";
 import { handleSecureSetupApi, INSTALL_PAGE_PATHS, isInstallApiPath, PROXY_HEADERS } from "../install/secureSetup";
 import { clearRuntimeInfo, writeRuntimeInfo } from "../install/service";
 import { secretValues, useSettingsSource } from "../install/settings";
+import { handlePortableRequest } from "../backup/http";
 import { handleApi } from "./api";
 import { loadLocalEnv } from "./env";
 
@@ -110,6 +111,9 @@ function publicRouteAllowed(method: string, path: string, oauth: boolean, hosted
   if (path === MCP_PATH) return true;
   if (method === "GET" && path === HEALTH_PATH) return true;
   if (method === "GET" && path === "/google/oauth/callback") return true;
+  if (/^\/portable\/(?:artifacts|uploads)\/art_[A-Za-z0-9_-]{20,80}$/.test(path)) {
+    return (method === "GET" && path.startsWith("/portable/artifacts/")) || (method === "POST" && path.startsWith("/portable/uploads/"));
+  }
   if (oauth && (isOAuthPublicPath(path, MCP_PATH) || (method === "GET" && path === "/oauth.js"))) return true;
   if (method === "POST" && path === SENDBLUE_WEBHOOK_PATH) return true;
   if (method === "GET" && (/^\/verify\/[A-Za-z0-9_-]+$/.test(path) || path === "/verify.js" || path === "/styles.css")) return true;
@@ -329,6 +333,8 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         const page = `<!doctype html><meta name="referrer" content="no-referrer"><title>Tour Core</title><p>${result.ok ? "Google Drive is connected to Tour Core. You can return to the chat." : "Google Drive wasn't connected. Return to the chat and try again."}</p>`;
         return send(result.ok ? 200 : 400, "text/html; charset=utf-8", page, { "Referrer-Policy": "no-referrer" });
       }
+      const portable = await handlePortableRequest(installation.backups, method, url.pathname, req);
+      if (portable) return send(portable.status, portable.type, portable.body, { "Referrer-Policy": "no-referrer" });
       if (url.pathname === "/api/connect" || url.pathname === "/api/connect/approve" || url.pathname === "/api/connect/deny") {
         if (!hosted) return send(404, "text/plain", "Not found");
         if (method === "POST" && !String(req.headers["content-type"] ?? "").startsWith("application/json")) {
@@ -568,7 +574,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const port = Number(new URL(url).port);
   writeRuntimeInfo(workspace.root, { pid: process.pid, port, url: url.replace(/\/$/, ""), startedAt: new Date().toISOString() });
   if (hosted && hostedConfig && hostedConfig.ok) {
-    const storage = manifest.storageProvider === "GOOGLE_DRIVE" ? "Google Drive (canonical)" : "local demo (not canonical)";
+    const storage =
+      installation.records.model() === "DIRECT_GOOGLE_DRIVE"
+        ? "Google Drive (optional direct mode)"
+        : installation.records.model() === "HOSTED_P0_VOLUME"
+          ? "Railway volume (live operational store)"
+          : "local demo (not canonical)";
     const lines = startupLines({ version: TOURCORE_VERSION, mode: deployment.mode, port, host: hostedConfig.host, publicHost: new URL(hostedConfig.publicUrl).host, storage }).map((line) => redactSecrets(line, secretValues()));
     console.log("");
     for (const line of lines) console.log(`  ${line}`);

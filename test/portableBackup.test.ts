@@ -1,0 +1,218 @@
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { handlePortableRequest } from "../src/backup/http";
+import { checksumOf, parsePortableBackup } from "../src/backup/portable";
+import { sha256Json } from "../src/storage/documentStore";
+import { InMemoryStore } from "../src/storage/Store";
+import { installHarness, SB_KEY, SB_SECRET, type InstallHarness } from "./installHarness";
+
+const cleanups: Array<() => void> = [];
+afterEach(() => cleanups.splice(0).forEach((run) => run()));
+
+function hosted(): InstallHarness {
+  const h = installHarness({
+    env: { TOURCORE_DEPLOYMENT_MODE: "HOSTED_RAILWAY_P0", RAILWAY_PUBLIC_DOMAIN: "demo.up.railway.app", PORT: "8080" },
+  });
+  cleanups.push(h.cleanup);
+  h.inst.files.ensure({ deploymentMode: "HOSTED_RAILWAY_P0" });
+  h.inst.files.setPublicBaseUrl("https://demo.up.railway.app", "RAILWAY");
+  h.inst.files.recordCheck("publicEndpointCheck", { ok: true, at: new Date(h.now()).toISOString(), message: "ok", url: "https://demo.up.railway.app" });
+  return h;
+}
+
+function readyTexting(h: InstallHarness) {
+  h.connectGrok();
+  h.inst.secrets.set({ SENDBLUE_API_API_KEY: SB_KEY, SENDBLUE_API_API_SECRET: SB_SECRET, SENDBLUE_FROM_NUMBER: "+15550109999" });
+  h.inst.files.recordCheck("visitorMessaging", { ok: true, at: new Date(h.now()).toISOString(), message: "ok", problems: [], publicBaseUrl: h.inst.publicBaseUrl()! });
+}
+
+describe("hosted volume onboarding", () => {
+  it("does not require Tour Core Google OAuth and offers the property after the backup destination is confirmed", async () => {
+    const h = hosted();
+    readyTexting(h);
+    const step = await h.ok("get_next_installation_step");
+    expect(step).toMatchObject({
+      component: "STORAGE",
+      action: "CONFIRM_BACKUP_DESTINATION",
+      tool: "confirm_backup_destination",
+      operatorMessage: "Visitor texting is connected. Next I recommend Google Drive so I can keep portable backups and exports of your Tour Core records there.",
+    });
+    expect(step.operatorMessage).not.toMatch(/OAuth client|client secret|canonical/i);
+    expect(step.grokInstructions).toMatch(/native Google Drive connector/);
+    expect(step.grokInstructions).toMatch(/Do not call begin_google_drive_connect/);
+    expect(h.inst.records.beginConnect().configured).toBe(false);
+    expect(JSON.stringify(await h.ok("get_installation_status"))).not.toMatch(/Tour Core Google OAuth client is missing|Google Drive canonical/);
+
+    await h.ok("confirm_backup_destination", { provider: "google_drive", folderName: "Tour Core", accountLabel: "Ada" });
+    expect((await h.ok("get_next_installation_step")).action).toBe("SET_UP_PROPERTY");
+    const storage = await h.component("STORAGE");
+    expect(storage.summary).toMatch(/Operational records: Stored by hosted Tour Core/);
+    expect(storage.summary).toMatch(/Portable backup: Google Drive connected/);
+    const resumed = await h.inst.records.resumeCanonical();
+    expect(resumed.ok).toBe(true);
+    expect(resumed.summary).not.toMatch(/lease|canonical/i);
+  });
+
+  it("does not let a direct Drive lease block hosted setup", async () => {
+    const h = hosted();
+    readyTexting(h);
+    expect(() => h.inst.records.prepare()).toThrow(/live store/);
+    expect((await h.ok("get_next_installation_step")).action).toBe("CONFIRM_BACKUP_DESTINATION");
+  });
+
+  it("continues to the property when portable backups are declined", async () => {
+    const h = hosted();
+    readyTexting(h);
+    await h.ok("decline_portable_backup");
+    expect((await h.ok("get_next_installation_step")).action).toBe("SET_UP_PROPERTY");
+    expect((await h.component("STORAGE")).summary).toMatch(/Portable backup: not connected/);
+  });
+});
+
+describe("portable backup and restore", () => {
+  it("snapshots business state, excludes secrets, and restores a clean host", async () => {
+    const origin = hosted();
+    origin.inst.secrets.set({
+      SENDBLUE_API_API_KEY: SB_KEY,
+      SENDBLUE_API_API_SECRET: SB_SECRET,
+      SENDBLUE_FROM_NUMBER: "+15550109999",
+      GOOGLE_OAUTH_REFRESH_TOKEN: "google-refresh-SECRET-token-xyz",
+      TOURCORE_GROK_ROUTINE_KEY: "routine-bearer-SECRETKEY-1a2b3c4d",
+    });
+    const propertyId = await origin.setUpAlfredWay();
+    await origin.ok("update_unit", { unit: "Unit 101", facts: ["In-unit laundry."] });
+    const visitor = await origin.touringVisitor(propertyId, { name: "Pat Smith" });
+    await visitor.act("finish");
+
+    const created = await origin.ok("create_portable_backup", { reason: "tour" });
+    expect(created.schemaVersion).toBe(1);
+    expect(created.fileName).toMatch(/^tour-core-backup-\d{4}-\d{2}-\d{2}T\d{6}Z\.json$/);
+    const artifactId = String(created.handoff.path).split("/").pop()!;
+    const downloaded = origin.inst.backups.handoff.takeDownload(artifactId, created.handoff.capability);
+    expect(downloaded.body).toContain("tourcore-portable-backup");
+    expect(downloaded.body).toContain("In-unit laundry.");
+    expect(downloaded.body).toContain(propertyId);
+    for (const secret of [SB_KEY, SB_SECRET, "google-refresh-SECRET-token-xyz", "routine-bearer-SECRETKEY-1a2b3c4d"]) {
+      expect(downloaded.body).not.toContain(secret);
+    }
+    expect(() => origin.inst.backups.handoff.takeDownload(artifactId, created.handoff.capability)).toThrow(/expired/);
+
+    const clean = hosted();
+    const upload = await clean.ok("begin_restore_upload");
+    const uploadId = String(upload.handoff.path).split("/").pop()!;
+    clean.inst.backups.receive(uploadId, upload.handoff.capability, downloaded.body);
+    const preview = await clean.ok("preview_portable_restore", { uploadId });
+    expect(preview.summary).toMatch(/Backup contains:/);
+    expect(preview.counts.properties).toBeGreaterThanOrEqual(1);
+    expect(preview.counts.units).toBeGreaterThanOrEqual(2);
+    expect(preview.counts.facts).toBeGreaterThanOrEqual(1);
+    expect(preview.counts.tours).toBeGreaterThanOrEqual(1);
+    const asked = await clean.ok("import_portable_backup", { uploadId });
+    expect(asked.requiresConfirmation).toBe(true);
+    const restored = await clean.ok("import_portable_backup", { uploadId, confirmationCode: asked.confirmationCode });
+    expect(restored.lines).toEqual([
+      "Property records: restored",
+      "Tour history: restored",
+      "Visitor texting: reconnect required",
+      "Operator updates: reconnect required",
+      "Door provider: reconnect required where applicable",
+    ]);
+    expect(clean.inst.secrets.get("SENDBLUE_API_API_KEY")).toBeUndefined();
+    expect(clean.inst.secrets.get("GOOGLE_OAUTH_REFRESH_TOKEN")).toBeUndefined();
+    expect(clean.workspace.list().map((property) => property.config.property.name)).toContain("100 Alfred Way");
+    expect(JSON.stringify(clean.workspace.list())).toContain("In-unit laundry.");
+
+    await origin.ok("confirm_backup_stored", { fileName: created.fileName, checksum: created.checksum });
+    const status = await origin.ok("get_backup_status");
+    expect(status.lastBackupConfirmedInDriveAt).toBeTruthy();
+  });
+
+  it("rejects a bad checksum, an unsupported schema, a malformed route, and a secret", async () => {
+    const h = hosted();
+    await h.setUpAlfredWay();
+    const created = await h.ok("create_portable_backup");
+    const artifactId = String(created.handoff.path).split("/").pop()!;
+    const raw = h.inst.backups.handoff.takeDownload(artifactId, created.handoff.capability).body;
+    const backup = JSON.parse(raw) as {
+      schemaVersion: number;
+      checksum: string;
+      contents: { files: Array<{ path: string; sha256: string; body: Record<string, unknown> }> };
+    };
+
+    expect(() => parsePortableBackup({ ...backup, checksum: "a".repeat(64) })).toThrow(/checksum/);
+    expect(() => parsePortableBackup({ ...backup, schemaVersion: 2 })).toThrow(/doesn't support/);
+
+    const malformed = structuredClone(backup);
+    const config = malformed.contents.files.find((file) => file.path.endsWith("/tourcore.config.json"))!;
+    const body = config.body as { routes: Array<{ stops: Array<{ doorId: string }> }> };
+    body.routes[0]!.stops[0]!.doorId = "missing_door";
+    config.sha256 = sha256Json(body);
+    malformed.checksum = checksumOf(malformed.contents);
+    expect(() => parsePortableBackup(malformed)).toThrow(/door/);
+
+    const configPath = join(h.root, "properties", h.workspace.propertyIds()[0]!, "tourcore.config.json");
+    const onDisk = JSON.parse(readFileSync(configPath, "utf8")) as { property: { facts?: string[] } };
+    onDisk.property.facts = [SB_KEY];
+    writeFileSync(configPath, JSON.stringify(onDisk));
+    h.inst.secrets.set({ SENDBLUE_API_API_KEY: SB_KEY });
+    expect(await h.fails("create_portable_backup")).toMatch(/credential/);
+  });
+
+  it("refuses a destructive restore unless replacement is explicit", async () => {
+    const origin = hosted();
+    await origin.setUpAlfredWay();
+    const created = await origin.ok("create_portable_backup");
+    const artifactId = String(created.handoff.path).split("/").pop()!;
+    const body = origin.inst.backups.handoff.takeDownload(artifactId, created.handoff.capability).body;
+
+    const occupied = hosted();
+    await occupied.setUpAlfredWay();
+    const upload = await occupied.ok("begin_restore_upload");
+    const uploadId = String(upload.handoff.path).split("/").pop()!;
+    occupied.inst.backups.receive(uploadId, upload.handoff.capability, body);
+    const refused = await occupied.ok("import_portable_backup", { uploadId });
+    expect(refused.summary).toMatch(/already has records/);
+    expect(occupied.workspace.list()).toHaveLength(1);
+    const asked = await occupied.ok("import_portable_backup", { uploadId, recovery: "replace" });
+    expect(asked.requiresConfirmation).toBe(true);
+    expect(asked.summary).toMatch(/Replace the records/);
+  });
+
+  it("expires a handoff and does not let a backup failure block a booking", async () => {
+    const h = hosted();
+    const propertyId = await h.setUpAlfredWay();
+    const created = await h.ok("create_portable_backup");
+    h.setClock(h.now() + 16 * 60_000);
+    const artifactId = String(created.handoff.path).split("/").pop()!;
+    expect(() => h.inst.backups.handoff.takeDownload(artifactId, created.handoff.capability)).toThrow(/expired/);
+
+    h.inst.backups.noteFailure("Google Drive didn't answer.");
+    h.inst.records.setDriveReachable(false);
+    await h.inst.records.beforeAccess();
+    expect(h.inst.records.wrapStore(new InMemoryStore())).toBeInstanceOf(InMemoryStore);
+    await h.touringVisitor(propertyId);
+    expect(h.inst.records.provider()).toBe("HOSTED_VOLUME");
+    expect(h.inst.records.storageRead()).toBe("live");
+    const status = await h.ok("get_backup_status");
+    expect(status.stale).toBe(true);
+    expect(status.lastFailureSummary).toMatch(/didn't answer/);
+    expect(h.workspace.has(propertyId)).toBe(true);
+  });
+
+  it("serves one capability download and hides a missing capability", async () => {
+    const h = hosted();
+    await h.setUpAlfredWay();
+    const created = await h.ok("create_portable_backup");
+    const artifactId = String(created.handoff.path).split("/").pop()!;
+    const path = `/portable/artifacts/${artifactId}`;
+    const hidden = await handlePortableRequest(h.inst.backups, "GET", path, { headers: {} } as never);
+    expect(hidden).toMatchObject({ status: 404 });
+    const ok = await handlePortableRequest(h.inst.backups, "GET", path, { headers: { "x-tourcore-capability": created.handoff.capability } } as never);
+    expect(ok?.status).toBe(200);
+    expect(ok?.body).toContain("tourcore-portable-backup");
+    expect(ok?.body).not.toContain(SB_KEY);
+    const again = await handlePortableRequest(h.inst.backups, "GET", path, { headers: { "x-tourcore-capability": created.handoff.capability } } as never);
+    expect(again).toMatchObject({ status: 404 });
+  });
+});

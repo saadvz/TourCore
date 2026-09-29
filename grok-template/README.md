@@ -32,7 +32,7 @@ Two ways in:
 | --- | --- | --- |
 | Profile (name, title, description, standing instructions, starting prompts) | `bot-profile.md` | Bot actions → Edit Profile, and the Bot's instructions |
 | Reusable context | `context/*.md` | Attach or paste into the Bot conversation and ask it to remember them |
-| Seven skills: Install Tour Core plus the six operator skills | `../.grok/skills/*/SKILL.md` (canonical, not copied) | Ask the Bot to save each as a private skill |
+| Eight skills: Install Tour Core, the six operator skills, and Backup Tour Core | `../.grok/skills/*/SKILL.md` (canonical, not copied) | Ask the Bot to save each as a private skill |
 | Routine: Tour Core Operator Updates | `routines/operator-updates.md` | Grok creates it (authenticated webhook trigger, these instructions) when the operator turns on tour updates |
 | Safe examples | `examples/*.md` | Context for the Bot; made-up data only |
 | Integration | `integrations/tour-core-tools.md` | Custom MCP server; connected by every installation |

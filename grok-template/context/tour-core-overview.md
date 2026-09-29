@@ -73,7 +73,7 @@ decided before Durin is contacted.
   stable self-hosted address.
 - Visitor messaging: Sendblue (real texts and iMessages).
 - Operator updates: the Tour Core Operator Updates Grok Routine.
-- Tour records: stored with the Tour Core installation. Google Drive is the next step.
+- Tour records: on the hosted product, stored by hosted Tour Core. Google Drive keeps portable backups and exports through Grok's connector. Optional direct Drive remains a separate mode.
 - Door access: Durin demo mode. No physical door is controlled.
 - Visitor verification: basic identity form (records claimed identity; it
   doesn't prove it).

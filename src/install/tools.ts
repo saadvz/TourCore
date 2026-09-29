@@ -8,6 +8,7 @@ import type { Installation } from "./installation";
 import { isHostedRailway } from "./deployment";
 import { HOSTED_SETUP_SESSION_MINUTES, HOSTED_SETUP_WRITES, DEFAULT_SETUP_SESSION_MINUTES } from "./setupSessions";
 import { STORAGE_TOOLS } from "./storageTools";
+import { BACKUP_TOOLS } from "../backup/tools";
 import { getInstallationStatus, INSTALLATION_COMPONENTS, OPTIONAL_COMPONENTS, type ComponentStatus, type InstallationComponent } from "./status";
 
 /**
@@ -266,4 +267,5 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
     },
   }),
   ...STORAGE_TOOLS,
+  ...BACKUP_TOOLS,
 ];

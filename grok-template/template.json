@@ -24,7 +24,8 @@
     "../.grok/skills/run-readiness-check/SKILL.md",
     "../.grok/skills/simulate-tour/SKILL.md",
     "../.grok/skills/work-exception/SKILL.md",
-    "../.grok/skills/export-audit/SKILL.md"
+    "../.grok/skills/export-audit/SKILL.md",
+    "../.grok/skills/backup-tour-core/SKILL.md"
   ],
   "examples": ["examples/first-run.md", "examples/safe-examples.md"],
   "integrations": [
@@ -40,7 +41,7 @@
       "name": "Google Drive",
       "type": "first-party-connector",
       "doc": "integrations/google-drive.md",
-      "auth": "Each installer connects their own Google account. Grok's built-in Drive connector is for browsing. Tour Core's own Google approval lets it save records when Grok is not in the chat.",
+      "auth": "Each installer connects their own Google account to Grok's built-in Drive connector. That is the only Google approval for a hosted Tour Core. Drive holds portable backups and exports. It is not the live record store.",
       "travelsWithTemplate": false
     }
   ],
@@ -54,7 +55,7 @@
     }
   ],
   "marketplace": {
-    "ships": ["Bot instructions and profile", "the seven Tour Core skills", "the Tour Core Operator Updates routine definition", "integration references for the Tour Core tools"],
+    "ships": ["Bot instructions and profile", "the eight Tour Core skills", "the Tour Core Operator Updates routine definition", "integration references for the Tour Core tools"],
     "neverShips": ["installation webhook secrets", "Sendblue secrets", "Tour Core OAuth tokens", "Google OAuth tokens", "a Google account", "a Tour Core Drive folder id", "live property data"],
     "activation": "A new user connects to the hosted Tour Core service named by hostedTourCoreUrl, approves the connection, and authorizes tour updates once. They do not create a Railway project. The open-source path remains for operators who run their own copy."
   },

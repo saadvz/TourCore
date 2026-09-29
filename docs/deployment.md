@@ -6,11 +6,12 @@ installation is deployed, set up and kept running, and what is (and isn't)
 automated.
 
 The normal product path is one Tour Core service we host. A landlord does not
-create a Railway project. Grok connects to that service. Google Drive, when
-connected, remains the canonical record store. Railway's disk is not.
+create a Railway project. Grok connects to that service. The Railway volume
+is the live operational store. Grok's Google Drive connector keeps portable
+backups and exports. Drive is not the live record store.
 
 ```
-Grok Marketplace Bot
+Grok
    │  connects to the already-hosted service (hostedTourCoreUrl)
    ▼
 Tour Core on Railway (HOSTED_RAILWAY_P0, one demo installation)
@@ -18,12 +19,11 @@ Tour Core on Railway (HOSTED_RAILWAY_P0, one demo installation)
    │     ├── /mcp                  Grok's OAuth connection
    │     ├── /webhooks/sendblue    visitor texts
    │     ├── /verify/<token>       identity form
-   │     ├── /google/oauth/callback
    │     ├── /connect              operator approves Grok
    │     ├── /install              short-lived secure setup
    │     └── /healthz              Railway deploy check
-   ├── volume at /data             secrets and rebuildable cache only
-   └── Google Drive                canonical properties, tours, outbox
+   ├── volume at /data             live operational state and secrets
+   └── Grok's Drive connector      Tour Core/Backups and Tour Core/Exports
 ```
 
 Open-source and local development still use a process on a computer, with a
@@ -104,9 +104,10 @@ Routine's webhook address and key, and Google OAuth tokens.
 
 On `HOSTED_RAILWAY_P0` that folder is the Railway volume (`TOURCORE_HOME`,
 normally `/data`, the same path as `RAILWAY_VOLUME_MOUNT_PATH`). The
-container filesystem is wiped on every deploy. The volume holds secrets,
-OAuth grants, setup sessions, and a cache that Drive can rebuild. Canonical
-business records are not stored there, and secrets are not written to Drive.
+container filesystem is wiped on every deploy. The volume is the live
+operational store: properties, tours, sessions, ledgers, the outbox,
+exceptions, and secrets. A restart does not restore from Drive. Secrets are
+not written into portable backups.
 
 - Written only by the secure setup page (or created by Tour Core itself, for
   the Sendblue webhook secret).
@@ -192,7 +193,7 @@ them, with the requirement Tour Core (not the agent) assigns:
 | --- | --- | --- |
 | `RUNTIME`, `PUBLIC_ENDPOINT` | required before property | BOOTSTRAP |
 | `GROK_OPERATOR` | required before property | CONNECT |
-| `VISITOR_MESSAGING`, `STORAGE` (Google Drive recommended; `LOCAL_DEMO` only if declined, or on a developer computer), `ACCESS` (DURIN_DEMO accepted) | required before property | INFRASTRUCTURE |
+| `VISITOR_MESSAGING`, `STORAGE`, `ACCESS` (DURIN_DEMO accepted) | required before property | INFRASTRUCTURE |
 | `PROPERTY` | required to publish | PROPERTY |
 | `OPERATOR_ALERTS` ("Tour updates") | recommended; offered only after the property is saved (`set_notification_preferences`); can be declined (`skip_optional_setup`); chosen but not connected → `CONNECT_OPERATOR_ALERTS` | PROPERTY |
 | `READINESS`, `PRACTICE_TOUR` | required to publish; run automatically | VALIDATE |
@@ -479,8 +480,9 @@ Checked against Railway's docs as of September 2026:
 
 Production start is `npm run build` then `npm start` (`node dist/server.js`).
 `npm run setup` stays the developer process. The hosted process exits if
-required configuration is malformed, or if Google Drive is canonical and
-cannot be opened. It does not silently switch to a writable local store.
+required configuration is malformed. It does not require a Google OAuth
+client, and it does not refuse to start because Drive is unreachable.
+`DIRECT_GOOGLE_DRIVE` is a separate optional mode.
 
 ### One-time admin setup
 
@@ -491,43 +493,48 @@ cannot be opened. It does not silently switch to a writable local store.
    `RAILWAY_PUBLIC_DOMAIN` as the variable Railway provides.
 4. Add a volume mounted at `/data`.
 5. Set `TOURCORE_DEPLOYMENT_MODE=HOSTED_RAILWAY_P0` and `TOURCORE_HOME=/data`.
-   Set the distributor Google OAuth client id and secret. Do not commit them.
-   Do not set `TOURCORE_GROK_LEGACY_OAUTH_COMPAT` unless you need to force it
-   off (`false`) or on (`true`). The hosted mode already accepts the known
-   Grok callbacks.
+   Do not set `TOURCORE_GOOGLE_WEB_CLIENT_ID` or
+   `TOURCORE_GOOGLE_WEB_CLIENT_SECRET` for the normal hosted path. Do not set
+   `TOURCORE_GROK_LEGACY_OAUTH_COMPAT` unless you need to force it off
+   (`false`) or on (`true`). The hosted mode already accepts the known Grok
+   callbacks.
 6. Set the healthcheck path to `/healthz`.
-7. Register `https://<that-domain>/google/oauth/callback` on the Tour Core
-   Google web client.
-8. Put the same `https://<that-domain>` into `hostedTourCoreUrl` in
+7. Put `https://<that-domain>` into `hostedTourCoreUrl` in
    `grok-template/template.json` for the bot you publish. The skills read
    that field. They do not contain a Railway hostname.
-9. Open `/healthz` and confirm `service` is `tour-core`.
+8. Open `/healthz` and confirm `service` is `tour-core`.
 
-To clear the demo operator binding without deleting Drive records, set
+`TOURCORE_STORAGE_MODEL=DIRECT_GOOGLE_DRIVE` is optional and off by default.
+Only that mode uses Tour Core's own Google client and
+`/google/oauth/callback`. Do not register that callback for a normal hosted
+demo.
+
+To clear the demo operator binding without deleting tour records, set
 `TOURCORE_HOSTED_TENANT_RESET=reset-demo-tenant` for one deploy, then remove
-it.
+it. Tour records live on the volume. The reset does not delete them.
 
 After the first deploy, connect Grok and click Allow on the authorization
 page. That first approval claims the demo. There is no owner-claim setup.
 
-### Moving the quick-tunnel demo
+### Moving an older install
 
-If Google Drive is already canonical: deploy Railway, connect the same Drive
-account, take over the writer lease if the old computer still holds it,
-restore, enter hosted secrets, let `test_visitor_messaging` point Sendblue at
-the Railway webhook, and connect Grok to `https://<domain>/mcp`. Retire the
-Grok-computer process so it cannot keep the lease. Do not recreate the
-property by hand.
+If an older computer used optional direct Drive as its live store, keep that
+mode only while you still need it (`TOURCORE_STORAGE_MODEL=DIRECT_GOOGLE_DRIVE`).
+The hosted product path does not take over a Drive writer lease. New hosted
+installations keep operational records on the volume and put portable backups
+in Grok's Drive folder.
 
-If records are still only on the Grok computer, migrate them to Drive first.
-The hosted service will not treat that disk as canonical.
+A Railway restart uses the volume. Restoring a portable backup is for a lost
+volume, onto a clean installation, after an explicit yes.
 
 ### What a fresh Grok user does
 
 They say "Set up Tour Core." Grok connects to `hostedTourCoreUrl`, the
-operator approves, then Sendblue, Google Drive, the property, updates,
-readiness, a practice tour, and publish. The conversation does not mention
-Railway, ports, tunnels, or `/mcp`.
+operator approves, then Sendblue, Grok's Google Drive connector for portable
+backups, the property, updates, readiness, a practice tour, and publish.
+Grok then saves the first portable backup to Drive. The conversation does not
+mention Railway, ports, tunnels, or `/mcp`, and it does not ask for a second
+Google approval.
 
 ## Self-hosted
 

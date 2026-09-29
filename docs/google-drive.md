@@ -1,52 +1,121 @@
-# Google Drive as Tour Core's canonical store
+# Google Drive and hosted storage
 
 Tour Core keeps its own records. Grok installs Tour Core and explains it.
-Google Drive is the portable copy of those records for a real installation.
-A local folder remains available for tests, development, and an operator who
-declines Drive. That local folder is not portable storage.
+For `HOSTED_RAILWAY_P0`, Google Drive is a portable backup and export copy.
+It is not the live operational store.
 
-## What Grok's connector does
+```
+Grok
+  ├── Tour Core MCP          hosted Tour Core
+  │                            └── Railway volume /data   live operational state
+  └── Google Drive connector   the user's Drive
+                                 └── Tour Core/            backups and exports
+```
 
-Official docs (checked for this milestone):
+A normal hosted user authorizes Google once, through Grok's built-in Drive
+connector. Tour Core does not start a second Google approval, and it does not
+need `TOURCORE_GOOGLE_WEB_CLIENT_ID` or `TOURCORE_GOOGLE_WEB_CLIENT_SECRET`.
 
-- [Google Drive connector](https://docs.x.ai/grok/connectors/google-drive) — search, read, create, and upload files during a conversation. OAuth scopes requested by Grok include `drive.metadata.readonly`, `drive.readonly`, optional `drive`, and `userinfo.email`.
-- [Connectors](https://docs.x.ai/grok/connectors) — built-in connectors authenticate the Grok user. There is no API to hand that token to another program.
-- [Grok Bot computer and apps](https://docs.x.ai/grok-bot/computer-and-apps) — connectors are plugins the operator approves in the browser. They are for the Bot's own tasks.
+## What is live
 
-Tour Core therefore does **not** send each save through Grok. Webhooks, door decisions, and restarts keep working when Grok is not in a chat. Grok's connector is for connecting the account, finding the Tour Core folder, and opening exports.
+`HOSTED_P0_VOLUME` is the hosted P0 storage model. The Railway volume at
+`/data` (`TOURCORE_HOME`) holds property state, reservations, sessions,
+ledgers, the operator outbox, exceptions, and secrets. A restart or redeploy
+reads that volume. It does not restore from Drive.
 
-## Tour Core's own Google authorization
+Drive is not on the path for an inbound text, a booking, a reservation change,
+an access decision, a custom time, an exception, or session recovery. Tour
+Core does not wake Grok in order to save a booking. If Grok is idle or Drive
+is down, tours continue. A failed backup is recorded and does not roll back a
+tour.
 
-[Drive API scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth) (updated 2026-09-03): `https://www.googleapis.com/auth/drive.file` is the non-sensitive scope for files the app creates. Tour Core also requests `https://www.googleapis.com/auth/userinfo.email` so the operator can see which Google account was approved. Full Drive access is not requested.
+## What Drive is for
 
-The flow is the [web server authorization-code flow](https://developers.google.com/identity/protocols/oauth2/web-server) with PKCE (S256), a random `state`, and an exact redirect URI (`{PUBLIC_BASE_URL}/google/oauth/callback`). Refresh tokens live in SecretStore on the Tour Core computer. They are not written to Drive, URLs after the exchange, or logs.
+After Sendblue, Tour Core recommends Drive. Grok connects its own connector,
+creates or finds a private folder named `Tour Core`, with `Backups/`,
+`Exports/`, and `Properties/`, and calls `confirm_backup_destination`. No
+OAuth token is passed. Tour Core records that the backup destination is
+configured. It does not pretend to hold Grok's Google token.
 
-A landlord does not create a Google Cloud project. A distributor configures `TOURCORE_GOOGLE_OAUTH_CLIENT_ID` and `TOURCORE_GOOGLE_OAUTH_CLIENT_SECRET` (the OAuth client for the Tour Core app). A developer can set the same variables locally. Until that client exists, Tour Core says so and can keep records locally.
+The folder belongs to the user. Tour Core does not create public sharing links.
 
-`LOCAL_DEVELOPER` and `GROK_MANAGED_P0` may use a loopback redirect when that is the public address. `SELF_HOSTED` and `HOSTED_RAILWAY_P0` use the stable web callback `{PUBLIC_BASE_URL}/google/oauth/callback`. On Railway that base is `https://${RAILWAY_PUBLIC_DOMAIN}` unless `PUBLIC_BASE_URL` is set. Register that exact URI on the Google web client. Do not register a trycloudflare host for the hosted service.
+Backups are saved at checkpoints: after the first publish, after a structural
+republish, after an approved content change, after a completed tour, when the
+operator asks, and when `get_backup_status` says one is due. Not on every
+transaction.
 
-## Folder
+`create_portable_backup` writes a validated snapshot and a short-lived
+capability download. Grok uploads that file to `Tour Core/Backups` and then
+calls `confirm_backup_stored`. Until that call, Tour Core does not say the
+file is in Drive.
 
-One private folder named `Tour Core` per store. Files are never shared by Tour Core (no permissions calls).
+Readable exports (`create_readable_export`, `export_audit`) are a different
+format. They go in `Tour Core/Exports`. They are not restored as a backup.
 
-Canonical JSON (schema version on each document) holds installation metadata, properties, tours, runtime sessions, the messaging ledger, operator events, and an append-only storage audit. `indexes/lookup.json` is rebuilt from those files so an inbound text does not scan Drive. `exports/` holds CSV and summary views. Views are not a second source of truth.
+## Portable snapshot
 
-Secrets stay in SecretStore: Sendblue keys, webhook secrets, the Grok routine address and key, Tour Core MCP tokens, Google tokens, setup-session secrets.
+`tour-core-backup-2026-09-29T030000Z.json`
 
-## Consistency
+```json
+{
+  "format": "tourcore-portable-backup",
+  "schemaVersion": 1,
+  "installationId": "inst_...",
+  "createdAt": "2026-09-29T03:00:00.000Z",
+  "tourCoreVersion": "0.4.0",
+  "contents": { "files": [] },
+  "checksum": "..."
+}
+```
 
-Drive is not a transactional database. A change is written as a new file, then a catalog file is updated only if its etag still matches (`If-Match`). Readers trust a file only when the catalog names its checksum. If the catalog update fails, the previous catalog still names the previous files. Two writers cannot silently overwrite each other: a writer lease (`lease.json`) names the host and an expiry. A second live host is refused until the operator takes over, or until the lease has expired.
+`contents.files` are the existing canonical JSON records: properties,
+addresses, types, units, facts, content changes, doors, routes, schedules,
+prospects, reservations, custom time requests, consent, verification status,
+tour state, operator holds, exceptions, preferences, audit, operator-event
+metadata, and visitor session state that is already stored. The snapshot is
+rejected unless its checksum, schema, and record relationships check out.
 
-The local data folder, when Drive is canonical, is a cache. A newer Drive revision wins. The cache is rebuilt by restoring the folder onto a clean computer.
+Portable backups can contain visitor details that Tour Core already stores.
+They do not add extra personal data for the sake of the copy. The Drive
+folder stays private.
 
-If Drive is down, a recently checked cache may answer an already-approved property fact. A booking, a schedule change, or a door grant is not confirmed unless it is saved. A door is not opened if the canonical records cannot be confirmed.
+Never included: Sendblue keys and webhook secrets, the Grok Routine address
+and key, MCP tokens, Google tokens, hosted owner cookies, CSRF and setup
+session secrets, future Durin credentials, and Railway secrets. Those are
+reconnected after a restore.
 
-## Migration and a new computer
+## Restore
 
-`prepare` → `migrate` (resumable) → `verify` → `activate` (only after verification, and only with confirmation). The local copy is kept. A failed check leaves the local files canonical.
+Grok downloads the latest backup and uploads it through a short-lived
+capability. Tour Core validates it, shows a plain preview, and waits for an
+explicit yes. Receiving the file does not change live records.
 
-A new computer connects the same Google account, discovers the folder, takes the writer lease, and restores JSON. Sendblue and other provider secrets are entered again.
+P0 restore is for an empty installation, such as a volume that was lost.
+If this Tour Core already has property or tour records, import is refused
+unless the operator explicitly chooses replacement. Merge is not supported.
 
-## Manual test
+After restore, property and tour history are back. Visitor texting, operator
+updates, and a future door provider need their credentials again. The backup
+does not contain them.
 
-See the Google Drive section of `docs/grok-manual-test.md`. Automated tests use `FakeGoogleDrive` and do not call Google.
+A normal Railway restart does not use this flow.
+
+## Optional direct Drive
+
+`DIRECT_GOOGLE_DRIVE` (`TOURCORE_STORAGE_MODEL=DIRECT_GOOGLE_DRIVE`) keeps the
+older design: Tour Core's own Google OAuth client, refresh tokens in
+SecretStore, `GoogleDriveStore`, and a writer lease. That mode can still be
+used for self-hosted experiments and migration tools. It is not the hosted
+onboarding path, and its lease does not block hosted setup.
+
+Automated tests use a fake Drive client for that mode. They do not call Google.
+
+## Later
+
+Before a public multi-tenant marketplace, a real hosted database becomes the
+operational store per tenant. Grok's Drive connector stays the user-owned
+backup and export layer. This milestone does not add that database.
+
+A daily Grok Routine that writes Drive is not shipped. Routines can call Tour
+Core, but the Drive connector is what saves the file, and that happens in a
+conversation. See `grok-template/routines/tour-core-backups.md`.

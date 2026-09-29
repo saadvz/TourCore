@@ -68,7 +68,7 @@ export interface InstallState {
    * client is refused. Not a secret. Marketplace tenancy is not this field.
    */
   hostedTenant?: { clientId: string; boundAt: string };
-  /** Where canonical tour records live. Tokens are never stored here. */
+  /** Where canonical tour records live when DIRECT_GOOGLE_DRIVE is in use. Tokens are never stored here. */
   storage?: {
     mode?: "LOCAL_DEMO" | "GOOGLE_DRIVE";
     phase?: "CONNECTING" | "READY" | "MIGRATING" | "ERROR";
@@ -89,6 +89,26 @@ export interface InstallState {
       hashes: Record<string, string>;
       error?: string;
     };
+  };
+  /**
+   * HOSTED_P0_VOLUME only. Non-secret metadata about the Grok Drive backup
+   * destination. Tour Core does not store a Google token here.
+   */
+  portableBackup?: {
+    destination?: {
+      provider: "google_drive";
+      folderName: string;
+      accountLabel?: string;
+      configuredAt: string;
+    };
+    declinedAt?: string;
+    lastBackupCreatedAt?: string;
+    lastBackupConfirmedInDriveAt?: string;
+    lastBackupChecksum?: string;
+    lastBackupSchemaVersion?: number;
+    lastBackupFileName?: string;
+    lastFailureAt?: string;
+    lastFailureSummary?: string;
   };
 }
 

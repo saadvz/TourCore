@@ -117,6 +117,7 @@ export type InstallationAction =
   | "FIX_VISITOR_MESSAGING"
   | "CHECK_STORAGE"
   | "CONNECT_GOOGLE_DRIVE"
+  | "CONFIRM_BACKUP_DESTINATION"
   | "FINISH_GOOGLE_DRIVE"
   | "SET_UP_PROPERTY"
   | "FINISH_PROPERTY_SETUP"
@@ -376,6 +377,12 @@ const DRIVE_INSTRUCTIONS =
   "Then call begin_google_drive_connect. If it returns an authorizationUrl, open that for Tour Core's own approval and say the summary: Grok's Drive connection cannot save Tour Core's records while you are away, and xAI does not document handing that connector's token to Tour Core. " +
   "If the operator says no, call use_local_demo_storage and tell them records stay on this computer and are not portable. If begin_google_drive_connect says the Google app is not configured, say the summary and offer to keep records on this computer; do not ask them to create a Google Cloud project.";
 
+const HOSTED_BACKUP_INSTRUCTIONS =
+  "Use Grok's native Google Drive connector only. If Drive is already connected, reuse it. Do not ask for a Google password, OAuth client id, client secret, API key, or refresh token. Do not call begin_google_drive_connect and do not open a Tour Core Google approval. " +
+  "Create or find a private folder named Tour Core with folders Backups, Exports, and Properties. Do not create a public sharing link and do not use that folder as the live database. " +
+  "Then call confirm_backup_destination with provider google_drive and folderName Tour Core. accountLabel may be a short display name. Do not pass tokens. " +
+  "If the operator declines, call decline_portable_backup. Operational records stay on hosted Tour Core either way. After the first property is published, call create_portable_backup and upload that file to Tour Core/Backups, then confirm_backup_stored.";
+
 function storageStatus(inst: Installation, messagingReady: boolean): ComponentStatus {
   let writable = true;
   try {
@@ -388,6 +395,7 @@ function storageStatus(inst: Installation, messagingReady: boolean): ComponentSt
   if (!writable) {
     return component("STORAGE", "ERROR", "Tour Core couldn't save a test record.", { provider, next: step("STORAGE", "CHECK_STORAGE", "GROK", "I'm checking where tour records are kept.", { tool: "test_storage" }) });
   }
+  if (inst.records.model() === "HOSTED_P0_VOLUME") return hostedVolumeStatus(inst, messagingReady, summary);
   if (provider === "GOOGLE_DRIVE_READY") return component("STORAGE", "READY", summary, { provider: "GOOGLE_DRIVE_READY" });
   if (provider === "LOCAL_DEMO") return component("STORAGE", "READY", summary, { provider: "LOCAL_DEMO", technical: ["Local demo storage stays on this computer. It is not portable."] });
   if (provider === "ERROR") {
@@ -408,6 +416,33 @@ function storageStatus(inst: Installation, messagingReady: boolean): ComponentSt
       tool: "begin_google_drive_connect",
       grokInstructions: DRIVE_INSTRUCTIONS,
     }),
+  });
+}
+
+function hostedVolumeStatus(inst: Installation, messagingReady: boolean, summary: string): ComponentStatus {
+  const backup = inst.files.state().portableBackup;
+  const connected = !!backup?.destination;
+  const declined = !!backup?.declinedAt && !connected;
+  if (!messagingReady) return component("STORAGE", "NOT_CONFIGURED", "Offered once visitor texting is working.", { provider: "HOSTED_VOLUME" });
+  if (connected || declined) {
+    return component("STORAGE", "READY", summary, {
+      provider: "HOSTED_VOLUME",
+      technical: [
+        connected
+          ? "Backup destination confirmed through Grok. Tour Core does not hold a Google token. The Railway volume is the live operational store."
+          : "The operator declined portable backups. The Railway volume remains the live operational store.",
+      ],
+    });
+  }
+  return component("STORAGE", "ACTION_REQUIRED", summary, {
+    provider: "HOSTED_VOLUME",
+    next: step(
+      "STORAGE",
+      "CONFIRM_BACKUP_DESTINATION",
+      "OPERATOR_DECISION",
+      "Visitor texting is connected. Next I recommend Google Drive so I can keep portable backups and exports of your Tour Core records there.",
+      { tool: "confirm_backup_destination", grokInstructions: HOSTED_BACKUP_INSTRUCTIONS },
+    ),
   });
 }
 

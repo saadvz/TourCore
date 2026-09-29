@@ -2,7 +2,7 @@
 name: install-tour-core
 description: Connect an operator to Tour Core and take them from a blank setup to a published property by following Tour Core's own next steps, asking only for approvals, logins, credentials through a secure handoff, property information and decisions.
 when-to-use: "set up Tour Core", "install Tour Core", "what's left to set up", "check my Tour Core installation", "is Tour Core running", "restart Tour Core", "test alerts", "connect texting", "turn on alerts", "tour updates", "change my notifications"
-allowed-tools: get_installation_status get_next_installation_step get_installation_component skip_optional_setup check_runtime_health check_public_endpoint test_visitor_messaging get_notification_preferences set_notification_preferences get_operator_update test_operator_alerts test_storage test_access get_secure_setup_url get_storage_status get_storage_location begin_google_drive_connect finish_google_drive_setup use_local_demo_storage prepare_storage_migration migrate_storage_to_google_drive verify_storage_migration activate_google_drive_storage discover_storage takeover_storage_writer disconnect_google_drive_storage
+allowed-tools: get_installation_status get_next_installation_step get_installation_component skip_optional_setup check_runtime_health check_public_endpoint test_visitor_messaging get_notification_preferences set_notification_preferences get_operator_update test_operator_alerts test_storage test_access get_secure_setup_url get_storage_status get_storage_location begin_google_drive_connect finish_google_drive_setup use_local_demo_storage prepare_storage_migration migrate_storage_to_google_drive verify_storage_migration activate_google_drive_storage discover_storage takeover_storage_writer disconnect_google_drive_storage confirm_backup_destination decline_portable_backup get_backup_status create_portable_backup confirm_backup_stored
 argument-hint: "[what to check or connect]"
 user-invocable: true
 metadata:
@@ -153,7 +153,25 @@ Visitor texting is part of this phase: it's connected and tested before any
 property. Then Tour Core recommends Google Drive, before the first property.
 The access system ("Demo") needs nothing from the operator.
 
-When the next step is Google Drive, say:
+On the hosted product, Google Drive is a portable backup. The live records
+stay with hosted Tour Core. There is no second Google approval. When the next
+step is confirming the backup destination, say:
+
+> Visitor texting is connected. Next I recommend Google Drive so I can keep portable backups and exports of your Tour Core records there.
+
+If they say yes, use your built-in Google Drive connector. If it is already
+connected, reuse it. Do not ask for a Google password, client id, client
+secret, or API key. Create or find a private folder named Tour Core, with
+Backups, Exports, and Properties inside. Do not make a public sharing link.
+Then call `confirm_backup_destination` (`provider` google_drive, `folderName`
+Tour Core). Say:
+
+> Google Drive is connected. I've prepared your Tour Core folder.
+
+If they say no, call `decline_portable_backup`. Operational records stay with
+hosted Tour Core, and property setup continues.
+
+On the open-source path, when the next step is Google Drive's own approval, say:
 
 > Visitor texting is working. Next I recommend connecting Google Drive so your property and tour records stay with you even if this Tour Core computer changes.
 
@@ -277,6 +295,17 @@ ask the publish question again). Don't ask the operator how to text people.
 > Your property is published. Visitor texting is live. Door access is still in
 > demo mode, so no physical locks will open. I'll keep you updated on your
 > tours and let you know when something needs your attention.
+
+On the hosted product, after that, create a portable backup
+(`create_portable_backup`), save the file in Tour Core/Backups with the
+Google Drive connector, confirm the file is there, then call
+`confirm_backup_stored`. Say:
+
+> I've also saved a portable backup of this setup to your Google Drive.
+
+A backup that fails does not unpublish the property or stop a tour. Later
+backups use the Backup Tour Core skill. Do not say a backup is saved until
+`confirm_backup_stored` succeeds.
 
 Describe each part as it is (texting live, door access demo); never say
 "everything runs in demo mode". From here, when the Tour Core Operator Updates

@@ -283,36 +283,26 @@ with no ZIP. Single-family internal space: Main Home. No public property name.
 | F6 | "How much is rent?" | The answer uses the address (or "this home"), then Thursday's times again. Not "Main Home" |
 | F7 | Readiness, practice tour, then "Yes, publish it." | One publish. Grok says it is published only after the tool result and a fresh status read. No second publish question and no "still needs a yes" |
 
-## G. Google Drive portability
+## G. Hosted portable backup
 
-Needs a Tour Core Google OAuth client configured on the computer
-(`TOURCORE_GOOGLE_OAUTH_CLIENT_ID` and `TOURCORE_GOOGLE_OAUTH_CLIENT_SECRET`)
-and a Google account that can approve both Grok's Drive connector and Tour
-Core. Automated tests do not call Google. This section does.
-
-### Flow A — fresh install
+Needs a hosted Tour Core (`HOSTED_RAILWAY_P0`) and a Google account that can
+approve Grok's Drive connector. Tour Core does not ask for its own Google
+approval. Automated tests do not call Google.
 
 | # | Do | Expect |
 | --- | --- | --- |
-| G1 | Blank Grok Bot. Bootstrap Tour Core. Connect Sendblue | After texting works, Grok recommends Google Drive before the first property. It does not ask for a Google password or API key |
-| G2 | Say yes | Grok connects its own Google Drive connector if needed, then opens Google's approval for Tour Core and explains why that second approval exists |
-| G3 | Approve Google | A private `Tour Core` folder appears. `test_storage` passes. Status says "Tour records: Google Drive connected." |
-| G4 | Create the property, readiness, practice tour, publish, and make a real booking | The property, tour, and audit files are in that folder. Secrets are not |
+| G1 | Fresh Grok bot. Connect hosted Tour Core. Allow. Connect Sendblue | Grok recommends Google Drive for portable backups and exports. It does not ask for a Google password, client id, client secret, or a second approval |
+| G2 | Approve Grok's Google Drive connector | Grok creates or finds a private Tour Core folder (Backups, Exports, Properties) and tells Tour Core the backup destination is configured |
+| G3 | Continue | "Google Drive is connected. I've prepared your Tour Core folder." Then the first property. Status does not say "Google Drive canonical" or that a Tour Core Google client is missing |
+| G4 | Create the property, updates, readiness, practice, publish | Grok saves a portable backup into Tour Core/Backups and says it is saved only after the file is there |
+| G5 | "Open my Tour Core backup." | Grok opens that file with the Drive connector. The operational answer still comes from Tour Core |
 
-### Flow B — a second computer
-
-| # | Do | Expect |
-| --- | --- | --- |
-| G5 | Stop the first Tour Core. Start a clean one and connect the same Google account | Grok finds the existing Tour Core folder |
-| G6 | Confirm the takeover | Property, tours, facts, and history are back. Sendblue and other secrets are asked for again. They were not in Drive |
-| G7 | Send a text to the touring number after Sendblue is reconnected | The conversation continues from the restored records |
-
-### Flow C — browsing
+### Portability
 
 | # | Do | Expect |
 | --- | --- | --- |
-| G8 | "Open my Tour Core records in Google Drive." | Grok uses its Drive connector to open the folder. The operational answer still comes from Tour Core |
-| G9 | "Show me today's export." | Grok opens the export view. It does not treat that file as the booking record |
+| G6 | Download the latest backup from Drive. Simulate a clean Tour Core with an empty volume | Grok uploads the backup through Tour Core's restore handoff. Tour Core shows a preview and waits |
+| G7 | Approve the restore | Property, tour history, and facts are back. Visitor texting and operator updates say reconnect is required. No Sendblue or Google secret came from the file |
 
 ## H. Hosted Railway demo
 
@@ -325,9 +315,9 @@ real deploy.
 | # | Do | Expect |
 | --- | --- | --- |
 | H1 | Push `saadvz/TourCore` and create one Railway service from that repo (`master`) | Railpack runs `npm run build` and `npm start`. No Docker |
-| H2 | Generate a public domain. Mount a volume at `/data`. Set `TOURCORE_DEPLOYMENT_MODE=HOSTED_RAILWAY_P0` and `TOURCORE_HOME=/data`. Set the Google OAuth client. Healthcheck path `/healthz`. Do not set `TOURCORE_GROK_LEGACY_OAUTH_COMPAT` and do not set an owner-claim secret | Deploy logs show the version, `HOSTED_RAILWAY_P0`, the port, the public host, the storage summary, and `Grok legacy OAuth compatibility active for HOSTED_RAILWAY_P0.` No credentials |
+| H2 | Generate a public domain. Mount a volume at `/data`. Set `TOURCORE_DEPLOYMENT_MODE=HOSTED_RAILWAY_P0` and `TOURCORE_HOME=/data`. Do not set a Tour Core Google OAuth client. Healthcheck path `/healthz`. Do not set `TOURCORE_GROK_LEGACY_OAUTH_COMPAT` | Deploy logs show the version, `HOSTED_RAILWAY_P0`, the port, the public host, `Railway volume (live operational store)`, and `Grok legacy OAuth compatibility active for HOSTED_RAILWAY_P0.` No credentials |
 | H3 | Open `https://<domain>/healthz` | `200` and `"service":"tour-core"`. The URL does not contain `trycloudflare` |
-| H4 | Register `https://<domain>/google/oauth/callback` on the Tour Core Google web client. Set `hostedTourCoreUrl` in the bot template to `https://<domain>` | Skills still say `hostedTourCoreUrl`, not a Railway hostname |
+| H4 | Set `hostedTourCoreUrl` in the bot template to `https://<domain>`. Do not register a Tour Core Google callback | Skills still say `hostedTourCoreUrl`, not a Railway hostname |
 | H4b | Do not run an owner-claim step | There is no `/claim` page and no bootstrap secret in this flow |
 
 ### Fresh user
@@ -336,13 +326,13 @@ real deploy.
 | --- | --- | --- |
 | H5 | Fresh Grok bot whose template has `hostedTourCoreUrl`. Say "Set up Tour Core." | Grok connects to the hosted service. It does not clone a runtime, start a tunnel, or say Tour Core only works while its computer is on. It does not mention Railway |
 | H6 | Click Authorize. Tour Core shows a pairing code and says approving this first connection makes this Grok connection the owner of the demo. Click Allow | The browser returns to Grok. Grok says it is connected. Registering or calling tools did not claim the demo by itself. A second unrelated account is refused |
-| H7 | Connect Sendblue, then Google Drive, then the property, updates, readiness, practice, and publish | Webhook and verification links use the Railway host. The Google callback is the registered Railway URL. Records are in Drive |
+| H7 | Connect Sendblue, then Grok's Google Drive connector, then the property, updates, readiness, practice, and publish | Webhook and verification links use the Railway host. There is no second Google approval. Records stay on the volume. A portable backup is saved under Tour Core/Backups |
 | H8 | A real visitor texts the property | The tour proceeds. Operator updates come from the hosted service |
 
 ### Restart
 
 | # | Do | Expect |
 | --- | --- | --- |
-| H9 | Redeploy or restart the Railway service | The public domain stays the same. `/healthz` returns 200 after startup. Logs do not show a quick-tunnel address |
-| H10 | Ask Grok about the property. Send another text | The property is still there. Sendblue still points at the Railway webhook. A booking alert already delivered is not sent again |
-| H11 | Leave the old Grok-computer process running against the same Drive folder | The hosted service refuses to start as a second writer until that lease is released or taken over |
+| H9 | Redeploy or restart the Railway service | The public domain stays the same. `/healthz` returns 200 after startup. Logs do not show a quick-tunnel address. Startup does not wait on Google Drive |
+| H10 | Ask Grok about the property. Send another text | The property is still there from the volume. Sendblue still points at the Railway webhook. A booking alert already delivered is not sent again |
+| H11 | Disconnect Google Drive in Grok, or leave Drive unavailable, and send another text | The tour still proceeds. Backup status can show a failure or that a backup is due. The booking is not rolled back |

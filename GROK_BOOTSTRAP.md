@@ -46,8 +46,8 @@ On your cloud computer, never the operator's:
    the next step until Tour Core reports the infrastructure ready.
 
 The other workflows (Setup Property, Map Route, Run Readiness Check, Simulate
-Tour, Work Exception, Export Audit) are in `.grok/skills/`. Load them from
-there once the repository is on your computer.
+Tour, Work Exception, Export Audit, Backup Tour Core) are in `.grok/skills/`.
+Load them from there once the repository is on your computer.
 
 ## Rules
 
@@ -72,7 +72,6 @@ there once the repository is on your computer.
 
 ## Order
 
-Tour Core, secure connection, Grok connection → visitor texting → Google Drive
-(recommended; local demo only if they decline) → property → alerts
-(recommended) → readiness check → practice tour → publish, and publish only
-after the operator's explicit yes.
+Hosted product: approval, visitor texting, Google Drive backups through Grok (recommended; they can decline), property, alerts (recommended), readiness, practice, publish, then one portable backup. No second Google approval.
+
+Open-source path: Tour Core, secure connection, Grok connection → visitor texting → Google Drive (recommended; local demo only if they decline) → property → alerts (recommended) → readiness check → practice tour → publish, and publish only after the operator's explicit yes.

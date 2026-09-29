@@ -14,16 +14,17 @@ installations is a leak:
 
 - MCP OAuth clients, grants, and approval sessions
 - properties, prospects, tours, and exceptions
-- Google Drive authorization and the Drive store
-- the Drive writer lease
+- Google Drive authorization is not shared. Each installation's backups stay in that user's Drive. Tour Core does not hold that user's Google token on the hosted path
 - the Sendblue connection and webhook secret
 - operator Routine preferences and the outbox
 - the secret namespace (Sendblue, Google refresh token, Routine key)
 - audit and exports
 
-Railway remains the runtime. Google Drive remains canonical business storage
-for each installation. Secrets stay out of Drive. A volume, if still used,
-is partitioned by installation id.
+Railway remains the runtime. For this demo the volume holds one installation's
+live operational state. A future hosted database replaces that volume as the
+operational store per tenant. Grok's Google Drive connector remains the
+user-owned backup and export layer. Secrets stay out of Drive and out of
+backups.
 
 Not in this design: billing, a landlord account system, an admin console, or
 a second messaging provider. Marketplace publication waits until the

@@ -7,6 +7,7 @@ import { addressReadback } from "../setup/address";
 import { PROPERTY_TYPE_LABELS, PROPERTY_TYPES, validateConfig } from "../config/tourCoreConfig";
 import { FIELD_WORDS, missingProfileFields, nextProfileQuestion, parseBulkUnitDetails, profileSummaryLine } from "../config/unitProfile";
 import { TourCoreError } from "../core/TourCore";
+import { PortableBackupError } from "../backup/portable";
 import { InvalidTransitionError } from "../domain/stateMachine";
 import { checkMessaging, UnavailableModeError } from "../createTourCore";
 import { applySetupCommand } from "../setup/commands";
@@ -1174,7 +1175,7 @@ export async function callOperatorTool(ctx: ToolContext, name: string, args: unk
     }
     return { ok: true, result };
   } catch (err) {
-    if (err instanceof SetupInputError || err instanceof TourCoreError || err instanceof UnavailableModeError) return { ok: false, error: err.message };
+    if (err instanceof SetupInputError || err instanceof TourCoreError || err instanceof UnavailableModeError || err instanceof PortableBackupError || err instanceof StorageUnavailableError) return { ok: false, error: err.message };
     if (err instanceof InvalidTransitionError) return { ok: false, error: "That tour can't make that change from where it is now. Nothing was changed." };
     return { ok: false, error: "Something went wrong in Tour Core. Nothing else was changed." };
   }

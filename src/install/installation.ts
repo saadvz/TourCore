@@ -2,6 +2,7 @@ import { GrokRoutineWebhookSink, NoopOperatorNotificationSink, type OperatorEven
 import { OperatorEventOutbox, type OutboxOptions } from "../alerts/outbox";
 import { OAuthGrantStore } from "../mcp/oauth/store";
 import { sendblueRuntime, type SendblueEnv } from "../messaging/sendblue/runtime";
+import { PortableBackups } from "../backup/service";
 import type { RuntimeStore } from "../storage/runtimeStore";
 import type { DriveClient } from "../storage/googleDrive";
 import { RecordStore } from "../storage/recordStore";
@@ -48,6 +49,7 @@ export class Installation {
   readonly outbox: OperatorEventOutbox;
   readonly grants: OAuthGrantStore;
   readonly records: RecordStore;
+  readonly backups: PortableBackups;
   readonly startedAt: number;
   private relevance?: (event: OperatorEvent) => Promise<boolean>;
 
@@ -76,6 +78,7 @@ export class Installation {
       fetch: () => this.fetch(),
       driveClient: options.driveClient,
     });
+    this.backups = new PortableBackups(this, TOURCORE_VERSION);
   }
 
   get root(): string {

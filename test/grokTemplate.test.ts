@@ -9,7 +9,7 @@ import { OPERATOR_TOOL_NAMES } from "../src/operator/tools";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SKILLS = join(ROOT, ".grok", "skills");
 const TEMPLATE = join(ROOT, "grok-template");
-const SKILL_NAMES = ["install-tour-core", "setup-property", "map-route", "run-readiness-check", "simulate-tour", "work-exception", "export-audit"];
+const SKILL_NAMES = ["install-tour-core", "setup-property", "map-route", "run-readiness-check", "simulate-tour", "work-exception", "export-audit", "backup-tour-core"];
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
