@@ -91,6 +91,12 @@ export class MessagingLedger {
     return this.entries.get(key)?.duplicates ?? 0;
   }
 
+  /** Forgets every provider event. The next inbound message is treated as new. */
+  clear(): void {
+    this.entries.clear();
+    this.save();
+  }
+
   private trim(): void {
     while (this.entries.size > this.maxEntries) this.entries.delete(this.entries.keys().next().value!);
   }

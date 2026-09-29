@@ -192,6 +192,34 @@ export class InstallationFiles {
     return { manifest, created: true };
   }
 
+  /**
+   * Starts a new installation id on the same hosted service. Keeps the
+   * deployment mode, public address, and host options. Clears nothing else;
+   * the caller clears business state first.
+   */
+  freshHostedIdentity(now = new Date()): { previousId: string; manifest: InstallationManifest } {
+    const existing = this.manifest();
+    if (!existing || existing.deploymentMode !== "HOSTED_RAILWAY_P0") {
+      throw new Error("A new hosted installation can only replace the hosted demo.");
+    }
+    const stamp = now.toISOString();
+    const manifest = this.writeManifest({
+      schemaVersion: 1,
+      deploymentMode: existing.deploymentMode,
+      installationId: newInstallationId(),
+      ...(existing.publicBaseUrl ? { publicBaseUrl: existing.publicBaseUrl } : {}),
+      publicEndpointProvider: existing.publicEndpointProvider,
+      messagingProvider: existing.messagingProvider,
+      storageProvider: existing.storageProvider,
+      accessProvider: existing.accessProvider,
+      operatorNotificationProvider: "NONE",
+      ...(existing.options ? { options: existing.options } : {}),
+      installedAt: stamp,
+      updatedAt: stamp,
+    });
+    return { previousId: existing.installationId, manifest };
+  }
+
   update(patch: Partial<Omit<InstallationManifest, "schemaVersion" | "installationId" | "installedAt">>, now = new Date()): InstallationManifest {
     const existing = this.manifest() ?? this.ensure({ deploymentMode: "LOCAL_DEVELOPER", now }).manifest;
     return this.writeManifest({ ...existing, ...patch, updatedAt: now.toISOString() });

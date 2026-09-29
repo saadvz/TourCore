@@ -343,3 +343,41 @@ real deploy.
 | H9 | Redeploy or restart the Railway service | The public domain stays the same. `/healthz` returns 200 after startup. Logs do not show a quick-tunnel address. Startup does not wait on Google Drive |
 | H10 | Ask Grok about the property. Send another text | The property is still there from the volume. Sendblue still points at the Railway webhook. A booking alert already delivered is not sent again |
 | H11 | Disconnect Google Drive in Grok, or leave Drive unavailable, and send another text | The tour still proceeds. Backup status can show a failure or that a backup is due. The booking is not rolled back |
+
+## I. Hosted demo reset
+
+A development reset of the single hosted demo. Automated tests do not call
+Railway, Sendblue, or Google. This section is the real service.
+
+### A. Existing demo
+
+Tour Core already has a published property, a completed tour, Sendblue,
+operator updates, a Google Drive backup destination, and a Grok owner.
+Backup files are already in Google Drive under Tour Core/Backups, Exports,
+and Properties.
+
+### B. Current Grok Bot
+
+| # | Do | Expect |
+| --- | --- | --- |
+| I1 | Say "Reset this hosted Tour Core demo so I can run a fresh onboarding test." | Grok calls `reset_hosted_demo` with no confirmation code. Tour Core explains what will be erased and what will be kept (the Railway service, the stable URL, and Google Drive files). Nothing is deleted yet |
+| I2 | Say "Yes, reset it." | Grok calls `reset_hosted_demo` with the confirmation code. The reset succeeds. Grok says this connection is no longer authorized and that you can delete this Bot. It does not delete Railway, the data volume, or Drive files, and it does not run a shell command |
+
+### C. After the reset
+
+| # | Do | Expect |
+| --- | --- | --- |
+| I3 | Open `https://<domain>/healthz` | `200`. The domain is unchanged |
+| I4 | Look in Google Drive | Tour Core/Backups, Exports, and Properties, and the files inside them, are still there |
+| I5 | Delete the current Grok Bot | The old connection is not reused |
+
+### D. New Bot
+
+Use the standard hosted bootstrap prompt (`GROK_BOOTSTRAP.md`, with
+`hostedTourCoreUrl` set).
+
+| # | Do | Expect |
+| --- | --- | --- |
+| I6 | Say "Set up Tour Core." | Grok finds the hosted service. It does not start a local runtime |
+| I7 | Authorize and click Allow | The new Bot becomes the owner. No properties are listed. Sendblue is not connected. The Google Drive backup destination is not configured. Operator updates are not configured |
+| I8 | Continue the normal hosted onboarding | Sendblue, then Grok's Google Drive connector, then the first property, updates, readiness, practice, and publish. No old property or tour appears |

@@ -70,6 +70,11 @@ export class ApprovalSessions {
     return { ok: true };
   }
 
+  /** Forgets the in-memory link. Stored sessions are removed separately. */
+  discard(): void {
+    this.live = undefined;
+  }
+
   private read(token: string | undefined): { ok: true; key: string; stored: Stored } | { ok: false; reason: "missing" | "unknown" | "expired" | "used" } {
     if (!tokenOk(token)) return { ok: false, reason: token ? "unknown" : "missing" };
     const key = keyFor(token);

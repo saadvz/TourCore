@@ -54,6 +54,11 @@ export class ConfirmationBook {
     if (entry.fingerprint !== fingerprint) throw new SetupInputError("CONFIRMATION_STALE", "Something changed since the operator approved this. Show them the current details and ask again.");
   }
 
+  /** Drops every outstanding approval. Used when the installation they belonged to is gone. */
+  clear(): void {
+    this.pending.clear();
+  }
+
   private sweep(): void {
     const now = this.now();
     for (const [code, entry] of this.pending) if (entry.expiresAt <= now) this.pending.delete(code);

@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { hostedResetToolVisible, HOSTED_ADMIN_TOOLS } from "../install/hostedAdminTools";
 import { callOperatorTool, OPERATOR_TOOLS, UnknownToolError, type ToolContext } from "../operator/tools";
 
 /**
@@ -41,8 +42,9 @@ const ANNOTATIONS = {
   consequential: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
 } as const;
 
-export function mcpToolList() {
-  return OPERATOR_TOOLS.map((t) => {
+export function mcpToolList(ctx?: ToolContext) {
+  const tools = hostedResetToolVisible(ctx) ? [...OPERATOR_TOOLS, ...HOSTED_ADMIN_TOOLS] : OPERATOR_TOOLS;
+  return tools.map((t) => {
     const { $schema: _s, ...inputSchema } = z.toJSONSchema(t.input) as Record<string, unknown>;
     return { name: t.name, title: t.title, description: t.description, inputSchema, annotations: { title: t.title, ...ANNOTATIONS[t.kind] } };
   });
@@ -65,7 +67,7 @@ export async function handleMcpMessage(ctx: ToolContext, message: unknown): Prom
     case "ping":
       return rpcResult(id, {});
     case "tools/list":
-      return rpcResult(id, { tools: mcpToolList() });
+      return rpcResult(id, { tools: mcpToolList(ctx) });
     case "tools/call": {
       const name = typeof params?.name === "string" ? params.name : "";
       try {

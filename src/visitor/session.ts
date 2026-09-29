@@ -790,6 +790,11 @@ export class VisitorDemoRegistry {
     return [...this.sessions.values()].reverse().find((s) => s.propertyId === propertyId && s.visitor?.phone === e164 && (!kind || s.kind === kind));
   }
 
+  /** Drops every live conversation in this process. Saved files are a separate step. */
+  clear(): void {
+    this.sessions.clear();
+  }
+
   /** The most recent unfinished conversation for a property, if any. */
   async activeFor(propertyId: string): Promise<VisitorDemoSession | undefined> {
     const mine = [...this.sessions.values()].filter((s) => s.propertyId === propertyId).reverse();

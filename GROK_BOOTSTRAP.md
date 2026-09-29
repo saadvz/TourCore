@@ -66,7 +66,7 @@ Load them from there once the repository is on your computer.
   Core's setup form, then a provider login when one exists, and only then
   the operator taking over that page. Never put a secret in ordinary chat
   or a tool argument. The Install Tour Core skill has the sentence to say.
-- Do everything else yourself. Never ask the operator to run a command.
+- Do everything else yourself. Never ask the operator to run a command. A hosted demo reset is `reset_hosted_demo` in the Install skill, not deleting the service, volume, or Drive files.
 - Tour updates reach the operator through a Grok Routine (Tour Core Operator
   Updates) that you build when Tour Core offers them; its address and key
   belong on the secure setup page only.

@@ -30,6 +30,8 @@ export interface RuntimeStore {
   delete(namespace: RuntimeNamespace, key: string): void;
   /** Every document in a namespace. Damaged ones are listed separately instead of hidden. */
   list<T>(namespace: RuntimeNamespace): { entries: { key: string; value: T }[]; damaged: string[] };
+  /** Removes one namespace. Does not remove the store root. */
+  clearNamespace(namespace: RuntimeNamespace): void;
 }
 
 const KEY = /^[A-Za-z0-9_-]{1,120}$/;
@@ -59,6 +61,10 @@ export class FileRuntimeStore implements RuntimeStore {
 
   delete(namespace: RuntimeNamespace, key: string): void {
     rmSync(this.path(namespace, key), { force: true });
+  }
+
+  clearNamespace(namespace: RuntimeNamespace): void {
+    rmSync(join(this.root, namespace), { recursive: true, force: true });
   }
 
   list<T>(namespace: RuntimeNamespace): { entries: { key: string; value: T }[]; damaged: string[] } {
@@ -98,6 +104,11 @@ export class MemoryRuntimeStore implements RuntimeStore {
 
   delete(namespace: RuntimeNamespace, key: string): void {
     this.docs.delete(`${namespace}/${checkKey(key)}`);
+  }
+
+  clearNamespace(namespace: RuntimeNamespace): void {
+    const prefix = `${namespace}/`;
+    for (const key of this.docs.keys()) if (key.startsWith(prefix)) this.docs.delete(key);
   }
 
   list<T>(namespace: RuntimeNamespace): { entries: { key: string; value: T }[]; damaged: string[] } {

@@ -1,14 +1,14 @@
 ---
 name: install-tour-core
 description: Connect an operator to Tour Core and take them from a blank setup to a published property by following Tour Core's own next steps, asking only for approvals, logins, credentials through a secure handoff, property information and decisions.
-when-to-use: "set up Tour Core", "install Tour Core", "what's left to set up", "check my Tour Core installation", "is Tour Core running", "restart Tour Core", "test alerts", "connect texting", "turn on alerts", "tour updates", "change my notifications"
-allowed-tools: get_installation_status get_next_installation_step get_installation_component skip_optional_setup check_runtime_health check_public_endpoint test_visitor_messaging get_notification_preferences set_notification_preferences get_operator_update test_operator_alerts test_storage test_access get_secure_setup_url get_storage_status get_storage_location begin_google_drive_connect finish_google_drive_setup use_local_demo_storage prepare_storage_migration migrate_storage_to_google_drive verify_storage_migration activate_google_drive_storage discover_storage takeover_storage_writer disconnect_google_drive_storage confirm_backup_destination decline_portable_backup get_backup_status create_portable_backup confirm_backup_stored
+when-to-use: "set up Tour Core", "install Tour Core", "what's left to set up", "check my Tour Core installation", "is Tour Core running", "restart Tour Core", "test alerts", "connect texting", "turn on alerts", "tour updates", "change my notifications", "reset Tour Core", "fresh demo", "fresh onboarding test"
+allowed-tools: get_installation_status get_next_installation_step get_installation_component skip_optional_setup check_runtime_health check_public_endpoint test_visitor_messaging get_notification_preferences set_notification_preferences get_operator_update test_operator_alerts test_storage test_access get_secure_setup_url get_storage_status get_storage_location begin_google_drive_connect finish_google_drive_setup use_local_demo_storage prepare_storage_migration migrate_storage_to_google_drive verify_storage_migration activate_google_drive_storage discover_storage takeover_storage_writer disconnect_google_drive_storage confirm_backup_destination decline_portable_backup get_backup_status create_portable_backup confirm_backup_stored reset_hosted_demo
 argument-hint: "[what to check or connect]"
 user-invocable: true
 metadata:
   author: Tour Core
   short-description: Connect to Tour Core and guide onboarding, in Tour Core's order
-  version: "0.6.0"
+  version: "0.7.0"
 ---
 
 # Install Tour Core
@@ -321,6 +321,23 @@ routine wakes you, call `get_operator_update` with its `eventId` and post the
 `summary` (Work Exception covers issues). Work exceptions when the operator
 asks.
 
+## Reset a hosted demo
+
+Only when the deployment is HOSTED and the operator asks to reset Tour Core
+for a fresh demo or a fresh onboarding test. Call `reset_hosted_demo` with
+no confirmation code. Read Tour Core's warning to the operator, including
+what will be erased and what will be kept. If they clearly say yes, call
+`reset_hosted_demo` again with that `confirmationCode` and nothing else.
+
+When it succeeds, say:
+
+> Tour Core has been reset. This connection is no longer authorized, which is expected. You can delete this Bot and start the fresh onboarding test.
+
+Do not reconnect this Bot. The next test uses a new Bot and the normal hosted
+bootstrap. Do not delete `/data`, run `rm`, edit files, delete the Railway
+service, delete Google Drive files, or reset a provider account yourself.
+There is no separate owner-reset step after this.
+
 ## Validate
 
 - After every step, check Tour Core's status and report the result as-is.
@@ -362,6 +379,7 @@ when that fill isn't available), choosing or declining tour updates
 - Put credentials in commands, files or tool arguments.
 - Ask the operator to run commands, create a hosting account, or choose the setup order.
 - On the hosted product, clone Tour Core as the runtime, start a local service, start a quick tunnel, or say it only works while your computer is on.
+- Reset a hosted demo by deleting files, the data volume, the Railway service, Google Drive files, or provider resources. Use `reset_hosted_demo` only.
 - Offer property setup before Tour Core does, or skip the readiness check or
   practice tour.
 - Claim setup is zero-click. Some steps always need the operator.

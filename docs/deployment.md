@@ -184,6 +184,15 @@ To clear the owner without deleting tour records, set
 it. The next approved Grok connection can claim the demo. That reset is an
 admin recovery step, not user onboarding.
 
+To erase the whole hosted demo and start a fresh installation on the same
+service, the current owner calls `reset_hosted_demo` (two-step confirmation).
+That clears properties, tours, texting, operator updates, the backup
+acknowledgment, OAuth grants, and the owner binding. It keeps the Railway
+service, the stable URL, the volume, and files already saved in Google Drive.
+It is a development reset for this demo, not a landlord feature, and it is
+not available outside `HOSTED_RAILWAY_P0`. The environment variable above
+does not do that full reset.
+
 ## Installation status and next step
 
 `src/install/status.ts`. Components, in the order Tour Core works through

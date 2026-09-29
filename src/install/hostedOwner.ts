@@ -186,6 +186,24 @@ export function revokeHostedOwnerSession(inst: Installation): boolean {
   return true;
 }
 
+/**
+ * Drops the hosted owner session and claim so the demo is unclaimed.
+ * Does not mint a new claim and does not delete tour records.
+ * A bootstrap secret that was already used stays spent.
+ */
+export function releaseHostedOwner(inst: Installation): void {
+  const consumed = inst.secrets.hostedOwner()?.consumedBootstrapHash;
+  inst.secrets.saveHostedOwner(undefined);
+  deleteClaimFile(inst.root);
+  if (!consumed) return;
+  inst.secrets.saveHostedOwner({
+    schemaVersion: 1,
+    claimHash: consumed,
+    claimed: false,
+    consumedBootstrapHash: consumed,
+  });
+}
+
 /** Distributor reset: drops the owner and issues a new CLI fallback claim. A bootstrap secret that was already used stays spent. Does not delete tour records. */
 export function resetHostedOwner(inst: Installation): void {
   const consumed = inst.secrets.hostedOwner()?.consumedBootstrapHash;

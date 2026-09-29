@@ -36,3 +36,7 @@ of this one demo. That first-approved-client rule is not the Marketplace
 authentication model. A multi-tenant host should authenticate a user, resolve
 that user's installation, and let that user approve Grok for that tenant.
 Ordinary Marketplace users do not become owner by being first to connect.
+
+`reset_hosted_demo` rotates that installation id for a fresh copy of this
+one demo. It does not add a second tenant. The Railway service stays. Files
+already stored in Google Drive stay.

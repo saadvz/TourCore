@@ -96,6 +96,11 @@ again with the code after the operator's yes.
 | `begin_restore_upload` | change | Opens a short-lived upload for one backup file. Nothing is imported yet |
 | `preview_portable_restore` | read | Checks an uploaded backup and returns a plain preview. Does not change records |
 | `import_portable_backup` | consequential | Restores a previewed backup after an explicit yes. Replacement of existing records needs a separate explicit choice. Provider logins are not restored |
+| `reset_hosted_demo` | consequential | Hosted demo only, current owner only. First call warns and changes nothing. Second call erases the demo and starts a fresh unclaimed installation. Keeps the Railway service and Google Drive files. Hidden unless that owner is connected |
+
+`reset_hosted_demo` is not offered on a self-hosted or local Tour Core, and it
+is hidden from anyone who is not the current hosted owner. It does not take a
+file path and it does not run a shell command.
 
 There is intentionally no tool to open, unlock or grant a door, mint access,
 change the door-access mode, or read or write raw files. There is also no

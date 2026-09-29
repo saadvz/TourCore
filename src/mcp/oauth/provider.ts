@@ -476,6 +476,13 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
     if (grant && grant.clientId === client.client_id) this.options.store.revokeGrant(grant.id);
   }
 
+  /** Drops approval requests and codes held in this process. Stored grants are separate. */
+  discardPending(): void {
+    this.requests.clear();
+    this.codes.clear();
+    this.metadataCache.clear();
+  }
+
   /** "Disconnect Grok" on this computer. */
   disconnectAll(): { grants: number; clients: number } {
     this.requests.clear();

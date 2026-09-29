@@ -503,6 +503,7 @@ describe("readiness: tour progress storage", () => {
       },
       delete: () => {},
       list: () => ({ entries: [], damaged: [] }),
+      clearNamespace: () => {},
     };
     const result = await runReadinessCheck(sendblueProperty(), { now: new Date(at(7)), runtime: broken });
     const check = result.checks.find((c) => c.id === "progress")!;

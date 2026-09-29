@@ -77,6 +77,11 @@ export class MessagingConversations {
     return this.broken.size;
   }
 
+  /** Drops conversations this process was holding after a failed restore. */
+  dropLive(): void {
+    this.broken.clear();
+  }
+
   async receive(message: InboundMessage): Promise<{ correlationId?: string }> {
     const { workspace: ws, registry } = this.deps;
     const line = message.to ?? this.deps.defaultLine?.();

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Installation } from "../install/installation";
 import { secretValues } from "../install/settings";
+import { HOSTED_ADMIN_TOOLS } from "../install/hostedAdminTools";
 import { INSTALLATION_TOOLS } from "../install/tools";
 import { installedMessaging } from "../install/status";
 import { addressReadback } from "../setup/address";
@@ -63,6 +64,10 @@ export interface ToolContext {
   installation?: Installation;
   /** Visitor messaging settings changed: drop any cached connection so the next message uses them. */
   resetMessaging?: () => void;
+  /** The OAuth client calling this tool, when the request was authenticated that way. */
+  caller?: { clientId?: string };
+  /** Drops process memory (sessions, ledger, pending OAuth) after a hosted demo reset. */
+  forgetLiveState?: () => void;
 }
 
 export type ToolKind = "read" | "change" | "consequential";
@@ -1141,7 +1146,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
   ...INSTALLATION_TOOLS,
 ];
 
-export const OPERATOR_TOOL_NAMES = OPERATOR_TOOLS.map((t) => t.name);
+export const OPERATOR_TOOL_NAMES = [...OPERATOR_TOOLS, ...HOSTED_ADMIN_TOOLS].map((t) => t.name);
 
 export class UnknownToolError extends Error {}
 
@@ -1153,7 +1158,7 @@ export type ToolOutcome = { ok: true; result: Record<string, unknown> } | { ok: 
  * the operator can be told, never a stack or a code.
  */
 export async function callOperatorTool(ctx: ToolContext, name: string, args: unknown): Promise<ToolOutcome> {
-  const def = OPERATOR_TOOLS.find((t) => t.name === name);
+  const def = [...OPERATOR_TOOLS, ...HOSTED_ADMIN_TOOLS].find((t) => t.name === name);
   if (!def) throw new UnknownToolError(`There's no Tour Core tool called "${name}".`);
   const parsed = def.input.safeParse(args ?? {});
   if (!parsed.success) {

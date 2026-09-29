@@ -271,9 +271,10 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           rateLimit: options.oauthRateLimit,
         })
       : undefined;
+  const confirmations = new ConfirmationBook();
   const tools: ToolContext = {
     services: api,
-    confirmations: new ConfirmationBook(),
+    confirmations,
     now: () => options.now?.() ?? new Date(),
     localUrl: () => {
       const address = server?.address();
@@ -281,6 +282,14 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
     },
     installation,
     resetMessaging,
+    forgetLiveState: () => {
+      ledger.clear();
+      visitors.clear();
+      conversations.dropLive();
+      confirmations.clear();
+      oauth?.provider.discardPending();
+      installation.approvals.discard();
+    },
   };
 
   server = createServer(async (req, res) => {
@@ -371,9 +380,12 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         if (typeof authMode !== "string") {
           return send(503, json, JSON.stringify({ error: { message: "The Tour Core connector is off: TOURCORE_MCP_AUTH_MODE must be oauth or static." } }));
         }
+        let caller: { clientId?: string } | undefined;
         if (oauth) {
           // Token checked before the body is read; failures have already been answered (401/403).
-          if (!(await oauth.authenticate(req, res))) return;
+          const auth = await oauth.authenticate(req, res);
+          if (!auth) return;
+          caller = { clientId: auth.clientId };
         } else {
           const token = operatorToken();
           if (!token) return send(503, json, JSON.stringify({ error: { message: "The Tour Core connector is off. Run `npm run grok:connect -- --static` on the Tour Core computer to turn it on." } }));
@@ -389,7 +401,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         } catch {
           return send(400, json, JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "That request couldn't be read." } }));
         }
-        const reply = await handleMcpMessage(tools, message);
+        const reply = await handleMcpMessage(caller ? { ...tools, caller } : tools, message);
         if (reply.body === undefined) {
           res.writeHead(reply.status, { "Cache-Control": "no-store" });
           return res.end();
