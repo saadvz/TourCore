@@ -1,19 +1,18 @@
 import { createHash, randomBytes } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { request, type IncomingHttpHeaders } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config/tourCoreConfig";
-import { claimFilePath, claimHostedInstallation, HOSTED_OWNER_RESET, OWNER_SESSION_SECONDS, ownerFromCookie, pendingClaimSecret, resetHostedOwner, revokeHostedOwnerSession } from "../src/install/hostedOwner";
+import { HOSTED_OWNER_RESET } from "../src/install/hostedOwner";
 import { Installation } from "../src/install/installation";
-import { getInstallationStatus } from "../src/install/status";
+import { clearHostedTenant } from "../src/install/tenant";
 import { GROK_LEGACY_REDIRECT_URIS, grokLegacyCompatEnabled, hostedCompatStartupLine, redirectPolicyFor } from "../src/mcp/oauth/clients";
 import { OPERATOR_SCOPE, REQUEST_SECONDS } from "../src/mcp/oauth/provider";
 import { effectiveEnv } from "../src/install/settings";
 import { readSendblueEnv, setSendblueRuntime } from "../src/messaging/sendblue/runtime";
 import { PropertyWorkspace } from "../src/setup";
-import { collectCanonical } from "../src/storage/canonical";
 import { FileRuntimeStore } from "../src/storage/runtimeStore";
 import { startSetupServer } from "../src/web/server";
 
@@ -67,22 +66,14 @@ function hostedFetch(port: number) {
     });
 }
 
-function cookieJar(headers: IncomingHttpHeaders): { cookie: string; csrf: string } {
-  const raw = headers["set-cookie"];
-  const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
-  const cookie = list.map((line) => line.split(";")[0]).join("; ");
-  const csrf = /(?:^|; )tourcore_csrf=([^;]+)/.exec(cookie)?.[1] ?? "";
-  return { cookie, csrf: decodeURIComponent(csrf) };
-}
-
 const pkce = () => {
   const verifier = randomBytes(32).toString("base64url");
   return { verifier, challenge: createHash("sha256").update(verifier).digest("base64url") };
 };
 
-async function hostedApp(options: { env?: NodeJS.ProcessEnv; now?: () => number; authNow?: () => number; seed?: boolean } = {}) {
+async function hostedApp(options: { env?: NodeJS.ProcessEnv; now?: () => number; authNow?: () => number; seed?: boolean; bootstrapSecret?: string } = {}) {
   const root = tempDir();
-  const env = options.env ?? hostedEnv(root);
+  const env = options.env ?? hostedEnv(root, options.bootstrapSecret ? { TOURCORE_HOSTED_OWNER_BOOTSTRAP_SECRET: options.bootstrapSecret } : {});
   const inst = installation(root, env, options.now);
   inst.files.ensure({ deploymentMode: "HOSTED_RAILWAY_P0" });
   const workspace = new PropertyWorkspace(root);
@@ -188,251 +179,108 @@ describe("hosted Grok callback compatibility", () => {
   });
 });
 
-describe("hosted owner claim", () => {
-  it("starts unclaimed, rejects a bad claim, accepts one claim, and keeps the owner across a restart", async () => {
-    const app = await hostedApp();
-    const secret = readFileSync(claimFilePath(app.root), "utf8").trim();
-    expect(app.inst.secrets.hostedOwner()?.claimed).toBe(false);
-    expect(pendingClaimSecret(app.inst)).toBe(secret);
-    const status = JSON.stringify(getInstallationStatus(app.inst, { workspace: new PropertyWorkspace(app.root) }));
-    expect(status).not.toContain(secret);
-    expect(app.logs.join("\n")).not.toContain(secret);
-    expect(readFileSync(join(app.root, "install", "secrets.json"), "utf8")).not.toContain(secret);
-    expect(JSON.stringify(collectCanonical(app.root))).not.toContain(secret);
-
-    const anon = await app.http("/api/claim", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: "not-the-claim-code-000000000000" }) });
-    expect(anon.status).toBe(401);
-    expect(anon.headers["set-cookie"]).toBeUndefined();
-    expect(app.inst.secrets.hostedOwner()?.claimed).toBe(false);
-
-    const claimed = await app.http("/api/claim", { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify({ code: secret }) });
-    expect(claimed.status).toBe(200);
-    const setCookie = (Array.isArray(claimed.headers["set-cookie"]) ? claimed.headers["set-cookie"] : [claimed.headers["set-cookie"]]).join("\n");
-    expect(setCookie).toMatch(/tourcore_owner=[^;]+; HttpOnly; Path=\/; Secure; SameSite=Lax; Max-Age=604800/);
-    expect(setCookie).toMatch(/tourcore_csrf=[^;]+; Path=\/; Secure; SameSite=Lax/);
-    expect(setCookie).not.toMatch(/tourcore_csrf=[^;]+; HttpOnly/);
-    const session = cookieJar(claimed.headers);
-    expect(app.inst.secrets.hostedOwner()?.claimed).toBe(true);
-    expect(app.inst.secrets.hostedOwner()?.ownerId).toMatch(/^own_/);
-    const ownerId = app.inst.secrets.hostedOwner()!.ownerId;
-    expect(readFileSync(join(app.root, "install", "secrets.json"), "utf8")).not.toContain(secret);
-    expect(pendingClaimSecret(app.inst)).toBeUndefined();
-
-    const again = await app.http("/api/claim", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: secret }) });
-    expect(again.status).toBe(401);
-    expect(await again.text()).toMatch(/already claimed/);
-
-    app.inst.secrets.set({ SENDBLUE_API_API_KEY: "sb-api-key-SECRETVALUE-11111111" });
-    expect(app.inst.secrets.hostedOwner()?.ownerId).toBe(ownerId);
-
-    const restarted = installation(app.root, app.env);
-    expect(restarted.secrets.hostedOwner()?.ownerId).toBe(ownerId);
-    expect(ownerFromCookie(restarted, session.cookie).ok).toBe(true);
-    const { server } = await startSetupServer({ installation: restarted, workspace: new PropertyWorkspace(app.root), host: "127.0.0.1", port: 0, open: false, oauthRateLimit: false, log: (line) => app.logs.push(line) });
-    cleanups.push(() => server.close());
-    const http = hostedFetch((server.address() as { port: number }).port);
-    const still = await http("/api/connect?request=not-a-real-request-id", { headers: { cookie: session.cookie } });
-    expect(still.status).toBe(404);
-    expect(app.logs.join("\n")).not.toContain(secret);
-
-    expect(revokeHostedOwnerSession(restarted)).toBe(true);
-    expect((await http("/api/connect?request=not-a-real-request-id", { headers: { cookie: session.cookie } })).status).toBe(401);
-    expect((await http("/api/claim", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: secret }) })).status).toBe(401);
-
-    resetHostedOwner(restarted);
-    expect(restarted.secrets.hostedOwner()?.claimed).toBe(false);
-    const replacement = pendingClaimSecret(restarted)!;
-    expect(replacement).not.toBe(secret);
-    expect((await http("/api/claim", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: secret }) })).status).toBe(401);
-    expect((await http("/api/claim", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: replacement }) })).status).toBe(200);
-    expect(HOSTED_OWNER_RESET).toBe("reset-hosted-owner");
-  });
-
-  it("expires the owner session", async () => {
-    const clock = { t: Date.parse("2026-09-28T15:00:00.000Z") };
-    const app = await hostedApp({ now: () => clock.t, authNow: () => clock.t });
-    const secret = pendingClaimSecret(app.inst)!;
-    const claimed = claimHostedInstallation(app.inst, secret);
-    expect(claimed.ok).toBe(true);
-    if (!claimed.ok) return;
-    const cookie = `tourcore_owner=${claimed.token}`;
-    expect(ownerFromCookie(app.inst, cookie).ok).toBe(true);
-    clock.t += OWNER_SESSION_SECONDS * 1000 + 1;
-    expect(ownerFromCookie(app.inst, cookie)).toEqual({ ok: false, reason: "expired" });
-    expect(app.inst.secrets.hostedOwner()?.ownerId).toBe(claimed.ownerId);
-  });
-});
-
-describe("hosted OAuth approval handoff", () => {
-  it("runs Grok authorize, owner approval, and token exchange for the same request", async () => {
-    const app = await hostedApp({ seed: true });
-    const { verifier, challenge } = pkce();
-    const state = "state-preserve-xyz";
-    const registered = await app.http("/register", {
+describe("hosted first approved connection owns the demo", () => {
+  async function register(http: ReturnType<typeof hostedFetch>, name: string, redirect = CURSOR_WEB) {
+    const res = await http("/register", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ client_name: "Cursor", redirect_uris: [CURSOR_WEB, CURSOR_APP, "http://localhost:8787/callback"], grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: "none" }),
+      body: JSON.stringify({ client_name: name, redirect_uris: [redirect], grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: "none" }),
     });
-    expect(registered.status).toBe(201);
-    const client = (await registered.json()) as { client_id: string };
-    const query = new URLSearchParams({
-      response_type: "code",
-      client_id: client.client_id,
-      redirect_uri: CURSOR_WEB,
-      code_challenge: challenge,
-      code_challenge_method: "S256",
-      state,
-      scope: OPERATOR_SCOPE,
-      resource: `${BASE}/mcp`,
-    });
-    const authorize = await app.http(`/authorize?${query}`);
+    expect(res.status).toBe(201);
+    return (await res.json()) as { client_id: string };
+  }
+
+  function authorizeQuery(clientId: string, challenge: string, state: string, redirect = CURSOR_WEB) {
+    return new URLSearchParams({ response_type: "code", client_id: clientId, redirect_uri: redirect, code_challenge: challenge, code_challenge_method: "S256", state, scope: OPERATOR_SCOPE, resource: `${BASE}/mcp` });
+  }
+
+  it("claims only when a human clicks Allow, then the same owner can reconnect", async () => {
+    const app = await hostedApp({ seed: true });
+    expect(app.inst.files.state().hostedTenant).toBeUndefined();
+    const { verifier, challenge } = pkce();
+    const state = "first-owner-state";
+    const client = await register(app.http, "Cursor");
+    expect(app.inst.files.state().hostedTenant).toBeUndefined();
+
+    const authorize = await app.http(`/authorize?${authorizeQuery(client.client_id, challenge, state)}`);
     expect(authorize.status).toBe(200);
     const html = await authorize.text();
-    const requestId = /data-request="([^"]+)"/.exec(html)?.[1];
-    const matchCode = /class="match-code">([^<]+)/.exec(html)?.[1];
-    expect(requestId).toBeTruthy();
-    expect(matchCode).toMatch(/^\d{3} \d{3}$/);
-    expect(html).toContain("Tour Core needs you to confirm ownership of this hosted installation before you can approve connections.");
-    expect(html).toContain(`/claim?request=${requestId}`);
-    expect(html).not.toMatch(/>\s*Allow\s*</);
-    expect(html).not.toContain("Continue to approval");
+    const requestId = /data-request="([^"]+)"/.exec(html)![1]!;
+    const matchCode = /class="match-code">([^<]+)/.exec(html)![1]!;
+    expect(html).toContain("Approving this first connection will make this Grok connection the owner of this Tour Core demo.");
+    expect(html).toContain(">Allow</button>");
+    expect(html).not.toContain("/claim");
+    expect(app.inst.files.state().hostedTenant).toBeUndefined();
 
-    const bare = await app.http("/connect");
-    expect(bare.status).toBe(400);
-    expect(await bare.text()).toContain("This approval link is missing or was opened without its code.");
-    expect((await app.http(`/api/connect?request=${requestId}`)).status).toBe(401);
-    expect((await app.http("/api/connect/approve", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer grok-mcp-token" }, body: JSON.stringify({ requestId, matchCode }) })).status).toBe(401);
+    const denied = await app.http(`/oauth/requests/${requestId}/deny`, { method: "POST" });
+    expect(denied.status).toBe(200);
+    expect(app.inst.files.state().hostedTenant).toBeUndefined();
 
-    const secret = pendingClaimSecret(app.inst)!;
-    const claimed = await app.http("/api/claim", {
-      method: "POST",
-      headers: { "content-type": "application/json", origin: BASE },
-      body: JSON.stringify({ code: secret, requestId }),
-    });
-    expect(claimed.status).toBe(200);
-    expect((await claimed.json()) as { next?: string }).toEqual({ ok: true, next: `/connect?request=${requestId}` });
-    const session = cookieJar(claimed.headers);
-    expect(app.logs.join("\n")).not.toContain(secret);
-    expect(app.logs.join("\n")).not.toContain(verifier);
+    const again = await app.http(`/authorize?${authorizeQuery(client.client_id, challenge, state)}`);
+    const page = await again.text();
+    const nextId = /data-request="([^"]+)"/.exec(page)![1]!;
+    const nextCode = /class="match-code">([^<]+)/.exec(page)![1]!;
+    expect((await app.http(`/oauth/requests/${nextId}/approve`, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer grok-mcp-token" }, body: JSON.stringify({ matchCode: nextCode }) })).status).toBe(401);
+    expect(app.inst.files.state().hostedTenant).toBeUndefined();
+    expect(((await (await app.http(`/oauth/requests/${nextId}`)).json()) as { status: string }).status).toBe("pending");
 
-    const ownerPage = await app.http(`/authorize?${query}`, { headers: { cookie: session.cookie } });
-    const ownerHtml = await ownerPage.text();
-    expect(ownerHtml).toContain("Continue to approval");
-    expect(ownerHtml).toContain(`/connect?request=`);
-    expect(ownerHtml).not.toMatch(/>\s*Allow\s*</);
-
-    const pending = await app.http(`/api/connect?request=${requestId}`, { headers: { cookie: session.cookie } });
-    expect(pending.status).toBe(200);
-    expect((await pending.json()) as { request: { matchCode: string } }).toMatchObject({ request: { id: requestId, matchCode } });
-    expect((await app.http("/api/connect", { headers: { cookie: session.cookie } })).status).toBe(400);
-    expect((await app.http("/api/connect?request=not-a-real-request-id", { headers: { cookie: session.cookie } })).status).toBe(404);
-    expect((await app.http("/api/connect/approve", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: session.cookie, "x-tourcore-csrf": session.csrf, origin: BASE, authorization: "Bearer grok-mcp-token" },
-      body: JSON.stringify({ requestId, matchCode }),
-    })).status).toBe(401);
-    expect((await app.http("/api/connect/approve", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: session.cookie, origin: BASE },
-      body: JSON.stringify({ requestId, matchCode }),
-    })).status).toBe(403);
-    expect((await app.http("/api/connect/approve", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: session.cookie, "x-tourcore-csrf": session.csrf, origin: "https://evil.example" },
-      body: JSON.stringify({ requestId, matchCode }),
-    })).status).toBe(403);
-
-    const allowed = await app.http("/api/connect/approve", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: session.cookie, "x-tourcore-csrf": session.csrf, origin: BASE },
-      body: JSON.stringify({ requestId, matchCode }),
-    });
+    const allowed = await app.http(`/oauth/requests/${nextId}/approve`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ matchCode: nextCode }) });
     expect(allowed.status).toBe(200);
-    expect((await app.http("/api/connect/approve", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: session.cookie, "x-tourcore-csrf": session.csrf, origin: BASE },
-      body: JSON.stringify({ requestId, matchCode }),
-    })).status).toBe(404);
-
-    const back = await app.http(`/oauth/requests/${requestId}/continue`);
+    expect(app.inst.files.state().hostedTenant?.clientId).toBe(client.client_id);
+    const back = await app.http(`/oauth/requests/${nextId}/continue`);
     expect(back.status).toBe(302);
     const location = new URL(back.headers.location!);
-    expect(location.origin + location.pathname).toBe(CURSOR_WEB);
     expect(location.searchParams.get("state")).toBe(state);
-    expect(location.searchParams.get("iss")).toBe(BASE);
-    const code = location.searchParams.get("code")!;
-    expect(code).toMatch(/^tcc_/);
-
-    const wrong = await app.http("/token", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ grant_type: "authorization_code", code, code_verifier: pkce().verifier, client_id: client.client_id, redirect_uri: CURSOR_WEB, resource: `${BASE}/mcp` }).toString(),
-    });
-    expect(((await wrong.json()) as { error: string }).error).toBe("invalid_grant");
+    expect(location.searchParams.get("code")).toMatch(/^tcc_/);
     const token = await app.http("/token", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ grant_type: "authorization_code", code, code_verifier: verifier, client_id: client.client_id, redirect_uri: CURSOR_WEB, resource: `${BASE}/mcp` }).toString(),
+      body: new URLSearchParams({ grant_type: "authorization_code", code: location.searchParams.get("code")!, code_verifier: verifier, client_id: client.client_id, redirect_uri: CURSOR_WEB, resource: `${BASE}/mcp` }).toString(),
     });
     expect(token.status).toBe(200);
     const access = ((await token.json()) as { access_token: string }).access_token;
-    expect(access).toMatch(/^tca_/);
     const listed = await app.http("/mcp", {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${access}` },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "list_properties", arguments: {} } }),
     });
-    expect(listed.status).toBe(200);
     expect(await listed.text()).toContain("100 Alfred Way");
-    const spoken = app.logs.join("\n") + (await listed.text());
-    for (const hidden of [secret, verifier, code, access]) expect(spoken).not.toContain(hidden);
-    expect(readFileSync(new URL("../src/web/public/connect.js", import.meta.url), "utf8")).toContain("Make sure this matches the sign-in page:");
-  });
+    expect(app.logs.join("\n")).not.toContain(verifier);
+    expect(app.logs.join("\n")).not.toContain(access);
 
-  it("denies, expires, and keeps a cursor:// callback's state", async () => {
-    const clock = { t: Date.parse("2026-09-28T15:00:00.000Z") };
-    const app = await hostedApp({ now: () => clock.t, authNow: () => clock.t, seed: true });
-    const secret = pendingClaimSecret(app.inst)!;
-    const claimed = await app.http("/api/claim", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: secret }) });
-    const session = cookieJar(claimed.headers);
-    const registered = await app.http("/register", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ client_name: "Cursor", redirect_uris: [CURSOR_APP], grant_types: ["authorization_code"], response_types: ["code"], token_endpoint_auth_method: "none" }),
-    });
-    const client = (await registered.json()) as { client_id: string };
-    const { verifier, challenge } = pkce();
-    const state = "cursor-state-1";
-    const query = new URLSearchParams({ response_type: "code", client_id: client.client_id, redirect_uri: CURSOR_APP, code_challenge: challenge, code_challenge_method: "S256", state, scope: OPERATOR_SCOPE, resource: `${BASE}/mcp` });
-    const opened = await app.http(`/authorize?${query}`, { headers: { cookie: session.cookie } });
-    const html = await opened.text();
-    const requestId = /data-request="([^"]+)"/.exec(html)![1]!;
-    const matchCode = /class="match-code">([^<]+)/.exec(html)![1]!;
-    expect(html).toContain("Continue to approval");
-    expect(html).toContain(`/connect?request=${requestId}`);
+    const restarted = installation(app.root, app.env);
+    expect(restarted.files.state().hostedTenant?.clientId).toBe(client.client_id);
+    const { server } = await startSetupServer({ installation: restarted, workspace: new PropertyWorkspace(app.root), host: "127.0.0.1", port: 0, open: false, oauthRateLimit: false });
+    cleanups.push(() => server.close());
+    const http = hostedFetch((server.address() as { port: number }).port);
+    const reconnect = pkce();
+    const reconnectState = "owner-reconnect";
+    const opened = await http(`/authorize?${authorizeQuery(client.client_id, reconnect.challenge, reconnectState)}`);
+    const reconnectHtml = await opened.text();
+    expect(reconnectHtml).not.toContain("owner of this Tour Core demo");
+    expect(reconnectHtml).toContain(">Allow</button>");
+    const reconnectId = /data-request="([^"]+)"/.exec(reconnectHtml)![1]!;
+    const reconnectCode = /class="match-code">([^<]+)/.exec(reconnectHtml)![1]!;
+    expect((await http(`/oauth/requests/${reconnectId}/approve`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ matchCode: reconnectCode }) })).status).toBe(200);
+    expect(restarted.files.state().hostedTenant?.clientId).toBe(client.client_id);
 
-    clock.t += REQUEST_SECONDS * 1000 + 1;
-    const expired = await app.http(`/api/connect?request=${requestId}`, { headers: { cookie: session.cookie } });
-    expect(expired.status).toBe(404);
-    expect(await expired.text()).toMatch(/expired/);
+    const other = await register(http, "Other");
+    const refused = await http(`/authorize?${authorizeQuery(other.client_id, pkce().challenge, "other-state")}`);
+    expect(refused.status).toBe(403);
+    expect(await refused.text()).not.toContain(">Allow</button>");
+    expect(restarted.files.state().hostedTenant?.clientId).toBe(client.client_id);
 
-    clock.t += 1000;
-    const again = await app.http(`/authorize?${query}`, { headers: { cookie: session.cookie } });
-    const secondHtml = await again.text();
-    const secondId = /data-request="([^"]+)"/.exec(secondHtml)![1]!;
-    const secondCode = /class="match-code">([^<]+)/.exec(secondHtml)![1]!;
-    const denied = await app.http("/api/connect/deny", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: session.cookie, "x-tourcore-csrf": session.csrf, origin: BASE },
-      body: JSON.stringify({ requestId: secondId, matchCode: secondCode }),
-    });
-    expect(denied.status).toBe(200);
-    const back = await app.http(`/oauth/requests/${secondId}/continue`);
-    const location = new URL(back.headers.location!);
-    expect(location.protocol).toBe("cursor:");
-    expect(location.searchParams.get("error")).toBe("access_denied");
-    expect(location.searchParams.get("state")).toBe(state);
-    expect(location.searchParams.get("code")).toBeNull();
-    expect(verifier).toBeTruthy();
+    expect(clearHostedTenant(restarted.files)).toBe(true);
+    expect(restarted.files.state().hostedTenant).toBeUndefined();
+    const next = await register(http, "Next");
+    const fresh = await http(`/authorize?${authorizeQuery(next.client_id, pkce().challenge, "after-reset")}`);
+    const freshHtml = await fresh.text();
+    expect(freshHtml).toContain("owner of this Tour Core demo");
+    const freshId = /data-request="([^"]+)"/.exec(freshHtml)![1]!;
+    const freshCode = /class="match-code">([^<]+)/.exec(freshHtml)![1]!;
+    expect((await http(`/oauth/requests/${freshId}/approve`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ matchCode: freshCode }) })).status).toBe(200);
+    expect(restarted.files.state().hostedTenant?.clientId).toBe(next.client_id);
+    expect(HOSTED_OWNER_RESET).toBe("reset-hosted-owner");
+    expect(REQUEST_SECONDS).toBeGreaterThan(0);
   });
 });

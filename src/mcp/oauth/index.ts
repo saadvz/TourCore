@@ -38,7 +38,7 @@ export const OAUTH_PUBLIC_PATHS = [
   "/register",
   "/revoke",
 ];
-const REQUEST_PATH = /^\/oauth\/requests\/[A-Za-z0-9_-]{16,64}(\/(continue|deny))?$/;
+const REQUEST_PATH = /^\/oauth\/requests\/[A-Za-z0-9_-]{16,64}(\/(continue|deny|approve))?$/;
 export const isOAuthPublicPath = (path: string, mcpPath: string) =>
   OAUTH_PUBLIC_PATHS.includes(path) || path === `/.well-known/oauth-protected-resource${mcpPath}` || REQUEST_PATH.test(path);
 export const isOAuthLocalPath = (path: string) => path === "/api/grok" || path.startsWith("/api/grok/");
@@ -54,7 +54,8 @@ export interface McpOAuthOptions {
   tenantPolicy?: (clientId: string) => { allowed: true } | { allowed: false; message: string };
   onOwnerApproved?: (clientId: string) => void;
   approvalPlace?: () => "computer" | "hosted";
-  ownerAuthenticated?: (cookieHeader: string | undefined) => boolean;
+  publicApproval?: (clientId: string) => boolean;
+  hostedClaimed?: () => boolean;
   /** Extra line when a known legacy callback is refused. Undefined keeps the local-testing hint. */
   legacyCompatNote?: () => string | undefined;
   log?: (line: string) => void;
@@ -125,7 +126,8 @@ export class McpOAuth {
       tenantPolicy: options.tenantPolicy,
       onOwnerApproved: options.onOwnerApproved,
       approvalPlace: options.approvalPlace,
-      ownerAuthenticated: options.ownerAuthenticated,
+      publicApproval: options.publicApproval,
+      hostedClaimed: options.hostedClaimed,
       log: this.log,
     });
     this.local = this.buildLocal();
@@ -208,6 +210,18 @@ export class McpOAuth {
     });
     app.post("/oauth/requests/:id/deny", (req, res) => {
       provider.denyFromBrowser(String(req.params.id));
+      res.set("Cache-Control", "no-store").json({ ok: true });
+    });
+    app.post("/oauth/requests/:id/approve", express.json({ limit: "4kb" }), (req, res) => {
+      if (req.headers.authorization) {
+        res.status(401).set("Cache-Control", "no-store").json({ ok: false, error: { message: "Connecting to Tour Core is not approval. Click Allow on the approval page." } });
+        return;
+      }
+      const matchCode = typeof req.body?.matchCode === "string" ? req.body.matchCode : "";
+      if (!provider.approveFromBrowser(String(req.params.id), matchCode)) {
+        res.status(403).set("Cache-Control", "no-store").json({ ok: false, error: { message: "That connection can't be approved from here." } });
+        return;
+      }
       res.set("Cache-Control", "no-store").json({ ok: true });
     });
     app.get("/oauth/requests/:id/continue", (req, res) => {

@@ -280,7 +280,7 @@ function endpointStatus(inst: Installation, mode: DeploymentMode): ComponentStat
 
 function approvalInstructions(inst: Installation): string {
   if (inst.deploymentMode() !== "HOSTED_RAILWAY_P0") return "Open the approval screen (/grok on the Tour Core computer) in your cloud browser and hand control to the operator.";
-  return "Tour Core shows a pairing code. The operator follows Continue to approval, checks the same code, and clicks Allow. Do not click Allow yourself. Do not open /connect by hand. Do not mention Railway.";
+  return "Tour Core shows a pairing code. The operator clicks Allow. Do not click Allow yourself. Do not mention Railway. The first Allow claims this demo; a later unrelated account is refused.";
 }
 
 function grokStatus(inst: Installation): ComponentStatus {
@@ -290,7 +290,7 @@ function grokStatus(inst: Installation): ComponentStatus {
   const hosted = inst.deploymentMode() === "HOSTED_RAILWAY_P0";
   const approval = approvalInstructions(inst);
   const connectMessage = hosted
-    ? "Tour Core is online. I need your approval to connect. Tour Core will show you a pairing code. Follow its Continue to approval button, make sure the same code appears, then click Allow."
+    ? "Tour Core is online. I need your approval to connect. Tour Core will show you a pairing code. Click Allow."
     : "Tour Core is installed and running. I need your approval to connect to it. I've opened the approval screen. Check that the codes match and click Allow.";
   if (typeof mode !== "string") {
     return component("GROK_OPERATOR", "ERROR", "Grok can't connect to Tour Core because of a setting.", {
@@ -317,7 +317,7 @@ function grokStatus(inst: Installation): ComponentStatus {
   if (connections.length) {
     return component("GROK_OPERATOR", "ACTION_REQUIRED", "Tour Core's connection changed, so Grok needs to reconnect.", {
       technical,
-      next: step("GROK_OPERATOR", "RECONNECT_GROK", "OPERATOR", hosted ? "Tour Core's connection changed, so I need your approval to reconnect. Tour Core will show you a pairing code. Follow its Continue to approval button, make sure the same code appears, then click Allow." : "Tour Core's secure connection changed, so I need your approval to reconnect. I've opened the approval screen. Check that the codes match and click Allow.", {
+      next: step("GROK_OPERATOR", "RECONNECT_GROK", "OPERATOR", hosted ? "Tour Core's connection changed, so I need your approval to reconnect. Tour Core will show you a pairing code. Click Allow." : "Tour Core's secure connection changed, so I need your approval to reconnect. I've opened the approval screen. Check that the codes match and click Allow.", {
         grokInstructions: `Remove the old Tour Core connector and add it again at ${connector} with OAuth (no token). ${approval} After approval, call get_installation_status without waiting to be asked.`,
       }),
     });

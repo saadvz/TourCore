@@ -325,17 +325,17 @@ real deploy.
 | # | Do | Expect |
 | --- | --- | --- |
 | H1 | Push `saadvz/TourCore` and create one Railway service from that repo (`master`) | Railpack runs `npm run build` and `npm start`. No Docker |
-| H2 | Generate a public domain. Mount a volume at `/data`. Set `TOURCORE_DEPLOYMENT_MODE=HOSTED_RAILWAY_P0` and `TOURCORE_HOME=/data`. Set the Google OAuth client. Healthcheck path `/healthz`. Do not set `TOURCORE_GROK_LEGACY_OAUTH_COMPAT` | Deploy logs show the version, `HOSTED_RAILWAY_P0`, the port, the public host, the storage summary, and `Grok legacy OAuth compatibility active for HOSTED_RAILWAY_P0.` No credentials and no claim secret |
+| H2 | Generate a public domain. Mount a volume at `/data`. Set `TOURCORE_DEPLOYMENT_MODE=HOSTED_RAILWAY_P0` and `TOURCORE_HOME=/data`. Set the Google OAuth client. Healthcheck path `/healthz`. Do not set `TOURCORE_GROK_LEGACY_OAUTH_COMPAT` and do not set an owner-claim secret | Deploy logs show the version, `HOSTED_RAILWAY_P0`, the port, the public host, the storage summary, and `Grok legacy OAuth compatibility active for HOSTED_RAILWAY_P0.` No credentials |
 | H3 | Open `https://<domain>/healthz` | `200` and `"service":"tour-core"`. The URL does not contain `trycloudflare` |
 | H4 | Register `https://<domain>/google/oauth/callback` on the Tour Core Google web client. Set `hostedTourCoreUrl` in the bot template to `https://<domain>` | Skills still say `hostedTourCoreUrl`, not a Railway hostname |
-| H4b | On the service, run `npm run hosted:owner-claim`. Open the printed link once in the browser that will approve Grok | The page confirms ownership. The same link fails the second time. Startup logs never showed the claim code |
+| H4b | Do not run an owner-claim step | There is no `/claim` page and no bootstrap secret in this flow |
 
 ### Fresh user
 
 | # | Do | Expect |
 | --- | --- | --- |
 | H5 | Fresh Grok bot whose template has `hostedTourCoreUrl`. Say "Set up Tour Core." | Grok connects to the hosted service. It does not clone a runtime, start a tunnel, or say Tour Core only works while its computer is on. It does not mention Railway |
-| H6 | In that same browser, click Authorize. Tour Core shows a pairing code. Click Continue to approval. The same code appears. Click Allow | The browser returns to Grok. Grok says it is connected. Grok cannot approve by calling the tools alone, and an anonymous browser cannot approve. A second unrelated account is refused |
+| H6 | Click Authorize. Tour Core shows a pairing code and says approving this first connection makes this Grok connection the owner of the demo. Click Allow | The browser returns to Grok. Grok says it is connected. Registering or calling tools did not claim the demo by itself. A second unrelated account is refused |
 | H7 | Connect Sendblue, then Google Drive, then the property, updates, readiness, practice, and publish | Webhook and verification links use the Railway host. The Google callback is the registered Railway URL. Records are in Drive |
 | H8 | A real visitor texts the property | The tour proceeds. Operator updates come from the hosted service |
 

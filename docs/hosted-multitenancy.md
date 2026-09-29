@@ -29,3 +29,9 @@ Not in this design: billing, a landlord account system, an admin console, or
 a second messaging provider. Marketplace publication waits until the
 boundary above is implemented and tested, including a test that two
 installations cannot read each other's records.
+
+`HOSTED_RAILWAY_P0` binds the first Grok client a human approves as the owner
+of this one demo. That first-approved-client rule is not the Marketplace
+authentication model. A multi-tenant host should authenticate a user, resolve
+that user's installation, and let that user approve Grok for that tenant.
+Ordinary Marketplace users do not become owner by being first to connect.

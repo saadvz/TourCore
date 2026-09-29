@@ -1,4 +1,4 @@
-import { randomBytes, randomInt } from "node:crypto";
+import { randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import type { Response } from "express";
 import type { AuthorizationParams, OAuthServerProvider } from "@modelcontextprotocol/sdk/server/auth/provider.js";
 import type { OAuthRegisteredClientsStore } from "@modelcontextprotocol/sdk/server/auth/clients.js";
@@ -111,14 +111,21 @@ export interface ProviderOptions {
   onOwnerApproved?: (clientId: string) => void;
   /** Where the human clicks Allow. */
   approvalPlace?: () => "computer" | "hosted";
-  /** Hosted owner cookie. The authorization page uses this to offer Continue to approval. */
-  ownerAuthenticated?: (cookieHeader: string | undefined) => boolean;
+  /**
+   * HOSTED_RAILWAY_P0 only. The public authorization page may approve this
+   * client when the demo is unclaimed, or when this client is already the owner.
+   * Unrelated clients are refused. Other deployment modes leave this unset.
+   */
+  publicApproval?: (clientId: string) => boolean;
+  /** True after the first hosted Allow has bound an owner client. */
+  hostedClaimed?: () => boolean;
   log?: (line: string) => void;
 }
 
-function cookieHeaderOf(res: Response): string | undefined {
-  const header = (res as Response & { req?: { headers?: { cookie?: string | string[] } } }).req?.headers?.cookie;
-  return Array.isArray(header) ? header[0] : header;
+function codesMatch(given: string, expected: string): boolean {
+  const a = Buffer.from(given.replace(/\s+/g, ""));
+  const b = Buffer.from(expected.replace(/\s+/g, ""));
+  return a.length === b.length && a.length > 0 && timingSafeEqual(a, b);
 }
 
 const matchCode = () => {
@@ -259,9 +266,27 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
     this.log(`Authorization request from ${request.clientName}: will return to ${redirectForLog(request.redirectUri)}.`);
     this.options.onApprovalRequest?.(this.view(request));
     const hosted = this.options.approvalPlace?.() === "hosted";
-    const cookie = cookieHeaderOf(res);
-    const owner = hosted && (this.options.ownerAuthenticated?.(cookie) ?? false);
-    res.status(200).set(PAGE_HEADERS).type("html").send(consentPage({ requestId: request.id, matchCode: request.matchCode, clientName: request.clientName, redirectHost: request.redirectHost, hosted, owner }));
+    res.status(200).set(PAGE_HEADERS).type("html").send(consentPage({
+      requestId: request.id,
+      matchCode: request.matchCode,
+      clientName: request.clientName,
+      redirectHost: request.redirectHost,
+      hosted,
+      firstClaim: hosted && !(this.options.hostedClaimed?.() ?? false),
+    }));
+  }
+
+  /**
+   * Human Allow on the hosted authorization page. Registration and a bearer
+   * token cannot call this. A second client is refused by publicApproval.
+   */
+  approveFromBrowser(id: string, matchCodeGiven: string): boolean {
+    this.prune();
+    const request = this.requests.get(id);
+    if (!request || request.status !== "pending") return false;
+    if (!this.options.publicApproval?.(request.clientId)) return false;
+    if (!codesMatch(matchCodeGiven, request.matchCode)) return false;
+    return this.decide(id, "approved");
   }
 
   /** Pending, already decided, expired, or not a request this process has. */

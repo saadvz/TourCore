@@ -34,7 +34,7 @@ export const SETTING_NAMES = Object.keys(SETTINGS) as SettingName[];
 export const SECRET_SETTING_NAMES = SETTING_NAMES.filter((n) => SETTINGS[n].secret);
 
 /** Environment-only secrets that also must never leave Tour Core. */
-export const OTHER_SECRET_ENV = ["TOURCORE_OPERATOR_TOKEN", "TOURCORE_INTENT_MODEL_KEY"] as const;
+export const OTHER_SECRET_ENV = ["TOURCORE_OPERATOR_TOKEN", "TOURCORE_INTENT_MODEL_KEY", "TOURCORE_HOSTED_OWNER_BOOTSTRAP_SECRET"] as const;
 
 /**
  * Hosted owner claim and session. Only hashes are stored. This is not a
@@ -43,9 +43,11 @@ export const OTHER_SECRET_ENV = ["TOURCORE_OPERATOR_TOKEN", "TOURCORE_INTENT_MOD
  */
 export interface HostedOwnerSecret {
   schemaVersion: 1;
-  /** SHA-256 of the one-time claim secret. Kept after use so a replay fails. */
+  /** SHA-256 of the optional CLI claim secret. Kept after use so a replay fails. */
   claimHash: string;
   claimed: boolean;
+  /** SHA-256 of a bootstrap secret that has already been accepted. Kept across reset. */
+  consumedBootstrapHash?: string;
   ownerId?: string;
   /** SHA-256 of the current owner-session cookie. Absent when logged out. */
   sessionHash?: string;

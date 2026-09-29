@@ -34,14 +34,11 @@ ${body}
 </html>
 `;
 
-export function consentPage(p: { requestId: string; matchCode: string; clientName: string; redirectHost: string; hosted?: boolean; owner?: boolean }): string {
+export function consentPage(p: { requestId: string; matchCode: string; clientName: string; redirectHost: string; hosted?: boolean; firstClaim?: boolean }): string {
   const requestId = escape(p.requestId);
-  const hostedNext = p.owner
-    ? `<p><a class="button primary" href="/connect?request=${requestId}">Continue to approval</a></p>`
-    : `<p>Tour Core needs you to confirm ownership of this hosted installation before you can approve connections.</p>
-          <p><a class="button primary" href="/claim?request=${requestId}">Confirm ownership</a></p>`;
   const decision = p.hosted
-    ? hostedNext
+    ? `${p.firstClaim ? "<p>Approving this first connection will make this Grok connection the owner of this Tour Core demo.</p>" : ""}
+          <p><button type="button" class="primary" id="oauth-allow" data-code="${escape(p.matchCode)}">Allow</button></p>`
     : `<p><strong>Approve on the Tour Core computer.</strong> A Tour Core window opens there (or open <em>Connect Grok</em> in Tour Core). Check it shows this code, then choose Allow:</p>`;
   return shell(
     "Connect to Tour Core",

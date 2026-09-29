@@ -165,22 +165,23 @@ Railway. Any other value is ignored and the mode default applies.
 `GROK_MANAGED_P0` still turns it on at bootstrap unless `--strict-oauth`
 was used. Hosted startup does not need the variable set.
 
-The public authorization page shows a pairing code and does not have an
-Allow button. An owner who already claimed this installation uses
-**Continue to approval**, which opens `/connect?request=…` for that same
-request. Allow and Deny are on that page, and only when the browser has the
-owner session cookie. A bare `/connect` still fails. The request id is not
-proof of ownership.
+On a fresh hosted demo, the authorization page shows the pairing code and
+Allow. The first human Allow binds that Grok client as the owner and finishes
+OAuth. Registration alone does not claim it, and neither does opening the
+page or clicking Deny. The binding is stored on the volume and survives
+restart. The same client can approve again later. A different client is
+refused. There is no separate owner-claim page and no bootstrap secret.
 
-A fresh Railway installation is unclaimed. The first start writes a one-time
-claim secret's hash into SecretStore and the secret itself to
-`install/owner-claim.once` on the volume (not to Drive, git, logs, or MCP).
-On the service, run `npm run hosted:owner-claim` and open the printed link
-once. That browser becomes the owner (HttpOnly Secure SameSite=Lax cookie,
-seven days). The claim cannot be reused. Restart and redeploy keep the owner
-because the volume keeps SecretStore. To revoke the session and issue a new
-claim, set `TOURCORE_HOSTED_OWNER_RESET=reset-hosted-owner` for one deploy,
-then remove it. Tour records are not deleted.
+This first-approved-client rule exists only because `HOSTED_RAILWAY_P0` is a
+controlled single-tenant demo. It is not the Marketplace sign-in. Before a
+public multi-tenant host, Tour Core must authenticate the user, resolve that
+user's installation, and bind Grok to that tenant. Do not treat
+first-connect-wins as production tenant security.
+
+To clear the owner without deleting tour records, set
+`TOURCORE_HOSTED_OWNER_RESET=reset-hosted-owner` for one deploy, then remove
+it. The next approved Grok connection can claim the demo. That reset is an
+admin recovery step, not user onboarding.
 
 ## Installation status and next step
 
@@ -506,10 +507,8 @@ To clear the demo operator binding without deleting Drive records, set
 `TOURCORE_HOSTED_TENANT_RESET=reset-demo-tenant` for one deploy, then remove
 it.
 
-After the first deploy, claim the installation once: `npm run hosted:owner-claim`
-on the service, open the link, and keep that browser for Grok approvals.
-The startup log says the installation is unclaimed. It does not print the
-claim secret.
+After the first deploy, connect Grok and click Allow on the authorization
+page. That first approval claims the demo. There is no owner-claim setup.
 
 ### Moving the quick-tunnel demo
 

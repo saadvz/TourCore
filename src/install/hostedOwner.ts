@@ -7,12 +7,17 @@ import type { HostedOwnerSecret } from "./secretStore";
 
 /**
  * One-time claim for the single hosted demo installation, then a browser
- * session for that owner. The claim secret is written once to a file on the
- * data volume for the distributor CLI. SecretStore keeps only its hash.
- * Google Drive, MCP results and ordinary pages never receive it.
+ * session for that owner. The distributor normally types
+ * TOURCORE_HOSTED_OWNER_BOOTSTRAP_SECRET on /claim. SecretStore keeps only
+ * hashes. An optional CLI file is a developer fallback. Google Drive, MCP
+ * results, logs and ordinary pages never receive either secret.
  *
- * The owner cookie proves who may approve. An OAuth request id does not.
+ * This exists only because HOSTED_RAILWAY_P0 is one shared demo. It is not
+ * the future Marketplace sign-in. The owner cookie proves who may approve.
+ * An OAuth request id does not.
  */
+
+export const HOSTED_OWNER_BOOTSTRAP_SECRET = "TOURCORE_HOSTED_OWNER_BOOTSTRAP_SECRET";
 
 export const HOSTED_OWNER_RESET = "reset-hosted-owner";
 export const OWNER_COOKIE = "tourcore_owner";
@@ -35,14 +40,27 @@ export interface ClaimSuccess {
   expiresAt: number;
 }
 
-export type ClaimFailure = { ok: false; reason: "invalid" | "used" | "missing" };
+export type ClaimFailure = { ok: false; reason: "invalid" | "used" | "spent" | "missing" };
 export type OwnerCheck = { ok: true; ownerId: string } | { ok: false; reason: "missing" | "unknown" | "expired" };
 
+const MIN_CLAIM_CODE = 16;
+const MAX_CLAIM_CODE = 256;
+
+/** Hash both sides, then compare in constant time. Length differences do not skip the compare. */
 const hashesEqual = (given: string, expectedHex: string) => {
   const actual = Buffer.from(hashSecret(given), "hex");
   const expected = Buffer.from(expectedHex, "hex");
   return actual.length === expected.length && expected.length > 0 && timingSafeEqual(actual, expected);
 };
+
+const acceptableClaimCode = (code: string) => code.length >= MIN_CLAIM_CODE && code.length <= MAX_CLAIM_CODE && !/[\r\n\0]/.test(code);
+
+/** The Railway variable, when it is strong enough to be a claim credential. The value is never stored. */
+export function bootstrapSecretFromEnv(env: NodeJS.ProcessEnv): string | undefined {
+  const value = env[HOSTED_OWNER_BOOTSTRAP_SECRET]?.trim();
+  if (!value || !acceptableClaimCode(value)) return undefined;
+  return value;
+}
 
 function writeClaimFile(root: string, secret: string): void {
   const path = claimFilePath(root);
@@ -78,7 +96,12 @@ export function ensureHostedOwnerClaim(inst: Installation): { created: boolean; 
   }
   if (existing && readClaimFile(inst.root)) return { created: false, claimed: false };
   const secret = randomBytes(32).toString("base64url");
-  inst.secrets.saveHostedOwner({ schemaVersion: 1, claimHash: hashSecret(secret), claimed: false });
+  inst.secrets.saveHostedOwner({
+    schemaVersion: 1,
+    claimHash: hashSecret(secret),
+    claimed: false,
+    ...(existing?.consumedBootstrapHash ? { consumedBootstrapHash: existing.consumedBootstrapHash } : {}),
+  });
   writeClaimFile(inst.root, secret);
   return { created: true, claimed: false };
 }
@@ -93,20 +116,21 @@ export function pendingClaimSecret(inst: Installation): string | undefined {
 }
 
 /**
- * Text the distributor CLI prints. Contains the claim secret when one is
- * waiting. Server startup must not call this.
+ * Text the optional developer CLI prints. Contains the fallback claim secret
+ * when one is waiting. Server startup must not call this. The recommended
+ * hosted setup is the /claim page, not this command.
  */
 export function ownerClaimInstructions(inst: Installation): string {
   const record = inst.secrets.hostedOwner();
   if (record?.claimed) {
-    return "This hosted installation is already claimed. To issue a new one-time claim, set TOURCORE_HOSTED_OWNER_RESET=reset-hosted-owner for one deploy, then remove it.";
+    return "This hosted installation is already claimed. To issue a new one-time claim, set TOURCORE_HOSTED_OWNER_RESET=reset-hosted-owner for one deploy, then remove it. A bootstrap secret that was already used will not work again.";
   }
   const secret = pendingClaimSecret(inst);
   const base = inst.publicBaseUrl()?.replace(/\/$/, "");
   if (!secret || !base) return "No one-time claim is waiting. Start the hosted Tour Core service once, then run this command again.";
   return [
-    "One-time hosted owner claim. Open this in the browser that should own Tour Core.",
-    "The code is in the link fragment, so it is not sent to Tour Core's logs.",
+    "Optional admin fallback. The recommended claim is to open /claim and enter TOURCORE_HOSTED_OWNER_BOOTSTRAP_SECRET.",
+    "This link is the one-time developer fallback. The code is in the fragment and is not written to the service log.",
     "",
     `${base}/claim#c=${secret}`,
     "",
@@ -115,23 +139,31 @@ export function ownerClaimInstructions(inst: Installation): string {
 }
 
 export function claimHostedInstallation(inst: Installation, code: string): ClaimSuccess | ClaimFailure {
+  if (typeof code !== "string") return { ok: false, reason: "invalid" };
+  const trimmed = code.trim();
+  if (!acceptableClaimCode(trimmed)) return { ok: false, reason: "invalid" };
   const record = inst.secrets.hostedOwner();
-  if (!record) return { ok: false, reason: "missing" };
-  if (typeof code !== "string" || !TOKEN.test(code) || !hashesEqual(code, record.claimHash)) return { ok: false, reason: "invalid" };
-  if (record.claimed) return { ok: false, reason: "used" };
+  if (record?.claimed) return { ok: false, reason: "used" };
+  if (record?.consumedBootstrapHash && hashesEqual(trimmed, record.consumedBootstrapHash)) return { ok: false, reason: "spent" };
+  const fileMatch = !!record && hashesEqual(trimmed, record.claimHash);
+  const envSecret = bootstrapSecretFromEnv(inst.env());
+  const envMatch = !!envSecret && hashesEqual(trimmed, hashSecret(envSecret));
+  if (!fileMatch && !envMatch) return { ok: false, reason: record ? "invalid" : "missing" };
   const token = randomBytes(32).toString("base64url");
   const csrf = randomBytes(32).toString("base64url");
   const ownerId = `own_${randomBytes(9).toString("base64url")}`;
   const now = inst.now();
+  const consumedBootstrapHash = envMatch ? hashSecret(trimmed) : record?.consumedBootstrapHash;
   const next: HostedOwnerSecret = {
     schemaVersion: 1,
-    claimHash: record.claimHash,
+    claimHash: record?.claimHash ?? hashSecret(trimmed),
     claimed: true,
     ownerId,
     sessionHash: hashSecret(token),
     csrfHash: hashSecret(csrf),
     sessionExpiresAt: now + OWNER_SESSION_MS,
     claimedAt: new Date(now).toISOString(),
+    ...(consumedBootstrapHash ? { consumedBootstrapHash } : {}),
   };
   inst.secrets.saveHostedOwner(next);
   deleteClaimFile(inst.root);
@@ -142,16 +174,31 @@ export function claimHostedInstallation(inst: Installation, code: string): Claim
 export function revokeHostedOwnerSession(inst: Installation): boolean {
   const record = inst.secrets.hostedOwner();
   if (!record?.sessionHash) return false;
-  const next: HostedOwnerSecret = { schemaVersion: 1, claimHash: record.claimHash, claimed: record.claimed, ...(record.ownerId ? { ownerId: record.ownerId } : {}), ...(record.claimedAt ? { claimedAt: record.claimedAt } : {}) };
+  const next: HostedOwnerSecret = {
+    schemaVersion: 1,
+    claimHash: record.claimHash,
+    claimed: record.claimed,
+    ...(record.ownerId ? { ownerId: record.ownerId } : {}),
+    ...(record.claimedAt ? { claimedAt: record.claimedAt } : {}),
+    ...(record.consumedBootstrapHash ? { consumedBootstrapHash: record.consumedBootstrapHash } : {}),
+  };
   inst.secrets.saveHostedOwner(next);
   return true;
 }
 
-/** Distributor reset: drops the owner and issues a new one-time claim. Does not delete tour records. */
+/** Distributor reset: drops the owner and issues a new CLI fallback claim. A bootstrap secret that was already used stays spent. Does not delete tour records. */
 export function resetHostedOwner(inst: Installation): void {
+  const consumed = inst.secrets.hostedOwner()?.consumedBootstrapHash;
   inst.secrets.saveHostedOwner(undefined);
   deleteClaimFile(inst.root);
   ensureHostedOwnerClaim(inst);
+  if (!consumed) return;
+  const record = inst.secrets.hostedOwner();
+  if (record) inst.secrets.saveHostedOwner({ ...record, consumedBootstrapHash: consumed });
+}
+
+export function hostedInstallationClaimed(inst: Installation): boolean {
+  return !!inst.secrets.hostedOwner()?.claimed;
 }
 
 export function ownerFromCookie(inst: Installation, cookieHeader: string | undefined): OwnerCheck {
@@ -203,6 +250,7 @@ const fail = (status: number, message: string): ClaimHttpResult => ({ status, js
 
 /** POST /api/claim. The claim code is taken from the body and never echoed. */
 export function handleHostedClaim(inst: Installation, method: string, body: unknown): ClaimHttpResult {
+  if (method === "GET") return { status: 200, json: { ok: true, claimed: hostedInstallationClaimed(inst) } };
   if (method !== "POST") return fail(404, "That page doesn't exist.");
   const parsed = body as { code?: unknown; requestId?: unknown } | undefined;
   const code = typeof parsed?.code === "string" ? parsed.code : "";
