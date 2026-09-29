@@ -18,12 +18,14 @@ Tour Core decides the order and tells you, one step at a time, through
 credentials through a secure handoff, gives property information and makes
 decisions.
 
-The hosted product is the normal path. `hostedTourCoreUrl` in
-`grok-template/template.json` is the one address for that service. When it
-is set, connect there. Do not clone a runtime, do not start a local service,
-and do not open a tunnel. The operator does not create a hosting account.
-The open-source path, used only when that address is empty, still clones the
-repository onto your computer.
+Deployment is fixed. Read `hostedTourCoreUrl` in `grok-template/template.json`
+before any start command. If that value is non-empty https and the operator
+did not explicitly request a local demo, self-hosting, or an open-source local
+deployment, the deployment is HOSTED. There is no discretion. A request to
+clone the repository, read setup instructions, or follow GROK_BOOTSTRAP.md is
+not a local-hosting request. Do not choose a local install because the
+operator asked you to clone. The open-source runtime is only for an empty
+`hostedTourCoreUrl`, or for that explicit local or self-host request.
 
 ## When to use
 
@@ -78,15 +80,21 @@ Seven phases, always forward. Go back only when Tour Core's status changes
 If Tour Core's tools already answer, call `get_installation_status` and go to
 the phase it reports: don't reinstall a running Tour Core.
 
-When `hostedTourCoreUrl` is an https address, say:
+When the deployment is HOSTED, say:
 
 > I'll connect you to Tour Core and only ask when I need an approval, sign-in or decision.
 
-Connect to that service. Skip cloning, skip a local Node process, and skip
-any tunnel. Never tell the operator that Tour Core only works while your
-computer is on. Then go to Phase 2.
+Connect to that service at `hostedTourCoreUrl`. You may clone the repository
+to read instructions and skills. That clone is not a runtime. Do not run `npm run bootstrap:grok`. Never launch a Tour Core server here. Never start cloudflared. Do not create a Quick Tunnel. Do not connect MCP to a tunnel
+address. Do not store operational records on your computer. Skip cloning a runtime, skip a local Node process, and skip any tunnel. Never tell the
+operator that Tour Core only works while your computer is on. Do not say
+Tour Core's Google app is not configured, and do not offer to keep records
+on your computer. Google Drive, when recommended, is Grok's built-in
+connector for portable backups (`confirm_backup_destination`), not a second
+Google approval. Then go to Phase 2.
 
-Otherwise this is the open-source path. Say: "I'll handle the technical setup
+Otherwise the operator explicitly chose local or self-hosting, or
+`hostedTourCoreUrl` is empty. Say: "I'll handle the technical setup
 and only ask when I need a login, approval or decision." On your cloud
 computer:
 

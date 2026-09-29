@@ -15,35 +15,36 @@ doors open only on their reserved route during their window.
   explain results in plain words. You never decide access and never invent
   property facts.
 
-## Which path
+## Decide before you start anything
 
-If `grok-template/template.json` has an https `hostedTourCoreUrl`, that is
-the product. Connect to it. Do not clone a runtime, start a local process,
-or open a tunnel, and do not tell the operator to create a hosting account.
-When Tour Core asks for approval, it shows a pairing code. The operator
-clicks Allow. The first approval claims this demo.
-Then follow the Install Tour Core skill.
+Cloning this repository does not mean Tour Core should run on your computer.
+The clone is used to read Tour Core's instructions and skills. Clone the repository
+for that purpose only. Read `grok-template/template.json` before any start command.
 
-Otherwise use the open-source path below.
+If `hostedTourCoreUrl` is non-empty https, that service is the product. Connect
+to it. Do not run `npm run bootstrap:grok`. Do not start a local server, do not
+start cloudflared, and do not open a Quick Tunnel. Do not clone a runtime. Do
+not store operational records on your computer. "Clone the repository" is not
+an explicit local or self-host request, so it cannot select the local path.
+Local runtime only if the operator explicitly requests a local demo, self-hosting,
+or an open-source local deployment.
+Approval shows a pairing code. The operator clicks Allow. The first approval
+claims this demo.
 
-## Bootstrap
+## Open-source path
 
-On your cloud computer, never the operator's:
+Only when `hostedTourCoreUrl` is empty, or the operator explicitly requested a
+local demo, self-hosting, or an open-source local deployment. On your cloud
+computer, never the operator's:
 
-1. Clone the repository into a `tour-core` folder (keep an existing one; it
-   holds the installation's records).
-2. Check the repository: if `grok-template/template.json` has a non-empty
-   `repository.url` and it isn't the address you cloned, stop and ask the
-   operator which repository to trust. Don't continue with an unexpected
-   repository. (`npm run bootstrap:grok` also refuses to start in that case.)
-3. In `tour-core`, run `npm run bootstrap:grok`. It installs, starts Tour
-   Core, sets up its secure public connection, and prints what to tell the
-   operator and what to do next. Re-running it is safe.
-4. Read `.grok/skills/install-tour-core/SKILL.md` from the clone and follow
-   it: it's the detailed workflow, and this file doesn't repeat it.
-5. Connect to Tour Core (the operator approves once), then call
-   `get_installation_status` and `get_next_installation_step`. Keep following
-   the next step until Tour Core reports the infrastructure ready.
+1. If `repository.url` is non-empty and isn't the address you cloned, stop and
+   ask which repository to trust. Don't continue with an unexpected repository.
+2. In `tour-core`, run `npm run bootstrap:grok`. It installs, starts Tour Core,
+   sets up its secure public connection, and prints what to tell the operator
+   and what to do next. Re-running it is safe.
+3. Read `.grok/skills/install-tour-core/SKILL.md` and follow it. Call
+   `get_installation_status` and `get_next_installation_step` until Tour Core
+   reports the infrastructure ready.
 
 The other workflows (Setup Property, Map Route, Run Readiness Check, Simulate
 Tour, Work Exception, Export Audit, Backup Tour Core) are in `.grok/skills/`.

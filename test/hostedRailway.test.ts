@@ -368,7 +368,7 @@ describe("hosted Grok instructions", () => {
 
   it("does not start a local runtime or mention hosting in what the operator hears", () => {
     const text = skill();
-    expect(text).toMatch(/Skip cloning, skip a local Node process, and skip\s+any tunnel/);
+    expect(text).toMatch(/Skip cloning a runtime, skip a local Node process, and skip\s+any tunnel/);
     expect(text).toMatch(/only works while your\s+computer is on/);
     expect(text).toMatch(/connect →|Connect to that service/);
     const sequence = text.slice(text.indexOf("## Sequence"), text.indexOf("## Validate"));

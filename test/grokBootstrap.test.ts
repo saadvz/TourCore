@@ -85,6 +85,67 @@ describe("fresh-bot bootstrap documentation", () => {
   });
 });
 
+describe("hosted URL wins over a clone request", () => {
+  const HOSTED = "https://tourcore-production.up.railway.app";
+  const bootstrap = read(BOOTSTRAP);
+  const skill = read(".grok/skills/install-tour-core/SKILL.md");
+  const manual = read("docs/grok-manual-test.md");
+  const template = JSON.parse(read("grok-template/template.json")) as { hostedTourCoreUrl: string };
+  const prompt = manual
+    .slice(manual.indexOf("## B."), manual.indexOf("## Connection and operator demo"))
+    .split("\n")
+    .filter((line) => line.startsWith(">"))
+    .map((line) => line.replace(/^>\s?/, ""))
+    .join("\n");
+  const hostedSkill = skill.slice(skill.indexOf("When the deployment is HOSTED"), skill.indexOf("Otherwise the operator explicitly chose local"));
+  const localSkill = skill.slice(skill.indexOf("Otherwise the operator explicitly chose local"), skill.indexOf("### Phase 2:"));
+
+  it("the standard bootstrap prompt selects the hosted service when hostedTourCoreUrl is set", () => {
+    expect(template.hostedTourCoreUrl).toBe(HOSTED);
+    expect(prompt).toMatch(/clone the repository only so you can read its\s+setup instructions and skills/);
+    expect(prompt).toMatch(/official hosted\s+Tour Core service, use that service rather than starting Tour Core locally/);
+    expect(prompt).toContain("GROK_BOOTSTRAP.md");
+    expect(prompt).toContain("Never ask me to paste secrets");
+    const decision = bootstrap.indexOf("Decide before you start anything");
+    const forbid = bootstrap.indexOf("Do not run `npm run bootstrap:grok`");
+    const localRun = bootstrap.indexOf("In `tour-core`, run `npm run bootstrap:grok`");
+    expect(decision).toBeGreaterThan(-1);
+    expect(forbid).toBeGreaterThan(decision);
+    expect(localRun).toBeGreaterThan(forbid);
+    expect(bootstrap).toMatch(/Cloning this repository does not mean Tour Core should run on your computer/);
+    expect(bootstrap).toMatch(/The clone is used to read Tour Core's instructions and skills/);
+    expect(bootstrap).toMatch(/"Clone the repository" is not\s+an explicit local or self-host request/);
+    expect(bootstrap).toMatch(/do not\s+start cloudflared, and do not open a Quick Tunnel/);
+    expect(bootstrap).toMatch(/Do not clone a runtime/);
+    expect(bootstrap).toMatch(/Do\s+not store operational records on your computer/);
+    expect(bootstrap.slice(0, localRun)).not.toMatch(/In `tour-core`, run `npm run bootstrap:grok`/);
+  });
+
+  it("hosted instructions use Grok's Drive connector and never Tour Core's Google app", () => {
+    expect(hostedSkill).toMatch(/deployment is HOSTED/);
+    expect(hostedSkill).toMatch(/You may clone the repository\s+to read instructions and skills/);
+    expect(hostedSkill).toMatch(/Do not run\s+`npm run bootstrap:grok`/);
+    expect(hostedSkill).toMatch(/Never start cloudflared/);
+    expect(hostedSkill).toMatch(/Quick Tunnel/);
+    expect(hostedSkill).toMatch(/confirm_backup_destination/);
+    expect(hostedSkill).toMatch(/built-in\s+connector for portable backups/);
+    expect(hostedSkill).toMatch(/Do not say\s+Tour Core's Google app is not configured/);
+    expect(hostedSkill).toMatch(/do not offer to keep records\s+on your computer/);
+    expect(hostedSkill).not.toMatch(/Offer to keep records on this computer/);
+    expect(hostedSkill).not.toMatch(/begin_google_drive_connect/);
+    expect(skill).toMatch(/There is no discretion/);
+    expect(skill).toMatch(/Do not choose a local install because the\s+operator asked you to clone/);
+  });
+
+  it("an explicit local or self-host request still uses the open-source runtime", () => {
+    expect(bootstrap).toMatch(/explicitly requests a local demo, self-hosting,\s+or an open-source local deployment/);
+    expect(localSkill).toMatch(/npm run bootstrap:grok/);
+    expect(localSkill).toMatch(/cloudflared/);
+    expect(skill).toMatch(/open-source path, when the next step is Google Drive's own approval/);
+    expect(skill).toMatch(/begin_google_drive_connect/);
+  });
+});
+
 describe("canonical repository", () => {
   it("normalizes https and ssh forms of the same repository", () => {
     expect(normalizeRepoUrl("https://github.com/Owner/Repo.git/")).toBe("github.com/owner/repo");

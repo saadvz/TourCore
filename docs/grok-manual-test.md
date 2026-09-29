@@ -28,7 +28,12 @@ contact. Instructions for the routine Grok creates:
 
 ## B. Fresh Grok Bot, one prompt, no attachments
 
-This is the development / open-source bootstrap. Start with a **completely
+This is the development / open-source bootstrap, and only when the operator
+explicitly asks to run Tour Core locally or to self-host, or when the cloned
+`grok-template/template.json` has an empty `hostedTourCoreUrl`. If that field
+is a non-empty https address, the prompt below selects the hosted service:
+do not run `npm run bootstrap:grok`, do not start cloudflared, and follow
+section H instead of the local rows. Start with a **completely
 fresh** Grok Bot and a fresh Sendblue test setup. Do **not** attach
 `bot-profile.md`, any `SKILL.md`, `template.json` or the `grok-template`
 folder. The operator must not open a terminal on their own computer at any
@@ -39,9 +44,11 @@ Send only this (with the real repository address):
 > Set up Tour Core, my AI landlord, using the open-source repository at
 > https://github.com/&lt;owner&gt;/&lt;repo&gt;.
 >
-> Use your cloud computer to clone the repository. Read and follow the
-> repository's GROK_BOOTSTRAP.md instructions as the authoritative installation
-> guide.
+> Use your cloud computer to clone the repository only so you can read its
+> setup instructions and skills. If the repository specifies an official hosted
+> Tour Core service, use that service rather than starting Tour Core locally.
+> Read and follow the repository's GROK_BOOTSTRAP.md instructions as the
+> authoritative installation guide.
 >
 > Do as much of the setup yourself as possible. Never ask me to paste secrets
 > into chat. Use Tour Core's secure setup flow for credentials or
