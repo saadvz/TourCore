@@ -1,6 +1,7 @@
 import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
 import type { OAuthClientInformationFull } from "@modelcontextprotocol/sdk/shared/auth.js";
+import type { DeploymentMode } from "../../install/deployment";
 
 /**
  * Which OAuth clients may be sent an authorization code, and where. Grok
@@ -18,10 +19,18 @@ const LOOPBACK = new Set(["127.0.0.1", "[::1]", "localhost"]);
 
 /**
  * The callbacks Grok Bot (through Cursor's MCP client) was seen registering
- * that the strict rule refuses. Accepted only with
- * TOURCORE_GROK_LEGACY_OAUTH_COMPAT=true, and only as these exact strings.
+ * that the strict rule refuses. Accepted only as these exact strings.
  * (Its third callback, http://localhost:8787/callback, is loopback and
  * already allowed.)
+ *
+ * Precedence for whether this list is active:
+ * 1. TOURCORE_GROK_LEGACY_OAUTH_COMPAT=true forces it on in every mode.
+ * 2. TOURCORE_GROK_LEGACY_OAUTH_COMPAT=false forces it off, including
+ *    HOSTED_RAILWAY_P0. Only that exact word (ignoring case and surrounding
+ *    space) is an explicit disable. "1" and "yes" are not.
+ * 3. Otherwise HOSTED_RAILWAY_P0 is on. LOCAL_DEVELOPER and SELF_HOSTED stay
+ *    off. GROK_MANAGED_P0 stays off here; its bootstrap still turns the flag
+ *    on unless --strict-oauth was used.
  */
 export const GROK_LEGACY_REDIRECT_URIS = ["cursor://anysphere.cursor-mcp/oauth/callback", "https://www.cursor.com/agents/mcp/oauth/callback"] as const;
 
@@ -32,7 +41,28 @@ export interface RedirectPolicy {
   exact: readonly string[];
 }
 
+/** True only when the variable is exactly `true`. Does not apply the hosted default. */
 export const grokLegacyCompatFromEnv = (env: NodeJS.ProcessEnv = process.env) => env.TOURCORE_GROK_LEGACY_OAUTH_COMPAT?.trim().toLowerCase() === "true";
+
+/**
+ * Whether the narrow legacy callback list is active.
+ * Explicit true/false wins. HOSTED_RAILWAY_P0 is on when the variable is unset
+ * or set to anything other than false.
+ */
+export function grokLegacyCompatEnabled(env: NodeJS.ProcessEnv = process.env, mode?: DeploymentMode): boolean {
+  const raw = env.TOURCORE_GROK_LEGACY_OAUTH_COMPAT?.trim().toLowerCase();
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  return mode === "HOSTED_RAILWAY_P0";
+}
+
+/** Startup line for the hosted service. Undefined when this mode has nothing to say. */
+export function hostedCompatStartupLine(env: NodeJS.ProcessEnv, mode: DeploymentMode | undefined): string | undefined {
+  if (mode !== "HOSTED_RAILWAY_P0") return undefined;
+  if (grokLegacyCompatEnabled(env, mode)) return "Grok legacy OAuth compatibility active for HOSTED_RAILWAY_P0.";
+  if (env.TOURCORE_GROK_LEGACY_OAUTH_COMPAT?.trim().toLowerCase() === "false") return "Grok legacy OAuth compatibility is off (TOURCORE_GROK_LEGACY_OAUTH_COMPAT=false).";
+  return undefined;
+}
 
 export function redirectHostsFromEnv(env: NodeJS.ProcessEnv = process.env): string[] {
   const extra = (env.TOURCORE_OAUTH_REDIRECT_HOSTS ?? "")
@@ -42,8 +72,23 @@ export function redirectHostsFromEnv(env: NodeJS.ProcessEnv = process.env): stri
   return [...new Set([...DEFAULT_REDIRECT_HOSTS, ...extra])];
 }
 
+export function redirectPolicyFor(env: NodeJS.ProcessEnv = process.env, mode?: DeploymentMode): RedirectPolicy {
+  return { hosts: redirectHostsFromEnv(env), exact: grokLegacyCompatEnabled(env, mode) ? GROK_LEGACY_REDIRECT_URIS : [] };
+}
+
+/** Env-only policy. HOSTED_RAILWAY_P0's default is applied by redirectPolicyFor. */
 export function redirectPolicyFromEnv(env: NodeJS.ProcessEnv = process.env): RedirectPolicy {
-  return { hosts: redirectHostsFromEnv(env), exact: grokLegacyCompatFromEnv(env) ? GROK_LEGACY_REDIRECT_URIS : [] };
+  return redirectPolicyFor(env);
+}
+
+/** scheme, host and path only. Query, fragment and credentials are left out so logs can use this. */
+export function redirectLogParts(uri: string): { scheme: string; host: string; path: string } {
+  try {
+    const url = new URL(uri);
+    return { scheme: url.protocol.replace(/:$/, ""), host: (url.host || "-").toLowerCase(), path: url.pathname || "/" };
+  } catch {
+    return { scheme: "?", host: "-", path: "-" };
+  }
 }
 
 export const strictPolicy = (hosts: string[] = DEFAULT_REDIRECT_HOSTS): RedirectPolicy => ({ hosts, exact: [] });

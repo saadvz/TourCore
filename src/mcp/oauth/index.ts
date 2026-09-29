@@ -54,6 +54,9 @@ export interface McpOAuthOptions {
   tenantPolicy?: (clientId: string) => { allowed: true } | { allowed: false; message: string };
   onOwnerApproved?: (clientId: string) => void;
   approvalPlace?: () => "computer" | "hosted";
+  ownerAuthenticated?: (cookieHeader: string | undefined) => boolean;
+  /** Extra line when a known legacy callback is refused. Undefined keeps the local-testing hint. */
+  legacyCompatNote?: () => string | undefined;
   log?: (line: string) => void;
   /** Passed to the SDK handlers' express-rate-limit. False turns it off (tests only). */
   rateLimit?: false;
@@ -122,6 +125,7 @@ export class McpOAuth {
       tenantPolicy: options.tenantPolicy,
       onOwnerApproved: options.onOwnerApproved,
       approvalPlace: options.approvalPlace,
+      ownerAuthenticated: options.ownerAuthenticated,
       log: this.log,
     });
     this.local = this.buildLocal();
@@ -286,7 +290,8 @@ export class McpOAuth {
     }
     const legacy = err.redirects.filter((r) => (GROK_LEGACY_REDIRECT_URIS as readonly string[]).includes(r.uri));
     if (legacy.length && !policy.exact.length) {
-      this.log("  That is Cursor's known legacy OAuth callback used by Grok Bot. For P0 Grok testing only, set TOURCORE_GROK_LEGACY_OAUTH_COMPAT=true and restart.");
+      const note = this.options.legacyCompatNote?.();
+      this.log(note ?? "  That is Cursor's known legacy OAuth callback used by Grok Bot. For P0 Grok testing only, set TOURCORE_GROK_LEGACY_OAUTH_COMPAT=true and restart.");
     }
     if (err.redirects.some((r) => r.scheme === "https" && r.host && !legacy.includes(r))) {
       this.log("  If one of those https addresses really is Grok's callback, add only that host to TOURCORE_OAUTH_REDIRECT_HOSTS.");

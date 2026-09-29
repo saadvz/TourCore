@@ -34,7 +34,15 @@ ${body}
 </html>
 `;
 
-export function consentPage(p: { requestId: string; matchCode: string; clientName: string; redirectHost: string; hosted?: boolean }): string {
+export function consentPage(p: { requestId: string; matchCode: string; clientName: string; redirectHost: string; hosted?: boolean; owner?: boolean }): string {
+  const requestId = escape(p.requestId);
+  const hostedNext = p.owner
+    ? `<p><a class="button primary" href="/connect?request=${requestId}">Continue to approval</a></p>`
+    : `<p>Tour Core needs you to confirm ownership of this hosted installation before you can approve connections.</p>
+          <p><a class="button primary" href="/claim?request=${requestId}">Confirm ownership</a></p>`;
+  const decision = p.hosted
+    ? hostedNext
+    : `<p><strong>Approve on the Tour Core computer.</strong> A Tour Core window opens there (or open <em>Connect Grok</em> in Tour Core). Check it shows this code, then choose Allow:</p>`;
   return shell(
     "Connect to Tour Core",
     `        <h1>Tour Core</h1>
@@ -57,9 +65,9 @@ export function consentPage(p: { requestId: string; matchCode: string; clientNam
         </ul>
         <p class="hint">Publishing, pausing, resuming, revoking tours and changing approved facts still ask you first, every time.</p>
         <div class="card highlight">
-          <p><strong>${p.hosted ? "Approve in Tour Core." : "Approve on the Tour Core computer."}</strong> ${p.hosted ? "Open Tour Core's approval page, check it shows this code, and click Allow." : "A Tour Core window opens there (or open <em>Connect Grok</em> in Tour Core). Check it shows this code, then choose Allow:"}</p>
+          ${decision}
           <p class="match-code">${escape(p.matchCode)}</p>
-          <p id="oauth-status" class="muted" data-request="${escape(p.requestId)}">Waiting for approval…</p>
+          <p id="oauth-status" class="muted" data-request="${requestId}">Waiting for approval…</p>
         </div>
         <button type="button" id="oauth-deny">Deny</button>`,
     `\n    <script type="module" src="/oauth.js"></script>`,

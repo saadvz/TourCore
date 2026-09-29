@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import type { IncomingHttpHeaders } from "node:http";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +9,7 @@ import { testVisitorMessaging } from "../src/install/checks";
 import { selectPublicEndpoint } from "../src/install/bootstrap";
 import { parseDeploymentMode, resolveDeploymentMode } from "../src/install/deployment";
 import { externalUrls, listenHost, listenPort, redactSecrets, resolveHostedPublicUrl, startupLines, validateHostedConfig } from "../src/install/hostedRuntime";
+import { claimFilePath } from "../src/install/hostedOwner";
 import { Installation } from "../src/install/installation";
 import { HOSTED_SETUP_WRITES } from "../src/install/setupSessions";
 import { handleSecureSetupApi } from "../src/install/secureSetup";
@@ -59,7 +61,7 @@ function installation(root: string, env: NodeJS.ProcessEnv, now = () => Date.now
 /** fetch() can't set Host. Railway's proxy sends the public hostname. */
 function hostedFetch(port: number, extra: Record<string, string> = {}) {
   return (path: string, init: { method?: string; headers?: Record<string, string>; body?: string } = {}) =>
-    new Promise<{ status: number; json: () => Promise<unknown>; text: () => Promise<string> }>((resolve, reject) => {
+    new Promise<{ status: number; headers: IncomingHttpHeaders; json: () => Promise<unknown>; text: () => Promise<string> }>((resolve, reject) => {
       const body = init.body ? Buffer.from(init.body) : undefined;
       const req = request(
         {
@@ -74,13 +76,29 @@ function hostedFetch(port: number, extra: Record<string, string> = {}) {
           res.on("data", (chunk: Buffer) => chunks.push(chunk));
           res.on("end", () => {
             const raw = Buffer.concat(chunks).toString("utf8");
-            resolve({ status: res.statusCode ?? 0, text: async () => raw, json: async () => (raw ? JSON.parse(raw) : {}) });
+            resolve({ status: res.statusCode ?? 0, headers: res.headers, text: async () => raw, json: async () => (raw ? JSON.parse(raw) : {}) });
           });
         },
       );
       req.on("error", reject);
       req.end(body);
     });
+}
+
+function cookieHeader(headers: IncomingHttpHeaders): { cookie: string; csrf: string } {
+  const raw = headers["set-cookie"];
+  const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  const cookie = list.map((line) => line.split(";")[0]).join("; ");
+  const csrf = /(?:^|; )tourcore_csrf=([^;]+)/.exec(cookie)?.[1] ?? "";
+  return { cookie, csrf: decodeURIComponent(csrf) };
+}
+
+async function ownerHeaders(inst: Installation, http: ReturnType<typeof hostedFetch>) {
+  const code = readFileSync(claimFilePath(inst.root), "utf8").trim();
+  const claimed = await http("/api/claim", { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify({ code }) });
+  expect(claimed.status).toBe(200);
+  const session = cookieHeader(claimed.headers);
+  return { "content-type": "application/json", cookie: session.cookie, "x-tourcore-csrf": session.csrf, origin: BASE };
 }
 
 describe("HOSTED_RAILWAY_P0 runtime", () => {
@@ -218,16 +236,13 @@ describe("hosted security", () => {
     const matchCode = /class="match-code">([^<]+)/.exec(html)?.[1];
     expect(requestId).toBeTruthy();
     expect(html).not.toMatch(/Allow<\/button>/);
-    const page = inst.approvals.pageUrl(BASE)!;
-    const token = /#s=([^&]+)/.exec(page.url)![1]!;
-    const csrf = /&c=([^&]+)/.exec(page.url)![1]!;
-    const headers = { "content-type": "application/json", "x-tourcore-approval-session": token, "x-tourcore-csrf": csrf, origin: BASE };
+    const headers = await ownerHeaders(inst, http);
     expect((await http(`/api/grok/requests/${requestId}/approve`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).status).toBe(404);
     expect((await http("/api/connect/approve", { method: "POST", headers: { ...headers, authorization: "Bearer grok-mcp-token" }, body: JSON.stringify({ requestId, matchCode }) })).status).toBe(401);
     expect((await http("/api/connect/approve", { method: "POST", headers, body: JSON.stringify({ requestId, matchCode: "000000" }) })).status).toBe(403);
     const allowed = await http("/api/connect/approve", { method: "POST", headers, body: JSON.stringify({ requestId, matchCode }) });
     expect(allowed.status).toBe(200);
-    expect((await http("/api/connect/approve", { method: "POST", headers, body: JSON.stringify({ requestId, matchCode }) })).status).toBe(401);
+    expect((await http("/api/connect/approve", { method: "POST", headers, body: JSON.stringify({ requestId, matchCode }) })).status).toBe(404);
     expect(verifier).toBeTruthy();
     expect(inst.files.state().hostedTenant?.clientId).toBe(client.client_id);
   });
@@ -340,13 +355,11 @@ describe("hosted storage, secrets, and one demo tenant", () => {
     })();
     const query = (clientId: string) => new URLSearchParams({ response_type: "code", client_id: clientId, redirect_uri: "https://grok.com/connectors/oauth/callback", code_challenge: challenge, code_challenge_method: "S256", state: "state-one", scope: OPERATOR_SCOPE, resource: `${BASE}/mcp` });
     const opened = await http(`/authorize?${query(first.client_id)}`);
-    const requestId = /data-request="([^"]+)"/.exec(await opened.text())?.[1]!;
-    const page = inst.approvals.pageUrl(BASE)!;
-    const token = /#s=([^&]+)/.exec(page.url)![1]!;
-    const csrf = /&c=([^&]+)/.exec(page.url)![1]!;
     const html = await opened.text();
+    const requestId = /data-request="([^"]+)"/.exec(html)?.[1]!;
     const matchCode = /class="match-code">([^<]+)/.exec(html)?.[1];
-    expect((await http("/api/connect/approve", { method: "POST", headers: { "content-type": "application/json", "x-tourcore-approval-session": token, "x-tourcore-csrf": csrf, origin: BASE }, body: JSON.stringify({ requestId, matchCode }) })).status).toBe(200);
+    const headers = await ownerHeaders(inst, http);
+    expect((await http("/api/connect/approve", { method: "POST", headers, body: JSON.stringify({ requestId, matchCode }) })).status).toBe(200);
     const second = (await (await register("Second")).json()) as { client_id: string };
     const refused = await http(`/authorize?${query(second.client_id)}`);
     expect(refused.status).toBe(403);
@@ -381,7 +394,7 @@ describe("hosted Grok instructions", () => {
     const quoted = text.split("\n").filter((line) => line.startsWith(">")).join("\n");
     expect(quoted).not.toMatch(/\brailway\b|\bcloudflared\b|\bRAILWAY_|\btrycloudflare\b|only works while/i);
     expect(quoted).toContain("I'll connect you to Tour Core and only ask when I need an approval, sign-in or decision.");
-    expect(quoted).toContain("Tour Core is online. I need your approval to connect. Check that the codes match and click Allow.");
+    expect(quoted).toContain("Tour Core will show you a pairing code. Follow its Continue to approval button, make sure the same code appears, then click Allow.");
     expect(bootstrap()).toMatch(/Do not clone a runtime/);
     expect(bootstrap().split("\n").length).toBeLessThan(80);
   });

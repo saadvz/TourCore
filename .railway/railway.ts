@@ -24,6 +24,8 @@ export default defineRailway(() => {
     env: {
       TOURCORE_DEPLOYMENT_MODE: "HOSTED_RAILWAY_P0",
       TOURCORE_HOME: "/data",
+      // Do not set TOURCORE_GROK_LEGACY_OAUTH_COMPAT. HOSTED_RAILWAY_P0
+      // accepts the known Grok callbacks unless that variable is false.
       NODE_ENV: "production",
       // Railpack's default is `npm install`. `npm ci` installs this lockfile.
       // NPM_CONFIG_PRODUCTION=false keeps esbuild and the TypeScript toolchain

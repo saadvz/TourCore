@@ -18,6 +18,7 @@
     "grok:status": "tsx src/tools/grok.ts status",
     "grok:disconnect": "tsx src/tools/grok.ts disconnect",
     "grok:tools": "tsx src/tools/grok.ts tools",
+    "hosted:owner-claim": "tsx src/install/ownerClaimCli.ts",
     "bootstrap:grok": "node scripts/bootstrap-grok.mjs --mode=GROK_MANAGED_P0",
     "bootstrap:self-hosted": "node scripts/bootstrap-grok.mjs --mode=SELF_HOSTED",
     "service:start": "tsx src/install/serviceCli.ts start",

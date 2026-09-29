@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { mcpAuthModeFromEnv } from "../mcp/authMode";
 import { MCP_PATH } from "../mcp/mcpBridge";
 import { OAuthGrantStore } from "../mcp/oauth";
-import { grokLegacyCompatFromEnv } from "../mcp/oauth/clients";
+import { grokLegacyCompatEnabled } from "../mcp/oauth/clients";
+import { resolveDeploymentMode } from "../install/deployment";
 import { mask, readSendblueEnv } from "../messaging/sendblue/runtime";
 import { OPERATOR_TOOLS } from "../operator/tools";
 import { defaultWorkspaceRoot } from "../setup/workspace";
@@ -80,7 +81,11 @@ function status(): void {
   say(`  URL ............ ${connectorUrl() ?? "not available (PUBLIC_BASE_URL isn't an https address)"}`);
   if (mode === "static") say(`  Static token ... ${mask(process.env[TOKEN_KEY]?.trim())}`);
   if (mode === "oauth") {
-    say(`  Grok legacy .... ${grokLegacyCompatFromEnv() ? "ON (P0 only): Cursor's legacy callbacks accepted; turn off when Grok no longer needs it" : "off (strict)"}`);
+    const deployment = resolveDeploymentMode(process.env).mode;
+    const legacy = grokLegacyCompatEnabled(process.env, deployment);
+    say(
+      `  Grok legacy .... ${legacy ? (deployment === "HOSTED_RAILWAY_P0" ? "ON for HOSTED_RAILWAY_P0 (narrow Cursor callbacks). Set TOURCORE_GROK_LEGACY_OAUTH_COMPAT=false to turn it off" : "ON (P0 only): Cursor's legacy callbacks accepted; turn off when Grok no longer needs it") : "off (strict)"}`,
+    );
     const connections = grants().connections();
     say(`  Connected ...... ${connections.length ? connections.map((c) => `${c.clientName} since ${new Date(c.connectedAt).toLocaleString()}`).join("; ") : "nothing"}`);
   }

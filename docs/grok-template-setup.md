@@ -173,8 +173,11 @@ were issued for, so the old ones stop working by design.
 **If Grok says the connection failed during registration**, look at the Tour
 Core window. If the refused redirects are `scheme=cursor host=anysphere.cursor-mcp`
 and/or `host=www.cursor.com path=/agents/mcp/oauth/callback`, that's Grok Bot's
-current Cursor-based client. Follow "P0 only: Grok legacy OAuth compatibility"
-in [`grok-manual-test.md`](grok-manual-test.md) instead of adding hosts.
+current Cursor-based client. On `HOSTED_RAILWAY_P0` those exact callbacks are
+already accepted; `TOURCORE_GROK_LEGACY_OAUTH_COMPAT=false` is what turns them
+off. On a local or self-hosted install, follow "P0 only: Grok legacy OAuth
+compatibility" in [`grok-manual-test.md`](grok-manual-test.md) instead of
+adding hosts.
 Otherwise, a `refused redirect: scheme=https host=<host> ...` line means Grok
 used a return address on a host Tour Core doesn't allow yet. By default only `grok.com`, `x.ai` and `x.com` (and their
 subdomains) are allowed. If that host is really Grok's, add it to `.env`

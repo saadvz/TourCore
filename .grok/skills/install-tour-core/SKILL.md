@@ -102,10 +102,10 @@ computer:
 ### Phase 2: Connect (the operator approves, once)
 
 For a fresh install there's no existing Tour Core connection. Add Tour Core
-yourself. On the hosted product, open the approval page Tour Core gives you
-and hand it to the operator:
+yourself. On the hosted product, the operator approves in the browser Tour
+Core opens:
 
-> Tour Core is online. I need your approval to connect. Check that the codes match and click Allow.
+> Tour Core is online. I need your approval to connect. Tour Core will show you a pairing code. Follow its Continue to approval button, make sure the same code appears, then click Allow.
 
 On the open-source path, open the approval screen in your cloud browser:
 

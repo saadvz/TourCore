@@ -13,4 +13,14 @@ await build({
   sourcemap: true,
   logLevel: "info",
 });
+await build({
+  entryPoints: ["src/install/ownerClaimCli.ts"],
+  bundle: true,
+  platform: "node",
+  format: "esm",
+  outfile: "dist/owner-claim.js",
+  packages: "external",
+  sourcemap: true,
+  logLevel: "info",
+});
 cpSync("src/web/public", "dist/public", { recursive: true });

@@ -144,8 +144,7 @@ On `HOSTED_RAILWAY_P0` the process listens on `0.0.0.0` and Railway's proxy
 headers are expected. `/install` is reachable only over https, and only with
 the session. The session lasts 15 minutes, carries a CSRF secret, and can
 save credentials a few times. `POST` from another site's `Origin` is refused.
-Grok's MCP bearer token cannot approve the connection; the operator uses
-`/connect` and the pairing code.
+Grok's MCP bearer token cannot approve the connection.
 
 Shared rules:
 
@@ -153,6 +152,35 @@ Shared rules:
   `Referer`) and comes back in a custom header. Only its hash is stored.
   Expired sessions are rejected.
 - A session can write provider settings. Nothing can read a credential back.
+
+## Hosted Grok connection
+
+`HOSTED_RAILWAY_P0` accepts Grok's current narrow legacy callbacks by
+default (`cursor://anysphere.cursor-mcp/oauth/callback` and
+`https://www.cursor.com/agents/mcp/oauth/callback`, exact strings only).
+`TOURCORE_GROK_LEGACY_OAUTH_COMPAT=true` forces that list on in any mode.
+`TOURCORE_GROK_LEGACY_OAUTH_COMPAT=false` forces it off, including on
+Railway. Any other value is ignored and the mode default applies.
+`LOCAL_DEVELOPER` and `SELF_HOSTED` stay off unless the variable is `true`.
+`GROK_MANAGED_P0` still turns it on at bootstrap unless `--strict-oauth`
+was used. Hosted startup does not need the variable set.
+
+The public authorization page shows a pairing code and does not have an
+Allow button. An owner who already claimed this installation uses
+**Continue to approval**, which opens `/connect?request=…` for that same
+request. Allow and Deny are on that page, and only when the browser has the
+owner session cookie. A bare `/connect` still fails. The request id is not
+proof of ownership.
+
+A fresh Railway installation is unclaimed. The first start writes a one-time
+claim secret's hash into SecretStore and the secret itself to
+`install/owner-claim.once` on the volume (not to Drive, git, logs, or MCP).
+On the service, run `npm run hosted:owner-claim` and open the printed link
+once. That browser becomes the owner (HttpOnly Secure SameSite=Lax cookie,
+seven days). The claim cannot be reused. Restart and redeploy keep the owner
+because the volume keeps SecretStore. To revoke the session and issue a new
+claim, set `TOURCORE_HOSTED_OWNER_RESET=reset-hosted-owner` for one deploy,
+then remove it. Tour records are not deleted.
 
 ## Installation status and next step
 
@@ -463,6 +491,9 @@ cannot be opened. It does not silently switch to a writable local store.
 4. Add a volume mounted at `/data`.
 5. Set `TOURCORE_DEPLOYMENT_MODE=HOSTED_RAILWAY_P0` and `TOURCORE_HOME=/data`.
    Set the distributor Google OAuth client id and secret. Do not commit them.
+   Do not set `TOURCORE_GROK_LEGACY_OAUTH_COMPAT` unless you need to force it
+   off (`false`) or on (`true`). The hosted mode already accepts the known
+   Grok callbacks.
 6. Set the healthcheck path to `/healthz`.
 7. Register `https://<that-domain>/google/oauth/callback` on the Tour Core
    Google web client.
@@ -474,6 +505,11 @@ cannot be opened. It does not silently switch to a writable local store.
 To clear the demo operator binding without deleting Drive records, set
 `TOURCORE_HOSTED_TENANT_RESET=reset-demo-tenant` for one deploy, then remove
 it.
+
+After the first deploy, claim the installation once: `npm run hosted:owner-claim`
+on the service, open the link, and keep that browser for Grok approvals.
+The startup log says the installation is unclaimed. It does not print the
+claim secret.
 
 ### Moving the quick-tunnel demo
 

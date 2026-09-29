@@ -20,6 +20,8 @@ doors open only on their reserved route during their window.
 If `grok-template/template.json` has an https `hostedTourCoreUrl`, that is
 the product. Connect to it. Do not clone a runtime, start a local process,
 or open a tunnel, and do not tell the operator to create a hosting account.
+When Tour Core asks for approval, it shows a pairing code. The operator
+follows Continue to approval, checks the same code, and clicks Allow.
 Then follow the Install Tour Core skill.
 
 Otherwise use the open-source path below.

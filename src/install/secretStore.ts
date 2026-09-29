@@ -36,6 +36,25 @@ export const SECRET_SETTING_NAMES = SETTING_NAMES.filter((n) => SETTINGS[n].secr
 /** Environment-only secrets that also must never leave Tour Core. */
 export const OTHER_SECRET_ENV = ["TOURCORE_OPERATOR_TOKEN", "TOURCORE_INTENT_MODEL_KEY"] as const;
 
+/**
+ * Hosted owner claim and session. Only hashes are stored. This is not a
+ * provider setting: it is never copied into the environment or returned by
+ * the settings layer.
+ */
+export interface HostedOwnerSecret {
+  schemaVersion: 1;
+  /** SHA-256 of the one-time claim secret. Kept after use so a replay fails. */
+  claimHash: string;
+  claimed: boolean;
+  ownerId?: string;
+  /** SHA-256 of the current owner-session cookie. Absent when logged out. */
+  sessionHash?: string;
+  /** SHA-256 of the CSRF token bound to that session. */
+  csrfHash?: string;
+  sessionExpiresAt?: number;
+  claimedAt?: string;
+}
+
 export interface SecretStore {
   get(name: SettingName): string | undefined;
   /** Saves the given values; blank values are ignored (use `delete` to remove). */
@@ -43,12 +62,17 @@ export interface SecretStore {
   delete(names: SettingName[], now?: Date): void;
   /** When each stored value was last changed. No values. */
   updatedAt(name: SettingName): string | undefined;
+  /** Hosted owner record, or undefined before the first claim is prepared. */
+  hostedOwner(): HostedOwnerSecret | undefined;
+  /** Replaces the hosted owner record. Undefined removes it. Provider secrets are left as they are. */
+  saveHostedOwner(record: HostedOwnerSecret | undefined): void;
 }
 
 interface SecretFile {
   schemaVersion: 1;
   values: Partial<Record<SettingName, string>>;
   updatedAt: Partial<Record<SettingName, string>>;
+  hostedOwner?: HostedOwnerSecret;
 }
 
 const empty = (): SecretFile => ({ schemaVersion: 1, values: {}, updatedAt: {} });
@@ -74,7 +98,8 @@ export class LocalSecretStore implements SecretStore {
     if (this.cached?.stamp === stamp) return structuredClone(this.cached.doc);
     try {
       const raw = JSON.parse(readFileSync(this.path, "utf8")) as SecretFile;
-      const doc: SecretFile = { schemaVersion: 1, values: raw.values ?? {}, updatedAt: raw.updatedAt ?? {} };
+      const hostedOwner = parseHostedOwner(raw.hostedOwner);
+      const doc: SecretFile = { schemaVersion: 1, values: raw.values ?? {}, updatedAt: raw.updatedAt ?? {}, ...(hostedOwner ? { hostedOwner } : {}) };
       this.cached = { stamp, doc };
       return structuredClone(doc);
     } catch {
@@ -120,9 +145,25 @@ export class LocalSecretStore implements SecretStore {
   updatedAt(name: SettingName): string | undefined {
     return this.read().updatedAt[name];
   }
+
+  hostedOwner(): HostedOwnerSecret | undefined {
+    return this.read().hostedOwner;
+  }
+
+  saveHostedOwner(record: HostedOwnerSecret | undefined): void {
+    const doc = this.read();
+    if (record) doc.hostedOwner = record;
+    else delete doc.hostedOwner;
+    this.write(doc);
+  }
 }
 
 /** Same contract, memory only. For tests. */
+function parseHostedOwner(raw: HostedOwnerSecret | undefined): HostedOwnerSecret | undefined {
+  if (!raw || raw.schemaVersion !== 1 || typeof raw.claimHash !== "string" || typeof raw.claimed !== "boolean") return undefined;
+  return raw;
+}
+
 export class MemorySecretStore implements SecretStore {
   private readonly doc = empty();
 
@@ -148,5 +189,14 @@ export class MemorySecretStore implements SecretStore {
 
   updatedAt(name: SettingName): string | undefined {
     return this.doc.updatedAt[name];
+  }
+
+  hostedOwner(): HostedOwnerSecret | undefined {
+    return this.doc.hostedOwner;
+  }
+
+  saveHostedOwner(record: HostedOwnerSecret | undefined): void {
+    if (record) this.doc.hostedOwner = record;
+    else delete this.doc.hostedOwner;
   }
 }

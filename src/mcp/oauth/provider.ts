@@ -14,7 +14,7 @@ import {
   UnauthorizedClientError,
 } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import type { OAuthClientInformationFull, OAuthTokenRevocationRequest, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
-import { checkRedirectUri, ClientMetadataError, fetchMetadataDocument, isMetadataDocumentClientId, parseMetadataDocument, type RedirectPolicy } from "./clients";
+import { checkRedirectUri, ClientMetadataError, fetchMetadataDocument, isMetadataDocumentClientId, parseMetadataDocument, redirectLogParts, type RedirectPolicy } from "./clients";
 import { consentPage, PAGE_HEADERS, problemPage } from "./pages";
 import { hashSecret, newSecret, type OAuthGrantStore } from "./store";
 
@@ -111,7 +111,14 @@ export interface ProviderOptions {
   onOwnerApproved?: (clientId: string) => void;
   /** Where the human clicks Allow. */
   approvalPlace?: () => "computer" | "hosted";
+  /** Hosted owner cookie. The authorization page uses this to offer Continue to approval. */
+  ownerAuthenticated?: (cookieHeader: string | undefined) => boolean;
   log?: (line: string) => void;
+}
+
+function cookieHeaderOf(res: Response): string | undefined {
+  const header = (res as Response & { req?: { headers?: { cookie?: string | string[] } } }).req?.headers?.cookie;
+  return Array.isArray(header) ? header[0] : header;
 }
 
 const matchCode = () => {
@@ -195,6 +202,12 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
       `An MCP client registered for Tour Core access: ${client.client_name ?? "unnamed"} (redirects: ${client.redirect_uris.map(redirectForLog).join(", ")}; ` +
         `${client.token_endpoint_auth_method === "none" ? "public client" : `authenticates with ${client.token_endpoint_auth_method}`}; refresh tokens ${client.grant_types?.includes("refresh_token") ? "requested" : "not requested"}).`,
     );
+    const exact = this.options.redirectPolicy().exact;
+    for (const uri of client.redirect_uris) {
+      if (!exact.includes(uri)) continue;
+      const parts = redirectLogParts(uri);
+      this.log(`accepted redirect: scheme=${parts.scheme} host=${parts.host} path=${parts.path} reason: known Grok legacy callback`);
+    }
     return client;
   }
 
@@ -204,8 +217,10 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
     const ep = this.options.endpoints();
     if (!ep) throw new TemporarilyUnavailableError("Tour Core's public address isn't set.");
     // Registered redirect URIs are re-checked here too, in case the allowed hosts changed since registration.
-    if (checkRedirectUri(params.redirectUri, this.options.redirectPolicy())) {
+    const redirectProblem = checkRedirectUri(params.redirectUri, this.options.redirectPolicy());
+    if (redirectProblem) {
       this.log(`Refused an authorization request: its redirect ${redirectForLog(params.redirectUri)} isn't allowed any more (was compatibility mode turned off?).`);
+      this.log(`  refused redirect: scheme=${redirectProblem.scheme ?? "?"} host=${redirectProblem.host ?? "-"} path=${redirectProblem.path ?? "-"} reason: ${redirectProblem.reason}`);
       res.status(400).set(PAGE_HEADERS).type("html").send(problemPage("Tour Core can't send you back there", "The app that sent you here asked to return to an address Tour Core doesn't allow. Nothing was approved."));
       return;
     }
@@ -243,7 +258,21 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
     this.requests.set(request.id, request);
     this.log(`Authorization request from ${request.clientName}: will return to ${redirectForLog(request.redirectUri)}.`);
     this.options.onApprovalRequest?.(this.view(request));
-    res.status(200).set(PAGE_HEADERS).type("html").send(consentPage({ requestId: request.id, matchCode: request.matchCode, clientName: request.clientName, redirectHost: request.redirectHost, hosted: this.options.approvalPlace?.() === "hosted" }));
+    const hosted = this.options.approvalPlace?.() === "hosted";
+    const cookie = cookieHeaderOf(res);
+    const owner = hosted && (this.options.ownerAuthenticated?.(cookie) ?? false);
+    res.status(200).set(PAGE_HEADERS).type("html").send(consentPage({ requestId: request.id, matchCode: request.matchCode, clientName: request.clientName, redirectHost: request.redirectHost, hosted, owner }));
+  }
+
+  /** Pending, already decided, expired, or not a request this process has. */
+  requestDisposition(id: string): "pending" | "used" | "expired" | "missing" {
+    const request = this.requests.get(id);
+    if (!request) return "missing";
+    if (request.expiresAt <= this.now()) {
+      this.requests.delete(id);
+      return "expired";
+    }
+    return request.status === "pending" ? "pending" : "used";
   }
 
   private view(r: ApprovalRequest): ApprovalRequestView {

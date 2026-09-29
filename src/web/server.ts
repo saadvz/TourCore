@@ -11,7 +11,7 @@ import { createIntentInterpreter, intentModelFromEnv, type IntentInterpreter } f
 import { mcpAuthModeFromEnv, type McpAuthMode } from "../mcp/authMode";
 import { authorized, handleMcpMessage, MCP_PATH } from "../mcp/mcpBridge";
 import { endpointsFor, isOAuthLocalPath, isOAuthPublicPath, McpOAuth } from "../mcp/oauth";
-import { grokLegacyCompatFromEnv, redirectPolicyFromEnv } from "../mcp/oauth/clients";
+import { grokLegacyCompatFromEnv, hostedCompatStartupLine, redirectPolicyFor } from "../mcp/oauth/clients";
 import { ConfirmationBook } from "../operator/confirmations";
 import type { ToolContext } from "../operator/tools";
 import { PropertyWorkspace } from "../setup";
@@ -24,6 +24,7 @@ import { OperatorUpdates } from "../alerts/operatorUpdates";
 import { HEALTH_PATH, publicHealth, runtimeHealth } from "../install/checks";
 import { isHostedRailway, resolveDeploymentMode } from "../install/deployment";
 import { handleHostedApproval } from "../install/hostedApproval";
+import { ensureHostedOwnerClaim, handleHostedClaim, HOSTED_OWNER_RESET, OAUTH_REQUEST_ID, ownerFromCookie, pendingClaimSecret, resetHostedOwner } from "../install/hostedOwner";
 import { RAILWAY_HEALTHCHECK_HOST, redactSecrets, startupLines, validateHostedConfig } from "../install/hostedRuntime";
 import { Installation, TOURCORE_VERSION } from "../install/installation";
 import { bindHostedTenant, clearHostedTenant, hostedTenantDecision, HOSTED_TENANT_RESET } from "../install/tenant";
@@ -112,8 +113,8 @@ function publicRouteAllowed(method: string, path: string, oauth: boolean, hosted
   if (oauth && (isOAuthPublicPath(path, MCP_PATH) || (method === "GET" && path === "/oauth.js"))) return true;
   if (method === "POST" && path === SENDBLUE_WEBHOOK_PATH) return true;
   if (method === "GET" && (/^\/verify\/[A-Za-z0-9_-]+$/.test(path) || path === "/verify.js" || path === "/styles.css")) return true;
-  if (hosted && method === "GET" && (path === "/connect" || path === "/connect.js" || path === "/install" || path === "/install.js" || path === "/styles.css")) return true;
-  if (hosted && (path === "/api/connect" || path === "/api/connect/approve" || isInstallApiPath(path))) return true;
+  if (hosted && method === "GET" && (path === "/connect" || path === "/connect.js" || path === "/claim" || path === "/claim.js" || path === "/install" || path === "/install.js" || path === "/styles.css")) return true;
+  if (hosted && (path === "/api/connect" || path === "/api/connect/approve" || path === "/api/connect/deny" || path === "/api/claim" || isInstallApiPath(path))) return true;
   return /^\/api\/verify\/[A-Za-z0-9_-]+$/.test(path) && (method === "GET" || method === "POST");
 }
 
@@ -235,7 +236,12 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
             const base = sendblueRuntime.env().publicBaseUrl;
             return base ? endpointsFor(base, MCP_PATH) : undefined;
           },
-          redirectPolicy: () => redirectPolicyFromEnv(),
+          redirectPolicy: () => redirectPolicyFor(installation.env(), installation.deploymentMode()),
+          ownerAuthenticated: (cookie) => ownerFromCookie(installation, cookie).ok,
+          legacyCompatNote: () =>
+            installation.env().TOURCORE_GROK_LEGACY_OAUTH_COMPAT?.trim().toLowerCase() === "false"
+              ? "  That is Cursor's known legacy OAuth callback. Compatibility is off because TOURCORE_GROK_LEGACY_OAUTH_COMPAT=false."
+              : undefined,
           now: options.authNow,
           fetchClientMetadata: options.fetchClientMetadata,
           tenantPolicy: (clientId) => (hostedMode() ? hostedTenantDecision(installation.files.state(), clientId) : { allowed: true }),
@@ -256,6 +262,10 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           rateLimit: options.oauthRateLimit,
         })
       : undefined;
+  if (hostedMode()) {
+    const claim = ensureHostedOwnerClaim(installation);
+    if (!claim.claimed) log("Hosted installation is unclaimed. Run npm run hosted:owner-claim to print a one-time claim link. The claim is not written to these logs.");
+  }
   const tools: ToolContext = {
     services: api,
     confirmations: new ConfirmationBook(),
@@ -269,7 +279,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
   };
 
   server = createServer(async (req, res) => {
-    const send = (status: number, type: string, body: string, extra: Record<string, string> = {}) => {
+    const send = (status: number, type: string, body: string, extra: Record<string, string | string[]> = {}) => {
       res.writeHead(status, { "Content-Type": type, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", ...extra });
       res.end(body);
     };
@@ -292,7 +302,17 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
       return send(isLocal || host === publicHost ? 404 : 403, "text/plain", isLocal || host === publicHost ? "Not found" : "Forbidden");
     }
 
-    const secretPage = INSTALL_PAGE_PATHS.includes(url.pathname) || isInstallApiPath(url.pathname) || url.pathname === "/connect" || url.pathname === "/connect.js" || url.pathname === "/api/connect" || url.pathname === "/api/connect/approve";
+    const secretPage =
+      INSTALL_PAGE_PATHS.includes(url.pathname) ||
+      isInstallApiPath(url.pathname) ||
+      url.pathname === "/connect" ||
+      url.pathname === "/connect.js" ||
+      url.pathname === "/claim" ||
+      url.pathname === "/claim.js" ||
+      url.pathname === "/api/connect" ||
+      url.pathname === "/api/connect/approve" ||
+      url.pathname === "/api/connect/deny" ||
+      url.pathname === "/api/claim";
     if (secretPage) {
       if (hosted) {
         const proto = forwardedProto(req);
@@ -311,14 +331,40 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         const page = `<!doctype html><meta name="referrer" content="no-referrer"><title>Tour Core</title><p>${result.ok ? "Google Drive is connected to Tour Core. You can return to the chat." : "Google Drive wasn't connected. Return to the chat and try again."}</p>`;
         return send(result.ok ? 200 : 400, "text/html; charset=utf-8", page, { "Referrer-Policy": "no-referrer" });
       }
-      if (url.pathname === "/api/connect" || url.pathname === "/api/connect/approve") {
+      if (url.pathname === "/api/claim") {
+        if (!hosted) return send(404, "text/plain", "Not found");
+        if (method !== "POST") return send(404, "text/plain", "Not found");
+        if (!String(req.headers["content-type"] ?? "").startsWith("application/json")) {
+          return send(415, "application/json", JSON.stringify({ error: { message: "Unsupported request." } }));
+        }
+        const claimBody = JSON.parse((await readRaw(req)).toString("utf8") || "{}");
+        const claimed = handleHostedClaim(installation, method, claimBody);
+        return send(claimed.status, "application/json; charset=utf-8", JSON.stringify(claimed.json), {
+          "Referrer-Policy": "no-referrer",
+          ...(claimed.cookies?.length ? { "Set-Cookie": claimed.cookies } : {}),
+        });
+      }
+      if (url.pathname === "/api/connect" || url.pathname === "/api/connect/approve" || url.pathname === "/api/connect/deny") {
         if (!hosted) return send(404, "text/plain", "Not found");
         if (method === "POST" && !String(req.headers["content-type"] ?? "").startsWith("application/json")) {
           return send(415, "application/json", JSON.stringify({ error: { message: "Unsupported request." } }));
         }
         const body = method === "POST" ? JSON.parse((await readRaw(req)).toString("utf8") || "{}") : undefined;
-        const result = handleHostedApproval(installation, oauth, method, url.pathname, req.headers, body);
+        const result = handleHostedApproval(installation, oauth, method, url, req.headers, body);
         return send(result.status, "application/json; charset=utf-8", JSON.stringify(result.json), { "Referrer-Policy": "no-referrer" });
+      }
+      if (hosted && method === "GET" && url.pathname === "/connect") {
+        const requestId = url.searchParams.get("request") ?? "";
+        if (!OAUTH_REQUEST_ID.test(requestId)) {
+          const missing = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><title>Connect to Tour Core</title><link rel="stylesheet" href="/styles.css"></head><body><main><h1>Connect to Tour Core</h1><p>This approval link is missing or was opened without its code.</p></main></body></html>`;
+          return send(400, "text/html; charset=utf-8", missing, { "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY" });
+        }
+        return send(200, "text/html; charset=utf-8", readFileSync(new URL("connect.html", PUBLIC_DIR), "utf8"), { "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY" });
+      }
+      if (hosted && method === "GET" && (url.pathname === "/claim" || url.pathname === "/claim.js")) {
+        const file = url.pathname === "/claim" ? "claim.html" : "claim.js";
+        const type = url.pathname === "/claim" ? "text/html; charset=utf-8" : JS;
+        return send(200, type, readFileSync(new URL(file, PUBLIC_DIR), "utf8"), { "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY" });
       }
       if (isInstallApiPath(url.pathname)) {
         if (method === "POST" && !String(req.headers["content-type"] ?? "").startsWith("application/json")) {
@@ -516,6 +562,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     if (process.env.TOURCORE_HOSTED_TENANT_RESET === HOSTED_TENANT_RESET && clearHostedTenant(installation.files)) {
       console.log("  Cleared the hosted demo operator binding. Tour records were not deleted. Remove TOURCORE_HOSTED_TENANT_RESET after this deploy.");
     }
+    if (process.env.TOURCORE_HOSTED_OWNER_RESET === HOSTED_OWNER_RESET) {
+      resetHostedOwner(installation);
+      console.log("  Cleared the hosted owner and prepared a new one-time claim. Run npm run hosted:owner-claim. Remove TOURCORE_HOSTED_OWNER_RESET after this deploy.");
+    }
   }
   if (manifest.options?.grokLegacyOAuthCompat && process.env.TOURCORE_GROK_LEGACY_OAUTH_COMPAT === undefined) process.env.TOURCORE_GROK_LEGACY_OAUTH_COMPAT = "true";
   const hostedConfig = hosted ? validateHostedConfig(process.env, manifest.publicBaseUrl) : undefined;
@@ -540,7 +590,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   writeRuntimeInfo(workspace.root, { pid: process.pid, port, url: url.replace(/\/$/, ""), startedAt: new Date().toISOString() });
   if (hosted && hostedConfig && hostedConfig.ok) {
     const storage = manifest.storageProvider === "GOOGLE_DRIVE" ? "Google Drive (canonical)" : "local demo (not canonical)";
-    const lines = startupLines({ version: TOURCORE_VERSION, mode: deployment.mode, port, host: hostedConfig.host, publicHost: new URL(hostedConfig.publicUrl).host, storage }).map((line) => redactSecrets(line, secretValues()));
+    const pendingClaim = pendingClaimSecret(installation);
+    const lines = startupLines({ version: TOURCORE_VERSION, mode: deployment.mode, port, host: hostedConfig.host, publicHost: new URL(hostedConfig.publicUrl).host, storage }).map((line) => redactSecrets(line, [...secretValues(), ...(pendingClaim ? [pendingClaim] : [])]));
     console.log("");
     for (const line of lines) console.log(`  ${line}`);
     console.log("  Hosted Railway P0 is single-tenant. Marketplace publication requires tenant isolation.");
@@ -564,8 +615,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const mcpUrl = sb.publicBaseUrl ? `${new URL(sb.publicBaseUrl).origin}${MCP_PATH}` : "(set PUBLIC_BASE_URL so Grok Bot can reach it)";
   const mode = mcpAuthModeFromEnv();
   if (mode === "oauth") {
-    console.log(hosted ? `  Grok connects at ${mcpUrl}. The operator approves on the hosted approval page.\n` : `  Grok Bot connector:   ${mcpUrl} (OAuth: approve connections at ${url}grok)\n`);
-    if (grokLegacyCompatFromEnv()) {
+    console.log(hosted ? `  Grok connects at ${mcpUrl}. The owner approves with Continue to approval, then Allow.\n` : `  Grok Bot connector:   ${mcpUrl} (OAuth: approve connections at ${url}grok)\n`);
+    const compatLine = hostedCompatStartupLine(process.env, deployment.mode);
+    if (compatLine) console.log(`  ${redactSecrets(compatLine, [...secretValues(), ...(hosted && pendingClaimSecret(installation) ? [pendingClaimSecret(installation)!] : [])])}\n`);
+    else if (grokLegacyCompatFromEnv()) {
       console.log("  WARNING: Grok legacy OAuth compatibility is enabled for this P0 demo. Tour Core is");
       console.log("  accepting Cursor's known legacy OAuth callback. Disable this mode when Grok");
       console.log("  no longer requires it. (TOURCORE_GROK_LEGACY_OAUTH_COMPAT=true in .env)\n");
