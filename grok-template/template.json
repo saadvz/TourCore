@@ -1,8 +1,9 @@
 {
   "name": "Tour Core",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "distribution": "team",
   "profile": "bot-profile.md",
+  "hostedTourCoreUrl": "",
   "repository": {
     "url": "https://github.com/saadvz/TourCore",
     "fallback": "TOURCORE_REPO_URL",
@@ -31,8 +32,15 @@
       "name": "Tour Core",
       "type": "custom-mcp-server",
       "doc": "integrations/tour-core-tools.md",
-      "url": "PUBLIC_BASE_URL/mcp",
-      "auth": "OAuth 2.1 (discovered from PUBLIC_BASE_URL/mcp; the owner approves on the Tour Core computer)",
+      "url": "hostedTourCoreUrl/mcp when that setting is set; otherwise the open-source PUBLIC_BASE_URL/mcp",
+      "auth": "OAuth 2.1 discovered from the Tour Core service. The owner approves in the browser. Grok cannot approve itself.",
+      "travelsWithTemplate": false
+    },
+    {
+      "name": "Google Drive",
+      "type": "first-party-connector",
+      "doc": "integrations/google-drive.md",
+      "auth": "Each installer connects their own Google account. Grok's built-in Drive connector is for browsing. Tour Core's own Google approval lets it save records when Grok is not in the chat.",
       "travelsWithTemplate": false
     }
   ],
@@ -47,8 +55,8 @@
   ],
   "marketplace": {
     "ships": ["Bot instructions and profile", "the seven Tour Core skills", "the Tour Core Operator Updates routine definition", "integration references for the Tour Core tools"],
-    "neverShips": ["installation webhook secrets", "Sendblue secrets", "Tour Core OAuth tokens", "live property data"],
-    "activation": "A new user installs their own Tour Core, approves the Tour Core connection, and activates and authorizes the routine connection once, on Tour Core's secure setup page."
+    "neverShips": ["installation webhook secrets", "Sendblue secrets", "Tour Core OAuth tokens", "Google OAuth tokens", "a Google account", "a Tour Core Drive folder id", "live property data"],
+    "activation": "A new user connects to the hosted Tour Core service named by hostedTourCoreUrl, approves the connection, and authorizes tour updates once. They do not create a Railway project. The open-source path remains for operators who run their own copy."
   },
   "suggestedPrompts": ["Set up Tour Core", "Set up a property", "Run a practice tour", "Show active tours", "Show exceptions", "Export today's audit"],
   "neverIncluded": [
@@ -56,6 +64,8 @@
     "webhook secret",
     "Grok Routine webhook address or key",
     "Tour Core connector token or OAuth tokens",
+    "Google OAuth access or refresh tokens",
+    "a Google account or Tour Core Drive folder id from another installation",
     "Durin credentials",
     "visitor names, phone numbers or other PII",
     "live property records",

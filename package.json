@@ -28,6 +28,8 @@
     "install:link": "tsx src/install/serviceCli.ts link",
     "demo": "tsx src/demo/run.ts",
     "demo:auto": "tsx src/demo/run.ts --auto",
+    "build": "node scripts/build.mjs",
+    "start": "node dist/server.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
@@ -40,8 +42,12 @@
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.3",
+    "esbuild": "^0.25.11",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.2"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

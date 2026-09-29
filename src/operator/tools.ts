@@ -16,6 +16,8 @@ import type { DryTourCheck, DryTourResult } from "../setup/dryTour";
 import type { ReadinessResult } from "../setup/readiness";
 import { createPropertySetup, modeSentence, SetupInputError, tourableSpacesQuestion, type SetupDraft } from "../setup/setupActions";
 import { statusLabel, type PublishBlocker } from "../setup/workspace";
+import { rememberCanonical, revertCanonical } from "../storage/canonical";
+import { StorageConflictError, StorageUnavailableError, StoreBusyError } from "../storage/errors";
 import { exportAudit, parseLocalDate } from "./auditExport";
 import type { ConfirmationBook } from "./confirmations";
 import {
@@ -1157,8 +1159,20 @@ export async function callOperatorTool(ctx: ToolContext, name: string, args: unk
     const fields = [...new Set(parsed.error.issues.map((i) => (i.code === "unrecognized_keys" ? `unexpected ${i.keys.join(", ")}` : i.path.join(".") || "input")))];
     return { ok: false, error: `That request doesn't fit ${def.name} (${fields.join("; ")}). Nothing was changed.` };
   }
+  const drive = ctx.installation?.records.provider() === "GOOGLE_DRIVE_READY";
+  const before = drive && def.kind !== "read" ? rememberCanonical(ctx.services.workspace.root) : undefined;
   try {
-    return { ok: true, result: redactSecrets(await def.run(ctx, parsed.data as never)) as Record<string, unknown> };
+    const result = redactSecrets(await def.run(ctx, parsed.data as never)) as Record<string, unknown>;
+    if (before) {
+      try {
+        await ctx.installation!.records.commitLocal();
+      } catch (err) {
+        revertCanonical(ctx.services.workspace.root, before);
+        if (err instanceof StorageUnavailableError || err instanceof StorageConflictError || err instanceof StoreBusyError) return { ok: false, error: err.message };
+        return { ok: false, error: "I couldn't save that to Google Drive, so it isn't confirmed." };
+      }
+    }
+    return { ok: true, result };
   } catch (err) {
     if (err instanceof SetupInputError || err instanceof TourCoreError || err instanceof UnavailableModeError) return { ok: false, error: err.message };
     if (err instanceof InvalidTransitionError) return { ok: false, error: "That tour can't make that change from where it is now. Nothing was changed." };

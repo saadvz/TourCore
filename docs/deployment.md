@@ -5,23 +5,39 @@ installer and the operator console. This document describes how a Tour Core
 installation is deployed, set up and kept running, and what is (and isn't)
 automated.
 
+The normal product path is one Tour Core service we host. A landlord does not
+create a Railway project. Grok connects to that service. Google Drive, when
+connected, remains the canonical record store. Railway's disk is not.
+
 ```
-Grok cloud computer
-   │  installs / runs / repairs  (npm run bootstrap:grok, npm run service:*)
+Grok Marketplace Bot
+   │  connects to the already-hosted service (hostedTourCoreUrl)
+   ▼
+Tour Core on Railway (HOSTED_RAILWAY_P0, one demo installation)
+   ├── https://<railway-domain>
+   │     ├── /mcp                  Grok's OAuth connection
+   │     ├── /webhooks/sendblue    visitor texts
+   │     ├── /verify/<token>       identity form
+   │     ├── /google/oauth/callback
+   │     ├── /connect              operator approves Grok
+   │     ├── /install              short-lived secure setup
+   │     └── /healthz              Railway deploy check
+   ├── volume at /data             secrets and rebuildable cache only
+   └── Google Drive                canonical properties, tours, outbox
+```
+
+Open-source and local development still use a process on a computer, with a
+quick tunnel only for `GROK_MANAGED_P0`:
+
+```
+Grok cloud computer or a developer machine
    ▼
 Tour Core runtime (src/web/server.ts)
-   ├── public https address (Cloudflare quick tunnel in P0, or a stable URL)
-   │     ├── /mcp                 Grok's OAuth MCP connection (operator + installation tools)
-   │     ├── /webhooks/sendblue   visitor texts
-   │     ├── /verify/<token>      identity form
-   │     └── /healthz             "is this Tour Core?" (fingerprint only)
+   ├── public https address (quick tunnel, or PUBLIC_BASE_URL)
+   │     ├── /mcp  /webhooks/sendblue  /verify/<token>  /healthz
    ├── this computer only
-   │     ├── /install             secure setup page (credentials go in here)
-   │     ├── /grok                approve Grok's connection
-   │     └── /                    browser operator app
-   ├── outbound → Grok Routine webhook (operator updates, durable outbox)
-   ▼
-Tour Core state, policy and audit (tourcore-data/)
+   │     ├── /install   /grok   /
+   └── tourcore-data/
 ```
 
 No Tour Core business logic lives in Grok's instructions. Grok decides nothing
@@ -32,17 +48,23 @@ installation status and follows its next step.
 
 | Mode | Where Tour Core runs | Who sets it up | Public address |
 | --- | --- | --- | --- |
+| `HOSTED_RAILWAY_P0` | One Railway service we run | The distributor, once. Landlords never see Railway | `https://${RAILWAY_PUBLIC_DOMAIN}`, or an explicit `PUBLIC_BASE_URL` |
 | `GROK_MANAGED_P0` | Grok's own cloud computer | Grok, with `npm run bootstrap:grok` | Cloudflare quick tunnel (temporary) or a URL Grok is given |
-| `SELF_HOSTED` | A server you run, at a stable https URL | You deploy; Grok only connects and configures | `PUBLIC_BASE_URL` |
+| `SELF_HOSTED` | A server the operator runs | They deploy; Grok only connects and configures | `PUBLIC_BASE_URL` |
 | `LOCAL_DEVELOPER` (default) | A developer's computer | `npm run setup`, `.env`, a manual tunnel | `PUBLIC_BASE_URL` |
 
 The mode is resolved from `TOURCORE_DEPLOYMENT_MODE`, then the installation
 manifest, then `LOCAL_DEVELOPER` (`src/install/deployment.ts`). It changes how
 Tour Core is installed and reached, never a tour, policy or access rule.
 
-**`GROK_MANAGED_P0` is a demo deployment.** Tour Core runs as long as Grok's
-cloud computer does, and the quick-tunnel address changes whenever the tunnel
-restarts. It is not the recommended way to host Tour Core around the clock.
+**`HOSTED_RAILWAY_P0` is a single-tenant demo host.** One installation, one
+operator client. A second account is refused. Marketplace publication
+requires tenant isolation (`docs/hosted-multitenancy.md`). It is not
+production multi-tenant hosting.
+
+**`GROK_MANAGED_P0` is the open-source demo on Grok's computer.** It runs
+only while that computer does, and the quick-tunnel address changes whenever
+the tunnel restarts. It is not the recommended hosted demo.
 
 ## The installation manifest
 
@@ -75,10 +97,16 @@ addresses live next to it in `install/state.json`, also non-secret.
 ## SecretStore
 
 `src/install/secretStore.ts`. `LocalSecretStore` is one JSON file,
-`tourcore-data/install/secrets.json`, inside the git-ignored data folder,
-written atomically and `chmod 600` where the file system supports it. It holds
-the Sendblue API key, API secret and incoming-webhook secret, the texting
-number, and the Grok Routine's webhook address and key.
+`install/secrets.json`, inside the data folder, written atomically and
+`chmod 600` where the file system supports it. It holds the Sendblue API key,
+API secret and incoming-webhook secret, the texting number, the Grok
+Routine's webhook address and key, and Google OAuth tokens.
+
+On `HOSTED_RAILWAY_P0` that folder is the Railway volume (`TOURCORE_HOME`,
+normally `/data`, the same path as `RAILWAY_VOLUME_MOUNT_PATH`). The
+container filesystem is wiped on every deploy. The volume holds secrets,
+OAuth grants, setup sessions, and a cache that Drive can rebuild. Canonical
+business records are not stored there, and secrets are not written to Drive.
 
 - Written only by the secure setup page (or created by Tour Core itself, for
   the Sendblue webhook secret).
@@ -94,26 +122,36 @@ number, and the Grok Routine's webhook address and key.
 
 ## Secure setup
 
-The secure setup page is served by Tour Core on the Tour Core computer:
-`http://localhost:4321/install` (`src/web/public/install.*`,
-`src/install/secureSetup.ts`). In a Grok-managed install that's Grok's cloud
-computer: Grok opens it in its cloud browser and asks the operator to take
-over the browser for the typing. Values go straight to Tour Core; Grok never
-sees them.
+The secure setup page is `src/web/public/install.*` and
+`src/install/secureSetup.ts`. On a Grok-managed or developer computer it is
+`http://localhost:4321/install` and answers only for a local browser. On
+`HOSTED_RAILWAY_P0` the same page is served over the Railway https address,
+with a short-lived session, a CSRF secret in the URL fragment, and a small
+write budget. An anonymous visitor cannot save credentials. Values are
+write-only. Grok's secure secret input remains the preferred way to fill the
+form.
 
-Protection:
+Protection on a local or Grok-managed computer:
 
 - The server listens on `127.0.0.1` only.
 - `/install` and `/api/install/*` answer only for a local `Host` **and** only
   when the request carries no proxy or tunnel headers (`cf-connecting-ip`,
   `cf-ray`, `x-forwarded-for`, `forwarded`, ...). Through the public address
   they're "Not found", whatever `Host` is sent.
-- Every API call needs a live **setup session** (30 minutes). Sessions are
-  minted by something already on the Tour Core computer: the bootstrap, the
-  server at startup, `npm run install:link`, or the `get_secure_setup_url`
-  tool. The token travels in the URL fragment (never sent as part of a URL or
-  a `Referer`) and back in a custom header, which a cross-site page can't set.
-  Only its hash is stored. Expired sessions are rejected.
+- A setup session lasts 30 minutes.
+
+On `HOSTED_RAILWAY_P0` the process listens on `0.0.0.0` and Railway's proxy
+headers are expected. `/install` is reachable only over https, and only with
+the session. The session lasts 15 minutes, carries a CSRF secret, and can
+save credentials a few times. `POST` from another site's `Origin` is refused.
+Grok's MCP bearer token cannot approve the connection; the operator uses
+`/connect` and the pairing code.
+
+Shared rules:
+
+- The token travels in the URL fragment (never a query string, never a
+  `Referer`) and comes back in a custom header. Only its hash is stored.
+  Expired sessions are rejected.
 - A session can write provider settings. Nothing can read a credential back.
 
 ## Installation status and next step
@@ -125,7 +163,7 @@ them, with the requirement Tour Core (not the agent) assigns:
 | --- | --- | --- |
 | `RUNTIME`, `PUBLIC_ENDPOINT` | required before property | BOOTSTRAP |
 | `GROK_OPERATOR` | required before property | CONNECT |
-| `VISITOR_MESSAGING`, `STORAGE` (LOCAL_DEMO accepted), `ACCESS` (DURIN_DEMO accepted) | required before property | INFRASTRUCTURE |
+| `VISITOR_MESSAGING`, `STORAGE` (Google Drive recommended; `LOCAL_DEMO` only if declined, or on a developer computer), `ACCESS` (DURIN_DEMO accepted) | required before property | INFRASTRUCTURE |
 | `PROPERTY` | required to publish | PROPERTY |
 | `OPERATOR_ALERTS` ("Tour updates") | recommended; offered only after the property is saved (`set_notification_preferences`); can be declined (`skip_optional_setup`); chosen but not connected → `CONNECT_OPERATOR_ALERTS` | PROPERTY |
 | `READINESS`, `PRACTICE_TOUR` | required to publish; run automatically | VALIDATE |
@@ -211,8 +249,13 @@ startup. There is no supervisor process: no systemd, no containers.
 ## Public address
 
 `src/install/publicEndpoint.ts`: `PublicEndpointProvider` with
-`ManualPublicEndpointProvider` and `CloudflareQuickTunnelProvider`. Tour Core's
-business logic only ever sees the resulting address.
+`ManualPublicEndpointProvider`, `CloudflareQuickTunnelProvider`, and
+`RailwayPublicEndpointProvider`. Tour Core's business logic only ever sees
+the resulting address. `HOSTED_RAILWAY_P0` uses the Railway provider only.
+It never installs or starts cloudflared, and it rejects a trycloudflare
+address. The hostname comes from `RAILWAY_PUBLIC_DOMAIN` (Railway injects
+it; Tour Core does not call the Railway API). An explicit https
+`PUBLIC_BASE_URL` overrides it.
 
 The quick tunnel provider finds `cloudflared` on `PATH` or in
 `tourcore-data/bin`; on Linux it downloads Cloudflare's official static binary
@@ -373,33 +416,88 @@ policy decisions (property facts, publishing). This is not zero-click setup.
 - The secure setup session token is visible to Grok (it opens the link). It
   lets a browser on that computer write settings, never read them.
 
-## Path to stable self-hosted production
+## Hosted Railway (distributor, once)
 
-1. Deploy the same repository to a stable host with a stable https URL (a VM,
-   a container host, Railway, Render, Fly, Cloudflare, ...). Nothing in Tour
-   Core's business logic changes.
-2. Set `TOURCORE_DEPLOYMENT_MODE=SELF_HOSTED` and `PUBLIC_BASE_URL`; run
-   `npm run bootstrap:self-hosted` (or the host's own process manager with
-   `npm run setup -- --no-open`).
-3. Connect Grok over OAuth and say "Set up Tour Core": the same installation
-   status, secure setup page (reached through the host's own local access,
-   e.g. an SSH tunnel) and skill apply.
-4. Longer term, Grok's cloud computer deploys Tour Core to such a host through
-   a new `PublicEndpointProvider`/deployment target instead of being the server
-   itself.
+Checked against Railway's docs as of September 2026:
 
-## Remaining work before Google Drive
+- GitHub-linked services redeploy when the connected branch changes
+  ([GitHub autodeploys](https://docs.railway.com/deployments/github-autodeploys)).
+  This repository's branch is `master`.
+- Railway injects `PORT`. The process must listen on `0.0.0.0:$PORT`
+  ([public networking](https://docs.railway.com/networking/public-networking)).
+  `HOSTED_RAILWAY_P0` does not fall back to 4321.
+- `RAILWAY_PUBLIC_DOMAIN` is the hostname, for example
+  `example.up.railway.app`, not a URL
+  ([variables reference](https://docs.railway.com/variables/reference)).
+- A healthcheck path is configured in the service settings. Railway calls it
+  with `Host: healthcheck.railway.app` and waits for any `2xx` before
+  shifting traffic. It does not poll the path after the deploy is live
+  ([healthchecks](https://docs.railway.com/deployments/healthchecks)).
+  Tour Core's path is `/healthz`. It does not read Drive on each call.
+- A volume is mounted at container start, not during build. `RAILWAY_VOLUME_MOUNT_PATH`
+  is set automatically ([volumes](https://docs.railway.com/volumes)).
+  Redeploying a service with a volume has a short period where the old and
+  new containers are not both mounted. A deploy does not delete Drive records.
+- `railway.json` / `railway.toml` are deprecated. New services cannot opt
+  into them, and they stop being read on 2026-12-01
+  ([config as code](https://docs.railway.com/config-as-code)). The desired
+  service is `.railway/railway.ts` (Infrastructure as Code). Applying it is
+  `railway config plan` then `railway config apply`. A git push deploys the
+  connected branch; it does not apply that file by itself. Railpack builds
+  the Node app from `npm run build` and `npm start`. No Docker image.
 
-- A `StorageProvider` seam for canonical tour records (today `TourCoreStore`
-  plus the workspace folder) that a Drive adapter can implement, with an OAuth
-  flow started from the secure setup page (a new secure setup step; no
-  credentials through Grok).
-- A `STORAGE` component that reports `GOOGLE_DRIVE` and offers the move as an
-  `optionalActions` entry while it's `LOCAL_DEMO` (the status model already has
-  the slot; the skill already offers optional actions).
-- Migration/export of existing local records into Drive, and where runtime
-  documents (sessions, outbox, OAuth) live once records are remote.
-- Drive-scoped consent and revocation handling in the readiness check.
+Production start is `npm run build` then `npm start` (`node dist/server.js`).
+`npm run setup` stays the developer process. The hosted process exits if
+required configuration is malformed, or if Google Drive is canonical and
+cannot be opened. It does not silently switch to a writable local store.
+
+### One-time admin setup
+
+1. Push Tour Core to GitHub (`saadvz/TourCore`, branch `master`).
+2. Create one Railway project and one service from that repo. Do not create
+   a project per landlord.
+3. Generate a Railway public domain (Settings, Networking). Leave
+   `RAILWAY_PUBLIC_DOMAIN` as the variable Railway provides.
+4. Add a volume mounted at `/data`.
+5. Set `TOURCORE_DEPLOYMENT_MODE=HOSTED_RAILWAY_P0` and `TOURCORE_HOME=/data`.
+   Set the distributor Google OAuth client id and secret. Do not commit them.
+6. Set the healthcheck path to `/healthz`.
+7. Register `https://<that-domain>/google/oauth/callback` on the Tour Core
+   Google web client.
+8. Put the same `https://<that-domain>` into `hostedTourCoreUrl` in
+   `grok-template/template.json` for the bot you publish. The skills read
+   that field. They do not contain a Railway hostname.
+9. Open `/healthz` and confirm `service` is `tour-core`.
+
+To clear the demo operator binding without deleting Drive records, set
+`TOURCORE_HOSTED_TENANT_RESET=reset-demo-tenant` for one deploy, then remove
+it.
+
+### Moving the quick-tunnel demo
+
+If Google Drive is already canonical: deploy Railway, connect the same Drive
+account, take over the writer lease if the old computer still holds it,
+restore, enter hosted secrets, let `test_visitor_messaging` point Sendblue at
+the Railway webhook, and connect Grok to `https://<domain>/mcp`. Retire the
+Grok-computer process so it cannot keep the lease. Do not recreate the
+property by hand.
+
+If records are still only on the Grok computer, migrate them to Drive first.
+The hosted service will not treat that disk as canonical.
+
+### What a fresh Grok user does
+
+They say "Set up Tour Core." Grok connects to `hostedTourCoreUrl`, the
+operator approves, then Sendblue, Google Drive, the property, updates,
+readiness, a practice tour, and publish. The conversation does not mention
+Railway, ports, tunnels, or `/mcp`.
+
+## Self-hosted
+
+An operator who runs their own copy sets `TOURCORE_DEPLOYMENT_MODE=SELF_HOSTED`
+and `PUBLIC_BASE_URL`, then starts Tour Core with their process manager
+(`npm run build && npm start`, or `npm run bootstrap:self-hosted`). Grok
+connects. That path is not the Marketplace experience.
 
 ## Technical debt
 

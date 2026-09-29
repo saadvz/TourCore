@@ -51,6 +51,9 @@ export interface McpOAuthOptions {
   now?: () => number;
   fetchClientMetadata?: (clientId: string) => Promise<unknown>;
   onApprovalRequest?: (request: ApprovalRequestView) => void;
+  tenantPolicy?: (clientId: string) => { allowed: true } | { allowed: false; message: string };
+  onOwnerApproved?: (clientId: string) => void;
+  approvalPlace?: () => "computer" | "hosted";
   log?: (line: string) => void;
   /** Passed to the SDK handlers' express-rate-limit. False turns it off (tests only). */
   rateLimit?: false;
@@ -116,6 +119,9 @@ export class McpOAuth {
       now: options.now,
       fetchClientMetadata: options.fetchClientMetadata,
       onApprovalRequest: options.onApprovalRequest,
+      tenantPolicy: options.tenantPolicy,
+      onOwnerApproved: options.onOwnerApproved,
+      approvalPlace: options.approvalPlace,
       log: this.log,
     });
     this.local = this.buildLocal();

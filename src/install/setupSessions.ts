@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { RuntimeStore } from "../storage/runtimeStore";
 
 /**
@@ -15,16 +15,34 @@ import type { RuntimeStore } from "../storage/runtimeStore";
  */
 
 export const SETUP_SESSION_HEADER = "x-tourcore-setup-session";
+export const SETUP_CSRF_HEADER = "x-tourcore-csrf";
 export const DEFAULT_SETUP_SESSION_MINUTES = 30;
+/** Hosted setup links are shorter and can save credentials only a few times. */
+export const HOSTED_SETUP_SESSION_MINUTES = 15;
+export const HOSTED_SETUP_WRITES = 6;
 const MAX_LIVE = 20;
 
 interface StoredSession {
   schemaVersion: 1;
   createdAt: number;
   expiresAt: number;
+  csrfHash?: string;
+  writesRemaining?: number;
+}
+
+export interface SetupMintOptions {
+  /** Required on every hosted write. Omitted for the local-computer page. */
+  csrf?: boolean;
+  /** Hosted sessions stop accepting writes after this many successful saves. */
+  writes?: number;
 }
 
 const keyFor = (token: string) => `ss_${createHash("sha256").update(token, "utf8").digest("hex").slice(0, 40)}`;
+const hash = (value: string) => createHash("sha256").update(value, "utf8").digest();
+const same = (given: Buffer, expectedHex: string) => {
+  const expected = Buffer.from(expectedHex, "hex");
+  return given.length === expected.length && timingSafeEqual(given, expected);
+};
 
 export class SetupSessions {
   constructor(
@@ -32,17 +50,24 @@ export class SetupSessions {
     private readonly now: () => number = Date.now,
   ) {}
 
-  mint(minutes = DEFAULT_SETUP_SESSION_MINUTES): { token: string; expiresAt: number } {
+  mint(minutes = DEFAULT_SETUP_SESSION_MINUTES, options: SetupMintOptions = {}): { token: string; expiresAt: number; csrf?: string } {
     this.prune();
     const token = randomBytes(24).toString("base64url");
+    const csrf = options.csrf ? randomBytes(24).toString("base64url") : undefined;
     const createdAt = this.now();
     const expiresAt = createdAt + minutes * 60_000;
-    this.store.put("setup-sessions", keyFor(token), { schemaVersion: 1, createdAt, expiresAt } satisfies StoredSession);
-    return { token, expiresAt };
+    this.store.put("setup-sessions", keyFor(token), {
+      schemaVersion: 1,
+      createdAt,
+      expiresAt,
+      ...(csrf ? { csrfHash: hash(csrf).toString("hex") } : {}),
+      ...(options.writes !== undefined ? { writesRemaining: options.writes } : {}),
+    } satisfies StoredSession);
+    return { token, expiresAt, ...(csrf ? { csrf } : {}) };
   }
 
   /** Valid and not expired. An expired session is removed on sight. */
-  check(token: string | undefined): { ok: true; expiresAt: number } | { ok: false; reason: "missing" | "unknown" | "expired" } {
+  check(token: string | undefined, csrf?: string): { ok: true; expiresAt: number; csrfOk?: boolean; writesRemaining?: number } | { ok: false; reason: "missing" | "unknown" | "expired" | "spent" } {
     if (!token || !/^[A-Za-z0-9_-]{20,80}$/.test(token)) return { ok: false, reason: token ? "unknown" : "missing" };
     const key = keyFor(token);
     let stored: StoredSession | undefined;
@@ -56,7 +81,27 @@ export class SetupSessions {
       this.store.delete("setup-sessions", key);
       return { ok: false, reason: "expired" };
     }
-    return { ok: true, expiresAt: stored.expiresAt };
+    if (stored.writesRemaining !== undefined && stored.writesRemaining <= 0) {
+      this.store.delete("setup-sessions", key);
+      return { ok: false, reason: "spent" };
+    }
+    const csrfOk = !!stored.csrfHash && !!csrf && same(hash(csrf), stored.csrfHash);
+    return {
+      ok: true,
+      expiresAt: stored.expiresAt,
+      ...(stored.csrfHash ? { csrfOk } : {}),
+      ...(stored.writesRemaining !== undefined ? { writesRemaining: stored.writesRemaining } : {}),
+    };
+  }
+
+  /** Counts one hosted write. A session with no write budget is unchanged. */
+  noteWrite(token: string): void {
+    if (!/^[A-Za-z0-9_-]{20,80}$/.test(token)) return;
+    const key = keyFor(token);
+    const stored = this.store.get<StoredSession>("setup-sessions", key);
+    if (!stored || stored.writesRemaining === undefined) return;
+    const writesRemaining = stored.writesRemaining - 1;
+    this.store.put("setup-sessions", key, { ...stored, writesRemaining });
   }
 
   end(token: string): void {

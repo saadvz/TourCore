@@ -106,7 +106,10 @@ describe("real fresh-install sequence (HTTP, MCP, secure setup page)", () => {
     expect((await page("GET", "status", session)).body.sections).toEqual({ visitorMessaging: true, operatorAlerts: false });
     expect((await page("POST", "visitor-messaging", session, { apiKey: SB_KEY, apiSecret: SB_SECRET, fromNumber: LINE })).body.ok).toBe(true);
 
-    // Sendblue READY and no property: the ONLY next step is the first property. Alerts aren't offered.
+    const drive = await nextStep();
+    expect(drive.action).toBe("CONNECT_GOOGLE_DRIVE");
+    await grok("use_local_demo_storage");
+    // Sendblue READY, records kept locally, and no property: the ONLY next step is the first property. Alerts aren't offered.
     const property = await nextStep();
     expect(property).toMatchObject({ component: "PROPERTY", action: "SET_UP_PROPERTY", operatorMessage: "Everything needed to start is connected and tested. Would you like to add your first property?" });
     const status = await grok("get_installation_status");
@@ -145,7 +148,7 @@ describe("real fresh-install sequence (HTTP, MCP, secure setup page)", () => {
     await grok("skip_optional_setup", { component: "OPERATOR_ALERTS" });
     expect((await nextStep()).action).toBe("RUN_READINESS");
 
-    expect(sequence).toEqual(["CHECK_PUBLIC_ENDPOINT", "CONNECT_GROK", "CONNECT_VISITOR_MESSAGING", "SET_UP_PROPERTY", "FINISH_PROPERTY_SETUP", "OFFER_OPERATOR_ALERTS", "RUN_READINESS"]);
+    expect(sequence).toEqual(["CHECK_PUBLIC_ENDPOINT", "CONNECT_GROK", "CONNECT_VISITOR_MESSAGING", "CONNECT_GOOGLE_DRIVE", "SET_UP_PROPERTY", "FINISH_PROPERTY_SETUP", "OFFER_OPERATOR_ALERTS", "RUN_READINESS"]);
   });
 
   it("the installation context file lists components in Tour Core's actual order and never calls alerts required", () => {

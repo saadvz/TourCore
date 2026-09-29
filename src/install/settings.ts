@@ -1,4 +1,5 @@
 import type { DeploymentMode } from "./deployment";
+import { resolveHostedPublicUrl } from "./hostedRuntime";
 import type { InstallationManifest } from "./manifest";
 import { OTHER_SECRET_ENV, SECRET_SETTING_NAMES, SETTING_NAMES, type SecretStore } from "./secretStore";
 
@@ -11,6 +12,8 @@ import { OTHER_SECRET_ENV, SECRET_SETTING_NAMES, SETTING_NAMES, type SecretStore
  *   3. the public address from the installation manifest, used when no
  *      PUBLIC_BASE_URL is set, and always in GROK_MANAGED_P0 (where the tunnel,
  *      not a person, owns the address).
+ *   HOSTED_RAILWAY_P0 derives https://RAILWAY_PUBLIC_DOMAIN when
+ *   PUBLIC_BASE_URL is unset, and refuses a quick-tunnel address.
  *
  * Adapters keep reading familiar names (SENDBLUE_API_API_KEY, PUBLIC_BASE_URL,
  * ...), so LOCAL_DEVELOPER setups with only a `.env` behave exactly as before.
@@ -48,7 +51,11 @@ export function effectiveEnv(env: NodeJS.ProcessEnv = process.env, from: Setting
   }
   const manifest = from.manifest ? safe(from.manifest) : undefined;
   const mode = from.deploymentMode?.() ?? manifest?.deploymentMode;
-  if (manifest?.publicBaseUrl && (mode === "GROK_MANAGED_P0" || !out.PUBLIC_BASE_URL?.trim())) out.PUBLIC_BASE_URL = manifest.publicBaseUrl;
+  if (mode === "HOSTED_RAILWAY_P0") {
+    const resolved = resolveHostedPublicUrl(out, manifest?.publicBaseUrl);
+    if (resolved.url) out.PUBLIC_BASE_URL = resolved.url;
+    else delete out.PUBLIC_BASE_URL;
+  } else if (manifest?.publicBaseUrl && (mode === "GROK_MANAGED_P0" || !out.PUBLIC_BASE_URL?.trim())) out.PUBLIC_BASE_URL = manifest.publicBaseUrl;
   return out;
 }
 

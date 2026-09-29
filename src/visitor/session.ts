@@ -11,6 +11,7 @@ import { visitorTourOf } from "./identity";
 import { TourCore, type AccessOutcome, type InboundMeta } from "../core/TourCore";
 import type { TourSlot } from "../core/schedule";
 import { createDurin, createStore, createVerificationProvider } from "../createTourCore";
+import type { TourCoreStore } from "../storage/Store";
 import { UNNAMED_VISITOR, type Reservation, type TourTimeRequest } from "../domain/model";
 import { countDurinCalls, type CountingDurin } from "../durin/countingDurin";
 import type { DeliveryReceipt, MessagingAdapter, OutgoingMessage } from "../messaging/Messenger";
@@ -19,7 +20,6 @@ import { SetupInputError } from "../setup/setupActions";
 import type { ConversationItem, TourRecord } from "../setup/workspace";
 import type { ExportBundle } from "../export/exportBundle";
 import type { Awaiting, IntentInterpretation } from "../intent";
-import type { TourCoreStore } from "../storage/Store";
 import type { VerificationLinks } from "./verificationLinks";
 
 /**
@@ -112,6 +112,10 @@ export interface VisitorSessionOptions {
   /** Kept when a conversation is restored from its saved records. */
   id?: string;
   startedAt?: Date;
+  /** Canonical tour records. Defaults to the in-memory store (local demo). */
+  store?: TourCoreStore;
+  storageRead?: () => "live" | "cached" | "stale";
+  beforeAccess?: () => Promise<void>;
 }
 
 /** How one typed message was read, kept on the visitor's line for developer details. Never model reasoning. */
@@ -166,7 +170,7 @@ export class VisitorDemoSession {
     this.id = options.id ?? `vd_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
     this.clock = new DemoClock(options.realNow);
     this.startedAt = options.startedAt ?? this.clock.now();
-    this.store = createStore(config);
+    this.store = options.store ?? createStore(config);
     this.transport = options.transport ?? new WebVisitorTransport();
     this.kind = options.kind ?? "visitor-demo";
     this.durin = countDurinCalls(createDurin(config, this.clock, (line) => this.durinLines.push(line.trim())));
@@ -181,6 +185,8 @@ export class VisitorDemoSession {
       verification: createVerificationProvider(config),
       correlationId: this.id,
       approvedContent: () => this.contentSource?.(),
+      storageRead: options.storageRead,
+      beforeAccess: options.beforeAccess,
       ...(links ? { verificationLink: ({ reservation, prospect }) => links.issue({ sessionId: this.id, reservationId: reservation.id, phone: prospect.phone }) } : {}),
     });
   }

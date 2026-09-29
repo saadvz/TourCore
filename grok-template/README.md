@@ -1,19 +1,19 @@
-# Tour Core Grok Bot template (v0.4.0)
+# Tour Core Grok Bot template (v0.5.0)
 
 Everything that belongs in the **Tour Core** Grok Bot team template, versioned
 with the code. Grok Bot is the installer and operator console; Tour Core stays
 the system of record and policy authority; Durin carries out approved access.
 
 ```
-Operator ─► Tour Core Bot (Grok Bot) ─► Tour Core tools (/mcp) ─► Tour Core ─► Durin
-               │                          same actions as the browser app and terminal
-               └─ its own cloud computer: installs, starts and repairs Tour Core
-                  (npm run bootstrap:grok), opens Tour Core's secure setup page
+Operator ─► Tour Core Bot ─► hosted Tour Core (hostedTourCoreUrl) ─► Durin
+               │
+               └─ open-source fallback: clone and run Tour Core on the
+                  Bot's computer (npm run bootstrap:grok)
 ```
 
-First run: the operator says **"Set up Tour Core."** The Bot installs Tour
-Core on its own cloud computer and walks the operator through only the steps
-that need a person. See [`docs/deployment.md`](../docs/deployment.md).
+First run: the operator says **"Set up Tour Core."** When `hostedTourCoreUrl`
+is set, the Bot connects to that service. It does not ask the operator to
+host anything. See [`docs/deployment.md`](../docs/deployment.md).
 
 Two ways in:
 

@@ -1,23 +1,29 @@
 ---
 name: install-tour-core
-description: Install and run Tour Core on your own cloud computer, then take the operator from a blank setup to a published property by following Tour Core's own next steps, asking only for approvals, logins, credentials through a secure handoff, property information and decisions.
+description: Connect an operator to Tour Core and take them from a blank setup to a published property by following Tour Core's own next steps, asking only for approvals, logins, credentials through a secure handoff, property information and decisions.
 when-to-use: "set up Tour Core", "install Tour Core", "what's left to set up", "check my Tour Core installation", "is Tour Core running", "restart Tour Core", "test alerts", "connect texting", "turn on alerts", "tour updates", "change my notifications"
-allowed-tools: get_installation_status get_next_installation_step get_installation_component skip_optional_setup check_runtime_health check_public_endpoint test_visitor_messaging get_notification_preferences set_notification_preferences get_operator_update test_operator_alerts test_storage test_access get_secure_setup_url
+allowed-tools: get_installation_status get_next_installation_step get_installation_component skip_optional_setup check_runtime_health check_public_endpoint test_visitor_messaging get_notification_preferences set_notification_preferences get_operator_update test_operator_alerts test_storage test_access get_secure_setup_url get_storage_status get_storage_location begin_google_drive_connect finish_google_drive_setup use_local_demo_storage prepare_storage_migration migrate_storage_to_google_drive verify_storage_migration activate_google_drive_storage discover_storage takeover_storage_writer disconnect_google_drive_storage
 argument-hint: "[what to check or connect]"
 user-invocable: true
 metadata:
   author: Tour Core
-  short-description: Grok-managed install and guided onboarding, in Tour Core's order
-  version: "0.4.0"
+  short-description: Connect to Tour Core and guide onboarding, in Tour Core's order
+  version: "0.6.0"
 ---
 
 # Install Tour Core
 
-You do the technical work yourself on your own cloud computer. Tour Core
-decides the order of everything that follows and tells you, one step at a
-time, through `get_next_installation_step`. The operator only approves,
-signs in, gives credentials through a secure handoff, gives property
-information and makes decisions.
+Tour Core decides the order and tells you, one step at a time, through
+`get_next_installation_step`. The operator only approves, signs in, gives
+credentials through a secure handoff, gives property information and makes
+decisions.
+
+The hosted product is the normal path. `hostedTourCoreUrl` in
+`grok-template/template.json` is the one address for that service. When it
+is set, connect there. Do not clone a runtime, do not start a local service,
+and do not open a tunnel. The operator does not create a hosting account.
+The open-source path, used only when that address is empty, still clones the
+repository onto your computer.
 
 ## When to use
 
@@ -51,6 +57,7 @@ secure secret input and filled into Tour Core's form, not in chat.
 | --- | --- |
 | "Your MCP server is https://.../mcp and exposes 42 tools." | "Tour Core is installed and running." |
 | "The Cloudflare quick tunnel is connected." | "Tour Core has a secure public connection." |
+| "Deploy Railway and set PORT." | "Tour Core is online." |
 | "The OAuth MCP connector needs approval." | "I need your approval to connect to Tour Core." |
 | "I'm creating a Grok Routine with an authenticated trigger." | "I'm setting up your tour updates." |
 | "Everything runs in demo mode." | "Visitor texting is live. Door access is still in demo mode, so no physical locks will open." |
@@ -68,12 +75,20 @@ Seven phases, always forward. Go back only when Tour Core's status changes
 
 ### Phase 1: Bootstrap (you, alone)
 
-Say: "I'll handle the technical setup and only ask when I need a login,
-approval or decision."
-
 If Tour Core's tools already answer, call `get_installation_status` and go to
-the phase it reports: don't reinstall a running Tour Core. Otherwise, on your
-cloud computer:
+the phase it reports: don't reinstall a running Tour Core.
+
+When `hostedTourCoreUrl` is an https address, say:
+
+> I'll connect you to Tour Core and only ask when I need an approval, sign-in or decision.
+
+Connect to that service. Skip cloning, skip a local Node process, and skip
+any tunnel. Never tell the operator that Tour Core only works while your
+computer is on. Then go to Phase 2.
+
+Otherwise this is the open-source path. Say: "I'll handle the technical setup
+and only ask when I need a login, approval or decision." On your cloud
+computer:
 
 1. Clone into `tour-core` unless that folder already exists (it holds the
    records). Load the other skills from its `.grok/skills/`.
@@ -87,8 +102,12 @@ cloud computer:
 ### Phase 2: Connect (the operator approves, once)
 
 For a fresh install there's no existing Tour Core connection. Add Tour Core
-yourself using the details the bootstrap printed, open Tour Core's approval
-screen in your cloud browser, and hand control to the operator:
+yourself. On the hosted product, open the approval page Tour Core gives you
+and hand it to the operator:
+
+> Tour Core is online. I need your approval to connect. Check that the codes match and click Allow.
+
+On the open-source path, open the approval screen in your cloud browser:
 
 > Tour Core is installed and running. I need your approval to connect to it.
 > I've opened the approval screen. Check that the codes match and click Allow.
@@ -131,8 +150,29 @@ By `performedBy`:
 - **OPERATOR_DECISION**: ask `operatorMessage` and wait for the answer.
 
 Visitor texting is part of this phase: it's connected and tested before any
-property. Tour records ("stored with this Tour Core installation") and the
-access system ("Demo") need nothing from the operator.
+property. Then Tour Core recommends Google Drive, before the first property.
+The access system ("Demo") needs nothing from the operator.
+
+When the next step is Google Drive, say:
+
+> Visitor texting is working. Next I recommend connecting Google Drive so your property and tour records stay with you even if this Tour Core computer changes.
+
+If they say yes:
+
+1. If your built-in Google Drive connector is not connected, connect it the normal way and let them approve Google. Do not ask for a Google password, API key, or client secret.
+2. Call `begin_google_drive_connect`. If your connector is already connected, still do this: Tour Core saves records itself, including when you are not in the chat.
+3. Say:
+
+   > Google Drive is connected to me. Tour Core also needs permission to save its records there directly so tours keep working even when I'm not in this chat. I'll open Google's approval screen for that now.
+
+4. Open `authorizationUrl`. After they approve, call `get_next_installation_step` and finish with the tool it names (`finish_google_drive_setup`).
+5. If `begin_google_drive_connect` says the Google app is not configured, say its summary. Do not ask them to create a Google Cloud project. Offer to keep records on this computer.
+
+If they say no, call `use_local_demo_storage` and say:
+
+> Your records are stored with this demo installation and won't be portable if this Tour Core computer is replaced.
+
+Questions like "Where are my Tour Core records?" use `get_storage_status` and `get_storage_location`. Open or browse the folder with your Google Drive connector. Don't reconstruct bookings from the files when a Tour Core tool can answer.
 
 ### Phase 4: Property
 
@@ -272,7 +312,8 @@ when that fill isn't available), choosing or declining tour updates
 - A person has to act (approval, login, MFA, provider terms, the secure setup
   page): say what to do and wait.
 - A provider account is blocked or refuses the details: say so plainly.
-- Your cloud computer can't run Tour Core: say what's blocking in one sentence.
+- The hosted service can't be reached: say what's blocking in one sentence, without asking the operator to create a hosting account.
+- Your cloud computer can't run the open-source path: say what's blocking in one sentence.
 - A tool refuses or reports an error its next step doesn't resolve.
 - The operator declines a required step.
 
@@ -282,7 +323,8 @@ when that fill isn't available), choosing or declining tour updates
   webhook addresses in chat. If the operator pastes one anyway, don't repeat
   it; tell them to rotate it and use the secure setup page instead.
 - Put credentials in commands, files or tool arguments.
-- Ask the operator to run commands, or to choose the setup order.
+- Ask the operator to run commands, create a hosting account, or choose the setup order.
+- On the hosted product, clone Tour Core as the runtime, start a local service, start a quick tunnel, or say it only works while your computer is on.
 - Offer property setup before Tour Core does, or skip the readiness check or
   practice tour.
 - Claim setup is zero-click. Some steps always need the operator.

@@ -1,4 +1,5 @@
 node_modules/
+dist/
 
 # Runtime records written by setup, demo and practice tours
 tourcore-data/

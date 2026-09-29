@@ -109,7 +109,7 @@ the operator correct it.
     a new property uses it on its own. Don't ask "How do you want to text
     people?". If `get_services` shows the property still on practice texts
     while texting is installed, `set_services` with `messaging: sendblue`
-    yourself. Tour records are stored with this Tour Core installation; don't
+    yourself. Where records live comes from `get_storage_status` (this computer, or Google Drive). Don't
     ask about it.
 11. `review_property_setup` and read its `lines` back as a short list:
 

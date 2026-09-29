@@ -30,6 +30,7 @@ function harness(options: { texting?: boolean } = {}): InstallHarness {
   if (options.texting !== false) {
     h.inst.secrets.set({ SENDBLUE_API_API_KEY: SB_KEY, SENDBLUE_API_API_SECRET: SB_SECRET, SENDBLUE_FROM_NUMBER: "+15550109999" });
     h.inst.files.recordCheck("visitorMessaging", { ok: true, at: now, message: "ok", problems: [], publicBaseUrl: TUNNEL });
+    h.inst.files.writeState({ ...h.inst.files.state(), storage: { mode: "LOCAL_DEMO", phase: "READY", chosenAt: now } });
   }
   return h;
 }
@@ -224,6 +225,7 @@ describe("real visitor texting can't be missed", () => {
     const now = new Date(h.now()).toISOString();
     h.inst.secrets.set({ SENDBLUE_API_API_KEY: SB_KEY, SENDBLUE_API_API_SECRET: SB_SECRET, SENDBLUE_FROM_NUMBER: "+15550109999" });
     h.inst.files.recordCheck("visitorMessaging", { ok: true, at: now, message: "ok", problems: [], publicBaseUrl: TUNNEL });
+    h.inst.files.writeState({ ...h.inst.files.state(), storage: { mode: "LOCAL_DEMO", phase: "READY", chosenAt: now } });
     const s = await h.status();
     expect(s.phase).not.toBe("OPERATE");
     expect(s.nextStep).toMatchObject({ action: "FINISH_PROPERTY_SETUP", performedBy: "GROK", tool: "set_services" });

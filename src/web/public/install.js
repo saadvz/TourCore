@@ -7,9 +7,11 @@
 const root = document.getElementById("install");
 const params = new URLSearchParams(location.hash.slice(1));
 if (params.get("s")) sessionStorage.setItem("tourcore-setup-session", params.get("s"));
+if (params.get("c")) sessionStorage.setItem("tourcore-setup-csrf", params.get("c"));
 const focus = params.get("step");
 if (location.hash) history.replaceState(null, "", location.pathname);
 const session = sessionStorage.getItem("tourcore-setup-session") || "";
+const csrf = sessionStorage.getItem("tourcore-setup-csrf") || "";
 
 function h(tag, attrs = {}, ...kids) {
   const node = document.createElement(tag);
@@ -26,7 +28,7 @@ async function api(method, path, body) {
   const res = await fetch(`/api/install/${path}`, {
     method,
     cache: "no-store",
-    headers: { "X-TourCore-Setup-Session": session, ...(body ? { "Content-Type": "application/json" } : {}) },
+    headers: { "X-TourCore-Setup-Session": session, ...(csrf ? { "X-TourCore-Csrf": csrf } : {}), ...(body ? { "Content-Type": "application/json" } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));

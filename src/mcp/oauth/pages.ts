@@ -34,7 +34,7 @@ ${body}
 </html>
 `;
 
-export function consentPage(p: { requestId: string; matchCode: string; clientName: string; redirectHost: string }): string {
+export function consentPage(p: { requestId: string; matchCode: string; clientName: string; redirectHost: string; hosted?: boolean }): string {
   return shell(
     "Connect to Tour Core",
     `        <h1>Tour Core</h1>
@@ -57,7 +57,7 @@ export function consentPage(p: { requestId: string; matchCode: string; clientNam
         </ul>
         <p class="hint">Publishing, pausing, resuming, revoking tours and changing approved facts still ask you first, every time.</p>
         <div class="card highlight">
-          <p><strong>Approve on the Tour Core computer.</strong> A Tour Core window opens there (or open <em>Connect Grok</em> in Tour Core). Check it shows this code, then choose Allow:</p>
+          <p><strong>${p.hosted ? "Approve in Tour Core." : "Approve on the Tour Core computer."}</strong> ${p.hosted ? "Open Tour Core's approval page, check it shows this code, and click Allow." : "A Tour Core window opens there (or open <em>Connect Grok</em> in Tour Core). Check it shows this code, then choose Allow:"}</p>
           <p class="match-code">${escape(p.matchCode)}</p>
           <p id="oauth-status" class="muted" data-request="${escape(p.requestId)}">Waiting for approval…</p>
         </div>

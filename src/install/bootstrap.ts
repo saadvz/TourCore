@@ -9,7 +9,7 @@ import { checkPublicEndpoint } from "./checks";
 import { DEPLOYMENT_MODE_LABELS, parseDeploymentMode, type DeploymentMode } from "./deployment";
 import { Installation } from "./installation";
 import { canonicalRepoUrl, checkRepositorySource, originUrl } from "./repoSource";
-import { CloudflareQuickTunnelProvider, downloadFile, ManualPublicEndpointProvider, type PublicEndpointProvider } from "./publicEndpoint";
+import { CloudflareQuickTunnelProvider, downloadFile, ManualPublicEndpointProvider, RailwayPublicEndpointProvider, type PublicEndpointProvider } from "./publicEndpoint";
 import { ServiceManager, serviceDir, type ServiceStatus } from "./service";
 import { useSettingsSource } from "./settings";
 import { getInstallationStatus, type InstallationStatus } from "./status";
@@ -170,6 +170,16 @@ export async function runBootstrap(deps: BootstrapDeps, options: BootstrapOption
   return finish(runtime, { createdInstallation: created, localUrl: runtime.localUrl, publicAddressChanged, secureSetupUrl });
 }
 
+/** Which public-address provider a deployment mode may start. Hosted Railway never starts cloudflared. */
+export function selectPublicEndpoint(mode: DeploymentMode, options: { publicUrl?: string; env: () => NodeJS.ProcessEnv; serviceDir: string; binDir: string }): PublicEndpointProvider | undefined {
+  if (mode === "HOSTED_RAILWAY_P0") return new RailwayPublicEndpointProvider(options.env);
+  if (mode === "GROK_MANAGED_P0" && !options.publicUrl) {
+    return new CloudflareQuickTunnelProvider({ serviceDir: options.serviceDir, binDir: options.binDir, download: downloadFile });
+  }
+  if (options.publicUrl || mode !== "LOCAL_DEVELOPER") return new ManualPublicEndpointProvider(() => options.publicUrl);
+  return undefined;
+}
+
 export function printReport(report: BootstrapReport, say: (line?: string) => void = (l = "") => console.log(l ? `  ${l}` : "")): void {
   say();
   say(`Tour Core bootstrap (${DEPLOYMENT_MODE_LABELS[report.deploymentMode]})`);
@@ -200,7 +210,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const value = (name: string) => args.find((a) => a.startsWith(`--${name}=`))?.split("=").slice(1).join("=");
   const parsed = parseDeploymentMode(value("mode") ?? (args.includes("--grok") ? "GROK_MANAGED_P0" : process.env.TOURCORE_DEPLOYMENT_MODE));
   if (parsed && "invalid" in parsed) {
-    console.error(`  Unknown deployment mode "${parsed.invalid}". Use GROK_MANAGED_P0, SELF_HOSTED or LOCAL_DEVELOPER.`);
+    console.error(`  Unknown deployment mode "${parsed.invalid}". Use GROK_MANAGED_P0, SELF_HOSTED, HOSTED_RAILWAY_P0 or LOCAL_DEVELOPER.`);
     process.exit(1);
   }
   const mode: DeploymentMode = parsed?.mode ?? "GROK_MANAGED_P0";
@@ -211,12 +221,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   useSettingsSource(installation.settingsSource());
   const port = Number(value("port") ?? 4321);
   const publicUrl = value("public-url") ?? (process.env.PUBLIC_BASE_URL?.trim() || undefined);
-  const endpoint: PublicEndpointProvider | undefined =
-    mode === "GROK_MANAGED_P0" && !publicUrl
-      ? new CloudflareQuickTunnelProvider({ serviceDir: serviceDir(root), binDir: join(root, "bin"), download: downloadFile })
-      : publicUrl || mode !== "LOCAL_DEVELOPER"
-        ? new ManualPublicEndpointProvider(() => publicUrl)
-        : undefined;
+  const endpoint = selectPublicEndpoint(mode, { publicUrl, env: () => installation.env(), serviceDir: serviceDir(root), binDir: join(root, "bin") });
   const legacyOAuthCompat = args.includes("--strict-oauth") ? false : mode === "GROK_MANAGED_P0" ? true : undefined;
   const report = await runBootstrap(
     {

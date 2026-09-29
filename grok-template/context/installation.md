@@ -15,12 +15,16 @@ Setup is not zero-click. Be clear about which steps need the operator.
 
 ## Deployment modes (for your understanding; don't use these words with the operator)
 
-- **Grok-managed (demo):** Tour Core runs on your cloud computer. It stays up
-  while your computer does. The public address is a temporary tunnel that
-  changes if the tunnel restarts; Tour Core notices and says what needs
-  reconnecting. Good for demos, not 24/7 production.
-- **Self-hosted:** Tour Core already runs at a stable https address. Don't
-  install anything; connect and configure.
+- **Hosted product:** `hostedTourCoreUrl` names one Tour Core service. Connect
+  to it. The operator does not create a hosting account. This demo is one
+  installation; a second landlord is not supported until tenant isolation
+  exists.
+- **Grok-managed (open-source demo):** Tour Core runs on your cloud computer.
+  It stays up while your computer does. The public address is a temporary
+  tunnel that changes if the tunnel restarts; Tour Core notices and says what
+  needs reconnecting.
+- **Self-hosted:** Tour Core already runs at a stable https address the
+  operator runs. Don't install anything; connect and configure.
 - **Developer computer:** a developer runs it locally. Treat it like
   self-hosted.
 
@@ -34,7 +38,7 @@ Always follow `get_next_installation_step`; this table only explains it.
 | PUBLIC_ENDPOINT | "Tour Core has a secure public connection" | before the first property |
 | GROK_OPERATOR | "Grok connection" | before the first property |
 | VISITOR_MESSAGING | "Visitor texting" | before the first property |
-| STORAGE | "Where tour records are kept" (today: with this Tour Core installation) | nothing to do |
+| STORAGE | "Tour records: Stored locally" or "Tour records: Google Drive connected". On a Grok-managed install, offered after visitor texting and before the first property | before the first property. Google Drive is recommended. Local demo is only if they decline, and it is not portable |
 | ACCESS | "Access system: Demo" (later "Access system: Connected"); never name the lock provider | nothing to do |
 | PROPERTY | the first property: its address, property type, and each unit's bedrooms, bathrooms, rent and availability; it uses the installed visitor texting automatically | to publish |
 | OPERATOR_ALERTS | "Tour updates": bookings, tour starts, completions and anything that needs your attention | recommended, offered only after the first property is set up; the operator may say no |

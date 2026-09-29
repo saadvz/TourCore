@@ -4,7 +4,8 @@ import type { OperatorServices } from "../operator/services";
 import { testOperatorAlerts, testVisitorMessaging } from "./checks";
 import type { Installation } from "./installation";
 import { secretValues } from "./settings";
-import { SETUP_SESSION_HEADER } from "./setupSessions";
+import { isHostedRailway } from "./deployment";
+import { SETUP_CSRF_HEADER, SETUP_SESSION_HEADER } from "./setupSessions";
 import { getInstallationStatus } from "./status";
 
 /**
@@ -62,14 +63,35 @@ export function parseRoutineSnippet(text: string): { webhookUrl: string; key: st
 
 const fail = (status: number, message: string): SecureSetupResult => ({ status, json: { ok: false, error: { message } } });
 
+const headerValue = (headers: Record<string, string | string[] | undefined>, name: string) => {
+  const value = headers[name];
+  return Array.isArray(value) ? value[0] : value;
+};
+
 export async function handleSecureSetupApi(ctx: SecureSetupContext, method: string, path: string, headers: Record<string, string | string[] | undefined>, body: unknown): Promise<SecureSetupResult> {
   const inst = ctx.installation;
-  const header = headers[SETUP_SESSION_HEADER];
-  const session = inst.sessions.check(Array.isArray(header) ? header[0] : header);
+  const token = headerValue(headers, SETUP_SESSION_HEADER);
+  const session = inst.sessions.check(token, headerValue(headers, SETUP_CSRF_HEADER));
   if (!session.ok) {
-    return fail(401, session.reason === "expired" ? "This secure setup link has expired. Ask Grok for a new one." : "This page needs a secure setup link from Grok (or `npm run install:link` on this computer).");
+    const message =
+      session.reason === "expired"
+        ? "This secure setup link has expired. Ask Grok for a new one."
+        : session.reason === "spent"
+          ? "This secure setup link has already been used. Ask Grok for a new one."
+          : "This page needs a secure setup link from Grok (or `npm run install:link` on this computer).";
+    return fail(401, message);
+  }
+  const hosted = isHostedRailway(inst.deploymentMode());
+  if (hosted && method === "POST" && !session.csrfOk) return fail(403, "This setup page couldn't be verified. Ask for a new secure setup link.");
+  if (hosted && method === "POST") {
+    const origin = headerValue(headers, "origin");
+    const base = inst.publicBaseUrl();
+    if (origin && base && origin !== new URL(base).origin) return fail(403, "This setup page couldn't be verified. Ask for a new secure setup link.");
   }
   const at = () => new Date(inst.now());
+  const wrote = () => {
+    if (token) inst.sessions.noteWrite(token);
+  };
   const route = path.replace(/^\/api\/install\/?/, "");
   const reply = (status: number, json: Record<string, unknown>) => ({ status, json: withoutSecrets(inst, { ...json, session: { expiresAt: new Date(session.expiresAt).toISOString() } }) });
 
@@ -104,12 +126,14 @@ export async function handleSecureSetupApi(ctx: SecureSetupContext, method: stri
     const number = fromNumber ? toE164(fromNumber) : undefined;
     if (fromNumber && !number) return fail(400, "Enter the texting number in full, like +15551234567.");
     inst.secrets.set({ SENDBLUE_API_API_KEY: apiKey, SENDBLUE_API_API_SECRET: apiSecret, SENDBLUE_FROM_NUMBER: number }, at());
+    wrote();
     ctx.resetMessaging?.();
     const result = await testVisitorMessaging(inst, { onConnected: ctx.resetMessaging });
     return reply(200, { ok: result.ok, saved: true, message: result.message, checks: result.checks, incomingMessages: result.incomingMessages });
   }
 
   if (method === "POST" && route === "visitor-messaging/test") {
+    wrote();
     const result = await testVisitorMessaging(inst, { onConnected: ctx.resetMessaging });
     return reply(200, { ok: result.ok, message: result.message, checks: result.checks, incomingMessages: result.incomingMessages });
   }
@@ -128,12 +152,14 @@ export async function handleSecureSetupApi(ctx: SecureSetupContext, method: stri
     if (url.protocol !== "https:") return fail(400, "The webhook address must start with https://.");
     if (values.key.length < 8) return fail(400, "That key looks too short.");
     inst.secrets.set({ TOURCORE_GROK_ROUTINE_URL: url.toString(), TOURCORE_GROK_ROUTINE_KEY: values.key }, at());
+    wrote();
     inst.files.update({ operatorNotificationProvider: "GROK_ROUTINE" }, at());
     const result = await testOperatorAlerts(inst);
     return reply(200, { ok: result.ok, saved: true, message: result.message });
   }
 
   if (method === "POST" && route === "operator-alerts/test") {
+    wrote();
     const result = await testOperatorAlerts(inst);
     return reply(200, { ok: result.ok, message: result.message });
   }

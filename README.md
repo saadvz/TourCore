@@ -17,10 +17,26 @@ calls Tour Core's typed tools; Tour Core keeps every record and makes every acce
 
 ## Getting started: pick a path
 
-### Path A: Grok-managed demo (recommended for P0)
+### Path A: Hosted Tour Core (the product path)
 
-1. Install (copy) the **Tour Core** Grok Bot template ([`grok-template/`](grok-template/)).
+Grok connects to the Tour Core service named by `hostedTourCoreUrl` in
+[`grok-template/template.json`](grok-template/template.json). The distributor
+sets that address once. A landlord does not create a Railway project, pick a
+domain, or set a port.
+
+1. Install the **Tour Core** Grok Bot template ([`grok-template/`](grok-template/)).
 2. Say **"Set up Tour Core."**
+
+The open-source fallback is still a blank Grok Bot, one prompt, and
+[`GROK_BOOTSTRAP.md`](GROK_BOOTSTRAP.md). That path clones and runs Tour Core.
+It is not the normal landlord experience. The one-time Railway setup for our
+demo host is in [`docs/deployment.md`](docs/deployment.md).
+
+### Open-source computer demo
+
+Use this only for the open-source computer demo (`GROK_MANAGED_P0`). It stops
+when that computer stops, and its public address changes when the tunnel
+restarts.
 
 Development / open-source fallback, with no template and no attachments: give a blank Grok Bot one prompt with
 this repository's URL and ask it to clone the repository and follow [`GROK_BOOTSTRAP.md`](GROK_BOOTSTRAP.md) (full

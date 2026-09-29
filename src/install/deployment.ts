@@ -1,19 +1,22 @@
 /**
  * How this Tour Core is installed and who runs it.
  *
- *  LOCAL_DEVELOPER  a developer's own computer: `npm run setup`, a local
- *                   browser, a manual tunnel and `.env`. The default.
- *  GROK_MANAGED_P0  installed and run by Grok on its own cloud computer
- *                   (`npm run bootstrap:grok`). A demo deployment, not 24/7
- *                   production hosting.
- *  SELF_HOSTED      already running at a stable https address; Grok only
- *                   connects over OAuth MCP and drives configuration.
+ *  LOCAL_DEVELOPER    a developer's own computer: `npm run setup`, a local
+ *                     browser, a manual tunnel and `.env`. The default.
+ *  GROK_MANAGED_P0    installed and run by Grok on its own cloud computer
+ *                     (`npm run bootstrap:grok`). A temporary demo, not the
+ *                     hosted product.
+ *  SELF_HOSTED        already running at a stable https address the operator
+ *                     runs; Grok only connects and drives configuration.
+ *  HOSTED_RAILWAY_P0  one Tour Core service we run on Railway for the demo.
+ *                     Landlords do not create Railway projects. Single-tenant:
+ *                     Marketplace publication requires tenant isolation.
  *
  * The mode changes how the installation is set up and reached, never a tour,
  * policy or access rule.
  */
 
-export const DEPLOYMENT_MODES = ["LOCAL_DEVELOPER", "GROK_MANAGED_P0", "SELF_HOSTED"] as const;
+export const DEPLOYMENT_MODES = ["LOCAL_DEVELOPER", "GROK_MANAGED_P0", "SELF_HOSTED", "HOSTED_RAILWAY_P0"] as const;
 export type DeploymentMode = (typeof DEPLOYMENT_MODES)[number];
 
 const ALIASES: Record<string, DeploymentMode> = {
@@ -25,6 +28,10 @@ const ALIASES: Record<string, DeploymentMode> = {
   grok: "GROK_MANAGED_P0",
   self_hosted: "SELF_HOSTED",
   selfhosted: "SELF_HOSTED",
+  hosted_railway_p0: "HOSTED_RAILWAY_P0",
+  hosted_railway: "HOSTED_RAILWAY_P0",
+  railway: "HOSTED_RAILWAY_P0",
+  hosted: "HOSTED_RAILWAY_P0",
 };
 
 export type ParsedDeploymentMode = { mode: DeploymentMode } | { invalid: string };
@@ -54,4 +61,7 @@ export const DEPLOYMENT_MODE_LABELS: Record<DeploymentMode, string> = {
   LOCAL_DEVELOPER: "Developer computer",
   GROK_MANAGED_P0: "Grok's cloud computer (demo)",
   SELF_HOSTED: "Self-hosted",
+  HOSTED_RAILWAY_P0: "Hosted Railway demo (single-tenant)",
 };
+
+export const isHostedRailway = (mode: DeploymentMode) => mode === "HOSTED_RAILWAY_P0";

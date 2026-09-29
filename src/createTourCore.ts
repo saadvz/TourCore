@@ -27,7 +27,7 @@ type Log = (line: string) => void;
 
 export function createStore(config: TourCoreConfig): TourCoreStore {
   if (config.storageMode === "memory") return new InMemoryStore();
-  throw new UnavailableModeError("STORAGE_UNAVAILABLE", "Keeping records in Google Drive isn't available yet. Choose \"On this computer\" for now.");
+  throw new UnavailableModeError("STORAGE_UNAVAILABLE", "Google Drive is connected for the whole installation, not as a per-property mode. Tour records follow the installation storage setting.");
 }
 
 export function createMessenger(config: TourCoreConfig, log?: Log, options: { ledger?: MessagingLedger } = {}): Messenger {

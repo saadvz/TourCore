@@ -75,6 +75,18 @@ again with the code after the operator's yes.
 | `test_storage` | change | Saves and reads back a test record where tour records are kept |
 | `test_access` | read | Checks the access system answers ("Access system: Demo") |
 | `get_secure_setup_url` | change | A short-lived link to Tour Core's secure setup page. Fill it with a secure secret input; hand over the browser only if that fill isn't available |
+| `get_storage_status` | read | Whether tour records are on this computer or in Google Drive |
+| `get_storage_location` | read | The Tour Core folder name and Google Drive id, for opening it. No tokens |
+| `begin_google_drive_connect` | change | Starts Tour Core's own Google approval after Grok's Drive connector, or explains that the shared Google app is not configured yet |
+| `finish_google_drive_setup` | change | Creates the Tour Core folder and makes Google Drive canonical after approval |
+| `use_local_demo_storage` | change | Keeps records on this computer after the operator declines Drive. Says they are not portable |
+| `prepare_storage_migration` | change | Counts local records to copy. Does not switch the canonical store |
+| `migrate_storage_to_google_drive` | change | Copies records to Drive. Safe to repeat. Does not delete local records |
+| `verify_storage_migration` | read | Checks the Drive copy against local records |
+| `activate_google_drive_storage` | consequential | Makes Google Drive canonical only after the copy checked out. Asks once |
+| `discover_storage` | read | Lists existing Tour Core folders in the connected Google account |
+| `takeover_storage_writer` | consequential | Restores a Drive folder onto this computer. Asks before taking over another writer |
+| `disconnect_google_drive_storage` | consequential | Disconnects Drive after confirmation. Can move back to this computer, connect another Drive, or stay. Does not delete the folder |
 
 There is intentionally no tool to open, unlock or grant a door, mint access,
 change the door-access mode, or read or write raw files. There is also no

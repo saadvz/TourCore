@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { join } from "node:path";
-import { createLiveMessagingTransport } from "../createTourCore";
+import { createLiveMessagingTransport, createStore } from "../createTourCore";
 import { MessagingLedger } from "../messaging/ledger";
 import { SENDBLUE_WEBHOOK_PATH, sendblueRuntime } from "../messaging/sendblue/runtime";
 import { handleSendblueWebhook } from "../messaging/sendblue/webhook";
@@ -22,12 +22,15 @@ import { adoptLegacyLine, MessagingConversations } from "../visitor/messagingRou
 import { VerificationLinks } from "../visitor/verificationLinks";
 import { OperatorUpdates } from "../alerts/operatorUpdates";
 import { HEALTH_PATH, publicHealth, runtimeHealth } from "../install/checks";
-import { resolveDeploymentMode } from "../install/deployment";
-import { Installation } from "../install/installation";
+import { isHostedRailway, resolveDeploymentMode } from "../install/deployment";
+import { handleHostedApproval } from "../install/hostedApproval";
+import { RAILWAY_HEALTHCHECK_HOST, redactSecrets, startupLines, validateHostedConfig } from "../install/hostedRuntime";
+import { Installation, TOURCORE_VERSION } from "../install/installation";
+import { bindHostedTenant, clearHostedTenant, hostedTenantDecision, HOSTED_TENANT_RESET } from "../install/tenant";
 import { installedMessaging } from "../install/status";
 import { handleSecureSetupApi, INSTALL_PAGE_PATHS, isInstallApiPath, PROXY_HEADERS } from "../install/secureSetup";
 import { clearRuntimeInfo, writeRuntimeInfo } from "../install/service";
-import { useSettingsSource } from "../install/settings";
+import { secretValues, useSettingsSource } from "../install/settings";
 import { handleApi } from "./api";
 import { loadLocalEnv } from "./env";
 
@@ -43,6 +46,8 @@ const STATIC: Record<string, { file: string; type: string }> = {
   "/verify.js": { file: "verify.js", type: JS },
   "/grok": { file: "grok.html", type: "text/html; charset=utf-8" },
   "/grok.js": { file: "grok.js", type: JS },
+  "/connect": { file: "connect.html", type: "text/html; charset=utf-8" },
+  "/connect.js": { file: "connect.js", type: JS },
   "/oauth.js": { file: "oauth.js", type: JS },
   "/install": { file: "install.html", type: "text/html; charset=utf-8" },
   "/install.js": { file: "install.js", type: JS },
@@ -86,6 +91,7 @@ export interface TourCoreServer extends Server {
     alerts: OperatorUpdates;
     /** Resolves once every alert scan and delivery started so far has finished. */
     settled(): Promise<void>;
+    storageReady: Promise<{ ok: boolean; summary: string }>;
   };
 }
 
@@ -99,14 +105,19 @@ export const operatorTokenFromEnv = () => process.env.TOURCORE_OPERATOR_TOKEN?.t
  * mode, the OAuth endpoints. Never the browser operator app, and never the
  * page where the owner approves a connection.
  */
-function publicRouteAllowed(method: string, path: string, oauth: boolean): boolean {
+function publicRouteAllowed(method: string, path: string, oauth: boolean, hosted: boolean): boolean {
   if (path === MCP_PATH) return true;
   if (method === "GET" && path === HEALTH_PATH) return true;
+  if (method === "GET" && path === "/google/oauth/callback") return true;
   if (oauth && (isOAuthPublicPath(path, MCP_PATH) || (method === "GET" && path === "/oauth.js"))) return true;
   if (method === "POST" && path === SENDBLUE_WEBHOOK_PATH) return true;
   if (method === "GET" && (/^\/verify\/[A-Za-z0-9_-]+$/.test(path) || path === "/verify.js" || path === "/styles.css")) return true;
+  if (hosted && method === "GET" && (path === "/connect" || path === "/connect.js" || path === "/install" || path === "/install.js" || path === "/styles.css")) return true;
+  if (hosted && (path === "/api/connect" || path === "/api/connect/approve" || isInstallApiPath(path))) return true;
   return /^\/api\/verify\/[A-Za-z0-9_-]+$/.test(path) && (method === "GET" || method === "POST");
 }
+
+const forwardedProto = (req: IncomingMessage) => String(req.headers["x-forwarded-proto"] ?? "").split(",")[0]?.trim().toLowerCase();
 
 /**
  * The local setup app plus the two things a real phone needs: the Sendblue
@@ -158,15 +169,21 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
     interpreter: options.interpreter ?? createIntentInterpreter({ log }),
     log,
     onSaved: (session) => afterSave(session.propertyId),
+    storeFor: (config) => installation.records.wrapStore(createStore(config)),
+    storageRead: () => installation.records.storageRead(),
+    beforeAccess: () => installation.records.beforeAccess(),
   });
-  const restored = conversations
+  const restored = installation.records
+    .warm()
+    .catch((err) => log(`Couldn't open Google Drive: ${err instanceof Error ? err.message : "unknown error"}`))
+    .then(() => conversations
     .restoreSaved()
     .then((n) => {
       const needsAttention = conversations.attentionCount;
       if (n) log(`Picked up ${n} text-message tour${n === 1 ? "" : "s"} where ${n === 1 ? "it" : "they"} left off.`);
       if (needsAttention) log(`${needsAttention} text-message tour${needsAttention === 1 ? "" : "s"} couldn't be restored safely and need${needsAttention === 1 ? "s" : ""} attention.`);
     })
-    .catch((err) => log(`Couldn't restore earlier text-message tours: ${err instanceof Error ? err.message : "unknown error"}`));
+    .catch((err) => log(`Couldn't restore earlier text-message tours: ${err instanceof Error ? err.message : "unknown error"}`)));
   // First start with alerts: issues that already exist are recorded, not announced. Then retry anything left pending before a restart.
   alertWork = restored.then(async () => {
     try {
@@ -200,6 +217,15 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
   let server: Server;
   const approvalPage = () => `${tools.localUrl?.() ?? "http://localhost:4321"}/grok`;
   let lastApprovalWindow = 0;
+  const hostedMode = () => isHostedRailway(installation.deploymentMode());
+  let storageGate: { settled: boolean; ok: boolean; summary: string } = { settled: !hostedMode(), ok: true, summary: "local" };
+  const storageReady = (async () => {
+    if (!hostedMode()) return storageGate;
+    const result = await installation.records.resumeCanonical();
+    storageGate = { settled: true, ok: result.ok, summary: result.summary };
+    if (!result.ok) log(result.summary);
+    return storageGate;
+  })();
   const oauth =
     authMode === "oauth"
       ? new McpOAuth({
@@ -212,8 +238,15 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           redirectPolicy: () => redirectPolicyFromEnv(),
           now: options.authNow,
           fetchClientMetadata: options.fetchClientMetadata,
+          tenantPolicy: (clientId) => (hostedMode() ? hostedTenantDecision(installation.files.state(), clientId) : { allowed: true }),
+          onOwnerApproved: (clientId) => {
+            if (hostedMode()) bindHostedTenant(installation.files, clientId, new Date(installation.now()));
+          },
+          approvalPlace: () => (hostedMode() ? "hosted" : "computer"),
           onApprovalRequest: (request) => {
-            log(`${request.clientName} is asking to connect to Tour Core (code ${request.matchCode}). Approve or deny it at ${approvalPage()}`);
+            log(`${request.clientName} is asking to connect to Tour Core (code ${request.matchCode}).`);
+            if (hostedMode()) return;
+            log(`Approve or deny it at ${approvalPage()}`);
             // Anyone with the tunnel URL can ask; one window at a time is enough, the page lists every request.
             if (request.createdAt - lastApprovalWindow < 20_000) return;
             lastApprovalWindow = request.createdAt;
@@ -236,7 +269,6 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
   };
 
   server = createServer(async (req, res) => {
-    await restored;
     const send = (status: number, type: string, body: string, extra: Record<string, string> = {}) => {
       res.writeHead(status, { "Content-Type": type, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", ...extra });
       res.end(body);
@@ -250,18 +282,43 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
     const url = new URL(req.url ?? "/", "http://localhost");
     const method = req.method ?? "GET";
     const isLocal = LOCAL_HOSTS.includes(host);
-    if (!isLocal && !(publicHost && host === publicHost && publicRouteAllowed(method, url.pathname, !!oauth))) {
+    const hosted = hostedMode();
+    const railwayHealth = host === RAILWAY_HEALTHCHECK_HOST && method === "GET" && url.pathname === HEALTH_PATH;
+    if (method === "GET" && url.pathname === HEALTH_PATH && (isLocal || railwayHealth || (publicHost && host === publicHost))) {
+      if (hosted && (!storageGate.settled || !storageGate.ok)) return send(503, "application/json; charset=utf-8", JSON.stringify({ ok: false, service: "tour-core" }));
+      return send(200, "application/json; charset=utf-8", JSON.stringify(isLocal ? { ...publicHealth(installation), ...runtimeHealth(installation) } : publicHealth(installation)));
+    }
+    if (!isLocal && !(publicHost && host === publicHost && publicRouteAllowed(method, url.pathname, !!oauth, hosted))) {
       return send(isLocal || host === publicHost ? 404 : 403, "text/plain", isLocal || host === publicHost ? "Not found" : "Forbidden");
     }
 
-    // Secure setup: this computer's own browser only. Anything relayed by a proxy or tunnel is refused, whatever its Host.
-    if (INSTALL_PAGE_PATHS.includes(url.pathname) || isInstallApiPath(url.pathname)) {
-      if (!isLocal || PROXY_HEADERS.some((h) => req.headers[h] !== undefined)) return send(404, "text/plain", "Not found");
+    const secretPage = INSTALL_PAGE_PATHS.includes(url.pathname) || isInstallApiPath(url.pathname) || url.pathname === "/connect" || url.pathname === "/connect.js" || url.pathname === "/api/connect" || url.pathname === "/api/connect/approve";
+    if (secretPage) {
+      if (hosted) {
+        const proto = forwardedProto(req);
+        if (proto !== "https") return send(404, "text/plain", "Not found");
+      } else if (url.pathname !== "/connect" && url.pathname !== "/connect.js" && !isLocal) {
+        return send(404, "text/plain", "Not found");
+      } else if (!hosted && (INSTALL_PAGE_PATHS.includes(url.pathname) || isInstallApiPath(url.pathname)) && (!isLocal || PROXY_HEADERS.some((h) => req.headers[h] !== undefined))) {
+        return send(404, "text/plain", "Not found");
+      }
     }
 
+    await restored;
     try {
-      if (method === "GET" && url.pathname === HEALTH_PATH) {
-        return send(200, "application/json; charset=utf-8", JSON.stringify(isLocal ? { ...publicHealth(installation), ...runtimeHealth(installation) } : publicHealth(installation)));
+      if (method === "GET" && url.pathname === "/google/oauth/callback") {
+        const result = await installation.records.completeCallback(url.searchParams);
+        const page = `<!doctype html><meta name="referrer" content="no-referrer"><title>Tour Core</title><p>${result.ok ? "Google Drive is connected to Tour Core. You can return to the chat." : "Google Drive wasn't connected. Return to the chat and try again."}</p>`;
+        return send(result.ok ? 200 : 400, "text/html; charset=utf-8", page, { "Referrer-Policy": "no-referrer" });
+      }
+      if (url.pathname === "/api/connect" || url.pathname === "/api/connect/approve") {
+        if (!hosted) return send(404, "text/plain", "Not found");
+        if (method === "POST" && !String(req.headers["content-type"] ?? "").startsWith("application/json")) {
+          return send(415, "application/json", JSON.stringify({ error: { message: "Unsupported request." } }));
+        }
+        const body = method === "POST" ? JSON.parse((await readRaw(req)).toString("utf8") || "{}") : undefined;
+        const result = handleHostedApproval(installation, oauth, method, url.pathname, req.headers, body);
+        return send(result.status, "application/json; charset=utf-8", JSON.stringify(result.json), { "Referrer-Policy": "no-referrer" });
       }
       if (isInstallApiPath(url.pathname)) {
         if (method === "POST" && !String(req.headers["content-type"] ?? "").startsWith("application/json")) {
@@ -359,6 +416,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           await seen;
         } while (seen !== alertWork);
       },
+      storageReady,
     },
   });
 }
@@ -379,10 +437,10 @@ function readRaw(req: IncomingMessage): Promise<Buffer> {
   });
 }
 
-function listen(server: Server, port: number): Promise<number> {
+function listen(server: Server, port: number, host: string): Promise<number> {
   return new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(port, "127.0.0.1", () => {
+    server.listen(port, host, () => {
       server.off("error", reject);
       const address = server.address();
       resolve(typeof address === "object" && address ? address.port : port);
@@ -402,12 +460,14 @@ function openBrowser(url: string): void {
   }
 }
 
-export async function startSetupServer(options: SetupServerOptions & { port?: number; open?: boolean } = {}): Promise<{ server: TourCoreServer; url: string }> {
+export async function startSetupServer(options: SetupServerOptions & { port?: number; host?: string; open?: boolean } = {}): Promise<{ server: TourCoreServer; url: string }> {
   const server = createSetupServer(options);
+  const host = options.host ?? "127.0.0.1";
   const first = options.port ?? 4321;
-  for (let port = first; port < first + 20; port++) {
+  const attempts = host === "0.0.0.0" ? 1 : 20;
+  for (let offset = 0; offset < attempts; offset++) {
     try {
-      const actual = await listen(server, port);
+      const actual = await listen(server, first + offset, host);
       const url = `http://localhost:${actual}/`;
       if (options.open) openBrowser(url);
       return { server, url };
@@ -424,7 +484,17 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   // PowerShell drops the "--" in `npm run setup -- --dev`, so npm keeps the flag and exposes it as npm_config_dev.
   const dev = args.includes("--dev") || process.env.npm_config_dev === "true";
   const portArg = args.find((a) => a.startsWith("--port="));
-  const open = !args.includes("--no-open") && !process.env.CI;
+  const preview = resolveDeploymentMode(process.env);
+  const hosted = isHostedRailway(preview.mode);
+  if (hosted) {
+    const config = validateHostedConfig(process.env);
+    if (!config.ok) {
+      for (const problem of config.problems) console.error(`  ${redactSecrets(problem, secretValues())}`);
+      process.exit(1);
+    }
+    if (!process.env.TOURCORE_HOME) process.env.TOURCORE_HOME = config.dataDir;
+  }
+  const open = hosted ? false : !args.includes("--no-open") && !process.env.CI;
   const workspace = new PropertyWorkspace();
   const installation = new Installation({ root: workspace.root, runtime: new FileRuntimeStore(join(workspace.root, "runtime")) });
   const recorded = (() => {
@@ -436,25 +506,54 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   })();
   const deployment = resolveDeploymentMode(process.env, recorded?.deploymentMode);
   const { manifest } = installation.files.ensure({ deploymentMode: deployment.mode });
+  if (hosted) {
+    const config = validateHostedConfig(process.env, manifest.publicBaseUrl);
+    if (!config.ok) {
+      for (const problem of config.problems) console.error(`  ${redactSecrets(problem, secretValues())}`);
+      process.exit(1);
+    }
+    installation.files.setPublicBaseUrl(config.publicUrl, "RAILWAY");
+    if (process.env.TOURCORE_HOSTED_TENANT_RESET === HOSTED_TENANT_RESET && clearHostedTenant(installation.files)) {
+      console.log("  Cleared the hosted demo operator binding. Tour records were not deleted. Remove TOURCORE_HOSTED_TENANT_RESET after this deploy.");
+    }
+  }
   if (manifest.options?.grokLegacyOAuthCompat && process.env.TOURCORE_GROK_LEGACY_OAUTH_COMPAT === undefined) process.env.TOURCORE_GROK_LEGACY_OAUTH_COMPAT = "true";
+  const hostedConfig = hosted ? validateHostedConfig(process.env, manifest.publicBaseUrl) : undefined;
   const { server, url } = await startSetupServer({
     dev,
     open,
     workspace,
     installation,
-    port: portArg ? Number(portArg.split("=")[1]) : undefined,
+    host: hostedConfig && hostedConfig.ok ? hostedConfig.host : "127.0.0.1",
+    port: hostedConfig && hostedConfig.ok ? hostedConfig.port : portArg ? Number(portArg.split("=")[1]) : undefined,
     onApprovalRequest: (page) => {
-      if (!process.env.CI) openBrowser(page);
+      if (!hosted && !process.env.CI) openBrowser(page);
     },
   });
+  const gate = await server.tourCore.storageReady;
+  if (!gate.ok) {
+    console.error(`  ${redactSecrets(gate.summary, secretValues())}`);
+    server.close();
+    process.exit(1);
+  }
   const port = Number(new URL(url).port);
   writeRuntimeInfo(workspace.root, { pid: process.pid, port, url: url.replace(/\/$/, ""), startedAt: new Date().toISOString() });
-  console.log("\n  Tour Core setup is running.");
-  console.log(`\n  Open this link in your browser:  ${url}\n`);
-  console.log(open ? "  (It should open by itself in a moment.)" : "");
-  console.log("  Keep this window open while you work. Press Ctrl+C to stop.\n");
-  console.log(`  Deployment:           ${deployment.mode}${deployment.invalid ? ` (TOURCORE_DEPLOYMENT_MODE "${deployment.invalid}" isn't recognized)` : ""}, installation ${manifest.installationId}`);
-  console.log(`  Secure setup:         ${url}install#s=${installation.sessions.mint().token}  (this computer only; expires in 30 minutes)\n`);
+  if (hosted && hostedConfig && hostedConfig.ok) {
+    const storage = manifest.storageProvider === "GOOGLE_DRIVE" ? "Google Drive (canonical)" : "local demo (not canonical)";
+    const lines = startupLines({ version: TOURCORE_VERSION, mode: deployment.mode, port, host: hostedConfig.host, publicHost: new URL(hostedConfig.publicUrl).host, storage }).map((line) => redactSecrets(line, secretValues()));
+    console.log("");
+    for (const line of lines) console.log(`  ${line}`);
+    console.log("  Hosted Railway P0 is single-tenant. Marketplace publication requires tenant isolation.");
+    console.log("");
+  }
+  if (!hosted) {
+    console.log("\n  Tour Core setup is running.");
+    console.log(`\n  Open this link in your browser:  ${url}\n`);
+    console.log(open ? "  (It should open by itself in a moment.)" : "");
+    console.log("  Keep this window open while you work. Press Ctrl+C to stop.\n");
+    console.log(`  Deployment:           ${deployment.mode}${deployment.invalid ? ` (TOURCORE_DEPLOYMENT_MODE "${deployment.invalid}" isn't recognized)` : ""}, installation ${manifest.installationId}`);
+    console.log(`  Secure setup:         ${url}install#s=${installation.sessions.mint().token}  (this computer only; expires in 30 minutes)\n`);
+  }
   const sb = sendblueRuntime.env();
   if (sb.apiKey || sb.publicBaseUrl) {
     console.log(`  Real-phone messaging: Sendblue number ${sb.fromNumber ?? "(not set)"}`);
@@ -465,7 +564,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const mcpUrl = sb.publicBaseUrl ? `${new URL(sb.publicBaseUrl).origin}${MCP_PATH}` : "(set PUBLIC_BASE_URL so Grok Bot can reach it)";
   const mode = mcpAuthModeFromEnv();
   if (mode === "oauth") {
-    console.log(`  Grok Bot connector:   ${mcpUrl} (OAuth: approve connections at ${url}grok)\n`);
+    console.log(hosted ? `  Grok connects at ${mcpUrl}. The operator approves on the hosted approval page.\n` : `  Grok Bot connector:   ${mcpUrl} (OAuth: approve connections at ${url}grok)\n`);
     if (grokLegacyCompatFromEnv()) {
       console.log("  WARNING: Grok legacy OAuth compatibility is enabled for this P0 demo. Tour Core is");
       console.log("  accepting Cursor's known legacy OAuth callback. Disable this mode when Grok");

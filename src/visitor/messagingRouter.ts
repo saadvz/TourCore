@@ -7,6 +7,8 @@ import type { InboundMessage } from "../messaging/inbound";
 import type { MessagingAdapter } from "../messaging/Messenger";
 import { isCurrent, type PropertyWorkspace } from "../setup/workspace";
 import { writeJsonAtomic } from "../storage/atomicWrite";
+import { StorageUnavailableError } from "../storage/errors";
+import type { TourCoreStore } from "../storage/Store";
 import { MemoryRuntimeStore, type RuntimeStore } from "../storage/runtimeStore";
 import { handleVisitorText, isGreeting } from "./conversation";
 import { restoreSession, RestoreError, SessionPersistence, type DurableSession } from "./durableSession";
@@ -55,6 +57,10 @@ export class MessagingConversations {
       /** Reads what a typed message is trying to do. Defaults to the built-in rules. */
       interpreter?: IntentInterpreter;
       log?: (line: string) => void;
+      /** Google Drive canonical store for new and restored conversations. */
+      storeFor?: (config: import("../config/tourCoreConfig").TourCoreConfig) => TourCoreStore | undefined;
+      storageRead?: () => "live" | "cached" | "stale";
+      beforeAccess?: () => Promise<void>;
       /** Called after a conversation's records are saved, from any surface (e.g. to look for new exceptions). */
       onSaved?: (session: VisitorDemoSession) => void;
     },
@@ -106,6 +112,9 @@ export class MessagingConversations {
           kind: "messaging",
           verificationLinks: this.deps.links,
           realNow: this.deps.realNow,
+          store: this.deps.storeFor?.(config),
+          storageRead: this.deps.storageRead,
+          beforeAccess: this.deps.beforeAccess,
         }),
       );
       // Someone who texted STOP earlier stays opted out until they text START.
@@ -114,7 +123,15 @@ export class MessagingConversations {
     session.line = endpoint.address;
 
     const wasOptedOut = session.optedOut;
-    await handleVisitorText(session, phone, message.text, meta, this.deps.interpreter);
+    try {
+      await handleVisitorText(session, phone, message.text, meta, this.deps.interpreter);
+    } catch (err) {
+      if (err instanceof StorageUnavailableError) {
+        await transport.send({ to: phone, audience: "PROSPECT", body: "I couldn't save that, so nothing was booked or changed. Please try again in a little while." }).catch(() => undefined);
+        return { correlationId: session.id };
+      }
+      throw err;
+    }
     if (session.optedOut !== wasOptedOut) this.setOptOut(propertyId, phone, session.optedOut);
     await this.save(session);
     return { correlationId: session.id };
@@ -131,6 +148,11 @@ export class MessagingConversations {
     return [...this.broken.values()]
       .filter((s) => s.propertyId === propertyId)
       .map((s) => ({ visitorPhone: s.visitorPhone, problem: s.recovery?.problem ?? "Couldn't be restored.", at: s.recovery?.at ?? s.updatedAt }));
+  }
+
+  private storeForProperty(propertyId: string) {
+    if (!this.deps.storeFor || !this.deps.workspace.has(propertyId)) return undefined;
+    return this.deps.storeFor(this.deps.workspace.load(propertyId).config);
   }
 
   /** Sends through the live transport, created only when a message actually goes out. */
@@ -166,7 +188,7 @@ export class MessagingConversations {
       }
       if (this.deps.registry.find(snapshot.sessionId)) continue;
       try {
-        const { session, notes } = await restoreSession(snapshot, { workspace: this.deps.workspace, transport: this.lazyTransport(), links: this.deps.links, realNow: this.deps.realNow });
+        const { session, notes } = await restoreSession(snapshot, { workspace: this.deps.workspace, transport: this.lazyTransport(), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(snapshot.propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess });
         this.deps.registry.add(session);
         for (const note of notes) log(`Restoring a text-message tour: ${note}`);
         restored++;
@@ -218,7 +240,7 @@ export class MessagingConversations {
           updatedAt: record.updatedAt,
         };
         try {
-          const { session } = await restoreSession(pseudo, { workspace: ws, transport: this.lazyTransport(), links: this.deps.links, realNow: this.deps.realNow });
+          const { session } = await restoreSession(pseudo, { workspace: ws, transport: this.lazyTransport(), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess });
           registry.add(session);
           await this.save(session);
           restored++;

@@ -275,3 +275,66 @@ with no ZIP. Single-family internal space: Main Home. No public property name.
 | F5 | "What about Thursday?" | Thursday's times. No exception for the property team |
 | F6 | "How much is rent?" | The answer uses the address (or "this home"), then Thursday's times again. Not "Main Home" |
 | F7 | Readiness, practice tour, then "Yes, publish it." | One publish. Grok says it is published only after the tool result and a fresh status read. No second publish question and no "still needs a yes" |
+
+## G. Google Drive portability
+
+Needs a Tour Core Google OAuth client configured on the computer
+(`TOURCORE_GOOGLE_OAUTH_CLIENT_ID` and `TOURCORE_GOOGLE_OAUTH_CLIENT_SECRET`)
+and a Google account that can approve both Grok's Drive connector and Tour
+Core. Automated tests do not call Google. This section does.
+
+### Flow A — fresh install
+
+| # | Do | Expect |
+| --- | --- | --- |
+| G1 | Blank Grok Bot. Bootstrap Tour Core. Connect Sendblue | After texting works, Grok recommends Google Drive before the first property. It does not ask for a Google password or API key |
+| G2 | Say yes | Grok connects its own Google Drive connector if needed, then opens Google's approval for Tour Core and explains why that second approval exists |
+| G3 | Approve Google | A private `Tour Core` folder appears. `test_storage` passes. Status says "Tour records: Google Drive connected." |
+| G4 | Create the property, readiness, practice tour, publish, and make a real booking | The property, tour, and audit files are in that folder. Secrets are not |
+
+### Flow B — a second computer
+
+| # | Do | Expect |
+| --- | --- | --- |
+| G5 | Stop the first Tour Core. Start a clean one and connect the same Google account | Grok finds the existing Tour Core folder |
+| G6 | Confirm the takeover | Property, tours, facts, and history are back. Sendblue and other secrets are asked for again. They were not in Drive |
+| G7 | Send a text to the touring number after Sendblue is reconnected | The conversation continues from the restored records |
+
+### Flow C — browsing
+
+| # | Do | Expect |
+| --- | --- | --- |
+| G8 | "Open my Tour Core records in Google Drive." | Grok uses its Drive connector to open the folder. The operational answer still comes from Tour Core |
+| G9 | "Show me today's export." | Grok opens the export view. It does not treat that file as the booking record |
+
+## H. Hosted Railway demo
+
+`HOSTED_RAILWAY_P0` is one demo installation. A landlord does not create a
+Railway account. Automated tests do not call Railway. This section is the
+real deploy.
+
+### Admin setup, once
+
+| # | Do | Expect |
+| --- | --- | --- |
+| H1 | Push `saadvz/TourCore` and create one Railway service from that repo (`master`) | Railpack runs `npm run build` and `npm start`. No Docker |
+| H2 | Generate a public domain. Mount a volume at `/data`. Set `TOURCORE_DEPLOYMENT_MODE=HOSTED_RAILWAY_P0` and `TOURCORE_HOME=/data`. Set the Google OAuth client. Healthcheck path `/healthz` | Deploy logs show the version, `HOSTED_RAILWAY_P0`, the port, the public host, and the storage summary. No credentials |
+| H3 | Open `https://<domain>/healthz` | `200` and `"service":"tour-core"`. The URL does not contain `trycloudflare` |
+| H4 | Register `https://<domain>/google/oauth/callback` on the Tour Core Google web client. Set `hostedTourCoreUrl` in the bot template to `https://<domain>` | Skills still say `hostedTourCoreUrl`, not a Railway hostname |
+
+### Fresh user
+
+| # | Do | Expect |
+| --- | --- | --- |
+| H5 | Fresh Grok bot whose template has `hostedTourCoreUrl`. Say "Set up Tour Core." | Grok connects to the hosted service. It does not clone a runtime, start a tunnel, or say Tour Core only works while its computer is on. It does not mention Railway |
+| H6 | Approve the connection. Check the codes match and click Allow | Grok cannot approve by calling the tools alone. A second unrelated account is refused |
+| H7 | Connect Sendblue, then Google Drive, then the property, updates, readiness, practice, and publish | Webhook and verification links use the Railway host. The Google callback is the registered Railway URL. Records are in Drive |
+| H8 | A real visitor texts the property | The tour proceeds. Operator updates come from the hosted service |
+
+### Restart
+
+| # | Do | Expect |
+| --- | --- | --- |
+| H9 | Redeploy or restart the Railway service | The public domain stays the same. `/healthz` returns 200 after startup. Logs do not show a quick-tunnel address |
+| H10 | Ask Grok about the property. Send another text | The property is still there. Sendblue still points at the Railway webhook. A booking alert already delivered is not sent again |
+| H11 | Leave the old Grok-computer process running against the same Drive folder | The hosted service refuses to start as a second writer until that lease is released or taken over |

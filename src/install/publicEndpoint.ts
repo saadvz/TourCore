@@ -2,6 +2,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync }
 import { join } from "node:path";
 import { publicBase } from "../messaging/sendblue/runtime";
 import { writeJsonAtomic } from "../storage/atomicWrite";
+import { resolveHostedPublicUrl } from "./hostedRuntime";
 import type { PublicEndpointProviderKind } from "./manifest";
 import { nodeProcesses, waitFor, type ProcessControl } from "./processes";
 
@@ -15,9 +16,8 @@ import { nodeProcesses, waitFor, type ProcessControl } from "./processes";
  *    tunnel, or a SELF_HOSTED server's stable https URL).
  *  - CloudflareQuickTunnelProvider: a temporary trycloudflare.com address for
  *    GROK_MANAGED_P0 demos. It changes whenever the tunnel restarts.
- *
- * A future stable host (VM, container host, Railway, Render, Fly, ...)
- * implements the same interface.
+ *  - RailwayPublicEndpointProvider: the stable Railway hostname for
+ *    HOSTED_RAILWAY_P0. It never starts cloudflared.
  */
 
 export interface EndpointResult {
@@ -183,6 +183,23 @@ export class CloudflareQuickTunnelProvider implements PublicEndpointProvider {
     if (r) this.processes.kill(r.pid);
     rmSync(this.recordPath, { force: true });
   }
+}
+
+/**
+ * The public address Railway already assigned. No tunnel, no Railway API.
+ */
+export class RailwayPublicEndpointProvider implements PublicEndpointProvider {
+  readonly kind = "RAILWAY" as const;
+
+  constructor(private readonly env: () => NodeJS.ProcessEnv) {}
+
+  async ensure(): Promise<EndpointResult> {
+    const resolved = resolveHostedPublicUrl(this.env());
+    if (!resolved.url) return { state: "ERROR", provider: this.kind, message: resolved.problem ?? "The hosted public address isn't set." };
+    return { state: "READY", provider: this.kind, url: resolved.url, message: "Using the Railway public address." };
+  }
+
+  async stop(): Promise<void> {}
 }
 
 export async function downloadFile(url: string, dest: string): Promise<void> {

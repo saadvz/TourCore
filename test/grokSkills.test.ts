@@ -324,6 +324,12 @@ describe("Install Tour Core skill", () => {
         case "CONNECT_GROK":
           h.connectGrok(); // the operator clicks Allow
           break;
+        case "CONNECT_GOOGLE_DRIVE":
+          expect(step.operatorMessage).toMatch(/connecting Google Drive/);
+          expect(step.operatorMessage).not.toMatch(/password|token|api key/i);
+          expect(step.grokInstructions).toMatch(/Google Drive connector/);
+          await tool("use_local_demo_storage");
+          break;
         case "SET_UP_PROPERTY": // "Yes." → Setup Property skill
           await h.setUpAlfredWay();
           break;
@@ -356,6 +362,7 @@ describe("Install Tour Core skill", () => {
       "CHECK_PUBLIC_ENDPOINT:GROK",
       "CONNECT_GROK:OPERATOR",
       "CONNECT_VISITOR_MESSAGING:OPERATOR_IN_SECURE_SETUP",
+      "CONNECT_GOOGLE_DRIVE:OPERATOR_DECISION",
       "SET_UP_PROPERTY:OPERATOR_DECISION",
       "OFFER_OPERATOR_ALERTS:OPERATOR_DECISION",
       "RUN_READINESS:GROK",

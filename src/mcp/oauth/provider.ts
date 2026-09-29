@@ -103,8 +103,14 @@ export interface ProviderOptions {
   now?: () => number;
   /** Fetches a Client ID Metadata Document. Tests replace the network here. */
   fetchClientMetadata?: (clientId: string) => Promise<unknown>;
-  /** A new approval is waiting on the Tour Core computer. */
+  /** A new approval is waiting. */
   onApprovalRequest?: (request: ApprovalRequestView) => void;
+  /** HOSTED_RAILWAY_P0 refuses a second operator client. Other modes allow everyone through. */
+  tenantPolicy?: (clientId: string) => { allowed: true } | { allowed: false; message: string };
+  /** Called once when the owner approves. Used to bind the demo tenant. */
+  onOwnerApproved?: (clientId: string) => void;
+  /** Where the human clicks Allow. */
+  approvalPlace?: () => "computer" | "hosted";
   log?: (line: string) => void;
 }
 
@@ -206,6 +212,12 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
     // The SDK requires S256 but accepts any string; a real S256 challenge is 43 base64url characters.
     if (!/^[A-Za-z0-9_-]{43}$/.test(params.codeChallenge)) throw new InvalidRequestError("code_challenge must be an S256 challenge.");
     if (params.resource && !sameResource(params.resource, ep)) throw new InvalidTargetError("That resource isn't this Tour Core's MCP server.");
+    const tenant = this.options.tenantPolicy?.(client.client_id);
+    if (tenant && !tenant.allowed) {
+      this.log("Refused a connection from a second account. This hosted demo is single-tenant.");
+      res.status(403).set(PAGE_HEADERS).type("html").send(problemPage("This Tour Core demo is already in use", tenant.message));
+      return;
+    }
     this.prune();
     if ([...this.requests.values()].filter((r) => r.status === "pending").length >= MAX_PENDING) {
       throw new TemporarilyUnavailableError("Too many connection requests are waiting. Try again in a few minutes.");
@@ -231,7 +243,7 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
     this.requests.set(request.id, request);
     this.log(`Authorization request from ${request.clientName}: will return to ${redirectForLog(request.redirectUri)}.`);
     this.options.onApprovalRequest?.(this.view(request));
-    res.status(200).set(PAGE_HEADERS).type("html").send(consentPage({ requestId: request.id, matchCode: request.matchCode, clientName: request.clientName, redirectHost: request.redirectHost }));
+    res.status(200).set(PAGE_HEADERS).type("html").send(consentPage({ requestId: request.id, matchCode: request.matchCode, clientName: request.clientName, redirectHost: request.redirectHost, hosted: this.options.approvalPlace?.() === "hosted" }));
   }
 
   private view(r: ApprovalRequest): ApprovalRequestView {
@@ -256,6 +268,7 @@ export class TourCoreOAuthProvider implements OAuthServerProvider {
     const r = this.requests.get(id);
     if (!r || r.status !== "pending") return false;
     r.status = decision;
+    if (decision === "approved") this.options.onOwnerApproved?.(r.clientId);
     this.log(decision === "approved" ? `Approved ${r.clientName}'s access to Tour Core.` : `Denied ${r.clientName}'s request to connect to Tour Core.`);
     return true;
   }

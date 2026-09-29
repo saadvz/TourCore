@@ -42,6 +42,7 @@ const infraReady = (h: InstallHarness) => {
   endpointReady(h);
   h.connectGrok();
   messagingReady(h);
+  h.inst.files.writeState({ ...h.inst.files.state(), storage: { mode: "LOCAL_DEMO", phase: "READY", chosenAt: at(h) } });
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -88,6 +89,26 @@ describe("Tour Core owns the onboarding order", () => {
       }
     }
     expect(people).toEqual(["CONNECT_GROK:OPERATOR"]);
+  });
+
+  it("after texting is connected, Tour Core recommends Google Drive before the first property", async () => {
+    const h = harness();
+    endpointReady(h);
+    h.connectGrok();
+    messagingReady(h);
+    const step = await next(h);
+    expect(step).toMatchObject({
+      component: "STORAGE",
+      action: "CONNECT_GOOGLE_DRIVE",
+      performedBy: "OPERATOR_DECISION",
+      operatorMessage: "Visitor texting is working. Next I recommend connecting Google Drive so your property and tour records stay with you even if this Tour Core computer changes.",
+    });
+    expect(step.operatorMessage).not.toMatch(JARGON);
+    expect(step.grokInstructions).toMatch(/built-in Google Drive connector/);
+    expect(step.grokInstructions).toMatch(/does not document|no documented/i);
+    expect(step.operatorMessage).not.toMatch(/password|token|api key/i);
+    await h.ok("use_local_demo_storage");
+    expect((await h.ok("use_local_demo_storage")).summary).toMatch(/won't be portable/);
   });
 
   it("after texting is connected and tested, Tour Core offers the first property, in plain words", async () => {

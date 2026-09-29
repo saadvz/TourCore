@@ -169,10 +169,19 @@ export async function testStorage(inst: Installation, services: OperatorServices
   } finally {
     rmSync(probe, { force: true });
   }
+  if (!problems.length && inst.records.provider() === "GOOGLE_DRIVE_READY") {
+    try {
+      await inst.records.probe();
+    } catch {
+      problems.push("Google Drive didn't save a test record.");
+    }
+  }
+  const provider = inst.records.provider();
+  const where = provider === "GOOGLE_DRIVE_READY" ? "Tour records: Google Drive connected." : provider === "LOCAL_DEMO" ? "Tour records: Stored locally." : inst.records.summary();
   return {
     ok: problems.length === 0,
-    provider: "LOCAL_DEMO",
-    message: problems.length ? problems.join(" ") : "Tour records are stored with this Tour Core installation, and a test record saved and read back correctly.",
+    provider,
+    message: problems.length ? problems.join(" ") : `${where} A test record saved and read back correctly.`,
   };
 }
 

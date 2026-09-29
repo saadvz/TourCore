@@ -17,7 +17,7 @@ import { DEPLOYMENT_MODES, type DeploymentMode } from "./deployment";
  * a changed address can be detected instead of silently used.
  */
 
-export const PUBLIC_ENDPOINT_PROVIDERS = ["NONE", "MANUAL", "CLOUDFLARE_QUICK_TUNNEL"] as const;
+export const PUBLIC_ENDPOINT_PROVIDERS = ["NONE", "MANUAL", "CLOUDFLARE_QUICK_TUNNEL", "RAILWAY"] as const;
 export type PublicEndpointProviderKind = (typeof PUBLIC_ENDPOINT_PROVIDERS)[number];
 
 export const ManifestSchema = z.strictObject({
@@ -27,8 +27,8 @@ export const ManifestSchema = z.strictObject({
   publicBaseUrl: z.url({ protocol: /^https$/ }).optional(),
   publicEndpointProvider: z.enum(PUBLIC_ENDPOINT_PROVIDERS),
   messagingProvider: z.enum(["SENDBLUE", "DEMO"]),
-  /** Future: GOOGLE_DRIVE. */
-  storageProvider: z.enum(["LOCAL_DEMO"]),
+  /** GOOGLE_DRIVE is canonical portable storage. LOCAL_DEMO stays on this computer. */
+  storageProvider: z.enum(["LOCAL_DEMO", "GOOGLE_DRIVE"]),
   /** Future: DURIN. */
   accessProvider: z.enum(["DURIN_DEMO"]),
   operatorNotificationProvider: z.enum(["NONE", "GROK_ROUTINE"]),
@@ -63,6 +63,33 @@ export interface InstallState {
   operatorUpdates?: NotificationPreferences;
   /** RECOMMENDED components the operator declined, and when. Turning one on later clears nothing; configuring it wins. */
   skipped?: Partial<Record<string, string>>;
+  /**
+   * HOSTED_RAILWAY_P0 only. The first approved operator client. A different
+   * client is refused. Not a secret. Marketplace tenancy is not this field.
+   */
+  hostedTenant?: { clientId: string; boundAt: string };
+  /** Where canonical tour records live. Tokens are never stored here. */
+  storage?: {
+    mode?: "LOCAL_DEMO" | "GOOGLE_DRIVE";
+    phase?: "CONNECTING" | "READY" | "MIGRATING" | "ERROR";
+    chosenAt?: string;
+    folderId?: string;
+    folderName?: string;
+    accountEmail?: string;
+    storeId?: string;
+    hostId?: string;
+    cacheValidatedAt?: string;
+    error?: string;
+    migration?: {
+      id: string;
+      phase: "PREPARED" | "COPYING" | "COPIED" | "VERIFIED" | "FAILED" | "ACTIVATED";
+      startedAt: string;
+      updatedAt: string;
+      copied: string[];
+      hashes: Record<string, string>;
+      error?: string;
+    };
+  };
 }
 
 export class ManifestSecretError extends Error {}

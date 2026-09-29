@@ -143,6 +143,9 @@ export interface RestoreDeps {
   transport: MessagingAdapter;
   links?: VerificationLinks;
   realNow?: () => number;
+  store?: import("../storage/Store").TourCoreStore;
+  storageRead?: () => "live" | "cached" | "stale";
+  beforeAccess?: () => Promise<void>;
 }
 
 /**
@@ -172,6 +175,9 @@ export async function restoreSession(snapshot: DurableSession, deps: RestoreDeps
     realNow: deps.realNow,
     id: snapshot.sessionId,
     startedAt: new Date(snapshot.createdAt),
+    store: deps.store,
+    storageRead: deps.storageRead,
+    beforeAccess: deps.beforeAccess,
   });
   await session.hydrate(tour.record, tour.bundle);
   session.line = snapshot.line;

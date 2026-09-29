@@ -44,6 +44,7 @@ async function completeInfrastructure(h: InstallHarness) {
   h.connectGrok();
   h.inst.secrets.set({ SENDBLUE_API_API_KEY: SB_KEY, SENDBLUE_API_API_SECRET: SB_SECRET, SENDBLUE_FROM_NUMBER: "+15550109999" });
   markChecked(h, "messaging");
+  h.inst.files.writeState({ ...h.inst.files.state(), storage: { mode: "LOCAL_DEMO", phase: "READY", chosenAt: new Date(h.now()).toISOString() } });
   h.inst.secrets.set({ TOURCORE_GROK_ROUTINE_URL: ROUTINE_URL, TOURCORE_GROK_ROUTINE_KEY: ROUTINE_KEY });
   markChecked(h, "alerts");
 }
@@ -174,7 +175,7 @@ describe("installation status", () => {
       ["PUBLIC_ENDPOINT", "ACTION_REQUIRED"],
       ["GROK_OPERATOR", "NOT_CONFIGURED"],
       ["VISITOR_MESSAGING", "ACTION_REQUIRED"],
-      ["STORAGE", "READY"],
+      ["STORAGE", "NOT_CONFIGURED"],
       ["ACCESS", "READY"],
       ["PROPERTY", "NOT_CONFIGURED"],
       ["OPERATOR_ALERTS", "NOT_CONFIGURED"],
@@ -184,7 +185,7 @@ describe("installation status", () => {
     ]);
     expect(s.nextStep).toMatchObject({ component: "PUBLIC_ENDPOINT", action: "ESTABLISH_PUBLIC_ENDPOINT", performedBy: "GROK", command: "npm run bootstrap:grok" });
     expect(s.infrastructureReady).toBe(false);
-    expect(s.components.find((c) => c.component === "STORAGE")).toMatchObject({ requirement: "REQUIRED_BEFORE_PROPERTY", technical: { provider: "LOCAL_DEMO" }, summary: "Tour records are stored with this Tour Core installation." });
+    expect(s.components.find((c) => c.component === "STORAGE")).toMatchObject({ requirement: "REQUIRED_BEFORE_PROPERTY", technical: { provider: "NOT_CONFIGURED" }, summary: "Offered once visitor texting is working." });
     expect(s.components.find((c) => c.component === "ACCESS")).toMatchObject({ technical: { provider: "DURIN_DEMO" }, summary: "Demo. No real doors open." });
     expect(s.components.find((c) => c.component === "OPERATOR_ALERTS")).toMatchObject({ requirement: "RECOMMENDED", summary: "Offered once your first property is set up." });
     expect(s.lines).toContain("\u2713 Access system: Demo. No real doors open.");
@@ -210,6 +211,15 @@ describe("installation status", () => {
     h.inst.secrets.set({ SENDBLUE_API_API_KEY: SB_KEY, SENDBLUE_API_API_SECRET: SB_SECRET, SENDBLUE_FROM_NUMBER: "+15550109999" });
     expect(await next()).toEqual(["TEST_VISITOR_MESSAGING", "GROK", "test_visitor_messaging"]);
     markChecked(h, "messaging");
+    const drive = await h.status();
+    expect(drive.infrastructureReady).toBe(false);
+    expect(drive.nextStep).toMatchObject({
+      component: "STORAGE",
+      action: "CONNECT_GOOGLE_DRIVE",
+      performedBy: "OPERATOR_DECISION",
+      operatorMessage: "Visitor texting is working. Next I recommend connecting Google Drive so your property and tour records stay with you even if this Tour Core computer changes.",
+    });
+    await h.ok("use_local_demo_storage");
     // Only now does property setup come up; alerts wait for a property.
     const infra = await h.status();
     expect(infra.infrastructureReady).toBe(true);
@@ -300,7 +310,7 @@ describe("installation status", () => {
 
   it("test_storage and test_access report the demo providers in operator words", async () => {
     const h = harness();
-    expect(await h.ok("test_storage")).toMatchObject({ ok: true, provider: "LOCAL_DEMO" });
+    expect(await h.ok("test_storage")).toMatchObject({ ok: true, provider: "NOT_CONFIGURED" });
     expect(await h.ok("test_access")).toMatchObject({ ok: true, accessSystem: "Demo", summary: "Access system: Demo. It's answering, and no real doors open." });
     expect(await h.ok("check_runtime_health")).toMatchObject({ summary: "Tour Core is running and healthy.", ok: true, technical: { running: true, deploymentMode: "GROK_MANAGED_P0" } });
   });

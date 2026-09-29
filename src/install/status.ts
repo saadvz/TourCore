@@ -116,6 +116,8 @@ export type InstallationAction =
   | "RECONNECT_VISITOR_MESSAGING"
   | "FIX_VISITOR_MESSAGING"
   | "CHECK_STORAGE"
+  | "CONNECT_GOOGLE_DRIVE"
+  | "FINISH_GOOGLE_DRIVE"
   | "SET_UP_PROPERTY"
   | "FINISH_PROPERTY_SETUP"
   | "OFFER_OPERATOR_ALERTS"
@@ -252,10 +254,14 @@ function endpointStatus(inst: Installation, mode: DeploymentMode): ComponentStat
   const establish = (): InstallationStep =>
     mode === "GROK_MANAGED_P0"
       ? step("PUBLIC_ENDPOINT", "ESTABLISH_PUBLIC_ENDPOINT", "GROK", "I'm setting up Tour Core's secure public connection.", { command: BOOTSTRAP, grokInstructions: `Run ${BOOTSTRAP} in the Tour Core folder on your cloud computer.` })
-      : step("PUBLIC_ENDPOINT", "ESTABLISH_PUBLIC_ENDPOINT", "OPERATOR", "Tour Core needs a secure public connection before it can be reached.", {
-          grokInstructions:
-            mode === "SELF_HOSTED" ? "Set PUBLIC_BASE_URL to the server's stable https address and restart Tour Core." : "Start a secure tunnel and set PUBLIC_BASE_URL (README, developer path).",
-        });
+      : mode === "HOSTED_RAILWAY_P0"
+        ? step("PUBLIC_ENDPOINT", "ESTABLISH_PUBLIC_ENDPOINT", "GROK", "Tour Core's public connection isn't ready yet.", {
+            grokInstructions: "HOSTED_RAILWAY_P0 has no public https address. The distributor must set RAILWAY_PUBLIC_DOMAIN or PUBLIC_BASE_URL. Do not install cloudflared or start a quick tunnel, and do not ask the operator to create a Railway project.",
+          })
+        : step("PUBLIC_ENDPOINT", "ESTABLISH_PUBLIC_ENDPOINT", "OPERATOR", "Tour Core needs a secure public connection before it can be reached.", {
+            grokInstructions:
+              mode === "SELF_HOSTED" ? "Set PUBLIC_BASE_URL to the server's stable https address and restart Tour Core." : "Start a secure tunnel and set PUBLIC_BASE_URL (README, developer path).",
+          });
   if (!url) {
     if (raw) return component("PUBLIC_ENDPOINT", "ERROR", "Tour Core's public connection isn't set up correctly.", { technical: ["PUBLIC_BASE_URL isn't https."], next: establish() });
     return component("PUBLIC_ENDPOINT", mode === "LOCAL_DEVELOPER" ? "NOT_CONFIGURED" : "ACTION_REQUIRED", "Tour Core doesn't have a secure public connection yet.", { next: establish() });
@@ -272,11 +278,23 @@ function endpointStatus(inst: Installation, mode: DeploymentMode): ComponentStat
   return component("PUBLIC_ENDPOINT", "READY", "Tour Core has a secure public connection.", { technical });
 }
 
+function approvalInstructions(inst: Installation): string {
+  if (inst.deploymentMode() !== "HOSTED_RAILWAY_P0") return "Open the approval screen (/grok on the Tour Core computer) in your cloud browser and hand control to the operator.";
+  const page = inst.approvals.pageUrl(inst.publicBaseUrl());
+  return page
+    ? `Open ${page.url} and hand that page to the operator. They check the codes match and click Allow. Do not click Allow yourself. Reaching /mcp is not approval. Do not mention Railway.`
+    : "The hosted approval page needs the public https address first.";
+}
+
 function grokStatus(inst: Installation): ComponentStatus {
   const mode = mcpAuthModeFromEnv(inst.env());
   const url = inst.publicBaseUrl();
   const connector = url ? `${new URL(url).origin}${MCP_PATH}` : undefined;
-  const approval = "Open the approval screen (/grok on the Tour Core computer) in your cloud browser and hand control to the operator.";
+  const hosted = inst.deploymentMode() === "HOSTED_RAILWAY_P0";
+  const approval = approvalInstructions(inst);
+  const connectMessage = hosted
+    ? "Tour Core is online. I need your approval to connect. Check that the codes match and click Allow."
+    : "Tour Core is installed and running. I need your approval to connect to it. I've opened the approval screen. Check that the codes match and click Allow.";
   if (typeof mode !== "string") {
     return component("GROK_OPERATOR", "ERROR", "Grok can't connect to Tour Core because of a setting.", {
       technical: [`TOURCORE_MCP_AUTH_MODE "${mode.invalid}" turns the connector off.`],
@@ -309,7 +327,7 @@ function grokStatus(inst: Installation): ComponentStatus {
   }
   return component("GROK_OPERATOR", "ACTION_REQUIRED", "Grok isn't connected to Tour Core yet.", {
     technical,
-    next: step("GROK_OPERATOR", "CONNECT_GROK", "OPERATOR", "Tour Core is installed and running. I need your approval to connect to it. I've opened the approval screen. Check that the codes match and click Allow.", {
+    next: step("GROK_OPERATOR", "CONNECT_GROK", "OPERATOR", connectMessage, {
       grokInstructions: `Add Tour Core as a custom connector at ${connector} with OAuth (leave token fields empty). ${approval} After approval, say "Connected. I'm checking the rest of the setup now." and call get_installation_status without waiting to be asked.`,
     }),
   });
@@ -356,13 +374,44 @@ export function installedMessaging(inst: Installation): InstalledMessaging | und
   return { mode: "sendblue", ready: messagingStatus(inst).state === "READY", requiredForPublish: inst.deploymentMode() === "GROK_MANAGED_P0" };
 }
 
-function storageStatus(inst: Installation): ComponentStatus {
+const DRIVE_INSTRUCTIONS =
+  "If your built-in Google Drive connector is not connected, connect it the normal way (grok.com/connectors, or Grok Bot Marketplace / Settings → Plugins) and let the operator approve Google there. Do not ask for a Google password, API key, or client secret. " +
+  "Then call begin_google_drive_connect. If it returns an authorizationUrl, open that for Tour Core's own approval and say the summary: Grok's Drive connection cannot save Tour Core's records while you are away, and xAI does not document handing that connector's token to Tour Core. " +
+  "If the operator says no, call use_local_demo_storage and tell them records stay on this computer and are not portable. If begin_google_drive_connect says the Google app is not configured, say the summary and offer to keep records on this computer; do not ask them to create a Google Cloud project.";
+
+function storageStatus(inst: Installation, messagingReady: boolean): ComponentStatus {
+  let writable = true;
   try {
     probeRuntimeStore(inst.runtime, new Date(inst.now()));
   } catch {
-    return component("STORAGE", "ERROR", "Tour Core couldn't save a test record.", { provider: "LOCAL_DEMO", next: step("STORAGE", "CHECK_STORAGE", "GROK", "I'm checking where tour records are kept.", { tool: "test_storage" }) });
+    writable = false;
   }
-  return component("STORAGE", "READY", "Tour records are stored with this Tour Core installation.", { provider: "LOCAL_DEMO" });
+  const provider = inst.records.provider();
+  const summary = inst.records.summary();
+  if (!writable) {
+    return component("STORAGE", "ERROR", "Tour Core couldn't save a test record.", { provider, next: step("STORAGE", "CHECK_STORAGE", "GROK", "I'm checking where tour records are kept.", { tool: "test_storage" }) });
+  }
+  if (provider === "GOOGLE_DRIVE_READY") return component("STORAGE", "READY", summary, { provider: "GOOGLE_DRIVE_READY" });
+  if (provider === "LOCAL_DEMO") return component("STORAGE", "READY", summary, { provider: "LOCAL_DEMO", technical: ["Local demo storage stays on this computer. It is not portable."] });
+  if (provider === "ERROR") {
+    return component("STORAGE", "ERROR", summary, { provider: "ERROR", next: step("STORAGE", "CHECK_STORAGE", "GROK", "I'm checking where tour records are kept.", { tool: "test_storage" }) });
+  }
+  if (!messagingReady) return component("STORAGE", "NOT_CONFIGURED", "Offered once visitor texting is working.", { provider: "NOT_CONFIGURED" });
+  if (provider === "GOOGLE_DRIVE_CONNECTING") {
+    const phase = inst.files.state().storage?.migration?.phase;
+    const tool = phase === "VERIFIED" ? "activate_google_drive_storage" : phase === "COPIED" ? "verify_storage_migration" : phase === "PREPARED" || phase === "COPYING" ? "migrate_storage_to_google_drive" : "finish_google_drive_setup";
+    return component("STORAGE", "CONFIGURING", summary, {
+      provider: "GOOGLE_DRIVE_CONNECTING",
+      next: step("STORAGE", "FINISH_GOOGLE_DRIVE", "GROK", "I'm finishing the Google Drive connection.", { tool, grokInstructions: "Call that tool. Do not ask for a Google password or token." }),
+    });
+  }
+  return component("STORAGE", "ACTION_REQUIRED", "Tour records are still stored on this computer.", {
+    provider: "NOT_CONFIGURED",
+    next: step("STORAGE", "CONNECT_GOOGLE_DRIVE", "OPERATOR_DECISION", "Visitor texting is working. Next I recommend connecting Google Drive so your property and tour records stay with you even if this Tour Core computer changes.", {
+      tool: "begin_google_drive_connect",
+      grokInstructions: DRIVE_INSTRUCTIONS,
+    }),
+  });
 }
 
 function accessStatus(): ComponentStatus {
@@ -544,7 +593,8 @@ function validationStatuses(services: OperatorServices, propertyReady: boolean, 
 export function getInstallationStatus(inst: Installation, services: OperatorServices, options: StatusOptions = {}): InstallationStatus {
   const deployment = inst.deployment();
   const mode = deployment.mode;
-  const infra = [runtimeStatus(options), endpointStatus(inst, mode), grokStatus(inst), messagingStatus(inst), storageStatus(inst), accessStatus()];
+  const messaging = messagingStatus(inst);
+  const infra = [runtimeStatus(options), endpointStatus(inst, mode), grokStatus(inst), messaging, storageStatus(inst, messaging.state === "READY"), accessStatus()];
   if (deployment.invalid) infra[0]!.technical = [...(infra[0]!.technical ?? []), `TOURCORE_DEPLOYMENT_MODE "${deployment.invalid}" isn't recognized; using ${mode}.`];
   const infrastructureReady = infra.every((c) => c.state === "READY");
   const installed = installedMessaging(inst);

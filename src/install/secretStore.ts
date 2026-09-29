@@ -20,6 +20,13 @@ export const SETTINGS = {
   /** Grok Routine webhook address. Treated as a secret: it's a capability to wake the routine. */
   TOURCORE_GROK_ROUTINE_URL: { secret: true },
   TOURCORE_GROK_ROUTINE_KEY: { secret: true },
+  /** Tour Core's own Google OAuth client secret. Never a landlord's Google password. */
+  GOOGLE_OAUTH_CLIENT_SECRET: { secret: true },
+  GOOGLE_OAUTH_REFRESH_TOKEN: { secret: true },
+  GOOGLE_OAUTH_ACCESS_TOKEN: { secret: true },
+  GOOGLE_OAUTH_ACCESS_EXPIRES_AT: { secret: true },
+  /** One-time PKCE verifier and state. A secret until Google redirects back. */
+  GOOGLE_OAUTH_PENDING: { secret: true },
 } as const satisfies Record<string, { secret: boolean }>;
 
 export type SettingName = keyof typeof SETTINGS;

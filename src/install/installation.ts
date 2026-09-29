@@ -3,13 +3,16 @@ import { OperatorEventOutbox, type OutboxOptions } from "../alerts/outbox";
 import { OAuthGrantStore } from "../mcp/oauth/store";
 import { sendblueRuntime, type SendblueEnv } from "../messaging/sendblue/runtime";
 import type { RuntimeStore } from "../storage/runtimeStore";
+import type { DriveClient } from "../storage/googleDrive";
+import { RecordStore } from "../storage/recordStore";
+import { ApprovalSessions } from "./approvalSessions";
 import { resolveDeploymentMode, type DeploymentMode } from "./deployment";
 import { InstallationFiles } from "./manifest";
 import { LocalSecretStore, type SecretStore, type SettingName } from "./secretStore";
 import { effectiveEnv, secretValues, settingSource, type SettingsSource } from "./settings";
 import { SetupSessions } from "./setupSessions";
 
-export const TOURCORE_VERSION = "0.3.0";
+export const TOURCORE_VERSION = "0.4.0";
 
 type Fetch = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal }) => Promise<{ status: number; json(): Promise<unknown> }>;
 
@@ -27,6 +30,8 @@ export interface InstallationOptions {
   fetch?: Fetch;
   outbox?: Omit<OutboxOptions, "now" | "stillRelevant">;
   log?: (line: string) => void;
+  /** Tests inject a fake Drive. Production uses Google's HTTP API. */
+  driveClient?: DriveClient;
 }
 
 /**
@@ -39,8 +44,10 @@ export class Installation {
   readonly files: InstallationFiles;
   readonly secrets: SecretStore;
   readonly sessions: SetupSessions;
+  readonly approvals: ApprovalSessions;
   readonly outbox: OperatorEventOutbox;
   readonly grants: OAuthGrantStore;
+  readonly records: RecordStore;
   readonly startedAt: number;
   private relevance?: (event: OperatorEvent) => Promise<boolean>;
 
@@ -49,6 +56,7 @@ export class Installation {
     this.secrets = options.secrets ?? new LocalSecretStore(new InstallationFiles(options.root).paths.secrets, now);
     this.files = new InstallationFiles(options.root, () => secretValues(this.rawEnv(), { secrets: this.secrets }));
     this.sessions = new SetupSessions(options.runtime, now);
+    this.approvals = new ApprovalSessions(options.runtime, now);
     this.grants = new OAuthGrantStore(options.runtime, now);
     this.outbox = new OperatorEventOutbox(options.runtime, () => this.sink(), {
       ...options.outbox,
@@ -57,6 +65,17 @@ export class Installation {
       stillRelevant: (event) => this.relevance?.(event) ?? Promise.resolve(true),
     });
     this.startedAt = now();
+    this.records = new RecordStore({
+      root: options.root,
+      now: () => this.now(),
+      deploymentMode: () => this.deploymentMode(),
+      files: this.files,
+      secrets: this.secrets,
+      publicBaseUrl: () => this.publicBaseUrl(),
+      env: () => this.env(),
+      fetch: () => this.fetch(),
+      driveClient: options.driveClient,
+    });
   }
 
   get root(): string {
