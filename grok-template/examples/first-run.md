@@ -24,17 +24,31 @@ click Allow.
 
 **Tour Core:** Connected. I'm checking the rest of the setup now.
 
-[`get_installation_status`, `get_next_installation_step` →
-CONNECT_VISITOR_MESSAGING. `get_secure_setup_url` step visitor-messaging,
-opened in the cloud browser.]
+[`get_next_installation_step` → CHOOSE_MESSAGING_PROVIDER]
 
-**Tour Core:** Visitor texting needs your Sendblue credentials. I'll ask for
-them securely; they won't be shown to me in chat.
+**Tour Core:** How would you like prospects to text Tour Core?
 
-**Operator:** Done.
+Sendblue. Managed messaging with iMessage/SMS support. Sandbox and
+dedicated-line behavior may differ.
+
+Twilio. Dedicated SMS messaging with low usage cost. Carrier registration may
+be required depending on country and use case.
+
+Photon. Agent-focused messaging through Photon/Spectrum with iMessage
+support. Available capabilities depend on the provisioned Photon line/account.
+
+**Operator:** Sendblue.
+
+[`choose_messaging_provider` sendblue → CONNECT_VISITOR_MESSAGING]
+
+**Tour Core:** Sendblue needs your API key, API secret, and messaging number.
+I'll ask for them securely; they won't be shown to me in chat.
+
+[Grok secure secret input. Grok fills and submits Tour Core's form. The
+operator does not open a page.]
 
 [`get_next_installation_step` → TEST_VISITOR_MESSAGING → `test_visitor_messaging`
-→ `get_next_installation_step` → SET_UP_PROPERTY]
+→ continue]
 
 **Tour Core:** Visitor texting is connected and working. Everything needed to
 start is connected and tested. Would you like to add your first property?
@@ -189,10 +203,12 @@ anything that needs your attention. Want to use those defaults?
 operator-alerts, opened next to the routine's trigger panel. The panel shows
 the address on screen, so Grok doesn't move it and hands the browser over.]
 
-**Tour Core:** I've opened Tour Core's secure setup page next to the update
-settings I created. Please copy the two connection details across, or put the
-whole example into the box on Tour Core's page. They go straight to Tour Core,
-not in chat.
+**Tour Core:** I'll ask for the tour-update connection details securely; they
+won't be shown in chat.
+
+[Secure secret input. Grok submits them. Only if those values are visibly
+shown on screen, and secure input cannot take them, does Grok say the normal
+collection could not be used.]
 
 **Operator:** Done.
 

@@ -9,6 +9,7 @@ import { isCurrent, type PropertyWorkspace } from "../setup/workspace";
 import { probeRuntimeStore } from "../storage/runtimeStore";
 import { DEPLOYMENT_MODE_LABELS, type DeploymentMode } from "./deployment";
 import type { Installation } from "./installation";
+import { activeFromNumber, createMessagingProvider, ensureMessagingSelection, MESSAGING_PROVIDER_CATALOG } from "../messaging/registry";
 
 /**
  * Where this installation stands, component by component, in one
@@ -111,6 +112,8 @@ export type InstallationAction =
   | "CONNECT_GROK"
   | "RECONNECT_GROK"
   | "FIX_GROK_CONNECTOR"
+  | "CHOOSE_MESSAGING_PROVIDER"
+  | "CHOOSE_MESSAGING_LINE"
   | "CONNECT_VISITOR_MESSAGING"
   | "TEST_VISITOR_MESSAGING"
   | "RECONNECT_VISITOR_MESSAGING"
@@ -156,6 +159,10 @@ export interface InstallationStep {
   secureSetupStep?: "visitor-messaging" | "operator-alerts";
   /** A command Grok runs on the Tour Core computer (never the operator's). Never shown to the operator. */
   command?: string;
+  /** Choices for an OPERATOR_DECISION step. Grok asks these; it does not invent a different list. */
+  choices?: { id: string; label: string; description: string }[];
+  /** Credential labels for Grok's secure input. Never values. */
+  credentialFields?: { label: string; secret: boolean }[];
   /** RECOMMENDED steps can be declined with skip_optional_setup. */
   optional?: boolean;
 }
@@ -331,45 +338,117 @@ function grokStatus(inst: Installation): ComponentStatus {
   });
 }
 
-function messagingStatus(inst: Installation): ComponentStatus {
-  const env = inst.sendblueEnv();
-  const connect = step("VISITOR_MESSAGING", "CONNECT_VISITOR_MESSAGING", "OPERATOR_IN_SECURE_SETUP", "Visitor texting needs your Sendblue credentials. I'll ask for them securely; they won't be shown to me in chat.", {
+function credentialAsk(id: string): string {
+  if (id === "sendblue") return "Sendblue needs your API key, API secret, and messaging number. I'll ask for them securely; they won't be shown to me in chat.";
+  if (id === "twilio") return "Twilio needs your Account SID, Auth Token, and Tour Core phone number. I'll ask for them securely; they won't be shown to me in chat.";
+  return "Photon needs your project credentials. I'll ask for them securely; they won't be shown to me in chat.";
+}
+
+function credentialStep(provider: { id: string; configFields: () => { label: string; secret: boolean }[] }): InstallationStep {
+  const fields = provider.configFields().map((field) => field.label).join(", ");
+  return step("VISITOR_MESSAGING", "CONNECT_VISITOR_MESSAGING", "OPERATOR_IN_SECURE_SETUP", credentialAsk(provider.id), {
     tool: "get_secure_setup_url",
     secureSetupStep: "visitor-messaging",
+    credentialFields: provider.configFields().map((field) => ({ label: field.label, secret: field.secret })),
     grokInstructions:
-      "Call get_secure_setup_url with step visitor-messaging and open it in your cloud browser. Prefer Grok's secure secret input: collect the API key, API secret and touring number securely and fill Tour Core's form yourself. Do not put them in chat or in tool arguments. Hand the browser to the operator only if secure fill isn't available for a field. When they're saved, call get_next_installation_step.",
+      `Stay in this conversation. Use Grok's secure secret-input control for each field (${fields}). The values must not appear in ordinary chat or in tool arguments. Then call get_secure_setup_url with step visitor-messaging, fill that form yourself, and submit it. After it is saved, call get_next_installation_step and continue. Do not ask what to do next. Do not tell the operator to open a page, leave the chat, or type the values. ` +
+      "Fallback only: if secure secret input is unavailable, say that the normal secure collection could not be used, then hand over the browser. Do not choose that path because it is easier. " +
+      (provider.id === "twilio" ? "Do not ask for a brand id, campaign id, or compliance profile. Tour Core does not check carrier registration. " : "") +
+      (provider.id === "photon" ? "After the project credentials are saved, Tour Core discovers provisioned lines. Do not ask the operator to type a phone number. " : ""),
   });
-  if (!env.apiKey || !env.apiSecret || !env.fromNumberRaw) return component("VISITOR_MESSAGING", "ACTION_REQUIRED", "Visitor texting isn't connected yet.", { provider: "SENDBLUE", next: connect });
+}
+
+function messagingStatus(inst: Installation): ComponentStatus {
+  const selection = ensureMessagingSelection(inst);
+  const choose = step("VISITOR_MESSAGING", "CHOOSE_MESSAGING_PROVIDER", "OPERATOR_DECISION", "How would you like prospects to text Tour Core?", {
+    tool: "choose_messaging_provider",
+    choices: MESSAGING_PROVIDER_CATALOG.map((p) => ({ id: p.id, label: p.displayName, description: p.description })),
+    grokInstructions:
+      "Ask how prospects should text Tour Core, using only the choices on this step and each choice's description. When they pick one, call choose_messaging_provider with that id. Do not assume Sendblue. Do not give legal or compliance advice beyond that description. Future providers come from this step, not from a hardcoded list.",
+  });
+  if (selection.invalid) {
+    return component("VISITOR_MESSAGING", "ACTION_REQUIRED", "Visitor texting isn't available with that choice.", {
+      technical: [`Visitor messaging: provider=${selection.invalid} status=NEEDS_ACTION`, `Tour Core doesn't include a messaging provider named "${selection.invalid}".`],
+      next: choose,
+    });
+  }
+  if (!selection.provider) {
+    return component("VISITOR_MESSAGING", "NOT_CONFIGURED", "Visitor texting isn't connected yet.", {
+      technical: ["Visitor messaging: provider=none status=NOT_CONFIGURED"],
+      next: choose,
+    });
+  }
+
+  const provider = createMessagingProvider(selection.provider, { env: () => inst.env(), sendblue: () => inst.sendblueEnv() });
+  const statusLine = (status: string) => `Visitor messaging: provider=${provider.id} status=${status}`;
+  const connect = credentialStep(provider);
+  const validation = provider.validateConfiguration();
+  const usableLines = (inst.files.state().messagingLines ?? []).filter((line) => line.status !== "unavailable");
+  if (provider.id === "photon" && validation.ok && !inst.env().TOURCORE_PHOTON_PHONE_NUMBER?.trim() && usableLines.length > 1) {
+    return component("VISITOR_MESSAGING", "ACTION_REQUIRED", "Photon is connected. Which of these lines should prospects text?", {
+      provider: provider.id,
+      technical: [statusLine("NEEDS_ACTION"), "Choose a line Photon reported. Do not ask for a number that is not in this list."],
+      next: step("VISITOR_MESSAGING", "CHOOSE_MESSAGING_LINE", "OPERATOR_DECISION", "Photon is connected. Which of these lines should prospects text?", {
+        tool: "choose_messaging_line",
+        choices: usableLines.map((line) => ({ id: line.address, label: line.address, description: line.status ?? "available" })),
+        grokInstructions:
+          "Show only these line numbers and ask which one prospects should text. They are not secrets. After the operator picks one, call choose_messaging_line with that address, then call get_next_installation_step and continue. Do not ask them to type a number Photon did not list. Do not tell them to open a setup page.",
+      }),
+    });
+  }
+  if (!validation.ok) {
+    return component("VISITOR_MESSAGING", "ACTION_REQUIRED", "Visitor texting isn't connected yet.", {
+      provider: provider.id,
+      technical: [statusLine("NEEDS_ACTION"), ...validation.problems],
+      next: connect,
+    });
+  }
+
   const check = inst.files.state().visitorMessaging;
+  const recordedProvider = check?.provider ?? (provider.id === "sendblue" ? "sendblue" : undefined);
   const test = step("VISITOR_MESSAGING", "TEST_VISITOR_MESSAGING", "GROK", "I'm testing visitor texting.", { tool: "test_visitor_messaging" });
-  const changedAt = latest(inst.secrets.updatedAt("SENDBLUE_API_API_KEY"), inst.secrets.updatedAt("SENDBLUE_API_API_SECRET"), inst.secrets.updatedAt("SENDBLUE_FROM_NUMBER"));
-  if (!check || (changedAt && check.at < changedAt)) return component("VISITOR_MESSAGING", "ACTION_REQUIRED", "Visitor texting is set up but hasn't been tested yet.", { provider: "SENDBLUE", next: test });
-  if (check.publicBaseUrl !== env.publicBaseUrl) {
+  const changedAt = latest(...provider.credentialNames().map((name) => inst.secrets.updatedAt(name as never)));
+  const number = activeFromNumber(inst);
+  if (!check || recordedProvider !== provider.id || (changedAt && check.at < changedAt)) {
+    return component("VISITOR_MESSAGING", "ACTION_REQUIRED", "Visitor texting is set up but hasn't been tested yet.", {
+      provider: provider.id,
+      technical: [statusLine("NEEDS_ACTION")],
+      next: test,
+    });
+  }
+  if (check.publicBaseUrl !== inst.publicBaseUrl()) {
     return component("VISITOR_MESSAGING", "ACTION_REQUIRED", "Visitor texting needs updating after Tour Core's connection changed.", {
-      provider: "SENDBLUE",
+      provider: provider.id,
+      technical: [statusLine("NEEDS_ACTION")],
       next: step("VISITOR_MESSAGING", "RECONNECT_VISITOR_MESSAGING", "GROK", "I'm updating visitor texting to use Tour Core's new connection.", { tool: "test_visitor_messaging" }),
     });
   }
   if (!check.ok) {
-    const accountProblem = check.problems.some((p) => /account|sign in|details|number/i.test(p));
+    const accountProblem = check.problems.some((p) => /account|sign in|details|number|line|project/i.test(p));
     return component("VISITOR_MESSAGING", "ERROR", check.problems[0] ?? check.message, {
-      provider: "SENDBLUE",
-      technical: check.problems,
-      next: accountProblem ? { ...connect, action: "FIX_VISITOR_MESSAGING", operatorMessage: `${check.problems[0] ?? check.message} I'll ask for the Sendblue details securely; they won't be shown in chat.` } : test,
+      provider: provider.id,
+      technical: [statusLine("NEEDS_ACTION"), ...check.problems],
+      next: accountProblem ? { ...connect, action: "FIX_VISITOR_MESSAGING", operatorMessage: `${check.problems[0] ?? check.message} I'll ask for the details securely; they won't be shown in chat.` } : test,
     });
   }
-  return component("VISITOR_MESSAGING", "READY", `Visitor texting is connected and working (${env.fromNumber ?? "your touring number"}).`, { provider: "SENDBLUE" });
+  return component("VISITOR_MESSAGING", "READY", `Visitor texting is connected and working${number ? ` (${number})` : ""}.`, {
+    provider: provider.id,
+    technical: [statusLine("CONNECTED")],
+  });
 }
 
 /**
  * The installation's real visitor texting, for property setup: a new property
  * uses it, and in a Grok-managed install a property can't be published
- * without it. Undefined when no texting account is set up.
+ * without it. Undefined when no texting account is set up. `mode` stays
+ * The provider name stays on the installation, not on the property.
  */
 export function installedMessaging(inst: Installation): InstalledMessaging | undefined {
-  const env = safe(() => inst.sendblueEnv());
-  if (!env?.apiKey || !env.apiSecret || !env.fromNumberRaw) return undefined;
-  return { mode: "sendblue", ready: messagingStatus(inst).state === "READY", requiredForPublish: inst.deploymentMode() === "GROK_MANAGED_P0" };
+  const selection = ensureMessagingSelection(inst);
+  if (!selection.provider) return undefined;
+  const provider = createMessagingProvider(selection.provider, { env: () => inst.env(), sendblue: () => inst.sendblueEnv() });
+  if (!provider.validateConfiguration().ok) return undefined;
+  return { mode: "live", provider: selection.provider, ready: messagingStatus(inst).state === "READY", requiredForPublish: inst.deploymentMode() === "GROK_MANAGED_P0" };
 }
 
 const DRIVE_INSTRUCTIONS =

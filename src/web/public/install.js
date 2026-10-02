@@ -63,32 +63,49 @@ function secretInput(id, label, hint, isSet) {
 
 function messagingCard(settings, last) {
   const s = settings.visitorMessaging;
+  const fields = s.fields ?? [];
   const form = h(
     "form",
     {
       onsubmit: async (e) => {
         e.preventDefault();
         const f = new FormData(form);
+        const values = {};
+        for (const field of fields) {
+          const raw = f.get(field.name);
+          if (raw) values[field.name] = raw;
+        }
+        const line = f.get("line");
         busy(form, true);
-        const out = await api("POST", "visitor-messaging", { apiKey: f.get("apiKey") || undefined, apiSecret: f.get("apiSecret") || undefined, fromNumber: f.get("fromNumber") || undefined });
+        const out = await api("POST", "visitor-messaging", { values, ...(line ? { line } : {}) });
         form.reset();
         render({ messaging: out.data.error ? { ok: false, message: out.data.error.message } : out.data });
       },
     },
-    ...secretInput("apiKey", "Sendblue API key", "From the Sendblue dashboard, under API keys.", s.apiKey),
-    ...secretInput("apiSecret", "Sendblue API secret", "Shown once when the key is created.", s.apiSecret),
-    h("label", { for: "fromNumber" }, "Texting number", h("span", { class: "hint", text: "The Sendblue number visitors will text, like +15551234567." })),
-    h("input", { id: "fromNumber", name: "fromNumber", type: "text", inputmode: "tel", autocomplete: "off", placeholder: s.fromNumber || "+1", required: !s.fromNumber }),
-    h("div", { class: "actions" }, h("button", { type: "submit", class: "primary" }, "Save and connect")),
+    ...fields.flatMap((field) =>
+      field.secret
+        ? secretInput(field.name, field.label, field.hint, field.set)
+        : [
+            h("label", { for: field.name }, field.label, h("span", { class: "hint", text: field.hint })),
+            h("input", { id: field.name, name: field.name, type: "text", inputmode: field.name.includes("NUMBER") ? "tel" : "text", autocomplete: "off", placeholder: field.value || "+1", required: field.required && !field.set }),
+          ],
+    ),
+    ...(s.lines?.length > 1
+      ? [
+          h("label", { for: "line" }, "Messaging line", h("span", { class: "hint", text: "Choose one of the lines this Photon project already has." })),
+          h("select", { id: "line", name: "line", required: true }, ...s.lines.map((line) => h("option", { value: line.address, text: `${line.address}${line.status ? ` (${line.status})` : ""}` }))),
+        ]
+      : []),
+    fields.length ? h("div", { class: "actions" }, h("button", { type: "submit", class: "primary" }, "Save and connect")) : null,
   );
   return h(
     "section",
     { class: `card${focus === "visitor-messaging" ? " highlight" : ""}`, id: "visitor-messaging" },
-    h("h2", { text: "Visitor texting (Sendblue)" }),
-    h("p", { class: "muted", text: "Tour Core checks the account and number, protects incoming messages with a secret, and tells Sendblue where to send visitor replies. Nothing is texted." }),
+    h("h2", { text: s.title || "Visitor texting" }),
+    h("p", { class: "muted", text: s.intro || "Tour Core checks the account and protects incoming messages. Nothing is texted." }),
     resultBox(last),
-    form,
-    s.apiKey && s.apiSecret ? h("button", { type: "button", class: "link", onclick: async () => render({ messaging: (await api("POST", "visitor-messaging/test")).data }) }, "Check again") : null,
+    fields.length ? form : h("p", { text: "Choose how prospects will text Tour Core in chat first. This page then asks only for that provider's details." }),
+    fields.some((field) => field.set) ? h("button", { type: "button", class: "link", onclick: async () => render({ messaging: (await api("POST", "visitor-messaging/test")).data }) }, "Check again") : null,
   );
 }
 

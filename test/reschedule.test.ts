@@ -181,7 +181,7 @@ describe("conversations survive a restart", () => {
     const root = mkdtempSync(join(tmpdir(), "tourcore-restore-"));
     roots.push(root);
     const ws = new PropertyWorkspace(root);
-    const config = { ...loadConfig(), messagingMode: "sendblue" as const };
+    const config = { ...loadConfig(), messagingMode: "live" as const };
     ws.save(config);
     const sent: string[] = [];
     const transport = new DemoMessagingAdapter((l) => sent.push(l), "MESSAGING");

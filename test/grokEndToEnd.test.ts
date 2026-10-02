@@ -27,7 +27,7 @@ async function liveDemo() {
   cleanups.push(setSendblueRuntime({ env: () => sendblueEnv(), client: () => fake.client }));
   let clock = at(7);
   const ws = new PropertyWorkspace(root);
-  const { config } = ws.save({ ...loadConfig(), messagingMode: "sendblue" });
+  const { config } = ws.save({ ...loadConfig(), messagingMode: "live" });
   ws.recordReadiness(config.property.id, await runReadinessCheck(config, { now: new Date(clock) }));
 
   const server: Server = createSetupServer({ workspace: new PropertyWorkspace(root), now: () => new Date(clock), realNow: () => clock, operatorToken: () => TOKEN, log: () => {} });

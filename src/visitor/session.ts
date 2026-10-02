@@ -156,6 +156,11 @@ export class VisitorDemoSession {
    * A phone number or an older tour does not set this.
    */
   smsConsent?: SmsConsentStatus;
+  /**
+   * keyword_confirm asks for TOUR then YES before property content.
+   * disabled starts the conversation immediately. STOP, START and HELP still apply.
+   */
+  smsConsentMode: "keyword_confirm" | "disabled" = "keyword_confirm";
   /** Last keyword-consent record, so a later STOP keeps the original opt-in time. */
   smsRecord?: SmsCampaignConsent;
   /** Writes the keyword-consent record. Unset in tests that only need memory. */

@@ -1,6 +1,9 @@
 import SendblueAPI from "sendblue";
 import { effectiveEnv } from "../../install/settings";
 import { toE164 } from "../Messenger";
+import { publicBase } from "../publicUrl";
+
+export { publicBase } from "../publicUrl";
 
 /**
  * Everything Sendblue-specific that comes from the settings layer: the
@@ -34,18 +37,6 @@ export function readSendblueEnv(env: NodeJS.ProcessEnv = process.env): SendblueE
     publicBaseUrlRaw: baseRaw,
     publicBaseUrl: publicBase(baseRaw),
   };
-}
-
-/** Only https URLs count; the phone and Sendblue must reach them. Trailing slashes are dropped. */
-export function publicBase(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
-  try {
-    const url = new URL(raw);
-    if (url.protocol !== "https:") return undefined;
-    return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
-  } catch {
-    return undefined;
-  }
 }
 
 export const SENDBLUE_WEBHOOK_PATH = "/webhooks/sendblue";

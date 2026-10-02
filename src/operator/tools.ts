@@ -212,7 +212,7 @@ function unitDetailsView(ctx: ToolContext, id: string) {
 }
 
 const MESSAGING_CHOICES = [
-  { choice: "sendblue", label: "Real texts to visitors' phones (Sendblue)", recommended: true },
+  { choice: "live", label: "Real texts to visitors' phones", recommended: true },
   { choice: "demo", label: "Practice only: texts show on screen, nobody is texted", recommended: false },
 ] as const;
 
@@ -765,12 +765,13 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Set messaging and records",
     kind: "change",
     description:
-      'Chooses how visitors are texted ("sendblue" for real texts, "demo" for practice only) and where records are kept ("this-computer" is the only choice today). Door access mode can\'t be changed here. Credentials are never set through chat.',
-    input: z.strictObject({ property: Property, messaging: z.enum(["sendblue", "demo"]).optional(), records: z.enum(["this-computer", "google-drive"]).optional() }),
+      'Chooses how visitors are texted ("live" for real texts through the installation\'s messaging provider, "demo" for practice only). "sendblue" is accepted as an older name for "live". Records stay on this computer. Door access mode can\'t be changed here. Credentials are never set through chat.',
+    input: z.strictObject({ property: Property, messaging: z.enum(["live", "sendblue", "demo"]).optional(), records: z.enum(["this-computer", "google-drive"]).optional() }),
     run: async (ctx, i) => {
       if (i.records === "google-drive") throw new SetupInputError("STORAGE_UNAVAILABLE", "Keeping records in Google Drive isn't available yet. They'll stay on this computer for now.");
       const { id, draft } = openDraft(ctx, i.property);
-      const state = edit(ctx, id, draft, "setServices", { messagingMode: i.messaging });
+      const messagingMode = i.messaging === "sendblue" ? "live" : i.messaging;
+      const state = edit(ctx, id, draft, "setServices", { messagingMode });
       return { summary: subsystemLines(ctx, id, ctx.services.workspace.openDraft(id).draft).sentence, ...state };
     },
   }),

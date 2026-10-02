@@ -61,7 +61,7 @@ describe("Tour Core owns the onboarding order", () => {
     endpointReady(h);
     h.connectGrok();
     const step = await next(h);
-    expect(step).toMatchObject({ component: "VISITOR_MESSAGING", action: "CONNECT_VISITOR_MESSAGING", phase: "INFRASTRUCTURE", infrastructureReady: false });
+    expect(step).toMatchObject({ component: "VISITOR_MESSAGING", action: "CHOOSE_MESSAGING_PROVIDER", phase: "INFRASTRUCTURE", infrastructureReady: false });
     expect(step.rule).toMatch(/Tour Core decides the order\. Do this step now\. Don't offer other setup, don't ask the operator what to do next, and don't start property setup/);
     const property = await h.component("PROPERTY");
     expect(property.next).toBeUndefined();

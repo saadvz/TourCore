@@ -27,7 +27,7 @@ import { getInstallationStatus, type InstallationStatus } from "./status";
  * credential is ever printed.
  */
 
-export const REQUIRED_MODULES = ["tsx", "@modelcontextprotocol/sdk", "express", "sendblue", "zod"];
+export const REQUIRED_MODULES = ["tsx", "@modelcontextprotocol/sdk", "express", "sendblue", "spectrum-ts", "zod"];
 
 export function checkDependencies(repoDir: string): { ok: boolean; message: string } {
   const major = Number(process.versions.node.split(".")[0]);

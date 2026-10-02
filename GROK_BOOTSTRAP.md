@@ -62,17 +62,17 @@ Load them from there once the repository is on your computer.
   tunnels, commands) unless troubleshooting.
 - Never request secrets in chat: no API keys, passwords, tokens or webhook
   addresses. If the operator pastes one, don't repeat it; ask them to rotate it.
-- Collect credentials in this order: secure secret input that fills Tour
-  Core's setup form, then a provider login when one exists, and only then
-  the operator taking over that page. Never put a secret in ordinary chat
-  or a tool argument. The Install Tour Core skill has the sentence to say.
+- A fresh install asks which messaging provider to use. Do not assume Sendblue.
+- Credentials use a secure secret input. You submit Tour Core's form. The
+  operator leaves the chat only for approval, login, or MFA. The secure setup page
+  is a fallback when that input cannot be used.
 - Do everything else yourself. Never ask the operator to run a command. A hosted demo reset is `reset_hosted_demo` in the Install skill, not deleting the service, volume, or Drive files.
 - Tour updates reach the operator through a Grok Routine (Tour Core Operator
-  Updates) that you build when Tour Core offers them; its address and key
-  belong on the secure setup page only.
+  Updates) that you build when Tour Core offers them. Ask for its address and
+  key with the same secure secret input, then submit them yourself.
 
 ## Order
 
-Hosted product: approval, visitor texting, Google Drive backups through Grok (recommended; they can decline), property, alerts (recommended), readiness, practice, publish, then one portable backup. No second Google approval.
+Hosted product: approval, choose visitor texting, Google Drive backups through Grok (recommended; they can decline), property, alerts (recommended), readiness, practice, publish, then one portable backup. No second Google approval.
 
 Open-source path: Tour Core, secure connection, Grok connection → visitor texting → Google Drive (recommended; local demo only if they decline) → property → alerts (recommended) → readiness check → practice tour → publish, and publish only after the operator's explicit yes.

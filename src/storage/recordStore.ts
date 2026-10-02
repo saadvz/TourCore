@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { InstallationFiles } from "../install/manifest";
 import type { SecretStore, SettingName } from "../install/secretStore";
+import { SECRET_SETTING_NAMES } from "../install/secretStore";
 import type { DeploymentMode } from "../install/deployment";
 import type { TourCoreStore } from "./Store";
 import { InMemoryStore } from "./Store";
@@ -489,9 +490,7 @@ export class RecordStore {
   }
 
   private secretValues(): string[] {
-    return ["GOOGLE_OAUTH_REFRESH_TOKEN", "GOOGLE_OAUTH_ACCESS_TOKEN", "GOOGLE_OAUTH_CLIENT_SECRET", "GOOGLE_OAUTH_PENDING", "SENDBLUE_API_API_KEY", "SENDBLUE_API_API_SECRET", "SENDBLUE_WEBHOOK_SECRET", "TOURCORE_GROK_ROUTINE_URL", "TOURCORE_GROK_ROUTINE_KEY"]
-      .map((name) => this.deps.secrets.get(name as SettingName))
-      .filter((value): value is string => !!value);
+    return SECRET_SETTING_NAMES.map((name) => this.deps.secrets.get(name)).filter((value): value is string => !!value);
   }
 
   private safeManifest() {

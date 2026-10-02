@@ -26,7 +26,7 @@ export const ManifestSchema = z.strictObject({
   installationId: z.string().regex(/^inst_[A-Za-z0-9_-]{12,60}$/),
   publicBaseUrl: z.url({ protocol: /^https$/ }).optional(),
   publicEndpointProvider: z.enum(PUBLIC_ENDPOINT_PROVIDERS),
-  messagingProvider: z.enum(["SENDBLUE", "DEMO"]),
+  messagingProvider: z.enum(["UNSET", "SENDBLUE", "TWILIO", "PHOTON", "DEMO"]),
   /** GOOGLE_DRIVE is canonical portable storage. LOCAL_DEMO stays on this computer. */
   storageProvider: z.enum(["LOCAL_DEMO", "GOOGLE_DRIVE"]),
   /** Future: DURIN. */
@@ -54,7 +54,11 @@ export interface InstallState {
   schemaVersion: 1;
   publicBaseUrlHistory: { url: string; since: string; until?: string }[];
   publicEndpointCheck?: CheckResult & { url: string };
-  visitorMessaging?: CheckResult & { publicBaseUrl?: string; webhookUrl?: string; problems: string[] };
+  visitorMessaging?: CheckResult & { publicBaseUrl?: string; webhookUrl?: string; problems: string[]; provider?: "sendblue" | "twilio" | "photon" };
+  /** Set when the operator chooses a provider, or when a working Sendblue install is migrated once. */
+  messagingProviderChoice?: "sendblue" | "twilio" | "photon";
+  /** Provisioned lines last reported by the active provider. Phone numbers only, never secrets. */
+  messagingLines?: { id: string; address: string; status?: string }[];
   /** credentialsChangedAt: when the routine settings were last changed, so an old test doesn't vouch for new ones. */
   operatorAlerts?: CheckResult & { credentialsChangedAt?: string };
   /** Exceptions that existed before operator alerts were first set up aren't announced. */
@@ -181,7 +185,7 @@ export class InstallationFiles {
       deploymentMode: input.deploymentMode,
       installationId: newInstallationId(),
       publicEndpointProvider: "NONE",
-      messagingProvider: "SENDBLUE",
+      messagingProvider: "UNSET",
       storageProvider: "LOCAL_DEMO",
       accessProvider: "DURIN_DEMO",
       operatorNotificationProvider: "NONE",

@@ -18,7 +18,7 @@ function home(): TourCoreConfig {
   const unit = { ...config.units[0]!, name: "Main Home", doorId: entrance.id };
   return {
     ...config,
-    messagingMode: "sendblue",
+    messagingMode: "live",
     property: {
       ...config.property,
       propertyType: "SINGLE_FAMILY",

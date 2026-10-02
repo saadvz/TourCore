@@ -57,7 +57,7 @@ describe("Sendblue adapter", () => {
 });
 
 describe("Sendblue readiness", () => {
-  const sendblueProperty = () => ({ ...loadConfig(), messagingMode: "sendblue" as const });
+  const sendblueProperty = () => ({ ...loadConfig(), messagingMode: "live" as const });
 
   it("explains missing credentials in plain language", async () => {
     restores.push(setSendblueRuntime({ env: () => sendblueEnv({ apiKey: undefined, apiSecret: undefined }) }));

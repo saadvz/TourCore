@@ -31,13 +31,26 @@ export function structuralView(config: TourCoreConfig): unknown {
   };
 }
 
+const shortHash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
+
 /** Fingerprint of the structural/safety part of a setup. Readiness, practice tours and publication are tied to this. */
 export function safetyHash(config: TourCoreConfig): string {
-  return createHash("sha256").update(JSON.stringify(structuralView(config))).digest("hex").slice(0, 16);
+  return shortHash(structuralView(config));
 }
 
 export function fullHash(config: TourCoreConfig): string {
-  return createHash("sha256").update(JSON.stringify(TourCoreConfigShape.parse(config))).digest("hex").slice(0, 16);
+  return shortHash(TourCoreConfigShape.parse(config));
+}
+
+/**
+ * The fingerprints a property file had when live messaging was stored as
+ * "sendblue". Used only to retarget readiness and publication during the rename.
+ */
+export function legacySendblueFingerprints(config: TourCoreConfig): { full: string; safety: string } {
+  const parsed = TourCoreConfigShape.parse(config);
+  const legacy = { ...parsed, messagingMode: "sendblue" as never };
+  const view = { ...(structuralView(parsed) as Record<string, unknown>), messagingMode: "sendblue" };
+  return { full: shortHash(legacy), safety: shortHash(view) };
 }
 
 export function classifyChange(before: TourCoreConfig, after: TourCoreConfig): ChangeKind {

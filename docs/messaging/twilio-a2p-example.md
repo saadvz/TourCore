@@ -1,6 +1,6 @@
 # Messaging providers and A2P registration
 
-Tour Core sends visitor texts through a messaging provider. Sendblue is the adapter included in this repository. Twilio is another provider a deployer may choose. A custom adapter can use the same messaging contract.
+Tour Core sends visitor texts through a messaging provider the deployer chooses. First-party adapters are Sendblue, Twilio, and Photon. A custom adapter can use the same `MessagingProvider` contract (`docs/messaging/providers.md`).
 
 Tour Core does not require Twilio. The visitor conversation, keyword opt-in, STOP and HELP handling, and consent record are provider-neutral. When a provider requires its own compliance registration, that registration stays with the deployer and the provider. It is not a Tour Core business profile.
 

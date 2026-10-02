@@ -122,7 +122,7 @@ export const COMMON_TIME_ZONES = [
 
 function servicesView(draft: SetupDraft) {
   const demo = draft.storageMode === "memory" && draft.messagingMode === "demo" && draft.accessMode === "durin-mock";
-  const sendblue = draft.messagingMode === "sendblue";
+  const live = draft.messagingMode === "live";
   return {
     allDemo: demo,
     messaging: {
@@ -130,9 +130,9 @@ function servicesView(draft: SetupDraft) {
       options: [
         { mode: "demo" as const, title: "Demo messaging", explanation: "Messages to visitors appear on screen. Nothing is actually texted." },
         {
-          mode: "sendblue" as const,
-          title: "Sendblue",
-          explanation: "Visitors text a real number from their own phone and get real replies. Needs Sendblue set up on this computer.",
+          mode: "live" as const,
+          title: "Visitor texting",
+          explanation: "Visitors text a real number from their own phone and get real replies. Uses the messaging provider connected for this installation.",
         },
       ],
     },
@@ -143,12 +143,12 @@ function servicesView(draft: SetupDraft) {
         dev: { mode: draft.storageMode, adapter: "InMemoryStore" },
       },
       {
-        title: sendblue ? "Sendblue messaging" : "Demo messaging",
-        text: sendblue
-          ? "Visitors text the property's Sendblue number and get real replies. Practice tours and the visitor demo still use demo messaging."
+        title: live ? "Visitor texting" : "Demo messaging",
+        text: live
+          ? "Visitors text the property's number and get real replies. Practice tours and the visitor demo still use demo messaging."
           : "Messages to visitors appear on screen. Nothing is actually texted.",
-        demo: !sendblue,
-        dev: { mode: draft.messagingMode, adapter: sendblue ? "SendblueMessagingAdapter" : "DemoMessagingAdapter" },
+        demo: !live,
+        dev: { mode: draft.messagingMode, adapter: live ? "MessagingProvider" : "DemoMessagingAdapter" },
       },
       {
         title: draft.accessMode === "durin-mock" ? "Durin demo mode" : CHOICE_LABELS.access[draft.accessMode],

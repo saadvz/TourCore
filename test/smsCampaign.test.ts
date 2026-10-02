@@ -19,7 +19,7 @@ afterEach(() => cleanups.splice(0).forEach((c) => c()));
 
 function sendblueProperty(): TourCoreConfig {
   const config = loadConfig();
-  return { ...config, messagingMode: "sendblue", property: { ...config.property, facts: ["Street parking only."] } };
+  return { ...config, messagingMode: "live", property: { ...config.property, facts: ["Street parking only."] } };
 }
 
 async function startPhoneApp(root = mkdtempSync(join(tmpdir(), "tourcore-sms-"))) {

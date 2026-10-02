@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { auditToCsv } from "../audit/audit";
-import { classifyChange, describeContentChanges, fullHash, safetyHash } from "../config/changeKinds";
+import { classifyChange, describeContentChanges, fullHash, legacySendblueFingerprints, safetyHash } from "../config/changeKinds";
 import { TourCoreConfigSchema, TourCoreConfigShape, validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
 import { ExportBundleSchema, type ExportBundle } from "../export/exportBundle";
 import { writeFileAtomic, writeFolderAtomic, writeJsonAtomic } from "../storage/atomicWrite";
@@ -46,6 +46,14 @@ export interface ContentChange {
  * setup. Results recorded before safety fingerprints existed fall back to the
  * whole-config fingerprint.
  */
+function retargetFingerprint<T extends { configHash: string; safetyHash?: string }>(record: T, old: { full: string; safety: string }, next: { full: string; safety: string }): T {
+  return {
+    ...record,
+    ...(record.configHash === old.full ? { configHash: next.full } : {}),
+    ...(record.safetyHash === old.safety ? { safetyHash: next.safety } : {}),
+  };
+}
+
 export function isCurrent(record: { configHash: string; safetyHash?: string } | undefined, state: PropertyState): boolean {
   if (!record) return false;
   return record.safetyHash !== undefined && state.safetyHash !== undefined ? record.safetyHash === state.safetyHash : record.configHash === state.configHash;
@@ -136,16 +144,43 @@ export class PropertyWorkspace {
 
   load(propertyId: string): SavedProperty {
     if (!this.has(propertyId)) throw new SetupInputError("PROPERTY_NOT_FOUND", "I couldn't find that property.");
-    const config = TourCoreConfigShape.parse(JSON.parse(readFileSync(this.configPath(propertyId), "utf8")));
+    const raw = JSON.parse(readFileSync(this.configPath(propertyId), "utf8")) as { messagingMode?: string };
+    const config = TourCoreConfigShape.parse(raw);
     const hash = configHash(config);
     const statePath = this.statePath(propertyId);
-    const stored: PropertyState | undefined = existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : undefined;
+    let stored: PropertyState | undefined = existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : undefined;
+    if (raw.messagingMode === "sendblue") stored = this.migrateLiveMessaging(propertyId, config, stored);
     // If a save was interrupted between the config and status files, fail closed: treat it as an unchecked draft.
     const state: PropertyState =
       stored && stored.configHash === hash
         ? stored
         : { ...(stored ?? {}), propertyId, status: "DRAFT", configHash: hash, savedAt: stored?.savedAt ?? new Date().toISOString(), publishedAt: undefined };
     return { config, state: { ...state, safetyHash: safetyHash(config) } };
+  }
+
+  /**
+   * Older property files stored live texting as "sendblue". Rewrite that one
+   * field to "live" and move the readiness and publication fingerprints with
+   * it. Nothing else about the property changes, so it does not need a new
+   * readiness check or a republish.
+   */
+  private migrateLiveMessaging(propertyId: string, config: TourCoreConfig, stored: PropertyState | undefined): PropertyState | undefined {
+    writeJsonAtomic(this.configPath(propertyId), config);
+    if (!stored) return stored;
+    const old = legacySendblueFingerprints(config);
+    const nextHash = configHash(config);
+    const nextSafety = safetyHash(config);
+    if (stored.configHash !== old.full && stored.configHash !== nextHash) return stored;
+    const moved = retargetFingerprint(stored, old, { full: nextHash, safety: nextSafety });
+    const next: PropertyState = {
+      ...moved,
+      configHash: nextHash,
+      safetyHash: nextSafety,
+      ...(stored.readiness ? { readiness: retargetFingerprint(stored.readiness, old, { full: nextHash, safety: nextSafety }) } : {}),
+      ...(stored.dryTour ? { dryTour: retargetFingerprint(stored.dryTour, old, { full: nextHash, safety: nextSafety }) } : {}),
+    };
+    this.writeState(next);
+    return next;
   }
 
   /**

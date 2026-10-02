@@ -13,7 +13,7 @@ and the terminal wizard (`npm run setup:cli`) use the same actions.
 **Recommended P0 path: Grok-managed.** Once the Bot exists (steps 3, 4 and the
 routine below), the operator just says *"Set up Tour Core."* The Bot installs
 Tour Core on its own cloud computer (`npm run bootstrap:grok`), connects to it,
-and opens Tour Core's secure setup page for credentials. Steps 1, 2 and 5
+and collects credentials with Grok's secure secret input. Steps 1, 2 and 5
 below are then done by the Bot, not by hand. See
 [`deployment.md`](deployment.md). The manual steps stay here for self-hosted
 and developer installs.
@@ -99,15 +99,15 @@ the first property is saved), the Bot creates a routine named **Tour Core
 Operator Updates** with an **authenticated webhook** trigger and the
 instructions in
 [`grok-template/routines/operator-updates.md`](../grok-template/routines/operator-updates.md),
-then opens Tour Core's secure setup page next to the routine's trigger panel.
-The webhook address and sender key go into the **Tour updates (Grok Routine)**
-card there: the Bot copies them itself only if both stay hidden on screen
-(copy buttons); otherwise the operator copies both values, or pastes the
-routine's whole webhook example into the page's paste box. They never go in
-chat, tool arguments, files or commands. (Rotate the key first if it has been
-shown anywhere else.) If you're building the Bot by hand for a self-hosted
-install, you can create the routine the same way and connect it on the same
-page.
+then asks for the webhook address and sender key with a secure secret input
+and submits Tour Core's form. If that input cannot be used, and both values
+stay hidden behind copy buttons, the Bot may paste them into the masked
+fields without reading them. If a value is shown on screen, the operator
+copies both values, or pastes the routine's whole webhook example. They never
+go in chat, tool arguments, files or commands. (Rotate the key first if it
+has been shown anywhere else.) If you're building the Bot by hand for a
+self-hosted install, you can create the routine the same way and use the
+setup page as the manual fallback.
 
 Private skills are one library shared by your Bots. If one doesn't appear in
 the `/` menu, open **Marketplace → Your plugins → Manage plugins and skills**
@@ -273,9 +273,9 @@ Publishing is manual. There's no official API for it, and P0 doesn't need one.
    `grok-template/template.json` and include no secrets or live data.
 4. Choose **Add Bot**. You get your own independent copy.
 5. Say *"Set up Tour Core."* The Bot installs and connects its own Tour Core
-   and asks you only for what needs a person, including authorizing the tour
-   updates routine connection once on Tour Core's secure setup page. No
-   webhook secrets, Sendblue secrets, Tour Core OAuth tokens or live property
+   and asks you only for what needs a person: approvals, logins, and
+   credentials through Grok's secure input. No
+   webhook secrets, provider secrets, Tour Core OAuth tokens or live property
    data come with the template. (Self-hosted instead: do steps 2 and 5 above
    with your Tour Core's URL.)
 6. Run one safe task (*"What's left to set up?"*, then *"Run a practice

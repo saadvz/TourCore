@@ -39,7 +39,7 @@ async function alertApp(options: { root?: string; clock?: { t: number }; net?: R
   const ws = new PropertyWorkspace(root);
   if (fresh) {
     const config = loadConfig();
-    const { config: saved } = ws.save({ ...config, messagingMode: "sendblue", property: { ...config.property, facts: ["Street parking only."] } });
+    const { config: saved } = ws.save({ ...config, messagingMode: "live", property: { ...config.property, facts: ["Street parking only."] } });
     ws.recordReadiness(saved.property.id, await runReadinessCheck(saved, { now: new Date(clock.t) }));
   }
   const runtime = new FileRuntimeStore(join(root, "runtime"));

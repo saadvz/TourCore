@@ -99,8 +99,11 @@ describe("real fresh-install sequence (HTTP, MCP, secure setup page)", () => {
     new OAuthGrantStore(runtime, () => clock).addGrant({ clientId: "grok", clientName: "Grok", issuer: TUNNEL, resource: `${TUNNEL}/mcp`, scopes: ["tourcore.operator"], createdAt: clock, expiresAt: clock + 86_400_000, accessHash: "x", accessExpiresAt: clock + 3_600_000 });
 
     const texting = await nextStep();
-    expect(texting).toMatchObject({ action: "CONNECT_VISITOR_MESSAGING", secureSetupStep: "visitor-messaging" });
-    const link = await grok("get_secure_setup_url", { step: texting.secureSetupStep });
+    expect(texting).toMatchObject({ action: "CHOOSE_MESSAGING_PROVIDER" });
+    await grok("choose_messaging_provider", { provider: "sendblue" });
+    const connect = await nextStep();
+    expect(connect).toMatchObject({ action: "CONNECT_VISITOR_MESSAGING", secureSetupStep: "visitor-messaging" });
+    const link = await grok("get_secure_setup_url", { step: connect.secureSetupStep });
     const session = /#s=([^&]+)/.exec(link.url)![1]!;
     // Before any property, the secure setup page doesn't show alerts at all.
     expect((await page("GET", "status", session)).body.sections).toEqual({ visitorMessaging: true, operatorAlerts: false });
@@ -148,8 +151,8 @@ describe("real fresh-install sequence (HTTP, MCP, secure setup page)", () => {
     await grok("skip_optional_setup", { component: "OPERATOR_ALERTS" });
     expect((await nextStep()).action).toBe("RUN_READINESS");
 
-    expect(sequence).toEqual(["CHECK_PUBLIC_ENDPOINT", "CONNECT_GROK", "CONNECT_VISITOR_MESSAGING", "CONNECT_GOOGLE_DRIVE", "SET_UP_PROPERTY", "FINISH_PROPERTY_SETUP", "OFFER_OPERATOR_ALERTS", "RUN_READINESS"]);
-  });
+    expect(sequence).toEqual(["CHECK_PUBLIC_ENDPOINT", "CONNECT_GROK", "CHOOSE_MESSAGING_PROVIDER", "CONNECT_VISITOR_MESSAGING", "CONNECT_GOOGLE_DRIVE", "SET_UP_PROPERTY", "FINISH_PROPERTY_SETUP", "OFFER_OPERATOR_ALERTS", "RUN_READINESS"]);
+  }, 20_000);
 
   it("the installation context file lists components in Tour Core's actual order and never calls alerts required", () => {
     const doc = readFileSync(new URL("../grok-template/context/installation.md", import.meta.url), "utf8");

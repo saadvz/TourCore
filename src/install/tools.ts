@@ -4,6 +4,8 @@ import { choosePreferences, describeUpdates, enabledUpdates, PROBLEMS_ONLY, RECO
 import type { OperatorTool, ToolContext, ToolKind } from "../operator/tools";
 import { SetupInputError } from "../setup/setupActions";
 import { checkPublicEndpoint, runtimeHealth, testAccess, testOperatorAlerts, testStorage, testVisitorMessaging } from "./checks";
+import { toE164 } from "../messaging/Messenger";
+import { chooseMessagingProvider } from "../messaging/switchProvider";
 import type { Installation } from "./installation";
 import { isHostedRailway } from "./deployment";
 import { HOSTED_SETUP_SESSION_MINUTES, HOSTED_SETUP_WRITES, DEFAULT_SETUP_SESSION_MINUTES } from "./setupSessions";
@@ -134,19 +136,52 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
     },
   }),
   tool({
+    name: "choose_messaging_provider",
+    title: "Choose visitor texting",
+    kind: "change",
+    description:
+      "Records which messaging provider prospects will use: sendblue, twilio, or photon. Takes no credentials. Switching removes the previous provider from active use and requires a new connection test. Property and tour records stay.",
+    input: z.strictObject({ provider: z.enum(["sendblue", "twilio", "photon"]) }),
+    run: async (ctx, i) => {
+      const inst = installation(ctx);
+      const chosen = await chooseMessagingProvider(inst, i.provider, { workspace: ctx.services.workspace });
+      ctx.resetMessaging?.();
+      const next = getInstallationStatus(inst, ctx.services).nextStep;
+      return { summary: chosen.summary, provider: i.provider, changed: chosen.changed, nextStep: next, rule: SEQUENCE_RULE };
+    },
+  }),
+  tool({
+    name: "choose_messaging_line",
+    title: "Choose a messaging line",
+    kind: "change",
+    description: "Saves which Photon line prospects will text. The address must be one Tour Core already discovered. Takes no secrets.",
+    input: z.strictObject({ line: z.string().min(8).max(40).describe("One of the line addresses Tour Core listed.") }),
+    run: async (ctx, i) => {
+      const inst = installation(ctx);
+      const wanted = toE164(i.line);
+      const known = (inst.files.state().messagingLines ?? []).map((line) => toE164(line.address) ?? line.address);
+      if (!wanted || !known.includes(wanted)) throw new SetupInputError("LINE_NOT_LISTED", "Choose one of the lines Tour Core listed.");
+      inst.secrets.set({ TOURCORE_PHOTON_PHONE_NUMBER: wanted }, new Date(inst.now()));
+      ctx.resetMessaging?.();
+      const next = getInstallationStatus(inst, ctx.services).nextStep;
+      return { summary: `Prospects will text ${wanted}. I'll test that line next.`, line: wanted, nextStep: next, rule: SEQUENCE_RULE };
+    },
+  }),
+  tool({
     name: "test_visitor_messaging",
     title: "Test visitor messaging",
     kind: "change",
     description:
-      "Checks visitor texting end to end (account, texting number, incoming messages, identity-form links) using details already saved on the secure setup page, and repairs what Tour Core owns: its own incoming-message address with Sendblue for the current public address. Takes no credentials. Nothing is texted.",
+      "Checks the selected visitor-texting provider (account, number or line, incoming messages, identity-form links) using details already saved, and registers Tour Core's incoming-message address when that provider supports it. Takes no credentials. Nothing is texted. A passing test does not mean carrier registration is complete. If Photon reports more than one line, ask the operator which listed line to use and call choose_messaging_line.",
     input: z.strictObject({}),
     run: async (ctx) => {
       const r = await testVisitorMessaging(installation(ctx), { onConnected: ctx.resetMessaging });
-      const { checks, incomingMessages, previousAddress, textingNumber, message } = r;
+      const { checks, incomingMessages, previousAddress, textingNumber, message, lines, needsLineChoice } = r;
       return {
         ok: r.ok,
-        summary: r.ok ? "Visitor texting is connected and working." : "Visitor texting isn't working yet.",
+        summary: needsLineChoice ? "Photon is connected. Choose one of the available lines." : r.ok ? "Visitor texting is connected and working." : "Visitor texting isn't working yet.",
         ...(textingNumber ? { textingNumber } : {}),
+        ...(needsLineChoice ? { needsLineChoice: true, lines } : {}),
         technical: { note: TECHNICAL_NOTE, detail: message, checks, incomingMessages, ...(previousAddress ? { previousAddress } : {}) },
       };
     },
@@ -247,7 +282,7 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
     kind: "change",
     description:
       "A short-lived link to Tour Core's secure setup page. On a local or Grok-managed install it only opens in the browser on the Tour Core computer. On the hosted demo it is an https page with a one-time session. Prefer a secure secret input that fills the form without the values entering chat. Hand the browser to the operator only if that fill isn't available. Never ask for credentials in chat and never pass them as tool arguments.",
-    input: z.strictObject({ step: SecureStep.optional().describe("Which part to open: visitor-messaging (Sendblue) or operator-alerts (Grok Routine).") }),
+    input: z.strictObject({ step: SecureStep.optional().describe("Which part to open: visitor-messaging or operator-alerts (Grok Routine).") }),
     run: async (ctx, i) => {
       const inst = installation(ctx);
       const hosted = isHostedRailway(inst.deploymentMode());

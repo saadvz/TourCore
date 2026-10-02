@@ -163,7 +163,7 @@ describe("setup through the tools", () => {
     const h = app();
     await h.setUpAlfredWay();
     const services = await h.ok("get_services");
-    expect(services.messaging.choices[0]).toMatchObject({ choice: "sendblue", recommended: true });
+    expect(services.messaging.choices[0]).toMatchObject({ choice: "live", recommended: true });
     expect(services.records.choices.find((c: { choice: string }) => c.choice === "google-drive")).toMatchObject({ available: false });
     expect(await h.fails("set_services", { records: "google-drive" })).toMatch(/Google Drive isn't available yet/);
     expect(await h.fails("set_services", { access: "durin" })).toMatch(/unexpected access/);

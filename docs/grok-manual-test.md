@@ -20,8 +20,8 @@ contact. Instructions for the routine Grok creates:
 | # | Do | Expect |
 | --- | --- | --- |
 | A1 | Update Tour Core (restart `npm run setup` or `npm run service:restart`). Ask Grok *"Check my Tour Core installation."* | Grok calls `get_installation_status` and answers with a checklist: runtime, secure connection, Grok connection, visitor texting, tour records stored with this installation, access system Demo, "Tour updates aren't turned on yet" (or "Tour updates are off" if you declined before) |
-| A2 | *"Turn on tour updates."* | Grok asks "Would you like me to keep you updated when someone books, starts or finishes a tour, and alert you if something needs your input?" and, if useful, recommends the defaults. Say yes: Grok calls `set_notification_preferences`, says "I'm setting up your tour updates.", creates the **Tour Core Operator Updates** routine itself and opens the secure setup page next to it (see B15 for the handoff) |
-| A3 | Finish the handoff on the secure setup page | The **Tour updates (Grok Routine)** card has two masked fields and a masked "Or paste the routine's whole webhook example" box. After saving, Grok runs `test_operator_alerts` and the routine posts "Tour updates are connected. I'll let you know about your tours here." Nothing was typed into chat |
+| A2 | *"Turn on tour updates."* | Grok asks "Would you like me to keep you updated when someone books, starts or finishes a tour, and alert you if something needs your input?" and, if useful, recommends the defaults. Say yes: Grok calls `set_notification_preferences`, says "I'm setting up your tour updates.", creates the **Tour Core Operator Updates** routine itself, and asks for the webhook address and key with a secure secret input |
+| A3 | Submit that secure input | The values do not appear in chat. Grok submits them, runs `test_operator_alerts`, and the routine posts "Tour updates are connected. I'll let you know about your tours here." Opening the setup page is only the fallback when that input cannot be used |
 | A4 | Open the same setup link from another device, or `https://<tunnel>/install` | Not found |
 | A5 | Ask Grok *"Test tour updates."* | Grok calls `test_operator_alerts`; the routine posts again; Grok never shows the address or key. Search the chat: neither value appears |
 | A6 | *"What updates am I getting?"*, then *"Only tell me about problems."* | Grok reads `get_notification_preferences` (bookings, tour starts, completions and anything that needs attention), then saves `problems-only`. A new booking from the phone produces no update; an unknown question still does |
@@ -51,10 +51,11 @@ Send only this (with the real repository address):
 > authoritative installation guide.
 >
 > Do as much of the setup yourself as possible. Never ask me to paste secrets
-> into chat. Use Tour Core's secure setup flow for credentials or
-> authentication. After Tour Core is running, use its installation-status tools
-> to determine what remains, test every component, then offer to configure my
-> first property.
+> into chat. Collect credentials with your secure secret input and submit
+> them yourself. I leave the conversation only to approve a connection, sign
+> in, or pass MFA. After Tour Core is running, use its installation-status
+> tools to determine what remains, test every component, then offer to
+> configure my first property.
 >
 > Start now.
 
@@ -66,9 +67,10 @@ Send only this (with the real repository address):
 | B3 | Read Grok's first message | Approximately: "I'll handle the technical setup and only ask when I need a login, approval or decision." Grok installs Tour Core without narrating the technical steps |
 | B4 | Wait | "Tour Core is installed and running. I need your approval to connect to it. I've opened the approval screen. Check that the codes match and click Allow." The approval screen is in Grok's cloud browser |
 | B5 | Take over the browser, check the codes match, click **Allow** | Without being asked: "Connected. I'm checking the rest of the setup now." Grok calls `get_installation_status` and `get_next_installation_step` |
-| B6 | Wait (**step 2: connect Sendblue**) | "Visitor texting needs your Sendblue credentials. I'll ask for them securely; they won't be shown to me in chat." Grok fills Tour Core's form from that secure input. Computer takeover only if secure fill isn't available. Grok does **not** offer property setup, ask what to do next, or ask for the key in chat |
-| B7 | Take over the browser, enter the Sendblue key, secret and number, say "done" | Grok tests it itself, then: "Visitor texting is connected and working. Everything needed to start is connected and tested. Would you like to add your first property?" |
-| B7a | Right after texting is connected | Grok does **not** mention tour updates, and never calls them required. The secure setup page shows only the texting section |
+| B6 | Wait (**step 2: choose visitor texting**) | "How would you like prospects to text Tour Core?" with Sendblue, Twilio, and Photon. Grok does **not** say texting runs through Sendblue, and does **not** ask you to open a setup page |
+| B6a | Say *"Sendblue"* (this script continues on Sendblue so the later phone steps have a number) | "Sendblue needs your API key, API secret, and messaging number. I'll ask for them securely; they won't be shown to me in chat." A secure input appears. Grok does **not** offer property setup, ask what to do next, or ask for the key in chat |
+| B7 | Submit the secure input. Do not open a browser to type the key, secret, or number | Grok fills and submits the form, tests texting, then: "Visitor texting is connected and working. Everything needed to start is connected and tested. Would you like to add your first property?" |
+| B7a | Right after texting is connected | Grok does **not** mention tour updates, and never calls them required |
 | B8 | Say yes (**step 3: create property**). Grok asks "What's the property address?"; answer *"144 Hillside Ave, Teaneck NJ"* | Grok calls `create_property_setup` with the address only. It asks "What ZIP code should I use?" and does not invent one |
 | B8a | Answer *"07666"* | Grok reads back 144 Hillside Ave / Teaneck, NJ 07666 and waits for yes before property type |
 | B9 | **Step 4: confirm canonical address** | After yes, Grok saves the confirmation and the guessed time zone, and asks if the time zone is right |
@@ -79,8 +81,8 @@ Send only this (with the real repository address):
 | B14 | **Step 9: verification.** *"Basic form."* | Saved; Grok says full ID checks aren't available yet only if asked |
 | B15 | **Step 10: texting is automatic.** Watch the next message | Grok does **not** ask "How do you want to text people?" or where to keep records. The review lists: 144 Hillside Ave, Teaneck NJ / Apartment building / each unit with its details line and route / "Tours: ..." / "Verification: ..." / "Visitor texting: Connected" / "Door access: Demo", then "Does that look right?" |
 | B16 | Say yes (**step 11: offer tour updates**) | "Your property is configured. Would you like me to keep you updated when someone books, starts or finishes a tour, and alert you if something needs your input?" Say *"Sure"*: Grok may add "I recommend alerts for bookings, tour starts, completions and anything that needs your attention. Want to use those defaults?" Say yes. Grok calls `set_notification_preferences` (recommended) and says "I'm setting up your tour updates." (Saying no instead skips updates and moves on) |
-| B16a | Watch Grok's cloud computer | Grok creates the **Tour Core Operator Updates** routine itself (authenticated webhook trigger), then opens Tour Core's secure setup page next to the routine's trigger panel. Record how the panel shows the webhook address and key |
-| B16b | Handoff | If both values stay hidden behind copy buttons, Grok copies each into the masked Tour Core fields itself without reading them. If either is visible on screen, Grok does **not** move it: it hands you the browser and asks you to copy both values across, or to paste the whole webhook example into Tour Core's paste box. Neither value appears in chat, tool arguments, files or commands |
+| B16a | Watch Grok's cloud computer | Grok creates the **Tour Core Operator Updates** routine itself (authenticated webhook trigger) and asks for the webhook address and key with a secure secret input |
+| B16b | Handoff | Submit that secure input. The values do not appear in chat, tool arguments, files, or commands. If secure input cannot be used and both values stay hidden behind copy buttons, Grok may paste them into the masked fields without reading them. If a value is shown on screen, Grok hands you the browser |
 | B16c | After saving | Grok runs `test_operator_alerts`; the routine posts "Tour updates are connected. I'll let you know about your tours here." |
 | B17 | Wait (**step 12: readiness**) | "Prospects can text your touring number to ask questions, choose a day and time, verify their details, and complete the self-guided tour in the same conversation. I'll run a readiness check and a practice tour before we turn it on." Grok runs the readiness check without asking whether to skip it |
 | B18 | Wait (**step 13: practice tour**) | Practice tour passes with its proof points; no text reaches your phone, and no tour update is posted for it |
@@ -91,7 +93,7 @@ Send only this (with the real repository address):
 
 Pass = no attached files, no terminal on the operator's computer, no
 credential in chat, no infrastructure jargon in the happy path, the operator
-only approved, signed in, entered credentials on the secure setup page,
+only approved, signed in, submitted credentials through Grok's secure input,
 answered property questions and made decisions, and the order was exactly:
 texting → property (address, type, units with details, routes, hours,
 verification; texting automatic) → offer tour updates → readiness → practice
@@ -298,7 +300,7 @@ approval. Automated tests do not call Google.
 
 | # | Do | Expect |
 | --- | --- | --- |
-| G1 | Fresh Grok bot. Connect hosted Tour Core. Allow. Connect Sendblue | Grok recommends Google Drive for portable backups and exports. It does not ask for a Google password, client id, client secret, or a second approval |
+| G1 | Fresh Grok bot. Connect hosted Tour Core. Allow. Choose a messaging provider and submit its credentials in the secure input | Grok recommends Google Drive for portable backups and exports. It does not ask for a Google password, client id, client secret, or a second approval |
 | G2 | Approve Grok's Google Drive connector | Grok creates or finds a private Tour Core folder (Backups, Exports, Properties) and tells Tour Core the backup destination is configured |
 | G3 | Continue | "Google Drive is connected. I've prepared your Tour Core folder." Then the first property. Status does not say "Google Drive canonical" or that a Tour Core Google client is missing |
 | G4 | Create the property, updates, readiness, practice, publish | Grok saves a portable backup into Tour Core/Backups and says it is saved only after the file is there |
@@ -333,7 +335,7 @@ real deploy.
 | --- | --- | --- |
 | H5 | Fresh Grok bot whose template has `hostedTourCoreUrl`. Say "Set up Tour Core." | Grok connects to the hosted service. It does not clone a runtime, start a tunnel, or say Tour Core only works while its computer is on. It does not mention Railway |
 | H6 | Click Authorize. Tour Core shows a pairing code and says approving this first connection makes this Grok connection the owner of the demo. Click Allow | The browser returns to Grok. Grok says it is connected. Registering or calling tools did not claim the demo by itself. A second unrelated account is refused |
-| H7 | Connect Sendblue, then Grok's Google Drive connector, then the property, updates, readiness, practice, and publish | Webhook and verification links use the Railway host. There is no second Google approval. Records stay on the volume. A portable backup is saved under Tour Core/Backups |
+| H7 | Choose a messaging provider and submit its credentials in the secure input, then Grok's Google Drive connector, then the property, updates, readiness, practice, and publish | Webhook and verification links use the Railway host. There is no second Google approval. Records stay on the volume. A portable backup is saved under Tour Core/Backups |
 | H8 | A real visitor texts the property | The tour proceeds. Operator updates come from the hosted service |
 
 ### Restart
@@ -379,5 +381,5 @@ Use the standard hosted bootstrap prompt (`GROK_BOOTSTRAP.md`, with
 | # | Do | Expect |
 | --- | --- | --- |
 | I6 | Say "Set up Tour Core." | Grok finds the hosted service. It does not start a local runtime |
-| I7 | Authorize and click Allow | The new Bot becomes the owner. No properties are listed. Sendblue is not connected. The Google Drive backup destination is not configured. Operator updates are not configured |
-| I8 | Continue the normal hosted onboarding | Sendblue, then Grok's Google Drive connector, then the first property, updates, readiness, practice, and publish. No old property or tour appears |
+| I7 | Authorize and click Allow | The new Bot becomes the owner. No properties are listed. Visitor texting is not connected. The Google Drive backup destination is not configured. Operator updates are not configured |
+| I8 | Continue the normal hosted onboarding | Choose a messaging provider, then Grok's Google Drive connector, then the first property, updates, readiness, practice, and publish. No old property or tour appears |

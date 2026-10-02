@@ -15,7 +15,7 @@ calls it internally; use it only if the operator asks for technical detail.
 | tour hours | days, first start, last finish, tour length, spacing, early arrival |
 | basic identity form | basic-form verification (claimed identity, not document-checked) |
 | practice verification | mock verification (everyone passes) |
-| real texts | Sendblue messaging |
+| real texts | live visitor texting |
 | practice texts / on screen | demo messaging |
 | tour records | the canonical tour store and audit |
 | readiness check | readiness checks |
@@ -27,7 +27,7 @@ calls it internally; use it only if the operator asks for technical detail.
 | approved fact | an operator-written property or unit fact |
 | door system, door access | Durin (demo mode in P0) |
 | tour updates | operator events delivered to the Tour Core Operator Updates Grok Routine |
-| visitor texting is live | the property uses the installation's Sendblue messaging |
+| visitor texting is live | the property uses the installation's messaging provider |
 
 Handles you'll see in tool results and must never show: `propertyId`,
 `unitId`, `doorId`, `tourRef`, `exceptionId`, `eventId`, `confirmation.code`.

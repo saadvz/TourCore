@@ -156,7 +156,7 @@ export async function handleVisitorText(
   if (firstMessage) session.identify(from);
 
   // SMS campaign consent comes before any property or booking content.
-  if (session.kind === "messaging" && session.smsConsent !== "opted_in") {
+  if (session.kind === "messaging" && session.smsConsentMode !== "disabled" && session.smsConsent !== "opted_in") {
     await handleSmsGate(session, said, text);
     return undefined;
   }

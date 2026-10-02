@@ -339,7 +339,7 @@ async function editServices(draft: SetupDraft): Promise<SetupDraft> {
   io.say("");
   const messagingMode = await io.choose("How should messages be sent?", [
     { label: "Demo messaging", hint: "texts show up on this screen instead of on phones", value: "demo" as const },
-    { label: "Sendblue", hint: "real texts and iMessages. Needs Sendblue set up on this computer (see the README)", value: "sendblue" as const },
+    { label: "Live texting", hint: "real texts through the messaging provider connected for this installation", value: "live" as const },
   ]);
   io.say("");
   const accessMode = await io.choose("How should doors be opened?", [

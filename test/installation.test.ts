@@ -75,7 +75,7 @@ describe("installation manifest", () => {
     expect(first.manifest).toMatchObject({
       schemaVersion: 1,
       deploymentMode: "GROK_MANAGED_P0",
-      messagingProvider: "SENDBLUE",
+      messagingProvider: "UNSET",
       storageProvider: "LOCAL_DEMO",
       accessProvider: "DURIN_DEMO",
       operatorNotificationProvider: "NONE",
@@ -174,7 +174,7 @@ describe("installation status", () => {
       ["RUNTIME", "READY"],
       ["PUBLIC_ENDPOINT", "ACTION_REQUIRED"],
       ["GROK_OPERATOR", "NOT_CONFIGURED"],
-      ["VISITOR_MESSAGING", "ACTION_REQUIRED"],
+      ["VISITOR_MESSAGING", "NOT_CONFIGURED"],
       ["STORAGE", "NOT_CONFIGURED"],
       ["ACCESS", "READY"],
       ["PROPERTY", "NOT_CONFIGURED"],
@@ -204,9 +204,14 @@ describe("installation status", () => {
     markChecked(h, "endpoint");
     expect(await next()).toEqual(["CONNECT_GROK", "OPERATOR", ""]);
     h.connectGrok();
+    expect(await next()).toEqual(["CHOOSE_MESSAGING_PROVIDER", "OPERATOR_DECISION", "choose_messaging_provider"]);
+    const choice = await h.ok("get_next_installation_step");
+    expect(choice.operatorMessage).toBe("How would you like prospects to text Tour Core?");
+    expect(JSON.stringify(choice)).not.toMatch(/Sendblue API|secure setup page|\/install/);
+    await h.ok("choose_messaging_provider", { provider: "sendblue" });
     expect(await next()).toEqual(["CONNECT_VISITOR_MESSAGING", "OPERATOR_IN_SECURE_SETUP", "get_secure_setup_url"]);
     expect((await h.ok("get_next_installation_step")).operatorMessage).toBe(
-      "Visitor texting needs your Sendblue credentials. I'll ask for them securely; they won't be shown to me in chat.",
+      "Sendblue needs your API key, API secret, and messaging number. I'll ask for them securely; they won't be shown to me in chat.",
     );
     h.inst.secrets.set({ SENDBLUE_API_API_KEY: SB_KEY, SENDBLUE_API_API_SECRET: SB_SECRET, SENDBLUE_FROM_NUMBER: "+15550109999" });
     expect(await next()).toEqual(["TEST_VISITOR_MESSAGING", "GROK", "test_visitor_messaging"]);

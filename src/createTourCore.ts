@@ -3,10 +3,12 @@ import { systemClock, type Clock } from "./core/clock";
 import { TourCore, type TourCoreDeps } from "./core/TourCore";
 import type { DurinAccessAdapter } from "./durin/DurinAccessAdapter";
 import { MockDurinAccessAdapter } from "./durin/MockDurinAccessAdapter";
+import type { Installation } from "./install/installation";
 import { DemoMessagingAdapter, type Messenger } from "./messaging/Messenger";
 import type { MessagingLedger } from "./messaging/ledger";
-import { SendblueMessagingAdapter } from "./messaging/sendblue/adapter";
-import { checkSendblue, type MessagingCheck } from "./messaging/sendblue/readiness";
+import type { MessagingCheck } from "./messaging/provider";
+import { createMessagingProvider, currentMessagingInput, resolveMessagingSelection } from "./messaging/registry";
+import { sendblueConfigured } from "./messaging/sendblue/provider";
 import { sendblueRuntime } from "./messaging/sendblue/runtime";
 import { InMemoryStore, type TourCoreStore } from "./storage/Store";
 import { BasicFormVerification, PracticeVerification, type VerificationProvider } from "./verification/basicForm";
@@ -35,19 +37,46 @@ export function createMessenger(config: TourCoreConfig, log?: Log, options: { le
   return createLiveMessagingTransport(options.ledger);
 }
 
-/** The real-phone transport (Sendblue today), created from the environment when the first message needs it. */
-export function createLiveMessagingTransport(ledger?: MessagingLedger): SendblueMessagingAdapter {
-  const env = sendblueRuntime.env();
-  if (!env.apiKey || !env.apiSecret || !env.fromNumber) {
+/** The real-phone transport for the selected messaging provider. */
+export function createLiveMessagingTransport(ledger?: MessagingLedger): Messenger {
+  const input = currentMessagingInput();
+  const selection = resolveMessagingSelection(input);
+  if (!selection.provider) {
+    throw new UnavailableModeError("MESSAGING_NOT_CONFIGURED", "Visitor messaging isn't connected yet.");
+  }
+  if (selection.provider === "sendblue" && !sendblueConfigured(input.sendblue)) {
     throw new UnavailableModeError("SENDBLUE_NOT_CONFIGURED", "Visitor messaging isn't connected yet: Sendblue isn't set up on this computer.");
   }
-  return new SendblueMessagingAdapter({ client: sendblueRuntime.client(env), fromNumber: env.fromNumber, ledger });
+  return createMessagingProvider(selection.provider, { env: () => input.env, sendblue: () => input.sendblue, ledger });
+}
+
+/** The running installation's transport. Uses the saved provider, not a hardcoded one. */
+export function liveTransportFor(inst: Installation, ledger?: MessagingLedger): Messenger {
+  const selection = resolveMessagingSelection({
+    env: inst.env(),
+    sendblue: inst.sendblueEnv(),
+    choice: inst.files.state().messagingProviderChoice,
+    manifestProvider: safeManifestProvider(inst),
+  });
+  if (!selection.provider) throw new UnavailableModeError("MESSAGING_NOT_CONFIGURED", "Visitor messaging isn't connected yet.");
+  return createMessagingProvider(selection.provider, { env: () => inst.env(), sendblue: () => inst.sendblueEnv(), ledger, now: () => new Date(inst.now()) });
+}
+
+function safeManifestProvider(inst: Installation) {
+  try {
+    return inst.files.manifest()?.messagingProvider;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Whether the chosen messaging can reach visitors, as plain-language checks. Demo messaging always can. */
 export async function checkMessaging(config: TourCoreConfig): Promise<MessagingCheck[]> {
   if (config.messagingMode === "demo") return [];
-  return checkSendblue();
+  const input = currentMessagingInput();
+  const selection = resolveMessagingSelection(input);
+  const id = selection.provider ?? "sendblue";
+  return createMessagingProvider(id, { env: () => input.env, sendblue: () => input.sendblue }).check();
 }
 
 export function createVerificationProvider(config: TourCoreConfig): VerificationProvider {

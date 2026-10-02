@@ -21,7 +21,7 @@ function sendblueProperty(): TourCoreConfig {
   const config = loadConfig();
   return {
     ...config,
-    messagingMode: "sendblue",
+    messagingMode: "live",
     property: { ...config.property, facts: ["Street parking only."] },
   };
 }

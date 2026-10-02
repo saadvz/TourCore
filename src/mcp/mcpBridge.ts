@@ -17,7 +17,8 @@ const SERVER_INFO = { name: "tour-core", title: "Tour Core", version: "0.2.0" };
 
 const INSTRUCTIONS =
   "Tour Core is the system of record and policy authority for self-guided tours. Use these tools to set up a property, map routes, run the readiness check and a practice tour, publish for demo (only after an explicit yes), watch active tours, work exceptions and export the audit. " +
-  "For installation, get_installation_status and get_next_installation_step are the source of truth for what's set up and what comes next. Provider credentials are entered only by the operator on Tour Core's secure setup page (get_secure_setup_url); never ask for them in chat. " +
+  "For installation, get_installation_status and get_next_installation_step are the source of truth. If visitor texting is not configured, the next step is to ask which provider to use. Do not assume Sendblue. " +
+  "Collect API credentials with Grok's secure secret-input control, then fill and submit Tour Core's setup form yourself. Never ask for secrets in ordinary chat and never tell the operator to open a setup page unless that secure input is unavailable. The operator leaves the conversation only for a human authorization such as OAuth, login, or MFA. " +
   "Speak to the operator in plain, everyday words. Never show ids, handles or codes. Never invent property facts. There is no tool to open a door: access is decided by Tour Core's policy on each visitor request and carried out by Durin.";
 
 type JsonRpcId = string | number | null;

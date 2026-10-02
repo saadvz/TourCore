@@ -1,4 +1,4 @@
-import { TourCoreConfigShape, validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
+import { isLiveMessaging, TourCoreConfigShape, validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
 import { FIELD_WORDS, missingProfileFields } from "../config/unitProfile";
 import type { ConfigIssue, ConfigSection } from "../config/validateConfig";
 import { SimulatedClock } from "../core/clock";
@@ -77,7 +77,7 @@ export async function runReadinessCheck(
   } = {},
 ): Promise<ReadinessResult> {
   const now = options.now ?? new Date();
-  const realPhones = (input as { messagingMode?: string } | undefined)?.messagingMode === "sendblue";
+  const realPhones = isLiveMessaging((input as { messagingMode?: string } | undefined)?.messagingMode);
   const ids = (Object.keys(LABELS) as ReadinessCheckId[]).filter((id) => id !== "progress" || (realPhones && options.runtime));
   const problems = new Map<ReadinessCheckId, ReadinessProblem[]>(ids.map((k) => [k, []]));
   const fail = (id: ReadinessCheckId, problem: ReadinessProblem) => problems.get(id)!.push(problem);
@@ -156,7 +156,7 @@ export async function runReadinessCheck(
   }
 
   const result = finish(problems, now);
-  if (config.messagingMode === "sendblue") {
+  if (isLiveMessaging(config.messagingMode)) {
     const messaging = result.checks.find((c) => c.id === "messaging")!;
     messaging.label = messaging.ok ? "Visitor messaging connected" : "Visitor messaging";
   }

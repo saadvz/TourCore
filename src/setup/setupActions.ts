@@ -52,7 +52,7 @@ export const CHOICE_LABELS = {
     mock: "Practice verification (everyone passes)",
     "document-check": "Full ID check",
   },
-  messaging: { demo: "Demo messaging (texts show on screen)", sendblue: "Sendblue (real texts and iMessages)" },
+  messaging: { demo: "Demo messaging (texts show on screen)", live: "Real texts to visitors' phones" },
   storage: { memory: "Demo records (kept on this computer)", "google-drive": "Google Drive" },
   access: { "durin-mock": "Durin demo mode (no real doors open)", durin: "Durin" },
 } as const;

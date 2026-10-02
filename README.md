@@ -8,7 +8,7 @@ route, and only during their reserved window. Afterward it sends a follow-up and
 own policy check allows the request. If policy says no, Durin is never asked.
 
 This is a P0 demo: door access runs in Durin demo mode (no real doors open) and tour records are stored with the
-Tour Core installation. Real visitor texting works through Sendblue.
+Tour Core installation. Real visitor texting uses the messaging provider the operator chooses.
 
 **Grok is the installer and the operator console.** The intended way to run Tour Core is by talking to the
 **Tour Core Bot** in Grok Bot: it installs Tour Core, connects texting, sets up a property, offers tour updates, runs the
@@ -51,12 +51,13 @@ in its cloud browser, fill in non-sensitive settings, and run every check.
 
 What you may still need to do (it isn't zero-click):
 
-- create or sign in to a Sendblue account, pass MFA, accept provider terms;
-- approve Grok's connection on Tour Core's page (Grok opens it; you take over the browser and click Allow);
-- type the Sendblue details into **Tour Core's secure setup page**, which Grok opens in its cloud browser, and
-  copy the Grok Routine's connection details there too (Grok copies them itself only when they stay hidden on
-  screen). Credentials never go into the chat;
+- choose how prospects text Tour Core, then give that provider's account details through Grok's secure input
+  (they are not shown in the chat; Grok submits them);
+- create or sign in to a provider account, pass MFA, or accept provider terms, when that provider requires it;
+- approve Grok's connection (Grok opens the approval; you click Allow);
 - make the decisions: property facts, tour hours, and the explicit yes to publish.
+
+Typing keys into a setup page is only a fallback when Grok's secure input cannot be used.
 
 Grok-managed is a **demo deployment**: Tour Core runs while Grok's cloud computer does, and its temporary public
 address changes if the tunnel restarts (Tour Core notices and says what to reconnect). Details, limits and the
@@ -70,7 +71,7 @@ path to production: [`docs/deployment.md`](docs/deployment.md).
 2. In Grok, add Tour Core as a custom connector at `PUBLIC_BASE_URL/mcp` (OAuth; approve it on the server's
    `/grok` page).
 3. Say **"Set up Tour Core."** Grok skips installing and drives configuration through the same installation
-   status and secure setup page.
+   status. Credentials use Grok's secure input.
 
 ### Path C: Local developer
 
@@ -175,9 +176,13 @@ npm test                    # vitest
 npm run typecheck           # tsc
 ```
 
-## Real phones with Sendblue
+## Visitor texting
 
-With Sendblue connected, a visitor texts the property's Sendblue number from their own phone and runs the whole tour
+Tour Core is provider-agnostic. Choose how prospects reach your property. Current first-party messaging adapters include Sendblue, Twilio, and Photon. Tour Core's booking, property, policy, and tour logic stays the same regardless of messaging provider. Additional providers can be added through the `MessagingProvider` interface (`docs/messaging/providers.md`). Features are not identical across adapters.
+
+Carrier and provider requirements vary. The deployer is responsible for their provider account and any applicable messaging requirements. Connecting a provider does not mean a carrier has approved application messaging.
+
+With a provider connected, a visitor texts the property's number from their own phone and runs the whole tour
 in their normal Messages app:
 
 - inquiry and unit facts;
@@ -194,13 +199,15 @@ The operator watches it in the same **Active tour** live view and history.
 
 It is the same visitor engine as the browser phone. Only the transport differs: the browser phone gets button wording,
 and a messaging app gets typed-reply wording ("Reply YES or NO."). Practice tours and the browser visitor demo never
-text anyone. Sendblue is one messaging provider. Twilio and other adapters can use the same keyword opt-in. A
-provider that requires its own compliance registration is documented in `docs/messaging/twilio-a2p-example.md`.
-Public compliance pages read `TOURCORE_PUBLIC_BRAND_NAME`, `TOURCORE_PUBLIC_LEGAL_NAME`,
-`TOURCORE_PUBLIC_CONTACT_EMAIL`, `TOURCORE_PUBLIC_SMS_NUMBER`, and `PUBLIC_BASE_URL`. They do not invent a legal
-entity when the legal name is empty.
+text anyone. Keyword opt-in, STOP, and HELP stay in Tour Core. Set `TOURCORE_SMS_CONSENT_MODE` to `keyword_confirm`,
+`provider_default`, or `disabled`. Public compliance pages at `/TourCore/privacy`, `/TourCore/terms`, and `/TourCore/sms`
+read `TOURCORE_PUBLIC_BRAND_NAME`, `TOURCORE_PUBLIC_LEGAL_NAME`, `TOURCORE_PUBLIC_CONTACT_EMAIL`,
+`TOURCORE_PUBLIC_SMS_NUMBER`, and `PUBLIC_BASE_URL`. They are not specific to one provider. They do not invent a legal
+entity when the legal name is empty. `docs/messaging/twilio-a2p-example.md` is an example of disclosures some carriers ask for.
 
-### Setup (development)
+Webhook addresses are `PUBLIC_BASE_URL/webhooks/sendblue`, `PUBLIC_BASE_URL/webhooks/twilio`, and `PUBLIC_BASE_URL/webhooks/photon`.
+
+### Sendblue (one adapter)
 
 1. **Create a Sendblue account.** The free sandbox is fine for testing.
 2. **Get API credentials.** In the Sendblue dashboard, create an API key and secret.
@@ -352,7 +359,7 @@ Terminal wizard ─────────────────────�
 ```
 
 - **Installation tools** (`src/install/tools.ts`): 10 more tools report and test the installation
-  (`get_installation_status`, `get_next_installation_step`, ...) and open the secure setup page. None takes or
+  (`get_installation_status`, `get_next_installation_step`, ...) and a secure setup form Grok fills. None takes or
   returns a credential or runs a command. See [`docs/deployment.md`](docs/deployment.md).
 - **Tool contract** (`src/operator/tools.ts`): 34 typed, provider-neutral operator tools over the existing actions:
   property setup, units, doors, routes (`preview_route` resolves the operator's words to doors on file; `set_route`
@@ -513,8 +520,8 @@ store this elsewhere; it's optional.
 
 The config holds the property (including its **IANA time zone**, e.g. `America/New_York`), operator alert contact,
 doors, units, routes, and tour hours: days, start, end, `slotEveryMinutes`, `tourLengthMinutes` and
-`earlyArrivalMinutes`. It also holds `verificationMode`, `verificationValidForDays`, `messagingMode`, `storageMode` and
-`accessMode`. Policy values live only in config. Setup shows the defaults (45-minute tours, hourly, 10 minutes early,
+`earlyArrivalMinutes`. It also holds `verificationMode`, `verificationValidForDays`, `messagingMode` (`demo` or `live`), `storageMode` and
+`accessMode`. The messaging provider (Sendblue, Twilio, or Photon) is stored on the installation, not on the property. Older property files that say `messagingMode: "sendblue"` are read as `live` and rewritten in place; that rename does not by itself require a new readiness check or a republish. Policy values live only in config. Setup shows the defaults (45-minute tours, hourly, 10 minutes early,
 checks reusable for 30 days) and lets the operator change them.
 
 **Approved facts.** `property.facts`, `unit.summary` and `unit.facts` hold only what the operator wrote.

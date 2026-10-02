@@ -167,7 +167,7 @@ describe("real visitor texting can't be missed", () => {
     const h = harness();
     await h.ok("create_property_setup", { address: "144 Hillside Ave, Teaneck, NJ", propertyType: "APARTMENT_BUILDING" });
     await finishHillside(h);
-    expect(h.workspace.load("prop_144_hillside_ave_teaneck_nj").config.messagingMode).toBe("sendblue");
+    expect(h.workspace.load("prop_144_hillside_ave_teaneck_nj").config.messagingMode).toBe("live");
     const review = await h.ok("review_property_setup");
     expect(review.lines.slice(-2)).toEqual(["Visitor texting: Connected", "Door access: Demo"]);
     expect(review.lines.join("\n")).not.toMatch(/https?:|trycloudflare|\/mcp|\+1555/);
@@ -179,7 +179,7 @@ describe("real visitor texting can't be missed", () => {
     const h = harness({ texting: false });
     h.inst.secrets.set({ SENDBLUE_API_API_KEY: SB_KEY, SENDBLUE_API_API_SECRET: SB_SECRET, SENDBLUE_FROM_NUMBER: "+15550109999" });
     await h.ok("create_property_setup", { address: "144 Hillside Ave, Teaneck, NJ", propertyType: "APARTMENT_BUILDING" });
-    expect(h.workspace.openDraft("prop_144_hillside_ave_teaneck_nj").draft.messagingMode).toBe("sendblue");
+    expect(h.workspace.openDraft("prop_144_hillside_ave_teaneck_nj").draft.messagingMode).toBe("live");
     expect((await h.ok("get_services")).messaging).toMatchObject({ visitorTexting: "Not working yet" });
   });
 

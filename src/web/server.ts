@@ -3,10 +3,16 @@ import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { join } from "node:path";
-import { createLiveMessagingTransport, createStore } from "../createTourCore";
+import { createStore, liveTransportFor } from "../createTourCore";
 import { MessagingLedger } from "../messaging/ledger";
-import { SENDBLUE_WEBHOOK_PATH, sendblueRuntime } from "../messaging/sendblue/runtime";
+import { handleProviderWebhook } from "../messaging/pipeline";
+import { activeFromNumber, bindMessagingInstallation, createMessagingProvider, selectionFromInstallation } from "../messaging/registry";
+import { consentModeForProvider } from "../messaging/consentPolicy";
+import { SENDBLUE_WEBHOOK_PATH } from "../messaging/sendblue/runtime";
 import { handleSendblueWebhook } from "../messaging/sendblue/webhook";
+import { PHOTON_WEBHOOK_PATH } from "../messaging/photon/provider";
+import { TWILIO_WEBHOOK_PATH } from "../messaging/twilio/provider";
+import { publicBaseUrl } from "../messaging/publicUrl";
 import { createIntentInterpreter, intentModelFromEnv, type IntentInterpreter } from "../intent";
 import { mcpAuthModeFromEnv, type McpAuthMode } from "../mcp/authMode";
 import { authorized, handleMcpMessage, MCP_PATH } from "../mcp/mcpBridge";
@@ -117,7 +123,7 @@ function publicRouteAllowed(method: string, path: string, oauth: boolean, hosted
     return (method === "GET" && path.startsWith("/portable/artifacts/")) || (method === "POST" && path.startsWith("/portable/uploads/"));
   }
   if (oauth && (isOAuthPublicPath(path, MCP_PATH) || (method === "GET" && path === "/oauth.js"))) return true;
-  if (method === "POST" && path === SENDBLUE_WEBHOOK_PATH) return true;
+  if (method === "POST" && (path === SENDBLUE_WEBHOOK_PATH || path === TWILIO_WEBHOOK_PATH || path === PHOTON_WEBHOOK_PATH)) return true;
   if (method === "GET" && isPublicCompliancePath(path)) return true;
   if (method === "GET" && (/^\/verify\/[A-Za-z0-9_-]+$/.test(path) || path === "/verify.js" || path === "/styles.css")) return true;
   if (hosted && method === "GET" && (path === "/connect" || path === "/connect.js" || path === "/install" || path === "/install.js" || path === "/styles.css")) return true;
@@ -127,8 +133,16 @@ function publicRouteAllowed(method: string, path: string, oauth: boolean, hosted
 
 const forwardedProto = (req: IncomingMessage) => String(req.headers["x-forwarded-proto"] ?? "").split(",")[0]?.trim().toLowerCase();
 
+function safeManifestProvider(installation: Installation) {
+  try {
+    return installation.files.manifest()?.messagingProvider;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
- * The local setup app plus the two things a real phone needs: the Sendblue
+ * The local setup app plus the two things a real phone needs: the messaging
  * receive webhook and the identity-form page. Operator pages and APIs answer
  * only on this computer's own address.
  */
@@ -142,16 +156,22 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
   const installation = options.installation ?? new Installation({ root: workspace.root, runtime, log });
   // Adapters read credentials through the settings layer; this installation's secure-setup values join the environment's.
   const restoreSettings = useSettingsSource(installation.settingsSource());
+  const restoreMessaging = bindMessagingInstallation(() => ({
+    env: installation.env(),
+    sendblue: installation.sendblueEnv(),
+    choice: installation.files.state().messagingProviderChoice,
+    manifestProvider: safeManifestProvider(installation),
+  }));
   const ledger = new MessagingLedger(join(workspace.root, "runtime", "messaging-ledger", "ledger.json"), 5000, join(workspace.root, "messaging", "ledger.json"));
-  const links = new VerificationLinks({ baseUrl: () => sendblueRuntime.env().publicBaseUrl, now: options.realNow, store: runtime });
+  const links = new VerificationLinks({ baseUrl: () => installation.publicBaseUrl() ?? publicBaseUrl(installation.env()), now: options.realNow, store: runtime });
   const endpoints = new MessagingEndpoints(runtime);
-  const messagingLine = () => sendblueRuntime.env().fromNumber;
+  const messagingLine = () => activeFromNumber(installation);
   try {
-    adoptLegacyLine(workspace, endpoints, messagingLine(), log);
+    adoptLegacyLine(workspace, endpoints, messagingLine(), log, selectionFromInstallation(installation).provider);
   } catch (err) {
     log(`Couldn't connect the texting number to a property: ${err instanceof Error ? err.message : "unknown error"}`);
   }
-  let transport: ReturnType<typeof createLiveMessagingTransport> | undefined;
+  let transport: ReturnType<typeof liveTransportFor> | undefined;
   const resetMessaging = () => {
     transport = undefined;
   };
@@ -171,11 +191,13 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
     runtime,
     endpoints,
     defaultLine: messagingLine,
-    transport: () => (transport ??= createLiveMessagingTransport(ledger)),
+    transport: () => (transport ??= liveTransportFor(installation, ledger)),
     now: options.now,
     realNow: options.realNow,
     interpreter: options.interpreter ?? createIntentInterpreter({ log }),
     log,
+    consentMode: () => consentModeForProvider(installation.env(), selectionFromInstallation(installation).provider),
+    publicBaseUrl: () => installation.publicBaseUrl(),
     onSaved: (session) => afterSave(session.propertyId),
     storeFor: (config) => installation.records.wrapStore(createStore(config)),
     storageRead: () => installation.records.storageRead(),
@@ -240,7 +262,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           runtime,
           mcpPath: MCP_PATH,
           endpoints: () => {
-            const base = sendblueRuntime.env().publicBaseUrl;
+            const base = installation.publicBaseUrl();
             return base ? endpointsFor(base, MCP_PATH) : undefined;
           },
           redirectPolicy: () => redirectPolicyFor(installation.env(), installation.deploymentMode()),
@@ -304,7 +326,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
     // Local addresses get everything; the configured public address gets only the phone-facing routes.
     // Anything else is refused (blocks DNS-rebinding tricks).
     const host = (req.headers.host ?? "").replace(/:\d+$/, "").toLowerCase();
-    const publicBase = sendblueRuntime.env().publicBaseUrl;
+    const publicBase = installation.publicBaseUrl();
     const publicHost = publicBase ? new URL(publicBase).hostname.toLowerCase() : undefined;
     const url = new URL(req.url ?? "/", "http://localhost");
     const method = req.method ?? "GET";
@@ -420,13 +442,36 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         }
         return send(reply.status, json, JSON.stringify(reply.body));
       }
-      if (method === "POST" && url.pathname === SENDBLUE_WEBHOOK_PATH) {
-        // Raw bytes first: authenticity is checked before anything is parsed.
+      if (method === "POST" && (url.pathname === SENDBLUE_WEBHOOK_PATH || url.pathname === TWILIO_WEBHOOK_PATH || url.pathname === PHOTON_WEBHOOK_PATH)) {
         const rawBody = await readRaw(req);
-        const result = await handleSendblueWebhook(
-          { rawBody, headers: req.headers },
-          { secret: sendblueRuntime.env().webhookSecret, ledger, receive: (m) => conversations.receive(m), now: options.now, log },
-        );
+        const providerId = url.pathname === TWILIO_WEBHOOK_PATH ? "twilio" : url.pathname === PHOTON_WEBHOOK_PATH ? "photon" : "sendblue";
+        const selection = selectionFromInstallation(installation);
+        const signedUrl = installation.publicBaseUrl() ? `${installation.publicBaseUrl()}${url.pathname}${url.search}` : undefined;
+        const provider = createMessagingProvider(providerId, { env: () => installation.env(), sendblue: () => installation.sendblueEnv(), ledger, now: options.now });
+        if (providerId === "sendblue") {
+          if (selection.provider && selection.provider !== "sendblue") {
+            const auth = provider.verifyWebhook({ rawBody, headers: req.headers, url: signedUrl });
+            if (!auth.ok) return send(401, "application/json; charset=utf-8", JSON.stringify({ error: "unauthorized" }));
+            try {
+              JSON.parse(rawBody.toString("utf8") || " ");
+            } catch {
+              return send(400, "application/json; charset=utf-8", JSON.stringify({ error: "invalid json" }));
+            }
+            return send(200, "application/json; charset=utf-8", JSON.stringify({ ignored: "inactive provider" }));
+          }
+          const result = await handleSendblueWebhook(
+            { rawBody, headers: req.headers },
+            { secret: installation.sendblueEnv().webhookSecret, ledger, receive: (m) => conversations.receive(m), now: options.now, log },
+          );
+          return send(result.status, "application/json; charset=utf-8", JSON.stringify(result.body));
+        }
+        const result = await handleProviderWebhook(provider, { rawBody, headers: req.headers, url: signedUrl }, {
+          ledger,
+          receive: (m) => conversations.receive(m),
+          now: options.now,
+          log,
+          active: selection.provider === providerId,
+        });
         return send(result.status, "application/json; charset=utf-8", JSON.stringify(result.body));
       }
       if (method === "GET" && /^\/verify\/[A-Za-z0-9_-]+$/.test(url.pathname)) {
@@ -459,6 +504,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
   server.on("close", () => {
     clearInterval(retry);
     restoreSettings();
+    restoreMessaging();
   });
   return Object.assign(server, {
     tourCore: {
@@ -618,14 +664,16 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.log(`  Deployment:           ${deployment.mode}${deployment.invalid ? ` (TOURCORE_DEPLOYMENT_MODE "${deployment.invalid}" isn't recognized)` : ""}, installation ${manifest.installationId}`);
     console.log(`  Secure setup:         ${url}install#s=${installation.sessions.mint().token}  (this computer only; expires in 30 minutes)\n`);
   }
-  const sb = sendblueRuntime.env();
-  if (sb.apiKey || sb.publicBaseUrl) {
-    console.log(`  Real-phone messaging: Sendblue number ${sb.fromNumber ?? "(not set)"}`);
-    console.log(`  Incoming messages:    ${sb.publicBaseUrl ? `${sb.publicBaseUrl}${SENDBLUE_WEBHOOK_PATH}` : "(set PUBLIC_BASE_URL to receive replies)"}`);
+  const line = activeFromNumber(installation);
+  const base = installation.publicBaseUrl();
+  const selected = selectionFromInstallation(installation).provider;
+  if (line || base) {
+    console.log(`  Real-phone messaging: ${selected ?? "not chosen"} ${line ?? "(number not set)"}`);
+    console.log(`  Incoming messages:    ${base && selected ? `${base}/webhooks/${selected}` : "(set PUBLIC_BASE_URL to receive replies)"}`);
     const model = intentModelFromEnv();
     console.log(`  Reading texts:        built-in rules${model ? ` + language model ${model.name}` : " only"}\n`);
   }
-  const mcpUrl = sb.publicBaseUrl ? `${new URL(sb.publicBaseUrl).origin}${MCP_PATH}` : "(set PUBLIC_BASE_URL so Grok Bot can reach it)";
+  const mcpUrl = base ? `${new URL(base).origin}${MCP_PATH}` : "(set PUBLIC_BASE_URL so Grok Bot can reach it)";
   const mode = mcpAuthModeFromEnv();
   if (mode === "oauth") {
     console.log(hosted ? `  Grok connects at ${mcpUrl}. The first Allow on the authorization page claims this demo.\n` : `  Grok Bot connector:   ${mcpUrl} (OAuth: approve connections at ${url}grok)\n`);

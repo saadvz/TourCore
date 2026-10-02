@@ -3,7 +3,8 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { testEvent } from "../alerts/operatorEvents";
 import { MockDurinAccessAdapter } from "../durin/MockDurinAccessAdapter";
-import { connectSendblue } from "../messaging/sendblue/connect";
+import { activeFromNumber, createMessagingProvider, ensureMessagingSelection } from "../messaging/registry";
+import type { SettingName } from "./secretStore";
 import type { OperatorServices } from "../operator/services";
 import { writeFileAtomic } from "../storage/atomicWrite";
 import { probeRuntimeStore } from "../storage/runtimeStore";
@@ -87,40 +88,54 @@ export async function checkPublicEndpoint(inst: Installation, options: { attempt
  * never changed here; they're entered on the secure setup page.
  */
 export async function testVisitorMessaging(inst: Installation, options: { onConnected?: () => void } = {}) {
-  const env = inst.sendblueEnv();
+  const selection = ensureMessagingSelection(inst);
+  if (selection.invalid || !selection.provider) {
+    const message = selection.invalid ? `Tour Core doesn't include a messaging provider named "${selection.invalid}".` : "Choose how prospects will text Tour Core first.";
+    return { ok: false, message, checks: [], incomingMessages: "Not changed." };
+  }
+  const provider = createMessagingProvider(selection.provider, { env: () => inst.env(), sendblue: () => inst.sendblueEnv(), now: () => new Date(inst.now()) });
   const previous = inst.files.state().visitorMessaging?.webhookUrl;
-  const result = await connectSendblue(env, {
-    saveWebhookSecret: (secret) => inst.secrets.set({ SENDBLUE_WEBHOOK_SECRET: secret }, new Date(inst.now())),
+  const result = await provider.connect({
+    saveSecret: (values) => inst.secrets.set(values as Partial<Record<SettingName, string>>, new Date(inst.now())),
     previousWebhookUrl: previous,
   });
   const problems = [...(result.problem ? [result.problem] : []), ...result.checks.filter((c) => !c.ok).map((c) => c.message)];
   const message = result.ok ? "Visitor texting is connected." : (problems[0] ?? "Visitor texting isn't connected yet.");
+  const number = activeFromNumber(inst);
   inst.files.recordCheck("visitorMessaging", {
     ok: result.ok,
     at: new Date(inst.now()).toISOString(),
     message,
     problems,
-    ...(env.publicBaseUrl ? { publicBaseUrl: env.publicBaseUrl } : {}),
+    provider: selection.provider,
+    ...(inst.publicBaseUrl() ? { publicBaseUrl: inst.publicBaseUrl() } : {}),
     ...(result.webhookUrl ? { webhookUrl: result.webhookUrl } : previous ? { webhookUrl: previous } : {}),
   });
   if (result.ok) {
-    inst.files.update({ messagingProvider: "SENDBLUE" }, new Date(inst.now()));
+    inst.files.update({ messagingProvider: selection.provider === "twilio" ? "TWILIO" : selection.provider === "photon" ? "PHOTON" : "SENDBLUE" }, new Date(inst.now()));
     options.onConnected?.();
   }
+  if (result.lines) {
+    const state = inst.files.state();
+    inst.files.writeState({ ...state, messagingLines: result.lines });
+  }
+  const who = provider.displayName;
   return {
     ok: result.ok,
     message,
     checks: result.checks.map((c) => ({ check: c.label, ok: c.ok, message: c.message })),
     incomingMessages:
       result.webhook === "registered"
-        ? "Registered Tour Core's incoming-message address with Sendblue."
+        ? `Registered Tour Core's incoming-message address with ${who}.`
         : result.webhook === "re-registered"
-          ? "Updated Tour Core's incoming-message address with Sendblue."
+          ? `Updated Tour Core's incoming-message address with ${who}.`
           : result.webhook === "already-registered"
-            ? "Sendblue already sends visitor replies to Tour Core."
+            ? `${who} already sends visitor replies to Tour Core.`
             : "Not changed.",
-    ...(result.removedPreviousWebhook ? { previousAddress: "Removed Tour Core's old incoming-message address from Sendblue." } : {}),
-    ...(env.fromNumber ? { textingNumber: env.fromNumber } : {}),
+    ...(result.removedPreviousWebhook ? { previousAddress: `Removed Tour Core's old incoming-message address from ${who}.` } : {}),
+    ...(number ? { textingNumber: number } : {}),
+    ...(result.lines ? { lines: result.lines } : {}),
+    ...(result.needsLineChoice ? { needsLineChoice: true } : {}),
   };
 }
 

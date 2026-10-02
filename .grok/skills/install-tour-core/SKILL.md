@@ -2,7 +2,7 @@
 name: install-tour-core
 description: Connect an operator to Tour Core and take them from a blank setup to a published property by following Tour Core's own next steps, asking only for approvals, logins, credentials through a secure handoff, property information and decisions.
 when-to-use: "set up Tour Core", "install Tour Core", "what's left to set up", "check my Tour Core installation", "is Tour Core running", "restart Tour Core", "test alerts", "connect texting", "turn on alerts", "tour updates", "change my notifications", "reset Tour Core", "fresh demo", "fresh onboarding test"
-allowed-tools: get_installation_status get_next_installation_step get_installation_component skip_optional_setup check_runtime_health check_public_endpoint test_visitor_messaging get_notification_preferences set_notification_preferences get_operator_update test_operator_alerts test_storage test_access get_secure_setup_url get_storage_status get_storage_location begin_google_drive_connect finish_google_drive_setup use_local_demo_storage prepare_storage_migration migrate_storage_to_google_drive verify_storage_migration activate_google_drive_storage discover_storage takeover_storage_writer disconnect_google_drive_storage confirm_backup_destination decline_portable_backup get_backup_status create_portable_backup confirm_backup_stored reset_hosted_demo
+allowed-tools: get_installation_status get_next_installation_step get_installation_component skip_optional_setup check_runtime_health check_public_endpoint choose_messaging_provider choose_messaging_line test_visitor_messaging get_notification_preferences set_notification_preferences get_operator_update test_operator_alerts test_storage test_access get_secure_setup_url get_storage_status get_storage_location begin_google_drive_connect finish_google_drive_setup use_local_demo_storage prepare_storage_migration migrate_storage_to_google_drive verify_storage_migration activate_google_drive_storage discover_storage takeover_storage_writer disconnect_google_drive_storage confirm_backup_destination decline_portable_backup get_backup_status create_portable_backup confirm_backup_stored reset_hosted_demo
 argument-hint: "[what to check or connect]"
 user-invocable: true
 metadata:
@@ -69,6 +69,12 @@ In normal conversation never mention addresses or links, `/mcp`,
 package or command names, process ids, adapters or tunnels. `grokInstructions`
 and anything under `technical` are for you only. Share technical details only
 if the operator asks for them or you're troubleshooting with them.
+
+The operator stays in this conversation except for a human-only authorization:
+OAuth Allow, a provider login, or MFA. API keys, secrets, account ids, and
+phone numbers are collected with Grok's secure secret input. You fill and
+submit Tour Core's form. Do not tell them to open a setup page unless that
+secure input could not be used.
 
 ## Sequence
 
@@ -141,24 +147,24 @@ By `performedBy`:
 
 - **GROK**: do it yourself (the `tool`, or the `command` on your computer),
   then say briefly what happened ("Visitor texting is connected and working.").
-- **OPERATOR_IN_SECURE_SETUP**: call `get_secure_setup_url` with its
-  `secureSetupStep`. Prefer Grok's secure secret input: ask for the values
-  securely, then fill and submit Tour Core's form yourself. They are not
-  shown in chat and are not tool arguments. Say:
-
-  > Visitor texting needs your Sendblue credentials. I'll ask for them securely; they won't be shown to me in chat.
-
-  The same order applies to a routine webhook address and key, and to future
-  provider credentials. If that provider has its own login, use that. Hand
-  the browser to the operator only when secure fill isn't available for that
-  field. Don't show the link, don't read the values back, and don't ask for
-  them in chat. When they're saved, call `get_next_installation_step`.
+- **OPERATOR_IN_SECURE_SETUP**: Prefer Grok's secure secret input. Say `operatorMessage`. For messaging credentials that sentence is "I'll ask for them securely; they won't be shown to me in chat." Collect only `credentialFields`. The values
+  are not shown in chat and are not tool arguments. Call
+  `get_secure_setup_url` with `secureSetupStep`, fill the form, and submit it
+  yourself. Do not show the link. Do not tell the operator to open a page.
+  When it is saved, call `get_next_installation_step` and continue. Do not ask
+  what to do next. The same secure fill applies to a routine webhook address
+  and key. Hand the browser to the operator only when secure fill isn't
+  available; say that the normal secure collection could not be used.
 - **OPERATOR**: say `operatorMessage` and wait (a login, MFA, provider terms,
   an approval).
 - **OPERATOR_DECISION**: ask `operatorMessage` and wait for the answer.
 
 Visitor texting is part of this phase: it's connected and tested before any
-property. Then Tour Core recommends Google Drive, before the first property.
+property. If the next step is choosing a provider, ask `operatorMessage` and
+offer only the returned choices. Do not assume Sendblue. Do not give legal or
+compliance advice beyond each choice's description. After they pick, call
+`choose_messaging_provider`, then follow the next step. If Photon lists more than one line, ask which one and call `choose_messaging_line`. Then Tour Core
+recommends Google Drive, before the first property.
 The access system ("Demo") needs nothing from the operator.
 
 On the hosted product, Google Drive is a portable backup. The live records
@@ -354,17 +360,18 @@ first property?"
 
 ## Requires approval
 
-Approving the connection to Tour Core (the operator clicks Allow), giving
-credentials through a secure handoff (or taking over the secure setup page
-when that fill isn't available), choosing or declining tour updates
+Approving the connection to Tour Core (the operator clicks Allow), supplying
+credentials through Grok's secure secret input (or taking over the form only
+when that input isn't available), choosing or declining tour updates
 (the operator's choice), and publishing (explicit yes).
 
 ## Stop when
 
 - Tour Core reports `DONE` (phase OPERATE), or the operator has what they
   asked for.
-- A person has to act (approval, login, MFA, provider terms, the secure setup
-  page): say what to do and wait.
+- A person has to act (approval, login, MFA, or provider terms): say what to
+  do and wait. A setup form is only for the operator when secure input could
+  not be used.
 - A provider account is blocked or refuses the details: say so plainly.
 - The hosted service can't be reached: say what's blocking in one sentence, without asking the operator to create a hosting account.
 - Your cloud computer can't run the open-source path: say what's blocking in one sentence.
@@ -375,7 +382,7 @@ when that fill isn't available), choosing or declining tour updates
 
 - Ask for, accept, repeat or store passwords, API keys, secrets, tokens or
   webhook addresses in chat. If the operator pastes one anyway, don't repeat
-  it; tell them to rotate it and use the secure setup page instead.
+  it; tell them to rotate it and supply the new value through secure secret input.
 - Put credentials in commands, files or tool arguments.
 - Ask the operator to run commands, create a hosting account, or choose the setup order.
 - On the hosted product, clone Tour Core as the runtime, start a local service, start a quick tunnel, or say it only works while your computer is on.

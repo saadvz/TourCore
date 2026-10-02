@@ -324,6 +324,11 @@ describe("Install Tour Core skill", () => {
         case "CONNECT_GROK":
           h.connectGrok(); // the operator clicks Allow
           break;
+        case "CHOOSE_MESSAGING_PROVIDER":
+          expect(step.choices?.map((c: { id: string }) => c.id)).toEqual(["sendblue", "twilio", "photon"]);
+          expect(step.operatorMessage).toMatch(/How would you like prospects to text/);
+          await tool("choose_messaging_provider", { provider: "sendblue" });
+          break;
         case "CONNECT_GOOGLE_DRIVE":
           expect(step.operatorMessage).toMatch(/connecting Google Drive/);
           expect(step.operatorMessage).not.toMatch(/password|token|api key/i);
@@ -361,6 +366,7 @@ describe("Install Tour Core skill", () => {
       "ESTABLISH_PUBLIC_ENDPOINT:GROK",
       "CHECK_PUBLIC_ENDPOINT:GROK",
       "CONNECT_GROK:OPERATOR",
+      "CHOOSE_MESSAGING_PROVIDER:OPERATOR_DECISION",
       "CONNECT_VISITOR_MESSAGING:OPERATOR_IN_SECURE_SETUP",
       "CONNECT_GOOGLE_DRIVE:OPERATOR_DECISION",
       "SET_UP_PROPERTY:OPERATOR_DECISION",
@@ -371,7 +377,7 @@ describe("Install Tour Core skill", () => {
     ]);
     expect(said).toContain("Everything needed to start is connected and tested. Would you like to add your first property?");
     // The property used the installed texting on its own: nobody was asked how to text people.
-    expect(h.workspace.load("prop_100_alfred_way").config.messagingMode).toBe("sendblue");
+    expect(h.workspace.load("prop_100_alfred_way").config.messagingMode).toBe("live");
     expect(step.operatorMessage).toBe(
       "Your property is published. Visitor texting is live. Door access is still in demo mode, so no physical locks will open. I'll keep you updated on your tours and let you know when something needs your attention.",
     );

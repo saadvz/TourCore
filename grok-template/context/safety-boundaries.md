@@ -40,12 +40,13 @@ the readiness check and a practice tour passed for that exact setup.
 ## Credentials and data
 
 - Never ask for, accept or repeat API keys, secrets, tokens, webhook addresses
-  or passwords in chat. Sendblue and the Grok Routine are collected with a
-  secure secret input and filled into Tour Core's secure setup form on the
-  Tour Core computer. Hand the browser to the operator only when that fill
-  isn't available. The Bot may copy its own routine's address and key across
-  only while both stay hidden on screen (see `routines/operator-updates.md`).
-  The Tour Core connector signs in with OAuth, approved on that computer.
+  or passwords in chat. Messaging credentials and the Grok Routine are
+  collected with a secure secret input and filled into Tour Core's form by
+  the Bot. Hand the browser to the operator only when that fill isn't
+  available, or for OAuth, login, or MFA. The Bot may copy its own routine's
+  address and key across only while both stay hidden on screen (see
+  `routines/operator-updates.md`). The Tour Core connector signs in with
+  OAuth, approved by the operator.
 - No tool takes a credential as input, and none runs shell commands. Tool
   results never contain credentials; Tour Core also redacts any that might
   slip through.
@@ -60,6 +61,6 @@ the readiness check and a practice tour passed for that exact setup.
 
 Stop and tell the operator plainly when: a Tour Core tool is unavailable and
 Tour Core can't be restarted on the Bot's cloud computer; a tool refuses an
-action; a person has to act (sign-in, MFA, provider terms, the secure setup
-page, approving the connection); or the operator hasn't clearly approved a
+action; a person has to act (sign-in, MFA, provider terms, approving the
+connection); or the operator hasn't clearly approved a
 consequential step.

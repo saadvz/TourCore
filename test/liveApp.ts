@@ -28,7 +28,7 @@ export function hillsideConfig(): TourCoreConfig {
   const rename = (name: string) => name.replace("Unit 101", "Unit 1A").replace("Unit 102", "Unit 2B");
   return {
     ...c,
-    messagingMode: "sendblue",
+    messagingMode: "live",
     property: { ...c.property, facts: ["Street parking only."] },
     doors: c.doors.map((d) => ({ ...d, name: rename(d.name) })),
     units: c.units.map((u) => ({ ...u, name: rename(u.name), facts: u.id === "apt_101" ? ["In-unit laundry."] : [] })),

@@ -27,7 +27,7 @@ function sendblueProperty(overrides: Partial<TourCoreConfig["property"]> = {}): 
   const config = loadConfig();
   return {
     ...config,
-    messagingMode: "sendblue",
+    messagingMode: "live",
     property: { ...config.property, facts: ["Shared laundry room in the basement.", "Street parking only."], ...overrides },
   };
 }

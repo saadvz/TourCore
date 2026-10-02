@@ -859,12 +859,12 @@ function messagingStatus(id) {
         s.checks.map((c) => el("div", { class: "status-row" }, mark(c.ok), el("span", {}, c.message, devChip(c.dev?.code)))),
         s.line
           ? el("p", {}, `Texting number for this property: ${s.line}`)
-          : s.mode === "sendblue"
+          : s.mode === "live"
             ? el("p", { class: "muted" }, "The texting number is connected to this property when you run the readiness check.")
             : null,
         s.connected
           ? el("p", { class: "muted" }, "Visitors can text the property's number now.")
-          : el("p", { class: "hint" }, "Sendblue is set up by whoever runs this computer (see \"Real phones with Sendblue\" in the README). Nothing needs to be typed here."),
+          : el("p", { class: "hint" }, "The messaging provider is connected by whoever runs this computer. Nothing needs to be typed here."),
         btn("Check again", () => rerender(), "small"),
       ),
     )
@@ -899,10 +899,10 @@ function servicesStep(data) {
       "div",
       {},
       el("h1", {}, "Records, messages and doors"),
-      el("p", { class: "lead" }, "Records and door access run as a safe demo. Messages can go to real phones through Sendblue."),
+      el("p", { class: "lead" }, "Records and door access run as a safe demo. Messages can go to real phones through the connected messaging provider."),
       el("h2", {}, "How should visitors get messages?"),
       choices,
-      mode === "sendblue" ? messagingStatus(id) : null,
+      mode === "live" ? messagingStatus(id) : null,
       el("h2", {}, "Everything else"),
       view.services.items.map((s) =>
         el("div", { class: "card" }, el("h3", {}, s.title, " ", s.demo === false ? null : el("span", { class: "badge demo" }, "Demo")), el("p", { class: "muted" }, s.text), devBlock(s.dev)),

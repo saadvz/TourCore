@@ -1,14 +1,8 @@
 import { mapSendblueError } from "./adapter";
 import { sendblueRuntime, webhookUrlFor, type SendblueEnv } from "./runtime";
+import type { MessagingCheck } from "../provider";
 
-export interface MessagingCheck {
-  id: "account" | "line" | "incoming" | "verify-link";
-  label: string;
-  ok: boolean;
-  /** Plain language; never contains secrets. */
-  message: string;
-  code?: string;
-}
+export type { MessagingCheck };
 
 /**
  * Can this computer text visitors through Sendblue and hear their replies?

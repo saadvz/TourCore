@@ -1,4 +1,4 @@
-import { validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
+import { isLiveMessaging, validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
 import { runDryTour, type DryTourResult } from "../setup/dryTour";
 import { runReadinessCheck, type ReadinessResult } from "../setup/readiness";
 import { SetupInputError } from "../setup/setupActions";
@@ -19,14 +19,15 @@ import type { InstalledMessaging, OperatorServices } from "./services";
 export function connectLine(services: OperatorServices, propertyId: string, messagingMode: string, now: Date): string | undefined {
   const endpoints = services.endpoints;
   if (!endpoints) return undefined;
-  if (messagingMode !== "sendblue") {
+  if (!isLiveMessaging(messagingMode)) {
     endpoints.detach(propertyId);
     return undefined;
   }
   const line = services.messagingLine?.();
   if (!line) return undefined;
   try {
-    const { changed, previous } = endpoints.attach({ address: line, provider: "sendblue", propertyId }, now);
+    const provider = services.installedMessaging?.()?.provider ?? "sendblue";
+    const { changed, previous } = endpoints.attach({ address: line, provider, propertyId }, now);
     if (changed && previous) services.workspace.invalidateReadiness(propertyId, "The texting number changed. Run the readiness check again.");
     return undefined;
   } catch (err) {
@@ -51,7 +52,7 @@ export const TEXTING_NOT_USED =
   "Visitor texting is connected, but this property isn't using it yet. I'll connect the property to your touring number before publishing.";
 
 export function visitorTexting(services: OperatorServices, propertyId: string, messagingMode: string, installed = services.installedMessaging?.()): VisitorTexting {
-  if (messagingMode !== "sendblue") {
+  if (!isLiveMessaging(messagingMode)) {
     return installed ? { state: "not-using-it", label: "Not connected to this property yet", problem: TEXTING_NOT_USED } : { state: "practice", label: "Practice only (nobody is texted)" };
   }
   if (installed && !installed.ready) return { state: "not-working", label: "Not working yet", problem: "Visitor texting isn't working yet, so texts to your touring number wouldn't reach this property." };

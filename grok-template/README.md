@@ -54,8 +54,8 @@ folder or the skills.
 
 Custom MCP servers and credentials don't travel with a Grok Bot template.
 After adding the Bot, each installation gets its own Tour Core, its own
-connection, and its own routine credentials (connected once on Tour Core's
-secure setup page). `template.json` → `marketplace` spells out what ships
+connection, and its own routine credentials (collected with a secure secret
+input). `template.json` → `marketplace` spells out what ships
 (instructions, skills, the routine definition, integration references) and
 what never does.
 

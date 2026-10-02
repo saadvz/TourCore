@@ -17,6 +17,14 @@ export const SETTINGS = {
   SENDBLUE_WEBHOOK_SECRET: { secret: true },
   /** The texting number; not a credential, but entered with the Sendblue account. */
   SENDBLUE_FROM_NUMBER: { secret: false },
+  TOURCORE_TWILIO_ACCOUNT_SID: { secret: true },
+  TOURCORE_TWILIO_AUTH_TOKEN: { secret: true },
+  TOURCORE_TWILIO_PHONE_NUMBER: { secret: false },
+  TOURCORE_PHOTON_PROJECT_ID: { secret: true },
+  TOURCORE_PHOTON_PROJECT_SECRET: { secret: true },
+  TOURCORE_PHOTON_PHONE_NUMBER: { secret: false },
+  TOURCORE_PHOTON_WEBHOOK_SECRET: { secret: true },
+  TOURCORE_PHOTON_WEBHOOK_STANDARD_SECRET: { secret: true },
   /** Grok Routine webhook address. Treated as a secret: it's a capability to wake the routine. */
   TOURCORE_GROK_ROUTINE_URL: { secret: true },
   TOURCORE_GROK_ROUTINE_KEY: { secret: true },

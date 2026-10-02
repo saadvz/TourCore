@@ -12,10 +12,9 @@ sender (bearer) key when the trigger is created. Those two values are
 installation secrets:
 
 - They don't travel with this template; each installation creates its own.
-- They go into the **Tour updates (Grok Routine)** card on Tour Core's
-  secure setup page, never in chat, tool arguments, files or commands. See
-  "Connecting it" below. Rotate the key first if it was ever shown anywhere
-  else.
+- Grok asks for them with a secure secret input and submits Tour Core's form.
+  They never go in chat, tool arguments, files, or commands. See "Connecting
+  it" below. Rotate the key first if it was ever shown anywhere else.
 - Tour Core keeps them in its secret store and never returns them to Grok.
 
 ## What Tour Core sends

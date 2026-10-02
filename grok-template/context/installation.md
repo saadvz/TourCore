@@ -8,8 +8,9 @@
   setting. Its installation tools are the source of truth.
 - **The operator** makes decisions and does the steps only a person can do:
   create or sign in to provider accounts, pass MFA, accept provider terms,
-  approve Grok's connection, type credentials into Tour Core's secure setup
-  page, and say yes to publishing.
+  approve Grok's connection, and say yes to publishing. API credentials stay
+  in Grok's secure secret input. You submit them. The operator does not open
+  a setup page unless that input cannot be used.
 
 Setup is not zero-click. Be clear about which steps need the operator.
 
@@ -47,8 +48,8 @@ Always follow `get_next_installation_step`; this table only explains it.
 
 Alerts are never required and never come before the first property. When the
 operator says yes, you save their choice (`set_notification_preferences`),
-create the Tour Core Operator Updates routine yourself, and connect it through
-the secure setup page (`routines/operator-updates.md`). If preferences are
+create the Tour Core Operator Updates routine yourself, and connect it with
+the same secure secret input (`routines/operator-updates.md`). If preferences are
 chosen but the routine isn't connected, the next step is
 CONNECT_OPERATOR_ALERTS.
 
@@ -57,19 +58,19 @@ Only READY means done.
 
 ## Credentials
 
-Sendblue's API key, API secret and touring number, and a routine's webhook
-address and key, are collected in this order:
+Visitor texting starts by asking which provider to use. Do not assume
+Sendblue. After the operator chooses, collect only that provider's fields
+with Grok's secure secret input, fill Tour Core's form, and submit it. Then
+follow the next step. Do not ask what to do next.
 
-1. Grok's secure secret input, which fills Tour Core's secure setup form.
-   The values are not shown in chat.
-2. The provider's own login, when it has one.
-3. The operator taking over the secure setup page, only when secure fill
-   isn't available for that field.
+A routine webhook address and key use the same secure input. If the routine
+panel's copy buttons keep both values hidden on screen, those hidden values
+may be pasted into the matching masked fields. If a value is shown on screen,
+don't read it into chat.
 
-Never put a secret in ordinary chat, a command, a file, or a tool argument.
-If the routine panel's copy buttons keep both values hidden on screen, those
-hidden values may be pasted into the matching masked fields. If a value is
-shown on screen, don't read it into chat: hand over the browser.
+The operator leaves the conversation only for OAuth, login, or MFA. Opening
+the setup page is a fallback when secure input cannot be used. Never put a
+secret in ordinary chat, a command, a file, or a tool argument.
 
 ## Later components
 

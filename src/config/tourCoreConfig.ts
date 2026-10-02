@@ -114,8 +114,12 @@ export const TourCoreConfigShape = z.object({
   verificationFormUrl: z.url().optional(),
   /** How long a passed check can be reused for repeat tours. */
   verificationValidForDays: z.number().int(),
-  /** "demo" prints messages; "sendblue" texts real phones. Credentials never live in config. */
-  messagingMode: z.preprocess((v) => (v === "console" ? "demo" : v), z.enum(["demo", "sendblue"])),
+  /**
+   * "demo" prints messages. "live" texts real phones through the installation's
+   * messaging provider (Sendblue, Twilio, or Photon). The provider is not stored
+   * on the property. Older files say "sendblue" for this same live mode.
+   */
+  messagingMode: z.preprocess((v) => (v === "console" ? "demo" : v === "sendblue" ? "live" : v), z.enum(["demo", "live"])),
   storageMode: z.enum(["memory", "google-drive"]),
   accessMode: z.enum(["durin-mock", "durin"]),
 });
@@ -126,6 +130,11 @@ export type Unit = z.infer<typeof UnitSchema>;
 export type Route = z.infer<typeof RouteSchema>;
 export type Property = z.infer<typeof PropertySchema>;
 export type TourHours = z.infer<typeof TourHoursSchema>;
+
+/** Real visitor texting, including property files saved before the mode was renamed from "sendblue". */
+export function isLiveMessaging(mode: string | undefined): boolean {
+  return mode === "live" || mode === "sendblue";
+}
 
 /** Shape + meaning. Anything that parses with this is safe to run tours on. */
 export const TourCoreConfigSchema = TourCoreConfigShape.superRefine((cfg, ctx) => {

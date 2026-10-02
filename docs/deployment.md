@@ -78,7 +78,7 @@ and non-secret:
   "installationId": "inst_...",
   "publicBaseUrl": "https://....trycloudflare.com",
   "publicEndpointProvider": "CLOUDFLARE_QUICK_TUNNEL",
-  "messagingProvider": "SENDBLUE",
+  "messagingProvider": "UNSET",
   "storageProvider": "LOCAL_DEMO",
   "accessProvider": "DURIN_DEMO",
   "operatorNotificationProvider": "GROK_ROUTINE",
@@ -91,6 +91,8 @@ and non-secret:
 The schema is strict (no extra fields), and every write is refused if any
 configured credential value appears anywhere in it. The installation id is
 created once and never changes, which is what makes the bootstrap idempotent.
+`messagingProvider` is `UNSET` until the operator chooses, then `SENDBLUE`, `TWILIO`, or `PHOTON`.
+A working Sendblue install with no explicit choice is migrated to Sendblue once. It is not switched to another provider.
 Check results (public address, messaging, alerts) and the history of public
 addresses live next to it in `install/state.json`, also non-secret.
 
@@ -313,15 +315,19 @@ webhook to the new address and removes the old one) as needing action. OAuth
 already refuses tokens issued for a different address. Nothing continues
 silently on a stale address.
 
-## Visitor messaging (Sendblue)
+## Visitor messaging
 
-The operator enters the API key, API secret and texting number on the secure
-setup page. Tour Core stores them, checks the account and line, creates an
-incoming-webhook secret if there isn't one, registers (or repairs) its own
-receive webhook for the current public address, removes its webhook for an
-old address, and runs the readiness checks (`src/messaging/sendblue/connect.ts`).
-Other webhooks on the account are never touched. The running server uses new
-values immediately. `.env`-based setups and `npm run sendblue:*` keep working.
+The operator chooses Sendblue, Twilio, or Photon. Grok collects that
+provider's credentials with a secure input and submits them. The setup page
+remains the write path and the manual fallback. A fresh installation asks;
+an existing installation that already has valid Sendblue credentials stays on
+Sendblue.
+
+Sendblue then checks the account and line, creates an incoming-webhook secret
+if there isn't one, registers its own receive webhook for the current public
+address, removes its webhook for an old address, and runs the readiness checks
+(`src/messaging/sendblue/connect.ts`). Other webhooks on the account are never
+touched. `.env`-based setups and `npm run sendblue:*` keep working.
 
 ## Operator updates
 
@@ -351,10 +357,11 @@ a tour is booked / starts / finishes / is cancelled, or a visitor needs judgment
   text-message tours produce updates (not practice tours or the browser
   demo), and something that happened before its kind was turned on is never
   sent late. No-shows aren't detected yet.
-- Connecting the routine: Grok creates it and opens the secure setup page's
-  **Tour updates (Grok Routine)** card (two masked fields, or a masked box for
-  the routine's whole webhook example). Grok copies the values itself only if
-  both stay hidden on screen; otherwise the operator copies them. See
+- Connecting the routine: Grok creates it, asks for the webhook address and
+  key with a secure secret input, and submits Tour Core's form. If that input
+  cannot be used and both values stay hidden behind copy buttons, Grok may
+  paste them into the masked fields without reading them. If a value is shown
+  on screen, the operator copies it. See
   `grok-template/routines/operator-updates.md`.
 - `src/alerts/outbox.ts`: saved before delivery, keyed by a stable `eventId`
   derived from the exception (so the same exception is never queued twice),
@@ -400,9 +407,11 @@ clone whose git origin isn't the canonical repository.
 6. Grok adds the Tour Core connection itself; **the operator approves** it on
    Tour Core's approval screen in Grok's cloud browser. Grok continues on its
    own: "Connected. I'm checking the rest of the setup now."
-7. Grok follows `get_next_installation_step`: the secure setup page for
-   texting, where **the operator enters** the Sendblue details; Grok tests it.
-   Tour records (stored with this installation) and access (Demo) need nothing.
+7. Grok follows `get_next_installation_step`. A fresh install asks which
+   messaging provider to use. After the operator chooses, Grok collects that
+   provider's credentials with a secure secret input, submits them, and tests
+   the provider. Tour records (stored with this installation) and access
+   (Demo) need nothing.
 8. "Everything needed to start is connected and tested. Would you like to add your first property?"
 9. Grok configures the property conversationally (Setup Property, Map Route):
    the address (confirmed as Tour Core saved it; a name only if the operator
@@ -415,10 +424,9 @@ clone whose git origin isn't the canonical repository.
 10. Tour Core offers tour updates (recommended): "Would you like me to keep
     you updated when someone books, starts or finishes a tour, and alert you
     if something needs your input?" If yes, Grok saves the choice, creates the
-    Tour Core Operator Updates routine itself, and connects it through the
-    secure setup page (the operator copies the values unless both stay hidden
-    on screen); Grok sends a test update. If no, Grok records the choice and
-    moves on.
+    Tour Core Operator Updates routine itself, and connects it with the same
+    secure secret input; Grok sends a test update. If no, Grok records the
+    choice and moves on.
 11. Grok explains how prospects use it and runs the readiness check and a
     practice tour without asking whether to skip them.
 12. Grok asks for an explicit yes to publish.
@@ -436,9 +444,10 @@ order.
 
 Grok can clone code, run commands, open pages, fill in non-sensitive settings
 and run tests. The operator may still need to create or sign in to provider
-accounts (Sendblue, Grok routines), pass MFA, accept provider terms, approve
-Grok's connection, type credentials into the secure setup page, and make
-policy decisions (property facts, publishing). This is not zero-click setup.
+accounts, pass MFA, accept provider terms, approve Grok's connection, and
+make policy decisions (property facts, publishing). Provider credentials are
+collected in Grok's secure input. Typing them into the setup page is only the
+fallback when that input cannot be used. This is not zero-click setup.
 
 ## Limitations of `GROK_MANAGED_P0`
 

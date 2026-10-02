@@ -117,7 +117,8 @@ describe("secure setup page", () => {
     const { token } = app.installation.sessions.mint();
     const ok = await app.setup("GET", "status", token);
     expect(ok.status).toBe(200);
-    expect(ok.body.settings).toEqual({ visitorMessaging: { apiKey: false, apiSecret: false, fromNumber: null, incomingSecret: false }, operatorAlerts: { webhookUrl: false, key: false } });
+    expect(ok.body.settings.visitorMessaging).toMatchObject({ provider: null, fields: [] });
+    expect(ok.body.settings.operatorAlerts).toEqual({ webhookUrl: false, key: false });
     const notJson = await app.raw("POST", "/api/install/operator-alerts", { "X-TourCore-Setup-Session": token, "Content-Type": "text/plain" });
     expect(notJson.status).toBe(415);
     app.setClock(app.now() + 31 * 60_000);
@@ -148,7 +149,12 @@ describe("secure setup page", () => {
     const status = await app.grok("get_installation_status");
     expect(status.result.components.find((c: { component: string }) => c.component === "VISITOR_MESSAGING")).toMatchObject({ state: "READY", summary: `Visitor texting is connected and working (${LINE}).` });
     const again = await app.setup("GET", "status", token);
-    expect(again.body.settings.visitorMessaging).toEqual({ apiKey: true, apiSecret: true, fromNumber: LINE, incomingSecret: true });
+    expect(again.body.settings.visitorMessaging.fields).toEqual([
+      expect.objectContaining({ name: "SENDBLUE_API_API_KEY", set: true, secret: true }),
+      expect.objectContaining({ name: "SENDBLUE_API_API_SECRET", set: true, secret: true }),
+      expect.objectContaining({ name: "SENDBLUE_FROM_NUMBER", set: true, secret: false, value: LINE }),
+    ]);
+    expect(JSON.stringify(again.body.settings.visitorMessaging)).not.toContain(SB_KEY);
 
     const everything = [JSON.stringify(out.body), JSON.stringify(again.body), status.text, (await app.grok("test_visitor_messaging")).text].join("\n");
     for (const secret of [SB_KEY, SB_SECRET, incoming]) expect(everything).not.toContain(secret);

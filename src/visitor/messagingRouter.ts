@@ -10,7 +10,10 @@ import { writeJsonAtomic } from "../storage/atomicWrite";
 import { StorageUnavailableError } from "../storage/errors";
 import type { TourCoreStore } from "../storage/Store";
 import { MemoryRuntimeStore, type RuntimeStore } from "../storage/runtimeStore";
-import { sendblueRuntime } from "../messaging/sendblue/runtime";
+import { isLiveMessaging } from "../config/tourCoreConfig";
+import { publicBaseUrl } from "../messaging/publicUrl";
+import { effectiveEnv } from "../install/settings";
+import type { ResolvedConsentMode } from "../messaging/consentPolicy";
 import { handleVisitorText, isGreeting } from "./conversation";
 import { SmsConsentDirectory } from "./smsConsent";
 import { restoreSession, RestoreError, SessionPersistence, type DurableSession } from "./durableSession";
@@ -59,6 +62,9 @@ export class MessagingConversations {
       /** Reads what a typed message is trying to do. Defaults to the built-in rules. */
       interpreter?: IntentInterpreter;
       log?: (line: string) => void;
+      /** Keyword confirmation or immediate conversation. Defaults to keyword confirmation. */
+      consentMode?: () => ResolvedConsentMode;
+      publicBaseUrl?: () => string | undefined;
       /** Google Drive canonical store for new and restored conversations. */
       storeFor?: (config: import("../config/tourCoreConfig").TourCoreConfig) => TourCoreStore | undefined;
       storageRead?: () => "live" | "cached" | "stale";
@@ -168,7 +174,7 @@ export class MessagingConversations {
   /** Sends through the live transport, created only when a message actually goes out. */
   private lazyTransport(): Transport {
     return {
-      provider: "sendblue",
+      provider: this.deps.transport().provider,
       presentation: "MESSAGING",
       send: (m) => this.deps.transport().send(m),
       noteChannel: (n, c) => this.deps.transport().noteChannel?.(n, c),
@@ -223,7 +229,7 @@ export class MessagingConversations {
     const knownTours = new Set([...known.values()].map((s) => `${s.propertyId}:${s.tourId}`));
     const withSnapshot = new Set(this.persistence.all().snapshots.map((s) => `${s.propertyId}:${s.tourId}`));
     let restored = 0;
-    for (const saved of ws.list().filter((p) => p.config.messagingMode === "sendblue")) {
+    for (const saved of ws.list().filter((p) => isLiveMessaging(p.config.messagingMode))) {
       const propertyId = saved.config.property.id;
       const seen = new Set<string>();
       for (const record of ws.listTours(propertyId)) {
@@ -301,7 +307,8 @@ export class MessagingConversations {
   private applySmsConsent(session: VisitorDemoSession, propertyId: string, phone: string): void {
     const record = this.smsConsent.get(propertyId, phone);
     session.persistSmsConsent = (next) => this.smsConsent.save(propertyId, next);
-    session.complianceBaseUrl = () => sendblueRuntime.env().publicBaseUrl;
+    session.complianceBaseUrl = this.deps.publicBaseUrl ?? (() => publicBaseUrl(effectiveEnv()));
+    session.smsConsentMode = this.deps.consentMode?.() ?? "keyword_confirm";
     if (record) {
       session.smsConsent = record.status;
       session.smsRecord = record;
@@ -342,12 +349,12 @@ export class MessagingConversations {
  * (the published one, or the only one using real messaging). Ambiguous cases
  * are left for the operator's readiness check.
  */
-export function adoptLegacyLine(workspace: PropertyWorkspace, endpoints: MessagingEndpoints, line: string | undefined, log?: (line: string) => void): void {
+export function adoptLegacyLine(workspace: PropertyWorkspace, endpoints: MessagingEndpoints, line: string | undefined, log?: (line: string) => void, provider = "sendblue"): void {
   if (!line || endpoints.resolve(line)) return;
-  const candidates = workspace.list().filter((p) => p.config.messagingMode === "sendblue" && !endpoints.forProperty(p.config.property.id));
+  const candidates = workspace.list().filter((p) => isLiveMessaging(p.config.messagingMode) && !endpoints.forProperty(p.config.property.id));
   const published = candidates.filter((p) => p.state.status === "PUBLISHED_FOR_DEMO");
   const pick = published.length === 1 ? published[0] : candidates.length === 1 ? candidates[0] : undefined;
   if (!pick) return;
-  endpoints.attach({ address: line, provider: "sendblue", propertyId: pick.config.property.id });
+  endpoints.attach({ address: line, provider, propertyId: pick.config.property.id });
   log?.(`Connected texting number ${line} to ${pick.config.property.name}.`);
 }
