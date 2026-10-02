@@ -19,7 +19,7 @@ afterEach(() => cleanups.splice(0).forEach((c) => c()));
 const atTime = (hour: number, minute = 0) => zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour, minute }, "America/New_York");
 
 async function chooseUnit(a: LiveApp) {
-  await a.text("Hi");
+  await a.optInSms();
   await a.text("1");
   await a.text("1");
 }

@@ -107,7 +107,7 @@ describe("tour lifecycle updates", () => {
 
   it("problems use their own update types and still point at the issue", async () => {
     const a = await withDefaults();
-    await a.text("Hi");
+    await a.optInSms();
     await a.text("1");
     await a.text("1");
     await a.text("1");

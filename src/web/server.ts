@@ -34,6 +34,8 @@ import { clearRuntimeInfo, writeRuntimeInfo } from "../install/service";
 import { secretValues, useSettingsSource } from "../install/settings";
 import { handlePortableRequest } from "../backup/http";
 import { handleApi } from "./api";
+import { buildComplianceConfig, isPublicCompliancePath, matchCompliancePath } from "./compliance/config";
+import { renderCompliancePage } from "./compliance/pages";
 import { loadLocalEnv } from "./env";
 
 const PUBLIC_DIR = new URL("./public/", import.meta.url);
@@ -116,6 +118,7 @@ function publicRouteAllowed(method: string, path: string, oauth: boolean, hosted
   }
   if (oauth && (isOAuthPublicPath(path, MCP_PATH) || (method === "GET" && path === "/oauth.js"))) return true;
   if (method === "POST" && path === SENDBLUE_WEBHOOK_PATH) return true;
+  if (method === "GET" && isPublicCompliancePath(path)) return true;
   if (method === "GET" && (/^\/verify\/[A-Za-z0-9_-]+$/.test(path) || path === "/verify.js" || path === "/styles.css")) return true;
   if (hosted && method === "GET" && (path === "/connect" || path === "/connect.js" || path === "/install" || path === "/install.js" || path === "/styles.css")) return true;
   if (hosted && (path === "/api/connect" || path === "/api/connect/approve" || path === "/api/connect/deny" || isInstallApiPath(path))) return true;
@@ -332,6 +335,15 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         return send(404, "text/plain", "Not found");
       } else if (!hosted && (INSTALL_PAGE_PATHS.includes(url.pathname) || isInstallApiPath(url.pathname)) && (!isLocal || PROXY_HEADERS.some((h) => req.headers[h] !== undefined))) {
         return send(404, "text/plain", "Not found");
+      }
+    }
+
+    if (method === "GET") {
+      const compliance = matchCompliancePath(url.pathname);
+      if (compliance) {
+        if (!compliance.exact) return send(301, "text/plain; charset=utf-8", "Redirecting", { Location: compliance.canonical });
+        const html = renderCompliancePage(compliance.id, buildComplianceConfig(process.env, publicBase));
+        return send(200, "text/html; charset=utf-8", html);
       }
     }
 

@@ -82,7 +82,8 @@ async function alertApp(options: { root?: string; clock?: { t: number }; net?: R
   };
   /** Books, verifies and brings the visitor inside Unit 101, by text. */
   const touring = async () => {
-    await text("Hi");
+    await text("TOUR");
+    await text("YES");
     await text("1");
     await text("1");
     await text("1");

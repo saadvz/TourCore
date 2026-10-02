@@ -20,6 +20,7 @@ import { SetupInputError } from "../setup/setupActions";
 import type { ConversationItem, TourRecord } from "../setup/workspace";
 import type { ExportBundle } from "../export/exportBundle";
 import type { Awaiting, IntentInterpretation } from "../intent";
+import { smsHelpBody, smsStopAck, type SmsCampaignConsent, type SmsConsentStatus } from "./smsConsent";
 import type { VerificationLinks } from "./verificationLinks";
 
 /**
@@ -150,6 +151,17 @@ export class VisitorDemoSession {
   /** A custom time named before a unit was chosen. Filed once the unit is picked. */
   heldTime?: SpokenTime;
   optedOut = false;
+  /**
+   * SMS campaign status. Undefined means this sender has not opted in.
+   * A phone number or an older tour does not set this.
+   */
+  smsConsent?: SmsConsentStatus;
+  /** Last keyword-consent record, so a later STOP keeps the original opt-in time. */
+  smsRecord?: SmsCampaignConsent;
+  /** Writes the keyword-consent record. Unset in tests that only need memory. */
+  persistSmsConsent?: (record: SmsCampaignConsent) => void;
+  /** Resolved PUBLIC_BASE_URL. Compliance texts never invent a host. */
+  complianceBaseUrl?: () => string | undefined;
   /** The messaging line this visitor texts (E.164), for text-message conversations. */
   line?: string;
   readonly durinLines: string[] = [];
@@ -339,30 +351,62 @@ export class VisitorDemoSession {
   }
 
   /** A Tour Core message that isn't part of a tour step (welcome, "didn't catch that", help info). */
-  async reply(body: string, prompt?: ReplyPrompt): Promise<void> {
-    await this.core.sendConversationText({ phone: this.visitor?.phone ?? "", body, prompt, reservationId: this.reservationId });
+  async reply(body: string, prompt?: ReplyPrompt, options?: { deliverDespiteOptOut?: boolean }): Promise<void> {
+    await this.core.sendConversationText({
+      phone: this.visitor?.phone ?? "",
+      body,
+      prompt,
+      reservationId: this.reservationId,
+      deliverDespiteOptOut: options?.deliverDespiteOptOut,
+    });
     await this.syncReplies();
+  }
+
+  /** Records keyword campaign consent. Does not create a tour/record consent. */
+  noteSmsConsent(status: SmsConsentStatus, keyword: string): void {
+    const sender = normalizePhone(this.visitor?.phone ?? "");
+    if (!sender || sender === "+") return;
+    const now = this.clock.now().toISOString();
+    const previous = this.smsRecord;
+    const record: SmsCampaignConsent = {
+      sender,
+      status,
+      method: "keyword",
+      keyword,
+      updatedAt: now,
+      ...(status === "opted_in" ? { optedInAt: previous?.optedInAt ?? now } : previous?.optedInAt ? { optedInAt: previous.optedInAt } : {}),
+      ...(status === "opted_out" ? { optedOutAt: now } : previous?.optedOutAt ? { optedOutAt: previous.optedOutAt } : {}),
+    };
+    this.smsConsent = status;
+    this.smsRecord = record;
+    this.persistSmsConsent?.(record);
+  }
+
+  /** Clears a STOP flag so a re-opt-in disclosure can be delivered. Does not opt the sender into the campaign. */
+  async allowMessagingAgain(): Promise<void> {
+    this.optedOut = false;
+    await this.core.optInToMessaging(this.visitor?.phone ?? "");
   }
 
   async optOut(said: Said): Promise<void> {
     await this.recordText(said);
+    await this.reply(smsStopAck(), undefined, { deliverDespiteOptOut: true });
     this.optedOut = true;
+    this.noteSmsConsent("opted_out", (said.text ?? "STOP").trim().toUpperCase());
     await this.core.optOutOfMessaging(this.visitor?.phone ?? "", (said.text ?? "STOP").trim());
     await this.syncReplies();
   }
 
   async optIn(said: Said): Promise<void> {
     await this.recordText(said);
-    this.optedOut = false;
-    await this.core.optInToMessaging(this.visitor?.phone ?? "");
+    await this.allowMessagingAgain();
     await this.reply(`You'll get messages from ${visitorTourOf(this.config.property)} again. Text HI any time to start a tour.`);
   }
 
   /** HELP: who this is and how to reach the property team; during a tour, the team is also alerted. */
   async help(said: Said): Promise<void> {
     const stage = await this.stage();
-    const contact = /[@\d]{3,}/.test(this.config.operator.contact) ? ` at ${this.config.operator.contact}` : "";
-    const info = `This is the self-tour assistant for ${visitorTourOf(this.config.property)}. For help, contact the ${this.config.operator.name.toLowerCase()}${contact}. Reply STOP to stop messages.`;
+    const info = smsHelpBody();
     if ((stage === "ready" || stage === "touring" || stage === "stopped") && this.reservationId) {
       this.say("visitor", said.text ?? "HELP");
       await this.core.requestHelp(this.reservationId, await this.currentPlace(), { text: said.text ?? "HELP", meta: said.meta });
@@ -370,7 +414,7 @@ export class VisitorDemoSession {
     } else {
       await this.recordText(said);
     }
-    await this.reply(info);
+    await this.reply(info, undefined, { deliverDespiteOptOut: this.smsConsent !== "opted_in" });
   }
 
   /**

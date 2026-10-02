@@ -783,7 +783,7 @@ export class TourCore {
    * A conversation-level text (welcome, help, "didn't catch that"): stored and
    * sent like any other, and suppressed for anyone who opted out.
    */
-  async sendConversationText(input: { phone: string; body: string; prompt?: ReplyPrompt; reservationId?: string }): Promise<void> {
+  async sendConversationText(input: { phone: string; body: string; prompt?: ReplyPrompt; reservationId?: string; deliverDespiteOptOut?: boolean }): Promise<void> {
     const phone = normalizePhone(input.phone);
     const prospect = (await this.deps.store.list("prospects")).find((p) => p.phone === phone);
     await this.deliver({
@@ -793,7 +793,7 @@ export class TourCore {
       body: withPrompt(input.body, input.prompt, this.presentation),
       prospectId: prospect?.id,
       reservationId: input.reservationId,
-      suppressed: !!prospect?.messagingOptedOut,
+      suppressed: !!prospect?.messagingOptedOut && !input.deliverDespiteOptOut,
     });
   }
 

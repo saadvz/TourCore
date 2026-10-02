@@ -20,6 +20,7 @@ import {
 import type { ReplyPrompt } from "../messaging/presentation";
 import { timeMenu } from "./entry";
 import type { InterpretationNote, Said, VisitorDemoSession, VisitorStage } from "./session";
+import { SMS_GATE_REMINDER, SMS_KEYWORD_PROMPT, smsDisclosure, smsOptInConfirmation } from "./smsConsent";
 
 /**
  * Typed replies from a real phone ("1", "YES", "just pulled up", "does it
@@ -154,6 +155,12 @@ export async function handleVisitorText(
   const firstMessage = !session.visitor;
   if (firstMessage) session.identify(from);
 
+  // SMS campaign consent comes before any property or booking content.
+  if (session.kind === "messaging" && session.smsConsent !== "opted_in") {
+    await handleSmsGate(session, said, text);
+    return undefined;
+  }
+
   // Someone who opted out only gets START / STOP handled; nothing they send is interpreted or answered.
   const keyword = keywordOf(text);
   if (session.optedOut && keyword !== "start" && keyword !== "stop") {
@@ -193,6 +200,42 @@ export async function handleVisitorText(
     else await session.greet(said);
   } else await byStage(turn);
   return interpretation;
+}
+
+/**
+ * Keyword campaign gate. Property questions, availability, and booking stay
+ * closed until the sender replies YES to the disclosure. Tour/record consent
+ * is a later step and is not decided here.
+ */
+async function handleSmsGate(session: VisitorDemoSession, said: Said, text: string): Promise<void> {
+  const keyword = keywordOf(text);
+  if (keyword === "stop") {
+    await session.optOut(said);
+    return;
+  }
+  if (keyword === "help") {
+    await session.help(said);
+    return;
+  }
+  const normalized = normalize(text);
+  if (keyword === "start" || normalized === "tour") {
+    await session.recordText(said);
+    await session.allowMessagingAgain();
+    session.noteSmsConsent("pending", keyword === "start" ? "START" : "TOUR");
+    await session.reply(smsDisclosure(session.complianceBaseUrl?.()), undefined, { deliverDespiteOptOut: true });
+    return;
+  }
+  if (session.smsConsent === "pending" && normalized === "yes") {
+    await session.recordText(said);
+    await session.allowMessagingAgain();
+    session.noteSmsConsent("opted_in", "YES");
+    await session.reply(smsOptInConfirmation(), undefined, { deliverDespiteOptOut: true });
+    if (!(await session.reservation())) await session.welcome();
+    return;
+  }
+  await session.recordText(said);
+  if (session.smsConsent === "opted_out" || session.optedOut) return;
+  await session.reply(session.smsConsent === "pending" ? SMS_GATE_REMINDER : SMS_KEYWORD_PROMPT, undefined, { deliverDespiteOptOut: true });
 }
 
 /** The unit a short reply points at, among the ones offered: its name ("1A") or its number in the list ("2"). */

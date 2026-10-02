@@ -68,7 +68,8 @@ async function startPhoneApp(options: { sendError?: () => Error | undefined } = 
 
 /** Texts through booking and consent; returns the identity-form token from the link Tour Core sent. */
 async function bookByText(app: Awaited<ReturnType<typeof startPhoneApp>>) {
-  await app.text("Hi");
+  await app.text("TOUR");
+  await app.text("YES");
   await app.text("1");
   await app.text("1");
   await app.text("1");
@@ -81,10 +82,19 @@ describe("a real phone over Sendblue", () => {
   it("completes the whole tour by text, through the same visitor engine as the browser phone", async () => {
     const app = await startPhoneApp();
 
-    const hi = await app.text("Hi");
-    expect(hi.replies).toEqual([
-      "Hi! Welcome to the self-guided tours at 100 Alfred Way. I can answer questions about the property and help you book a tour.\n\nWhich unit would you like to see?\nReply 1 for Unit 101 or 2 for Unit 102.",
-    ]);
+    const tour = await app.text("TOUR");
+    expect(tour.replies).toHaveLength(1);
+    expect(tour.replies[0]).toContain("Tour Core: You're starting a text conversation about a self-guided property tour.");
+    expect(tour.replies[0]).not.toContain("Khanex");
+    expect(tour.replies[0]).toContain("https://tour.example/TourCore/privacy");
+    expect(tour.replies[0]).toContain("https://tour.example/TourCore/terms");
+    expect(tour.replies[0]).not.toContain("Which unit");
+    expect(tour.replies[0]).not.toMatch(/trycloudflare/i);
+
+    const yes = await app.text("YES");
+    expect(yes.replies[0]).toContain("You're opted in");
+    expect(yes.replies.join("\n")).toContain("Which unit would you like to see?");
+    expect(yes.replies.join("\n")).toContain("Reply 1 for Unit 101 or 2 for Unit 102.");
 
     const unit = await app.text("1");
     expect(unit.replies[0]).toContain("Here's what the property team shared: Two-bedroom, first floor, south-facing.");
@@ -130,7 +140,9 @@ describe("a real phone over Sendblue", () => {
     expect((await app.text("how much is it?")).replies).toEqual(["Unit 101 rents for $2,300 a month."]);
     expect((await app.text("is there a gym?")).replies[0]).toBe("I don't have that information for this property. I've flagged it for the property team so they can get back to you.");
     const help = await app.text("help");
-    expect(help.replies.at(-1)).toContain("This is the self-tour assistant for 100 Alfred Way.");
+    expect(help.replies.at(-1)).toContain("Tour Core:");
+    expect(help.replies.at(-1)).toContain("Reply STOP to opt out.");
+    expect(help.replies.at(-1)).not.toContain("Khanex");
 
     const finish = await app.text("finish");
     expect(finish.replies[0]).toContain("Would you like someone from the property team to follow up?\nReply YES or NO.");
@@ -141,8 +153,8 @@ describe("a real phone over Sendblue", () => {
     expect(tours[0]).toMatchObject({ kindLabel: "Text message tour", outcomeLabel: "Finished", visitorName: "Pat Smith" });
     const { bundle, record } = app.ws.loadTour(app.id, tours[0].id)!;
     expect(record.visitorPhone).toBe(PHONE);
-    const inboundHi = bundle.messages.find((m) => m.direction === "INBOUND" && m.body === "Hi")!;
-    expect(inboundHi).toMatchObject({ provider: "sendblue", providerMessageId: "in_1", deliveryChannel: "IMESSAGE", deliveryStatus: "RECEIVED" });
+    const inboundTour = bundle.messages.find((m) => m.direction === "INBOUND" && m.body === "TOUR")!;
+    expect(inboundTour).toMatchObject({ provider: "sendblue", providerMessageId: "in_1", deliveryChannel: "IMESSAGE", deliveryStatus: "RECEIVED" });
     const firstReply = bundle.messages.find((m) => m.direction === "OUTBOUND" && m.audience === "PROSPECT")!;
     expect(firstReply).toMatchObject({ provider: "sendblue", providerMessageId: "out_1", deliveryChannel: "IMESSAGE", deliveryStatus: "QUEUED" });
     expect(firstReply.correlationId).toMatch(/^vd_/);
@@ -154,9 +166,10 @@ describe("a real phone over Sendblue", () => {
 
   it("processes a retried webhook once: no second reservation, reply or state change", async () => {
     const app = await startPhoneApp();
-    await app.text("Hi", "dup-1");
+    await app.text("TOUR", "dup-0");
+    await app.text("YES", "dup-0b");
+    await app.text("1", "dup-1");
     await app.text("1", "dup-2");
-    await app.text("1", "dup-day");
     const first = await app.text("1", "dup-3");
     const retry = await app.text("1", "dup-3");
     expect(first.replies).toHaveLength(1);
@@ -170,6 +183,8 @@ describe("a real phone over Sendblue", () => {
 
   it("understands natural texts over Sendblue; a retried one still acts once; how it was read stays developer-only", async () => {
     const app = await startPhoneApp();
+    await app.text("TOUR");
+    await app.text("YES");
     await app.text("hey I wanna see 101");
     await app.text("monday");
     await app.text("1 works");
@@ -214,7 +229,8 @@ describe("a real phone over Sendblue", () => {
     const app = await startPhoneApp();
     await bookByText(app);
     const stop = await app.text("STOP");
-    expect(stop.replies).toEqual([]);
+    expect(stop.replies.join("\n")).toContain("You're opted out");
+    expect(stop.replies.join("\n")).not.toContain("Which unit");
     expect((await app.text("I'm here")).replies).toEqual([]);
     expect((await app.text("hi")).replies).toEqual([]);
 
@@ -224,8 +240,12 @@ describe("a real phone over Sendblue", () => {
     expect(bundle.accessGrants).toHaveLength(0);
 
     const start = await app.text("START");
-    expect(start.replies).toEqual(["You'll get messages from 100 Alfred Way again. Text HI any time to start a tour."]);
-    expect((await app.text("Hi")).replies[0]).toContain("Which unit would you like to see?");
+    expect(start.replies.join("\n")).toContain("Reply YES to continue");
+    expect(start.replies.join("\n")).not.toContain("Which unit");
+    expect((await app.text("Hi")).replies.join("\n")).not.toContain("Which unit");
+    const again = await app.text("YES");
+    expect(again.replies.join("\n")).toContain("You're opted in");
+    expect(again.replies.join("\n")).toContain("Which unit would you like to see?");
   });
 
   it("a Sendblue outage never changes an access decision", async () => {

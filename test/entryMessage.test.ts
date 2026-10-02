@@ -6,8 +6,8 @@ import { VisitorDemoSession } from "../src/visitor/session";
 import { at } from "./grokHarness";
 
 /**
- * The first text gets one introduction. Property type chooses the wording;
- * the next step is in that same message.
+ * SMS opt-in comes first. After YES, the opening text is one introduction.
+ * Property type chooses the wording; the next step is in that same message.
  */
 
 const cleanups: Array<() => void> = [];
@@ -35,6 +35,8 @@ async function texts(config: TourCoreConfig, message: string) {
     kind: "messaging",
     transport: new DemoMessagingAdapter((line) => sent.push(line), "MESSAGING"),
   });
+  await handleVisitorText(session, "+15550102000", "TOUR");
+  await handleVisitorText(session, "+15550102000", "YES");
   await handleVisitorText(session, "+15550102000", message);
   return session.conversation.filter((item) => item.from === "tourcore").map((item) => item.text);
 }
@@ -42,19 +44,19 @@ async function texts(config: TourCoreConfig, message: string) {
 describe("the opening text", () => {
   it("a single-family home gets one message naming the home, the address, and a tour time", async () => {
     const replies = await texts(home(), "Hi");
-    expect(replies).toHaveLength(1);
-    expect(replies[0]).toContain("Hi! Welcome to the self-guided tour for Teaneck Home at 144 Hillside Ave, Teaneck, NJ 07666.");
-    expect(replies[0]).toContain("questions about the home");
-    expect(replies[0]).toContain("Which day works for you?");
-    expect(replies[0]).not.toContain("Which unit");
-    expect(replies[0]).not.toContain("Main Home");
-    expect(replies[0]).not.toContain("Happy to set up");
+    const welcome = replies.find((reply) => reply.includes("Hi! Welcome"))!;
+    expect(welcome).toContain("Hi! Welcome to the self-guided tour for Teaneck Home at 144 Hillside Ave, Teaneck, NJ 07666.");
+    expect(welcome).toContain("questions about the home");
+    expect(welcome).toContain("Which day works for you?");
+    expect(welcome).not.toContain("Which unit");
+    expect(welcome).not.toContain("Main Home");
+    expect(welcome).not.toContain("Happy to set up");
   });
 
   it("an apartment gets one message with the address and the unit choice", async () => {
     const replies = await texts(loadConfig(), "Hi");
-    expect(replies).toHaveLength(1);
-    expect(replies[0]).toBe(
+    expect(replies.at(-1)).toContain("Which unit would you like to see?");
+    expect(replies.join("\n")).toContain(
       "Hi! Welcome to the self-guided tours at 100 Alfred Way. I can answer questions about the property and help you book a tour.\n\nWhich unit would you like to see?\nReply 1 for Unit 101 or 2 for Unit 102.",
     );
   });
@@ -64,7 +66,7 @@ describe("the opening text", () => {
     config.property.facts = ["Street parking only."];
     const replies = await texts(config, "Is there parking?");
     expect(replies.filter((reply) => reply.includes("Welcome"))).toHaveLength(1);
-    expect(replies[0]).toContain("Street parking only.");
+    expect(replies.some((reply) => reply.includes("Street parking only."))).toBe(true);
     expect(replies.at(-1)).toContain("Which unit would you like to see?");
     expect(replies.at(-1)).toContain("Reply 1 for Unit 101");
   });

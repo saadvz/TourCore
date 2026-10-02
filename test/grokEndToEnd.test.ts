@@ -71,7 +71,8 @@ async function liveDemo() {
 describe("P0 operator demo through Grok tools, with a real-phone visitor", () => {
   it("monitors the tour, answers a flagged question, pauses and resumes, and exports the audit", async () => {
     const demo = await liveDemo();
-    await demo.text("Hi");
+    await demo.text("TOUR");
+    await demo.text("YES");
     await demo.text("1");
     await demo.text("1");
     await demo.text("1");

@@ -49,7 +49,9 @@ async function finishHillside(h: InstallHarness) {
 function welcomeFor(h: InstallHarness, propertyId: string): Promise<string> {
   const sent: string[] = [];
   const session = new VisitorDemoSession(propertyId, h.workspace.load(propertyId).config, "t", { realNow: () => at(7), kind: "messaging", transport: new DemoMessagingAdapter((l) => sent.push(l), "MESSAGING") });
-  return handleVisitorText(session, "+15550102000", "Hi").then(() => session.conversation.filter((m) => m.from === "tourcore").map((m) => m.text).join("\n"));
+  return handleVisitorText(session, "+15550102000", "TOUR")
+    .then(() => handleVisitorText(session, "+15550102000", "YES"))
+    .then(() => session.conversation.filter((m) => m.from === "tourcore").map((m) => m.text).join("\n"));
 }
 
 describe("canonical property identity", () => {

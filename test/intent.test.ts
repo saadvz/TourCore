@@ -311,6 +311,8 @@ function phone(options: { config?: TourCoreConfig; interpreter?: IntentInterpret
 }
 
 async function readyForTour(p: ReturnType<typeof phone>, time = at(13, 58)) {
+  await p.say("TOUR");
+  await p.say("YES");
   await p.say("hi");
   await p.say("1");
   await p.say("1");
@@ -329,6 +331,8 @@ async function inside(p: ReturnType<typeof phone>) {
 describe("natural texts drive the real tour", () => {
   it("the definition-of-done conversation, start to finish", async () => {
     const p = phone();
+    await p.say("TOUR");
+    await p.say("YES");
     await p.say("hey I wanna see 101");
     expect(p.lastReply()).toContain("Happy to set up a self-guided tour of Unit 101");
     await p.say("1");
@@ -410,12 +414,16 @@ describe("natural texts drive the real tour", () => {
     const before = p.session.durin.requestCount;
     await p.say(text);
     expect(await p.audit("HELP_REQUESTED")).toHaveLength(1);
-    expect(p.lastReply()).toContain("This is the self-tour assistant for 100 Alfred Way.");
+    expect(p.lastReply()).toContain("Tour Core:");
+    expect(p.lastReply()).toContain("Reply STOP to opt out.");
+    expect(p.lastReply()).not.toContain("Khanex");
     expect(p.session.durin.requestCount).toBe(before);
   });
 
   it("exact menu replies and keywords still work", async () => {
     const p = phone();
+    await p.say("TOUR");
+    await p.say("YES");
     await p.say("hi");
     await p.say("2");
     expect(p.lastReply()).toContain("Unit 102");
@@ -424,7 +432,9 @@ describe("natural texts drive the real tour", () => {
     await p.say("NO");
     expect(await p.session.stage()).toBe("stopped");
     await p.say("HELP");
-    expect(p.lastReply()).toContain("Reply STOP to stop messages.");
+    expect(p.lastReply()).toContain("Tour Core:");
+    expect(p.lastReply()).toContain("Reply STOP to opt out.");
+    expect(p.lastReply()).not.toContain("Khanex");
     await p.say("STOP");
     expect(p.session.optedOut).toBe(true);
     await p.say("START");
@@ -485,6 +495,8 @@ describe("ambiguity asks instead of acting, and never calls Durin", () => {
 
   it("choosing a unit by a vague reference asks which one", async () => {
     const p = phone();
+    await p.say("TOUR");
+    await p.say("YES");
     await p.say("hi");
     await p.say("the apartment");
     expect(p.lastReply()).toBe("Sure — did you mean Unit 101 or Unit 102?\nReply 1 for Unit 101 or 2 for Unit 102.");

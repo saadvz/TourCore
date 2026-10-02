@@ -194,7 +194,11 @@ The operator watches it in the same **Active tour** live view and history.
 
 It is the same visitor engine as the browser phone. Only the transport differs: the browser phone gets button wording,
 and a messaging app gets typed-reply wording ("Reply YES or NO."). Practice tours and the browser visitor demo never
-text anyone.
+text anyone. Sendblue is one messaging provider. Twilio and other adapters can use the same keyword opt-in. A
+provider that requires its own compliance registration is documented in `docs/messaging/twilio-a2p-example.md`.
+Public compliance pages read `TOURCORE_PUBLIC_BRAND_NAME`, `TOURCORE_PUBLIC_LEGAL_NAME`,
+`TOURCORE_PUBLIC_CONTACT_EMAIL`, `TOURCORE_PUBLIC_SMS_NUMBER`, and `PUBLIC_BASE_URL`. They do not invent a legal
+entity when the legal name is empty.
 
 ### Setup (development)
 
@@ -211,8 +215,9 @@ text anyone.
    - `ngrok http 4321`
 
    Tour Core only cares about the resulting https address.
-7. **Set `PUBLIC_BASE_URL`** in `.env` to that https address. Tour Core serves `PUBLIC_BASE_URL/webhooks/sendblue` and
-   `PUBLIC_BASE_URL/verify/<token>` there, and nothing else: operator pages stay reachable only from this computer.
+7. **Set `PUBLIC_BASE_URL`** in `.env` to that https address. Tour Core serves `PUBLIC_BASE_URL/webhooks/sendblue`,
+   `PUBLIC_BASE_URL/verify/<token>`, and the compliance pages at `/TourCore/privacy`, `/TourCore/terms`, and
+   `/TourCore/sms`. Operator pages stay reachable only from this computer.
 8. **Register the webhook:** `npm run sendblue:configure`. This adds Tour Core's receive webhook, limited to your line.
    If `SENDBLUE_WEBHOOK_SECRET` is empty, it creates one and saves it to `.env` without showing it. It never replaces
    other webhooks. If this URL is already registered with a different secret, `-- --replace` re-registers only this

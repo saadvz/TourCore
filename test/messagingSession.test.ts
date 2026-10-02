@@ -39,7 +39,8 @@ describe("channel-aware wording", () => {
     expect(webConsent).not.toContain("Reply YES or NO");
 
     const { say, lastReply } = phoneSession();
-    await say("hi");
+    await say("TOUR");
+    await say("YES");
     await say("1");
     await say("2:00 pm");
     expect(lastReply()).toMatch(/Is it OK if I text you about this tour.*\nReply YES or NO\.$/s);
@@ -73,7 +74,8 @@ describe("identity form links", () => {
   it("the phone conversation sends the personal link and continues after the form", async () => {
     const links = new VerificationLinks({ baseUrl: () => "https://tour.example", now: () => MONDAY_7AM });
     const { session, say, lastReply } = phoneSession(links);
-    await say("hi");
+    await say("TOUR");
+    await say("YES");
     await say("1");
     await say("1");
     await say("1");
@@ -103,8 +105,12 @@ describe("typed replies", () => {
   it("HELP says who this is and how to reach the team; during a tour it also alerts them", async () => {
     const { session, say, lastReply } = phoneSession();
     await say("HELP");
-    expect(lastReply()).toBe("This is the self-tour assistant for 100 Alfred Way. For help, contact the leasing team at +15550100000. Reply STOP to stop messages.");
+    expect(lastReply()).toContain("Tour Core:");
+    expect(lastReply()).toContain("Reply STOP to opt out.");
+    expect(lastReply()).not.toContain("Khanex");
 
+    await say("TOUR");
+    await say("YES");
     await say("1");
     await say("1");
     await say("1");
@@ -116,14 +122,16 @@ describe("typed replies", () => {
 
   it("asks again, with the options, when it doesn't understand", async () => {
     const { say, lastReply } = phoneSession();
-    await say("hi");
+    await say("TOUR");
+    await say("YES");
     await say("the blue one");
     expect(lastReply()).toBe("Sorry, I didn't catch that. Which unit would you like to see?\nReply 1 for Unit 101 or 2 for Unit 102.");
   });
 
   it("a texted wrong door is refused by policy without contacting Durin", async () => {
     const { session, say, lastReply } = phoneSession();
-    await say("hi");
+    await say("TOUR");
+    await say("YES");
     await say("1");
     await say("1");
     await say("1");

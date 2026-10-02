@@ -10,7 +10,9 @@ import { writeJsonAtomic } from "../storage/atomicWrite";
 import { StorageUnavailableError } from "../storage/errors";
 import type { TourCoreStore } from "../storage/Store";
 import { MemoryRuntimeStore, type RuntimeStore } from "../storage/runtimeStore";
+import { sendblueRuntime } from "../messaging/sendblue/runtime";
 import { handleVisitorText, isGreeting } from "./conversation";
+import { SmsConsentDirectory } from "./smsConsent";
 import { restoreSession, RestoreError, SessionPersistence, type DurableSession } from "./durableSession";
 import { VisitorDemoSession, type VisitorDemoRegistry } from "./session";
 import type { VerificationLinks } from "./verificationLinks";
@@ -68,9 +70,11 @@ export class MessagingConversations {
     const runtime = deps.runtime ?? new MemoryRuntimeStore();
     this.persistence = new SessionPersistence(deps.workspace, runtime, deps.links);
     this.endpoints = deps.endpoints ?? new MessagingEndpoints(runtime);
+    this.smsConsent = new SmsConsentDirectory(deps.workspace.root);
   }
 
   private readonly endpoints: MessagingEndpoints;
+  private readonly smsConsent: SmsConsentDirectory;
 
   /** How many conversations are held for the operator after the last restore. */
   get attentionCount(): number {
@@ -126,6 +130,7 @@ export class MessagingConversations {
       session.optedOut = this.isOptedOut(propertyId, phone);
     }
     session.line = endpoint.address;
+    this.applySmsConsent(session, propertyId, phone);
 
     const wasOptedOut = session.optedOut;
     try {
@@ -290,6 +295,21 @@ export class MessagingConversations {
       await transport.send({ to: snapshot.visitorPhone, audience: "PROSPECT", body: `${RESTORE_TROUBLE} Text HI to start a new tour.` }).catch(() => undefined);
     }
     return false;
+  }
+
+  /** Keyword campaign consent is the source of truth. An older STOP file still counts as opted out. Nothing here marks a past tour opted in. */
+  private applySmsConsent(session: VisitorDemoSession, propertyId: string, phone: string): void {
+    const record = this.smsConsent.get(propertyId, phone);
+    session.persistSmsConsent = (next) => this.smsConsent.save(propertyId, next);
+    session.complianceBaseUrl = () => sendblueRuntime.env().publicBaseUrl;
+    if (record) {
+      session.smsConsent = record.status;
+      session.smsRecord = record;
+      session.optedOut = record.status === "opted_out";
+      return;
+    }
+    session.smsConsent = session.optedOut ? "opted_out" : undefined;
+    session.smsRecord = undefined;
   }
 
   // Opt-outs outlive any one conversation, so they're kept per property on disk.

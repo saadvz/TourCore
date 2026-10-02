@@ -49,7 +49,7 @@ function home(): TourCoreConfig {
 describe("date-first availability", () => {
   it("offers upcoming days, then that day's times, and a day question is not a property exception", async () => {
     const a = await liveApp({ cleanups });
-    await a.text("Hi");
+    await a.optInSms();
     const opened = (await a.text("1")).join("\n");
     expect(opened).toContain("Unit 1A at 100 Alfred Way");
     expect(opened).toContain("Which day works for you?");
@@ -83,7 +83,7 @@ describe("date-first availability", () => {
 
   it("keeps Thursday's times after a rent question", async () => {
     const a = await liveApp({ cleanups });
-    await a.text("Hi");
+    await a.optInSms();
     await a.text("1");
     await a.text("Thursday");
     const rent = (await a.text("How much is rent?")).join("\n");
@@ -95,7 +95,7 @@ describe("date-first availability", () => {
 
   it("files a custom time on the selected day, and on a different day when one is named", async () => {
     const a = await liveApp({ cleanups });
-    await a.text("Hi");
+    await a.optInSms();
     await a.text("1");
     await a.text("Thursday");
     const sameDay = (await a.text("Can I come at 3:20?")).join("\n");
@@ -116,7 +116,7 @@ describe("date-first availability", () => {
 describe("single-family visitor language", () => {
   it("names the home by its address, not the internal space label", async () => {
     const a = await liveApp({ cleanups, config: home() });
-    const hi = (await a.text("Hi")).join("\n");
+    const hi = (await a.optInSms()).join("\n");
     expect(hi).toContain("Hi! Welcome to the self-guided tour for 144 Hillside Ave, Teaneck, NJ 07666.");
     expect(hi).toContain("questions about the home");
     expect(hi).toContain("Which day works for you?");
@@ -136,7 +136,7 @@ describe("single-family visitor language", () => {
     config.property.displayName = "Teaneck Home";
     config.property.name = "Teaneck Home";
     const a = await liveApp({ cleanups, config });
-    const hi = (await a.text("Hi")).join("\n");
+    const hi = (await a.optInSms()).join("\n");
     expect(hi).toContain("Teaneck Home at 144 Hillside Ave, Teaneck, NJ 07666");
     expect(hi).not.toContain("Main Home");
     const rent = (await a.text("How much is rent?")).join("\n");

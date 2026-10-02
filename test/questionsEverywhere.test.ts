@@ -47,13 +47,17 @@ describe("approved-fact resolution", () => {
 });
 
 describe("questions at every stage of a text conversation", () => {
-  it("before choosing a unit: the answer, then the welcome and unit menu; no reservation needed", async () => {
+  it("before choosing a unit: no property answer until YES, then the answer and the unit menu", async () => {
     const a = await app();
+    const blocked = (await a.text("How much is 1A?")).join("\n");
+    expect(blocked).toContain("Text TOUR");
+    expect(blocked).not.toContain("2,300");
+    expect(blocked).not.toContain("Which unit");
+    await a.text("TOUR");
+    expect((await a.text("YES")).join("\n")).toContain("Which unit would you like to see?");
     const replies = await a.text("How much is 1A?");
-    expect(replies).toEqual([
-      "Unit 1A rents for $2,300 a month.",
-      `Hi! Welcome to the self-guided tours at 100 Alfred Way. I can answer questions about the property and help you book a tour.\n\nWhich unit would you like to see?\n${UNIT_MENU}`,
-    ]);
+    expect(replies[0]).toBe("Unit 1A rents for $2,300 a month.");
+    expect(replies.at(-1)).toContain("Which unit would you like to see?");
     expect(a.ws.listTours("prop_100_alfred_way")[0]).toMatchObject({ kind: "messaging", outcome: "in-progress" });
     const tour = (await a.grok("list_active_tours")).tours[0];
     expect(tour).toMatchObject({ status: "Browsing", currentStep: "Choosing a unit" });
@@ -63,7 +67,7 @@ describe("questions at every stage of a text conversation", () => {
 
   it('"How much is it?" with no unit chosen asks which unit, answers, and the unit menu still means what it did', async () => {
     const a = await app();
-    await a.text("Hi");
+    await a.optInSms();
     expect(await a.text("How much is it?")).toEqual([`Which unit do you mean: Unit 1A or Unit 2B?\n${UNIT_MENU}`]);
     // "2" answers the question about 2B; it doesn't book 2B.
     expect(await a.text("2")).toEqual(["Unit 2B rents for $1,950 a month.", `Which unit would you like to see?\n${UNIT_MENU}`]);
@@ -74,7 +78,7 @@ describe("questions at every stage of a text conversation", () => {
 
   it("while choosing a time: answered from the chosen unit, then the same times, and the menu number still works", async () => {
     const a = await app();
-    await a.text("Hi");
+    await a.optInSms();
     await a.text("1");
     await a.text("1");
     expect(await a.text("Does it have laundry?")).toEqual(["Here's what the property team shared: In-unit laundry.", TIMES]);
@@ -84,7 +88,7 @@ describe("questions at every stage of a text conversation", () => {
 
   it("before consent and during the identity form: answered, then the same question or reminder; consent and the form link still work", async () => {
     const a = await app();
-    await a.text("Hi");
+    await a.optInSms();
     await a.text("1");
     await a.text("1");
     await a.text("1");
@@ -118,6 +122,7 @@ describe("questions at every stage of a text conversation", () => {
 
   it("an unknown question at any stage: safe fallback, an exception for the team, and the visitor's step is kept", async () => {
     const a = await app();
+    await a.optInSms();
     expect(await a.text("Is there a gym?")).toEqual([FALLBACK, expect.stringContaining("Which unit would you like to see?")]);
     await a.text("1");
     expect(await a.text("Is there a pool?")).toEqual([FALLBACK, DATE_MENU]);
@@ -135,7 +140,7 @@ describe("questions at every stage of a text conversation", () => {
 
   it("the operator's answer reaches the visitor and puts them back on the step they were on", async () => {
     const a = await app();
-    await a.text("Hi");
+    await a.optInSms();
     await a.text("1");
     await a.text("1");
     expect(await a.text("Is there a gym?")).toEqual([FALLBACK, TIMES]);
@@ -151,7 +156,7 @@ describe("questions at every stage of a text conversation", () => {
 
   it("a question about one unit before booking is filed against that unit, and a detail answer is saved to it", async () => {
     const a = await app();
-    await a.text("Hi");
+    await a.optInSms();
     expect(await a.text("How big is 2B?")).toEqual([FALLBACK, `Which unit would you like to see?\n${UNIT_MENU}`]);
     const [issue] = (await a.grok("list_exceptions")).exceptions;
     expect(issue.unitName).toBe("Unit 2B");

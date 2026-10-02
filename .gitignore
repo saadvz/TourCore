@@ -4,6 +4,8 @@ dist/
 # Runtime records written by setup, demo and practice tours
 tourcore-data/
 exports/
+runtime/
+logs/
 
 # Secrets and local environment
 .env

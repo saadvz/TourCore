@@ -112,7 +112,8 @@ type App = Awaited<ReturnType<typeof durableApp>>;
 const tokenIn = (reply: string) => reply.match(/\/verify\/([A-Za-z0-9_-]+)/)![1]!;
 
 async function bookToConsent(app: App) {
-  await app.text("Hi");
+  await app.text("TOUR");
+  await app.text("YES");
   await app.text("1");
   await app.text("1");
   await app.text("1");
@@ -135,7 +136,8 @@ async function liveView(app: App) {
 describe("a text-message tour picks up where it left off after a restart", () => {
   it("booking: a unit chosen before the restart, the time chosen after, one conversation", async () => {
     const app = await durableApp();
-    await app.text("Hi");
+    await app.text("TOUR");
+    await app.text("YES");
     const unit = await app.text("1");
     expect(unit.reply).toContain("Which day works for you?");
 
@@ -155,7 +157,8 @@ describe("a text-message tour picks up where it left off after a restart", () =>
 
   it("keeps the chosen day through a restart, so the next number is that day's time", async () => {
     const app = await durableApp();
-    await app.text("Hi");
+    await app.text("TOUR");
+    await app.text("YES");
     await app.text("1");
     const thursday = await app.text("Thursday");
     expect(thursday.reply).toContain("Thursday, Oct 1");
@@ -324,9 +327,10 @@ describe("access after a restart is never looser", () => {
 describe("retried webhooks after a restart", () => {
   it("an event processed before the restart is recognised afterwards and not run again", async () => {
     const app = await durableApp();
-    await app.text("Hi", "evt-1");
+    await app.text("TOUR", "evt-0");
+    await app.text("YES", "evt-0b");
+    await app.text("1", "evt-1");
     await app.text("1", "evt-2");
-    await app.text("1", "evt-3");
     const first = await app.text("1", "ABC");
     expect(first.replies).toHaveLength(1);
 
@@ -361,7 +365,8 @@ describe("retried webhooks after a restart", () => {
 describe("which property answers on which texting number", () => {
   it("resolves the property from the number texted; an unknown number gets no answer and creates nothing", async () => {
     const app = await durableApp();
-    expect((await app.text("Hi")).reply).toContain("Hi! Welcome to the self-guided tours at 100 Alfred Way.");
+    await app.text("TOUR");
+    expect((await app.text("YES")).reply).toContain("Hi! Welcome to the self-guided tours at 100 Alfred Way.");
     const stranger = await app.text("Hi", "x-1", "+15558887777");
     expect(stranger).toMatchObject({ status: 200, replies: [] });
     expect(app.tours()).toHaveLength(1);

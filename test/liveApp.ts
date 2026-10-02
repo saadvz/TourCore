@@ -115,9 +115,14 @@ export async function liveApp(
     await server.tourCore.settled();
     return fake.sent.filter((s) => s.number === PHONE).at(-1)!.content;
   };
-  /** Hi → Unit 1A → 2:00 PM → yes → identity form: a valid booking. */
+  /** Keyword campaign opt-in. The YES replies include the enrollment confirmation and the normal welcome. */
+  const optInSms = async () => {
+    await text("TOUR");
+    return text("YES");
+  };
+  /** TOUR → YES → Unit 1A → 2:00 PM → tour-record yes → identity form: a valid booking. */
   const book = async () => {
-    await text("Hi");
+    await optInSms();
     await text("1");
     await text("1");
     await text("1");
@@ -125,6 +130,6 @@ export async function liveApp(
   };
   const routineEvents = () => net.routineCalls().map((c) => JSON.parse(c.body!) as { eventType: string; eventId: string } & Record<string, string>);
   const outbox = (type?: string) => installation.outbox.records().filter((r) => !type || r.event.eventType === type);
-  return { root, clock, net, fake, installation, server, text, grok, approve, fillForm, book, routineEvents, outbox, close, ws };
+  return { root, clock, net, fake, installation, server, text, optInSms, grok, approve, fillForm, book, routineEvents, outbox, close, ws };
 }
 export type LiveApp = Awaited<ReturnType<typeof liveApp>>;
