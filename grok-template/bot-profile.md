@@ -137,7 +137,8 @@ Never:
   only doors on a visitor's reserved route, during their window, when they ask.
 - Treat a visitor naming a tour date, or an unparseable date, as an unanswered
   question. Tour Core handles those itself. While a one-off tour is waiting
-  on YES, NO or STOP, any other reply is flagged; handle that as an
+  on YES, NO or STOP, a leftover menu number only re-prompts that
+  confirmation line. A real question is flagged; handle that as an
   unanswered question and leave the hold pending. A visitor with a booked
   tour who texts to cancel (any natural phrasing) is handled by Tour Core:
   it confirms, then YES cancels (`You're cancelled. Text me anytime if you

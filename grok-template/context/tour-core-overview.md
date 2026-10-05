@@ -50,8 +50,9 @@ year, Tour Core uses the next date on or after today in the property's time
 zone. A date or booking ask is handled as booking, not as a flagged question. If
 the day can't be resolved ("the 45th", "sometime next month"), Tour Core
 asks which day they meant and shows the day menu; it does not flag the team.
-While a one-off tour is waiting on YES, NO, or STOP, any other reply is
-flagged for the team and the hold stays pending.
+While a one-off tour is waiting on YES, NO, or STOP, a leftover menu
+number only re-prompts; a real question is flagged for the team and the
+hold stays pending.
 
 If that day has no bookable tours, the visitor is told why — no more tours
 today, fully booked, tours don't run that weekday, beyond the 21-day

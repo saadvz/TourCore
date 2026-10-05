@@ -305,8 +305,9 @@ menu numbers, YES/NO, HELP, STOP and START. A tour day can be "today", "tomorrow
 ("Dec 1", "December 1st", "1 Dec", "12/1", "Tuesday Oct 6"); without a year, Tour Core uses the next date on or after
 today in the property's time zone. A date or booking ask is not a flagged question for the team. If the day
 can't be resolved ("the 45th", "sometime next month"), Tour Core asks which day they meant and shows the day
-menu; it does not flag the property team. While a one-off tour is waiting on YES, NO, or STOP, any other reply
-is flagged for the team and the hold stays pending.
+menu; it does not flag the property team. While a one-off tour is waiting on YES, NO, or STOP, a leftover
+menu number only re-prompts `Reply YES to confirm, NO to cancel, or STOP to opt out.` A real question is
+flagged for the team and the hold stays pending.
 
 If that day has no bookable tours, the visitor is told why — no more tours today, fully booked, tours don't run
 that weekday, beyond the 21-day booking horizon, or no open times at all — plus the next opening when there is

@@ -190,6 +190,7 @@ right now").
   isn't a clear yes or no on that confirm is flagged (`I'll check with the
   {team} and get back to you.`). That should not appear as a flagged question
   unless they were unclear on the confirm, or cancel could not finish (then
-  the team is asked to call it off). While a
-  one-off tour is waiting on YES, NO or STOP, any other reply is flagged;
-  handle that as an unanswered question and leave the hold pending.
+  the team is asked to call it off). While a one-off tour is waiting on YES,
+  NO or STOP, a leftover menu number only re-prompts; a real question is
+  flagged. Handle a flagged question as an unanswered question and leave the
+  hold pending.
