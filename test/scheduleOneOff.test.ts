@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { slotsOn } from "../src/core/schedule";
 import { zonedTimeToUtc } from "../src/core/timezone";
+import { runReadinessCheck } from "../src/setup";
 import { operatorScheduledFirstText } from "../src/visitor/session";
 import { at, liveApp, PHONE, type LiveApp } from "./liveApp";
 
@@ -244,7 +245,9 @@ describe("operators can set up a one-time tour", () => {
     const a = await liveApp({ cleanups });
     await publish(a);
     const current = a.ws.load(PROPERTY).config;
-    a.ws.save({ ...current, tourHours: { ...current.tourHours, start: "18:00", end: "21:00" } });
+    const { config } = a.ws.save({ ...current, tourHours: { ...current.tourHours, start: "18:00", end: "21:00" } });
+    a.ws.recordReadiness(PROPERTY, await runReadinessCheck(config, { now: new Date(a.clock.t) }));
+    await publish(a);
 
     const evening = await a.grok("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "7:30 PM today" });
     expect(evening.summary).toBe(
