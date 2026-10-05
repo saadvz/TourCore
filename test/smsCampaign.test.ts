@@ -22,13 +22,18 @@ function sendblueProperty(): TourCoreConfig {
   return { ...config, messagingMode: "live", property: { ...config.property, facts: ["Street parking only."] } };
 }
 
-async function startPhoneApp(root = mkdtempSync(join(tmpdir(), "tourcore-sms-"))) {
+async function startPhoneApp(root?: string, operator: { supportEmail?: string; visitorContact?: string } = {}) {
+  const dir = root ?? mkdtempSync(join(tmpdir(), "tourcore-sms-"));
   const fake = fakeSendblue();
   cleanups.push(setSendblueRuntime({ env: () => sendblueEnv(), client: () => fake.client }));
   const clock = at(7);
-  const ws = new PropertyWorkspace(root);
+  const ws = new PropertyWorkspace(dir);
   if (!ws.list().length) {
-    const { config } = ws.save(sendblueProperty());
+    const base = sendblueProperty();
+    const { config } = ws.save({
+      ...base,
+      operator: { ...base.operator, ...operator, ...(operator.supportEmail || operator.visitorContact ? { visitorHelpDecided: true } : {}) },
+    });
     ws.recordReadiness(config.property.id, await runReadinessCheck(config, { now: new Date(clock) }));
   }
   const server: Server = createSetupServer({ workspace: ws, now: () => new Date(clock), realNow: () => clock, log: () => {} });
@@ -46,9 +51,9 @@ async function startPhoneApp(root = mkdtempSync(join(tmpdir(), "tourcore-sms-"))
   const close = () => new Promise<void>((resolve) => server.close(() => resolve()));
   cleanups.push(() => {
     server.close();
-    rmSync(root, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true });
   });
-  return { ws, text, close, root, id: ws.list()[0]!.config.property.id };
+  return { ws, text, close, root: dir, id: ws.list()[0]!.config.property.id };
 }
 
 describe("SMS keyword campaign", () => {
@@ -87,24 +92,13 @@ describe("SMS keyword campaign", () => {
     const previous = process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
     delete process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
     try {
-      const emailRoot = mkdtempSync(join(tmpdir(), "tourcore-sms-"));
-      new PropertyWorkspace(emailRoot).save({
-        ...sendblueProperty(),
-        operator: { ...sendblueProperty().operator, supportEmail: "desk@example.com", visitorHelpDecided: true },
-      });
-      const emailed = await startPhoneApp(emailRoot);
+      const emailed = await startPhoneApp(undefined, { supportEmail: "desk@example.com" });
       expect((await emailed.text("HELP")).replies.join("\n")).toBe(
         "Tour Core: For help with your property tour, email desk@example.com. Message and data rates may apply. Reply STOP to opt out.",
       );
       await emailed.close();
 
-      const numberRoot = mkdtempSync(join(tmpdir(), "tourcore-sms-"));
-      const numberWs = new PropertyWorkspace(numberRoot);
-      numberWs.save({
-        ...sendblueProperty(),
-        operator: { ...sendblueProperty().operator, visitorContact: "+15550108888", visitorHelpDecided: true },
-      });
-      const numbered = await startPhoneApp(numberRoot);
+      const numbered = await startPhoneApp(undefined, { visitorContact: "+15550108888" });
       expect((await numbered.text("HELP")).replies.join("\n")).toBe(
         "Tour Core: For help with your property tour, call (555) 010-8888 or reply here. Message and data rates may apply. Reply STOP to opt out.",
       );

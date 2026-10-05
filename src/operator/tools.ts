@@ -854,7 +854,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         ...("problem" in modes.texting ? { textingProblem: modes.texting.problem } : {}),
         canSave: view.canSave,
         ...setupState(ctx, id),
-        ...(ctx.services.workspace.has(id) && ctx.services.workspace.load(id).state.status === "PUBLISHED_FOR_DEMO" ? {} : propertyNextQuestion(draft)),
+        ...(ctx.services.workspace.has(id) && ctx.services.workspace.load(id).state.status === "PUBLISHED_FOR_DEMO" ? {} : visitorHelpQuestion(draft)),
       };
     },
   }),

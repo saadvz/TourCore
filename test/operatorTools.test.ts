@@ -144,7 +144,8 @@ describe("setup through the tools", () => {
 
   it("saves a support email and records an explicit skip of the optional help step", async () => {
     const h = app();
-    await h.ok("create_property_setup", { address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way", propertyType: "APARTMENT_BUILDING" });
+    await h.ok("create_property_setup", { address: "100 Alfred Way, Brooklyn, NY 11201", name: "100 Alfred Way", propertyType: "APARTMENT_BUILDING" });
+    await h.ok("update_property_details", { confirmAddress: true });
     await h.ok("add_door", { name: "Lobby Entrance", kind: "entrance" });
     await h.ok("add_unit", { name: "Unit 101" });
     await h.ok("set_unit_details", { details: "101 is 1 bed 1 bath for $1,950, available now." });
@@ -167,7 +168,8 @@ describe("setup through the tools", () => {
 
     const other = grokHarness();
     cleanups.push(other.cleanup);
-    await other.ok("create_property_setup", { address: "200 Other St, Brooklyn, NY", name: "200 Other St", propertyType: "APARTMENT_BUILDING" });
+    await other.ok("create_property_setup", { address: "200 Other St, Brooklyn, NY 11201", name: "200 Other St", propertyType: "APARTMENT_BUILDING" });
+    await other.ok("update_property_details", { confirmAddress: true });
     await other.ok("add_door", { name: "Lobby Entrance", kind: "entrance" });
     await other.ok("add_unit", { name: "Unit 1" });
     await other.ok("set_unit_details", { details: "1 is 1 bed 1 bath for $1,800, available now." });
