@@ -166,7 +166,7 @@ export async function runReadinessCheck(
   const advisories =
     config.operator.visitorContact || resolveSupportEmail(config.operator.supportEmail)
       ? []
-      : ["No visitor help number or support email is set. Visitors who text HELP can reply here."];
+      : ["No visitor help number or email is set, so stuck visitors can only text back."];
   return { ...result, messaging: messagingChecks, advisories };
 }
 

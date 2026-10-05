@@ -269,10 +269,10 @@ describe("readiness, practice tour and publish", () => {
       "\u2713 Records",
       "\u2713 Durin access",
       "\u2713 Audit/export",
-      "No visitor help number or support email is set. Visitors who text HELP can reply here.",
+      "No visitor help number or email is set, so stuck visitors can only text back.",
     ]);
     expect(readiness.passed).toBe(true);
-    expect(readiness.advisories).toEqual(["No visitor help number or support email is set. Visitors who text HELP can reply here."]);
+    expect(readiness.advisories).toEqual(["No visitor help number or email is set, so stuck visitors can only text back."]);
     if (previous === undefined) delete process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
     else process.env.TOURCORE_PUBLIC_CONTACT_EMAIL = previous;
     const practice = await h.ok("run_dry_tour");

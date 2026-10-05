@@ -263,7 +263,7 @@ describe("readiness check", () => {
       "Durin access",
       "Audit/export",
     ]);
-    expect(result.advisories).toEqual(["No visitor help number or support email is set. Visitors who text HELP can reply here."]);
+    expect(result.advisories).toEqual(["No visitor help number or email is set, so stuck visitors can only text back."]);
   });
 
   it("does not fail readiness when visitor help is missing, and drops the advisory once either is set", async () => {
@@ -273,7 +273,7 @@ describe("readiness check", () => {
     try {
       const missing = await runReadinessCheck(draft, { now: MONDAY_MORNING });
       expect(missing.passed).toBe(true);
-      expect(missing.advisories).toEqual(["No visitor help number or support email is set. Visitors who text HELP can reply here."]);
+      expect(missing.advisories).toEqual(["No visitor help number or email is set, so stuck visitors can only text back."]);
       const withNumber = await runReadinessCheck(setAlertContact(draft, { visitorContact: "(555) 010-8888" }), { now: MONDAY_MORNING });
       expect(withNumber.passed).toBe(true);
       expect(withNumber.advisories).toEqual([]);
