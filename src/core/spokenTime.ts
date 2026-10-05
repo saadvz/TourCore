@@ -4,6 +4,7 @@
  * that time is bookable.
  */
 
+import { isBeyondBookingHorizon } from "./schedule";
 import type { LocalDate, Weekday } from "./timezone";
 
 export interface SpokenTime {
@@ -14,13 +15,15 @@ export interface SpokenTime {
   weekday?: Weekday;
   /** "next Monday" means the following one, not today if today is Monday. */
   nextWeek?: boolean;
+  /** Concrete calendar date when the visitor named one next to the clock ("oct 6 at 12 pm"). */
+  date?: LocalDate;
 }
 
 const CLOCK =
   /(?:^|\s)(?:(at|around|about|for|by)\s+)?(?<!\d)(\d{1,2})(?::(\d{2}))?(?:\s*(am|pm|a m|p m|o'?clock))?(?!\d)(?=\s|$)/g;
 
 /** Every distinct clock time in already-normalized text. "1" alone is not a time; "3:15" and "at 3" are. */
-export function spokenTimes(normalized: string): SpokenTime[] {
+export function spokenTimes(normalized: string, today?: LocalDate): SpokenTime[] {
   const day = /\btomorrow\b/.test(normalized) ? "tomorrow" : /\btoday\b/.test(normalized) ? "today" : undefined;
   const found: SpokenTime[] = [];
   for (const match of normalized.matchAll(CLOCK)) {
@@ -33,10 +36,10 @@ export function spokenTimes(normalized: string): SpokenTime[] {
     const minute = minutes ? Number(minutes) : 0;
     if (minute > 59) continue;
     const meridiem = suffix && !suffix.startsWith("o") ? (suffix.startsWith("a") ? "AM" : "PM") : undefined;
-    const asked = dayReference(normalized);
+    const asked = dayReference(normalized, today);
     const named = asked && asked !== "menu" ? asked : undefined;
-    const key = `${hour}:${minute}:${meridiem ?? ""}:${day ?? ""}:${named?.weekday ?? ""}`;
-    if (found.some((item) => `${item.hour}:${item.minute}:${item.meridiem ?? ""}:${item.day ?? ""}:${item.weekday ?? ""}` === key)) continue;
+    const key = `${hour}:${minute}:${meridiem ?? ""}:${day ?? ""}:${named?.weekday ?? ""}:${named?.date ? `${named.date.year}-${named.date.month}-${named.date.day}` : ""}`;
+    if (found.some((item) => `${item.hour}:${item.minute}:${item.meridiem ?? ""}:${item.day ?? ""}:${item.weekday ?? ""}:${item.date ? `${item.date.year}-${item.date.month}-${item.date.day}` : ""}` === key)) continue;
     found.push({
       hour,
       minute,
@@ -44,6 +47,7 @@ export function spokenTimes(normalized: string): SpokenTime[] {
       ...(day ? { day } : {}),
       ...(named?.weekday ? { weekday: named.weekday } : {}),
       ...(named?.nextWeek ? { nextWeek: true } : {}),
+      ...(named?.date ? { date: named.date } : {}),
     });
   }
   return found;
@@ -77,7 +81,10 @@ export interface DayReference {
 /**
  * A day the visitor named, or a general availability ask, in already-normalized
  * text. `today` is the property-local date so a year-less calendar date
- * ("Dec 1") becomes the next occurrence on or after today.
+ * ("Dec 1") becomes the next occurrence on or after today. A this-year date
+ * that has already passed is kept as that past date when next year would be
+ * beyond the booking horizon — so the visitor hears it already passed, not
+ * that it is too far ahead.
  */
 export function dayReference(normalized: string, today?: LocalDate): DayReference | "menu" | undefined {
   if (/\b(this )?weekend\b/.test(normalized)) return { relative: "weekend" };
@@ -197,11 +204,17 @@ function resolveCalendarDate(today: LocalDate | undefined, month: number, day: n
 }
 
 function nextOnOrAfter(today: LocalDate, month: number, day: number): LocalDate | undefined {
-  for (const year of [today.year, today.year + 1]) {
-    const date = { year, month, day };
-    if (isValidYmd(year, month, day) && !isBefore(date, today)) return date;
-  }
-  return undefined;
+  const thisYear = isValidYmd(today.year, month, day) ? { year: today.year, month, day } : undefined;
+  const nextYear = isValidYmd(today.year + 1, month, day) ? { year: today.year + 1, month, day } : undefined;
+  if (thisYear && !isBefore(thisYear, today)) return thisYear;
+  if (nextYear && !isBeyondBookingHorizon(today, nextYear)) return nextYear;
+  return thisYear ?? nextYear;
+}
+
+/** True when the text names a tour day (calendar date, weekday, today/tomorrow), not a bare yes. */
+export function namesTourDay(normalized: string, today?: LocalDate): boolean {
+  const asked = dayReference(normalized, today);
+  return !!asked && asked !== "menu";
 }
 
 function isBefore(a: LocalDate, b: LocalDate): boolean {

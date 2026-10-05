@@ -1,6 +1,7 @@
-import { dayReference, spokenTimes, vagueTimeRequest, type SpokenTime } from "../core/spokenTime";
+import { dayReference, namesTourDay, spokenTimes, vagueTimeRequest, type SpokenTime } from "../core/spokenTime";
 import type { IntentInterpretation, IntentInterpreter, InterpretContext, StepAwaiting, StopRef, TourIntent } from "./model";
 import { normalize, numberWord, ordinalWord, stripFiller } from "./normalize";
+import { acceptsNextOpening, yesNo } from "./yesNo";
 
 /**
  * Deterministic interpretation: menu numbers, YES/NO, messaging keywords and
@@ -106,40 +107,6 @@ export function isCancelTourAsk(raw: string): boolean {
   return CANCEL_VERB.test(t) && TOUR_NOUN.test(t);
 }
 
-const YES_EXACT = /^(y|yes|yeah|yea|yeh|ya|yah|yep|yup|ye|yass|yes please|sure|ok|okay|k|kk|affirmative|correct|absolutely|definitely|certainly|of course)$/;
-const NO_EXACT = /^(n|no|nope|nah|no thanks|no thank you)$/;
-const YES_LEAD =
-  /^(yes|y|yeah|yea|yeh|ya|yah|yep|yup|yass|sure|ok|okay|fine|absolutely|definitely|certainly|of course|course|agreed|i agree|agree|i consent|consent|i accept|accept|go ahead|go for it|do it|sounds (good|great|fine)|that works|works for me|that is (fine|ok|okay|good|great|perfect)|that would be (great|good|nice|helpful|awesome|perfect|lovely|fine)|that would help|would be (great|good|nice|helpful)|please|please do|i would (like|love|appreciate) (that|it)|would love (that|it)|perfect|great|awesome|cool|alright|all right|correct|affirmative|you bet|for sure|totally|no problem|no worries|not a problem|have (someone|somebody|them|the team) (reach out|call|text|contact|follow up|get in touch|get back)|(someone|somebody) (can|could|should) (reach out|call|text|contact|follow up)|(please )?(reach out|follow up|contact me|get in touch)|i am in|count me in)\b/;
-const NO_LEAD =
-  /^(no|n|nope|nah|na|no thanks|no thank you|not (right )?now|not right|not really|not interested|no need|nothing|never mind|nevermind|i do not|(please )?do not|i decline|decline|rather not|i would rather not|maybe later|not today|no way|i will pass|pass)\b/;
-const SOFT_NO = /^(i am good|i am ok|i am okay|i am fine|all good|i am all set|we are good|we are all set)\b/;
-const NOT_NEGATIVE = /\b(no problem|no worries|not a problem)\b/g;
-const HEDGE = /\b(but|only|unless|except|maybe|not sure|i guess|kinda|kind of|depends|what if|if)\b/;
-const NEGATION = /\b(no|not|nope|nah|never|without|rather not|stop|cancel|decline|refuse|unsubscribe)\b/;
-
-interface YesNo {
-  answer?: "yes" | "no";
-  confidence: number;
-  soft?: boolean;
-}
-
-function yesNo(t: string): YesNo {
-  if (YES_EXACT.test(t)) return { answer: "yes", confidence: 1 };
-  if (NO_EXACT.test(t)) return { answer: "no", confidence: 1 };
-  if (SOFT_NO.test(t)) return { answer: "no", confidence: 0.8, soft: true };
-  if (NO_LEAD.test(t) && !/^(no problem|no worries|not a problem)\b/.test(t)) {
-    const rest = t.replace(NO_LEAD, "").trim();
-    return YES_LEAD.test(rest) && !/^(thanks|thank you)/.test(rest) ? { confidence: 0.3 } : { answer: "no", confidence: 0.9 };
-  }
-  if (YES_LEAD.test(t)) {
-    const rest = t.replace(YES_LEAD, "").replace(NOT_NEGATIVE, "").trim();
-    if (NEGATION.test(rest)) return { confidence: 0.3 };
-    if (HEDGE.test(rest)) return { answer: "yes", confidence: 0.6 };
-    return { answer: "yes", confidence: 0.9 };
-  }
-  return { confidence: 0 };
-}
-
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 function mentionsUnit(t: string, unitName: string): boolean {
@@ -240,6 +207,7 @@ function clockIntent(spoken: SpokenTime): TourIntent {
     ...(spoken.day ? { day: spoken.day } : {}),
     ...(spoken.weekday ? { weekday: spoken.weekday } : {}),
     ...(spoken.nextWeek ? { nextWeek: true } : {}),
+    ...(spoken.date ? { date: spoken.date } : {}),
   };
 }
 
@@ -254,8 +222,9 @@ function schedulingIntent(
   allowBareClock: boolean,
   result: (intent: TourIntent, confidence: number, extra?: Partial<IntentInterpretation>) => IntentInterpretation,
   unknown: (extra?: Partial<IntentInterpretation>) => IntentInterpretation,
+  today?: InterpretContext["today"],
 ): IntentInterpretation | undefined {
-  const times = spokenTimes(t);
+  const times = spokenTimes(t, today);
   if (times.length > 1) return unknown({ clarificationNeeded: true, clarificationQuestion: "Which time did you mean?" });
   const spoken = times[0];
   if (spoken && (TOPIC.test(t) || WANTS_TO_KNOW.test(t))) {
@@ -388,7 +357,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
       }
       const pick = pickOption(t, ctx.units.length);
       if (pick) return result({ type: "SELECT_UNIT", unitName: ctx.units[pick.index]!.name }, pick.confidence);
-      const customUnit = schedulingIntent(raw, t, true, result, unknown);
+      const customUnit = schedulingIntent(raw, t, true, result, unknown, ctx.today);
       if (customUnit) return customUnit;
       const dateUnit = dateIntent(raw, t, result, ctx.today);
       if (dateUnit) return dateUnit;
@@ -404,7 +373,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
     }
 
     case "choose-date": {
-      if (ctx.awaiting?.kind === "accept-next-opening" && /^(that|that one|that day|that time|that works|yes|yeah|yea|yep|yup|sure|ok|okay|k|yes that|yes that one|yeah that)$/.test(t)) {
+      if (ctx.awaiting?.kind === "accept-next-opening" && acceptsNextOpening(t) && !namesTourDay(t, ctx.today)) {
         return result({ type: "SELECT_DATE" }, 0.95);
       }
       const labels = ctx.timeChoices;
@@ -413,7 +382,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
       if (bareN !== undefined && bareN >= 1 && bareN <= Math.max(labels.length, 1) && labels.length) {
         return result({ type: "SELECT_DATE" }, 1, {});
       }
-      const customDate = schedulingIntent(raw, t, true, result, unknown);
+      const customDate = schedulingIntent(raw, t, true, result, unknown, ctx.today);
       if (customDate) return customDate;
       const picked = dateIntent(raw, t, result, ctx.today);
       if (picked) return picked;
@@ -432,7 +401,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
       if (bareN !== undefined && bareN >= 1 && bareN <= labels.length) return result({ type: "SELECT_TIME", timeLabel: labels[bareN - 1]! }, 1);
       const time = pickTimeLabel(t, labels);
       if (time.label) return result({ type: "SELECT_TIME", timeLabel: time.label }, 0.95);
-      const customTime = schedulingIntent(raw, t, true, result, unknown);
+      const customTime = schedulingIntent(raw, t, true, result, unknown, ctx.today);
       if (customTime) return customTime;
       const anotherDay = dateIntent(raw, t, result, ctx.today);
       if (anotherDay) return anotherDay;
@@ -452,7 +421,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
     }
 
     case "consent": {
-      const customConsent = schedulingIntent(raw, t, false, result, unknown);
+      const customConsent = schedulingIntent(raw, t, false, result, unknown, ctx.today);
       if (customConsent?.intent.type === "REQUEST_CUSTOM_TIME" || customConsent?.mentionedTime) return customConsent;
       const yn = yesNo(t);
       if (yn.answer === "yes") return result({ type: "CONSENT_YES" }, yn.confidence);
@@ -462,7 +431,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
     }
 
     case "follow-up": {
-      const customFollow = schedulingIntent(raw, t, false, result, unknown);
+      const customFollow = schedulingIntent(raw, t, false, result, unknown, ctx.today);
       if (customFollow) return customFollow;
       const yn = yesNo(t);
       if (yn.answer === "yes") return result({ type: "FOLLOW_UP_YES" }, yn.confidence);
@@ -472,7 +441,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
 
     case "identity": {
       // "Where's the form?" is about the identity form (Tour Core resends the link), not about the property.
-      const customIdentity = schedulingIntent(raw, t, false, result, unknown);
+      const customIdentity = schedulingIntent(raw, t, false, result, unknown, ctx.today);
       if (customIdentity) return customIdentity;
       if (FORM_WORDS.test(t)) return help() ?? unknown();
       return help() ?? clearQuestion() ?? unknown();
@@ -483,7 +452,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
       return interpretOnTour(ctx, t, asked, { result, unknown, question, help, informational });
 
     default: {
-      const customOpen = schedulingIntent(raw, t, true, result, unknown);
+      const customOpen = schedulingIntent(raw, t, true, result, unknown, ctx.today);
       if (customOpen) return customOpen;
       const openDate = dateIntent(raw, t, result, ctx.today);
       if (openDate) return openDate;
@@ -548,7 +517,7 @@ function answerToAwaiting(awaiting: StepAwaiting, t: string, { result, unknown }
 function interpretOnTour(ctx: InterpretContext, t: string, asked: boolean, h: Helpers): IntentInterpretation {
   const { result, unknown, question, help, informational } = h;
   const touring = ctx.step === "touring";
-  const custom = schedulingIntent(ctx.message, t, false, result, unknown);
+  const custom = schedulingIntent(ctx.message, t, false, result, unknown, ctx.today);
   if (custom) return custom;
 
   if (ctx.awaiting) {

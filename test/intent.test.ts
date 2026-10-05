@@ -140,6 +140,10 @@ describe("rule-based interpretation", () => {
 
   it("SELECT_DATE from a typed calendar date, not a property question", () => {
     expect(readAs("choose-date", "Can I come Dec 1?")).toEqual({ type: "SELECT_DATE", date: { year: 2026, month: 12, day: 1 } });
+    expect(readAs("choose-date", "Can I come October 1", { today: { year: 2026, month: 10, day: 5 } })).toEqual({
+      type: "SELECT_DATE",
+      date: { year: 2026, month: 10, day: 1 },
+    });
     expect(readAs("choose-date", "December 1st")).toEqual({ type: "SELECT_DATE", date: { year: 2026, month: 12, day: 1 } });
     expect(readAs("choose-date", "1 Dec")).toEqual({ type: "SELECT_DATE", date: { year: 2026, month: 12, day: 1 } });
     expect(readAs("choose-date", "12/1")).toEqual({ type: "SELECT_DATE", date: { year: 2026, month: 12, day: 1 } });
@@ -235,6 +239,24 @@ describe("rule-based interpretation", () => {
       expect(i, m).toMatchObject({ manipulation: true, intent: { type: "UNKNOWN" } });
       expect(isConfident(i)).toBe(false);
     }
+  });
+
+  it("flexible yes takes a pending next-opening offer", () => {
+    const awaiting = { kind: "accept-next-opening" as const, date: "2026-10-05", slotStart: "2026-10-05T12:15:00.000Z" };
+    for (const m of ["yes", "that", "yeah", "yep", "ok", "okay", "Yes I'll take it", "Yes 1 works", "I'll take it"]) {
+      expect(readAs("choose-date", m, { awaiting }), m).toEqual({ type: "SELECT_DATE" });
+    }
+    expect(readAs("choose-date", "Monday", { awaiting })).toEqual({ type: "SELECT_DATE", weekday: "MON" });
+    expect(readAs("choose-date", "1", { awaiting })).toEqual({ type: "SELECT_DATE" });
+    expect(readAs("choose-date", "Can I come oct 6 at 12 pm?", { awaiting })).toMatchObject({
+      type: "REQUEST_CUSTOM_TIME",
+      hour: 12,
+      minute: 0,
+      meridiem: "PM",
+      date: { year: 2026, month: 10, day: 6 },
+    });
+    expect(readAs("choose-date", "hmm", { awaiting }).type).toBe("NOT_CONFIDENT");
+    expect(readAs("choose-date", "Yes I'll take it").type).toBe("NOT_CONFIDENT");
   });
 
   it("a bare yes answers the confirmation Tour Core just asked for", () => {

@@ -178,19 +178,22 @@ right now").
   Tour Core only opens doors on the visitor's own route during their tour time.
 - Invent, reword or embellish an approved fact.
 - Show exceptionIds, tourRefs or codes.
-- Treat a visitor naming a tour date ("Can I come Dec 1?"), an unparseable
-  date ("the 45th", "sometime next month"), or a day that isn't bookable
-  (no more today, fully booked, that weekday, too far ahead, no open times)
-  as an unanswered question. Tour Core handles those itself — including
-  yes/that for the offered next opening — and they should not appear as a
-  flagged question. A visitor who texts to cancel a booked tour (any natural
-  phrasing) is also handled by Tour Core: it confirms, then YES cancels
-  (`You're cancelled. Text me anytime if you want to book again.`) or NO keeps
-  the booking (`Okay, your tour stays on {day} at {time}.`). A reply that
-  isn't a clear yes or no on that confirm is flagged (`I'll check with the
-  {team} and get back to you.`). That should not appear as a flagged question
-  unless they were unclear on the confirm, or cancel could not finish (then
-  the team is asked to call it off). While a one-off tour is waiting on YES,
-  NO or STOP, a leftover menu number only re-prompts; a real question is
-  flagged. Handle a flagged question as an unanswered question and leave the
-  hold pending.
+- Treat a visitor naming a tour date ("Can I come Dec 1?", "Can I come
+  October 1"), an unparseable date ("the 45th", "sometime next month"), or
+  a day that isn't bookable (already passed, no more today, fully booked,
+  that weekday, too far ahead, no open times) as an unanswered question.
+  Tour Core handles those itself — including a natural yes (yes, that,
+  "Yes I'll take it", "Yes 1 works") for the offered next opening, and a
+  new day/time ask while that offer is pending ("Can I come oct 6 at 12
+  pm?") as that day, not as accepting the offer — and they should not
+  appear as a flagged question. A visitor who texts to cancel a booked
+  tour (any natural phrasing) is also handled by Tour Core: it confirms,
+  then YES cancels (`You're cancelled. Text me anytime if you want to book
+  again.`) or NO keeps the booking (`Okay, your tour stays on {day} at
+  {time}.`). A reply that isn't a clear yes or no on that confirm is
+  flagged (`I'll check with the {team} and get back to you.`). That should
+  not appear as a flagged question unless they were unclear on the confirm,
+  or cancel could not finish (then the team is asked to call it off).
+  While a one-off tour is waiting on YES, NO or STOP, a leftover menu
+  number only re-prompts; a real question is flagged. Handle a flagged
+  question as an unanswered question and leave the hold pending.

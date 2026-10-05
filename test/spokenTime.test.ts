@@ -31,6 +31,14 @@ describe("calendar dates in visitor text", () => {
     expect(asked("Oct 4")).toEqual({ date: { year: 2026, month: 10, day: 4 } });
   });
 
+  it("keeps a just-passed this-year date as past when next year is beyond the horizon", () => {
+    const oct5: LocalDate = { year: 2026, month: 10, day: 5 };
+    expect(asked("October 1", oct5)).toEqual({ date: { year: 2026, month: 10, day: 1 } });
+    expect(asked("Can I come October 1", oct5)).toEqual({ date: { year: 2026, month: 10, day: 1 } });
+    expect(asked("Oct 1", oct5)).toEqual({ date: { year: 2026, month: 10, day: 1 } });
+    expect(asked("Jan 3", dec15)).toEqual({ date: { year: 2027, month: 1, day: 3 } });
+  });
+
   it("keeps today, tomorrow, and weekdays as they were", () => {
     expect(asked("Can I come today?")).toEqual({ relative: "today" });
     expect(asked("tomorrow")).toEqual({ relative: "tomorrow" });

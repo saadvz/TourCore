@@ -303,7 +303,9 @@ Visitors don't need exact phrases. "hey I wanna see 101", "2 works", "yeah that'
 outside 101", "does this place have laundry?", "I'm all done" and "yeah have someone reach out" all work, as do the
 menu numbers, YES/NO, HELP, STOP and START. A tour day can be "today", "tomorrow", a weekday, or a calendar date
 ("Dec 1", "December 1st", "1 Dec", "12/1", "Tuesday Oct 6"); without a year, Tour Core uses the next date on or after
-today in the property's time zone. A date or booking ask is not a flagged question for the team. If the day
+today in the property's time zone. If that this-year date has already passed and next year is beyond the 21-day
+horizon, it stays that past date — "That day has already passed" — instead of rolling forward and calling it too
+far ahead. A date or booking ask is not a flagged question for the team. If the day
 can't be resolved ("the 45th", "sometime next month"), Tour Core asks which day they meant and shows the day
 menu; it does not flag the property team. While a one-off tour is waiting on YES, NO, or STOP, a leftover
 menu number only re-prompts `Reply YES to confirm, NO to cancel, or STOP to opt out.` A real question is
@@ -314,8 +316,12 @@ that weekday, beyond the 21-day booking horizon, or no open times at all — plu
 one. A date that has already passed starts "That day has already passed. The next opening is {when}." Wherever
 "The next opening is {when}." is followed by the day menu, the ending is "Reply yes to take it, or pick a day:".
 An offer without that next-opening line still ends "Reply yes for {Weekday} at {time}, or pick a day:". The
-follow-up is "Reply yes for {Weekday} at {time}, or pick a day." Replying yes or that books that exact start
-after a recheck; if it was taken, they hear "Someone just grabbed that time."
+follow-up is "Reply yes for {Weekday} at {time}, or pick a day." A natural yes — yes, that, yeah, yep, ok,
+okay, "Yes I'll take it", "Yes 1 works", "I'll take it", and similar accepts — books that exact start after a
+recheck; if it was taken, they hear "Someone just grabbed that time." A reply that is neither an accept nor a
+day keeps the offer and repeats the follow-up. Bare numbers and day names still pick from the day menu. A
+sentence that names another day or time ("Can I come oct 6 at 12 pm?") is a fresh date request for that day,
+not an accept of the pending opening.
 
 Open conversations pick up the latest published settings (hours, units, and so on) on every inbound text. A
 stale numbered reply after hours change gets "Tour times just changed. Here's what's open now:" and the fresh
