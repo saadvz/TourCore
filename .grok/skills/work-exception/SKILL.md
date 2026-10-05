@@ -115,7 +115,7 @@ not change.
    - "Offer them 3:30" → `propose_tour_time`. The current booking stays until the visitor agrees.
    - "Decline" or "Keep the 4 PM booking" → `decline_tour_time_request`.
    - "Move Testa to 3:15" → `reschedule_tour` with their name and the time. Ask the one question it returns, then call again after yes.
-   - "Set up a tour for Dana at 1A on Monday at 3:15" → `schedule_one_off_tour` with their phone, the unit and the time. Ask the one question it returns, then call again after yes. Only if they asked for this tour.
+   - "Set up a tour for Dana at 1A on Monday at 3:15" → `schedule_one_off_tour` with their phone, the unit and the time. Ask the one question it returns (it ends `Book it?`), then call again after yes. Only if they asked for this tour.
    - "Who's waiting for a different time?" → `list_tour_time_requests`.
 3. A time outside normal touring hours returns a stronger question. Call again
    with `confirmationCode` and `acknowledgeOutsideHours` true only after they
@@ -124,6 +124,13 @@ not change.
    names. Don't approve it.
 5. Never describe this as a schedule change. Future visitors still get the
    regular times.
+6. After a one-off is set, Tour Core texts the visitor first. YES continues to
+   the usual consent step. STOP opts out and sends only the standard opt-out
+   confirmation — nothing further. NO cancels and tells the team. If they
+   never reply in time, the time is released; unless they opted out they get
+   exactly one text that it was released, then no further texts.
+7. Confirmation questions name the action and end with the verb: `Move it?`,
+   `Book it?`, or `Save it?`. Never "Continue?".
 
 One visitor text is one intent. If they ask a question and name a custom time
 in the same message, Tour Core answers the question and asks them to confirm
@@ -143,10 +150,10 @@ The short queue, or the one item and what was done.
 ## Requires approval
 
 Answering with a new approved fact, pausing, resuming and calling off a tour,
-approving a custom time, and moving a tour. A time outside normal touring
-hours needs the stronger confirmation. Marking an item handled, declining a
-time request, or offering another time doesn't need a confirmation code but
-should follow the operator's instruction.
+approving a custom time, moving a tour, and setting up a one-off tour. A time
+outside normal touring hours needs the stronger confirmation. Marking an item
+handled, declining a time request, or offering another time doesn't need a
+confirmation code but should follow the operator's instruction.
 
 ## Stop when
 

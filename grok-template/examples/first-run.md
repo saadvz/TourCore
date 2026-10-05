@@ -305,6 +305,26 @@ Tour Core puts their tour step back in front of them.]
 
 ---
 
+## Set up a tour someone asked for
+
+**Operator:** Dana asked for a tour of 1A on Monday at 3:15. Her number is
+555-010-2000. Set that up.
+
+[`schedule_one_off_tour` → question]
+
+**Tour Core:** Set up a tour for Dana at Unit 1A on Monday at 3:15 PM? Only
+say yes if they asked for this tour. This is a one-off. Your regular tour
+hours stay the same, and Dana gets a text to confirm. Book it?
+
+**Operator:** Yes.
+
+[`schedule_one_off_tour` with confirmationCode]
+
+**Tour Core:** I texted Dana to confirm a tour of Unit 1A on Monday at
+3:15 PM. The regular tour times are unchanged.
+
+---
+
 ## If readiness fails
 
 **Tour Core:** Almost there. One thing: Unit 1B doesn't have a complete route

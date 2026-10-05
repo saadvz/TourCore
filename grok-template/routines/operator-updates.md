@@ -129,4 +129,8 @@ property is not unpublished by an update.
 `list_exceptions` if an issue can't be found. A `tour.time_requested` update
 needs a decision: `list_tour_time_requests`, `inspect_tour_time_request`,
 `approve_tour_time_request`, `decline_tour_time_request`, `propose_tour_time`,
-`reschedule_tour`, and `schedule_one_off_tour`.
+`reschedule_tour`, and `schedule_one_off_tour`. Ask the exact question Tour
+Core returns (`Move it?` / `Book it?`). For a brand-new one-off, only after
+the operator confirms the visitor asked. YES / STOP / NO / no-reply are
+handled by Tour Core (one release text if they never reply, unless they
+opted out; STOP is opt-out only).
