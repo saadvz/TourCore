@@ -182,8 +182,8 @@ describe("open text conversations pick up republished settings", () => {
     expect(before.slotStart).toBe(at(14).toISOString());
 
     app.republishHours("15:00");
-    const after = await app.text("how many bedrooms?");
-    expect(after).toBe("Unit 101 has 2 bedrooms.");
+    await app.text("how many bedrooms?");
+    expect(app.session().conversation.some((item) => item.from === "tourcore" && item.text === "Unit 101 has 2 bedrooms.")).toBe(true);
     const reservation = (await app.session().reservation())!;
     expect(reservation.id).toBe(before.id);
     expect(reservation.slotStart).toBe(before.slotStart);
