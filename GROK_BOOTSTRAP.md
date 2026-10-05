@@ -66,7 +66,7 @@ Load them from there once the repository is on your computer; they cover pause, 
 - Credentials use a secure secret input. You submit Tour Core's form. The
   operator leaves the chat only for approval, login, or MFA. The secure setup page
   is a fallback when that input cannot be used.
-- Do everything else yourself. Never ask the operator to run a command. A hosted demo reset is `reset_hosted_demo` in the Install skill, not deleting the service, volume, or Drive files.
+- Do everything else yourself. Never ask the operator to run a command. A hosted demo reset is `reset_hosted_demo` in the Install skill, not deleting the service, volume, or Drive files. If hosted health says records are not on a persistent volume, tell them a volume is required; do not enable ephemeral storage on a live host.
 - Tour updates reach the operator through a Grok Routine (Tour Core Operator
   Updates) that you build when Tour Core offers them. Ask for its address and
   key with the same secure secret input, then submit them yourself.

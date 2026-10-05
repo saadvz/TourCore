@@ -71,7 +71,7 @@ again with the code after the operator's yes.
 | `get_next_installation_step` | read | The one next step Tour Core decided, who does it, and the tool or skill to use |
 | `get_installation_component` | read | One component's status and next step |
 | `skip_optional_setup` | change | Records that the operator declined an optional step Tour Core offered (e.g. tour updates) |
-| `check_runtime_health` | read | Whether Tour Core is running and healthy |
+| `check_runtime_health` | read | Whether Tour Core is running and healthy. Technical fields include `storagePath`, `persistentVolume`, and `volumeMount`. On the hosted product, `persistentVolume: false` means records sit on disposable disk: tell the operator a volume must be attached. Never set or recommend the ephemeral-storage escape hatch on a live service |
 | `check_public_endpoint` | change | Checks from outside that the public address reaches this installation; records the result |
 | `choose_messaging_line` | change | Saves which discovered Photon line prospects will text. Takes no secrets |
 | `choose_messaging_provider` | change | Records whether prospects text through Sendblue, Twilio, Photon, or the local QA loopback. Takes no credentials. Switching requires a new connection test. Saved account details and attached lines for other providers stay |

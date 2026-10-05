@@ -37,6 +37,7 @@ import { isHostedRailway, resolveDeploymentMode } from "../install/deployment";
 import { handleHostedApproval } from "../install/hostedApproval";
 import { HOSTED_OWNER_RESET, OAUTH_REQUEST_ID } from "../install/hostedOwner";
 import { RAILWAY_HEALTHCHECK_HOST, redactSecrets, startupLines, validateHostedConfig } from "../install/hostedRuntime";
+import { applyHostedStorageGuard, runStorageCheck } from "../install/persistentVolume";
 import { Installation, TOURCORE_VERSION } from "../install/installation";
 import { bindHostedTenant, clearHostedTenant, hostedTenantDecision, HOSTED_TENANT_RESET } from "../install/tenant";
 import { installedMessaging } from "../install/status";
@@ -607,6 +608,11 @@ export async function startSetupServer(options: SetupServerOptions & { port?: nu
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   loadLocalEnv();
   const args = process.argv.slice(2);
+  if (args.includes("--check-storage")) {
+    const pathArg = args.find((a) => a !== "--check-storage" && !a.startsWith("--"));
+    const env = pathArg ? { ...process.env, TOURCORE_HOME: pathArg } : process.env;
+    process.exit(runStorageCheck(env));
+  }
   // PowerShell drops the "--" in `npm run setup -- --dev`, so npm keeps the flag and exposes it as npm_config_dev.
   const dev = args.includes("--dev") || process.env.npm_config_dev === "true";
   const portArg = args.find((a) => a.startsWith("--port="));
@@ -619,6 +625,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       process.exit(1);
     }
     if (!process.env.TOURCORE_HOME) process.env.TOURCORE_HOME = config.dataDir;
+    const storage = applyHostedStorageGuard(preview.mode, process.env, (line) => console.error(`  ${line}`));
+    if (!storage.ok) process.exit(1);
   }
   const open = hosted ? false : !args.includes("--no-open") && !process.env.CI;
   const workspace = new PropertyWorkspace();
