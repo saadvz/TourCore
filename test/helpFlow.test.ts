@@ -77,6 +77,8 @@ describe("help flow: one visitor reply, one open exception", () => {
     await p.say("help");
     const added = (await prospectOutbound(p.session)).slice(before.length);
     expect(added.map((m) => m.body)).toEqual([VisitorDenialCopy.helpAck(TEAM)]);
+    expect(added[0]!.body).toContain("They'll reply as soon as they can");
+    expect(added[0]!.body).not.toContain("The leasing team will reply");
     expect(added.join("\n")).not.toContain("Tour Core:");
     expect(added.join("\n")).not.toContain("Reply STOP to opt out.");
     expect(await p.session.store.listAudit()).toEqual(expect.arrayContaining([expect.objectContaining({ type: "HELP_REQUESTED" })]));
@@ -90,6 +92,8 @@ describe("help flow: one visitor reply, one open exception", () => {
     await p.say("HELP");
     const added = (await prospectOutbound(p.session)).slice(before.length);
     expect(added.map((m) => m.body)).toEqual([VisitorDenialCopy.helpAckRemote(TEAM)]);
+    expect(added[0]!.body).toContain("They'll reply here as soon as they can");
+    expect(added[0]!.body).not.toContain("The leasing team will reply");
     expect(added[0]!.body).not.toContain("Stay where you are");
     expect(added.join("\n")).not.toContain("Tour Core:");
     expect((await p.session.store.listAudit()).some((e) => e.type === "HELP_REQUESTED")).toBe(true);
@@ -240,6 +244,8 @@ describe("help flow: one visitor reply, one open exception", () => {
     const added = (await prospectOutbound(p.session)).slice(before.length);
     expect(added.map((m) => m.body)).toEqual([VisitorDenialCopy.helpAck(TEAM), VisitorDenialCopy.helpRepeatAck(TEAM)]);
     expect(added[1]!.body).toContain("Stay where you are");
+    expect(added[1]!.body).toContain("They'll reply as soon as they can");
+    expect(added[1]!.body).not.toContain("The leasing team will reply");
     expect(added.join("\n")).not.toContain("Tour Core:");
     expect((await p.session.store.listAudit()).filter((e) => e.type === "HELP_REQUESTED")).toHaveLength(2);
     expect((await p.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(1);
@@ -249,15 +255,23 @@ describe("help flow: one visitor reply, one open exception", () => {
     const maple = "Maple Leasing team";
     const contact = "+15550109999";
     expect(VisitorDenialCopy.helpRepeatAck(maple, contact)).toBe(
-      `The ${maple} already knows and is on it. ${VisitorDenialCopy.atDoor(maple, contact)}`,
+      `The ${maple} already knows and is on it. ${VisitorDenialCopy.atDoor(maple, contact, { teamJustNamed: true })}`,
     );
     expect(VisitorDenialCopy.helpRepeatAckRemote(maple, contact)).toBe(
-      `The ${maple} already knows and is on it. ${VisitorDenialCopy.remote(maple, contact)}`,
+      `The ${maple} already knows and is on it. ${VisitorDenialCopy.remote(maple, contact, { teamJustNamed: true })}`,
     );
     expect(VisitorDenialCopy.helpRepeatAckRemote(maple, contact)).toContain("or call (555) 010-9999");
+    expect(VisitorDenialCopy.helpRepeatAckRemote(maple, contact)).toContain("They'll reply here as soon as they can");
     expect(VisitorDenialCopy.helpRepeatAckRemote(maple, contact)).not.toContain("Stay where you are");
-    expect(VisitorDenialCopy.helpAckRemote(TEAM)).toBe(`I've let the ${TEAM} know. ${VisitorDenialCopy.remote(TEAM)}`);
-    expect(VisitorDenialCopy.helpRepeatAck(TEAM)).toBe(`The ${TEAM} already knows and is on it. ${VisitorDenialCopy.atDoor(TEAM)}`);
+    expect(VisitorDenialCopy.helpRepeatAckRemote(maple, contact)).not.toMatch(new RegExp(`The ${maple} will reply`));
+    expect(VisitorDenialCopy.helpAckRemote(TEAM)).toBe(
+      `I've let the ${TEAM} know. ${VisitorDenialCopy.remote(TEAM, undefined, { teamJustNamed: true })}`,
+    );
+    expect(VisitorDenialCopy.helpRepeatAck(TEAM)).toBe(
+      `The ${TEAM} already knows and is on it. ${VisitorDenialCopy.atDoor(TEAM, undefined, { teamJustNamed: true })}`,
+    );
+    expect(VisitorDenialCopy.atDoor(TEAM)).toContain(`The ${TEAM} will reply`);
+    expect(VisitorDenialCopy.remote(TEAM)).toContain(`The ${TEAM} will reply here`);
 
     const ctx = setup({ operatorName: maple, visitorContact: contact });
     const tour = await bookTour(ctx);

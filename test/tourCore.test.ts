@@ -90,6 +90,8 @@ describe("Tour Core journey", () => {
     const team = "leasing team";
     const atDoorUnset = VisitorDenialCopy.atDoor(team);
     const atDoorSet = VisitorDenialCopy.atDoor(team, "+15550109999");
+    const atDoorNamedUnset = VisitorDenialCopy.atDoor(team, undefined, { teamJustNamed: true });
+    const atDoorNamedSet = VisitorDenialCopy.atDoor(team, "+15550109999", { teamJustNamed: true });
     const failedFollowUpUnset = VisitorDenialCopy.followUp(team);
     const failedFollowUpSet = VisitorDenialCopy.followUp(team, "+15550109999");
     const failedBooking = "Thanks for filling that out. I couldn't confirm your details, so I can't open doors for this tour.";
@@ -175,17 +177,35 @@ describe("Tour Core journey", () => {
       VisitorDenialCopy.operatorHold(team, "+15550109999"),
     ]);
     expect(VisitorDenialCopy.operatorHold(team)).not.toMatch(/window|counting down|rebook/i);
-    expect(doorUnset.some((b) => b.startsWith(doors) && b.endsWith(atDoorUnset))).toBe(true);
-    expect(doorSet.some((b) => b.startsWith(doors) && b.endsWith(atDoorSet))).toBe(true);
+    expect(doorUnset.some((b) => b.startsWith(doors) && b.endsWith(atDoorNamedUnset))).toBe(true);
+    expect(doorSet.some((b) => b.startsWith(doors) && b.endsWith(atDoorNamedSet))).toBe(true);
     expect(helpUnset.filter((b) => b === VisitorDenialCopy.helpAckRemote(team))).toEqual([VisitorDenialCopy.helpAckRemote(team)]);
     expect(helpSet.filter((b) => b === VisitorDenialCopy.helpAckRemote(team, "+15550109999"))).toEqual([
       VisitorDenialCopy.helpAckRemote(team, "+15550109999"),
     ]);
     expect(helpUnset.join("\n")).not.toContain("Stay where you are");
-    expect(VisitorDenialCopy.helpAck(team)).toBe(`I've let the ${team} know. ${atDoorUnset}`);
-    expect(VisitorDenialCopy.helpAck(team, "+15550109999")).toBe(`I've let the ${team} know. ${atDoorSet}`);
-    expect(VisitorDenialCopy.helpAckRemote(team)).toBe(`I've let the ${team} know. ${VisitorDenialCopy.remote(team)}`);
-    expect(VisitorDenialCopy.helpAckRemote(team, "+15550109999")).toBe(`I've let the ${team} know. ${VisitorDenialCopy.remote(team, "+15550109999")}`);
+    expect(atDoorUnset).toBe(`Stay where you are and reply here. The ${team} will reply as soon as they can.`);
+    expect(atDoorSet).toBe(`Stay where you are. The ${team} will reply as soon as they can, or call (555) 010-9999.`);
+    expect(atDoorNamedUnset).toBe("Stay where you are and reply here. They'll reply as soon as they can.");
+    expect(atDoorNamedSet).toBe("Stay where you are. They'll reply as soon as they can, or call (555) 010-9999.");
+    expect(VisitorDenialCopy.remote(team)).toBe(`The ${team} will reply here as soon as they can.`);
+    expect(VisitorDenialCopy.remote(team, "+15550109999")).toBe(`The ${team} will reply here as soon as they can, or call (555) 010-9999.`);
+    expect(VisitorDenialCopy.remote(team, undefined, { teamJustNamed: true })).toBe("They'll reply here as soon as they can.");
+    expect(VisitorDenialCopy.remote(team, "+15550109999", { teamJustNamed: true })).toBe(
+      "They'll reply here as soon as they can, or call (555) 010-9999.",
+    );
+    expect(VisitorDenialCopy.helpAck(team)).toBe(`I've let the ${team} know. ${atDoorNamedUnset}`);
+    expect(VisitorDenialCopy.helpAck(team, "+15550109999")).toBe(`I've let the ${team} know. ${atDoorNamedSet}`);
+    expect(VisitorDenialCopy.helpAckRemote(team)).toBe(`I've let the ${team} know. ${VisitorDenialCopy.remote(team, undefined, { teamJustNamed: true })}`);
+    expect(VisitorDenialCopy.helpAckRemote(team, "+15550109999")).toBe(
+      `I've let the ${team} know. ${VisitorDenialCopy.remote(team, "+15550109999", { teamJustNamed: true })}`,
+    );
+    for (const body of [...holdUnset, ...holdSet, ...doorUnset, ...doorSet, ...helpUnset, ...helpSet].filter(
+      (b) => b.includes("I've let the") || b.includes("on hold"),
+    )) {
+      expect(body.match(/leasing team/gi)).toHaveLength(1);
+      expect(body).toContain("They'll reply");
+    }
     for (const body of failedIdBodies) {
       expect(body.match(/The leasing team/g)).toHaveLength(1);
       expect(body).not.toMatch(/on hold|yet|Stay where you are/);
@@ -293,14 +313,17 @@ describe("Tour Core journey", () => {
     expect(VisitorDenialCopy.noOpenTimes(maple)).toBe("There are no open tour times right now. The Maple Leasing team will reach out.");
     expect(VisitorDenialCopy.followUpYes(maple)).toBe("Great. Someone from the Maple Leasing team will be in touch soon.");
     expect(VisitorDenialCopy.operatorHold(maple)).toBe(
-      `Your tour is on hold, and your tour time keeps running while the ${maple} sorts this out. ${VisitorDenialCopy.atDoor(maple)}`,
+      `Your tour is on hold, and your tour time keeps running while the ${maple} sorts this out. ${VisitorDenialCopy.atDoor(maple, undefined, { teamJustNamed: true })}`,
     );
     expect(VisitorDenialCopy.operatorHold(maple, "+15550109999")).toBe(
-      `Your tour is on hold, and your tour time keeps running while the ${maple} sorts this out. ${VisitorDenialCopy.atDoor(maple, "+15550109999")}`,
+      `Your tour is on hold, and your tour time keeps running while the ${maple} sorts this out. ${VisitorDenialCopy.atDoor(maple, "+15550109999", { teamJustNamed: true })}`,
     );
     expect(VisitorDenialCopy.calledOff(maple, "+15550109999")).toBe(
       `Your tour has been called off, so the doors won't open for it. ${VisitorDenialCopy.remote(maple, "+15550109999")}`,
     );
+    expect(VisitorDenialCopy.calledOff(maple, "+15550109999")).toContain(`The ${maple} will reply here`);
+    expect(VisitorDenialCopy.operatorHold(maple)).toContain("They'll reply as soon as they can.");
+    expect(VisitorDenialCopy.operatorHold(maple)).not.toMatch(new RegExp(`The ${maple} will reply`));
   });
 
   it("a stale ID re-check goes through submitVerification and then opens the door", async () => {

@@ -121,18 +121,20 @@ export const UNKNOWN_ANSWER = "I don't have that information for this property. 
  * `operator.contact` is never used here — that line is private.
  */
 export class VisitorDenialCopy {
-  static atDoor(team: string, visitorContact?: string): string {
-    if (visitorContact) return `Stay where you are. The ${team} will reply as soon as they can, or call ${formatPhone(visitorContact)}.`;
-    return `Stay where you are and reply here. The ${team} will reply as soon as they can.`;
+  static atDoor(team: string, visitorContact?: string, options?: { teamJustNamed?: boolean }): string {
+    const who = options?.teamJustNamed ? "They'll" : `The ${team} will`;
+    if (visitorContact) return `Stay where you are. ${who} reply as soon as they can, or call ${formatPhone(visitorContact)}.`;
+    return `Stay where you are and reply here. ${who} reply as soon as they can.`;
   }
 
-  static remote(team: string, visitorContact?: string): string {
-    if (visitorContact) return `The ${team} will reply here as soon as they can, or call ${formatPhone(visitorContact)}.`;
-    return `The ${team} will reply here as soon as they can.`;
+  static remote(team: string, visitorContact?: string, options?: { teamJustNamed?: boolean }): string {
+    const who = options?.teamJustNamed ? "They'll" : `The ${team} will`;
+    if (visitorContact) return `${who} reply here as soon as they can, or call ${formatPhone(visitorContact)}.`;
+    return `${who} reply here as soon as they can.`;
   }
 
   static operatorHold(team: string, visitorContact?: string): string {
-    return `Your tour is on hold, and your tour time keeps running while the ${team} sorts this out. ${this.atDoor(team, visitorContact)}`;
+    return `Your tour is on hold, and your tour time keeps running while the ${team} sorts this out. ${this.atDoor(team, visitorContact, { teamJustNamed: true })}`;
   }
 
   static calledOff(team: string, visitorContact?: string): string {
@@ -152,19 +154,19 @@ export class VisitorDenialCopy {
   }
 
   static helpAck(team: string, visitorContact?: string): string {
-    return `I've let the ${team} know. ${this.atDoor(team, visitorContact)}`;
+    return `I've let the ${team} know. ${this.atDoor(team, visitorContact, { teamJustNamed: true })}`;
   }
 
   static helpRepeatAck(team: string, visitorContact?: string): string {
-    return `The ${team} already knows and is on it. ${this.atDoor(team, visitorContact)}`;
+    return `The ${team} already knows and is on it. ${this.atDoor(team, visitorContact, { teamJustNamed: true })}`;
   }
 
   static helpAckRemote(team: string, visitorContact?: string): string {
-    return `I've let the ${team} know. ${this.remote(team, visitorContact)}`;
+    return `I've let the ${team} know. ${this.remote(team, visitorContact, { teamJustNamed: true })}`;
   }
 
   static helpRepeatAckRemote(team: string, visitorContact?: string): string {
-    return `The ${team} already knows and is on it. ${this.remote(team, visitorContact)}`;
+    return `The ${team} already knows and is on it. ${this.remote(team, visitorContact, { teamJustNamed: true })}`;
   }
 
   static noOpenTimes(team: string): string {
@@ -172,7 +174,7 @@ export class VisitorDenialCopy {
   }
 
   static doorsNotResponding(team: string, visitorContact?: string): string {
-    return `Sorry, the doors aren't responding right now. I've let the ${team} know. ${this.atDoor(team, visitorContact)}`;
+    return `Sorry, the doors aren't responding right now. I've let the ${team} know. ${this.atDoor(team, visitorContact, { teamJustNamed: true })}`;
   }
 
   static followUp(team: string, visitorContact?: string): string {
