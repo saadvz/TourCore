@@ -115,12 +115,21 @@ export class VisitorDenialCopy {
     return `Sorry, the doors aren't responding right now. I've let the ${team} know. ${this.atDoor(team, visitorContact)}`;
   }
 
+  static followUp(team: string, visitorContact?: string): string {
+    if (visitorContact) return `The ${team} will follow up here, or call ${formatPhone(visitorContact)}.`;
+    return `The ${team} will follow up here.`;
+  }
+
   static failedIdAtDoor(team: string, visitorContact?: string): string {
-    return `I can't open doors for this tour yet. The ${team} is reviewing your details and will text you here. ${this.atDoor(team, visitorContact)}`;
+    return `I couldn't confirm your details, so I can't open doors for this tour. ${this.followUp(team, visitorContact)}`;
   }
 
   static failedIdAtBooking(team: string, visitorContact?: string): string {
-    return `Thanks for filling that out. I couldn't confirm your details, so your tour is on hold for now. The ${team} will text you here. ${this.remote(team, visitorContact)}`;
+    return `Thanks for filling that out. ${this.failedIdAtDoor(team, visitorContact)}`;
+  }
+
+  static failedIdEnded(team: string, visitorContact?: string): string {
+    return `I couldn't confirm your details, so your tour has ended. Please head out the way you came in. ${this.followUp(team, visitorContact)}`;
   }
 
   static staleVerification(): string {
@@ -329,7 +338,13 @@ export class TourCore {
     await this.deps.store.put("verifications", verification);
 
     if (!outcome.passed) {
-      await this.textProspect(prospect, reservation.id, VisitorDenialCopy.failedIdAtBooking(this.teamName(), this.visitorHelpNumber()));
+      const activeGrants = (await this.listGrants(reservation.id)).filter((g) => g.status === "ACTIVE");
+      const inside = (reservation.status === "READY" || reservation.status === "TOURING") && activeGrants.length > 0;
+      await this.revokeGrants(reservation, "identity check failed");
+      const copy = inside
+        ? VisitorDenialCopy.failedIdEnded(this.teamName(), this.visitorHelpNumber())
+        : VisitorDenialCopy.failedIdAtBooking(this.teamName(), this.visitorHelpNumber());
+      await this.textProspect(prospect, reservation.id, copy);
       await this.notifyOperator(reservation, `Identity form for ${prospect.name} didn't check out (${outcome.reason}). Please follow up.`);
       return this.move(reservation, "VERIFICATION_FAILED", "VERIFICATION_FAILED", { detail: outcome.reason });
     }

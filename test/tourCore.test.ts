@@ -88,10 +88,11 @@ describe("Tour Core journey", () => {
     const privateLine = loadConfig().operator.contact;
     const atDoorUnset = "Stay where you are and reply here. The leasing team will reply as soon as they can.";
     const atDoorSet = "Stay where you are. The leasing team will reply as soon as they can, or call (555) 010-9999.";
-    const remoteUnset = "The leasing team will reply here as soon as they can.";
-    const remoteSet = "The leasing team will reply here as soon as they can, or call (555) 010-9999.";
-    const failedBooking = "Thanks for filling that out. I couldn't confirm your details, so your tour is on hold for now. The leasing team will text you here.";
-    const failedDoor = "I can't open doors for this tour yet. The leasing team is reviewing your details and will text you here.";
+    const failedFollowUpUnset = "The leasing team will follow up here.";
+    const failedFollowUpSet = "The leasing team will follow up here, or call (555) 010-9999.";
+    const failedBooking = "Thanks for filling that out. I couldn't confirm your details, so I can't open doors for this tour.";
+    const failedDoor = "I couldn't confirm your details, so I can't open doors for this tour.";
+    const failedEnded = "I couldn't confirm your details, so your tour has ended. Please head out the way you came in.";
     const hold = "Your tour is paused for a moment.";
     const doors = "Sorry, the doors aren't responding right now. I've let the leasing team know.";
 
@@ -122,24 +123,53 @@ describe("Tour Core journey", () => {
       await tour.request("entrance");
       return prospectTexts(ctx);
     };
+    const endedTexts = async (visitorContact?: string) => {
+      const ctx = setup(visitorContact ? { visitorContact } : {});
+      const tour = await bookTour(ctx);
+      ctx.clock.set(tour.slotStart);
+      await tour.request("entrance");
+      await tour.request("unit_101");
+      const check = (await ctx.store.list("verifications"))[0]!;
+      await ctx.store.put("verifications", { ...check, validUntil: minutesFrom(tour.slotStart, -1).toISOString() });
+      await ctx.core.submitVerification(tour.reservation.id, basicForm("555-999-0000"));
+      return prospectTexts(ctx);
+    };
 
     const failedUnset = await failedTexts();
     const failedSet = await failedTexts("+15550109999");
+    const endedUnset = await endedTexts();
+    const endedSet = await endedTexts("+15550109999");
     const holdUnset = await holdTexts();
     const holdSet = await holdTexts("+15550109999");
     const doorUnset = await doorTexts();
     const doorSet = await doorTexts("+15550109999");
+    const failedIdBodies = [
+      ...failedUnset.filter((b) => b.includes("I couldn't confirm your details")),
+      ...failedSet.filter((b) => b.includes("I couldn't confirm your details")),
+      ...endedUnset.filter((b) => b.includes("I couldn't confirm your details")),
+      ...endedSet.filter((b) => b.includes("I couldn't confirm your details")),
+    ];
 
-    expect(failedUnset.filter((b) => b.startsWith("Thanks for filling that out"))).toEqual([`${failedBooking} ${remoteUnset}`]);
-    expect(failedSet.filter((b) => b.startsWith("Thanks for filling that out"))).toEqual([`${failedBooking} ${remoteSet}`]);
-    expect(failedUnset.filter((b) => b.startsWith("I can't open doors"))).toEqual([`${failedDoor} ${atDoorUnset}`]);
-    expect(failedSet.filter((b) => b.startsWith("I can't open doors"))).toEqual([`${failedDoor} ${atDoorSet}`]);
-    expect(failedUnset.find((b) => b.startsWith("Thanks for filling that out"))).not.toMatch(/Stay where you are|I can't open doors yet/);
+    expect(failedUnset.filter((b) => b.startsWith("Thanks for filling that out"))).toEqual([`${failedBooking} ${failedFollowUpUnset}`]);
+    expect(failedSet.filter((b) => b.startsWith("Thanks for filling that out"))).toEqual([`${failedBooking} ${failedFollowUpSet}`]);
+    expect(failedUnset.filter((b) => b === `${failedDoor} ${failedFollowUpUnset}`)).toEqual([`${failedDoor} ${failedFollowUpUnset}`]);
+    expect(failedSet.filter((b) => b === `${failedDoor} ${failedFollowUpSet}`)).toEqual([`${failedDoor} ${failedFollowUpSet}`]);
+    expect(endedUnset.filter((b) => b.startsWith("I couldn't confirm your details, so your tour has ended"))).toEqual([
+      `${failedEnded} ${failedFollowUpUnset}`,
+    ]);
+    expect(endedSet.filter((b) => b.startsWith("I couldn't confirm your details, so your tour has ended"))).toEqual([
+      `${failedEnded} ${failedFollowUpSet}`,
+    ]);
+    expect(failedUnset.find((b) => b.startsWith("Thanks for filling that out"))).not.toMatch(/Stay where you are|I can't open doors yet|on hold/);
     expect(holdUnset.some((b) => b.startsWith(hold) && b.endsWith(atDoorUnset))).toBe(true);
     expect(holdSet.some((b) => b.startsWith(hold) && b.endsWith(atDoorSet))).toBe(true);
     expect(doorUnset.some((b) => b.startsWith(doors) && b.endsWith(atDoorUnset))).toBe(true);
     expect(doorSet.some((b) => b.startsWith(doors) && b.endsWith(atDoorSet))).toBe(true);
-    for (const body of [...failedUnset, ...failedSet, ...holdUnset, ...holdSet, ...doorUnset, ...doorSet]) {
+    for (const body of failedIdBodies) {
+      expect(body.match(/The leasing team/g)).toHaveLength(1);
+      expect(body).not.toMatch(/on hold|yet|Stay where you are/);
+    }
+    for (const body of [...failedUnset, ...failedSet, ...endedUnset, ...endedSet, ...holdUnset, ...holdSet, ...doorUnset, ...doorSet]) {
       expect(body).not.toContain(privateLine);
       expect(body).not.toContain("5550100000");
       expect(body).not.toMatch(/someone will reach out shortly/i);
@@ -206,11 +236,54 @@ describe("Tour Core journey", () => {
 
     const bodies = (await ctx.core.exportRecords()).messages.filter((m) => m.audience === "PROSPECT").map((m) => m.body);
     expect(bodies.filter((b) => b.startsWith("Thanks for filling that out"))).toEqual([
-      "Thanks for filling that out. I couldn't confirm your details, so your tour is on hold for now. The leasing team will text you here. The leasing team will reply here as soon as they can.",
+      "Thanks for filling that out. I couldn't confirm your details, so I can't open doors for this tour. The leasing team will follow up here.",
     ]);
-    expect(bodies.filter((b) => b.startsWith("I can't open doors"))).toEqual([
-      "I can't open doors for this tour yet. The leasing team is reviewing your details and will text you here. Stay where you are and reply here. The leasing team will reply as soon as they can.",
+    expect(bodies.filter((b) => b === "I couldn't confirm your details, so I can't open doors for this tour. The leasing team will follow up here.")).toEqual([
+      "I couldn't confirm your details, so I can't open doors for this tour. The leasing team will follow up here.",
     ]);
+    for (const body of bodies.filter((b) => b.includes("I couldn't confirm your details"))) {
+      expect(body.match(/The leasing team/g)).toHaveLength(1);
+      expect(body).not.toMatch(/on hold|yet|Stay where you are/);
+    }
+  });
+
+  it("a failed mid-tour re-check revokes every grant and later door tries stay denied", async () => {
+    const ctx = setup();
+    const tour = await bookTour(ctx);
+    ctx.clock.set(tour.slotStart);
+    expect((await tour.request("entrance")).decision.code).toBe("ALLOW");
+    expect((await tour.request("unit_101")).decision.code).toBe("ALLOW");
+    expect((await ctx.core.getReservation(tour.reservation.id))?.status).toBe("TOURING");
+    expect((await ctx.core.listGrants(tour.reservation.id)).map((g) => [g.doorId, g.status])).toEqual([
+      ["entrance", "ACTIVE"],
+      ["unit_101", "ACTIVE"],
+    ]);
+
+    const check = (await ctx.store.list("verifications"))[0]!;
+    await ctx.store.put("verifications", { ...check, validUntil: minutesFrom(tour.slotStart, -1).toISOString() });
+    const failed = await ctx.core.submitVerification(tour.reservation.id, basicForm("555-999-0000"));
+    expect(failed.status).toBe("VERIFICATION_FAILED");
+    expect((await ctx.core.listGrants(tour.reservation.id)).every((g) => g.status === "REVOKED")).toBe(true);
+    expect(ctx.durin.calls.revokeAccess.map((c) => c.doorId)).toEqual(["entrance", "unit_101"]);
+    expect((await ctx.core.auditTrail()).filter((e) => e.type === "ACCESS_REVOKED")).toHaveLength(2);
+    expect((await ctx.core.auditTrail()).filter((e) => e.type === "ACCESS_REVOKED").every((e) => e.detail?.includes("identity check failed"))).toBe(
+      true,
+    );
+
+    expect((await tour.request("entrance")).decision).toMatchObject({ allowed: false, code: "DENY_VERIFICATION_FAILED" });
+    expect((await tour.request("unit_101")).decision).toMatchObject({ allowed: false, code: "DENY_VERIFICATION_FAILED" });
+    expect(ctx.durin.calls.requestAccess).toHaveLength(2);
+
+    const bodies = (await ctx.core.exportRecords()).messages.filter((m) => m.audience === "PROSPECT").map((m) => m.body);
+    expect(bodies.filter((b) => b.includes("your tour has ended"))).toEqual([
+      "I couldn't confirm your details, so your tour has ended. Please head out the way you came in. The leasing team will follow up here.",
+    ]);
+    const doorFail = "I couldn't confirm your details, so I can't open doors for this tour. The leasing team will follow up here.";
+    expect(bodies.filter((b) => b === doorFail)).toEqual([doorFail, doorFail]);
+    for (const body of bodies.filter((b) => b.includes("I couldn't confirm your details"))) {
+      expect(body.match(/The leasing team/g)).toHaveLength(1);
+      expect(body).not.toMatch(/on hold|yet|Stay where you are|Thanks for filling that out/);
+    }
   });
 
   it("operator hold is denied, and resuming restores access", async () => {
