@@ -24,6 +24,12 @@ function nextClause(nextOpening: Date | undefined, tz: string, noun: "one" | "op
   return nextOpening ? ` The next ${noun} is ${nextOpeningWhen(nextOpening, tz)}.` : "";
 }
 
+function nextOpeningAsk(nextOpening: Date, tz: string): string {
+  return `The next opening is ${nextOpeningWhen(nextOpening, tz)}. Want that, or another day?`;
+}
+
+const GRABBED = "Someone just grabbed that time.";
+
 /**
  * Why a requested day has no bookable regular tours, in the visitor's words.
  * Uses the property's tour hours and timezone; never implies a closed weekday
@@ -103,6 +109,31 @@ export async function offerDate(session: VisitorDemoSession, date: string): Prom
   await session.reply(menu.body, menu.prompt);
 }
 
+async function offerAfterGrabbed(session: VisitorDemoSession, date: string): Promise<void> {
+  const slots = await session.selectDate(date);
+  const tz = session.config.property.timezone;
+  const requested = parseIsoDate(date);
+  const today = localDateOf(session.clock.now(), tz);
+  const beyond = requested ? isBeyondBookingHorizon(today, requested) : false;
+  if (slots.length && !beyond) {
+    await session.reply(`${GRABBED} Here's what's left:`, { kind: "choose", options: slots.map((slot) => slot.label), what: "a time" });
+    return;
+  }
+  session.selectedDate = undefined;
+  session.offeredSlots = [];
+  const nextOpening = (await session.core.availableDates(1))[0]?.start;
+  if (!nextOpening) {
+    await session.reply(`${GRABBED} ${VisitorDenialCopy.noOpenTimes(session.config.operator.name)}`);
+    return;
+  }
+  await session.reply(`${GRABBED} ${nextOpeningAsk(nextOpening, tz)}`, datePrompt(session));
+  session.expect("choose-date", {
+    kind: "accept-next-opening",
+    date: isoDate(localDateOf(nextOpening, tz)),
+    slotStart: nextOpening.toISOString(),
+  });
+}
+
 async function slotStillOpen(session: VisitorDemoSession, slotStart: string, date: string): Promise<boolean> {
   const start = new Date(slotStart);
   if (Number.isNaN(start.getTime())) return false;
@@ -129,10 +160,10 @@ export async function takeOfferedOpening(
       if (!(error instanceof TourCoreError) || error.code !== "SLOT_UNAVAILABLE") throw error;
       session.selectedDate = undefined;
       session.offeredSlots = [];
-      await offerDate(session, awaiting.date);
+      await offerAfterGrabbed(session, awaiting.date);
       return;
     }
   }
   if (said.text) await session.recordText(said);
-  await offerDate(session, awaiting.date);
+  await offerAfterGrabbed(session, awaiting.date);
 }

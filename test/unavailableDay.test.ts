@@ -170,10 +170,22 @@ describe("typed day questions use the shared copy", () => {
     const { reservation } = await p.session.core.startInquiry({ name: "Other", phone: "(555) 010-3199", unitId: "apt_101" }, { announce: false });
     await p.session.core.reserveSlot(reservation.id, stolen.toISOString());
     await p.say("that");
-    expect(p.lastReply()).toContain("I have these times available Monday, Oct 5:");
+    expect(p.lastReply()).toContain("Someone just grabbed that time. Here's what's left:");
     expect(p.lastReply()).toContain("9:15 AM");
     expect(p.lastReply()).not.toContain("8:15 AM");
     expect(await p.session.stage()).toBe("choose-time");
+  });
+
+  it("if that time was taken and the day has none left, offers the next opening", async () => {
+    const p = textVisitor({ config: oneSundaySlot(), now: at(2026, 10, 4, 10).getTime() });
+    await toChooseDate(p);
+    await p.say("today");
+    const stolen = at(2026, 10, 5, 8, 15);
+    const { reservation } = await p.session.core.startInquiry({ name: "Other", phone: "(555) 010-3198", unitId: "apt_101" }, { announce: false });
+    await p.session.core.reserveSlot(reservation.id, stolen.toISOString());
+    await p.say("that");
+    expect(p.lastReply()).toContain("Someone just grabbed that time. The next opening is Tuesday, Oct 6 at 8:15 AM. Want that, or another day?");
+    expect(await p.session.stage()).toBe("choose-date");
   });
 
   it("naming the next-opening day uses the existing day choice", async () => {
