@@ -70,9 +70,6 @@ Load them from there once the repository is on your computer.
 - Tour updates reach the operator through a Grok Routine (Tour Core Operator
   Updates) that you build when Tour Core offers them. Ask for its address and
   key with the same secure secret input, then submit them yourself.
-- A visitor with a booked tour can cancel by text in their own words. Tour Core
-  confirms (`Cancel your tour on {day} at {time}? Reply YES or NO.`), then YES
-  cancels or NO keeps the booking. That is not an unanswered property question.
 
 ## Order
 
