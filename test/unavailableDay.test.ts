@@ -143,6 +143,7 @@ describe("unavailableDayReply", () => {
     expect(acceptsOfferedOpening("That one!")).toBe(true);
     expect(acceptsOfferedOpening("another day")).toBe(false);
     expect(acceptsOfferedOpening("Monday")).toBe(false);
+    expect(acceptsOfferedOpening("Can I come oct 6 at 12 pm?")).toBe(false);
     expect(acceptsOfferedOpening("1")).toBe(false);
     expect(acceptsOfferedOpening("hmm")).toBe(false);
   });
@@ -252,6 +253,19 @@ describe("typed day questions use the shared copy", () => {
     expect((await p.session.reservation())?.slotStart).toBe(at(2026, 10, 5, 8, 15).toISOString());
   });
 
+  it("Can I come October 1 when that day this year has passed is already-passed, not far-ahead", async () => {
+    const p = textVisitor({ config: everydayHours(), now: at(2026, 10, 5, 10).getTime() });
+    await toChooseDate(p);
+    const before = p.session.conversation.filter((m) => m.from === "tourcore").length;
+    await p.say("Can I come October 1");
+    const added = p.session.conversation.filter((m) => m.from === "tourcore").slice(before);
+    expect(added).toHaveLength(1);
+    expect(added[0]!.text).toContain("That day has already passed. The next opening is Monday, Oct 5 at 10:15 AM. Reply yes to take it, or pick a day:");
+    expect(added[0]!.text).not.toContain("I can't book that far ahead yet.");
+    expect(added[0]!.text).toContain("1) Monday, Oct 5");
+    expect((await p.session.store.listAudit()).filter((e) => e.type === "QUESTION_UNANSWERED")).toHaveLength(0);
+  });
+
   it("a typed date that has already passed starts with That day has already passed", async () => {
     const p = textVisitor({ config: everydayHours(), now: at(2026, 10, 4, 22, 49).getTime() });
     await toChooseDate(p);
@@ -313,6 +327,20 @@ describe("typed day questions use the shared copy", () => {
     await p.say("Jan 3");
     expect(p.lastReply()).toContain("I have these times available Sunday, Jan 3:");
     expect(await p.session.stage()).toBe("choose-time");
+  });
+
+  it("a new day/time ask while a next opening is pending is that day, not the offered slot", async () => {
+    const p = textVisitor({ config: everydayHours(), now: at(2026, 10, 4, 22, 49).getTime() });
+    await toChooseDate(p);
+    await p.say("12/1?");
+    expect(p.lastReply()).toContain("I can't book that far ahead yet. The next opening is Monday, Oct 5 at 8:15 AM. Reply yes to take it, or pick a day:");
+    await p.say("Can I come oct 6 at 12 pm?");
+    expect(p.lastReply()).toContain("I have these times available Tuesday, Oct 6:");
+    expect(p.lastReply()).not.toContain("Great, you're booked for 8:15 AM on Monday, Oct 5.");
+    expect(p.lastReply()).not.toContain("Great, you're booked for 12:00 PM on Monday, Oct 5.");
+    expect(p.lastReply()).not.toContain("Sorry, I didn't catch that. Which day works for you?");
+    expect(await p.session.stage()).toBe("choose-time");
+    expect((await p.session.reservation())?.slotStart).toBeUndefined();
   });
 
   it("a bare menu number still picks that day while a next opening is offered", async () => {

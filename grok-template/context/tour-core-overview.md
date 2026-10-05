@@ -47,7 +47,9 @@ information" for a clear cancel ask.
 Visitors can name a tour day as today, tomorrow, a weekday, or a calendar
 date ("Dec 1", "December 1st", "1 Dec", "12/1", "Tuesday Oct 6"). Without a
 year, Tour Core uses the next date on or after today in the property's time
-zone. A date or booking ask is handled as booking, not as a flagged question. If
+zone. If that this-year date has already passed and next year is beyond the
+21-day horizon, it stays that past date — "That day has already passed" —
+instead of rolling forward and calling it too far ahead. A date or booking ask is handled as booking, not as a flagged question. If
 the day can't be resolved ("the 45th", "sometime next month"), Tour Core
 asks which day they meant and shows the day menu; it does not flag the team.
 While a one-off tour is waiting on YES, NO, or STOP, a leftover menu
@@ -67,7 +69,9 @@ that, yeah, yep, ok, okay, "Yes I'll take it", "Yes 1 works", "I'll take
 it", and similar accepts — books that exact start after a recheck; if it
 was taken, they hear "Someone just grabbed that time." A reply that is
 neither an accept nor a day keeps the offer and repeats the follow-up.
-Bare numbers and day names still pick from the day menu.
+Bare numbers and day names still pick from the day menu. A sentence that
+names another day or time ("Can I come oct 6 at 12 pm?") is a fresh date
+request for that day, not an accept of the pending opening.
 
 Open conversations pick up the latest published settings (hours, units,
 and so on) on every inbound text. A stale numbered reply after hours

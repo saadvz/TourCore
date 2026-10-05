@@ -1,4 +1,4 @@
-import { dayReference, spokenTimes, vagueTimeRequest, type SpokenTime } from "../core/spokenTime";
+import { dayReference, namesTourDay, spokenTimes, vagueTimeRequest, type SpokenTime } from "../core/spokenTime";
 import type { IntentInterpretation, IntentInterpreter, InterpretContext, StepAwaiting, StopRef, TourIntent } from "./model";
 import { normalize, numberWord, ordinalWord, stripFiller } from "./normalize";
 import { acceptsNextOpening, yesNo } from "./yesNo";
@@ -207,6 +207,7 @@ function clockIntent(spoken: SpokenTime): TourIntent {
     ...(spoken.day ? { day: spoken.day } : {}),
     ...(spoken.weekday ? { weekday: spoken.weekday } : {}),
     ...(spoken.nextWeek ? { nextWeek: true } : {}),
+    ...(spoken.date ? { date: spoken.date } : {}),
   };
 }
 
@@ -221,8 +222,9 @@ function schedulingIntent(
   allowBareClock: boolean,
   result: (intent: TourIntent, confidence: number, extra?: Partial<IntentInterpretation>) => IntentInterpretation,
   unknown: (extra?: Partial<IntentInterpretation>) => IntentInterpretation,
+  today?: InterpretContext["today"],
 ): IntentInterpretation | undefined {
-  const times = spokenTimes(t);
+  const times = spokenTimes(t, today);
   if (times.length > 1) return unknown({ clarificationNeeded: true, clarificationQuestion: "Which time did you mean?" });
   const spoken = times[0];
   if (spoken && (TOPIC.test(t) || WANTS_TO_KNOW.test(t))) {
@@ -355,7 +357,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
       }
       const pick = pickOption(t, ctx.units.length);
       if (pick) return result({ type: "SELECT_UNIT", unitName: ctx.units[pick.index]!.name }, pick.confidence);
-      const customUnit = schedulingIntent(raw, t, true, result, unknown);
+      const customUnit = schedulingIntent(raw, t, true, result, unknown, ctx.today);
       if (customUnit) return customUnit;
       const dateUnit = dateIntent(raw, t, result, ctx.today);
       if (dateUnit) return dateUnit;
@@ -371,7 +373,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
     }
 
     case "choose-date": {
-      if (ctx.awaiting?.kind === "accept-next-opening" && acceptsNextOpening(t)) {
+      if (ctx.awaiting?.kind === "accept-next-opening" && acceptsNextOpening(t) && !namesTourDay(t, ctx.today)) {
         return result({ type: "SELECT_DATE" }, 0.95);
       }
       const labels = ctx.timeChoices;
@@ -380,7 +382,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
       if (bareN !== undefined && bareN >= 1 && bareN <= Math.max(labels.length, 1) && labels.length) {
         return result({ type: "SELECT_DATE" }, 1, {});
       }
-      const customDate = schedulingIntent(raw, t, true, result, unknown);
+      const customDate = schedulingIntent(raw, t, true, result, unknown, ctx.today);
       if (customDate) return customDate;
       const picked = dateIntent(raw, t, result, ctx.today);
       if (picked) return picked;
@@ -399,7 +401,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
       if (bareN !== undefined && bareN >= 1 && bareN <= labels.length) return result({ type: "SELECT_TIME", timeLabel: labels[bareN - 1]! }, 1);
       const time = pickTimeLabel(t, labels);
       if (time.label) return result({ type: "SELECT_TIME", timeLabel: time.label }, 0.95);
-      const customTime = schedulingIntent(raw, t, true, result, unknown);
+      const customTime = schedulingIntent(raw, t, true, result, unknown, ctx.today);
       if (customTime) return customTime;
       const anotherDay = dateIntent(raw, t, result, ctx.today);
       if (anotherDay) return anotherDay;
@@ -419,7 +421,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
     }
 
     case "consent": {
-      const customConsent = schedulingIntent(raw, t, false, result, unknown);
+      const customConsent = schedulingIntent(raw, t, false, result, unknown, ctx.today);
       if (customConsent?.intent.type === "REQUEST_CUSTOM_TIME" || customConsent?.mentionedTime) return customConsent;
       const yn = yesNo(t);
       if (yn.answer === "yes") return result({ type: "CONSENT_YES" }, yn.confidence);
@@ -429,7 +431,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
     }
 
     case "follow-up": {
-      const customFollow = schedulingIntent(raw, t, false, result, unknown);
+      const customFollow = schedulingIntent(raw, t, false, result, unknown, ctx.today);
       if (customFollow) return customFollow;
       const yn = yesNo(t);
       if (yn.answer === "yes") return result({ type: "FOLLOW_UP_YES" }, yn.confidence);
@@ -439,7 +441,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
 
     case "identity": {
       // "Where's the form?" is about the identity form (Tour Core resends the link), not about the property.
-      const customIdentity = schedulingIntent(raw, t, false, result, unknown);
+      const customIdentity = schedulingIntent(raw, t, false, result, unknown, ctx.today);
       if (customIdentity) return customIdentity;
       if (FORM_WORDS.test(t)) return help() ?? unknown();
       return help() ?? clearQuestion() ?? unknown();
@@ -450,7 +452,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
       return interpretOnTour(ctx, t, asked, { result, unknown, question, help, informational });
 
     default: {
-      const customOpen = schedulingIntent(raw, t, true, result, unknown);
+      const customOpen = schedulingIntent(raw, t, true, result, unknown, ctx.today);
       if (customOpen) return customOpen;
       const openDate = dateIntent(raw, t, result, ctx.today);
       if (openDate) return openDate;
@@ -515,7 +517,7 @@ function answerToAwaiting(awaiting: StepAwaiting, t: string, { result, unknown }
 function interpretOnTour(ctx: InterpretContext, t: string, asked: boolean, h: Helpers): IntentInterpretation {
   const { result, unknown, question, help, informational } = h;
   const touring = ctx.step === "touring";
-  const custom = schedulingIntent(ctx.message, t, false, result, unknown);
+  const custom = schedulingIntent(ctx.message, t, false, result, unknown, ctx.today);
   if (custom) return custom;
 
   if (ctx.awaiting) {

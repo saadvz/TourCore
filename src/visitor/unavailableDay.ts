@@ -2,6 +2,7 @@ import type { TourCoreConfig } from "../config/tourCoreConfig";
 import { calendarDaysBetween, isoDate, isBeyondBookingHorizon, parseIsoDate } from "../core/schedule";
 import { formatDay, formatLocalDate, formatTime, localDateOf, weekdayOf, type LocalDate } from "../core/timezone";
 import { TourCoreError, VisitorDenialCopy } from "../core/TourCore";
+import { namesTourDay } from "../core/spokenTime";
 import { acceptsNextOpening } from "../intent/yesNo";
 import { normalize, stripFiller } from "../intent/normalize";
 import type { ReplyPrompt } from "../messaging/presentation";
@@ -67,9 +68,11 @@ export function unavailableDayReply(input: {
   return `${formatLocalDate(requested, tz)} is fully booked.${nextClause(nextOpening, tz, "opening")}${ask}`;
 }
 
-/** Flexible yes / "that" / "I'll take it" after a next-opening offer. */
-export function acceptsOfferedOpening(text: string): boolean {
-  return acceptsNextOpening(stripFiller(normalize(text)));
+/** Flexible yes / "that" / "I'll take it" after a next-opening offer. A named other day is not an accept. */
+export function acceptsOfferedOpening(text: string, today?: LocalDate): boolean {
+  const t = stripFiller(normalize(text));
+  if (namesTourDay(t, today)) return false;
+  return acceptsNextOpening(t);
 }
 
 /** Follow-up when the offer is still pending and the reply was not an accept or a day. */

@@ -140,6 +140,10 @@ describe("rule-based interpretation", () => {
 
   it("SELECT_DATE from a typed calendar date, not a property question", () => {
     expect(readAs("choose-date", "Can I come Dec 1?")).toEqual({ type: "SELECT_DATE", date: { year: 2026, month: 12, day: 1 } });
+    expect(readAs("choose-date", "Can I come October 1", { today: { year: 2026, month: 10, day: 5 } })).toEqual({
+      type: "SELECT_DATE",
+      date: { year: 2026, month: 10, day: 1 },
+    });
     expect(readAs("choose-date", "December 1st")).toEqual({ type: "SELECT_DATE", date: { year: 2026, month: 12, day: 1 } });
     expect(readAs("choose-date", "1 Dec")).toEqual({ type: "SELECT_DATE", date: { year: 2026, month: 12, day: 1 } });
     expect(readAs("choose-date", "12/1")).toEqual({ type: "SELECT_DATE", date: { year: 2026, month: 12, day: 1 } });
@@ -244,6 +248,13 @@ describe("rule-based interpretation", () => {
     }
     expect(readAs("choose-date", "Monday", { awaiting })).toEqual({ type: "SELECT_DATE", weekday: "MON" });
     expect(readAs("choose-date", "1", { awaiting })).toEqual({ type: "SELECT_DATE" });
+    expect(readAs("choose-date", "Can I come oct 6 at 12 pm?", { awaiting })).toMatchObject({
+      type: "REQUEST_CUSTOM_TIME",
+      hour: 12,
+      minute: 0,
+      meridiem: "PM",
+      date: { year: 2026, month: 10, day: 6 },
+    });
     expect(readAs("choose-date", "hmm", { awaiting }).type).toBe("NOT_CONFIDENT");
     expect(readAs("choose-date", "Yes I'll take it").type).toBe("NOT_CONFIDENT");
   });

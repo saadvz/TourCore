@@ -36,6 +36,7 @@ export const TourIntentSchema = z.discriminatedUnion("type", [
     day: z.enum(["today", "tomorrow"]).optional(),
     weekday: z.enum(["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]).optional(),
     nextWeek: z.boolean().optional(),
+    date: CalendarDate.optional(),
   }),
   z.object({
     type: z.literal("SELECT_DATE"),

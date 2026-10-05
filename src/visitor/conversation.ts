@@ -1,7 +1,7 @@
 import { resolveSpokenTime } from "../core/customSlot";
 import { orList, unitsNamedIn } from "../core/questions";
 import { isoDate, parseIsoDate } from "../core/schedule";
-import { type DayReference, type SpokenTime } from "../core/spokenTime";
+import { dayReference, type DayReference, type SpokenTime } from "../core/spokenTime";
 import { addDays, formatDay, formatTime, localDateOf, weekdayOf, zonedParts, type LocalDate } from "../core/timezone";
 import { VisitorDenialCopy, visitorCancelConfirm, visitorCancelKept, type InboundMeta } from "../core/TourCore";
 import { isCancelableReservation } from "../domain/stateMachine";
@@ -347,6 +347,20 @@ async function contextDay(session: VisitorDemoSession): Promise<LocalDate | unde
   return offered ? localDateOf(offered.start, tz) : undefined;
 }
 
+/** A new day named while a next-opening offer is pending — not an accept of that offer. */
+function dayAskWhileOfferPending(turn: Turn): DayReference | undefined {
+  const { intent } = turn;
+  if (intent.type === "SELECT_DATE" && (intent.date || intent.weekday || intent.relative || intent.unclear)) return intent;
+  if (intent.type === "REQUEST_CUSTOM_TIME") {
+    if (intent.date) return { date: intent.date };
+    if (intent.weekday) return { weekday: intent.weekday, ...(intent.nextWeek ? { nextWeek: true } : {}) };
+    if (intent.day) return { relative: intent.day };
+  }
+  const today = localDateOf(turn.session.clock.now(), turn.session.config.property.timezone);
+  const asked = dayReference(normalize(turn.said.text ?? ""), today);
+  return asked && asked !== "menu" ? asked : undefined;
+}
+
 function asSpoken(intent: Extract<TourIntent, { type: "REQUEST_CUSTOM_TIME" }> | SpokenTime): SpokenTime {
   return {
     hour: intent.hour,
@@ -355,6 +369,7 @@ function asSpoken(intent: Extract<TourIntent, { type: "REQUEST_CUSTOM_TIME" }> |
     ...(intent.day ? { day: intent.day } : {}),
     ...("weekday" in intent && intent.weekday ? { weekday: intent.weekday } : {}),
     ...("nextWeek" in intent && intent.nextWeek ? { nextWeek: true } : {}),
+    ...("date" in intent && intent.date ? { date: intent.date } : {}),
   };
 }
 
@@ -661,7 +676,11 @@ async function byStage(turn: Turn): Promise<void> {
     await session.declineAlternative(turn.awaiting.requestId);
     return;
   }
-  if (intent.type === "REQUEST_CUSTOM_TIME" && turn.confident) return fileCustomTime(turn, asSpoken(intent));
+  if (intent.type === "REQUEST_CUSTOM_TIME" && turn.confident) {
+    const named = turn.awaiting?.kind === "accept-next-opening" ? dayAskWhileOfferPending(turn) : undefined;
+    if (named) return showAskedDay(turn, named);
+    return fileCustomTime(turn, asSpoken(intent));
+  }
   if (intent.type === "ASK_PROPERTY_QUESTION" && turn.stage !== "stopped" && turn.stage !== "intro") return ask(turn, intent.question);
 
   switch (turn.stage) {
@@ -679,8 +698,11 @@ async function byStage(turn: Turn): Promise<void> {
     }
 
     case "choose-date": {
-      if (turn.awaiting?.kind === "accept-next-opening" && acceptsOfferedOpening(turn.said.text ?? "")) {
-        return takeOfferedOpening(session, turn.awaiting, turn.said);
+      if (turn.awaiting?.kind === "accept-next-opening") {
+        const today = localDateOf(session.clock.now(), session.config.property.timezone);
+        if (acceptsOfferedOpening(turn.said.text ?? "", today)) {
+          return takeOfferedOpening(session, turn.awaiting, turn.said);
+        }
       }
       if (intent.type === "REQUEST_HELP") return session.help(turn.said);
       if (intent.type === "START_INQUIRY") return restartBookingDays(turn);

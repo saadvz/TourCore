@@ -80,7 +80,11 @@ function clockLabel(hour: number, minute: number): string {
 export function resolveSpokenTime(config: TourCoreConfig, now: Date, spoken: SpokenTime, contextDay?: LocalDate): ResolvedTime {
   const tz = config.property.timezone;
   const today = localDateOf(now, tz);
-  const named = spoken.weekday ? weekdayOnOrAfter(spoken.nextWeek ? addDays(today, 1) : today, spoken.weekday) : undefined;
+  const named = spoken.date
+    ? spoken.date
+    : spoken.weekday
+      ? weekdayOnOrAfter(spoken.nextWeek ? addDays(today, 1) : today, spoken.weekday)
+      : undefined;
   const day = spoken.day === "tomorrow" ? addDays(today, 1) : spoken.day === "today" ? today : (named ?? contextDay ?? today);
   const meridiem = chooseMeridiem(config, day, spoken);
   if (!meridiem) {
@@ -88,10 +92,10 @@ export function resolveSpokenTime(config: TourCoreConfig, now: Date, spoken: Spo
   }
   const start = at(day, spoken.hour, spoken.minute, meridiem, tz);
   if (start.getTime() <= now.getTime()) {
-    if (spoken.day === "today" || (contextDay && sameDay(day, today) && !spoken.day && !spoken.weekday)) {
+    if (spoken.day === "today" || (contextDay && sameDay(day, today) && !spoken.day && !spoken.weekday && !spoken.date)) {
       return { ok: false, ask: "That time has already passed. What time would you like?" };
     }
-    if (!spoken.day && !spoken.weekday) return { ok: false, ask: "That time today has already passed. Did you mean tomorrow?" };
+    if (!spoken.day && !spoken.weekday && !spoken.date) return { ok: false, ask: "That time today has already passed. Did you mean tomorrow?" };
   }
   return { ok: true, start, placement: placementOf(config, start), label: formatTime(start, tz) };
 }
@@ -110,7 +114,7 @@ export function parseFlexibleTime(text: string, config: TourCoreConfig, now: Dat
     if (Number.isNaN(start.getTime())) return { ok: false, ask: "That time isn't valid." };
     return { ok: true, start, placement: placementOf(config, start), label: formatTime(start, config.property.timezone) };
   }
-  const times = spokenTimes(normalize(trimmed));
+  const times = spokenTimes(normalize(trimmed), localDateOf(now, config.property.timezone));
   if (times.length !== 1) return { ok: false, ask: times.length > 1 ? "Which time did you mean?" : "What time should that be?" };
   return resolveSpokenTime(config, now, times[0]!, contextDay);
 }
