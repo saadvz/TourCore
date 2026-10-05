@@ -1044,7 +1044,7 @@ export class TourCore {
    * revoked, the reservation is cancelled, and the visitor gets the approved
    * cancel text. A tour already in progress is left alone.
    */
-  async cancelBookedTour(reservationId: string, options: { reason: string; propertyWide: boolean }): Promise<Reservation> {
+  async cancelBookedTour(reservationId: string, options: { reason: string; propertyWide: boolean; removed?: boolean }): Promise<Reservation> {
     let reservation = await this.mustGetReservation(reservationId);
     if (reservation.status === "TOURING") return reservation;
     if (!reservation.slotStart || TERMINAL.includes(reservation.status)) return reservation;
@@ -1062,6 +1062,7 @@ export class TourCore {
         time: this.time(start),
         address: this.deps.config.property.address,
         propertyWide: options.propertyWide,
+        ...(options.removed ? { removed: true } : {}),
       }),
     );
     return reservation;

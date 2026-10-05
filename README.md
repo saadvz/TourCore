@@ -434,9 +434,10 @@ Terminal wizard ─────────────────────�
   saves exact names only), tour hours in everyday words, verification, messaging, review, `run_readiness_check`,
   `run_dry_tour`, `publish_demo_property`, `list_active_tours`, `inspect_tour`, the exception queue, holds, calling a
   tour off, answering a flagged question with a new approved fact, custom tour times (`approve_tour_time_request`,
-  `reschedule_tour`, `schedule_one_off_tour`), `pause_tours` / `resume_tours` (property or unit;
-  resume texts waiting visitors that tours are back), `remove_property` (records are kept; a later text gets a goodbye
-  and cannot book), and `export_audit`. Every input is validated (unexpected fields are
+  `reschedule_tour`, `schedule_one_off_tour`; approve and reschedule refuse while that property is paused:
+  `Tours at {property} are paused. Resume them first.`), `pause_tours` / `resume_tours` (property or unit;
+  resume texts waiting visitors that tours are back), `remove_property` (records are kept; booked cancel text does
+  not promise tours will be back; a later text gets a goodbye and cannot book), and `export_audit`. Every input is validated (unexpected fields are
   refused); every result is plain language. `npm run grok:tools` lists them.
 - **One-off tour** (`schedule_one_off_tour`): use it when the operator wants to set up a tour for a visitor who
   asked — including someone who hasn't texted in yet. The first call returns one yes/no question (ends `Book it?`);

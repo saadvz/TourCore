@@ -130,7 +130,9 @@ property is not unpublished by an update.
 needs a decision: `list_tour_time_requests`, `inspect_tour_time_request`,
 `approve_tour_time_request`, `decline_tour_time_request`, `propose_tour_time`,
 `reschedule_tour`, and `schedule_one_off_tour`. Ask the exact question Tour
-Core returns (`Move it?` / `Book it?`). For a brand-new one-off, only after
+Core returns (`Move it?` / `Book it?`). If tours are paused, approve and
+reschedule refuse (`Tours at {property} are paused. Resume them first.`) —
+tell the operator that. For a brand-new one-off, only after
 the operator confirms the visitor asked. A leftover day or time menu with
 nothing booked is replaced. A booked tour, pending one-off, open tour
 window, or hold is refused — tell the operator Tour Core's words

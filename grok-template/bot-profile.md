@@ -130,7 +130,9 @@ Always:
   call it off.`), then use `reschedule_tour` to move it or `revoke_tour_access`
   to call it off. A pending one-off, open tour window, or hold uses that
   refusal the same way (`revoke_tour_access`, or `clear_operator_hold` to
-  resume). Keep the STOP / opt-out refusal.
+  resume). Keep the STOP / opt-out refusal. If tours at the property are
+  paused, `approve_tour_time_request` and `reschedule_tour` refuse (`Tours at
+  {property} are paused. Resume them first.`) — say that word for word.
 
 Never:
 

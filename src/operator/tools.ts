@@ -1167,7 +1167,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Remove a property",
     kind: "consequential",
     description:
-      "Removes a property from the operator's list (its records are kept). Booked visitors get a cancel text and pending door access is switched off. Waiting visitors from a pause are not texted that tours are back; that list is dropped. A later text to the property's line gets a goodbye and cannot book. Refused while someone is on a tour. First call returns a yes/no question; call again with confirmationCode only after an explicit yes. Say remove, never archive.",
+      "Removes a property from the operator's list (its records are kept). Booked visitors get a cancel text that the property isn't offering tours anymore — not that they'll be texted when tours are back — and pending door access is switched off. Waiting visitors from a pause are not texted that tours are back; that list is dropped. A later text to the property's line gets a goodbye and cannot book. Refused while someone is on a tour. First call returns a yes/no question; call again with confirmationCode only after an explicit yes. Say remove, never archive.",
     input: z.strictObject({ property: Property, confirmationCode: Code }),
     run: (ctx, i) => removeProperty(ctx, i),
   }),
@@ -1224,7 +1224,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Approve a custom time",
     kind: "consequential",
     description:
-      "Approves a visitor's requested tour time as a one-off. Does not change the property's regular hours or which times are offered. First call returns one yes/no question that names the action and ends Move it? or Book it? — never Continue?. A move inside hours includes the old and new times. \"This is a one-off. Your regular tour hours stay the same\" only when the time is outside tour hours. Call again with confirmationCode only after an explicit yes. If the result says outsideHours, the question is the stronger outside-hours confirmation: call again with confirmationCode and acknowledgeOutsideHours true only after they agree to that.",
+      "Approves a visitor's requested tour time as a one-off. Does not change the property's regular hours or which times are offered. First call returns one yes/no question that names the action and ends Move it? or Book it? — never Continue?. A move inside hours includes the old and new times. \"This is a one-off. Your regular tour hours stay the same\" only when the time is outside tour hours. Call again with confirmationCode only after an explicit yes. If the result says outsideHours, the question is the stronger outside-hours confirmation: call again with confirmationCode and acknowledgeOutsideHours true only after they agree to that. Refused when tours at that property or unit are paused (Tours at {property} are paused. Resume them first.) — tell the operator that, no visitor text.",
     input: z.strictObject({
       tourTimeRequestId: z.string().min(3).max(40).describe("The tourTimeRequestId. Never show it to the operator."),
       confirmationCode: Code,
@@ -1260,7 +1260,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Move a tour",
     kind: "consequential",
     description:
-      "Moves a visitor's tour to a time the landlord is directing, including a one-off time that isn't a regular slot. Pass the visitor's name and the new time in everyday words. Does not change the property's regular hours. First call returns one yes/no question that names the old and new times and ends Move it? — never Continue?. \"This is a one-off. Your regular tour hours stay the same\" only when the time is outside tour hours. Call again with confirmationCode only after an explicit yes. A time outside normal touring hours returns a stronger question; call again with confirmationCode and acknowledgeOutsideHours true only after they agree.",
+      "Moves a visitor's tour to a time the landlord is directing, including a one-off time that isn't a regular slot. Pass the visitor's name and the new time in everyday words. Does not change the property's regular hours. First call returns one yes/no question that names the old and new times and ends Move it? — never Continue?. \"This is a one-off. Your regular tour hours stay the same\" only when the time is outside tour hours. Call again with confirmationCode only after an explicit yes. A time outside normal touring hours returns a stronger question; call again with confirmationCode and acknowledgeOutsideHours true only after they agree. Refused when tours at that property or unit are paused (Tours at {property} are paused. Resume them first.) — tell the operator that, no visitor text.",
     input: z.strictObject({
       reservationId: z.string().min(3).max(40).optional().describe("The reservation, when you already have it. Never show it."),
       tourRef: TourRef.optional(),

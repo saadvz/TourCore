@@ -8,7 +8,7 @@ import { orList } from "../core/questions";
 import { operatorConfirmBy } from "../core/customSlot";
 import { formatDay, formatLocalDate, formatTime, formatWeekday } from "../core/timezone";
 import type { SpokenTime } from "../core/spokenTime";
-import { bookingRefusal, isEffectivelyPaused, isRemoved, openUnits } from "../setup/availability";
+import { bookingRefusal, isEffectivelyPaused, isRemoved, openUnits, operatorPausedBookingRefuse } from "../setup/availability";
 import type { PropertyState } from "../setup/workspace";
 import { entryReply } from "./entry";
 import { visitorTourOf } from "./identity";
@@ -568,7 +568,8 @@ export class VisitorDemoSession {
   async reschedule(newStartsAt: string, options: { outsideTourHours?: boolean; customTime?: boolean; notice?: "default" | "moved" } = {}): Promise<{ changed: boolean }> {
     if (!this.reservationId) throw new SetupInputError("NO_TOUR", "This visitor hasn't booked a tour yet.");
     const reservation = await this.reservation();
-    if (await this.refuseIfPaused(reservation?.unitId)) return { changed: false };
+    const paused = operatorPausedBookingRefuse(this.pauseState(), this.config, reservation?.unitId);
+    if (paused) throw new SetupInputError("TOURS_PAUSED", paused);
     const { changed } = await this.core.rescheduleReservation({ reservationId: this.reservationId, newStartsAt, ...options });
     await this.syncReplies();
     return { changed };
@@ -694,7 +695,8 @@ export class VisitorDemoSession {
 
   async approveTimeRequest(requestId: string, options: { outsideTourHours?: boolean } = {}) {
     const reservation = await this.reservation();
-    if (await this.refuseIfPaused(reservation?.unitId)) return;
+    const paused = operatorPausedBookingRefuse(this.pauseState(), this.config, reservation?.unitId);
+    if (paused) throw new SetupInputError("TOURS_PAUSED", paused);
     const result = await this.core.approveTourTimeRequest(requestId, options);
     await this.syncReplies();
     return result;

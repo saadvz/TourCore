@@ -2,14 +2,18 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   bookedTourCalledOffText,
   pauseConfirmQuestion,
+  pausedPropertyOperatorRefuse,
   pausedPropertyVisitorText,
+  pausedUnitOperatorRefuse,
   pausedUnitVisitorText,
+  PROPERTY_REMOVED_REFUSE,
   REMOVE_REFUSED_LIVE_TOUR,
   removeConfirmQuestion,
   removedPropertyVisitorText,
   resumeConfirmQuestion,
   toursAreBackText,
 } from "../src/core/availabilityCopy";
+import { persistSession } from "../src/operator/services";
 import { formatDay, formatTime } from "../src/core/timezone";
 import { formatPhone } from "../src/core/phone";
 import { createTourCore } from "../src/createTourCore";
@@ -70,6 +74,18 @@ describe("availability copy", () => {
     expect(bookedTourCalledOffText({ team: "leasing team", day: "Monday, Sep 28", time: "9:00 AM", address: "100 Alfred Way", propertyWide: true })).toBe(
       "Sorry, the leasing team had to cancel your Monday, Sep 28 at 9:00 AM tour at 100 Alfred Way. They'll text you when tours are back.",
     );
+    expect(bookedTourCalledOffText({ team: "leasing team", day: "Monday, Sep 28", time: "9:00 AM", address: "100 Alfred Way", propertyWide: true, removed: true })).toBe(
+      "Sorry, the leasing team had to cancel your Monday, Sep 28 at 9:00 AM tour at 100 Alfred Way. 100 Alfred Way isn't offering tours anymore.",
+    );
+    expect(bookedTourCalledOffText({ team: "leasing team", day: "Monday, Sep 28", time: "9:00 AM", address: "100 Alfred Way", propertyWide: true, removed: true })).not.toContain(
+      "when tours are back",
+    );
+  });
+
+  it("uses the approved operator refuse when approving or moving a time on a paused property", () => {
+    expect(pausedPropertyOperatorRefuse("100 Alfred Way")).toBe("Tours at 100 Alfred Way are paused. Resume them first.");
+    expect(pausedUnitOperatorRefuse("Unit 101")).toBe("Tours of Unit 101 are paused. Resume them first.");
+    expect(PROPERTY_REMOVED_REFUSE).toBe("That property has been removed.");
   });
 
   it("uses the approved operator pause and remove questions", () => {
@@ -115,6 +131,10 @@ describe("availability copy", () => {
       pausedUnitVisitorText("Unit 101"),
       bookedTourCalledOffText({ team: "leasing team", day: "Monday, Sep 28", time: "9:00 AM", address: "100 Alfred Way", propertyWide: true }),
       bookedTourCalledOffText({ team: "leasing team", day: "Monday, Sep 28", time: "9:00 AM", address: "100 Alfred Way", propertyWide: false }),
+      bookedTourCalledOffText({ team: "leasing team", day: "Monday, Sep 28", time: "9:00 AM", address: "100 Alfred Way", propertyWide: true, removed: true }),
+      pausedPropertyOperatorRefuse("100 Alfred Way"),
+      pausedUnitOperatorRefuse("Unit 101"),
+      PROPERTY_REMOVED_REFUSE,
       pauseConfirmQuestion("100 Alfred Way", 2),
       pauseConfirmQuestion("100 Alfred Way", 0),
       removeConfirmQuestion("100 Alfred Way", 2),
@@ -232,6 +252,30 @@ describe("pause and remove", () => {
     });
   });
 
+  it("refuses approve_tour_time_request and reschedule_tour on a paused property", async () => {
+    const h = app();
+    const id = await h.publish();
+    const booked = await readyVisitor(h, id, { phone: "(555) 010-2001" });
+    const start = new Date((await booked.session.reservation())!.slotStart!);
+    const later = new Date(start.getTime() + 60 * 60_000);
+    await booked.session.requestCustomTime(later);
+    await persistSession(h.services, booked.session);
+    const listed = await h.ok("list_tour_time_requests");
+    const requestId = listed.requests[0].tourTimeRequestId as string;
+    await h.approve("pause_tours", { property: id, bookedTours: "keep" });
+
+    const name = h.workspace.load(id).config.property.name;
+    const refuse = pausedPropertyOperatorRefuse(name);
+    const before = lastFrom(booked.session);
+    expect(await h.fails("approve_tour_time_request", { tourTimeRequestId: requestId })).toBe(refuse);
+    expect(await h.fails("reschedule_tour", { visitor: "Pat", newStartsAt: "3:15 PM today" })).toBe(refuse);
+    expect((await booked.session.reservation())!.slotStart).toBe(start.toISOString());
+    expect((await booked.session.reservation())!.status).toBe("READY");
+    expect(lastFrom(booked.session)).toBe(before);
+    expect(lastFrom(booked.session)).not.toContain("when tours are back");
+    expect(JSON.stringify(booked.session.conversation)).not.toMatch(/approve_tour_time_request|reschedule_tour/);
+  });
+
   it("keeps booked tours when asked, and cancels them with the approved text when asked", async () => {
     const h = app();
     const id = await h.publish();
@@ -321,8 +365,11 @@ describe("pause and remove", () => {
         time: formatTime(new Date(reservation.slotStart!), config.property.timezone),
         address: config.property.address,
         propertyWide: true,
+        removed: true,
       }),
     );
+    expect(lastFrom(v.session)).toContain("isn't offering tours anymore");
+    expect(lastFrom(v.session)).not.toContain("when tours are back");
     expect((await v.session.store.get("accessGrants", "grt_pending"))?.status).toBe("REVOKED");
     expect(v.session.durin.revokeCount).toBeGreaterThan(0);
     expect((await h.ok("list_properties")).properties).toEqual([]);

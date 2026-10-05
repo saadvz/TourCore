@@ -115,7 +115,10 @@ decided before Durin is contacted.
    Pause or resume bookings at a property or unit (`pause_tours` /
    `resume_tours`; resume texts people who were told tours would be back),
    or remove a property from the list (`remove_property`; records stay; a
-   later text gets a goodbye and cannot book). Say remove, never archive.
+   later text gets a goodbye and cannot book; booked cancel text does not
+   promise tours will be back). While paused, `approve_tour_time_request`
+   and `reschedule_tour` refuse (`Tours at {property} are paused. Resume
+   them first.`). Say remove, never archive.
    Tour Core also wakes the Bot (Tour Core Operator Updates routine) for the
    updates the operator chose: bookings, tour starts, completions and anything
    that needs their judgment. Only real text-message tours produce updates.

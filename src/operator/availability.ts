@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createMessenger } from "../createTourCore";
-import { pauseConfirmQuestion, REMOVE_REFUSED_LIVE_TOUR, removeConfirmQuestion, resumeConfirmQuestion, toursAreBackText } from "../core/availabilityCopy";
+import { pauseConfirmQuestion, PROPERTY_REMOVED_REFUSE, REMOVE_REFUSED_LIVE_TOUR, removeConfirmQuestion, resumeConfirmQuestion, toursAreBackText } from "../core/availabilityCopy";
 import { normalizePhone } from "../core/phone";
 import { newId, type AuditEvent, type AuditEventType, type Reservation } from "../domain/model";
 import { TERMINAL } from "../domain/stateMachine";
@@ -112,14 +112,20 @@ async function sessionFor(services: OperatorServices, tour: TourSnapshot): Promi
   return session;
 }
 
-async function cancelBooked(services: OperatorServices, tours: TourSnapshot[], propertyWide: boolean, reason: string): Promise<number> {
+async function cancelBooked(
+  services: OperatorServices,
+  tours: TourSnapshot[],
+  propertyWide: boolean,
+  reason: string,
+  removed = false,
+): Promise<number> {
   let cancelled = 0;
   for (const tour of tours) {
     const reservation = currentReservation(tour);
     if (!isBookedReservation(reservation)) continue;
     const session = await sessionFor(services, tour);
-    await session.operatorChange((core, id) => core.cancelBookedTour(id, { reason, propertyWide }));
-    if (propertyWide) {
+    await session.operatorChange((core, id) => core.cancelBookedTour(id, { reason, propertyWide, ...(removed ? { removed: true } : {}) }));
+    if (propertyWide && !removed) {
       const phone = session.visitor?.phone;
       if (phone) rememberWaiter(services.workspace.root, session.propertyId, { phone, at: (services.now?.() ?? new Date()).toISOString() });
     }
@@ -181,7 +187,7 @@ async function notifyWaiters(services: OperatorServices, propertyId: string, uni
 function pauseTarget(ctx: Ctx, property: string | undefined, unit?: string): { propertyId: string; unitId?: string; label: string; state: PropertyState } {
   const propertyId = resolvePropertyId(ctx.services.workspace, property);
   const { config, state } = ctx.services.workspace.load(propertyId);
-  if (isRemoved(state)) throw new SetupInputError("PROPERTY_REMOVED", "That property has been removed.");
+  if (isRemoved(state)) throw new SetupInputError("PROPERTY_REMOVED", PROPERTY_REMOVED_REFUSE);
   if (!unit) return { propertyId, label: config.property.name, state };
   const matched = requireUnit(config, unit);
   return { propertyId, unitId: matched.id, label: matched.name, state };
@@ -282,7 +288,7 @@ export async function removeProperty(ctx: Ctx, input: { property?: string; confi
   }
   redeem(ctx, input.confirmationCode, "remove-property", propertyId, fingerprint);
 
-  const cancelled = await cancelBooked(ctx.services, booked, true, "property removed");
+  const cancelled = await cancelBooked(ctx.services, booked, true, "property removed", true);
   ctx.services.workspace.patchState(propertyId, { removedAt: ctx.now().toISOString(), paused: true });
   dropWaiters(ctx.services.workspace.root, propertyId);
   appendAvailabilityEvent(ctx.services.workspace.root, propertyId, "PROPERTY_REMOVED", config.property.name, ctx.now().toISOString());
