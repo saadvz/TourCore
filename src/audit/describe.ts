@@ -97,7 +97,9 @@ function sentence(
     case "FOLLOW_UP_SENT":
       return info(`A follow-up message was sent to ${c.name}.`);
     case "RESERVATION_CANCELLED":
-      return info(`${c.name}'s tour was cancelled.`);
+      return e.detail.includes("replaced by the operator's one-off")
+        ? info(`${c.name}'s unfinished conversation was replaced by a tour the property team set up.`)
+        : info(`${c.name}'s tour was cancelled.`);
     case "RESERVATION_REVOKED":
       return blocked(`${c.name}'s tour was called off, and their access was switched off.`);
     case "OPERATOR_HOLD_PLACED":

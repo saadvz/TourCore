@@ -17,6 +17,7 @@ import { publicBaseUrl } from "../messaging/publicUrl";
 import { effectiveEnv } from "../install/settings";
 import type { ResolvedConsentMode } from "../messaging/consentPolicy";
 import { handleVisitorText, isGreeting } from "./conversation";
+import { oneOffBlockReason } from "./oneOffGate";
 import { SmsConsentDirectory } from "./smsConsent";
 import { restoreSession, RestoreError, SessionPersistence, type DurableSession } from "./durableSession";
 import { VisitorDemoSession, type VisitorDemoRegistry } from "./session";
@@ -171,9 +172,12 @@ export class MessagingConversations {
     const e164 = normalizePhone(phone);
     const existing = this.deps.registry.latestForPhone(propertyId, e164, "messaging");
     if (existing) {
+      const blocked = await oneOffBlockReason(existing);
+      if (blocked) throw new SetupInputError("TOUR_EXISTS", blocked);
       const stage = await existing.stage();
-      if (!["done", "stopped"].includes(stage) || (await existing.isPaused())) {
-        throw new SetupInputError("TOUR_EXISTS", "They already have a tour in progress.");
+      if (!["done", "stopped"].includes(stage)) {
+        await existing.supersedeForOperatorOneOff();
+        await this.save(existing);
       }
     }
     const { config } = this.deps.workspace.load(propertyId);

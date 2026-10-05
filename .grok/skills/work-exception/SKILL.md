@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Tour updates, exception queue, monitoring, holds and approved answers
-  version: "0.3.0"
+  version: "0.3.1"
 ---
 
 # Work Exception
@@ -115,7 +115,7 @@ not change.
    - "Offer them 3:30" → `propose_tour_time`. The current booking stays until the visitor agrees.
    - "Decline" or "Keep the 4 PM booking" → `decline_tour_time_request`.
    - "Move Testa to 3:15" → `reschedule_tour` with their name and the time. Ask the one question it returns, then call again after yes.
-   - "Set up a tour for Dana at 1A on Monday at 3:15" → `schedule_one_off_tour` with their phone, the unit and the time. Ask the one question it returns (it ends `Book it?`), then call again after yes. Only if they asked for this tour.
+   - "Set up a tour for Dana at 1A on Monday at 3:15" → `schedule_one_off_tour` with their phone, the unit and the time. Ask the one question it returns (it ends `Book it?`), then call again after yes. Only if they asked for this tour. A leftover day or time menu with nothing booked does not block — the one-off replaces it. If they already have a booked tour, Tour Core refuses: use `reschedule_tour` to move it or `revoke_tour_access` to call it off. A pending one-off waiting for YES or NO, an open tour window, or a paused tour is also refused. STOP / opt-out still refuses.
    - "Who's waiting for a different time?" → `list_tour_time_requests`.
 3. A time outside normal touring hours returns a stronger question. Call again
    with `confirmationCode` and `acknowledgeOutsideHours` true only after they
@@ -129,9 +129,12 @@ not change.
    consent step. STOP opts out and sends only the standard opt-out
    confirmation — nothing further. NO cancels and tells the team. Any other
    reply is flagged for the team (`I'll check with the {team} and get back to
-   you.`); the hold stays pending and the no-reply timer still applies. If they
-   never reply in time, the time is released; unless they opted out they get
-   exactly one text that it was released, then no further texts.
+   you.`); the hold stays pending and the no-reply timer still applies. If the
+   one-off replaced a leftover day or time menu, a later reply (including a
+   leftover menu number such as "1") is a reply to that confirmation, not a
+   booking from the old menu. If they never reply in time, the time is
+   released; unless they opted out they get exactly one text that it was
+   released, then no further texts.
 7. Confirmation questions name the action and end with the verb: `Move it?`,
    `Book it?`, or `Save it?`. Never "Continue?". A move inside hours includes
    the old time. `This is a one-off. Your regular tour hours stay the same`

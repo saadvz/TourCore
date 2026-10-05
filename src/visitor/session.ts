@@ -9,6 +9,7 @@ import { formatDay, formatLocalDate, formatTime, formatWeekday } from "../core/t
 import type { SpokenTime } from "../core/spokenTime";
 import { entryReply } from "./entry";
 import { visitorTourOf } from "./identity";
+import { ONE_OFF_REPLACED_DETAIL } from "./oneOffGate";
 import { offerDate } from "./unavailableDay";
 import { isLiveHelpReservation, TourCore, type AccessOutcome, type InboundMeta } from "../core/TourCore";
 import { parseIsoDate, type TourSlot } from "../core/schedule";
@@ -169,6 +170,8 @@ export class VisitorDemoSession {
   /** A custom time named before a unit was chosen. Filed once the unit is picked. */
   heldTime?: SpokenTime;
   optedOut = false;
+  /** Ended because the operator set a one-off tour for this phone. */
+  superseded = false;
   /**
    * SMS campaign status. Undefined means this sender has not opted in.
    * A phone number or an older tour does not set this.
@@ -307,6 +310,7 @@ export class VisitorDemoSession {
   }
 
   async stage(): Promise<VisitorStage> {
+    if (this.superseded) return "stopped";
     if (!this.visitor) return "intro";
     const r = await this.reservation();
     if (!r) return "choose-unit";
@@ -583,6 +587,32 @@ export class VisitorDemoSession {
       await this.reply(`${label} isn't one of the regular tour times, but I can ask the property team. I'll let you know once they respond.`);
     }
     return { created, request };
+  }
+
+  /**
+   * Ends a leftover pre-booking conversation so an operator one-off can take
+   * its place. Cancels an inquiry with nothing held. Does not text the visitor.
+   */
+  async supersedeForOperatorOneOff(): Promise<void> {
+    this.superseded = true;
+    this.expected = undefined;
+    this.offeredDates = [];
+    this.offeredSlots = [];
+    this.selectedDate = undefined;
+    this.heldTime = undefined;
+    const reservation = await this.reservation();
+    if (!reservation || reservation.status !== "INQUIRY") return;
+    await this.core.cancelReservation(reservation.id, ONE_OFF_REPLACED_DETAIL);
+    for (const request of await this.store.list("tourTimeRequests")) {
+      if (request.reservationId === reservation.id && request.status === "PENDING") {
+        await this.store.put("tourTimeRequests", {
+          ...request,
+          status: "SUPERSEDED",
+          resolvedAt: this.clock.now().toISOString(),
+          operatorNote: ONE_OFF_REPLACED_DETAIL,
+        });
+      }
+    }
   }
 
   /**

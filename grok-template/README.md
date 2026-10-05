@@ -75,9 +75,12 @@ what never does.
   anything unknown is flagged to the operator, and the visitor picks up where
   they left off once it's answered.
 - **One-off tours.** When the operator wants to set up a tour for someone who
-  asked (including a visitor who hasn't texted in), the Bot uses
-  `schedule_one_off_tour` and asks the exact question Tour Core returns. Only
-  a yes that they asked is enough. Confirmation questions end `Move it?`,
+  asked (including a visitor who hasn't texted in, or who only got a day or
+  time menu and never booked), the Bot uses `schedule_one_off_tour` and asks
+  the exact question Tour Core returns. Only a yes that they asked is enough.
+  A leftover choosing menu is replaced; a booked tour, pending one-off, open
+  tour window, or paused tour is refused (move with `reschedule_tour` or call
+  off with `revoke_tour_access`). Confirmation questions end `Move it?`,
   `Book it?`, or `Save it?`.
 
 Install and publishing steps: [`docs/grok-template-setup.md`](../docs/grok-template-setup.md).
