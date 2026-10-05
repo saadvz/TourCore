@@ -5,6 +5,7 @@ import { zonedTimeToUtc } from "../src/core/timezone";
 import { createTourCore } from "../src/createTourCore";
 import { MockDurinAccessAdapter } from "../src/durin/MockDurinAccessAdapter";
 import { ConsoleMessenger, DemoMessagingAdapter } from "../src/messaging/Messenger";
+import { who } from "../src/operator/tourTimes";
 import { midSentence, unitNameOf } from "../src/operator/tours";
 import { InMemoryStore } from "../src/storage/Store";
 import {
@@ -361,7 +362,7 @@ describe("apartment or condo visitor and landlord copy", () => {
     expect(unitNameOf(tour as never)).not.toContain("Main Home");
   });
 
-  it("single-family tour lists keep the space name instead of a duplicated street", () => {
+  it("single-family alerts use the street via visitorSubject, never Main Home or a duplicated address", () => {
     const property = {
       address: "1 QA Scratch Lane, Tenafly, NJ 07670",
       displayName: "1 QA Scratch Lane",
@@ -370,7 +371,8 @@ describe("apartment or condo visitor and landlord copy", () => {
       canonicalAddress: { street: "1 QA Scratch Lane" },
     };
     const tour = { config: { property, units: [{ id: "u", name: "Main Home" }] }, bundle: { reservations: [{ unitId: "u" }] } };
-    expect(unitNameOf(tour as never)).toBe("Main Home");
+    expect(unitNameOf(tour as never)).toBe("1 QA Scratch Lane");
+    expect(unitNameOf(tour as never)).not.toContain("Main Home");
     expect(unitNameOf(tour as never)).not.toMatch(/1 QA Scratch Lane at 1 QA Scratch Lane/);
     expect(unitNameOf(tour as never)).not.toMatch(/ at /);
   });
@@ -395,13 +397,20 @@ describe("apartment or condo visitor and landlord copy", () => {
     expect(thanks).not.toContain("Visitor");
   });
 
-  it("operator confirmation copy lowercases a leading article mid-sentence", () => {
+  it("who() stays sentence-start; midSentence lowercases only mid-sentence", () => {
+    const unnamed = { bundle: { reservations: [], prospects: [] }, visitorPhone: "+15550102000" };
+    expect(who(unnamed as never)).toBe("The visitor");
+    expect(midSentence(who(unnamed as never))).toBe("the visitor");
+    expect(`${who(unnamed as never)} doesn't have a tour time to move yet.`).toBe("The visitor doesn't have a tour time to move yet.");
+    expect(`Declined. ${who(unnamed as never)}'s 3:00 PM tour is still confirmed.`).toBe(
+      "Declined. The visitor's 3:00 PM tour is still confirmed.",
+    );
+    expect(`Move ${midSentence(who(unnamed as never))}'s tour`).toBe("Move the visitor's tour");
+    expect(`I asked ${midSentence(who(unnamed as never))} about 3:30 PM.`).toBe("I asked the visitor about 3:30 PM.");
     expect(midSentence("A visitor texting from +15550102000")).toBe("a visitor texting from +15550102000");
-    expect(midSentence("The visitor")).toBe("the visitor");
     expect(midSentence("Pat Smith")).toBe("Pat Smith");
     expect(`Call off ${midSentence("A visitor texting from +15550102000")}'s tour`).toBe(
       "Call off a visitor texting from +15550102000's tour",
     );
-    expect(`Move ${midSentence("The visitor")}'s tour`).toBe("Move the visitor's tour");
   });
 });

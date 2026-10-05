@@ -122,7 +122,9 @@ describe("the landlord decides", () => {
     await a.book();
     await a.text("Can I change it to 3:15?");
     const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
-    expect((await a.grok("decline_tour_time_request", { tourTimeRequestId: id })).summary).toContain("2:00 PM");
+    expect((await a.grok("decline_tour_time_request", { tourTimeRequestId: id })).summary).toBe(
+      "Declined. Testy's 2:00 PM tour is still confirmed.",
+    );
     const last = a.fake.sent.filter((message) => message.number === PHONE).at(-1)!.content;
     expect(last).toContain("couldn't approve 3:15 PM");
     expect(last).toContain("2:00 PM tour is still confirmed");
@@ -135,7 +137,9 @@ describe("the landlord decides", () => {
     await a.book();
     await a.text("Can I change it to 3:15?");
     const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
-    expect((await a.grok("propose_tour_time", { tourTimeRequestId: id, newStartsAt: "3:30 PM" })).summary).toContain("3:30 PM");
+    expect((await a.grok("propose_tour_time", { tourTimeRequestId: id, newStartsAt: "3:30 PM" })).summary).toBe(
+      "I asked Testy about 3:30 PM. Their current booking stays until they say yes.",
+    );
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
     expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.slotStart).toBe(atTime(14).toISOString());
     const refused = await a.text("no");
@@ -153,6 +157,15 @@ describe("the landlord decides", () => {
     expect(yes.join("\n")).toContain("3:30 PM");
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
     expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.slotStart).toBe(atTime(15, 30).toISOString());
+  });
+
+  it("reschedule before a time is booked keeps The visitor at the start of the error", async () => {
+    const a = await liveApp({ cleanups });
+    await ask(a, "Can I tour at 3:15?");
+    const [tour] = (await a.grok("list_active_tours")).tours;
+    await expect(a.grok("reschedule_tour", { tourRef: tour.tourRef, newStartsAt: "3:30 PM" })).rejects.toThrow(
+      /The visitor doesn't have a tour time to move yet/,
+    );
   });
 
   it("the landlord can move the tour directly, and access follows the new time", async () => {

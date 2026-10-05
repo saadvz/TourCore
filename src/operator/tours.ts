@@ -6,7 +6,7 @@ import { UNNAMED_VISITOR } from "../domain/model";
 import { TERMINAL } from "../domain/stateMachine";
 import type { ExportBundle } from "../export/exportBundle";
 import { SetupInputError } from "../setup/setupActions";
-import { isApartmentOrCondo, visitorSubject } from "../visitor/identity";
+import { visitorSubject } from "../visitor/identity";
 import type { ConversationItem, TourRecord } from "../setup/workspace";
 import type { VisitorDemoSession } from "../visitor/session";
 import { STATUS_LABELS } from "../visitor/views";
@@ -117,9 +117,7 @@ export function visitorNameOf(tour: TourSnapshot): string {
 export function unitNameOf(tour: TourSnapshot): string | undefined {
   const r = currentReservation(tour);
   const unit = tour.config.units.find((u) => u.id === r?.unitId);
-  if (!unit) return undefined;
-  // Condo lists show street + unit. Single-family and other types keep the space's own name.
-  return isApartmentOrCondo(tour.config.property) ? visitorSubject(tour.config.property, unit.name) : unit.name;
+  return unit ? visitorSubject(tour.config.property, unit.name) : undefined;
 }
 
 /** Lowercase a leading "A" / "The" so the name reads naturally mid-sentence. */
