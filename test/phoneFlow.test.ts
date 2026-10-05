@@ -126,7 +126,7 @@ describe("a real phone over Sendblue", () => {
     expect((await app.local("POST", `/api/verify/${token}`, { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: PHONE })).status).toBe(410);
 
     const early = await app.text("I'm here");
-    expect(early.replies).toEqual(["You're a little early! I can open the doors from 1:50 PM on Monday, Sep 28. Text me again once the window opens."]);
+    expect(early.replies).toEqual(["You're a little early! I can open the doors from 1:50 PM today. Text me again at 1:50 PM."]);
 
     app.setClock(at(13, 58));
     const arrived = await app.text("I'm here");

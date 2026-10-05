@@ -117,7 +117,7 @@ describe("visitor demo on the real engine", () => {
     const s = await bookedAndReady();
     await s.act("arrive", {});
     expect(await s.stage()).toBe("ready");
-    expect(lastFromTourCore(s)).toBe("You're a little early! I can open the doors from 1:50 PM on Monday, Sep 28. Text me again once the window opens.");
+    expect(lastFromTourCore(s)).toBe("You're a little early! I can open the doors from 1:50 PM today. Text me again at 1:50 PM.");
     expect(s.lastAccess).toMatchObject({ allowed: false, code: "DENY_TOO_EARLY", durinCalled: false });
     expect(s.durin.requestCount).toBe(0);
     expect((await visitorView(s)).demoControls.map((c) => c.action)).toContain("demoSkipAhead");

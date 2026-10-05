@@ -95,7 +95,6 @@ describe("Tour Core journey", () => {
     const failedBooking = "Thanks for filling that out. I couldn't confirm your details, so I can't open doors for this tour.";
     const failedDoor = "I couldn't confirm your details, so I can't open doors for this tour.";
     const failedEnded = "I couldn't confirm your details, so your tour has ended. Please head out the way you came in.";
-    const hold = "Your tour is on hold. The tour window is still counting down.";
     const doors = `Sorry, the doors aren't responding right now. I've let the ${team} know.`;
 
     const prospectTexts = async (ctx: ReturnType<typeof setup>) =>
@@ -125,6 +124,12 @@ describe("Tour Core journey", () => {
       await tour.request("entrance");
       return prospectTexts(ctx);
     };
+    const helpTexts = async (visitorContact?: string) => {
+      const ctx = setup(visitorContact ? { visitorContact } : {});
+      const tour = await bookTour(ctx);
+      await ctx.core.requestHelp(tour.reservation.id, "lobby");
+      return prospectTexts(ctx);
+    };
     const endedTexts = async (visitorContact?: string) => {
       const ctx = setup(visitorContact ? { visitorContact } : {});
       const tour = await bookTour(ctx);
@@ -145,6 +150,8 @@ describe("Tour Core journey", () => {
     const holdSet = await holdTexts("+15550109999");
     const doorUnset = await doorTexts();
     const doorSet = await doorTexts("+15550109999");
+    const helpUnset = await helpTexts();
+    const helpSet = await helpTexts("+15550109999");
     const failedIdBodies = [
       ...failedUnset.filter((b) => b.includes("I couldn't confirm your details")),
       ...failedSet.filter((b) => b.includes("I couldn't confirm your details")),
@@ -163,15 +170,24 @@ describe("Tour Core journey", () => {
       `${failedEnded} ${failedFollowUpSet}`,
     ]);
     expect(failedUnset.find((b) => b.startsWith("Thanks for filling that out"))).not.toMatch(/Stay where you are|I can't open doors yet|on hold/);
-    expect(holdUnset.filter((b) => b === `${hold} ${atDoorUnset}`)).toEqual([`${hold} ${atDoorUnset}`]);
-    expect(holdSet.filter((b) => b === `${hold} ${atDoorSet}`)).toEqual([`${hold} ${atDoorSet}`]);
+    expect(holdUnset.filter((b) => b === VisitorDenialCopy.operatorHold(team))).toEqual([VisitorDenialCopy.operatorHold(team)]);
+    expect(holdSet.filter((b) => b === VisitorDenialCopy.operatorHold(team, "+15550109999"))).toEqual([
+      VisitorDenialCopy.operatorHold(team, "+15550109999"),
+    ]);
+    expect(VisitorDenialCopy.operatorHold(team)).not.toMatch(/window|counting down|rebook/i);
     expect(doorUnset.some((b) => b.startsWith(doors) && b.endsWith(atDoorUnset))).toBe(true);
     expect(doorSet.some((b) => b.startsWith(doors) && b.endsWith(atDoorSet))).toBe(true);
+    expect(helpUnset.filter((b) => b === VisitorDenialCopy.helpAck(team))).toEqual([VisitorDenialCopy.helpAck(team)]);
+    expect(helpSet.filter((b) => b === VisitorDenialCopy.helpAck(team, "+15550109999"))).toEqual([
+      VisitorDenialCopy.helpAck(team, "+15550109999"),
+    ]);
+    expect(VisitorDenialCopy.helpAck(team)).toBe(`I've let the ${team} know. ${atDoorUnset}`);
+    expect(VisitorDenialCopy.helpAck(team, "+15550109999")).toBe(`I've let the ${team} know. ${atDoorSet}`);
     for (const body of failedIdBodies) {
       expect(body.match(/The leasing team/g)).toHaveLength(1);
       expect(body).not.toMatch(/on hold|yet|Stay where you are/);
     }
-    for (const body of [...failedUnset, ...failedSet, ...endedUnset, ...endedSet, ...holdUnset, ...holdSet, ...doorUnset, ...doorSet]) {
+    for (const body of [...failedUnset, ...failedSet, ...endedUnset, ...endedSet, ...holdUnset, ...holdSet, ...doorUnset, ...doorSet, ...helpUnset, ...helpSet]) {
       expect(body).not.toContain(privateLine);
       expect(body).not.toContain("5550100000");
       expect(body).not.toMatch(/someone will reach out shortly/i);
@@ -213,7 +229,8 @@ describe("Tour Core journey", () => {
 
     const team = "leasing team";
     const maple = "Maple Leasing team";
-    const early = VisitorDenialCopy.tooEarly("1:50 PM on Monday, Sep 28");
+    const earlyToday = VisitorDenialCopy.tooEarly("1:50 PM", "today at 1:50 PM");
+    const earlyLater = VisitorDenialCopy.tooEarly("1:50 PM", "on Wednesday, Sep 30 at 1:50 PM");
     const expired = "Your tour time has ended, so I can't open doors anymore. Want me to find you another time?";
     const wrong = (name: string) =>
       `That door isn't part of your tour, so I can't open it. You're here to see Unit 101. I've let the ${name} know in case you need a hand.`;
@@ -228,11 +245,18 @@ describe("Tour Core journey", () => {
     expect((await tour.request("unit_102")).decision.code).toBe("DENY_WRONG_ROUTE");
     await ctx.core.requestHelp(tour.reservation.id, "lobby");
     const bodies = await prospectTexts(ctx);
-    expect(bodies.filter((b) => b === early)).toEqual([early]);
+    expect(earlyToday).toBe("You're a little early! I can open the doors from 1:50 PM today. Text me again at 1:50 PM.");
+    expect(bodies.filter((b) => b === earlyToday)).toEqual([earlyToday]);
     expect(bodies.filter((b) => b === expired)).toEqual([expired]);
     expect(bodies.filter((b) => b === wrong(team))).toEqual([wrong(team)]);
     expect(bodies.filter((b) => b === VisitorDenialCopy.helpAck(team))).toEqual([VisitorDenialCopy.helpAck(team)]);
     expect(bodies.join("\n")).toContain("the leasing team");
+
+    const laterCtx = setup();
+    const laterTour = await bookTour(laterCtx, "ready", { year: 2026, month: 9, day: 30 });
+    expect((await laterTour.request("entrance")).decision.code).toBe("DENY_TOO_EARLY");
+    expect(await prospectTexts(laterCtx)).toContain(earlyLater);
+    expect(earlyLater).toBe("You're a little early! I can open the doors from 1:50 PM on Wednesday, Sep 30. Text me again at 1:50 PM.");
 
     const doneCtx = setup();
     const done = await bookTour(doneCtx);
@@ -266,10 +290,10 @@ describe("Tour Core journey", () => {
     expect(VisitorDenialCopy.noOpenTimes(maple)).toBe("There are no open tour times right now. The Maple Leasing team will reach out.");
     expect(VisitorDenialCopy.followUpYes(maple)).toBe("Great. Someone from the Maple Leasing team will be in touch soon.");
     expect(VisitorDenialCopy.operatorHold(maple)).toBe(
-      `Your tour is on hold. The tour window is still counting down. ${VisitorDenialCopy.atDoor(maple)}`,
+      `Your tour is on hold, and your tour time keeps running while the ${maple} sorts this out. ${VisitorDenialCopy.atDoor(maple)}`,
     );
     expect(VisitorDenialCopy.operatorHold(maple, "+15550109999")).toBe(
-      `Your tour is on hold. The tour window is still counting down. ${VisitorDenialCopy.atDoor(maple, "+15550109999")}`,
+      `Your tour is on hold, and your tour time keeps running while the ${maple} sorts this out. ${VisitorDenialCopy.atDoor(maple, "+15550109999")}`,
     );
     expect(VisitorDenialCopy.calledOff(maple, "+15550109999")).toBe(
       `Your tour has been called off, so the doors won't open for it. ${VisitorDenialCopy.remote(maple, "+15550109999")}`,

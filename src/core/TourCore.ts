@@ -108,23 +108,26 @@ export class VisitorDenialCopy {
   }
 
   static operatorHold(team: string, visitorContact?: string): string {
-    return `Your tour is on hold. The tour window is still counting down. ${this.atDoor(team, visitorContact)}`;
+    return `Your tour is on hold, and your tour time keeps running while the ${team} sorts this out. ${this.atDoor(team, visitorContact)}`;
   }
 
   static calledOff(team: string, visitorContact?: string): string {
     return `Your tour has been called off, so the doors won't open for it. ${this.remote(team, visitorContact)}`;
   }
 
-  static tooEarly(opensAt?: string): string {
-    return `You're a little early! I can open the doors from ${opensAt ?? "your tour time"}. Text me again once the window opens.`;
+  static tooEarly(opensAt?: string, relative?: string): string {
+    if (!opensAt) return "You're a little early! I can open the doors from your tour time. Text me again at your tour time.";
+    const atTime = ` at ${opensAt}`;
+    const day = relative?.endsWith(atTime) ? relative.slice(0, -atTime.length) : relative;
+    return `You're a little early! I can open the doors from ${opensAt}${day ? ` ${day}` : ""}. Text me again at ${opensAt}.`;
   }
 
   static followUpYes(team: string): string {
     return `Great. Someone from the ${team} will be in touch soon.`;
   }
 
-  static helpAck(team: string): string {
-    return `I've let the ${team} know. Someone will reach out shortly.`;
+  static helpAck(team: string, visitorContact?: string): string {
+    return `I've let the ${team} know. ${this.atDoor(team, visitorContact)}`;
   }
 
   static noOpenTimes(team: string): string {
@@ -792,7 +795,7 @@ export class TourCore {
     await this.recordInbound(prospect.id, reservationId, inbound?.text ?? "I need help", inbound?.meta);
     await this.record("HELP_REQUESTED", { reservationId, prospectId: prospect.id, detail: where ?? "" });
     await this.notifyOperator(reservation, `${prospect.name} asked for help${where ? ` near ${where}` : ""}.`);
-    await this.textProspect(prospect, reservationId, VisitorDenialCopy.helpAck(this.teamName()));
+    await this.textProspect(prospect, reservationId, VisitorDenialCopy.helpAck(this.teamName(), this.visitorHelpNumber()));
   }
 
   // -------------------------------------------------------- operator actions
@@ -1104,9 +1107,9 @@ export class TourCore {
         await this.textProspect(prospect, reservation.id, ask.body, ask.form ? { kind: "form", link: await this.verificationFormLink(reservation, prospect) } : undefined);
       } else {
         const text: Partial<Record<AccessDecisionCode, string>> = {
-          DENY_TOO_EARLY: VisitorDenialCopy.tooEarly(
-            reservation.windowStart ? `${this.time(new Date(reservation.windowStart))} on ${this.day(new Date(reservation.windowStart))}` : undefined,
-          ),
+          DENY_TOO_EARLY: reservation.windowStart
+            ? VisitorDenialCopy.tooEarly(this.time(new Date(reservation.windowStart)), this.whenPhrase(new Date(reservation.windowStart)))
+            : VisitorDenialCopy.tooEarly(),
           DENY_EXPIRED: "Your tour time has ended, so I can't open doors anymore. Want me to find you another time?",
           DENY_WRONG_ROUTE: `That door isn't part of your tour, so I can't open it. You're here to see ${visitorSubject(this.deps.config.property, unit.name)}. I've let the ${team} know in case you need a hand.`,
           DENY_DURIN_UNHEALTHY: VisitorDenialCopy.doorsNotResponding(team, help),
