@@ -163,9 +163,14 @@ export async function handleVisitorText(
   if (firstMessage) session.identify(from);
 
   // Operator-set tour: YES/NO/STOP are about that confirmation, not the SMS keyword gate.
+  // A released or cancelled hold is not still waiting — don't send another confirm text.
   if (session.pendingClarification?.awaiting.kind === "confirm-operator-tour") {
-    await handleOperatorScheduledReply(session, said, text);
-    return undefined;
+    const reservation = await session.reservation();
+    if (reservation?.awaitingVisitorConfirm?.kind === "OPERATOR_SCHEDULED") {
+      await handleOperatorScheduledReply(session, said, text);
+      return undefined;
+    }
+    session.takeExpected(session.pendingClarification.stage);
   }
 
   // SMS campaign consent comes before any property or booking content.

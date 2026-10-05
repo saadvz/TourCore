@@ -624,6 +624,10 @@ export class VisitorDemoSession {
 
   async releaseUnconfirmedOperatorTour(): Promise<void> {
     await this.core.releaseExpiredOperatorScheduled();
+    const reservation = await this.reservation();
+    if (this.expected?.awaiting.kind === "confirm-operator-tour" && reservation?.awaitingVisitorConfirm?.kind !== "OPERATOR_SCHEDULED") {
+      this.expected = undefined;
+    }
     await this.syncReplies();
   }
 

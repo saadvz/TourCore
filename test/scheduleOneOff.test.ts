@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { slotsOn } from "../src/core/schedule";
+import { zonedTimeToUtc } from "../src/core/timezone";
 import { operatorScheduledFirstText } from "../src/visitor/session";
 import { at, liveApp, PHONE, type LiveApp } from "./liveApp";
 
@@ -166,6 +167,24 @@ describe("operators can set up a one-time tour", () => {
     expect(bundle.reservations[0]!.status).toBe("CANCELLED");
     expect(bundle.auditEvents.some((event) => event.type === "RESERVATION_CANCELLED" && event.detail.includes("didn't confirm"))).toBe(true);
     expect(bundle.auditEvents.some((event) => event.type === "OPERATOR_NOTIFIED" && event.detail.includes("didn't confirm the 2:00 PM tour, so I released it"))).toBe(true);
+
+    await a.textFrom(OTHER, "any other times?");
+    expect(a.fake.sent.filter((message) => message.number === PHONE)).toHaveLength(visitor.length);
+
+    const later = await a.text("YES");
+    expect(later.join("\n")).not.toContain("Reply YES to confirm this tour");
+    expect(later.join("\n")).not.toContain("I didn't hear back");
+    expect(a.fake.sent.filter((message) => message.number === PHONE && message.content.includes("I didn't hear back"))).toHaveLength(1);
+  });
+
+  it("names the weekday in the release text when the tour isn't today", async () => {
+    const a = await liveApp({ cleanups });
+    await publish(a);
+    await a.approve("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "Tuesday at 2:00 PM" });
+    a.clock.t = zonedTimeToUtc({ year: 2026, month: 9, day: 30, hour: 7, minute: 0 }, "America/New_York").getTime();
+    await a.textFrom(OTHER, "TOUR");
+    const visitor = a.fake.sent.filter((message) => message.number === PHONE);
+    expect(visitor.at(-1)!.content).toBe("I didn't hear back, so I released your Tuesday at 2:00 PM tour. Text me anytime to book another.");
   });
 
   it("refuses when the property isn't published, the time is in the past, or it overlaps another tour", async () => {
