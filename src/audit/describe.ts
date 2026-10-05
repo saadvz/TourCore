@@ -124,6 +124,14 @@ function sentence(
       return info(`${c.name}'s tour was moved ${e.detail}.`);
     case "TOUR_TIME_OVERRIDE_APPROVED":
       return info(`The property team approved a one-time tour for ${c.name} outside the normal touring hours.`);
+    case "TOURS_PAUSED":
+      return info("Tours were paused.");
+    case "TOURS_RESUMED":
+      return info("Tours were resumed.");
+    case "TOURS_BACK_NOTIFIED":
+      return info(`${c.name} was told tours are back.`);
+    case "PROPERTY_REMOVED":
+      return info("The property was removed.");
     case "QUESTION_ANSWERED":
       return good(`${c.name} asked "${e.detail}" and got an answer from your approved facts.`);
     case "QUESTION_UNANSWERED":

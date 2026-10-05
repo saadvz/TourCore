@@ -2,7 +2,7 @@
 name: work-exception
 description: Show what needs the team's attention on live and recent tours (unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored), open one, and resolve it using only Tour Core's actions and the operator's own facts.
 when-to-use: "what needs attention", "show exceptions", "any problems", "open Pat's issue", "what's happening with Pat's tour", "show active tours", "pause the tour", "call off the tour", a Tour Core Operator Updates routine run
-allowed-tools: get_operator_update list_active_tours inspect_tour list_exceptions inspect_exception resolve_exception answer_flagged_question place_operator_hold clear_operator_hold revoke_tour_access list_tour_time_requests inspect_tour_time_request approve_tour_time_request decline_tour_time_request propose_tour_time reschedule_tour schedule_one_off_tour inject_local_sms read_local_outbox
+allowed-tools: get_operator_update list_active_tours inspect_tour list_exceptions inspect_exception resolve_exception answer_flagged_question place_operator_hold clear_operator_hold revoke_tour_access pause_tours resume_tours remove_property list_tour_time_requests inspect_tour_time_request approve_tour_time_request decline_tour_time_request propose_tour_time reschedule_tour schedule_one_off_tour inject_local_sms read_local_outbox
 argument-hint: "[visitor or issue]"
 user-invocable: true
 metadata:
@@ -99,6 +99,13 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   **call off** (`revoke_tour_access`): each returns a yes/no question first.
   Ask it word for word; call again with `confirmationCode` only after a clear
   yes. Calling off can't be undone; say so.
+- **Pause or resume bookings** at a property or unit (`pause_tours`,
+  `resume_tours`), or **remove a property** (`remove_property`): these are not
+  the same as holding one visitor. Ask the exact question first. If tours are
+  already booked, the operator chooses keep or cancel. Resume texts waiting
+  visitors that tours are back. Removal drops that list without sending it,
+  and a later text to that line gets a goodbye and cannot book. Removal is
+  refused while someone is on a tour. Say remove, never archive.
 - Door-system problems and tours that couldn't be restored: explain in plain
   words, suggest reaching out to the visitor, and resume only once the operator
   says the doors are working.

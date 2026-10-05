@@ -2,7 +2,7 @@
 name: setup-property
 description: Set up a self-guided touring property in Tour Core through a friendly, one-question-at-a-time conversation, then check it and run a practice tour before offering to publish. Use when the operator wants to add, set up, import or change a building.
 when-to-use: "set up a property", "set up my building", "add a property", "I have a new building", "change the tour hours", "add a unit"
-allowed-tools: list_properties get_property_setup create_property_setup update_property_details list_units add_unit update_unit set_unit_details get_unit_details list_doors add_door preview_route set_route get_tour_hours set_tour_hours get_verification_policy set_verification_policy get_services set_services review_property_setup run_readiness_check run_dry_tour publish_demo_property
+allowed-tools: list_properties get_property_setup create_property_setup update_property_details list_units add_unit update_unit set_unit_details get_unit_details list_doors add_door preview_route set_route get_tour_hours set_tour_hours get_verification_policy set_verification_policy get_services set_services review_property_setup run_readiness_check run_dry_tour publish_demo_property pause_tours resume_tours remove_property
 argument-hint: "[address]"
 user-invocable: true
 metadata:
@@ -163,6 +163,19 @@ the operator correct it.
     publish question again. After publishing, say each part as it is: "Visitor
     texting is live. Door access is still in demo mode, so no physical locks
     will open." Never say "everything runs in demo mode".
+
+**Pause, resume, or remove.** These are not setup edits and do not change the
+published configuration. `pause_tours` stops new bookings at a property or one
+unit (ask the exact question it returns; if tours are already booked, the
+operator chooses keep or cancel). A tour in progress always finishes.
+`resume_tours` turns bookings back on and texts people who were told tours
+would be back (or who got a paused-unit line). `remove_property` takes the
+property off the list after the exact confirmation; booked visitors get a
+cancel text and pending door access is switched off. Waiting visitors are not
+texted that tours are back. A later text to that line gets a goodbye and
+cannot book. It is refused while someone is on a tour. Records stay
+(`export_audit`, `inspect_tour`). Say **remove**, never archive. This is not
+`place_operator_hold`, which pauses one visitor's tour.
 
 Later edits: facts and unit details (bedrooms, rent, availability,
 description, amenities, directions) are approved content: saving them keeps

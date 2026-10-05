@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { removedPropertyVisitorText } from "../core/availabilityCopy";
 import { normalizePhone } from "../core/phone";
-import type { IntentInterpreter } from "../intent";
+import { keywordOf, type IntentInterpreter } from "../intent";
 import { MessagingEndpoints } from "../messaging/endpoints";
 import type { InboundMessage } from "../messaging/inbound";
 import type { MessagingAdapter } from "../messaging/Messenger";
@@ -18,7 +19,8 @@ import { effectiveEnv } from "../install/settings";
 import type { ResolvedConsentMode } from "../messaging/consentPolicy";
 import { handleVisitorText, isGreeting } from "./conversation";
 import { oneOffBlockReason } from "./oneOffGate";
-import { SmsConsentDirectory } from "./smsConsent";
+import { markRemovedReply, shouldReplyRemoved } from "./removedReplies";
+import { smsHelpBody, smsStopAck, SmsConsentDirectory } from "./smsConsent";
 import { restoreSession, RestoreError, SessionPersistence, type DurableSession } from "./durableSession";
 import { VisitorDemoSession, type VisitorDemoRegistry } from "./session";
 import type { VerificationLinks } from "./verificationLinks";
@@ -106,6 +108,10 @@ export class MessagingConversations {
       return {};
     }
     const propertyId = endpoint.propertyId;
+    if (ws.load(propertyId).state.removedAt) {
+      await this.answerRemovedProperty(propertyId, message);
+      return {};
+    }
     const transport = this.deps.transport();
     transport.noteChannel?.(message.from, message.channel);
     const meta = { provider: message.provider, providerMessageId: message.providerMessageId, deliveryChannel: message.channel };
@@ -345,6 +351,56 @@ export class MessagingConversations {
       }
     }
     return restored;
+  }
+
+  /**
+   * A text to a removed property: STOP/HELP still work; everyone else who
+   * hasn't opted out gets the goodbye once per 24 hours. No session, booking,
+   * or flagged question.
+   */
+  private async answerRemovedProperty(propertyId: string, message: InboundMessage): Promise<void> {
+    const phone = normalizePhone(message.from);
+    const transport = this.deps.transport();
+    transport.noteChannel?.(message.from, message.channel);
+    const now = this.deps.now?.() ?? new Date();
+    const keyword = keywordOf(message.text);
+    if (keyword === "stop") {
+      this.setOptOut(propertyId, phone, true);
+      this.smsConsent.save(propertyId, {
+        sender: phone,
+        status: "opted_out",
+        method: "keyword",
+        keyword: "STOP",
+        updatedAt: now.toISOString(),
+        optedOutAt: now.toISOString(),
+      });
+      await transport.send({ to: phone, audience: "PROSPECT", body: smsStopAck() }).catch(() => undefined);
+      return;
+    }
+    if (keyword === "help") {
+      await transport.send({ to: phone, audience: "PROSPECT", body: smsHelpBody() }).catch(() => undefined);
+      return;
+    }
+    if (keyword === "start") {
+      this.setOptOut(propertyId, phone, false);
+      return;
+    }
+    if (this.removedUnreachable(propertyId, phone)) return;
+    if (!shouldReplyRemoved(this.deps.workspace.root, propertyId, phone, now)) return;
+    const { config } = this.deps.workspace.load(propertyId);
+    await transport
+      .send({
+        to: phone,
+        audience: "PROSPECT",
+        body: removedPropertyVisitorText(config.property.address, config.operator.visitorContact),
+      })
+      .catch(() => undefined);
+    markRemovedReply(this.deps.workspace.root, propertyId, phone, now);
+  }
+
+  private removedUnreachable(propertyId: string, phone: string): boolean {
+    if (this.isOptedOut(propertyId, phone)) return true;
+    return this.smsConsent.get(propertyId, phone)?.status === "opted_out";
   }
 
   /**

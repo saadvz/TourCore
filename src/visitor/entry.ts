@@ -8,7 +8,7 @@ import { visitorPlace } from "./identity";
  * is chosen. A later step never sends a second introduction.
  */
 
-export function entryReply(config: TourCoreConfig, dates: { label: string }[]): { body: string; prompt?: ReplyPrompt } {
+export function entryReply(config: TourCoreConfig, dates: { label: string }[], units = config.units): { body: string; prompt?: ReplyPrompt } {
   const home = config.property.propertyType === "SINGLE_FAMILY";
   const place = visitorPlace(config.property);
   const named = place.publicName ? `${place.publicName} at ${place.address}` : place.address;
@@ -19,7 +19,7 @@ export function entryReply(config: TourCoreConfig, dates: { label: string }[]): 
   if (!home) {
     return {
       body: `${welcome}\n\nWhich unit would you like to see?`,
-      prompt: { kind: "choose", options: config.units.map((unit) => unit.name), what: "a unit" },
+      prompt: { kind: "choose", options: units.map((unit) => unit.name), what: "a unit" },
     };
   }
   if (dates.length === 0) {

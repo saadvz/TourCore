@@ -33,6 +33,12 @@ export interface PropertyState {
   readiness?: { passed: boolean; checkedAt: string; configHash: string; safetyHash?: string; problems: string[] };
   dryTour?: { passed: boolean; ranAt: string; configHash: string; safetyHash?: string; failure?: string; recordsFolder?: string; tourId?: string };
   publishedAt?: string;
+  /** Operator paused new bookings for the whole property. Not a config change. */
+  paused?: boolean;
+  /** Unit ids that are paused for new bookings. */
+  pausedUnitIds?: string[];
+  /** Set when the property is removed (archived). Records stay; it leaves operator lists. */
+  removedAt?: string;
 }
 
 /** An approved-content change, kept in an append-only log next to the setup. */
@@ -135,7 +141,16 @@ export class PropertyWorkspace {
     return this.propertyIds()
       .filter((id) => this.has(id))
       .map((id) => this.load(id))
+      .filter((saved) => !saved.state.removedAt)
       .sort((a, b) => a.config.property.name.localeCompare(b.config.property.name));
+  }
+
+  /** Operational status only (pause / remove). Does not change the setup or its fingerprints. */
+  patchState(propertyId: string, patch: Partial<PropertyState>): PropertyState {
+    const { state } = this.load(propertyId);
+    const next: PropertyState = { ...state, ...patch, propertyId };
+    this.writeState(next);
+    return next;
   }
 
   has(propertyId: string): boolean {
@@ -477,9 +492,12 @@ function uniqueTourId(dir: string, base: string): string {
 /** Short operator-facing status. */
 export function statusLabel(saved: SavedProperty): string {
   const { state } = saved;
-  if (state.status === "PUBLISHED_FOR_DEMO") return "Published for demo";
+  if (state.removedAt) return "Removed";
+  const unitIds = saved.config.units.map((unit) => unit.id);
+  const paused = !!state.paused || (unitIds.length > 0 && unitIds.every((id) => (state.pausedUnitIds ?? []).includes(id)));
+  if (state.status === "PUBLISHED_FOR_DEMO") return paused ? "Published for demo · paused" : "Published for demo";
   if (state.readiness?.passed && isCurrent(state.readiness, state) && state.dryTour?.passed && isCurrent(state.dryTour, state)) {
-    return "Ready to publish for demo";
+    return paused ? "Ready to publish for demo · paused" : "Ready to publish for demo";
   }
-  return "Draft";
+  return paused ? "Paused" : "Draft";
 }

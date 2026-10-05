@@ -21,11 +21,11 @@ again with the code after the operator's yes.
 
 | Tool | Kind | What it does |
 | --- | --- | --- |
-| `list_properties` | read | Every property and its status |
-| `get_property_setup` | read | Full setup: units, doors, routes, hours, verification, messaging, problems |
+| `list_properties` | read | Every property and its status (removed properties are omitted; paused ones say so) |
+| `get_property_setup` | read | Full setup: units, doors, routes, hours, verification, messaging, problems, and whether tours are paused or the property was removed |
 | `create_property_setup` | change | Starts a property from its street address. A US address needs street, city, state and ZIP; a missing ZIP is the next question, then a read-back to confirm, then property type. An optional public name only if the operator said one. Uses the installed visitor texting automatically |
 | `update_property_details` | change | Property type, address, operator-given name, time zone, approved property facts, who gets alerts, optional visitor help number (never the team's private alert line); `skipVisitorHelp` records an explicit skip; returns `nextQuestion` (how to name the tourable spaces for that type, then the optional help-number step) |
-| `list_units` | read | Units with description, facts, door, route |
+| `list_units` | read | Units with description, facts, door, route, and whether that unit is paused |
 | `add_unit` | change | Adds a unit and its own door. For a single-family home the name is optional ("Main Home"), its door is the home's entrance ("Front Door" unless named) and its route is set automatically. Never a made-up unit number |
 | `update_unit` | change | Renames a unit or changes its description/facts |
 | `set_unit_details` | change | Saves units' bedrooms, bathrooms, rent, availability and optional details from the operator's words (bulk answers welcome); "not sure" is saved as not provided |
@@ -56,6 +56,9 @@ again with the code after the operator's yes.
 | `place_operator_hold` | consequential | Pauses a running tour; its doors are switched off |
 | `clear_operator_hold` | consequential | Resumes a paused tour; policy still decides every door |
 | `revoke_tour_access` | consequential | Calls a tour off for good and tells the visitor. Visitors can also cancel a booked tour by text; Tour Core confirms first (`Cancel your tour on {day} at {time}? Reply YES or NO.`). YES: `You're cancelled. Text me anytime if you want to book again.` NO: `Okay, your tour stays on {day} at {time}.` Unclear replies are flagged (`I'll check with the {team} and get back to you.`) |
+| `pause_tours` | consequential | Pauses new bookings at a property or one unit; keep or cancel booked tours. A tour in progress finishes |
+| `resume_tours` | consequential | Resumes bookings at a paused property or unit, and texts waiting visitors that tours are back |
+| `remove_property` | consequential | Removes a property from the list (records are kept). A later text gets a goodbye and cannot book. Refused while someone is on a tour. Say remove, never archive |
 | `list_tour_time_requests` | read | Who is waiting on a time that isn't a regular slot, or on moving a tour |
 | `inspect_tour_time_request` | read | One custom-time request: who, the time they want, their current booking, and whether it's outside normal touring hours |
 | `approve_tour_time_request` | consequential | Approves that time as a one-off. Asks once first; the question ends `Move it?` or `Book it?`. A move names the old and new times. `This is a one-off…` only outside tour hours. Regular hours stay the same |

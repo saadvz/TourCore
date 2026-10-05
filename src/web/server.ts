@@ -25,6 +25,7 @@ import { AuditExportLinks } from "../operator/auditExportLinks";
 import { ConfirmationBook } from "../operator/confirmations";
 import type { ToolContext } from "../operator/tools";
 import { PropertyWorkspace } from "../setup";
+import { rememberWaiter } from "../setup/pauseWaiters";
 import { MessagingEndpoints } from "../messaging/endpoints";
 import { FileRuntimeStore } from "../storage/runtimeStore";
 import { VisitorDemoRegistry, type VisitorDemoSession } from "../visitor";
@@ -155,6 +156,8 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
   const workspace = options.workspace ?? new PropertyWorkspace();
   const visitors = options.visitors ?? new VisitorDemoRegistry();
   visitors.useApprovedContent((id) => (workspace.has(id) ? workspace.load(id).config : undefined));
+  visitors.useAvailability((id) => (workspace.has(id) ? workspace.load(id).state : undefined));
+  visitors.usePauseWaiters((id, waiter) => rememberWaiter(workspace.root, id, waiter));
   const dev = options.dev ?? false;
   const log = options.log ?? ((line: string) => console.log(`  ${line}`));
   const runtime = options.installation?.runtime ?? new FileRuntimeStore(join(workspace.root, "runtime"));

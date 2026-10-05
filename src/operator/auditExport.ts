@@ -7,6 +7,7 @@ import { SetupInputError } from "../setup/setupActions";
 import type { PropertyWorkspace } from "../setup/workspace";
 import { writeFolderAtomic } from "../storage/atomicWrite";
 import { AccessWindows } from "./accessWindows";
+import { readAvailabilityEvents } from "./availability";
 import { listExceptions, readResolutions } from "./exceptions";
 import type { OperatorServices } from "./services";
 import { currentReservation, tourSnapshots, type TourSnapshot } from "./tours";
@@ -69,9 +70,11 @@ export async function exportAudit(services: OperatorServices, propertyId: string
     outcome: outcomeOf(t),
     bundle: ExportBundleSchema.parse(t.bundle),
   }));
-  const events = bundles
-    .flatMap((b) => b.bundle.auditEvents.filter((e) => e.at >= from && e.at < to).map((event) => ({ tourId: b.tourId, kind: b.kind, event })))
-    .sort((a, b) => a.event.at.localeCompare(b.event.at) || a.event.seq - b.event.seq);
+  const propertyEvents = readAvailabilityEvents(ws.root, propertyId).filter((e) => e.at >= from && e.at < to);
+  const events = [
+    ...bundles.flatMap((b) => b.bundle.auditEvents.filter((e) => e.at >= from && e.at < to).map((event) => ({ tourId: b.tourId, kind: b.kind, event }))),
+    ...propertyEvents.map((event) => ({ tourId: "property", kind: "property", event })),
+  ].sort((a, b) => a.event.at.localeCompare(b.event.at) || a.event.seq - b.event.seq);
 
   const exceptions = (await listExceptions(services, { propertyId, includeClosed: true })).filter((x) => x.happenedAt >= from && x.happenedAt < to);
   const resolutions = readResolutions(services, propertyId).filter((r) => r.resolvedAt >= from && r.resolvedAt < to);
@@ -100,6 +103,7 @@ export async function exportAudit(services: OperatorServices, propertyId: string
     timezone: tz,
     summary,
     tours: bundles,
+    propertyEvents,
     exceptions: exceptions.map(({ nextSteps: _n, ...x }) => x),
     resolutions,
   };

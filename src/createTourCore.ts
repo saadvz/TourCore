@@ -106,5 +106,11 @@ export function createTourCore(config: TourCoreConfig, overrides: Partial<TourCo
     messenger: overrides.messenger ?? createMessenger(config),
     verification: overrides.verification ?? createVerificationProvider(config),
     durin: overrides.durin ?? createDurin(config, clock),
+    ...(overrides.availability ? { availability: overrides.availability } : {}),
+    ...(overrides.approvedContent ? { approvedContent: overrides.approvedContent } : {}),
+    ...(overrides.storageRead ? { storageRead: overrides.storageRead } : {}),
+    ...(overrides.beforeAccess ? { beforeAccess: overrides.beforeAccess } : {}),
+    ...(overrides.verificationLink ? { verificationLink: overrides.verificationLink } : {}),
+    ...(overrides.correlationId ? { correlationId: overrides.correlationId } : {}),
   });
 }
