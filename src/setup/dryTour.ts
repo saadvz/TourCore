@@ -8,6 +8,7 @@ import type { AuditEvent } from "../domain/model";
 import { countDurinCalls } from "../durin/countingDurin";
 import type { ExportBundle } from "../export/exportBundle";
 import type { Messenger } from "../messaging/Messenger";
+import { isApartmentOrCondo } from "../visitor/identity";
 
 export type DryTourGroup = "journey" | "safety" | "wrapup";
 
@@ -170,7 +171,8 @@ export async function runDryTour(input: TourCoreConfig, options: DryTourOptions 
     );
 
     clock.set(new Date(slot.start));
-    const firstIsUnitDoor = entranceId === unit.doorId;
+    const noBuildingEntranceOnRoute = !route.stops.some((s) => config.doors.find((d) => d.id === s.doorId)?.kind === "ENTRANCE");
+    const firstIsUnitDoor = isApartmentOrCondo(config.property) && noBuildingEntranceOnRoute && entranceId === unit.doorId;
     await at(`Visitor arrives on time and asks for ${doorName(entranceId)}`);
     const entrance = await request(entranceId);
     await flush();

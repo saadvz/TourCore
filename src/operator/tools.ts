@@ -535,7 +535,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Update a unit",
     kind: "change",
     description:
-      'Renames a unit or changes its description or approved facts (facts replace the whole list). Only the operator\'s words. For an apartment or condo, the new name is cased the same way as add_unit ("loft" → "Unit Loft", "4b" → "Unit 4B"), and the street-plus-unit nickname and matching unit door are refreshed.',
+      'Renames a unit or changes its description or approved facts (facts replace the whole list). Only the operator\'s words. For an apartment or condo, the new name is cased the same way as add_unit ("loft" → "Unit Loft", "4b" → "Unit 4B"), and the street-plus-unit nickname and matching unit door are refreshed. The confirmation echoes that stored display name ("Updated Unit Loft."), not the raw input.',
     input: z.strictObject({
       property: Property,
       unit: Unit,
@@ -552,7 +552,8 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       if (i.newName !== undefined) next = applySetupCommand(next, "renameUnit", { unitId: unit.id, name: i.newName, alsoRenameDoor: i.alsoRenameDoor });
       ctx.services.workspace.persistEdit(next, ctx.now());
       const setup = setupSnapshot(ctx, id);
-      return { summary: `Updated ${i.newName ?? unit.name}.`, unit: setup.units.find((u) => u.unitId === unit.id), ...setupState(ctx, id) };
+      const updated = setup.units.find((u) => u.unitId === unit.id);
+      return { summary: `Updated ${updated?.name ?? unit.name}.`, unit: updated, ...setupState(ctx, id) };
     },
   }),
   tool({
@@ -920,7 +921,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Run a practice tour",
     kind: "change",
     description:
-      "Runs one complete practice tour through the real engine (no one is texted, no real door opens) and returns the proof points: booking, verification, early denial, entrance, unit, off-route denial, duplicate, completion, follow-up.",
+      "Runs one complete practice tour through the real engine (no one is texted, no real door opens) and returns the proof points: booking, verification, early denial, entrance (kept for a single-family home, even when that door is also the unit door), the unit door on a unit-door-only apartment or condo, later unit doors, off-route denial, duplicate, completion, follow-up.",
     input: z.strictObject({ property: Property, unit: Unit.optional() }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);

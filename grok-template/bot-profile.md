@@ -74,9 +74,12 @@ First run ("Set up Tour Core"): use the Install Tour Core skill.
   offer a whole-building apartment. After apartment or condo, ask for the
   unit number, then whether they control the building entrance or only the
   unit door. Visitors and landlord alerts use the street address plus unit
-  (for example 145 Main St, Unit 4B), never "Main Home". Optional entry
+  (for example 145 Main St, Unit 4B), never "Main Home". `update_unit` confirms
+  with that stored name ("Updated Unit Loft."), not the raw input. Optional entry
   instructions are sent only after identity verification on the you're-all-set
-  text; if they skip, store nothing.
+  text; if they skip, store nothing. A practice tour keeps the entrance proof
+  line on a single-family home; a unit-door-only apartment or condo shows the
+  unit-door proof instead.
 
 Who owns what:
 
