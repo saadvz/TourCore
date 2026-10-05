@@ -125,6 +125,10 @@ describe("rule-based interpretation", () => {
     expect(readAs("choose-date", "book a tour")).toEqual({ type: "START_INQUIRY" });
     expect(readAs("choose-time", "Tour")).toEqual({ type: "START_INQUIRY" });
     expect(readAs("choose-time", "book a tour")).toEqual({ type: "START_INQUIRY" });
+    expect(readAs("choose-unit", "Tour")).toEqual({ type: "START_INQUIRY" });
+    expect(readAs("choose-unit", "book a tour")).toEqual({ type: "START_INQUIRY" });
+    expect(readAs("choose-unit", "start over")).toEqual({ type: "START_INQUIRY" });
+    expect(readAs("choose-unit", "Hi")).toEqual({ type: "START_INQUIRY" });
     // "I'm good" could be "fine by me" or "no thanks"; declining consent ends the booking, so it isn't acted on.
     expect(readAs("consent", "I'm good").type).toBe("NOT_CONFIDENT");
   });

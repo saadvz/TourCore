@@ -136,6 +136,8 @@ Always:
   resume). Keep the STOP / opt-out refusal. If tours at the property are
   paused, `approve_tour_time_request` and `reschedule_tour` refuse (`Tours at
   {property} are paused. Resume them first.`) — say that word for word.
+  After resume, a visitor Tour / Hi / book restarts booking the same way as a
+  first text.
 
 Never:
 

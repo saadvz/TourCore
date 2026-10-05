@@ -692,7 +692,10 @@ async function byStage(turn: Turn): Promise<void> {
       if (intent.type === "SELECT_DATE") return showAskedDay(turn, intent);
       if (intent.type === "SELECT_UNIT") return chooseUnit(turn);
       if (intent.type === "REQUEST_HELP") return session.help(turn.said);
-      if (intent.type === "START_INQUIRY") return turn.respond("Hi! Which unit would you like to see?", menu);
+      // After pause, welcome() may have sent the paused line without starting
+      // an inquiry. Tour / Hi / book must restart like a first text: a home
+      // gets the welcome and day list, not a leftover unit-picker fallthrough.
+      if (intent.type === "START_INQUIRY") return session.greet(turn.said);
       if (turn.interpretation.clarificationNeeded && !turn.interpretation.manipulation) return chooseUnit(turn);
       return turn.fallback(`${SORRY} Which unit would you like to see?`, menu);
     }

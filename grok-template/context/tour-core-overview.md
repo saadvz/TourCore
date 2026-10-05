@@ -113,7 +113,8 @@ decided before Durin is contacted.
 5. **Watch active tours** and **work exceptions**: unanswered questions, help
    requests, door problems, paused tours, tours that couldn't be restored.
    Pause or resume bookings at a property or unit (`pause_tours` /
-   `resume_tours`; resume texts people who were told tours would be back),
+   `resume_tours`; resume texts people who were told tours would be back;
+   a later Tour / Hi / book restarts booking the same way as a first text),
    or remove a property from the list (`remove_property`; records stay; a
    later text gets a goodbye and cannot book; booked cancel text does not
    promise tours will be back). While paused, `approve_tour_time_request`

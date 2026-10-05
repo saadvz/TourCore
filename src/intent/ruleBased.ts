@@ -365,7 +365,8 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
       if (h) return h;
       const info = informational();
       if (info) return info;
-      if (/^(hi|hello|hey|hiya|howdy|yo|good (morning|afternoon|evening)|hi there|hello there)$/.test(full)) return result({ type: "START_INQUIRY" }, 0.9);
+      // Same restart words as the day/time steps. "Tour" is not a unit name.
+      if (wantsToStartBooking(full, t)) return result({ type: "START_INQUIRY" }, 0.9);
       if (GENERIC_UNIT.test(t) || /\b(any|either|whichever)\b/.test(t)) {
         return ctx.units.length === 1 ? result({ type: "SELECT_UNIT", unitName: ctx.units[0]!.name }, 0.9) : unknown({ clarificationNeeded: true });
       }
