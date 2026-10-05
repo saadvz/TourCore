@@ -33,6 +33,7 @@ import {
   setVerificationPolicy,
   statusLabel,
   validateConfig,
+  VISITOR_HELP_NUMBER_QUESTION,
   type DryTourEvent,
   type SetupDraft,
 } from "../setup";
@@ -353,10 +354,7 @@ async function editAlerts(draft: SetupDraft): Promise<SetupDraft> {
   io.say("");
   return retry(async () => {
     const name = await io.askRequired(OperatorTeamCopy.cliPrompt(), draft.operator.name);
-    const visitorContact = await io.ask(
-      "What number can visitors call if they're stuck at a door? Leave blank if they should just reply to the text.",
-      draft.operator.visitorContact,
-    );
+    const visitorContact = await io.ask(VISITOR_HELP_NUMBER_QUESTION, draft.operator.visitorContact);
     return setAlertContact(draft, { name, visitorContact });
   });
 }
@@ -449,6 +447,7 @@ async function readinessFlow(id: string): Promise<boolean> {
     check.problems.forEach((p, i) => io.say(`      ${p}${devCode(check.codes[i] ?? "")}`));
     await io.pause(120);
   }
+  for (const note of result.advisories ?? []) io.say(`  ${note}`);
   io.say(result.passed ? green("\nEverything's ready.") : yellow("\nA few things need fixing first."));
   return result.passed;
 }

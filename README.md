@@ -222,7 +222,7 @@ text anyone. Keyword opt-in, STOP, and HELP stay in Tour Core. Set `TOURCORE_SMS
 `provider_default`, or `disabled`. Public compliance pages at `/TourCore/privacy`, `/TourCore/terms`, and `/TourCore/sms`
 read `TOURCORE_PUBLIC_BRAND_NAME`, `TOURCORE_PUBLIC_LEGAL_NAME`, `TOURCORE_PUBLIC_CONTACT_EMAIL`,
 `TOURCORE_PUBLIC_SMS_NUMBER`, and `PUBLIC_BASE_URL`. They are not specific to one provider. They do not invent a legal
-entity when the legal name is empty. `docs/messaging/twilio-a2p-example.md` is an example of disclosures some carriers ask for.
+entity when the legal name is empty. HELP replies list the optional visitor help number when one is set, then "or reply here"; they do not use `TOURCORE_PUBLIC_CONTACT_EMAIL`. `docs/messaging/twilio-a2p-example.md` is an example of disclosures some carriers ask for.
 
 Webhook addresses are `PUBLIC_BASE_URL/webhooks/sendblue`, `PUBLIC_BASE_URL/webhooks/twilio`, and `PUBLIC_BASE_URL/webhooks/photon`.
 
@@ -282,7 +282,7 @@ npm run sendblue:test -- --to +1XXXXXXXXXX   # manual: checks the connection, se
   never changes a policy decision. A wrong door texted from a phone is refused before Durin is contacted.
 - **STOP, UNSUBSCRIBE, CANCEL, QUIT.** Tour Core stops messaging that person, ends any tour in progress (open doors
   are switched off), alerts the team, and stays quiet until START.
-- **HELP.** Replies with who this is and how to reach the property team; during a tour it also alerts them.
+- **HELP.** Replies with who this is and every set contact (number first, then email), always ending with reply here; during a tour it also alerts them.
 
 ### Natural texts
 

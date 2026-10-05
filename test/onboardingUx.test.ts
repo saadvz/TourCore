@@ -120,6 +120,28 @@ describe("Tour Core owns the onboarding order", () => {
     expect(OPERATOR_MESSAGES.firstProperty).toBe("Everything needed to start is connected and tested. Would you like to add your first property?");
   });
 
+  it("asks for a visitor help number as one optional step before the property is ready", async () => {
+    const h = harness();
+    infraReady(h);
+    await h.ok("create_property_setup", { address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way", propertyType: "APARTMENT_BUILDING" });
+    await h.ok("add_door", { name: "Lobby Entrance", kind: "entrance" });
+    await h.ok("add_unit", { name: "Unit 101" });
+    await h.ok("set_unit_details", { details: "101 is 1 bed 1 bath for $1,950, available now." });
+    await h.ok("set_route", { unit: "Unit 101", doors: ["Lobby Entrance", "Unit 101 Door"] });
+    await h.ok("set_tour_hours", { days: "weekdays", start: "9am", end: "5pm" });
+    await h.ok("set_verification_policy", { level: "basic-form" });
+    const step = await next(h);
+    expect(step).toMatchObject({
+      component: "PROPERTY",
+      action: "FINISH_PROPERTY_SETUP",
+      performedBy: "OPERATOR_DECISION",
+      tool: "update_property_details",
+      operatorMessage: "What number can stuck visitors call? Pick one someone answers during tour hours.",
+    });
+    await h.ok("update_property_details", { skipVisitorHelp: true });
+    expect((await next(h)).action).toBe("OFFER_OPERATOR_ALERTS");
+  });
+
   it("alerts are offered only after the property is saved, as a recommended option Tour Core marks optional", async () => {
     const h = harness();
     infraReady(h);

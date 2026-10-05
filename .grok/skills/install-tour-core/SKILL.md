@@ -221,7 +221,8 @@ it), "What type of property is this?" (single-family home, multifamily home,
 apartment building or other), then the question Tour Core returns about the
 spaces people tour, each unit's bedrooms, bathrooms, rent and availability,
 "Which door do visitors come in through?", "When can people tour?", "How
-carefully do you want to verify visitors?". Never show field names and never
+carefully do you want to verify visitors?", then Tour Core's optional question
+about a visitor help number (they can skip it). Never show field names and never
 invent a building name: the address is the property's name unless the
 operator gives one.
 

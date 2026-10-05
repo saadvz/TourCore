@@ -110,10 +110,16 @@ export const TourCoreConfigShape = z.object({
     /** Private alert line. Never shown to visitors. */
     contact: z.string(),
     /**
-     * Optional number visitors can call when they're stuck. Separate from
-     * `contact` on purpose: that line is for the team, not prospects.
+     * Optional number visitors see and call when they're stuck. Someone
+     * should answer it during tour hours. Separate from `contact` on
+     * purpose: that line is for the team, not prospects.
      */
     visitorContact: z.string().optional(),
+    /**
+     * The operator answered the optional visitor-help-number step
+     * (with a number or an explicit skip). Absent on older setups.
+     */
+    visitorHelpDecided: z.boolean().optional(),
   }),
   doors: z.array(DoorSchema),
   units: z.array(UnitSchema),

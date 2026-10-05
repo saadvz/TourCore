@@ -80,6 +80,7 @@ export function grokHarness(root = mkdtempSync(join(tmpdir(), "tourcore-grok-"))
     await ok("set_route", { unit: "Unit 102", doors: ["Lobby Entrance", "Unit 102 Door"] });
     await ok("set_tour_hours", { days: "weekdays", start: "9am", end: "5pm" });
     await ok("set_verification_policy", { level: "basic-form" });
+    await ok("update_property_details", { skipVisitorHelp: true });
     return created.setup.propertyId as string;
   };
 

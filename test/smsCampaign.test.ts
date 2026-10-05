@@ -22,13 +22,18 @@ function sendblueProperty(): TourCoreConfig {
   return { ...config, messagingMode: "live", property: { ...config.property, facts: ["Street parking only."] } };
 }
 
-async function startPhoneApp(root = mkdtempSync(join(tmpdir(), "tourcore-sms-"))) {
+async function startPhoneApp(root?: string, operator: { visitorContact?: string } = {}) {
+  const dir = root ?? mkdtempSync(join(tmpdir(), "tourcore-sms-"));
   const fake = fakeSendblue();
   cleanups.push(setSendblueRuntime({ env: () => sendblueEnv(), client: () => fake.client }));
   const clock = at(7);
-  const ws = new PropertyWorkspace(root);
+  const ws = new PropertyWorkspace(dir);
   if (!ws.list().length) {
-    const { config } = ws.save(sendblueProperty());
+    const base = sendblueProperty();
+    const { config } = ws.save({
+      ...base,
+      operator: { ...base.operator, ...operator, ...(operator.visitorContact ? { visitorHelpDecided: true } : {}) },
+    });
     ws.recordReadiness(config.property.id, await runReadinessCheck(config, { now: new Date(clock) }));
   }
   const server: Server = createSetupServer({ workspace: ws, now: () => new Date(clock), realNow: () => clock, log: () => {} });
@@ -46,9 +51,9 @@ async function startPhoneApp(root = mkdtempSync(join(tmpdir(), "tourcore-sms-"))
   const close = () => new Promise<void>((resolve) => server.close(() => resolve()));
   cleanups.push(() => {
     server.close();
-    rmSync(root, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true });
   });
-  return { ws, text, close, root, id: ws.list()[0]!.config.property.id };
+  return { ws, text, close, root: dir, id: ws.list()[0]!.config.property.id };
 }
 
 describe("SMS keyword campaign", () => {
@@ -83,14 +88,35 @@ describe("SMS keyword campaign", () => {
     expect(JSON.stringify(file)).not.toContain("Which unit");
   });
 
-  it("HELP names Tour Core and the configured support email, and STOP blocks ordinary messages until START and YES", async () => {
+  it("HELP lists the visitor help number when set, then reply here — never email, env-var, or not-configured wording", async () => {
+    const previous = process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
+    process.env.TOURCORE_PUBLIC_CONTACT_EMAIL = "desk@example.com";
+    try {
+      const numbered = await startPhoneApp(undefined, { visitorContact: "+15550108888" });
+      expect((await numbered.text("HELP")).replies.join("\n")).toBe(
+        "Tour Core: For help with your property tour, call (555) 010-8888 or reply here. Message and data rates may apply. Reply STOP to opt out.",
+      );
+      expect((await numbered.text("HELP")).replies.join("\n")).not.toMatch(/email|not configured|TOURCORE_PUBLIC_CONTACT_EMAIL/);
+      await numbered.close();
+
+      const neither = await startPhoneApp();
+      const body = (await neither.text("HELP")).replies.join("\n");
+      expect(body).toBe("Tour Core: For help with your property tour, reply here. Message and data rates may apply. Reply STOP to opt out.");
+      expect(body).not.toMatch(/email|not configured|TOURCORE_PUBLIC_CONTACT_EMAIL/);
+    } finally {
+      if (previous === undefined) delete process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
+      else process.env.TOURCORE_PUBLIC_CONTACT_EMAIL = previous;
+    }
+  });
+
+  it("HELP names Tour Core and does not use the contact-email env, and STOP blocks ordinary messages until START and YES", async () => {
     const previous = process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
     process.env.TOURCORE_PUBLIC_CONTACT_EMAIL = "help@example.com";
     try {
     const app = await startPhoneApp();
     const help = await app.text("HELP");
     expect(help.replies).toHaveLength(1);
-    expect(help.replies.join("\n")).toBe("Tour Core: For help with your property tour, email help@example.com. Message and data rates may apply. Reply STOP to opt out.");
+    expect(help.replies.join("\n")).toBe("Tour Core: For help with your property tour, reply here. Message and data rates may apply. Reply STOP to opt out.");
     expect(help.replies.join("\n")).not.toContain("Khanex");
     expect(help.replies.join("\n")).not.toContain("Which unit");
 

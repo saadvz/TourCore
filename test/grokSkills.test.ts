@@ -73,9 +73,15 @@ describe("Grok skill scenarios", () => {
     // "Basic form."  "Real texts."  (Sendblue isn't connected in this test, so stay on practice texts.)
     await tool("set_verification_policy", { level: "basic-form" });
     expect((await tool("get_services")).records.choices.map((c: { label: string }) => c.label)).toEqual(["On this computer", "A folder in your Google Drive"]);
+    const help = await tool("review_property_setup");
+    expect(help.nextQuestion).toBe("What number can stuck visitors call? Pick one someone answers during tour hours.");
+    await tool("update_property_details", { skipVisitorHelp: true });
 
     const review = await tool("review_property_setup");
     expect(review).toMatchObject({ canSave: true, problems: [], saved: "All changes saved" });
+    expect(review.lines).toEqual(expect.arrayContaining(["Visitors can call: not set"]));
+    expect(review.lines.join("\n")).not.toMatch(/Support email/);
+    expect(review.nextQuestion).toBeUndefined();
     expect(validateConfig(h.workspace.load("prop_100_alfred_way").config)).toEqual([]);
     // "Yes." Grok: "Great. I'll check the setup and run a practice tour before publishing."
     expect((await tool("run_readiness_check")).passed).toBe(true);

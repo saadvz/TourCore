@@ -111,6 +111,7 @@ describe("setup through the tools", () => {
         "Verification: Basic identity form",
         "Visitor texting: Practice only (nobody is texted)",
         "Door access: Demo",
+        "Visitors can call: not set",
       ]),
     );
     expect(review.lines.join("\n")).not.toMatch(/https?:|\/mcp|localhost/);
@@ -138,6 +139,44 @@ describe("setup through the tools", () => {
     expect(alertName).toContain(OperatorTeamCopy.hint());
     expect(alertName).toContain("Rendered exactly as entered");
     expect(alertName).not.toMatch(/your own name/i);
+  });
+
+  it("saves a visitor help number and records an explicit skip of the optional help step", async () => {
+    const h = app();
+    await h.ok("create_property_setup", { address: "100 Alfred Way, Brooklyn, NY 11201", name: "100 Alfred Way", propertyType: "APARTMENT_BUILDING" });
+    await h.ok("update_property_details", { confirmAddress: true });
+    await h.ok("add_door", { name: "Lobby Entrance", kind: "entrance" });
+    await h.ok("add_unit", { name: "Unit 101" });
+    await h.ok("set_unit_details", { details: "101 is 1 bed 1 bath for $1,950, available now." });
+    await h.ok("set_route", { unit: "Unit 101", doors: ["Lobby Entrance", "Unit 101 Door"] });
+    await h.ok("set_tour_hours", { days: "weekdays", start: "9am", end: "5pm" });
+    await h.ok("set_verification_policy", { level: "basic-form" });
+
+    const asked = await h.ok("review_property_setup");
+    expect(asked.nextQuestion).toBe("What number can stuck visitors call? Pick one someone answers during tour hours.");
+    expect(asked.lines).toEqual(expect.arrayContaining(["Visitors can call: not set"]));
+    expect(asked.lines.join("\n")).not.toMatch(/Support email|supportEmail/);
+
+    const saved = await h.ok("update_property_details", { visitorContact: "(555) 010-3333" });
+    expect(saved.setup.visitorHelpNumber).toBe("(555) 010-3333");
+    expect(saved.setup.supportEmail).toBeUndefined();
+    expect(saved.nextQuestion).toBeUndefined();
+    expect((await h.ok("review_property_setup")).lines).toEqual(expect.arrayContaining(["Visitors can call: (555) 010-3333"]));
+
+    const other = grokHarness();
+    cleanups.push(other.cleanup);
+    await other.ok("create_property_setup", { address: "200 Other St, Brooklyn, NY 11201", name: "200 Other St", propertyType: "APARTMENT_BUILDING" });
+    await other.ok("update_property_details", { confirmAddress: true });
+    await other.ok("add_door", { name: "Lobby Entrance", kind: "entrance" });
+    await other.ok("add_unit", { name: "Unit 1" });
+    await other.ok("set_unit_details", { details: "1 is 1 bed 1 bath for $1,800, available now." });
+    await other.ok("set_route", { unit: "Unit 1", doors: ["Lobby Entrance", "Unit 1 Door"] });
+    await other.ok("set_tour_hours", { days: "weekdays", start: "9am", end: "5pm" });
+    await other.ok("set_verification_policy", { level: "basic-form" });
+    const skipped = await other.ok("update_property_details", { skipVisitorHelp: true });
+    expect(skipped.nextQuestion).toBeUndefined();
+    expect(other.workspace.load(skipped.setup.propertyId).config.operator.visitorHelpDecided).toBe(true);
+    expect((await other.ok("get_property_setup")).nextQuestion).toBeUndefined();
   });
 
   it("doesn't create a second property when the same address is sent again", async () => {
@@ -210,10 +249,27 @@ describe("readiness, practice tour and publish", () => {
   });
 
   it("runs the real readiness check and practice tour and reports the proof points", async () => {
+    const previous = process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
+    delete process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
     const h = app();
     await h.setUpAlfredWay();
     const readiness = await h.ok("run_readiness_check");
-    expect(readiness.lines).toEqual(["\u2713 Property details", "\u2713 Unit information", "\u2713 Tour hours", "\u2713 Unit routes", "\u2713 Verification", "\u2713 Messaging", "\u2713 Records", "\u2713 Durin access", "\u2713 Audit/export"]);
+    expect(readiness.lines).toEqual([
+      "\u2713 Property details",
+      "\u2713 Unit information",
+      "\u2713 Tour hours",
+      "\u2713 Unit routes",
+      "\u2713 Verification",
+      "\u2713 Messaging",
+      "\u2713 Records",
+      "\u2713 Durin access",
+      "\u2713 Audit/export",
+      "No visitor help number is set, so stuck visitors can only text back.",
+    ]);
+    expect(readiness.passed).toBe(true);
+    expect(readiness.advisories).toEqual(["No visitor help number is set, so stuck visitors can only text back."]);
+    if (previous === undefined) delete process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
+    else process.env.TOURCORE_PUBLIC_CONTACT_EMAIL = previous;
     const practice = await h.ok("run_dry_tour");
     expect(practice.passed).toBe(true);
     expect(practice.proofPoints).toEqual([

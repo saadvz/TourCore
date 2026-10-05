@@ -56,6 +56,8 @@ describe("browser setup", () => {
     expect(appJs.text).toContain("Use a team name that reads naturally after");
     expect(appJs.text).toContain("Maple Leasing team");
     expect(appJs.text).not.toContain("your own name");
+    expect(appJs.text).toContain("What number can stuck visitors call? Pick one someone answers during tour hours.");
+    expect(appJs.text).not.toContain("What email should visitors see when they text HELP?");
   });
 
   it("goes from a new property to published for demo through the real setup actions", async () => {
@@ -93,6 +95,23 @@ describe("browser setup", () => {
 
     const download = await app.call("GET", `/api/properties/${id}/export/records.json`);
     expect(download.headers.get("content-disposition")).toContain("attachment");
+  });
+
+  it("saves the optional visitor help number from the services step", async () => {
+    const app = await startApp();
+    const { id } = await setUpAlfredWay(app);
+    const saved = await app.cmd(id, "setAlertContact", { name: "Leasing team", visitorContact: "(555) 010-4444" });
+    expect(saved.body.view.operator).toMatchObject({ visitorContact: "+15550104444" });
+    expect(saved.body.view.operator.supportEmail).toBeUndefined();
+    expect(saved.body.view.reviewCards.find((c: { title: string }) => c.title === "Records and messages").rows).toEqual(
+      expect.arrayContaining(["Visitors can call: (555) 010-4444"]),
+    );
+    expect(saved.body.view.reviewCards.find((c: { title: string }) => c.title === "Records and messages").rows.join("\n")).not.toMatch(/Support email/);
+    const skipped = await app.cmd(id, "setAlertContact", { name: "Leasing team", visitorContact: "" });
+    expect(skipped.body.view.operator).toMatchObject({ visitorContact: "" });
+    expect(skipped.body.view.reviewCards.find((c: { title: string }) => c.title === "Records and messages").rows).toEqual(
+      expect.arrayContaining(["Visitors can call: not set"]),
+    );
   });
 
   it("hides codes, adapter names and file paths from operators", async () => {

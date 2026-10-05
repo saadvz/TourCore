@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -27,6 +27,9 @@ import {
   setVerificationPolicy,
   SetupInputError,
   validateConfig,
+  visitorHelpQuestion,
+  VISITOR_HELP_NUMBER_QUESTION,
+  VISITOR_HELP_QUESTION,
   type DryTourResult,
   type SetupDraft,
 } from "../src/setup";
@@ -83,7 +86,10 @@ describe("guided setup actions", () => {
     expect(section("ROUTE: UNIT 101")).toEqual(["Lobby Entrance", "Unit 101 Door"]);
     expect(section("ROUTE: UNIT 102")).toEqual(["Lobby Entrance", "Unit 102 Door"]);
     expect(section("VERIFICATION")?.[0]).toBe("Basic identity form");
-    expect(section("ALERTS")).toEqual(["If a visitor needs help: leasing team"]);
+    expect(section("ALERTS")).toEqual([
+      "If a visitor needs help: leasing team",
+      "Visitors can call: not set",
+    ]);
   });
 
   it("sets an optional visitor help number separately from the operator alert line", () => {
@@ -94,6 +100,7 @@ describe("guided setup actions", () => {
     const withNumber = setAlertContact(draft, { visitorContact: "(555) 010-8888" });
     expect(withNumber.operator.visitorContact).toBe("+15550108888");
     expect(withNumber.operator.contact).toBe("Shown on screen (demo)");
+    expect(withNumber.operator.visitorHelpDecided).toBe(true);
     expect(reviewSetup(withNumber).sections.find((s) => s.title === "ALERTS")?.lines).toEqual([
       "If a visitor needs help: leasing team",
       "Visitors can call: (555) 010-8888",
@@ -102,6 +109,7 @@ describe("guided setup actions", () => {
     const cleared = setAlertContact(withNumber, { visitorContact: "" });
     expect(cleared.operator.visitorContact).toBeUndefined();
     expect(cleared.operator.contact).toBe("Shown on screen (demo)");
+    expect(cleared.operator.visitorHelpDecided).toBe(true);
     expect(() => setAlertContact(draft, { visitorContact: "123" })).toThrow(new SetupInputError("PHONE_INVALID", "Please enter a full phone number."));
 
     const bad = { ...draft, operator: { ...draft.operator, visitorContact: "not-a-phone" } };
@@ -116,6 +124,32 @@ describe("guided setup actions", () => {
     expect(OperatorTeamCopy.cliPrompt()).toBe(
       'Who should we alert if a visitor needs help? Use a team name that reads naturally after "the", for example leasing team or Maple Leasing team.',
     );
+  });
+
+  it("records an explicit skip of the optional visitor help number", () => {
+    const { draft } = buildProperty();
+    expect(draft.operator.visitorHelpDecided).toBeUndefined();
+
+    const skipped = setAlertContact(draft, { skipVisitorHelp: true });
+    expect(skipped.operator.visitorContact).toBeUndefined();
+    expect(skipped.operator.visitorHelpDecided).toBe(true);
+    expect(reviewSetup(skipped).sections.find((s) => s.title === "ALERTS")?.lines).toEqual([
+      "If a visitor needs help: leasing team",
+      "Visitors can call: not set",
+    ]);
+
+    expect(VISITOR_HELP_NUMBER_QUESTION).toBe("What number can stuck visitors call? Pick one someone answers during tour hours.");
+    expect(VISITOR_HELP_QUESTION).toBe(VISITOR_HELP_NUMBER_QUESTION);
+    expect(visitorHelpQuestion(draft)).toEqual({ nextQuestion: VISITOR_HELP_QUESTION });
+    expect(visitorHelpQuestion(skipped)).toBeUndefined();
+    expect(visitorHelpQuestion(createPropertySetup({ address: "100 Alfred Way, Brooklyn, NY", propertyType: "APARTMENT_BUILDING" }))).toBeUndefined();
+
+    const cli = readFileSync(new URL("../src/cli/setup.ts", import.meta.url), "utf8");
+    const web = readFileSync(new URL("../src/web/public/app.js", import.meta.url), "utf8");
+    expect(cli).toContain("VISITOR_HELP_NUMBER_QUESTION");
+    expect(cli).not.toMatch(/supportEmail|VISITOR_HELP_EMAIL|What email should visitors/);
+    expect(web).toContain(VISITOR_HELP_NUMBER_QUESTION);
+    expect(web).not.toMatch(/supportEmail|What email should visitors/);
   });
 
   it("keeps policy values in config with visible defaults", () => {
@@ -191,7 +225,11 @@ describe("guided setup actions", () => {
 
 describe("readiness check", () => {
   it("passes every check for a complete property", async () => {
+    const previous = process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
+    delete process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
     const result = await runReadinessCheck(buildProperty().draft, { now: MONDAY_MORNING });
+    if (previous === undefined) delete process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
+    else process.env.TOURCORE_PUBLIC_CONTACT_EMAIL = previous;
     expect(result.passed).toBe(true);
     expect(result.checks.map((c) => c.label)).toEqual([
       "Property details",
@@ -204,6 +242,17 @@ describe("readiness check", () => {
       "Durin access",
       "Audit/export",
     ]);
+    expect(result.advisories).toEqual(["No visitor help number is set, so stuck visitors can only text back."]);
+  });
+
+  it("does not fail readiness when visitor help is missing, and drops the advisory once a number is set", async () => {
+    const { draft } = buildProperty();
+    const missing = await runReadinessCheck(draft, { now: MONDAY_MORNING });
+    expect(missing.passed).toBe(true);
+    expect(missing.advisories).toEqual(["No visitor help number is set, so stuck visitors can only text back."]);
+    const withNumber = await runReadinessCheck(setAlertContact(draft, { visitorContact: "(555) 010-8888" }), { now: MONDAY_MORNING });
+    expect(withNumber.passed).toBe(true);
+    expect(withNumber.advisories).toEqual([]);
   });
 
   it("fails with a clear reason when a unit has no route", async () => {
