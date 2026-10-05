@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Connect to Tour Core and guide onboarding, in Tour Core's order
-  version: "0.7.0"
+  version: "0.7.1"
 ---
 
 # Install Tour Core
@@ -167,8 +167,12 @@ compliance advice beyond each choice's description. After they pick, call
 provider that already has saved account details, follow that next step (usually
 a connection test) and do not ask them to re-enter those credentials. If Photon
 lists more than one line, ask which one and call `choose_messaging_line`. QA may
-choose `local` (no real texts; later `inject_local_sms` / `read_local_outbox`).
-Switching to `local` does not clear carrier secrets. Then Tour Core
+choose `local` for a fresh install (no real texts; later `inject_local_sms` / `read_local_outbox`),
+or put one scratch building on local test texts while the installation stays
+on live visitor texting (`choose_messaging_provider` with `local` and that
+property, or `set_services` with `messaging: local`). Do not switch the
+whole installation to local when another building is already published and
+receiving real texts. Switching to `local` does not clear carrier secrets. Then Tour Core
 recommends Google Drive, before the first property.
 The access system ("Demo") needs nothing from the operator.
 

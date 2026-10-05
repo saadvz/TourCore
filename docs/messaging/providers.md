@@ -67,7 +67,9 @@ Build the public URL from `PUBLIC_BASE_URL`. Verify the provider's signature on 
 
 Register secret and non-secret names in `src/install/secretStore.ts`. The secure setup page asks only for `configFields()`. Secrets are write-only. Add the provider id to `MESSAGING_PROVIDER_IDS` and `MessagingProviderRegistry` (`src/messaging/registry.ts`). Selection is `TOURCORE_MESSAGING_PROVIDER` or the installation manifest. An unknown name fails clearly.
 
-`choose_messaging_provider` is the deliberate switch. It takes the previous provider out of active use, clears the connection test, and invalidates property readiness until the new provider passes. Saved Sendblue, Twilio, and Photon credentials and attached lines stay. Switching to `local` must not blank carrier secrets. Switching back uses the stored account and a new connection test unless those details were never set.
+`choose_messaging_provider` is the deliberate switch. An installation-wide change takes the previous provider out of active use, clears the connection test, and invalidates property readiness until the new provider passes — except buildings already on local test texts, which stay as they are. Saved Sendblue, Twilio, and Photon credentials and attached lines stay. Switching to `local` must not blank carrier secrets. Switching back uses the stored account and a new connection test unless those details were never set.
+
+A property may opt into local test texts (`choose_messaging_provider` with `local` and a property, or `set_services` with `messaging: local`) while the installation's primary provider stays in place for other buildings. That does not draft or disconnect a published live property. When more than one building exists, `local` without a property is refused. Full per-property live credentials (one building on Sendblue, another on Twilio) are a later slice.
 
 ## Health
 
@@ -177,4 +179,4 @@ Manual checks for a real Sendblue, Twilio, or Photon line are in `docs/messaging
 
 ## Not in this milestone
 
-Linq is not implemented. Neither is multi-number routing. One installation has one active provider and one public inbound number. The inbound message already carries `to`, so a later router can choose a property without rewriting the visitor engine.
+Linq is not implemented. Neither is full per-property live credentials (one building on Sendblue, another on Twilio). One installation still has one primary live provider and one public inbound number for that provider. A property may additionally opt into the local QA loopback. The inbound message already carries `to`, so a later router can choose a property without rewriting the visitor engine.

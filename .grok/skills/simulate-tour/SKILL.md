@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Practice tour with safety proof points
-  version: "0.2.0"
+  version: "0.2.1"
 ---
 
 # Simulate Tour
@@ -52,11 +52,13 @@ Don't list every low-level event unless the operator asks.
 
 To exercise the real visitor SMS path without Sendblue or a carrier:
 
-1. The property must be `messagingMode: live` on the `local` provider
-   (`choose_messaging_provider` with `local`, then `set_services` with
-   `messaging: live` if it still uses practice texts). Switching to local
-   does not clear Sendblue, Twilio, or Photon credentials. Switching back
-   uses the stored account and a new connection test.
+1. The property must be `messagingMode: live` on local test texts
+   (`choose_messaging_provider` with `local` and that property, or
+   `set_services` with `messaging: local`). That opts this building in
+   without changing the installation's live texting or drafting other
+   published buildings. Switching the installation to local does not
+   clear saved account details. Switching the installation back uses
+   the stored account and a new connection test.
 2. `inject_local_sms` with the visitor's `from` number, the property line
    (`to`) or property, and their `text`. That is the same path as
    `POST /webhooks/local` → `handleProviderWebhook` → `conversations.receive`.

@@ -7,6 +7,7 @@ import type { Installation } from "./install/installation";
 import { DemoMessagingAdapter, type Messenger } from "./messaging/Messenger";
 import type { MessagingLedger } from "./messaging/ledger";
 import type { MessagingCheck } from "./messaging/provider";
+import { usesLocalMessaging } from "./messaging/propertyScope";
 import { createMessagingProvider, currentMessagingInput, resolveMessagingSelection } from "./messaging/registry";
 import { sendblueConfigured } from "./messaging/sendblue/provider";
 import { sendblueRuntime } from "./messaging/sendblue/runtime";
@@ -34,6 +35,10 @@ export function createStore(config: TourCoreConfig): TourCoreStore {
 
 export function createMessenger(config: TourCoreConfig, log?: Log, options: { ledger?: MessagingLedger } = {}): Messenger {
   if (config.messagingMode === "demo") return new DemoMessagingAdapter(log);
+  if (usesLocalMessaging(config, resolveMessagingSelection(currentMessagingInput()))) {
+    const input = currentMessagingInput();
+    return createMessagingProvider("local", { env: () => input.env, sendblue: () => input.sendblue, ledger: options.ledger });
+  }
   return createLiveMessagingTransport(options.ledger);
 }
 
@@ -75,7 +80,7 @@ export async function checkMessaging(config: TourCoreConfig): Promise<MessagingC
   if (config.messagingMode === "demo") return [];
   const input = currentMessagingInput();
   const selection = resolveMessagingSelection(input);
-  const id = selection.provider ?? "sendblue";
+  const id = usesLocalMessaging(config, selection) ? "local" : (selection.provider ?? "sendblue");
   return createMessagingProvider(id, { env: () => input.env, sendblue: () => input.sendblue }).check();
 }
 

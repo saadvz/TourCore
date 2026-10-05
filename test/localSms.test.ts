@@ -216,15 +216,18 @@ describe("inject_local_sms and read_local_outbox", () => {
     h.workspace.save(hillsideConfig());
     await h.ok("set_services", { messaging: "live" });
 
-    await h.ok("choose_messaging_provider", { provider: "local" });
+    const toLocal = await h.ok("choose_messaging_provider", { provider: "local", property: hillsideConfig().property.id });
+    expect(toLocal.scope).toBe("property");
+    expect(h.inst.files.manifest()?.messagingProvider).toBe("SENDBLUE");
     expect(h.inst.secrets.get("SENDBLUE_API_API_KEY")).toBe(SB_KEY);
     expect(h.inst.secrets.get("SENDBLUE_API_API_SECRET")).toBe(SB_SECRET);
     expect(h.inst.secrets.get("SENDBLUE_FROM_NUMBER")).toBe(LINE);
 
-    const back = await h.ok("choose_messaging_provider", { provider: "sendblue" });
-    expect(back.summary).toMatch(/I'll test the saved account next/);
+    const back = await h.ok("choose_messaging_provider", { provider: "sendblue", property: hillsideConfig().property.id });
+    expect(back.scope).toBe("property");
     expect(h.inst.secrets.get("SENDBLUE_API_API_KEY")).toBe(SB_KEY);
     expect(h.inst.secrets.get("SENDBLUE_FROM_NUMBER")).toBe(LINE);
+    expect(h.inst.files.manifest()?.messagingProvider).toBe("SENDBLUE");
     expect((await h.status()).components.find((c) => c.component === "VISITOR_MESSAGING")?.next).toMatchObject({ action: "TEST_VISITOR_MESSAGING" });
   });
 

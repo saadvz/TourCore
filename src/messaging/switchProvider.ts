@@ -1,6 +1,8 @@
 import { isLiveMessaging } from "../config/tourCoreConfig";
 import type { Installation } from "../install/installation";
+import { setServices, SetupInputError } from "../setup/setupActions";
 import type { PropertyWorkspace } from "../setup/workspace";
+import { propertyMessagingOverride } from "./propertyScope";
 import { createMessagingProvider, manifestProviderName, selectionFromInstallation } from "./registry";
 import type { MessagingProviderId } from "./provider";
 
@@ -12,16 +14,34 @@ import type { MessagingProviderId } from "./provider";
  * Saved Sendblue, Twilio, and Photon credentials and attached lines stay in
  * the secret store. Switching to local (or any other provider) must not
  * blank them. Switching back uses the stored account unless it was never set.
+ *
+ * First slice of property-scoped messaging: `local` plus a property opts that
+ * building into the QA loopback without changing the installation's primary
+ * provider and without drafting other published buildings.
  */
 export async function chooseMessagingProvider(
   inst: Installation,
   provider: MessagingProviderId,
-  options: { workspace?: PropertyWorkspace } = {},
-): Promise<{ changed: boolean; summary: string }> {
+  options: { workspace?: PropertyWorkspace; propertyId?: string } = {},
+): Promise<{ changed: boolean; summary: string; scope: "property" | "installation" }> {
+  if (options.propertyId && options.workspace) {
+    return applyPropertyMessaging(options.workspace, options.propertyId, provider, inst);
+  }
+  if (provider === "local" && options.workspace) {
+    const ids = options.workspace.propertyIds();
+    if (ids.length === 1) return applyPropertyMessaging(options.workspace, ids[0]!, provider, inst);
+    if (ids.length > 1) {
+      throw new SetupInputError(
+        "PROPERTY_REQUIRED",
+        "Say which building should use local test texts. Other buildings stay on live visitor texting.",
+      );
+    }
+  }
+
   const current = selectionFromInstallation(inst).provider;
   const state = inst.files.state();
   if (current === provider && state.messagingProviderChoice === provider) {
-    return { changed: false, summary: "Visitor texting is already set up to use that option." };
+    return { changed: false, summary: "Visitor texting is already set up to use that option.", scope: "installation" };
   }
 
   if (current && current !== provider) {
@@ -35,6 +55,7 @@ export async function chooseMessagingProvider(
     if (options.workspace) {
       for (const id of options.workspace.propertyIds()) {
         const { config, state: property } = options.workspace.load(id);
+        if (propertyMessagingOverride(config) === "local") continue;
         if (isLiveMessaging(config.messagingMode) && (property.readiness || property.publishedAt)) {
           options.workspace.invalidateReadiness(id, "Visitor texting changed. Run the readiness check again.");
         }
@@ -46,7 +67,47 @@ export async function chooseMessagingProvider(
   delete next.visitorMessaging;
   inst.files.writeState(next);
   inst.files.update({ messagingProvider: manifestProviderName(provider) }, new Date(inst.now()));
-  return { changed: true, summary: switchSummary(inst, provider) };
+  return { changed: true, summary: switchSummary(inst, provider), scope: "installation" };
+}
+
+function applyPropertyMessaging(
+  workspace: PropertyWorkspace,
+  propertyId: string,
+  provider: MessagingProviderId,
+  inst: Installation,
+): { changed: boolean; summary: string; scope: "property" } {
+  if (!workspace.has(propertyId) && !workspace.openDraft(propertyId).draft) {
+    throw new SetupInputError("PROPERTY_NOT_FOUND", "I couldn't find that property.");
+  }
+  const { draft } = workspace.openDraft(propertyId);
+  if (provider === "local") {
+    if (propertyMessagingOverride(draft) === "local" && isLiveMessaging(draft.messagingMode)) {
+      return { changed: false, summary: "Visitor texting for this building already uses local test texts.", scope: "property" };
+    }
+    workspace.persistEdit(setServices(draft, { messagingProvider: "local" }), new Date(inst.now()));
+    return {
+      changed: true,
+      summary: "Visitor texting for this building will use local test texts. No real texts are sent. Other buildings stay as they are.",
+      scope: "property",
+    };
+  }
+
+  const installProvider = selectionFromInstallation(inst).provider;
+  if (installProvider && provider !== installProvider) {
+    throw new SetupInputError(
+      "PROPERTY_PROVIDER_UNAVAILABLE",
+      "A building can use local test texts or the installation's live visitor texting. Choosing a different live provider for one building isn't available yet.",
+    );
+  }
+  if (propertyMessagingOverride(draft) === undefined && isLiveMessaging(draft.messagingMode)) {
+    return { changed: false, summary: "Visitor texting for this building already uses the installation's live texting.", scope: "property" };
+  }
+  workspace.persistEdit(setServices(draft, { messagingMode: "live" }), new Date(inst.now()));
+  return {
+    changed: true,
+    summary: "Visitor texting for this building will use the installation's live texting.",
+    scope: "property",
+  };
 }
 
 function switchSummary(inst: Installation, provider: MessagingProviderId): string {

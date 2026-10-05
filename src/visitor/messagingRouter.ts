@@ -52,8 +52,8 @@ export class MessagingConversations {
     private readonly deps: {
       workspace: PropertyWorkspace;
       registry: VisitorDemoRegistry;
-      /** The live transport, e.g. the Sendblue adapter. */
-      transport: () => Transport;
+      /** The live transport for a property. Local-scoped buildings use the loopback. */
+      transport: (propertyId?: string) => Transport;
       links: VerificationLinks;
       /** Where conversation snapshots are kept. Defaults to memory only (nothing survives a restart). */
       runtime?: RuntimeStore;
@@ -112,7 +112,7 @@ export class MessagingConversations {
       await this.answerRemovedProperty(propertyId, message);
       return {};
     }
-    const transport = this.deps.transport();
+    const transport = this.deps.transport(propertyId);
     transport.noteChannel?.(message.from, message.channel);
     const meta = { provider: message.provider, providerMessageId: message.providerMessageId, deliveryChannel: message.channel };
     const phone = normalizePhone(message.from);
@@ -192,7 +192,7 @@ export class MessagingConversations {
     const tourId = this.deps.workspace.newVisitorTourId(propertyId, this.deps.now?.() ?? new Date(), "text");
     const session = this.deps.registry.add(
       new VisitorDemoSession(propertyId, config, tourId, {
-        transport: this.lazyTransport(),
+        transport: this.lazyTransport(propertyId),
         kind: "messaging",
         verificationLinks: this.deps.links,
         realNow: this.deps.realNow,
@@ -255,12 +255,12 @@ export class MessagingConversations {
   }
 
   /** Sends through the live transport, created only when a message actually goes out. */
-  private lazyTransport(): Transport {
+  private lazyTransport(propertyId?: string): Transport {
     return {
-      provider: this.deps.transport().provider,
+      provider: this.deps.transport(propertyId).provider,
       presentation: "MESSAGING",
-      send: (m) => this.deps.transport().send(m),
-      noteChannel: (n, c) => this.deps.transport().noteChannel?.(n, c),
+      send: (m) => this.deps.transport(propertyId).send(m),
+      noteChannel: (n, c) => this.deps.transport(propertyId).noteChannel?.(n, c),
     };
   }
 
@@ -287,7 +287,7 @@ export class MessagingConversations {
       }
       if (this.deps.registry.find(snapshot.sessionId)) continue;
       try {
-        const { session, notes } = await restoreSession(snapshot, { workspace: this.deps.workspace, transport: this.lazyTransport(), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(snapshot.propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyStarts: (propertyId, tourId) => this.otherBusyStarts(propertyId, tourId) });
+        const { session, notes } = await restoreSession(snapshot, { workspace: this.deps.workspace, transport: this.lazyTransport(snapshot.propertyId), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(snapshot.propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyStarts: (propertyId, tourId) => this.otherBusyStarts(propertyId, tourId) });
         this.deps.registry.add(session);
         for (const note of notes) log(`Restoring a text-message tour: ${note}`);
         restored++;
@@ -339,7 +339,7 @@ export class MessagingConversations {
           updatedAt: record.updatedAt,
         };
         try {
-          const { session } = await restoreSession(pseudo, { workspace: ws, transport: this.lazyTransport(), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyStarts: (id, tourId) => this.otherBusyStarts(id, tourId) });
+          const { session } = await restoreSession(pseudo, { workspace: ws, transport: this.lazyTransport(propertyId), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyStarts: (id, tourId) => this.otherBusyStarts(id, tourId) });
           registry.add(session);
           await this.save(session);
           restored++;
@@ -360,7 +360,7 @@ export class MessagingConversations {
    */
   private async answerRemovedProperty(propertyId: string, message: InboundMessage): Promise<void> {
     const phone = normalizePhone(message.from);
-    const transport = this.deps.transport();
+    const transport = this.deps.transport(propertyId);
     transport.noteChannel?.(message.from, message.channel);
     const now = this.deps.now?.() ?? new Date();
     const keyword = keywordOf(message.text);
@@ -414,7 +414,7 @@ export class MessagingConversations {
       this.broken.delete(key);
       return true;
     }
-    const transport = this.deps.transport();
+    const transport = this.deps.transport(snapshot.propertyId);
     const optedOut = this.isOptedOut(snapshot.propertyId, snapshot.visitorPhone);
     if (!snapshot.recovery?.visitorTold) {
       if (!optedOut) await transport.send({ to: snapshot.visitorPhone, audience: "PROSPECT", body: RESTORE_TROUBLE }).catch(() => undefined);

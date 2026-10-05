@@ -443,7 +443,8 @@ function messagingStatus(inst: Installation): ComponentStatus {
  * The installation's real visitor texting, for property setup: a new property
  * uses it, and in a Grok-managed install a property can't be published
  * without it. Undefined when no texting account is set up. `mode` stays
- * The provider name stays on the installation, not on the property.
+ * The installation's primary provider stays here. A property may opt into
+ * local test texts without changing this.
  */
 export function installedMessaging(inst: Installation): InstalledMessaging | undefined {
   const selection = ensureMessagingSelection(inst);

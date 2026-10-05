@@ -131,10 +131,18 @@ export const TourCoreConfigShape = z.object({
   verificationValidForDays: z.number().int(),
   /**
    * "demo" prints messages. "live" texts real phones through the installation's
-   * messaging provider (Sendblue, Twilio, or Photon). The provider is not stored
-   * on the property. Older files say "sendblue" for this same live mode.
+   * messaging provider (Sendblue, Twilio, or Photon), unless this property
+   * opts into local loopback via `messagingProvider`. Older files say
+   * "sendblue" for this same live mode.
    */
   messagingMode: z.preprocess((v) => (v === "console" ? "demo" : v === "sendblue" ? "live" : v), z.enum(["demo", "live"])),
+  /**
+   * Optional override for this property. `"local"` uses the QA loopback
+   * (inject / outbox) while the installation's primary provider stays in
+   * place for other buildings. Absent means inherit the installation.
+   * Per-property live carriers are a later slice.
+   */
+  messagingProvider: z.enum(["local"]).optional(),
   storageMode: z.enum(["memory", "google-drive"]),
   accessMode: z.enum(["durin-mock", "durin"]),
 });
@@ -168,6 +176,7 @@ const SECTION_BY_KEY: Record<string, ConfigSection> = {
   verificationFormUrl: "verification",
   verificationValidForDays: "verification",
   messagingMode: "services",
+  messagingProvider: "services",
   storageMode: "services",
   accessMode: "services",
 };

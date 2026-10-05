@@ -7,6 +7,7 @@ import { createStore, liveTransportFor } from "../createTourCore";
 import { MessagingLedger } from "../messaging/ledger";
 import type { InboundMessage } from "../messaging/inbound";
 import { handleProviderWebhook } from "../messaging/pipeline";
+import { anyPropertyUsesLocal, usesLocalMessaging } from "../messaging/propertyScope";
 import { activeFromNumber, bindMessagingInstallation, createMessagingProvider, selectionFromInstallation } from "../messaging/registry";
 import { consentModeForProvider } from "../messaging/consentPolicy";
 import { SENDBLUE_WEBHOOK_PATH } from "../messaging/sendblue/runtime";
@@ -181,8 +182,23 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
     log(`Couldn't connect the texting number to a property: ${err instanceof Error ? err.message : "unknown error"}`);
   }
   let transport: ReturnType<typeof liveTransportFor> | undefined;
+  let localTransport: ReturnType<typeof liveTransportFor> | undefined;
   const resetMessaging = () => {
     transport = undefined;
+    localTransport = undefined;
+  };
+  const transportFor = (propertyId?: string) => {
+    if (propertyId) {
+      try {
+        const draft = workspace.openDraft(propertyId).draft;
+        if (usesLocalMessaging(draft, selectionFromInstallation(installation))) {
+          return (localTransport ??= createMessagingProvider("local", { env: () => installation.env(), sendblue: () => installation.sendblueEnv(), ledger, now: options.now }));
+        }
+      } catch {
+        // Unknown property uses the installation transport.
+      }
+    }
+    return (transport ??= liveTransportFor(installation, ledger));
   };
   // Operator updates run after the visitor has been answered and saved; a failure here never reaches the visitor.
   let alertWork: Promise<void> = Promise.resolve();
@@ -200,7 +216,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
     runtime,
     endpoints,
     defaultLine: messagingLine,
-    transport: () => (transport ??= liveTransportFor(installation, ledger)),
+    transport: transportFor,
     now: options.now,
     realNow: options.realNow,
     interpreter: options.interpreter ?? createIntentInterpreter({ log }),
@@ -484,7 +500,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           receive: (m) => conversations.receive(m),
           now: options.now,
           log,
-          active: selection.provider === providerId,
+          active: selection.provider === providerId || (providerId === "local" && anyPropertyUsesLocal(workspace)),
         });
         return send(result.status, "application/json; charset=utf-8", JSON.stringify(result.body));
       }

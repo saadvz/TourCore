@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Tour updates, exception queue, monitoring, holds and approved answers
-  version: "0.3.2"
+  version: "0.3.3"
 ---
 
 # Work Exception
@@ -60,7 +60,8 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   `inspect_tour`. Summarize status, latest activity, questions, access denials
   and anything in `needsAttention`.
 - QA on the local loopback: `inject_local_sms` then `read_local_outbox` (separate
-  bubbles, never one blob). Those tools refuse unless the property is on local.
+  bubbles, never one blob). Those tools refuse unless that building is on local
+  test texts. Other published buildings can stay on live visitor texting.
   A local live tour still shows up in `list_active_tours` and `inspect_tour`.
 
 ### Queue
