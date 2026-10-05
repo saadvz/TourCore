@@ -8,7 +8,7 @@ import { PhotonMessagingProvider } from "../src/messaging/photon/provider";
 import { parseSendblueInbound } from "../src/messaging/sendblue/webhook";
 import { TwilioMessagingProvider } from "../src/messaging/twilio/provider";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
-import { handleVisitorText, PHOTO_NOT_SUPPORTED } from "../src/visitor/conversation";
+import { handleVisitorText, PHOTO_ALONE_REPLY, PHOTO_WITH_TEXT_REPLY } from "../src/visitor/conversation";
 import { VisitorDemoSession } from "../src/visitor";
 import { inbound, LINE } from "./fakeSendblue";
 import { FALLBACK, liveApp, PHONE } from "./liveApp";
@@ -124,7 +124,7 @@ describe("honest photo reply", () => {
   it("a photo alone before any booking text gets the honesty reply, not silence or the keyword prompt", async () => {
     const a = await liveApp({ cleanups });
     const replies = await a.text("", undefined, PHOTO);
-    expect(replies).toEqual([PHOTO_NOT_SUPPORTED]);
+    expect(replies).toEqual([PHOTO_ALONE_REPLY]);
     expect(replies.join("\n")).not.toMatch(/Text TOUR|didn't catch that|MMS/i);
   });
 
@@ -133,7 +133,7 @@ describe("honest photo reply", () => {
     await a.optInSms();
     const handle = "same-photo-handle";
     const replies = await a.text("", handle, PHOTO);
-    expect(replies).toEqual([PHOTO_NOT_SUPPORTED]);
+    expect(replies).toEqual([PHOTO_ALONE_REPLY]);
     expect(replies.join("\n")).not.toMatch(/MMS|inject_local_sms|Sendblue|Twilio|Photon/i);
     const again = await a.text("", handle, PHOTO);
     expect(again).toEqual([]);
@@ -144,9 +144,10 @@ describe("honest photo reply", () => {
     const a = await liveApp({ cleanups });
     await a.optInSms();
     const replies = await a.text("Is there a gym?", undefined, PHOTO);
-    expect(replies[0]).toBe(PHOTO_NOT_SUPPORTED);
+    expect(replies[0]).toBe(PHOTO_WITH_TEXT_REPLY);
+    expect(replies.join("\n")).not.toContain("Text your question");
     expect(replies).toContain(FALLBACK);
-    expect(replies.filter((r) => r === PHOTO_NOT_SUPPORTED)).toHaveLength(1);
+    expect(replies.filter((r) => r === PHOTO_WITH_TEXT_REPLY)).toHaveLength(1);
     const issues = (await a.grok("list_exceptions")).exceptions;
     expect(issues.map((x: { summary: string }) => x.summary)).toEqual(['Asked "Is there a gym?". There\'s no approved answer yet.']);
   });
@@ -157,8 +158,18 @@ describe("honest photo reply", () => {
     const before = p.replies();
     await p.say("", true);
     const added = p.replies().slice(before.length);
-    expect(added).toEqual([PHOTO_NOT_SUPPORTED]);
+    expect(added).toEqual([PHOTO_ALONE_REPLY]);
     expect(added.join("\n")).not.toMatch(/didn't catch that|MMS/i);
+  });
+
+  it("a photo plus a booking reply uses the short honesty line and continues the text path", async () => {
+    const a = await liveApp({ cleanups });
+    await a.optInSms();
+    const replies = await a.text("1", undefined, PHOTO);
+    expect(replies[0]).toBe(PHOTO_WITH_TEXT_REPLY);
+    expect(replies.join("\n")).not.toContain("Text your question");
+    expect(replies.filter((r) => r === PHOTO_WITH_TEXT_REPLY)).toHaveLength(1);
+    expect(replies.join("\n")).toMatch(/Happy to set up a self-guided tour of Unit 1A|Which day works for you/i);
   });
 
   it("a photo plus a question during a tour replies once and flags the text", async () => {
@@ -167,9 +178,10 @@ describe("honest photo reply", () => {
     const before = p.replies();
     await p.say("Is there a pool?", true);
     const added = p.replies().slice(before.length);
-    expect(added[0]).toBe(PHOTO_NOT_SUPPORTED);
+    expect(added[0]).toBe(PHOTO_WITH_TEXT_REPLY);
+    expect(added.join("\n")).not.toContain("Text your question");
     expect(added).toContain("I don't have that information for this property. I've flagged it for the property team so they can get back to you.");
-    expect(added.filter((r) => r === PHOTO_NOT_SUPPORTED)).toHaveLength(1);
+    expect(added.filter((r) => r === PHOTO_WITH_TEXT_REPLY)).toHaveLength(1);
     expect((await p.session.store.listAudit()).some((e) => e.type === "QUESTION_UNANSWERED" && e.detail === "Is there a pool?")).toBe(true);
   });
 

@@ -246,7 +246,7 @@ in their normal Messages app:
 - HELP and STOP;
 - the follow-up question.
 
-Photos and other attachments are not forwarded yet. If a visitor texts a photo, they immediately get one reply: "I can't take photos yet. Text your question and I'll pass it along." A caption or question in the same message is handled as a normal text. The same inbound is not answered twice.
+Photos and other attachments are not forwarded yet. A photo alone gets one reply: "I can't take photos yet. Text your question and I'll pass it along." A photo with any text (a question or a booking reply such as `1` or `YES`) gets only "I can't take photos yet." and the text is handled as a normal message. The same inbound is not answered twice.
 
 The operator watches it in the same **Active tour** live view and history.
 

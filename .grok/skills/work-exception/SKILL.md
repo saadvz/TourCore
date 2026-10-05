@@ -211,5 +211,6 @@ right now").
   question as an unanswered question and leave the hold pending.
 - Treat a visitor photo as something to forward or as silence. Tour Core
   tells them `I can't take photos yet. Text your question and I'll pass it
-  along.` once. A caption or question in the same message is handled as
-  usual. Do not say "MMS" to the visitor.
+  along.` when the photo has no caption, or only `I can't take photos yet.`
+  when there is any text in the same message. That text is handled as usual.
+  Do not say "MMS" to the visitor.

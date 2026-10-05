@@ -32,9 +32,11 @@ the operator answers, the visitor gets the answer and the step they were on.
 
 Photos are not forwarded yet. A photo alone gets one plain reply:
 `I can't take photos yet. Text your question and I'll pass it along.`
-A photo with a caption or question still gets that reply once; the text is
-handled as usual (answered from approved facts, or flagged for the team).
-The same inbound is not answered twice. Do not say "MMS" to a visitor.
+A photo with any text (a question or a booking reply such as `1` or `YES`)
+gets only `I can't take photos yet.`; the text is handled as usual
+(answered from approved facts, flagged for the team, or used as the booking
+reply). Do not append “Text your question…”. The same inbound is not
+answered twice. Do not say "MMS" to a visitor.
 
 A visitor with a booked (or held) tour can cancel by text in their own words —
 "Can we cancel the tour?", "I want to cancel the booked tour", "cancel",

@@ -42,8 +42,10 @@ export { keywordOf, type Keyword } from "../intent";
 
 export const isGreeting = (text: string) => /^(hi|hello|hey|hiya|tour|book|start over|new tour|hi there|good (morning|afternoon|evening))\b/.test(normalize(text));
 
-/** Locked visitor copy when an inbound includes a photo or other attachment. Do not say MMS. */
-export const PHOTO_NOT_SUPPORTED = "I can't take photos yet. Text your question and I'll pass it along.";
+/** Locked visitor copy when an inbound is a photo with no caption. Do not say MMS. */
+export const PHOTO_ALONE_REPLY = "I can't take photos yet. Text your question and I'll pass it along.";
+/** Locked visitor copy when an inbound is a photo plus any text. Do not append the question prompt. */
+export const PHOTO_WITH_TEXT_REPLY = "I can't take photos yet.";
 
 /** Lead when published hours changed and a numbered/old-menu reply can't be mapped safely. */
 export const SCHEDULE_CHANGED_LEAD = "Tour times just changed. Here's what's open now:";
@@ -175,7 +177,7 @@ export async function handleVisitorText(
   if (photo) {
     const keyword = keywordOf(text);
     const silent = session.optedOut && keyword !== "start" && keyword !== "stop";
-    if (!silent) await session.reply(PHOTO_NOT_SUPPORTED);
+    if (!silent) await session.reply(typed ? PHOTO_WITH_TEXT_REPLY : PHOTO_ALONE_REPLY);
     if (!typed) {
       await session.recordText({ text: "(photo)", meta });
       return undefined;
