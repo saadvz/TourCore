@@ -8,16 +8,17 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Practice tour with safety proof points
-  version: "0.2.1"
+  version: "0.2.2"
 ---
 
 # Simulate Tour
 
 The practice tour books a pretend visitor, records consent, verifies them,
-tries an early arrival, opens the entrance at the right time, repeats a request,
-opens the unit, tries a door that isn't on the route, completes the tour and
-sends the follow-up, all through the real engine and policy with Durin in demo
-mode.
+tries an early arrival, opens the first door on the route at the right time
+(the building entrance, or the unit door when that is the only door), repeats a
+request, opens any later doors, tries a door that isn't on the route, completes
+the tour and sends the follow-up, all through the real engine and policy with
+Durin in demo mode.
 
 ## When to use
 
@@ -43,6 +44,10 @@ wants to prove the tour still works.
    > ✓ A repeated request didn't create a second access grant
    > ✓ Tour completed
    > ✓ Follow-up worked
+
+   On a unit-door-only apartment or condo (no building entrance on the route),
+   show the unit-door proof instead of an entrance line:
+   > ✓ Unit 4B access was allowed
 4. If it stopped, say which step failed and why, in the tool's words, and
    suggest the next step (usually fixing the setup and checking again).
 

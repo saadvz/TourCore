@@ -642,7 +642,7 @@ The actions:
 | Action | What it does |
 | --- | --- |
 | `createPropertySetup` / `setPropertyDetails` | Property name, address and time zone (inferred from the address, always confirmed) |
-| `addUnit` / `renameUnit` / `setUnitDetails` / `removeUnit` | Tourable units, their description and approved facts. A rename can also rename the unit's door, but only if it still has the suggested name |
+| `addUnit` / `renameUnit` / `setUnitDetails` / `removeUnit` | Tourable units, their description and approved facts. A rename can also rename the unit's door, but only if it still has the suggested name. For an apartment or condo, rename applies the same unit casing as add (`4b` → `Unit 4B`, `loft` → `Unit Loft`) and refreshes the street-plus-unit nickname and matching unit door |
 | `addDoor` / `renameDoor` / `removeDoor` | Entrances, unit doors, and hallway or shared doors (ids are generated and can't collide) |
 | `setRoute` | Ordered doors for one unit, plus optional directions |
 | `setTourHours` | Days, hours, tour length, spacing, early-arrival allowance |

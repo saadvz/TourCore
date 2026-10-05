@@ -44,7 +44,7 @@ export async function findTimeRequest(services: OperatorServices, id: string): P
 
 function who(tour: TourSnapshot): string {
   const name = visitorNameOf(tour);
-  return name.startsWith("A visitor") ? "The visitor" : (name.split(/\s+/)[0] ?? name);
+  return name.startsWith("A visitor") ? "the visitor" : (name.split(/\s+/)[0] ?? name);
 }
 
 function sameLocalDay(a: Date, b: Date, tz: string): boolean {

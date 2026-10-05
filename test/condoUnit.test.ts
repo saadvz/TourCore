@@ -5,7 +5,7 @@ import { zonedTimeToUtc } from "../src/core/timezone";
 import { createTourCore } from "../src/createTourCore";
 import { MockDurinAccessAdapter } from "../src/durin/MockDurinAccessAdapter";
 import { ConsoleMessenger, DemoMessagingAdapter } from "../src/messaging/Messenger";
-import { unitNameOf } from "../src/operator/tours";
+import { midSentence, unitNameOf } from "../src/operator/tours";
 import { InMemoryStore } from "../src/storage/Store";
 import {
   addDoor,
@@ -15,6 +15,7 @@ import {
   createPropertySetup,
   ENTRY_INSTRUCTIONS_QUESTION,
   entryInstructionsFragment,
+  renameUnit,
   runDryTour,
   setBuildingAccess,
   setEntryInstructions,
@@ -23,7 +24,8 @@ import {
 } from "../src/setup";
 import { handleVisitorText } from "../src/visitor/conversation";
 import { entryReply } from "../src/visitor/entry";
-import { streetAndUnit, unitLabel, visitorSubject } from "../src/visitor/identity";
+import { UNNAMED_VISITOR } from "../src/domain/model";
+import { streetAndUnit, unitLabel, visitorPlace, visitorSubject, visitorTourOf } from "../src/visitor/identity";
 import { VisitorDemoSession } from "../src/visitor/session";
 import { at } from "./grokHarness";
 import { basicForm, TOUR_DAY } from "./helpers";
@@ -69,7 +71,7 @@ async function welcomeOf(config: ReturnType<typeof condoDraft>) {
   return session.conversation.filter((item) => item.from === "tourcore").map((item) => item.text).join("\n");
 }
 
-async function bookCondo(config: ReturnType<typeof condoDraft>) {
+async function bookCondo(config: ReturnType<typeof condoDraft>, visitor = { name: "Jane Smith", phone: "(555) 010-1234" }) {
   const clock = new SimulatedClock(zonedTimeToUtc({ ...TOUR_DAY, hour: 10, minute: 0 }, config.property.timezone));
   const durin = new MockDurinAccessAdapter({
     doorNames: Object.fromEntries(config.doors.map((d) => [d.id, d.name])),
@@ -78,11 +80,11 @@ async function bookCondo(config: ReturnType<typeof condoDraft>) {
   });
   const store = new InMemoryStore();
   const core = createTourCore(config, { clock, durin, messenger: new ConsoleMessenger(() => {}), store });
-  const { prospect, reservation } = await core.startInquiry({ name: "Jane Smith", phone: "(555) 010-1234", unitId: config.units[0]!.id });
+  const { prospect, reservation } = await core.startInquiry({ ...visitor, unitId: config.units[0]!.id });
   const slot = (await core.availableSlots(TOUR_DAY))[0]!;
   await core.reserveSlot(reservation.id, slot.start.toISOString());
-  await core.recordConsent(reservation.id, true);
-  const ready = await core.submitVerification(reservation.id, basicForm());
+  const consented = await core.recordConsent(reservation.id, true);
+  const ready = consented.status === "READY" ? consented : await core.submitVerification(consented.id, basicForm(visitor.phone));
   const texts = (await store.list("messages")).filter((m) => m.direction === "OUTBOUND" && m.audience === "PROSPECT").map((m) => m.body);
   const outbound = async () =>
     (await store.list("messages")).filter((m) => m.direction === "OUTBOUND" && m.audience === "PROSPECT").map((m) => m.body);
@@ -134,6 +136,46 @@ describe("apartment or condo identity", () => {
     expect(named.property.name).toBe("145 Main St, Unit Garden");
   });
 
+  it("applies the same casing when renaming a unit and refreshes the door and nickname", () => {
+    let draft = addTourableSpace(createPropertySetup({ address: "145 Main St, Hoboken, NJ 07030", propertyType: "APARTMENT_OR_CONDO" }), { name: "Garden" });
+    expect(draft.units[0]!.name).toBe("Unit Garden");
+    expect(draft.doors.find((d) => d.id === draft.units[0]!.doorId)?.name).toBe("Unit Garden Door");
+    expect(draft.property.name).toBe("145 Main St, Unit Garden");
+
+    draft = renameUnit(draft, draft.units[0]!.id, "loft");
+    expect(draft.units[0]!.name).toBe("Unit Loft");
+    expect(draft.doors.find((d) => d.id === draft.units[0]!.doorId)?.name).toBe("Unit Loft Door");
+    expect(draft.property.name).toBe("145 Main St, Unit Loft");
+    expect(draft.units[0]!.name).not.toBe("loft");
+    expect(draft.doors.some((d) => d.name === "loft Door")).toBe(false);
+
+    draft = renameUnit(draft, draft.units[0]!.id, "4b");
+    expect(draft.units[0]!.name).toBe("Unit 4B");
+    expect(draft.doors.find((d) => d.id === draft.units[0]!.doorId)?.name).toBe("Unit 4B Door");
+    expect(draft.property.name).toBe("145 Main St, Unit 4B");
+  });
+
+  it("does not treat a street line stored as the name as a public building name", () => {
+    const scratch = {
+      address: "1 QA Scratch Lane, Tenafly, NJ 07670",
+      displayName: "1 QA Scratch Lane",
+      name: "1 QA Scratch Lane",
+      propertyType: "SINGLE_FAMILY" as const,
+      canonicalAddress: { street: "1 QA Scratch Lane" },
+    };
+    expect(visitorPlace(scratch).publicName).toBeUndefined();
+    expect(visitorTourOf(scratch)).toBe("1 QA Scratch Lane");
+    expect(visitorTourOf(scratch)).not.toMatch(/ at /);
+    expect(visitorSubject(scratch, "Main Home")).toBe("1 QA Scratch Lane");
+    const home = {
+      address: "144 Hillside Ave, Teaneck, NJ 07666",
+      displayName: "Teaneck Home",
+      propertyType: "SINGLE_FAMILY" as const,
+      canonicalAddress: { street: "144 Hillside Ave" },
+    };
+    expect(visitorTourOf(home)).toBe("Teaneck Home at 144 Hillside Ave, Teaneck, NJ 07666");
+  });
+
   it("omits a blank entry-instructions fragment", () => {
     expect(entryInstructionsFragment(undefined)).toBeUndefined();
     expect(entryInstructionsFragment("")).toBeUndefined();
@@ -169,6 +211,8 @@ describe("apartment or condo setup", () => {
 
     const result = await runDryTour(draft, { now: zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour: 7, minute: 0 }, draft.property.timezone) });
     expect(result.passed).toBe(true);
+    expect(result.checks.map((c) => c.id)).toContain("entrance");
+    expect(result.checks.map((c) => c.id)).toContain("unit_door");
     const opened = result.bundle!.accessGrants.map((g) => g.doorId);
     expect(opened).toEqual(expect.arrayContaining(draft.routes[0]!.stops.map((s) => s.doorId)));
     expect(opened).toHaveLength(2);
@@ -186,6 +230,8 @@ describe("apartment or condo setup", () => {
     const result = await runDryTour(draft, { now: zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour: 7, minute: 0 }, draft.property.timezone) });
     expect(result.passed).toBe(true);
     expect(result.bundle!.accessGrants.map((g) => g.doorId)).toEqual([draft.units[0]!.doorId]);
+    expect(result.checks.map((c) => c.id)).not.toContain("entrance");
+    expect(result.checks.find((c) => c.id === "unit_door")).toMatchObject({ ok: true, label: "Visitor enters Unit 4B" });
   });
 
   it("asks building-door control, then the building entrance, then optional entry instructions", async () => {
@@ -215,6 +261,18 @@ describe("apartment or condo setup", () => {
     expect(review.lines.join("\n")).not.toMatch(/Entry instructions:/);
   });
 
+  it("update_unit cases a condo rename and refreshes the door and nickname", async () => {
+    const h = harness();
+    await h.ok("create_property_setup", { address: "145 Main St, Hoboken, NJ 07030", propertyType: "APARTMENT_OR_CONDO" });
+    await h.ok("update_property_details", { confirmAddress: true });
+    await h.ok("add_unit", { name: "Garden" });
+    const renamed = await h.ok("update_unit", { unit: "Unit Garden", newName: "loft", alsoRenameDoor: true });
+    expect(renamed.unit).toMatchObject({ name: "Unit Loft", door: "Unit Loft Door" });
+    const id = h.workspace.propertyIds()[0]!;
+    expect(h.workspace.openDraft(id).draft.property.name).toBe("145 Main St, Unit Loft");
+    expect(h.workspace.openDraft(id).draft.units[0]!.name).toBe("Unit Loft");
+  });
+
   it("unit-only setup never puts a building door on the route", async () => {
     const h = harness();
     await h.ok("create_property_setup", { address: "145 Main St, Hoboken, NJ 07030", propertyType: "APARTMENT_OR_CONDO" });
@@ -229,6 +287,13 @@ describe("apartment or condo setup", () => {
     expect(setup.doors.some((d: { kind: string }) => d.kind === "Entrance")).toBe(false);
     const review = await h.ok("review_property_setup");
     expect(review.lines).toEqual(expect.arrayContaining(["Building entrance: visitors get in on their own", "Entry instructions: Tell the front desk you are touring 4B."]));
+
+    await h.ok("set_unit_details", { details: "4B is 2 bed 1 bath for $2,400, available now." });
+    await h.ok("set_tour_hours", { days: "weekdays", start: "9am", end: "5pm" });
+    const practice = await h.ok("run_dry_tour");
+    expect(practice.passed).toBe(true);
+    expect(practice.proofPoints.join("\n")).toContain("Unit 4B access was allowed");
+    expect(practice.proofPoints.join("\n")).not.toContain("Entrance access was allowed");
   });
 });
 
@@ -294,5 +359,49 @@ describe("apartment or condo visitor and landlord copy", () => {
     const tour = { config: draft, bundle: { reservations: [{ unitId: draft.units[0]!.id }] } };
     expect(unitNameOf(tour as never)).toBe("145 Main St, Unit 4B");
     expect(unitNameOf(tour as never)).not.toContain("Main Home");
+  });
+
+  it("single-family tour lists keep the space name instead of a duplicated street", () => {
+    const property = {
+      address: "1 QA Scratch Lane, Tenafly, NJ 07670",
+      displayName: "1 QA Scratch Lane",
+      name: "1 QA Scratch Lane",
+      propertyType: "SINGLE_FAMILY" as const,
+      canonicalAddress: { street: "1 QA Scratch Lane" },
+    };
+    const tour = { config: { property, units: [{ id: "u", name: "Main Home" }] }, bundle: { reservations: [{ unitId: "u" }] } };
+    expect(unitNameOf(tour as never)).toBe("Main Home");
+    expect(unitNameOf(tour as never)).not.toMatch(/1 QA Scratch Lane at 1 QA Scratch Lane/);
+    expect(unitNameOf(tour as never)).not.toMatch(/ at /);
+  });
+
+  it("goodbye uses the visitor's name, or omits the placeholder when they are unnamed", async () => {
+    const janeDraft = condoDraft("UNIT_ONLY");
+    const named = await bookCondo(janeDraft);
+    named.clock.set(new Date(named.ready.slotStart!));
+    await named.request(janeDraft.units[0]!.doorId);
+    await named.core.completeTour(named.ready.id);
+    const jane = (await named.outbound()).find((t) => t.startsWith("Thanks for touring"));
+    expect(jane).toContain("Thanks for touring 145 Main St, Unit 4B, Jane!");
+    expect(jane).not.toContain(", Visitor");
+
+    const draft = { ...condoDraft("UNIT_ONLY"), verificationMode: "mock" as const };
+    const unnamed = await bookCondo(draft, { name: UNNAMED_VISITOR, phone: "(555) 010-1234" });
+    unnamed.clock.set(new Date(unnamed.ready.slotStart!));
+    await unnamed.request(draft.units[0]!.doorId);
+    await unnamed.core.completeTour(unnamed.ready.id);
+    const thanks = (await unnamed.outbound()).find((t) => t.startsWith("Thanks for touring"));
+    expect(thanks).toContain("Thanks for touring 145 Main St, Unit 4B!");
+    expect(thanks).not.toContain("Visitor");
+  });
+
+  it("operator confirmation copy lowercases a leading article mid-sentence", () => {
+    expect(midSentence("A visitor texting from +15550102000")).toBe("a visitor texting from +15550102000");
+    expect(midSentence("The visitor")).toBe("the visitor");
+    expect(midSentence("Pat Smith")).toBe("Pat Smith");
+    expect(`Call off ${midSentence("A visitor texting from +15550102000")}'s tour`).toBe(
+      "Call off a visitor texting from +15550102000's tour",
+    );
+    expect(`Move ${midSentence("The visitor")}'s tour`).toBe("Move the visitor's tour");
   });
 });

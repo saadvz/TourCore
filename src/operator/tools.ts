@@ -44,7 +44,7 @@ import {
 import { matchDoor, requireUnit, resolvePropertyId } from "./resolve";
 import { defaultMessagingMode, type OperatorServices } from "./services";
 import { publishGuards, publishProperty, readinessForProperty, runPracticeTour, visitorTexting } from "./setupFlow";
-import { findTour, inspectTourView, listActiveTours } from "./tours";
+import { findTour, inspectTourView, listActiveTours, midSentence } from "./tours";
 import { approveTourTimeRequest, declineTourTimeRequest, inspectTourTimeRequest, listTourTimeRequests, proposeTourTime, rescheduleTour, scheduleOneOffTour } from "./tourTimes";
 import { injectLocalSms, readLocalOutbox } from "./localSms";
 
@@ -275,6 +275,7 @@ const PROOF: Record<string, (c: DryTourCheck) => string | undefined> = {
   ready: () => undefined,
   early_arrival: () => "Early arrival was denied",
   entrance: () => "Entrance access was allowed at the right time",
+  unit_door: (c) => `${c.label.replace(/^Visitor enters /, "")} access was allowed`,
   duplicate: () => "A repeated request didn't create a second access grant",
   wrong_door: (c) => `${c.label.replace(/^Visitor tries /, "")} (not on the route) was denied before Durin was contacted`,
   completed: () => "Tour completed",
@@ -286,7 +287,7 @@ const PROOF: Record<string, (c: DryTourCheck) => string | undefined> = {
 function proofPoints(result: DryTourResult): string[] {
   return result.checks.flatMap((c) => {
     if (!c.ok) return [`\u2717 ${c.label}${c.detail ? `: ${c.detail}` : ""}`];
-    const text = (PROOF[c.id] ?? ((x: DryTourCheck) => (x.id === "unit_door" ? `${x.label.replace(/^Visitor enters /, "")} access was allowed` : x.label)))(c);
+    const text = (PROOF[c.id] ?? ((x: DryTourCheck) => x.label))(c);
     return text ? [`\u2713 ${text}`] : [];
   });
 }
@@ -533,7 +534,8 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "update_unit",
     title: "Update a unit",
     kind: "change",
-    description: "Renames a unit or changes its description or approved facts (facts replace the whole list). Only the operator's words.",
+    description:
+      'Renames a unit or changes its description or approved facts (facts replace the whole list). Only the operator\'s words. For an apartment or condo, the new name is cased the same way as add_unit ("loft" → "Unit Loft", "4b" → "Unit 4B"), and the street-plus-unit nickname and matching unit door are refreshed.',
     input: z.strictObject({
       property: Property,
       unit: Unit,
@@ -1124,7 +1126,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     run: async (ctx, i) => {
       const target = await describeChangeTarget(ctx.services, i.tourRef, "hold");
       const fingerprint = reservationFingerprint(target.reservation);
-      if (!i.confirmationCode) return needsConfirmation(ctx, "hold", i.tourRef, fingerprint, `Pause ${target.name}'s tour of ${target.unit}? Their doors will be switched off until you resume it.`);
+      if (!i.confirmationCode) return needsConfirmation(ctx, "hold", i.tourRef, fingerprint, `Pause ${midSentence(target.name)}'s tour of ${target.unit}? Their doors will be switched off until you resume it.`);
       ctx.confirmations.redeem(i.confirmationCode, "hold", i.tourRef, fingerprint);
       const tour = await placeHold(ctx.services, i.tourRef, i.reason);
       return { summary: `${target.name}'s tour is paused. No doors will open until you resume it.`, tour };
@@ -1140,7 +1142,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     run: async (ctx, i) => {
       const target = await describeChangeTarget(ctx.services, i.tourRef, "resume");
       const fingerprint = reservationFingerprint(target.reservation);
-      if (!i.confirmationCode) return needsConfirmation(ctx, "resume", i.tourRef, fingerprint, `Resume ${target.name}'s tour of ${target.unit}? Doors on their route can open again during their tour time.`);
+      if (!i.confirmationCode) return needsConfirmation(ctx, "resume", i.tourRef, fingerprint, `Resume ${midSentence(target.name)}'s tour of ${target.unit}? Doors on their route can open again during their tour time.`);
       ctx.confirmations.redeem(i.confirmationCode, "resume", i.tourRef, fingerprint);
       const tour = await clearHold(ctx.services, i.tourRef);
       return { summary: `${target.name}'s tour is resumed.`, tour };
@@ -1156,7 +1158,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     run: async (ctx, i) => {
       const target = await describeChangeTarget(ctx.services, i.tourRef, "revoke");
       const fingerprint = reservationFingerprint(target.reservation);
-      if (!i.confirmationCode) return needsConfirmation(ctx, "revoke", i.tourRef, fingerprint, `Call off ${target.name}'s tour of ${target.unit}? All their access will be switched off and they'll be told. This can't be undone.`);
+      if (!i.confirmationCode) return needsConfirmation(ctx, "revoke", i.tourRef, fingerprint, `Call off ${midSentence(target.name)}'s tour of ${target.unit}? All their access will be switched off and they'll be told. This can't be undone.`);
       ctx.confirmations.redeem(i.confirmationCode, "revoke", i.tourRef, fingerprint);
       const tour = await revokeTour(ctx.services, i.tourRef, i.reason);
       return { summary: `${target.name}'s tour is called off and their access is switched off.`, tour };
