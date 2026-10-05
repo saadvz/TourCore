@@ -104,9 +104,18 @@ describe("secure setup page", () => {
       expect((await app.raw("GET", "/api/install/status", { [header]: "203.0.113.9", "X-TourCore-Setup-Session": token })).status, header).toBe(404);
     }
     expect((await app.raw("GET", "/install", { Host: "evil.example" })).status).toBe(403);
-    // The public health page is reachable, and says nothing about the installation beyond a fingerprint.
+    // The public health page is reachable. It names the installation fingerprint and
+    // whether the data folder is on a persistent volume, and it does not include secrets.
     const health = await app.raw("GET", "/healthz", { Host: publicHost });
-    expect(JSON.parse(health.body)).toEqual({ ok: true, service: "tour-core", commit: null, installation: expect.stringMatching(/^[a-f0-9]{16}$/) });
+    expect(JSON.parse(health.body)).toEqual({
+      ok: true,
+      service: "tour-core",
+      commit: null,
+      installation: expect.stringMatching(/^[a-f0-9]{16}$/),
+      storagePath: app.installation.options.root,
+      persistentVolume: expect.any(Boolean),
+      volumeMount: expect.toBeOneOf([null, expect.any(String)]),
+    });
     expect(app.installation.secrets.get("TOURCORE_GROK_ROUTINE_KEY")).toBeUndefined();
   });
 

@@ -135,9 +135,6 @@ export function detectPersistentVolume(target: string, io: PersistentVolumeIo = 
         reason: `Covered by ${covering.fsType} mount at ${covering.mountPoint}.`,
       };
     }
-    if (byDev?.persistent) {
-      return { path, persistent: true, mount: byDev.mount, fsType: covering?.fsType ?? null, reason: byDev.reason };
-    }
     if (covering) {
       return {
         path,
