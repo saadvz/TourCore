@@ -18,6 +18,15 @@ import { TOURCORE_VERSION, type Installation } from "./installation";
 
 export const HEALTH_PATH = "/healthz";
 
+/** Railway injects this on GitHub deploys. Self-hosted can set the Tour Core or generic override. */
+function deployedCommitSha(env: NodeJS.ProcessEnv): string | null {
+  for (const name of ["RAILWAY_GIT_COMMIT_SHA", "TOURCORE_COMMIT_SHA", "GIT_COMMIT_SHA"] as const) {
+    const value = env[name]?.trim();
+    if (value) return value;
+  }
+  return null;
+}
+
 /** Identifies this installation on the public health page without revealing its id. */
 export const installationFingerprint = (installationId: string | undefined) =>
   installationId ? createHash("sha256").update(`tour-core|${installationId}`).digest("hex").slice(0, 16) : undefined;
@@ -25,13 +34,14 @@ export const installationFingerprint = (installationId: string | undefined) =>
 export interface PublicHealth {
   ok: true;
   service: "tour-core";
+  commit: string | null;
   installation?: string;
 }
 
 export function publicHealth(inst: Installation): PublicHealth {
   const id = safe(() => inst.files.manifest()?.installationId);
   const fingerprint = installationFingerprint(id);
-  return { ok: true, service: "tour-core", ...(fingerprint ? { installation: fingerprint } : {}) };
+  return { ok: true, service: "tour-core", commit: deployedCommitSha(inst.env()), ...(fingerprint ? { installation: fingerprint } : {}) };
 }
 
 export function runtimeHealth(inst: Installation) {
@@ -46,6 +56,7 @@ export function runtimeHealth(inst: Installation) {
   return {
     running: true,
     version: TOURCORE_VERSION,
+    commit: deployedCommitSha(inst.env()),
     pid: process.pid,
     uptimeSeconds: Math.round((inst.now() - inst.startedAt) / 1000),
     deploymentMode: deployment.mode,

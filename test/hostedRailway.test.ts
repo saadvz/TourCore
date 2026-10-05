@@ -5,7 +5,7 @@ import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { testVisitorMessaging } from "../src/install/checks";
+import { publicHealth, runtimeHealth, testVisitorMessaging } from "../src/install/checks";
 import { selectPublicEndpoint } from "../src/install/bootstrap";
 import { parseDeploymentMode, resolveDeploymentMode } from "../src/install/deployment";
 import { externalUrls, listenHost, listenPort, redactSecrets, resolveHostedPublicUrl, startupLines, validateHostedConfig } from "../src/install/hostedRuntime";
@@ -137,11 +137,38 @@ describe("HOSTED_RAILWAY_P0 runtime", () => {
     expect(health.status).toBe(200);
     const body = await health.text();
     expect(body).toMatch(/"service":"tour-core"/);
+    expect(JSON.parse(body)).toMatchObject({ ok: true, service: "tour-core", commit: null });
     expect(body).not.toContain(SECRET);
     expect(body).not.toMatch(/trycloudflare|apiKey|refresh/i);
     const probe = hostedFetch(port, { host: "healthcheck.railway.app" });
     expect((await probe("/healthz")).status).toBe(200);
+    expect(await (await probe("/healthz")).json()).toMatchObject({ ok: true, service: "tour-core", commit: null });
     expect((await http("/")).status).toBe(404);
+  });
+
+  it("reports the Railway commit SHA on /healthz, or null when unset", async () => {
+    const sha = "0123456789abcdef0123456789abcdef01234567";
+    const unsetRoot = tempDir();
+    const unset = installation(unsetRoot, hostedEnv(unsetRoot));
+    expect(publicHealth(unset).commit).toBeNull();
+    expect(runtimeHealth(unset)).toMatchObject({ version: expect.any(String), commit: null });
+
+    const root = tempDir();
+    const env = hostedEnv(root, { RAILWAY_GIT_COMMIT_SHA: sha });
+    const inst = installation(root, env);
+    inst.files.ensure({ deploymentMode: "HOSTED_RAILWAY_P0" });
+    expect(publicHealth(inst).commit).toBe(sha);
+    expect(runtimeHealth(inst).commit).toBe(sha);
+    expect(publicHealth(installation(root, hostedEnv(root, { TOURCORE_COMMIT_SHA: sha }))).commit).toBe(sha);
+    expect(publicHealth(installation(root, hostedEnv(root, { GIT_COMMIT_SHA: sha }))).commit).toBe(sha);
+    expect(publicHealth(installation(root, hostedEnv(root, { RAILWAY_GIT_COMMIT_SHA: "  ", TOURCORE_COMMIT_SHA: sha }))).commit).toBe(sha);
+
+    const { server } = await startSetupServer({ installation: inst, workspace: new PropertyWorkspace(root), host: "0.0.0.0", port: 0, open: false });
+    cleanups.push(() => server.close());
+    const port = (server.address() as { port: number }).port;
+    const body = await (await hostedFetch(port)("/healthz")).json();
+    expect(body).toMatchObject({ ok: true, service: "tour-core", commit: sha });
+    expect(JSON.stringify(body)).not.toMatch(/RAILWAY_|TOURCORE_HOME|PORT/);
   });
 });
 
