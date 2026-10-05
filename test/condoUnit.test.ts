@@ -84,7 +84,10 @@ async function bookCondo(config: ReturnType<typeof condoDraft>) {
   await core.recordConsent(reservation.id, true);
   const ready = await core.submitVerification(reservation.id, basicForm());
   const texts = (await store.list("messages")).filter((m) => m.direction === "OUTBOUND" && m.audience === "PROSPECT").map((m) => m.body);
-  return { core, prospect, ready, texts, store, clock };
+  const outbound = async () =>
+    (await store.list("messages")).filter((m) => m.direction === "OUTBOUND" && m.audience === "PROSPECT").map((m) => m.body);
+  const request = (doorId: string) => core.requestAccess({ reservationId: ready.id, prospectId: prospect.id, doorId });
+  return { core, prospect, ready, texts, store, clock, request, outbound };
 }
 
 describe("apartment or condo identity", () => {
@@ -96,6 +99,30 @@ describe("apartment or condo identity", () => {
     expect(streetAndUnit(property, "4B")).toBe("145 Main St, Unit 4B");
     expect(visitorSubject(property, "4B")).toBe("145 Main St, Unit 4B");
     expect(visitorSubject(property, "4B")).not.toContain(SINGLE_FAMILY_SPACE_NAME);
+  });
+
+  it("uppercases short unit codes and title-cases spelled names", () => {
+    expect(unitLabel("4b")).toBe("Unit 4B");
+    expect(unitLabel("unit 4b")).toBe("Unit 4B");
+    expect(unitLabel("12c")).toBe("Unit 12C");
+    expect(unitLabel("ph")).toBe("Unit PH");
+    expect(unitLabel("PH")).toBe("Unit PH");
+    expect(unitLabel("apt 12c")).toBe("Unit 12C");
+    expect(unitLabel("Garden")).toBe("Unit Garden");
+    expect(unitLabel("garden")).toBe("Unit Garden");
+    expect(unitLabel("unit garden")).toBe("Unit Garden");
+    expect(unitLabel("GARDEN")).toBe("Unit Garden");
+    expect(unitLabel("Garden")).not.toBe("Unit GARDEN");
+    const property = { address: "145 Main St, Hoboken, NJ 07030", canonicalAddress: { street: "145 Main St" }, propertyType: "APARTMENT_OR_CONDO" as const };
+    expect(streetAndUnit(property, "4b")).toBe("145 Main St, Unit 4B");
+    expect(streetAndUnit(property, "garden")).toBe("145 Main St, Unit Garden");
+    expect(visitorSubject({ ...property, propertyType: "SINGLE_FAMILY" }, "Main Home")).not.toMatch(/Unit /);
+    const coded = addTourableSpace(createPropertySetup({ address: "145 Main St, Hoboken, NJ 07030", propertyType: "APARTMENT_OR_CONDO" }), { name: "4b" });
+    expect(coded.units[0]!.name).toBe("Unit 4B");
+    expect(coded.property.name).toBe("145 Main St, Unit 4B");
+    const named = addTourableSpace(createPropertySetup({ address: "145 Main St, Hoboken, NJ 07030", propertyType: "APARTMENT_OR_CONDO" }), { name: "garden" });
+    expect(named.units[0]!.name).toBe("Unit Garden");
+    expect(named.property.name).toBe("145 Main St, Unit Garden");
   });
 
   it("omits a blank entry-instructions fragment", () => {
@@ -227,6 +254,30 @@ describe("apartment or condo visitor and landlord copy", () => {
     expect(skippedAllSet).not.toContain("Here's how to get in");
     expect(skippedAllSet).toContain("I'll open the unit door");
     expect(none.texts.join("\n")).not.toContain("Here's how to get in");
+  });
+
+  it("repeats entry instructions only when the building entrance opens, not on a unit-only first door", async () => {
+    const both = condoDraft("BUILDING_AND_UNIT", "Use the lobby code 1234");
+    const booked = await bookCondo(both);
+    expect(booked.texts.find((t) => t.startsWith("You're all set"))).toContain("Here's how to get in: Use the lobby code 1234");
+    booked.clock.set(new Date(booked.ready.slotStart!));
+    await booked.request(both.routes[0]!.stops[0]!.doorId);
+    const afterEntrance = await booked.outbound();
+    const entranceOpen = afterEntrance.find((t) => t.includes("is open for you now"));
+    expect(entranceOpen).toContain("Here's how to get in: Use the lobby code 1234");
+    await booked.request(both.units[0]!.doorId);
+    const afterUnit = await booked.outbound();
+    const unitOpen = afterUnit.filter((t) => t.includes("is open for you now")).at(-1);
+    expect(unitOpen).not.toContain("Here's how to get in");
+
+    const only = condoDraft("UNIT_ONLY", "Tell the front desk you are touring 4B.");
+    const unitOnly = await bookCondo(only);
+    expect(unitOnly.texts.find((t) => t.startsWith("You're all set"))).toContain("Here's how to get in: Tell the front desk you are touring 4B.");
+    unitOnly.clock.set(new Date(unitOnly.ready.slotStart!));
+    await unitOnly.request(only.units[0]!.doorId);
+    const opened = (await unitOnly.outbound()).find((t) => t.includes("is open for you now"));
+    expect(opened).toBeDefined();
+    expect(opened).not.toContain("Here's how to get in");
   });
 
   it("landlord alerts name the street and unit, never Main Home", () => {

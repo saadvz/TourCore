@@ -1286,8 +1286,8 @@ export class TourCore {
     const stop = config.routes.find((r) => r.id === approved.routeId)?.stops.find((s) => s.doorId === request.doorId);
     const opened = new Set((await this.listGrants(approved.id)).map((g) => g.doorId));
     const nextStop = approved.allowedRoute.find((d) => !opened.has(d));
-    const firstDoor = request.doorId === approved.allowedRoute[0];
-    const reminder = firstDoor ? entryInstructionsFragment(this.unitFor(approved).entryInstructions) : undefined;
+    const atBuildingEntrance = request.doorId === approved.allowedRoute[0] && door?.kind === "ENTRANCE";
+    const reminder = atBuildingEntrance ? entryInstructionsFragment(this.unitFor(approved).entryInstructions) : undefined;
     await this.textProspect(
       prospect!,
       approved.id,

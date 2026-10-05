@@ -28,12 +28,32 @@ export function isApartmentOrCondo(property: { propertyType?: PropertyType }): b
   return property.propertyType === "APARTMENT_OR_CONDO";
 }
 
-/** "4B" → "Unit 4B". Leaves "Unit 4B" / "Apt 4B" as the operator wrote them, minus a leading #. */
+/**
+ * Display form for an apartment or condo unit: always "Unit …".
+ * Short codes (4b, 12c, ph) become uppercase. Spelled names stay as typed,
+ * with a leading capital if the whole word was lowercase — never ALL-CAPS
+ * ("garden" / "Garden" → "Unit Garden", never "Unit GARDEN").
+ */
 export function unitLabel(name: string): string {
   const trimmed = name.trim().replace(/^#\s*/, "");
   if (!trimmed) return "";
-  if (/^(unit|apt\.?|apartment|suite)\s+/i.test(trimmed)) return trimmed.replace(/^(apt\.?|apartment|suite)\s+/i, "Unit ");
-  return `Unit ${trimmed}`;
+  const rest = trimmed.replace(/^(unit|apt\.?|apartment|suite)\s+/i, "").replace(/^#\s*/, "").trim();
+  if (!rest) return "Unit";
+  return `Unit ${formatUnitName(rest)}`;
+}
+
+/** Short alphanumeric codes: mostly letters/digits and ≤4 chars, or like 4B / 12C / A1. */
+function isShortUnitCode(token: string): boolean {
+  if (!/^[a-z0-9]+$/i.test(token)) return false;
+  return token.length <= 4 || /^[a-z]?\d+[a-z]?$/i.test(token);
+}
+
+function formatUnitName(token: string): string {
+  if (!/\s/.test(token) && isShortUnitCode(token)) return token.toUpperCase();
+  if (!/\s/.test(token) && token === token.toLowerCase()) return token.charAt(0).toUpperCase() + token.slice(1);
+  if (!/\s/.test(token) && token.length > 1 && token === token.toUpperCase()) return token.charAt(0) + token.slice(1).toLowerCase();
+  if (/^[a-z]/.test(token)) return token.charAt(0).toUpperCase() + token.slice(1);
+  return token;
 }
 
 /** Street line visitors hear: "145 Main St", never a made-up building name. */
