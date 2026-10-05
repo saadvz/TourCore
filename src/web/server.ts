@@ -35,7 +35,7 @@ import { HOSTED_OWNER_RESET, OAUTH_REQUEST_ID } from "../install/hostedOwner";
 import { RAILWAY_HEALTHCHECK_HOST, redactSecrets, startupLines, validateHostedConfig } from "../install/hostedRuntime";
 import { Installation, TOURCORE_VERSION } from "../install/installation";
 import { bindHostedTenant, clearHostedTenant, hostedTenantDecision, HOSTED_TENANT_RESET } from "../install/tenant";
-import { installedMessaging } from "../install/status";
+import { installedMessaging, primaryProperty } from "../install/status";
 import { handleSecureSetupApi, INSTALL_PAGE_PATHS, isInstallApiPath, PROXY_HEADERS } from "../install/secureSetup";
 import { clearRuntimeInfo, writeRuntimeInfo } from "../install/service";
 import { secretValues, useSettingsSource } from "../install/settings";
@@ -134,6 +134,16 @@ function publicRouteAllowed(method: string, path: string, oauth: boolean, hosted
 }
 
 const forwardedProto = (req: IncomingMessage) => String(req.headers["x-forwarded-proto"] ?? "").split(",")[0]?.trim().toLowerCase();
+
+function operatorSupportEmail(workspace: PropertyWorkspace): string | undefined {
+  try {
+    const primary = primaryProperty(workspace);
+    if (!primary) return undefined;
+    return workspace.openDraft(primary.id).draft.operator.supportEmail;
+  } catch {
+    return undefined;
+  }
+}
 
 function safeManifestProvider(installation: Installation) {
   try {
@@ -366,7 +376,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
       const compliance = matchCompliancePath(url.pathname);
       if (compliance) {
         if (!compliance.exact) return send(301, "text/plain; charset=utf-8", "Redirecting", { Location: compliance.canonical });
-        const html = renderCompliancePage(compliance.id, buildComplianceConfig(process.env, publicBase));
+        const html = renderCompliancePage(compliance.id, buildComplianceConfig(process.env, publicBase, operatorSupportEmail(workspace)));
         return send(200, "text/html; charset=utf-8", html);
       }
     }

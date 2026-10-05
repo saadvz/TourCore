@@ -95,6 +95,21 @@ describe("browser setup", () => {
     expect(download.headers.get("content-disposition")).toContain("attachment");
   });
 
+  it("saves the optional visitor help number and support email from the services step", async () => {
+    const app = await startApp();
+    const { id } = await setUpAlfredWay(app);
+    const saved = await app.cmd(id, "setAlertContact", { name: "Leasing team", visitorContact: "(555) 010-4444", supportEmail: "desk@example.com" });
+    expect(saved.body.view.operator).toMatchObject({ visitorContact: "+15550104444", supportEmail: "desk@example.com" });
+    expect(saved.body.view.reviewCards.find((c: { title: string }) => c.title === "Records and messages").rows).toEqual(
+      expect.arrayContaining(["Visitors can call: (555) 010-4444", "Support email: desk@example.com"]),
+    );
+    const skipped = await app.cmd(id, "setAlertContact", { name: "Leasing team", visitorContact: "", supportEmail: "" });
+    expect(skipped.body.view.operator).toMatchObject({ visitorContact: "", supportEmail: "" });
+    expect(skipped.body.view.reviewCards.find((c: { title: string }) => c.title === "Records and messages").rows).toEqual(
+      expect.arrayContaining(["Visitors can call: not set", "Support email: not set"]),
+    );
+  });
+
   it("hides codes, adapter names and file paths from operators", async () => {
     const app = await startApp();
     const { id } = await setUpAlfredWay(app);

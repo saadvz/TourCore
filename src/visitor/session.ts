@@ -423,7 +423,14 @@ export class VisitorDemoSession {
       return;
     }
     await this.recordText(said);
-    await this.reply(smsHelpBody(), undefined, { deliverDespiteOptOut: this.smsConsent !== "opted_in" });
+    await this.reply(
+      smsHelpBody(process.env, {
+        supportEmail: this.config.operator.supportEmail,
+        visitorContact: this.config.operator.visitorContact,
+      }),
+      undefined,
+      { deliverDespiteOptOut: this.smsConsent !== "opted_in" },
+    );
   }
 
   /**

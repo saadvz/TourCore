@@ -357,7 +357,11 @@ async function editAlerts(draft: SetupDraft): Promise<SetupDraft> {
       "What number can visitors call if they're stuck at a door? Leave blank if they should just reply to the text.",
       draft.operator.visitorContact,
     );
-    return setAlertContact(draft, { name, visitorContact });
+    const supportEmail = await io.ask(
+      "What email should we give visitors who text HELP? Leave blank if they should reply here.",
+      draft.operator.supportEmail,
+    );
+    return setAlertContact(draft, { name, visitorContact, supportEmail });
   });
 }
 
@@ -449,6 +453,7 @@ async function readinessFlow(id: string): Promise<boolean> {
     check.problems.forEach((p, i) => io.say(`      ${p}${devCode(check.codes[i] ?? "")}`));
     await io.pause(120);
   }
+  for (const note of result.advisories ?? []) io.say(`  ${note}`);
   io.say(result.passed ? green("\nEverything's ready.") : yellow("\nA few things need fixing first."));
   return result.passed;
 }

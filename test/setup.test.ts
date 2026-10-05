@@ -27,6 +27,8 @@ import {
   setVerificationPolicy,
   SetupInputError,
   validateConfig,
+  visitorHelpQuestion,
+  VISITOR_HELP_QUESTION,
   type DryTourResult,
   type SetupDraft,
 } from "../src/setup";
@@ -83,7 +85,11 @@ describe("guided setup actions", () => {
     expect(section("ROUTE: UNIT 101")).toEqual(["Lobby Entrance", "Unit 101 Door"]);
     expect(section("ROUTE: UNIT 102")).toEqual(["Lobby Entrance", "Unit 102 Door"]);
     expect(section("VERIFICATION")?.[0]).toBe("Basic identity form");
-    expect(section("ALERTS")).toEqual(["If a visitor needs help: leasing team"]);
+    expect(section("ALERTS")).toEqual([
+      "If a visitor needs help: leasing team",
+      "Visitors can call: not set",
+      "Support email: not set",
+    ]);
   });
 
   it("sets an optional visitor help number separately from the operator alert line", () => {
@@ -94,14 +100,17 @@ describe("guided setup actions", () => {
     const withNumber = setAlertContact(draft, { visitorContact: "(555) 010-8888" });
     expect(withNumber.operator.visitorContact).toBe("+15550108888");
     expect(withNumber.operator.contact).toBe("Shown on screen (demo)");
+    expect(withNumber.operator.visitorHelpDecided).toBe(true);
     expect(reviewSetup(withNumber).sections.find((s) => s.title === "ALERTS")?.lines).toEqual([
       "If a visitor needs help: leasing team",
       "Visitors can call: (555) 010-8888",
+      "Support email: not set",
     ]);
 
     const cleared = setAlertContact(withNumber, { visitorContact: "" });
     expect(cleared.operator.visitorContact).toBeUndefined();
     expect(cleared.operator.contact).toBe("Shown on screen (demo)");
+    expect(cleared.operator.visitorHelpDecided).toBe(true);
     expect(() => setAlertContact(draft, { visitorContact: "123" })).toThrow(new SetupInputError("PHONE_INVALID", "Please enter a full phone number."));
 
     const bad = { ...draft, operator: { ...draft.operator, visitorContact: "not-a-phone" } };
@@ -116,6 +125,40 @@ describe("guided setup actions", () => {
     expect(OperatorTeamCopy.cliPrompt()).toBe(
       'Who should we alert if a visitor needs help? Use a team name that reads naturally after "the", for example leasing team or Maple Leasing team.',
     );
+  });
+
+  it("sets an optional support email and records an explicit skip", () => {
+    const { draft } = buildProperty();
+    expect(draft.operator.supportEmail).toBeUndefined();
+    expect(draft.operator.visitorHelpDecided).toBeUndefined();
+
+    const withEmail = setAlertContact(draft, { supportEmail: "help@example.com" });
+    expect(withEmail.operator.supportEmail).toBe("help@example.com");
+    expect(withEmail.operator.visitorHelpDecided).toBe(true);
+    expect(reviewSetup(withEmail).sections.find((s) => s.title === "ALERTS")?.lines).toEqual([
+      "If a visitor needs help: leasing team",
+      "Visitors can call: not set",
+      "Support email: help@example.com",
+    ]);
+    expect(() => setAlertContact(draft, { supportEmail: "not-an-email" })).toThrow(new SetupInputError("EMAIL_INVALID", "Please enter a real email address."));
+
+    const skipped = setAlertContact(draft, { skipVisitorHelp: true });
+    expect(skipped.operator.visitorContact).toBeUndefined();
+    expect(skipped.operator.supportEmail).toBeUndefined();
+    expect(skipped.operator.visitorHelpDecided).toBe(true);
+    expect(reviewSetup(skipped).sections.find((s) => s.title === "ALERTS")?.lines).toEqual([
+      "If a visitor needs help: leasing team",
+      "Visitors can call: not set",
+      "Support email: not set",
+    ]);
+
+    const bad = { ...draft, operator: { ...draft.operator, supportEmail: "nope" } };
+    expect(validateConfig(bad).map((i) => i.code)).toContain("SUPPORT_EMAIL_INVALID");
+    expect(validateConfig(withEmail)).toEqual([]);
+
+    expect(visitorHelpQuestion(draft)).toEqual({ nextQuestion: VISITOR_HELP_QUESTION });
+    expect(visitorHelpQuestion(skipped)).toBeUndefined();
+    expect(visitorHelpQuestion(createPropertySetup({ address: "100 Alfred Way, Brooklyn, NY", propertyType: "APARTMENT_BUILDING" }))).toBeUndefined();
   });
 
   it("keeps policy values in config with visible defaults", () => {
@@ -191,7 +234,11 @@ describe("guided setup actions", () => {
 
 describe("readiness check", () => {
   it("passes every check for a complete property", async () => {
+    const previous = process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
+    delete process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
     const result = await runReadinessCheck(buildProperty().draft, { now: MONDAY_MORNING });
+    if (previous === undefined) delete process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
+    else process.env.TOURCORE_PUBLIC_CONTACT_EMAIL = previous;
     expect(result.passed).toBe(true);
     expect(result.checks.map((c) => c.label)).toEqual([
       "Property details",
@@ -204,6 +251,27 @@ describe("readiness check", () => {
       "Durin access",
       "Audit/export",
     ]);
+    expect(result.advisories).toEqual(["No visitor help number or support email is set. Visitors who text HELP can reply here."]);
+  });
+
+  it("does not fail readiness when visitor help is missing, and drops the advisory once either is set", async () => {
+    const { draft } = buildProperty();
+    const previous = process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
+    delete process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
+    try {
+      const missing = await runReadinessCheck(draft, { now: MONDAY_MORNING });
+      expect(missing.passed).toBe(true);
+      expect(missing.advisories).toEqual(["No visitor help number or support email is set. Visitors who text HELP can reply here."]);
+      const withNumber = await runReadinessCheck(setAlertContact(draft, { visitorContact: "(555) 010-8888" }), { now: MONDAY_MORNING });
+      expect(withNumber.passed).toBe(true);
+      expect(withNumber.advisories).toEqual([]);
+      const withEmail = await runReadinessCheck(setAlertContact(draft, { supportEmail: "help@example.com" }), { now: MONDAY_MORNING });
+      expect(withEmail.passed).toBe(true);
+      expect(withEmail.advisories).toEqual([]);
+    } finally {
+      if (previous === undefined) delete process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
+      else process.env.TOURCORE_PUBLIC_CONTACT_EMAIL = previous;
+    }
   });
 
   it("fails with a clear reason when a unit has no route", async () => {

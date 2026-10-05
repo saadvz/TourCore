@@ -1,6 +1,5 @@
 import { FIELD_WORDS, missingProfileFields, PROFILE_FIELDS, profileSummaryLine, type ProfileField } from "../config/unitProfile";
 import type { ConfigIssue, ConfigSection } from "../config/validateConfig";
-import { formatPhone } from "../core/phone";
 import { slotStartMinutes } from "../core/schedule";
 import { formatClockTime, friendlyTimeZone } from "../core/timezone";
 import type { DryTourGroup, DryTourResult } from "./dryTour";
@@ -13,6 +12,7 @@ import {
   doorFollowsUnitName,
   reviewSetup,
   suggestRoute,
+  visitorHelpLines,
   type SetupDraft,
 } from "./setupActions";
 import { isCurrent, statusLabel, type SavedProperty, type TourRecord } from "./workspace";
@@ -256,14 +256,18 @@ export function draftView(draft: SetupDraft) {
       rows: [
         ...services.items.map((s) => s.title),
         `Alerts go to: ${draft.operator.name}`,
-        ...(draft.operator.visitorContact ? [`Visitors can call: ${formatPhone(draft.operator.visitorContact)}`] : []),
+        ...visitorHelpLines(draft.operator),
       ],
     },
   ];
 
   return {
     property,
-    operator: { name: draft.operator.name, visitorContact: draft.operator.visitorContact ?? "" },
+    operator: {
+      name: draft.operator.name,
+      visitorContact: draft.operator.visitorContact ?? "",
+      supportEmail: draft.operator.supportEmail ?? "",
+    },
     units,
     doors: draft.doors.map((d) => ({
       id: d.id,
@@ -298,6 +302,7 @@ export function readinessView(result: ReadinessResult) {
         return { message: p.message, ...(fix ? { fix } : {}), dev: { code: p.code, ...(p.detail ? { detail: p.detail } : {}) } };
       }),
     })),
+    advisories: result.advisories ?? [],
   };
 }
 

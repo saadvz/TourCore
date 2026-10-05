@@ -114,6 +114,13 @@ export const TourCoreConfigShape = z.object({
      * `contact` on purpose: that line is for the team, not prospects.
      */
     visitorContact: z.string().optional(),
+    /** Optional address for HELP replies and compliance pages. */
+    supportEmail: z.string().optional(),
+    /**
+     * The operator answered the optional help-number/support-email step
+     * (with values or an explicit skip). Absent on older setups.
+     */
+    visitorHelpDecided: z.boolean().optional(),
   }),
   doors: z.array(DoorSchema),
   units: z.array(UnitSchema),

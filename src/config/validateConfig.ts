@@ -1,4 +1,5 @@
 import { formatClockTime, isValidTimeZone } from "../core/timezone";
+import { parseEmail } from "../core/email";
 import { parsePhone } from "../core/phone";
 import { minutesOfDay } from "../core/schedule";
 import type { TourCoreConfig } from "./tourCoreConfig";
@@ -50,6 +51,9 @@ export function semanticIssues(cfg: TourCoreConfig): ConfigIssue[] {
   if (!cfg.operator.name.trim()) add("property", "OPERATOR_MISSING", "Tell us who should get alerts if a visitor needs help.");
   if (cfg.operator.visitorContact?.trim() && !parsePhone(cfg.operator.visitorContact)) {
     add("property", "VISITOR_CONTACT_INVALID", "The number visitors can call doesn't look like a full phone number.");
+  }
+  if (cfg.operator.supportEmail?.trim() && !parseEmail(cfg.operator.supportEmail)) {
+    add("property", "SUPPORT_EMAIL_INVALID", "The support email doesn't look like a real email address.");
   }
   const allFacts = [...cfg.property.facts, ...cfg.units.flatMap((u) => [u.summary, ...u.facts])];
   if (allFacts.some((f) => f.length > MAX_FACT_LENGTH)) add("units", "FACT_TOO_LONG", `Keep each description or fact under ${MAX_FACT_LENGTH} characters.`);

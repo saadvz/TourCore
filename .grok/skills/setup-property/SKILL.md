@@ -111,7 +111,13 @@ the operator correct it.
     while texting is installed, `set_services` with `messaging: sendblue`
     yourself. Where records live comes from `get_storage_status` (this computer, or Google Drive). Don't
     ask about it.
-11. `review_property_setup` and read its `lines` back as a short list:
+11. Ask Tour Core's next question about visitor help, in plain words:
+    **"If a visitor gets stuck, what number can they call and what email should we give them for help? You can skip both."**
+    Save a number with `update_property_details` `visitorContact` and an email
+    with `supportEmail`. If they skip, call `update_property_details` with
+    `skipVisitorHelp: true` so it is not asked again. Never use the team's
+    private alert line as the visitor number. Both stay optional.
+12. `review_property_setup` and read its `lines` back as a short list:
 
     > Here's what I have:
     > 144 Hillside Ave, Teaneck NJ
@@ -129,19 +135,22 @@ the operator correct it.
     > Verification: Basic identity form
     > Visitor texting: Connected
     > Door access: Demo
+    > Visitors can call: not set
+    > Support email: not set
     >
     > Does that look right?
 
     If the operator gave the property a name, a "Called: ..." line follows the
-    address.
-12. On yes, the setup is saved. In a guided install, go back to Tour Core's
+    address. If they set a help number or support email, those lines show the
+    values instead of "not set".
+13. On yes, the setup is saved. In a guided install, go back to Tour Core's
     next step (`get_next_installation_step`, Install Tour Core skill): it
     offers tour updates next, then runs the checks. Otherwise: "I'll run a
     readiness check and a practice tour before we turn it on." Then run **Run
     Readiness Check**. If it fails, explain each problem in plain words and
     offer the fix; change nothing without the operator's OK. If it passes, run
     **Simulate Tour**.
-13. If both passed, `publish_demo_property`. It returns one question; ask it
+14. If both passed, `publish_demo_property`. It returns one question; ask it
     word for word. Only after a clear yes, call it again with the
     `confirmationCode` and wait for the result. Then `get_property_setup` or
     `get_installation_status` and say it is published only if that says so.

@@ -9,8 +9,9 @@ import {
   type TourHours,
   type Unit,
 } from "../config/tourCoreConfig";
-import { parseProfileValue, PROFILE_FIELDS, ProfileValueError, type ProfileField, type UnitProfile } from "../config/unitProfile";
+import { nextProfileQuestion, parseProfileValue, PROFILE_FIELDS, ProfileValueError, type ProfileField, type UnitProfile } from "../config/unitProfile";
 import type { ConfigIssue, ConfigSection } from "../config/validateConfig";
+import { parseEmail } from "../core/email";
 import { formatPhone, parsePhone } from "../core/phone";
 import { formatClockTime, friendlyTimeZone, WEEKDAYS, type Weekday } from "../core/timezone";
 import { visitorSubject } from "../visitor/identity";
@@ -248,7 +249,32 @@ export function defaultUnitDoorName(unitName: string): string {
   return `${unitName.trim()} Door`;
 }
 
-export function setAlertContact(draft: SetupDraft, input: { name?: string; contact?: string; visitorContact?: string }): SetupDraft {
+export const VISITOR_HELP_QUESTION =
+  "If a visitor gets stuck, what number can they call and what email should we give them for help? You can skip both.";
+
+export function visitorHelpDecided(operator: SetupDraft["operator"]): boolean {
+  return !!operator.visitorHelpDecided || !!operator.visitorContact || !!operator.supportEmail;
+}
+
+export function visitorHelpLines(operator: SetupDraft["operator"]): string[] {
+  return [
+    `Visitors can call: ${operator.visitorContact ? formatPhone(operator.visitorContact) : "not set"}`,
+    `Support email: ${operator.supportEmail ?? "not set"}`,
+  ];
+}
+
+/** Asked once the rest of the setup is saveable, so it sits with the alert step. */
+export function visitorHelpQuestion(draft: SetupDraft): { nextQuestion: string } | undefined {
+  if (visitorHelpDecided(draft.operator)) return undefined;
+  if (nextProfileQuestion(draft.units)) return undefined;
+  if (validateConfig(draft).length) return undefined;
+  return { nextQuestion: VISITOR_HELP_QUESTION };
+}
+
+export function setAlertContact(
+  draft: SetupDraft,
+  input: { name?: string; contact?: string; visitorContact?: string; supportEmail?: string; skipVisitorHelp?: boolean },
+): SetupDraft {
   const next = clone(draft);
   if (input.name !== undefined) next.operator.name = requireName(input.name, "OPERATOR_MISSING", "Please say who should get alerts.");
   if (input.contact !== undefined) next.operator.contact = input.contact.trim() || SETUP_DEFAULTS.operatorContact;
@@ -260,6 +286,18 @@ export function setAlertContact(draft: SetupDraft, input: { name?: string; conta
       if (!phone) throw new SetupInputError("PHONE_INVALID", "Please enter a full phone number.");
       next.operator.visitorContact = phone;
     }
+  }
+  if (input.supportEmail !== undefined) {
+    const raw = input.supportEmail.trim();
+    if (!raw) delete next.operator.supportEmail;
+    else {
+      const email = parseEmail(raw);
+      if (!email) throw new SetupInputError("EMAIL_INVALID", "Please enter a real email address.");
+      next.operator.supportEmail = email;
+    }
+  }
+  if (input.skipVisitorHelp || input.visitorContact !== undefined || input.supportEmail !== undefined) {
+    next.operator.visitorHelpDecided = true;
   }
   return next;
 }
@@ -579,10 +617,7 @@ export function reviewSetup(draft: SetupDraft): SetupReview {
     {
       editSection: "property",
       title: "ALERTS",
-      lines: [
-        `If a visitor needs help: ${draft.operator.name}`,
-        ...(draft.operator.visitorContact ? [`Visitors can call: ${formatPhone(draft.operator.visitorContact)}`] : []),
-      ],
+      lines: [`If a visitor needs help: ${draft.operator.name}`, ...visitorHelpLines(draft.operator)],
     },
   ];
   return { sections, issues, canSave: issues.length === 0 };

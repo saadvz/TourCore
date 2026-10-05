@@ -877,6 +877,7 @@ function servicesStep(data) {
   const id = summary.id;
   const alertName = input({ value: view.operator.name });
   const visitorContact = input({ value: view.operator.visitorContact, inputmode: "tel", autocomplete: "tel" });
+  const supportEmail = input({ value: view.operator.supportEmail, type: "email", autocomplete: "email" });
   const errors = errorBox();
   let mode = view.services.messaging.mode;
   const choices = view.services.messaging.options.map((o) => {
@@ -890,7 +891,7 @@ function servicesStep(data) {
     return node;
   });
   const save = action(async () => {
-    await command(id, "setAlertContact", { name: alertName.value, visitorContact: visitorContact.value });
+    await command(id, "setAlertContact", { name: alertName.value, visitorContact: visitorContact.value, supportEmail: supportEmail.value });
     go(`${base(id)}/review`);
   }, errors);
   return wizardShell(
@@ -916,6 +917,11 @@ function servicesStep(data) {
           "What number can visitors call if they're stuck at a door? (optional)",
           visitorContact,
           "Shown to visitors when a door stays locked. Leave blank if they should just reply to the text. This is not your private alert line.",
+        ),
+        field(
+          "What email should we give visitors who text HELP? (optional)",
+          supportEmail,
+          "Used for HELP replies and the public contact pages. Leave blank if they should reply here.",
         ),
         errors.node,
       ),
@@ -985,6 +991,7 @@ function readinessList(id, r) {
           ),
         ),
       ),
+      (r.advisories ?? []).map((note) => el("li", {}, el("div", { class: "check-line" }, mark(), el("span", {}, note)))),
     ),
   );
 }

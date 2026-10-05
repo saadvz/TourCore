@@ -24,7 +24,7 @@ again with the code after the operator's yes.
 | `list_properties` | read | Every property and its status |
 | `get_property_setup` | read | Full setup: units, doors, routes, hours, verification, messaging, problems |
 | `create_property_setup` | change | Starts a property from its street address. A US address needs street, city, state and ZIP; a missing ZIP is the next question, then a read-back to confirm, then property type. An optional public name only if the operator said one. Uses the installed visitor texting automatically |
-| `update_property_details` | change | Property type, address, operator-given name, time zone, approved property facts, who gets alerts, optional visitor help number (never the team's private alert line); returns `nextQuestion` (how to name the tourable spaces for that type) |
+| `update_property_details` | change | Property type, address, operator-given name, time zone, approved property facts, who gets alerts, optional visitor help number and support email (never the team's private alert line); `skipVisitorHelp` records an explicit skip; returns `nextQuestion` (how to name the tourable spaces for that type, then the optional help step) |
 | `list_units` | read | Units with description, facts, door, route |
 | `add_unit` | change | Adds a unit and its own door. For a single-family home the name is optional ("Main Home"), its door is the home's entrance ("Front Door" unless named) and its route is set automatically. Never a made-up unit number |
 | `update_unit` | change | Renames a unit or changes its description/facts |
@@ -41,7 +41,7 @@ again with the code after the operator's yes.
 | `set_verification_policy` | change | Basic identity form or practice verification |
 | `get_services` | read | Messaging choice and connection, records location, door access mode |
 | `set_services` | change | Live texts or practice texts; records location |
-| `review_property_setup` | read | The setup as short lines to read back: address, "Called: ..." if named, property type, each unit with its details and route, "Tours: ...", "Verification: ...", "Visitor texting: Connected", "Door access: Demo" |
+| `review_property_setup` | read | The setup as short lines to read back: address, "Called: ..." if named, property type, each unit with its details and route, "Tours: ...", "Verification: ...", "Visitor texting: Connected", "Door access: Demo", visitor help number and support email (or "not set") |
 | `run_readiness_check` | change | The real readiness checks, recorded for publish |
 | `run_dry_tour` | change | A full practice tour with safety proof points, recorded for publish |
 | `publish_demo_property` | consequential | Publishes for demo, only when readiness and a practice tour passed for this exact setup. In a Grok-managed install it refuses while the property still uses practice texts although texting is installed, returning a `summary` and a `remediation` (switch to real texts, re-run readiness and the practice tour, ask again) |

@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import { normalizePhone } from "../core/phone";
-import { complianceLinkPair, isDevelopmentPublicConfig, publicBrandName, publicContactEmail } from "../web/compliance/config";
+import { resolveSupportEmail } from "../core/email";
+import { formatPhone, normalizePhone } from "../core/phone";
+import { complianceLinkPair, publicBrandName } from "../web/compliance/config";
 import { campaignConfirmation, campaignDisclosure, MESSAGE_RATES } from "../web/compliance/pages";
 import { writeJsonAtomic } from "../storage/atomicWrite";
 
@@ -46,15 +47,20 @@ export function smsOptInConfirmation(env: NodeJS.ProcessEnv = process.env): stri
 
 /**
  * Visitor HELP text. The program name comes from TOURCORE_PUBLIC_BRAND_NAME.
- * The support address comes only from TOURCORE_PUBLIC_CONTACT_EMAIL.
+ * The support address is the operator setting, with TOURCORE_PUBLIC_CONTACT_EMAIL
+ * as a fallback only. Visitors never see env-var names or "not configured".
  */
-export function smsHelpBody(env: NodeJS.ProcessEnv = process.env): string {
-  const email = publicContactEmail(env);
+export function smsHelpBody(
+  env: NodeJS.ProcessEnv = process.env,
+  contact: { supportEmail?: string; visitorContact?: string } = {},
+): string {
+  const email = resolveSupportEmail(contact.supportEmail, env);
+  const number = contact.visitorContact ? formatPhone(contact.visitorContact) : undefined;
   const help = email
     ? `For help with your property tour, email ${email}.`
-    : isDevelopmentPublicConfig(env)
-      ? "For help with your property tour, TOURCORE_PUBLIC_CONTACT_EMAIL is not set."
-      : "For help with your property tour, a support email is not configured.";
+    : number
+      ? `For help with your property tour, call ${number} or reply here.`
+      : "For help with your property tour, reply here.";
   return `${publicBrandName(env)}: ${help} ${MESSAGE_RATES} Reply STOP to opt out.`;
 }
 

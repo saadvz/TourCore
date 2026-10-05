@@ -221,7 +221,8 @@ and a messaging app gets typed-reply wording ("Reply YES or NO."). Practice tour
 text anyone. Keyword opt-in, STOP, and HELP stay in Tour Core. Set `TOURCORE_SMS_CONSENT_MODE` to `keyword_confirm`,
 `provider_default`, or `disabled`. Public compliance pages at `/TourCore/privacy`, `/TourCore/terms`, and `/TourCore/sms`
 read `TOURCORE_PUBLIC_BRAND_NAME`, `TOURCORE_PUBLIC_LEGAL_NAME`, `TOURCORE_PUBLIC_CONTACT_EMAIL`,
-`TOURCORE_PUBLIC_SMS_NUMBER`, and `PUBLIC_BASE_URL`. They are not specific to one provider. They do not invent a legal
+`TOURCORE_PUBLIC_SMS_NUMBER`, and `PUBLIC_BASE_URL`. The contact email on those pages and in HELP replies is the
+operator's support email when one is set; `TOURCORE_PUBLIC_CONTACT_EMAIL` is only a fallback. They are not specific to one provider. They do not invent a legal
 entity when the legal name is empty. `docs/messaging/twilio-a2p-example.md` is an example of disclosures some carriers ask for.
 
 Webhook addresses are `PUBLIC_BASE_URL/webhooks/sendblue`, `PUBLIC_BASE_URL/webhooks/twilio`, and `PUBLIC_BASE_URL/webhooks/photon`.

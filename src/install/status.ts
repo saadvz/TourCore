@@ -1,4 +1,5 @@
 import { nextProfileQuestion } from "../config/unitProfile";
+import { visitorHelpQuestion } from "../setup/setupActions";
 import { mcpAuthModeFromEnv } from "../mcp/authMode";
 import { MCP_PATH } from "../mcp/paths";
 import { describeUpdates, enabledUpdates } from "../alerts/preferences";
@@ -586,6 +587,22 @@ function propertyStatus(services: OperatorServices, installed: InstalledMessagin
           skill: "setup-property",
           tool: "set_unit_details",
           grokInstructions: "Ask this in plain words and save the answer with set_unit_details (the operator's words; \"not sure\" or \"don't list it\" count as answers). get_unit_details shows what's still missing.",
+        }),
+      }),
+    };
+  }
+  const published = primary.saved && ws.has(primary.id) && ws.load(primary.id).state.status === "PUBLISHED_FOR_DEMO";
+  const help = published ? undefined : visitorHelpQuestion(draft);
+  if (help) {
+    return {
+      ready: false,
+      name,
+      status: component("PROPERTY", "CONFIGURING", `${name} still has an optional visitor help step.`, {
+        next: step("PROPERTY", "FINISH_PROPERTY_SETUP", "OPERATOR_DECISION", help.nextQuestion, {
+          skill: "setup-property",
+          tool: "update_property_details",
+          grokInstructions:
+            "Ask this in plain words. Save a number with update_property_details visitorContact and an email with supportEmail. If they skip, call update_property_details with skipVisitorHelp true so it is not asked again. Never use the team's private alert line as the visitor number.",
         }),
       }),
     };

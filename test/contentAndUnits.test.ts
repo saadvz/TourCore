@@ -135,6 +135,12 @@ describe("real fresh-install sequence (HTTP, MCP, secure setup page)", () => {
     for (const unit of ["1A", "1B"]) await grok("set_route", { unit, doors: ["Front Door", `Unit ${unit} Door`] });
     await grok("set_tour_hours", { days: "weekdays", start: "9am", end: "5pm" });
     await grok("set_verification_policy", { level: "basic-form" });
+    const help = await nextStep();
+    expect(help).toMatchObject({
+      action: "FINISH_PROPERTY_SETUP",
+      operatorMessage: "If a visitor gets stuck, what number can they call and what email should we give them for help? You can skip both.",
+    });
+    await grok("update_property_details", { skipVisitorHelp: true });
 
     // Only now: alerts are offered, and the page shows them.
     const offer = await nextStep();
@@ -151,7 +157,7 @@ describe("real fresh-install sequence (HTTP, MCP, secure setup page)", () => {
     await grok("skip_optional_setup", { component: "OPERATOR_ALERTS" });
     expect((await nextStep()).action).toBe("RUN_READINESS");
 
-    expect(sequence).toEqual(["CHECK_PUBLIC_ENDPOINT", "CONNECT_GROK", "CHOOSE_MESSAGING_PROVIDER", "CONNECT_VISITOR_MESSAGING", "CONNECT_GOOGLE_DRIVE", "SET_UP_PROPERTY", "FINISH_PROPERTY_SETUP", "OFFER_OPERATOR_ALERTS", "RUN_READINESS"]);
+    expect(sequence).toEqual(["CHECK_PUBLIC_ENDPOINT", "CONNECT_GROK", "CHOOSE_MESSAGING_PROVIDER", "CONNECT_VISITOR_MESSAGING", "CONNECT_GOOGLE_DRIVE", "SET_UP_PROPERTY", "FINISH_PROPERTY_SETUP", "FINISH_PROPERTY_SETUP", "OFFER_OPERATOR_ALERTS", "RUN_READINESS"]);
   }, 20_000);
 
   it("the installation context file lists components in Tour Core's actual order and never calls alerts required", () => {

@@ -1,3 +1,4 @@
+import { resolveSupportEmail } from "../../core/email";
 import { resolveDeploymentMode } from "../../install/deployment";
 import { toE164 } from "../../messaging/Messenger";
 
@@ -9,8 +10,6 @@ export const COMPLIANCE_PATHS = {
 } as const;
 
 export type CompliancePageId = keyof typeof COMPLIANCE_PATHS;
-
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Shown when TOURCORE_PUBLIC_BRAND_NAME is unset. */
 export const DEFAULT_PUBLIC_BRAND_NAME = "Tour Core";
@@ -88,10 +87,9 @@ export function complianceLinkPair(publicBaseUrl: string | undefined): { privacy
   };
 }
 
-/** A real public contact address, or nothing. An invalid value is not displayed. */
-export function publicContactEmail(env: NodeJS.ProcessEnv = process.env): string | undefined {
-  const raw = env.TOURCORE_PUBLIC_CONTACT_EMAIL?.trim();
-  return raw && EMAIL.test(raw) ? raw : undefined;
+/** A real public contact address, or nothing. An invalid value is not displayed. Operator setting is primary. */
+export function publicContactEmail(env: NodeJS.ProcessEnv = process.env, operatorEmail?: string): string | undefined {
+  return resolveSupportEmail(operatorEmail, env);
 }
 
 /** Public brand. An empty setting stays the product name rather than a blank title. */
@@ -111,11 +109,11 @@ export function publicLegalName(env: NodeJS.ProcessEnv = process.env): string | 
  * (PUBLIC_BASE_URL, or the installation's public address). It is never a
  * hardcoded host.
  */
-export function buildComplianceConfig(env: NodeJS.ProcessEnv = process.env, publicBaseUrl?: string): PublicComplianceConfig {
+export function buildComplianceConfig(env: NodeJS.ProcessEnv = process.env, publicBaseUrl?: string, operatorEmail?: string): PublicComplianceConfig {
   const rawNumber = env.TOURCORE_PUBLIC_SMS_NUMBER?.trim() || undefined;
   const canonical = rawNumber ? toE164(rawNumber) : undefined;
-  const rawEmail = env.TOURCORE_PUBLIC_CONTACT_EMAIL?.trim() || undefined;
-  const contactEmail = rawEmail && EMAIL.test(rawEmail) ? rawEmail : undefined;
+  const contactEmail = resolveSupportEmail(operatorEmail, env);
+  const rawEmail = operatorEmail?.trim() || env.TOURCORE_PUBLIC_CONTACT_EMAIL?.trim() || undefined;
   const legalName = publicLegalName(env);
   const base = publicBaseUrl?.replace(/\/+$/, "") || undefined;
   return {

@@ -40,6 +40,8 @@ operator asks why something isn't ready.
    > ✓ Tour progress can be safely saved
    > ✓ Durin access
    > ✓ Audit/export
+   > No visitor help number or support email is set. Visitors who text HELP can reply here.
+   An advisory line after the checks does not fail the check. Say it plainly.
 3. If anything failed, explain each problem in one plain sentence and offer
    the fix ("Want me to map Unit 102's route now?"). Use **Map Route** or
    **Setup Property** for the fix, only with the operator's OK.

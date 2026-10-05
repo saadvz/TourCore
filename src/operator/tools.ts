@@ -17,7 +17,7 @@ import { draftView, readinessView, saveStateView } from "../setup/presenters";
 import { parseDays, parseMinutes, parseTimeOfDay } from "../setup/parse";
 import type { DryTourCheck, DryTourResult } from "../setup/dryTour";
 import type { ReadinessResult } from "../setup/readiness";
-import { createPropertySetup, modeSentence, OperatorTeamCopy, SetupInputError, tourableSpacesQuestion, type SetupDraft } from "../setup/setupActions";
+import { createPropertySetup, modeSentence, OperatorTeamCopy, SetupInputError, tourableSpacesQuestion, visitorHelpLines, visitorHelpQuestion, type SetupDraft } from "../setup/setupActions";
 import { isHostedRailway } from "../install/deployment";
 import { statusLabel, type PublishBlocker } from "../setup/workspace";
 import { rememberCanonical, revertCanonical } from "../storage/canonical";
@@ -125,7 +125,7 @@ function propertyNextQuestion(draft: SetupDraft): { nextQuestion: string; choice
     return { nextQuestion: `I have:\n${addressReadback(canonical)}\nIs that the address?`, confirmAddress: true };
   }
   if (!draft.property.propertyType) return { nextQuestion: "What type of property is this?", choices: PROPERTY_TYPE_CHOICES };
-  if (draft.units.length) return undefined;
+  if (draft.units.length) return visitorHelpQuestion(draft);
   const spaces = tourableSpacesQuestion(draft);
   return spaces ? { nextQuestion: spaces.question, ...(spaces.suggestedName ? { suggestedName: spaces.suggestedName } : {}) } : undefined;
 }
@@ -207,6 +207,7 @@ function setupSnapshot(ctx: ToolContext, id: string) {
     doorAccess: draft.accessMode === "durin-mock" ? "Demo" : "Connected",
     alertsGoTo: view.operator.name,
     ...(view.operator.visitorContact ? { visitorHelpNumber: formatPhone(view.operator.visitorContact) } : {}),
+    ...(view.operator.supportEmail ? { supportEmail: view.operator.supportEmail } : {}),
     ...setupState(ctx, id),
   };
 }
@@ -244,7 +245,11 @@ function readinessOut(result: ReadinessResult, savedChanges: boolean) {
     passed: result.passed,
     summary: view.headline,
     checks: view.checks.map((c) => ({ check: c.label, ok: c.ok, problems: c.problems.map((p) => p.message) })),
-    lines: view.checks.map((c) => (c.ok ? `\u2713 ${c.label}` : `\u2717 ${c.label}: ${c.problems.map((p) => p.message).join(" ")}`)),
+    lines: [
+      ...view.checks.map((c) => (c.ok ? `\u2713 ${c.label}` : `\u2717 ${c.label}: ${c.problems.map((p) => p.message).join(" ")}`)),
+      ...view.advisories,
+    ],
+    advisories: view.advisories,
     savedChanges,
   };
 }
@@ -359,8 +364,10 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     input: z.strictObject({ property: Property }),
     run: async (ctx, i) => {
       const id = resolvePropertyId(ctx.services.workspace, i.property);
+      const { draft } = ctx.services.workspace.openDraft(id);
       const setup = setupSnapshot(ctx, id);
-      return { summary: `${setup.name}: ${setup.status}.`, setup };
+      const published = ctx.services.workspace.has(id) && ctx.services.workspace.load(id).state.status === "PUBLISHED_FOR_DEMO";
+      return { summary: `${setup.name}: ${setup.status}.`, setup, ...(published ? {} : propertyNextQuestion(draft)) };
     },
   }),
   tool({
@@ -397,7 +404,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Update property details",
     kind: "change",
     description:
-      "Changes the property's type, address, ZIP, public name, time zone or approved property facts. The name is only one the operator said (an empty name goes back to using the address). A ZIP code does not invent the rest of the address. confirmAddress is true only after they agree to the read-back. Facts must be the operator's own words. Returns nextQuestion when something still has to be asked, and that question comes before property type until the address is confirmed. visitorContact is an optional number visitors can call if they're stuck at a door; it is never the team's private alert line.",
+      "Changes the property's type, address, ZIP, public name, time zone or approved property facts. The name is only one the operator said (an empty name goes back to using the address). A ZIP code does not invent the rest of the address. confirmAddress is true only after they agree to the read-back. Facts must be the operator's own words. Returns nextQuestion when something still has to be asked, and that question comes before property type until the address is confirmed. After the rest of the setup is saveable, nextQuestion asks for an optional visitor help number and support email together. visitorContact is an optional number visitors can call if they're stuck at a door; it is never the team's private alert line. supportEmail is the optional address for HELP replies and compliance pages. If they skip both, pass skipVisitorHelp true so the question is not asked again.",
     input: z.strictObject({
       property: Property,
       propertyType: z.enum(PROPERTY_TYPES).optional().describe("From the operator's answer to \"What type of property is this?\"."),
@@ -414,6 +421,15 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         .max(30)
         .optional()
         .describe("Optional phone number visitors can call if they're stuck at a door. Empty clears it. Never the team's private alert line."),
+      supportEmail: z
+        .string()
+        .max(120)
+        .optional()
+        .describe("Optional email visitors see when they text HELP, and on the public contact pages. Empty clears it."),
+      skipVisitorHelp: z
+        .boolean()
+        .optional()
+        .describe("True when the operator explicitly skips the optional help number and support email. Records the skip so the question is not asked again."),
     }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
@@ -426,8 +442,14 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         postalCode: i.postalCode,
         confirmAddress: i.confirmAddress,
       });
-      if (i.alertName !== undefined || i.alertContact !== undefined || i.visitorContact !== undefined) {
-        next = applySetupCommand(next, "setAlertContact", { name: i.alertName, contact: i.alertContact, visitorContact: i.visitorContact });
+      if (i.alertName !== undefined || i.alertContact !== undefined || i.visitorContact !== undefined || i.supportEmail !== undefined || i.skipVisitorHelp) {
+        next = applySetupCommand(next, "setAlertContact", {
+          name: i.alertName,
+          contact: i.alertContact,
+          visitorContact: i.visitorContact,
+          supportEmail: i.supportEmail,
+          skipVisitorHelp: i.skipVisitorHelp,
+        });
       }
       ctx.services.workspace.persistEdit(next, ctx.now());
       const setup = setupSnapshot(ctx, id);
@@ -806,7 +828,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Review the setup",
     kind: "read",
     description:
-      'Everything on one page, as short lines to read back to the operator ("Here\'s what I have: ..."): the address, property type, each tourable unit with its details and route, tour hours, verification, visitor texting and door access. Plus anything still missing. No addresses of Tour Core itself or other technical details.',
+      'Everything on one page, as short lines to read back to the operator ("Here\'s what I have: ..."): the address, property type, each tourable unit with its details and route, tour hours, verification, visitor texting and door access, the visitor help number and support email (or "not set"). Plus anything still missing. No addresses of Tour Core itself or other technical details.',
     input: z.strictObject({ property: Property }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
@@ -823,7 +845,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         `Tours: ${view.tourHours.summary ?? `${view.tourHours.daysLabel}, ${view.tourHours.hoursLabel}`}`,
         `Verification: ${view.reviewCards.find((c) => c.step === "verification")!.rows[0]}`,
         ...modes.lines,
-        ...(draft.operator.visitorContact ? [`Visitors can call: ${formatPhone(draft.operator.visitorContact)}`] : []),
+        ...visitorHelpLines(draft.operator),
       ];
       return {
         summary: view.canSave ? "Setup looks complete." : `${view.issues.length} thing${view.issues.length === 1 ? "" : "s"} still need${view.issues.length === 1 ? "s" : ""} an answer.`,
@@ -832,6 +854,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         ...("problem" in modes.texting ? { textingProblem: modes.texting.problem } : {}),
         canSave: view.canSave,
         ...setupState(ctx, id),
+        ...(ctx.services.workspace.has(id) && ctx.services.workspace.load(id).state.status === "PUBLISHED_FOR_DEMO" ? {} : propertyNextQuestion(draft)),
       };
     },
   }),
@@ -840,7 +863,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Run the readiness check",
     kind: "change",
     description:
-      "Runs Tour Core's real readiness checks (property, hours, routes, verification, messaging, records, tour progress, Durin access, audit/export). Report the result as-is; never claim a check passed if it didn't.",
+      "Runs Tour Core's real readiness checks (property, hours, routes, verification, messaging, records, tour progress, Durin access, audit/export). Report the result as-is, including any advisory lines; never claim a check passed if it didn't.",
     input: z.strictObject({ property: Property }),
     run: async (ctx, i) => {
       const id = resolvePropertyId(ctx.services.workspace, i.property);

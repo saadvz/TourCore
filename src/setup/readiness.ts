@@ -1,4 +1,5 @@
 import { isLiveMessaging, TourCoreConfigShape, validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
+import { resolveSupportEmail } from "../core/email";
 import { FIELD_WORDS, missingProfileFields } from "../config/unitProfile";
 import type { ConfigIssue, ConfigSection } from "../config/validateConfig";
 import { SimulatedClock } from "../core/clock";
@@ -38,6 +39,8 @@ export interface ReadinessResult {
   checks: ReadinessCheck[];
   /** Step-by-step messaging connection checks (empty for demo messaging). */
   messaging?: MessagingCheck[];
+  /** Optional notes that do not fail the check. */
+  advisories?: string[];
 }
 
 const LABELS: Record<ReadinessCheckId, string> = {
@@ -160,7 +163,11 @@ export async function runReadinessCheck(
     const messaging = result.checks.find((c) => c.id === "messaging")!;
     messaging.label = messaging.ok ? "Visitor messaging connected" : "Visitor messaging";
   }
-  return { ...result, messaging: messagingChecks };
+  const advisories =
+    config.operator.visitorContact || resolveSupportEmail(config.operator.supportEmail)
+      ? []
+      : ["No visitor help number or support email is set. Visitors who text HELP can reply here."];
+  return { ...result, messaging: messagingChecks, advisories };
 }
 
 function listWords(words: string[]): string {

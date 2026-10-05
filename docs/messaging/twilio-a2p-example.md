@@ -14,7 +14,8 @@ Tour Core can support a keyword opt-in. It does not submit a brand, a campaign, 
 | --- | --- |
 | `TOURCORE_PUBLIC_BRAND_NAME` | `Tour Core` |
 | `TOURCORE_PUBLIC_LEGAL_NAME` | `Example Property Company LLC` |
-| `TOURCORE_PUBLIC_CONTACT_EMAIL` | `support@example.com` |
+| Operator support email (property setup) | `support@example.com` |
+| `TOURCORE_PUBLIC_CONTACT_EMAIL` | fallback only, if the operator setting is empty |
 | `TOURCORE_PUBLIC_SMS_NUMBER` | `+15555550123` |
 | `PUBLIC_BASE_URL` | `https://example.com` |
 
@@ -32,6 +33,6 @@ A deployer who uses a provider that wants a visible opt-in can publish:
 
 Generic example, with placeholders only:
 
-Prospective renters opt in by texting the configured keyword to the displayed property-tour number. They see that number on a listing, website, sign, or QR code. Tour Core replies with a messaging disclosure and asks them to reply YES. Reply STOP to opt out. Reply HELP for help. Help uses the address in `TOURCORE_PUBLIC_CONTACT_EMAIL`.
+Prospective renters opt in by texting the configured keyword to the displayed property-tour number. They see that number on a listing, website, sign, or QR code. Tour Core replies with a messaging disclosure and asks them to reply YES. Reply STOP to opt out. Reply HELP for help. Help uses the operator's support email when one is set, otherwise the address in `TOURCORE_PUBLIC_CONTACT_EMAIL` if that fallback is set, otherwise a reply-here line (and the visitor help number if one is set).
 
 Replace every placeholder with the deploying organization's own legal name, support address, phone number, and public website before sending anything to a provider. This page is not a completed campaign application.

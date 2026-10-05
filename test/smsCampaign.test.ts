@@ -83,6 +83,43 @@ describe("SMS keyword campaign", () => {
     expect(JSON.stringify(file)).not.toContain("Which unit");
   });
 
+  it("HELP uses the operator support email, then a help number, then a reply-here line — never env-var or not-configured wording", async () => {
+    const previous = process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
+    delete process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
+    try {
+      const emailRoot = mkdtempSync(join(tmpdir(), "tourcore-sms-"));
+      new PropertyWorkspace(emailRoot).save({
+        ...sendblueProperty(),
+        operator: { ...sendblueProperty().operator, supportEmail: "desk@example.com", visitorHelpDecided: true },
+      });
+      const emailed = await startPhoneApp(emailRoot);
+      expect((await emailed.text("HELP")).replies.join("\n")).toBe(
+        "Tour Core: For help with your property tour, email desk@example.com. Message and data rates may apply. Reply STOP to opt out.",
+      );
+      await emailed.close();
+
+      const numberRoot = mkdtempSync(join(tmpdir(), "tourcore-sms-"));
+      const numberWs = new PropertyWorkspace(numberRoot);
+      numberWs.save({
+        ...sendblueProperty(),
+        operator: { ...sendblueProperty().operator, visitorContact: "+15550108888", visitorHelpDecided: true },
+      });
+      const numbered = await startPhoneApp(numberRoot);
+      expect((await numbered.text("HELP")).replies.join("\n")).toBe(
+        "Tour Core: For help with your property tour, call (555) 010-8888 or reply here. Message and data rates may apply. Reply STOP to opt out.",
+      );
+      expect((await numbered.text("HELP")).replies.join("\n")).not.toMatch(/not configured|TOURCORE_PUBLIC_CONTACT_EMAIL/);
+
+      const neither = await startPhoneApp();
+      const body = (await neither.text("HELP")).replies.join("\n");
+      expect(body).toBe("Tour Core: For help with your property tour, reply here. Message and data rates may apply. Reply STOP to opt out.");
+      expect(body).not.toMatch(/not configured|TOURCORE_PUBLIC_CONTACT_EMAIL/);
+    } finally {
+      if (previous === undefined) delete process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
+      else process.env.TOURCORE_PUBLIC_CONTACT_EMAIL = previous;
+    }
+  });
+
   it("HELP names Tour Core and the configured support email, and STOP blocks ordinary messages until START and YES", async () => {
     const previous = process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
     process.env.TOURCORE_PUBLIC_CONTACT_EMAIL = "help@example.com";

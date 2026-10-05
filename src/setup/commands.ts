@@ -47,7 +47,13 @@ export const SETUP_COMMANDS = {
     (d, i) => setPropertyDetails(d, i),
   ),
   setAlertContact: command(
-    z.object({ name: Text.optional(), contact: Text.optional(), visitorContact: Text.optional() }),
+    z.object({
+      name: Text.optional(),
+      contact: Text.optional(),
+      visitorContact: Text.optional(),
+      supportEmail: Text.optional(),
+      skipVisitorHelp: z.boolean().optional(),
+    }),
     (d, i) => setAlertContact(d, i),
   ),
   /** Adds a unit together with its own door (named "<unit> Door" unless given). A single-family home's one space uses the home's entrance. */

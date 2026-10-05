@@ -95,5 +95,18 @@ describe("public compliance boundaries", () => {
         TOURCORE_PUBLIC_CONTACT_EMAIL: "support@example.com",
       }),
     ).toBe("Example Tours: For help with your property tour, email support@example.com. Message and data rates may apply. Reply STOP to opt out.");
+    expect(smsHelpBody({ TOURCORE_PUBLIC_BRAND_NAME: "Example Tours" })).toBe(
+      "Example Tours: For help with your property tour, reply here. Message and data rates may apply. Reply STOP to opt out.",
+    );
+    expect(smsHelpBody({ TOURCORE_PUBLIC_BRAND_NAME: "Example Tours" }, { visitorContact: "+15550108888" })).toBe(
+      "Example Tours: For help with your property tour, call (555) 010-8888 or reply here. Message and data rates may apply. Reply STOP to opt out.",
+    );
+    expect(smsHelpBody({ TOURCORE_PUBLIC_BRAND_NAME: "Example Tours" }, { supportEmail: "desk@example.com", visitorContact: "+15550108888" })).toBe(
+      "Example Tours: For help with your property tour, email desk@example.com. Message and data rates may apply. Reply STOP to opt out.",
+    );
+    expect(smsHelpBody({ TOURCORE_PUBLIC_BRAND_NAME: "Example Tours", TOURCORE_PUBLIC_CONTACT_EMAIL: "fallback@example.com" }, { supportEmail: "desk@example.com" })).toBe(
+      "Example Tours: For help with your property tour, email desk@example.com. Message and data rates may apply. Reply STOP to opt out.",
+    );
+    expect(smsHelpBody({ TOURCORE_PUBLIC_BRAND_NAME: "Example Tours" })).not.toMatch(/not configured|TOURCORE_PUBLIC_CONTACT_EMAIL/);
   });
 });
