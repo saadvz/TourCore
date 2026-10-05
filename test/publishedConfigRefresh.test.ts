@@ -8,7 +8,7 @@ import { MessagingEndpoints } from "../src/messaging/endpoints";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
 import { PropertyWorkspace, runReadinessCheck } from "../src/setup";
 import { MemoryRuntimeStore } from "../src/storage/runtimeStore";
-import { handleVisitorText } from "../src/visitor/conversation";
+import { handleVisitorText, SCHEDULE_CHANGED_LEAD } from "../src/visitor/conversation";
 import { MessagingConversations } from "../src/visitor/messagingRouter";
 import { VisitorDemoRegistry, VisitorDemoSession } from "../src/visitor/session";
 import { VerificationLinks } from "../src/visitor/verificationLinks";
@@ -89,7 +89,21 @@ async function textApp(options: { clock: number; hours?: TourHours }) {
       consentMode: () => "disabled",
     });
     expect(await restored.restoreSaved()).toBe(1);
-    return { registry: next, router: restored, session: () => next.latestForPhone(PROPERTY, PHONE, "messaging")! };
+    let m = 0;
+    const text = async (body: string) => {
+      await restored.receive({
+        provider: "test",
+        providerMessageId: `m_restored_${++m}`,
+        from: PHONE,
+        to: LINE,
+        text: body,
+        channel: "SMS",
+        receivedAt: new Date(options.clock).toISOString(),
+      });
+      const session = next.latestForPhone(PROPERTY, PHONE, "messaging")!;
+      return [...session.conversation].reverse().find((item) => item.from === "tourcore")!.text;
+    };
+    return { registry: next, router: restored, session: () => next.latestForPhone(PROPERTY, PHONE, "messaging")!, text };
   };
   return { ws, registry, text, session, republishHours, restart };
 }
@@ -120,22 +134,46 @@ describe("open text conversations pick up republished settings", () => {
     expect(restored.session().offeredDates[0]?.date).toBe("2026-09-29");
     restored.republishHours("20:00");
     const afterRestart = await restored.restart();
+    expect(afterRestart.session().config.tourHours.start).toBe("20:00");
+    expect(afterRestart.session().core.config.tourHours.start).toBe("20:00");
     expect(afterRestart.session().offeredDates[0]).toMatchObject({ date: "2026-09-28" });
     expect(afterRestart.session().offeredDates[0]?.label).toContain("Monday, Sep 28");
-    const numbered = await afterRestart.router.receive({
-      provider: "test",
-      providerMessageId: "m_restore_1",
-      from: PHONE,
-      to: LINE,
-      text: "1",
-      channel: "SMS",
-      receivedAt: new Date(clock).toISOString(),
-    });
-    expect(numbered.correlationId).toBe(afterRestart.session().id);
-    const reply = [...afterRestart.session().conversation].reverse().find((item) => item.from === "tourcore")!.text;
-    expect(reply).toContain("I have these times available Monday, Sep 28:");
-    expect(reply).toContain("11:00 PM");
-    expect(reply).toContain("Reply 1 for 11:00 PM");
+    const numbered = await afterRestart.text("1");
+    expect(numbered).toContain(SCHEDULE_CHANGED_LEAD);
+    expect(numbered).toContain("I have tours available. Which day works for you?");
+    expect(numbered).toContain("Monday, Sep 28");
+    expect(numbered).not.toContain("you're booked");
+    expect(await afterRestart.session().stage()).toBe("choose-date");
+    const todayAfterRestore = await afterRestart.text("today");
+    expect(todayAfterRestore).toContain("I have these times available Monday, Sep 28:");
+    expect(todayAfterRestore).toContain("11:00 PM");
+    expect(todayAfterRestore).toContain("Reply 1 for 11:00 PM");
+  });
+
+  it("a numbered reply after an hours change is not remapped onto the new menu", async () => {
+    const clock = at(22, 53).getTime();
+    const app = await textApp({ clock, hours: EVENING });
+    await app.text("Hi");
+    await app.text("1");
+    expect(app.session().offeredDates.map((day) => day.date)).toEqual(["2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02"]);
+    expect(await app.session().stage()).toBe("choose-date");
+
+    app.republishHours("20:00");
+    const remapped = await app.text("2");
+    expect(remapped).toContain(SCHEDULE_CHANGED_LEAD);
+    expect(remapped).toContain("I have tours available. Which day works for you?");
+    expect(remapped).toContain("Monday, Sep 28");
+    expect(remapped).toContain("Tuesday, Sep 29");
+    expect(remapped).not.toContain("I have these times available");
+    expect(remapped).not.toContain("you're booked");
+    expect(await app.session().stage()).toBe("choose-date");
+    expect((await app.session().reservation())!.slotStart).toBeUndefined();
+    expect(app.session().offeredDates[0]).toMatchObject({ date: "2026-09-28" });
+
+    const afterReshow = await app.text("1");
+    expect(afterReshow).toContain("I have these times available Monday, Sep 28:");
+    expect(afterReshow).toContain("11:00 PM");
+    expect(await app.session().stage()).toBe("choose-time");
   });
 
   it("'Tour' in choose-date and choose-time re-offers fresh days and keeps the unit", async () => {
