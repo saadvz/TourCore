@@ -43,10 +43,11 @@ domain, or set a port.
 1. Install the **Tour Core** Grok Bot template ([`grok-template/`](grok-template/)).
 2. Say **"Set up Tour Core."**
 
-The open-source fallback is still a blank Grok Bot, one prompt, and
-[`GROK_BOOTSTRAP.md`](GROK_BOOTSTRAP.md). That path clones and runs Tour Core.
-It is not the normal landlord experience. The one-time Railway setup for our
-demo host is in [`docs/deployment.md`](docs/deployment.md).
+The open-source fallback is still a blank Grok Bot and the prompt in
+[Set up with Grok Bot](#set-up-with-grok-bot). Grok follows
+[`GROK_BOOTSTRAP.md`](GROK_BOOTSTRAP.md) from the clone. It is not the
+normal landlord experience. The one-time Railway setup for our demo host
+is in [`docs/deployment.md`](docs/deployment.md).
 
 ### Open-source computer demo
 
