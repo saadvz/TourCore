@@ -15,6 +15,22 @@ Tour Core installation. Real visitor texting uses the messaging provider the ope
 readiness check and a practice tour, publishes, watches live tours, works exceptions and exports the audit. Grok
 calls Tour Core's typed tools; Tour Core keeps every record and makes every access decision.
 
+## Set up with Grok Bot
+
+If you use Grok Bot, paste this prompt into your bot. Do not change a word.
+
+```text
+Set up Tour Core, my AI landlord, using the open-source repository at https://github.com/saadvz/TourCore.
+Use your cloud computer to clone the repository only so you can read its setup instructions and skills. Read GROK_BOOTSTRAP.md and follow it as the authoritative setup instructions. If the repository specifies an official hosted Tour Core service, use that service instead of starting Tour Core locally on your computer.
+Do as much of the installation and configuration yourself as possible. Never ask me to paste API keys, passwords, tokens, or provider secrets into chat. When a login, MFA step, credential entry, OAuth approval, or other human-only action is required, use Tour Core's secure setup flow or the provider's own page and ask me only to complete that step.
+After you're connected to Tour Core, use its installation-status tools to determine what remains, test each connected component, and then offer to configure my first property.
+Start now.
+```
+
+The same prompt is in [`grok-template/SETUP_PROMPT.md`](grok-template/SETUP_PROMPT.md).
+
+For a manual setup or another agent, clone this repository and follow [`GROK_BOOTSTRAP.md`](GROK_BOOTSTRAP.md).
+
 ## Getting started: pick a path
 
 ### Path A: Hosted Tour Core (the product path)
@@ -38,9 +54,11 @@ Use this only for the open-source computer demo (`GROK_MANAGED_P0`). It stops
 when that computer stops, and its public address changes when the tunnel
 restarts.
 
-Development / open-source fallback, with no template and no attachments: give a blank Grok Bot one prompt with
-this repository's URL and ask it to clone the repository and follow [`GROK_BOOTSTRAP.md`](GROK_BOOTSTRAP.md) (full
-prompt: [`docs/grok-manual-test.md`](docs/grok-manual-test.md), test B).
+Development / open-source fallback, with no template and no attachments: give a blank Grok Bot the prompt in
+[Set up with Grok Bot](#set-up-with-grok-bot). Grok clones this repository only to read
+[`GROK_BOOTSTRAP.md`](GROK_BOOTSTRAP.md) and the skills. If the repository names a hosted Tour Core service, Grok
+uses that instead of running Tour Core on its computer. (Manual-test wording:
+[`docs/grok-manual-test.md`](docs/grok-manual-test.md), test B.)
 
 Grok installs and runs Tour Core **on its own cloud computer** (`npm run bootstrap:grok`), opens a public
 address, connects to it, and then walks you through only the steps that need a person. Your own computer isn't
