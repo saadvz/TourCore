@@ -33,6 +33,6 @@ A deployer who uses a provider that wants a visible opt-in can publish:
 
 Generic example, with placeholders only:
 
-Prospective renters opt in by texting the configured keyword to the displayed property-tour number. They see that number on a listing, website, sign, or QR code. Tour Core replies with a messaging disclosure and asks them to reply YES. Reply STOP to opt out. Reply HELP for help. Help uses the operator's support email when one is set, otherwise the address in `TOURCORE_PUBLIC_CONTACT_EMAIL` if that fallback is set, otherwise a reply-here line (and the visitor help number if one is set).
+Prospective renters opt in by texting the configured keyword to the displayed property-tour number. They see that number on a listing, website, sign, or QR code. Tour Core replies with a messaging disclosure and asks them to reply YES. Reply STOP to opt out. Reply HELP for help. Help lists every contact that is set (visitor help number first, then the operator's support email or the `TOURCORE_PUBLIC_CONTACT_EMAIL` fallback) and always ends with a reply-here line.
 
 Replace every placeholder with the deploying organization's own legal name, support address, phone number, and public website before sending anything to a provider. This page is not a completed campaign application.

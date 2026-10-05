@@ -249,7 +249,10 @@ export function defaultUnitDoorName(unitName: string): string {
   return `${unitName.trim()} Door`;
 }
 
-export const VISITOR_HELP_QUESTION = "What number can stuck visitors call? Pick one someone answers during tour hours.";
+export const VISITOR_HELP_NUMBER_QUESTION =
+  "What number can stuck visitors call? Pick one someone answers during tour hours.";
+export const VISITOR_HELP_EMAIL_QUESTION = "What email should visitors see when they text HELP?";
+export const VISITOR_HELP_QUESTION = `${VISITOR_HELP_NUMBER_QUESTION} ${VISITOR_HELP_EMAIL_QUESTION}`;
 
 export function visitorHelpDecided(operator: SetupDraft["operator"]): boolean {
   return !!operator.visitorHelpDecided || !!operator.visitorContact || !!operator.supportEmail;

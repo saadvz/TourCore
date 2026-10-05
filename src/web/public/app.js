@@ -919,9 +919,9 @@ function servicesStep(data) {
           "Visitors see and call this number. Optional. Leave blank if they should reply to the text. This is not your private alert line.",
         ),
         field(
-          "What email should we give visitors who text HELP? (optional)",
+          "What email should visitors see when they text HELP?",
           supportEmail,
-          "Used for HELP replies and the public contact pages. Leave blank if they should reply here.",
+          "Visitors see this when they text HELP. Optional. Leave blank if they should reply here.",
         ),
         errors.node,
       ),

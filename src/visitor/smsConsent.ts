@@ -56,11 +56,13 @@ export function smsHelpBody(
 ): string {
   const email = resolveSupportEmail(contact.supportEmail, env);
   const number = contact.visitorContact ? formatPhone(contact.visitorContact) : undefined;
-  const help = email
-    ? `For help with your property tour, email ${email}.`
-    : number
-      ? `For help with your property tour, call ${number} or reply here.`
-      : "For help with your property tour, reply here.";
+  const contacts = [...(number ? [`call ${number}`] : []), ...(email ? [`email ${email}`] : [])];
+  const help =
+    contacts.length === 0
+      ? "For help with your property tour, reply here."
+      : contacts.length === 1
+        ? `For help with your property tour, ${contacts[0]} or reply here.`
+        : `For help with your property tour, ${contacts.join(", ")}, or reply here.`;
   return `${publicBrandName(env)}: ${help} ${MESSAGE_RATES} Reply STOP to opt out.`;
 }
 

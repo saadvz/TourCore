@@ -33,6 +33,8 @@ import {
   setVerificationPolicy,
   statusLabel,
   validateConfig,
+  VISITOR_HELP_EMAIL_QUESTION,
+  VISITOR_HELP_NUMBER_QUESTION,
   type DryTourEvent,
   type SetupDraft,
 } from "../setup";
@@ -353,14 +355,8 @@ async function editAlerts(draft: SetupDraft): Promise<SetupDraft> {
   io.say("");
   return retry(async () => {
     const name = await io.askRequired(OperatorTeamCopy.cliPrompt(), draft.operator.name);
-    const visitorContact = await io.ask(
-      "What number can stuck visitors call? Pick one someone answers during tour hours.",
-      draft.operator.visitorContact,
-    );
-    const supportEmail = await io.ask(
-      "What email should we give visitors who text HELP? Leave blank if they should reply here.",
-      draft.operator.supportEmail,
-    );
+    const visitorContact = await io.ask(VISITOR_HELP_NUMBER_QUESTION, draft.operator.visitorContact);
+    const supportEmail = await io.ask(VISITOR_HELP_EMAIL_QUESTION, draft.operator.supportEmail);
     return setAlertContact(draft, { name, visitorContact, supportEmail });
   });
 }

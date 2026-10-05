@@ -602,7 +602,7 @@ function propertyStatus(services: OperatorServices, installed: InstalledMessagin
           skill: "setup-property",
           tool: "update_property_details",
           grokInstructions:
-            "Ask operatorMessage word for word. Also offer a support email in the same step. Save a number with update_property_details visitorContact and an email with supportEmail. If they skip, call update_property_details with skipVisitorHelp true so it is not asked again. Never use the team's private alert line as the visitor number.",
+            "Ask operatorMessage word for word. Save a number with update_property_details visitorContact and an email with supportEmail. If they skip, call update_property_details with skipVisitorHelp true so it is not asked again. Never use the team's private alert line as the visitor number.",
         }),
       }),
     };

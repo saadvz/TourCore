@@ -74,7 +74,9 @@ describe("Grok skill scenarios", () => {
     await tool("set_verification_policy", { level: "basic-form" });
     expect((await tool("get_services")).records.choices.map((c: { label: string }) => c.label)).toEqual(["On this computer", "A folder in your Google Drive"]);
     const help = await tool("review_property_setup");
-    expect(help.nextQuestion).toBe("What number can stuck visitors call? Pick one someone answers during tour hours.");
+    expect(help.nextQuestion).toBe(
+      "What number can stuck visitors call? Pick one someone answers during tour hours. What email should visitors see when they text HELP?",
+    );
     await tool("update_property_details", { skipVisitorHelp: true });
 
     const review = await tool("review_property_setup");

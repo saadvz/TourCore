@@ -136,7 +136,8 @@ describe("Tour Core owns the onboarding order", () => {
       action: "FINISH_PROPERTY_SETUP",
       performedBy: "OPERATOR_DECISION",
       tool: "update_property_details",
-      operatorMessage: "What number can stuck visitors call? Pick one someone answers during tour hours.",
+      operatorMessage:
+        "What number can stuck visitors call? Pick one someone answers during tour hours. What email should visitors see when they text HELP?",
     });
     await h.ok("update_property_details", { skipVisitorHelp: true });
     expect((await next(h)).action).toBe("OFFER_OPERATOR_ALERTS");

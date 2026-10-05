@@ -88,21 +88,28 @@ describe("SMS keyword campaign", () => {
     expect(JSON.stringify(file)).not.toContain("Which unit");
   });
 
-  it("HELP uses the operator support email, then a help number, then a reply-here line — never env-var or not-configured wording", async () => {
+  it("HELP lists every set contact, number first, and always ends with reply here — never env-var or not-configured wording", async () => {
     const previous = process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
     delete process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
     try {
-      const emailed = await startPhoneApp(undefined, { supportEmail: "desk@example.com" });
-      expect((await emailed.text("HELP")).replies.join("\n")).toBe(
-        "Tour Core: For help with your property tour, email desk@example.com. Message and data rates may apply. Reply STOP to opt out.",
+      const both = await startPhoneApp(undefined, { supportEmail: "desk@example.com", visitorContact: "+15550108888" });
+      expect((await both.text("HELP")).replies.join("\n")).toBe(
+        "Tour Core: For help with your property tour, call (555) 010-8888, email desk@example.com, or reply here. Message and data rates may apply. Reply STOP to opt out.",
       );
-      await emailed.close();
+      await both.close();
 
       const numbered = await startPhoneApp(undefined, { visitorContact: "+15550108888" });
       expect((await numbered.text("HELP")).replies.join("\n")).toBe(
         "Tour Core: For help with your property tour, call (555) 010-8888 or reply here. Message and data rates may apply. Reply STOP to opt out.",
       );
       expect((await numbered.text("HELP")).replies.join("\n")).not.toMatch(/not configured|TOURCORE_PUBLIC_CONTACT_EMAIL/);
+      await numbered.close();
+
+      const emailed = await startPhoneApp(undefined, { supportEmail: "desk@example.com" });
+      expect((await emailed.text("HELP")).replies.join("\n")).toBe(
+        "Tour Core: For help with your property tour, email desk@example.com or reply here. Message and data rates may apply. Reply STOP to opt out.",
+      );
+      await emailed.close();
 
       const neither = await startPhoneApp();
       const body = (await neither.text("HELP")).replies.join("\n");
@@ -121,7 +128,7 @@ describe("SMS keyword campaign", () => {
     const app = await startPhoneApp();
     const help = await app.text("HELP");
     expect(help.replies).toHaveLength(1);
-    expect(help.replies.join("\n")).toBe("Tour Core: For help with your property tour, email help@example.com. Message and data rates may apply. Reply STOP to opt out.");
+    expect(help.replies.join("\n")).toBe("Tour Core: For help with your property tour, email help@example.com or reply here. Message and data rates may apply. Reply STOP to opt out.");
     expect(help.replies.join("\n")).not.toContain("Khanex");
     expect(help.replies.join("\n")).not.toContain("Which unit");
 

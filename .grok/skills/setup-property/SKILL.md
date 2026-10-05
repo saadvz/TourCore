@@ -111,13 +111,13 @@ the operator correct it.
     while texting is installed, `set_services` with `messaging: sendblue`
     yourself. Where records live comes from `get_storage_status` (this computer, or Google Drive). Don't
     ask about it.
-11. Ask Tour Core's next question about visitor help word for word:
+11. Ask Tour Core's next questions about visitor help word for word:
     **"What number can stuck visitors call? Pick one someone answers during tour hours."**
-    Also offer a support email in the same step. Save a number with
-    `update_property_details` `visitorContact` and an email with `supportEmail`.
-    If they skip, call `update_property_details` with `skipVisitorHelp: true`
-    so it is not asked again. Never use the team's private alert line as the
-    visitor number. Both stay optional.
+    **"What email should visitors see when they text HELP?"**
+    Save a number with `update_property_details` `visitorContact` and an email
+    with `supportEmail`. If they skip, call `update_property_details` with
+    `skipVisitorHelp: true` so it is not asked again. Never use the team's
+    private alert line as the visitor number. Both stay optional.
 12. `review_property_setup` and read its `lines` back as a short list:
 
     > Here's what I have:

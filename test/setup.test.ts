@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -28,6 +28,8 @@ import {
   SetupInputError,
   validateConfig,
   visitorHelpQuestion,
+  VISITOR_HELP_EMAIL_QUESTION,
+  VISITOR_HELP_NUMBER_QUESTION,
   VISITOR_HELP_QUESTION,
   type DryTourResult,
   type SetupDraft,
@@ -156,9 +158,19 @@ describe("guided setup actions", () => {
     expect(validateConfig(bad).map((i) => i.code)).toContain("SUPPORT_EMAIL_INVALID");
     expect(validateConfig(withEmail)).toEqual([]);
 
+    expect(VISITOR_HELP_NUMBER_QUESTION).toBe("What number can stuck visitors call? Pick one someone answers during tour hours.");
+    expect(VISITOR_HELP_EMAIL_QUESTION).toBe("What email should visitors see when they text HELP?");
+    expect(VISITOR_HELP_QUESTION).toBe(`${VISITOR_HELP_NUMBER_QUESTION} ${VISITOR_HELP_EMAIL_QUESTION}`);
     expect(visitorHelpQuestion(draft)).toEqual({ nextQuestion: VISITOR_HELP_QUESTION });
     expect(visitorHelpQuestion(skipped)).toBeUndefined();
     expect(visitorHelpQuestion(createPropertySetup({ address: "100 Alfred Way, Brooklyn, NY", propertyType: "APARTMENT_BUILDING" }))).toBeUndefined();
+
+    const cli = readFileSync(new URL("../src/cli/setup.ts", import.meta.url), "utf8");
+    const web = readFileSync(new URL("../src/web/public/app.js", import.meta.url), "utf8");
+    expect(cli).toContain("VISITOR_HELP_NUMBER_QUESTION");
+    expect(cli).toContain("VISITOR_HELP_EMAIL_QUESTION");
+    expect(web).toContain(VISITOR_HELP_NUMBER_QUESTION);
+    expect(web).toContain(VISITOR_HELP_EMAIL_QUESTION);
   });
 
   it("keeps policy values in config with visible defaults", () => {

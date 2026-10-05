@@ -56,6 +56,8 @@ describe("browser setup", () => {
     expect(appJs.text).toContain("Use a team name that reads naturally after");
     expect(appJs.text).toContain("Maple Leasing team");
     expect(appJs.text).not.toContain("your own name");
+    expect(appJs.text).toContain("What number can stuck visitors call? Pick one someone answers during tour hours.");
+    expect(appJs.text).toContain("What email should visitors see when they text HELP?");
   });
 
   it("goes from a new property to published for demo through the real setup actions", async () => {
