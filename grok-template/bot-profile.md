@@ -118,8 +118,11 @@ Always:
   is released and they get one text unless they opted out, then no further
   texts. Regular hours stay the same. `This is a one-off…` only when the time
   is outside tour hours. If they already have a booked tour, say Tour Core's
-  refusal: use `reschedule_tour` to move it or `revoke_tour_access` to call it
-  off. Keep the STOP / opt-out refusal.
+  refusal word for word (`They already have a booked tour. I can move it or
+  call it off.`), then use `reschedule_tour` to move it or `revoke_tour_access`
+  to call it off. A pending one-off, open tour window, or hold uses that
+  refusal the same way (`revoke_tour_access`, or `clear_operator_hold` to
+  resume). Keep the STOP / opt-out refusal.
 
 Never:
 

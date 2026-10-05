@@ -5,17 +5,14 @@ import type { VisitorDemoSession } from "./session";
 /** A leftover day/time (or other pre-booking) conversation was replaced. */
 export const ONE_OFF_REPLACED_DETAIL = "replaced by the operator's one-off tour";
 
-export const ONE_OFF_BOOKED_REFUSAL =
-  "They already have a booked tour. Use reschedule_tour to move it or revoke_tour_access to call it off.";
+export const ONE_OFF_BOOKED_REFUSAL = "They already have a booked tour. I can move it or call it off.";
 
 export const ONE_OFF_PENDING_REFUSAL =
-  "They already have a tour waiting for them to reply YES or NO. Use revoke_tour_access to call it off, or wait for them to answer.";
+  "They already have a tour waiting for them to reply YES or NO. I can call it off, or we can wait for them to answer.";
 
-export const ONE_OFF_TOURING_REFUSAL =
-  "They're already on a tour. Use revoke_tour_access to call it off.";
+export const ONE_OFF_TOURING_REFUSAL = "They're on a tour right now. I can call it off.";
 
-export const ONE_OFF_PAUSED_REFUSAL =
-  "Their tour is paused. Use clear_operator_hold to resume it, or revoke_tour_access to call it off.";
+export const ONE_OFF_PAUSED_REFUSAL = "Their tour is on hold. I can resume it or call it off.";
 
 /**
  * Why this phone cannot get a new operator-set tour, in plain operator words.

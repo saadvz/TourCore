@@ -79,8 +79,10 @@ what never does.
   time menu and never booked), the Bot uses `schedule_one_off_tour` and asks
   the exact question Tour Core returns. Only a yes that they asked is enough.
   A leftover choosing menu is replaced; a booked tour, pending one-off, open
-  tour window, or paused tour is refused (move with `reschedule_tour` or call
-  off with `revoke_tour_access`). Confirmation questions end `Move it?`,
+  tour window, or hold is refused. Tell the operator Tour Core's words
+  (`They already have a booked tour. I can move it or call it off.`), then
+  move with `reschedule_tour` or call off with `revoke_tour_access` (resume a
+  hold with `clear_operator_hold`). Confirmation questions end `Move it?`,
   `Book it?`, or `Save it?`.
 
 Install and publishing steps: [`docs/grok-template-setup.md`](../docs/grok-template-setup.md).

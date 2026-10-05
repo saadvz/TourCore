@@ -203,7 +203,7 @@ describe("operators can set up a one-time tour", () => {
     await publish(a);
     await a.book();
     await expect(a.grok("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "3:15 PM today" })).rejects.toThrow(
-      "They already have a booked tour. Use reschedule_tour to move it or revoke_tour_access to call it off.",
+      "They already have a booked tour. I can move it or call it off.",
     );
   });
 
@@ -212,7 +212,7 @@ describe("operators can set up a one-time tour", () => {
     await publish(a);
     await a.approve("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "2:00 PM today" });
     await expect(a.grok("schedule_one_off_tour", { phone: PHONE, visitorName: "Pat", unit: "2B", startsAt: "3:15 PM today" })).rejects.toThrow(
-      "They already have a tour waiting for them to reply YES or NO. Use revoke_tour_access to call it off, or wait for them to answer.",
+      "They already have a tour waiting for them to reply YES or NO. I can call it off, or we can wait for them to answer.",
     );
   });
 

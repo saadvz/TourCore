@@ -401,10 +401,14 @@ Terminal wizard ─────────────────────�
   and later replies, including a leftover menu number, go to the new confirmation. Refused if the property isn't
   published with live texting, the number already said STOP, the time is in the past, it overlaps another tour, or
   they already have a tour in progress (a booked or held reservation, a pending one-off waiting for YES or NO, an
-  active access window, or a paused tour). For a booked or held tour:
-  `They already have a booked tour. Use reschedule_tour to move it or revoke_tour_access to call it off.`
-  For a pending one-off:
-  `They already have a tour waiting for them to reply YES or NO. Use revoke_tour_access to call it off, or wait for them to answer.`
+  active access window, or a paused tour). Refusal text has no tool names. Booked or held:
+  `They already have a booked tour. I can move it or call it off.`
+  Pending one-off:
+  `They already have a tour waiting for them to reply YES or NO. I can call it off, or we can wait for them to answer.`
+  Open tour window: `They're on a tour right now. I can call it off.`
+  On hold: `Their tour is on hold. I can resume it or call it off.`
+  Grok then uses `reschedule_tour` to move a booked tour, `revoke_tour_access` to call one off, or
+  `clear_operator_hold` to resume a hold.
 - **Confirmation wording**: tour-time and flagged-answer questions name the action and end with the verb —
   `Move it?`, `Book it?`, or `Save it?` — never `Continue?`. A move inside hours includes the old time
   (`Move Testy's tour from 2:00 PM to 3:15 PM today?`). `This is a one-off. Your regular tour hours stay the same`

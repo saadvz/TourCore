@@ -133,8 +133,10 @@ needs a decision: `list_tour_time_requests`, `inspect_tour_time_request`,
 Core returns (`Move it?` / `Book it?`). For a brand-new one-off, only after
 the operator confirms the visitor asked. A leftover day or time menu with
 nothing booked is replaced. A booked tour, pending one-off, open tour
-window, or paused tour is refused (move with `reschedule_tour` or call off
-with `revoke_tour_access`). YES / STOP / NO / no-reply are handled by Tour
+window, or hold is refused — tell the operator Tour Core's words
+(`They already have a booked tour. I can move it or call it off.`), then
+move with `reschedule_tour` or call off with `revoke_tour_access` (resume a
+hold with `clear_operator_hold`). YES / STOP / NO / no-reply are handled by Tour
 Core (one release text if they never reply, unless they opted out; STOP is
 opt-out only). Other replies before they confirm — including a leftover
 menu number — are flagged for the team; the hold stays pending.
