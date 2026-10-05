@@ -252,6 +252,13 @@ function inboundAt(event: AuditEvent): string | undefined {
   return event.code?.trim() || undefined;
 }
 
+/** Later asks stay on the same exception while it is open, or if they happened before it was marked handled. */
+function belongsToCurrentHelp(current: OperatorException, event: AuditEvent): boolean {
+  if (current.status === "open") return true;
+  if (current.status !== "resolved" || !current.resolution) return false;
+  return Date.parse(event.at) <= Date.parse(current.resolution.resolvedAt);
+}
+
 /**
  * One open help exception per reservation. Later HELP_REQUESTED events on the
  * same reservation append their time (and the visitor's words) until the
@@ -269,7 +276,7 @@ function foldHelpExceptions(tour: TourSnapshot, events: AuditEvent[], resolution
   for (const group of byReservation.values()) {
     let current: OperatorException | undefined;
     for (const e of group) {
-      if (current?.status === "open") {
+      if (current && belongsToCurrentHelp(current, e)) {
         const when = formatShortDateTime(new Date(e.at), tour.config.property.timezone);
         const said = inboundAt(e);
         current.summary += said ? ` Asked again at ${when}: "${said}".` : ` Asked again at ${when}.`;

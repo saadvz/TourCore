@@ -97,6 +97,7 @@ describe("help flow: one visitor reply, one open exception", () => {
     expect(again[0].summary).toBe('Asked for help near Unit 101 Door. Asked again at Sep 28, 9:00 AM: "I need help".');
 
     await h.ok("resolve_exception", { exceptionId: again[0].exceptionId, resolutionNote: "Called Pat." });
+    h.setClock(h.now() + 60_000);
     await v.act("help");
     const afterResolve = await h.ok("list_exceptions");
     const openHelp = afterResolve.exceptions.filter((e: { what: string }) => e.what === "Visitor asked for help");
