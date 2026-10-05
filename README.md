@@ -223,6 +223,7 @@ npm run demo                # scripted walkthrough of one tour on the sample pro
 npm run demo:auto           # same, without prompts
 npm test                    # vitest
 npm run typecheck           # tsc
+npm run build               # package with esbuild
 ```
 
 ## Visitor texting
@@ -767,7 +768,11 @@ phone). It does not prove identity.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for how to propose changes.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to propose changes. Pull requests run typecheck, build, and test in GitHub Actions.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) to report a security flaw privately.
 
 ## License
 

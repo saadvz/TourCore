@@ -5,15 +5,16 @@
 1. Fork the repository.
 2. Create a branch from `master`.
 3. Make your change.
-4. Run `npm run typecheck` and `npm test`.
+4. Run `npm run typecheck`, `npm run build`, and `npm test`.
 5. Open a pull request against `master`.
 
 ## Checks
 
-Both of these must pass before you open a PR:
+All of these must pass before you open a PR. GitHub Actions CI runs the same three commands:
 
 ```bash
 npm run typecheck
+npm run build
 npm test
 ```
 
