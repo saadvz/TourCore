@@ -106,7 +106,7 @@ describe("secure setup page", () => {
     expect((await app.raw("GET", "/install", { Host: "evil.example" })).status).toBe(403);
     // The public health page is reachable, and says nothing about the installation beyond a fingerprint.
     const health = await app.raw("GET", "/healthz", { Host: publicHost });
-    expect(JSON.parse(health.body)).toEqual({ ok: true, service: "tour-core", installation: expect.stringMatching(/^[a-f0-9]{16}$/) });
+    expect(JSON.parse(health.body)).toEqual({ ok: true, service: "tour-core", commit: null, installation: expect.stringMatching(/^[a-f0-9]{16}$/) });
     expect(app.installation.secrets.get("TOURCORE_GROK_ROUTINE_KEY")).toBeUndefined();
   });
 
