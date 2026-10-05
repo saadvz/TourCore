@@ -236,7 +236,7 @@ describe("help flow: one visitor reply, one open exception", () => {
     await bookAndArrive(p);
     const before = await prospectOutbound(p.session);
     await p.say("help");
-    await p.say("help again");
+    await p.say("I need help");
     const added = (await prospectOutbound(p.session)).slice(before.length);
     expect(added.map((m) => m.body)).toEqual([VisitorDenialCopy.helpAck(TEAM), VisitorDenialCopy.helpRepeatAck(TEAM)]);
     expect(added[1]!.body).toContain("Stay where you are");
