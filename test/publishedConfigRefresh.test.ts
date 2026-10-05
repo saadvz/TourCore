@@ -139,8 +139,10 @@ describe("open text conversations pick up republished settings", () => {
     expect(afterRestart.session().offeredDates[0]).toMatchObject({ date: "2026-09-28" });
     expect(afterRestart.session().offeredDates[0]?.label).toContain("Monday, Sep 28");
     const numbered = await afterRestart.text("1");
-    expect(numbered).toContain(SCHEDULE_CHANGED_LEAD);
-    expect(numbered).toContain("I have tours available. Which day works for you?");
+    expect(numbered.startsWith(`${SCHEDULE_CHANGED_LEAD}\n1) Monday, Sep 28`)).toBe(true);
+    expect(numbered).toContain("Which day works for you?");
+    expect(numbered).not.toContain("I have tours available.");
+    expect(numbered).not.toContain("Reply with the number.");
     expect(numbered).toContain("Monday, Sep 28");
     expect(numbered).not.toContain("you're booked");
     expect(await afterRestart.session().stage()).toBe("choose-date");
@@ -161,8 +163,10 @@ describe("open text conversations pick up republished settings", () => {
 
     app.republishHours("20:00");
     const remapped = await app.text("2");
-    expect(remapped).toContain(SCHEDULE_CHANGED_LEAD);
-    expect(remapped).toContain("I have tours available. Which day works for you?");
+    expect(remapped.startsWith(`${SCHEDULE_CHANGED_LEAD}\n1) Monday, Sep 28`)).toBe(true);
+    expect(remapped).toContain("Which day works for you?");
+    expect(remapped).not.toContain("I have tours available.");
+    expect(remapped).not.toContain("Reply with the number.");
     expect(remapped).toContain("Monday, Sep 28");
     expect(remapped).toContain("Tuesday, Sep 29");
     expect(remapped).not.toContain("I have these times available");

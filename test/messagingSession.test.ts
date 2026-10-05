@@ -26,6 +26,24 @@ describe("channel-aware wording", () => {
     expect(withPrompt("Is it OK?", { kind: "yes-no" }, "MESSAGING")).toBe("Is it OK?\nReply YES or NO.");
     expect(withPrompt("Which unit?", { kind: "choose", options: ["Unit 101", "Unit 102"], what: "a unit" }, "MESSAGING")).toBe("Which unit?\nReply 1 for Unit 101 or 2 for Unit 102.");
     expect(withPrompt("Which unit?", { kind: "choose", options: ["Unit 101", "Unit 102"], what: "a unit" }, "WEB")).toBe("Which unit?\nPick a unit below.");
+    expect(
+      withPrompt("Tour times just changed. Here's what's open now:", {
+        kind: "choose",
+        options: ["Monday, Sep 28", "Tuesday, Sep 29", "Wednesday, Sep 30", "Thursday, Oct 1", "Friday, Oct 2"],
+        what: "a day",
+        after: "Which day works for you?",
+      }, "MESSAGING"),
+    ).toBe(
+      "Tour times just changed. Here's what's open now:\n1) Monday, Sep 28\n2) Tuesday, Sep 29\n3) Wednesday, Sep 30\n4) Thursday, Oct 1\n5) Friday, Oct 2\nWhich day works for you?",
+    );
+    expect(
+      withPrompt("Tour times just changed. Here's what's open now:", {
+        kind: "choose",
+        options: ["Monday, Sep 28", "Tuesday, Sep 29"],
+        what: "a day",
+        after: "Which day works for you?",
+      }, "WEB"),
+    ).toBe("Tour times just changed. Here's what's open now:\nWhich day works for you?\nPick a day below.");
     expect(withPrompt("Fill this in.", { kind: "form", link: "https://x/verify/abc" }, "MESSAGING")).toBe("Fill this in.\nhttps://x/verify/abc");
   });
 

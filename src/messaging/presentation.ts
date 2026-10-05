@@ -7,7 +7,7 @@ import type { MessageChannel } from "./Messenger";
  */
 export type ReplyPrompt =
   | { kind: "yes-no" }
-  | { kind: "choose"; options: string[]; what: string }
+  | { kind: "choose"; options: string[]; what: string; after?: string }
   | { kind: "say"; phrase: string; purpose: string }
   | { kind: "form"; link?: string };
 
@@ -16,7 +16,7 @@ export function withPrompt(body: string, prompt: ReplyPrompt | undefined, channe
   if (channel === "WEB") {
     switch (prompt.kind) {
       case "choose":
-        return `${body}\nPick ${prompt.what} below.`;
+        return prompt.after ? `${body}\n${prompt.after}\nPick ${prompt.what} below.` : `${body}\nPick ${prompt.what} below.`;
       case "form":
         return `${body}\nThe form is just below.`;
       default:
@@ -27,7 +27,7 @@ export function withPrompt(body: string, prompt: ReplyPrompt | undefined, channe
     case "yes-no":
       return `${body}\nReply YES or NO.`;
     case "choose":
-      return `${body}\n${numbered(prompt.options)}`;
+      return `${body}\n${numbered(prompt.options, prompt.after)}`;
     case "say":
       return `${body}\nText "${prompt.phrase}" ${prompt.purpose}.`;
     case "form":
@@ -36,10 +36,11 @@ export function withPrompt(body: string, prompt: ReplyPrompt | undefined, channe
 }
 
 /** "Reply 1 for Unit 101 or 2 for Unit 102." / a numbered list for longer menus. */
-function numbered(options: string[]): string {
+function numbered(options: string[], after?: string): string {
   if (options.length <= 3) {
     const parts = options.map((o, i) => `${i + 1} for ${o}`);
-    return `Reply ${parts.length > 1 ? `${parts.slice(0, -1).join(", ")} or ${parts.at(-1)}` : parts[0]}.`;
+    const reply = `Reply ${parts.length > 1 ? `${parts.slice(0, -1).join(", ")} or ${parts.at(-1)}` : parts[0]}.`;
+    return after ? `${reply}\n${after}` : reply;
   }
-  return `${options.map((o, i) => `${i + 1}) ${o}`).join("\n")}\nReply with the number.`;
+  return `${options.map((o, i) => `${i + 1}) ${o}`).join("\n")}\n${after ?? "Reply with the number."}`;
 }

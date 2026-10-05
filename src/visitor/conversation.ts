@@ -42,7 +42,8 @@ export const isGreeting = (text: string) => /^(hi|hello|hey|hiya|tour|book|start
 
 /** Lead when published hours changed and a numbered/old-menu reply can't be mapped safely. */
 export const SCHEDULE_CHANGED_LEAD = "Tour times just changed. Here's what's open now:";
-const DAY_MENU = "I have tours available. Which day works for you?";
+const WHICH_DAY = "Which day works for you?";
+const DAY_MENU = `I have tours available. ${WHICH_DAY}`;
 const MENU_NUMBER = /^\s*(?:#|number |option )?(\d{1,2})\s*[.!]?\s*$/i;
 
 const SORRY = "Sorry, I didn't catch that.";
@@ -518,7 +519,7 @@ async function showScheduleChanged(turn: Turn): Promise<void> {
     return;
   }
   session.markDatesShown();
-  await turn.respond(`${SCHEDULE_CHANGED_LEAD}\n${DAY_MENU}`, { kind: "choose", options: labels, what: "a day" });
+  await turn.respond(SCHEDULE_CHANGED_LEAD, { kind: "choose", options: labels, what: "a day", after: WHICH_DAY });
 }
 
 async function presentDay(turn: Turn, date: string, alreadyRecorded = false): Promise<void> {
