@@ -108,7 +108,31 @@ export class VisitorDenialCopy {
   }
 
   static operatorHold(team: string, visitorContact?: string): string {
-    return `Your tour is paused for a moment. ${this.atDoor(team, visitorContact)}`;
+    return `Your tour is on hold, and your tour time keeps running while the ${team} sorts this out. ${this.atDoor(team, visitorContact)}`;
+  }
+
+  static calledOff(team: string, visitorContact?: string): string {
+    return `Your tour has been called off, so the doors won't open for it. ${this.remote(team, visitorContact)}`;
+  }
+
+  static tooEarly(opensAt?: string, relative?: string): string {
+    if (!opensAt) return "You're a little early! I can open the doors from your tour time. Text me again at your tour time.";
+    const atTime = ` at ${opensAt}`;
+    const day = relative?.endsWith(atTime) ? relative.slice(0, -atTime.length) : relative;
+    const again = day && day !== "today" ? "Text me again then." : `Text me again at ${opensAt}.`;
+    return `You're a little early! I can open the doors from ${opensAt}${day ? ` ${day}` : ""}. ${again}`;
+  }
+
+  static followUpYes(team: string): string {
+    return `Great. Someone from the ${team} will be in touch soon.`;
+  }
+
+  static helpAck(team: string, visitorContact?: string): string {
+    return `I've let the ${team} know. ${this.atDoor(team, visitorContact)}`;
+  }
+
+  static noOpenTimes(team: string): string {
+    return `There are no open tour times right now. The ${team} will reach out.`;
   }
 
   static doorsNotResponding(team: string, visitorContact?: string): string {
@@ -205,7 +229,7 @@ export class TourCore {
       `${hello} Happy to set up a self-guided tour of ${place}.` +
       (unit.summary ? ` Here's what the property team shared: ${unit.summary.replace(/\.?$/, ".")}` : "");
     if (dates.length === 0) {
-      await this.textProspect(prospect, reservation.id, `${intro}\nThere are no open tour times right now. The ${config.operator.name.toLowerCase()} will reach out.`);
+      await this.textProspect(prospect, reservation.id, `${intro}\n${VisitorDenialCopy.noOpenTimes(this.teamName())}`);
     } else {
       await this.textProspect(prospect, reservation.id, `${intro}\nI have tours available. Which day works for you?`, {
         kind: "choose",
@@ -689,7 +713,7 @@ export class TourCore {
     await this.record("FOLLOW_UP_RESPONSE", { reservationId, prospectId: prospect.id, detail: wantsContact ? "yes" : "no" });
     if (wantsContact) {
       await this.notifyOperator(reservation, `${prospect.name} toured ${this.unitFor(reservation).name} and would like someone to follow up.`);
-      await this.textProspect(prospect, reservationId, `Great. Someone from the ${this.deps.config.operator.name.toLowerCase()} will be in touch soon.`);
+      await this.textProspect(prospect, reservationId, VisitorDenialCopy.followUpYes(this.teamName()));
     } else {
       await this.textProspect(prospect, reservationId, "No problem. Thanks again for visiting!");
     }
@@ -772,7 +796,7 @@ export class TourCore {
     await this.recordInbound(prospect.id, reservationId, inbound?.text ?? "I need help", inbound?.meta);
     await this.record("HELP_REQUESTED", { reservationId, prospectId: prospect.id, detail: where ?? "" });
     await this.notifyOperator(reservation, `${prospect.name} asked for help${where ? ` near ${where}` : ""}.`);
-    await this.textProspect(prospect, reservationId, `I've let the ${this.deps.config.operator.name.toLowerCase()} know. Someone will reach out shortly.`);
+    await this.textProspect(prospect, reservationId, VisitorDenialCopy.helpAck(this.teamName(), this.visitorHelpNumber()));
   }
 
   // -------------------------------------------------------- operator actions
@@ -782,7 +806,7 @@ export class TourCore {
     await this.revokeGrants(reservation, reason);
     reservation = await this.move(reservation, "REVOKED", "RESERVATION_REVOKED", { detail: reason });
     const prospect = await this.mustGetProspect(reservation.prospectId);
-    await this.textProspect(prospect, reservation.id, "Your tour has been called off, so the doors won't open for it. The leasing team will reach out.");
+    await this.textProspect(prospect, reservation.id, VisitorDenialCopy.calledOff(this.teamName(), this.visitorHelpNumber()));
     return reservation;
   }
 
@@ -1071,7 +1095,7 @@ export class TourCore {
     prospect: Prospect | undefined,
     doorId: string,
   ): Promise<void> {
-    const team = this.deps.config.operator.name.toLowerCase();
+    const team = this.teamName();
     const help = this.visitorHelpNumber();
     const needsOperator: AccessDecisionCode[] = ["DENY_WRONG_ROUTE", "DENY_DURIN_UNHEALTHY", "DENY_PROVIDER_FAILURE", "DENY_UNKNOWN", "DENY_PROSPECT_MISMATCH", "DENY_NO_RESERVATION"];
 
@@ -1084,7 +1108,9 @@ export class TourCore {
         await this.textProspect(prospect, reservation.id, ask.body, ask.form ? { kind: "form", link: await this.verificationFormLink(reservation, prospect) } : undefined);
       } else {
         const text: Partial<Record<AccessDecisionCode, string>> = {
-          DENY_TOO_EARLY: `You're a little early! I can open the doors from ${reservation.windowStart ? this.time(new Date(reservation.windowStart)) : "your tour time"}.`,
+          DENY_TOO_EARLY: reservation.windowStart
+            ? VisitorDenialCopy.tooEarly(this.time(new Date(reservation.windowStart)), this.whenPhrase(new Date(reservation.windowStart)))
+            : VisitorDenialCopy.tooEarly(),
           DENY_EXPIRED: "Your tour time has ended, so I can't open doors anymore. Want me to find you another time?",
           DENY_WRONG_ROUTE: `That door isn't part of your tour, so I can't open it. You're here to see ${visitorSubject(this.deps.config.property, unit.name)}. I've let the ${team} know in case you need a hand.`,
           DENY_DURIN_UNHEALTHY: VisitorDenialCopy.doorsNotResponding(team, help),
@@ -1137,7 +1163,7 @@ export class TourCore {
   }
 
   private teamName(): string {
-    return this.deps.config.operator.name.toLowerCase();
+    return this.deps.config.operator.name;
   }
 
   /** Visitor-facing help number only. Never `operator.contact`. */

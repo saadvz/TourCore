@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config/tourCoreConfig";
+import { VisitorDenialCopy } from "../src/core/TourCore";
 import { setSendblueRuntime } from "../src/messaging/sendblue/runtime";
 import { PropertyWorkspace, runReadinessCheck } from "../src/setup";
 import { createSetupServer } from "../src/web/server";
@@ -103,12 +104,8 @@ describe("P0 operator demo through Grok tools, with a real-phone visitor", () =>
 
     // Operator: "Pause Pat's tour." -> "Yes." The visitor is told it's paused, not ended, and HI doesn't start a second tour.
     await demo.approve("place_operator_hold", { tourRef: tour.tourRef, reason: "Checking the lobby camera" });
-    expect(await demo.text("I'm at unit 101")).toBe(
-      "Your tour is paused for a moment. Stay where you are and reply here. The leasing team will reply as soon as they can.",
-    );
-    expect(await demo.text("hi")).toBe(
-      "Your tour is paused for a moment. Stay where you are and reply here. The leasing team will reply as soon as they can.",
-    );
+    expect(await demo.text("I'm at unit 101")).toBe(VisitorDenialCopy.operatorHold("leasing team"));
+    expect(await demo.text("hi")).toBe(VisitorDenialCopy.operatorHold("leasing team"));
     expect(demo.ws.listTours("prop_100_alfred_way").filter((t) => t.kind === "messaging")).toHaveLength(1);
     expect((await demo.grok("list_active_tours")).tours[0]).toMatchObject({ status: "Paused", paused: true });
 

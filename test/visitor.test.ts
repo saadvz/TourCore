@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig, type TourCoreConfig } from "../src/config/tourCoreConfig";
 import { zonedTimeToUtc } from "../src/core/timezone";
+import { VisitorDenialCopy } from "../src/core/TourCore";
 import { PropertyWorkspace, tourDetailView } from "../src/setup";
 import { liveTourView, VisitorDemoSession, visitorView } from "../src/visitor";
 
@@ -106,9 +107,7 @@ describe("visitor demo on the real engine", () => {
     await s.act("consent", { agree: true });
     await s.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: "555-999-0000" });
     expect(await s.stage()).toBe("stopped");
-    expect(lastFromTourCore(s)).toBe(
-      "Thanks for filling that out. I couldn't confirm your details, so I can't open doors for this tour. The leasing team will follow up here.",
-    );
+    expect(lastFromTourCore(s)).toBe(VisitorDenialCopy.failedIdAtBooking("leasing team"));
     expect(lastFromTourCore(s)).not.toMatch(/Stay where you are|I can't open doors yet|on hold|usually replies within 15 minutes/);
     expect(lastFromTourCore(s).match(/The leasing team/g)).toHaveLength(1);
     expect(lastFromTourCore(s)).not.toContain(s.config.operator.contact);
@@ -118,7 +117,7 @@ describe("visitor demo on the real engine", () => {
     const s = await bookedAndReady();
     await s.act("arrive", {});
     expect(await s.stage()).toBe("ready");
-    expect(lastFromTourCore(s)).toBe("You're a little early! I can open the doors from 1:50 PM.");
+    expect(lastFromTourCore(s)).toBe("You're a little early! I can open the doors from 1:50 PM today. Text me again at 1:50 PM.");
     expect(s.lastAccess).toMatchObject({ allowed: false, code: "DENY_TOO_EARLY", durinCalled: false });
     expect(s.durin.requestCount).toBe(0);
     expect((await visitorView(s)).demoControls.map((c) => c.action)).toContain("demoSkipAhead");
@@ -148,7 +147,9 @@ describe("visitor demo on the real engine", () => {
     await s.act("demoWrongDoor", {});
     expect(s.lastAccess).toMatchObject({ doorId: "unit_102", allowed: false, code: "DENY_WRONG_ROUTE", durinCalled: false });
     expect(s.durin.requestCount).toBe(before);
-    expect(s.conversation.at(-2)!.text).toContain("That door isn't part of your tour");
+    expect(s.conversation.at(-2)!.text).toBe(
+      "That door isn't part of your tour, so I can't open it. You're here to see Unit 101. I've let the leasing team know in case you need a hand.",
+    );
     expect(s.conversation.at(-1)).toMatchObject({ from: "demo", text: "Demo safety check: Tour Core refused this door and never contacted Durin." });
 
     const live = await liveTourView(s);

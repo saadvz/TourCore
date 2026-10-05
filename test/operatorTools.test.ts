@@ -5,9 +5,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ExportBundleSchema } from "../src/export/exportBundle";
 import { mcpToolList } from "../src/mcp/mcpBridge";
 import { setSendblueRuntime } from "../src/messaging/sendblue/runtime";
+import { VisitorDenialCopy } from "../src/core/TourCore";
 import { ConfirmationBook } from "../src/operator/confirmations";
 import { OPERATOR_TOOLS, redactSecrets, type ToolContext } from "../src/operator/tools";
-import { PropertyWorkspace } from "../src/setup";
+import { OperatorTeamCopy, PropertyWorkspace } from "../src/setup";
 import { createSetupServer } from "../src/web/server";
 import { sendblueEnv } from "./fakeSendblue";
 import { tourRef } from "../src/operator/tours";
@@ -122,13 +123,21 @@ describe("setup through the tools", () => {
     const before = h.workspace.load(id).config.operator.contact;
     const saved = await h.ok("update_property_details", { visitorContact: "(555) 010-7777" });
     expect(saved.setup.visitorHelpNumber).toBe("(555) 010-7777");
-    expect(saved.setup.alertsGoTo).toBe("Leasing team");
+    expect(saved.setup.alertsGoTo).toBe("leasing team");
     expect(JSON.stringify(saved)).not.toContain(before);
     expect(h.workspace.load(id).config.operator).toMatchObject({ contact: before, visitorContact: "+15550107777" });
     expect(await h.fails("update_property_details", { visitorContact: "12" })).toMatch(/full phone number/);
     await h.ok("update_property_details", { visitorContact: "" });
     expect(h.workspace.load(id).config.operator.visitorContact).toBeUndefined();
     expect((await h.ok("get_property_setup")).setup.visitorHelpNumber).toBeUndefined();
+  });
+
+  it("describes the alert name as a team name that reads naturally after \"the\"", () => {
+    const tool = mcpToolList().find((t) => t.name === "update_property_details");
+    const alertName = (tool?.inputSchema as { properties?: { alertName?: { description?: string } } }).properties?.alertName?.description;
+    expect(alertName).toContain(OperatorTeamCopy.hint());
+    expect(alertName).toContain("Rendered exactly as entered");
+    expect(alertName).not.toMatch(/your own name/i);
   });
 
   it("doesn't create a second property when the same address is sent again", async () => {
@@ -472,7 +481,7 @@ describe("live tours and exceptions", () => {
     const again = await h.ok("revoke_tour_access", { tourRef: tour.tourRef, reason: "Visitor asked to leave" });
     const done = await h.ok("revoke_tour_access", { tourRef: tour.tourRef, reason: "Visitor asked to leave", confirmationCode: again.confirmation.code });
     expect(done.tour).toMatchObject({ status: "Called off", active: false });
-    expect(v.session.conversation.at(-1)?.text).toBe("Your tour has been called off, so the doors won't open for it. The leasing team will reach out.");
+    expect(v.session.conversation.at(-1)?.text).toBe(VisitorDenialCopy.calledOff("leasing team"));
     expect((await v.session.core.listGrants(v.session.reservationId!)).every((g) => g.status === "REVOKED")).toBe(true);
     const afterRevoke = await h.ok("inspect_tour", { tourRef: tour.tourRef });
     expect(afterRevoke.tour.accessGrants.every((g: { endedAt?: string; endedAtIso?: string }) => g.endedAt === "Monday, Sep 28, 9:00 AM" && g.endedAtIso === "2026-09-28T09:00:00-04:00")).toBe(true);

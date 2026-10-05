@@ -17,7 +17,7 @@ import { draftView, readinessView, saveStateView } from "../setup/presenters";
 import { parseDays, parseMinutes, parseTimeOfDay } from "../setup/parse";
 import type { DryTourCheck, DryTourResult } from "../setup/dryTour";
 import type { ReadinessResult } from "../setup/readiness";
-import { createPropertySetup, modeSentence, SetupInputError, tourableSpacesQuestion, type SetupDraft } from "../setup/setupActions";
+import { createPropertySetup, modeSentence, OperatorTeamCopy, SetupInputError, tourableSpacesQuestion, type SetupDraft } from "../setup/setupActions";
 import { isHostedRailway } from "../install/deployment";
 import { statusLabel, type PublishBlocker } from "../setup/workspace";
 import { rememberCanonical, revertCanonical } from "../storage/canonical";
@@ -407,7 +407,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       confirmAddress: z.boolean().optional().describe("True only after the operator agreed the read-back address is right."),
       timezone: z.string().max(60).optional(),
       facts: Facts.optional().describe("The full list of approved property facts, in the operator's words."),
-      alertName: z.string().max(120).optional().describe("Who should hear about problems, e.g. \"Leasing team\"."),
+      alertName: z.string().max(120).optional().describe(`Who should hear about problems. ${OperatorTeamCopy.hint()} Rendered exactly as entered.`),
       alertContact: z.string().max(200).optional(),
       visitorContact: z
         .string()

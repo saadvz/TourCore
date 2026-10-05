@@ -126,7 +126,7 @@ describe("a real phone over Sendblue", () => {
     expect((await app.local("POST", `/api/verify/${token}`, { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: PHONE })).status).toBe(410);
 
     const early = await app.text("I'm here");
-    expect(early.replies).toEqual(["You're a little early! I can open the doors from 1:50 PM."]);
+    expect(early.replies).toEqual(["You're a little early! I can open the doors from 1:50 PM today. Text me again at 1:50 PM."]);
 
     app.setClock(at(13, 58));
     const arrived = await app.text("I'm here");
@@ -134,7 +134,9 @@ describe("a real phone over Sendblue", () => {
     expect(arrived.replies[0]).toContain('Text "at Unit 101" when you get there.');
 
     expect((await app.text("at unit 101")).replies[0]).toContain("Unit 101 Door is open for you now.");
-    expect((await app.text("at unit 102")).replies[0]).toContain("That door isn't part of your tour");
+    const wrongDoor = await app.text("at unit 102");
+    expect(wrongDoor.replies[0]).toContain("That door isn't part of your tour");
+    expect(wrongDoor.replies[0]).toContain("I've let the leasing team know");
     // Structured unit details are the canonical answer for their topic.
     expect((await app.text("how many bedrooms?")).replies).toEqual(["Unit 101 has 2 bedrooms."]);
     expect((await app.text("how much is it?")).replies).toEqual(["Unit 101 rents for $2,300 a month."]);

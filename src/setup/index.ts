@@ -29,6 +29,7 @@ export {
   describeMinutes,
   describeInterval,
   SETUP_DEFAULTS,
+  OperatorTeamCopy,
   CHOICE_LABELS,
   SetupInputError,
   type SetupDraft,
