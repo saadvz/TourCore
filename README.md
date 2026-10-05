@@ -765,6 +765,11 @@ src/demo/          scripted demo (npm run demo)
 Tour Core never stores government ID images. The basic form records claimed identity only (legal name, email,
 phone). It does not prove identity.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to propose changes.
+
 ## License
 
-Apache-2.0
+Tour Core is licensed under the [Apache License 2.0](LICENSE).
+
