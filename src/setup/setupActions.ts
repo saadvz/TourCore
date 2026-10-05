@@ -531,9 +531,26 @@ export function setVerificationPolicy(
 
 export function setServices(
   draft: SetupDraft,
-  input: { messagingMode?: SetupDraft["messagingMode"]; storageMode?: SetupDraft["storageMode"]; accessMode?: SetupDraft["accessMode"] },
+  input: {
+    messagingMode?: SetupDraft["messagingMode"];
+    messagingProvider?: "local";
+    storageMode?: SetupDraft["storageMode"];
+    accessMode?: SetupDraft["accessMode"];
+  },
 ): SetupDraft {
-  return { ...clone(draft), ...Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined)) };
+  const next = clone(draft);
+  if (input.storageMode !== undefined) next.storageMode = input.storageMode;
+  if (input.accessMode !== undefined) next.accessMode = input.accessMode;
+  if (input.messagingProvider === "local") {
+    next.messagingMode = "live";
+    next.messagingProvider = "local";
+    return next;
+  }
+  if (input.messagingMode !== undefined) {
+    next.messagingMode = input.messagingMode;
+    delete next.messagingProvider;
+  }
+  return next;
 }
 
 // -------------------------------------------------------------------- review
@@ -598,7 +615,7 @@ export function reviewSetup(draft: SetupDraft): SetupReview {
       title: "RECORDS, MESSAGES AND DOORS",
       lines: [
         `Records: ${CHOICE_LABELS.storage[draft.storageMode]}`,
-        `Messages: ${CHOICE_LABELS.messaging[draft.messagingMode]}`,
+        `Messages: ${draft.messagingProvider === "local" ? "Local test texts (no real texts are sent)" : CHOICE_LABELS.messaging[draft.messagingMode]}`,
         `Doors: ${CHOICE_LABELS.access[draft.accessMode]}`,
       ],
     },

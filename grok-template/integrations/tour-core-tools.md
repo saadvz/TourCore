@@ -40,8 +40,8 @@ again with the code after the operator's yes.
 | `get_verification_policy` | read | Visitor verification choice and reuse window |
 | `set_verification_policy` | change | Basic identity form or practice verification |
 | `get_services` | read | Messaging choice and connection, records location, door access mode |
-| `set_services` | change | Live texts or practice texts; records location |
-| `inject_local_sms` | change | QA only. Injects a visitor SMS on the local loopback (same path as a real inbound webhook). Refuses unless that property is on local — never Sendblue, Twilio, Photon, or practice texts |
+| `set_services` | change | Live texts, local test texts for this building, or practice texts; records location. Local does not change the installation or other buildings |
+| `inject_local_sms` | change | QA only. Injects a visitor SMS on the local loopback (same path as a real inbound webhook). Refuses unless that building is on local test texts |
 | `read_local_outbox` | read | QA only. Outbound local-loopback replies as separate bubbles in send order (body + timestamp). Never one concatenated blob. Refuses unless that property is on local |
 | `review_property_setup` | read | The setup as short lines to read back: address, "Called: ..." if named, property type, each unit with its details and route, "Tours: ...", "Verification: ...", "Visitor texting: Connected", "Door access: Demo", visitor help number (or "not set") |
 | `run_readiness_check` | change | The real readiness checks, recorded for publish |
@@ -74,7 +74,7 @@ again with the code after the operator's yes.
 | `check_runtime_health` | read | Whether Tour Core is running and healthy. Technical fields include `storagePath`, `persistentVolume`, and `volumeMount`. On the hosted product, `persistentVolume: false` means records sit on disposable disk: tell the operator a volume must be attached. Never set or recommend the ephemeral-storage escape hatch on a live service |
 | `check_public_endpoint` | change | Checks from outside that the public address reaches this installation; records the result |
 | `choose_messaging_line` | change | Saves which discovered Photon line prospects will text. Takes no secrets |
-| `choose_messaging_provider` | change | Records whether prospects text through Sendblue, Twilio, Photon, or the local QA loopback. Takes no credentials. Switching requires a new connection test. Saved account details and attached lines for other providers stay |
+| `choose_messaging_provider` | change | Records whether prospects text through Sendblue, Twilio, Photon, or the local QA loopback. Pass a property to put only that building on local test texts without drafting other published buildings. Takes no credentials. An installation-wide switch requires a new connection test. Saved account details and attached lines for other providers stay |
 | `test_visitor_messaging` | change | Checks texting end to end and repairs Tour Core's own incoming-message address; takes no credentials |
 | `get_notification_preferences` | read | Which tour updates and problem alerts the operator gets, and Tour Core's recommended default |
 | `set_notification_preferences` | change | Saves the operator's choice: preset `recommended` (bookings, starts, completions, anything needing attention) or `problems-only`, or an exact `updates` list |

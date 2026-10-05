@@ -5,6 +5,7 @@ import { LOCAL_PROVIDER_REQUIRED, LocalMessagingProvider } from "../messaging/lo
 import { localSmsOutbox, type LocalOutboxBubble } from "../messaging/local/outbox";
 import { MessagingLedger } from "../messaging/ledger";
 import { toE164 } from "../messaging/Messenger";
+import { anyPropertyUsesLocal, usesLocalMessaging } from "../messaging/propertyScope";
 import { activeFromNumber, createMessagingProvider, selectionFromInstallation } from "../messaging/registry";
 import { SetupInputError } from "../setup/setupActions";
 import { resolvePropertyId } from "./resolve";
@@ -17,13 +18,14 @@ function installationProvider(ctx: ToolContext): string | undefined {
   return ctx.services.installedMessaging?.()?.provider;
 }
 
-/** True only when this property is live and the installation/line is the local loopback. */
+/** True when this property is live on the local loopback — either its own override or the installation. */
 export function isLocalMessagingProperty(ctx: ToolContext, propertyId: string): boolean {
   const { draft } = ctx.services.workspace.openDraft(propertyId);
+  const installed = ctx.services.installedMessaging?.()?.provider ?? installationProvider(ctx);
+  if (usesLocalMessaging(draft, { provider: installed })) return true;
   if (!isLiveMessaging(draft.messagingMode)) return false;
   const attached = ctx.services.endpoints?.forProperty(propertyId)?.provider;
   if (attached && attached !== "local") return false;
-  const installed = ctx.services.installedMessaging?.()?.provider ?? installationProvider(ctx);
   return installed === "local";
 }
 
@@ -99,7 +101,7 @@ export function readLocalOutbox(ctx: ToolContext, input: { from?: string; proper
   const ids = ctx.services.workspace.propertyIds();
   const propertyId = input.property ? resolvePropertyId(ctx.services.workspace, input.property) : ids.length === 1 ? ids[0] : undefined;
   if (propertyId) requireLocalMessagingProperty(ctx, propertyId);
-  else if (installationProvider(ctx) && installationProvider(ctx) !== "local") {
+  else if (installationProvider(ctx) !== "local" && !anyPropertyUsesLocal(ctx.services.workspace)) {
     throw new SetupInputError("LOCAL_PROVIDER_REQUIRED", LOCAL_PROVIDER_REQUIRED);
   }
   const phone = input.from ? toE164(input.from) : undefined;

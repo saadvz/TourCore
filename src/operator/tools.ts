@@ -239,6 +239,7 @@ function unitDetailsView(ctx: ToolContext, id: string) {
 
 const MESSAGING_CHOICES = [
   { choice: "live", label: "Real texts to visitors' phones", recommended: true },
+  { choice: "local", label: "Local test texts for this building (no real texts are sent)", recommended: false },
   { choice: "demo", label: "Practice only: texts show on screen, nobody is texted", recommended: false },
 ] as const;
 
@@ -826,13 +827,14 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Set messaging and records",
     kind: "change",
     description:
-      'Chooses how visitors are texted ("live" for real texts through the installation\'s messaging provider, "demo" for practice only). "sendblue" is accepted as an older name for "live". Does not change the installation provider and does not touch saved Sendblue, Twilio, or Photon credentials. Records stay on this computer. Door access mode can\'t be changed here. Credentials are never set through chat.',
-    input: z.strictObject({ property: Property, messaging: z.enum(["live", "sendblue", "demo"]).optional(), records: z.enum(["this-computer", "google-drive"]).optional() }),
+      'Chooses how visitors are texted for this building: "live" for real texts through the installation\'s messaging provider, "local" for QA test texts on this building only (other published buildings stay as they are), or "demo" for practice only. "sendblue" is accepted as an older name for "live". Does not change the installation provider and does not touch saved Sendblue, Twilio, or Photon credentials. Records stay on this computer. Door access mode can\'t be changed here. Credentials are never set through chat.',
+    input: z.strictObject({ property: Property, messaging: z.enum(["live", "sendblue", "demo", "local"]).optional(), records: z.enum(["this-computer", "google-drive"]).optional() }),
     run: async (ctx, i) => {
       if (i.records === "google-drive") throw new SetupInputError("STORAGE_UNAVAILABLE", "Keeping records in Google Drive isn't available yet. They'll stay on this computer for now.");
       const { id, draft } = openDraft(ctx, i.property);
-      const messagingMode = i.messaging === "sendblue" ? "live" : i.messaging;
-      const state = edit(ctx, id, draft, "setServices", { messagingMode });
+      const messagingMode = i.messaging === "sendblue" ? "live" : i.messaging === "local" ? "live" : i.messaging;
+      const messagingProvider = i.messaging === "local" ? "local" : undefined;
+      const state = edit(ctx, id, draft, "setServices", { messagingMode, ...(messagingProvider ? { messagingProvider } : {}) });
       return { summary: subsystemLines(ctx, id, ctx.services.workspace.openDraft(id).draft).sentence, ...state };
     },
   }),
@@ -971,7 +973,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Inject a local visitor text",
     kind: "change",
     description:
-      "QA only. Sends a visitor SMS into Tour Core as if it arrived on the local loopback (same path as POST /webhooks/local → handleProviderWebhook → conversations.receive). Refuses unless that property is on the local provider — never against Sendblue, Twilio, Photon, or practice texts. No real text is sent.",
+      "QA only. Sends a visitor SMS into Tour Core as if it arrived on the local loopback (same path as POST /webhooks/local → handleProviderWebhook → conversations.receive). Refuses unless that property is on local test texts — either this building opted in, or the installation is on local. Never against a building that uses the installation's live texting or practice texts. No real text is sent.",
     input: z.strictObject({
       from: z.string().min(7).max(30).describe("The visitor's phone number."),
       text: z.string().min(1).max(1600).describe("The visitor's text, one message."),
@@ -986,7 +988,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Read the local SMS outbox",
     kind: "read",
     description:
-      "QA only. Returns outbound local-loopback replies for a conversation as separate bubbles in send order (body + timestamp). Never one concatenated blob. Refuses unless that property is on the local provider.",
+      "QA only. Returns outbound local-loopback replies for a conversation as separate bubbles in send order (body + timestamp). Never one concatenated blob. Refuses unless that property is on local test texts.",
     input: z.strictObject({
       from: z.string().min(7).max(30).optional().describe("The visitor's phone number. Leave out to list every prospect bubble."),
       property: Property,

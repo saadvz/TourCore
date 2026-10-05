@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Guided property setup, checked and practiced before publish
-  version: "0.3.1"
+  version: "0.3.2"
 ---
 
 # Setup Property
@@ -109,8 +109,10 @@ the operator correct it.
     a new property uses it on its own. Don't ask "How do you want to text
     people?". If `get_services` shows the property still on practice texts
     while texting is installed, `set_services` with `messaging: sendblue`
-    yourself. `set_services` only sets live or practice texts for this property;
-    it does not change the installation provider or saved credentials. Where
+    yourself.     `set_services` only sets live, local test, or practice texts for this property;
+    it does not change the installation provider or saved credentials. `messaging: local`
+    puts this building on local test texts without drafting other published buildings.
+    Where
     records live comes from `get_storage_status` (this computer, or Google Drive).
     Don't ask about it.
 11. Ask Tour Core's next question about visitor help word for word:

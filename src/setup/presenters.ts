@@ -133,7 +133,7 @@ function servicesView(draft: SetupDraft) {
         {
           mode: "live" as const,
           title: "Visitor texting",
-          explanation: "Visitors text a real number from their own phone and get real replies. Uses the messaging provider connected for this installation.",
+          explanation: "Visitors text a real number from their own phone and get real replies. Uses the messaging provider connected for this installation, unless this building is on local test texts.",
         },
       ],
     },

@@ -267,7 +267,16 @@ QA tools (MCP / Grok):
 - `inject_local_sms` — send a visitor text as `from` to the property line (`to`) or property. Refuses unless that property is on `local`.
 - `read_local_outbox` — outbound replies for that conversation as **separate bubbles in order** (body + timestamp). Never one concatenated blob.
 
-Switch a scratch property: `choose_messaging_provider` with `local`, `set_services` with `messaging: live`, then inject and read the outbox. Inject against a Sendblue, Twilio, Photon, or practice-text property is refused. Switching to `local` or back to a carrier does not delete saved Sendblue, Twilio, or Photon credentials or attached lines. Switching back uses the stored account and a new connection test unless those details were never set. `set_services` only changes the property's live/practice mode; it does not touch installation secrets.
+A property can opt into local test texts while the installation's primary provider stays in place for other buildings. That is the first slice of property-scoped messaging — not a disposable install-wide patch.
+
+QA scratch recipe (keep a published live building on Sendblue):
+
+1. Leave the installation on Sendblue (do **not** call `choose_messaging_provider` with `local` and no property).
+2. Put only the scratch building on local: `choose_messaging_provider` with `local` **and** that property, or `set_services` with `messaging: local`.
+3. Run `inject_local_sms` / `read_local_outbox` against the scratch property.
+4. Confirm the live building is still Published. Switching or injecting for scratch must not draft or disconnect it.
+
+When more than one building exists, `choose_messaging_provider` with `local` and no property is refused. Inject against a building that uses the installation's live texting, or practice texts, is refused. An installation-wide switch to `local` or back to a carrier does not delete saved Sendblue, Twilio, or Photon credentials or attached lines. Switching the installation back uses the stored account and a new connection test unless those details were never set. `set_services` only changes that building's live / local / practice mode; it does not touch installation secrets.
 
 ### Sendblue (one adapter)
 
@@ -657,8 +666,8 @@ On `HOSTED_RAILWAY_P0` (Railway), `TOURCORE_HOME` must be on the persistent volu
 
 The config holds the property (including its **IANA time zone**, e.g. `America/New_York`), operator alert contact,
 doors, units, routes, and tour hours: days, start, end, `slotEveryMinutes`, `tourLengthMinutes` and
-`earlyArrivalMinutes`. It also holds `verificationMode`, `verificationValidForDays`, `messagingMode` (`demo` or `live`), `storageMode` and
-`accessMode`. The messaging provider (Sendblue, Twilio, or Photon) is stored on the installation, not on the property. Older property files that say `messagingMode: "sendblue"` are read as `live` and rewritten in place; that rename does not by itself require a new readiness check or a republish. Policy values live only in config. Setup shows the defaults (45-minute tours, hourly, 10 minutes early,
+`earlyArrivalMinutes`. It also holds `verificationMode`, `verificationValidForDays`, `messagingMode` (`demo` or `live`), optional `messagingProvider` (`local` opts this building into the QA loopback), `storageMode` and
+`accessMode`. The installation still has one primary live provider (Sendblue, Twilio, or Photon). A property may override that with `messagingProvider: "local"` so QA can inject texts without flipping the installation or drafting other published buildings. Full per-property live credentials are a later slice. Older property files that say `messagingMode: "sendblue"` are read as `live` and rewritten in place; that rename does not by itself require a new readiness check or a republish. Policy values live only in config. Setup shows the defaults (45-minute tours, hourly, 10 minutes early,
 checks reusable for 30 days) and lets the operator change them.
 
 **Approved facts.** `property.facts`, `unit.summary` and `unit.facts` hold only what the operator wrote.

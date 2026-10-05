@@ -93,6 +93,7 @@ configured credential value appears anywhere in it. The installation id is
 created once and never changes, which is what makes the bootstrap idempotent.
 `messagingProvider` is `UNSET` until the operator chooses, then `SENDBLUE`, `TWILIO`, `PHOTON`, or `LOCAL`.
 A working Sendblue install with no explicit choice is migrated to Sendblue once. It is not switched to another provider.
+A property may still opt into local test texts (`messagingProvider: "local"` on that building) while this installation value stays on the live provider.
 Check results (public address, messaging, alerts) and the history of public
 addresses live next to it in `install/state.json`, also non-secret.
 

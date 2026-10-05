@@ -17,7 +17,7 @@ calls it internally; use it only if the operator asks for technical detail.
 | practice verification | mock verification (everyone passes) |
 | real texts | live visitor texting |
 | practice texts / on screen | demo messaging |
-| local loopback, QA texts | the `local` messaging provider (no carrier; `inject_local_sms` / `read_local_outbox`) |
+| local loopback, QA texts, local test texts | the `local` messaging provider, or a building that opted into it while the installation stays on live texting (`inject_local_sms` / `read_local_outbox`) |
 | tour records | the canonical tour store and audit |
 | readiness check | readiness checks |
 | practice tour | dry tour |
@@ -29,7 +29,7 @@ calls it internally; use it only if the operator asks for technical detail.
 | approved fact | an operator-written property or unit fact |
 | door system, door access | Durin (demo mode in P0) |
 | tour updates | operator events delivered to the Tour Core Operator Updates Grok Routine |
-| visitor texting is live | the property uses the installation's messaging provider |
+| visitor texting is live | the property uses real texts through the installation's messaging provider (or local test texts if that building opted in) |
 
 Handles you'll see in tool results and must never show: `propertyId`,
 `unitId`, `doorId`, `tourRef`, `exceptionId`, `eventId`, `confirmation.code`.

@@ -92,6 +92,7 @@ export const SETUP_COMMANDS = {
   setServices: command(
     z.object({
       messagingMode: z.preprocess((v) => (v === "sendblue" ? "live" : v), z.enum(["demo", "live"])).optional(),
+      messagingProvider: z.enum(["local"]).optional(),
       storageMode: z.enum(["memory", "google-drive"]).optional(),
       accessMode: z.enum(["durin-mock", "durin"]).optional(),
     }),

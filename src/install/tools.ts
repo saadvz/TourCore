@@ -6,6 +6,7 @@ import { SetupInputError } from "../setup/setupActions";
 import { checkPublicEndpoint, runtimeHealth, testAccess, testOperatorAlerts, testStorage, testVisitorMessaging } from "./checks";
 import { toE164 } from "../messaging/Messenger";
 import { chooseMessagingProvider } from "../messaging/switchProvider";
+import { resolvePropertyId } from "../operator/resolve";
 import type { Installation } from "./installation";
 import { isHostedRailway } from "./deployment";
 import { HOSTED_SETUP_SESSION_MINUTES, HOSTED_SETUP_WRITES, DEFAULT_SETUP_SESSION_MINUTES } from "./setupSessions";
@@ -141,14 +142,18 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
     title: "Choose visitor texting",
     kind: "change",
     description:
-      "Records which messaging provider prospects will use: sendblue, twilio, photon, or local (QA loopback; no real texts). Takes no credentials. Switching takes the previous provider out of active use and requires a new connection test. Saved account details and attached lines for other providers stay. Property and tour records stay.",
-    input: z.strictObject({ provider: z.enum(["sendblue", "twilio", "photon", "local"]) }),
+      "Records which messaging provider prospects will use: sendblue, twilio, photon, or local (QA loopback; no real texts). Pass property to put only that building on local test texts; the installation's live texting and other published buildings stay as they are. Without a property, local is refused when more than one building exists. Takes no credentials. An installation-wide switch takes the previous provider out of active use and requires a new connection test. Saved account details and attached lines for other providers stay. Property and tour records stay.",
+    input: z.strictObject({
+      provider: z.enum(["sendblue", "twilio", "photon", "local"]),
+      property: z.string().max(200).optional().describe("Which building should use this option. Required for local when more than one building exists."),
+    }),
     run: async (ctx, i) => {
       const inst = installation(ctx);
-      const chosen = await chooseMessagingProvider(inst, i.provider, { workspace: ctx.services.workspace });
-      ctx.resetMessaging?.();
+      const propertyId = i.property ? resolvePropertyId(ctx.services.workspace, i.property) : undefined;
+      const chosen = await chooseMessagingProvider(inst, i.provider, { workspace: ctx.services.workspace, propertyId });
+      if (chosen.scope === "installation") ctx.resetMessaging?.();
       const next = getInstallationStatus(inst, ctx.services).nextStep;
-      return { summary: chosen.summary, provider: i.provider, changed: chosen.changed, nextStep: next, rule: SEQUENCE_RULE };
+      return { summary: chosen.summary, provider: i.provider, changed: chosen.changed, scope: chosen.scope, nextStep: next, rule: SEQUENCE_RULE };
     },
   }),
   tool({

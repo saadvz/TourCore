@@ -1,4 +1,5 @@
 import { isLiveMessaging, validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
+import { localLoopbackNumber, usesLocalMessaging } from "../messaging/propertyScope";
 import { isRemoved } from "../setup/availability";
 import { runDryTour, type DryTourResult } from "../setup/dryTour";
 import { runReadinessCheck, type ReadinessResult } from "../setup/readiness";
@@ -24,10 +25,13 @@ export function connectLine(services: OperatorServices, propertyId: string, mess
     endpoints.detach(propertyId);
     return undefined;
   }
-  const line = services.messagingLine?.();
+  const config = services.workspace.has(propertyId) ? services.workspace.load(propertyId).config : services.workspace.openDraft(propertyId).draft;
+  const installed = services.installedMessaging?.();
+  const local = usesLocalMessaging(config, installed);
+  const line = local ? localLoopbackNumber() : services.messagingLine?.();
   if (!line) return undefined;
   try {
-    const provider = services.installedMessaging?.()?.provider ?? "sendblue";
+    const provider = local ? "local" : (installed?.provider ?? "sendblue");
     const { changed, previous } = endpoints.attach({ address: line, provider, propertyId }, now, {
       replaceIf: (id) => services.workspace.has(id) && isRemoved(services.workspace.load(id).state),
     });
@@ -55,6 +59,16 @@ export const TEXTING_NOT_USED =
   "Visitor texting is connected, but this property isn't using it yet. I'll connect the property to your touring number before publishing.";
 
 export function visitorTexting(services: OperatorServices, propertyId: string, messagingMode: string, installed = services.installedMessaging?.()): VisitorTexting {
+  let config: { messagingMode?: string; messagingProvider?: string } = { messagingMode };
+  try {
+    config = services.workspace.openDraft(propertyId).draft;
+  } catch {
+    // Property isn't on file yet; use the mode the caller already has.
+  }
+  if (usesLocalMessaging({ ...config, messagingMode }, installed)) {
+    const line = services.endpoints?.forProperty(propertyId)?.address ?? localLoopbackNumber();
+    return { state: "connected", label: "Connected", line };
+  }
   if (!isLiveMessaging(messagingMode)) {
     return installed ? { state: "not-using-it", label: "Not connected to this property yet", problem: TEXTING_NOT_USED } : { state: "practice", label: "Practice only (nobody is texted)" };
   }
@@ -76,11 +90,20 @@ export function visitorTexting(services: OperatorServices, propertyId: string, m
  */
 export function publishGuards(services: OperatorServices, propertyId: string, messagingMode: string, installed: InstalledMessaging | undefined = services.installedMessaging?.()): PublishBlocker[] {
   if (!installed?.requiredForPublish) return [];
+  const config = (() => {
+    try {
+      return services.workspace.openDraft(propertyId).draft;
+    } catch {
+      return { messagingMode, messagingProvider: undefined as "local" | undefined };
+    }
+  })();
+  const local = usesLocalMessaging({ ...config, messagingMode }, installed);
   const texting = visitorTexting(services, propertyId, messagingMode, installed);
   if (texting.state === "not-using-it") return [{ code: "TEXTING_NOT_CONNECTED", message: texting.problem }];
   if (texting.state === "not-working" || texting.state === "number-in-use") return [{ code: "TEXTING_NOT_WORKING", message: texting.problem }];
   const attached = services.endpoints?.forProperty(propertyId);
-  if (services.endpoints && services.messagingLine?.() && !attached) {
+  const line = local ? localLoopbackNumber() : services.messagingLine?.();
+  if (services.endpoints && line && !attached) {
     return [{ code: "TEXTING_NOT_ATTACHED", message: "Visitor texting isn't pointed at this property yet. Run the readiness check again and I'll connect it." }];
   }
   return [];
