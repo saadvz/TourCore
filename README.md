@@ -436,7 +436,8 @@ needs to change.
    where it left off."
 4. Reply "yeah that's fine". You should get the identity-form link, not the welcome message.
 5. Restart once more (Ctrl+C, `npm run setup`), then open the link from step 4 and submit the form. You should get
-   "You're all set for your tour...".
+   "You're all set for your tour...". If the property's street, city, state and ZIP are on file, a second text
+   follows with directions: `Here's how to get there: https://www.google.com/maps/dir/?api=1&destination=...`.
 
 Second scenario, during a tour (use **Move tour to now** in developer mode, `npm run setup:dev`, if the tour time is
 later):
