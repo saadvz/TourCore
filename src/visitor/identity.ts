@@ -30,9 +30,9 @@ export function isApartmentOrCondo(property: { propertyType?: PropertyType }): b
 
 /**
  * Display form for an apartment or condo unit: always "Unit …".
- * Short codes (4b, 12c, ph) become uppercase. Spelled names stay as typed,
- * with a leading capital if the whole word was lowercase — never ALL-CAPS
- * ("garden" / "Garden" → "Unit Garden", never "Unit GARDEN").
+ * Short codes with a digit (4b, 12c) or 1–2 letters (PH, A) become uppercase.
+ * Spelled names of 3+ letters stay title-cased ("Loft", "garden" / "Garden" →
+ * "Unit Loft", "Unit Garden") — never ALL-CAPS.
  */
 export function unitLabel(name: string): string {
   const trimmed = name.trim().replace(/^#\s*/, "");
@@ -42,10 +42,10 @@ export function unitLabel(name: string): string {
   return `Unit ${formatUnitName(rest)}`;
 }
 
-/** Short alphanumeric codes: mostly letters/digits and ≤4 chars, or like 4B / 12C / A1. */
+/** Codes with a digit (4b, 12c), or 1–2 letters (PH, A). Three-plus letter words stay spelled names. */
 function isShortUnitCode(token: string): boolean {
   if (!/^[a-z0-9]+$/i.test(token)) return false;
-  return token.length <= 4 || /^[a-z]?\d+[a-z]?$/i.test(token);
+  return /\d/.test(token) || token.length <= 2;
 }
 
 function formatUnitName(token: string): string {

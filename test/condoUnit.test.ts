@@ -113,6 +113,15 @@ describe("apartment or condo identity", () => {
     expect(unitLabel("unit garden")).toBe("Unit Garden");
     expect(unitLabel("GARDEN")).toBe("Unit Garden");
     expect(unitLabel("Garden")).not.toBe("Unit GARDEN");
+    expect(unitLabel("Loft")).toBe("Unit Loft");
+    expect(unitLabel("loft")).toBe("Unit Loft");
+    expect(unitLabel("LOFT")).toBe("Unit Loft");
+    expect(unitLabel("Rear")).toBe("Unit Rear");
+    expect(unitLabel("rear")).toBe("Unit Rear");
+    expect(unitLabel("Top")).toBe("Unit Top");
+    expect(unitLabel("top")).toBe("Unit Top");
+    expect(unitLabel("Loft")).not.toBe("Unit LOFT");
+    expect(unitLabel("PH")).toBe("Unit PH");
     const property = { address: "145 Main St, Hoboken, NJ 07030", canonicalAddress: { street: "145 Main St" }, propertyType: "APARTMENT_OR_CONDO" as const };
     expect(streetAndUnit(property, "4b")).toBe("145 Main St, Unit 4B");
     expect(streetAndUnit(property, "garden")).toBe("145 Main St, Unit Garden");
