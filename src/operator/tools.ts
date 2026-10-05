@@ -207,7 +207,6 @@ function setupSnapshot(ctx: ToolContext, id: string) {
     doorAccess: draft.accessMode === "durin-mock" ? "Demo" : "Connected",
     alertsGoTo: view.operator.name,
     ...(view.operator.visitorContact ? { visitorHelpNumber: formatPhone(view.operator.visitorContact) } : {}),
-    ...(view.operator.supportEmail ? { supportEmail: view.operator.supportEmail } : {}),
     ...setupState(ctx, id),
   };
 }
@@ -404,7 +403,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Update property details",
     kind: "change",
     description:
-      "Changes the property's type, address, ZIP, public name, time zone or approved property facts. The name is only one the operator said (an empty name goes back to using the address). A ZIP code does not invent the rest of the address. confirmAddress is true only after they agree to the read-back. Facts must be the operator's own words. Returns nextQuestion when something still has to be asked, and that question comes before property type until the address is confirmed. After the rest of the setup is saveable, nextQuestion is \"What number can stuck visitors call? Pick one someone answers during tour hours. What email should visitors see when they text HELP?\" visitorContact is that optional number visitors see and call; it is never the team's private alert line. supportEmail is the optional address visitors see when they text HELP, and on the public contact pages. If they skip both, pass skipVisitorHelp true so the question is not asked again.",
+      "Changes the property's type, address, ZIP, public name, time zone or approved property facts. The name is only one the operator said (an empty name goes back to using the address). A ZIP code does not invent the rest of the address. confirmAddress is true only after they agree to the read-back. Facts must be the operator's own words. Returns nextQuestion when something still has to be asked, and that question comes before property type until the address is confirmed. After the rest of the setup is saveable, nextQuestion is \"What number can stuck visitors call? Pick one someone answers during tour hours.\" visitorContact is that optional number visitors see and call; it is never the team's private alert line. If they skip it, pass skipVisitorHelp true so the question is not asked again.",
     input: z.strictObject({
       property: Property,
       propertyType: z.enum(PROPERTY_TYPES).optional().describe("From the operator's answer to \"What type of property is this?\"."),
@@ -421,15 +420,10 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         .max(30)
         .optional()
         .describe("Optional number visitors see and call if they get stuck. Pick one someone answers during tour hours. Empty clears it. Never the team's private alert line."),
-      supportEmail: z
-        .string()
-        .max(120)
-        .optional()
-        .describe("Optional email visitors see when they text HELP, and on the public contact pages. Empty clears it."),
       skipVisitorHelp: z
         .boolean()
         .optional()
-        .describe("True when the operator explicitly skips the optional help number and support email. Records the skip so the question is not asked again."),
+        .describe("True when the operator explicitly skips the optional visitor help number. Records the skip so the question is not asked again."),
     }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
@@ -442,12 +436,11 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         postalCode: i.postalCode,
         confirmAddress: i.confirmAddress,
       });
-      if (i.alertName !== undefined || i.alertContact !== undefined || i.visitorContact !== undefined || i.supportEmail !== undefined || i.skipVisitorHelp) {
+      if (i.alertName !== undefined || i.alertContact !== undefined || i.visitorContact !== undefined || i.skipVisitorHelp) {
         next = applySetupCommand(next, "setAlertContact", {
           name: i.alertName,
           contact: i.alertContact,
           visitorContact: i.visitorContact,
-          supportEmail: i.supportEmail,
           skipVisitorHelp: i.skipVisitorHelp,
         });
       }
@@ -828,7 +821,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Review the setup",
     kind: "read",
     description:
-      'Everything on one page, as short lines to read back to the operator ("Here\'s what I have: ..."): the address, property type, each tourable unit with its details and route, tour hours, verification, visitor texting and door access, the visitor help number and support email (or "not set"). Plus anything still missing. No addresses of Tour Core itself or other technical details.',
+      'Everything on one page, as short lines to read back to the operator ("Here\'s what I have: ..."): the address, property type, each tourable unit with its details and route, tour hours, verification, visitor texting and door access, and the visitor help number (or "not set"). Plus anything still missing. No addresses of Tour Core itself or other technical details.',
     input: z.strictObject({ property: Property }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);

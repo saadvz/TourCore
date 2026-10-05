@@ -30,7 +30,6 @@ export {
   visitorHelpQuestion,
   VISITOR_HELP_QUESTION,
   VISITOR_HELP_NUMBER_QUESTION,
-  VISITOR_HELP_EMAIL_QUESTION,
   describeDays,
   describeMinutes,
   describeInterval,

@@ -111,13 +111,12 @@ the operator correct it.
     while texting is installed, `set_services` with `messaging: sendblue`
     yourself. Where records live comes from `get_storage_status` (this computer, or Google Drive). Don't
     ask about it.
-11. Ask Tour Core's next questions about visitor help word for word:
+11. Ask Tour Core's next question about visitor help word for word:
     **"What number can stuck visitors call? Pick one someone answers during tour hours."**
-    **"What email should visitors see when they text HELP?"**
-    Save a number with `update_property_details` `visitorContact` and an email
-    with `supportEmail`. If they skip, call `update_property_details` with
-    `skipVisitorHelp: true` so it is not asked again. Never use the team's
-    private alert line as the visitor number. Both stay optional.
+    Save a number with `update_property_details` `visitorContact`. If they skip,
+    call `update_property_details` with `skipVisitorHelp: true` so it is not
+    asked again. Never use the team's private alert line as the visitor number.
+    The number stays optional.
 12. `review_property_setup` and read its `lines` back as a short list:
 
     > Here's what I have:
@@ -137,13 +136,12 @@ the operator correct it.
     > Visitor texting: Connected
     > Door access: Demo
     > Visitors can call: not set
-    > Support email: not set
     >
     > Does that look right?
 
     If the operator gave the property a name, a "Called: ..." line follows the
-    address. If they set a help number or support email, those lines show the
-    values instead of "not set".
+    address. If they set a help number, that line shows the value instead of
+    "not set".
 13. On yes, the setup is saved. In a guided install, go back to Tour Core's
     next step (`get_next_installation_step`, Install Tour Core skill): it
     offers tour updates next, then runs the checks. Otherwise: "I'll run a

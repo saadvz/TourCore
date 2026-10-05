@@ -101,7 +101,7 @@ function emailNotice(config: PublicComplianceConfig): string {
   if (config.contactEmail) return "";
   if (config.development) {
     const why = config.contactEmailProblem === "invalid" ? "is not a valid email address" : "is not set";
-    return `<p class="notice" role="status"><strong>Configuration needed.</strong> No support email is set on the property${why === "is not a valid email address" ? ", and TOURCORE_PUBLIC_CONTACT_EMAIL is not a valid email address" : ", and TOURCORE_PUBLIC_CONTACT_EMAIL is not set"}. Add one in property setup. This page will not invent one.</p>`;
+    return `<p class="notice" role="status"><strong>Configuration needed.</strong> TOURCORE_PUBLIC_CONTACT_EMAIL ${why}. Add the support address for this deployment. This page will not invent one.</p>`;
   }
   return `<p class="notice" role="status">A public contact email is not configured.</p>`;
 }

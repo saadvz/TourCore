@@ -51,7 +51,6 @@ export const SETUP_COMMANDS = {
       name: Text.optional(),
       contact: Text.optional(),
       visitorContact: Text.optional(),
-      supportEmail: Text.optional(),
       skipVisitorHelp: z.boolean().optional(),
     }),
     (d, i) => setAlertContact(d, i),

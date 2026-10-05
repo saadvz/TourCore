@@ -28,7 +28,6 @@ import {
   SetupInputError,
   validateConfig,
   visitorHelpQuestion,
-  VISITOR_HELP_EMAIL_QUESTION,
   VISITOR_HELP_NUMBER_QUESTION,
   VISITOR_HELP_QUESTION,
   type DryTourResult,
@@ -90,7 +89,6 @@ describe("guided setup actions", () => {
     expect(section("ALERTS")).toEqual([
       "If a visitor needs help: leasing team",
       "Visitors can call: not set",
-      "Support email: not set",
     ]);
   });
 
@@ -106,7 +104,6 @@ describe("guided setup actions", () => {
     expect(reviewSetup(withNumber).sections.find((s) => s.title === "ALERTS")?.lines).toEqual([
       "If a visitor needs help: leasing team",
       "Visitors can call: (555) 010-8888",
-      "Support email: not set",
     ]);
 
     const cleared = setAlertContact(withNumber, { visitorContact: "" });
@@ -129,38 +126,20 @@ describe("guided setup actions", () => {
     );
   });
 
-  it("sets an optional support email and records an explicit skip", () => {
+  it("records an explicit skip of the optional visitor help number", () => {
     const { draft } = buildProperty();
-    expect(draft.operator.supportEmail).toBeUndefined();
     expect(draft.operator.visitorHelpDecided).toBeUndefined();
-
-    const withEmail = setAlertContact(draft, { supportEmail: "help@example.com" });
-    expect(withEmail.operator.supportEmail).toBe("help@example.com");
-    expect(withEmail.operator.visitorHelpDecided).toBe(true);
-    expect(reviewSetup(withEmail).sections.find((s) => s.title === "ALERTS")?.lines).toEqual([
-      "If a visitor needs help: leasing team",
-      "Visitors can call: not set",
-      "Support email: help@example.com",
-    ]);
-    expect(() => setAlertContact(draft, { supportEmail: "not-an-email" })).toThrow(new SetupInputError("EMAIL_INVALID", "Please enter a real email address."));
 
     const skipped = setAlertContact(draft, { skipVisitorHelp: true });
     expect(skipped.operator.visitorContact).toBeUndefined();
-    expect(skipped.operator.supportEmail).toBeUndefined();
     expect(skipped.operator.visitorHelpDecided).toBe(true);
     expect(reviewSetup(skipped).sections.find((s) => s.title === "ALERTS")?.lines).toEqual([
       "If a visitor needs help: leasing team",
       "Visitors can call: not set",
-      "Support email: not set",
     ]);
 
-    const bad = { ...draft, operator: { ...draft.operator, supportEmail: "nope" } };
-    expect(validateConfig(bad).map((i) => i.code)).toContain("SUPPORT_EMAIL_INVALID");
-    expect(validateConfig(withEmail)).toEqual([]);
-
     expect(VISITOR_HELP_NUMBER_QUESTION).toBe("What number can stuck visitors call? Pick one someone answers during tour hours.");
-    expect(VISITOR_HELP_EMAIL_QUESTION).toBe("What email should visitors see when they text HELP?");
-    expect(VISITOR_HELP_QUESTION).toBe(`${VISITOR_HELP_NUMBER_QUESTION} ${VISITOR_HELP_EMAIL_QUESTION}`);
+    expect(VISITOR_HELP_QUESTION).toBe(VISITOR_HELP_NUMBER_QUESTION);
     expect(visitorHelpQuestion(draft)).toEqual({ nextQuestion: VISITOR_HELP_QUESTION });
     expect(visitorHelpQuestion(skipped)).toBeUndefined();
     expect(visitorHelpQuestion(createPropertySetup({ address: "100 Alfred Way, Brooklyn, NY", propertyType: "APARTMENT_BUILDING" }))).toBeUndefined();
@@ -168,9 +147,9 @@ describe("guided setup actions", () => {
     const cli = readFileSync(new URL("../src/cli/setup.ts", import.meta.url), "utf8");
     const web = readFileSync(new URL("../src/web/public/app.js", import.meta.url), "utf8");
     expect(cli).toContain("VISITOR_HELP_NUMBER_QUESTION");
-    expect(cli).toContain("VISITOR_HELP_EMAIL_QUESTION");
+    expect(cli).not.toMatch(/supportEmail|VISITOR_HELP_EMAIL|What email should visitors/);
     expect(web).toContain(VISITOR_HELP_NUMBER_QUESTION);
-    expect(web).toContain(VISITOR_HELP_EMAIL_QUESTION);
+    expect(web).not.toMatch(/supportEmail|What email should visitors/);
   });
 
   it("keeps policy values in config with visible defaults", () => {
@@ -263,27 +242,17 @@ describe("readiness check", () => {
       "Durin access",
       "Audit/export",
     ]);
-    expect(result.advisories).toEqual(["No visitor help number or email is set, so stuck visitors can only text back."]);
+    expect(result.advisories).toEqual(["No visitor help number is set, so stuck visitors can only text back."]);
   });
 
-  it("does not fail readiness when visitor help is missing, and drops the advisory once either is set", async () => {
+  it("does not fail readiness when visitor help is missing, and drops the advisory once a number is set", async () => {
     const { draft } = buildProperty();
-    const previous = process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
-    delete process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
-    try {
-      const missing = await runReadinessCheck(draft, { now: MONDAY_MORNING });
-      expect(missing.passed).toBe(true);
-      expect(missing.advisories).toEqual(["No visitor help number or email is set, so stuck visitors can only text back."]);
-      const withNumber = await runReadinessCheck(setAlertContact(draft, { visitorContact: "(555) 010-8888" }), { now: MONDAY_MORNING });
-      expect(withNumber.passed).toBe(true);
-      expect(withNumber.advisories).toEqual([]);
-      const withEmail = await runReadinessCheck(setAlertContact(draft, { supportEmail: "help@example.com" }), { now: MONDAY_MORNING });
-      expect(withEmail.passed).toBe(true);
-      expect(withEmail.advisories).toEqual([]);
-    } finally {
-      if (previous === undefined) delete process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
-      else process.env.TOURCORE_PUBLIC_CONTACT_EMAIL = previous;
-    }
+    const missing = await runReadinessCheck(draft, { now: MONDAY_MORNING });
+    expect(missing.passed).toBe(true);
+    expect(missing.advisories).toEqual(["No visitor help number is set, so stuck visitors can only text back."]);
+    const withNumber = await runReadinessCheck(setAlertContact(draft, { visitorContact: "(555) 010-8888" }), { now: MONDAY_MORNING });
+    expect(withNumber.passed).toBe(true);
+    expect(withNumber.advisories).toEqual([]);
   });
 
   it("fails with a clear reason when a unit has no route", async () => {

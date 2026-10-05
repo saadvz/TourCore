@@ -120,7 +120,7 @@ describe("Tour Core owns the onboarding order", () => {
     expect(OPERATOR_MESSAGES.firstProperty).toBe("Everything needed to start is connected and tested. Would you like to add your first property?");
   });
 
-  it("asks for a visitor help number and support email as one optional step before the property is ready", async () => {
+  it("asks for a visitor help number as one optional step before the property is ready", async () => {
     const h = harness();
     infraReady(h);
     await h.ok("create_property_setup", { address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way", propertyType: "APARTMENT_BUILDING" });
@@ -136,8 +136,7 @@ describe("Tour Core owns the onboarding order", () => {
       action: "FINISH_PROPERTY_SETUP",
       performedBy: "OPERATOR_DECISION",
       tool: "update_property_details",
-      operatorMessage:
-        "What number can stuck visitors call? Pick one someone answers during tour hours. What email should visitors see when they text HELP?",
+      operatorMessage: "What number can stuck visitors call? Pick one someone answers during tour hours.",
     });
     await h.ok("update_property_details", { skipVisitorHelp: true });
     expect((await next(h)).action).toBe("OFFER_OPERATOR_ALERTS");

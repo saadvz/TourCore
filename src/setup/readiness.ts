@@ -1,5 +1,4 @@
 import { isLiveMessaging, TourCoreConfigShape, validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
-import { resolveSupportEmail } from "../core/email";
 import { FIELD_WORDS, missingProfileFields } from "../config/unitProfile";
 import type { ConfigIssue, ConfigSection } from "../config/validateConfig";
 import { SimulatedClock } from "../core/clock";
@@ -163,10 +162,9 @@ export async function runReadinessCheck(
     const messaging = result.checks.find((c) => c.id === "messaging")!;
     messaging.label = messaging.ok ? "Visitor messaging connected" : "Visitor messaging";
   }
-  const advisories =
-    config.operator.visitorContact || resolveSupportEmail(config.operator.supportEmail)
-      ? []
-      : ["No visitor help number or email is set, so stuck visitors can only text back."];
+  const advisories = config.operator.visitorContact
+    ? []
+    : ["No visitor help number is set, so stuck visitors can only text back."];
   return { ...result, messaging: messagingChecks, advisories };
 }
 

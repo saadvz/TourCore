@@ -33,7 +33,6 @@ import {
   setVerificationPolicy,
   statusLabel,
   validateConfig,
-  VISITOR_HELP_EMAIL_QUESTION,
   VISITOR_HELP_NUMBER_QUESTION,
   type DryTourEvent,
   type SetupDraft,
@@ -356,8 +355,7 @@ async function editAlerts(draft: SetupDraft): Promise<SetupDraft> {
   return retry(async () => {
     const name = await io.askRequired(OperatorTeamCopy.cliPrompt(), draft.operator.name);
     const visitorContact = await io.ask(VISITOR_HELP_NUMBER_QUESTION, draft.operator.visitorContact);
-    const supportEmail = await io.ask(VISITOR_HELP_EMAIL_QUESTION, draft.operator.supportEmail);
-    return setAlertContact(draft, { name, visitorContact, supportEmail });
+    return setAlertContact(draft, { name, visitorContact });
   });
 }
 

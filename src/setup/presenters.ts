@@ -266,7 +266,6 @@ export function draftView(draft: SetupDraft) {
     operator: {
       name: draft.operator.name,
       visitorContact: draft.operator.visitorContact ?? "",
-      supportEmail: draft.operator.supportEmail ?? "",
     },
     units,
     doors: draft.doors.map((d) => ({

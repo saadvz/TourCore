@@ -112,7 +112,6 @@ describe("setup through the tools", () => {
         "Visitor texting: Practice only (nobody is texted)",
         "Door access: Demo",
         "Visitors can call: not set",
-        "Support email: not set",
       ]),
     );
     expect(review.lines.join("\n")).not.toMatch(/https?:|\/mcp|localhost/);
@@ -142,7 +141,7 @@ describe("setup through the tools", () => {
     expect(alertName).not.toMatch(/your own name/i);
   });
 
-  it("saves a support email and records an explicit skip of the optional help step", async () => {
+  it("saves a visitor help number and records an explicit skip of the optional help step", async () => {
     const h = app();
     await h.ok("create_property_setup", { address: "100 Alfred Way, Brooklyn, NY 11201", name: "100 Alfred Way", propertyType: "APARTMENT_BUILDING" });
     await h.ok("update_property_details", { confirmAddress: true });
@@ -154,19 +153,15 @@ describe("setup through the tools", () => {
     await h.ok("set_verification_policy", { level: "basic-form" });
 
     const asked = await h.ok("review_property_setup");
-    expect(asked.nextQuestion).toBe(
-      "What number can stuck visitors call? Pick one someone answers during tour hours. What email should visitors see when they text HELP?",
-    );
-    expect(asked.lines).toEqual(expect.arrayContaining(["Visitors can call: not set", "Support email: not set"]));
+    expect(asked.nextQuestion).toBe("What number can stuck visitors call? Pick one someone answers during tour hours.");
+    expect(asked.lines).toEqual(expect.arrayContaining(["Visitors can call: not set"]));
+    expect(asked.lines.join("\n")).not.toMatch(/Support email|supportEmail/);
 
-    expect(await h.fails("update_property_details", { supportEmail: "nope" })).toMatch(/real email address/);
-    const saved = await h.ok("update_property_details", { visitorContact: "(555) 010-3333", supportEmail: "help@example.com" });
+    const saved = await h.ok("update_property_details", { visitorContact: "(555) 010-3333" });
     expect(saved.setup.visitorHelpNumber).toBe("(555) 010-3333");
-    expect(saved.setup.supportEmail).toBe("help@example.com");
+    expect(saved.setup.supportEmail).toBeUndefined();
     expect(saved.nextQuestion).toBeUndefined();
-    expect((await h.ok("review_property_setup")).lines).toEqual(
-      expect.arrayContaining(["Visitors can call: (555) 010-3333", "Support email: help@example.com"]),
-    );
+    expect((await h.ok("review_property_setup")).lines).toEqual(expect.arrayContaining(["Visitors can call: (555) 010-3333"]));
 
     const other = grokHarness();
     cleanups.push(other.cleanup);
@@ -269,10 +264,10 @@ describe("readiness, practice tour and publish", () => {
       "\u2713 Records",
       "\u2713 Durin access",
       "\u2713 Audit/export",
-      "No visitor help number or email is set, so stuck visitors can only text back.",
+      "No visitor help number is set, so stuck visitors can only text back.",
     ]);
     expect(readiness.passed).toBe(true);
-    expect(readiness.advisories).toEqual(["No visitor help number or email is set, so stuck visitors can only text back."]);
+    expect(readiness.advisories).toEqual(["No visitor help number is set, so stuck visitors can only text back."]);
     if (previous === undefined) delete process.env.TOURCORE_PUBLIC_CONTACT_EMAIL;
     else process.env.TOURCORE_PUBLIC_CONTACT_EMAIL = previous;
     const practice = await h.ok("run_dry_tour");

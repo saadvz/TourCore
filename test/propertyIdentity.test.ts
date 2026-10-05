@@ -169,11 +169,10 @@ describe("real visitor texting can't be missed", () => {
     await finishHillside(h);
     expect(h.workspace.load("prop_144_hillside_ave_teaneck_nj").config.messagingMode).toBe("live");
     const review = await h.ok("review_property_setup");
-    expect(review.lines.slice(-4)).toEqual([
+    expect(review.lines.slice(-3)).toEqual([
       "Visitor texting: Connected",
       "Door access: Demo",
       "Visitors can call: not set",
-      "Support email: not set",
     ]);
     expect(review.lines.join("\n")).not.toMatch(/https?:|trycloudflare|\/mcp|\+1555/);
     const services = await h.ok("get_services");

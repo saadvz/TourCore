@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import { resolveSupportEmail } from "../core/email";
 import { formatPhone, normalizePhone } from "../core/phone";
 import { complianceLinkPair, publicBrandName } from "../web/compliance/config";
 import { campaignConfirmation, campaignDisclosure, MESSAGE_RATES } from "../web/compliance/pages";
@@ -47,22 +46,17 @@ export function smsOptInConfirmation(env: NodeJS.ProcessEnv = process.env): stri
 
 /**
  * Visitor HELP text. The program name comes from TOURCORE_PUBLIC_BRAND_NAME.
- * The support address is the operator setting, with TOURCORE_PUBLIC_CONTACT_EMAIL
- * as a fallback only. Visitors never see env-var names or "not configured".
+ * Lists the visitor help number when set, then always "or reply here".
+ * Visitors never see env-var names, email, or "not configured".
  */
 export function smsHelpBody(
   env: NodeJS.ProcessEnv = process.env,
-  contact: { supportEmail?: string; visitorContact?: string } = {},
+  contact: { visitorContact?: string } = {},
 ): string {
-  const email = resolveSupportEmail(contact.supportEmail, env);
   const number = contact.visitorContact ? formatPhone(contact.visitorContact) : undefined;
-  const contacts = [...(number ? [`call ${number}`] : []), ...(email ? [`email ${email}`] : [])];
-  const help =
-    contacts.length === 0
-      ? "For help with your property tour, reply here."
-      : contacts.length === 1
-        ? `For help with your property tour, ${contacts[0]} or reply here.`
-        : `For help with your property tour, ${contacts.join(", ")}, or reply here.`;
+  const help = number
+    ? `For help with your property tour, call ${number} or reply here.`
+    : "For help with your property tour, reply here.";
   return `${publicBrandName(env)}: ${help} ${MESSAGE_RATES} Reply STOP to opt out.`;
 }
 

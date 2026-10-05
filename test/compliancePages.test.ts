@@ -10,7 +10,6 @@ import { MCP_PATH } from "../src/mcp/paths";
 import { SENDBLUE_WEBHOOK_PATH } from "../src/messaging/sendblue/runtime";
 import { buildComplianceConfig, formatPublicSmsNumber } from "../src/web/compliance/config";
 import { MESSAGE_RATES, PRIVACY_NON_SHARING } from "../src/web/compliance/pages";
-import { loadConfig } from "../src/config/tourCoreConfig";
 import { PropertyWorkspace } from "../src/setup";
 import { createSetupServer } from "../src/web/server";
 
@@ -251,30 +250,6 @@ describe("public compliance pages", () => {
         expect(privacy.text).not.toMatch(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
       },
     );
-  });
-
-  it("uses the operator support email on compliance pages when the env fallback is empty", async () => {
-    const root = mkdtempSync(join(tmpdir(), "tourcore-compliance-"));
-    const workspace = new PropertyWorkspace(root);
-    const created = workspace.save({
-      ...loadConfig(),
-      operator: { ...loadConfig().operator, supportEmail: "desk@example.com", visitorHelpDecided: true },
-    });
-    expect(created.config.operator.supportEmail).toBe("desk@example.com");
-    const server: Server = createSetupServer({ workspace, log: () => {} });
-    const { port } = await new Promise<{ port: number }>((resolve) => {
-      server.listen(0, "127.0.0.1", () => resolve({ port: (server.address() as { port: number }).port }));
-    });
-    cleanup.push(() => {
-      server.close();
-      rmSync(root, { recursive: true, force: true });
-    });
-    await withEnv({ TOURCORE_PUBLIC_CONTACT_EMAIL: undefined, NODE_ENV: "production", PUBLIC_BASE_URL: PUBLIC_BASE }, async () => {
-      const privacy = await http(port, "/TourCore/privacy");
-      expect(privacy.text).toContain("desk@example.com");
-      expect(privacy.text).not.toContain("A public contact email is not configured.");
-      expect(privacy.text).not.toContain("TOURCORE_PUBLIC_CONTACT_EMAIL");
-    });
   });
 
   it("leaves health, MCP, and the Sendblue webhook in place", async () => {

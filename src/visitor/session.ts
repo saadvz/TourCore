@@ -424,10 +424,7 @@ export class VisitorDemoSession {
     }
     await this.recordText(said);
     await this.reply(
-      smsHelpBody(process.env, {
-        supportEmail: this.config.operator.supportEmail,
-        visitorContact: this.config.operator.visitorContact,
-      }),
+      smsHelpBody(process.env, { visitorContact: this.config.operator.visitorContact }),
       undefined,
       { deliverDespiteOptOut: this.smsConsent !== "opted_in" },
     );
