@@ -77,6 +77,7 @@ function lastAsked(step: ConversationStep, awaiting?: StepAwaiting): string {
   if (awaiting?.kind === "confirm-stop") return `Are you at ${awaiting.stop.label} now?`;
   if (awaiting?.kind === "choose-stop") return `Which door are you at: ${awaiting.stops.map((s) => s.label).join(" or ")}?`;
   if (awaiting?.kind === "confirm-finish") return "Are you finished with your tour?";
+  if (awaiting?.kind === "accept-next-opening") return "Want that, or another day?";
   switch (step) {
     case "choose-unit":
       return "Which unit would you like to see?";

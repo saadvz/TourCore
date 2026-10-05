@@ -29,7 +29,7 @@ import { approvedAnswerText, approvedFacts, type ApprovedFact } from "./facts";
 import { formatPhone, normalizePhone } from "./phone";
 import { resolveQuestion } from "./questions";
 import { closestOpenSlots, intervalsOverlap, overlapSummary, placementOf, relativeWhen, tourInterval, touringHoursLabel } from "./customSlot";
-import { isoDate, nextTourDay, slotsOn, tourWindow, type TourSlot } from "./schedule";
+import { BOOKING_HORIZON_DAYS, isoDate, nextTourDay, slotsOn, tourWindow, type TourSlot } from "./schedule";
 import { addDays, formatDay as formatDayIn, formatTime as formatTimeIn, localDateOf, type LocalDate } from "./timezone";
 
 export interface TourCoreDeps {
@@ -284,7 +284,7 @@ export class TourCore {
     const tz = this.deps.config.property.timezone;
     let day = localDateOf(now, tz);
     const out: { date: string; label: string; start: Date }[] = [];
-    for (let i = 0; i < 21 && out.length < limit; i++, day = addDays(day, 1)) {
+    for (let i = 0; i < BOOKING_HORIZON_DAYS && out.length < limit; i++, day = addDays(day, 1)) {
       const slots = await this.availableSlots(day);
       if (!slots.length) continue;
       out.push({ date: isoDate(day), label: formatDayIn(slots[0]!.start, tz), start: slots[0]!.start });

@@ -2,7 +2,7 @@ import { resolveSpokenTime } from "../core/customSlot";
 import { orList, unitsNamedIn } from "../core/questions";
 import { isoDate, parseIsoDate } from "../core/schedule";
 import { type DayReference, type SpokenTime } from "../core/spokenTime";
-import { addDays, formatDay, localDateOf, weekdayOf, zonedParts, zonedTimeToUtc, type LocalDate } from "../core/timezone";
+import { addDays, formatDay, localDateOf, weekdayOf, zonedParts, type LocalDate } from "../core/timezone";
 import { VisitorDenialCopy, type InboundMeta } from "../core/TourCore";
 import {
   isConfident,
@@ -20,6 +20,7 @@ import {
 import type { ReplyPrompt } from "../messaging/presentation";
 import { timeMenu } from "./entry";
 import type { InterpretationNote, Said, VisitorDemoSession, VisitorStage } from "./session";
+import { acceptsOfferedOpening, offerDate, takeOfferedOpening } from "./unavailableDay";
 import { SMS_GATE_REMINDER, SMS_KEYWORD_PROMPT, smsDisclosure, smsOptInConfirmation } from "./smsConsent";
 
 /**
@@ -478,21 +479,7 @@ async function showAskedDay(turn: Turn, ask: DayReference, alreadyRecorded = fal
 async function presentDay(turn: Turn, date: string, alreadyRecorded = false): Promise<void> {
   const { session } = turn;
   if (!alreadyRecorded) await session.recordText(turn.said);
-  const slots = await session.selectDate(date);
-  const tz = session.config.property.timezone;
-  const local = parseIsoDate(date);
-  const label = slots[0] ? formatDay(slots[0].start, tz) : local ? formatDay(zonedTimeToUtc({ ...local, hour: 12, minute: 0 }, tz), tz) : date;
-  if (!slots.length) {
-    session.selectedDate = undefined;
-    await session.reply(`I don't have tours on ${label}. I have tours available. Which day works for you?`, {
-      kind: "choose",
-      options: session.offeredDates.map((day) => day.label),
-      what: "a day",
-    });
-    return;
-  }
-  const menu = timeMenu(formatDay(slots[0]!.start, tz), slots.map((slot) => slot.label));
-  await session.reply(menu.body, menu.prompt);
+  await offerDate(session, date);
 }
 
 async function byStage(turn: Turn): Promise<void> {
@@ -531,6 +518,9 @@ async function byStage(turn: Turn): Promise<void> {
     }
 
     case "choose-date": {
+      if (turn.awaiting?.kind === "accept-next-opening" && acceptsOfferedOpening(turn.said.text ?? "")) {
+        return takeOfferedOpening(session, turn.awaiting, turn.said);
+      }
       if (intent.type === "SELECT_DATE") return showAskedDay(turn, intent);
       if (intent.type === "REQUEST_HELP") return session.help(turn.said);
       return turn.fallback(`${SORRY} Which day works for you?`, { kind: "choose", options: session.offeredDates.map((day) => day.label), what: "a day" });
