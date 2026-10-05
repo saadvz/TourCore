@@ -174,6 +174,9 @@ right now").
   Tour Core only opens doors on the visitor's own route during their tour time.
 - Invent, reword or embellish an approved fact.
 - Show exceptionIds, tourRefs or codes.
-- Treat a visitor naming a tour date ("Can I come Dec 1?") or an unparseable
-  date ("the 45th", "sometime next month") as an unanswered question. Tour
-  Core handles those itself; they should not appear as a flagged question.
+- Treat a visitor naming a tour date ("Can I come Dec 1?"), an unparseable
+  date ("the 45th", "sometime next month"), or a day that isn't bookable
+  (no more today, fully booked, that weekday, too far ahead, no open times)
+  as an unanswered question. Tour Core handles those itself — including
+  yes/that for the offered next opening — and they should not appear as a
+  flagged question.

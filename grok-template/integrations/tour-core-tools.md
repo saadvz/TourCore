@@ -36,7 +36,7 @@ again with the code after the operator's yes.
 | `preview_route` | read | Resolves the operator's door words to doors on file, without saving |
 | `set_route` | change | Saves a route from exact door names; refuses unknown doors and invalid routes |
 | `get_tour_hours` | read | Days, hours, length, spacing, early arrival |
-| `set_tour_hours` | change | Sets tour hours from everyday words |
+| `set_tour_hours` | change | Sets tour hours from everyday words. Hours are structural: a published property goes back to draft until readiness, a practice tour, and publish. After those hours are published, open visitor conversations use them on the next inbound text |
 | `get_verification_policy` | read | Visitor verification choice and reuse window |
 | `set_verification_policy` | change | Basic identity form or practice verification |
 | `get_services` | read | Messaging choice and connection, records location, door access mode |
@@ -44,7 +44,7 @@ again with the code after the operator's yes.
 | `review_property_setup` | read | The setup as short lines to read back: address, "Called: ..." if named, property type, each unit with its details and route, "Tours: ...", "Verification: ...", "Visitor texting: Connected", "Door access: Demo", visitor help number (or "not set") |
 | `run_readiness_check` | change | The real readiness checks, recorded for publish |
 | `run_dry_tour` | change | A full practice tour with safety proof points, recorded for publish |
-| `publish_demo_property` | consequential | Publishes for demo, only when readiness and a practice tour passed for this exact setup. In a Grok-managed install it refuses while the property still uses practice texts although texting is installed, returning a `summary` and a `remediation` (switch to real texts, re-run readiness and the practice tour, ask again) |
+| `publish_demo_property` | consequential | Publishes for demo, only when readiness and a practice tour passed for this exact setup. Open conversations then use these published settings (hours, units, and so on) on every inbound text. In a Grok-managed install it refuses while the property still uses practice texts although texting is installed, returning a `summary` and a `remediation` (switch to real texts, re-run readiness and the practice tour, ask again) |
 | `list_active_tours` | read | Tours happening now |
 | `inspect_tour` | read | One tour: status, activity, questions, denials, what needs attention |
 | `list_exceptions` | read | The queue of issues that need the team |

@@ -37,6 +37,20 @@ zone. A date or booking ask is handled as booking, not as a flagged question. If
 the day can't be resolved ("the 45th", "sometime next month"), Tour Core
 asks which day they meant and shows the day menu; it does not flag the team.
 
+If that day has no bookable tours, the visitor is told why — no more tours
+today, fully booked, tours don't run that weekday, beyond the 21-day
+booking horizon, or no open times at all — plus the next opening when there
+is one. When a day menu follows, the line is "Reply yes for {Weekday} at
+{time}, or pick a day:". Replying yes or that books that exact start after
+a recheck; if it was taken, they hear "Someone just grabbed that time."
+
+Open conversations pick up the latest published settings (hours, units,
+and so on) on every inbound text. A stale numbered reply after hours
+change gets "Tour times just changed. Here's what's open now:" and the
+fresh days. "Tour" restarts booking from the current day picker. An
+offered next opening is rechecked against the current hours before it is
+booked.
+
 ## Who does what
 
 | Part | Job |

@@ -167,7 +167,12 @@ description, amenities, directions) are approved content: saving them keeps
 the property published and active tours use them right away. Doors, routes,
 tour hours, verification and messaging are structural: they send the property
 back to draft until readiness and a practice tour pass again. Tell the operator
-which it is before saving a structural change to a published property.
+which it is before saving a structural change to a published property. After
+the new hours are published, anyone already texting picks them up on their
+next message: a stale numbered day gets "Tour times just changed. Here's
+what's open now:" and the fresh days; "Tour" starts the day picker over from
+the current hours; an offered next opening is checked against those hours
+before it is booked.
 
 ## Validate
 
