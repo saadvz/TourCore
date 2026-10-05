@@ -92,7 +92,7 @@ export const DurableSessionSchema = z.object({
   followUp: z.enum(["asked", "answered"]).optional(),
   optedOut: z.boolean().default(false),
   /** This leftover conversation was replaced by an operator-set one-off. */
-  superseded: z.boolean().default(false),
+  superseded: z.boolean().optional(),
   createdAt: Iso,
   updatedAt: Iso,
   completedAt: Iso.optional(),
