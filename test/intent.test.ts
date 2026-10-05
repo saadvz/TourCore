@@ -436,9 +436,11 @@ describe("natural texts drive the real tour", () => {
     await p.say("NO");
     expect(await p.session.stage()).toBe("stopped");
     await p.say("HELP");
-    expect(p.lastReply()).toBe(VisitorDenialCopy.helpAck("leasing team"));
-    expect(p.lastReply()).not.toContain("Tour Core:");
+    expect(p.lastReply()).toContain("Tour Core:");
+    expect(p.lastReply()).toContain("Reply STOP to opt out.");
+    expect(p.lastReply()).not.toContain("I've let the");
     expect(p.lastReply()).not.toContain("Khanex");
+    expect(await p.audit("HELP_REQUESTED")).toHaveLength(0);
     await p.say("STOP");
     expect(p.session.optedOut).toBe(true);
     await p.say("START");

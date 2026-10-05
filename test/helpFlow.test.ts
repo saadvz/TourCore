@@ -112,9 +112,11 @@ describe("help flow: one visitor reply, one open exception", () => {
     await ctx.core.requestHelp(tour.reservation.id, "lobby", { text: "help" });
     await ctx.core.requestHelp(tour.reservation.id, "lobby", { text: "help" });
     const alerts = (await ctx.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"));
-    const acks = (await ctx.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.body === VisitorDenialCopy.helpAck(TEAM));
+    const firstAcks = (await ctx.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.body === VisitorDenialCopy.helpAck(TEAM));
+    const repeatAcks = (await ctx.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.body === VisitorDenialCopy.helpRepeatAck(TEAM));
     expect(alerts).toHaveLength(1);
-    expect(acks).toHaveLength(2);
+    expect(firstAcks).toHaveLength(1);
+    expect(repeatAcks).toHaveLength(1);
     expect((await ctx.store.listAudit()).filter((e) => e.type === "HELP_REQUESTED")).toHaveLength(2);
     expect((await ctx.store.listAudit()).filter((e) => e.type === "OPERATOR_NOTIFIED" && e.detail.includes("asked for help"))).toHaveLength(1);
 
@@ -125,6 +127,58 @@ describe("help flow: one visitor reply, one open exception", () => {
     ctx.clock.set(minutesFrom(ctx.clock.now(), 1));
     await ctx.core.requestHelp(tour.reservation.id, "lobby", { text: "help" });
     expect((await ctx.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(2);
-    expect((await ctx.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.body === VisitorDenialCopy.helpAck(TEAM))).toHaveLength(4);
+    expect((await ctx.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.body === VisitorDenialCopy.helpAck(TEAM))).toHaveLength(1);
+    expect((await ctx.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.body === VisitorDenialCopy.helpRepeatAck(TEAM))).toHaveLength(3);
+  });
+
+  it("HELP after a canceled reservation sends only the carrier keyword reply", async () => {
+    const p = phone();
+    await p.say("TOUR");
+    await p.say("YES");
+    await p.say("1");
+    await p.say("1");
+    await p.say("1");
+    await p.say("NO");
+    expect((await p.session.reservation())?.status).toBe("CANCELLED");
+    const before = await prospectOutbound(p.session);
+    await p.say("HELP");
+    const added = (await prospectOutbound(p.session)).slice(before.length);
+    expect(added.map((m) => m.body)).toEqual([smsHelpBody()]);
+    expect((await p.session.store.listAudit()).filter((e) => e.type === "HELP_REQUESTED")).toHaveLength(0);
+    expect((await p.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(0);
+  });
+
+  it("HELP after a finished tour sends only the carrier keyword reply", async () => {
+    const p = phone();
+    await bookAndArrive(p);
+    await p.say("I'm all done");
+    expect((await p.session.reservation())?.status).toBe("COMPLETED");
+    const before = await prospectOutbound(p.session);
+    await p.say("HELP");
+    const added = (await prospectOutbound(p.session)).slice(before.length);
+    expect(added.map((m) => m.body)).toEqual([smsHelpBody()]);
+    expect((await p.session.store.listAudit()).filter((e) => e.type === "HELP_REQUESTED")).toHaveLength(0);
+    expect((await p.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(0);
+  });
+
+  it("a second help on an open exception says the team already knows, even when the alert is throttled", async () => {
+    const maple = "Maple Leasing team";
+    const contact = "+15550109999";
+    expect(VisitorDenialCopy.helpRepeatAck(maple, contact)).toBe(
+      `The ${maple} already knows and is on it. ${VisitorDenialCopy.atDoor(maple, contact)}`,
+    );
+    expect(VisitorDenialCopy.helpRepeatAck(maple, contact)).toContain("or call (555) 010-9999");
+    expect(VisitorDenialCopy.helpRepeatAck(TEAM)).toBe(`The ${TEAM} already knows and is on it. ${VisitorDenialCopy.atDoor(TEAM)}`);
+
+    const ctx = setup({ operatorName: maple, visitorContact: contact });
+    const tour = await bookTour(ctx);
+    await ctx.core.requestHelp(tour.reservation.id, "lobby", { text: "help" });
+    await ctx.core.requestHelp(tour.reservation.id, "lobby", { text: "help again" });
+    const toVisitor = (await ctx.store.list("messages")).filter((m) => m.audience === "PROSPECT").map((m) => m.body);
+    expect(toVisitor.filter((b) => b === VisitorDenialCopy.helpAck(maple, contact))).toEqual([VisitorDenialCopy.helpAck(maple, contact)]);
+    expect(toVisitor.filter((b) => b === VisitorDenialCopy.helpRepeatAck(maple, contact))).toEqual([VisitorDenialCopy.helpRepeatAck(maple, contact)]);
+    expect((await ctx.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(1);
+    expect(toVisitor.join("\n")).toContain("Maple Leasing team");
+    expect(toVisitor.join("\n")).not.toContain("maple leasing team");
   });
 });

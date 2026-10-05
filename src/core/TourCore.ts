@@ -92,6 +92,17 @@ const CONSENT_TEXT = "Is it OK if I text you about this tour and keep a record o
 /** Repeat help on the same reservation re-alerts the team at most once per this window. */
 export const HELP_ALERT_WINDOW_MS = 5 * 60_000;
 
+/**
+ * HELP alerts the team only for a live reservation: upcoming (not finished)
+ * or still inside its tour window. Finished, canceled, revoked, failed-ID,
+ * expired, or past-window reservations do not.
+ */
+export function isLiveHelpReservation(reservation: Reservation, now: Date): boolean {
+  if (TERMINAL.includes(reservation.status)) return false;
+  if (reservation.windowEnd && Date.parse(reservation.windowEnd) <= now.getTime()) return false;
+  return true;
+}
+
 /** What a visitor hears when the approved facts don't cover their question. The team is alerted at the same time. */
 export const UNKNOWN_ANSWER = "I don't have that information for this property. I've flagged it for the property team so they can get back to you.";
 
@@ -132,6 +143,10 @@ export class VisitorDenialCopy {
 
   static helpAck(team: string, visitorContact?: string): string {
     return `I've let the ${team} know. ${this.atDoor(team, visitorContact)}`;
+  }
+
+  static helpRepeatAck(team: string, visitorContact?: string): string {
+    return `The ${team} already knows and is on it. ${this.atDoor(team, visitorContact)}`;
   }
 
   static noOpenTimes(team: string): string {
@@ -795,14 +810,18 @@ export class TourCore {
 
   async requestHelp(reservationId: string, where?: string, inbound?: { text: string; meta?: InboundMeta }): Promise<void> {
     const reservation = await this.mustGetReservation(reservationId);
+    if (!isLiveHelpReservation(reservation, this.deps.clock.now())) return;
     const prospect = await this.mustGetProspect(reservation.prospectId);
     const said = inbound?.text ?? "I need help";
+    const repeat = (await this.deps.store.listAudit()).some((e) => e.reservationId === reservationId && e.type === "HELP_REQUESTED");
     await this.recordInbound(prospect.id, reservationId, said, inbound?.meta);
     await this.record("HELP_REQUESTED", { reservationId, prospectId: prospect.id, detail: where ?? "", code: said });
     if (await this.shouldAlertHelp(reservationId)) {
       await this.notifyOperator(reservation, `${prospect.name} asked for help${where ? ` near ${where}` : ""}.`);
     }
-    await this.textProspect(prospect, reservationId, VisitorDenialCopy.helpAck(this.teamName(), this.visitorHelpNumber()));
+    const team = this.teamName();
+    const contact = this.visitorHelpNumber();
+    await this.textProspect(prospect, reservationId, repeat ? VisitorDenialCopy.helpRepeatAck(team, contact) : VisitorDenialCopy.helpAck(team, contact));
   }
 
   /** Re-alert at most once per HELP_ALERT_WINDOW_MS for the same reservation's open help. */

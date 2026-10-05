@@ -8,7 +8,7 @@ import { formatDay, formatTime } from "../core/timezone";
 import type { SpokenTime } from "../core/spokenTime";
 import { entryReply } from "./entry";
 import { visitorTourOf } from "./identity";
-import { TourCore, type AccessOutcome, type InboundMeta } from "../core/TourCore";
+import { isLiveHelpReservation, TourCore, type AccessOutcome, type InboundMeta } from "../core/TourCore";
 import type { TourSlot } from "../core/schedule";
 import { createDurin, createStore, createVerificationProvider } from "../createTourCore";
 import type { TourCoreStore } from "../storage/Store";
@@ -409,14 +409,16 @@ export class VisitorDemoSession {
   }
 
   /**
-   * HELP: one reply only. A reservation (active tour or any booking) gets the
-   * help ack and alerts the team. No reservation gets the carrier HELP keyword
-   * reply so compliance still holds for unknown numbers.
+   * HELP: one reply only. A live reservation (upcoming or still in its tour
+   * window) gets the help ack and alerts the team. Finished, canceled, revoked
+   * or past-window reservations — and unknown numbers — get the carrier HELP
+   * keyword reply so compliance still holds.
    */
   async help(said: Said): Promise<void> {
-    if (this.reservationId) {
+    const reservation = await this.reservation();
+    if (reservation && isLiveHelpReservation(reservation, this.clock.now())) {
       this.say("visitor", said.text ?? "HELP");
-      await this.core.requestHelp(this.reservationId, await this.currentPlace(), { text: said.text ?? "HELP", meta: said.meta });
+      await this.core.requestHelp(reservation.id, await this.currentPlace(), { text: said.text ?? "HELP", meta: said.meta });
       await this.syncReplies();
       return;
     }
@@ -660,9 +662,7 @@ export class VisitorDemoSession {
         return;
       }
       case "help":
-        this.say("visitor", said.text ?? "I need help.");
-        await this.core.requestHelp(r!.id, await this.currentPlace(), { text: said.text ?? "I need help", meta: said.meta });
-        return;
+        return this.help({ ...said, text: said.text ?? "I need help" });
       case "finish":
         await visitorSays("I'm done with the tour.");
         await this.core.completeTour(r!.id);
