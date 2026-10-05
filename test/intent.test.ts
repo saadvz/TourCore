@@ -16,6 +16,7 @@ import {
   type LanguageModel,
   type StopRef,
 } from "../src/intent";
+import { VisitorDenialCopy } from "../src/core/TourCore";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
 import { handleVisitorText } from "../src/visitor/conversation";
 import { VisitorDemoSession } from "../src/visitor";
@@ -412,11 +413,14 @@ describe("natural texts drive the real tour", () => {
     const p = phone();
     await inside(p);
     const before = p.session.durin.requestCount;
+    const outboundBefore = (await p.session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").length;
     await p.say(text);
     expect(await p.audit("HELP_REQUESTED")).toHaveLength(1);
-    expect(p.lastReply()).toContain("Tour Core:");
-    expect(p.lastReply()).toContain("Reply STOP to opt out.");
+    expect(p.lastReply()).toBe(VisitorDenialCopy.helpAck("leasing team"));
+    expect(p.lastReply()).not.toContain("Tour Core:");
     expect(p.lastReply()).not.toContain("Khanex");
+    const outbound = (await p.session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND");
+    expect(outbound.length - outboundBefore).toBe(1);
     expect(p.session.durin.requestCount).toBe(before);
   });
 
@@ -434,7 +438,9 @@ describe("natural texts drive the real tour", () => {
     await p.say("HELP");
     expect(p.lastReply()).toContain("Tour Core:");
     expect(p.lastReply()).toContain("Reply STOP to opt out.");
+    expect(p.lastReply()).not.toContain("I've let the");
     expect(p.lastReply()).not.toContain("Khanex");
+    expect(await p.audit("HELP_REQUESTED")).toHaveLength(0);
     await p.say("STOP");
     expect(p.session.optedOut).toBe(true);
     await p.say("START");

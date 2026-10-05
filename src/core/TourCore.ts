@@ -89,6 +89,30 @@ export class TourCoreError extends Error {
 
 const CONSENT_TEXT = "Is it OK if I text you about this tour and keep a record of your visit (times and doors used)?";
 
+/** Repeat help on the same reservation re-alerts the team at most once per this window. */
+export const HELP_ALERT_WINDOW_MS = 5 * 60_000;
+
+/** Where HELP copy and alerts apply. Dead / unbooked reservations are `null`. */
+export type HelpContext = "in-window" | "upcoming";
+
+/**
+ * HELP alerts the team only for a booked tour that is upcoming (window not
+ * started) or still inside its tour window. Finished, canceled, revoked,
+ * failed-ID, expired, past-window, or not-yet-booked reservations do not.
+ */
+export function helpContext(reservation: Reservation, now: Date): HelpContext | null {
+  if (TERMINAL.includes(reservation.status)) return null;
+  if (!reservation.windowStart || !reservation.windowEnd) return null;
+  const start = Date.parse(reservation.windowStart);
+  const end = Date.parse(reservation.windowEnd);
+  if (Number.isNaN(start) || Number.isNaN(end) || end <= now.getTime()) return null;
+  return now.getTime() < start ? "upcoming" : "in-window";
+}
+
+export function isLiveHelpReservation(reservation: Reservation, now: Date): boolean {
+  return helpContext(reservation, now) !== null;
+}
+
 /** What a visitor hears when the approved facts don't cover their question. The team is alerted at the same time. */
 export const UNKNOWN_ANSWER = "I don't have that information for this property. I've flagged it for the property team so they can get back to you.";
 
@@ -97,18 +121,20 @@ export const UNKNOWN_ANSWER = "I don't have that information for this property. 
  * `operator.contact` is never used here — that line is private.
  */
 export class VisitorDenialCopy {
-  static atDoor(team: string, visitorContact?: string): string {
-    if (visitorContact) return `Stay where you are. The ${team} will reply as soon as they can, or call ${formatPhone(visitorContact)}.`;
-    return `Stay where you are and reply here. The ${team} will reply as soon as they can.`;
+  static atDoor(team: string, visitorContact?: string, options?: { teamJustNamed?: boolean }): string {
+    const who = options?.teamJustNamed ? "They'll" : `The ${team} will`;
+    if (visitorContact) return `Stay where you are. ${who} reply as soon as they can, or call ${formatPhone(visitorContact)}.`;
+    return `Stay where you are and reply here. ${who} reply as soon as they can.`;
   }
 
-  static remote(team: string, visitorContact?: string): string {
-    if (visitorContact) return `The ${team} will reply here as soon as they can, or call ${formatPhone(visitorContact)}.`;
-    return `The ${team} will reply here as soon as they can.`;
+  static remote(team: string, visitorContact?: string, options?: { teamJustNamed?: boolean }): string {
+    const who = options?.teamJustNamed ? "They'll" : `The ${team} will`;
+    if (visitorContact) return `${who} reply here as soon as they can, or call ${formatPhone(visitorContact)}.`;
+    return `${who} reply here as soon as they can.`;
   }
 
   static operatorHold(team: string, visitorContact?: string): string {
-    return `Your tour is on hold, and your tour time keeps running while the ${team} sorts this out. ${this.atDoor(team, visitorContact)}`;
+    return `Your tour is on hold, and your tour time keeps running while the ${team} sorts this out. ${this.atDoor(team, visitorContact, { teamJustNamed: true })}`;
   }
 
   static calledOff(team: string, visitorContact?: string): string {
@@ -128,7 +154,19 @@ export class VisitorDenialCopy {
   }
 
   static helpAck(team: string, visitorContact?: string): string {
-    return `I've let the ${team} know. ${this.atDoor(team, visitorContact)}`;
+    return `I've let the ${team} know. ${this.atDoor(team, visitorContact, { teamJustNamed: true })}`;
+  }
+
+  static helpRepeatAck(team: string, visitorContact?: string): string {
+    return `The ${team} already knows and is on it. ${this.atDoor(team, visitorContact, { teamJustNamed: true })}`;
+  }
+
+  static helpAckRemote(team: string, visitorContact?: string): string {
+    return `I've let the ${team} know. ${this.remote(team, visitorContact, { teamJustNamed: true })}`;
+  }
+
+  static helpRepeatAckRemote(team: string, visitorContact?: string): string {
+    return `The ${team} already knows and is on it. ${this.remote(team, visitorContact, { teamJustNamed: true })}`;
   }
 
   static noOpenTimes(team: string): string {
@@ -136,7 +174,7 @@ export class VisitorDenialCopy {
   }
 
   static doorsNotResponding(team: string, visitorContact?: string): string {
-    return `Sorry, the doors aren't responding right now. I've let the ${team} know. ${this.atDoor(team, visitorContact)}`;
+    return `Sorry, the doors aren't responding right now. I've let the ${team} know. ${this.atDoor(team, visitorContact, { teamJustNamed: true })}`;
   }
 
   static followUp(team: string, visitorContact?: string): string {
@@ -792,11 +830,36 @@ export class TourCore {
 
   async requestHelp(reservationId: string, where?: string, inbound?: { text: string; meta?: InboundMeta }): Promise<void> {
     const reservation = await this.mustGetReservation(reservationId);
+    const place = helpContext(reservation, this.deps.clock.now());
+    if (!place) return;
     const prospect = await this.mustGetProspect(reservation.prospectId);
-    await this.recordInbound(prospect.id, reservationId, inbound?.text ?? "I need help", inbound?.meta);
-    await this.record("HELP_REQUESTED", { reservationId, prospectId: prospect.id, detail: where ?? "" });
-    await this.notifyOperator(reservation, `${prospect.name} asked for help${where ? ` near ${where}` : ""}.`);
-    await this.textProspect(prospect, reservationId, VisitorDenialCopy.helpAck(this.teamName(), this.visitorHelpNumber()));
+    const said = inbound?.text ?? "I need help";
+    const repeat = (await this.deps.store.listAudit()).some((e) => e.reservationId === reservationId && e.type === "HELP_REQUESTED");
+    await this.recordInbound(prospect.id, reservationId, said, inbound?.meta);
+    await this.record("HELP_REQUESTED", { reservationId, prospectId: prospect.id, detail: where ?? "", code: said });
+    if (await this.shouldAlertHelp(reservationId)) {
+      await this.notifyOperator(reservation, `${prospect.name} asked for help${where ? ` near ${where}` : ""}.`);
+    }
+    const team = this.teamName();
+    const contact = this.visitorHelpNumber();
+    const ack =
+      place === "upcoming"
+        ? repeat
+          ? VisitorDenialCopy.helpRepeatAckRemote(team, contact)
+          : VisitorDenialCopy.helpAckRemote(team, contact)
+        : repeat
+          ? VisitorDenialCopy.helpRepeatAck(team, contact)
+          : VisitorDenialCopy.helpAck(team, contact);
+    await this.textProspect(prospect, reservationId, ack);
+  }
+
+  /** Re-alert at most once per HELP_ALERT_WINDOW_MS for the same reservation's open help. */
+  private async shouldAlertHelp(reservationId: string): Promise<boolean> {
+    const last = [...(await this.deps.store.listAudit())]
+      .reverse()
+      .find((e) => e.reservationId === reservationId && e.type === "OPERATOR_NOTIFIED" && e.detail.includes("asked for help"));
+    if (!last) return true;
+    return this.deps.clock.now().getTime() - Date.parse(last.at) >= HELP_ALERT_WINDOW_MS;
   }
 
   // -------------------------------------------------------- operator actions

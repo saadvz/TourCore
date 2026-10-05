@@ -248,6 +248,49 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
   };
 }
 
+function inboundAt(event: AuditEvent): string | undefined {
+  return event.code?.trim() || undefined;
+}
+
+/** Later asks stay on the same exception while it is open, or if they happened before it was marked handled. */
+function belongsToCurrentHelp(current: OperatorException, event: AuditEvent): boolean {
+  if (current.status === "open") return true;
+  if (current.status !== "resolved" || !current.resolution) return false;
+  return Date.parse(event.at) <= Date.parse(current.resolution.resolvedAt);
+}
+
+/**
+ * One open help exception per reservation. Later HELP_REQUESTED events on the
+ * same reservation append their time (and the visitor's words) until the
+ * operator marks that exception handled; a later ask then opens a new one.
+ */
+function foldHelpExceptions(tour: TourSnapshot, events: AuditEvent[], resolutions: Map<string, ExceptionResolution>): OperatorException[] {
+  const byReservation = new Map<string, AuditEvent[]>();
+  for (const e of events) {
+    const key = e.reservationId ?? e.id;
+    const list = byReservation.get(key) ?? [];
+    list.push(e);
+    byReservation.set(key, list);
+  }
+  const out: OperatorException[] = [];
+  for (const group of byReservation.values()) {
+    let current: OperatorException | undefined;
+    for (const e of group) {
+      if (current && belongsToCurrentHelp(current, e)) {
+        const when = formatShortDateTime(new Date(e.at), tour.config.property.timezone);
+        const said = inboundAt(e);
+        current.summary += said ? ` Asked again at ${when}: "${said}".` : ` Asked again at ${when}.`;
+        current.happenedAt = e.at;
+        current.when = when;
+        continue;
+      }
+      current = fromEvent(tour, e, "needs-help", resolutions);
+      out.push(current);
+    }
+  }
+  return out;
+}
+
 /** Every exception for one property or all of them, newest first. Open ones only unless asked. */
 export async function listExceptions(services: OperatorServices, options: { propertyId?: string; includeClosed?: boolean } = {}): Promise<OperatorException[]> {
   const tours = await tourSnapshots(services, { propertyId: options.propertyId });
@@ -258,10 +301,13 @@ export async function listExceptions(services: OperatorServices, options: { prop
     const resolutions = new Map(readResolutions(services, propertyId).map((r) => [r.exceptionId, r]));
     const mine = tours.filter((t) => t.propertyId === propertyId);
     for (const tour of mine) {
+      const help: AuditEvent[] = [];
       for (const e of tour.bundle.auditEvents) {
         const kind = kindFor(e);
-        if (kind) out.push(fromEvent(tour, e, kind, resolutions));
+        if (kind === "needs-help") help.push(e);
+        else if (kind) out.push(fromEvent(tour, e, kind, resolutions));
       }
+      out.push(...foldHelpExceptions(tour, help, resolutions));
     }
     const { config } = services.workspace.load(propertyId);
     for (const broken of services.needsAttention?.(propertyId) ?? []) {
