@@ -62,7 +62,7 @@ Load them from there once the repository is on your computer.
   tunnels, commands) unless troubleshooting.
 - Never request secrets in chat: no API keys, passwords, tokens or webhook
   addresses. If the operator pastes one, don't repeat it; ask them to rotate it.
-- A fresh install asks which messaging provider to use. Do not assume Sendblue.
+- A fresh install asks which messaging provider to use. Do not assume Sendblue. QA can use `local` with `inject_local_sms` and `read_local_outbox` (separate bubbles; refused unless the property is on local).
 - Credentials use a secure secret input. You submit Tour Core's form. The
   operator leaves the chat only for approval, login, or MFA. The secure setup page
   is a fallback when that input cannot be used.

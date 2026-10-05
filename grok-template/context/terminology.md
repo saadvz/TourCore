@@ -17,6 +17,7 @@ calls it internally; use it only if the operator asks for technical detail.
 | practice verification | mock verification (everyone passes) |
 | real texts | live visitor texting |
 | practice texts / on screen | demo messaging |
+| local loopback, QA texts | the `local` messaging provider (no carrier; `inject_local_sms` / `read_local_outbox`) |
 | tour records | the canonical tour store and audit |
 | readiness check | readiness checks |
 | practice tour | dry tour |

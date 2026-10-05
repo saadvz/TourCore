@@ -91,7 +91,7 @@ and non-secret:
 The schema is strict (no extra fields), and every write is refused if any
 configured credential value appears anywhere in it. The installation id is
 created once and never changes, which is what makes the bootstrap idempotent.
-`messagingProvider` is `UNSET` until the operator chooses, then `SENDBLUE`, `TWILIO`, or `PHOTON`.
+`messagingProvider` is `UNSET` until the operator chooses, then `SENDBLUE`, `TWILIO`, `PHOTON`, or `LOCAL`.
 A working Sendblue install with no explicit choice is migrated to Sendblue once. It is not switched to another provider.
 Check results (public address, messaging, alerts) and the history of public
 addresses live next to it in `install/state.json`, also non-secret.

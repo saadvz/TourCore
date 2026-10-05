@@ -124,7 +124,8 @@ decided before Durin is contacted.
 
 - Tour Core runs on the Bot's cloud computer (a demo deployment) or at a
   stable self-hosted address.
-- Visitor messaging: the provider the operator chooses (Sendblue, Twilio, or Photon). Do not assume Sendblue.
+- Visitor messaging: the provider the operator chooses (Sendblue, Twilio, Photon, or local QA loopback). Do not assume Sendblue.
+- QA without a carrier: switch the property to `local`, then `inject_local_sms` and `read_local_outbox`. Replies are separate bubbles. Those tools refuse on Sendblue, Twilio, Photon, or practice texts.
 - Operator updates: the Tour Core Operator Updates Grok Routine.
 - Tour records: on the hosted product, stored by hosted Tour Core. Google Drive keeps portable backups and exports through Grok's connector. Optional direct Drive remains a separate mode.
 - Door access: Durin demo mode. No physical door is controlled.

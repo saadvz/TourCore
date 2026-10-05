@@ -2,7 +2,7 @@
 name: work-exception
 description: Show what needs the team's attention on live and recent tours (unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored), open one, and resolve it using only Tour Core's actions and the operator's own facts.
 when-to-use: "what needs attention", "show exceptions", "any problems", "open Pat's issue", "what's happening with Pat's tour", "show active tours", "pause the tour", "call off the tour", a Tour Core Operator Updates routine run
-allowed-tools: get_operator_update list_active_tours inspect_tour list_exceptions inspect_exception resolve_exception answer_flagged_question place_operator_hold clear_operator_hold revoke_tour_access list_tour_time_requests inspect_tour_time_request approve_tour_time_request decline_tour_time_request propose_tour_time reschedule_tour schedule_one_off_tour
+allowed-tools: get_operator_update list_active_tours inspect_tour list_exceptions inspect_exception resolve_exception answer_flagged_question place_operator_hold clear_operator_hold revoke_tour_access list_tour_time_requests inspect_tour_time_request approve_tour_time_request decline_tour_time_request propose_tour_time reschedule_tour schedule_one_off_tour inject_local_sms read_local_outbox
 argument-hint: "[visitor or issue]"
 user-invocable: true
 metadata:
@@ -59,6 +59,9 @@ Tour Core sends only an `eventId` and an event type; never names or details.
 - "What's happening with Pat's tour?": find Pat's `tourRef` from the list, then
   `inspect_tour`. Summarize status, latest activity, questions, access denials
   and anything in `needsAttention`.
+- QA on the local loopback: `inject_local_sms` then `read_local_outbox` (separate
+  bubbles, never one blob). Those tools refuse unless the property is on local.
+  A local live tour still shows up in `list_active_tours` and `inspect_tour`.
 
 ### Queue
 

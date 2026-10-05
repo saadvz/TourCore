@@ -48,6 +48,13 @@ export function providerConsentRecommendation(provider: MessagingProviderId | un
       note: "Photon does not give Tour Core an SMS keyword rule. The conversation starts immediately. Set TOURCORE_SMS_CONSENT_MODE=keyword_confirm to require TOUR and YES. SMS or RCS fallback is not assumed.",
     };
   }
+  if (provider === "local") {
+    return {
+      mode: "keyword_confirm",
+      source: "no_provider_requirement",
+      note: "Local loopback uses keyword confirmation so QA sees the same visitor SMS flow as a typical production line.",
+    };
+  }
   return {
     mode: "keyword_confirm",
     source: "no_provider_requirement",

@@ -1,8 +1,8 @@
 ---
 name: simulate-tour
 description: Run one complete practice tour through the real Tour Core engine (nobody is texted, no real door opens) and summarize the proof points that matter.
-when-to-use: "run a practice tour", "run a dry tour", "test the tour", "simulate a visitor"
-allowed-tools: list_properties run_dry_tour run_readiness_check
+when-to-use: "run a practice tour", "run a dry tour", "test the tour", "simulate a visitor", "local SMS", "inject a visitor text"
+allowed-tools: list_properties run_dry_tour run_readiness_check inject_local_sms read_local_outbox
 argument-hint: "[property] [unit]"
 user-invocable: true
 metadata:
@@ -47,6 +47,24 @@ wants to prove the tour still works.
    suggest the next step (usually fixing the setup and checking again).
 
 Don't list every low-level event unless the operator asks.
+
+## Local SMS loopback (QA)
+
+To exercise the real visitor SMS path without Sendblue or a carrier:
+
+1. The property must be `messagingMode: live` on the `local` provider
+   (`choose_messaging_provider` with `local`, then `set_services` with
+   `messaging: live` if it still uses practice texts).
+2. `inject_local_sms` with the visitor's `from` number, the property line
+   (`to`) or property, and their `text`. That is the same path as
+   `POST /webhooks/local` → `handleProviderWebhook` → `conversations.receive`.
+3. `read_local_outbox` for that conversation. Return **separate bubbles in
+   order** (each body is one SMS). Never concatenate them.
+4. `inspect_tour` / `list_active_tours` (Work Exception skill) see the live
+   session the same way they would for a real text.
+
+`inject_local_sms` and `read_local_outbox` refuse unless that property is on
+local. They never run against Sendblue, Twilio, Photon, or practice texts.
 
 ## Validate
 

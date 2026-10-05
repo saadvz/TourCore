@@ -163,7 +163,8 @@ Visitor texting is part of this phase: it's connected and tested before any
 property. If the next step is choosing a provider, ask `operatorMessage` and
 offer only the returned choices. Do not assume Sendblue. Do not give legal or
 compliance advice beyond each choice's description. After they pick, call
-`choose_messaging_provider`, then follow the next step. If Photon lists more than one line, ask which one and call `choose_messaging_line`. Then Tour Core
+`choose_messaging_provider`, then follow the next step. If Photon lists more than one line, ask which one and call `choose_messaging_line`. QA may choose
+`local` (no real texts; later `inject_local_sms` / `read_local_outbox`). Then Tour Core
 recommends Google Drive, before the first property.
 The access system ("Demo") needs nothing from the operator.
 

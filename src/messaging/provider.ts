@@ -7,7 +7,7 @@ import type { DeliveryReceipt, MessageChannel, MessagingAdapter, OutgoingMessage
  * Optional methods are omitted when the provider does not support them.
  */
 
-export const MESSAGING_PROVIDER_IDS = ["sendblue", "twilio", "photon"] as const;
+export const MESSAGING_PROVIDER_IDS = ["sendblue", "twilio", "photon", "local"] as const;
 export type MessagingProviderId = (typeof MESSAGING_PROVIDER_IDS)[number];
 
 export type MessagingReadiness = "NOT_CONFIGURED" | "CONNECTED" | "NEEDS_ACTION";

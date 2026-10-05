@@ -6,8 +6,8 @@ Tour Core decides what a visitor is doing. A messaging provider only carries the
                     Tour Core
                        |
                 MessagingService
-               /       |       \
-         Sendblue    Twilio    Photon
+               /    /    |    \
+         Sendblue Twilio Photon local
 ```
 
 Booking, scheduling, visitor questions, exceptions, and access policy do not import a provider. Adding Linq, Telnyx, WhatsApp, or a private adapter does not require changes in those layers.
@@ -59,6 +59,7 @@ Each adapter has its own path:
 - `/webhooks/sendblue`
 - `/webhooks/twilio`
 - `/webhooks/photon`
+- `/webhooks/local` (QA loopback; JSON `{ id, from, to, text }`; no carrier signature)
 
 Build the public URL from `PUBLIC_BASE_URL`. Verify the provider's signature on the raw body before parsing. Reject unsigned requests when the provider has a verification mechanism. Twilio uses `X-Twilio-Signature`. Photon uses Spectrum's Standard Webhooks secret and the legacy `X-Spectrum-Signature` header, both from the current Spectrum docs.
 

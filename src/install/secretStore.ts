@@ -25,6 +25,8 @@ export const SETTINGS = {
   TOURCORE_PHOTON_PHONE_NUMBER: { secret: false },
   TOURCORE_PHOTON_WEBHOOK_SECRET: { secret: true },
   TOURCORE_PHOTON_WEBHOOK_STANDARD_SECRET: { secret: true },
+  /** Reserved QA loopback number. Not a credential. */
+  TOURCORE_LOCAL_FROM_NUMBER: { secret: false },
   /** Grok Routine webhook address. Treated as a secret: it's a capability to wake the routine. */
   TOURCORE_GROK_ROUTINE_URL: { secret: true },
   TOURCORE_GROK_ROUTINE_KEY: { secret: true },
