@@ -96,7 +96,7 @@ export const UNKNOWN_ANSWER = "I don't have that information for this property. 
  * Visitor SMS when a door stays locked. Casual, no provider names.
  * `operator.contact` is never used here — that line is private.
  */
-class VisitorDenialCopy {
+export class VisitorDenialCopy {
   static nextStep(team: string, visitorContact?: string): string {
     if (visitorContact) return `Stay where you are. The ${team} usually replies within 15 minutes, or call ${formatPhone(visitorContact)}.`;
     return `Stay where you are and reply here. The ${team} usually replies within 15 minutes.`;

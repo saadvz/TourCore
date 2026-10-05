@@ -3,7 +3,7 @@ import { orList, unitsNamedIn } from "../core/questions";
 import { isoDate, parseIsoDate } from "../core/schedule";
 import { type DayReference, type SpokenTime } from "../core/spokenTime";
 import { addDays, formatDay, localDateOf, weekdayOf, zonedParts, zonedTimeToUtc, type LocalDate } from "../core/timezone";
-import type { InboundMeta } from "../core/TourCore";
+import { VisitorDenialCopy, type InboundMeta } from "../core/TourCore";
 import {
   isConfident,
   keywordOf,
@@ -585,7 +585,7 @@ async function byStage(turn: Turn): Promise<void> {
     case "stopped":
       if (await session.isPaused()) {
         if (intent.type === "REQUEST_HELP") return session.help(turn.said);
-        return turn.respond(`Your tour is paused for a moment. The ${session.config.operator.name.toLowerCase()} will be in touch shortly.`);
+        return turn.respond(VisitorDenialCopy.operatorHold(session.config.operator.name.toLowerCase(), session.config.operator.visitorContact));
       }
       return turn.respond("This tour has ended. Text HI any time to start a new one.");
   }
