@@ -159,7 +159,7 @@ hours stay the same, and Dana gets a text to confirm. Book it?
 
 **Tour Core:** I texted Dana to confirm. The regular tour times are unchanged.
 
-Dana gets: "Hi, this is the Leasing team at 100 Alfred Way. We set up a tour
+Dana gets: "Hi, this is the leasing team at 100 Alfred Way. We set up a tour
 for you on Monday at 3:15 PM. Reply YES to confirm, or STOP to opt out."
 
 - YES → usual consent, then identity.

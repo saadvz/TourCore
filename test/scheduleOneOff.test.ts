@@ -50,7 +50,7 @@ describe("operators can set up a one-time tour", () => {
 
     const first = a.fake.sent.filter((message) => message.number === PHONE).at(-1)!.content;
     expect(first).toBe(operatorScheduledFirstText(a.ws.load(PROPERTY).config, new Date("2026-09-28T19:15:00.000Z")));
-    expect(first).toBe("Hi, this is the Leasing team at 100 Alfred Way. We set up a tour for you on Monday at 3:15 PM. Reply YES to confirm, or STOP to opt out.");
+    expect(first).toBe("Hi, this is the leasing team at 100 Alfred Way. We set up a tour for you on Monday at 3:15 PM. Reply YES to confirm, or STOP to opt out.");
 
     const yes = await a.text("YES");
     expect(yes.join("\n")).toContain("Great, you're booked for 3:15 PM");
