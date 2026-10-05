@@ -31,6 +31,7 @@ import { resolveQuestion } from "./questions";
 import { closestOpenSlots, intervalsOverlap, overlapSummary, placementOf, relativeWhen, releasedWhen, tourInterval, touringHoursLabel } from "./customSlot";
 import { BOOKING_HORIZON_DAYS, isoDate, nextTourDay, slotsOn, tourWindow, type TourSlot } from "./schedule";
 import { bookedTourCalledOffText } from "./availabilityCopy";
+import { propertyMapsUrl, tourMapText } from "./mapsLink";
 import { addDays, formatDay as formatDayIn, formatTime as formatTimeIn, localDateOf, type LocalDate } from "./timezone";
 
 export interface TourCoreDeps {
@@ -1310,6 +1311,8 @@ export class TourCore {
         `Doors will work for you from ${this.time(new Date(ready.windowStart!))} to ${this.time(new Date(ready.windowEnd!))}.`,
       { kind: "say", phrase: "I'm here", purpose: "when you arrive and I'll open the entrance" },
     );
+    const map = propertyMapsUrl(this.deps.config.property);
+    if (map) await this.textProspect(prospect, ready.id, tourMapText(map));
     return ready;
   }
 
