@@ -57,8 +57,8 @@ again with the code after the operator's yes.
 | `clear_operator_hold` | consequential | Resumes a paused tour; policy still decides every door |
 | `revoke_tour_access` | consequential | Calls a tour off for good and tells the visitor. Visitors can also cancel a booked tour by text; Tour Core confirms first (`Cancel your tour on {day} at {time}? Reply YES or NO.`). YES: `You're cancelled. Text me anytime if you want to book again.` NO: `Okay, your tour stays on {day} at {time}.` Unclear replies are flagged (`I'll check with the {team} and get back to you.`) |
 | `pause_tours` | consequential | Pauses new bookings at a property or one unit; keep or cancel booked tours. A tour in progress finishes |
-| `resume_tours` | consequential | Resumes bookings at a paused property or unit |
-| `remove_property` | consequential | Removes a property from the list (records are kept). Refused while someone is on a tour. Say remove, never archive |
+| `resume_tours` | consequential | Resumes bookings at a paused property or unit, and texts waiting visitors that tours are back |
+| `remove_property` | consequential | Removes a property from the list (records are kept). A later text gets a goodbye and cannot book. Refused while someone is on a tour. Say remove, never archive |
 | `list_tour_time_requests` | read | Who is waiting on a time that isn't a regular slot, or on moving a tour |
 | `inspect_tour_time_request` | read | One custom-time request: who, the time they want, their current booking, and whether it's outside normal touring hours |
 | `approve_tour_time_request` | consequential | Approves that time as a one-off. Asks once first; the question ends `Move it?` or `Book it?`. A move names the old and new times. `This is a one-off…` only outside tour hours. Regular hours stay the same |

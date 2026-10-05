@@ -173,6 +173,7 @@ export const AuditEventTypeSchema = z.enum([
   "TOUR_TIME_OVERRIDE_APPROVED",
   "TOURS_PAUSED",
   "TOURS_RESUMED",
+  "TOURS_BACK_NOTIFIED",
   "PROPERTY_REMOVED",
 ]);
 export type AuditEventType = z.infer<typeof AuditEventTypeSchema>;

@@ -1154,7 +1154,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Resume tours",
     kind: "consequential",
     description:
-      "Resumes bookings at a paused property or unit. First call returns a yes/no question; call again with confirmationCode only after an explicit yes. Resuming the property clears every unit pause. Resuming one unit does not lift a property-wide pause.",
+      "Resumes bookings at a paused property or unit. First call returns a yes/no question that includes how many waiting visitors will be texted that tours are back; call again with confirmationCode only after an explicit yes. Each waiting visitor who hasn't opted out is texted once, then the waiting list is cleared. Resuming the property clears every unit pause. Resuming one unit does not lift a property-wide pause. Removing a property instead drops the waiting list and does not send the back text.",
     input: z.strictObject({
       property: Property,
       unit: z.string().max(100).optional().describe("One unit to resume. Leave out to resume the whole property."),
@@ -1167,7 +1167,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Remove a property",
     kind: "consequential",
     description:
-      "Removes a property from the operator's list (its records are kept). Booked visitors get a cancel text and pending door access is switched off. Refused while someone is on a tour. First call returns a yes/no question; call again with confirmationCode only after an explicit yes. Say remove, never archive.",
+      "Removes a property from the operator's list (its records are kept). Booked visitors get a cancel text and pending door access is switched off. Waiting visitors from a pause are not texted that tours are back; that list is dropped. A later text to the property's line gets a goodbye and cannot book. Refused while someone is on a tour. First call returns a yes/no question; call again with confirmationCode only after an explicit yes. Say remove, never archive.",
     input: z.strictObject({ property: Property, confirmationCode: Code }),
     run: (ctx, i) => removeProperty(ctx, i),
   }),

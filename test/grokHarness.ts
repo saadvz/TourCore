@@ -7,6 +7,7 @@ import { ConfirmationBook } from "../src/operator/confirmations";
 import { persistSession, type OperatorServices } from "../src/operator/services";
 import { callOperatorTool, type ToolContext } from "../src/operator/tools";
 import { PropertyWorkspace } from "../src/setup";
+import { rememberWaiter } from "../src/setup/pauseWaiters";
 import { VisitorDemoRegistry, VisitorDemoSession } from "../src/visitor";
 
 /** Monday 28 Sep 2026 at the property (America/New_York). */
@@ -46,6 +47,7 @@ export function grokHarness(root = mkdtempSync(join(tmpdir(), "tourcore-grok-"))
   const visitors = new VisitorDemoRegistry();
   visitors.useApprovedContent((id) => (workspace.has(id) ? workspace.load(id).config : undefined));
   visitors.useAvailability((id) => (workspace.has(id) ? workspace.load(id).state : undefined));
+  visitors.usePauseWaiters((id, waiter) => rememberWaiter(workspace.root, id, waiter));
   const services: OperatorServices = { workspace, visitors, now: () => new Date(clock) };
   const ctx: ToolContext = { services, confirmations: new ConfirmationBook(10 * 60_000, () => clock), now: () => new Date(clock), localUrl: () => "http://localhost:4321" };
 

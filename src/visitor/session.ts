@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { TourCoreConfig } from "../config/tourCoreConfig";
 import { DemoClock } from "../core/clock";
-import { pausedPropertyVisitorText, pausedUnitVisitorText } from "../core/availabilityCopy";
+import { pausedPropertyVisitorText, pausedUnitVisitorText, removedPropertyVisitorText } from "../core/availabilityCopy";
 import { normalizePhone } from "../core/phone";
 import { orList } from "../core/questions";
 import { operatorConfirmBy } from "../core/customSlot";
@@ -207,6 +207,8 @@ export class VisitorDemoSession {
   contentSource?: () => TourCoreConfig | undefined;
   /** Pause / remove status, read at booking time so an operator's pause applies immediately. */
   availabilitySource?: () => PropertyState | undefined;
+  /** Records a visitor who was told tours would come back, or who got a paused-unit line. */
+  rememberPauseWaiter?: (waiter: { phone: string; unitId?: string; at: string }) => void;
 
   private _config: TourCoreConfig;
 
@@ -976,11 +978,22 @@ export class VisitorDemoSession {
     return pausedPropertyVisitorText(this.config.property.address, this.config.operator.name, this.config.operator.visitorContact);
   }
 
+  private notePauseWaiter(unitId?: string): void {
+    const phone = this.visitor?.phone;
+    if (!phone || phone === "+") return;
+    this.rememberPauseWaiter?.({ phone, at: this.clock.now().toISOString(), ...(unitId ? { unitId } : {}) });
+  }
+
   async refuseIfPaused(unitId?: string): Promise<boolean> {
     const state = this.pauseState();
     const unitIds = this.config.units.map((unit) => unit.id);
-    if (state && (isRemoved(state) || isEffectivelyPaused(state, unitIds))) {
+    if (state && isRemoved(state)) {
+      await this.reply(removedPropertyVisitorText(this.config.property.address, this.config.operator.visitorContact));
+      return true;
+    }
+    if (state && isEffectivelyPaused(state, unitIds)) {
       await this.reply(this.propertyPausedCopy());
+      this.notePauseWaiter(unitId);
       return true;
     }
     if (unitId && state) {
@@ -989,6 +1002,7 @@ export class VisitorDemoSession {
         const open = this.offerableUnits();
         if (!open.length) {
           await this.reply(this.propertyPausedCopy());
+          this.notePauseWaiter(unitId);
           return true;
         }
         await this.reply(`${pausedUnitVisitorText(this.config.units.find((unit) => unit.id === unitId)?.name ?? "That unit")}\n\nWhich unit would you like to see?`, {
@@ -996,6 +1010,7 @@ export class VisitorDemoSession {
           options: open.map((unit) => unit.name),
           what: "a unit",
         });
+        this.notePauseWaiter(unitId);
         return true;
       }
     }
@@ -1084,10 +1099,11 @@ export class VisitorDemoRegistry {
   private readonly sessions = new Map<string, VisitorDemoSession>();
   private content?: (propertyId: string) => TourCoreConfig | undefined;
   private availability?: (propertyId: string) => PropertyState | undefined;
+  private pauseWaiter?: (propertyId: string, waiter: { phone: string; unitId?: string; at: string }) => void;
 
   add(session: VisitorDemoSession): VisitorDemoSession {
     this.sessions.set(session.id, session);
-    if (this.content || this.availability) this.attach(session);
+    if (this.content || this.availability || this.pauseWaiter) this.attach(session);
     return session;
   }
 
@@ -1106,9 +1122,15 @@ export class VisitorDemoRegistry {
     for (const s of this.sessions.values()) this.attach(s);
   }
 
+  usePauseWaiters(remember: (propertyId: string, waiter: { phone: string; unitId?: string; at: string }) => void): void {
+    this.pauseWaiter = remember;
+    for (const s of this.sessions.values()) this.attach(s);
+  }
+
   private attach(session: VisitorDemoSession): void {
     if (this.content) session.contentSource = () => this.content!(session.propertyId);
     if (this.availability) session.availabilitySource = () => this.availability!(session.propertyId);
+    if (this.pauseWaiter) session.rememberPauseWaiter = (waiter) => this.pauseWaiter!(session.propertyId, waiter);
   }
 
   get(id: string): VisitorDemoSession {

@@ -1,4 +1,5 @@
 import { isLiveMessaging, validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
+import { isRemoved } from "../setup/availability";
 import { runDryTour, type DryTourResult } from "../setup/dryTour";
 import { runReadinessCheck, type ReadinessResult } from "../setup/readiness";
 import { SetupInputError } from "../setup/setupActions";
@@ -27,7 +28,9 @@ export function connectLine(services: OperatorServices, propertyId: string, mess
   if (!line) return undefined;
   try {
     const provider = services.installedMessaging?.()?.provider ?? "sendblue";
-    const { changed, previous } = endpoints.attach({ address: line, provider, propertyId }, now);
+    const { changed, previous } = endpoints.attach({ address: line, provider, propertyId }, now, {
+      replaceIf: (id) => services.workspace.has(id) && isRemoved(services.workspace.load(id).state),
+    });
     if (changed && previous) services.workspace.invalidateReadiness(propertyId, "The texting number changed. Run the readiness check again.");
     return undefined;
   } catch (err) {
@@ -59,7 +62,10 @@ export function visitorTexting(services: OperatorServices, propertyId: string, m
   const line = services.messagingLine?.();
   const owner = line ? services.endpoints?.resolve(line) : undefined;
   if (owner && owner.propertyId !== propertyId) {
-    return { state: "number-in-use", label: "Number used by another property", problem: "Your touring number already answers for another property, so texts wouldn't reach this one." };
+    const takenByRemoved = services.workspace.has(owner.propertyId) && isRemoved(services.workspace.load(owner.propertyId).state);
+    if (!takenByRemoved) {
+      return { state: "number-in-use", label: "Number used by another property", problem: "Your touring number already answers for another property, so texts wouldn't reach this one." };
+    }
   }
   return { state: "connected", label: "Connected", ...(line ? { line } : {}) };
 }

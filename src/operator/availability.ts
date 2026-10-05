@@ -1,12 +1,16 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { pauseConfirmQuestion, REMOVE_REFUSED_LIVE_TOUR, removeConfirmQuestion, resumeConfirmQuestion } from "../core/availabilityCopy";
+import { createMessenger } from "../createTourCore";
+import { pauseConfirmQuestion, REMOVE_REFUSED_LIVE_TOUR, removeConfirmQuestion, resumeConfirmQuestion, toursAreBackText } from "../core/availabilityCopy";
+import { normalizePhone } from "../core/phone";
 import { newId, type AuditEvent, type AuditEventType, type Reservation } from "../domain/model";
 import { TERMINAL } from "../domain/stateMachine";
 import { SetupInputError } from "../setup/setupActions";
 import { isEffectivelyPaused, isRemoved, isUnitPaused } from "../setup/availability";
+import { dropUnitWaiters, dropWaiters, rememberWaiter, uniquePhones, waitersFor } from "../setup/pauseWaiters";
 import type { PropertyState, TourRecord } from "../setup/workspace";
 import { writeJsonAtomic } from "../storage/atomicWrite";
+import { SmsConsentDirectory } from "../visitor/smsConsent";
 import { VisitorDemoSession } from "../visitor/session";
 import type { ConfirmationBook } from "./confirmations";
 import { requireUnit, resolvePropertyId } from "./resolve";
@@ -115,10 +119,63 @@ async function cancelBooked(services: OperatorServices, tours: TourSnapshot[], p
     if (!isBookedReservation(reservation)) continue;
     const session = await sessionFor(services, tour);
     await session.operatorChange((core, id) => core.cancelBookedTour(id, { reason, propertyWide }));
+    if (propertyWide) {
+      const phone = session.visitor?.phone;
+      if (phone) rememberWaiter(services.workspace.root, session.propertyId, { phone, at: (services.now?.() ?? new Date()).toISOString() });
+    }
     await persistSession(services, session);
     cancelled += 1;
   }
   return cancelled;
+}
+
+function visitorUnreachable(services: OperatorServices, propertyId: string, phone: string): boolean {
+  const sender = normalizePhone(phone);
+  if (!sender || sender === "+") return true;
+  if (new SmsConsentDirectory(services.workspace.root).get(propertyId, sender)?.status === "opted_out") return true;
+  const session = services.visitors?.latestForPhone(propertyId, sender);
+  return !!session?.optedOut || session?.smsConsent === "opted_out";
+}
+
+function reachableWaitingPhones(services: OperatorServices, propertyId: string, unitId?: string): string[] {
+  return uniquePhones(waitersFor(services.workspace.root, propertyId, unitId)).filter((phone) => !visitorUnreachable(services, propertyId, phone));
+}
+
+function phonesToNotify(services: OperatorServices, propertyId: string, unitId?: string): string[] {
+  if (unitId) {
+    const { state } = services.workspace.load(propertyId);
+    if (state.paused || isRemoved(state)) return [];
+  }
+  return reachableWaitingPhones(services, propertyId, unitId);
+}
+
+async function notifyWaiters(services: OperatorServices, propertyId: string, unitId: string | undefined, now: Date): Promise<number> {
+  if (unitId) {
+    const { state } = services.workspace.load(propertyId);
+    if (state.paused || isRemoved(state)) return 0;
+  }
+  const phones = reachableWaitingPhones(services, propertyId, unitId);
+  const { config } = services.workspace.load(propertyId);
+  const body = toursAreBackText(config.property.address);
+  let sent = 0;
+  for (const phone of phones) {
+    if (visitorUnreachable(services, propertyId, phone)) continue;
+    const session = services.visitors?.latestForPhone(propertyId, phone);
+    if (session) {
+      await session.reply(body);
+      await persistSession(services, session);
+    } else {
+      await createMessenger(config).send({ to: phone, audience: "PROSPECT", body }).catch(() => undefined);
+    }
+    appendAvailabilityEvent(services.workspace.root, propertyId, "TOURS_BACK_NOTIFIED", body, now.toISOString(), {
+      ...(unitId ? { unitId } : {}),
+      ...(session?.prospectId ? { prospectId: session.prospectId } : {}),
+    });
+    sent += 1;
+  }
+  if (unitId) dropUnitWaiters(services.workspace.root, propertyId, unitId);
+  else dropWaiters(services.workspace.root, propertyId);
+  return sent;
 }
 
 function pauseTarget(ctx: Ctx, property: string | undefined, unit?: string): { propertyId: string; unitId?: string; label: string; state: PropertyState } {
@@ -179,9 +236,12 @@ export async function pauseTours(
 
 export async function resumeTours(ctx: Ctx, input: { property?: string; unit?: string; confirmationCode?: string }) {
   const target = pauseTarget(ctx, input.property, input.unit);
-  const fingerprint = `${target.propertyId}|${target.unitId ?? ""}|resume`;
+  const waiting = phonesToNotify(ctx.services, target.propertyId, target.unitId);
+  const fingerprint = `${target.propertyId}|${target.unitId ?? ""}|resume|${waiting.join(",")}`;
   if (!input.confirmationCode) {
-    return ask(ctx, "resume-tours", target.propertyId, fingerprint, resumeConfirmQuestion(target.label));
+    return ask(ctx, "resume-tours", target.propertyId, fingerprint, resumeConfirmQuestion(target.label, waiting.length), {
+      waitingVisitors: waiting.length,
+    });
   }
   redeem(ctx, input.confirmationCode, "resume-tours", target.propertyId, fingerprint);
 
@@ -194,6 +254,7 @@ export async function resumeTours(ctx: Ctx, input: { property?: string; unit?: s
     ctx.services.workspace.patchState(target.propertyId, { paused: false, pausedUnitIds: [] });
   }
 
+  const notified = await notifyWaiters(ctx.services, target.propertyId, target.unitId, ctx.now());
   appendAvailabilityEvent(ctx.services.workspace.root, target.propertyId, "TOURS_RESUMED", target.unitId ? `unit ${target.label}` : labelOf(ctx.services, target.propertyId), ctx.now().toISOString(), {
     ...(target.unitId ? { unitId: target.unitId } : {}),
   });
@@ -202,6 +263,7 @@ export async function resumeTours(ctx: Ctx, input: { property?: string; unit?: s
     status: "resumed",
     summary: target.unitId ? `Tours of ${target.label} can be booked again.` : `Tours at ${target.label} can be booked again.`,
     paused: false,
+    notified,
   };
 }
 
@@ -222,7 +284,7 @@ export async function removeProperty(ctx: Ctx, input: { property?: string; confi
 
   const cancelled = await cancelBooked(ctx.services, booked, true, "property removed");
   ctx.services.workspace.patchState(propertyId, { removedAt: ctx.now().toISOString(), paused: true });
-  ctx.services.endpoints?.detach(propertyId);
+  dropWaiters(ctx.services.workspace.root, propertyId);
   appendAvailabilityEvent(ctx.services.workspace.root, propertyId, "PROPERTY_REMOVED", config.property.name, ctx.now().toISOString());
 
   return {

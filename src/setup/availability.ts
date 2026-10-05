@@ -1,5 +1,5 @@
 import type { TourCoreConfig } from "../config/tourCoreConfig";
-import { pausedPropertyVisitorText, pausedUnitVisitorText } from "../core/availabilityCopy";
+import { pausedPropertyVisitorText, pausedUnitVisitorText, removedPropertyVisitorText } from "../core/availabilityCopy";
 import type { PropertyState } from "./workspace";
 
 export function isRemoved(state: PropertyState | undefined): boolean {
@@ -30,9 +30,12 @@ export function openUnits<T extends { id: string }>(units: T[], state: PropertyS
 export function bookingRefusal(state: PropertyState | undefined, config: TourCoreConfig, unitId?: string): { reason: "removed" | "paused-property" | "paused-unit"; message: string } | undefined {
   if (!state) return undefined;
   const unitIds = config.units.map((unit) => unit.id);
-  if (isRemoved(state) || isEffectivelyPaused(state, unitIds)) {
+  if (isRemoved(state)) {
+    return { reason: "removed", message: removedPropertyVisitorText(config.property.address, config.operator.visitorContact) };
+  }
+  if (isEffectivelyPaused(state, unitIds)) {
     return {
-      reason: isRemoved(state) ? "removed" : "paused-property",
+      reason: "paused-property",
       message: pausedPropertyVisitorText(config.property.address, config.operator.name, config.operator.visitorContact),
     };
   }

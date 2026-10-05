@@ -29,8 +29,24 @@ export function pauseConfirmQuestion(property: string, bookedCount: number): str
   return `Pause tours at ${property}? New bookings stop now. ${tours}: keep them or cancel them with a text? Any tour in progress will finish.`;
 }
 
-export function resumeConfirmQuestion(property: string): string {
-  return `Resume tours at ${property}? New bookings can start again.`;
+export function toursAreBackText(address: string): string {
+  return `Tours at ${address} are back. Text me anytime to book.`;
+}
+
+export function removedPropertyVisitorText(address: string, visitorContact?: string): string {
+  const line = `${address} isn't offering tours anymore.`;
+  return visitorContact ? `${line} Questions? Call ${formatPhone(visitorContact)}.` : line;
+}
+
+export function resumeConfirmQuestion(property: string, waitingCount = 0): string {
+  if (waitingCount <= 0) {
+    return `Resume tours at ${property}? New bookings can start again. Resume it?`;
+  }
+  const waiting =
+    waitingCount === 1
+      ? "1 person waiting gets a text that tours are back"
+      : `${waitingCount} people waiting get a text that tours are back`;
+  return `Resume tours at ${property}? New bookings can start again, and ${waiting}. Resume it?`;
 }
 
 export function removeConfirmQuestion(property: string, bookedCount: number): string {

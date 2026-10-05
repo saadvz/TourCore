@@ -102,8 +102,10 @@ Tour Core sends only an `eventId` and an event type; never names or details.
 - **Pause or resume bookings** at a property or unit (`pause_tours`,
   `resume_tours`), or **remove a property** (`remove_property`): these are not
   the same as holding one visitor. Ask the exact question first. If tours are
-  already booked, the operator chooses keep or cancel. Removal is refused
-  while someone is on a tour. Say remove, never archive.
+  already booked, the operator chooses keep or cancel. Resume texts waiting
+  visitors that tours are back. Removal drops that list without sending it,
+  and a later text to that line gets a goodbye and cannot book. Removal is
+  refused while someone is on a tour. Say remove, never archive.
 - Door-system problems and tours that couldn't be restored: explain in plain
   words, suggest reaching out to the visitor, and resume only once the operator
   says the doors are working.

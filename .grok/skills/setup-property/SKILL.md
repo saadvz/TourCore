@@ -168,11 +168,14 @@ the operator correct it.
 published configuration. `pause_tours` stops new bookings at a property or one
 unit (ask the exact question it returns; if tours are already booked, the
 operator chooses keep or cancel). A tour in progress always finishes.
-`resume_tours` turns bookings back on. `remove_property` takes the property
-off the list after the exact confirmation; booked visitors get a cancel text
-and pending door access is switched off. It is refused while someone is on a
-tour. Records stay (`export_audit`, `inspect_tour`). Say **remove**, never
-archive. This is not `place_operator_hold`, which pauses one visitor's tour.
+`resume_tours` turns bookings back on and texts people who were told tours
+would be back (or who got a paused-unit line). `remove_property` takes the
+property off the list after the exact confirmation; booked visitors get a
+cancel text and pending door access is switched off. Waiting visitors are not
+texted that tours are back. A later text to that line gets a goodbye and
+cannot book. It is refused while someone is on a tour. Records stay
+(`export_audit`, `inspect_tour`). Say **remove**, never archive. This is not
+`place_operator_hold`, which pauses one visitor's tour.
 
 Later edits: facts and unit details (bedrooms, rent, availability,
 description, amenities, directions) are approved content: saving them keeps

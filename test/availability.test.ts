@@ -6,7 +6,9 @@ import {
   pausedUnitVisitorText,
   REMOVE_REFUSED_LIVE_TOUR,
   removeConfirmQuestion,
+  removedPropertyVisitorText,
   resumeConfirmQuestion,
+  toursAreBackText,
 } from "../src/core/availabilityCopy";
 import { formatDay, formatTime } from "../src/core/timezone";
 import { formatPhone } from "../src/core/phone";
@@ -16,7 +18,9 @@ import { MessagingEndpoints } from "../src/messaging/endpoints";
 import { MemoryRuntimeStore } from "../src/storage/runtimeStore";
 import { VisitorDemoSession } from "../src/visitor/session";
 import { MessagingConversations } from "../src/visitor/messagingRouter";
+import { smsHelpBody, smsStopAck } from "../src/visitor/smsConsent";
 import { VerificationLinks } from "../src/visitor/verificationLinks";
+import { listWaiters } from "../src/setup/pauseWaiters";
 import { readAvailabilityEvents } from "../src/operator/availability";
 import { tourRef } from "../src/operator/tours";
 import { grokHarness, type GrokHarness } from "./grokHarness";
@@ -85,7 +89,23 @@ describe("availability copy", () => {
       "Remove 100 Alfred Way? Tours stop, 1 booked visitor get a cancel text, and it leaves your list. Its records are kept. Remove it?",
     );
     expect(REMOVE_REFUSED_LIVE_TOUR).toBe("Someone is on a tour right now. Try again after it ends.");
-    expect(resumeConfirmQuestion("100 Alfred Way")).toBe("Resume tours at 100 Alfred Way? New bookings can start again.");
+    expect(resumeConfirmQuestion("100 Alfred Way")).toBe("Resume tours at 100 Alfred Way? New bookings can start again. Resume it?");
+    expect(resumeConfirmQuestion("100 Alfred Way", 0)).toBe("Resume tours at 100 Alfred Way? New bookings can start again. Resume it?");
+    expect(resumeConfirmQuestion("100 Alfred Way", 1)).toBe(
+      "Resume tours at 100 Alfred Way? New bookings can start again, and 1 person waiting gets a text that tours are back. Resume it?",
+    );
+    expect(resumeConfirmQuestion("100 Alfred Way", 2)).toBe(
+      "Resume tours at 100 Alfred Way? New bookings can start again, and 2 people waiting get a text that tours are back. Resume it?",
+    );
+  });
+
+  it("uses the approved tours-are-back and removed-property lines", () => {
+    expect(toursAreBackText("100 Alfred Way")).toBe("Tours at 100 Alfred Way are back. Text me anytime to book.");
+    expect(removedPropertyVisitorText("100 Alfred Way")).toBe("100 Alfred Way isn't offering tours anymore.");
+    expect(removedPropertyVisitorText("100 Alfred Way", "+15550109999")).toBe(
+      "100 Alfred Way isn't offering tours anymore. Questions? Call (555) 010-9999.",
+    );
+    expect(removedPropertyVisitorText("100 Alfred Way")).not.toContain("Questions?");
   });
 
   it("never says archive in visitor or operator copy", () => {
@@ -100,6 +120,11 @@ describe("availability copy", () => {
       removeConfirmQuestion("100 Alfred Way", 2),
       REMOVE_REFUSED_LIVE_TOUR,
       resumeConfirmQuestion("100 Alfred Way"),
+      resumeConfirmQuestion("100 Alfred Way", 1),
+      resumeConfirmQuestion("100 Alfred Way", 2),
+      toursAreBackText("100 Alfred Way"),
+      removedPropertyVisitorText("100 Alfred Way"),
+      removedPropertyVisitorText("100 Alfred Way", "+15550109999"),
     ];
     for (const line of lines) expect(line.toLowerCase()).not.toContain("archive");
   });
@@ -252,7 +277,7 @@ describe("pause and remove", () => {
     const asked = await h.ok("pause_tours", { property: id });
     await h.ok("pause_tours", { property: id, confirmationCode: asked.confirmation.code });
     const resumeAsked = await h.ok("resume_tours", { property: id });
-    expect(resumeAsked.summary).toBe(resumeConfirmQuestion(h.workspace.load(id).config.property.name));
+    expect(resumeAsked.summary).toBe(resumeConfirmQuestion(h.workspace.load(id).config.property.name, 0));
     await h.ok("resume_tours", { property: id, confirmationCode: resumeAsked.confirmation.code });
     const v = await readyVisitor(h, id);
     expect((await v.session.reservation())!.status).toBe("READY");
@@ -313,7 +338,112 @@ describe("pause and remove", () => {
     expect(JSON.stringify(v.session.conversation).toLowerCase()).not.toContain("archive");
   });
 
-  it("does not let an inbound text reach a removed property", async () => {
+  async function inboundOn(h: GrokHarness, id: string, from: string, text: string, sent: string[], extras: { now?: () => Date; endpoints?: MessagingEndpoints } = {}) {
+    const endpoints = extras.endpoints ?? h.services.endpoints ?? new MessagingEndpoints(new MemoryRuntimeStore());
+    if (!h.services.endpoints) {
+      endpoints.attach({ address: "+15550109999", provider: "demo", propertyId: id }, new Date(h.now()));
+      h.services.endpoints = endpoints;
+    }
+    const router = new MessagingConversations({
+      workspace: h.workspace,
+      registry: h.visitors,
+      endpoints,
+      transport: () => new DemoMessagingAdapter((line) => sent.push(line), "MESSAGING"),
+      links: new VerificationLinks({ baseUrl: () => undefined }),
+      realNow: () => h.now(),
+      now: extras.now ?? (() => new Date(h.now())),
+    });
+    await router.receive({
+      provider: "demo",
+      providerMessageId: `msg_${sent.length + 1}`,
+      from,
+      to: "+15550109999",
+      text,
+      channel: "SMS",
+      receivedAt: new Date(h.now()).toISOString(),
+    });
+    return router;
+  }
+
+  it("texts waiting visitors once on resume, and skips the back text when nobody is waiting", async () => {
+    const h = app();
+    const id = await h.publish();
+    const { config } = h.workspace.load(id);
+    await h.approve("pause_tours", { property: id });
+    const emptyResume = await h.ok("resume_tours", { property: id });
+    expect(emptyResume.summary).toBe(resumeConfirmQuestion(config.property.name, 0));
+    await h.ok("resume_tours", { property: id, confirmationCode: emptyResume.confirmation.code });
+
+    await h.approve("pause_tours", { property: id });
+    const waiting = h.visitors.add(new VisitorDemoSession(id, config, h.workspace.newVisitorTourId(id, new Date(h.now())), { realNow: () => h.now() }));
+    await waiting.act("begin", { name: "Pat Smith", phone: "(555) 010-2000" });
+    expect(lastFrom(waiting)).toBe(pausedPropertyVisitorText(config.property.address, config.operator.name, config.operator.visitorContact));
+    expect(listWaiters(h.root, id).map((waiter) => waiter.phone)).toEqual(["+15550102000"]);
+
+    const asked = await h.ok("resume_tours", { property: id });
+    expect(asked.summary).toBe(resumeConfirmQuestion(config.property.name, 1));
+    await h.ok("resume_tours", { property: id, confirmationCode: asked.confirmation.code });
+    expect(lastFrom(waiting)).toBe(toursAreBackText(config.property.address));
+    expect(listWaiters(h.root, id)).toEqual([]);
+    expect(readAvailabilityEvents(h.root, id).filter((event) => event.type === "TOURS_BACK_NOTIFIED")).toHaveLength(1);
+
+    const booked = await readyVisitor(h, id, { phone: "(555) 010-2044" });
+    expect((await booked.session.reservation())!.status).toBe("READY");
+  });
+
+  it("texts visitors who got a paused-unit line when that unit is resumed", async () => {
+    const h = app();
+    const id = await h.publish();
+    const { config } = h.workspace.load(id);
+    await h.approve("pause_tours", { property: id, unit: "Unit 101" });
+    const waiting = h.visitors.add(new VisitorDemoSession(id, config, h.workspace.newVisitorTourId(id, new Date(h.now())), { realNow: () => h.now() }));
+    await waiting.act("begin", { name: "Pat Smith", phone: "(555) 010-2000" });
+    await waiting.act("chooseUnit", { unitId: "unit_101" });
+    expect(lastFrom(waiting).split("\n")[0]).toBe(pausedUnitVisitorText("Unit 101"));
+
+    const asked = await h.ok("resume_tours", { property: id, unit: "Unit 101" });
+    expect(asked.summary).toBe(resumeConfirmQuestion("Unit 101", 1));
+    await h.ok("resume_tours", { property: id, unit: "Unit 101", confirmationCode: asked.confirmation.code });
+    expect(lastFrom(waiting)).toBe(toursAreBackText(config.property.address));
+    expect(listWaiters(h.root, id)).toEqual([]);
+  });
+
+  it("skips opted-out waiting visitors on resume", async () => {
+    const h = app();
+    const id = await h.publish();
+    const { config } = h.workspace.load(id);
+    await h.approve("pause_tours", { property: id });
+    const kept = h.visitors.add(new VisitorDemoSession(id, config, h.workspace.newVisitorTourId(id, new Date(h.now())), { realNow: () => h.now() }));
+    await kept.act("begin", { name: "Pat Smith", phone: "(555) 010-2000" });
+    const stopped = h.visitors.add(new VisitorDemoSession(id, config, h.workspace.newVisitorTourId(id, new Date(h.now())), { realNow: () => h.now() }));
+    await stopped.act("begin", { name: "Alex Reed", phone: "(555) 010-2002" });
+    await stopped.optOut({ text: "STOP" });
+    expect(stopped.optedOut).toBe(true);
+
+    const asked = await h.ok("resume_tours", { property: id });
+    expect(asked.summary).toBe(resumeConfirmQuestion(config.property.name, 1));
+    await h.ok("resume_tours", { property: id, confirmationCode: asked.confirmation.code });
+    expect(lastFrom(kept)).toBe(toursAreBackText(config.property.address));
+    expect(lastFrom(stopped)).toBe(smsStopAck());
+    expect(readAvailabilityEvents(h.root, id).filter((event) => event.type === "TOURS_BACK_NOTIFIED")).toHaveLength(1);
+    expect(listWaiters(h.root, id)).toEqual([]);
+  });
+
+  it("does not send the back text when a paused property is removed", async () => {
+    const h = app();
+    const id = await h.publish();
+    const { config } = h.workspace.load(id);
+    await h.approve("pause_tours", { property: id });
+    const waiting = h.visitors.add(new VisitorDemoSession(id, config, h.workspace.newVisitorTourId(id, new Date(h.now())), { realNow: () => h.now() }));
+    await waiting.act("begin", { name: "Pat Smith", phone: "(555) 010-2000" });
+    await h.approve("remove_property", { property: id });
+    expect(lastFrom(waiting)).toBe(pausedPropertyVisitorText(config.property.address, config.operator.name, config.operator.visitorContact));
+    expect(lastFrom(waiting)).not.toBe(toursAreBackText(config.property.address));
+    expect(listWaiters(h.root, id)).toEqual([]);
+    expect(readAvailabilityEvents(h.root, id).some((event) => event.type === "TOURS_BACK_NOTIFIED")).toBe(false);
+  });
+
+  it("replies that a removed property is not offering tours, with and without a help number, and does not book", async () => {
     const h = app();
     const id = await h.publish();
     const runtime = new MemoryRuntimeStore();
@@ -323,28 +453,60 @@ describe("pause and remove", () => {
 
     const asked = await h.ok("remove_property", { property: id });
     await h.ok("remove_property", { property: id, confirmationCode: asked.confirmation.code });
-    expect(endpoints.resolve("+15550109999")).toBeUndefined();
+    expect(endpoints.resolve("+15550109999")?.propertyId).toBe(id);
 
-    endpoints.attach({ address: "+15550109999", provider: "demo", propertyId: id }, new Date(h.now()));
+    const { config } = h.workspace.load(id);
     const sent: string[] = [];
-    const router = new MessagingConversations({
-      workspace: h.workspace,
-      registry: h.visitors,
-      endpoints,
-      transport: () => new DemoMessagingAdapter((line) => sent.push(line), "MESSAGING"),
-      links: new VerificationLinks({ baseUrl: () => undefined }),
-      realNow: () => h.now(),
-    });
-    await router.receive({
-      provider: "demo",
-      providerMessageId: "msg_removed",
-      from: "+15550102000",
-      to: "+15550109999",
-      text: "Hi",
-      channel: "SMS",
-      receivedAt: new Date(h.now()).toISOString(),
-    });
-    expect(sent.join("\n")).not.toMatch(/book|Which unit|tours available/i);
+    await inboundOn(h, id, "+15550102000", "Hi", sent);
+    expect(sent.join("\n")).toContain(removedPropertyVisitorText(config.property.address, config.operator.visitorContact));
+    expect(sent.join("\n")).not.toMatch(/Which unit|I have tours available|archive/i);
+    expect(h.visitors.all().filter((session) => session.kind === "messaging")).toHaveLength(0);
+    expect(h.workspace.listTours(id).filter((tour) => tour.kind === "messaging")).toHaveLength(0);
+
+    const again: string[] = [];
+    await inboundOn(h, id, "+15550102000", "Can I book a tour?", again);
+    expect(again.join("\n")).not.toContain("isn't offering tours anymore");
+    expect(h.visitors.all().filter((session) => session.kind === "messaging")).toHaveLength(0);
+  });
+
+  it("appends the visitor help number on a removed-property reply when one is set", async () => {
+    const h = app();
+    const id = await h.publish();
+    await h.ok("update_property_details", { property: id, visitorContact: "555-010-9999" });
+    const runtime = new MemoryRuntimeStore();
+    const endpoints = new MessagingEndpoints(runtime);
+    endpoints.attach({ address: "+15550109999", provider: "demo", propertyId: id }, new Date(h.now()));
+    h.services.endpoints = endpoints;
+    await h.approve("remove_property", { property: id });
+
+    const { config } = h.workspace.load(id);
+    const sent: string[] = [];
+    await inboundOn(h, id, "+15550102000", "Hi", sent);
+    expect(sent.join("\n")).toContain(removedPropertyVisitorText(config.property.address, config.operator.visitorContact));
+    expect(sent.join("\n")).toContain(`Questions? Call ${formatPhone(config.operator.visitorContact!)}`);
+    expect(h.visitors.all().filter((session) => session.kind === "messaging")).toHaveLength(0);
+  });
+
+  it("honors STOP and HELP on a removed property and does not text an opted-out number", async () => {
+    const h = app();
+    const id = await h.publish();
+    const runtime = new MemoryRuntimeStore();
+    const endpoints = new MessagingEndpoints(runtime);
+    endpoints.attach({ address: "+15550109999", provider: "demo", propertyId: id }, new Date(h.now()));
+    h.services.endpoints = endpoints;
+    await h.approve("remove_property", { property: id });
+
+    const stop: string[] = [];
+    await inboundOn(h, id, "+15550102000", "STOP", stop);
+    expect(stop.join("\n")).toContain(smsStopAck());
+
+    const afterStop: string[] = [];
+    await inboundOn(h, id, "+15550102000", "Hi", afterStop);
+    expect(afterStop.join("\n")).not.toContain("isn't offering tours anymore");
+
+    const help: string[] = [];
+    await inboundOn(h, id, "+15550102000", "HELP", help);
+    expect(help.join("\n")).toContain(smsHelpBody());
     expect(h.visitors.all().filter((session) => session.kind === "messaging")).toHaveLength(0);
   });
 

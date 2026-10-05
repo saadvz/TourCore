@@ -128,6 +128,8 @@ function sentence(
       return info("Tours were paused.");
     case "TOURS_RESUMED":
       return info("Tours were resumed.");
+    case "TOURS_BACK_NOTIFIED":
+      return info(`${c.name} was told tours are back.`);
     case "PROPERTY_REMOVED":
       return info("The property was removed.");
     case "QUESTION_ANSWERED":

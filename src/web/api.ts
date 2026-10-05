@@ -28,6 +28,7 @@ import { zonedParts, zonedTimeToUtc } from "../core/timezone";
 import { toE164 } from "../messaging/Messenger";
 import { auditExportFile } from "../operator/auditExport";
 import { defaultMessagingMode, persistSession, type OperatorServices } from "../operator/services";
+import { rememberWaiter } from "../setup/pauseWaiters";
 import { checkedConfig as checkedSetup, publishProperty, readinessForProperty, runPracticeTour } from "../operator/setupFlow";
 import type { VerificationLinks } from "../visitor/verificationLinks";
 
@@ -100,6 +101,7 @@ async function route(ctx: ApiContext, method: string, path: string, body: Record
     ctx.visitors = new VisitorDemoRegistry();
     ctx.visitors.useApprovedContent((id) => (ws.has(id) ? ws.load(id).config : undefined));
     ctx.visitors.useAvailability((id) => (ws.has(id) ? ws.load(id).state : undefined));
+    ctx.visitors.usePauseWaiters((id, waiter) => rememberWaiter(ws.root, id, waiter));
   }
   const visitors = ctx.visitors;
   const now = ctx.now?.() ?? new Date();
