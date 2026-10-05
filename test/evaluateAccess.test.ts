@@ -86,6 +86,13 @@ describe("evaluateAccess", () => {
     expect(evaluateAccess(input({ consent: undefined }))).toMatchObject({ allowed: false, code: "DENY_CONSENT_MISSING" });
   });
 
+  it("denies when verification has lapsed", () => {
+    expect(evaluateAccess(input({ verification: { ...verification, validUntil: iso(13, 0) } }))).toMatchObject({
+      allowed: false,
+      code: "DENY_VERIFICATION_STALE",
+    });
+  });
+
   it("denies under an operator hold", () => {
     expect(evaluateAccess(input({ reservation: { ...reservation, status: "OPERATOR_HOLD" } }))).toMatchObject({ allowed: false, code: "DENY_OPERATOR_HOLD" });
   });

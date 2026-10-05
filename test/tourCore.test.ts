@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { loadConfig } from "../src/config/tourCoreConfig";
 import { ExportBundleSchema } from "../src/export/exportBundle";
 import { basicForm, bookTour, minutesFrom, setup } from "./helpers";
 
@@ -77,6 +78,102 @@ describe("Tour Core journey", () => {
     const tour = await bookTour(ctx, "awaiting-verification");
     const r = await ctx.core.submitVerification(tour.reservation.id, basicForm("555-999-0000"));
     expect(r.status).toBe("VERIFICATION_FAILED");
+  });
+
+  it("failed ID, hold, and door-outage texts share a next-step line and never show the operator alert number", async () => {
+    const privateLine = loadConfig().operator.contact;
+    const nextUnset = "Stay where you are and reply here. The leasing team usually replies within 15 minutes.";
+    const nextSet = "Stay where you are. The leasing team usually replies within 15 minutes, or call (555) 010-9999.";
+    const failed = "I can't open doors for this tour yet. The leasing team is reviewing your details and will text you here.";
+    const hold = "Your tour is paused for a moment.";
+    const doors = "Sorry, the doors aren't responding right now. I've let the leasing team know.";
+
+    const prospectTexts = async (ctx: ReturnType<typeof setup>) =>
+      (await ctx.core.exportRecords()).messages.filter((m) => m.audience === "PROSPECT").map((m) => m.body);
+
+    const failedTexts = async (visitorContact?: string) => {
+      const ctx = setup(visitorContact ? { visitorContact } : {});
+      const tour = await bookTour(ctx, "awaiting-verification");
+      await ctx.core.submitVerification(tour.reservation.id, basicForm("555-999-0000"));
+      ctx.clock.set(tour.slotStart);
+      await tour.request("entrance");
+      return prospectTexts(ctx);
+    };
+    const holdTexts = async (visitorContact?: string) => {
+      const ctx = setup(visitorContact ? { visitorContact } : {});
+      const tour = await bookTour(ctx);
+      ctx.clock.set(tour.slotStart);
+      await ctx.core.placeOperatorHold(tour.reservation.id, "checking something");
+      await tour.request("entrance");
+      return prospectTexts(ctx);
+    };
+    const doorTexts = async (visitorContact?: string) => {
+      const ctx = setup(visitorContact ? { visitorContact } : {});
+      const tour = await bookTour(ctx);
+      ctx.clock.set(tour.slotStart);
+      ctx.durin.setHealthy(false, "controller offline");
+      await tour.request("entrance");
+      return prospectTexts(ctx);
+    };
+
+    const failedUnset = await failedTexts();
+    const failedSet = await failedTexts("+15550109999");
+    const holdUnset = await holdTexts();
+    const holdSet = await holdTexts("+15550109999");
+    const doorUnset = await doorTexts();
+    const doorSet = await doorTexts("+15550109999");
+
+    expect(failedUnset.filter((b) => b.includes(failed))).toEqual([`${failed} ${nextUnset}`, `${failed} ${nextUnset}`]);
+    expect(failedSet.filter((b) => b.includes(failed))).toEqual([`${failed} ${nextSet}`, `${failed} ${nextSet}`]);
+    expect(holdUnset.some((b) => b.startsWith(hold) && b.endsWith(nextUnset))).toBe(true);
+    expect(holdSet.some((b) => b.startsWith(hold) && b.endsWith(nextSet))).toBe(true);
+    expect(doorUnset.some((b) => b.startsWith(doors) && b.endsWith(nextUnset))).toBe(true);
+    expect(doorSet.some((b) => b.startsWith(doors) && b.endsWith(nextSet))).toBe(true);
+    for (const body of [...failedUnset, ...failedSet, ...holdUnset, ...holdSet, ...doorUnset, ...doorSet]) {
+      expect(body).not.toContain(privateLine);
+      expect(body).not.toContain("5550100000");
+      expect(body).not.toMatch(/someone will reach out shortly/i);
+    }
+  });
+
+  it("lapsed verification and missing consent each get their own text", async () => {
+    const ctx = setup();
+    const stale = await bookTour(ctx);
+    const check = (await ctx.store.list("verifications"))[0]!;
+    await ctx.store.put("verifications", { ...check, validUntil: minutesFrom(stale.slotStart, -1).toISOString() });
+    ctx.clock.set(stale.slotStart);
+    expect((await stale.request("entrance")).decision.code).toBe("DENY_VERIFICATION_STALE");
+
+    const pending = await ctx.core.startInquiry({ name: "Pat Lee", phone: "(555) 010-4321", unitId: "apt_101" });
+    const slot = (await ctx.core.availableSlots())[0]!;
+    await ctx.core.reserveSlot(pending.reservation.id, slot.start.toISOString());
+    ctx.clock.set(slot.start);
+    expect(
+      (await ctx.core.requestAccess({ reservationId: pending.reservation.id, prospectId: pending.prospect.id, doorId: "entrance" })).decision.code,
+    ).toBe("DENY_CONSENT_MISSING");
+
+    const bodies = (await ctx.core.exportRecords()).messages.filter((m) => m.audience === "PROSPECT").map((m) => m.body);
+    const staleText = bodies.find((b) => b.includes("ID check has expired"));
+    const consentText = bodies.find((b) => b.includes("Is it OK if I text you about this tour"));
+    expect(staleText).toContain("Your ID check has expired, so I need a quick re-check before I can open doors.");
+    expect(staleText).toContain("https://forms.example/tour-core-basic-id");
+    expect(consentText).toContain("Is it OK if I text you about this tour and keep a record of your visit (times and doors used)?");
+    expect(consentText).toContain("Reply YES or NO.");
+    expect(bodies.filter((b) => b.includes("Finish the steps I sent earlier"))).toEqual([]);
+    expect(bodies.join("\n")).not.toContain(ctx.config.operator.contact);
+  });
+
+  it("a stale ID re-check goes through submitVerification and then opens the door", async () => {
+    const ctx = setup();
+    const tour = await bookTour(ctx);
+    const check = (await ctx.store.list("verifications"))[0]!;
+    await ctx.store.put("verifications", { ...check, validUntil: minutesFrom(tour.slotStart, -1).toISOString() });
+    ctx.clock.set(tour.slotStart);
+    expect((await tour.request("entrance")).decision.code).toBe("DENY_VERIFICATION_STALE");
+    const again = await ctx.core.submitVerification(tour.reservation.id, basicForm());
+    expect(again.status).toBe("READY");
+    expect(again.verificationId).not.toBe(tour.reservation.verificationId);
+    expect((await tour.request("entrance")).decision.code).toBe("ALLOW");
   });
 
   it("operator hold is denied, and resuming restores access", async () => {

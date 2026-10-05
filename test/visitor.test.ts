@@ -106,6 +106,10 @@ describe("visitor demo on the real engine", () => {
     await s.act("consent", { agree: true });
     await s.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: "555-999-0000" });
     expect(await s.stage()).toBe("stopped");
+    expect(lastFromTourCore(s)).toBe(
+      "I can't open doors for this tour yet. The leasing team is reviewing your details and will text you here. Stay where you are and reply here. The leasing team usually replies within 15 minutes.",
+    );
+    expect(lastFromTourCore(s)).not.toContain(s.config.operator.contact);
   });
 
   it("early arrival is denied by the real policy, without contacting Durin", async () => {

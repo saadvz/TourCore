@@ -24,7 +24,7 @@ again with the code after the operator's yes.
 | `list_properties` | read | Every property and its status |
 | `get_property_setup` | read | Full setup: units, doors, routes, hours, verification, messaging, problems |
 | `create_property_setup` | change | Starts a property from its street address. A US address needs street, city, state and ZIP; a missing ZIP is the next question, then a read-back to confirm, then property type. An optional public name only if the operator said one. Uses the installed visitor texting automatically |
-| `update_property_details` | change | Property type, address, operator-given name, time zone, approved property facts, who gets alerts; returns `nextQuestion` (how to name the tourable spaces for that type) |
+| `update_property_details` | change | Property type, address, operator-given name, time zone, approved property facts, who gets alerts, optional visitor help number (never the team's private alert line); returns `nextQuestion` (how to name the tourable spaces for that type) |
 | `list_units` | read | Units with description, facts, door, route |
 | `add_unit` | change | Adds a unit and its own door. For a single-family home the name is optional ("Main Home"), its door is the home's entrance ("Front Door" unless named) and its route is set automatically. Never a made-up unit number |
 | `update_unit` | change | Renames a unit or changes its description/facts |

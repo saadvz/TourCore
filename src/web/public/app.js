@@ -876,6 +876,7 @@ function servicesStep(data) {
   const { view, summary } = data;
   const id = summary.id;
   const alertName = input({ value: view.operator.name });
+  const visitorContact = input({ value: view.operator.visitorContact, inputmode: "tel", autocomplete: "tel" });
   const errors = errorBox();
   let mode = view.services.messaging.mode;
   const choices = view.services.messaging.options.map((o) => {
@@ -889,7 +890,7 @@ function servicesStep(data) {
     return node;
   });
   const save = action(async () => {
-    await command(id, "setAlertContact", { name: alertName.value });
+    await command(id, "setAlertContact", { name: alertName.value, visitorContact: visitorContact.value });
     go(`${base(id)}/review`);
   }, errors);
   return wizardShell(
@@ -907,7 +908,17 @@ function servicesStep(data) {
       view.services.items.map((s) =>
         el("div", { class: "card" }, el("h3", {}, s.title, " ", s.demo === false ? null : el("span", { class: "badge demo" }, "Demo")), el("p", { class: "muted" }, s.text), devBlock(s.dev)),
       ),
-      el("div", { class: "card" }, field("Who should we alert if a visitor needs help?", alertName, "For example, your leasing team or your own name."), errors.node),
+      el(
+        "div",
+        { class: "card" },
+        field("Who should we alert if a visitor needs help?", alertName, "For example, your leasing team or your own name."),
+        field(
+          "What number can visitors call if they're stuck at a door? (optional)",
+          visitorContact,
+          "Shown to visitors when a door stays locked. Leave blank if they should just reply to the text. This is not your private alert line.",
+        ),
+        errors.node,
+      ),
     ),
     save,
   );

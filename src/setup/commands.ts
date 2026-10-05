@@ -46,7 +46,10 @@ export const SETUP_COMMANDS = {
     }),
     (d, i) => setPropertyDetails(d, i),
   ),
-  setAlertContact: command(z.object({ name: Text.optional(), contact: Text.optional() }), (d, i) => setAlertContact(d, i)),
+  setAlertContact: command(
+    z.object({ name: Text.optional(), contact: Text.optional(), visitorContact: Text.optional() }),
+    (d, i) => setAlertContact(d, i),
+  ),
   /** Adds a unit together with its own door (named "<unit> Door" unless given). A single-family home's one space uses the home's entrance. */
   addUnit: command(z.object({ name: Text.optional(), summary: Text.optional(), facts: Facts.optional(), doorName: Text.optional() }), (d, i) => addTourableSpace(d, i)),
   renameUnit: command(z.object({ unitId: Text, name: Text, alsoRenameDoor: z.boolean().optional() }), (d, i) =>

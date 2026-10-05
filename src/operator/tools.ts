@@ -7,6 +7,7 @@ import { installedMessaging } from "../install/status";
 import { addressReadback } from "../setup/address";
 import { PROPERTY_TYPE_LABELS, PROPERTY_TYPES, validateConfig } from "../config/tourCoreConfig";
 import { FIELD_WORDS, missingProfileFields, nextProfileQuestion, parseBulkUnitDetails, profileSummaryLine } from "../config/unitProfile";
+import { formatPhone } from "../core/phone";
 import { TourCoreError } from "../core/TourCore";
 import { PortableBackupError } from "../backup/portable";
 import { InvalidTransitionError } from "../domain/stateMachine";
@@ -190,6 +191,7 @@ function setupSnapshot(ctx: ToolContext, id: string) {
     visitorTexting: subsystemLines(ctx, id, draft).texting.label,
     doorAccess: draft.accessMode === "durin-mock" ? "Demo" : "Connected",
     alertsGoTo: view.operator.name,
+    ...(view.operator.visitorContact ? { visitorHelpNumber: formatPhone(view.operator.visitorContact) } : {}),
     ...setupState(ctx, id),
   };
 }
@@ -380,7 +382,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Update property details",
     kind: "change",
     description:
-      "Changes the property's type, address, ZIP, public name, time zone or approved property facts. The name is only one the operator said (an empty name goes back to using the address). A ZIP code does not invent the rest of the address. confirmAddress is true only after they agree to the read-back. Facts must be the operator's own words. Returns nextQuestion when something still has to be asked, and that question comes before property type until the address is confirmed.",
+      "Changes the property's type, address, ZIP, public name, time zone or approved property facts. The name is only one the operator said (an empty name goes back to using the address). A ZIP code does not invent the rest of the address. confirmAddress is true only after they agree to the read-back. Facts must be the operator's own words. Returns nextQuestion when something still has to be asked, and that question comes before property type until the address is confirmed. visitorContact is an optional number visitors can call if they're stuck at a door; it is never the team's private alert line.",
     input: z.strictObject({
       property: Property,
       propertyType: z.enum(PROPERTY_TYPES).optional().describe("From the operator's answer to \"What type of property is this?\"."),
@@ -392,6 +394,11 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       facts: Facts.optional().describe("The full list of approved property facts, in the operator's words."),
       alertName: z.string().max(120).optional().describe("Who should hear about problems, e.g. \"Leasing team\"."),
       alertContact: z.string().max(200).optional(),
+      visitorContact: z
+        .string()
+        .max(30)
+        .optional()
+        .describe("Optional phone number visitors can call if they're stuck at a door. Empty clears it. Never the team's private alert line."),
     }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
@@ -404,7 +411,9 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         postalCode: i.postalCode,
         confirmAddress: i.confirmAddress,
       });
-      if (i.alertName !== undefined || i.alertContact !== undefined) next = applySetupCommand(next, "setAlertContact", { name: i.alertName, contact: i.alertContact });
+      if (i.alertName !== undefined || i.alertContact !== undefined || i.visitorContact !== undefined) {
+        next = applySetupCommand(next, "setAlertContact", { name: i.alertName, contact: i.alertContact, visitorContact: i.visitorContact });
+      }
       ctx.services.workspace.persistEdit(next, ctx.now());
       const setup = setupSnapshot(ctx, id);
       return { summary: `Updated ${setup.name}. ${setup.saved}.`, ...propertyNextQuestion(next), setup };
@@ -799,6 +808,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         `Tours: ${view.tourHours.summary ?? `${view.tourHours.daysLabel}, ${view.tourHours.hoursLabel}`}`,
         `Verification: ${view.reviewCards.find((c) => c.step === "verification")!.rows[0]}`,
         ...modes.lines,
+        ...(draft.operator.visitorContact ? [`Visitors can call: ${formatPhone(draft.operator.visitorContact)}`] : []),
       ];
       return {
         summary: view.canSave ? "Setup looks complete." : `${view.issues.length} thing${view.issues.length === 1 ? "" : "s"} still need${view.issues.length === 1 ? "s" : ""} an answer.`,

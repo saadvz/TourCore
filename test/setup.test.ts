@@ -18,6 +18,7 @@ import {
   reviewSetup,
   runDryTour,
   runReadinessCheck,
+  setAlertContact,
   setPropertyDetails,
   setRoute,
   setTourHours,
@@ -81,6 +82,30 @@ describe("guided setup actions", () => {
     expect(section("ROUTE: UNIT 101")).toEqual(["Lobby Entrance", "Unit 101 Door"]);
     expect(section("ROUTE: UNIT 102")).toEqual(["Lobby Entrance", "Unit 102 Door"]);
     expect(section("VERIFICATION")?.[0]).toBe("Basic identity form");
+    expect(section("ALERTS")).toEqual(["If a visitor needs help: Leasing team"]);
+  });
+
+  it("sets an optional visitor help number separately from the operator alert line", () => {
+    const { draft } = buildProperty();
+    expect(draft.operator.contact).toBe("Shown on screen (demo)");
+    expect(draft.operator.visitorContact).toBeUndefined();
+
+    const withNumber = setAlertContact(draft, { visitorContact: "(555) 010-8888" });
+    expect(withNumber.operator.visitorContact).toBe("+15550108888");
+    expect(withNumber.operator.contact).toBe("Shown on screen (demo)");
+    expect(reviewSetup(withNumber).sections.find((s) => s.title === "ALERTS")?.lines).toEqual([
+      "If a visitor needs help: Leasing team",
+      "Visitors can call: (555) 010-8888",
+    ]);
+
+    const cleared = setAlertContact(withNumber, { visitorContact: "" });
+    expect(cleared.operator.visitorContact).toBeUndefined();
+    expect(cleared.operator.contact).toBe("Shown on screen (demo)");
+    expect(() => setAlertContact(draft, { visitorContact: "123" })).toThrow(new SetupInputError("PHONE_INVALID", "Please enter a full phone number."));
+
+    const bad = { ...draft, operator: { ...draft.operator, visitorContact: "not-a-phone" } };
+    expect(validateConfig(bad).map((i) => i.code)).toContain("VISITOR_CONTACT_INVALID");
+    expect(validateConfig(withNumber)).toEqual([]);
   });
 
   it("keeps policy values in config with visible defaults", () => {

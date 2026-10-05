@@ -4,3 +4,16 @@ export function normalizePhone(raw: string): string {
   if (digits.length === 10) return `+1${digits}`;
   return `+${digits}`;
 }
+
+/** A full phone number: 10–15 digits. Same bar as other visitor phone fields. */
+export function parsePhone(raw: string): string | undefined {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length < 10 || digits.length > 15) return undefined;
+  return normalizePhone(raw);
+}
+
+/** Casual US formatting for visitor-facing texts. Other numbers stay as stored. */
+export function formatPhone(e164: string): string {
+  const match = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(e164);
+  return match ? `(${match[1]}) ${match[2]}-${match[3]}` : e164;
+}

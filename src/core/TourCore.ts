@@ -26,7 +26,7 @@ import { AuditLog, type AuditInput } from "../audit/audit";
 import { buildExport, type ExportBundle } from "../export/exportBundle";
 import type { Clock } from "./clock";
 import { approvedAnswerText, approvedFacts, type ApprovedFact } from "./facts";
-import { normalizePhone } from "./phone";
+import { formatPhone, normalizePhone } from "./phone";
 import { resolveQuestion } from "./questions";
 import { closestOpenSlots, intervalsOverlap, overlapSummary, placementOf, relativeWhen, tourInterval, touringHoursLabel } from "./customSlot";
 import { isoDate, nextTourDay, slotsOn, tourWindow, type TourSlot } from "./schedule";
@@ -91,6 +91,33 @@ const CONSENT_TEXT = "Is it OK if I text you about this tour and keep a record o
 
 /** What a visitor hears when the approved facts don't cover their question. The team is alerted at the same time. */
 export const UNKNOWN_ANSWER = "I don't have that information for this property. I've flagged it for the property team so they can get back to you.";
+
+/**
+ * Visitor SMS when a door stays locked. Casual, no provider names.
+ * `operator.contact` is never used here — that line is private.
+ */
+class VisitorDenialCopy {
+  static nextStep(team: string, visitorContact?: string): string {
+    if (visitorContact) return `Stay where you are. The ${team} usually replies within 15 minutes, or call ${formatPhone(visitorContact)}.`;
+    return `Stay where you are and reply here. The ${team} usually replies within 15 minutes.`;
+  }
+
+  static operatorHold(team: string, visitorContact?: string): string {
+    return `Your tour is paused for a moment. ${this.nextStep(team, visitorContact)}`;
+  }
+
+  static doorsNotResponding(team: string, visitorContact?: string): string {
+    return `Sorry, the doors aren't responding right now. I've let the ${team} know. ${this.nextStep(team, visitorContact)}`;
+  }
+
+  static failedId(team: string, visitorContact?: string): string {
+    return `I can't open doors for this tour yet. The ${team} is reviewing your details and will text you here. ${this.nextStep(team, visitorContact)}`;
+  }
+
+  static staleVerification(): string {
+    return "Your ID check has expired, so I need a quick re-check before I can open doors.";
+  }
+}
 
 export class TourCore {
   private readonly audit: AuditLog;
@@ -257,22 +284,18 @@ export class TourCore {
     }
 
     reservation = await this.move(reservation, "AWAITING_VERIFICATION", "VERIFICATION_REQUESTED", { detail: `method ${this.deps.verification.method}` });
-    const link =
-      this.presentation === "MESSAGING" && !this.deps.verification.automatic
-        ? this.deps.verificationLink
-          ? await this.deps.verificationLink({ reservation, prospect })
-          : this.deps.verification.defaultLink?.(prospect)
-        : undefined;
     const ask = this.deps.verification.request(prospect);
-    await this.textProspect(prospect, reservation.id, ask.body, ask.form ? { kind: "form", link } : undefined);
+    await this.textProspect(prospect, reservation.id, ask.body, ask.form ? { kind: "form", link: await this.verificationFormLink(reservation, prospect) } : undefined);
     if (this.deps.verification.automatic) return this.submitVerification(reservation.id, {});
     return reservation;
   }
 
   async submitVerification(reservationId: string, submission: unknown): Promise<Reservation> {
     let reservation = await this.mustGetReservation(reservationId);
-    if (reservation.verificationId) return reservation;
-    if (reservation.status !== "AWAITING_VERIFICATION") {
+    const existing = reservation.verificationId ? await this.deps.store.get("verifications", reservation.verificationId) : undefined;
+    const staleRecheck = this.isStalePassedCheck(existing) && (reservation.status === "READY" || reservation.status === "TOURING");
+    if (reservation.verificationId && !staleRecheck) return reservation;
+    if (reservation.status !== "AWAITING_VERIFICATION" && !staleRecheck) {
       throw new TourCoreError("NOT_AWAITING_VERIFICATION", `Reservation is ${reservation.status}`);
     }
     const prospect = await this.mustGetProspect(reservation.prospectId);
@@ -293,13 +316,14 @@ export class TourCore {
     await this.deps.store.put("verifications", verification);
 
     if (!outcome.passed) {
-      reservation = await this.move(reservation, "VERIFICATION_FAILED", "VERIFICATION_FAILED", { detail: outcome.reason });
-      await this.textProspect(prospect, reservation.id, "Thanks for filling that out. We couldn't confirm your details, so someone from the leasing team will reach out to help.");
+      await this.textProspect(prospect, reservation.id, VisitorDenialCopy.failedId(this.teamName(), this.visitorHelpNumber()));
       await this.notifyOperator(reservation, `Identity form for ${prospect.name} didn't check out (${outcome.reason}). Please follow up.`);
-      return reservation;
+      if (staleRecheck) return reservation;
+      return this.move(reservation, "VERIFICATION_FAILED", "VERIFICATION_FAILED", { detail: outcome.reason });
     }
 
     reservation = { ...reservation, verificationId: verification.id };
+    if (staleRecheck) await this.deps.store.put("reservations", reservation);
     await this.record("VERIFICATION_COMPLETED", {
       reservationId: reservation.id,
       prospectId: prospect.id,
@@ -310,6 +334,7 @@ export class TourCore {
       const named = `${outcome.claimed.firstName} ${outcome.claimed.lastName}`.trim();
       if (named) await this.deps.store.put("prospects", { ...prospect, name: named });
     }
+    if (staleRecheck) return reservation;
     return this.markReady(reservation, prospect);
   }
 
@@ -1020,26 +1045,37 @@ export class TourCore {
     doorId: string,
   ): Promise<void> {
     const team = this.deps.config.operator.name.toLowerCase();
+    const help = this.visitorHelpNumber();
     const needsOperator: AccessDecisionCode[] = ["DENY_WRONG_ROUTE", "DENY_DURIN_UNHEALTHY", "DENY_PROVIDER_FAILURE", "DENY_UNKNOWN", "DENY_PROSPECT_MISMATCH", "DENY_NO_RESERVATION"];
 
     if (reservation && prospect && prospect.id === reservation.prospectId) {
       const unit = this.unitFor(reservation);
-      const text: Partial<Record<AccessDecisionCode, string>> = {
-        DENY_TOO_EARLY: `You're a little early! I can open the doors from ${reservation.windowStart ? this.time(new Date(reservation.windowStart)) : "your tour time"}.`,
-        DENY_EXPIRED: "Your tour time has ended, so I can't open doors anymore. Want me to find you another time?",
-        DENY_WRONG_ROUTE: `That door isn't part of your tour, so I can't open it. You're here to see ${visitorSubject(this.deps.config.property, unit.name)}. I've let the ${team} know in case you need a hand.`,
-        DENY_DURIN_UNHEALTHY: `Sorry, the doors aren't responding right now. I've let the ${team} know and someone will reach out shortly.`,
-        DENY_PROVIDER_FAILURE: `Sorry, the doors aren't responding right now. I've let the ${team} know and someone will reach out shortly.`,
-        DENY_TOUR_COMPLETED: "Your tour is finished, so the doors are locked again. Want to book another visit?",
-        DENY_OPERATOR_HOLD: `Your tour is paused for a moment. The ${team} will be in touch shortly.`,
-        DENY_CANCELLED: "This tour is no longer active, so I can't open doors. Reply if you'd like to book a new time.",
-        DENY_REVOKED: "This tour is no longer active, so I can't open doors. Reply if you'd like to book a new time.",
-      };
-      await this.textProspect(
-        prospect,
-        reservation.id,
-        text[code] ?? "We're not quite ready to open doors yet. Finish the steps I sent earlier and you'll be all set.",
-      );
+      if (code === "DENY_CONSENT_MISSING") {
+        await this.textProspect(prospect, reservation.id, CONSENT_TEXT, { kind: "yes-no" });
+      } else if (code === "DENY_VERIFICATION_STALE") {
+        await this.textProspect(prospect, reservation.id, VisitorDenialCopy.staleVerification(), {
+          kind: "form",
+          link: await this.verificationFormLink(reservation, prospect),
+        });
+      } else {
+        const text: Partial<Record<AccessDecisionCode, string>> = {
+          DENY_TOO_EARLY: `You're a little early! I can open the doors from ${reservation.windowStart ? this.time(new Date(reservation.windowStart)) : "your tour time"}.`,
+          DENY_EXPIRED: "Your tour time has ended, so I can't open doors anymore. Want me to find you another time?",
+          DENY_WRONG_ROUTE: `That door isn't part of your tour, so I can't open it. You're here to see ${visitorSubject(this.deps.config.property, unit.name)}. I've let the ${team} know in case you need a hand.`,
+          DENY_DURIN_UNHEALTHY: VisitorDenialCopy.doorsNotResponding(team, help),
+          DENY_PROVIDER_FAILURE: VisitorDenialCopy.doorsNotResponding(team, help),
+          DENY_TOUR_COMPLETED: "Your tour is finished, so the doors are locked again. Want to book another visit?",
+          DENY_OPERATOR_HOLD: VisitorDenialCopy.operatorHold(team, help),
+          DENY_CANCELLED: "This tour is no longer active, so I can't open doors. Reply if you'd like to book a new time.",
+          DENY_REVOKED: "This tour is no longer active, so I can't open doors. Reply if you'd like to book a new time.",
+          DENY_VERIFICATION_FAILED: VisitorDenialCopy.failedId(team, help),
+        };
+        await this.textProspect(
+          prospect,
+          reservation.id,
+          text[code] ?? "We're not quite ready to open doors yet. Finish the steps I sent earlier and you'll be all set.",
+        );
+      }
     }
     if (needsOperator.includes(code)) {
       const who = prospect?.name ?? "Someone without a booked tour";
@@ -1073,6 +1109,25 @@ export class TourCore {
 
   private record(type: AuditEventType, input: AuditInput): Promise<AuditEvent> {
     return this.audit.record(type, input);
+  }
+
+  private teamName(): string {
+    return this.deps.config.operator.name.toLowerCase();
+  }
+
+  /** Visitor-facing help number only. Never `operator.contact`. */
+  private visitorHelpNumber(): string | undefined {
+    return this.deps.config.operator.visitorContact;
+  }
+
+  private isStalePassedCheck(verification: Verification | undefined): boolean {
+    return !!verification && verification.status === "PASSED" && Date.parse(verification.validUntil) <= this.deps.clock.now().getTime();
+  }
+
+  private async verificationFormLink(reservation: Reservation, prospect: Prospect): Promise<string | undefined> {
+    if (this.deps.verification.automatic || this.presentation !== "MESSAGING") return undefined;
+    if (this.deps.verificationLink) return this.deps.verificationLink({ reservation, prospect });
+    return this.deps.verification.defaultLink?.(prospect);
   }
 
   private async textProspect(prospect: Prospect, reservationId: string | undefined, body: string, prompt?: ReplyPrompt): Promise<void> {

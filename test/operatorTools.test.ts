@@ -115,6 +115,21 @@ describe("setup through the tools", () => {
     expect(review.canSave).toBe(true);
   });
 
+  it("saves a visitor help number without exposing the operator alert line", async () => {
+    const h = app();
+    const id = await h.setUpAlfredWay();
+    const before = h.workspace.load(id).config.operator.contact;
+    const saved = await h.ok("update_property_details", { visitorContact: "(555) 010-7777" });
+    expect(saved.setup.visitorHelpNumber).toBe("(555) 010-7777");
+    expect(saved.setup.alertsGoTo).toBe("Leasing team");
+    expect(JSON.stringify(saved)).not.toContain(before);
+    expect(h.workspace.load(id).config.operator).toMatchObject({ contact: before, visitorContact: "+15550107777" });
+    expect(await h.fails("update_property_details", { visitorContact: "12" })).toMatch(/full phone number/);
+    await h.ok("update_property_details", { visitorContact: "" });
+    expect(h.workspace.load(id).config.operator.visitorContact).toBeUndefined();
+    expect((await h.ok("get_property_setup")).setup.visitorHelpNumber).toBeUndefined();
+  });
+
   it("doesn't create a second property when the same address is sent again", async () => {
     const h = app();
     await h.setUpAlfredWay();
