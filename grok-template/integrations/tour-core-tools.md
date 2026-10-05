@@ -24,14 +24,14 @@ again with the code after the operator's yes.
 | `list_properties` | read | Every property and its status (removed properties are omitted; paused ones say so) |
 | `get_property_setup` | read | Full setup: units, doors, routes, hours, verification, messaging, problems, and whether tours are paused or the property was removed |
 | `create_property_setup` | change | Starts a property from its street address. A US address needs street, city, state and ZIP; a missing ZIP is the next question, then a read-back to confirm, then property type. An optional public name only if the operator said one. Uses the installed visitor texting automatically |
-| `update_property_details` | change | Property type, address, operator-given name, time zone, approved property facts, who gets alerts, optional visitor help number (never the team's private alert line); `skipVisitorHelp` records an explicit skip; returns `nextQuestion` (how to name the tourable spaces for that type, then the optional help-number step) |
+| `update_property_details` | change | Property type, address, operator-given name, time zone, approved property facts, apartment or condo building-door control (`BUILDING_AND_UNIT` / `UNIT_ONLY`), optional entry instructions (`skipEntryInstructions` stores nothing), who gets alerts, optional visitor help number (never the team's private alert line); `skipVisitorHelp` records an explicit skip; returns `nextQuestion` (unit number and building-door control for an apartment or condo, then the optional help-number step) |
 | `list_units` | read | Units with description, facts, door, route, and whether that unit is paused |
-| `add_unit` | change | Adds a unit and its own door. For a single-family home the name is optional ("Main Home"), its door is the home's entrance ("Front Door" unless named) and its route is set automatically. Never a made-up unit number |
+| `add_unit` | change | Adds a unit and its own door. For a single-family home the name is optional ("Main Home"), its door is the home's entrance ("Front Door" unless named) and its route is set automatically. For an apartment or condo, name is the unit number (required); the route waits until they say whether they control the building entrance. Never a made-up unit number |
 | `update_unit` | change | Renames a unit or changes its description/facts |
 | `set_unit_details` | change | Saves units' bedrooms, bathrooms, rent, availability and optional details from the operator's words (bulk answers welcome); "not sure" is saved as not provided |
 | `get_unit_details` | read | Unit details as short lines, what's still missing, and the one question to ask next |
 | `list_doors` | read | Every door on file |
-| `add_door` | change | Adds an entrance or hallway door the operator named |
+| `add_door` | change | Adds an entrance or hallway door the operator named. For an apartment or condo that controls the building entrance, adding that entrance completes the route |
 | `get_route` | read | A unit's saved route (or a suggestion) |
 | `preview_route` | read | Resolves the operator's door words to doors on file, without saving |
 | `set_route` | change | Saves a route from exact door names; refuses unknown doors and invalid routes |

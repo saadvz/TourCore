@@ -5,7 +5,7 @@ import { HOSTED_ADMIN_TOOLS } from "../install/hostedAdminTools";
 import { INSTALLATION_TOOLS } from "../install/tools";
 import { installedMessaging } from "../install/status";
 import { addressReadback } from "../setup/address";
-import { PROPERTY_TYPE_LABELS, PROPERTY_TYPES, validateConfig } from "../config/tourCoreConfig";
+import { PROPERTY_TYPE_LABELS, PROPERTY_TYPES, SETUP_PROPERTY_TYPES, validateConfig } from "../config/tourCoreConfig";
 import { FIELD_WORDS, missingProfileFields, nextProfileQuestion, parseBulkUnitDetails, profileSummaryLine } from "../config/unitProfile";
 import { formatPhone } from "../core/phone";
 import { TourCoreError } from "../core/TourCore";
@@ -18,7 +18,7 @@ import { draftView, readinessView, saveStateView } from "../setup/presenters";
 import { parseDays, parseMinutes, parseTimeOfDay } from "../setup/parse";
 import type { DryTourCheck, DryTourResult } from "../setup/dryTour";
 import type { ReadinessResult } from "../setup/readiness";
-import { createPropertySetup, modeSentence, OperatorTeamCopy, SetupInputError, tourableSpacesQuestion, visitorHelpLines, visitorHelpQuestion, type SetupDraft } from "../setup/setupActions";
+import { condoNextQuestion, createPropertySetup, modeSentence, OperatorTeamCopy, SetupInputError, tourableSpacesQuestion, visitorHelpLines, visitorHelpQuestion, type SetupDraft } from "../setup/setupActions";
 import { isHostedRailway } from "../install/deployment";
 import { statusLabel, type PublishBlocker } from "../setup/workspace";
 import { rememberCanonical, revertCanonical } from "../storage/canonical";
@@ -120,16 +120,18 @@ function servicesOf(ctx: ToolContext): OperatorServices {
   return { ...ctx.services, installedMessaging: () => installedMessaging(installation) };
 }
 
-const PROPERTY_TYPE_CHOICES = PROPERTY_TYPES.map((t) => ({ choice: t, label: PROPERTY_TYPE_LABELS[t] }));
+const PROPERTY_TYPE_CHOICES = SETUP_PROPERTY_TYPES.map((t) => ({ choice: t, label: PROPERTY_TYPE_LABELS[t] }));
 
 /** The next property question Tour Core wants asked, so the setup order depends on the property type. */
-function propertyNextQuestion(draft: SetupDraft): { nextQuestion: string; choices?: typeof PROPERTY_TYPE_CHOICES; suggestedName?: string; confirmAddress?: boolean } | undefined {
+function propertyNextQuestion(draft: SetupDraft): { nextQuestion: string; choices?: { choice: string; label: string }[]; suggestedName?: string; confirmAddress?: boolean } | undefined {
   const canonical = draft.property.canonicalAddress;
   if (canonical && !canonical.postalCode) return { nextQuestion: "What ZIP code should I use?" };
   if (canonical?.postalCode && !draft.property.addressConfirmed) {
     return { nextQuestion: `I have:\n${addressReadback(canonical)}\nIs that the address?`, confirmAddress: true };
   }
-  if (!draft.property.propertyType) return { nextQuestion: "What type of property is this?", choices: PROPERTY_TYPE_CHOICES };
+  if (!draft.property.propertyType) return { nextQuestion: "What type of property is this?", choices: [...PROPERTY_TYPE_CHOICES] };
+  const condo = condoNextQuestion(draft);
+  if (condo) return condo;
   if (draft.units.length) return visitorHelpQuestion(draft);
   const spaces = tourableSpacesQuestion(draft);
   return spaces ? { nextQuestion: spaces.question, ...(spaces.suggestedName ? { suggestedName: spaces.suggestedName } : {}) } : undefined;
@@ -193,6 +195,7 @@ function setupSnapshot(ctx: ToolContext, id: string) {
     ...(saved ? { paused: !!saved.state.paused || pausedUnits.length === saved.config.units.length && saved.config.units.length > 0, removed: !!saved.state.removedAt, ...(pausedUnits.length ? { pausedUnits } : {}) } : {}),
     ...(draft.property.displayName ? { propertyName: draft.property.displayName } : {}),
     propertyType: draft.property.propertyType ? PROPERTY_TYPE_LABELS[draft.property.propertyType] : "Not chosen yet",
+    ...(draft.property.buildingAccess ? { buildingAccess: draft.property.buildingAccess === "UNIT_ONLY" ? "Unit door only" : "Building entrance and unit door" } : {}),
     timezone: `${view.property.timezoneLabel} (${view.property.timezone})`,
     propertyFacts: view.property.facts,
     units: view.units.map((u) => ({
@@ -203,6 +206,7 @@ function setupSnapshot(ctx: ToolContext, id: string) {
       door: u.door?.name,
       route: u.route ? u.route.doorNames.join(" \u2192 ") : undefined,
       directions: u.route?.directions || undefined,
+      ...(draft.units.find((unit) => unit.id === u.id)?.entryInstructions ? { entryInstructions: draft.units.find((unit) => unit.id === u.id)!.entryInstructions } : {}),
       ...(saved ? { paused: unitPausedFlag(saved.state, u.id) } : {}),
     })),
     doors: view.doors.map((d) => ({ doorId: d.id, name: d.name, kind: d.kindLabel, ...(d.unitName ? { forUnit: d.unitName } : {}) })),
@@ -426,10 +430,10 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Update property details",
     kind: "change",
     description:
-      "Changes the property's type, address, ZIP, public name, time zone or approved property facts. The name is only one the operator said (an empty name goes back to using the address). A ZIP code does not invent the rest of the address. confirmAddress is true only after they agree to the read-back. Facts must be the operator's own words. Returns nextQuestion when something still has to be asked, and that question comes before property type until the address is confirmed. After the rest of the setup is saveable, nextQuestion is \"What number can stuck visitors call? Pick one someone answers during tour hours.\" visitorContact is that optional number visitors see and call; it is never the team's private alert line. If they skip it, pass skipVisitorHelp true so the question is not asked again.",
+      "Changes the property's type, address, ZIP, public name, time zone, approved property facts, apartment or condo building-door control, or optional entry instructions. The name is only one the operator said (an empty name goes back to using the address). A ZIP code does not invent the rest of the address. confirmAddress is true only after they agree to the read-back. Facts must be the operator's own words. For an apartment or condo, buildingAccess is BUILDING_AND_UNIT or UNIT_ONLY from \"Do you control the building entrance, or only the unit door?\"; entryInstructions is how visitors get in and find the unit, sent only after identity verification. If they skip that, pass skipEntryInstructions true and store nothing. Returns nextQuestion when something still has to be asked, and that question comes before property type until the address is confirmed. After the rest of the setup is saveable, nextQuestion is \"What number can stuck visitors call? Pick one someone answers during tour hours.\" visitorContact is that optional number visitors see and call; it is never the team's private alert line. If they skip it, pass skipVisitorHelp true so the question is not asked again.",
     input: z.strictObject({
       property: Property,
-      propertyType: z.enum(PROPERTY_TYPES).optional().describe("From the operator's answer to \"What type of property is this?\"."),
+      propertyType: z.enum(PROPERTY_TYPES).optional().describe("From the operator's answer to \"What type of property is this?\" Use APARTMENT_OR_CONDO for one apartment or condo unit, not a whole building."),
       name: z.string().max(120).optional().describe("Only a property or building name the operator said. Empty removes it."),
       address: z.string().max(200).optional(),
       postalCode: z.string().max(10).optional().describe("The ZIP code the operator gave. Five digits. Don't invent one."),
@@ -447,6 +451,19 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         .boolean()
         .optional()
         .describe("True when the operator explicitly skips the optional visitor help number. Records the skip so the question is not asked again."),
+      buildingAccess: z
+        .enum(["BUILDING_AND_UNIT", "UNIT_ONLY"])
+        .optional()
+        .describe('Apartment or condo: BUILDING_AND_UNIT if they control the building entrance, UNIT_ONLY if they only control the unit door.'),
+      entryInstructions: z
+        .string()
+        .max(500)
+        .optional()
+        .describe("Optional landlord words for getting in and finding the unit. Skip or empty stores nothing; never send a blank line."),
+      skipEntryInstructions: z
+        .boolean()
+        .optional()
+        .describe("True when the operator skips the optional entry-instructions question. Stores nothing and does not ask again."),
     }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
@@ -458,6 +475,9 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         facts: i.facts,
         postalCode: i.postalCode,
         confirmAddress: i.confirmAddress,
+        buildingAccess: i.buildingAccess,
+        entryInstructions: i.entryInstructions,
+        skipEntryInstructions: i.skipEntryInstructions,
       });
       if (i.alertName !== undefined || i.alertContact !== undefined || i.visitorContact !== undefined || i.skipVisitorHelp) {
         next = applySetupCommand(next, "setAlertContact", {
@@ -491,21 +511,22 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Add a unit",
     kind: "change",
     description:
-      'Adds one tourable unit or space. In an apartment building or multifamily home its own door is added with it (named "<unit> Door" unless the operator names it). In a single-family home there\'s one space, the whole home: leave name out to call it "Main Home" (or pass the operator\'s own name); its door is the home\'s entrance ("Front Door" unless the operator names it) and its route is set automatically. Never make up a unit number. Description and facts must be the operator\'s words.',
+      'Adds one tourable unit or space. In a multifamily home its own door is added with it (named "<unit> Door" unless the operator names it). In a single-family home there\'s one space, the whole home: leave name out to call it "Main Home" (or pass the operator\'s own name); its door is the home\'s entrance ("Front Door" unless the operator names it) and its route is set automatically. In an apartment or condo, name is the unit number (required; "4B" is stored as "Unit 4B"); its unit door is added and the route waits until they say whether they control the building entrance. Never make up a unit number. Description and facts must be the operator\'s words.',
     input: z.strictObject({
       property: Property,
-      name: z.string().min(1).max(100).optional().describe("The unit or space name the operator gave. Required except for a single-family home."),
+      name: z.string().min(1).max(100).optional().describe("The unit or space name the operator gave. Required except for a single-family home. For an apartment or condo this is the unit number."),
       description: z.string().max(300).optional(),
       facts: Facts.optional(),
       doorName: z.string().max(100).optional(),
     }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
-      if (!i.name && draft.property.propertyType !== "SINGLE_FAMILY") throw new SetupInputError("UNIT_NAME_MISSING", "What's the unit called? Use the operator's own name for it, like \"1A\".");
+      if (!i.name && draft.property.propertyType !== "SINGLE_FAMILY") throw new SetupInputError("UNIT_NAME_MISSING", draft.property.propertyType === "APARTMENT_OR_CONDO" ? "What's the unit number?" : "What's the unit called? Use the operator's own name for it, like \"1A\".");
       const state = edit(ctx, id, draft, "addUnit", { name: i.name, summary: i.description, facts: i.facts, doorName: i.doorName });
       const setup = setupSnapshot(ctx, id);
       const unit = setup.units.find((u) => !draft.units.some((d) => d.id === u.unitId));
-      return { summary: `Added ${unit?.name} with ${unit?.door}.${unit?.route ? ` Route: ${unit.route}.` : ""}`, unit, ...state };
+      const after = ctx.services.workspace.openDraft(id).draft;
+      return { summary: `Added ${unit?.name} with ${unit?.door}.${unit?.route ? ` Route: ${unit.route}.` : ""}`, unit, ...state, ...propertyNextQuestion(after) };
     },
   }),
   tool({
@@ -613,7 +634,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "add_door",
     title: "Add a door",
     kind: "change",
-    description: "Adds an entrance or a hallway/shared door the operator described. Unit doors come with add_unit. Only add doors the operator actually named.",
+    description: "Adds an entrance or a hallway/shared door the operator described. Unit doors come with add_unit. Only add doors the operator actually named. For an apartment or condo that controls the building entrance, adding that entrance completes the route (building entrance + unit door).",
     input: z.strictObject({
       property: Property,
       name: z.string().min(1).max(100),
@@ -622,7 +643,8 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
       const state = edit(ctx, id, draft, "addDoor", { name: i.name, kind: i.kind === "entrance" ? "ENTRANCE" : "COMMON" });
-      return { summary: `Added ${i.name.trim()}.`, ...state };
+      const after = ctx.services.workspace.openDraft(id).draft;
+      return { summary: `Added ${i.name.trim()}.`, ...state, ...propertyNextQuestion(after) };
     },
   }),
 
@@ -855,6 +877,9 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         draft.property.address,
         ...(draft.property.displayName ? [`Called: ${draft.property.displayName}`] : []),
         draft.property.propertyType ? PROPERTY_TYPE_LABELS[draft.property.propertyType] : "Property type: not chosen yet",
+        ...(draft.property.buildingAccess === "UNIT_ONLY" ? ["Building entrance: visitors get in on their own"] : []),
+        ...(draft.property.buildingAccess === "BUILDING_AND_UNIT" ? ["Building entrance: you control it"] : []),
+        ...(draft.units[0]?.entryInstructions ? [`Entry instructions: ${draft.units[0].entryInstructions}`] : []),
         "",
         ...view.units.flatMap((u) => [u.name, `  ${u.details.line.slice(u.details.line.indexOf(" \u2014 ") + 3)}`, `  Route: ${u.route ? u.route.doorNames.join(" \u2192 ") : "not set yet"}`]),
         ...(view.units.length ? [] : ["No tourable units yet"]),

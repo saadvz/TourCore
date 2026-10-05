@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Guided property setup, checked and practiced before publish
-  version: "0.3.2"
+  version: "0.3.3"
 ---
 
 # Setup Property
@@ -27,13 +27,16 @@ doors, tour hours, verification or messaging. For route questions on their own, 
 ## Required inputs and access
 
 - The Tour Core connector must be connected (see the template setup guide).
-- From the operator, in this order: address; property type; the units or
-  spaces people can tour; each unit's basic information (bedrooms, bathrooms,
-  monthly rent, availability are required; square footage, floor, description,
-  parking, laundry, pets, utilities, furnished and features are offered); the
-  entrance(s); any hallway doors on the way; tour days and hours; how careful
-  to be about checking IDs. A property or building name only if the operator
-  offers one.
+- From the operator, in this order: address; property type (single-family
+  home, multifamily, or apartment or condo — one unit); the units or spaces
+  people can tour; for an apartment or condo, whether they control the
+  building entrance or only the unit door, then optional entry instructions;
+  each unit's basic information (bedrooms, bathrooms, monthly rent,
+  availability are required; square footage, floor, description, parking,
+  laundry, pets, utilities, furnished and features are offered); the
+  entrance(s) they control; any hallway doors on the way; tour days and hours;
+  how careful to be about checking IDs. A property or building name only if
+  the operator offers one.
 - Never ask for API keys, secrets, passwords or phone-provider credentials.
   Those are collected with a secure secret input during install, never in chat.
 
@@ -53,8 +56,9 @@ the operator correct it.
    said a public property or building name themselves; never suggest one, and
    never treat an internal space name such as "Main Home" as the property name.
 3. Ask Tour Core's `nextQuestion`, **"What type of property is this?"**, with
-   its `choices` in plain words: single-family home, multifamily home,
-   apartment building, or other. Never guess the type from the address. Save
+   its `choices` in plain words: single-family home; multifamily (duplex /
+   small building you own); apartment or condo (one unit). Never guess the
+   type from the address. There is no whole-building apartment option. Save
    the answer with `update_property_details` (`propertyType`). It returns the
    next question about the spaces people tour.
 4. Ask about the tourable spaces the way that type needs:
@@ -63,11 +67,23 @@ the operator correct it.
      "Main Home"). Its door is the home's entrance ("Front Door" unless the
      operator names it) and its route is set on its own. Never make up a unit
      number.
-   - **Multifamily home or apartment building:** ask **"Which units can people
-     tour?"** For each, `add_unit` with the operator's own name and
-     description. Each unit gets its own door automatically ("Unit 1A Door").
-   - **Other:** ask how they'd like the spaces people tour to be named, then
-     `add_unit` with their names.
+   - **Multifamily:** ask **"Which units can people tour?"** For each,
+     `add_unit` with the operator's own name and description. Each unit gets
+     its own door automatically ("Unit 1A Door").
+   - **Apartment or condo (one unit):** ask **"What's the unit number?"** then
+     `add_unit` with that number (`"4B"` is stored as `"Unit 4B"`). Then ask
+     Tour Core's next question: **"Do you control the building entrance, or
+     only the unit door?"** Save `buildingAccess` `BUILDING_AND_UNIT` or
+     `UNIT_ONLY` with `update_property_details`. If they control the building
+     entrance, ask **"What's the building entrance called?"** and `add_door`
+     `kind: entrance` — Tour Core sets the route as building entrance + unit
+     door. If they only control the unit door, the route is that door alone
+     (no building door on the route or in arrival text). Then ask the optional
+     **"How should visitors get in and find your unit?"** Save their words as
+     `entryInstructions`, or `skipEntryInstructions: true` if they skip.
+     Skip stores nothing. Visitors hear those words only after identity
+     verification, on the you're-all-set text. The nickname is the street
+     plus unit (`145 Main St, Unit 4B`), never "Main Home".
 
    Never write a description or fact yourself.
 5. **Unit information, before doors and routes.** Ask for bedrooms, bathrooms,
@@ -90,14 +106,18 @@ the operator correct it.
    facts: visitors' questions ("How many bedrooms?", "How much is it?", "When
    is it available?") are answered from them first, at any point in their
    conversation.
-6. Doors: ask **"Which door do visitors come in through?"** `add_door` with
-   `kind: entrance`. Ask **"Any hallway or inside doors on the way to the
-   units?"** Add each as `kind: hallway`. Add only doors the operator named. A
-   single-family home already has its entrance; ask only if they want to
-   rename it or there are inside doors.
+6. Doors: ask **"Which door do visitors come in through?"** when this type
+   has a building entrance they control. `add_door` with `kind: entrance`.
+   Ask **"Any hallway or inside doors on the way to the units?"** Add each as
+   `kind: hallway`. Add only doors the operator named. A single-family home
+   already has its entrance; ask only if they want to rename it or there are
+   inside doors. An apartment or condo that only controls the unit door has
+   no building door to add.
 7. Routes: follow the **Map Route** skill for each unit (`preview_route`, show
    the operator, then `set_route` with the exact names). A single-family
-   home's route is already set.
+   home's route is already set. An apartment or condo route is set when they
+   answer the building-door question (and name the entrance, if they control
+   it).
 8. Ask **"When can people tour?"** Pass their words to `set_tour_hours`
    ("weekdays", "9 to 5"). Mention the visible defaults once (45-minute tours,
    a new tour every hour, 10 minutes early) and change any they want.
@@ -125,7 +145,7 @@ the operator correct it.
 
     > Here's what I have:
     > 144 Hillside Ave, Teaneck NJ
-    > Apartment building
+    > Multifamily (duplex / small building you own)
     >
     > Unit 1A
     > 2 bed · 1 bath · $2,300/month · available now

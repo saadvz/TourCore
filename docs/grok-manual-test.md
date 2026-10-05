@@ -74,12 +74,12 @@ Send only this (with the real repository address):
 | B8 | Say yes (**step 3: create property**). Grok asks "What's the property address?"; answer *"144 Hillside Ave, Teaneck NJ"* | Grok calls `create_property_setup` with the address only. It asks "What ZIP code should I use?" and does not invent one |
 | B8a | Answer *"07666"* | Grok reads back 144 Hillside Ave / Teaneck, NJ 07666 and waits for yes before property type |
 | B9 | **Step 4: confirm canonical address** | After yes, Grok saves the confirmation and the guessed time zone, and asks if the time zone is right |
-| B10 | **Step 5: property type** | "What type of property is this?" with single-family home, multifamily home, apartment building, other. Answer *"Apartment building"*: Grok saves it (`update_property_details`) and asks "Which units can people tour?" (A single-family answer would get "Should I call it "Main Home"...?" instead, never a made-up unit number) |
+| B10 | **Step 5: property type** | "What type of property is this?" with single-family home; multifamily (duplex / small building you own); apartment or condo (one unit). No whole-building apartment option. Answer *"Multifamily"*: Grok saves it (`update_property_details`) and asks "Which units can people tour?" (A single-family answer would get "Should I call it "Main Home"...?" instead, never a made-up unit number. An apartment or condo answer asks "What's the unit number?", then "Do you control the building entrance, or only the unit door?") |
 | B11 | **Step 6: units and unit profiles.** Answer *"1A, 1B, 2A and 2B."*, then in one go: *"1A and 1B are 2 bed 1 bath for $2,200. 2A is 3 bed 2 bath for $2,800 and 2B is 2 bed 2 bath for $2,500."* | Grok reads back one line per unit (e.g. "Unit 1A — 2 bed · 1 bath · $2,200/month · availability not given yet") and asks only "When are these units available?". Answer *"1A and 1B now, 2A October 15, 2B not sure yet"*, and when optional details are offered: *"All units have in-unit laundry."* Grok asks "Does that look right?" before doors; nothing was invented, and "not sure yet" shows as not listed |
 | B12 | **Step 7: map routes.** *"Visitors come in the main entrance. No inside doors."* | `add_door` Main Entrance; Grok shows "Main Entrance → Unit 1A Door" (etc.) and asks "Is that right?" before saving each route |
 | B13 | **Step 8: tour hours.** *"Every day, 9 to 6."* | Grok reads back the days and hours with the defaults (45-minute tours, a new tour every hour, 10 minutes early) |
 | B14 | **Step 9: verification.** *"Basic form."* | Saved; Grok says full ID checks aren't available yet only if asked |
-| B15 | **Step 10: texting is automatic.** Watch the next message | Grok does **not** ask "How do you want to text people?" or where to keep records. The review lists: 144 Hillside Ave, Teaneck NJ / Apartment building / each unit with its details line and route / "Tours: ..." / "Verification: ..." / "Visitor texting: Connected" / "Door access: Demo", then "Does that look right?" |
+| B15 | **Step 10: texting is automatic.** Watch the next message | Grok does **not** ask "How do you want to text people?" or where to keep records. The review lists: 144 Hillside Ave, Teaneck NJ / Multifamily (duplex / small building you own) / each unit with its details line and route / "Tours: ..." / "Verification: ..." / "Visitor texting: Connected" / "Door access: Demo", then "Does that look right?" |
 | B16 | Say yes (**step 11: offer tour updates**) | "Your property is configured. Would you like me to keep you updated when someone books, starts or finishes a tour, and alert you if something needs your input?" Say *"Sure"*: Grok may add "I recommend alerts for bookings, tour starts, completions and anything that needs your attention. Want to use those defaults?" Say yes. Grok calls `set_notification_preferences` (recommended) and says "I'm setting up your tour updates." (Saying no instead skips updates and moves on) |
 | B16a | Watch Grok's cloud computer | Grok creates the **Tour Core Operator Updates** routine itself (authenticated webhook trigger) and asks for the webhook address and key with a secure secret input |
 | B16b | Handoff | Submit that secure input. The values do not appear in chat, tool arguments, files, or commands. If secure input cannot be used and both values stay hidden behind copy buttons, Grok may paste them into the masked fields without reading them. If a value is shown on screen, Grok hands you the browser |
@@ -235,7 +235,7 @@ the [setup guide](grok-template-setup.md).
 | --- | --- | --- |
 | 1 | Add/install the Tour Core Bot ([setup guide](grok-template-setup.md) steps 3–5, or install from the team template and reconnect with OAuth as above). Ask *"List the Tour Core tools you can use."* | 54 Tour Core tools; nothing that unlocks or opens a door, and nothing that takes a credential |
 | 2 | *"Set up a property"* | Bot asks "What's the property address?"; one question at a time; no field names or codes |
-| 3 | Answer: 100 Alfred Way, Brooklyn NY; apartment building; two units (101, 102); one entrance ("Lobby Entrance"); no hallway doors. Confirm routes when shown | Bot confirms the address, asks "What type of property is this?", never invents a building name; shows "Lobby Entrance → Unit 101 Door" and asks "Is that right?" before saving; in the browser app the same property shows both routes |
+| 3 | Answer: 100 Alfred Way, Brooklyn NY; multifamily (small building you own); two units (101, 102); one entrance ("Lobby Entrance"); no hallway doors. Confirm routes when shown | Bot confirms the address, asks "What type of property is this?" with single-family / multifamily / apartment or condo (one unit); never invents a building name; shows "Lobby Entrance → Unit 101 Door" and asks "Is that right?" before saving; in the browser app the same property shows both routes |
 | 3a | Say *"Unit 102 goes through the side gate"* | Bot says it doesn't have a side gate on file and lists the doors; nothing saved |
 | 4 | Tour hours: *"Weekdays, 9 to 5"* | Bot reads back weekdays 9 AM–5 PM with the defaults |
 | 5 | Verification: basic form | Bot doesn't ask how to text people (the property already uses the installed texting); `get_services` shows messaging connected |
@@ -291,6 +291,19 @@ with no ZIP. Single-family internal space: Main Home. No public property name.
 | F5 | "What about Thursday?" | Thursday's times. No exception for the property team |
 | F6 | "How much is rent?" | The answer uses the address (or "this home"), then Thursday's times again. Not "Main Home" |
 | F7 | Readiness, practice tour, then "Yes, publish it." | One publish. Grok says it is published only after the tool result and a fresh status read. No second publish question and no "still needs a yes" |
+
+## F-condo. Apartment or condo (one unit)
+
+Fresh Grok install. Address *"145 Main St, Hoboken, NJ 07030"*. No public name.
+
+| # | Do | Expect |
+| --- | --- | --- |
+| C1 | After address confirm, choose **Apartment or condo (one unit)** | Grok asks "What's the unit number?" Never offers a whole-building apartment |
+| C2 | *"4B"* | Saved as Unit 4B. Next: "Do you control the building entrance, or only the unit door?" |
+| C3 | *"I control the building entrance."* Then *"Lobby Entrance"* | Route is Lobby Entrance → Unit 4B Door. Optional: "How should visitors get in and find your unit?" |
+| C4 | Give instructions, or skip | Skip stores nothing. Review names it "Apartment or condo (one unit)" and does not say Main Home. Visitors and alerts say "145 Main St, Unit 4B" |
+| C5 | Repeat C1–C2, then *"I only control the unit door."* Skip instructions | Route is Unit 4B Door only. No building door. Arrival text opens the unit door, not the entrance |
+| C6 | Book, verify, read the you're-all-set text | Entry instructions appear here, only after verify, as `Here's how to get in: …`. Not in the welcome. Skip means that fragment is absent |
 
 ## G. Hosted portable backup
 

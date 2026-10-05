@@ -32,6 +32,11 @@ export const UnitSchema = z.object({
   facts: ApprovedFacts,
   /** Minimum leasing information (bedrooms, bathrooms, rent, availability, ...). Absent until asked. */
   profile: UnitProfileSchema.optional(),
+  /**
+   * Landlord-set lobby / wayfinding instructions for an apartment or condo unit.
+   * Absent when skipped. Never stored as a blank string.
+   */
+  entryInstructions: z.string().min(1).optional(),
 });
 
 export const RouteSchema = z.object({
@@ -42,15 +47,29 @@ export const RouteSchema = z.object({
   stops: z.array(z.object({ doorId: z.string(), guidance: z.string() })),
 });
 
-export const PROPERTY_TYPES = ["SINGLE_FAMILY", "MULTIFAMILY_HOME", "APARTMENT_BUILDING", "OTHER"] as const;
+export const PROPERTY_TYPES = ["SINGLE_FAMILY", "MULTIFAMILY_HOME", "APARTMENT_OR_CONDO", "APARTMENT_BUILDING", "OTHER"] as const;
 export const PropertyTypeSchema = z.enum(PROPERTY_TYPES);
 export type PropertyType = z.infer<typeof PropertyTypeSchema>;
 
+/** Types offered during setup. Whole-building apartments and "Other" stay readable on older files. */
+export const SETUP_PROPERTY_TYPES = ["SINGLE_FAMILY", "MULTIFAMILY_HOME", "APARTMENT_OR_CONDO"] as const;
+export type SetupPropertyType = (typeof SETUP_PROPERTY_TYPES)[number];
+
 export const PROPERTY_TYPE_LABELS: Record<PropertyType, string> = {
   SINGLE_FAMILY: "Single-family home",
-  MULTIFAMILY_HOME: "Multifamily home",
+  MULTIFAMILY_HOME: "Multifamily (duplex / small building you own)",
+  APARTMENT_OR_CONDO: "Apartment or condo (one unit)",
   APARTMENT_BUILDING: "Apartment building",
   OTHER: "Other",
+};
+
+export const BUILDING_ACCESS = ["BUILDING_AND_UNIT", "UNIT_ONLY"] as const;
+export const BuildingAccessSchema = z.enum(BUILDING_ACCESS);
+export type BuildingAccess = z.infer<typeof BuildingAccessSchema>;
+
+export const BUILDING_ACCESS_LABELS: Record<BuildingAccess, string> = {
+  BUILDING_AND_UNIT: "I control the building entrance",
+  UNIT_ONLY: "I only control the unit door",
 };
 
 export const PropertySchema = z.object({
@@ -83,6 +102,16 @@ export const PropertySchema = z.object({
   displayName: z.string().optional(),
   /** Asked right after the address, never inferred from it. Shapes which setup questions are asked. */
   propertyType: PropertyTypeSchema.optional(),
+  /**
+   * Apartment or condo only: whether the landlord can open the building
+   * entrance as well as the unit door. Absent until asked.
+   */
+  buildingAccess: BuildingAccessSchema.optional(),
+  /**
+   * The optional apartment/condo entry-instructions question was answered
+   * (with instructions or an explicit skip). Absent on older setups.
+   */
+  entryInstructionsDecided: z.boolean().optional(),
   /** IANA zone, e.g. America/New_York. All tour hours are read in this zone. */
   timezone: z.string(),
   facts: ApprovedFacts,

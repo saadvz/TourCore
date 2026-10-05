@@ -8,6 +8,9 @@ settings screen. Casual and non-technical is a requirement.
 | What's the property address? | Provide property.address. |
 | What type of property is this? | Set propertyType. |
 | Which units can people tour? | Configure units[]. |
+| What's the unit number? | Add the apartment or condo unit. |
+| Do you control the building entrance, or only the unit door? | Set buildingAccess. |
+| How should visitors get in and find your unit? | entryInstructions (optional; skip stores nothing). |
 | Should I call it "Main Home", or would you like another name? | Unit 1 |
 | Which door do visitors come in through? | Add an ENTRANCE door. |
 | When can people tour? | Configure tourHours. |
