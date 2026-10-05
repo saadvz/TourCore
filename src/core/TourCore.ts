@@ -1048,10 +1048,11 @@ export class TourCore {
     let reservation = await this.mustGetReservation(reservationId);
     if (reservation.status === "TOURING") return reservation;
     if (!reservation.slotStart || TERMINAL.includes(reservation.status)) return reservation;
+    const slotStart = reservation.slotStart;
     await this.revokeGrants(reservation, options.reason);
     reservation = await this.move(reservation, "CANCELLED", "RESERVATION_CANCELLED", { detail: options.reason });
     const prospect = await this.mustGetProspect(reservation.prospectId);
-    const start = new Date(reservation.slotStart);
+    const start = new Date(slotStart);
     await this.textProspect(
       prospect,
       reservation.id,

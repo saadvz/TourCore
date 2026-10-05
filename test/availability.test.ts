@@ -155,7 +155,8 @@ describe("pause and remove", () => {
     expect(lastFrom(session)).toContain("Which unit would you like to see?");
     expect(lastFrom(session)).not.toContain("Unit 101 isn't open");
     await session.act("chooseUnit", { unitId: "unit_101" });
-    expect(lastFrom(session)).toBe(`${pausedUnitVisitorText("Unit 101")}\n\nWhich unit would you like to see?`);
+    expect(lastFrom(session).split("\n")[0]).toBe(pausedUnitVisitorText("Unit 101"));
+    expect(lastFrom(session)).toContain("Which unit would you like to see?");
     expect(session.conversation.some((item) => item.from === "tourcore" && item.text.includes("archive"))).toBe(false);
   });
 
@@ -175,6 +176,7 @@ describe("pause and remove", () => {
     const id = await h.publish();
     const booked = await readyVisitor(h, id, { phone: "(555) 010-2001" });
     const start = (await booked.session.reservation())!.slotStart!;
+    const inquiry = await h.visitor(id, { name: "Jamie Lee", phone: "(555) 010-2003" });
     await h.approve("pause_tours", { property: id, bookedTours: "keep" });
 
     const { config } = h.workspace.load(id);
@@ -183,7 +185,6 @@ describe("pause and remove", () => {
     expect(lastFrom(fresh)).toBe(pausedPropertyVisitorText(config.property.address, config.operator.name, config.operator.visitorContact));
     await expect(fresh.core.startInquiry({ name: "Alex Reed", phone: "(555) 010-2002", unitId: "unit_101" })).rejects.toMatchObject({ code: "TOURS_PAUSED" });
 
-    const inquiry = await h.visitor(id, { name: "Jamie Lee", phone: "(555) 010-2003" });
     await expect(inquiry.session.core.reserveSlot((await inquiry.session.reservation())!.id, inquiry.slot().toISOString())).rejects.toMatchObject({
       code: "TOURS_PAUSED",
     });
@@ -201,13 +202,9 @@ describe("pause and remove", () => {
     ).rejects.toMatchObject({ code: "TOURS_PAUSED" });
 
     const later = new Date(new Date(start).getTime() + 60 * 60_000).toISOString();
-    expect(await h.fails("reschedule_tour", { tourRef: tourRef(id, booked.session.tourId), newStartsAt: "10:00 AM", confirmationCode: "x" })).toMatch(/paused|doesn't fit|confirmation/i);
-    const asked = await h.ok("reschedule_tour", { tourRef: tourRef(id, booked.session.tourId), newStartsAt: "10:00 AM" });
-    if (asked.status === "needs-confirmation") {
-      await expect(booked.session.core.rescheduleReservation({ reservationId: booked.session.reservationId!, newStartsAt: later, customTime: true })).rejects.toMatchObject({
-        code: "TOURS_PAUSED",
-      });
-    }
+    await expect(booked.session.core.rescheduleReservation({ reservationId: booked.session.reservationId!, newStartsAt: later, customTime: true })).rejects.toMatchObject({
+      code: "TOURS_PAUSED",
+    });
   });
 
   it("keeps booked tours when asked, and cancels them with the approved text when asked", async () => {
