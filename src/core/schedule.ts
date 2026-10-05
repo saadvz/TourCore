@@ -6,6 +6,17 @@ export interface TourSlot {
   label: string;
 }
 
+/** How far ahead visitors can pick a regular tour day. */
+export const BOOKING_HORIZON_DAYS = 21;
+
+export function calendarDaysBetween(from: LocalDate, to: LocalDate): number {
+  return Math.round((Date.UTC(to.year, to.month - 1, to.day) - Date.UTC(from.year, from.month - 1, from.day)) / 86_400_000);
+}
+
+export function isBeyondBookingHorizon(today: LocalDate, requested: LocalDate): boolean {
+  return calendarDaysBetween(today, requested) >= BOOKING_HORIZON_DAYS;
+}
+
 export function minutesOfDay(hhmm: string): number {
   const [h = 0, m = 0] = hhmm.split(":").map(Number);
   return h * 60 + m;

@@ -4,12 +4,13 @@ import type { TourCoreConfig } from "../config/tourCoreConfig";
 import { DemoClock } from "../core/clock";
 import { normalizePhone } from "../core/phone";
 import { orList } from "../core/questions";
-import { formatDay, formatTime } from "../core/timezone";
+import { formatLocalDate, formatTime } from "../core/timezone";
 import type { SpokenTime } from "../core/spokenTime";
 import { entryReply } from "./entry";
 import { visitorTourOf } from "./identity";
+import { offerDate } from "./unavailableDay";
 import { isLiveHelpReservation, TourCore, type AccessOutcome, type InboundMeta } from "../core/TourCore";
-import type { TourSlot } from "../core/schedule";
+import { parseIsoDate, type TourSlot } from "../core/schedule";
 import { createDurin, createStore, createVerificationProvider } from "../createTourCore";
 import type { TourCoreStore } from "../storage/Store";
 import { UNNAMED_VISITOR, type Reservation, type TourTimeRequest } from "../domain/model";
@@ -606,19 +607,11 @@ export class VisitorDemoSession {
         return;
       }
       case "chooseDate": {
-        const slots = await this.selectDate(String(input.date));
-        const day = slots[0] ? formatDay(slots[0].start, this.config.property.timezone) : String(input.date);
-        this.say("visitor", said.text ?? day);
-        if (!slots.length) {
-          this.selectedDate = undefined;
-          await this.reply(`I don't have tours on ${day}. I have tours available. Which day works for you?`, {
-            kind: "choose",
-            options: this.offeredDates.map((item) => item.label),
-            what: "a day",
-          });
-          return;
-        }
-        await this.reply(`I have these times available ${day}:`, { kind: "choose", options: slots.map((slot) => slot.label), what: "a time" });
+        const date = String(input.date);
+        const local = parseIsoDate(date);
+        const label = local ? formatLocalDate(local, this.config.property.timezone) : date;
+        this.say("visitor", said.text ?? label);
+        await offerDate(this, date);
         return;
       }
       case "chooseTime": {
