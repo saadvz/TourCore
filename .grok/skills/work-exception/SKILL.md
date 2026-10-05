@@ -130,14 +130,15 @@ not change.
 6. After a one-off is set, Tour Core texts the visitor first: Reply YES to
    confirm, NO to cancel, or STOP to opt out. YES continues to the usual
    consent step. STOP opts out and sends only the standard opt-out
-   confirmation — nothing further. NO cancels and tells the team. Any other
-   reply is flagged for the team (`I'll check with the {team} and get back to
-   you.`); the hold stays pending and the no-reply timer still applies. If the
-   one-off replaced a leftover day or time menu, a later reply (including a
-   leftover menu number such as "1") is a reply to that confirmation, not a
-   booking from the old menu. If they never reply in time, the time is
-   released; unless they opted out they get exactly one text that it was
-   released, then no further texts.
+   confirmation — nothing further. NO cancels and tells the team. A leftover
+   menu number (`1`, `2`) only gets that same confirmation line again — no
+   team issue and no alert. A real question is flagged for the team (`I'll
+   check with the {team} and get back to you.`); the hold stays pending and
+   the no-reply timer still applies. If the one-off replaced a leftover day
+   or time menu, a later reply (including a leftover menu number such as
+   "1") is a reply to that confirmation, not a booking from the old menu.
+   If they never reply in time, the time is released; unless they opted out
+   they get exactly one text that it was released, then no further texts.
 7. Confirmation questions name the action and end with the verb: `Move it?`,
    `Book it?`, or `Save it?`. Never "Continue?". A move inside hours includes
    the old time. `This is a one-off. Your regular tour hours stay the same`
@@ -189,6 +190,7 @@ right now").
   isn't a clear yes or no on that confirm is flagged (`I'll check with the
   {team} and get back to you.`). That should not appear as a flagged question
   unless they were unclear on the confirm, or cancel could not finish (then
-  the team is asked to call it off). While a
-  one-off tour is waiting on YES, NO or STOP, any other reply is flagged;
-  handle that as an unanswered question and leave the hold pending.
+  the team is asked to call it off). While a one-off tour is waiting on YES,
+  NO or STOP, a leftover menu number only re-prompts; a real question is
+  flagged. Handle a flagged question as an unanswered question and leave the
+  hold pending.

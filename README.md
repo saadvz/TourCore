@@ -305,8 +305,9 @@ menu numbers, YES/NO, HELP, STOP and START. A tour day can be "today", "tomorrow
 ("Dec 1", "December 1st", "1 Dec", "12/1", "Tuesday Oct 6"); without a year, Tour Core uses the next date on or after
 today in the property's time zone. A date or booking ask is not a flagged question for the team. If the day
 can't be resolved ("the 45th", "sometime next month"), Tour Core asks which day they meant and shows the day
-menu; it does not flag the property team. While a one-off tour is waiting on YES, NO, or STOP, any other reply
-is flagged for the team and the hold stays pending.
+menu; it does not flag the property team. While a one-off tour is waiting on YES, NO, or STOP, a leftover
+menu number only re-prompts `Reply YES to confirm, NO to cancel, or STOP to opt out.` A real question is
+flagged for the team and the hold stays pending.
 
 If that day has no bookable tours, the visitor is told why — no more tours today, fully booked, tours don't run
 that weekday, beyond the 21-day booking horizon, or no open times at all — plus the next opening when there is
@@ -434,12 +435,14 @@ Terminal wizard ─────────────────────�
   only treat a yes as confirmation that **the visitor asked for this tour**. Tour Core texts first: `Reply YES to
   confirm, NO to cancel, or STOP to opt out.` YES continues into the usual consent and identity steps. STOP opts
   out and sends only the standard opt-out confirmation. NO cancels (`No problem. I cancelled that tour. Text me
-  anytime to book another.`) and tells the team. Any other reply before they confirm is flagged for the team; they
-  get `I'll check with the {team} and get back to you.` (team name as entered) and the hold stays pending. If they
-  never reply in time, the slot is released, they get exactly one text unless they opted out (`I didn't hear back,
-  so I released your {time} tour. Text me anytime to book another.`), then no further texts. Regular hours, the
-  published schedule, and readiness/publish state do not change. A leftover conversation still choosing a day or
-  time, with nothing booked, does not block: the one-off replaces it (audited as replaced by the operator's one-off)
+  anytime to book another.`) and tells the team. A leftover menu number (`1`, `2`) only re-prompts
+  `Reply YES to confirm, NO to cancel, or STOP to opt out.` — no team issue, no alert. A real question
+  (`Who is this?`) is flagged for the team; they get `I'll check with the {team} and get back to you.`
+  (team name as entered) and the hold stays pending. If they never reply in time, the slot is released,
+  they get exactly one text unless they opted out (`I didn't hear back, so I released your {time} tour.
+  Text me anytime to book another.`), then no further texts. Regular hours, the published schedule, and
+  readiness/publish state do not change. A leftover conversation still choosing a day or time, with
+  nothing booked, does not block: the one-off replaces it (audited as replaced by the operator's one-off)
   and later replies, including a leftover menu number, go to the new confirmation. Refused if the property isn't
   published with live texting, the number already said STOP, the time is in the past, it overlaps another tour, or
   they already have a tour in progress (a booked or held reservation, a pending one-off waiting for YES or NO, an

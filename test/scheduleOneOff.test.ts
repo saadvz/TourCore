@@ -180,7 +180,8 @@ describe("operators can set up a one-time tour", () => {
     await a.approve("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "3:15 PM today" });
 
     const reply = await a.text("1");
-    expect(reply).toEqual(["I'll check with the leasing team and get back to you."]);
+    expect(reply).toEqual(["Reply YES to confirm, NO to cancel, or STOP to opt out."]);
+    expect(reply.join("\n")).not.toContain("I'll check with the leasing team");
     expect(reply.join("\n")).not.toContain("Great, you're booked");
     expect(reply.join("\n")).not.toContain("2:00 PM");
     expect(reply.join("\n")).not.toContain("Which day");
@@ -195,7 +196,39 @@ describe("operators can set up a one-time tour", () => {
     expect(stale!.reservations[0]!.status).toBe("CANCELLED");
     expect(stale!.reservations[0]!.slotStart).toBeUndefined();
     expect(fresh!.reservations[0]).toMatchObject({ status: "RESERVED", awaitingVisitorConfirm: { kind: "OPERATOR_SCHEDULED" } });
-    expect(fresh!.auditEvents.some((event) => event.type === "QUESTION_UNANSWERED" && event.detail === "1")).toBe(true);
+    expect(fresh!.auditEvents.some((event) => event.type === "QUESTION_UNANSWERED")).toBe(false);
+  });
+
+  it("a leftover menu number before confirm only re-prompts; a real question still flags; YES still books", async () => {
+    const a = await liveApp({ cleanups });
+    await publish(a);
+    await a.approve("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "2:00 PM today" });
+    const exceptionsBefore = a.routineEvents().filter((event) => event.eventType === "exception.created").length;
+
+    const tap = await a.text("1");
+    expect(tap).toEqual(["Reply YES to confirm, NO to cancel, or STOP to opt out."]);
+
+    const tour = a.ws.listTours(PROPERTY).find((item) => item.kind === "messaging")!;
+    let bundle = a.ws.loadTour(PROPERTY, tour.tourId)!.bundle;
+    expect(bundle.reservations[0]).toMatchObject({ status: "RESERVED", awaitingVisitorConfirm: { kind: "OPERATOR_SCHEDULED" } });
+    expect(bundle.auditEvents.some((event) => event.type === "QUESTION_UNANSWERED")).toBe(false);
+    expect(bundle.auditEvents.some((event) => event.type === "OPERATOR_NOTIFIED" && event.detail.includes("asked"))).toBe(false);
+    const afterTap = await a.grok("list_exceptions");
+    expect(afterTap.exceptions.some((item: { summary: string }) => item.summary.includes('Asked "1"'))).toBe(false);
+    expect(a.routineEvents().filter((event) => event.eventType === "exception.created")).toHaveLength(exceptionsBefore);
+
+    const who = await a.text("Who is this?");
+    expect(who).toEqual(["I'll check with the leasing team and get back to you."]);
+    bundle = a.ws.loadTour(PROPERTY, tour.tourId)!.bundle;
+    expect(bundle.reservations[0]).toMatchObject({ status: "RESERVED", awaitingVisitorConfirm: { kind: "OPERATOR_SCHEDULED" } });
+    expect(bundle.auditEvents.some((event) => event.type === "QUESTION_UNANSWERED" && event.detail === "Who is this?")).toBe(true);
+    const afterQuestion = await a.grok("list_exceptions");
+    expect(afterQuestion.exceptions.some((item: { summary: string }) => item.summary.includes('Asked "Who is this?"'))).toBe(true);
+    expect(a.routineEvents().filter((event) => event.eventType === "exception.created").length).toBeGreaterThan(exceptionsBefore);
+
+    const yes = await a.text("YES");
+    expect(yes.join("\n")).toContain("Great, you're booked for 2:00 PM");
+    expect(yes.join("\n")).toContain("Is it OK if I text you about this tour");
   });
 
   it("refuses a booked tour with the reschedule or revoke wording", async () => {

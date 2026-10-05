@@ -21,7 +21,7 @@ import {
 } from "../intent";
 import type { ReplyPrompt } from "../messaging/presentation";
 import { timeMenu } from "./entry";
-import type { InterpretationNote, Said, VisitorDemoSession, VisitorStage } from "./session";
+import { OPERATOR_SCHEDULE_CONFIRM_PROMPT, type InterpretationNote, type Said, type VisitorDemoSession, type VisitorStage } from "./session";
 import { acceptsOfferedOpening, offerDate, takeOfferedOpening } from "./unavailableDay";
 import { SMS_GATE_REMINDER, SMS_KEYWORD_PROMPT, smsDisclosure, smsOptInConfirmation } from "./smsConsent";
 
@@ -251,6 +251,11 @@ async function handleOperatorScheduledReply(session: VisitorDemoSession, said: S
     session.takeExpected(await session.stage());
     await session.recordText(said);
     await session.declineOperatorSchedule();
+    return;
+  }
+  if (isBareMenuNumber(text)) {
+    await session.recordText(said);
+    await session.reply(OPERATOR_SCHEDULE_CONFIRM_PROMPT);
     return;
   }
   await session.flagQuestionWhileAwaitingConfirm(said);
