@@ -2,7 +2,7 @@ import type { TourCoreConfig } from "../config/tourCoreConfig";
 import { normalize } from "../intent/normalize";
 import { slotsOn } from "./schedule";
 import { spokenTimes, type SpokenTime } from "./spokenTime";
-import { addDays, formatClockTime, formatDay, formatTime, localDateOf, weekdayOf, zonedParts, zonedTimeToUtc, type LocalDate } from "./timezone";
+import { addDays, formatClockTime, formatDay, formatTime, formatWeekday, localDateOf, weekdayOf, zonedParts, zonedTimeToUtc, type LocalDate } from "./timezone";
 
 /** Where a start sits relative to the recurring schedule. The schedule itself is never edited. */
 export type SlotPlacement = "ON_GRID" | "INSIDE_HOURS" | "OUTSIDE_HOURS";
@@ -149,4 +149,16 @@ export function relativeWhen(start: Date, now: Date, tz: string): string {
   const today = localDateOf(now, tz);
   const word = sameDay(day, today) ? "today" : sameDay(day, addDays(today, 1)) ? "tomorrow" : `on ${formatDay(start, tz)}`;
   return `${word} at ${formatTime(start, tz)}`;
+}
+
+/** Clock only when the tour is today; otherwise "Monday at 3:15 PM". */
+export function releasedWhen(start: Date, now: Date, tz: string): string {
+  return sameDay(localDateOf(start, tz), localDateOf(now, tz)) ? formatTime(start, tz) : `${formatWeekday(start, tz)} at ${formatTime(start, tz)}`;
+}
+
+/** Deadline for an operator-set tour the visitor still has to confirm. */
+export function operatorConfirmBy(start: Date, setupAt: Date): Date {
+  const hourBeforeStart = start.getTime() - 60 * 60_000;
+  if (start.getTime() - setupAt.getTime() < 60 * 60_000) return new Date(setupAt.getTime() + 30 * 60_000);
+  return new Date(hourBeforeStart);
 }

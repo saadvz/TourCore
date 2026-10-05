@@ -162,6 +162,17 @@ export async function handleVisitorText(
   const firstMessage = !session.visitor;
   if (firstMessage) session.identify(from);
 
+  // Operator-set tour: YES/NO/STOP are about that confirmation, not the SMS keyword gate.
+  // A released or cancelled hold is not still waiting — don't send another confirm text.
+  if (session.pendingClarification?.awaiting.kind === "confirm-operator-tour") {
+    const reservation = await session.reservation();
+    if (reservation?.awaitingVisitorConfirm?.kind === "OPERATOR_SCHEDULED") {
+      await handleOperatorScheduledReply(session, said, text);
+      return undefined;
+    }
+    session.takeExpected(session.pendingClarification.stage);
+  }
+
   // SMS campaign consent comes before any property or booking content.
   if (session.kind === "messaging" && session.smsConsentMode !== "disabled" && session.smsConsent !== "opted_in") {
     await handleSmsGate(session, said, text);
@@ -207,6 +218,35 @@ export async function handleVisitorText(
     else await session.greet(said);
   } else await byStage(turn);
   return interpretation;
+}
+
+async function handleOperatorScheduledReply(session: VisitorDemoSession, said: Said, text: string): Promise<void> {
+  const keyword = keywordOf(text);
+  if (keyword === "stop") {
+    session.takeExpected(await session.stage());
+    await session.optOut(said);
+    return;
+  }
+  if (keyword === "help") {
+    await session.help(said);
+    return;
+  }
+  const normalized = normalize(text);
+  if (normalized === "yes" || /^(yeah|yep|sure|ok|okay)$/.test(normalized)) {
+    session.takeExpected(await session.stage());
+    await session.recordText(said);
+    await session.allowMessagingAgain();
+    session.noteSmsConsent("opted_in", "YES");
+    await session.confirmOperatorSchedule();
+    return;
+  }
+  if (normalized === "no" || /^(nope|nah)$/.test(normalized)) {
+    session.takeExpected(await session.stage());
+    await session.recordText(said);
+    await session.declineOperatorSchedule();
+    return;
+  }
+  await session.flagQuestionWhileAwaitingConfirm(said);
 }
 
 /**

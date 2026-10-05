@@ -45,6 +45,7 @@ const STEP_AWAITING = [
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     slotStart: Iso,
   }),
+  z.object({ kind: z.literal("confirm-operator-tour"), confirmBy: Iso }),
 ] as const;
 const StepAwaitingSchema = z.discriminatedUnion("kind", [...STEP_AWAITING]);
 
@@ -151,6 +152,7 @@ export interface RestoreDeps {
   store?: import("../storage/Store").TourCoreStore;
   storageRead?: () => "live" | "cached" | "stale";
   beforeAccess?: () => Promise<void>;
+  otherBusyStarts?: (propertyId: string, tourId: string) => Promise<Date[]>;
 }
 
 /**
@@ -184,6 +186,7 @@ export async function restoreSession(snapshot: DurableSession, deps: RestoreDeps
     store: deps.store,
     storageRead: deps.storageRead,
     beforeAccess: deps.beforeAccess,
+    otherBusyStarts: deps.otherBusyStarts ? () => deps.otherBusyStarts!(snapshot.propertyId, snapshot.tourId) : undefined,
   });
   await session.hydrate(tour.record, tour.bundle);
   session.line = snapshot.line;

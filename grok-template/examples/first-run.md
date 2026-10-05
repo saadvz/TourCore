@@ -291,8 +291,8 @@ them?
 [`answer_flagged_question` approvedFact "There's no pool, but there's a gym on
 the roof." → returns a question]
 
-**Tour Core:** I'll save "There's no pool, but there's a gym on the roof." as
-an approved fact and send that answer to Testy. Continue?
+**Tour Core:** Send "There's no pool, but there's a gym on the roof" to Testy?
+Future visitors who ask the same thing will get it too. Save it?
 
 **Operator:** Yes.
 
@@ -302,6 +302,25 @@ Tour Core puts their tour step back in front of them.]
 [Later: `tour.completed`.]
 
 **Tour Core:** Testy's Unit 1A tour is complete.
+
+---
+
+## Set up a tour someone asked for
+
+**Operator:** Dana asked for a tour of 1A on Monday at 3:15. Her number is
+555-010-2000. Set that up.
+
+[`schedule_one_off_tour` → question]
+
+**Tour Core:** Set up a tour for Dana at Unit 1A on Monday at 3:15 PM? Only
+say yes if they asked for this tour. Dana gets a text to confirm. Book it?
+
+**Operator:** Yes.
+
+[`schedule_one_off_tour` with confirmationCode]
+
+**Tour Core:** I texted Dana to confirm a tour of Unit 1A on Monday at
+3:15 PM. The regular tour times are unchanged.
 
 ---
 

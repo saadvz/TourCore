@@ -4,7 +4,8 @@ import type { TourCoreConfig } from "../config/tourCoreConfig";
 import { DemoClock } from "../core/clock";
 import { normalizePhone } from "../core/phone";
 import { orList } from "../core/questions";
-import { formatLocalDate, formatTime } from "../core/timezone";
+import { operatorConfirmBy } from "../core/customSlot";
+import { formatDay, formatLocalDate, formatTime, formatWeekday } from "../core/timezone";
 import type { SpokenTime } from "../core/spokenTime";
 import { entryReply } from "./entry";
 import { visitorTourOf } from "./identity";
@@ -45,6 +46,12 @@ export type VisitorStage =
   | "stopped";
 
 export const VISITOR_DEFAULTS = { name: "Pat Smith", phone: "(555) 010-2000" };
+
+/** First outbound text when the operator sets up a tour for someone who hasn't texted in. */
+export function operatorScheduledFirstText(config: TourCoreConfig, start: Date): string {
+  const tz = config.property.timezone;
+  return `Hi, this is the ${config.operator.name} at ${config.property.address}. We set up a tour for you on ${formatWeekday(start, tz)} at ${formatTime(start, tz)}. Reply YES to confirm, NO to cancel, or STOP to opt out.`;
+}
 
 /** The browser phone: nothing to deliver, the page reads the thread. Replies are phrased for buttons. */
 export class WebVisitorTransport implements MessagingAdapter {
@@ -118,6 +125,8 @@ export interface VisitorSessionOptions {
   store?: TourCoreStore;
   storageRead?: () => "live" | "cached" | "stale";
   beforeAccess?: () => Promise<void>;
+  /** Other tours on this property that should count as busy. */
+  otherBusyStarts?: () => Promise<Date[]>;
 }
 
 /** How one typed message was read, kept on the visitor's line for developer details. Never model reasoning. */
@@ -216,6 +225,7 @@ export class VisitorDemoSession {
       approvedContent: () => this.contentSource?.(),
       storageRead: options.storageRead,
       beforeAccess: options.beforeAccess,
+      otherBusyStarts: options.otherBusyStarts,
       ...(links ? { verificationLink: ({ reservation, prospect }) => links.issue({ sessionId: this.id, reservationId: reservation.id, phone: prospect.phone }) } : {}),
     });
   }
@@ -300,6 +310,7 @@ export class VisitorDemoSession {
     if (!this.visitor) return "intro";
     const r = await this.reservation();
     if (!r) return "choose-unit";
+    if (r.awaitingVisitorConfirm) return "intro";
     switch (r.status) {
       case "INQUIRY":
         return this.selectedDate ? "choose-time" : "choose-date";
@@ -572,6 +583,64 @@ export class VisitorDemoSession {
       await this.reply(`${label} isn't one of the regular tour times, but I can ask the property team. I'll let you know once they respond.`);
     }
     return { created, request };
+  }
+
+  /**
+   * Operator set a tour for this phone: reserve the one-off time and wait for
+   * the visitor's YES. Does not change tour hours.
+   */
+  async scheduleOneOff(input: { unitId: string; start: Date; outsideHours: boolean; name?: string }): Promise<Reservation> {
+    if (input.name?.trim() && this.visitor) this.visitor = { ...this.visitor, name: input.name.trim() };
+    if (!this.visitor) throw new SetupInputError("PHONE_MISSING", "I need the visitor's phone number.");
+    await this.inquire(input.unitId, { announce: false });
+    if (input.name?.trim() && this.prospectId) {
+      const prospect = await this.store.get("prospects", this.prospectId);
+      if (prospect && (prospect.name === UNNAMED_VISITOR || !prospect.name)) {
+        await this.store.put("prospects", { ...prospect, name: input.name.trim() });
+      }
+    }
+    const confirmBy = operatorConfirmBy(input.start, this.clock.now());
+    const reservation = await this.core.bookCustomSlot(this.reservationId!, input.start.toISOString(), {
+      outsideTourHours: input.outsideHours,
+      holdForVisitorConfirm: { confirmBy },
+    });
+    this.expect("intro", { kind: "confirm-operator-tour", confirmBy: confirmBy.toISOString() });
+    this.noteSmsConsent("pending", "YES");
+    await this.reply(operatorScheduledFirstText(this.config, input.start), undefined, { deliverDespiteOptOut: true });
+    return reservation;
+  }
+
+  async confirmOperatorSchedule(): Promise<void> {
+    if (!this.reservationId) throw new SetupInputError("NO_TOUR", "This visitor hasn't booked a tour yet.");
+    await this.core.confirmOperatorScheduledTour(this.reservationId);
+    await this.syncReplies();
+  }
+
+  async declineOperatorSchedule(): Promise<void> {
+    if (!this.reservationId) throw new SetupInputError("NO_TOUR", "This visitor hasn't booked a tour yet.");
+    await this.core.declineOperatorScheduledTour(this.reservationId);
+    await this.syncReplies();
+  }
+
+  /** Flags a question for the team without dropping the YES hold. */
+  async flagQuestionWhileAwaitingConfirm(said: Said): Promise<void> {
+    await this.core.flagUnansweredQuestion({
+      phone: this.visitor?.phone ?? "",
+      question: said.text ?? "",
+      reservationId: this.reservationId,
+      meta: said.meta,
+      reply: `I'll check with the ${this.config.operator.name} and get back to you.`,
+    });
+    await this.syncReplies();
+  }
+
+  async releaseUnconfirmedOperatorTour(): Promise<void> {
+    await this.core.releaseExpiredOperatorScheduled();
+    const reservation = await this.reservation();
+    if (this.expected?.awaiting.kind === "confirm-operator-tour" && reservation?.awaitingVisitorConfirm?.kind !== "OPERATOR_SCHEDULED") {
+      this.expected = undefined;
+    }
+    await this.syncReplies();
   }
 
   async approveTimeRequest(requestId: string, options: { outsideTourHours?: boolean } = {}) {

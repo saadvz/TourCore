@@ -73,17 +73,18 @@ export async function liveApp(
 
   let n = 0;
   /** One text from the visitor; returns every reply Tour Core sent back, in order. `handle` repeats a delivery. */
-  const text = async (content: string, handle?: string) => {
+  const textFrom = async (phone: string, content: string, handle?: string) => {
     const before = fake.sent.length;
     const res = await fetch(`http://127.0.0.1:${port}/webhooks/sendblue`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "sb-signing-secret": SECRET },
-      body: JSON.stringify(inbound(PHONE, content, handle ?? `in_${root.slice(-6)}_${++n}_${clock.t}`)),
+      body: JSON.stringify(inbound(phone, content, handle ?? `in_${phone.slice(-4)}_${root.slice(-6)}_${++n}_${clock.t}`)),
     });
     expect(res.status).toBe(200);
     await server.tourCore.settled();
-    return fake.sent.slice(before).filter((s) => s.number === PHONE).map((s) => s.content);
+    return fake.sent.slice(before).filter((s) => s.number === phone).map((s) => s.content);
   };
+  const text = async (content: string, handle?: string) => textFrom(PHONE, content, handle);
   let rpc = 0;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const grok = async (name: string, args: Record<string, unknown> = {}): Promise<any> => {
@@ -130,6 +131,6 @@ export async function liveApp(
   };
   const routineEvents = () => net.routineCalls().map((c) => JSON.parse(c.body!) as { eventType: string; eventId: string } & Record<string, string>);
   const outbox = (type?: string) => installation.outbox.records().filter((r) => !type || r.event.eventType === type);
-  return { root, clock, net, fake, installation, server, text, optInSms, grok, approve, fillForm, book, routineEvents, outbox, close, ws };
+  return { root, clock, net, fake, installation, server, text, textFrom, optInSms, grok, approve, fillForm, book, routineEvents, outbox, close, ws };
 }
 export type LiveApp = Awaited<ReturnType<typeof liveApp>>;

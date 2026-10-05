@@ -28,7 +28,7 @@ import type { Clock } from "./clock";
 import { approvedAnswerText, approvedFacts, type ApprovedFact } from "./facts";
 import { formatPhone, normalizePhone } from "./phone";
 import { resolveQuestion } from "./questions";
-import { closestOpenSlots, intervalsOverlap, overlapSummary, placementOf, relativeWhen, tourInterval, touringHoursLabel } from "./customSlot";
+import { closestOpenSlots, intervalsOverlap, overlapSummary, placementOf, relativeWhen, releasedWhen, tourInterval, touringHoursLabel } from "./customSlot";
 import { BOOKING_HORIZON_DAYS, isoDate, nextTourDay, slotsOn, tourWindow, type TourSlot } from "./schedule";
 import { addDays, formatDay as formatDayIn, formatTime as formatTimeIn, localDateOf, type LocalDate } from "./timezone";
 
@@ -56,6 +56,8 @@ export interface TourCoreDeps {
   storageRead?: () => "live" | "cached" | "stale";
   /** Called immediately before a door grant. Throw to deny without calling Durin. */
   beforeAccess?: () => Promise<void>;
+  /** Other tours on this property that should count as busy (other conversations). */
+  otherBusyStarts?: () => Promise<Date[]>;
 }
 
 export interface InboundMeta {
@@ -571,8 +573,14 @@ export class TourCore {
   /**
    * Books a one-off time onto an inquiry. Normal self-service still goes
    * through `reserveSlot`. This does not change the property's recurring hours.
+   * `holdForVisitorConfirm` reserves the slot and waits for the visitor's YES
+   * before the usual consent text.
    */
-  async bookCustomSlot(reservationId: string, slotStartIso: string, options: { outsideTourHours?: boolean } = {}): Promise<Reservation> {
+  async bookCustomSlot(
+    reservationId: string,
+    slotStartIso: string,
+    options: { outsideTourHours?: boolean; holdForVisitorConfirm?: { confirmBy: Date } } = {},
+  ): Promise<Reservation> {
     let reservation = await this.mustGetReservation(reservationId);
     const start = new Date(slotStartIso);
     if (Number.isNaN(start.getTime())) throw new TourCoreError("INVALID_SLOT", "That tour time isn't valid.");
@@ -600,10 +608,74 @@ export class TourCore {
     if (override) {
       await this.record("TOUR_TIME_OVERRIDE_APPROVED", { reservationId: reservation.id, prospectId: reservation.prospectId, detail: "one-time tour outside normal touring hours" });
     }
+    if (options.holdForVisitorConfirm) {
+      reservation = {
+        ...reservation,
+        awaitingVisitorConfirm: { kind: "OPERATOR_SCHEDULED", confirmBy: options.holdForVisitorConfirm.confirmBy.toISOString() },
+        updatedAt: this.nowIso(),
+      };
+      await this.deps.store.put("reservations", reservation);
+      return reservation;
+    }
     reservation = await this.move(reservation, "AWAITING_CONSENT", "CONSENT_REQUESTED", { detail: "asked permission to text and keep tour records" });
     const prospect = await this.mustGetProspect(reservation.prospectId);
     await this.textProspect(prospect, reservation.id, `Great, you're booked for ${this.time(start)} on ${this.day(start)}.\n${CONSENT_TEXT}`, { kind: "yes-no" });
     return reservation;
+  }
+
+  /** Visitor said YES to an operator-set tour: the usual consent question is next. */
+  async confirmOperatorScheduledTour(reservationId: string): Promise<Reservation> {
+    let reservation = await this.mustGetReservation(reservationId);
+    if (reservation.awaitingVisitorConfirm?.kind !== "OPERATOR_SCHEDULED" || reservation.status !== "RESERVED" || !reservation.slotStart) {
+      throw new TourCoreError("NOT_AWAITING_CONFIRM", "That tour isn't waiting on the visitor to confirm.");
+    }
+    const slotStart = reservation.slotStart;
+    const { awaitingVisitorConfirm: _dropped, ...kept } = reservation;
+    reservation = { ...kept, updatedAt: this.nowIso() };
+    await this.deps.store.put("reservations", reservation);
+    reservation = await this.move(reservation, "AWAITING_CONSENT", "CONSENT_REQUESTED", { detail: "asked permission to text and keep tour records" });
+    const prospect = await this.mustGetProspect(reservation.prospectId);
+    const start = new Date(slotStart);
+    await this.textProspect(prospect, reservation.id, `Great, you're booked for ${this.time(start)} on ${this.day(start)}.\n${CONSENT_TEXT}`, { kind: "yes-no" });
+    return reservation;
+  }
+
+  /** Visitor said NO to an operator-set tour: cancel, tell the team, and acknowledge. */
+  async declineOperatorScheduledTour(reservationId: string): Promise<Reservation> {
+    let reservation = await this.mustGetReservation(reservationId);
+    if (reservation.awaitingVisitorConfirm?.kind !== "OPERATOR_SCHEDULED") {
+      throw new TourCoreError("NOT_AWAITING_CONFIRM", "That tour isn't waiting on the visitor to confirm.");
+    }
+    const start = reservation.slotStart ? new Date(reservation.slotStart) : undefined;
+    const prospect = await this.mustGetProspect(reservation.prospectId);
+    reservation = await this.cancelReservation(reservation.id, "visitor declined the scheduled tour");
+    await this.textProspect(prospect, reservation.id, "No problem. I cancelled that tour. Text me anytime to book another.");
+    const when = start ? releasedWhen(start, this.deps.clock.now(), this.deps.config.property.timezone) : "scheduled";
+    await this.notifyOperator(reservation, `${this.visitorLabel(prospect)} said no to the ${when} tour, so I cancelled it.`);
+    return reservation;
+  }
+
+  /**
+   * Releases operator-set times the visitor never confirmed. Sends one text
+   * (unless they opted out) and alerts the team. Idempotent.
+   */
+  async releaseExpiredOperatorScheduled(): Promise<Reservation[]> {
+    const released: Reservation[] = [];
+    const now = this.deps.clock.now();
+    for (const reservation of await this.deps.store.list("reservations")) {
+      const pending = reservation.awaitingVisitorConfirm;
+      if (!pending || pending.kind !== "OPERATOR_SCHEDULED") continue;
+      if (TERMINAL.includes(reservation.status)) continue;
+      if (Date.parse(pending.confirmBy) > now.getTime()) continue;
+      const start = reservation.slotStart ? new Date(reservation.slotStart) : undefined;
+      const prospect = await this.mustGetProspect(reservation.prospectId);
+      const when = start ? releasedWhen(start, now, this.deps.config.property.timezone) : "scheduled";
+      const cancelled = await this.cancelReservation(reservation.id, "visitor didn't confirm the scheduled tour in time");
+      await this.textProspect(prospect, cancelled.id, `I didn't hear back, so I released your ${when} tour. Text me anytime to book another.`);
+      await this.notifyOperator(cancelled, `${this.visitorLabel(prospect)} didn't confirm the ${when} tour, so I released it.`);
+      released.push(cancelled);
+    }
+    return released;
   }
 
   /** A visitor or operator asking for a time. Repeating the same pending time does not create another request. */
@@ -825,6 +897,24 @@ export class TourCore {
     return { outcome: "unknown", facts: [], ...(resolved.unitId ? { unitId: resolved.unitId } : {}) };
   }
 
+  /**
+   * Flags a visitor's words for the team the same way an unanswered property
+   * question is flagged, and sends `reply`. Used while an operator-set tour is
+   * still waiting for YES — the hold stays pending.
+   */
+  async flagUnansweredQuestion(input: { phone: string; question: string; reservationId?: string; meta?: InboundMeta; reply: string }): Promise<void> {
+    const phone = normalizePhone(input.phone);
+    const prospect = (await this.deps.store.list("prospects")).find((p) => p.phone === phone);
+    const reservation = input.reservationId ? await this.deps.store.get("reservations", input.reservationId) : undefined;
+    const asked = input.question.trim().slice(0, 300);
+    if (!asked) throw new TourCoreError("EMPTY_QUESTION", "Please type a question");
+    await this.recordIncoming({ phone, body: asked, prospectId: prospect?.id, reservationId: reservation?.id, meta: input.meta });
+    await this.record("QUESTION_UNANSWERED", { reservationId: reservation?.id, prospectId: prospect?.id, detail: asked });
+    await this.sendConversationText({ phone, body: input.reply, reservationId: reservation?.id });
+    const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : `A visitor texting from ${phone}`;
+    await this.notifyOperator(reservation, `${who} asked "${asked}", and there's no approved answer yet.`);
+  }
+
   private approvedContent(): TourCoreConfig {
     try {
       return this.deps.approvedContent?.() ?? this.deps.config;
@@ -880,7 +970,12 @@ export class TourCore {
 
   async cancelReservation(reservationId: string, reason: string): Promise<Reservation> {
     let reservation = await this.mustGetReservation(reservationId);
+    if (TERMINAL.includes(reservation.status)) return reservation;
     await this.revokeGrants(reservation, reason);
+    if (reservation.awaitingVisitorConfirm) {
+      const { awaitingVisitorConfirm: _dropped, ...kept } = reservation;
+      reservation = { ...kept, updatedAt: this.nowIso() };
+    }
     return this.move(reservation, "CANCELLED", "RESERVATION_CANCELLED", { detail: reason });
   }
 
@@ -1352,10 +1447,17 @@ export class TourCore {
     return relativeWhen(start, this.deps.clock.now(), this.deps.config.property.timezone);
   }
 
+  private visitorLabel(prospect: Prospect): string {
+    return prospect.name && prospect.name !== UNNAMED_VISITOR ? prospect.name.trim().split(/\s+/)[0]! : formatPhone(prospect.phone);
+  }
+
   private async busyStarts(exceptId?: string): Promise<Date[]> {
-    return (await this.deps.store.list("reservations"))
+    await this.releaseExpiredOperatorScheduled();
+    const mine = (await this.deps.store.list("reservations"))
       .filter((reservation) => reservation.id !== exceptId && reservation.slotStart && !TERMINAL.includes(reservation.status))
       .map((reservation) => new Date(reservation.slotStart!));
+    const others = (await this.deps.otherBusyStarts?.()) ?? [];
+    return [...mine, ...others];
   }
 
   private overlapsAny(start: Date, busy: Date[]): boolean {

@@ -220,7 +220,7 @@ reconnecting. Tour Core refuses those callbacks immediately once the flag is off
 | C4 | On the Tour Core computer | A **Connect Grok** window opened by itself (else open `http://localhost:4321/grok`); same code as the Grok page |
 | C5 | On the Grok-opened page, try to approve: there's no Allow there. From another device, open `https://<tunnel>/grok` | Only Deny on the public page; `/grok` through the tunnel is "Not found" |
 | C6 | Click **Allow** on the Connect Grok window | Grok's page returns to Grok; Grok shows Tour Core connected; Connect Grok lists "Grok since ..." |
-| C7 | Ask Grok *"List the Tour Core tools you can use."* then *"List my properties."* | 54 tools (40 property and tour + 14 installation), nothing that unlocks a door or sets a credential; `list_properties` runs and returns this Tour Core's real properties |
+| C7 | Ask Grok *"List the Tour Core tools you can use."* then *"List my properties."* | 55 tools (41 property and tour + 14 installation, including `schedule_one_off_tour`), nothing that unlocks a door or sets a credential; `list_properties` runs and returns this Tour Core's real properties |
 | C8 | Search the Grok chat for any Tour Core token | None: no credential was ever typed or shown |
 | C9 | (Later) Click **Disconnect Grok** (or `npm run grok:disconnect`), then ask Grok to list properties | Grok gets an authorization error and asks to reconnect; properties, tours and Sendblue unchanged. Reconnect (C3–C6) before continuing |
 | C10 | Connect again, but click **Deny** | Grok reports the connection was refused; nothing connected |

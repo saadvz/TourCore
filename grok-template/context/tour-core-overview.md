@@ -65,6 +65,11 @@ decided before Durin is contacted.
    Tour Core also wakes the Bot (Tour Core Operator Updates routine) for the
    updates the operator chose: bookings, tour starts, completions and anything
    that needs their judgment. Only real text-message tours produce updates.
+   A visitor can ask for a time that isn't a regular slot. The operator can
+   also set up a tour for someone who asked (`schedule_one_off_tour`), even if
+   they haven't texted in — only after confirming they asked. Confirmation
+   questions end `Move it?`, `Book it?`, or `Save it?`. A move names the old
+   time. `This is a one-off…` only outside tour hours.
 6. **Export the audit**: a validated, provider-neutral record of the day.
 
 ## Current P0 demo configuration

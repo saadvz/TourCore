@@ -32,6 +32,10 @@ export interface OperatorServices {
   messagingLine?: () => string | undefined;
   /** Saves a conversation's records (and, for text messages, its resume snapshot). */
   persist?: (session: VisitorDemoSession) => Promise<void>;
+  /** Opens a text-message conversation so Tour Core can text first. */
+  openMessagingSession?: (propertyId: string, phone: string) => Promise<VisitorDemoSession>;
+  /** Releases operator-set tours the visitor never confirmed. */
+  releaseUnconfirmedTours?: () => Promise<void>;
   /** Text-message tours that couldn't be picked up after a restart. */
   needsAttention?: (propertyId: string) => { visitorPhone: string; problem: string; at?: string }[];
   /** Real visitor texting set up for this installation, if any. New properties use it. */

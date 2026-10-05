@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { loadConfig, type TourCoreConfig } from "../src/config/tourCoreConfig";
 import { SimulatedClock } from "../src/core/clock";
 import { slotsOn } from "../src/core/schedule";
+import { releasedWhen } from "../src/core/customSlot";
 import { formatDateTime, formatIsoOffset, formatTime, zonedTimeToUtc } from "../src/core/timezone";
 import { createTourCore } from "../src/createTourCore";
 import { ConsoleMessenger } from "../src/messaging/Messenger";
@@ -50,5 +51,12 @@ describe("property timezone", () => {
     expect(formatIsoOffset(nine, "America/New_York")).toBe("2026-09-28T09:00:00-04:00");
     const tokyo = zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour: 14, minute: 0 }, "Asia/Tokyo");
     expect(formatIsoOffset(tokyo, "Asia/Tokyo")).toBe("2026-09-28T14:00:00+09:00");
+  });
+
+  it("names only the clock when a released tour is today, and the weekday when it isn't", () => {
+    const tz = "America/New_York";
+    const start = zonedTimeToUtc({ year: 2026, month: 9, day: 29, hour: 14, minute: 0 }, tz);
+    expect(releasedWhen(start, zonedTimeToUtc({ year: 2026, month: 9, day: 29, hour: 13, minute: 0 }, tz), tz)).toBe("2:00 PM");
+    expect(releasedWhen(start, zonedTimeToUtc({ year: 2026, month: 9, day: 30, hour: 7, minute: 0 }, tz), tz)).toBe("Tuesday at 2:00 PM");
   });
 });

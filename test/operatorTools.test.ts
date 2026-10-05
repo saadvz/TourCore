@@ -468,7 +468,7 @@ describe("live tours and exceptions", () => {
     const [issue] = (await h.ok("list_exceptions")).exceptions;
 
     const asked = await h.ok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "Parking is included." });
-    expect(asked.summary).toBe('I\'ll save "Parking is included" as an approved fact and send that answer to Pat. Continue?');
+    expect(asked.summary).toBe('Send "Parking is included" to Pat? Future visitors who ask the same thing will get it too. Save it?');
     expect(h.workspace.load(id).config.property.facts).toEqual([]);
     const threadBefore = v.session.conversation.length;
 

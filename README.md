@@ -380,18 +380,35 @@ Terminal wizard ─────────────────────�
 - **Installation tools** (`src/install/tools.ts`): 10 more tools report and test the installation
   (`get_installation_status`, `get_next_installation_step`, ...) and a secure setup form Grok fills. None takes or
   returns a credential or runs a command. See [`docs/deployment.md`](docs/deployment.md).
-- **Tool contract** (`src/operator/tools.ts`): 34 typed, provider-neutral operator tools over the existing actions:
+- **Tool contract** (`src/operator/tools.ts`): typed, provider-neutral operator tools over the existing actions:
   property setup, units, doors, routes (`preview_route` resolves the operator's words to doors on file; `set_route`
   saves exact names only), tour hours in everyday words, verification, messaging, review, `run_readiness_check`,
   `run_dry_tour`, `publish_demo_property`, `list_active_tours`, `inspect_tour`, the exception queue, holds, calling a
-  tour off, answering a flagged question with a new approved fact, and `export_audit`. Every input is validated
-  (unexpected fields are refused); every result is plain language. `npm run grok:tools` lists them.
+  tour off, answering a flagged question with a new approved fact, custom tour times (`approve_tour_time_request`,
+  `reschedule_tour`, `schedule_one_off_tour`), and `export_audit`. Every input is validated (unexpected fields are
+  refused); every result is plain language. `npm run grok:tools` lists them.
+- **One-off tour** (`schedule_one_off_tour`): use it when the operator wants to set up a tour for a visitor who
+  asked — including someone who hasn't texted in yet. The first call returns one yes/no question (ends `Book it?`);
+  only treat a yes as confirmation that **the visitor asked for this tour**. Tour Core texts first: `Reply YES to
+  confirm, NO to cancel, or STOP to opt out.` YES continues into the usual consent and identity steps. STOP opts
+  out and sends only the standard opt-out confirmation. NO cancels (`No problem. I cancelled that tour. Text me
+  anytime to book another.`) and tells the team. Any other reply before they confirm is flagged for the team; they
+  get `I'll check with the {team} and get back to you.` (team name as entered) and the hold stays pending. If they
+  never reply in time, the slot is released, they get exactly one text unless they opted out (`I didn't hear back,
+  so I released your {time} tour. Text me anytime to book another.`), then no further texts. Regular hours, the
+  published schedule, and readiness/publish state do not change. Refused if the property isn't published with live
+  texting, the number already said STOP, the time is in the past, or it overlaps another tour.
+- **Confirmation wording**: tour-time and flagged-answer questions name the action and end with the verb —
+  `Move it?`, `Book it?`, or `Save it?` — never `Continue?`. A move inside hours includes the old time
+  (`Move Testy's tour from 2:00 PM to 3:15 PM today?`). `This is a one-off. Your regular tour hours stay the same`
+  only for times outside tour hours. Flagged answers ask
+  `Send "{answer}" to {name}? Future visitors who ask the same thing will get it too. Save it?`
 - **No door tool.** Nothing opens, unlocks, grants or mints access, changes the door-access mode or touches raw
   files. Doors open only through a visitor's own tour and Tour Core's policy.
-- **Explicit approval** for publish, pause, resume, call off and new approved facts: the first call changes nothing
-  and returns the exact question plus a short-lived code bound to that action, target and current state; only a
-  second call with the code acts, and only if nothing changed. Publish is also refused unless readiness and a
-  practice tour passed for the exact setup.
+- **Explicit approval** for publish, pause, resume, call off, new approved facts, approving or moving a tour time,
+  and setting up a one-off tour: the first call changes nothing and returns the exact question plus a short-lived
+  code bound to that action, target and current state; only a second call with the code acts, and only if nothing
+  changed. Publish is also refused unless readiness and a practice tour passed for the exact setup.
 - **Exceptions** (`src/operator/exceptions.ts`) are derived from the canonical tour records: unanswered questions,
   help requests, off-route attempts, door-system problems, paused tours, failed identity checks, undelivered
   messages, and text tours that couldn't be restored. Resolutions go in an append-only ledger

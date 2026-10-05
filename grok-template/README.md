@@ -74,6 +74,11 @@ what never does.
 - **Visitor questions at every stage.** Answered only from approved facts;
   anything unknown is flagged to the operator, and the visitor picks up where
   they left off once it's answered.
+- **One-off tours.** When the operator wants to set up a tour for someone who
+  asked (including a visitor who hasn't texted in), the Bot uses
+  `schedule_one_off_tour` and asks the exact question Tour Core returns. Only
+  a yes that they asked is enough. Confirmation questions end `Move it?`,
+  `Book it?`, or `Save it?`.
 
 Install and publishing steps: [`docs/grok-template-setup.md`](../docs/grok-template-setup.md).
 Manual test: [`docs/grok-manual-test.md`](../docs/grok-manual-test.md).

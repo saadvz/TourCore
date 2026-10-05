@@ -5,6 +5,8 @@ import type { IntentInterpreter } from "../intent";
 import { MessagingEndpoints } from "../messaging/endpoints";
 import type { InboundMessage } from "../messaging/inbound";
 import type { MessagingAdapter } from "../messaging/Messenger";
+import { TERMINAL } from "../domain/stateMachine";
+import { SetupInputError } from "../setup/setupActions";
 import { isCurrent, type PropertyWorkspace } from "../setup/workspace";
 import { writeJsonAtomic } from "../storage/atomicWrite";
 import { StorageUnavailableError } from "../storage/errors";
@@ -93,6 +95,7 @@ export class MessagingConversations {
   }
 
   async receive(message: InboundMessage): Promise<{ correlationId?: string }> {
+    await this.releaseUnconfirmed();
     const { workspace: ws, registry } = this.deps;
     const line = message.to ?? this.deps.defaultLine?.();
     if (!this.deps.endpoints) adoptLegacyLine(ws, this.endpoints, line);
@@ -121,8 +124,9 @@ export class MessagingConversations {
         await transport.send({ to: phone, audience: "PROSPECT", body: `Thanks for reaching out to ${config.property.name}. Self-guided tours by text aren't available right now. Please contact the property team.` }).catch(() => undefined);
         return {};
       }
+      const tourId = ws.newVisitorTourId(propertyId, this.deps.now?.() ?? new Date(), "text");
       session = registry.add(
-        new VisitorDemoSession(propertyId, config, ws.newVisitorTourId(propertyId, this.deps.now?.() ?? new Date(), "text"), {
+        new VisitorDemoSession(propertyId, config, tourId, {
           transport,
           kind: "messaging",
           verificationLinks: this.deps.links,
@@ -130,6 +134,7 @@ export class MessagingConversations {
           store: this.deps.storeFor?.(config),
           storageRead: this.deps.storageRead,
           beforeAccess: this.deps.beforeAccess,
+          otherBusyStarts: () => this.otherBusyStarts(propertyId, tourId),
         }),
       );
       // Someone who texted STOP earlier stays opted out until they text START.
@@ -156,6 +161,69 @@ export class MessagingConversations {
     if (session.optedOut !== wasOptedOut) this.setOptOut(propertyId, phone, session.optedOut);
     await this.save(session);
     return { correlationId: session.id };
+  }
+
+  /**
+   * Starts a text-message conversation the visitor hasn't opened yet, so the
+   * operator can set up a tour and Tour Core can text first.
+   */
+  async openOutbound(propertyId: string, phone: string): Promise<VisitorDemoSession> {
+    const e164 = normalizePhone(phone);
+    const existing = this.deps.registry.latestForPhone(propertyId, e164, "messaging");
+    if (existing) {
+      const stage = await existing.stage();
+      if (!["done", "stopped"].includes(stage) || (await existing.isPaused())) {
+        throw new SetupInputError("TOUR_EXISTS", "They already have a tour in progress.");
+      }
+    }
+    const { config } = this.deps.workspace.load(propertyId);
+    const line = this.endpoints.forProperty(propertyId)?.address ?? this.deps.defaultLine?.();
+    if (!line) throw new SetupInputError("NO_MESSAGING_LINE", "Visitor texting isn't connected for that property.");
+    const tourId = this.deps.workspace.newVisitorTourId(propertyId, this.deps.now?.() ?? new Date(), "text");
+    const session = this.deps.registry.add(
+      new VisitorDemoSession(propertyId, config, tourId, {
+        transport: this.lazyTransport(),
+        kind: "messaging",
+        verificationLinks: this.deps.links,
+        realNow: this.deps.realNow,
+        store: this.deps.storeFor?.(config),
+        storageRead: this.deps.storageRead,
+        beforeAccess: this.deps.beforeAccess,
+        otherBusyStarts: () => this.otherBusyStarts(propertyId, tourId),
+      }),
+    );
+    session.identify(e164);
+    session.line = line;
+    this.applySmsConsent(session, propertyId, e164);
+    return session;
+  }
+
+  private async otherBusyStarts(propertyId: string, exceptTourId: string): Promise<Date[]> {
+    const starts: Date[] = [];
+    const live = this.deps.registry.all().filter((session) => session.propertyId === propertyId && session.tourId !== exceptTourId);
+    const seen = new Set<string>([exceptTourId]);
+    for (const session of live) {
+      seen.add(session.tourId);
+      const reservation = await session.reservation();
+      if (reservation?.slotStart && !TERMINAL.includes(reservation.status)) starts.push(new Date(reservation.slotStart));
+    }
+    for (const record of this.deps.workspace.listTours(propertyId)) {
+      if (seen.has(record.tourId) || record.kind === "practice") continue;
+      const saved = this.deps.workspace.loadTour(propertyId, record.tourId);
+      for (const reservation of saved?.bundle.reservations ?? []) {
+        if (reservation.slotStart && !TERMINAL.includes(reservation.status)) starts.push(new Date(reservation.slotStart));
+      }
+    }
+    return starts;
+  }
+
+  /** Releases operator-set tours the visitor never confirmed. Safe to call often. */
+  async releaseUnconfirmed(): Promise<void> {
+    for (const session of this.deps.registry.all()) {
+      if (session.kind !== "messaging") continue;
+      await session.releaseUnconfirmedOperatorTour();
+      await this.save(session);
+    }
   }
 
   /** Saves a conversation's tour records and its snapshot. Use after any change, from any surface. */
@@ -209,7 +277,7 @@ export class MessagingConversations {
       }
       if (this.deps.registry.find(snapshot.sessionId)) continue;
       try {
-        const { session, notes } = await restoreSession(snapshot, { workspace: this.deps.workspace, transport: this.lazyTransport(), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(snapshot.propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess });
+        const { session, notes } = await restoreSession(snapshot, { workspace: this.deps.workspace, transport: this.lazyTransport(), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(snapshot.propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyStarts: (propertyId, tourId) => this.otherBusyStarts(propertyId, tourId) });
         this.deps.registry.add(session);
         for (const note of notes) log(`Restoring a text-message tour: ${note}`);
         restored++;
@@ -261,7 +329,7 @@ export class MessagingConversations {
           updatedAt: record.updatedAt,
         };
         try {
-          const { session } = await restoreSession(pseudo, { workspace: ws, transport: this.lazyTransport(), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess });
+          const { session } = await restoreSession(pseudo, { workspace: ws, transport: this.lazyTransport(), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyStarts: (id, tourId) => this.otherBusyStarts(id, tourId) });
           registry.add(session);
           await this.save(session);
           restored++;

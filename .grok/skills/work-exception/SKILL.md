@@ -2,7 +2,7 @@
 name: work-exception
 description: Show what needs the team's attention on live and recent tours (unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored), open one, and resolve it using only Tour Core's actions and the operator's own facts.
 when-to-use: "what needs attention", "show exceptions", "any problems", "open Pat's issue", "what's happening with Pat's tour", "show active tours", "pause the tour", "call off the tour", a Tour Core Operator Updates routine run
-allowed-tools: get_operator_update list_active_tours inspect_tour list_exceptions inspect_exception resolve_exception answer_flagged_question place_operator_hold clear_operator_hold revoke_tour_access list_tour_time_requests inspect_tour_time_request approve_tour_time_request decline_tour_time_request propose_tour_time reschedule_tour
+allowed-tools: get_operator_update list_active_tours inspect_tour list_exceptions inspect_exception resolve_exception answer_flagged_question place_operator_hold clear_operator_hold revoke_tour_access list_tour_time_requests inspect_tour_time_request approve_tour_time_request decline_tour_time_request propose_tour_time reschedule_tour schedule_one_off_tour
 argument-hint: "[visitor or issue]"
 user-invocable: true
 metadata:
@@ -79,8 +79,8 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   them?"), not a yes/no. As soon as the operator gives it ("2 bedrooms"), call
   `answer_flagged_question` with their words as `approvedFact`, before saying
   anything else. It returns the one confirmation question, such as:
-  > I'll save "Unit 1A has 2 bedrooms" as an approved fact and send that answer
-  > to Pat. Continue?
+  > Send "Parking is included" to Pat? Future visitors who ask the same thing
+  > will get it too. Save it?
 
   Ask exactly that, once. Don't ask a separate "want me to add it?" first.
   After a clear yes, call again with `confirmationCode`, then say what Pat was
@@ -115,6 +115,7 @@ not change.
    - "Offer them 3:30" → `propose_tour_time`. The current booking stays until the visitor agrees.
    - "Decline" or "Keep the 4 PM booking" → `decline_tour_time_request`.
    - "Move Testa to 3:15" → `reschedule_tour` with their name and the time. Ask the one question it returns, then call again after yes.
+   - "Set up a tour for Dana at 1A on Monday at 3:15" → `schedule_one_off_tour` with their phone, the unit and the time. Ask the one question it returns (it ends `Book it?`), then call again after yes. Only if they asked for this tour.
    - "Who's waiting for a different time?" → `list_tour_time_requests`.
 3. A time outside normal touring hours returns a stronger question. Call again
    with `confirmationCode` and `acknowledgeOutsideHours` true only after they
@@ -123,6 +124,18 @@ not change.
    names. Don't approve it.
 5. Never describe this as a schedule change. Future visitors still get the
    regular times.
+6. After a one-off is set, Tour Core texts the visitor first: Reply YES to
+   confirm, NO to cancel, or STOP to opt out. YES continues to the usual
+   consent step. STOP opts out and sends only the standard opt-out
+   confirmation — nothing further. NO cancels and tells the team. Any other
+   reply is flagged for the team (`I'll check with the {team} and get back to
+   you.`); the hold stays pending and the no-reply timer still applies. If they
+   never reply in time, the time is released; unless they opted out they get
+   exactly one text that it was released, then no further texts.
+7. Confirmation questions name the action and end with the verb: `Move it?`,
+   `Book it?`, or `Save it?`. Never "Continue?". A move inside hours includes
+   the old time. `This is a one-off. Your regular tour hours stay the same`
+   only when the time is outside tour hours.
 
 One visitor text is one intent. If they ask a question and name a custom time
 in the same message, Tour Core answers the question and asks them to confirm
@@ -142,10 +155,10 @@ The short queue, or the one item and what was done.
 ## Requires approval
 
 Answering with a new approved fact, pausing, resuming and calling off a tour,
-approving a custom time, and moving a tour. A time outside normal touring
-hours needs the stronger confirmation. Marking an item handled, declining a
-time request, or offering another time doesn't need a confirmation code but
-should follow the operator's instruction.
+approving a custom time, moving a tour, and setting up a one-off tour. A time
+outside normal touring hours needs the stronger confirmation. Marking an item
+handled, declining a time request, or offering another time doesn't need a
+confirmation code but should follow the operator's instruction.
 
 ## Stop when
 

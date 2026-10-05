@@ -1,10 +1,13 @@
-import { parseFlexibleTime, placementOf, relativeWhen, touringHoursLabel } from "../core/customSlot";
-import { formatTime, localDateOf } from "../core/timezone";
+import { isLiveMessaging } from "../config/tourCoreConfig";
+import { intervalsOverlap, parseFlexibleTime, placementOf, relativeWhen, tourInterval, touringHoursLabel } from "../core/customSlot";
+import { addDays, formatConfirmStamp, formatDay, formatTime, formatWeekday, localDateOf } from "../core/timezone";
+import { formatPhone, parsePhone } from "../core/phone";
 import type { TourTimeRequest } from "../domain/model";
 import { TERMINAL } from "../domain/stateMachine";
 import { SetupInputError } from "../setup/setupActions";
+import { SmsConsentDirectory } from "../visitor/smsConsent";
 import type { ConfirmationBook } from "./confirmations";
-import { resolvePropertyId } from "./resolve";
+import { requireUnit, resolvePropertyId } from "./resolve";
 import { persistSession, type OperatorServices } from "./services";
 import { currentReservation, findTour, tourRef, tourSnapshots, unitNameOf, visitorNameOf, type TourSnapshot } from "./tours";
 
@@ -40,6 +43,43 @@ export async function findTimeRequest(services: OperatorServices, id: string): P
 function who(tour: TourSnapshot): string {
   const name = visitorNameOf(tour);
   return name.startsWith("A visitor") ? "The visitor" : (name.split(/\s+/)[0] ?? name);
+}
+
+function sameLocalDay(a: Date, b: Date, tz: string): boolean {
+  const left = localDateOf(a, tz);
+  const right = localDateOf(b, tz);
+  return left.year === right.year && left.month === right.month && left.day === right.day;
+}
+
+function dayWord(start: Date, now: Date, tz: string): string {
+  const today = localDateOf(now, tz);
+  const day = localDateOf(start, tz);
+  if (day.year === today.year && day.month === today.month && day.day === today.day) return "today";
+  const tomorrow = addDays(today, 1);
+  if (day.year === tomorrow.year && day.month === tomorrow.month && day.day === tomorrow.day) return "tomorrow";
+  return `on ${formatDay(start, tz)}`;
+}
+
+function visitorTextNote(who: string, confirm: boolean, outside: boolean): string {
+  const text = `${who} gets a text ${confirm ? "to confirm" : "with the new time"}.`;
+  return outside ? `This is a one-off. Your regular tour hours stay the same, and ${text}` : text;
+}
+
+function moveFromTo(from: Date, to: Date, now: Date, tz: string, outside: boolean): string {
+  if (outside || !sameLocalDay(from, to, tz)) {
+    return `from ${formatConfirmStamp(from, tz)} to ${formatConfirmStamp(to, tz)}`;
+  }
+  return `from ${formatTime(from, tz)} to ${formatTime(to, tz)} ${dayWord(to, now, tz)}`;
+}
+
+function moveConfirmQuestion(input: { who: string; from?: Date; to: Date; now: Date; tz: string; outside: boolean; confirm: boolean }): string {
+  const toLabel = input.outside ? formatConfirmStamp(input.to, input.tz) : relativeWhen(input.to, input.now, input.tz);
+  const lead = input.from
+    ? `Move ${input.who}'s tour ${moveFromTo(input.from, input.to, input.now, input.tz, input.outside)}?`
+    : `Book ${input.who} for ${toLabel}?`;
+  const extra = input.outside ? " That's outside your tour hours." : "";
+  const verb = input.from ? "Move it?" : "Book it?";
+  return `${lead}${extra} ${visitorTextNote(input.who, input.confirm, input.outside)} ${verb}`;
 }
 
 function requestView(tour: TourSnapshot, request: TourTimeRequest, now: Date) {
@@ -105,11 +145,15 @@ export async function approveTourTimeRequest(ctx: Ctx, input: { tourTimeRequestI
   const name = who(found.tour);
   const reservation = found.tour.bundle.reservations.find((item) => item.id === found.request.reservationId);
   if (!input.confirmationCode) {
-    const question = outside
-      ? `Approving ${formatTime(start, tz)} will create a one-time tour outside the property's normal ${touringHoursLabel(found.tour.config)} touring hours. Continue?`
-      : reservation?.slotStart
-        ? `I'll move ${name}'s tour from ${formatTime(new Date(reservation.slotStart), tz)} to ${relativeWhen(start, ctx.now(), tz)}. Continue?`
-        : `I'll book ${name} for ${relativeWhen(start, ctx.now(), tz)}. Continue?`;
+    const question = moveConfirmQuestion({
+      who: name,
+      ...(reservation?.slotStart ? { from: new Date(reservation.slotStart) } : {}),
+      to: start,
+      now: ctx.now(),
+      tz,
+      outside,
+      confirm: false,
+    });
     return ask(ctx, "approve-time", found.request.id, fingerprint, question, outside ? { outsideHours: true } : {});
   }
   if (outside && !input.acknowledgeOutsideHours) {
@@ -195,9 +239,15 @@ export async function rescheduleTour(
   const fingerprint = `${reservation.id}|${reservation.updatedAt}|${resolved.start.toISOString()}|${outside}`;
   const name = who(tour);
   if (!input.confirmationCode) {
-    const question = outside
-      ? `Moving ${name}'s tour to ${formatTime(resolved.start, tz)} will create a one-time tour outside the property's normal ${touringHoursLabel(tour.config)} touring hours. Continue?`
-      : `I'll move ${name}'s tour from ${formatTime(new Date(reservation.slotStart), tz)} to ${relativeWhen(resolved.start, ctx.now(), tz)}. Continue?`;
+    const question = moveConfirmQuestion({
+      who: name,
+      from: new Date(reservation.slotStart),
+      to: resolved.start,
+      now: ctx.now(),
+      tz,
+      outside,
+      confirm: false,
+    });
     return ask(ctx, "reschedule-tour", reservation.id, fingerprint, question, outside ? { outsideHours: true } : {});
   }
   if (outside && !input.acknowledgeOutsideHours) {
@@ -210,5 +260,61 @@ export async function rescheduleTour(
     summary: `${name}'s tour is now ${relativeWhen(resolved.start, ctx.now(), tz)}. They've been told. The regular tour times are unchanged.`,
     rescheduled: true,
     tourRef: tourRef(tour.propertyId, tour.tourId),
+  };
+}
+
+export async function scheduleOneOffTour(
+  ctx: Ctx,
+  input: { property?: string; phone: string; visitorName?: string; unit: string; startsAt: string; confirmationCode?: string; acknowledgeOutsideHours?: boolean },
+) {
+  await ctx.services.releaseUnconfirmedTours?.();
+  const propertyId = resolvePropertyId(ctx.services.workspace, input.property);
+  if (!ctx.services.workspace.has(propertyId)) throw new SetupInputError("PROPERTY_NOT_FOUND", "I couldn't find that property.");
+  const { config, state } = ctx.services.workspace.load(propertyId);
+  if (state.status !== "PUBLISHED_FOR_DEMO" || !isLiveMessaging(config.messagingMode)) {
+    throw new SetupInputError("NOT_LIVE", "That property isn't published with live visitor texting, so I can't set up a tour.");
+  }
+  if (!ctx.services.openMessagingSession) {
+    throw new SetupInputError("NOT_LIVE", "Visitor texting isn't live on that property, so I can't set up a tour.");
+  }
+  const phone = parsePhone(input.phone);
+  if (!phone) throw new SetupInputError("PHONE_INVALID", "That phone number doesn't look complete.");
+  const optedOut = new SmsConsentDirectory(ctx.services.workspace.root).get(propertyId, phone);
+  if (optedOut?.status === "opted_out") {
+    throw new SetupInputError("OPTED_OUT", "That number asked us not to text them (STOP), so I can't set up a tour.");
+  }
+  const unit = requireUnit(config, input.unit);
+  const resolved = parseFlexibleTime(input.startsAt, config, ctx.now());
+  if (!resolved.ok) throw new SetupInputError("TIME_UNCLEAR", resolved.ask);
+  if (resolved.start.getTime() <= ctx.now().getTime()) throw new SetupInputError("SLOT_PAST", "That time has already passed.");
+  const wanted = tourInterval(config, resolved.start);
+  for (const tour of await tourSnapshots(ctx.services, { propertyId })) {
+    const reservation = currentReservation(tour);
+    if (!reservation?.slotStart || TERMINAL.includes(reservation.status)) continue;
+    if (intervalsOverlap(wanted, tourInterval(config, new Date(reservation.slotStart)))) {
+      throw new SetupInputError("SLOT_OVERLAP", "That time overlaps another tour.");
+    }
+  }
+  const outside = resolved.placement === "OUTSIDE_HOURS";
+  const tz = config.property.timezone;
+  const whoLabel = input.visitorName?.trim() ? input.visitorName.trim().split(/\s+/)[0]! : formatPhone(phone);
+  const whenLabel = `on ${formatWeekday(resolved.start, tz)} at ${formatTime(resolved.start, tz)}`;
+  const fingerprint = `${propertyId}|${phone}|${unit.id}|${resolved.start.toISOString()}|${outside}`;
+  if (!input.confirmationCode) {
+    const extra = outside ? " That's outside your tour hours." : "";
+    const question = `Set up a tour for ${whoLabel} at ${unit.name} ${whenLabel}? Only say yes if they asked for this tour.${extra} ${visitorTextNote(whoLabel, true, outside)} Book it?`;
+    return ask(ctx, "schedule-one-off", `${propertyId}:${phone}`, fingerprint, question, outside ? { outsideHours: true } : {});
+  }
+  if (outside && !input.acknowledgeOutsideHours) {
+    throw new SetupInputError("OUTSIDE_HOURS", "Setting up a tour outside normal touring hours needs a clear yes to that specifically.");
+  }
+  redeem(ctx, input.confirmationCode, "schedule-one-off", `${propertyId}:${phone}`, fingerprint);
+  const session = await ctx.services.openMessagingSession(propertyId, phone);
+  await session.scheduleOneOff({ unitId: unit.id, start: resolved.start, outsideHours: outside, name: input.visitorName });
+  await persistSession(ctx.services, session);
+  return {
+    summary: `I texted ${whoLabel} to confirm a tour of ${unit.name} ${whenLabel}. The regular tour times are unchanged.`,
+    scheduled: true,
+    tourRef: tourRef(propertyId, session.tourId),
   };
 }
