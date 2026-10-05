@@ -47,7 +47,8 @@ The open-source fallback is still a blank Grok Bot and the prompt in
 [Set up with Grok Bot](#set-up-with-grok-bot). Grok follows
 [`GROK_BOOTSTRAP.md`](GROK_BOOTSTRAP.md) from the clone. It is not the
 normal landlord experience. The one-time Railway setup for our demo host
-is in [`docs/deployment.md`](docs/deployment.md).
+is in [Deploy / Railway](#deploy--railway) and
+[`docs/deployment.md`](docs/deployment.md).
 
 ### Open-source computer demo
 
@@ -103,6 +104,35 @@ npm run setup
 Everything below is the technical and manual documentation for this path: the browser app, real phones with
 Sendblue and a manual tunnel, `.env`, the Grok connector, and the engine itself. The browser app stays as the
 fallback, the debugging surface and a deterministic comparison.
+
+## Deploy / Railway
+
+Landlords do not create a Railway project. This is the distributor's one-time
+host. Mount a volume at `/data`, set `TOURCORE_DEPLOYMENT_MODE=HOSTED_RAILWAY_P0`
+and `TOURCORE_HOME=/data`, and keep the healthcheck on `/healthz`. Full steps:
+[`docs/deployment.md`](docs/deployment.md).
+
+The hosted process **refuses to start** if `TOURCORE_HOME` is unset or is not on
+a persistent volume (the container disk is wiped on every redeploy). Detection
+reads Linux mountinfo and device ids, treats overlay/tmpfs/root as ephemeral,
+and requires `TOURCORE_HOME` to sit inside `RAILWAY_VOLUME_MOUNT_PATH` when
+Railway injects that variable.
+
+`/healthz` and `check_runtime_health` report the same read-only snapshot:
+
+| Field | Meaning |
+| --- | --- |
+| `storagePath` | The folder Tour Core is using (`TOURCORE_HOME`) |
+| `persistentVolume` | `true` when that folder is on a mounted volume |
+| `volumeMount` | The covering mount that was found, or `null` |
+
+`npm run check:storage` (or `node dist/server.js --check-storage`) prints that
+verdict for a given `TOURCORE_HOME` and exits non-zero when hosted mode would
+refuse. It does not start the server or write files.
+
+`TOURCORE_ALLOW_EPHEMERAL_STORAGE=1` turns the refusal into a warning for a
+disposable demo only. **Never set it on a live service.** Local `npm run setup`
+does not use this guard.
 
 ## Quick start (developer)
 
@@ -514,6 +544,7 @@ npm run bootstrap:self-hosted # same, using PUBLIC_BASE_URL instead of a tunnel
 npm run service:status        # running? healthy?   (also service:start, service:stop, service:restart)
 npm run install:status        # installation status, component by component
 npm run install:link          # a fresh secure setup link for this computer's browser
+npm run check:storage         # hosted volume verdict for TOURCORE_HOME; does not start the server
 ```
 
 ### Property identity and type
@@ -619,12 +650,8 @@ Each property has one canonical `TourCoreConfig`, written by the setup flow to
 practice tour's records go in `practice-tours/<time>/` (`tour-export.json` and `audit.csv`). Set `TOURCORE_HOME` to
 store this elsewhere; it's optional for local development.
 
-On `HOSTED_RAILWAY_P0` (Railway), `TOURCORE_HOME` must be on the persistent volume, usually `/data`. The process
-refuses to start if that folder is unset or is not on a mounted volume, so a redeploy cannot wipe live records.
-`/healthz` and `check_runtime_health` report the storage path, whether it is on a persistent volume, and the mount
-that was found. `npm run check:storage` (or `node dist/server.js --check-storage`) prints the same verdict without
-starting the server or writing files, and exits non-zero when hosted mode would refuse. For a disposable demo only,
-`TOURCORE_ALLOW_EPHEMERAL_STORAGE=1` turns that refusal into a warning. Local `npm run setup` is not affected.
+On `HOSTED_RAILWAY_P0` (Railway), `TOURCORE_HOME` must be on the persistent volume, usually `/data`. See
+[Deploy / Railway](#deploy--railway) for the startup guard, `/healthz` fields, and `npm run check:storage`.
 
 The config holds the property (including its **IANA time zone**, e.g. `America/New_York`), operator alert contact,
 doors, units, routes, and tour hours: days, start, end, `slotEveryMinutes`, `tourLengthMinutes` and
@@ -647,6 +674,20 @@ closed). Each tour folder holds `record.json`, `tour-export.json` and `audit.csv
 
 All tour-hour and access-window math uses the property's time zone, never the host machine's.
 `config/demo-property.json` is the sample property used by `npm run demo`.
+
+## Environment variables
+
+Developer values live in `.env` (see [`.env.example`](.env.example)). Grok-managed and self-hosted installs put
+credentials on Tour Core's secure setup page instead. Hosted Railway sets the first four on the service.
+
+| Variable | Used when | What it does |
+| --- | --- | --- |
+| `TOURCORE_DEPLOYMENT_MODE` | All. Default `LOCAL_DEVELOPER` | `LOCAL_DEVELOPER`, `GROK_MANAGED_P0`, `SELF_HOSTED`, or `HOSTED_RAILWAY_P0`. The last is set on our Railway service, not in a landlord's `.env`. |
+| `TOURCORE_HOME` | All. Required on hosted | Records folder. Local default is `./tourcore-data`. On Railway this must be the volume, usually `/data`. |
+| `RAILWAY_VOLUME_MOUNT_PATH` | Railway injects it | The volume mount (usually `/data`). When present, `TOURCORE_HOME` must be inside it. Do not set this in a local `.env`. |
+| `TOURCORE_ALLOW_EPHEMERAL_STORAGE` | Hosted demos only | Set to `1` to start even if `TOURCORE_HOME` is not on a persistent volume. Data is lost on the next deploy. **Never set this on a live service.** Local `npm run setup` ignores it. |
+| `PUBLIC_BASE_URL` | Self-hosted and local tunnels | Public https origin that reaches this process. Railway derives it from `RAILWAY_PUBLIC_DOMAIN`. |
+| `PORT` | Railway | Listen port. Railway sets it. `HOSTED_RAILWAY_P0` does not fall back to 4321. |
 
 ## The boundary: Tour Core, then policy, then Durin
 

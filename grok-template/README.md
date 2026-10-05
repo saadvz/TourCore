@@ -38,6 +38,12 @@ Two ways in:
 | Integration | `integrations/tour-core-tools.md` | Custom MCP server; connected by every installation |
 | Manifest | `template.json` | For reviewers; lists every item, the repository setting, and what's never included |
 
+`SETUP_PROMPT.md` is the exact copy-paste Grok Bot prompt from the root README.
+Do not change a word. Hosted storage-health guidance (`persistentVolume: false`
+means attach a volume; never use the ephemeral-storage escape hatch on a live
+service) is in `context/installation.md`, `integrations/tour-core-tools.md`,
+and the Install Tour Core skill.
+
 The repository address is https://github.com/saadvz/TourCore
 (`template.json` → `repository.url`). An address in the operator's message or
 `TOURCORE_REPO_URL` is only a fallback: if it differs, Grok asks the operator,
