@@ -649,7 +649,7 @@ export class TourCore {
     const start = reservation.slotStart ? new Date(reservation.slotStart) : undefined;
     const prospect = await this.mustGetProspect(reservation.prospectId);
     reservation = await this.cancelReservation(reservation.id, "visitor declined the scheduled tour");
-    await this.textProspect(prospect, reservation.id, "No problem. I cancelled that tour.");
+    await this.textProspect(prospect, reservation.id, "No problem. I cancelled that tour. Text me anytime to book another.");
     const when = start ? releasedWhen(start, this.deps.clock.now(), this.deps.config.property.timezone) : "scheduled";
     await this.notifyOperator(reservation, `${this.visitorLabel(prospect)} said no to the ${when} tour, so I cancelled it.`);
     return reservation;
@@ -895,6 +895,24 @@ export class TourCore {
     const about = !reservation && resolved.unitId ? ` about ${this.deps.config.units.find((u) => u.id === resolved.unitId)?.name ?? "a unit"}` : "";
     await this.notifyOperator(reservation, `${who} asked "${asked}"${about}, and there's no approved answer yet.`);
     return { outcome: "unknown", facts: [], ...(resolved.unitId ? { unitId: resolved.unitId } : {}) };
+  }
+
+  /**
+   * Flags a visitor's words for the team the same way an unanswered property
+   * question is flagged, and sends `reply`. Used while an operator-set tour is
+   * still waiting for YES — the hold stays pending.
+   */
+  async flagUnansweredQuestion(input: { phone: string; question: string; reservationId?: string; meta?: InboundMeta; reply: string }): Promise<void> {
+    const phone = normalizePhone(input.phone);
+    const prospect = (await this.deps.store.list("prospects")).find((p) => p.phone === phone);
+    const reservation = input.reservationId ? await this.deps.store.get("reservations", input.reservationId) : undefined;
+    const asked = input.question.trim().slice(0, 300);
+    if (!asked) throw new TourCoreError("EMPTY_QUESTION", "Please type a question");
+    await this.recordIncoming({ phone, body: asked, prospectId: prospect?.id, reservationId: reservation?.id, meta: input.meta });
+    await this.record("QUESTION_UNANSWERED", { reservationId: reservation?.id, prospectId: prospect?.id, detail: asked });
+    await this.sendConversationText({ phone, body: input.reply, reservationId: reservation?.id });
+    const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : `A visitor texting from ${phone}`;
+    await this.notifyOperator(reservation, `${who} asked "${asked}", and there's no approved answer yet.`);
   }
 
   private approvedContent(): TourCoreConfig {

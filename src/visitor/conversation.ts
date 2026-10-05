@@ -246,8 +246,7 @@ async function handleOperatorScheduledReply(session: VisitorDemoSession, said: S
     await session.declineOperatorSchedule();
     return;
   }
-  await session.recordText(said);
-  await session.reply("Reply YES to confirm this tour, or STOP to opt out.");
+  await session.flagQuestionWhileAwaitingConfirm(said);
 }
 
 /**

@@ -1,6 +1,6 @@
 import { isLiveMessaging } from "../config/tourCoreConfig";
 import { intervalsOverlap, parseFlexibleTime, placementOf, relativeWhen, tourInterval, touringHoursLabel } from "../core/customSlot";
-import { formatConfirmStamp, formatTime, formatWeekday, localDateOf } from "../core/timezone";
+import { addDays, formatConfirmStamp, formatDay, formatTime, formatWeekday, localDateOf } from "../core/timezone";
 import { formatPhone, parsePhone } from "../core/phone";
 import type { TourTimeRequest } from "../domain/model";
 import { TERMINAL } from "../domain/stateMachine";
@@ -45,20 +45,41 @@ function who(tour: TourSnapshot): string {
   return name.startsWith("A visitor") ? "The visitor" : (name.split(/\s+/)[0] ?? name);
 }
 
-function oneOffNote(who: string, confirm: boolean): string {
-  return `This is a one-off. Your regular tour hours stay the same, and ${who} gets a text ${confirm ? "to confirm" : "with the new time"}.`;
+function sameLocalDay(a: Date, b: Date, tz: string): boolean {
+  const left = localDateOf(a, tz);
+  const right = localDateOf(b, tz);
+  return left.year === right.year && left.month === right.month && left.day === right.day;
+}
+
+function dayWord(start: Date, now: Date, tz: string): string {
+  const today = localDateOf(now, tz);
+  const day = localDateOf(start, tz);
+  if (day.year === today.year && day.month === today.month && day.day === today.day) return "today";
+  const tomorrow = addDays(today, 1);
+  if (day.year === tomorrow.year && day.month === tomorrow.month && day.day === tomorrow.day) return "tomorrow";
+  return `on ${formatDay(start, tz)}`;
+}
+
+function visitorTextNote(who: string, confirm: boolean, outside: boolean): string {
+  const text = `${who} gets a text ${confirm ? "to confirm" : "with the new time"}.`;
+  return outside ? `This is a one-off. Your regular tour hours stay the same, and ${text}` : text;
+}
+
+function moveFromTo(from: Date, to: Date, now: Date, tz: string, outside: boolean): string {
+  if (outside || !sameLocalDay(from, to, tz)) {
+    return `from ${formatConfirmStamp(from, tz)} to ${formatConfirmStamp(to, tz)}`;
+  }
+  return `from ${formatTime(from, tz)} to ${formatTime(to, tz)} ${dayWord(to, now, tz)}`;
 }
 
 function moveConfirmQuestion(input: { who: string; from?: Date; to: Date; now: Date; tz: string; outside: boolean; confirm: boolean }): string {
   const toLabel = input.outside ? formatConfirmStamp(input.to, input.tz) : relativeWhen(input.to, input.now, input.tz);
   const lead = input.from
-    ? input.outside
-      ? `Move ${input.who}'s tour from ${formatConfirmStamp(input.from, input.tz)} to ${toLabel}?`
-      : `Move ${input.who}'s tour to ${toLabel}?`
+    ? `Move ${input.who}'s tour ${moveFromTo(input.from, input.to, input.now, input.tz, input.outside)}?`
     : `Book ${input.who} for ${toLabel}?`;
   const extra = input.outside ? " That's outside your tour hours." : "";
   const verb = input.from ? "Move it?" : "Book it?";
-  return `${lead}${extra} ${oneOffNote(input.who, input.confirm)} ${verb}`;
+  return `${lead}${extra} ${visitorTextNote(input.who, input.confirm, input.outside)} ${verb}`;
 }
 
 function requestView(tour: TourSnapshot, request: TourTimeRequest, now: Date) {
@@ -281,7 +302,7 @@ export async function scheduleOneOffTour(
   const fingerprint = `${propertyId}|${phone}|${unit.id}|${resolved.start.toISOString()}|${outside}`;
   if (!input.confirmationCode) {
     const extra = outside ? " That's outside your tour hours." : "";
-    const question = `Set up a tour for ${whoLabel} at ${unit.name} ${whenLabel}? Only say yes if they asked for this tour.${extra} ${oneOffNote(whoLabel, true)} Book it?`;
+    const question = `Set up a tour for ${whoLabel} at ${unit.name} ${whenLabel}? Only say yes if they asked for this tour.${extra} ${visitorTextNote(whoLabel, true, outside)} Book it?`;
     return ask(ctx, "schedule-one-off", `${propertyId}:${phone}`, fingerprint, question, outside ? { outsideHours: true } : {});
   }
   if (outside && !input.acknowledgeOutsideHours) {

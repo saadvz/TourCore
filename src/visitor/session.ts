@@ -50,7 +50,7 @@ export const VISITOR_DEFAULTS = { name: "Pat Smith", phone: "(555) 010-2000" };
 /** First outbound text when the operator sets up a tour for someone who hasn't texted in. */
 export function operatorScheduledFirstText(config: TourCoreConfig, start: Date): string {
   const tz = config.property.timezone;
-  return `Hi, this is the ${config.operator.name} at ${config.property.address}. We set up a tour for you on ${formatWeekday(start, tz)} at ${formatTime(start, tz)}. Reply YES to confirm, or STOP to opt out.`;
+  return `Hi, this is the ${config.operator.name} at ${config.property.address}. We set up a tour for you on ${formatWeekday(start, tz)} at ${formatTime(start, tz)}. Reply YES to confirm, NO to cancel, or STOP to opt out.`;
 }
 
 /** The browser phone: nothing to deliver, the page reads the thread. Replies are phrased for buttons. */
@@ -619,6 +619,18 @@ export class VisitorDemoSession {
   async declineOperatorSchedule(): Promise<void> {
     if (!this.reservationId) throw new SetupInputError("NO_TOUR", "This visitor hasn't booked a tour yet.");
     await this.core.declineOperatorScheduledTour(this.reservationId);
+    await this.syncReplies();
+  }
+
+  /** Flags a question for the team without dropping the YES hold. */
+  async flagQuestionWhileAwaitingConfirm(said: Said): Promise<void> {
+    await this.core.flagUnansweredQuestion({
+      phone: this.visitor?.phone ?? "",
+      question: said.text ?? "",
+      reservationId: this.reservationId,
+      meta: said.meta,
+      reply: `I'll check with the ${this.config.operator.name} and get back to you.`,
+    });
     await this.syncReplies();
   }
 

@@ -1011,7 +1011,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Answer a flagged question with a new approved fact",
     kind: "consequential",
     description:
-      "Only when the OPERATOR supplied the answer. As soon as they give it (e.g. \"2 bedrooms\"), call this without a code: Tour Core works out how it will be saved (a unit detail like bedrooms becomes that unit's value and the canonical sentence \"Unit 1A has 2 bedrooms.\"; anything else stays in the operator's words) and returns ONE question to ask. That question is \"Save this answer? Future visitors who ask the same thing will get it too. Save it?\" — never Continue?. Don't ask a separate yes/no before it. After a clear yes, call again with confirmationCode: the fact is saved, the visitor gets exactly that fact, and the question is marked handled. The property stays published. Never make up or reword the answer.",
+      "Only when the OPERATOR supplied the answer. As soon as they give it (e.g. \"2 bedrooms\"), call this without a code: Tour Core works out how it will be saved (a unit detail like bedrooms becomes that unit's value and the canonical sentence \"Unit 1A has 2 bedrooms.\"; anything else stays in the operator's words) and returns ONE question to ask. That question is Send \"{answer}\" to {name}? Future visitors who ask the same thing will get it too. Save it? — never Continue?. Don't ask a separate yes/no before it. After a clear yes, call again with confirmationCode: the fact is saved, the visitor gets exactly that fact, and the question is marked handled. The property stays published. Never make up or reword the answer.",
     input: z.strictObject({
       exceptionId: ExceptionId,
       approvedFact: z.string().min(1).max(300).describe("The operator's own words, e.g. \"2 bedrooms\" or \"Parking is included.\""),
@@ -1024,7 +1024,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const first = x.visitorName.split(/\s+/)[0];
       const fingerprint = `${x.exceptionId}|${plan.appliesTo}|${plan.field ?? ""}|${plan.fact}`;
       if (!i.confirmationCode) {
-        return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, "Save this answer? Future visitors who ask the same thing will get it too. Save it?", {
+        return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, `Send "${plan.fact.replace(/\.$/, "")}" to ${first}? Future visitors who ask the same thing will get it too. Save it?`, {
           visitorWillReceive: visitorAnswerText(x.question!, plan.fact),
         });
       }
@@ -1137,7 +1137,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Approve a custom time",
     kind: "consequential",
     description:
-      "Approves a visitor's requested tour time as a one-off. Does not change the property's regular hours or which times are offered. First call returns one yes/no question that names the action and ends Move it? or Book it? — never Continue?. Call again with confirmationCode only after an explicit yes. If the result says outsideHours, the question is the stronger outside-hours confirmation: call again with confirmationCode and acknowledgeOutsideHours true only after they agree to that.",
+      "Approves a visitor's requested tour time as a one-off. Does not change the property's regular hours or which times are offered. First call returns one yes/no question that names the action and ends Move it? or Book it? — never Continue?. A move inside hours includes the old and new times. \"This is a one-off. Your regular tour hours stay the same\" only when the time is outside tour hours. Call again with confirmationCode only after an explicit yes. If the result says outsideHours, the question is the stronger outside-hours confirmation: call again with confirmationCode and acknowledgeOutsideHours true only after they agree to that.",
     input: z.strictObject({
       tourTimeRequestId: z.string().min(3).max(40).describe("The tourTimeRequestId. Never show it to the operator."),
       confirmationCode: Code,
@@ -1173,7 +1173,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Move a tour",
     kind: "consequential",
     description:
-      "Moves a visitor's tour to a time the landlord is directing, including a one-off time that isn't a regular slot. Pass the visitor's name and the new time in everyday words. Does not change the property's regular hours. First call returns one yes/no question that names the move and ends Move it? — never Continue?. Call again with confirmationCode only after an explicit yes. A time outside normal touring hours returns a stronger question; call again with confirmationCode and acknowledgeOutsideHours true only after they agree.",
+      "Moves a visitor's tour to a time the landlord is directing, including a one-off time that isn't a regular slot. Pass the visitor's name and the new time in everyday words. Does not change the property's regular hours. First call returns one yes/no question that names the old and new times and ends Move it? — never Continue?. \"This is a one-off. Your regular tour hours stay the same\" only when the time is outside tour hours. Call again with confirmationCode only after an explicit yes. A time outside normal touring hours returns a stronger question; call again with confirmationCode and acknowledgeOutsideHours true only after they agree.",
     input: z.strictObject({
       reservationId: z.string().min(3).max(40).optional().describe("The reservation, when you already have it. Never show it."),
       tourRef: TourRef.optional(),
@@ -1189,7 +1189,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Set up a one-time tour",
     kind: "consequential",
     description:
-      "Sets up a tour for a visitor who asked for it, including someone who hasn't texted in yet. Use this only when the operator is booking a time they asked for. Pass their phone, the unit, and the time in everyday words. Optional name. Does not change the property's regular hours or which times are offered. First call returns one yes/no question that names the visitor, unit, day and time, says only say yes if they asked, and ends Book it? — never Continue?. Call again with confirmationCode only after that explicit yes. A time outside normal touring hours returns a stronger question; call again with confirmationCode and acknowledgeOutsideHours true only after they agree. Tour Core texts first. YES continues to the usual consent and identity steps. STOP opts out and sends only the standard opt-out confirmation. NO cancels and tells the team. If they never reply in time, the slot is released; unless they opted out they get exactly one text that the time was released, then no further texts.",
+      "Sets up a tour for a visitor who asked for it, including someone who hasn't texted in yet. Use this only when the operator is booking a time they asked for. Pass their phone, the unit, and the time in everyday words. Optional name. Does not change the property's regular hours or which times are offered. First call returns one yes/no question that names the visitor, unit, day and time, says only say yes if they asked, and ends Book it? — never Continue?. \"This is a one-off. Your regular tour hours stay the same\" only when the time is outside tour hours; inside hours still says they get a text to confirm. Call again with confirmationCode only after that explicit yes. A time outside normal touring hours returns a stronger question; call again with confirmationCode and acknowledgeOutsideHours true only after they agree. Tour Core texts first: Reply YES to confirm, NO to cancel, or STOP to opt out. YES continues to the usual consent and identity steps. STOP opts out and sends only the standard opt-out confirmation. NO cancels and tells the team. Any other reply before they confirm is flagged for the team (the hold stays pending). If they never reply in time, the slot is released; unless they opted out they get exactly one text that the time was released, then no further texts.",
     input: z.strictObject({
       property: Property,
       phone: z.string().min(7).max(30).describe("The visitor's phone number."),

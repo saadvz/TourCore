@@ -291,8 +291,8 @@ them?
 [`answer_flagged_question` approvedFact "There's no pool, but there's a gym on
 the roof." → returns a question]
 
-**Tour Core:** Save this answer? Future visitors who ask the same thing will
-get it too. Save it?
+**Tour Core:** Send "There's no pool, but there's a gym on the roof" to Testy?
+Future visitors who ask the same thing will get it too. Save it?
 
 **Operator:** Yes.
 
@@ -313,8 +313,7 @@ Tour Core puts their tour step back in front of them.]
 [`schedule_one_off_tour` → question]
 
 **Tour Core:** Set up a tour for Dana at Unit 1A on Monday at 3:15 PM? Only
-say yes if they asked for this tour. This is a one-off. Your regular tour
-hours stay the same, and Dana gets a text to confirm. Book it?
+say yes if they asked for this tour. Dana gets a text to confirm. Book it?
 
 **Operator:** Yes.
 

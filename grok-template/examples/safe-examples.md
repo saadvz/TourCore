@@ -66,8 +66,8 @@ you. No doors were refused.
 
 [`inspect_exception`; `answer_flagged_question` approvedFact "Parking is included." → question]
 
-**Tour Core:** Save this answer? Future visitors who ask the same thing will
-get it too. Save it?
+**Tour Core:** Send "Parking is included" to Pat? Future visitors who ask the
+same thing will get it too. Save it?
 
 **Operator:** Yes.
 
@@ -150,8 +150,7 @@ Her number is 555-010-2000.
 "Monday at 3:15 PM" → question]
 
 **Tour Core:** Set up a tour for Dana at Unit 1A on Monday at 3:15 PM? Only
-say yes if they asked for this tour. This is a one-off. Your regular tour
-hours stay the same, and Dana gets a text to confirm. Book it?
+say yes if they asked for this tour. Dana gets a text to confirm. Book it?
 
 **Operator:** Yes.
 
@@ -160,11 +159,14 @@ hours stay the same, and Dana gets a text to confirm. Book it?
 **Tour Core:** I texted Dana to confirm. The regular tour times are unchanged.
 
 Dana gets: "Hi, this is the leasing team at 100 Alfred Way. We set up a tour
-for you on Monday at 3:15 PM. Reply YES to confirm, or STOP to opt out."
+for you on Monday at 3:15 PM. Reply YES to confirm, NO to cancel, or STOP to
+opt out."
 
 - YES → usual consent, then identity.
 - STOP → only the standard opt-out confirmation. Nothing further.
-- NO → cancelled; the team is told.
+- NO → "No problem. I cancelled that tour. Text me anytime to book another."
+- Any other reply → flagged for the team; Dana gets "I'll check with the
+  leasing team and get back to you." The hold stays pending.
 - No reply in time → the time is released. Dana gets one text: "I didn't hear
   back, so I released your Monday at 3:15 PM tour. Text me anytime to book
   another." Then no further texts.

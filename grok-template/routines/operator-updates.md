@@ -133,4 +133,5 @@ needs a decision: `list_tour_time_requests`, `inspect_tour_time_request`,
 Core returns (`Move it?` / `Book it?`). For a brand-new one-off, only after
 the operator confirms the visitor asked. YES / STOP / NO / no-reply are
 handled by Tour Core (one release text if they never reply, unless they
-opted out; STOP is opt-out only).
+opted out; STOP is opt-out only). Other replies before they confirm are
+flagged for the team; the hold stays pending.

@@ -50,17 +50,17 @@ again with the code after the operator's yes.
 | `list_exceptions` | read | The queue of issues that need the team |
 | `inspect_exception` | read | One issue with context and next steps |
 | `resolve_exception` | change | Marks an issue handled with a note; changes nothing else |
-| `answer_flagged_question` | consequential | Saves the operator's answer as an approved fact (a unit detail like bedrooms becomes that unit's value), texts the visitor exactly that, asks one confirmation that ends `Save it?`, keeps the property published |
+| `answer_flagged_question` | consequential | Saves the operator's answer as an approved fact (a unit detail like bedrooms becomes that unit's value), texts the visitor exactly that, asks one confirmation (`Send "{answer}" to {name}?` … `Save it?`), keeps the property published |
 | `place_operator_hold` | consequential | Pauses a running tour; its doors are switched off |
 | `clear_operator_hold` | consequential | Resumes a paused tour; policy still decides every door |
 | `revoke_tour_access` | consequential | Calls a tour off for good and tells the visitor |
 | `list_tour_time_requests` | read | Who is waiting on a time that isn't a regular slot, or on moving a tour |
 | `inspect_tour_time_request` | read | One custom-time request: who, the time they want, their current booking, and whether it's outside normal touring hours |
-| `approve_tour_time_request` | consequential | Approves that time as a one-off. Asks once first; the question ends `Move it?` or `Book it?`. Outside normal touring hours asks a stronger question. Regular hours stay the same |
+| `approve_tour_time_request` | consequential | Approves that time as a one-off. Asks once first; the question ends `Move it?` or `Book it?`. A move names the old and new times. `This is a one-off…` only outside tour hours. Regular hours stay the same |
 | `decline_tour_time_request` | change | Declines the request and tells the visitor. A current booking stays confirmed |
 | `propose_tour_time` | change | Offers the visitor another time. The current booking stays until they agree |
-| `reschedule_tour` | consequential | Moves a tour to a time the landlord is directing, including a one-off. Asks once first; the question ends `Move it?`. Regular hours stay the same |
-| `schedule_one_off_tour` | consequential | Sets up a tour for a visitor who asked, including someone who hasn't texted in. Only after the operator confirms they asked. Asks once first; the question ends `Book it?`. Regular hours stay the same. Tour Core texts first: YES continues to consent; STOP is opt-out only; NO cancels; no reply releases the time with one visitor text (unless opted out), then nothing further |
+| `reschedule_tour` | consequential | Moves a tour to a time the landlord is directing, including a one-off. Asks once first; names old and new times; ends `Move it?`. `This is a one-off…` only outside tour hours. Regular hours stay the same |
+| `schedule_one_off_tour` | consequential | Sets up a tour for a visitor who asked, including someone who hasn't texted in. Only after the operator confirms they asked. Asks once first; the question ends `Book it?`. `This is a one-off…` only outside tour hours. Tour Core texts first: YES / NO / STOP. Other replies are flagged for the team; the hold stays pending. No reply releases the time with one visitor text (unless opted out) |
 | `export_audit` | change | Writes a validated day's audit export (JSON + CSV) and summarizes it |
 | `get_installation_status` | read | Every installation component's state (runtime, public address, Grok connection, messaging, tour updates, records, access, property, readiness, practice tour, publish) and the next step |
 | `get_next_installation_step` | read | The one next step Tour Core decided, who does it, and the tool or skill to use |

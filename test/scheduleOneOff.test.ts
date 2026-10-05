@@ -31,7 +31,7 @@ describe("operators can set up a one-time tour", () => {
     const asked = await a.grok("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "3:15 PM today" });
     expect(asked.status).toBe("needs-confirmation");
     expect(asked.summary).toBe(
-      "Set up a tour for Dana at Unit 1A on Monday at 3:15 PM? Only say yes if they asked for this tour. This is a one-off. Your regular tour hours stay the same, and Dana gets a text to confirm. Book it?",
+      "Set up a tour for Dana at Unit 1A on Monday at 3:15 PM? Only say yes if they asked for this tour. Dana gets a text to confirm. Book it?",
     );
     expect(asked.summary).not.toContain("Continue?");
     expect(asked.summary).not.toContain("create a one-time tour");
@@ -50,7 +50,7 @@ describe("operators can set up a one-time tour", () => {
 
     const first = a.fake.sent.filter((message) => message.number === PHONE).at(-1)!.content;
     expect(first).toBe(operatorScheduledFirstText(a.ws.load(PROPERTY).config, new Date("2026-09-28T19:15:00.000Z")));
-    expect(first).toBe("Hi, this is the leasing team at 100 Alfred Way. We set up a tour for you on Monday at 3:15 PM. Reply YES to confirm, or STOP to opt out.");
+    expect(first).toBe("Hi, this is the leasing team at 100 Alfred Way. We set up a tour for you on Monday at 3:15 PM. Reply YES to confirm, NO to cancel, or STOP to opt out.");
 
     const yes = await a.text("YES");
     expect(yes.join("\n")).toContain("Great, you're booked for 3:15 PM");
@@ -85,6 +85,7 @@ describe("operators can set up a one-time tour", () => {
     const asked = await a.grok("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "7:30 PM today" });
     expect(asked.outsideHours).toBe(true);
     expect(asked.summary).toContain("That's outside your tour hours.");
+    expect(asked.summary).toContain("This is a one-off. Your regular tour hours stay the same, and Dana gets a text to confirm.");
     expect(asked.summary).toContain("Book it?");
     expect(asked.summary).not.toContain("create a one-time tour");
     await expect(
@@ -132,12 +133,51 @@ describe("operators can set up a one-time tour", () => {
     expect(times.join("\n")).toContain("2:00 PM");
   });
 
+  it("flags a question before they confirm and does not loop the YES prompt", async () => {
+    const a = await liveApp({ cleanups });
+    await publish(a);
+    await a.approve("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "2:00 PM today" });
+    const asked = await a.text("Which unit?");
+    expect(asked).toEqual(["I'll check with the leasing team and get back to you."]);
+    expect(asked.join("\n")).not.toContain("Reply YES");
+    const who = await a.text("Who is this?");
+    expect(who).toEqual(["I'll check with the leasing team and get back to you."]);
+
+    const tour = a.ws.listTours(PROPERTY).find((item) => item.kind === "messaging")!;
+    const bundle = a.ws.loadTour(PROPERTY, tour.tourId)!.bundle;
+    expect(bundle.reservations[0]).toMatchObject({ status: "RESERVED", awaitingVisitorConfirm: { kind: "OPERATOR_SCHEDULED" } });
+    expect(bundle.auditEvents.some((event) => event.type === "QUESTION_UNANSWERED" && event.detail === "Which unit?")).toBe(true);
+    expect(bundle.auditEvents.some((event) => event.type === "QUESTION_UNANSWERED" && event.detail === "Who is this?")).toBe(true);
+    const queue = await a.grok("list_exceptions");
+    expect(queue.exceptions.some((item: { summary: string }) => item.summary.includes('Asked "Which unit?"'))).toBe(true);
+
+    const yes = await a.text("YES");
+    expect(yes.join("\n")).toContain("Great, you're booked for 2:00 PM");
+  });
+
+  it("a question before confirm does not stop the no-reply release", async () => {
+    const a = await liveApp({ cleanups });
+    a.clock.t = at(13, 25);
+    await publish(a);
+    await a.approve("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "2:00 PM today" });
+    await a.text("Which unit?");
+    const afterQuestion = a.fake.sent.filter((message) => message.number === PHONE).length;
+
+    a.clock.t = at(13, 56);
+    await a.textFrom(OTHER, "TOUR");
+    const visitor = a.fake.sent.filter((message) => message.number === PHONE);
+    expect(visitor.length).toBe(afterQuestion + 1);
+    expect(visitor.at(-1)!.content).toBe("I didn't hear back, so I released your 2:00 PM tour. Text me anytime to book another.");
+    const tour = a.ws.listTours(PROPERTY).find((item) => item.kind === "messaging" && item.visitorPhone === PHONE)!;
+    expect(a.ws.loadTour(PROPERTY, tour.tourId)!.bundle.reservations[0]!.status).toBe("CANCELLED");
+  });
+
   it("NO cancels and tells the team", async () => {
     const a = await liveApp({ cleanups });
     await publish(a);
     await a.approve("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "3:15 PM today" });
     const no = await a.text("NO");
-    expect(no.join("\n")).toContain("cancelled");
+    expect(no.join("\n")).toBe("No problem. I cancelled that tour. Text me anytime to book another.");
     const tour = a.ws.listTours(PROPERTY).find((item) => item.kind === "messaging")!;
     const bundle = a.ws.loadTour(PROPERTY, tour.tourId)!.bundle;
     expect(bundle.reservations[0]!.status).toBe("CANCELLED");
@@ -207,7 +247,7 @@ describe("tour time confirmation wording", () => {
     await a.book();
     const asked = await a.grok("reschedule_tour", { visitor: "Testy", newStartsAt: "3:15 PM today" });
     expect(asked.summary).toBe(
-      "Move Testy's tour to today at 3:15 PM? This is a one-off. Your regular tour hours stay the same, and Testy gets a text with the new time. Move it?",
+      "Move Testy's tour from 2:00 PM to 3:15 PM today? Testy gets a text with the new time. Move it?",
     );
     const outside = await a.grok("reschedule_tour", { visitor: "Testy", newStartsAt: "7:30 PM today" });
     expect(outside.summary).toBe(

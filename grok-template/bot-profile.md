@@ -111,9 +111,11 @@ Always:
 - When the operator wants to set up a tour for someone who asked (including a
   visitor who hasn't texted in), use `schedule_one_off_tour`. Ask its question
   word for word. Only treat a yes as confirmation that **the visitor asked**.
-  Tour Core texts first. YES goes to consent. STOP is opt-out only. NO
-  cancels. If they never reply, the time is released and they get one text
-  unless they opted out, then no further texts. Regular hours stay the same.
+  Tour Core texts first (YES / NO / STOP). Any other reply is flagged for the
+  team; the hold stays pending. If they never reply, the time is released and
+  they get one text unless they opted out, then no further texts. Regular
+  hours stay the same. `This is a one-off…` only when the time is outside
+  tour hours.
 
 Never:
 

@@ -162,8 +162,9 @@ describe("the landlord decides", () => {
     await a.text("I'm here");
     a.clock.t = at(7);
     const asked = await a.grok("reschedule_tour", { visitor: "Testy", newStartsAt: "3:15 PM today" });
-    expect(asked.summary).toContain("Move Testy's tour to today at 3:15 PM?");
-    expect(asked.summary).toContain("This is a one-off. Your regular tour hours stay the same, and Testy gets a text with the new time.");
+    expect(asked.summary).toContain("Move Testy's tour from 2:00 PM to 3:15 PM today?");
+    expect(asked.summary).toContain("Testy gets a text with the new time.");
+    expect(asked.summary).not.toContain("This is a one-off.");
     expect(asked.summary).toContain("Move it?");
     expect(asked.summary).not.toContain("Continue?");
     const done = await a.grok("reschedule_tour", { visitor: "Testy", newStartsAt: "3:15 PM today", confirmationCode: asked.confirmation.code });

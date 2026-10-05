@@ -389,15 +389,20 @@ Terminal wizard ─────────────────────�
   refused); every result is plain language. `npm run grok:tools` lists them.
 - **One-off tour** (`schedule_one_off_tour`): use it when the operator wants to set up a tour for a visitor who
   asked — including someone who hasn't texted in yet. The first call returns one yes/no question (ends `Book it?`);
-  only treat a yes as confirmation that **the visitor asked for this tour**. Tour Core texts first. YES continues
-  into the usual consent and identity steps. STOP opts out and sends only the standard opt-out confirmation. NO
-  cancels and tells the team. If they never reply in time, the slot is released, they get exactly one text unless
-  they opted out (`I didn't hear back, so I released your {time} tour. Text me anytime to book another.`), then no
-  further texts. Regular hours, the published schedule, and readiness/publish state do not change. Refused if the
-  property isn't published with live texting, the number already said STOP, the time is in the past, or it overlaps
-  another tour.
+  only treat a yes as confirmation that **the visitor asked for this tour**. Tour Core texts first: `Reply YES to
+  confirm, NO to cancel, or STOP to opt out.` YES continues into the usual consent and identity steps. STOP opts
+  out and sends only the standard opt-out confirmation. NO cancels (`No problem. I cancelled that tour. Text me
+  anytime to book another.`) and tells the team. Any other reply before they confirm is flagged for the team; they
+  get `I'll check with the {team} and get back to you.` (team name as entered) and the hold stays pending. If they
+  never reply in time, the slot is released, they get exactly one text unless they opted out (`I didn't hear back,
+  so I released your {time} tour. Text me anytime to book another.`), then no further texts. Regular hours, the
+  published schedule, and readiness/publish state do not change. Refused if the property isn't published with live
+  texting, the number already said STOP, the time is in the past, or it overlaps another tour.
 - **Confirmation wording**: tour-time and flagged-answer questions name the action and end with the verb —
-  `Move it?`, `Book it?`, or `Save it?` — never `Continue?`.
+  `Move it?`, `Book it?`, or `Save it?` — never `Continue?`. A move inside hours includes the old time
+  (`Move Testy's tour from 2:00 PM to 3:15 PM today?`). `This is a one-off. Your regular tour hours stay the same`
+  only for times outside tour hours. Flagged answers ask
+  `Send "{answer}" to {name}? Future visitors who ask the same thing will get it too. Save it?`
 - **No door tool.** Nothing opens, unlocks, grants or mints access, changes the door-access mode or touches raw
   files. Doors open only through a visitor's own tour and Tour Core's policy.
 - **Explicit approval** for publish, pause, resume, call off, new approved facts, approving or moving a tour time,
