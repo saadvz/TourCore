@@ -99,8 +99,8 @@ export type StepAwaiting =
   | { kind: "confirm-finish" }
   | { kind: "confirm-custom-time"; hour: number; minute: number; meridiem?: "AM" | "PM"; day?: "today" | "tomorrow" }
   | { kind: "confirm-alternative"; requestId: string; startsAt: string }
-  /** "Want that, or another day?" — `date` is the next opening's YYYY-MM-DD. */
-  | { kind: "accept-next-opening"; date: string };
+  /** "Want that, or another day?" — `slotStart` is the exact next opening; `date` is its YYYY-MM-DD. */
+  | { kind: "accept-next-opening"; date: string; slotStart: string };
 
 /**
  * Something Tour Core just asked the visitor. `which-unit` interrupts the

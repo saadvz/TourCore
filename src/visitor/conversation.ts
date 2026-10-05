@@ -20,7 +20,7 @@ import {
 import type { ReplyPrompt } from "../messaging/presentation";
 import { timeMenu } from "./entry";
 import type { InterpretationNote, Said, VisitorDemoSession, VisitorStage } from "./session";
-import { acceptsOfferedOpening, offerDate } from "./unavailableDay";
+import { acceptsOfferedOpening, offerDate, takeOfferedOpening } from "./unavailableDay";
 import { SMS_GATE_REMINDER, SMS_KEYWORD_PROMPT, smsDisclosure, smsOptInConfirmation } from "./smsConsent";
 
 /**
@@ -519,7 +519,7 @@ async function byStage(turn: Turn): Promise<void> {
 
     case "choose-date": {
       if (turn.awaiting?.kind === "accept-next-opening" && acceptsOfferedOpening(turn.said.text ?? "")) {
-        return presentDay(turn, turn.awaiting.date);
+        return takeOfferedOpening(session, turn.awaiting, turn.said);
       }
       if (intent.type === "SELECT_DATE") return showAskedDay(turn, intent);
       if (intent.type === "REQUEST_HELP") return session.help(turn.said);

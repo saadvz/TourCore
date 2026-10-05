@@ -40,7 +40,11 @@ const STEP_AWAITING = [
     day: z.enum(["today", "tomorrow"]).optional(),
   }),
   z.object({ kind: z.literal("confirm-alternative"), requestId: z.string(), startsAt: Iso }),
-  z.object({ kind: z.literal("accept-next-opening"), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }),
+  z.object({
+    kind: z.literal("accept-next-opening"),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    slotStart: Iso,
+  }),
 ] as const;
 const StepAwaitingSchema = z.discriminatedUnion("kind", [...STEP_AWAITING]);
 

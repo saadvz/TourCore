@@ -113,10 +113,8 @@ describe("unavailableDayReply", () => {
     );
   });
 
-  it("omits the next-opening clause when nothing is open", () => {
-    expect(replyFor(at(2026, 10, 4, 22, 49), date(2026, 10, 4), undefined, openEveryDay)).toBe(
-      "There are no more tours today. Which day works for you?",
-    );
+  it("omits the next-opening ask when nothing is open", () => {
+    expect(replyFor(at(2026, 10, 4, 22, 49), date(2026, 10, 4), undefined, openEveryDay)).toBe("There are no more tours today.");
   });
 
   it("does not use the old closed-day sentence or 'I have tours available'", () => {
@@ -152,13 +150,29 @@ describe("typed day questions use the shared copy", () => {
     expect(p.lastReply()).not.toContain("I have tours available");
   });
 
-  it("accepting 'that' offers the next opening day's times", async () => {
+  it("accepting 'that' books the exact next opening through the time-menu path", async () => {
     const p = textVisitor({ config: everydayHours(), now: at(2026, 10, 4, 22, 49).getTime() });
     await toChooseDate(p);
     await p.say("Is there a tour for today?");
     await p.say("that");
+    expect(p.lastReply()).toContain("Great, you're booked for 8:15 AM on Monday, Oct 5.");
+    expect(p.lastReply()).toContain("Is it OK if I text you about this tour");
+    expect(p.lastReply()).not.toContain("I have these times available");
+    expect(await p.session.stage()).toBe("consent");
+    expect((await p.session.reservation())?.slotStart).toBe(at(2026, 10, 5, 8, 15).toISOString());
+  });
+
+  it("if that exact time was taken, offers the day's remaining times", async () => {
+    const p = textVisitor({ config: everydayHours(), now: at(2026, 10, 4, 22, 49).getTime() });
+    await toChooseDate(p);
+    await p.say("Is there a tour for today?");
+    const stolen = at(2026, 10, 5, 8, 15);
+    const { reservation } = await p.session.core.startInquiry({ name: "Other", phone: "(555) 010-3199", unitId: "apt_101" }, { announce: false });
+    await p.session.core.reserveSlot(reservation.id, stolen.toISOString());
+    await p.say("that");
     expect(p.lastReply()).toContain("I have these times available Monday, Oct 5:");
-    expect(p.lastReply()).toContain("8:15 AM");
+    expect(p.lastReply()).toContain("9:15 AM");
+    expect(p.lastReply()).not.toContain("8:15 AM");
     expect(await p.session.stage()).toBe("choose-time");
   });
 
@@ -189,6 +203,31 @@ describe("typed day questions use the shared copy", () => {
     expect(p.lastReply()).toContain("Tours don't run on Saturdays. The next opening is Monday, Sep 28 at 2:00 PM. Want that, or another day?");
     expect(p.lastReply()).toContain("1) Monday, Sep 28");
     expect(p.lastReply()).not.toContain("I have tours available");
+  });
+
+  it("when nothing is open, uses the no-open-times line and no day menu", async () => {
+    const config: TourCoreConfig = {
+      ...loadConfig(),
+      operator: { ...loadConfig().operator, name: "Maple Leasing team" },
+      tourHours: {
+        days: ["SUN"],
+        start: "08:15",
+        end: "09:15",
+        slotEveryMinutes: 60,
+        tourLengthMinutes: 45,
+        earlyArrivalMinutes: 10,
+      },
+    };
+    const p = textVisitor({ config, now: at(2026, 10, 4, 8).getTime() });
+    await toChooseDate(p);
+    await bookAllSlots(p.session, date(2026, 10, 4));
+    await bookAllSlots(p.session, date(2026, 10, 11));
+    await bookAllSlots(p.session, date(2026, 10, 18));
+    await p.say("today");
+    expect(p.lastReply()).toBe("There are no open tour times right now. The Maple Leasing team will reach out.");
+    expect(p.lastReply()).not.toContain("Which day works for you?");
+    expect(p.lastReply()).not.toMatch(/^\d\) /m);
+    expect(await p.session.stage()).toBe("choose-date");
   });
 });
 
