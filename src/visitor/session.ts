@@ -409,10 +409,10 @@ export class VisitorDemoSession {
   }
 
   /**
-   * HELP: one reply only. A live reservation (upcoming or still in its tour
-   * window) gets the help ack and alerts the team. Finished, canceled, revoked
-   * or past-window reservations — and unknown numbers — get the carrier HELP
-   * keyword reply so compliance still holds.
+   * HELP: one reply only. A booked tour that is upcoming or still in its
+   * window gets the help ack (at-door or remote) and alerts the team.
+   * Finished, canceled, revoked, expired, past-window, or not-yet-booked
+   * reservations — and unknown numbers — get the carrier HELP keyword reply.
    */
   async help(said: Said): Promise<void> {
     const reservation = await this.reservation();

@@ -177,12 +177,15 @@ describe("Tour Core journey", () => {
     expect(VisitorDenialCopy.operatorHold(team)).not.toMatch(/window|counting down|rebook/i);
     expect(doorUnset.some((b) => b.startsWith(doors) && b.endsWith(atDoorUnset))).toBe(true);
     expect(doorSet.some((b) => b.startsWith(doors) && b.endsWith(atDoorSet))).toBe(true);
-    expect(helpUnset.filter((b) => b === VisitorDenialCopy.helpAck(team))).toEqual([VisitorDenialCopy.helpAck(team)]);
-    expect(helpSet.filter((b) => b === VisitorDenialCopy.helpAck(team, "+15550109999"))).toEqual([
-      VisitorDenialCopy.helpAck(team, "+15550109999"),
+    expect(helpUnset.filter((b) => b === VisitorDenialCopy.helpAckRemote(team))).toEqual([VisitorDenialCopy.helpAckRemote(team)]);
+    expect(helpSet.filter((b) => b === VisitorDenialCopy.helpAckRemote(team, "+15550109999"))).toEqual([
+      VisitorDenialCopy.helpAckRemote(team, "+15550109999"),
     ]);
+    expect(helpUnset.join("\n")).not.toContain("Stay where you are");
     expect(VisitorDenialCopy.helpAck(team)).toBe(`I've let the ${team} know. ${atDoorUnset}`);
     expect(VisitorDenialCopy.helpAck(team, "+15550109999")).toBe(`I've let the ${team} know. ${atDoorSet}`);
+    expect(VisitorDenialCopy.helpAckRemote(team)).toBe(`I've let the ${team} know. ${VisitorDenialCopy.remote(team)}`);
+    expect(VisitorDenialCopy.helpAckRemote(team, "+15550109999")).toBe(`I've let the ${team} know. ${VisitorDenialCopy.remote(team, "+15550109999")}`);
     for (const body of failedIdBodies) {
       expect(body.match(/The leasing team/g)).toHaveLength(1);
       expect(body).not.toMatch(/on hold|yet|Stay where you are/);

@@ -92,15 +92,25 @@ const CONSENT_TEXT = "Is it OK if I text you about this tour and keep a record o
 /** Repeat help on the same reservation re-alerts the team at most once per this window. */
 export const HELP_ALERT_WINDOW_MS = 5 * 60_000;
 
+/** Where HELP copy and alerts apply. Dead / unbooked reservations are `null`. */
+export type HelpContext = "in-window" | "upcoming";
+
 /**
- * HELP alerts the team only for a live reservation: upcoming (not finished)
- * or still inside its tour window. Finished, canceled, revoked, failed-ID,
- * expired, or past-window reservations do not.
+ * HELP alerts the team only for a booked tour that is upcoming (window not
+ * started) or still inside its tour window. Finished, canceled, revoked,
+ * failed-ID, expired, past-window, or not-yet-booked reservations do not.
  */
+export function helpContext(reservation: Reservation, now: Date): HelpContext | null {
+  if (TERMINAL.includes(reservation.status)) return null;
+  if (!reservation.windowStart || !reservation.windowEnd) return null;
+  const start = Date.parse(reservation.windowStart);
+  const end = Date.parse(reservation.windowEnd);
+  if (Number.isNaN(start) || Number.isNaN(end) || end <= now.getTime()) return null;
+  return now.getTime() < start ? "upcoming" : "in-window";
+}
+
 export function isLiveHelpReservation(reservation: Reservation, now: Date): boolean {
-  if (TERMINAL.includes(reservation.status)) return false;
-  if (reservation.windowEnd && Date.parse(reservation.windowEnd) <= now.getTime()) return false;
-  return true;
+  return helpContext(reservation, now) !== null;
 }
 
 /** What a visitor hears when the approved facts don't cover their question. The team is alerted at the same time. */
@@ -147,6 +157,14 @@ export class VisitorDenialCopy {
 
   static helpRepeatAck(team: string, visitorContact?: string): string {
     return `The ${team} already knows and is on it. ${this.atDoor(team, visitorContact)}`;
+  }
+
+  static helpAckRemote(team: string, visitorContact?: string): string {
+    return `I've let the ${team} know. ${this.remote(team, visitorContact)}`;
+  }
+
+  static helpRepeatAckRemote(team: string, visitorContact?: string): string {
+    return `The ${team} already knows and is on it. ${this.remote(team, visitorContact)}`;
   }
 
   static noOpenTimes(team: string): string {
@@ -810,7 +828,8 @@ export class TourCore {
 
   async requestHelp(reservationId: string, where?: string, inbound?: { text: string; meta?: InboundMeta }): Promise<void> {
     const reservation = await this.mustGetReservation(reservationId);
-    if (!isLiveHelpReservation(reservation, this.deps.clock.now())) return;
+    const place = helpContext(reservation, this.deps.clock.now());
+    if (!place) return;
     const prospect = await this.mustGetProspect(reservation.prospectId);
     const said = inbound?.text ?? "I need help";
     const repeat = (await this.deps.store.listAudit()).some((e) => e.reservationId === reservationId && e.type === "HELP_REQUESTED");
@@ -821,7 +840,15 @@ export class TourCore {
     }
     const team = this.teamName();
     const contact = this.visitorHelpNumber();
-    await this.textProspect(prospect, reservationId, repeat ? VisitorDenialCopy.helpRepeatAck(team, contact) : VisitorDenialCopy.helpAck(team, contact));
+    const ack =
+      place === "upcoming"
+        ? repeat
+          ? VisitorDenialCopy.helpRepeatAckRemote(team, contact)
+          : VisitorDenialCopy.helpAckRemote(team, contact)
+        : repeat
+          ? VisitorDenialCopy.helpRepeatAck(team, contact)
+          : VisitorDenialCopy.helpAck(team, contact);
+    await this.textProspect(prospect, reservationId, ack);
   }
 
   /** Re-alert at most once per HELP_ALERT_WINDOW_MS for the same reservation's open help. */
