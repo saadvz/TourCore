@@ -165,8 +165,11 @@ opt out."
 - YES → usual consent, then identity.
 - STOP → only the standard opt-out confirmation. Nothing further.
 - NO → "No problem. I cancelled that tour. Text me anytime to book another."
-- Any other reply → flagged for the team; Dana gets "I'll check with the
-  leasing team and get back to you." The hold stays pending.
+- A leftover menu number such as "1" → only "Reply YES to confirm, NO to
+  cancel, or STOP to opt out." No team issue.
+- A real question such as "Who is this?" → flagged for the team; Dana gets
+  "I'll check with the leasing team and get back to you." The hold stays
+  pending.
 - No reply in time → the time is released. Dana gets one text: "I didn't hear
   back, so I released your Monday at 3:15 PM tour. Text me anytime to book
   another." Then no further texts.

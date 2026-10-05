@@ -49,10 +49,13 @@ export type VisitorStage =
 
 export const VISITOR_DEFAULTS = { name: "Pat Smith", phone: "(555) 010-2000" };
 
+/** Same confirmation line the first one-off text ends with. A leftover menu tap gets only this nudge. */
+export const OPERATOR_SCHEDULE_CONFIRM_PROMPT = "Reply YES to confirm, NO to cancel, or STOP to opt out.";
+
 /** First outbound text when the operator sets up a tour for someone who hasn't texted in. */
 export function operatorScheduledFirstText(config: TourCoreConfig, start: Date): string {
   const tz = config.property.timezone;
-  return `Hi, this is the ${config.operator.name} at ${config.property.address}. We set up a tour for you on ${formatWeekday(start, tz)} at ${formatTime(start, tz)}. Reply YES to confirm, NO to cancel, or STOP to opt out.`;
+  return `Hi, this is the ${config.operator.name} at ${config.property.address}. We set up a tour for you on ${formatWeekday(start, tz)} at ${formatTime(start, tz)}. ${OPERATOR_SCHEDULE_CONFIRM_PROMPT}`;
 }
 
 /** The browser phone: nothing to deliver, the page reads the thread. Replies are phrased for buttons. */

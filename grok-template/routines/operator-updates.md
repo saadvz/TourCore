@@ -138,5 +138,6 @@ window, or hold is refused — tell the operator Tour Core's words
 move with `reschedule_tour` or call off with `revoke_tour_access` (resume a
 hold with `clear_operator_hold`). YES / STOP / NO / no-reply are handled by Tour
 Core (one release text if they never reply, unless they opted out; STOP is
-opt-out only). Other replies before they confirm — including a leftover
-menu number — are flagged for the team; the hold stays pending.
+opt-out only). A leftover menu number only re-prompts the confirmation
+line — no team issue. A real question before they confirm is flagged for
+the team; the hold stays pending.

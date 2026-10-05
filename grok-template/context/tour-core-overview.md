@@ -111,7 +111,8 @@ decided before Durin is contacted.
    also set up a tour for someone who asked (`schedule_one_off_tour`), even if
    they haven't texted in — only after confirming they asked. A leftover day or
    time menu with nothing booked does not block: the one-off replaces it, and
-   later replies go to the new confirmation. A booked tour, a pending one-off,
+   later replies go to the new confirmation. A leftover menu number only
+   re-prompts YES / NO / STOP; a real question is flagged. A booked tour, a pending one-off,
    an open tour window, or a hold still refuses — tell the operator Tour Core's
    words (`They already have a booked tour. I can move it or call it off.`),
    then move it with `reschedule_tour` or call it off with `revoke_tour_access`

@@ -86,7 +86,9 @@ what never does.
   tour window, or hold is refused. Tell the operator Tour Core's words
   (`They already have a booked tour. I can move it or call it off.`), then
   move with `reschedule_tour` or call off with `revoke_tour_access` (resume a
-  hold with `clear_operator_hold`). Confirmation questions end `Move it?`,
+  hold with `clear_operator_hold`). While the visitor is confirming, a leftover
+  menu number only re-prompts YES / NO / STOP; a real question is flagged.
+  Confirmation questions end `Move it?`,
   `Book it?`, or `Save it?`.
 
 Install and publishing steps: [`docs/grok-template-setup.md`](../docs/grok-template-setup.md).
