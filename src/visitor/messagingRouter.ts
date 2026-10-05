@@ -137,6 +137,11 @@ export class MessagingConversations {
     }
     session.line = endpoint.address;
     this.applySmsConsent(session, propertyId, phone);
+    const published = ws.load(propertyId).config;
+    if (session.applyPublishedConfig(published)) {
+      const stage = await session.stage();
+      if (stage === "choose-date" || stage === "choose-time") await session.refreshOfferedSchedule();
+    }
 
     const wasOptedOut = session.optedOut;
     try {

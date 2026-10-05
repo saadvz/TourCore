@@ -179,12 +179,15 @@ export class VisitorDemoSession {
   /** Where this tour reads the property's current approved content (set by the registry). */
   contentSource?: () => TourCoreConfig | undefined;
 
+  private _config: TourCoreConfig;
+
   constructor(
     readonly propertyId: string,
-    readonly config: TourCoreConfig,
+    config: TourCoreConfig,
     readonly tourId: string,
     options: VisitorSessionOptions = {},
   ) {
+    this._config = config;
     this.id = options.id ?? `vd_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
     this.clock = new DemoClock(options.realNow);
     this.startedAt = options.startedAt ?? this.clock.now();
@@ -209,8 +212,42 @@ export class VisitorDemoSession {
     });
   }
 
+  get config(): TourCoreConfig {
+    return this._config;
+  }
+
   get conversation(): readonly ConversationItem[] {
     return this.thread;
+  }
+
+  /**
+   * Point this open conversation at the property's current published settings.
+   * Stage, reservation, pending confirmations and records stay as they are.
+   * Returns whether those settings actually changed.
+   */
+  applyPublishedConfig(next: TourCoreConfig): boolean {
+    const changed = JSON.stringify(this._config) !== JSON.stringify(next);
+    this._config = next;
+    this.core.useConfig(next);
+    return changed;
+  }
+
+  /**
+   * Rebuild the day and time menus from the current published hours so a
+   * numbered reply matches what the visitor is about to be offered.
+   * An already-booked reservation is not touched.
+   */
+  async refreshOfferedSchedule(): Promise<void> {
+    this.offeredDates = (await this.core.availableDates()).map(({ date, label }) => ({ date, label }));
+    if (!this.selectedDate) {
+      this.offeredSlots = [];
+      return;
+    }
+    try {
+      this.offeredSlots = await this.selectDate(this.selectedDate);
+    } catch {
+      this.offeredSlots = [];
+    }
   }
 
   get presentation() {

@@ -215,6 +215,11 @@ export class TourCore {
     return this.deps.config;
   }
 
+  /** Use the property's current published settings without rebuilding the tour. */
+  useConfig(config: TourCoreConfig): void {
+    this.deps.config = config;
+  }
+
   // ---------------------------------------------------------------- journey
 
   async startInquiry(input: { name: string; phone: string; unitId: string }, options: { announce?: boolean } = {}): Promise<{ prospect: Prospect; reservation: Reservation }> {

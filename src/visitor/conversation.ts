@@ -476,6 +476,19 @@ async function showAskedDay(turn: Turn, ask: DayReference, alreadyRecorded = fal
   await presentDay(turn, isoDate(day), alreadyRecorded);
 }
 
+/** START_INQUIRY during booking: keep the unit, offer days again from the current schedule. */
+async function restartBookingDays(turn: Turn): Promise<void> {
+  const { session } = turn;
+  session.selectedDate = undefined;
+  await session.refreshOfferedSchedule();
+  const labels = session.offeredDates.map((day) => day.label);
+  if (!labels.length) {
+    await turn.respond("There are no open tour times right now. The property team will reach out.");
+    return;
+  }
+  await turn.respond("I have tours available. Which day works for you?", { kind: "choose", options: labels, what: "a day" });
+}
+
 async function presentDay(turn: Turn, date: string, alreadyRecorded = false): Promise<void> {
   const { session } = turn;
   if (!alreadyRecorded) await session.recordText(turn.said);
@@ -523,6 +536,7 @@ async function byStage(turn: Turn): Promise<void> {
       }
       if (intent.type === "SELECT_DATE") return showAskedDay(turn, intent);
       if (intent.type === "REQUEST_HELP") return session.help(turn.said);
+      if (intent.type === "START_INQUIRY") return restartBookingDays(turn);
       return turn.fallback(`${SORRY} Which day works for you?`, { kind: "choose", options: session.offeredDates.map((day) => day.label), what: "a day" });
     }
 
@@ -536,6 +550,7 @@ async function byStage(turn: Turn): Promise<void> {
         return turn.clarify("Which time works for you?", menu);
       }
       if (intent.type === "REQUEST_HELP") return session.help(turn.said);
+      if (intent.type === "START_INQUIRY") return restartBookingDays(turn);
       if (turn.interpretation.clarificationQuestion) return turn.clarify(`${turn.interpretation.clarificationQuestion} Which time works for you?`, menu);
       if (turn.interpretation.clarificationNeeded && !turn.interpretation.manipulation) return turn.clarify("Sure — which time works for you?", menu);
       return turn.fallback(`${SORRY} Which time works for you?`, menu);
