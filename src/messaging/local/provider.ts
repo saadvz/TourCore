@@ -9,11 +9,9 @@ export const DEFAULT_LOCAL_FROM_NUMBER = "+15555550123";
 
 /**
  * Operator-facing refusal when inject or local outbound is used on a property
- * that is not on the local loopback. Sendblue, Twilio, Photon, and practice
- * texts must never take this path.
+ * that is not on the local loopback. Do not name other providers here.
  */
-export const LOCAL_PROVIDER_REQUIRED =
-  "This property isn't using the local messaging provider. Local SMS inject and outbound only work for a property on local, not Sendblue, Twilio, Photon, or practice texts.";
+export const LOCAL_PROVIDER_REQUIRED = "This property isn't set up for local test texts. Switch it to local messaging first.";
 
 const CAPABILITIES: MessagingCapabilities = {
   inboundMessaging: true,
