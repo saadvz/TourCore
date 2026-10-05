@@ -73,7 +73,11 @@ what never does.
   mode, so no physical locks will open." Never "everything runs in demo mode".
 - **Visitor questions at every stage.** Answered only from approved facts;
   anything unknown is flagged to the operator, and the visitor picks up where
-  they left off once it's answered.
+  they left off once it's answered. A booked-tour cancel by text (any natural
+  phrasing) is handled by Tour Core: it confirms, then YES cancels (`You're
+  cancelled. Text me anytime if you want to book again.`) or NO keeps the
+  booking (`Okay, your tour stays on {day} at {time}.`). A reply that isn't a
+  clear yes or no is flagged. That is not a missing-fact flag.
 - **One-off tours.** When the operator wants to set up a tour for someone who
   asked (including a visitor who hasn't texted in, or who only got a day or
   time menu and never booked), the Bot uses `schedule_one_off_tour` and asks

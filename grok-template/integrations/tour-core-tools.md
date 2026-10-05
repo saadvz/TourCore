@@ -53,7 +53,7 @@ again with the code after the operator's yes.
 | `answer_flagged_question` | consequential | Saves the operator's answer as an approved fact (a unit detail like bedrooms becomes that unit's value), texts the visitor exactly that, asks one confirmation (`Send "{answer}" to {name}?` … `Save it?`), keeps the property published |
 | `place_operator_hold` | consequential | Pauses a running tour; its doors are switched off |
 | `clear_operator_hold` | consequential | Resumes a paused tour; policy still decides every door |
-| `revoke_tour_access` | consequential | Calls a tour off for good and tells the visitor |
+| `revoke_tour_access` | consequential | Calls a tour off for good and tells the visitor. Visitors can also cancel a booked tour by text; Tour Core confirms first (`Cancel your tour on {day} at {time}? Reply YES or NO.`). YES: `You're cancelled. Text me anytime if you want to book again.` NO: `Okay, your tour stays on {day} at {time}.` Unclear replies are flagged (`I'll check with the {team} and get back to you.`) |
 | `list_tour_time_requests` | read | Who is waiting on a time that isn't a regular slot, or on moving a tour |
 | `inspect_tour_time_request` | read | One custom-time request: who, the time they want, their current booking, and whether it's outside normal touring hours |
 | `approve_tour_time_request` | consequential | Approves that time as a one-off. Asks once first; the question ends `Move it?` or `Book it?`. A move names the old and new times. `This is a one-off…` only outside tour hours. Regular hours stay the same |

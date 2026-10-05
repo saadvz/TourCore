@@ -3,7 +3,7 @@ import { isConfident, type IntentInterpretation, type IntentInterpreter, type In
 import { RuleBasedIntentInterpreter } from "./ruleBased";
 
 export * from "./model";
-export { keywordOf, interpretByRules, RuleBasedIntentInterpreter, type Keyword } from "./ruleBased";
+export { keywordOf, interpretByRules, isCancelTourAsk, RuleBasedIntentInterpreter, type Keyword } from "./ruleBased";
 export { LLMIntentInterpreter, OpenAICompatibleModel, ModelReplySchema, type LanguageModel } from "./llm";
 export { normalize } from "./normalize";
 

@@ -187,6 +187,30 @@ describe("rule-based interpretation", () => {
     expect(read("consent", "YES")).toMatchObject({ intent: { type: "CONSENT_YES" }, confidence: 1 });
     expect(read("consent", "N")).toMatchObject({ intent: { type: "CONSENT_NO" }, confidence: 1 });
     expect(read("choose-unit", "please don't stop").intent.type).not.toBe("STOP_MESSAGES");
+    expect(read("ready", "cancel")).toMatchObject({ intent: { type: "STOP_MESSAGES" }, confidence: 1 });
+  });
+
+  it("CANCEL_TOUR from varied phrasing when a booked tour can be cancelled", () => {
+    const booked = { hasCancelableTour: true };
+    for (const m of [
+      "Can we cancel the tour?",
+      "I want to cancel the booked tour",
+      "cancel",
+      "please cancel my tour",
+      "call off the tour",
+      "I can't make it",
+      "I need to cancel",
+      "Yes, cancel it",
+    ]) {
+      expect(readAs("ready", m, booked), m).toEqual({ type: "CANCEL_TOUR" });
+    }
+    expect(readAs("ready", "What's your cancellation policy?", booked)).toEqual({ type: "ASK_PROPERTY_QUESTION", question: "What's your cancellation policy?" });
+    expect(readAs("ready", "is there a gym?", booked)).toEqual({ type: "ASK_PROPERTY_QUESTION", question: "is there a gym?" });
+    expect(readAs("touring", "I can't find the unit", booked)).toEqual({ type: "REQUEST_HELP", problem: "CANT_FIND_UNIT" });
+    expect(read("ready", "STOP", booked)).toMatchObject({ intent: { type: "STOP_MESSAGES" }, confidence: 1 });
+    expect(readAs("ready", "yes", { ...booked, awaiting: { kind: "confirm-cancel-tour", day: "Monday, Sep 28", time: "2:00 PM" } })).toEqual({ type: "CONFIRM_CANCEL_TOUR" });
+    expect(readAs("ready", "Yes, cancel it", { ...booked, awaiting: { kind: "confirm-cancel-tour", day: "Monday, Sep 28", time: "2:00 PM" } })).toEqual({ type: "CONFIRM_CANCEL_TOUR" });
+    expect(readAs("ready", "no", { ...booked, awaiting: { kind: "confirm-cancel-tour", day: "Monday, Sep 28", time: "2:00 PM" } })).toEqual({ type: "KEEP_TOUR" });
   });
 
   it("vague or partial access-related messages stay below the access threshold", () => {

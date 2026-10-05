@@ -13,7 +13,7 @@ import {
   type TourTimeRequest,
   type Verification,
 } from "../domain/model";
-import { TERMINAL, transition } from "../domain/stateMachine";
+import { isCancelableReservation, TERMINAL, transition } from "../domain/stateMachine";
 import type { DurinAccessAdapter, DurinAccessResult, DurinHealth } from "../durin/DurinAccessAdapter";
 import { MessagingError, type DeliveryReceipt, type MessageChannel, type Messenger } from "../messaging/Messenger";
 import { withPrompt, type ReplyPrompt } from "../messaging/presentation";
@@ -117,6 +117,24 @@ export function isLiveHelpReservation(reservation: Reservation, now: Date): bool
 
 /** What a visitor hears when the approved facts don't cover their question. The team is alerted at the same time. */
 export const UNKNOWN_ANSWER = "I don't have that information for this property. I've flagged it for the property team so they can get back to you.";
+
+/** Visitor cancel-by-text: Critiquito-locked confirm, done, and keep-booked lines. */
+export const VISITOR_CANCEL_DONE = "You're cancelled. Text me anytime if you want to book again.";
+export const VISITOR_CANCEL_FAILED = "I can't cancel it from here. I've asked the leasing team to call it off and get back to you.";
+
+export function visitorCancelConfirm(day: string, time: string): string {
+  return `Cancel your tour on ${day} at ${time}? Reply YES or NO.`;
+}
+
+export function visitorCancelKept(day: string, time: string): string {
+  return `Okay, your tour stays on ${day} at ${time}.`;
+}
+
+export function visitorCancelConfirmFor(reservation: Reservation, timeZone: string): string | undefined {
+  if (!reservation.slotStart) return undefined;
+  const start = new Date(reservation.slotStart);
+  return visitorCancelConfirm(formatDayIn(start, timeZone), formatTimeIn(start, timeZone));
+}
 
 /**
  * Visitor SMS when a door stays locked. Casual, no provider names.
@@ -977,6 +995,35 @@ export class TourCore {
       reservation = { ...kept, updatedAt: this.nowIso() };
     }
     return this.move(reservation, "CANCELLED", "RESERVATION_CANCELLED", { detail: reason });
+  }
+
+  /**
+   * Visitor confirmed cancel-by-text. Same engine path as calling the tour
+   * off: doors are switched off, status is cancelled, audit is written.
+   * The caller sends the short done line.
+   */
+  async cancelTourByVisitor(reservationId: string): Promise<Reservation> {
+    const reservation = await this.mustGetReservation(reservationId);
+    if (!isCancelableReservation(reservation)) {
+      throw new TourCoreError("NOT_CANCELABLE", "This tour can't be cancelled from here.");
+    }
+    return this.cancelReservation(reservationId, "visitor cancelled by text");
+  }
+
+  /**
+   * Cancel-by-text could not finish. Never uses the generic "I don't have that
+   * information" line — flags the team and sends the interim call-off reply.
+   */
+  async flagVisitorCancelFailed(input: { phone: string; text: string; reservationId?: string; meta?: InboundMeta; recordInbound?: boolean }): Promise<void> {
+    const phone = normalizePhone(input.phone);
+    const prospect = (await this.deps.store.list("prospects")).find((p) => p.phone === phone);
+    const reservation = input.reservationId ? await this.deps.store.get("reservations", input.reservationId) : undefined;
+    const asked = input.text.trim().slice(0, 300) || "cancel";
+    if (input.recordInbound !== false) await this.recordIncoming({ phone, body: asked, prospectId: prospect?.id, reservationId: reservation?.id, meta: input.meta });
+    await this.record("QUESTION_UNANSWERED", { reservationId: reservation?.id, prospectId: prospect?.id, detail: asked });
+    await this.sendConversationText({ phone, body: VISITOR_CANCEL_FAILED, reservationId: reservation?.id });
+    const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : `A visitor texting from ${phone}`;
+    await this.notifyOperator(reservation, `${who} asked to cancel their tour, and I couldn't cancel it from here.`);
   }
 
   async placeOperatorHold(reservationId: string, reason: string): Promise<Reservation> {

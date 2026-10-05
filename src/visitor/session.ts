@@ -11,7 +11,8 @@ import { entryReply } from "./entry";
 import { visitorTourOf } from "./identity";
 import { ONE_OFF_REPLACED_DETAIL } from "./oneOffGate";
 import { offerDate } from "./unavailableDay";
-import { isLiveHelpReservation, TourCore, type AccessOutcome, type InboundMeta } from "../core/TourCore";
+import { isLiveHelpReservation, TourCore, VISITOR_CANCEL_DONE, visitorCancelConfirmFor, type AccessOutcome, type InboundMeta } from "../core/TourCore";
+import { isCancelableReservation } from "../domain/stateMachine";
 import { parseIsoDate, type TourSlot } from "../core/schedule";
 import { createDurin, createStore, createVerificationProvider } from "../createTourCore";
 import type { TourCoreStore } from "../storage/Store";
@@ -702,6 +703,51 @@ export class VisitorDemoSession {
     const request = await this.core.declineProposedTime(requestId);
     await this.syncReplies();
     return request;
+  }
+
+  async hasCancelableTour(): Promise<boolean> {
+    const reservation = await this.reservation();
+    return !!reservation && isCancelableReservation(reservation);
+  }
+
+  cancelConfirmLine(reservation: Reservation): string | undefined {
+    return visitorCancelConfirmFor(reservation, this.config.property.timezone);
+  }
+
+  /** Visitor confirmed cancel-by-text: revoke doors, cancel, audit, then the short done line. */
+  async cancelBookedTour(said: Said): Promise<"cancelled" | "failed"> {
+    await this.recordText(said);
+    const reservation = await this.reservation();
+    try {
+      if (!reservation || !isCancelableReservation(reservation)) {
+        throw new SetupInputError("NOT_CANCELABLE", "This tour can't be cancelled from here.");
+      }
+      await this.core.cancelTourByVisitor(reservation.id);
+      await this.reply(VISITOR_CANCEL_DONE);
+      return "cancelled";
+    } catch {
+      await this.core.flagVisitorCancelFailed({
+        phone: this.visitor?.phone ?? "",
+        text: said.text ?? "cancel",
+        reservationId: this.reservationId,
+        meta: said.meta,
+        recordInbound: false,
+      });
+      await this.syncReplies();
+      return "failed";
+    }
+  }
+
+  async reportCancelFailed(said: Said): Promise<void> {
+    await this.recordText(said);
+    await this.core.flagVisitorCancelFailed({
+      phone: this.visitor?.phone ?? "",
+      text: said.text ?? "cancel",
+      reservationId: this.reservationId,
+      meta: said.meta,
+      recordInbound: false,
+    });
+    await this.syncReplies();
   }
 
   /**

@@ -63,6 +63,10 @@ export const TourIntentSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("FOLLOW_UP_NO") }),
   z.object({ type: z.literal("STOP_MESSAGES") }),
   z.object({ type: z.literal("START_MESSAGES") }),
+  /** Visitor wants to cancel a booked tour; Tour Core confirms before acting. */
+  z.object({ type: z.literal("CANCEL_TOUR") }),
+  z.object({ type: z.literal("CONFIRM_CANCEL_TOUR") }),
+  z.object({ type: z.literal("KEEP_TOUR") }),
   z.object({ type: z.literal("UNKNOWN") }),
 ]);
 export type TourIntent = z.infer<typeof TourIntentSchema>;
@@ -117,7 +121,9 @@ export type StepAwaiting =
   | { kind: "confirm-alternative"; requestId: string; startsAt: string }
   /** "Want that, or another day?" — `slotStart` is the exact next opening; `date` is its YYYY-MM-DD. */
   | { kind: "accept-next-opening"; date: string; slotStart: string }
-  | { kind: "confirm-operator-tour"; confirmBy: string };
+  | { kind: "confirm-operator-tour"; confirmBy: string }
+  /** Confirm a visitor cancel-by-text. Day/time match the booked-tour copy. */
+  | { kind: "confirm-cancel-tour"; day: string; time: string };
 
 /**
  * Something Tour Core just asked the visitor. `which-unit` interrupts the
@@ -146,6 +152,8 @@ export interface InterpretContext {
   today?: LocalDate;
   /** Property timezone, so last-asked copy can name a weekday and time. */
   timezone?: string;
+  /** A booked (or held) tour the visitor can cancel by text. */
+  hasCancelableTour?: boolean;
 }
 
 export interface IntentInterpreter {
@@ -171,6 +179,8 @@ const STATE_CHANGING: ReadonlySet<IntentType> = new Set([
   "FOLLOW_UP_NO",
   "STOP_MESSAGES",
   "START_MESSAGES",
+  "CONFIRM_CANCEL_TOUR",
+  "KEEP_TOUR",
 ]);
 
 /**
