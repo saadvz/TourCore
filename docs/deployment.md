@@ -317,11 +317,14 @@ silently on a stale address.
 
 ## Visitor messaging
 
-The operator chooses Sendblue, Twilio, or Photon. Grok collects that
+The operator chooses Sendblue, Twilio, Photon, or the local QA loopback. Grok collects that
 provider's credentials with a secure input and submits them. The setup page
 remains the write path and the manual fallback. A fresh installation asks;
 an existing installation that already has valid Sendblue credentials stays on
-Sendblue.
+Sendblue. Switching providers takes the previous one out of active use and
+requires a new connection test. It does not delete saved credentials or
+attached lines for other providers. Switching back uses the stored account
+unless those details were never set.
 
 Sendblue then checks the account and line, creates an incoming-webhook secret
 if there isn't one, registers its own receive webhook for the current public

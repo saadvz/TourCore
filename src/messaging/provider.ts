@@ -92,7 +92,7 @@ export interface MessagingProvider extends MessagingAdapter {
   readonly presentation: MessageChannel;
   capabilities(): MessagingCapabilities;
   configFields(): MessagingConfigField[];
-  /** Secret-store names removed from active use when the operator switches away. */
+  /** Secret-store names that belong to this provider. Secure setup writes these; they stay saved when the operator switches away. */
   settingNames(): string[];
   /** Names whose change means the last connection test no longer applies. */
   credentialNames(): string[];

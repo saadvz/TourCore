@@ -206,6 +206,28 @@ describe("inject_local_sms and read_local_outbox", () => {
     expect(await h.fails("inject_local_sms", { from: VISITOR, text: "HI" })).toBe("This property isn't set up for local test texts. Switch it to local messaging first.");
   });
 
+  it("switching a scratch property to local and back to Sendblue keeps the stored credentials", async () => {
+    const h = installHarness();
+    cleanups.push(h.cleanup);
+    h.inst.files.ensure({ deploymentMode: "GROK_MANAGED_P0" });
+    h.inst.files.setPublicBaseUrl(PUBLIC, "MANUAL");
+    await h.ok("choose_messaging_provider", { provider: "sendblue" });
+    h.inst.secrets.set({ SENDBLUE_API_API_KEY: SB_KEY, SENDBLUE_API_API_SECRET: SB_SECRET, SENDBLUE_FROM_NUMBER: LINE });
+    h.workspace.save(hillsideConfig());
+    await h.ok("set_services", { messaging: "live" });
+
+    await h.ok("choose_messaging_provider", { provider: "local" });
+    expect(h.inst.secrets.get("SENDBLUE_API_API_KEY")).toBe(SB_KEY);
+    expect(h.inst.secrets.get("SENDBLUE_API_API_SECRET")).toBe(SB_SECRET);
+    expect(h.inst.secrets.get("SENDBLUE_FROM_NUMBER")).toBe(LINE);
+
+    const back = await h.ok("choose_messaging_provider", { provider: "sendblue" });
+    expect(back.summary).toMatch(/I'll test the saved account next/);
+    expect(h.inst.secrets.get("SENDBLUE_API_API_KEY")).toBe(SB_KEY);
+    expect(h.inst.secrets.get("SENDBLUE_FROM_NUMBER")).toBe(LINE);
+    expect((await h.status()).components.find((c) => c.component === "VISITOR_MESSAGING")?.next).toMatchObject({ action: "TEST_VISITOR_MESSAGING" });
+  });
+
   it("choose_messaging_provider local needs no credentials and no network test", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const h = installHarness();

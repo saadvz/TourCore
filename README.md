@@ -237,7 +237,7 @@ QA tools (MCP / Grok):
 - `inject_local_sms` — send a visitor text as `from` to the property line (`to`) or property. Refuses unless that property is on `local`.
 - `read_local_outbox` — outbound replies for that conversation as **separate bubbles in order** (body + timestamp). Never one concatenated blob.
 
-Switch a scratch property: `choose_messaging_provider` with `local`, `set_services` with `messaging: live`, then inject and read the outbox. Inject against a Sendblue, Twilio, Photon, or practice-text property is refused.
+Switch a scratch property: `choose_messaging_provider` with `local`, `set_services` with `messaging: live`, then inject and read the outbox. Inject against a Sendblue, Twilio, Photon, or practice-text property is refused. Switching to `local` or back to a carrier does not delete saved Sendblue, Twilio, or Photon credentials or attached lines. Switching back uses the stored account and a new connection test unless those details were never set. `set_services` only changes the property's live/practice mode; it does not touch installation secrets.
 
 ### Sendblue (one adapter)
 

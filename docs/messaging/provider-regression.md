@@ -98,4 +98,4 @@ Use a real Photon project id and secret, and a line that Photon's API lists for 
 
 ## After each provider
 
-Property records, the booking, and the consent record should look the same aside from the provider name and the phone numbers. Switching providers afterward must be an explicit choice and must require a new connection test.
+Property records, the booking, and the consent record should look the same aside from the provider name and the phone numbers. Switching providers afterward must be an explicit choice and must require a new connection test. Saved credentials and attached lines for other providers stay.
