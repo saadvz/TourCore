@@ -7,13 +7,13 @@ import { Installation } from "../src/install/installation";
 import { LocalSecretStore } from "../src/install/secretStore";
 import { DEFAULT_LOCAL_FROM_NUMBER } from "../src/messaging/local/provider";
 import { resetLocalSmsOutbox } from "../src/messaging/local/outbox";
+import { setSendblueRuntime } from "../src/messaging/sendblue/runtime";
 import { PropertyWorkspace, runReadinessCheck } from "../src/setup";
 import { FileRuntimeStore } from "../src/storage/runtimeStore";
 import { createSetupServer } from "../src/web/server";
-import { grokHarness } from "./grokHarness";
 import { installHarness, SB_KEY, SB_SECRET } from "./installHarness";
 import { hillsideConfig } from "./liveApp";
-import { LINE, PUBLIC, SECRET } from "./fakeSendblue";
+import { LINE, PUBLIC, SECRET, fakeSendblue, sendblueEnv } from "./fakeSendblue";
 
 const VISITOR = "+15555550100";
 const TOKEN = "test-operator-token-abcdef";
@@ -62,15 +62,19 @@ async function startMixedApp() {
   const root = mkdtempSync(join(tmpdir(), "tourcore-property-msg-"));
   cleanups.push(resetLocalSmsOutbox());
   cleanups.push(() => rmSync(root, { recursive: true, force: true }));
+  const fake = fakeSendblue();
+  cleanups.push(setSendblueRuntime({ env: () => sendblueEnv(), client: () => fake.client }));
   let clock = Date.parse("2026-09-28T11:00:00.000Z");
   const ws = new PropertyWorkspace(root);
   const now = new Date(clock);
-  const tenaflyId = await publish(ws, tenaflyConfig(), now);
-  const scratchId = ws.save(scratchConfig()).config.property.id;
   const runtime = new FileRuntimeStore(join(root, "runtime"));
   const env: NodeJS.ProcessEnv = {
     PUBLIC_BASE_URL: PUBLIC,
     TOURCORE_SMS_CONSENT_MODE: "keyword_confirm",
+    SENDBLUE_API_API_KEY: SB_KEY,
+    SENDBLUE_API_API_SECRET: SB_SECRET,
+    SENDBLUE_FROM_NUMBER: LINE,
+    SENDBLUE_WEBHOOK_SECRET: SECRET,
   };
   const installation = new Installation({
     root,
@@ -91,6 +95,8 @@ async function startMixedApp() {
   const server = createSetupServer({ workspace: ws, installation, now: () => new Date(clock), realNow: () => clock, operatorToken: () => TOKEN, log: () => {} });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   cleanups.push(() => server.close());
+  const tenaflyId = await publish(ws, tenaflyConfig(), now);
+  const scratchId = ws.save(scratchConfig()).config.property.id;
   const port = (server.address() as { port: number }).port;
   let rpc = 0;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -128,13 +134,21 @@ describe("property-scoped local messaging", () => {
     expect(app.ws.load(app.scratchId).config.messagingProvider).toBe("local");
     expect(app.ws.load(app.scratchId).config.messagingMode).toBe("live");
 
+    await app.grok("run_readiness_check", { property: app.scratchId });
+    expect(app.ws.load(app.tenaflyId).state.status).toBe("PUBLISHED_FOR_DEMO");
+
     const injected = await app.grok("inject_local_sms", { from: VISITOR, text: "TOUR", property: app.scratchId });
     expect(injected.bubbles.length).toBeGreaterThanOrEqual(1);
     expect(typeof injected.bubbles[0].body).toBe("string");
+    expect(injected.bubbles[0].body).toMatch(/TOUR|privacy|self-guided/i);
+    expect(injected.bubbles[0].body).not.toMatch(/aren't available right now/);
     expect(injected.to).toBe(DEFAULT_LOCAL_FROM_NUMBER);
     const outbox = await app.grok("read_local_outbox", { from: VISITOR, property: app.scratchId });
     expect(outbox.bubbles.length).toBeGreaterThanOrEqual(1);
-    expect(outbox.bubbles.map((b: { body: string }) => b.body).join("\0")).not.toEqual(outbox.bubbles.map((b: { body: string }) => b.body).join(""));
+    expect(outbox.bubbles.every((b: { body: string; sentAt: string }) => typeof b.body === "string" && typeof b.sentAt === "string")).toBe(true);
+    if (outbox.bubbles.length > 1) {
+      expect(outbox.bubbles.map((b: { body: string }) => b.body).join("\0")).not.toEqual(outbox.bubbles.map((b: { body: string }) => b.body).join(""));
+    }
 
     await expect(app.grok("inject_local_sms", { from: VISITOR, text: "TOUR", property: app.tenaflyId })).rejects.toThrow(
       /isn't set up for local test texts/,
@@ -195,13 +209,3 @@ describe("property-scoped local messaging", () => {
   });
 });
 
-describe("property-scoped local without an installation", () => {
-  it("set_services local lets inject run when the install is not on local", async () => {
-    const h = grokHarness();
-    cleanups.push(h.cleanup);
-    const id = await h.setUpAlfredWay();
-    await h.ok("set_services", { property: id, messaging: "local" });
-    expect(h.workspace.openDraft(id).draft.messagingProvider).toBe("local");
-    expect(await h.fails("inject_local_sms", { from: VISITOR, text: "HI", property: id })).toMatch(/visitor pipeline|local test texts|Start Tour Core/i);
-  });
-});

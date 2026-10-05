@@ -5,7 +5,7 @@ import { LOCAL_PROVIDER_REQUIRED, LocalMessagingProvider } from "../messaging/lo
 import { localSmsOutbox, type LocalOutboxBubble } from "../messaging/local/outbox";
 import { MessagingLedger } from "../messaging/ledger";
 import { toE164 } from "../messaging/Messenger";
-import { anyPropertyUsesLocal, usesLocalMessaging } from "../messaging/propertyScope";
+import { anyPropertyUsesLocal, localLoopbackNumber, usesLocalMessaging } from "../messaging/propertyScope";
 import { activeFromNumber, createMessagingProvider, selectionFromInstallation } from "../messaging/registry";
 import { SetupInputError } from "../setup/setupActions";
 import { resolvePropertyId } from "./resolve";
@@ -43,6 +43,7 @@ function lineFor(ctx: ToolContext, propertyId: string, to?: string): string {
   }
   const attached = ctx.services.endpoints?.forProperty(propertyId)?.address;
   if (attached) return attached;
+  if (isLocalMessagingProperty(ctx, propertyId)) return localLoopbackNumber(ctx.installation?.env());
   const line = ctx.services.messagingLine?.() ?? (ctx.installation ? activeFromNumber(ctx.installation) : undefined);
   if (line) return line;
   throw new SetupInputError("LINE_MISSING", "This property doesn't have a local touring number yet.");
