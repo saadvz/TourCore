@@ -138,7 +138,7 @@ describe("real fresh-install sequence (HTTP, MCP, secure setup page)", () => {
     const help = await nextStep();
     expect(help).toMatchObject({
       action: "FINISH_PROPERTY_SETUP",
-      operatorMessage: "If a visitor gets stuck, what number can they call and what email should we give them for help? You can skip both.",
+      operatorMessage: "What number can stuck visitors call? Pick one someone answers during tour hours.",
     });
     await grok("update_property_details", { skipVisitorHelp: true });
 

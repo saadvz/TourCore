@@ -404,7 +404,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Update property details",
     kind: "change",
     description:
-      "Changes the property's type, address, ZIP, public name, time zone or approved property facts. The name is only one the operator said (an empty name goes back to using the address). A ZIP code does not invent the rest of the address. confirmAddress is true only after they agree to the read-back. Facts must be the operator's own words. Returns nextQuestion when something still has to be asked, and that question comes before property type until the address is confirmed. After the rest of the setup is saveable, nextQuestion asks for an optional visitor help number and support email together. visitorContact is an optional number visitors can call if they're stuck at a door; it is never the team's private alert line. supportEmail is the optional address for HELP replies and compliance pages. If they skip both, pass skipVisitorHelp true so the question is not asked again.",
+      "Changes the property's type, address, ZIP, public name, time zone or approved property facts. The name is only one the operator said (an empty name goes back to using the address). A ZIP code does not invent the rest of the address. confirmAddress is true only after they agree to the read-back. Facts must be the operator's own words. Returns nextQuestion when something still has to be asked, and that question comes before property type until the address is confirmed. After the rest of the setup is saveable, nextQuestion is \"What number can stuck visitors call? Pick one someone answers during tour hours.\" Also offer a support email in the same step. visitorContact is that optional number visitors see and call; it is never the team's private alert line. supportEmail is the optional address for HELP replies and compliance pages. If they skip both, pass skipVisitorHelp true so the question is not asked again.",
     input: z.strictObject({
       property: Property,
       propertyType: z.enum(PROPERTY_TYPES).optional().describe("From the operator's answer to \"What type of property is this?\"."),
@@ -420,7 +420,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         .string()
         .max(30)
         .optional()
-        .describe("Optional phone number visitors can call if they're stuck at a door. Empty clears it. Never the team's private alert line."),
+        .describe("Optional number visitors see and call if they get stuck. Pick one someone answers during tour hours. Empty clears it. Never the team's private alert line."),
       supportEmail: z
         .string()
         .max(120)

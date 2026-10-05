@@ -354,7 +354,7 @@ async function editAlerts(draft: SetupDraft): Promise<SetupDraft> {
   return retry(async () => {
     const name = await io.askRequired(OperatorTeamCopy.cliPrompt(), draft.operator.name);
     const visitorContact = await io.ask(
-      "What number can visitors call if they're stuck at a door? Leave blank if they should just reply to the text.",
+      "What number can stuck visitors call? Pick one someone answers during tour hours.",
       draft.operator.visitorContact,
     );
     const supportEmail = await io.ask(

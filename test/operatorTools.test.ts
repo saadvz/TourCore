@@ -154,7 +154,7 @@ describe("setup through the tools", () => {
     await h.ok("set_verification_policy", { level: "basic-form" });
 
     const asked = await h.ok("review_property_setup");
-    expect(asked.nextQuestion).toBe("If a visitor gets stuck, what number can they call and what email should we give them for help? You can skip both.");
+    expect(asked.nextQuestion).toBe("What number can stuck visitors call? Pick one someone answers during tour hours.");
     expect(asked.lines).toEqual(expect.arrayContaining(["Visitors can call: not set", "Support email: not set"]));
 
     expect(await h.fails("update_property_details", { supportEmail: "nope" })).toMatch(/real email address/);

@@ -914,9 +914,9 @@ function servicesStep(data) {
         { class: "card" },
         field("Who should we alert if a visitor needs help?", alertName, "Use a team name that reads naturally after \"the\", for example leasing team or Maple Leasing team."),
         field(
-          "What number can visitors call if they're stuck at a door? (optional)",
+          "What number can stuck visitors call? Pick one someone answers during tour hours.",
           visitorContact,
-          "Shown to visitors when a door stays locked. Leave blank if they should just reply to the text. This is not your private alert line.",
+          "Visitors see and call this number. Optional. Leave blank if they should reply to the text. This is not your private alert line.",
         ),
         field(
           "What email should we give visitors who text HELP? (optional)",
