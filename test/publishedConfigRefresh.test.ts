@@ -71,9 +71,10 @@ async function textApp(options: { clock: number; hours?: TourHours }) {
     return [...session.conversation].reverse().find((item) => item.from === "tourcore")!.text;
   };
   const session = () => registry.latestForPhone(PROPERTY, PHONE, "messaging")!;
-  const republishHours = (start: string) => {
+  const republishHours = (hours: string | Partial<TourHours>) => {
     const current = ws.load(PROPERTY).config;
-    ws.save({ ...current, tourHours: { ...current.tourHours, start } });
+    const tourHours = typeof hours === "string" ? { ...current.tourHours, start: hours } : { ...current.tourHours, ...hours };
+    ws.save({ ...current, tourHours });
   };
   const restart = async () => {
     const next = new VisitorDemoRegistry();
@@ -211,6 +212,34 @@ describe("open text conversations pick up republished settings", () => {
     const bookAgain = await app.text("book a tour");
     expect(bookAgain).toContain("I have tours available. Which day works for you?");
     expect(bookAgain).not.toContain("Sorry, I didn't catch that");
+  });
+
+  it("a 'that' after an hours change re-validates the offered opening before booking", async () => {
+    const clock = at(22, 53).getTime();
+    const app = await textApp({ clock, hours: EVENING });
+    await app.text("Hi");
+    await app.text("1");
+    const offered = await app.text("today");
+    expect(offered).toContain("There are no more tours today.");
+    expect(offered).toContain("The next one is Tuesday, Sep 29 at 8:15 PM. Want that, or another day?");
+    expect(await app.session().stage()).toBe("choose-date");
+
+    app.republishHours({ end: "23:30" });
+    const stillOpen = await app.text("that");
+    const tuesday815 = zonedTimeToUtc({ year: 2026, month: 9, day: 29, hour: 20, minute: 15 }, "America/New_York").toISOString();
+    expect(stillOpen).toContain("you're booked for 8:15 PM on Tuesday, Sep 29");
+    expect((await app.session().reservation())!.slotStart).toBe(tuesday815);
+
+    const closed = await textApp({ clock, hours: EVENING });
+    await closed.text("Hi");
+    await closed.text("1");
+    await closed.text("today");
+    closed.republishHours("21:00");
+    const rejected = await closed.text("that");
+    expect(rejected).toContain("Someone just grabbed that time.");
+    expect(rejected).not.toContain("you're booked");
+    expect((await closed.session().reservation())!.slotStart).toBeUndefined();
+    expect(await closed.session().stage()).not.toBe("consent");
   });
 
   it("a booked reservation keeps its tour window after an hours change", async () => {
