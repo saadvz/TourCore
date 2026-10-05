@@ -26,6 +26,11 @@ two steps:
 
 Ask the question word for word. Pass the code only after an explicit yes.
 
+If tours at the property are paused, `approve_tour_time_request` and
+`reschedule_tour` refuse on the first call (`Tours at {property} are paused.
+Resume them first.`) instead of asking. Tell the operator that. Don't look
+for another way.
+
 Publishing is also refused outright unless the saved setup is valid and both
 the readiness check and a practice tour passed for that exact setup.
 

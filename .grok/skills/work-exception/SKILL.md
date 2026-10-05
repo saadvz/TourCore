@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Tour updates, exception queue, monitoring, holds and approved answers
-  version: "0.3.1"
+  version: "0.3.2"
 ---
 
 # Work Exception
@@ -104,8 +104,9 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   the same as holding one visitor. Ask the exact question first. If tours are
   already booked, the operator chooses keep or cancel. Resume texts waiting
   visitors that tours are back. Removal drops that list without sending it,
-  and a later text to that line gets a goodbye and cannot book. Removal is
-  refused while someone is on a tour. Say remove, never archive.
+  and a later text to that line gets a goodbye and cannot book. Booked
+  cancel text on remove does not say they'll be texted when tours are back.
+  Removal is refused while someone is on a tour. Say remove, never archive.
 - Door-system problems and tours that couldn't be restored: explain in plain
   words, suggest reaching out to the visitor, and resume only once the operator
   says the doors are working.
@@ -121,10 +122,10 @@ not change.
    It names the visitor, the time they want, and whether that time is outside
    normal touring hours.
 2. The landlord can say it naturally:
-   - "Approve 3:15" → `approve_tour_time_request`. Ask the question it returns, once. After a clear yes, call it again with `confirmationCode`.
+   - "Approve 3:15" → `approve_tour_time_request`. Ask the question it returns, once. After a clear yes, call it again with `confirmationCode`. If the property is paused, it refuses (`Tours at {property} are paused. Resume them first.`) — say that, don't approve.
    - "Offer them 3:30" → `propose_tour_time`. The current booking stays until the visitor agrees.
    - "Decline" or "Keep the 4 PM booking" → `decline_tour_time_request`.
-   - "Move Testa to 3:15" → `reschedule_tour` with their name and the time. Ask the one question it returns, then call again after yes.
+   - "Move Testa to 3:15" → `reschedule_tour` with their name and the time. Ask the one question it returns, then call again after yes. If the property is paused, it refuses the same way.
    - "Set up a tour for Dana at 1A on Monday at 3:15" → `schedule_one_off_tour` with their phone, the unit and the time. Ask the one question it returns (it ends `Book it?`), then call again after yes. Only if they asked for this tour. A leftover day or time menu with nothing booked does not block — the one-off replaces it. If they already have a booked tour, say Tour Core's refusal word for word (`They already have a booked tour. I can move it or call it off.`), then use `reschedule_tour` to move it or `revoke_tour_access` to call it off. A pending one-off (`They already have a tour waiting for them to reply YES or NO. I can call it off, or we can wait for them to answer.` → `revoke_tour_access` or wait), an open tour window (`They're on a tour right now. I can call it off.` → `revoke_tour_access`), or a hold (`Their tour is on hold. I can resume it or call it off.` → `clear_operator_hold` or `revoke_tour_access`) is also refused. STOP / opt-out still refuses.
    - "Who's waiting for a different time?" → `list_tour_time_requests`.
 3. A time outside normal touring hours returns a stronger question. Call again
@@ -159,8 +160,9 @@ the time. It does not file the request until they say yes.
 
 - After each action, re-read the item (`inspect_exception` or `inspect_tour`)
   and report the new status.
-- If a tool refuses ("isn't running right now", "can't be paused"), tell the
-  operator plainly. Don't look for another way to do it.
+- If a tool refuses ("isn't running right now", "can't be paused", "Tours at
+  {property} are paused. Resume them first."), tell the operator plainly.
+  Don't look for another way to do it.
 
 ## Return
 

@@ -1,5 +1,12 @@
 import type { TourCoreConfig } from "../config/tourCoreConfig";
-import { pausedPropertyVisitorText, pausedUnitVisitorText, removedPropertyVisitorText } from "../core/availabilityCopy";
+import {
+  pausedPropertyOperatorRefuse,
+  pausedPropertyVisitorText,
+  pausedUnitOperatorRefuse,
+  pausedUnitVisitorText,
+  PROPERTY_REMOVED_REFUSE,
+  removedPropertyVisitorText,
+} from "../core/availabilityCopy";
 import type { PropertyState } from "./workspace";
 
 export function isRemoved(state: PropertyState | undefined): boolean {
@@ -42,6 +49,22 @@ export function bookingRefusal(state: PropertyState | undefined, config: TourCor
   if (unitId && isUnitPaused(state, unitId)) {
     const unit = config.units.find((item) => item.id === unitId);
     return { reason: "paused-unit", message: pausedUnitVisitorText(unit?.name ?? "That unit") };
+  }
+  return undefined;
+}
+
+/** Operator-facing refuse for approve/reschedule (and similar) while paused or removed. */
+export function operatorPausedBookingRefuse(
+  state: PropertyState | undefined,
+  config: TourCoreConfig,
+  unitId?: string,
+): string | undefined {
+  if (!state) return undefined;
+  if (isRemoved(state)) return PROPERTY_REMOVED_REFUSE;
+  const unitIds = config.units.map((unit) => unit.id);
+  if (isEffectivelyPaused(state, unitIds)) return pausedPropertyOperatorRefuse(config.property.name);
+  if (unitId && isUnitPaused(state, unitId)) {
+    return pausedUnitOperatorRefuse(config.units.find((item) => item.id === unitId)?.name ?? "That unit");
   }
   return undefined;
 }

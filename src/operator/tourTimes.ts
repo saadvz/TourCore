@@ -4,6 +4,7 @@ import { addDays, formatConfirmStamp, formatDay, formatTime, formatWeekday, loca
 import { formatPhone, parsePhone } from "../core/phone";
 import type { TourTimeRequest } from "../domain/model";
 import { TERMINAL } from "../domain/stateMachine";
+import { operatorPausedBookingRefuse } from "../setup/availability";
 import { SetupInputError } from "../setup/setupActions";
 import { oneOffBlockReason } from "../visitor/oneOffGate";
 import { SmsConsentDirectory } from "../visitor/smsConsent";
@@ -106,6 +107,12 @@ function requireLive(tour: TourSnapshot) {
   return tour.live;
 }
 
+function refuseIfPaused(ctx: Ctx, propertyId: string, unitId?: string): void {
+  const { config, state } = ctx.services.workspace.load(propertyId);
+  const message = operatorPausedBookingRefuse(state, config, unitId);
+  if (message) throw new SetupInputError("TOURS_PAUSED", message);
+}
+
 export async function listTourTimeRequests(ctx: Ctx, input: { property?: string; includeHandled?: boolean }) {
   const propertyId = input.property ? resolvePropertyId(ctx.services.workspace, input.property) : undefined;
   const requests = [];
@@ -138,6 +145,11 @@ export async function approveTourTimeRequest(ctx: Ctx, input: { tourTimeRequestI
   const found = await findTimeRequest(ctx.services, input.tourTimeRequestId);
   if (!found) throw new SetupInputError("REQUEST_NOT_FOUND", "I couldn't find that time request.");
   if (found.request.status !== "PENDING") throw new SetupInputError("REQUEST_CLOSED", "That request has already been handled.");
+  refuseIfPaused(
+    ctx,
+    found.tour.propertyId,
+    found.request.unitId ?? found.tour.bundle.reservations.find((item) => item.id === found.request.reservationId)?.unitId,
+  );
   const session = requireLive(found.tour);
   const tz = found.tour.config.property.timezone;
   const start = new Date(found.request.requestedStartsAt);
@@ -232,6 +244,7 @@ export async function rescheduleTour(
   const tour = await tourForReschedule(ctx.services, input);
   const session = requireLive(tour);
   const reservation = currentReservation(tour);
+  refuseIfPaused(ctx, tour.propertyId, reservation?.unitId);
   if (!reservation?.slotStart) throw new SetupInputError("NO_TOUR", `${who(tour)} doesn't have a tour time to move yet.`);
   const tz = tour.config.property.timezone;
   const resolved = parseFlexibleTime(input.newStartsAt, tour.config, ctx.now(), localDateOf(new Date(reservation.slotStart), tz));

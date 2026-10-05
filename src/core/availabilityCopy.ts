@@ -16,10 +16,30 @@ export function pausedUnitVisitorText(unitName: string): string {
   return `${unitName} isn't open for tours right now.`;
 }
 
-export function bookedTourCalledOffText(input: { team: string; day: string; time: string; address: string; propertyWide: boolean }): string {
+export function bookedTourCalledOffText(input: {
+  team: string;
+  day: string;
+  time: string;
+  address: string;
+  propertyWide: boolean;
+  removed?: boolean;
+}): string {
   const lead = `Sorry, the ${input.team} had to cancel your ${input.day} at ${input.time} tour at ${input.address}.`;
+  if (input.removed) return `${lead} ${input.address} isn't offering tours anymore.`;
   return input.propertyWide ? `${lead} They'll text you when tours are back.` : `${lead} Text me anytime to book another.`;
 }
+
+/** Operator-facing refuse when approving or moving a time on a paused property. */
+export function pausedPropertyOperatorRefuse(property: string): string {
+  return `Tours at ${property} are paused. Resume them first.`;
+}
+
+/** Operator-facing refuse when approving or moving a time on a paused unit. */
+export function pausedUnitOperatorRefuse(unit: string): string {
+  return `Tours of ${unit} are paused. Resume them first.`;
+}
+
+export const PROPERTY_REMOVED_REFUSE = "That property has been removed.";
 
 export function pauseConfirmQuestion(property: string, bookedCount: number): string {
   if (bookedCount === 0) {
