@@ -5,7 +5,7 @@ import { zonedTimeToUtc, type LocalDate } from "../src/core/timezone";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
 import { handleVisitorText } from "../src/visitor/conversation";
 import { VisitorDemoSession, visitorView } from "../src/visitor";
-import { unavailableDayReply } from "../src/visitor/unavailableDay";
+import { acceptsOfferedOpening, unavailableDayReply } from "../src/visitor/unavailableDay";
 
 const TZ = "America/New_York";
 const PHONE = "+15550102000";
@@ -34,7 +34,6 @@ function oneSundaySlot(base = loadConfig()): TourCoreConfig {
     ...everydayHours(base),
     tourHours: {
       ...everydayHours(base).tourHours,
-      days: ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"],
       start: "08:15",
       end: "09:15",
     },
@@ -89,57 +88,42 @@ describe("unavailableDayReply", () => {
   const openEveryDay = everydayHours();
   const weekdays = loadConfig();
 
-  it("today is open but no slots remain: says no more today and the next opening", () => {
-    const now = at(2026, 10, 4, 22, 49);
-    const next = at(2026, 10, 5, 8, 15);
-    expect(replyFor(now, date(2026, 10, 4), next, openEveryDay)).toBe(
-      "There are no more tours today. The next opening is tomorrow at 8:15 AM. Which day works for you?",
+  it("today is open but no slots remain", () => {
+    expect(replyFor(at(2026, 10, 4, 22, 49), date(2026, 10, 4), at(2026, 10, 5, 8, 15), openEveryDay)).toBe(
+      "There are no more tours today. The next one is Monday, Oct 5 at 8:15 AM. Want that, or another day?",
     );
   });
 
   it("a later open day is fully booked", () => {
-    const now = at(2026, 9, 28, 7);
-    const next = at(2026, 9, 28, 14);
-    expect(replyFor(now, date(2026, 9, 29), next, weekdays)).toBe(
-      "Tuesday, Sep 29 is fully booked. The next opening is today at 2:00 PM. Which day works for you?",
+    expect(replyFor(at(2026, 10, 5, 9), date(2026, 10, 7), at(2026, 10, 8, 9), weekdays)).toBe(
+      "Wednesday, Oct 7 is fully booked. The next opening is Thursday, Oct 8 at 9:00 AM. Want that, or another day?",
     );
   });
 
   it("the requested weekday is not a tour day", () => {
-    const now = at(2026, 9, 28, 7);
-    const next = at(2026, 9, 28, 14);
-    expect(replyFor(now, date(2026, 10, 4), next, weekdays)).toBe(
-      "I don't have tours on Sundays. The next opening is today at 2:00 PM. Which day works for you?",
+    expect(replyFor(at(2026, 10, 4, 22, 49), date(2026, 10, 3), at(2026, 10, 5, 8, 15), weekdays)).toBe(
+      "Tours don't run on Saturdays. The next opening is Monday, Oct 5 at 8:15 AM. Want that, or another day?",
     );
   });
 
   it("the requested day is beyond the booking horizon", () => {
-    const now = at(2026, 9, 28, 7);
-    const next = at(2026, 9, 28, 14);
     expect(isBeyondBookingHorizon(date(2026, 9, 28), date(2026, 11, 16))).toBe(true);
-    expect(replyFor(now, date(2026, 11, 16), next, weekdays)).toBe(
-      "That's too far out to book. The next opening is today at 2:00 PM. Which day works for you?",
-    );
-  });
-
-  it("uses on {weekday, date} when the next opening is not today or tomorrow", () => {
-    const now = at(2026, 10, 2, 16);
-    const next = at(2026, 10, 5, 14);
-    expect(replyFor(now, date(2026, 10, 2), next, weekdays)).toBe(
-      "There are no more tours today. The next opening is on Monday, Oct 5 at 2:00 PM. Which day works for you?",
+    expect(replyFor(at(2026, 9, 28, 7), date(2026, 11, 16), at(2026, 10, 5, 8, 15), weekdays)).toBe(
+      "I can't book that far ahead yet. The next opening is Monday, Oct 5 at 8:15 AM. Want that, or another day?",
     );
   });
 
   it("omits the next-opening clause when nothing is open", () => {
-    const now = at(2026, 10, 4, 22, 49);
-    expect(replyFor(now, date(2026, 10, 4), undefined, openEveryDay)).toBe("There are no more tours today. Which day works for you?");
+    expect(replyFor(at(2026, 10, 4, 22, 49), date(2026, 10, 4), undefined, openEveryDay)).toBe(
+      "There are no more tours today. Which day works for you?",
+    );
   });
 
   it("does not use the old closed-day sentence or 'I have tours available'", () => {
-    const now = at(2026, 10, 4, 22, 49);
-    const text = replyFor(now, date(2026, 10, 4), at(2026, 10, 5, 8, 15), openEveryDay);
+    const text = replyFor(at(2026, 10, 4, 22, 49), date(2026, 10, 4), at(2026, 10, 5, 8, 15), openEveryDay);
     expect(text).not.toContain("I don't have tours on Sunday, Oct 4");
     expect(text).not.toContain("I have tours available");
+    expect(text).not.toContain("Which day works for you?");
   });
 
   it("treats today + horizon days as too far, and today + horizon - 1 as in range", () => {
@@ -147,17 +131,45 @@ describe("unavailableDayReply", () => {
     expect(isBeyondBookingHorizon(date(2026, 9, 28), date(2026, 10, 18))).toBe(false);
     expect(isBeyondBookingHorizon(date(2026, 9, 28), date(2026, 10, 19))).toBe(true);
   });
+
+  it("reads 'that' and 'yes' as accepting the next opening", () => {
+    expect(acceptsOfferedOpening("that")).toBe(true);
+    expect(acceptsOfferedOpening("That one!")).toBe(true);
+    expect(acceptsOfferedOpening("yes")).toBe(true);
+    expect(acceptsOfferedOpening("another day")).toBe(false);
+    expect(acceptsOfferedOpening("Monday")).toBe(false);
+  });
 });
 
 describe("typed day questions use the shared copy", () => {
-  it("Sunday 10:49 PM, last slot gone: no more tours today, next is tomorrow 8:15 AM", async () => {
+  it("Sunday 10:49 PM, last slot gone: no more tours today, next is Monday 8:15 AM", async () => {
     const p = textVisitor({ config: everydayHours(), now: at(2026, 10, 4, 22, 49).getTime() });
     await toChooseDate(p);
     await p.say("Is there a tour for today?");
-    expect(p.lastReply()).toContain("There are no more tours today. The next opening is tomorrow at 8:15 AM. Which day works for you?");
+    expect(p.lastReply()).toContain("There are no more tours today. The next one is Monday, Oct 5 at 8:15 AM. Want that, or another day?");
     expect(p.lastReply()).toContain("1) Monday, Oct 5");
     expect(p.lastReply()).not.toContain("I don't have tours on Sunday");
     expect(p.lastReply()).not.toContain("I have tours available");
+  });
+
+  it("accepting 'that' offers the next opening day's times", async () => {
+    const p = textVisitor({ config: everydayHours(), now: at(2026, 10, 4, 22, 49).getTime() });
+    await toChooseDate(p);
+    await p.say("Is there a tour for today?");
+    await p.say("that");
+    expect(p.lastReply()).toContain("I have these times available Monday, Oct 5:");
+    expect(p.lastReply()).toContain("8:15 AM");
+    expect(await p.session.stage()).toBe("choose-time");
+  });
+
+  it("naming the next-opening day uses the existing day choice", async () => {
+    const p = textVisitor({ config: everydayHours(), now: at(2026, 10, 4, 22, 49).getTime() });
+    await toChooseDate(p);
+    await p.say("Is there a tour for today?");
+    await p.say("Monday");
+    expect(p.lastReply()).toContain("I have these times available Monday, Oct 5:");
+    expect(p.lastReply()).toContain("8:15 AM");
+    expect(await p.session.stage()).toBe("choose-time");
   });
 
   it("today is open but every remaining start is booked", async () => {
@@ -165,16 +177,16 @@ describe("typed day questions use the shared copy", () => {
     await toChooseDate(p);
     await bookAllSlots(p.session, date(2026, 10, 4));
     await p.say("today");
-    expect(p.lastReply()).toContain("There are no more tours today. The next opening is tomorrow at 8:15 AM. Which day works for you?");
+    expect(p.lastReply()).toContain("There are no more tours today. The next one is Monday, Oct 5 at 8:15 AM. Want that, or another day?");
     expect(p.lastReply()).not.toContain("is fully booked");
     expect(p.lastReply()).not.toContain("I have tours available");
   });
 
-  it("Sunday is not a tour day on the weekday schedule", async () => {
+  it("Saturday is not a tour day on the weekday schedule", async () => {
     const p = textVisitor({ now: at(2026, 9, 28, 7).getTime() });
     await toChooseDate(p);
-    await p.say("Sunday");
-    expect(p.lastReply()).toContain("I don't have tours on Sundays. The next opening is today at 2:00 PM. Which day works for you?");
+    await p.say("Saturday");
+    expect(p.lastReply()).toContain("Tours don't run on Saturdays. The next opening is Monday, Sep 28 at 2:00 PM. Want that, or another day?");
     expect(p.lastReply()).toContain("1) Monday, Sep 28");
     expect(p.lastReply()).not.toContain("I have tours available");
   });
@@ -186,18 +198,28 @@ describe("chooseDate buttons use the same helper", () => {
     await toWebChooseDate(session);
     await bookAllSlots(session, date(2026, 9, 29));
     await session.act("chooseDate", { date: "2026-09-29" });
-    expect(lastFromTourCore(session)).toContain("Tuesday, Sep 29 is fully booked. The next opening is today at 2:00 PM. Which day works for you?");
+    expect(lastFromTourCore(session)).toContain("Tuesday, Sep 29 is fully booked. The next opening is Monday, Sep 28 at 2:00 PM. Want that, or another day?");
     expect(lastFromTourCore(session)).toContain("Pick a day below.");
     expect(lastFromTourCore(session)).not.toContain("I have tours available");
     expect(await session.stage()).toBe("choose-date");
     expect((await visitorView(session)).choices.map((c) => c.label).slice(0, 2)).toEqual(["Monday, Sep 28", "Tuesday, Sep 29"]);
   });
 
+  it("picking the next-opening day from the buttons offers that day's times", async () => {
+    const session = webVisitor({ now: at(2026, 9, 28, 7).getTime() });
+    await toWebChooseDate(session);
+    await bookAllSlots(session, date(2026, 9, 29));
+    await session.act("chooseDate", { date: "2026-09-29" });
+    await session.act("chooseDate", { date: "2026-09-28" });
+    expect(lastFromTourCore(session)).toContain("I have these times available Monday, Sep 28:");
+    expect(await session.stage()).toBe("choose-time");
+  });
+
   it("a day past the booking horizon is too far out", async () => {
     const session = webVisitor({ now: at(2026, 9, 28, 7).getTime() });
     await toWebChooseDate(session);
     await session.act("chooseDate", { date: "2026-11-16" });
-    expect(lastFromTourCore(session)).toContain("That's too far out to book. The next opening is today at 2:00 PM. Which day works for you?");
+    expect(lastFromTourCore(session)).toContain("I can't book that far ahead yet. The next opening is Monday, Sep 28 at 2:00 PM. Want that, or another day?");
     expect(lastFromTourCore(session)).toContain("Pick a day below.");
     expect(lastFromTourCore(session)).not.toContain("I have tours available");
     expect(lastFromTourCore(session)).not.toContain("I have these times available");

@@ -368,6 +368,9 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
     }
 
     case "choose-date": {
+      if (ctx.awaiting?.kind === "accept-next-opening" && /^(that|that one|that day|that time|that works|yes|yeah|yea|yep|yup|sure|ok|okay|k|yes that|yes that one|yeah that)$/.test(t)) {
+        return result({ type: "SELECT_DATE" }, 0.95);
+      }
       const labels = ctx.timeChoices;
       const bare = t.match(/^(#|number |option |no |choice )?(\S+)$/);
       const bareN = bare ? numberWord(bare[2]!) : undefined;

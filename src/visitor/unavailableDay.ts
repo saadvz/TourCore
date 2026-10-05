@@ -1,7 +1,7 @@
 import type { TourCoreConfig } from "../config/tourCoreConfig";
-import { relativeWhen } from "../core/customSlot";
-import { isBeyondBookingHorizon, parseIsoDate } from "../core/schedule";
-import { formatDay, formatLocalDate, localDateOf, weekdayOf, type LocalDate } from "../core/timezone";
+import { isoDate, isBeyondBookingHorizon, parseIsoDate } from "../core/schedule";
+import { formatDay, formatLocalDate, formatTime, localDateOf, weekdayOf, type LocalDate } from "../core/timezone";
+import { normalize, stripFiller } from "../intent/normalize";
 import type { ReplyPrompt } from "../messaging/presentation";
 import { timeMenu } from "./entry";
 import type { VisitorDemoSession } from "./session";
@@ -14,8 +14,17 @@ function weekdayPlural(requested: LocalDate, tz: string): string {
   return `${formatLocalDate(requested, tz).split(",")[0]!}s`;
 }
 
-function nextOpeningClause(nextOpening: Date | undefined, now: Date, tz: string): string {
-  return nextOpening ? ` The next opening is ${relativeWhen(nextOpening, now, tz)}.` : "";
+/** "Monday, Oct 5 at 8:15 AM" in the property's zone. */
+export function nextOpeningWhen(start: Date, tz: string): string {
+  return `${formatDay(start, tz)} at ${formatTime(start, tz)}`;
+}
+
+function nextClause(nextOpening: Date | undefined, tz: string, noun: "one" | "opening"): string {
+  return nextOpening ? ` The next ${noun} is ${nextOpeningWhen(nextOpening, tz)}.` : "";
+}
+
+function ask(hasNext: boolean): string {
+  return hasNext ? " Want that, or another day?" : " Which day works for you?";
 }
 
 /**
@@ -32,19 +41,24 @@ export function unavailableDayReply(input: {
   const { config, now, requested, nextOpening } = input;
   const tz = config.property.timezone;
   const today = localDateOf(now, tz);
-  const next = nextOpeningClause(nextOpening, now, tz);
-  const ask = " Which day works for you?";
+  const closing = ask(!!nextOpening);
 
   if (!config.tourHours.days.includes(weekdayOf(requested))) {
-    return `I don't have tours on ${weekdayPlural(requested, tz)}.${next}${ask}`;
+    return `Tours don't run on ${weekdayPlural(requested, tz)}.${nextClause(nextOpening, tz, "opening")}${closing}`;
   }
   if (isBeyondBookingHorizon(today, requested)) {
-    return `That's too far out to book.${next}${ask}`;
+    return `I can't book that far ahead yet.${nextClause(nextOpening, tz, "opening")}${closing}`;
   }
   if (sameDay(requested, today)) {
-    return `There are no more tours today.${next}${ask}`;
+    return `There are no more tours today.${nextClause(nextOpening, tz, "one")}${closing}`;
   }
-  return `${formatLocalDate(requested, tz)} is fully booked.${next}${ask}`;
+  return `${formatLocalDate(requested, tz)} is fully booked.${nextClause(nextOpening, tz, "opening")}${closing}`;
+}
+
+/** "that" / "yes" after "Want that, or another day?" */
+export function acceptsOfferedOpening(text: string): boolean {
+  const t = stripFiller(normalize(text));
+  return /^(that|that one|that day|that time|that works|yes|yeah|yea|yep|yup|sure|ok|okay|k|yes that|yes that one|yeah that)$/.test(t);
 }
 
 function datePrompt(session: VisitorDemoSession): ReplyPrompt {
@@ -68,8 +82,11 @@ export async function offerDate(session: VisitorDemoSession, date: string): Prom
     const nextOpening = (await session.core.availableDates(1))[0]?.start;
     const body = requested
       ? unavailableDayReply({ config: session.config, now, requested, ...(nextOpening ? { nextOpening } : {}) })
-      : `I don't have tours on that day. Which day works for you?`;
+      : "I can't book that day. Which day works for you?";
     await session.reply(body, datePrompt(session));
+    if (nextOpening) {
+      session.expect("choose-date", { kind: "accept-next-opening", date: isoDate(localDateOf(nextOpening, tz)) });
+    }
     return;
   }
   const menu = timeMenu(formatDay(slots[0]!.start, tz), slots.map((slot) => slot.label));

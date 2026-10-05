@@ -20,7 +20,7 @@ import {
 import type { ReplyPrompt } from "../messaging/presentation";
 import { timeMenu } from "./entry";
 import type { InterpretationNote, Said, VisitorDemoSession, VisitorStage } from "./session";
-import { offerDate } from "./unavailableDay";
+import { acceptsOfferedOpening, offerDate } from "./unavailableDay";
 import { SMS_GATE_REMINDER, SMS_KEYWORD_PROMPT, smsDisclosure, smsOptInConfirmation } from "./smsConsent";
 
 /**
@@ -518,6 +518,9 @@ async function byStage(turn: Turn): Promise<void> {
     }
 
     case "choose-date": {
+      if (turn.awaiting?.kind === "accept-next-opening" && acceptsOfferedOpening(turn.said.text ?? "")) {
+        return presentDay(turn, turn.awaiting.date);
+      }
       if (intent.type === "SELECT_DATE") return showAskedDay(turn, intent);
       if (intent.type === "REQUEST_HELP") return session.help(turn.said);
       return turn.fallback(`${SORRY} Which day works for you?`, { kind: "choose", options: session.offeredDates.map((day) => day.label), what: "a day" });
