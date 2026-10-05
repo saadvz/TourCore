@@ -94,6 +94,8 @@ what never does.
   move with `reschedule_tour` or call off with `revoke_tour_access` (resume a
   hold with `clear_operator_hold`). If tours are paused, approve and
   reschedule refuse (`Tours at {property} are paused. Resume them first.`).
+  After resume, a visitor Tour / Hi / book restarts booking the same way as a
+  first text.
   While the visitor is confirming, a leftover
   menu number only re-prompts YES / NO / STOP; a real question is flagged.
   Confirmation questions end `Move it?`,

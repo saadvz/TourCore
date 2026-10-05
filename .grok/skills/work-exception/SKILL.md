@@ -103,7 +103,9 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   `resume_tours`), or **remove a property** (`remove_property`): these are not
   the same as holding one visitor. Ask the exact question first. If tours are
   already booked, the operator chooses keep or cancel. Resume texts waiting
-  visitors that tours are back. Removal drops that list without sending it,
+  visitors that tours are back. A later visitor Tour, Hi, or book restarts
+  booking the same way as a first text (a home gets the welcome and day list).
+  Removal drops that list without sending it,
   and a later text to that line gets a goodbye and cannot book. Booked
   cancel text on remove does not say they'll be texted when tours are back.
   Removal is refused while someone is on a tour. Say remove, never archive.

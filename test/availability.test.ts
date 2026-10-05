@@ -16,10 +16,12 @@ import {
 import { persistSession } from "../src/operator/services";
 import { formatDay, formatTime } from "../src/core/timezone";
 import { formatPhone } from "../src/core/phone";
+import { loadConfig, type TourCoreConfig } from "../src/config/tourCoreConfig";
 import { createTourCore } from "../src/createTourCore";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
 import { MessagingEndpoints } from "../src/messaging/endpoints";
 import { MemoryRuntimeStore } from "../src/storage/runtimeStore";
+import { handleVisitorText } from "../src/visitor/conversation";
 import { VisitorDemoSession } from "../src/visitor/session";
 import { MessagingConversations } from "../src/visitor/messagingRouter";
 import { smsHelpBody, smsStopAck } from "../src/visitor/smsConsent";
@@ -27,7 +29,7 @@ import { VerificationLinks } from "../src/visitor/verificationLinks";
 import { listWaiters } from "../src/setup/pauseWaiters";
 import { readAvailabilityEvents } from "../src/operator/availability";
 import { tourRef } from "../src/operator/tours";
-import { grokHarness, type GrokHarness } from "./grokHarness";
+import { at, grokHarness, type GrokHarness } from "./grokHarness";
 import { bookTour, setup } from "./helpers";
 
 const cleanups: Array<() => void> = [];
@@ -385,7 +387,14 @@ describe("pause and remove", () => {
     expect(JSON.stringify(v.session.conversation).toLowerCase()).not.toContain("archive");
   });
 
-  async function inboundOn(h: GrokHarness, id: string, from: string, text: string, sent: string[], extras: { now?: () => Date; endpoints?: MessagingEndpoints } = {}) {
+  async function inboundOn(
+    h: GrokHarness,
+    id: string,
+    from: string,
+    text: string,
+    sent: string[],
+    extras: { now?: () => Date; endpoints?: MessagingEndpoints; consentMode?: "keyword_confirm" | "disabled" } = {},
+  ) {
     const endpoints = extras.endpoints ?? h.services.endpoints ?? new MessagingEndpoints(new MemoryRuntimeStore());
     if (!h.services.endpoints) {
       endpoints.attach({ address: "+15550109999", provider: "demo", propertyId: id }, new Date(h.now()));
@@ -399,6 +408,7 @@ describe("pause and remove", () => {
       links: new VerificationLinks({ baseUrl: () => undefined }),
       realNow: () => h.now(),
       now: extras.now ?? (() => new Date(h.now())),
+      ...(extras.consentMode ? { consentMode: () => extras.consentMode! } : {}),
     });
     await router.receive({
       provider: "demo",
@@ -436,6 +446,94 @@ describe("pause and remove", () => {
 
     const booked = await readyVisitor(h, id, { phone: "(555) 010-2044" });
     expect((await booked.session.reservation())!.status).toBe("READY");
+  });
+
+  function tenaflyHome(): TourCoreConfig {
+    const config = loadConfig();
+    return {
+      ...config,
+      property: {
+        ...config.property,
+        propertyType: "SINGLE_FAMILY",
+        address: "1455 Tenafly Road, Tenafly, NJ 07670",
+        displayName: "Tenafly Home",
+        name: "Tenafly Home",
+      },
+      units: [{ ...config.units[0]!, name: "Tenafly Home" }],
+    };
+  }
+
+  it("after pause then resume, Tour restarts the welcome and day list on a single-family home", async () => {
+    const config = tenaflyHome();
+    let paused = true;
+    const session = new VisitorDemoSession(config.property.id, config, "t", {
+      realNow: () => at(7),
+      kind: "messaging",
+      transport: new DemoMessagingAdapter(() => {}, "MESSAGING"),
+    });
+    session.smsConsentMode = "disabled";
+    session.availabilitySource = () => ({
+      propertyId: config.property.id,
+      status: "PUBLISHED_FOR_DEMO",
+      configHash: "test",
+      savedAt: new Date(at(7)).toISOString(),
+      paused,
+    });
+    session.rememberPauseWaiter = () => {};
+
+    await handleVisitorText(session, "+15550102000", "Tour");
+    expect(lastFrom(session)).toBe(pausedPropertyVisitorText(config.property.address, config.operator.name, config.operator.visitorContact));
+    expect(session.reservationId).toBeUndefined();
+    expect(await session.stage()).toBe("choose-unit");
+
+    paused = false;
+    await handleVisitorText(session, "+15550102000", "Tour");
+    expect(lastFrom(session)).toContain("Hi! Welcome to the self-guided tour for Tenafly Home at 1455 Tenafly Road, Tenafly, NJ 07670.");
+    expect(lastFrom(session)).toContain("Which day works for you?");
+    expect(lastFrom(session)).not.toContain("didn't catch that");
+    expect(lastFrom(session)).not.toContain("Which unit");
+    expect(lastFrom(session)).not.toContain("Reply 1 for Tenafly Home");
+    expect(await session.stage()).toBe("choose-date");
+    expect((await session.reservation())?.status).toBe("INQUIRY");
+  });
+
+  async function publishHome(h: GrokHarness): Promise<string> {
+    const created = await h.ok("create_property_setup", { address: "1455 Tenafly Road, Tenafly, NJ 07670", name: "Tenafly Home", propertyType: "SINGLE_FAMILY" });
+    await h.ok("add_unit", { name: "Tenafly Home" });
+    await h.ok("set_unit_details", { units: [{ unit: "Tenafly Home", bedrooms: "3", bathrooms: "2", monthlyRent: "$4,200", availability: "now" }] });
+    await h.ok("set_tour_hours", { days: "weekdays", start: "9am", end: "5pm" });
+    await h.ok("set_verification_policy", { level: "basic-form" });
+    await h.ok("update_property_details", { skipVisitorHelp: true });
+    await h.ok("run_readiness_check");
+    await h.ok("run_dry_tour");
+    await h.approve("publish_demo_property", {});
+    return created.setup.propertyId as string;
+  }
+
+  it("pause → resume → visitor Tour on a published home restarts days, not the unit picker", async () => {
+    const h = app();
+    const id = await publishHome(h);
+    const { config } = h.workspace.load(id);
+    await h.approve("pause_tours", { property: id });
+
+    const paused: string[] = [];
+    await inboundOn(h, id, "+15550102000", "Tour", paused, { consentMode: "disabled" });
+    expect(paused.join("\n")).toBe(pausedPropertyVisitorText(config.property.address, config.operator.name, config.operator.visitorContact));
+    expect(paused.join("\n")).not.toContain("Which unit");
+
+    await h.approve("resume_tours", { property: id });
+    const live = h.visitors.latestForPhone(id, "+15550102000", "messaging")!;
+    expect(lastFrom(live)).toBe(toursAreBackText(config.property.address));
+
+    const again: string[] = [];
+    await inboundOn(h, id, "+15550102000", "Tour", again, { consentMode: "disabled" });
+    const body = again.join("\n");
+    expect(body).toContain("Hi! Welcome to the self-guided tour");
+    expect(body).toContain("Which day works for you?");
+    expect(body).not.toContain("didn't catch that");
+    expect(body).not.toContain("Which unit");
+    expect(body).not.toContain("Reply 1 for Tenafly Home");
+    expect(await live.stage()).toBe("choose-date");
   });
 
   it("texts visitors who got a paused-unit line when that unit is resumed", async () => {

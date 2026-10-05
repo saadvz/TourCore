@@ -467,7 +467,8 @@ Terminal wizard ─────────────────────�
   tour off, answering a flagged question with a new approved fact, custom tour times (`approve_tour_time_request`,
   `reschedule_tour`, `schedule_one_off_tour`; approve and reschedule refuse while that property is paused:
   `Tours at {property} are paused. Resume them first.`), `pause_tours` / `resume_tours` (property or unit;
-  resume texts waiting visitors that tours are back), `remove_property` (records are kept; booked cancel text does
+  resume texts waiting visitors that tours are back; a later `Tour` / `Hi` / `book` restarts booking the same way
+  as a first text — a home gets the welcome and day list, not a leftover unit picker), `remove_property` (records are kept; booked cancel text does
   not promise tours will be back; a later text gets a goodbye and cannot book), and `export_audit`. Every input is validated (unexpected fields are
   refused); every result is plain language. `npm run grok:tools` lists them.
 - **One-off tour** (`schedule_one_off_tour`): use it when the operator wants to set up a tour for a visitor who

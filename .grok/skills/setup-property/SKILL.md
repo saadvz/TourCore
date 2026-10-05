@@ -169,7 +169,8 @@ published configuration. `pause_tours` stops new bookings at a property or one
 unit (ask the exact question it returns; if tours are already booked, the
 operator chooses keep or cancel). A tour in progress always finishes.
 `resume_tours` turns bookings back on and texts people who were told tours
-would be back (or who got a paused-unit line). `remove_property` takes the
+would be back (or who got a paused-unit line). A later visitor Tour, Hi, or
+book restarts booking the same way as a first text. `remove_property` takes the
 property off the list after the exact confirmation; booked visitors get a
 cancel text that the property isn't offering tours anymore (not that they'll
 be texted when tours are back) and pending door access is switched off.

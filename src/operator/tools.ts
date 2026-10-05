@@ -1154,7 +1154,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Resume tours",
     kind: "consequential",
     description:
-      "Resumes bookings at a paused property or unit. First call returns a yes/no question that includes how many waiting visitors will be texted that tours are back; call again with confirmationCode only after an explicit yes. Each waiting visitor who hasn't opted out is texted once, then the waiting list is cleared. Resuming the property clears every unit pause. Resuming one unit does not lift a property-wide pause. Removing a property instead drops the waiting list and does not send the back text.",
+      "Resumes bookings at a paused property or unit. First call returns a yes/no question that includes how many waiting visitors will be texted that tours are back; call again with confirmationCode only after an explicit yes. Each waiting visitor who hasn't opted out is texted once, then the waiting list is cleared. A later visitor Tour, Hi, or book restarts booking the same way as a first text (a home gets the welcome and day list, not a leftover unit picker). Resuming the property clears every unit pause. Resuming one unit does not lift a property-wide pause. Removing a property instead drops the waiting list and does not send the back text.",
     input: z.strictObject({
       property: Property,
       unit: z.string().max(100).optional().describe("One unit to resume. Leave out to resume the whole property."),
