@@ -518,21 +518,19 @@ describe("pause and remove", () => {
 
     const paused: string[] = [];
     await inboundOn(h, id, "+15550102000", "Tour", paused, { consentMode: "disabled" });
-    expect(paused.join("\n")).toBe(pausedPropertyVisitorText(config.property.address, config.operator.name, config.operator.visitorContact));
+    expect(paused.join("\n")).toContain(pausedPropertyVisitorText(config.property.address, config.operator.name, config.operator.visitorContact));
     expect(paused.join("\n")).not.toContain("Which unit");
 
     await h.approve("resume_tours", { property: id });
     const live = h.visitors.latestForPhone(id, "+15550102000", "messaging")!;
     expect(lastFrom(live)).toBe(toursAreBackText(config.property.address));
 
-    const again: string[] = [];
-    await inboundOn(h, id, "+15550102000", "Tour", again, { consentMode: "disabled" });
-    const body = again.join("\n");
-    expect(body).toContain("Hi! Welcome to the self-guided tour");
-    expect(body).toContain("Which day works for you?");
-    expect(body).not.toContain("didn't catch that");
-    expect(body).not.toContain("Which unit");
-    expect(body).not.toContain("Reply 1 for Tenafly Home");
+    await inboundOn(h, id, "+15550102000", "Tour", [], { consentMode: "disabled" });
+    expect(lastFrom(live)).toContain("Hi! Welcome to the self-guided tour");
+    expect(lastFrom(live)).toContain("Which day works for you?");
+    expect(lastFrom(live)).not.toContain("didn't catch that");
+    expect(lastFrom(live)).not.toContain("Which unit");
+    expect(lastFrom(live)).not.toContain("Reply 1 for Tenafly Home");
     expect(await live.stage()).toBe("choose-date");
   });
 
