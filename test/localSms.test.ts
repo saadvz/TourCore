@@ -7,6 +7,8 @@ import { LOCAL_PROVIDER_REQUIRED, LocalMessagingProvider, readLocalEnv } from ".
 import { localSmsOutbox, resetLocalSmsOutbox } from "../src/messaging/local/outbox";
 import { MessagingLedger } from "../src/messaging/ledger";
 import { handleProviderWebhook } from "../src/messaging/pipeline";
+import { bindMessagingInstallation } from "../src/messaging/registry";
+import { sendblueRuntime } from "../src/messaging/sendblue/runtime";
 import { PropertyWorkspace, runReadinessCheck } from "../src/setup";
 import { FileRuntimeStore } from "../src/storage/runtimeStore";
 import { createSetupServer } from "../src/web/server";
@@ -41,6 +43,14 @@ async function startLocalApp() {
     PUBLIC_BASE_URL: PUBLIC,
     TOURCORE_SMS_CONSENT_MODE: "keyword_confirm",
   };
+  cleanups.push(
+    bindMessagingInstallation(() => ({
+      env,
+      sendblue: sendblueRuntime.env(),
+      choice: "local",
+      manifestProvider: "LOCAL",
+    })),
+  );
   const installation = new Installation({ root, runtime, env: () => env, now: () => clock });
   installation.files.ensure({ deploymentMode: "LOCAL_DEVELOPER" });
   installation.files.setPublicBaseUrl(PUBLIC, "MANUAL");
@@ -74,7 +84,9 @@ async function startLocalApp() {
     });
     return { status: res.status, body: await res.json() };
   };
-  return { grok, webhook, port, id: config.property.id, setClock: (t: number) => (clock = t) };
+  const app = { grok, webhook, port, id: config.property.id, setClock: (t: number) => (clock = t) };
+  await grok("run_readiness_check", { property: config.property.id });
+  return app;
 }
 
 describe("local messaging provider", () => {
@@ -138,6 +150,8 @@ describe("inject_local_sms and read_local_outbox", () => {
     expect(first.bubbles.every((b: { body: string }) => typeof b.body === "string")).toBe(true);
     expect(Array.isArray(first.bubbles)).toBe(true);
     expect(typeof first.bubbles[0].body).toBe("string");
+    expect(first.bubbles[0].body).toMatch(/TOUR|privacy|self-guided/i);
+    expect(first.bubbles[0].body).not.toMatch(/aren't available right now/);
 
     const yes = await app.grok("inject_local_sms", { from: VISITOR, text: "YES", property: app.id });
     expect(yes.bubbles.length).toBeGreaterThan(1);
@@ -168,7 +182,8 @@ describe("inject_local_sms and read_local_outbox", () => {
     expect(posted).toEqual({ status: 200, body: { ok: true } });
     const outbox = await app.grok("read_local_outbox", { from: VISITOR });
     expect(outbox.bubbles.length).toBeGreaterThanOrEqual(1);
-    expect(outbox.bubbles[0].body).toContain("Tour");
+    expect(outbox.bubbles[0].body).toMatch(/TOUR|privacy|self-guided/i);
+    expect(outbox.bubbles[0].body).not.toMatch(/aren't available right now/);
   });
 
   it("refuses inject on a Sendblue property", async () => {

@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { join } from "node:path";
 import { createStore, liveTransportFor } from "../createTourCore";
 import { MessagingLedger } from "../messaging/ledger";
+import type { InboundMessage } from "../messaging/inbound";
 import { handleProviderWebhook } from "../messaging/pipeline";
 import { activeFromNumber, bindMessagingInstallation, createMessagingProvider, selectionFromInstallation } from "../messaging/registry";
 import { consentModeForProvider } from "../messaging/consentPolicy";
@@ -245,7 +246,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
     releaseUnconfirmedTours: () => conversations.releaseUnconfirmed(),
     needsAttention: (propertyId: string) => conversations.needsAttention(propertyId),
     installedMessaging: () => installedMessaging(installation),
-    receiveInbound: (message) => conversations.receive(message),
+    receiveInbound: (message: InboundMessage) => conversations.receive(message),
   };
   const alerts = new OperatorUpdates({ services: api, outbox: installation.outbox, preferences: () => installation.files.state().operatorUpdates, log });
   installation.setRelevanceCheck((event) => alerts.stillRelevant(event));
