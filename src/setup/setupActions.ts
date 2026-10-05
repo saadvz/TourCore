@@ -456,15 +456,20 @@ export function doorFollowsUnitName(draft: SetupDraft, unitId: string): boolean 
 }
 
 /**
- * Renames one unit. Its door is renamed too only when asked AND the door still
- * has the suggested label; a door the operator named themselves is never touched.
+ * Renames one unit. Apartment or condo names get the same casing as add
+ * (`4b` → `Unit 4B`, `loft` → `Unit Loft`), and the street-plus-unit nickname
+ * is refreshed. Its door is renamed too when asked (or always for a condo)
+ * AND the door still has the suggested label; a door the operator named
+ * themselves is never touched.
  */
 export function renameUnit(draft: SetupDraft, unitId: string, name: string, options: { alsoRenameDoor?: boolean } = {}): SetupDraft {
-  const clean = requireName(name, "UNIT_NAME_MISSING", "Please give the unit a name.");
+  const requested = requireName(name, "UNIT_NAME_MISSING", "Please give the unit a name.");
+  const clean = isApartmentOrCondo(draft.property) ? unitLabel(requested) : requested;
   if (draft.units.some((u) => u.id !== unitId && u.name.toLowerCase() === clean.toLowerCase())) {
     throw new SetupInputError("UNIT_NAME_TAKEN", `There's already a unit called "${clean}".`);
   }
-  const renameDoorToo = options.alsoRenameDoor === true && doorFollowsUnitName(draft, unitId);
+  const followDoor = options.alsoRenameDoor === true || isApartmentOrCondo(draft.property);
+  const renameDoorToo = followDoor && doorFollowsUnitName(draft, unitId);
   let next = clone(draft);
   const unit = next.units.find((u) => u.id === unitId);
   if (!unit) throw new SetupInputError("UNIT_NOT_FOUND", "That unit isn't part of this property.");

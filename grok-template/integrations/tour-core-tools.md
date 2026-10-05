@@ -27,7 +27,7 @@ again with the code after the operator's yes.
 | `update_property_details` | change | Property type, address, operator-given name, time zone, approved property facts, apartment or condo building-door control (`BUILDING_AND_UNIT` / `UNIT_ONLY`), optional entry instructions (`skipEntryInstructions` stores nothing), who gets alerts, optional visitor help number (never the team's private alert line); `skipVisitorHelp` records an explicit skip; returns `nextQuestion` (unit number and building-door control for an apartment or condo, then the optional help-number step) |
 | `list_units` | read | Units with description, facts, door, route, and whether that unit is paused |
 | `add_unit` | change | Adds a unit and its own door. For a single-family home the name is optional ("Main Home"), its door is the home's entrance ("Front Door" unless named) and its route is set automatically. For an apartment or condo, name is the unit number (required); the route waits until they say whether they control the building entrance. Never a made-up unit number |
-| `update_unit` | change | Renames a unit or changes its description/facts |
+| `update_unit` | change | Renames a unit or changes its description/facts. For an apartment or condo, the new name is cased the same way as add_unit and the street-plus-unit nickname and matching unit door are refreshed |
 | `set_unit_details` | change | Saves units' bedrooms, bathrooms, rent, availability and optional details from the operator's words (bulk answers welcome); "not sure" is saved as not provided |
 | `get_unit_details` | read | Unit details as short lines, what's still missing, and the one question to ask next |
 | `list_doors` | read | Every door on file |

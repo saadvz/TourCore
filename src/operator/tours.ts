@@ -120,6 +120,11 @@ export function unitNameOf(tour: TourSnapshot): string | undefined {
   return unit ? visitorSubject(tour.config.property, unit.name) : undefined;
 }
 
+/** Lowercase a leading "A" / "The" so the name reads naturally mid-sentence. */
+export function midSentence(name: string): string {
+  return name.replace(/^(A|The)(\s)/, (_all, article: string, space: string) => article.toLowerCase() + space);
+}
+
 /** Still in play: a reservation that hasn't ended, or a live visitor who hasn't booked yet. */
 export function isActive(tour: TourSnapshot): boolean {
   const r = currentReservation(tour);

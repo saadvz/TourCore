@@ -481,10 +481,13 @@ export class TourCore {
 
     await this.revokeGrants(reservation, "tour completed");
     reservation = await this.move(reservation, "COMPLETED", "TOUR_COMPLETED", { detail: "prospect finished the tour" });
+    const place = visitorSubject(this.deps.config.property, unit.name);
+    const who = knownFirstName(prospect.name);
+    const thanks = who ? `Thanks for touring ${place}, ${who}!` : `Thanks for touring ${place}!`;
     await this.textProspect(
       prospect,
       reservation.id,
-      `Thanks for touring ${visitorSubject(this.deps.config.property, unit.name)}, ${firstName(prospect.name)}!${unit.summary ? ` Quick recap: ${unit.summary.replace(/\.$/, "")}.` : ""} The doors are locked again behind you.\n` +
+      `${thanks}${unit.summary ? ` Quick recap: ${unit.summary.replace(/\.$/, "")}.` : ""} The doors are locked again behind you.\n` +
         "Would you like someone from the property team to follow up?",
       { kind: "yes-no" },
     );
@@ -1613,4 +1616,10 @@ export class TourCore {
 
 function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] ?? name;
+}
+
+function knownFirstName(name: string): string | undefined {
+  const trimmed = name.trim();
+  if (!trimmed || trimmed === UNNAMED_VISITOR) return undefined;
+  return firstName(trimmed);
 }

@@ -75,9 +75,17 @@ export function visitorSubject(property: NamedProperty, unitName: string): strin
 }
 
 /** Address visitors see: the public name plus the address when one was given, otherwise the address alone. */
-export function visitorPlace(property: { address: string; displayName?: string; name?: string }): { address: string; publicName?: string } {
+export function visitorPlace(property: Pick<NamedProperty, "address" | "displayName" | "name" | "canonicalAddress">): { address: string; publicName?: string } {
   const address = property.address.trim();
   const named = property.displayName?.trim();
-  const publicName = named && named.toLowerCase() !== address.toLowerCase() ? named : undefined;
-  return { address, ...(publicName ? { publicName } : {}) };
+  if (!named || sameIgnoreCase(named, address)) return { address };
+  const street = property.canonicalAddress?.street?.trim();
+  // A street line stored as the "name" is not a public building name — don't say "Oak Ln at Oak Ln, City".
+  if (street && sameIgnoreCase(named, street)) return { address };
+  if (address.toLowerCase().startsWith(named.toLowerCase())) return { address };
+  return { address, publicName: named };
+}
+
+function sameIgnoreCase(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
 }
