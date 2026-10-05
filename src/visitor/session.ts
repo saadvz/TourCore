@@ -408,18 +408,20 @@ export class VisitorDemoSession {
     await this.reply(`You'll get messages from ${visitorTourOf(this.config.property)} again. Text HI any time to start a tour.`);
   }
 
-  /** HELP: who this is and how to reach the property team; during a tour, the team is also alerted. */
+  /**
+   * HELP: one reply only. A reservation (active tour or any booking) gets the
+   * help ack and alerts the team. No reservation gets the carrier HELP keyword
+   * reply so compliance still holds for unknown numbers.
+   */
   async help(said: Said): Promise<void> {
-    const stage = await this.stage();
-    const info = smsHelpBody();
-    if ((stage === "ready" || stage === "touring" || stage === "stopped") && this.reservationId) {
+    if (this.reservationId) {
       this.say("visitor", said.text ?? "HELP");
       await this.core.requestHelp(this.reservationId, await this.currentPlace(), { text: said.text ?? "HELP", meta: said.meta });
       await this.syncReplies();
-    } else {
-      await this.recordText(said);
+      return;
     }
-    await this.reply(info, undefined, { deliverDespiteOptOut: this.smsConsent !== "opted_in" });
+    await this.recordText(said);
+    await this.reply(smsHelpBody(), undefined, { deliverDespiteOptOut: this.smsConsent !== "opted_in" });
   }
 
   /**

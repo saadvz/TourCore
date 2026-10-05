@@ -89,6 +89,9 @@ export class TourCoreError extends Error {
 
 const CONSENT_TEXT = "Is it OK if I text you about this tour and keep a record of your visit (times and doors used)?";
 
+/** Repeat help on the same reservation re-alerts the team at most once per this window. */
+export const HELP_ALERT_WINDOW_MS = 5 * 60_000;
+
 /** What a visitor hears when the approved facts don't cover their question. The team is alerted at the same time. */
 export const UNKNOWN_ANSWER = "I don't have that information for this property. I've flagged it for the property team so they can get back to you.";
 
@@ -793,10 +796,22 @@ export class TourCore {
   async requestHelp(reservationId: string, where?: string, inbound?: { text: string; meta?: InboundMeta }): Promise<void> {
     const reservation = await this.mustGetReservation(reservationId);
     const prospect = await this.mustGetProspect(reservation.prospectId);
-    await this.recordInbound(prospect.id, reservationId, inbound?.text ?? "I need help", inbound?.meta);
-    await this.record("HELP_REQUESTED", { reservationId, prospectId: prospect.id, detail: where ?? "" });
-    await this.notifyOperator(reservation, `${prospect.name} asked for help${where ? ` near ${where}` : ""}.`);
+    const said = inbound?.text ?? "I need help";
+    await this.recordInbound(prospect.id, reservationId, said, inbound?.meta);
+    await this.record("HELP_REQUESTED", { reservationId, prospectId: prospect.id, detail: where ?? "", code: said });
+    if (await this.shouldAlertHelp(reservationId)) {
+      await this.notifyOperator(reservation, `${prospect.name} asked for help${where ? ` near ${where}` : ""}.`);
+    }
     await this.textProspect(prospect, reservationId, VisitorDenialCopy.helpAck(this.teamName(), this.visitorHelpNumber()));
+  }
+
+  /** Re-alert at most once per HELP_ALERT_WINDOW_MS for the same reservation's open help. */
+  private async shouldAlertHelp(reservationId: string): Promise<boolean> {
+    const last = [...(await this.deps.store.listAudit())]
+      .reverse()
+      .find((e) => e.reservationId === reservationId && e.type === "OPERATOR_NOTIFIED" && e.detail.includes("asked for help"));
+    if (!last) return true;
+    return this.deps.clock.now().getTime() - Date.parse(last.at) >= HELP_ALERT_WINDOW_MS;
   }
 
   // -------------------------------------------------------- operator actions

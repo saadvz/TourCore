@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config/tourCoreConfig";
+import { VisitorDenialCopy } from "../src/core/TourCore";
 import { zonedTimeToUtc } from "../src/core/timezone";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
 import { withPrompt } from "../src/messaging/presentation";
@@ -116,8 +117,13 @@ describe("typed replies", () => {
     await say("1");
     await say("yes");
     await session.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: PHONE });
+    const outboundBefore = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").length;
     await say("help");
     expect((await session.store.listAudit()).some((e) => e.type === "HELP_REQUESTED")).toBe(true);
+    expect(lastReply()).toBe(VisitorDenialCopy.helpAck("leasing team"));
+    const outbound = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND");
+    expect(outbound.length - outboundBefore).toBe(1);
+    expect(outbound.at(-1)?.body).not.toContain("Tour Core:");
   });
 
   it("asks again, with the options, when it doesn't understand", async () => {

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig, type TourCoreConfig } from "../src/config/tourCoreConfig";
+import { VisitorDenialCopy } from "../src/core/TourCore";
 import { zonedTimeToUtc } from "../src/core/timezone";
 import { setSendblueRuntime } from "../src/messaging/sendblue/runtime";
 import { PropertyWorkspace, runReadinessCheck } from "../src/setup";
@@ -142,9 +143,9 @@ describe("a real phone over Sendblue", () => {
     expect((await app.text("how much is it?")).replies).toEqual(["Unit 101 rents for $2,300 a month."]);
     expect((await app.text("is there a gym?")).replies[0]).toBe("I don't have that information for this property. I've flagged it for the property team so they can get back to you.");
     const help = await app.text("help");
-    expect(help.replies.at(-1)).toContain("Tour Core:");
-    expect(help.replies.at(-1)).toContain("Reply STOP to opt out.");
-    expect(help.replies.at(-1)).not.toContain("Khanex");
+    expect(help.replies).toEqual([VisitorDenialCopy.helpAck("leasing team")]);
+    expect(help.replies.join("\n")).not.toContain("Tour Core:");
+    expect(help.replies.join("\n")).not.toContain("Khanex");
 
     const finish = await app.text("finish");
     expect(finish.replies[0]).toContain("Would you like someone from the property team to follow up?\nReply YES or NO.");

@@ -89,6 +89,7 @@ describe("SMS keyword campaign", () => {
     try {
     const app = await startPhoneApp();
     const help = await app.text("HELP");
+    expect(help.replies).toHaveLength(1);
     expect(help.replies.join("\n")).toBe("Tour Core: For help with your property tour, email help@example.com. Message and data rates may apply. Reply STOP to opt out.");
     expect(help.replies.join("\n")).not.toContain("Khanex");
     expect(help.replies.join("\n")).not.toContain("Which unit");
