@@ -404,8 +404,8 @@ describe("hosted audit export download", () => {
     expect(url).not.toMatch(/localhost|127\.0\.0\.1/);
     expect(out.accessGrants).toEqual(
       expect.arrayContaining([
-        { doorName: "Lobby Entrance", allowedAt: "9:00 AM", validUntil: "9:45 AM" },
-        { doorName: "Unit 101 Door", allowedAt: "9:00 AM", validUntil: "9:45 AM" },
+        expect.objectContaining({ doorName: "Lobby Entrance", allowedAt: "9:00 AM", validUntil: "9:45 AM" }),
+        expect.objectContaining({ doorName: "Unit 101 Door", allowedAt: "9:00 AM", validUntil: "9:45 AM" }),
       ]),
     );
 

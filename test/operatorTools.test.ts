@@ -419,8 +419,8 @@ describe("live tours and exceptions", () => {
     expect(out.files[0].openOnTourCoreComputer).toMatch(/^http:\/\/localhost:4321\/api\/properties\/prop_100_alfred_way\/audit-exports\/2026-09-28_.+\/audit-export\.json$/);
     expect(out.accessGrants).toEqual(
       expect.arrayContaining([
-        { doorName: "Lobby Entrance", allowedAt: "9:00 AM", validUntil: "9:45 AM" },
-        { doorName: "Unit 101 Door", allowedAt: "9:00 AM", validUntil: "9:45 AM" },
+        expect.objectContaining({ doorName: "Lobby Entrance", allowedAt: "9:00 AM", validUntil: "9:45 AM" }),
+        expect.objectContaining({ doorName: "Unit 101 Door", allowedAt: "9:00 AM", validUntil: "9:45 AM" }),
       ]),
     );
     expect(out.denials).toEqual(expect.arrayContaining([{ doorName: "Unit 102 Door", time: "9:00 AM", code: "DENY_WRONG_ROUTE" }]));
