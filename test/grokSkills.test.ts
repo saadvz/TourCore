@@ -154,6 +154,12 @@ describe("Grok skill scenarios", () => {
     const inspected = await tool("inspect_tour", { tourRef: tour.tourRef });
     expect(inspected.needsAttention).toHaveLength(1);
     expect(inspected.tour.questions.at(-1)).toContain('Pat asked "Is parking included?"');
+    expect(inspected.tour.accessGrants).toEqual(
+      expect.arrayContaining([
+        { doorName: "Lobby Entrance", allowedAt: "9:00 AM", validUntil: "9:45 AM" },
+        { doorName: "Unit 101 Door", allowedAt: "9:00 AM", validUntil: "9:45 AM" },
+      ]),
+    );
 
     // "Show me what needs attention."
     const queue = await tool("list_exceptions");
@@ -211,6 +217,7 @@ describe("Grok skill scenarios", () => {
     expect(out.totals).toMatchObject({ tours: 1, completed: 1, practiceTours: 1, openIssues: 0 });
     expect(out.reference).toMatch(/^Audit export 2026-09-28_.+, saved with 100 Alfred Way's tour records on the Tour Core computer\.$/);
     expect(out.files.map((f: { file: string }) => f.file)).toEqual(["audit-export.json", "audit.csv"]);
+    expect(out.accessGrants.some((g: { doorName: string; allowedAt: string; validUntil: string }) => g.doorName === "Lobby Entrance" && g.allowedAt === "9:00 AM" && g.validUntil === "9:45 AM")).toBe(true);
     // The same export can be opened from the browser app's API on the Tour Core computer.
     const { handleApi } = await import("../src/web/api");
     const exportId = /^Audit export (\S+),/.exec(out.reference)![1]!;

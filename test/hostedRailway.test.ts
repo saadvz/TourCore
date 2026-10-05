@@ -383,3 +383,45 @@ describe("hosted Grok instructions", () => {
     expect(bootstrap().split("\n").length).toBeLessThan(80);
   });
 });
+
+describe("hosted audit export download", () => {
+  it("builds a public-base download URL, serves it with the token, and refuses missing or expired tokens", async () => {
+    const h = installHarness({ env: { TOURCORE_DEPLOYMENT_MODE: "HOSTED_RAILWAY_P0", RAILWAY_PUBLIC_DOMAIN: DOMAIN, PORT: "8080" } });
+    cleanups.push(h.cleanup);
+    h.inst.files.ensure({ deploymentMode: "HOSTED_RAILWAY_P0" });
+    expect(h.inst.publicBaseUrl()).toBe(BASE);
+
+    const id = await h.publish();
+    await h.touringVisitor(id);
+    const { server } = await startSetupServer({ installation: h.inst, workspace: h.workspace, host: "127.0.0.1", port: 0, open: false, now: () => new Date(h.now()) });
+    cleanups.push(() => server.close());
+    const port = (server.address() as { port: number }).port;
+    const http = hostedFetch(port);
+
+    const out = await h.ok("export_audit", { day: "today" });
+    const url = out.files[0].openOnTourCoreComputer as string;
+    expect(url).toMatch(new RegExp(`^${BASE}/api/properties/${id}/audit-exports/2026-09-28_.+/audit-export\\.json\\?t=`));
+    expect(url).not.toMatch(/localhost|127\.0\.0\.1/);
+    expect(out.accessGrants).toEqual(
+      expect.arrayContaining([
+        { doorName: "Lobby Entrance", allowedAt: "9:00 AM", validUntil: "9:45 AM" },
+        { doorName: "Unit 101 Door", allowedAt: "9:00 AM", validUntil: "9:45 AM" },
+      ]),
+    );
+
+    const path = url.slice(BASE.length);
+    const withToken = await http(path);
+    expect(withToken.status).toBe(200);
+    expect(JSON.parse(await withToken.text()).summary.tours).toBe(1);
+
+    const bare = path.replace(/\?t=[^&]+$/, "");
+    const missing = await http(bare);
+    expect(missing.status).toBe(401);
+    expect(await missing.text()).toMatch(/isn't valid or has expired/);
+
+    h.setClock(h.now() + 31 * 60_000);
+    const expired = await http(path);
+    expect(expired.status).toBe(401);
+    expect(await expired.text()).toMatch(/isn't valid or has expired/);
+  });
+});

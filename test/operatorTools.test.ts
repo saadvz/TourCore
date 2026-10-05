@@ -256,7 +256,7 @@ describe("live tours and exceptions", () => {
   it("lists active tours in plain words and inspects one", async () => {
     const h = app();
     const id = await h.publish();
-    await h.touringVisitor(id);
+    const v = await h.touringVisitor(id);
     const list = await h.ok("list_active_tours");
     expect(list.tours).toHaveLength(1);
     expect(list.tours[0]).toMatchObject({
@@ -273,6 +273,21 @@ describe("live tours and exceptions", () => {
     const inspected = await h.ok("inspect_tour", { tourRef: list.tours[0].tourRef });
     expect(inspected.summary).toBe("Pat Smith, Unit 101: Touring. At Unit 101.");
     expect(inspected.tour.latestActivity.at(-1)).toContain("Unit 101 Door access was approved for Pat.");
+    expect(inspected.tour.accessGrants).toEqual([
+      { doorName: "Lobby Entrance", allowedAt: "9:00 AM", validUntil: "9:45 AM" },
+      { doorName: "Unit 101 Door", allowedAt: "9:00 AM", validUntil: "9:45 AM" },
+    ]);
+    expect(inspected.tour.denials).toEqual([]);
+    // Allowed-at is inside the tour window (8:50–9:45); validUntil is the window end.
+    for (const grant of inspected.tour.accessGrants) {
+      expect(grant.allowedAt).toBe("9:00 AM");
+      expect(grant.validUntil).toBe("9:45 AM");
+    }
+
+    await v.act("atStop", { doorId: "unit_102_door" });
+    const denied = await h.ok("inspect_tour", { tourRef: list.tours[0].tourRef });
+    expect(denied.tour.denials).toEqual([{ doorName: "Unit 102 Door", time: "9:00 AM", code: "DENY_WRONG_ROUTE" }]);
+    expect(denied.tour.accessDenials.at(-1)).toContain("Unit 102 Door");
   });
 
   it("queues an unknown visitor question, and resolving it changes nothing else", async () => {
@@ -380,6 +395,8 @@ describe("live tours and exceptions", () => {
     expect(done.tour).toMatchObject({ status: "Called off", active: false });
     expect(v.session.conversation.at(-1)?.text).toBe("Your tour has been called off, so the doors won't open for it. The leasing team will reach out.");
     expect((await v.session.core.listGrants(v.session.reservationId!)).every((g) => g.status === "REVOKED")).toBe(true);
+    const afterRevoke = await h.ok("inspect_tour", { tourRef: tour.tourRef });
+    expect(afterRevoke.tour.accessGrants.every((g: { endedAt?: string }) => g.endedAt === "9:00 AM")).toBe(true);
 
     expect(await h.fails("revoke_tour_access", { tourRef: tour.tourRef, reason: "again" })).toMatch(/already called off/);
     expect(await h.fails("clear_operator_hold", { tourRef: tour.tourRef })).toMatch(/isn't paused/);
@@ -400,6 +417,13 @@ describe("live tours and exceptions", () => {
     expect(out.totals).toMatchObject({ day: "Monday, Sep 28", tours: 1, completed: 1, active: 0, stopped: 0, accessDenials: 1, questionsNeedingAttention: 1, practiceTours: 1 });
     expect(out.summary).toBe("Monday, Sep 28: 1 visitor tour (1 completed, 0 active, 0 stopped), 1 access denial, 1 question needing attention, plus 1 practice tour.");
     expect(out.files[0].openOnTourCoreComputer).toMatch(/^http:\/\/localhost:4321\/api\/properties\/prop_100_alfred_way\/audit-exports\/2026-09-28_.+\/audit-export\.json$/);
+    expect(out.accessGrants).toEqual(
+      expect.arrayContaining([
+        { doorName: "Lobby Entrance", allowedAt: "9:00 AM", validUntil: "9:45 AM" },
+        { doorName: "Unit 101 Door", allowedAt: "9:00 AM", validUntil: "9:45 AM" },
+      ]),
+    );
+    expect(out.denials).toEqual(expect.arrayContaining([{ doorName: "Unit 102 Door", time: "9:00 AM", code: "DENY_WRONG_ROUTE" }]));
     expect(JSON.stringify(out)).not.toContain(h.root.replace(/\\/g, "\\\\"));
 
     const dir = join(h.root, "properties", id, "audit-exports");
