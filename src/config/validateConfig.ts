@@ -1,4 +1,5 @@
 import { formatClockTime, isValidTimeZone } from "../core/timezone";
+import { parsePhone } from "../core/phone";
 import { minutesOfDay } from "../core/schedule";
 import type { TourCoreConfig } from "./tourCoreConfig";
 
@@ -47,6 +48,9 @@ export function semanticIssues(cfg: TourCoreConfig): ConfigIssue[] {
     add("property", "TIMEZONE_INVALID", `We don't recognize the time zone "${cfg.property.timezone}". Try something like America/New_York.`);
   }
   if (!cfg.operator.name.trim()) add("property", "OPERATOR_MISSING", "Tell us who should get alerts if a visitor needs help.");
+  if (cfg.operator.visitorContact?.trim() && !parsePhone(cfg.operator.visitorContact)) {
+    add("property", "VISITOR_CONTACT_INVALID", "The number visitors can call doesn't look like a full phone number.");
+  }
   const allFacts = [...cfg.property.facts, ...cfg.units.flatMap((u) => [u.summary, ...u.facts])];
   if (allFacts.some((f) => f.length > MAX_FACT_LENGTH)) add("units", "FACT_TOO_LONG", `Keep each description or fact under ${MAX_FACT_LENGTH} characters.`);
 

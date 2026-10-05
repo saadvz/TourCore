@@ -1,5 +1,6 @@
 import { FIELD_WORDS, missingProfileFields, PROFILE_FIELDS, profileSummaryLine, type ProfileField } from "../config/unitProfile";
 import type { ConfigIssue, ConfigSection } from "../config/validateConfig";
+import { formatPhone } from "../core/phone";
 import { slotStartMinutes } from "../core/schedule";
 import { formatClockTime, friendlyTimeZone } from "../core/timezone";
 import type { DryTourGroup, DryTourResult } from "./dryTour";
@@ -249,12 +250,20 @@ export function draftView(draft: SetupDraft) {
       title: "Verification",
       rows: [verification?.title ?? CHOICE_LABELS.verification[draft.verificationMode], `A check can be reused for ${draft.verificationValidForDays} days`],
     },
-    { step: "services" as SetupStep, title: "Records and messages", rows: [...services.items.map((s) => s.title), `Alerts go to: ${draft.operator.name}`] },
+    {
+      step: "services" as SetupStep,
+      title: "Records and messages",
+      rows: [
+        ...services.items.map((s) => s.title),
+        `Alerts go to: ${draft.operator.name}`,
+        ...(draft.operator.visitorContact ? [`Visitors can call: ${formatPhone(draft.operator.visitorContact)}`] : []),
+      ],
+    },
   ];
 
   return {
     property,
-    operator: { name: draft.operator.name },
+    operator: { name: draft.operator.name, visitorContact: draft.operator.visitorContact ?? "" },
     units,
     doors: draft.doors.map((d) => ({
       id: d.id,

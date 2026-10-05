@@ -4,20 +4,25 @@ import { zonedTimeToUtc, type LocalDate } from "../src/core/timezone";
 import { createTourCore } from "../src/createTourCore";
 import { MockDurinAccessAdapter } from "../src/durin/MockDurinAccessAdapter";
 import { ConsoleMessenger } from "../src/messaging/Messenger";
+import { InMemoryStore } from "../src/storage/Store";
 
 /** Monday 28 Sep 2026 at the property (America/New_York). */
 export const TOUR_DAY: LocalDate = { year: 2026, month: 9, day: 28 };
 
-export function setup() {
-  const config = loadConfig();
+export function setup(options: { visitorContact?: string } = {}) {
+  const loaded = loadConfig();
+  const config = options.visitorContact
+    ? { ...loaded, operator: { ...loaded.operator, visitorContact: options.visitorContact } }
+    : loaded;
   const clock = new SimulatedClock(zonedTimeToUtc({ ...TOUR_DAY, hour: 10, minute: 0 }, config.property.timezone));
   const durin = new MockDurinAccessAdapter({
     doorNames: Object.fromEntries(config.doors.map((d) => [d.id, d.name])),
     log: () => {},
     now: () => clock.now(),
   });
-  const core = createTourCore(config, { clock, durin, messenger: new ConsoleMessenger(() => {}) });
-  return { config, clock, durin, core };
+  const store = new InMemoryStore();
+  const core = createTourCore(config, { clock, durin, messenger: new ConsoleMessenger(() => {}), store });
+  return { config, clock, durin, core, store };
 }
 
 export function basicForm(phone = "555-010-1234") {

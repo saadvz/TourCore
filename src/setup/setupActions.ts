@@ -11,6 +11,7 @@ import {
 } from "../config/tourCoreConfig";
 import { parseProfileValue, PROFILE_FIELDS, ProfileValueError, type ProfileField, type UnitProfile } from "../config/unitProfile";
 import type { ConfigIssue, ConfigSection } from "../config/validateConfig";
+import { formatPhone, parsePhone } from "../core/phone";
 import { formatClockTime, friendlyTimeZone, WEEKDAYS, type Weekday } from "../core/timezone";
 import { visitorSubject } from "../visitor/identity";
 import { inferTimeZone, resolveTimeZone, slugify } from "./parse";
@@ -236,10 +237,19 @@ export function defaultUnitDoorName(unitName: string): string {
   return `${unitName.trim()} Door`;
 }
 
-export function setAlertContact(draft: SetupDraft, input: { name?: string; contact?: string }): SetupDraft {
+export function setAlertContact(draft: SetupDraft, input: { name?: string; contact?: string; visitorContact?: string }): SetupDraft {
   const next = clone(draft);
   if (input.name !== undefined) next.operator.name = requireName(input.name, "OPERATOR_MISSING", "Please say who should get alerts.");
   if (input.contact !== undefined) next.operator.contact = input.contact.trim() || SETUP_DEFAULTS.operatorContact;
+  if (input.visitorContact !== undefined) {
+    const raw = input.visitorContact.trim();
+    if (!raw) delete next.operator.visitorContact;
+    else {
+      const phone = parsePhone(raw);
+      if (!phone) throw new SetupInputError("PHONE_INVALID", "Please enter a full phone number.");
+      next.operator.visitorContact = phone;
+    }
+  }
   return next;
 }
 
@@ -555,7 +565,14 @@ export function reviewSetup(draft: SetupDraft): SetupReview {
         `Doors: ${CHOICE_LABELS.access[draft.accessMode]}`,
       ],
     },
-    { editSection: "property", title: "ALERTS", lines: [`If a visitor needs help: ${draft.operator.name}`] },
+    {
+      editSection: "property",
+      title: "ALERTS",
+      lines: [
+        `If a visitor needs help: ${draft.operator.name}`,
+        ...(draft.operator.visitorContact ? [`Visitors can call: ${formatPhone(draft.operator.visitorContact)}`] : []),
+      ],
+    },
   ];
   return { sections, issues, canSave: issues.length === 0 };
 }

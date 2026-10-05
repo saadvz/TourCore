@@ -131,7 +131,11 @@ async function route(ctx: ApiContext, method: string, path: string, body: Record
       if (toE164(form.data.phone) !== check.entry.phone) {
         return { status: 400, json: { ok: false, message: "That phone number doesn't match the one you're texting from. Please use the same number." } };
       }
-      if ((await session.stage()) !== "identity" || session.reservationId !== check.entry.reservationId) {
+      const reservation = await session.reservation();
+      const currentCheck = reservation?.verificationId ? await session.store.get("verifications", reservation.verificationId) : undefined;
+      const now = (ctx.now?.() ?? new Date()).getTime();
+      const staleCheck = !!currentCheck && currentCheck.status === "PASSED" && Date.parse(currentCheck.validUntil) <= now;
+      if (((await session.stage()) !== "identity" && !staleCheck) || session.reservationId !== check.entry.reservationId) {
         links!.markUsed(parts[1]);
         return { status: 410, json: { ok: false, message: LINK_PROBLEMS.used } };
       }
@@ -139,7 +143,9 @@ async function route(ctx: ApiContext, method: string, path: string, body: Record
       links!.markUsed(parts[1]);
       await session.act("submitIdentity", form.data, { text: "Submitted the identity form." });
       await persist(ctx, session);
-      const passed = (await session.stage()) === "ready";
+      const after = await session.reservation();
+      const latest = after?.verificationId ? await session.store.get("verifications", after.verificationId) : undefined;
+      const passed = !!latest && latest.status === "PASSED" && Date.parse(latest.validUntil) > (ctx.now?.() ?? new Date()).getTime();
       return ok({
         ok: passed,
         message: passed ? "Thanks, you're all set! Check your messages for your tour details." : "Thanks. We couldn't confirm your details, so the property team will reach out.",

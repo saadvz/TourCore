@@ -105,7 +105,16 @@ export const TourHoursSchema = z.object({
 export const TourCoreConfigShape = z.object({
   schemaVersion: z.literal(1),
   property: PropertySchema,
-  operator: z.object({ name: z.string(), contact: z.string() }),
+  operator: z.object({
+    name: z.string(),
+    /** Private alert line. Never shown to visitors. */
+    contact: z.string(),
+    /**
+     * Optional number visitors can call when they're stuck. Separate from
+     * `contact` on purpose: that line is for the team, not prospects.
+     */
+    visitorContact: z.string().optional(),
+  }),
   doors: z.array(DoorSchema),
   units: z.array(UnitSchema),
   routes: z.array(RouteSchema),
