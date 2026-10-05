@@ -246,6 +246,8 @@ in their normal Messages app:
 - HELP and STOP;
 - the follow-up question.
 
+Photos and other attachments are not forwarded yet. If a visitor texts a photo, they immediately get one reply: "I can't take photos yet. Text your question and I'll pass it along." A caption or question in the same message is handled as a normal text. The same inbound is not answered twice.
+
 The operator watches it in the same **Active tour** live view and history.
 
 It is the same visitor engine as the browser phone. Only the transport differs: the browser phone gets button wording,
@@ -260,13 +262,13 @@ Webhook addresses are `PUBLIC_BASE_URL/webhooks/sendblue`, `PUBLIC_BASE_URL/webh
 
 ### Local loopback (QA)
 
-`local` is a first-party `MessagingProvider` for running the full visitor SMS path without Sendblue, Twilio, Photon, or real texts. `send()` writes each outbound SMS to an in-process outbox as one bubble, in send order. Inbound is `POST /webhooks/local` with `{ id, from, to, text }`, or the operator tools below. Both feed `handleProviderWebhook` → `conversations.receive` → `handleVisitorText`.
+`local` is a first-party `MessagingProvider` for running the full visitor SMS path without Sendblue, Twilio, Photon, or real texts. `send()` writes each outbound SMS to an in-process outbox as one bubble, in send order. Inbound is `POST /webhooks/local` with `{ id, from, to, text, hasMedia? }`, or the operator tools below. Both feed `handleProviderWebhook` → `conversations.receive` → `handleVisitorText`.
 
 A property can run `messagingMode: live` with provider `local`. Line attach, readiness, consent, identity-form links, the live tour view, and operator tools (`inspect_tour`, exceptions, `list_active_tours`) behave like production SMS.
 
 QA tools (MCP / Grok):
 
-- `inject_local_sms` — send a visitor text as `from` to the property line (`to`) or property. Refuses unless that property is on `local`.
+- `inject_local_sms` — send a visitor text as `from` to the property line (`to`) or property. Set `hasMedia` for a photo inbound (Tour Core replies that it can't take photos yet and does not forward the file). Refuses unless that property is on `local`.
 - `read_local_outbox` — outbound replies for that conversation as **separate bubbles in order** (body + timestamp). Never one concatenated blob.
 
 A property can opt into local test texts while the installation's primary provider stays in place for other buildings. That is the first slice of property-scoped messaging — not a disposable install-wide patch.

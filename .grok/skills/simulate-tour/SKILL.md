@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Practice tour with safety proof points
-  version: "0.2.1"
+  version: "0.2.2"
 ---
 
 # Simulate Tour
@@ -60,7 +60,9 @@ To exercise the real visitor SMS path without Sendblue or a carrier:
    clear saved account details. Switching the installation back uses
    the stored account and a new connection test.
 2. `inject_local_sms` with the visitor's `from` number, the property line
-   (`to`) or property, and their `text`. That is the same path as
+   (`to`) or property, and their `text`. Set `hasMedia` when the inbound is a
+   photo; Tour Core replies that it can't take photos yet and does not
+   forward the file. That is the same path as
    `POST /webhooks/local` → `handleProviderWebhook` → `conversations.receive`.
 3. `read_local_outbox` for that conversation. Return **separate bubbles in
    order** (each body is one SMS). Never concatenate them.

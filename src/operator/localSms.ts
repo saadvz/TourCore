@@ -55,7 +55,7 @@ function bubblesView(bubbles: LocalOutboxBubble[]) {
 
 export async function injectLocalSms(
   ctx: ToolContext,
-  input: { from: string; text: string; to?: string; property?: string; id?: string },
+  input: { from: string; text?: string; to?: string; property?: string; id?: string; hasMedia?: boolean },
 ): Promise<Record<string, unknown>> {
   const propertyId = resolvePropertyId(ctx.services.workspace, input.property);
   requireLocalMessagingProperty(ctx, propertyId);
@@ -78,10 +78,14 @@ export async function injectLocalSms(
   const provider = ctx.installation
     ? createMessagingProvider("local", { env: () => ctx.installation!.env(), ledger: ctx.messagingLedger, now: ctx.now })
     : new LocalMessagingProvider({ now: ctx.now, ledger: ctx.messagingLedger });
+  const text = input.text ?? "";
+  if (!text.trim() && !input.hasMedia) {
+    throw new SetupInputError("TEXT_REQUIRED", "Enter the visitor's text, or mark this inbound as a photo.");
+  }
   const id = input.id?.trim() || randomUUID();
   const result = await handleProviderWebhook(
     provider,
-    { rawBody: Buffer.from(JSON.stringify({ id, from, to, text: input.text }), "utf8"), headers: { "content-type": "application/json" } },
+    { rawBody: Buffer.from(JSON.stringify({ id, from, to, text, ...(input.hasMedia ? { hasMedia: true } : {}) }), "utf8"), headers: { "content-type": "application/json" } },
     { ledger: ctx.messagingLedger ?? new MessagingLedger(), receive, now: ctx.now },
   );
   if (result.status !== 200 || result.body.ok === false) {
@@ -92,7 +96,7 @@ export async function injectLocalSms(
     summary: result.body.duplicate ? "That visitor text was already delivered." : "Delivered the visitor text.",
     from,
     to,
-    text: input.text,
+    text,
     bubbles: bubblesView(bubbles),
     ...(result.body.duplicate ? { duplicate: true } : {}),
   };

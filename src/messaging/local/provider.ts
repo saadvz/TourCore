@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { MessagingLedger } from "../ledger";
+import type { InboundMedia } from "../inbound";
 import { MessagingError, toE164, type DeliveryReceipt, type OutgoingMessage } from "../Messenger";
 import type { MessagingCapabilities, MessagingCheck, MessagingConfigField, MessagingProvider, ProviderConnectContext, ProviderConnectResult, WebhookHttpRequest } from "../provider";
 import { localSmsOutbox, type LocalSmsOutbox } from "./outbox";
@@ -12,6 +13,22 @@ export const DEFAULT_LOCAL_FROM_NUMBER = "+15555550123";
  * that is not on the local loopback. Do not name other providers here.
  */
 export const LOCAL_PROVIDER_REQUIRED = "This property isn't set up for local test texts. Switch it to local messaging first.";
+
+function localInboundMedia(body: { media?: unknown; hasMedia?: unknown }): InboundMedia[] | undefined {
+  if (Array.isArray(body.media)) {
+    const media = body.media.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const row = item as { url?: unknown; contentType?: unknown };
+      const url = typeof row.url === "string" ? row.url.trim() : "";
+      const contentType = typeof row.contentType === "string" ? row.contentType.trim() : "";
+      if (!url && !contentType) return [];
+      return [{ ...(url ? { url } : {}), ...(contentType ? { contentType } : {}) }];
+    });
+    if (media.length) return media;
+  }
+  if (body.hasMedia === true) return [{ contentType: "image/jpeg" }];
+  return undefined;
+}
 
 const CAPABILITIES: MessagingCapabilities = {
   inboundMessaging: true,
@@ -138,7 +155,7 @@ export class LocalMessagingProvider implements MessagingProvider {
   }
 
   parseInbound(rawBody: Buffer, now = new Date()) {
-    let body: { id?: unknown; from?: unknown; to?: unknown; text?: unknown };
+    let body: { id?: unknown; from?: unknown; to?: unknown; text?: unknown; media?: unknown; hasMedia?: unknown };
     try {
       body = JSON.parse(rawBody.toString("utf8") || "{}") as typeof body;
     } catch {
@@ -149,6 +166,7 @@ export class LocalMessagingProvider implements MessagingProvider {
     const text = typeof body.text === "string" ? body.text : "";
     const to = typeof body.to === "string" ? toE164(body.to) : undefined;
     const id = typeof body.id === "string" && body.id.trim() ? body.id.trim() : randomUUID();
+    const media = localInboundMedia(body);
     return {
       message: {
         provider: "local",
@@ -156,6 +174,7 @@ export class LocalMessagingProvider implements MessagingProvider {
         from,
         ...(to ? { to } : {}),
         text,
+        ...(media ? { media } : {}),
         channel: "SMS" as const,
         receivedAt: now.toISOString(),
       },

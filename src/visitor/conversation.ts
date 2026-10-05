@@ -42,6 +42,9 @@ export { keywordOf, type Keyword } from "../intent";
 
 export const isGreeting = (text: string) => /^(hi|hello|hey|hiya|tour|book|start over|new tour|hi there|good (morning|afternoon|evening))\b/.test(normalize(text));
 
+/** Locked visitor copy when an inbound includes a photo or other attachment. Do not say MMS. */
+export const PHOTO_NOT_SUPPORTED = "I can't take photos yet. Text your question and I'll pass it along.";
+
 /** Lead when published hours changed and a numbered/old-menu reply can't be mapped safely. */
 export const SCHEDULE_CHANGED_LEAD = "Tour times just changed. Here's what's open now:";
 const WHICH_DAY = "Which day works for you?";
@@ -166,6 +169,18 @@ export async function handleVisitorText(
   const said: Said = { text, meta };
   const firstMessage = !session.visitor;
   if (firstMessage) session.identify(from);
+
+  const photo = !!meta?.hasMedia;
+  const typed = text.trim();
+  if (photo) {
+    const keyword = keywordOf(text);
+    const silent = session.optedOut && keyword !== "start" && keyword !== "stop";
+    if (!silent) await session.reply(PHOTO_NOT_SUPPORTED);
+    if (!typed) {
+      await session.recordText({ text: "(photo)", meta });
+      return undefined;
+    }
+  }
 
   // Operator-set tour: YES/NO/STOP are about that confirmation, not the SMS keyword gate.
   // A released or cancelled hold is not still waiting — don't send another confirm text.

@@ -22,3 +22,8 @@ export interface InboundMessage {
   /** Non-secret delivery hints. Not the provider's original payload. */
   metadata?: { status?: string };
 }
+
+/** True when the inbound included a photo or other attachment. Presence only; Tour Core does not download or forward files. */
+export function hasInboundMedia(message: { media?: InboundMedia[] } | undefined): boolean {
+  return (message?.media?.length ?? 0) > 0;
+}

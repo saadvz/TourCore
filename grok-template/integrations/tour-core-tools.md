@@ -41,7 +41,7 @@ again with the code after the operator's yes.
 | `set_verification_policy` | change | Basic identity form or practice verification |
 | `get_services` | read | Messaging choice and connection, records location, door access mode |
 | `set_services` | change | Live texts, local test texts for this building, or practice texts; records location. Local does not change the installation or other buildings |
-| `inject_local_sms` | change | QA only. Injects a visitor SMS on the local loopback (same path as a real inbound webhook). Refuses unless that building is on local test texts |
+| `inject_local_sms` | change | QA only. Injects a visitor SMS on the local loopback (same path as a real inbound webhook). `hasMedia` marks a photo; Tour Core replies that it can't take photos yet and does not forward it. Refuses unless that building is on local test texts |
 | `read_local_outbox` | read | QA only. Outbound local-loopback replies as separate bubbles in send order (body + timestamp). Never one concatenated blob. Refuses unless that property is on local |
 | `review_property_setup` | read | The setup as short lines to read back: address, "Called: ..." if named, property type, each unit with its details and route, "Tours: ...", "Verification: ...", "Visitor texting: Connected", "Door access: Demo", visitor help number (or "not set") |
 | `run_readiness_check` | change | The real readiness checks, recorded for publish |

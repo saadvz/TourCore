@@ -14,6 +14,7 @@ import { FileRuntimeStore } from "../src/storage/runtimeStore";
 import { createSetupServer } from "../src/web/server";
 import { grokHarness } from "./grokHarness";
 import { installHarness, SB_KEY, SB_SECRET } from "./installHarness";
+import { PHOTO_NOT_SUPPORTED } from "../src/visitor/conversation";
 import { hillsideConfig } from "./liveApp";
 import { LINE, PUBLIC } from "./fakeSendblue";
 
@@ -174,6 +175,21 @@ describe("inject_local_sms and read_local_outbox", () => {
     expect(tours.tours.length).toBeGreaterThanOrEqual(1);
     const inspected = await app.grok("inspect_tour", { tourRef: tours.tours[0].tourRef });
     expect(inspected.tour.visitorPhone ?? inspected.summary).toBeTruthy();
+  });
+
+  it("injects a photo inbound and returns the honesty reply once", async () => {
+    const app = await startLocalApp();
+    await app.grok("inject_local_sms", { from: VISITOR, text: "TOUR", property: app.id });
+    await app.grok("inject_local_sms", { from: VISITOR, text: "YES", property: app.id });
+    const photo = await app.grok("inject_local_sms", { from: VISITOR, hasMedia: true, property: app.id, id: "photo_once" });
+    expect(photo.bubbles.map((b: { body: string }) => b.body)).toEqual([PHOTO_NOT_SUPPORTED]);
+    const again = await app.grok("inject_local_sms", { from: VISITOR, hasMedia: true, property: app.id, id: "photo_once" });
+    expect(again.duplicate).toBe(true);
+    expect(again.bubbles).toEqual([]);
+    const caption = await app.grok("inject_local_sms", { from: VISITOR, text: "Is there a gym?", hasMedia: true, property: app.id });
+    expect(caption.bubbles[0].body).toBe(PHOTO_NOT_SUPPORTED);
+    expect(caption.bubbles.filter((b: { body: string }) => b.body === PHOTO_NOT_SUPPORTED)).toHaveLength(1);
+    expect(caption.bubbles.some((b: { body: string }) => b.body.includes("flagged it for the property team"))).toBe(true);
   });
 
   it("feeds POST /webhooks/local through the same visitor pipeline", async () => {

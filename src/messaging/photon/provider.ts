@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { InboundMedia } from "../inbound";
 import { MessagingError, toE164, type DeliveryReceipt, type OutgoingMessage } from "../Messenger";
 import type { MessagingLedger } from "../ledger";
 import { publicBase } from "../publicUrl";
@@ -26,6 +27,13 @@ function scrub(err: unknown, secrets: Array<string | undefined>, code: string, m
     if (!leaked) return err;
   }
   return new MessagingError(code, message, err instanceof MessagingError ? { retryable: err.options.retryable, status: err.options.status } : {});
+}
+
+function photonInboundMedia(content: { type: string } & Record<string, unknown>): InboundMedia[] | undefined {
+  if (content.type !== "attachment" && content.type !== "voice") return undefined;
+  const mime = typeof content.mimeType === "string" ? content.mimeType.trim() : "";
+  const url = typeof content.url === "string" ? content.url.trim() : "";
+  return [{ ...(url ? { url } : {}), contentType: mime || (content.type === "voice" ? "audio/*" : "application/octet-stream") }];
 }
 
 const TextEvent = z.object({
@@ -187,7 +195,9 @@ export class PhotonMessagingProvider implements MessagingProvider {
     if (!parsed.success) return { ignored: "not a message event" };
     const event = parsed.data;
     if (event.space.type === "group") return { ignored: "group message" };
-    if (event.message.content.type !== "text") return { ignored: "unsupported message" };
+    const content = event.message.content;
+    const media = photonInboundMedia(content);
+    if (content.type !== "text" && !media) return { ignored: "unsupported message" };
     const from = toE164(event.message.sender.id);
     if (!from) return { ignored: "unreadable sender" };
     const to = event.space.phone ? toE164(event.space.phone) : undefined;
@@ -198,7 +208,8 @@ export class PhotonMessagingProvider implements MessagingProvider {
         providerMessageId: event.message.id,
         from,
         ...(to ? { to } : {}),
-        text: (event.message.content.text ?? "").trim(),
+        text: (content.text ?? "").trim(),
+        ...(media ? { media } : {}),
         channel: "IMESSAGE" as const,
         receivedAt: received,
       },

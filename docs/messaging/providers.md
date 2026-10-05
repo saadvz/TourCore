@@ -41,10 +41,13 @@ Webhook code produces this and nothing provider-shaped goes further:
   from: "+15555550100",
   to: "+15555550123",
   text: "Hi",
+  media: [{ url: "https://example.invalid/photo.jpg", contentType: "image/jpeg" }], // optional
   receivedAt: "2026-10-02T12:00:00.000Z",
   channel: "SMS"
 }
 ```
+
+Photos and other attachments are detected so the visitor can be told they can't send photos yet. Tour Core does not download or forward them. A caption or question in the same message is handled as a normal text.
 
 `src/messaging/pipeline.ts` de-duplicates with `provider:providerMessageId` (`twilio:SMxxx`, `photon:spc-msg-...`). Sendblue keeps the existing ledger key `sendblue:in:...` so retries from before this split stay duplicates. A retry must not book twice, reply twice, or record consent twice.
 
