@@ -30,6 +30,34 @@ have that information for this property. I've flagged it for the property
 team so they can get back to you.", plus an issue and an operator update. When
 the operator answers, the visitor gets the answer and the step they were on.
 
+Visitors can name a tour day as today, tomorrow, a weekday, or a calendar
+date ("Dec 1", "December 1st", "1 Dec", "12/1", "Tuesday Oct 6"). Without a
+year, Tour Core uses the next date on or after today in the property's time
+zone. A date or booking ask is handled as booking, not as a flagged question. If
+the day can't be resolved ("the 45th", "sometime next month"), Tour Core
+asks which day they meant and shows the day menu; it does not flag the team.
+While a one-off tour is waiting on YES, NO, or STOP, any other reply is
+flagged for the team and the hold stays pending.
+
+If that day has no bookable tours, the visitor is told why — no more tours
+today, fully booked, tours don't run that weekday, beyond the 21-day
+booking horizon, or no open times at all — plus the next opening when there
+is one. A date that has already passed starts "That day has already
+passed. The next opening is {when}." Wherever "The next opening is
+{when}." is followed by the day menu, the ending is "Reply yes to take
+it, or pick a day:". An offer without that next-opening line still ends
+"Reply yes for {Weekday} at {time}, or pick a day:". The follow-up is
+"Reply yes for {Weekday} at {time}, or pick a day." Replying yes or that
+books that exact start after a recheck; if it was taken, they hear
+"Someone just grabbed that time."
+
+Open conversations pick up the latest published settings (hours, units,
+and so on) on every inbound text. A stale numbered reply after hours
+change gets "Tour times just changed. Here's what's open now:" and the
+fresh days. "Tour" restarts booking from the current day picker. An
+offered next opening is rechecked against the current hours before it is
+booked.
+
 ## Who does what
 
 | Part | Job |

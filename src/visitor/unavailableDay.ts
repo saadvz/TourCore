@@ -1,5 +1,5 @@
 import type { TourCoreConfig } from "../config/tourCoreConfig";
-import { isoDate, isBeyondBookingHorizon, parseIsoDate } from "../core/schedule";
+import { calendarDaysBetween, isoDate, isBeyondBookingHorizon, parseIsoDate } from "../core/schedule";
 import { formatDay, formatLocalDate, formatTime, localDateOf, weekdayOf, type LocalDate } from "../core/timezone";
 import { TourCoreError, VisitorDenialCopy } from "../core/TourCore";
 import { normalize, stripFiller } from "../intent/normalize";
@@ -24,8 +24,14 @@ function nextClause(nextOpening: Date | undefined, tz: string, noun: "one" | "op
   return nextOpening ? ` The next ${noun} is ${nextOpeningWhen(nextOpening, tz)}.` : "";
 }
 
-function nextOpeningAsk(nextOpening: Date, tz: string): string {
-  return `The next opening is ${nextOpeningWhen(nextOpening, tz)}. Want that, or another day?`;
+/** One instruction when a day menu follows a next-opening line; "Want that, or another day?" when it does not. */
+function nextOpeningCloser(withMenu: boolean): string {
+  if (!withMenu) return " Want that, or another day?";
+  return " Reply yes to take it, or pick a day:";
+}
+
+function nextOpeningAsk(nextOpening: Date, tz: string, withMenu: boolean): string {
+  return `The next opening is ${nextOpeningWhen(nextOpening, tz)}.${nextOpeningCloser(withMenu)}`;
 }
 
 const GRABBED = "Someone just grabbed that time.";
@@ -40,11 +46,13 @@ export function unavailableDayReply(input: {
   now: Date;
   requested: LocalDate;
   nextOpening?: Date;
+  /** True when the usual day menu will follow this sentence. */
+  withMenu?: boolean;
 }): string {
-  const { config, now, requested, nextOpening } = input;
+  const { config, now, requested, nextOpening, withMenu } = input;
   const tz = config.property.timezone;
   const today = localDateOf(now, tz);
-  const ask = nextOpening ? " Want that, or another day?" : "";
+  const ask = nextOpening ? nextOpeningCloser(!!withMenu) : "";
 
   if (!config.tourHours.days.includes(weekdayOf(requested))) {
     return `Tours don't run on ${weekdayPlural(requested, tz)}.${nextClause(nextOpening, tz, "opening")}${ask}`;
@@ -66,7 +74,7 @@ export function acceptsOfferedOpening(text: string): boolean {
 
 function datePrompt(session: VisitorDemoSession): ReplyPrompt | undefined {
   if (!session.offeredDates.length) return undefined;
-  return { kind: "choose", options: session.offeredDates.map((day) => day.label), what: "a day" };
+  return { kind: "choose", options: session.offeredDates.map((day) => day.label), what: "a day", after: "" };
 }
 
 async function explainUnavailable(session: VisitorDemoSession, requested: LocalDate | undefined): Promise<void> {
@@ -77,10 +85,11 @@ async function explainUnavailable(session: VisitorDemoSession, requested: LocalD
     return;
   }
   const tz = session.config.property.timezone;
+  const menu = datePrompt(session);
   const body = requested
-    ? unavailableDayReply({ config: session.config, now, requested, nextOpening })
-    : `I can't book that day. The next opening is ${nextOpeningWhen(nextOpening, tz)}. Want that, or another day?`;
-  await session.reply(body, datePrompt(session));
+    ? unavailableDayReply({ config: session.config, now, requested, nextOpening, withMenu: !!menu })
+    : `That day has already passed. ${nextOpeningAsk(nextOpening, tz, !!menu)}`;
+  await session.reply(body, menu);
   session.markDatesShown();
   session.expect("choose-date", {
     kind: "accept-next-opening",
@@ -99,11 +108,13 @@ export async function offerDate(session: VisitorDemoSession, date: string): Prom
   const now = session.clock.now();
   const requested = parseIsoDate(date);
   const today = localDateOf(now, tz);
+  const past = requested ? calendarDaysBetween(today, requested) < 0 : false;
   const beyond = requested ? isBeyondBookingHorizon(today, requested) : false;
-  if (!slots.length || beyond) {
+  if (!slots.length || beyond || past) {
     session.selectedDate = undefined;
     session.offeredSlots = [];
-    await explainUnavailable(session, requested);
+    // Past dates: "That day has already passed. The next opening is {when}."
+    await explainUnavailable(session, past ? undefined : requested);
     return;
   }
   const menu = timeMenu(formatDay(slots[0]!.start, tz), slots.map((slot) => slot.label));
@@ -129,7 +140,8 @@ async function offerAfterGrabbed(session: VisitorDemoSession, date: string): Pro
     await session.reply(`${GRABBED} ${VisitorDenialCopy.noOpenTimes(session.config.operator.name)}`);
     return;
   }
-  await session.reply(`${GRABBED} ${nextOpeningAsk(nextOpening, tz)}`, datePrompt(session));
+  const menu = datePrompt(session);
+  await session.reply(`${GRABBED} ${nextOpeningAsk(nextOpening, tz, !!menu)}`, menu);
   session.markDatesShown();
   session.expect("choose-date", {
     kind: "accept-next-opening",

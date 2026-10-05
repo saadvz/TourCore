@@ -719,7 +719,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Set tour hours",
     kind: "change",
     description:
-      'Sets tour hours from everyday words: days ("weekdays", "Mon-Sat"), start/end ("9am", "5 PM"), tour length, how often a new tour starts, early arrival ("10 minutes"). Only pass what the operator said; defaults stay visible.',
+      'Sets tour hours from everyday words: days ("weekdays", "Mon-Sat"), start/end ("9am", "5 PM"), tour length, how often a new tour starts, early arrival ("10 minutes"). Only pass what the operator said; defaults stay visible. Hours are structural: a published property goes back to draft until readiness, a practice tour, and publish. After those hours are published, open visitor conversations use them on the next inbound text.',
     input: z.strictObject({
       property: Property,
       days: z.union([z.string().max(80), z.array(z.string().max(20)).max(7)]).optional(),
@@ -888,7 +888,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Publish for demo",
     kind: "consequential",
     description:
-      "Publishes the property for demo so visitors can start tours. Only works when the saved setup is valid and both the readiness check and a practice tour passed for this exact setup. First call returns a yes/no question; ask it and call again with confirmationCode only after an explicit yes.",
+      "Publishes the property for demo so visitors can start tours. Only works when the saved setup is valid and both the readiness check and a practice tour passed for this exact setup. Open conversations then use these published settings (hours, units, and so on) on every inbound text. First call returns a yes/no question; ask it and call again with confirmationCode only after an explicit yes.",
     input: z.strictObject({ property: Property, confirmationCode: Code }),
     run: async (ctx, i) => {
       const ws = ctx.services.workspace;

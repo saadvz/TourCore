@@ -375,7 +375,9 @@ describe("operators can set up a one-time tour", () => {
     await a.text("YES");
     await a.text("1");
     const saturday = await a.text("Saturday");
-    expect(saturday.join("\n")).toContain("Tours don't run on Saturdays. The next opening is Monday, Sep 28 at 2:00 PM. Want that, or another day?");
+    expect(saturday.join("\n")).toContain("Tours don't run on Saturdays. The next opening is Monday, Sep 28 at 2:00 PM. Reply yes to take it, or pick a day:");
+    expect(saturday.join("\n")).toContain("1) Monday, Sep 28");
+    expect(saturday.join("\n")).not.toContain("Want that, or another day?");
     expect(saturday.join("\n")).not.toContain("I have tours available");
 
     const booked = await a.text("that");
@@ -390,7 +392,8 @@ describe("operators can set up a one-time tour", () => {
     await a.textFrom(OTHER, "YES");
     await a.textFrom(OTHER, "1");
     const saturday = await a.textFrom(OTHER, "Saturday");
-    expect(saturday.join("\n")).toContain("The next opening is Monday, Sep 28 at 2:00 PM. Want that, or another day?");
+    expect(saturday.join("\n")).toContain("The next opening is Monday, Sep 28 at 2:00 PM. Reply yes to take it, or pick a day:");
+    expect(saturday.join("\n")).not.toContain("Want that, or another day?");
 
     await a.approve("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "2:00 PM today" });
     const that = await a.textFrom(OTHER, "that");

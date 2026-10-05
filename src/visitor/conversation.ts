@@ -64,6 +64,8 @@ async function contextFor(session: VisitorDemoSession, message: string, step: Vi
     ...(awaiting ? { awaiting } : {}),
     units: session.config.units.map((u) => ({ name: u.name, ...(u.summary ? { summary: u.summary } : {}) })),
     timeChoices: step === "choose-date" ? session.offeredDates.map((day) => day.label) : session.offeredSlots.map((s) => s.label),
+    today: localDateOf(session.clock.now(), session.config.property.timezone),
+    timezone: session.config.property.timezone,
     ...(r ? { reservedUnit: session.config.units.find((u) => u.id === r.unitId)?.name } : {}),
     remainingStops: remaining.map((id) => stopRef(session, id)),
     doors: session.config.doors.map((d) => stopRef(session, d.id)),
@@ -496,6 +498,16 @@ async function showAskedDay(turn: Turn, ask: DayReference, alreadyRecorded = fal
   const { session } = turn;
   const dates = session.offeredDates;
   const dateMenu = { kind: "choose" as const, options: dates.map((day) => day.label), what: "a day" };
+  if (ask.date) {
+    await presentDay(turn, isoDate(ask.date), alreadyRecorded);
+    return;
+  }
+  if (ask.unclear) {
+    if (!alreadyRecorded) await session.recordText(turn.said);
+    session.markDatesShown();
+    await session.reply("I couldn't tell which day you meant. Which day works for you?", dateMenu);
+    return;
+  }
   if (!ask.weekday && !ask.relative) {
     const index = /^\s*(?:#|number |option )?(\d{1,2})\s*[.!]?\s*$/i.exec(turn.said.text ?? "")?.[1];
     const picked = index ? dates[Number(index) - 1] : undefined;

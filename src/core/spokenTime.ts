@@ -4,7 +4,7 @@
  * that time is bookable.
  */
 
-import type { Weekday } from "./timezone";
+import type { LocalDate, Weekday } from "./timezone";
 
 export interface SpokenTime {
   hour: number;
@@ -68,23 +68,150 @@ export interface DayReference {
   weekday?: Weekday;
   relative?: "today" | "tomorrow" | "weekend";
   nextWeek?: boolean;
+  /** Concrete property-local calendar date, when the visitor named one. */
+  date?: LocalDate;
+  /** They asked for a day, but the date could not be resolved ("the 45th"). */
+  unclear?: boolean;
 }
 
-/** A day the visitor named, or a general availability ask, in already-normalized text. */
-export function dayReference(normalized: string): DayReference | "menu" | undefined {
+/**
+ * A day the visitor named, or a general availability ask, in already-normalized
+ * text. `today` is the property-local date so a year-less calendar date
+ * ("Dec 1") becomes the next occurrence on or after today.
+ */
+export function dayReference(normalized: string, today?: LocalDate): DayReference | "menu" | undefined {
   if (/\b(this )?weekend\b/.test(normalized)) return { relative: "weekend" };
   if (/\btomorrow\b/.test(normalized)) return { relative: "tomorrow", ...weekdayFields(normalized) };
   if (/\btoday\b/.test(normalized)) return { relative: "today", ...weekdayFields(normalized) };
+  const calendar = calendarDateOf(normalized, today);
+  if (calendar) return calendar;
   const weekday = weekdayOfText(normalized);
   if (weekday) {
     const scheduling = /\b(what about|how about|anything|available|availability|what times|which times|do you have|can i come|could i come|instead)\b/.test(normalized) || normalized.split(" ").length <= 4;
     if (!scheduling) return undefined;
     return { weekday: weekday.day, ...(weekday.next ? { nextWeek: true } : {}) };
   }
-  if (/\b(what availability|any availability|which days|what days|when are you available|when can i (come|tour|visit)|availability do you have)\b/.test(normalized)) {
+  if (unclearDateAttempt(normalized)) return { unclear: true };
+  if (
+    /\b(what availability|any availability|which days|what days|when are you available|when can i (come|tour|visit)|can i come|could i come|can we come|could we come|can i tour|can i visit|availability do you have)\b/.test(
+      normalized,
+    )
+  ) {
     return "menu";
   }
   return undefined;
+}
+
+const MONTH_NUMBER: Record<string, number> = {
+  january: 1,
+  jan: 1,
+  february: 2,
+  feb: 2,
+  march: 3,
+  mar: 3,
+  april: 4,
+  apr: 4,
+  may: 5,
+  june: 6,
+  jun: 6,
+  july: 7,
+  jul: 7,
+  august: 8,
+  aug: 8,
+  september: 9,
+  sept: 9,
+  sep: 9,
+  october: 10,
+  oct: 10,
+  november: 11,
+  nov: 11,
+  december: 12,
+  dec: 12,
+};
+
+const MONTH_WORD = Object.keys(MONTH_NUMBER)
+  .sort((a, b) => b.length - a.length)
+  .join("|");
+const DAY_TOKEN = String.raw`(?:3[01]|[12]\d|0?[1-9])(?:st|nd|rd|th)?`;
+const MONTH_TOKEN = `(?:${MONTH_WORD})`;
+const YEAR_TOKEN = String.raw`(?:\d{4}|\d{2})`;
+const WEEKDAY_TOKEN = "monday|tuesday|wednesday|thursday|friday|saturday|sunday";
+
+const MONTH_THEN_DAY = new RegExp(`\\b(?:(${WEEKDAY_TOKEN})\\s+)?(${MONTH_TOKEN})\\s+(${DAY_TOKEN})(?:\\s+(${YEAR_TOKEN}))?\\b`);
+const DAY_THEN_MONTH = new RegExp(`\\b(?:(${WEEKDAY_TOKEN})\\s+)?(${DAY_TOKEN})\\s+(${MONTH_TOKEN})(?:\\s+(${YEAR_TOKEN}))?\\b`);
+const NUMERIC_DATE = new RegExp(`\\b(?:(${WEEKDAY_TOKEN})\\s+)?(1[0-2]|0?[1-9])\\s+(${DAY_TOKEN})(?:\\s+(${YEAR_TOKEN}))?\\b`);
+const NUMERIC_ONLY = new RegExp(`^(1[0-2]|0?[1-9])\\s+(${DAY_TOKEN})(?:\\s+(${YEAR_TOKEN}))?$`);
+const NUMERIC_SCHEDULING = /\b(what about|how about|anything|available|availability|what times|which times|do you have|can i come|could i come|instead|come|tour|visit|book|on)\b/;
+
+function calendarDateOf(normalized: string, today?: LocalDate): DayReference | undefined {
+  const named = MONTH_THEN_DAY.exec(normalized) ?? DAY_THEN_MONTH.exec(normalized);
+  if (named) {
+    const weekdayWord = named[1];
+    const monthFirst = MONTH_NUMBER[named[2]!] !== undefined;
+    const month = monthFirst ? MONTH_NUMBER[named[2]!]! : MONTH_NUMBER[named[3]!]!;
+    const day = parseDay(monthFirst ? named[3]! : named[2]!);
+    const yearToken = named[4];
+    const date = resolveCalendarDate(today, month, day, yearToken);
+    if (!date) return { unclear: true };
+    return { date, ...(weekdayWord ? { weekday: WEEKDAY_WORD[weekdayWord] } : {}) };
+  }
+
+  const numeric = NUMERIC_DATE.exec(normalized);
+  if (!numeric) return undefined;
+  const onlyDate = NUMERIC_ONLY.test(normalized);
+  if (!onlyDate && !NUMERIC_SCHEDULING.test(normalized)) return undefined;
+  const weekdayWord = numeric[1];
+  const month = Number(numeric[2]);
+  const day = parseDay(numeric[3]!);
+  const date = resolveCalendarDate(today, month, day, numeric[4]);
+  if (!date) return { unclear: true };
+  return { date, ...(weekdayWord ? { weekday: WEEKDAY_WORD[weekdayWord] } : {}) };
+}
+
+const UNCLEAR_DATE =
+  /\b(sometime|next month|this month|end of (the )?month|later this month|early next month|in a few (days|weeks)|in a month)\b|\bthe (?:3[2-9]|[4-9]\d|\d{3,})(?:st|nd|rd|th)?\b/;
+const BOOKING_ASK =
+  /\b(can i come|could i come|can we come|could we come|can i tour|can i visit|can we tour|can we visit|when can i (come|tour|visit))\b/;
+
+function unclearDateAttempt(normalized: string): boolean {
+  if (UNCLEAR_DATE.test(normalized)) return true;
+  if (new RegExp(`\\b(?:in|this|next)\\s+(${MONTH_WORD})\\b`).test(normalized)) return true;
+  return BOOKING_ASK.test(normalized) && new RegExp(`\\b(?!may\\b)(${MONTH_WORD})\\b`).test(normalized);
+}
+
+function parseDay(token: string): number {
+  return Number(token.replace(/(?:st|nd|rd|th)$/, ""));
+}
+
+function parseYear(token: string): number {
+  return token.length === 2 ? 2000 + Number(token) : Number(token);
+}
+
+function resolveCalendarDate(today: LocalDate | undefined, month: number, day: number, yearToken?: string): LocalDate | undefined {
+  if (yearToken) {
+    const year = parseYear(yearToken);
+    return isValidYmd(year, month, day) ? { year, month, day } : undefined;
+  }
+  if (!today) return undefined;
+  return nextOnOrAfter(today, month, day);
+}
+
+function nextOnOrAfter(today: LocalDate, month: number, day: number): LocalDate | undefined {
+  for (const year of [today.year, today.year + 1]) {
+    const date = { year, month, day };
+    if (isValidYmd(year, month, day) && !isBefore(date, today)) return date;
+  }
+  return undefined;
+}
+
+function isBefore(a: LocalDate, b: LocalDate): boolean {
+  return a.year < b.year || (a.year === b.year && a.month < b.month) || (a.year === b.year && a.month === b.month && a.day < b.day);
+}
+
+function isValidYmd(year: number, month: number, day: number): boolean {
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const t = new Date(Date.UTC(year, month - 1, day));
+  return t.getUTCFullYear() === year && t.getUTCMonth() === month - 1 && t.getUTCDate() === day;
 }
 
 function weekdayFields(normalized: string): Pick<DayReference, "weekday" | "nextWeek"> {

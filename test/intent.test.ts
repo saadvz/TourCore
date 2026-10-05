@@ -39,6 +39,8 @@ function ctx(step: ConversationStep, message: string, extra: Partial<InterpretCo
       { name: "Unit 102", summary: "One-bedroom, first floor, courtyard view." },
     ],
     timeChoices: ["2:00 PM", "3:30 PM"],
+    today: { year: 2026, month: 10, day: 4 },
+    timezone: "America/New_York",
     reservedUnit: "Unit 101",
     remainingStops: step === "ready" ? [ENTRANCE, U101] : [U101],
     doors: [ENTRANCE, U101, U102],
@@ -134,6 +136,18 @@ describe("rule-based interpretation", () => {
     for (const m of ["the apartment", "a unit", "either"]) expect(read("choose-unit", m), m).toMatchObject({ intent: { type: "UNKNOWN" }, clarificationNeeded: true });
     expect(read("choose-unit", "101 or 102")).toMatchObject({ clarificationNeeded: true });
     expect(read("choose-unit", "the blue one")).toMatchObject({ intent: { type: "UNKNOWN" }, clarificationNeeded: false });
+  });
+
+  it("SELECT_DATE from a typed calendar date, not a property question", () => {
+    expect(readAs("choose-date", "Can I come Dec 1?")).toEqual({ type: "SELECT_DATE", date: { year: 2026, month: 12, day: 1 } });
+    expect(readAs("choose-date", "December 1st")).toEqual({ type: "SELECT_DATE", date: { year: 2026, month: 12, day: 1 } });
+    expect(readAs("choose-date", "1 Dec")).toEqual({ type: "SELECT_DATE", date: { year: 2026, month: 12, day: 1 } });
+    expect(readAs("choose-date", "12/1")).toEqual({ type: "SELECT_DATE", date: { year: 2026, month: 12, day: 1 } });
+    expect(readAs("choose-date", "Tuesday Oct 6")).toEqual({ type: "SELECT_DATE", date: { year: 2026, month: 10, day: 6 }, weekday: "TUE" });
+    expect(readAs("choose-date", "Jan 3", { today: { year: 2026, month: 12, day: 15 } })).toEqual({ type: "SELECT_DATE", date: { year: 2027, month: 1, day: 3 } });
+    expect(readAs("choose-date", "Can I come today?")).toEqual({ type: "SELECT_DATE", relative: "today" });
+    expect(readAs("choose-date", "can I come the 45th")).toEqual({ type: "SELECT_DATE", unclear: true });
+    expect(readAs("choose-date", "sometime next month")).toEqual({ type: "SELECT_DATE", unclear: true });
   });
 
   it("SELECT_TIME by menu number, time or order", () => {
@@ -241,6 +255,26 @@ describe("semantic interpretation", () => {
     ]) {
       expect(await run(bad), bad).toMatchObject({ intent: { type: "UNKNOWN" }, confidence: 0 });
     }
+  });
+
+  it("names the offered weekday and time on the accept-next-opening follow-up", async () => {
+    const { model, calls } = fakeModel('{"intent":"UNKNOWN","confidence":0.2}');
+    const slotStart = zonedTimeToUtc({ year: 2026, month: 10, day: 5, hour: 8, minute: 15 }, "America/New_York").toISOString();
+    await new LLMIntentInterpreter(model).interpret(
+      ctx("choose-date", "hmm", {
+        timezone: "America/New_York",
+        awaiting: { kind: "accept-next-opening", date: "2026-10-05", slotStart },
+      }),
+    );
+    expect(JSON.parse(calls[0]!.user).lastAsked).toBe("Reply yes for Monday at 8:15 AM, or pick a day.");
+    expect(JSON.parse(calls[0]!.user).lastAsked).not.toBe("Reply yes for that opening, or pick a day.");
+  });
+
+  it("accepts SELECT_DATE with a concrete local date", async () => {
+    const i = await new LLMIntentInterpreter(fakeModel('{"intent":"SELECT_DATE","date":"2026-12-01","confidence":0.93}').model).interpret(
+      ctx("choose-date", "Can I come Dec 1?"),
+    );
+    expect(i.intent).toEqual({ type: "SELECT_DATE", date: { year: 2026, month: 12, day: 1 } });
   });
 
   it("uses the visitor's own words for questions, not the model's paraphrase", async () => {

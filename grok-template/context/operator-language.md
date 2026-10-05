@@ -23,6 +23,7 @@ settings screen. Casual and non-technical is a requirement.
 | Set up a tour for Dana at Unit 1A on Monday at 3:15 PM? Only say yes if they asked for this tour. Dana gets a text to confirm. Book it? | Create a one-time tour. Continue? |
 | They already have a booked tour. I can move it or call it off. | They already have a tour in progress. |
 | Send "Parking is included" to Pat? Future visitors who ask the same thing will get it too. Save it? | I'll save that as an approved fact. Continue? |
+| That date ask is booking, not a question for the team. | Flag "Can I come Dec 1?" as unanswered. |
 
 ## Habits
 

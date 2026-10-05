@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { LocalDate } from "../core/timezone";
 
 /**
  * What a visitor is trying to do, in Tour Core's own terms. An interpreter
@@ -11,6 +12,11 @@ export const HelpProblemSchema = z.enum(["DOOR_WONT_OPEN", "LOST", "CANT_FIND_UN
 export type HelpProblem = z.infer<typeof HelpProblemSchema>;
 
 const Name = z.string().trim().min(1).max(80);
+const CalendarDate = z.object({
+  year: z.number().int(),
+  month: z.number().int().min(1).max(12),
+  day: z.number().int().min(1).max(31),
+});
 
 export const TourIntentSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("START_INQUIRY") }),
@@ -36,6 +42,10 @@ export const TourIntentSchema = z.discriminatedUnion("type", [
     weekday: z.enum(["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]).optional(),
     relative: z.enum(["today", "tomorrow", "weekend"]).optional(),
     nextWeek: z.boolean().optional(),
+    /** Property-local calendar date when the visitor named one ("Dec 1", "12/1"). */
+    date: CalendarDate.optional(),
+    /** They asked for a day that could not be resolved ("the 45th", "next month"). */
+    unclear: z.boolean().optional(),
   }),
   z.object({ type: z.literal("ACCEPT_PROPOSED_TIME") }),
   z.object({ type: z.literal("DECLINE_PROPOSED_TIME") }),
@@ -76,7 +86,13 @@ export interface IntentInterpretation {
    */
   mentionedTime?: { hour: number; minute: number; meridiem?: "AM" | "PM"; day?: "today" | "tomorrow" };
   /** A day named next to a property question. The question is answered, then that day's times are shown. */
-  mentionedDate?: { weekday?: "SUN" | "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT"; relative?: "today" | "tomorrow" | "weekend"; nextWeek?: boolean };
+  mentionedDate?: {
+    weekday?: "SUN" | "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT";
+    relative?: "today" | "tomorrow" | "weekend";
+    nextWeek?: boolean;
+    date?: { year: number; month: number; day: number };
+    unclear?: boolean;
+  };
   /** The text reads like an instruction to the assistant ("ignore your rules..."), not a visitor action. */
   manipulation?: boolean;
 }
@@ -126,6 +142,10 @@ export interface InterpretContext {
   remainingStops: StopRef[];
   /** Every door on file, so a visitor naming an off-route door is understood (and then refused by policy). */
   doors: StopRef[];
+  /** Property-local calendar date "now", so year-less dates resolve to the next occurrence. */
+  today?: LocalDate;
+  /** Property timezone, so last-asked copy can name a weekday and time. */
+  timezone?: string;
 }
 
 export interface IntentInterpreter {
