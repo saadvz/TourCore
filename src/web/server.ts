@@ -5,11 +5,14 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { join } from "node:path";
 import { createStore, liveTransportFor } from "../createTourCore";
 import { MessagingLedger } from "../messaging/ledger";
+import type { InboundMessage } from "../messaging/inbound";
 import { handleProviderWebhook } from "../messaging/pipeline";
 import { activeFromNumber, bindMessagingInstallation, createMessagingProvider, selectionFromInstallation } from "../messaging/registry";
 import { consentModeForProvider } from "../messaging/consentPolicy";
 import { SENDBLUE_WEBHOOK_PATH } from "../messaging/sendblue/runtime";
 import { handleSendblueWebhook } from "../messaging/sendblue/webhook";
+import { LOCAL_WEBHOOK_PATH } from "../messaging/local/provider";
+import { resetLocalSmsOutbox } from "../messaging/local/outbox";
 import { PHOTON_WEBHOOK_PATH } from "../messaging/photon/provider";
 import { TWILIO_WEBHOOK_PATH } from "../messaging/twilio/provider";
 import { publicBaseUrl } from "../messaging/publicUrl";
@@ -124,7 +127,7 @@ function publicRouteAllowed(method: string, path: string, oauth: boolean, hosted
     return (method === "GET" && path.startsWith("/portable/artifacts/")) || (method === "POST" && path.startsWith("/portable/uploads/"));
   }
   if (oauth && (isOAuthPublicPath(path, MCP_PATH) || (method === "GET" && path === "/oauth.js"))) return true;
-  if (method === "POST" && (path === SENDBLUE_WEBHOOK_PATH || path === TWILIO_WEBHOOK_PATH || path === PHOTON_WEBHOOK_PATH)) return true;
+  if (method === "POST" && (path === SENDBLUE_WEBHOOK_PATH || path === TWILIO_WEBHOOK_PATH || path === PHOTON_WEBHOOK_PATH || path === LOCAL_WEBHOOK_PATH)) return true;
   if (method === "GET" && isPublicCompliancePath(path)) return true;
   if (method === "GET" && (/^\/verify\/[A-Za-z0-9_-]+$/.test(path) || path === "/verify.js" || path === "/styles.css")) return true;
   if (hosted && method === "GET" && (path === "/connect" || path === "/connect.js" || path === "/install" || path === "/install.js" || path === "/styles.css")) return true;
@@ -243,6 +246,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
     releaseUnconfirmedTours: () => conversations.releaseUnconfirmed(),
     needsAttention: (propertyId: string) => conversations.needsAttention(propertyId),
     installedMessaging: () => installedMessaging(installation),
+    receiveInbound: (message: InboundMessage) => conversations.receive(message),
   };
   const alerts = new OperatorUpdates({ services: api, outbox: installation.outbox, preferences: () => installation.files.state().operatorUpdates, log });
   installation.setRelevanceCheck((event) => alerts.stillRelevant(event));
@@ -311,6 +315,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
     },
     installation,
     resetMessaging,
+    messagingLedger: ledger,
     forgetLiveState: () => {
       ledger.clear();
       visitors.clear();
@@ -318,6 +323,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
       confirmations.clear();
       oauth?.provider.discardPending();
       installation.approvals.discard();
+      resetLocalSmsOutbox();
     },
   };
 
@@ -446,9 +452,9 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         }
         return send(reply.status, json, JSON.stringify(reply.body));
       }
-      if (method === "POST" && (url.pathname === SENDBLUE_WEBHOOK_PATH || url.pathname === TWILIO_WEBHOOK_PATH || url.pathname === PHOTON_WEBHOOK_PATH)) {
+      if (method === "POST" && (url.pathname === SENDBLUE_WEBHOOK_PATH || url.pathname === TWILIO_WEBHOOK_PATH || url.pathname === PHOTON_WEBHOOK_PATH || url.pathname === LOCAL_WEBHOOK_PATH)) {
         const rawBody = await readRaw(req);
-        const providerId = url.pathname === TWILIO_WEBHOOK_PATH ? "twilio" : url.pathname === PHOTON_WEBHOOK_PATH ? "photon" : "sendblue";
+        const providerId = url.pathname === TWILIO_WEBHOOK_PATH ? "twilio" : url.pathname === PHOTON_WEBHOOK_PATH ? "photon" : url.pathname === LOCAL_WEBHOOK_PATH ? "local" : "sendblue";
         const selection = selectionFromInstallation(installation);
         const signedUrl = installation.publicBaseUrl() ? `${installation.publicBaseUrl()}${url.pathname}${url.search}` : undefined;
         const provider = createMessagingProvider(providerId, { env: () => installation.env(), sendblue: () => installation.sendblueEnv(), ledger, now: options.now });

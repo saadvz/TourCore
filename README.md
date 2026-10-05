@@ -197,7 +197,7 @@ npm run typecheck           # tsc
 
 ## Visitor texting
 
-Tour Core is provider-agnostic. Choose how prospects reach your property. Current first-party messaging adapters include Sendblue, Twilio, and Photon. Tour Core's booking, property, policy, and tour logic stays the same regardless of messaging provider. Additional providers can be added through the `MessagingProvider` interface (`docs/messaging/providers.md`). Features are not identical across adapters.
+Tour Core is provider-agnostic. Choose how prospects reach your property. Current first-party messaging adapters include Sendblue, Twilio, Photon, and a `local` QA loopback that never hits a carrier. Tour Core's booking, property, policy, and tour logic stays the same regardless of messaging provider. Additional providers can be added through the `MessagingProvider` interface (`docs/messaging/providers.md`). Features are not identical across adapters.
 
 Carrier and provider requirements vary. The deployer is responsible for their provider account and any applicable messaging requirements. Connecting a provider does not mean a carrier has approved application messaging.
 
@@ -224,7 +224,20 @@ read `TOURCORE_PUBLIC_BRAND_NAME`, `TOURCORE_PUBLIC_LEGAL_NAME`, `TOURCORE_PUBLI
 `TOURCORE_PUBLIC_SMS_NUMBER`, and `PUBLIC_BASE_URL`. They are not specific to one provider. They do not invent a legal
 entity when the legal name is empty. HELP replies list the optional visitor help number when one is set, then "or reply here"; they do not use `TOURCORE_PUBLIC_CONTACT_EMAIL`. `docs/messaging/twilio-a2p-example.md` is an example of disclosures some carriers ask for.
 
-Webhook addresses are `PUBLIC_BASE_URL/webhooks/sendblue`, `PUBLIC_BASE_URL/webhooks/twilio`, and `PUBLIC_BASE_URL/webhooks/photon`.
+Webhook addresses are `PUBLIC_BASE_URL/webhooks/sendblue`, `PUBLIC_BASE_URL/webhooks/twilio`, `PUBLIC_BASE_URL/webhooks/photon`, and `PUBLIC_BASE_URL/webhooks/local`.
+
+### Local loopback (QA)
+
+`local` is a first-party `MessagingProvider` for running the full visitor SMS path without Sendblue, Twilio, Photon, or real texts. `send()` writes each outbound SMS to an in-process outbox as one bubble, in send order. Inbound is `POST /webhooks/local` with `{ id, from, to, text }`, or the operator tools below. Both feed `handleProviderWebhook` → `conversations.receive` → `handleVisitorText`.
+
+A property can run `messagingMode: live` with provider `local`. Line attach, readiness, consent, identity-form links, the live tour view, and operator tools (`inspect_tour`, exceptions, `list_active_tours`) behave like production SMS.
+
+QA tools (MCP / Grok):
+
+- `inject_local_sms` — send a visitor text as `from` to the property line (`to`) or property. Refuses unless that property is on `local`.
+- `read_local_outbox` — outbound replies for that conversation as **separate bubbles in order** (body + timestamp). Never one concatenated blob.
+
+Switch a scratch property: `choose_messaging_provider` with `local`, `set_services` with `messaging: live`, then inject and read the outbox. Inject against a Sendblue, Twilio, Photon, or practice-text property is refused.
 
 ### Sendblue (one adapter)
 

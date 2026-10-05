@@ -26,7 +26,7 @@ export const ManifestSchema = z.strictObject({
   installationId: z.string().regex(/^inst_[A-Za-z0-9_-]{12,60}$/),
   publicBaseUrl: z.url({ protocol: /^https$/ }).optional(),
   publicEndpointProvider: z.enum(PUBLIC_ENDPOINT_PROVIDERS),
-  messagingProvider: z.enum(["UNSET", "SENDBLUE", "TWILIO", "PHOTON", "DEMO"]),
+  messagingProvider: z.enum(["UNSET", "SENDBLUE", "TWILIO", "PHOTON", "LOCAL", "DEMO"]),
   /** GOOGLE_DRIVE is canonical portable storage. LOCAL_DEMO stays on this computer. */
   storageProvider: z.enum(["LOCAL_DEMO", "GOOGLE_DRIVE"]),
   /** Future: DURIN. */
@@ -54,9 +54,9 @@ export interface InstallState {
   schemaVersion: 1;
   publicBaseUrlHistory: { url: string; since: string; until?: string }[];
   publicEndpointCheck?: CheckResult & { url: string };
-  visitorMessaging?: CheckResult & { publicBaseUrl?: string; webhookUrl?: string; problems: string[]; provider?: "sendblue" | "twilio" | "photon" };
+  visitorMessaging?: CheckResult & { publicBaseUrl?: string; webhookUrl?: string; problems: string[]; provider?: "sendblue" | "twilio" | "photon" | "local" };
   /** Set when the operator chooses a provider, or when a working Sendblue install is migrated once. */
-  messagingProviderChoice?: "sendblue" | "twilio" | "photon";
+  messagingProviderChoice?: "sendblue" | "twilio" | "photon" | "local";
   /** Provisioned lines last reported by the active provider. Phone numbers only, never secrets. */
   messagingLines?: { id: string; address: string; status?: string }[];
   /** credentialsChangedAt: when the routine settings were last changed, so an old test doesn't vouch for new ones. */

@@ -12,6 +12,7 @@ import { TourCoreError } from "../core/TourCore";
 import { PortableBackupError } from "../backup/portable";
 import { InvalidTransitionError } from "../domain/stateMachine";
 import { checkMessaging, UnavailableModeError } from "../createTourCore";
+import type { MessagingLedger } from "../messaging/ledger";
 import { applySetupCommand } from "../setup/commands";
 import { draftView, readinessView, saveStateView } from "../setup/presenters";
 import { parseDays, parseMinutes, parseTimeOfDay } from "../setup/parse";
@@ -44,6 +45,7 @@ import { defaultMessagingMode, type OperatorServices } from "./services";
 import { publishGuards, publishProperty, readinessForProperty, runPracticeTour, visitorTexting } from "./setupFlow";
 import { findTour, inspectTourView, listActiveTours } from "./tours";
 import { approveTourTimeRequest, declineTourTimeRequest, inspectTourTimeRequest, listTourTimeRequests, proposeTourTime, rescheduleTour, scheduleOneOffTour } from "./tourTimes";
+import { injectLocalSms, readLocalOutbox } from "./localSms";
 
 /**
  * Tour Core's operator tool contract: a narrow, provider-neutral list of
@@ -71,6 +73,8 @@ export interface ToolContext {
   caller?: { clientId?: string };
   /** Drops process memory (sessions, ledger, pending OAuth) after a hosted demo reset. */
   forgetLiveState?: () => void;
+  /** Shared inbound/outbound de-duplication for this process, including local SMS inject. */
+  messagingLedger?: MessagingLedger;
 }
 
 export type ToolKind = "read" | "change" | "consequential";
@@ -941,6 +945,35 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         instructions: "Publishing finished. Tell the operator the property is published, using summary. Do not say it still needs a yes.",
       };
     },
+  }),
+
+  // -------------------------------------------------------- local SMS QA
+  tool({
+    name: "inject_local_sms",
+    title: "Inject a local visitor text",
+    kind: "change",
+    description:
+      "QA only. Sends a visitor SMS into Tour Core as if it arrived on the local loopback (same path as POST /webhooks/local → handleProviderWebhook → conversations.receive). Refuses unless that property is on the local provider — never against Sendblue, Twilio, Photon, or practice texts. No real text is sent.",
+    input: z.strictObject({
+      from: z.string().min(7).max(30).describe("The visitor's phone number."),
+      text: z.string().min(1).max(1600).describe("The visitor's text, one message."),
+      to: z.string().min(7).max(30).optional().describe("The property's local touring number. Leave out to use the property's attached line."),
+      property: Property,
+      id: z.string().max(80).optional().describe("Optional inbound id for de-duplication. Leave out to mint one."),
+    }),
+    run: (ctx, i) => injectLocalSms(ctx, i),
+  }),
+  tool({
+    name: "read_local_outbox",
+    title: "Read the local SMS outbox",
+    kind: "read",
+    description:
+      "QA only. Returns outbound local-loopback replies for a conversation as separate bubbles in send order (body + timestamp). Never one concatenated blob. Refuses unless that property is on the local provider.",
+    input: z.strictObject({
+      from: z.string().min(7).max(30).optional().describe("The visitor's phone number. Leave out to list every prospect bubble."),
+      property: Property,
+    }),
+    run: async (ctx, i) => readLocalOutbox(ctx, i),
   }),
 
   // -------------------------------------------------------- live tours

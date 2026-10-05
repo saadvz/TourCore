@@ -342,6 +342,7 @@ function grokStatus(inst: Installation): ComponentStatus {
 function credentialAsk(id: string): string {
   if (id === "sendblue") return "Sendblue needs your API key, API secret, and messaging number. I'll ask for them securely; they won't be shown to me in chat.";
   if (id === "twilio") return "Twilio needs your Account SID, Auth Token, and Tour Core phone number. I'll ask for them securely; they won't be shown to me in chat.";
+  if (id === "local") return "The local loopback is ready. No account details are needed.";
   return "Photon needs your project credentials. I'll ask for them securely; they won't be shown to me in chat.";
 }
 

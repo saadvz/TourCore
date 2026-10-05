@@ -43,6 +43,9 @@ export async function chooseMessagingProvider(
   delete next.visitorMessaging;
   inst.files.writeState(next);
   inst.files.update({ messagingProvider: manifestProviderName(provider) }, new Date(inst.now()));
+  if (provider === "local") {
+    return { changed: true, summary: "Visitor texting will use the local loopback. No real texts are sent." };
+  }
   const name = provider === "sendblue" ? "Sendblue" : provider === "twilio" ? "Twilio" : "Photon";
   return { changed: true, summary: `Visitor texting will use ${name}. I'll ask for the account details securely; they won't be shown in chat.` };
 }

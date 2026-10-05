@@ -3,7 +3,7 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { testEvent } from "../alerts/operatorEvents";
 import { MockDurinAccessAdapter } from "../durin/MockDurinAccessAdapter";
-import { activeFromNumber, createMessagingProvider, ensureMessagingSelection } from "../messaging/registry";
+import { activeFromNumber, createMessagingProvider, ensureMessagingSelection, manifestProviderName } from "../messaging/registry";
 import type { SettingName } from "./secretStore";
 import type { OperatorServices } from "../operator/services";
 import { writeFileAtomic } from "../storage/atomicWrite";
@@ -123,7 +123,7 @@ export async function testVisitorMessaging(inst: Installation, options: { onConn
     ...(result.webhookUrl ? { webhookUrl: result.webhookUrl } : previous ? { webhookUrl: previous } : {}),
   });
   if (result.ok) {
-    inst.files.update({ messagingProvider: selection.provider === "twilio" ? "TWILIO" : selection.provider === "photon" ? "PHOTON" : "SENDBLUE" }, new Date(inst.now()));
+    inst.files.update({ messagingProvider: manifestProviderName(selection.provider) }, new Date(inst.now()));
     options.onConnected?.();
   }
   if (result.lines) {

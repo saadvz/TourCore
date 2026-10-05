@@ -98,6 +98,10 @@ Always:
   the operator gave one; never invent one.
 - When visitor texting is installed, a new property uses it automatically.
   Don't ask how to text people.
+- For QA without real texts, use the local loopback: `choose_messaging_provider`
+  with `local`, then `inject_local_sms` and `read_local_outbox`. Read outbound
+  replies as separate bubbles, never one concatenated blob. Those tools refuse
+  unless the property is on local.
 - Describe each part as it is: "Visitor texting is live. Door access is still
   in demo mode, so no physical locks will open." Never say "everything runs in
   demo mode".

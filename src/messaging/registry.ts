@@ -1,6 +1,7 @@
 import type { Installation } from "../install/installation";
 import type { InstallationManifest } from "../install/manifest";
 import { toE164 } from "./Messenger";
+import { LocalMessagingProvider, readLocalEnv } from "./local/provider";
 import { PhotonMessagingProvider, readPhotonEnv } from "./photon/provider";
 import type { MessagingProvider, MessagingProviderId, MessagingProviderInfo, MessagingReadiness } from "./provider";
 import { MESSAGING_PROVIDER_IDS } from "./provider";
@@ -31,6 +32,7 @@ const MANIFEST_PROVIDER: Record<MessagingProviderId, InstallationManifest["messa
   sendblue: "SENDBLUE",
   twilio: "TWILIO",
   photon: "PHOTON",
+  local: "LOCAL",
 };
 
 let boundInstallation: (() => SelectionInput) | undefined;
@@ -81,6 +83,7 @@ export function resolveMessagingSelection(input: SelectionInput): MessagingSelec
   if (input.choice) return { provider: input.choice, inferredLegacySendblue: false, readiness: "NEEDS_ACTION" };
   if (input.manifestProvider === "TWILIO") return { provider: "twilio", inferredLegacySendblue: false, readiness: "NEEDS_ACTION" };
   if (input.manifestProvider === "PHOTON") return { provider: "photon", inferredLegacySendblue: false, readiness: "NEEDS_ACTION" };
+  if (input.manifestProvider === "LOCAL") return { provider: "local", inferredLegacySendblue: false, readiness: "NEEDS_ACTION" };
   if (sendblueConfigured(input.sendblue)) {
     return { provider: "sendblue", inferredLegacySendblue: true, readiness: "NEEDS_ACTION" };
   }
@@ -123,6 +126,7 @@ export function ensureMessagingSelection(inst: Installation): MessagingSelection
 export function createMessagingProvider(id: MessagingProviderId, options: { env: () => NodeJS.ProcessEnv; ledger?: MessagingLedger; now?: () => Date; sendblue?: () => SendblueEnv }): MessagingProvider {
   if (id === "twilio") return new TwilioMessagingProvider({ env: () => readTwilioEnv(options.env()), ledger: options.ledger, now: options.now });
   if (id === "photon") return new PhotonMessagingProvider({ env: () => readPhotonEnv(options.env()), ledger: options.ledger, now: options.now });
+  if (id === "local") return new LocalMessagingProvider({ env: () => readLocalEnv(options.env()), ledger: options.ledger, now: options.now });
   return new SendblueMessagingProvider({ env: options.sendblue ?? (() => sendblueRuntime.env()), ledger: options.ledger, now: options.now });
 }
 
@@ -130,6 +134,7 @@ export function activeFromNumber(inst: Installation): string | undefined {
   const selection = selectionFromInstallation(inst);
   if (selection.provider === "twilio") return readTwilioEnv(inst.env()).fromNumber;
   if (selection.provider === "photon") return readPhotonEnv(inst.env()).fromNumber;
+  if (selection.provider === "local") return readLocalEnv(inst.env()).fromNumber;
   if (selection.provider === "sendblue") return inst.sendblueEnv().fromNumber;
   return undefined;
 }

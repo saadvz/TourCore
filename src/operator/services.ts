@@ -1,3 +1,4 @@
+import type { InboundMessage } from "../messaging/inbound";
 import type { MessagingProviderId } from "../messaging/provider";
 import type { MessagingEndpoints } from "../messaging/endpoints";
 import type { PropertyWorkspace } from "../setup/workspace";
@@ -40,6 +41,8 @@ export interface OperatorServices {
   needsAttention?: (propertyId: string) => { visitorPhone: string; problem: string; at?: string }[];
   /** Real visitor texting set up for this installation, if any. New properties use it. */
   installedMessaging?: () => InstalledMessaging | undefined;
+  /** Hands a verified inbound SMS to the same visitor pipeline the webhooks use. */
+  receiveInbound?: (message: InboundMessage) => Promise<{ correlationId?: string } | void>;
   now?: () => Date;
 }
 
