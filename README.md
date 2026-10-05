@@ -283,7 +283,7 @@ npm run sendblue:test -- --to +1XXXXXXXXXX   # manual: checks the connection, se
   never changes a policy decision. A wrong door texted from a phone is refused before Durin is contacted.
 - **STOP, UNSUBSCRIBE, CANCEL, QUIT.** Tour Core stops messaging that person, ends any tour in progress (open doors
   are switched off), alerts the team, and stays quiet until START.
-- **HELP.** Replies with who this is and how to reach the property team; during a tour it also alerts them.
+- **HELP.** Replies with who this is and every set contact (number first, then email), always ending with reply here; during a tour it also alerts them.
 
 ### Natural texts
 
