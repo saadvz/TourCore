@@ -8,8 +8,8 @@ Do not open a public issue for a security flaw.
 
 ## What to expect
 
-We will acknowledge that we received your report and give you a first response within a few business days.
+You'll hear back that we got your report, and a first response within a few business days.
 
 ## Scope
 
-This policy covers Tour Core itself — the self-touring software in this repository. It does not cover third-party lock hardware vendors.
+This covers Tour Core — the self-touring software in this repository. It does not cover door locks or access systems you connect to it.
