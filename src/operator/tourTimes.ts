@@ -5,6 +5,7 @@ import { formatPhone, parsePhone } from "../core/phone";
 import type { TourTimeRequest } from "../domain/model";
 import { TERMINAL } from "../domain/stateMachine";
 import { SetupInputError } from "../setup/setupActions";
+import { oneOffBlockReason } from "../visitor/oneOffGate";
 import { SmsConsentDirectory } from "../visitor/smsConsent";
 import type { ConfirmationBook } from "./confirmations";
 import { requireUnit, resolvePropertyId } from "./resolve";
@@ -282,6 +283,11 @@ export async function scheduleOneOffTour(
   const optedOut = new SmsConsentDirectory(ctx.services.workspace.root).get(propertyId, phone);
   if (optedOut?.status === "opted_out") {
     throw new SetupInputError("OPTED_OUT", "That number asked us not to text them (STOP), so I can't set up a tour.");
+  }
+  const existing = ctx.services.visitors?.latestForPhone(propertyId, phone, "messaging");
+  if (existing) {
+    const blocked = await oneOffBlockReason(existing);
+    if (blocked) throw new SetupInputError("TOUR_EXISTS", blocked);
   }
   const unit = requireUnit(config, input.unit);
   const resolved = parseFlexibleTime(input.startsAt, config, ctx.now());

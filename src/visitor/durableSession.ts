@@ -91,6 +91,8 @@ export const DurableSessionSchema = z.object({
   verification: z.object({ issuedAt: Iso, expiresAt: Iso }).optional(),
   followUp: z.enum(["asked", "answered"]).optional(),
   optedOut: z.boolean().default(false),
+  /** This leftover conversation was replaced by an operator-set one-off. */
+  superseded: z.boolean().optional(),
   createdAt: Iso,
   updatedAt: Iso,
   completedAt: Iso.optional(),
@@ -112,7 +114,7 @@ export async function snapshotOf(session: VisitorDemoSession, links?: Verificati
   const r = await session.reservation();
   const opened = r ? (await session.core.listGrants(r.id)).map((g) => g.doorId) : [];
   const now = session.clock.now().toISOString();
-  const status = statusFor(stage, r);
+  const status = session.superseded ? "ended" : statusFor(stage, r);
   const link = r && links ? links.current(r.id) : undefined;
   return DurableSessionSchema.parse({
     schemaVersion: 1,
@@ -135,6 +137,7 @@ export async function snapshotOf(session: VisitorDemoSession, links?: Verificati
     ...(link ? { verification: { issuedAt: new Date(link.issuedAt).toISOString(), expiresAt: new Date(link.expiresAt).toISOString() } } : {}),
     ...(stage === "follow-up" ? { followUp: "asked" } : stage === "done" ? { followUp: "answered" } : {}),
     optedOut: session.optedOut,
+    ...(session.superseded ? { superseded: true } : {}),
     createdAt: previous?.createdAt ?? session.startedAt.toISOString(),
     updatedAt: now,
     ...(status !== "active" ? { completedAt: previous?.completedAt ?? now } : {}),
@@ -189,6 +192,7 @@ export async function restoreSession(snapshot: DurableSession, deps: RestoreDeps
     otherBusyStarts: deps.otherBusyStarts ? () => deps.otherBusyStarts!(snapshot.propertyId, snapshot.tourId) : undefined,
   });
   await session.hydrate(tour.record, tour.bundle);
+  if (snapshot.superseded) session.superseded = true;
   session.line = snapshot.line;
   if (!session.visitor) session.identify(snapshot.visitorPhone);
   if (session.visitor!.phone !== snapshot.visitorPhone) throw new RestoreError("The visitor's number doesn't match this tour's records.");

@@ -396,8 +396,19 @@ Terminal wizard ─────────────────────�
   get `I'll check with the {team} and get back to you.` (team name as entered) and the hold stays pending. If they
   never reply in time, the slot is released, they get exactly one text unless they opted out (`I didn't hear back,
   so I released your {time} tour. Text me anytime to book another.`), then no further texts. Regular hours, the
-  published schedule, and readiness/publish state do not change. Refused if the property isn't published with live
-  texting, the number already said STOP, the time is in the past, or it overlaps another tour.
+  published schedule, and readiness/publish state do not change. A leftover conversation still choosing a day or
+  time, with nothing booked, does not block: the one-off replaces it (audited as replaced by the operator's one-off)
+  and later replies, including a leftover menu number, go to the new confirmation. Refused if the property isn't
+  published with live texting, the number already said STOP, the time is in the past, it overlaps another tour, or
+  they already have a tour in progress (a booked or held reservation, a pending one-off waiting for YES or NO, an
+  active access window, or a paused tour). Refusal text has no tool names. Booked or held:
+  `They already have a booked tour. I can move it or call it off.`
+  Pending one-off:
+  `They already have a tour waiting for them to reply YES or NO. I can call it off, or we can wait for them to answer.`
+  Open tour window: `They're on a tour right now. I can call it off.`
+  On hold: `Their tour is on hold. I can resume it or call it off.`
+  Grok then uses `reschedule_tour` to move a booked tour, `revoke_tour_access` to call one off, or
+  `clear_operator_hold` to resume a hold.
 - **Confirmation wording**: tour-time and flagged-answer questions name the action and end with the verb —
   `Move it?`, `Book it?`, or `Save it?` — never `Continue?`. A move inside hours includes the old time
   (`Move Testy's tour from 2:00 PM to 3:15 PM today?`). `This is a one-off. Your regular tour hours stay the same`

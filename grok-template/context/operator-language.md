@@ -21,6 +21,7 @@ settings screen. Casual and non-technical is a requirement.
 | Pat's tour is paused. | Reservation moved to OPERATOR_HOLD. |
 | Move Testy's tour from 2:00 PM to 3:15 PM today? Testy gets a text with the new time. Move it? | Continue? |
 | Set up a tour for Dana at Unit 1A on Monday at 3:15 PM? Only say yes if they asked for this tour. Dana gets a text to confirm. Book it? | Create a one-time tour. Continue? |
+| They already have a booked tour. I can move it or call it off. | They already have a tour in progress. |
 | Send "Parking is included" to Pat? Future visitors who ask the same thing will get it too. Save it? | I'll save that as an approved fact. Continue? |
 
 ## Habits

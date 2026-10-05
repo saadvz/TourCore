@@ -111,6 +111,109 @@ describe("operators can set up a one-time tour", () => {
     await publish(a);
     await a.text("STOP");
     await expect(a.grok("schedule_one_off_tour", { phone: PHONE, unit: "1A", startsAt: "3:15 PM today" })).rejects.toThrow(/asked us not to text them \(STOP\)/);
+    await expect(a.grok("schedule_one_off_tour", { phone: PHONE, unit: "1A", startsAt: "3:15 PM today" })).rejects.toThrow(
+      "That number asked us not to text them (STOP), so I can't set up a tour.",
+    );
+  });
+
+  it("replaces a leftover choosing-time conversation; later replies go to the one-off", async () => {
+    const a = await liveApp({ cleanups });
+    await publish(a);
+    await a.optInSms();
+    await a.text("1");
+    const menu = await a.text("1");
+    expect(menu.join("\n")).toContain("2:00 PM");
+    expect(menu.join("\n")).toContain("3:30 PM");
+
+    const beforeVisitor = a.fake.sent.filter((message) => message.number === PHONE).length;
+    const asked = await a.grok("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "3:15 PM today" });
+    expect(asked.status).toBe("needs-confirmation");
+    expect(asked.summary).toBe(
+      "Set up a tour for Dana at Unit 1A on Monday at 3:15 PM? Only say yes if they asked for this tour. Dana gets a text to confirm. Book it?",
+    );
+
+    const done = await a.grok("schedule_one_off_tour", {
+      phone: PHONE,
+      visitorName: "Dana",
+      unit: "1A",
+      startsAt: "3:15 PM today",
+      confirmationCode: asked.confirmation.code,
+    });
+    expect(done.scheduled).toBe(true);
+
+    const visitor = a.fake.sent.filter((message) => message.number === PHONE);
+    expect(visitor.length).toBe(beforeVisitor + 1);
+    expect(visitor.at(-1)!.content).toBe(
+      "Hi, this is the leasing team at 100 Alfred Way. We set up a tour for you on Monday at 3:15 PM. Reply YES to confirm, NO to cancel, or STOP to opt out.",
+    );
+
+    const tours = a.ws.listTours(PROPERTY).filter((item) => item.kind === "messaging" && item.visitorPhone === PHONE);
+    expect(tours).toHaveLength(2);
+    const bundles = tours.map((item) => ({ record: item, bundle: a.ws.loadTour(PROPERTY, item.tourId)!.bundle }));
+    const stale = bundles.find((item) => item.bundle.auditEvents.some((event) => event.type === "RESERVATION_CANCELLED" && event.detail === "replaced by the operator's one-off tour"));
+    const fresh = bundles.find((item) => item.bundle.reservations[0]?.awaitingVisitorConfirm?.kind === "OPERATOR_SCHEDULED");
+    expect(stale).toBeDefined();
+    expect(fresh).toBeDefined();
+    expect(stale!.bundle.reservations[0]!.status).toBe("CANCELLED");
+    expect(stale!.bundle.reservations[0]!.slotStart).toBeUndefined();
+    expect(stale!.record.outcome).toBe("stopped");
+
+    const yes = await a.text("YES");
+    expect(yes.join("\n")).toContain("Great, you're booked for 3:15 PM");
+    expect(yes.join("\n")).toContain("Is it OK if I text you about this tour");
+    expect(yes.join("\n")).not.toContain("2:00 PM");
+
+    const staleAfter = a.ws.loadTour(PROPERTY, stale!.record.tourId)!.bundle;
+    expect(staleAfter.reservations[0]!.status).toBe("CANCELLED");
+    expect(staleAfter.reservations[0]!.slotStart).toBeUndefined();
+    const freshAfter = a.ws.loadTour(PROPERTY, fresh!.record.tourId)!.bundle;
+    expect(freshAfter.reservations[0]!.slotStart).toBe("2026-09-28T19:15:00.000Z");
+    expect(freshAfter.reservations[0]!.status).not.toBe("CANCELLED");
+  });
+
+  it("a leftover menu number after replacement is a one-off reply, not a stale booking", async () => {
+    const a = await liveApp({ cleanups });
+    await publish(a);
+    await a.optInSms();
+    await a.text("1");
+    await a.text("1");
+    await a.approve("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "3:15 PM today" });
+
+    const reply = await a.text("1");
+    expect(reply).toEqual(["I'll check with the leasing team and get back to you."]);
+    expect(reply.join("\n")).not.toContain("Great, you're booked");
+    expect(reply.join("\n")).not.toContain("2:00 PM");
+    expect(reply.join("\n")).not.toContain("Which day");
+
+    const tours = a.ws.listTours(PROPERTY).filter((item) => item.kind === "messaging" && item.visitorPhone === PHONE);
+    expect(tours).toHaveLength(2);
+    const bundles = tours.map((item) => a.ws.loadTour(PROPERTY, item.tourId)!.bundle);
+    const stale = bundles.find((bundle) => bundle.auditEvents.some((event) => event.type === "RESERVATION_CANCELLED" && event.detail === "replaced by the operator's one-off tour"));
+    const fresh = bundles.find((bundle) => bundle.reservations[0]?.awaitingVisitorConfirm?.kind === "OPERATOR_SCHEDULED");
+    expect(stale).toBeDefined();
+    expect(fresh).toBeDefined();
+    expect(stale!.reservations[0]!.status).toBe("CANCELLED");
+    expect(stale!.reservations[0]!.slotStart).toBeUndefined();
+    expect(fresh!.reservations[0]).toMatchObject({ status: "RESERVED", awaitingVisitorConfirm: { kind: "OPERATOR_SCHEDULED" } });
+    expect(fresh!.auditEvents.some((event) => event.type === "QUESTION_UNANSWERED" && event.detail === "1")).toBe(true);
+  });
+
+  it("refuses a booked tour with the reschedule or revoke wording", async () => {
+    const a = await liveApp({ cleanups });
+    await publish(a);
+    await a.book();
+    await expect(a.grok("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "3:15 PM today" })).rejects.toThrow(
+      "They already have a booked tour. I can move it or call it off.",
+    );
+  });
+
+  it("refuses a pending one-off waiting for YES or NO", async () => {
+    const a = await liveApp({ cleanups });
+    await publish(a);
+    await a.approve("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "2:00 PM today" });
+    await expect(a.grok("schedule_one_off_tour", { phone: PHONE, visitorName: "Pat", unit: "2B", startsAt: "3:15 PM today" })).rejects.toThrow(
+      "They already have a tour waiting for them to reply YES or NO. I can call it off, or we can wait for them to answer.",
+    );
   });
 
   it("STOP opts out, cancels, releases the time, and sends only the opt-out confirmation", async () => {
