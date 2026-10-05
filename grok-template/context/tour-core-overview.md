@@ -35,9 +35,11 @@ A visitor with a booked (or held) tour can cancel by text in their own words —
 "please cancel my tour", "call off the tour", "I can't make it", "I need to
 cancel". That is not a property question. Tour Core confirms first:
 `Cancel your tour on {day} at {time}? Reply YES or NO.` YES cancels (doors
-off, status cancelled, audit) and they hear `Your tour is cancelled. Text me
-anytime to book another.` NO keeps the booking: `No problem. Your tour is
-still booked.` STOP still opts out. If cancel cannot finish, they get
+off, status cancelled, audit) and they hear `You're cancelled. Text me
+anytime if you want to book again.` NO keeps the booking: `Okay, your tour
+stays on {day} at {time}.` A reply that isn't a clear yes or no is flagged:
+`I'll check with the {team} and get back to you.` STOP still opts out. If
+cancel cannot finish, they get
 `I can't cancel it from here. I've asked the leasing team to call it off and
 get back to you.` and the team is flagged. Never use "I don't have that
 information" for a clear cancel ask.

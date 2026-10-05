@@ -1073,7 +1073,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Call off a tour",
     kind: "consequential",
     description:
-      "Calls off one tour for good: all its access is switched off and the visitor is told. This can't be undone. First call returns a yes/no question; call again with confirmationCode only after an explicit yes. Visitors can also cancel a booked tour by text in their own words; Tour Core confirms first (Cancel your tour on {day} at {time}? Reply YES or NO.), then YES cancels (doors off, status cancelled, audit) and NO keeps the booking. STOP still opts out. A clear cancel ask is never treated as a missing property fact.",
+      "Calls off one tour for good: all its access is switched off and the visitor is told. This can't be undone. First call returns a yes/no question; call again with confirmationCode only after an explicit yes. Visitors can also cancel a booked tour by text in their own words; Tour Core confirms first (Cancel your tour on {day} at {time}? Reply YES or NO.). YES: You're cancelled. Text me anytime if you want to book again. NO: Okay, your tour stays on {day} at {time}. A reply that isn't a clear yes or no is flagged (I'll check with the {team} and get back to you.). STOP still opts out. A clear cancel ask is never treated as a missing property fact.",
     input: z.strictObject({ tourRef: TourRef, reason: z.string().min(1).max(300), confirmationCode: Code }),
     run: async (ctx, i) => {
       const target = await describeChangeTarget(ctx.services, i.tourRef, "revoke");

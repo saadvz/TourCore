@@ -5,8 +5,8 @@ import {
   UNKNOWN_ANSWER,
   VISITOR_CANCEL_DONE,
   VISITOR_CANCEL_FAILED,
-  VISITOR_CANCEL_KEPT,
   visitorCancelConfirm,
+  visitorCancelKept,
 } from "../src/core/TourCore";
 import { handleVisitorText } from "../src/visitor/conversation";
 import { VisitorDemoSession } from "../src/visitor";
@@ -15,6 +15,8 @@ import { DemoMessagingAdapter } from "../src/messaging/Messenger";
 const at = (hour: number, minute = 0) => zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour, minute }, "America/New_York").getTime();
 const PHONE = "+15550102000";
 const CONFIRM = visitorCancelConfirm("Monday, Sep 28", "2:00 PM");
+const KEPT = visitorCancelKept("Monday, Sep 28", "2:00 PM");
+const CHECK_BACK = "I'll check with the leasing team and get back to you.";
 
 function phone() {
   const transport = new DemoMessagingAdapter(() => {}, "MESSAGING");
@@ -44,6 +46,7 @@ describe("visitor cancel-by-text", () => {
     const p = phone();
     await bookedAndReady(p);
     await p.say("Can we cancel the tour?");
+    expect(p.lastReply()).toBe("Cancel your tour on Monday, Sep 28 at 2:00 PM? Reply YES or NO.");
     expect(p.lastReply()).toBe(CONFIRM);
     expect(p.lastReply()).not.toBe(UNKNOWN_ANSWER);
     expect(p.lastReply()).not.toContain("I don't have that information");
@@ -76,6 +79,7 @@ describe("visitor cancel-by-text", () => {
     await p.say("I want to cancel the booked tour");
     expect(p.lastReply()).toBe(CONFIRM);
     await p.say("YES");
+    expect(p.lastReply()).toBe("You're cancelled. Text me anytime if you want to book again.");
     expect(p.lastReply()).toBe(VISITOR_CANCEL_DONE);
     expect((await p.session.reservation())?.status).toBe("CANCELLED");
     expect((await p.audit("RESERVATION_CANCELLED")).map((e) => e.detail)).toEqual(["visitor cancelled by text"]);
@@ -98,10 +102,26 @@ describe("visitor cancel-by-text", () => {
     await p.say("please cancel my tour");
     expect(p.lastReply()).toBe(CONFIRM);
     await p.say("NO");
-    expect(p.lastReply()).toBe(VISITOR_CANCEL_KEPT);
+    expect(p.lastReply()).toBe("Okay, your tour stays on Monday, Sep 28 at 2:00 PM.");
+    expect(p.lastReply()).toBe(KEPT);
     expect((await p.session.reservation())?.status).toBe("READY");
     expect(await p.audit("RESERVATION_CANCELLED")).toHaveLength(0);
     expect(p.lastReply()).not.toBe(VISITOR_CANCEL_DONE);
+  });
+
+  it("unclear reply on the confirm flags the team with the check-back line and leaves the tour booked", async () => {
+    const p = phone();
+    await bookedAndReady(p);
+    await p.say("Can we cancel the tour?");
+    expect(p.lastReply()).toBe(CONFIRM);
+    await p.say("huh?");
+    expect(p.lastReply()).toBe(CHECK_BACK);
+    expect(p.lastReply()).not.toBe(UNKNOWN_ANSWER);
+    expect((await p.session.reservation())?.status).toBe("READY");
+    expect((await p.audit("QUESTION_UNANSWERED")).map((e) => e.detail)).toEqual(["huh?"]);
+    await p.say("YES");
+    expect(p.lastReply()).toBe(VISITOR_CANCEL_DONE);
+    expect((await p.session.reservation())?.status).toBe("CANCELLED");
   });
 
   it("a real non-cancel question still flags", async () => {
@@ -110,6 +130,16 @@ describe("visitor cancel-by-text", () => {
     await p.say("is there a gym?");
     expect(p.lastReply()).toBe(UNKNOWN_ANSWER);
     expect((await p.audit("QUESTION_UNANSWERED")).map((e) => e.detail)).toEqual(["is there a gym?"]);
+    expect((await p.session.reservation())?.status).toBe("READY");
+  });
+
+  it("a question on the cancel confirm uses the check-back line, not the missing-fact line", async () => {
+    const p = phone();
+    await bookedAndReady(p);
+    await p.say("please cancel my tour");
+    await p.say("is there a gym?");
+    expect(p.lastReply()).toBe(CHECK_BACK);
+    expect(p.lastReply()).not.toBe(UNKNOWN_ANSWER);
     expect((await p.session.reservation())?.status).toBe("READY");
   });
 

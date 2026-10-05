@@ -332,8 +332,9 @@ visitor text ─► interpreter ─► typed intent (ARRIVAL, AT_UNIT "Unit 101"
   "I need to cancel" — is cancel intent, not a property question. Tour Core confirms first:
   `Cancel your tour on {day} at {time}? Reply YES or NO.` (day and time from the booked tour, same as other visitor
   copy). YES cancels the same way an operator call-off would from the visitor side (doors revoked, status cancelled,
-  audit) and sends `Your tour is cancelled. Text me anytime to book another.` NO keeps the booking:
-  `No problem. Your tour is still booked.` STOP / opt-out is unchanged. If cancel cannot finish, they get
+  audit) and sends `You're cancelled. Text me anytime if you want to book again.` NO keeps the booking:
+  `Okay, your tour stays on {day} at {time}.` A reply that isn't a clear yes or no on that confirm is flagged:
+  `I'll check with the {team} and get back to you.` STOP / opt-out is unchanged. If cancel cannot finish, they get
   `I can't cancel it from here. I've asked the leasing team to call it off and get back to you.` and the team is
   flagged — never the generic "I don't have that information" line for a clear cancel ask. Real questions still flag
   as usual.

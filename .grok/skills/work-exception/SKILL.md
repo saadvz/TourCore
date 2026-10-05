@@ -180,8 +180,12 @@ right now").
   as an unanswered question. Tour Core handles those itself — including
   yes/that for the offered next opening — and they should not appear as a
   flagged question. A visitor who texts to cancel a booked tour (any natural
-  phrasing) is also handled by Tour Core: it confirms, then YES cancels or NO
-  keeps the booking. That should not appear as a flagged question unless
-  cancel could not finish (then the team is asked to call it off). While a
+  phrasing) is also handled by Tour Core: it confirms, then YES cancels
+  (`You're cancelled. Text me anytime if you want to book again.`) or NO keeps
+  the booking (`Okay, your tour stays on {day} at {time}.`). A reply that
+  isn't a clear yes or no on that confirm is flagged (`I'll check with the
+  {team} and get back to you.`). That should not appear as a flagged question
+  unless they were unclear on the confirm, or cancel could not finish (then
+  the team is asked to call it off). While a
   one-off tour is waiting on YES, NO or STOP, any other reply is flagged;
   handle that as an unanswered question and leave the hold pending.

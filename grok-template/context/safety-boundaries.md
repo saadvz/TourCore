@@ -34,7 +34,9 @@ the readiness check and a practice tour passed for that exact setup.
   words saved in Tour Core, structured unit details first. They can ask at any
   stage; anything Tour Core can't answer gets a safe fallback and is flagged
   for the operator. A clear cancel ask on a booked tour is cancel-by-text
-  (confirm, then YES cancels or NO keeps the booking), not a missing fact.
+  (confirm, then YES cancels or NO keeps the booking). A reply that isn't a
+  clear yes or no on that confirm is flagged with the usual check-back line,
+  not treated as a missing fact.
 - The Bot never writes, guesses or rewords a fact. When the operator supplies a
   new one, it's added only after their yes, and the visitor receives exactly
   those words.

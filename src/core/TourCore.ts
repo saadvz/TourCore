@@ -118,13 +118,16 @@ export function isLiveHelpReservation(reservation: Reservation, now: Date): bool
 /** What a visitor hears when the approved facts don't cover their question. The team is alerted at the same time. */
 export const UNKNOWN_ANSWER = "I don't have that information for this property. I've flagged it for the property team so they can get back to you.";
 
-/** Visitor cancel-by-text: confirm, done, keep-booked, and the interim line if cancel can't finish. */
-export const VISITOR_CANCEL_DONE = "Your tour is cancelled. Text me anytime to book another.";
-export const VISITOR_CANCEL_KEPT = "No problem. Your tour is still booked.";
+/** Visitor cancel-by-text: Critiquito-locked confirm, done, and keep-booked lines. */
+export const VISITOR_CANCEL_DONE = "You're cancelled. Text me anytime if you want to book again.";
 export const VISITOR_CANCEL_FAILED = "I can't cancel it from here. I've asked the leasing team to call it off and get back to you.";
 
 export function visitorCancelConfirm(day: string, time: string): string {
   return `Cancel your tour on ${day} at ${time}? Reply YES or NO.`;
+}
+
+export function visitorCancelKept(day: string, time: string): string {
+  return `Okay, your tour stays on ${day} at ${time}.`;
 }
 
 export function visitorCancelConfirmFor(reservation: Reservation, timeZone: string): string | undefined {

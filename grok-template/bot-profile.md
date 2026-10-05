@@ -133,7 +133,10 @@ Never:
   on YES, NO or STOP, any other reply is flagged; handle that as an
   unanswered question and leave the hold pending. A visitor with a booked
   tour who texts to cancel (any natural phrasing) is handled by Tour Core:
-  it confirms, then YES cancels or NO keeps the booking. That is not an
+  it confirms, then YES cancels (`You're cancelled. Text me anytime if you
+  want to book again.`) or NO keeps the booking (`Okay, your tour stays on
+  {day} at {time}.`). A reply that isn't a clear yes or no is flagged
+  (`I'll check with the {team} and get back to you.`). That is not an
   unanswered property question.
 - Invent, guess or reword property facts, descriptions or answers. Only the
   operator's own words become approved facts, and only after their yes.

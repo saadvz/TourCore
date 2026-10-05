@@ -3,7 +3,7 @@ import { orList, unitsNamedIn } from "../core/questions";
 import { isoDate, parseIsoDate } from "../core/schedule";
 import { type DayReference, type SpokenTime } from "../core/spokenTime";
 import { addDays, formatDay, formatTime, localDateOf, weekdayOf, zonedParts, type LocalDate } from "../core/timezone";
-import { VisitorDenialCopy, VISITOR_CANCEL_KEPT, visitorCancelConfirm, type InboundMeta } from "../core/TourCore";
+import { VisitorDenialCopy, visitorCancelConfirm, visitorCancelKept, type InboundMeta } from "../core/TourCore";
 import { isCancelableReservation } from "../domain/stateMachine";
 import {
   isCancelTourAsk,
@@ -498,18 +498,23 @@ async function handleCancelIntent(turn: Turn): Promise<boolean> {
   const text = turn.said.text ?? "";
   const cancelable = await session.hasCancelableTour();
   const cancelAsk = intent.type === "CANCEL_TOUR" || intent.type === "CONFIRM_CANCEL_TOUR" || isCancelTourAsk(text);
-  const awaitingCancel = turn.awaiting?.kind === "confirm-cancel-tour";
+  const awaiting = turn.awaiting?.kind === "confirm-cancel-tour" ? turn.awaiting : undefined;
 
-  if (awaitingCancel && intent.type === "KEEP_TOUR" && turn.confident) {
-    await turn.respond(VISITOR_CANCEL_KEPT);
+  if (awaiting && intent.type === "KEEP_TOUR" && turn.confident) {
+    await turn.respond(visitorCancelKept(awaiting.day, awaiting.time));
     return true;
   }
-  if (awaitingCancel && intent.type === "CONFIRM_CANCEL_TOUR" && turn.confident) {
+  if (awaiting && intent.type === "CONFIRM_CANCEL_TOUR" && turn.confident) {
     await session.cancelBookedTour(turn.said);
     return true;
   }
-  if (awaitingCancel && cancelAsk && intent.type !== "ASK_PROPERTY_QUESTION" && intent.type !== "REQUEST_HELP") {
+  if (awaiting && cancelAsk && intent.type !== "ASK_PROPERTY_QUESTION" && intent.type !== "REQUEST_HELP") {
     await session.cancelBookedTour(turn.said);
+    return true;
+  }
+  if (awaiting && intent.type !== "REQUEST_HELP") {
+    await session.flagQuestionWhileAwaitingConfirm(turn.said);
+    session.expect(turn.stage, awaiting);
     return true;
   }
   if (cancelAsk && cancelable) {
