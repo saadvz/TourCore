@@ -911,7 +911,7 @@ function servicesStep(data) {
       el(
         "div",
         { class: "card" },
-        field("Who should we alert if a visitor needs help?", alertName, "For example, your leasing team or your own name."),
+        field("Who should we alert if a visitor needs help?", alertName, "Use a team name that reads naturally after \"the\", for example leasing team or Maple Leasing team."),
         field(
           "What number can visitors call if they're stuck at a door? (optional)",
           visitorContact,

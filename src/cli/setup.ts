@@ -26,6 +26,7 @@ import {
   setPropertyDetails,
   setRoute,
   setServices,
+  OperatorTeamCopy,
   SETUP_DEFAULTS,
   SetupInputError,
   setTourHours,
@@ -351,7 +352,7 @@ async function editServices(draft: SetupDraft): Promise<SetupDraft> {
 async function editAlerts(draft: SetupDraft): Promise<SetupDraft> {
   io.say("");
   return retry(async () => {
-    const name = await io.askRequired("Who should we alert if a visitor needs help?", draft.operator.name);
+    const name = await io.askRequired(OperatorTeamCopy.cliPrompt(), draft.operator.name);
     const visitorContact = await io.ask(
       "What number can visitors call if they're stuck at a door? Leave blank if they should just reply to the text.",
       draft.operator.visitorContact,

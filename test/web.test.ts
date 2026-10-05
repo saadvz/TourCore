@@ -51,7 +51,11 @@ describe("browser setup", () => {
     const page = await app.call("GET", "/");
     expect(page.status).toBe(200);
     expect(page.text).toContain("Tour Core");
-    expect((await app.call("GET", "/app.js")).status).toBe(200);
+    const appJs = await app.call("GET", "/app.js");
+    expect(appJs.status).toBe(200);
+    expect(appJs.text).toContain("Use a team name that reads naturally after");
+    expect(appJs.text).toContain("Maple Leasing team");
+    expect(appJs.text).not.toContain("your own name");
   });
 
   it("goes from a new property to published for demo through the real setup actions", async () => {

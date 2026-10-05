@@ -9,11 +9,19 @@ import { InMemoryStore } from "../src/storage/Store";
 /** Monday 28 Sep 2026 at the property (America/New_York). */
 export const TOUR_DAY: LocalDate = { year: 2026, month: 9, day: 28 };
 
-export function setup(options: { visitorContact?: string } = {}) {
+export function setup(options: { visitorContact?: string; operatorName?: string } = {}) {
   const loaded = loadConfig();
-  const config = options.visitorContact
-    ? { ...loaded, operator: { ...loaded.operator, visitorContact: options.visitorContact } }
-    : loaded;
+  const config =
+    options.visitorContact !== undefined || options.operatorName !== undefined
+      ? {
+          ...loaded,
+          operator: {
+            ...loaded.operator,
+            ...(options.visitorContact !== undefined ? { visitorContact: options.visitorContact } : {}),
+            ...(options.operatorName !== undefined ? { name: options.operatorName } : {}),
+          },
+        }
+      : loaded;
   const clock = new SimulatedClock(zonedTimeToUtc({ ...TOUR_DAY, hour: 10, minute: 0 }, config.property.timezone));
   const durin = new MockDurinAccessAdapter({
     doorNames: Object.fromEntries(config.doors.map((d) => [d.id, d.name])),

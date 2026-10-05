@@ -90,7 +90,7 @@ describe("rescheduleReservation", () => {
     setTime(at(13, 58));
     await text("I'm here");
     expect(session.lastAccess).toMatchObject({ allowed: false, code: "DENY_TOO_EARLY", durinCalled: false });
-    expect(lastReply()).toBe("You're a little early! I can open the doors from 3:20 PM.");
+    expect(lastReply()).toBe("You're a little early! I can open the doors from 3:20 PM on Monday, Sep 28. Text me again once the window opens.");
 
     setTime(at(15, 28));
     await text("I'm here");

@@ -26,9 +26,20 @@ import { formatCanonical, parseUsAddress } from "./address";
 /** A TourCoreConfig that may not be complete or valid yet. */
 export type SetupDraft = TourCoreConfig;
 
+/** Setup copy for the team name visitors hear after "the". Rendered exactly as entered. */
+export class OperatorTeamCopy {
+  static hint(): string {
+    return 'Use a team name that reads naturally after "the", for example leasing team or Maple Leasing team.';
+  }
+
+  static cliPrompt(): string {
+    return `Who should we alert if a visitor needs help? ${this.hint()}`;
+  }
+}
+
 /** Visible, overridable defaults. Policy values live in config, never in code paths. */
 export const SETUP_DEFAULTS = {
-  operatorName: "Leasing team",
+  operatorName: "leasing team",
   operatorContact: "Shown on screen (demo)",
   entranceName: "Main Entrance",
   tourHours: {

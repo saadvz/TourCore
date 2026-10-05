@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config/tourCoreConfig";
+import { VisitorDenialCopy } from "../src/core/TourCore";
 import { ExportBundleSchema } from "../src/export/exportBundle";
 import { basicForm, bookTour, minutesFrom, setup } from "./helpers";
 
@@ -86,15 +87,16 @@ describe("Tour Core journey", () => {
 
   it("failed ID, hold, and door-outage texts share a next-step line and never show the operator alert number", async () => {
     const privateLine = loadConfig().operator.contact;
-    const atDoorUnset = "Stay where you are and reply here. The leasing team will reply as soon as they can.";
-    const atDoorSet = "Stay where you are. The leasing team will reply as soon as they can, or call (555) 010-9999.";
-    const failedFollowUpUnset = "The leasing team will follow up here.";
-    const failedFollowUpSet = "The leasing team will follow up here, or call (555) 010-9999.";
+    const team = "leasing team";
+    const atDoorUnset = VisitorDenialCopy.atDoor(team);
+    const atDoorSet = VisitorDenialCopy.atDoor(team, "+15550109999");
+    const failedFollowUpUnset = VisitorDenialCopy.followUp(team);
+    const failedFollowUpSet = VisitorDenialCopy.followUp(team, "+15550109999");
     const failedBooking = "Thanks for filling that out. I couldn't confirm your details, so I can't open doors for this tour.";
     const failedDoor = "I couldn't confirm your details, so I can't open doors for this tour.";
     const failedEnded = "I couldn't confirm your details, so your tour has ended. Please head out the way you came in.";
-    const hold = "Your tour is paused for a moment.";
-    const doors = "Sorry, the doors aren't responding right now. I've let the leasing team know.";
+    const hold = "Your tour is on hold. The tour window is still counting down.";
+    const doors = `Sorry, the doors aren't responding right now. I've let the ${team} know.`;
 
     const prospectTexts = async (ctx: ReturnType<typeof setup>) =>
       (await ctx.core.exportRecords()).messages.filter((m) => m.audience === "PROSPECT").map((m) => m.body);
@@ -161,8 +163,8 @@ describe("Tour Core journey", () => {
       `${failedEnded} ${failedFollowUpSet}`,
     ]);
     expect(failedUnset.find((b) => b.startsWith("Thanks for filling that out"))).not.toMatch(/Stay where you are|I can't open doors yet|on hold/);
-    expect(holdUnset.some((b) => b.startsWith(hold) && b.endsWith(atDoorUnset))).toBe(true);
-    expect(holdSet.some((b) => b.startsWith(hold) && b.endsWith(atDoorSet))).toBe(true);
+    expect(holdUnset.filter((b) => b === `${hold} ${atDoorUnset}`)).toEqual([`${hold} ${atDoorUnset}`]);
+    expect(holdSet.filter((b) => b === `${hold} ${atDoorSet}`)).toEqual([`${hold} ${atDoorSet}`]);
     expect(doorUnset.some((b) => b.startsWith(doors) && b.endsWith(atDoorUnset))).toBe(true);
     expect(doorSet.some((b) => b.startsWith(doors) && b.endsWith(atDoorSet))).toBe(true);
     for (const body of failedIdBodies) {
@@ -205,6 +207,75 @@ describe("Tour Core journey", () => {
     expect(bodies.join("\n")).not.toContain(ctx.config.operator.contact);
   });
 
+  it("visitor texts keep the configured team name, include the tour date when early, and reuse the shared next-step line", async () => {
+    const prospectTexts = async (ctx: ReturnType<typeof setup>) =>
+      (await ctx.core.exportRecords()).messages.filter((m) => m.audience === "PROSPECT").map((m) => m.body);
+
+    const team = "leasing team";
+    const maple = "Maple Leasing team";
+    const early = VisitorDenialCopy.tooEarly("1:50 PM on Monday, Sep 28");
+    const expired = "Your tour time has ended, so I can't open doors anymore. Want me to find you another time?";
+    const wrong = (name: string) =>
+      `That door isn't part of your tour, so I can't open it. You're here to see Unit 101. I've let the ${name} know in case you need a hand.`;
+
+    const ctx = setup();
+    const tour = await bookTour(ctx);
+    ctx.clock.set(minutesFrom(tour.slotStart, -30));
+    expect((await tour.request("entrance")).decision.code).toBe("DENY_TOO_EARLY");
+    ctx.clock.set(minutesFrom(tour.slotStart, 60));
+    expect((await tour.request("entrance")).decision.code).toBe("DENY_EXPIRED");
+    ctx.clock.set(tour.slotStart);
+    expect((await tour.request("unit_102")).decision.code).toBe("DENY_WRONG_ROUTE");
+    await ctx.core.requestHelp(tour.reservation.id, "lobby");
+    const bodies = await prospectTexts(ctx);
+    expect(bodies.filter((b) => b === early)).toEqual([early]);
+    expect(bodies.filter((b) => b === expired)).toEqual([expired]);
+    expect(bodies.filter((b) => b === wrong(team))).toEqual([wrong(team)]);
+    expect(bodies.filter((b) => b === VisitorDenialCopy.helpAck(team))).toEqual([VisitorDenialCopy.helpAck(team)]);
+    expect(bodies.join("\n")).toContain("the leasing team");
+
+    const doneCtx = setup();
+    const done = await bookTour(doneCtx);
+    doneCtx.clock.set(done.slotStart);
+    await done.request("entrance");
+    await doneCtx.core.completeTour(done.reservation.id);
+    await doneCtx.core.recordFollowUpResponse(done.reservation.id, true);
+    expect(await prospectTexts(doneCtx)).toContain(VisitorDenialCopy.followUpYes(team));
+
+    const calledUnset = setup();
+    const calledTour = await bookTour(calledUnset);
+    await calledUnset.core.revokeReservation(calledTour.reservation.id, "operator cancelled");
+    expect(await prospectTexts(calledUnset)).toContain(VisitorDenialCopy.calledOff(team));
+
+    const calledSet = setup({ visitorContact: "+15550109999" });
+    const calledSetTour = await bookTour(calledSet);
+    await calledSet.core.revokeReservation(calledSetTour.reservation.id, "operator cancelled");
+    expect(await prospectTexts(calledSet)).toContain(VisitorDenialCopy.calledOff(team, "+15550109999"));
+
+    const mapleCtx = setup({ operatorName: maple });
+    const mapleTour = await bookTour(mapleCtx);
+    mapleCtx.clock.set(mapleTour.slotStart);
+    await mapleTour.request("unit_102");
+    await mapleCtx.core.revokeReservation(mapleTour.reservation.id, "operator cancelled");
+    const mapleBodies = await prospectTexts(mapleCtx);
+    expect(mapleBodies).toContain(wrong(maple));
+    expect(mapleBodies).toContain(VisitorDenialCopy.calledOff(maple));
+    expect(mapleBodies.join("\n")).toContain("Maple Leasing team");
+    expect(mapleBodies.join("\n")).not.toContain("maple leasing team");
+
+    expect(VisitorDenialCopy.noOpenTimes(maple)).toBe("There are no open tour times right now. The Maple Leasing team will reach out.");
+    expect(VisitorDenialCopy.followUpYes(maple)).toBe("Great. Someone from the Maple Leasing team will be in touch soon.");
+    expect(VisitorDenialCopy.operatorHold(maple)).toBe(
+      `Your tour is on hold. The tour window is still counting down. ${VisitorDenialCopy.atDoor(maple)}`,
+    );
+    expect(VisitorDenialCopy.operatorHold(maple, "+15550109999")).toBe(
+      `Your tour is on hold. The tour window is still counting down. ${VisitorDenialCopy.atDoor(maple, "+15550109999")}`,
+    );
+    expect(VisitorDenialCopy.calledOff(maple, "+15550109999")).toBe(
+      `Your tour has been called off, so the doors won't open for it. ${VisitorDenialCopy.remote(maple, "+15550109999")}`,
+    );
+  });
+
   it("a stale ID re-check goes through submitVerification and then opens the door", async () => {
     const ctx = setup();
     const tour = await bookTour(ctx);
@@ -236,10 +307,10 @@ describe("Tour Core journey", () => {
 
     const bodies = (await ctx.core.exportRecords()).messages.filter((m) => m.audience === "PROSPECT").map((m) => m.body);
     expect(bodies.filter((b) => b.startsWith("Thanks for filling that out"))).toEqual([
-      "Thanks for filling that out. I couldn't confirm your details, so I can't open doors for this tour. The leasing team will follow up here.",
+      VisitorDenialCopy.failedIdAtBooking("leasing team"),
     ]);
-    expect(bodies.filter((b) => b === "I couldn't confirm your details, so I can't open doors for this tour. The leasing team will follow up here.")).toEqual([
-      "I couldn't confirm your details, so I can't open doors for this tour. The leasing team will follow up here.",
+    expect(bodies.filter((b) => b === VisitorDenialCopy.failedIdAtDoor("leasing team"))).toEqual([
+      VisitorDenialCopy.failedIdAtDoor("leasing team"),
     ]);
     for (const body of bodies.filter((b) => b.includes("I couldn't confirm your details"))) {
       expect(body.match(/The leasing team/g)).toHaveLength(1);
