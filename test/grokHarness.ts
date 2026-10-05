@@ -12,6 +12,29 @@ import { VisitorDemoRegistry, VisitorDemoSession } from "../src/visitor";
 /** Monday 28 Sep 2026 at the property (America/New_York). */
 export const at = (hour: number, minute = 0) => zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour, minute }, "America/New_York").getTime();
 
+/** Grant times for a 9:00 AM Alfred Way slot (EDT, 45-minute tour). */
+export const GRANT_9AM = {
+  allowedAt: "Monday, Sep 28, 9:00 AM",
+  allowedAtIso: "2026-09-28T09:00:00-04:00",
+  validFrom: "Monday, Sep 28, 9:00 AM",
+  validFromIso: "2026-09-28T09:00:00-04:00",
+  validUntil: "Monday, Sep 28, 9:45 AM",
+  validUntilIso: "2026-09-28T09:45:00-04:00",
+} as const;
+
+/** Grant times for a 10:00 AM Alfred Way slot (EDT, 45-minute tour). */
+export const GRANT_10AM = {
+  allowedAt: "Monday, Sep 28, 10:00 AM",
+  allowedAtIso: "2026-09-28T10:00:00-04:00",
+  validFrom: "Monday, Sep 28, 10:00 AM",
+  validFromIso: "2026-09-28T10:00:00-04:00",
+  validUntil: "Monday, Sep 28, 10:45 AM",
+  validUntilIso: "2026-09-28T10:45:00-04:00",
+} as const;
+
+export const DENIAL_9AM = { time: "Monday, Sep 28, 9:00 AM", timeIso: "2026-09-28T09:00:00-04:00" } as const;
+export const DENIAL_10AM = { time: "Monday, Sep 28, 10:00 AM", timeIso: "2026-09-28T10:00:00-04:00" } as const;
+
 /**
  * Tour Core as an agent host sees it: the operator tool contract over a real
  * workspace and live conversations, with a movable clock. Provider-neutral:

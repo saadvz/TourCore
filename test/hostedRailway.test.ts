@@ -24,6 +24,7 @@ import { FileRuntimeStore } from "../src/storage/runtimeStore";
 import { PropertyWorkspace } from "../src/setup";
 import { startSetupServer } from "../src/web/server";
 import { fakeSendblue } from "./fakeSendblue";
+import { GRANT_9AM } from "./grokHarness";
 import { installHarness, SB_KEY, SB_SECRET } from "./installHarness";
 
 const DOMAIN = "demo.up.railway.app";
@@ -404,8 +405,8 @@ describe("hosted audit export download", () => {
     expect(url).not.toMatch(/localhost|127\.0\.0\.1/);
     expect(out.accessGrants).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ doorName: "Lobby Entrance", allowedAt: "9:00 AM", validUntil: "9:45 AM" }),
-        expect.objectContaining({ doorName: "Unit 101 Door", allowedAt: "9:00 AM", validUntil: "9:45 AM" }),
+        expect.objectContaining({ doorName: "Lobby Entrance", ...GRANT_9AM, unitName: "Unit 101" }),
+        expect.objectContaining({ doorName: "Unit 101 Door", ...GRANT_9AM, unitName: "Unit 101" }),
       ]),
     );
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { loadConfig, type TourCoreConfig } from "../src/config/tourCoreConfig";
 import { SimulatedClock } from "../src/core/clock";
 import { slotsOn } from "../src/core/schedule";
-import { formatTime, zonedTimeToUtc } from "../src/core/timezone";
+import { formatDateTime, formatIsoOffset, formatTime, zonedTimeToUtc } from "../src/core/timezone";
 import { createTourCore } from "../src/createTourCore";
 import { ConsoleMessenger } from "../src/messaging/Messenger";
 
@@ -42,5 +42,13 @@ describe("property timezone", () => {
     expect(booked.windowStart).toBe("2026-09-28T04:50:00.000Z");
     expect(formatTime(new Date(booked.windowStart!), "Asia/Tokyo")).toBe("1:50 PM");
     expect(lines.join("\n")).toContain("booked for 2:00 PM");
+  });
+
+  it("prints a property-local date and time plus ISO-8601 with seconds and offset", () => {
+    const nine = zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour: 9, minute: 0 }, "America/New_York");
+    expect(formatDateTime(nine, "America/New_York")).toBe("Monday, Sep 28, 9:00 AM");
+    expect(formatIsoOffset(nine, "America/New_York")).toBe("2026-09-28T09:00:00-04:00");
+    const tokyo = zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour: 14, minute: 0 }, "Asia/Tokyo");
+    expect(formatIsoOffset(tokyo, "Asia/Tokyo")).toBe("2026-09-28T14:00:00+09:00");
   });
 });
