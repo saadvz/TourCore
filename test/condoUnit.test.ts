@@ -159,13 +159,15 @@ describe("apartment or condo setup", () => {
     const added = await h.ok("add_unit", { name: "4B" });
     expect(added.unit).toMatchObject({ name: "Unit 4B", door: "Unit 4B Door" });
     expect(added.nextQuestion).toBe(BUILDING_ACCESS_QUESTION);
-    expect(added.setup.name).toBe("145 Main St, Unit 4B");
+    const id = h.workspace.propertyIds()[0]!;
+    expect(h.workspace.openDraft(id).draft.property.name).toBe("145 Main St, Unit 4B");
 
     const access = await h.ok("update_property_details", { buildingAccess: "BUILDING_AND_UNIT" });
     expect(access.nextQuestion).toBe("What's the building entrance called?");
     const door = await h.ok("add_door", { name: "Lobby Entrance", kind: "entrance" });
     expect(door.nextQuestion).toBe(ENTRY_INSTRUCTIONS_QUESTION);
-    expect(door.setup.units[0].route).toBe("Lobby Entrance → Unit 4B Door");
+    const afterDoor = await h.ok("get_property_setup");
+    expect(afterDoor.setup.units[0].route).toBe("Lobby Entrance → Unit 4B Door");
 
     const skipped = await h.ok("update_property_details", { skipEntryInstructions: true });
     expect(skipped.setup.units[0].entryInstructions).toBeUndefined();
