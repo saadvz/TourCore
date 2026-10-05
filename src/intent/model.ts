@@ -119,7 +119,7 @@ export type StepAwaiting =
   | { kind: "confirm-finish" }
   | { kind: "confirm-custom-time"; hour: number; minute: number; meridiem?: "AM" | "PM"; day?: "today" | "tomorrow" }
   | { kind: "confirm-alternative"; requestId: string; startsAt: string }
-  /** "Want that, or another day?" — `slotStart` is the exact next opening; `date` is its YYYY-MM-DD. */
+  /** Next-opening offer — `slotStart` is the exact start; `date` is its YYYY-MM-DD. Flexible yes takes it. */
   | { kind: "accept-next-opening"; date: string; slotStart: string }
   | { kind: "confirm-operator-tour"; confirmBy: string }
   /** Confirm a visitor cancel-by-text. Day/time match the booked-tour copy. */

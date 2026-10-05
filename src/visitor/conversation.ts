@@ -22,7 +22,7 @@ import {
 import type { ReplyPrompt } from "../messaging/presentation";
 import { timeMenu } from "./entry";
 import { OPERATOR_SCHEDULE_CONFIRM_PROMPT, type InterpretationNote, type Said, type VisitorDemoSession, type VisitorStage } from "./session";
-import { acceptsOfferedOpening, offerDate, takeOfferedOpening } from "./unavailableDay";
+import { acceptsOfferedOpening, nextOpeningFollowUp, offerDate, takeOfferedOpening } from "./unavailableDay";
 import { SMS_GATE_REMINDER, SMS_KEYWORD_PROMPT, smsDisclosure, smsOptInConfirmation } from "./smsConsent";
 
 /**
@@ -691,6 +691,11 @@ async function byStage(turn: Turn): Promise<void> {
         if (isBareMenuNumber(text) || matchesLabel(text, session.lastShownDates.map((day) => day.label))) return showScheduleChanged(turn);
       }
       if (intent.type === "SELECT_DATE") return showAskedDay(turn, intent);
+      if (turn.awaiting?.kind === "accept-next-opening") {
+        const labels = session.offeredDates.map((day) => day.label);
+        session.markDatesShown();
+        return turn.clarify(nextOpeningFollowUp(new Date(turn.awaiting.slotStart), session.config.property.timezone), { kind: "choose", options: labels, what: "a day", after: "" }, turn.awaiting);
+      }
       session.markDatesShown();
       return turn.fallback(`${SORRY} Which day works for you?`, { kind: "choose", options: session.offeredDates.map((day) => day.label), what: "a day" });
     }

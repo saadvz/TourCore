@@ -237,6 +237,17 @@ describe("rule-based interpretation", () => {
     }
   });
 
+  it("flexible yes takes a pending next-opening offer", () => {
+    const awaiting = { kind: "accept-next-opening" as const, date: "2026-10-05", slotStart: "2026-10-05T12:15:00.000Z" };
+    for (const m of ["yes", "that", "yeah", "yep", "ok", "okay", "Yes I'll take it", "Yes 1 works", "I'll take it"]) {
+      expect(readAs("choose-date", m, { awaiting }), m).toEqual({ type: "SELECT_DATE" });
+    }
+    expect(readAs("choose-date", "Monday", { awaiting })).toEqual({ type: "SELECT_DATE", weekday: "MON" });
+    expect(readAs("choose-date", "1", { awaiting })).toEqual({ type: "SELECT_DATE" });
+    expect(readAs("choose-date", "hmm", { awaiting }).type).toBe("NOT_CONFIDENT");
+    expect(readAs("choose-date", "Yes I'll take it").type).toBe("NOT_CONFIDENT");
+  });
+
   it("a bare yes answers the confirmation Tour Core just asked for", () => {
     expect(readAs("ready", "yes", { awaiting: { kind: "confirm-arrival" } })).toEqual({ type: "ARRIVAL" });
     expect(readAs("touring", "yep", { awaiting: { kind: "confirm-stop", stop: U101 } })).toEqual({ type: "AT_UNIT", unitName: "Unit 101" });

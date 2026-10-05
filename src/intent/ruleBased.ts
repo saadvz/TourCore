@@ -1,6 +1,7 @@
 import { dayReference, spokenTimes, vagueTimeRequest, type SpokenTime } from "../core/spokenTime";
 import type { IntentInterpretation, IntentInterpreter, InterpretContext, StepAwaiting, StopRef, TourIntent } from "./model";
 import { normalize, numberWord, ordinalWord, stripFiller } from "./normalize";
+import { acceptsNextOpening, yesNo } from "./yesNo";
 
 /**
  * Deterministic interpretation: menu numbers, YES/NO, messaging keywords and
@@ -104,40 +105,6 @@ export function isCancelTourAsk(raw: string): boolean {
   if (BARE_CANCEL.test(t) || YES_CANCEL.test(t)) return true;
   if (WANT_CANCEL.test(t) || CANT_MAKE_IT.test(t)) return true;
   return CANCEL_VERB.test(t) && TOUR_NOUN.test(t);
-}
-
-const YES_EXACT = /^(y|yes|yeah|yea|yeh|ya|yah|yep|yup|ye|yass|yes please|sure|ok|okay|k|kk|affirmative|correct|absolutely|definitely|certainly|of course)$/;
-const NO_EXACT = /^(n|no|nope|nah|no thanks|no thank you)$/;
-const YES_LEAD =
-  /^(yes|y|yeah|yea|yeh|ya|yah|yep|yup|yass|sure|ok|okay|fine|absolutely|definitely|certainly|of course|course|agreed|i agree|agree|i consent|consent|i accept|accept|go ahead|go for it|do it|sounds (good|great|fine)|that works|works for me|that is (fine|ok|okay|good|great|perfect)|that would be (great|good|nice|helpful|awesome|perfect|lovely|fine)|that would help|would be (great|good|nice|helpful)|please|please do|i would (like|love|appreciate) (that|it)|would love (that|it)|perfect|great|awesome|cool|alright|all right|correct|affirmative|you bet|for sure|totally|no problem|no worries|not a problem|have (someone|somebody|them|the team) (reach out|call|text|contact|follow up|get in touch|get back)|(someone|somebody) (can|could|should) (reach out|call|text|contact|follow up)|(please )?(reach out|follow up|contact me|get in touch)|i am in|count me in)\b/;
-const NO_LEAD =
-  /^(no|n|nope|nah|na|no thanks|no thank you|not (right )?now|not right|not really|not interested|no need|nothing|never mind|nevermind|i do not|(please )?do not|i decline|decline|rather not|i would rather not|maybe later|not today|no way|i will pass|pass)\b/;
-const SOFT_NO = /^(i am good|i am ok|i am okay|i am fine|all good|i am all set|we are good|we are all set)\b/;
-const NOT_NEGATIVE = /\b(no problem|no worries|not a problem)\b/g;
-const HEDGE = /\b(but|only|unless|except|maybe|not sure|i guess|kinda|kind of|depends|what if|if)\b/;
-const NEGATION = /\b(no|not|nope|nah|never|without|rather not|stop|cancel|decline|refuse|unsubscribe)\b/;
-
-interface YesNo {
-  answer?: "yes" | "no";
-  confidence: number;
-  soft?: boolean;
-}
-
-function yesNo(t: string): YesNo {
-  if (YES_EXACT.test(t)) return { answer: "yes", confidence: 1 };
-  if (NO_EXACT.test(t)) return { answer: "no", confidence: 1 };
-  if (SOFT_NO.test(t)) return { answer: "no", confidence: 0.8, soft: true };
-  if (NO_LEAD.test(t) && !/^(no problem|no worries|not a problem)\b/.test(t)) {
-    const rest = t.replace(NO_LEAD, "").trim();
-    return YES_LEAD.test(rest) && !/^(thanks|thank you)/.test(rest) ? { confidence: 0.3 } : { answer: "no", confidence: 0.9 };
-  }
-  if (YES_LEAD.test(t)) {
-    const rest = t.replace(YES_LEAD, "").replace(NOT_NEGATIVE, "").trim();
-    if (NEGATION.test(rest)) return { confidence: 0.3 };
-    if (HEDGE.test(rest)) return { answer: "yes", confidence: 0.6 };
-    return { answer: "yes", confidence: 0.9 };
-  }
-  return { confidence: 0 };
 }
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -404,7 +371,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
     }
 
     case "choose-date": {
-      if (ctx.awaiting?.kind === "accept-next-opening" && /^(that|that one|that day|that time|that works|yes|yeah|yea|yep|yup|sure|ok|okay|k|yes that|yes that one|yeah that)$/.test(t)) {
+      if (ctx.awaiting?.kind === "accept-next-opening" && acceptsNextOpening(t)) {
         return result({ type: "SELECT_DATE" }, 0.95);
       }
       const labels = ctx.timeChoices;
