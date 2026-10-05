@@ -90,26 +90,26 @@ describe("unavailableDayReply", () => {
 
   it("today is open but no slots remain", () => {
     expect(replyFor(at(2026, 10, 4, 22, 49), date(2026, 10, 4), at(2026, 10, 5, 8, 15), openEveryDay)).toBe(
-      "There are no more tours today. The next one is Monday, Oct 5 at 8:15 AM. Reply yes for Monday at 8:15 AM, or pick a day:",
+      "There are no more tours today. The next one is Monday, Oct 5 at 8:15 AM. Reply yes to take it, or pick a day:",
     );
   });
 
   it("a later open day is fully booked", () => {
     expect(replyFor(at(2026, 10, 5, 9), date(2026, 10, 7), at(2026, 10, 8, 9), weekdays)).toBe(
-      "Wednesday, Oct 7 is fully booked. The next opening is Thursday, Oct 8 at 9:00 AM. Reply yes for Thursday at 9:00 AM, or pick a day:",
+      "Wednesday, Oct 7 is fully booked. The next opening is Thursday, Oct 8 at 9:00 AM. Reply yes to take it, or pick a day:",
     );
   });
 
   it("the requested weekday is not a tour day", () => {
     expect(replyFor(at(2026, 10, 4, 22, 49), date(2026, 10, 3), at(2026, 10, 5, 8, 15), weekdays)).toBe(
-      "Tours don't run on Saturdays. The next opening is Monday, Oct 5 at 8:15 AM. Reply yes for Monday at 8:15 AM, or pick a day:",
+      "Tours don't run on Saturdays. The next opening is Monday, Oct 5 at 8:15 AM. Reply yes to take it, or pick a day:",
     );
   });
 
   it("the requested day is beyond the booking horizon", () => {
     expect(isBeyondBookingHorizon(date(2026, 9, 28), date(2026, 11, 16))).toBe(true);
     expect(replyFor(at(2026, 9, 28, 7), date(2026, 11, 16), at(2026, 10, 5, 8, 15), weekdays)).toBe(
-      "I can't book that far ahead yet. The next opening is Monday, Oct 5 at 8:15 AM. Reply yes for Monday at 8:15 AM, or pick a day:",
+      "I can't book that far ahead yet. The next opening is Monday, Oct 5 at 8:15 AM. Reply yes to take it, or pick a day:",
     );
   });
 
@@ -150,7 +150,7 @@ describe("typed day questions use the shared copy", () => {
     const p = textVisitor({ config: everydayHours(), now: at(2026, 10, 4, 22, 49).getTime() });
     await toChooseDate(p);
     await p.say("Is there a tour for today?");
-    expect(p.lastReply()).toContain("There are no more tours today. The next one is Monday, Oct 5 at 8:15 AM. Reply yes for Monday at 8:15 AM, or pick a day:");
+    expect(p.lastReply()).toContain("There are no more tours today. The next one is Monday, Oct 5 at 8:15 AM. Reply yes to take it, or pick a day:");
     expect(p.lastReply()).toContain("1) Monday, Oct 5");
     expect(p.lastReply()).not.toContain("Want that, or another day?");
     expect(p.lastReply()).not.toContain("Reply with the number.");
@@ -192,7 +192,7 @@ describe("typed day questions use the shared copy", () => {
     const { reservation } = await p.session.core.startInquiry({ name: "Other", phone: "(555) 010-3198", unitId: "apt_101" }, { announce: false });
     await p.session.core.reserveSlot(reservation.id, stolen.toISOString());
     await p.say("that");
-    expect(p.lastReply()).toContain("Someone just grabbed that time. The next opening is Tuesday, Oct 6 at 8:15 AM. Reply yes for Tuesday at 8:15 AM, or pick a day:");
+    expect(p.lastReply()).toContain("Someone just grabbed that time. The next opening is Tuesday, Oct 6 at 8:15 AM. Reply yes to take it, or pick a day:");
     expect(p.lastReply()).not.toContain("Want that, or another day?");
     expect(p.lastReply()).not.toContain("Reply with the number.");
     expect(await p.session.stage()).toBe("choose-date");
@@ -205,7 +205,7 @@ describe("typed day questions use the shared copy", () => {
     await p.say("Can I come Dec 1?");
     const added = p.session.conversation.filter((m) => m.from === "tourcore").slice(before);
     expect(added).toHaveLength(1);
-    expect(added[0]!.text).toContain("I can't book that far ahead yet. The next opening is Monday, Oct 5 at 8:15 AM. Reply yes for Monday at 8:15 AM, or pick a day:");
+    expect(added[0]!.text).toContain("I can't book that far ahead yet. The next opening is Monday, Oct 5 at 8:15 AM. Reply yes to take it, or pick a day:");
     expect(added[0]!.text).not.toContain("Want that, or another day?");
     expect(added[0]!.text).not.toContain("Reply with the number.");
     expect(added[0]!.text).not.toContain("I don't have that information");
@@ -214,6 +214,22 @@ describe("typed day questions use the shared copy", () => {
     await p.say("yes");
     expect(p.lastReply()).toContain("Great, you're booked for 8:15 AM on Monday, Oct 5.");
     expect((await p.session.reservation())?.slotStart).toBe(at(2026, 10, 5, 8, 15).toISOString());
+  });
+
+  it("a typed date that has already passed starts with That day has already passed", async () => {
+    const p = textVisitor({ config: everydayHours(), now: at(2026, 10, 4, 22, 49).getTime() });
+    await toChooseDate(p);
+    const before = p.session.conversation.filter((m) => m.from === "tourcore").length;
+    await p.say("Can I come Sep 28, 2026?");
+    const added = p.session.conversation.filter((m) => m.from === "tourcore").slice(before);
+    expect(added).toHaveLength(1);
+    expect(added[0]!.text).toContain("That day has already passed. The next opening is Monday, Oct 5 at 8:15 AM. Reply yes to take it, or pick a day:");
+    expect(added[0]!.text).toContain("1) Monday, Oct 5");
+    expect(added[0]!.text).not.toContain("I can't book that day.");
+    expect(added[0]!.text).not.toContain("Want that, or another day?");
+    expect(added[0]!.text).not.toContain("Reply with the number.");
+    expect(added[0]!.text).not.toContain("I don't have that information");
+    expect((await p.session.store.listAudit()).filter((e) => e.type === "QUESTION_UNANSWERED")).toHaveLength(0);
   });
 
   it("a within-horizon typed date offers that day's times", async () => {
@@ -230,7 +246,7 @@ describe("typed day questions use the shared copy", () => {
     const p = textVisitor({ now: at(2026, 10, 4, 22, 49).getTime() });
     await toChooseDate(p);
     await p.say("Can I come Oct 10?");
-    expect(p.lastReply()).toContain("Tours don't run on Saturdays. The next opening is Monday, Oct 5 at 2:00 PM. Reply yes for Monday at 2:00 PM, or pick a day:");
+    expect(p.lastReply()).toContain("Tours don't run on Saturdays. The next opening is Monday, Oct 5 at 2:00 PM. Reply yes to take it, or pick a day:");
     expect(p.lastReply()).not.toContain("Want that, or another day?");
     expect(p.lastReply()).not.toContain("Reply with the number.");
     expect(p.lastReply()).not.toContain("I don't have that information");
@@ -278,7 +294,7 @@ describe("typed day questions use the shared copy", () => {
     await toChooseDate(p);
     await bookAllSlots(p.session, date(2026, 10, 4));
     await p.say("today");
-    expect(p.lastReply()).toContain("There are no more tours today. The next one is Monday, Oct 5 at 8:15 AM. Reply yes for Monday at 8:15 AM, or pick a day:");
+    expect(p.lastReply()).toContain("There are no more tours today. The next one is Monday, Oct 5 at 8:15 AM. Reply yes to take it, or pick a day:");
     expect(p.lastReply()).not.toContain("Want that, or another day?");
     expect(p.lastReply()).not.toContain("Reply with the number.");
     expect(p.lastReply()).not.toContain("is fully booked");
@@ -289,7 +305,7 @@ describe("typed day questions use the shared copy", () => {
     const p = textVisitor({ now: at(2026, 9, 28, 7).getTime() });
     await toChooseDate(p);
     await p.say("Saturday");
-    expect(p.lastReply()).toContain("Tours don't run on Saturdays. The next opening is Monday, Sep 28 at 2:00 PM. Reply yes for Monday at 2:00 PM, or pick a day:");
+    expect(p.lastReply()).toContain("Tours don't run on Saturdays. The next opening is Monday, Sep 28 at 2:00 PM. Reply yes to take it, or pick a day:");
     expect(p.lastReply()).toContain("1) Monday, Sep 28");
     expect(p.lastReply()).not.toContain("Want that, or another day?");
     expect(p.lastReply()).not.toContain("Reply with the number.");
@@ -328,7 +344,7 @@ describe("chooseDate buttons use the same helper", () => {
     await toWebChooseDate(session);
     await bookAllSlots(session, date(2026, 9, 29));
     await session.act("chooseDate", { date: "2026-09-29" });
-    expect(lastFromTourCore(session)).toContain("Tuesday, Sep 29 is fully booked. The next opening is Monday, Sep 28 at 2:00 PM. Reply yes for Monday at 2:00 PM, or pick a day:");
+    expect(lastFromTourCore(session)).toContain("Tuesday, Sep 29 is fully booked. The next opening is Monday, Sep 28 at 2:00 PM. Reply yes to take it, or pick a day:");
     expect(lastFromTourCore(session)).not.toContain("Want that, or another day?");
     expect(lastFromTourCore(session)).toContain("Pick a day below.");
     expect(lastFromTourCore(session)).not.toContain("I have tours available");
@@ -346,11 +362,22 @@ describe("chooseDate buttons use the same helper", () => {
     expect(await session.stage()).toBe("choose-time");
   });
 
+  it("a past date starts with That day has already passed and the next-opening closer", async () => {
+    const session = webVisitor({ config: everydayHours(), now: at(2026, 10, 4, 22, 49).getTime() });
+    await toWebChooseDate(session);
+    await session.act("chooseDate", { date: "2026-09-28" });
+    expect(lastFromTourCore(session)).toContain("That day has already passed. The next opening is Monday, Oct 5 at 8:15 AM. Reply yes to take it, or pick a day:");
+    expect(lastFromTourCore(session)).not.toContain("I can't book that day.");
+    expect(lastFromTourCore(session)).not.toContain("Want that, or another day?");
+    expect(lastFromTourCore(session)).toContain("Pick a day below.");
+    expect(await session.stage()).toBe("choose-date");
+  });
+
   it("a day past the booking horizon is too far out", async () => {
     const session = webVisitor({ now: at(2026, 9, 28, 7).getTime() });
     await toWebChooseDate(session);
     await session.act("chooseDate", { date: "2026-11-16" });
-    expect(lastFromTourCore(session)).toContain("I can't book that far ahead yet. The next opening is Monday, Sep 28 at 2:00 PM. Reply yes for Monday at 2:00 PM, or pick a day:");
+    expect(lastFromTourCore(session)).toContain("I can't book that far ahead yet. The next opening is Monday, Sep 28 at 2:00 PM. Reply yes to take it, or pick a day:");
     expect(lastFromTourCore(session)).not.toContain("Want that, or another day?");
     expect(lastFromTourCore(session)).toContain("Pick a day below.");
     expect(lastFromTourCore(session)).not.toContain("I have tours available");

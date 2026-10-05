@@ -144,6 +144,8 @@ export interface InterpretContext {
   doors: StopRef[];
   /** Property-local calendar date "now", so year-less dates resolve to the next occurrence. */
   today?: LocalDate;
+  /** Property timezone, so last-asked copy can name a weekday and time. */
+  timezone?: string;
 }
 
 export interface IntentInterpreter {

@@ -40,6 +40,7 @@ function ctx(step: ConversationStep, message: string, extra: Partial<InterpretCo
     ],
     timeChoices: ["2:00 PM", "3:30 PM"],
     today: { year: 2026, month: 10, day: 4 },
+    timezone: "America/New_York",
     reservedUnit: "Unit 101",
     remainingStops: step === "ready" ? [ENTRANCE, U101] : [U101],
     doors: [ENTRANCE, U101, U102],
@@ -254,6 +255,19 @@ describe("semantic interpretation", () => {
     ]) {
       expect(await run(bad), bad).toMatchObject({ intent: { type: "UNKNOWN" }, confidence: 0 });
     }
+  });
+
+  it("names the offered weekday and time on the accept-next-opening follow-up", async () => {
+    const { model, calls } = fakeModel('{"intent":"UNKNOWN","confidence":0.2}');
+    const slotStart = zonedTimeToUtc({ year: 2026, month: 10, day: 5, hour: 8, minute: 15 }, "America/New_York").toISOString();
+    await new LLMIntentInterpreter(model).interpret(
+      ctx("choose-date", "hmm", {
+        timezone: "America/New_York",
+        awaiting: { kind: "accept-next-opening", date: "2026-10-05", slotStart },
+      }),
+    );
+    expect(JSON.parse(calls[0]!.user).lastAsked).toBe("Reply yes for Monday at 8:15 AM, or pick a day.");
+    expect(JSON.parse(calls[0]!.user).lastAsked).not.toBe("Reply yes for that opening, or pick a day.");
   });
 
   it("accepts SELECT_DATE with a concrete local date", async () => {

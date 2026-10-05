@@ -65,6 +65,7 @@ async function contextFor(session: VisitorDemoSession, message: string, step: Vi
     units: session.config.units.map((u) => ({ name: u.name, ...(u.summary ? { summary: u.summary } : {}) })),
     timeChoices: step === "choose-date" ? session.offeredDates.map((day) => day.label) : session.offeredSlots.map((s) => s.label),
     today: localDateOf(session.clock.now(), session.config.property.timezone),
+    timezone: session.config.property.timezone,
     ...(r ? { reservedUnit: session.config.units.find((u) => u.id === r.unitId)?.name } : {}),
     remainingStops: remaining.map((id) => stopRef(session, id)),
     doors: session.config.doors.map((d) => stopRef(session, d.id)),

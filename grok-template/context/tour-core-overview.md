@@ -40,9 +40,14 @@ asks which day they meant and shows the day menu; it does not flag the team.
 If that day has no bookable tours, the visitor is told why — no more tours
 today, fully booked, tours don't run that weekday, beyond the 21-day
 booking horizon, or no open times at all — plus the next opening when there
-is one. When a day menu follows, the line is "Reply yes for {Weekday} at
-{time}, or pick a day:". Replying yes or that books that exact start after
-a recheck; if it was taken, they hear "Someone just grabbed that time."
+is one. A date that has already passed starts "That day has already
+passed. The next opening is {when}." Wherever "The next opening is
+{when}." is followed by the day menu, the ending is "Reply yes to take
+it, or pick a day:". An offer without that next-opening line still ends
+"Reply yes for {Weekday} at {time}, or pick a day:". The follow-up is
+"Reply yes for {Weekday} at {time}, or pick a day." Replying yes or that
+books that exact start after a recheck; if it was taken, they hear
+"Someone just grabbed that time."
 
 Open conversations pick up the latest published settings (hours, units,
 and so on) on every inbound text. A stale numbered reply after hours

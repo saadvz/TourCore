@@ -221,7 +221,7 @@ describe("open text conversations pick up republished settings", () => {
     await app.text("1");
     const offered = await app.text("today");
     expect(offered).toContain("There are no more tours today.");
-    expect(offered).toContain("The next one is Tuesday, Sep 29 at 8:15 PM. Reply yes for Tuesday at 8:15 PM, or pick a day:");
+    expect(offered).toContain("The next one is Tuesday, Sep 29 at 8:15 PM. Reply yes to take it, or pick a day:");
     expect(offered).not.toContain("Want that, or another day?");
     expect(offered).not.toContain("Reply with the number.");
     expect(await app.session().stage()).toBe("choose-date");

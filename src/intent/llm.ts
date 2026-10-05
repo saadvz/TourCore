@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isoDate, parseIsoDate } from "../core/schedule";
+import { formatDay, formatTime } from "../core/timezone";
 import { HelpProblemSchema, type StepAwaiting, type ConversationStep, type IntentInterpretation, type IntentInterpreter, type InterpretContext, type TourIntent } from "./model";
 
 /**
@@ -76,12 +77,16 @@ Use the conversation step and "lastAsked" to read short replies: "sure" answers 
 Use low confidence when the message is vague. Use UNKNOWN when the visitor is only on the way or nearby, or when you cannot tell where they are.
 Never name a unit, door or time the visitor did not clearly refer to.`;
 
-function lastAsked(step: ConversationStep, awaiting?: StepAwaiting): string {
+function lastAsked(step: ConversationStep, awaiting?: StepAwaiting, timezone?: string): string {
   if (awaiting?.kind === "confirm-arrival") return "Are you at the property now?";
   if (awaiting?.kind === "confirm-stop") return `Are you at ${awaiting.stop.label} now?`;
   if (awaiting?.kind === "choose-stop") return `Which door are you at: ${awaiting.stops.map((s) => s.label).join(" or ")}?`;
   if (awaiting?.kind === "confirm-finish") return "Are you finished with your tour?";
-  if (awaiting?.kind === "accept-next-opening") return "Reply yes for that opening, or pick a day.";
+  if (awaiting?.kind === "accept-next-opening") {
+    const start = new Date(awaiting.slotStart);
+    const weekday = formatDay(start, timezone ?? "UTC").split(",")[0]!;
+    return `Reply yes for ${weekday} at ${formatTime(start, timezone ?? "UTC")}, or pick a day.`;
+  }
   switch (step) {
     case "choose-unit":
       return "Which unit would you like to see?";
@@ -173,7 +178,7 @@ export class LLMIntentInterpreter implements IntentInterpreter {
     const rejected: IntentInterpretation = { intent: { type: "UNKNOWN" }, confidence: 0, interpreter: "semantic", clarificationNeeded: false };
     const user = JSON.stringify({
       step: ctx.step,
-      lastAsked: lastAsked(ctx.step, ctx.awaiting),
+      lastAsked: lastAsked(ctx.step, ctx.awaiting, ctx.timezone),
       units: ctx.units.map((u) => ({ name: u.name, ...(u.summary ? { summary: u.summary } : {}) })),
       timeChoices: ctx.timeChoices,
       reservedUnit: ctx.reservedUnit,
