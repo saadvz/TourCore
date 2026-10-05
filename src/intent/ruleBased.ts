@@ -385,6 +385,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
       if (h) return h;
       const info = informational();
       if (info) return info;
+      if (wantsToStartBooking(full, t)) return result({ type: "START_INQUIRY" }, 0.9);
       return unknown();
     }
 
@@ -410,6 +411,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
       if (h) return h;
       const info = informational();
       if (info) return info;
+      if (wantsToStartBooking(full, t)) return result({ type: "START_INQUIRY" }, 0.9);
       return unknown(/\b(any|either|whichever|whenever|does not matter)\b/.test(t) ? { clarificationNeeded: true } : {});
     }
 
@@ -459,6 +461,13 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
     if ((asked && words >= 2) || WANTS_TO_KNOW.test(t) || (words <= 3 && TOPIC.test(t))) return question(0.85);
     return undefined;
   }
+}
+
+const START_BOOKING =
+  /^(hi|hello|hey|hiya|howdy|yo|tour|book( a tour)?|start over|new tour|hi there|hello there|good (morning|afternoon|evening))$/;
+
+function wantsToStartBooking(full: string, stripped: string): boolean {
+  return START_BOOKING.test(full) || START_BOOKING.test(stripped);
 }
 
 const FORM_WORDS = /\b(form|link|verif\w*|identity|id check|my id)\b/;

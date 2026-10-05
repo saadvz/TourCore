@@ -81,6 +81,7 @@ async function explainUnavailable(session: VisitorDemoSession, requested: LocalD
     ? unavailableDayReply({ config: session.config, now, requested, nextOpening })
     : `I can't book that day. The next opening is ${nextOpeningWhen(nextOpening, tz)}. Want that, or another day?`;
   await session.reply(body, datePrompt(session));
+  session.markDatesShown();
   session.expect("choose-date", {
     kind: "accept-next-opening",
     date: isoDate(localDateOf(nextOpening, tz)),
@@ -107,6 +108,7 @@ export async function offerDate(session: VisitorDemoSession, date: string): Prom
   }
   const menu = timeMenu(formatDay(slots[0]!.start, tz), slots.map((slot) => slot.label));
   await session.reply(menu.body, menu.prompt);
+  session.markTimesShown();
 }
 
 async function offerAfterGrabbed(session: VisitorDemoSession, date: string): Promise<void> {
@@ -117,6 +119,7 @@ async function offerAfterGrabbed(session: VisitorDemoSession, date: string): Pro
   const beyond = requested ? isBeyondBookingHorizon(today, requested) : false;
   if (slots.length && !beyond) {
     await session.reply(`${GRABBED} Here's what's left:`, { kind: "choose", options: slots.map((slot) => slot.label), what: "a time" });
+    session.markTimesShown();
     return;
   }
   session.selectedDate = undefined;
@@ -127,6 +130,7 @@ async function offerAfterGrabbed(session: VisitorDemoSession, date: string): Pro
     return;
   }
   await session.reply(`${GRABBED} ${nextOpeningAsk(nextOpening, tz)}`, datePrompt(session));
+  session.markDatesShown();
   session.expect("choose-date", {
     kind: "accept-next-opening",
     date: isoDate(localDateOf(nextOpening, tz)),
@@ -144,7 +148,9 @@ async function slotStillOpen(session: VisitorDemoSession, slotStart: string, dat
 
 /**
  * "that" after a next-opening offer: book that exact start through the same
- * chooseTime path as the time menu, or fall back if it was taken.
+ * chooseTime path as the time menu, or fall back if it was taken. Re-checks
+ * the offered start against the current published schedule first, so an hours
+ * change after the offer cannot book a slot that is no longer open.
  */
 export async function takeOfferedOpening(
   session: VisitorDemoSession,

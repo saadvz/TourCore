@@ -164,6 +164,7 @@ export async function restoreSession(snapshot: DurableSession, deps: RestoreDeps
   const notes: string[] = [];
   const { workspace: ws } = deps;
   if (!ws.has(snapshot.propertyId)) throw new RestoreError("The property for this tour is no longer set up.");
+  // Current published settings, not a copy captured in the snapshot.
   const { config } = ws.load(snapshot.propertyId);
   let tour: ReturnType<PropertyWorkspace["loadTour"]>;
   try {
@@ -220,6 +221,19 @@ export async function restoreSession(snapshot: DurableSession, deps: RestoreDeps
     ...(pending ? { pending } : {}),
     ...(snapshot.heldTime ? { heldTime: snapshot.heldTime } : {}),
   });
+  session.rememberShownSchedule(snapshot.offeredDates ?? [], offeredSlots);
+  if (stage === "choose-date" || stage === "choose-time") {
+    const before = JSON.stringify({
+      dates: session.offeredDates,
+      slots: session.offeredSlots.map((slot) => slot.start.toISOString()),
+    });
+    await session.refreshOfferedSchedule();
+    const after = JSON.stringify({
+      dates: session.offeredDates,
+      slots: session.offeredSlots.map((slot) => slot.start.toISOString()),
+    });
+    if (before !== after) notes.push("The offered days and times were rebuilt from the current schedule.");
+  }
   if (snapshot.step !== stage) notes.push(`Saved step "${snapshot.step}" was behind the tour records ("${stage}"); the tour records were used.`);
   return { session, notes };
 }

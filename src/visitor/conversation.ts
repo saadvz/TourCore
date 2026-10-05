@@ -40,6 +40,12 @@ export { keywordOf, type Keyword } from "../intent";
 
 export const isGreeting = (text: string) => /^(hi|hello|hey|hiya|tour|book|start over|new tour|hi there|good (morning|afternoon|evening))\b/.test(normalize(text));
 
+/** Lead when published hours changed and a numbered/old-menu reply can't be mapped safely. */
+export const SCHEDULE_CHANGED_LEAD = "Tour times just changed. Here's what's open now:";
+const WHICH_DAY = "Which day works for you?";
+const DAY_MENU = `I have tours available. ${WHICH_DAY}`;
+const MENU_NUMBER = /^\s*(?:#|number |option )?(\d{1,2})\s*[.!]?\s*$/i;
+
 const SORRY = "Sorry, I didn't catch that.";
 const rulesOnly = new LayeredIntentInterpreter();
 
@@ -377,6 +383,8 @@ export async function resumeStep(session: VisitorDemoSession, stage?: VisitorSta
   const p = stepPrompt(session, now, stage === undefined ? pending : stage === now ? awaiting : undefined);
   if (!p) return;
   if (p.awaiting) session.expect(now, p.awaiting);
+  if (now === "choose-date") session.markDatesShown();
+  if (now === "choose-time") session.markTimesShown();
   await session.reply(p.body, p.prompt);
 }
 
@@ -452,8 +460,9 @@ async function showAskedDay(turn: Turn, ask: DayReference, alreadyRecorded = fal
     const index = /^\s*(?:#|number |option )?(\d{1,2})\s*[.!]?\s*$/i.exec(turn.said.text ?? "")?.[1];
     const picked = index ? dates[Number(index) - 1] : undefined;
     if (picked) return presentDay(turn, picked.date, alreadyRecorded);
-    if (alreadyRecorded) await session.reply("I have tours available. Which day works for you?", dateMenu);
-    else await turn.respond("I have tours available. Which day works for you?", dateMenu);
+    session.markDatesShown();
+    if (alreadyRecorded) await session.reply(DAY_MENU, dateMenu);
+    else await turn.respond(DAY_MENU, dateMenu);
     return;
   }
   if (ask.relative === "weekend") {
@@ -465,7 +474,8 @@ async function showAskedDay(turn: Turn, ask: DayReference, alreadyRecorded = fal
     if (!alreadyRecorded) await session.recordText(turn.said);
     if (weekend.length === 1) return presentDay(turn, weekend[0]!.date, true);
     const options = (weekend.length ? weekend : dates).map((day) => day.label);
-    const lead = weekend.length ? "I have tours available. Which day works for you?" : "I don't have weekend tours. I have tours available. Which day works for you?";
+    const lead = weekend.length ? DAY_MENU : "I don't have weekend tours. I have tours available. Which day works for you?";
+    session.markDatesShown();
     await session.reply(lead, { kind: "choose", options, what: "a day" });
     return;
   }
@@ -474,6 +484,42 @@ async function showAskedDay(turn: Turn, ask: DayReference, alreadyRecorded = fal
   const start = ask.relative === "today" ? today : ask.relative === "tomorrow" || ask.nextWeek ? addDays(today, 1) : today;
   const day = ask.weekday ? dayOnOrAfter(start, ask.weekday) : start;
   await presentDay(turn, isoDate(day), alreadyRecorded);
+}
+
+/** START_INQUIRY during booking: keep the unit, offer days again from the current schedule. */
+async function restartBookingDays(turn: Turn): Promise<void> {
+  const { session } = turn;
+  session.selectedDate = undefined;
+  await session.refreshOfferedSchedule();
+  const labels = session.offeredDates.map((day) => day.label);
+  if (!labels.length) {
+    await turn.respond(VisitorDenialCopy.noOpenTimes(session.config.operator.name));
+    return;
+  }
+  session.markDatesShown();
+  await turn.respond(DAY_MENU, { kind: "choose", options: labels, what: "a day" });
+}
+
+function isBareMenuNumber(text: string): boolean {
+  return MENU_NUMBER.test(text);
+}
+
+function matchesLabel(text: string, labels: string[]): boolean {
+  return labels.some((label) => same(label, text));
+}
+
+async function showScheduleChanged(turn: Turn): Promise<void> {
+  const { session } = turn;
+  session.selectedDate = undefined;
+  session.offeredSlots = [];
+  await session.refreshOfferedSchedule();
+  const labels = session.offeredDates.map((day) => day.label);
+  if (!labels.length) {
+    await turn.respond(VisitorDenialCopy.noOpenTimes(session.config.operator.name));
+    return;
+  }
+  session.markDatesShown();
+  await turn.respond(SCHEDULE_CHANGED_LEAD, { kind: "choose", options: labels, what: "a day", after: WHICH_DAY });
 }
 
 async function presentDay(turn: Turn, date: string, alreadyRecorded = false): Promise<void> {
@@ -521,23 +567,39 @@ async function byStage(turn: Turn): Promise<void> {
       if (turn.awaiting?.kind === "accept-next-opening" && acceptsOfferedOpening(turn.said.text ?? "")) {
         return takeOfferedOpening(session, turn.awaiting, turn.said);
       }
-      if (intent.type === "SELECT_DATE") return showAskedDay(turn, intent);
       if (intent.type === "REQUEST_HELP") return session.help(turn.said);
+      if (intent.type === "START_INQUIRY") return restartBookingDays(turn);
+      if (session.staleDateMenu) {
+        const text = turn.said.text ?? "";
+        const still = session.offeredDates.find((day) => same(day.label, text) || day.date === text.trim());
+        if (still) return presentDay(turn, still.date);
+        if (isBareMenuNumber(text) || matchesLabel(text, session.lastShownDates.map((day) => day.label))) return showScheduleChanged(turn);
+      }
+      if (intent.type === "SELECT_DATE") return showAskedDay(turn, intent);
+      session.markDatesShown();
       return turn.fallback(`${SORRY} Which day works for you?`, { kind: "choose", options: session.offeredDates.map((day) => day.label), what: "a day" });
     }
 
     case "choose-time": {
       const labels = session.offeredSlots.map((s) => s.label);
       const menu: ReplyPrompt = { kind: "choose", options: labels, what: "a time" };
+      if (intent.type === "REQUEST_HELP") return session.help(turn.said);
+      if (intent.type === "START_INQUIRY") return restartBookingDays(turn);
+      if (session.staleTimeMenu || session.staleDateMenu) {
+        const text = turn.said.text ?? "";
+        const still = session.offeredSlots.find((slot) => same(slot.label, text));
+        if (still && turn.confident) return turn.act("chooseTime", { slotStart: still.start.toISOString() });
+        if (isBareMenuNumber(text) || matchesLabel(text, session.lastShownSlots.map((slot) => slot.label))) return showScheduleChanged(turn);
+      }
       if (intent.type === "SELECT_DATE") return showAskedDay(turn, intent);
       if (intent.type === "SELECT_TIME") {
         const slot = session.offeredSlots.find((s) => same(s.label, intent.timeLabel));
         if (slot && turn.confident) return turn.act("chooseTime", { slotStart: slot.start.toISOString() });
         return turn.clarify("Which time works for you?", menu);
       }
-      if (intent.type === "REQUEST_HELP") return session.help(turn.said);
       if (turn.interpretation.clarificationQuestion) return turn.clarify(`${turn.interpretation.clarificationQuestion} Which time works for you?`, menu);
       if (turn.interpretation.clarificationNeeded && !turn.interpretation.manipulation) return turn.clarify("Sure — which time works for you?", menu);
+      session.markTimesShown();
       return turn.fallback(`${SORRY} Which time works for you?`, menu);
     }
 

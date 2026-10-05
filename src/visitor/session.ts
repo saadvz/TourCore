@@ -149,6 +149,14 @@ export class VisitorDemoSession {
   selectedDate?: string;
   /** Times offered at inquiry; typed replies ("2") and buttons both pick from this list. */
   offeredSlots: TourSlot[] = [];
+  /** Day menu last shown to the visitor. A later hours change is compared to this, not the rebuilt list. */
+  lastShownDates: { date: string; label: string }[] = [];
+  /** Time menu last shown to the visitor. */
+  lastShownSlots: TourSlot[] = [];
+  /** The published day list changed since the last day menu this visitor saw. */
+  staleDateMenu = false;
+  /** The published time list changed since the last time menu this visitor saw. */
+  staleTimeMenu = false;
   /** A custom time named before a unit was chosen. Filed once the unit is picked. */
   heldTime?: SpokenTime;
   optedOut = false;
@@ -179,12 +187,15 @@ export class VisitorDemoSession {
   /** Where this tour reads the property's current approved content (set by the registry). */
   contentSource?: () => TourCoreConfig | undefined;
 
+  private _config: TourCoreConfig;
+
   constructor(
     readonly propertyId: string,
-    readonly config: TourCoreConfig,
+    config: TourCoreConfig,
     readonly tourId: string,
     options: VisitorSessionOptions = {},
   ) {
+    this._config = config;
     this.id = options.id ?? `vd_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
     this.clock = new DemoClock(options.realNow);
     this.startedAt = options.startedAt ?? this.clock.now();
@@ -209,8 +220,65 @@ export class VisitorDemoSession {
     });
   }
 
+  get config(): TourCoreConfig {
+    return this._config;
+  }
+
   get conversation(): readonly ConversationItem[] {
     return this.thread;
+  }
+
+  /**
+   * Point this open conversation at the property's current published settings.
+   * Stage, reservation, pending confirmations and records stay as they are.
+   * Returns whether those settings actually changed.
+   */
+  applyPublishedConfig(next: TourCoreConfig): boolean {
+    const changed = JSON.stringify(this._config) !== JSON.stringify(next);
+    this._config = next;
+    this.core.useConfig(next);
+    return changed;
+  }
+
+  /**
+   * Rebuild the day and time menus from the current published hours.
+   * An already-booked reservation is not touched. If the rebuilt menus
+   * differ from what the visitor was last shown, numbered replies are
+   * not silently remapped — the conversation must re-show the list.
+   */
+  async refreshOfferedSchedule(): Promise<void> {
+    const shownDates = this.lastShownDates.length ? this.lastShownDates : this.offeredDates;
+    const shownSlots = this.lastShownSlots.length ? this.lastShownSlots : this.offeredSlots;
+    this.offeredDates = (await this.core.availableDates()).map(({ date, label }) => ({ date, label }));
+    if (!this.selectedDate) {
+      this.offeredSlots = [];
+    } else {
+      try {
+        this.offeredSlots = await this.selectDate(this.selectedDate);
+      } catch {
+        this.offeredSlots = [];
+      }
+    }
+    if (shownDates.length && !sameDateMenu(shownDates, this.offeredDates)) this.staleDateMenu = true;
+    if (shownSlots.length && !sameTimeMenu(shownSlots, this.offeredSlots)) this.staleTimeMenu = true;
+  }
+
+  /** The visitor just saw these days. Numbered replies now mean this list. */
+  markDatesShown(): void {
+    this.lastShownDates = this.offeredDates.map((day) => ({ date: day.date, label: day.label }));
+    this.staleDateMenu = false;
+  }
+
+  /** The visitor just saw these times. Numbered replies now mean this list. */
+  markTimesShown(): void {
+    this.lastShownSlots = this.offeredSlots.map((slot) => ({ start: slot.start, label: slot.label }));
+    this.staleTimeMenu = false;
+  }
+
+  /** What the visitor had been shown (a snapshot), before menus are rebuilt from the current config. */
+  rememberShownSchedule(dates: { date: string; label: string }[], slots: TourSlot[]): void {
+    this.lastShownDates = dates.map((day) => ({ date: day.date, label: day.label }));
+    this.lastShownSlots = slots.map((slot) => ({ start: slot.start, label: slot.label }));
   }
 
   get presentation() {
@@ -699,6 +767,7 @@ export class VisitorDemoSession {
     this.offeredDates = await this.core.availableDates();
     this.selectedDate = undefined;
     this.offeredSlots = [];
+    this.markDatesShown();
   }
 
   /** Times for one day. An empty list means that day has no open regular tours. */
@@ -852,4 +921,12 @@ export class VisitorDemoRegistry {
     }
     return undefined;
   }
+}
+
+function sameDateMenu(a: { date: string }[], b: { date: string }[]): boolean {
+  return a.length === b.length && a.every((day, i) => day.date === b[i]?.date);
+}
+
+function sameTimeMenu(a: TourSlot[], b: TourSlot[]): boolean {
+  return a.length === b.length && a.every((slot, i) => slot.start.getTime() === b[i]?.start.getTime());
 }
