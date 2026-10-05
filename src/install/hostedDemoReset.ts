@@ -36,6 +36,7 @@ const RUNTIME_NAMESPACES: RuntimeNamespace[] = [
   "operator-events",
   "setup-sessions",
   "approval-sessions",
+  "audit-export-links",
 ];
 
 const INSTALLATION_SETTINGS: SettingName[] = [...SETTING_NAMES];

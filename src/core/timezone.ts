@@ -110,6 +110,23 @@ export function formatShortDateTime(date: Date, timeZone: string): string {
   return `${day}, ${formatTime(date, timeZone)}`;
 }
 
+/** "Monday, Sep 28, 9:00 AM" */
+export function formatDateTime(date: Date, timeZone: string): string {
+  return `${formatDay(date, timeZone)}, ${formatTime(date, timeZone)}`;
+}
+
+/** ISO-8601 with seconds and the property's offset, e.g. 2026-09-28T09:00:00-04:00. */
+export function formatIsoOffset(date: Date, timeZone: string): string {
+  const p = zonedParts(date, timeZone);
+  const offset = offsetMs(date.getTime(), timeZone);
+  const sign = offset >= 0 ? "+" : "-";
+  const abs = Math.abs(offset);
+  const hours = Math.floor(abs / 3_600_000);
+  const minutes = Math.floor((abs % 3_600_000) / 60_000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}:${pad(p.second)}${sign}${pad(hours)}:${pad(minutes)}`;
+}
+
 export function formatLocalDate(date: LocalDate, timeZone: string): string {
   return formatDay(zonedTimeToUtc({ ...date, hour: 12, minute: 0 }, timeZone), timeZone);
 }

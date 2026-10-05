@@ -9,6 +9,7 @@ import { SetupInputError } from "../setup/setupActions";
 import type { ConversationItem, TourRecord } from "../setup/workspace";
 import type { VisitorDemoSession } from "../visitor/session";
 import { STATUS_LABELS } from "../visitor/views";
+import { AccessWindows } from "./accessWindows";
 import type { OperatorServices } from "./services";
 
 /**
@@ -208,6 +209,8 @@ export function inspectTourView(tour: TourSnapshot) {
     latestActivity: timeline.slice(-8).map((e) => `${e.time}: ${e.text}`),
     questions: timeline.filter((e) => e.dev.type === "QUESTION_UNANSWERED" || e.dev.type === "HELP_REQUESTED" || e.dev.type === "QUESTION_ANSWERED").map((e) => `${e.time}: ${e.text}`),
     accessDenials: timeline.filter((e) => e.dev.type === "ACCESS_DENIED").map((e) => `${e.time}: ${e.text}`),
+    accessGrants: AccessWindows.grants(tour),
+    denials: AccessWindows.denials(tour),
     recentMessages: tour.conversation.slice(-6).map((m) => ({ from: m.from === "tourcore" ? "Tour Core" : m.from === "visitor" ? "Visitor" : "Demo note", text: m.text, time: formatTime(new Date(m.at), tz) })),
     messageProblems: failedToVisitor ? `${failedToVisitor === 1 ? "1 message" : `${failedToVisitor} messages`} couldn't be delivered to the visitor.` : undefined,
     followUp: followUp ? (followUp.detail === "yes" ? "Wants someone to follow up" : "No follow-up needed") : undefined,

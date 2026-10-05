@@ -18,10 +18,12 @@ import { parseDays, parseMinutes, parseTimeOfDay } from "../setup/parse";
 import type { DryTourCheck, DryTourResult } from "../setup/dryTour";
 import type { ReadinessResult } from "../setup/readiness";
 import { createPropertySetup, modeSentence, SetupInputError, tourableSpacesQuestion, type SetupDraft } from "../setup/setupActions";
+import { isHostedRailway } from "../install/deployment";
 import { statusLabel, type PublishBlocker } from "../setup/workspace";
 import { rememberCanonical, revertCanonical } from "../storage/canonical";
 import { StorageConflictError, StorageUnavailableError, StoreBusyError } from "../storage/errors";
 import { exportAudit, parseLocalDate } from "./auditExport";
+import { AuditExportLinks } from "./auditExportLinks";
 import type { ConfirmationBook } from "./confirmations";
 import {
   answerFlaggedQuestion,
@@ -136,6 +138,19 @@ function subsystemLines(ctx: ToolContext, id: string, draft: SetupDraft) {
     lines: [`Visitor texting: ${texting.label}`, `Door access: ${draft.accessMode === "durin-mock" ? "Demo" : "Connected"}`],
     sentence: modeSentence(texting.state === "connected", draft.accessMode === "durin-mock"),
   };
+}
+
+/** Local computer link when that's all we have; hosted public URL with a short-lived token. */
+function auditExportFileLink(ctx: ToolContext, propertyId: string, exportId: string, file: string): { openOnTourCoreComputer?: string } {
+  const inst = ctx.installation;
+  const hosted = inst && isHostedRailway(inst.deploymentMode());
+  const publicBase = hosted ? inst.publicBaseUrl() : undefined;
+  if (hosted && publicBase) {
+    const minted = new AuditExportLinks(inst.runtime, () => inst.now()).issue(propertyId, exportId, file);
+    return { openOnTourCoreComputer: AuditExportLinks.downloadUrl(publicBase, propertyId, exportId, file, minted.token) };
+  }
+  const local = ctx.localUrl?.();
+  return local ? { openOnTourCoreComputer: AuditExportLinks.localUrl(local, propertyId, exportId, file) } : {};
 }
 
 function openDraft(ctx: ToolContext, property: string | undefined): { id: string; draft: SetupDraft } {
@@ -929,7 +944,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "inspect_tour",
     title: "Inspect a tour",
     kind: "read",
-    description: "What's happening on one tour: status, latest activity, questions, access denials, recent messages, and anything that needs the team.",
+    description: "What's happening on one tour: status, latest activity, questions, access grant times, access denials, recent messages, and anything that needs the team.",
     input: z.strictObject({ tourRef: TourRef }),
     run: async (ctx, i) => {
       const tour = await findTour(ctx.services, i.tourRef);
@@ -1059,7 +1074,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "export_audit",
     title: "Export the audit",
     kind: "change",
-    description: 'Exports one day\'s tour records for a property as a validated, provider-neutral file (JSON + CSV) and summarizes it. Day is "today" (default) or YYYY-MM-DD.',
+    description: 'Exports one day\'s tour records for a property as a validated, provider-neutral file (JSON + CSV) and summarizes it, including each access grant\'s times and each denial. Day is "today" (default) or YYYY-MM-DD.',
     input: z.strictObject({ property: Property, day: z.string().max(20).optional() }),
     run: async (ctx, i) => {
       const id = resolvePropertyId(ctx.services.workspace, i.property);
@@ -1067,12 +1082,13 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       if (i.day && i.day.trim().toLowerCase() !== "today" && !day) throw new SetupInputError("DAY_UNREADABLE", 'Use "today" or a date like 2026-09-28.');
       const out = await exportAudit(ctx.services, id, { day, now: ctx.now() });
       const s = out.summary;
-      const base = ctx.localUrl?.();
       return {
         summary: `${s.day}: ${s.tours} visitor tour${s.tours === 1 ? "" : "s"} (${s.completed} completed, ${s.active} active, ${s.stopped} stopped), ${s.accessDenials} access denial${s.accessDenials === 1 ? "" : "s"}, ${s.questionsNeedingAttention} question${s.questionsNeedingAttention === 1 ? "" : "s"} needing attention, plus ${s.practiceTours} practice tour${s.practiceTours === 1 ? "" : "s"}.`,
         totals: s,
         reference: `Audit export ${out.exportId}, saved with ${ctx.services.workspace.load(id).config.property.name}'s tour records on the Tour Core computer.`,
-        files: out.files.map((f) => ({ file: f, ...(base ? { openOnTourCoreComputer: `${base}/api/properties/${id}/audit-exports/${out.exportId}/${f}` } : {}) })),
+        accessGrants: out.accessGrants,
+        denials: out.denials,
+        files: out.files.map((f) => ({ file: f, ...auditExportFileLink(ctx, id, out.exportId, f) })),
       };
     },
   }),

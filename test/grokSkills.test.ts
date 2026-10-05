@@ -5,7 +5,7 @@ import { publicHealth } from "../src/install/checks";
 import { handleSecureSetupApi } from "../src/install/secureSetup";
 import { setSendblueRuntime } from "../src/messaging/sendblue/runtime";
 import { fakeSendblue } from "./fakeSendblue";
-import { at, grokHarness, type GrokHarness } from "./grokHarness";
+import { at, GRANT_9AM, grokHarness, type GrokHarness } from "./grokHarness";
 import { installHarness, ROUTINE_KEY, ROUTINE_URL, SB_KEY, SB_SECRET } from "./installHarness";
 
 /**
@@ -154,6 +154,12 @@ describe("Grok skill scenarios", () => {
     const inspected = await tool("inspect_tour", { tourRef: tour.tourRef });
     expect(inspected.needsAttention).toHaveLength(1);
     expect(inspected.tour.questions.at(-1)).toContain('Pat asked "Is parking included?"');
+    expect(inspected.tour.accessGrants).toEqual(
+      expect.arrayContaining([
+        { doorName: "Lobby Entrance", ...GRANT_9AM, tourRef: tour.tourRef, unitName: "Unit 101" },
+        { doorName: "Unit 101 Door", ...GRANT_9AM, tourRef: tour.tourRef, unitName: "Unit 101" },
+      ]),
+    );
 
     // "Show me what needs attention."
     const queue = await tool("list_exceptions");
@@ -211,6 +217,19 @@ describe("Grok skill scenarios", () => {
     expect(out.totals).toMatchObject({ tours: 1, completed: 1, practiceTours: 1, openIssues: 0 });
     expect(out.reference).toMatch(/^Audit export 2026-09-28_.+, saved with 100 Alfred Way's tour records on the Tour Core computer\.$/);
     expect(out.files.map((f: { file: string }) => f.file)).toEqual(["audit-export.json", "audit.csv"]);
+    expect(
+      out.accessGrants.some(
+        (g: { doorName: string; allowedAt: string; allowedAtIso: string; validFrom: string; validFromIso: string; validUntil: string; validUntilIso: string }) =>
+          g.doorName === "Lobby Entrance" &&
+          g.allowedAt === GRANT_9AM.allowedAt &&
+          g.allowedAtIso === GRANT_9AM.allowedAtIso &&
+          g.validFrom === GRANT_9AM.validFrom &&
+          g.validFromIso === GRANT_9AM.validFromIso &&
+          g.validUntil === GRANT_9AM.validUntil &&
+          g.validUntilIso === GRANT_9AM.validUntilIso &&
+          g.allowedAtIso >= g.validFromIso,
+      ),
+    ).toBe(true);
     // The same export can be opened from the browser app's API on the Tour Core computer.
     const { handleApi } = await import("../src/web/api");
     const exportId = /^Audit export (\S+),/.exec(out.reference)![1]!;

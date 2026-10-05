@@ -18,6 +18,7 @@ import { mcpAuthModeFromEnv, type McpAuthMode } from "../mcp/authMode";
 import { authorized, handleMcpMessage, MCP_PATH } from "../mcp/mcpBridge";
 import { endpointsFor, isOAuthLocalPath, isOAuthPublicPath, McpOAuth } from "../mcp/oauth";
 import { grokLegacyCompatFromEnv, hostedCompatStartupLine, redirectPolicyFor } from "../mcp/oauth/clients";
+import { AuditExportLinks } from "../operator/auditExportLinks";
 import { ConfirmationBook } from "../operator/confirmations";
 import type { ToolContext } from "../operator/tools";
 import { PropertyWorkspace } from "../setup";
@@ -128,6 +129,7 @@ function publicRouteAllowed(method: string, path: string, oauth: boolean, hosted
   if (method === "GET" && (/^\/verify\/[A-Za-z0-9_-]+$/.test(path) || path === "/verify.js" || path === "/styles.css")) return true;
   if (hosted && method === "GET" && (path === "/connect" || path === "/connect.js" || path === "/install" || path === "/install.js" || path === "/styles.css")) return true;
   if (hosted && (path === "/api/connect" || path === "/api/connect/approve" || path === "/api/connect/deny" || isInstallApiPath(path))) return true;
+  if (method === "GET" && AuditExportLinks.parsePath(path)) return true;
   return /^\/api\/verify\/[A-Za-z0-9_-]+$/.test(path) && (method === "GET" || method === "POST");
 }
 
@@ -480,6 +482,14 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
       if (url.pathname.startsWith("/api/")) {
         if (method === "POST" && !String(req.headers["content-type"] ?? "").startsWith("application/json")) {
           return send(415, "application/json", JSON.stringify({ error: { message: "Unsupported request." } }));
+        }
+        const exportTarget = method === "GET" ? AuditExportLinks.parsePath(url.pathname) : undefined;
+        if (exportTarget && !isLocal) {
+          const token = AuditExportLinks.tokenFrom(url.searchParams);
+          const allowed = new AuditExportLinks(installation.runtime, () => installation.now()).check(token, exportTarget.propertyId, exportTarget.exportId, exportTarget.file);
+          if (!allowed.ok) {
+            return send(401, "application/json; charset=utf-8", JSON.stringify({ error: { message: "This download link isn't valid or has expired." } }));
+          }
         }
         const body = method === "POST" ? JSON.parse((await readRaw(req)).toString("utf8") || "{}") : undefined;
         const result = await handleApi(api, method, url.pathname, body);

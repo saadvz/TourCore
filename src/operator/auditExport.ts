@@ -6,6 +6,7 @@ import { ExportBundleSchema, type ExportBundle } from "../export/exportBundle";
 import { SetupInputError } from "../setup/setupActions";
 import type { PropertyWorkspace } from "../setup/workspace";
 import { writeFolderAtomic } from "../storage/atomicWrite";
+import { AccessWindows } from "./accessWindows";
 import { listExceptions, readResolutions } from "./exceptions";
 import type { OperatorServices } from "./services";
 import { currentReservation, tourSnapshots, type TourSnapshot } from "./tours";
@@ -110,7 +111,8 @@ export async function exportAudit(services: OperatorServices, propertyId: string
     "audit-export.json": JSON.stringify(document, null, 2) + "\n",
     "audit.csv": combinedCsv(events),
   });
-  return { exportId: finalId, summary, files: [...AUDIT_EXPORT_FILES], folder };
+  const windows = AccessWindows.fromTours(tours);
+  return { exportId: finalId, summary, files: [...AUDIT_EXPORT_FILES], folder, accessGrants: windows.accessGrants, denials: windows.accessDenials };
 }
 
 /** One file of an earlier audit export, for download. */
