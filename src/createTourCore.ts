@@ -99,7 +99,7 @@ export function createDurin(config: TourCoreConfig, clock: Clock, log?: Log): Du
       log,
     });
   }
-  throw new UnavailableModeError("ACCESS_UNAVAILABLE", "Live door credentials aren't configured in this demo. Choose Durin demo mode — no real doors open.");
+  throw new UnavailableModeError("ACCESS_UNAVAILABLE", "Live door access isn't set up here. Switch to demo door access — no real doors open.");
 }
 
 export function createTourCore(config: TourCoreConfig, overrides: Partial<TourCoreDeps> = {}): TourCore {
