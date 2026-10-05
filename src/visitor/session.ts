@@ -606,7 +606,7 @@ export class VisitorDemoSession {
     });
     this.expect("intro", { kind: "confirm-operator-tour", confirmBy: confirmBy.toISOString() });
     this.noteSmsConsent("pending", "YES");
-    await this.reply(operatorScheduledFirstText(this.config, input.start), { kind: "yes-no" }, { deliverDespiteOptOut: true });
+    await this.reply(operatorScheduledFirstText(this.config, input.start), undefined, { deliverDespiteOptOut: true });
     return reservation;
   }
 
