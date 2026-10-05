@@ -30,6 +30,7 @@ import { formatPhone, normalizePhone } from "./phone";
 import { resolveQuestion } from "./questions";
 import { closestOpenSlots, intervalsOverlap, overlapSummary, placementOf, relativeWhen, releasedWhen, tourInterval, touringHoursLabel } from "./customSlot";
 import { BOOKING_HORIZON_DAYS, isoDate, nextTourDay, slotsOn, tourWindow, type TourSlot } from "./schedule";
+import { bookedTourCalledOffText } from "./availabilityCopy";
 import { addDays, formatDay as formatDayIn, formatTime as formatTimeIn, localDateOf, type LocalDate } from "./timezone";
 
 export interface TourCoreDeps {
@@ -58,6 +59,11 @@ export interface TourCoreDeps {
   beforeAccess?: () => Promise<void>;
   /** Other tours on this property that should count as busy (other conversations). */
   otherBusyStarts?: () => Promise<Date[]>;
+  /**
+   * When a property or unit is paused (or the property was removed), new
+   * bookings must stop. Unset means booking is allowed (practice tours, older tests).
+   */
+  availability?: (unitId?: string) => { allowed: boolean; message: string } | undefined;
 }
 
 export interface InboundMeta {
@@ -244,6 +250,7 @@ export class TourCore {
 
   async startInquiry(input: { name: string; phone: string; unitId: string }, options: { announce?: boolean } = {}): Promise<{ prospect: Prospect; reservation: Reservation }> {
     const { config, store } = this.deps;
+    this.assertBookingAllowed(input.unitId);
     const phone = normalizePhone(input.phone);
     const unit = config.units.find((u) => u.id === input.unitId);
     if (!unit) throw new TourCoreError("UNKNOWN_UNIT", `Unknown unit ${input.unitId}`);
@@ -327,6 +334,7 @@ export class TourCore {
 
   async reserveSlot(reservationId: string, slotStartIso: string): Promise<Reservation> {
     let reservation = await this.mustGetReservation(reservationId);
+    this.assertBookingAllowed(reservation.unitId);
     const start = new Date(slotStartIso);
     if (Number.isNaN(start.getTime())) throw new TourCoreError("INVALID_SLOT", "That tour time isn't valid");
     if (reservation.slotStart === start.toISOString() && reservation.status !== "INQUIRY") return reservation;
@@ -520,6 +528,7 @@ export class TourCore {
     const start = new Date(input.newStartsAt);
     if (Number.isNaN(start.getTime())) throw new TourCoreError("INVALID_SLOT", "That tour time isn't valid.");
     if (reservation.slotStart === start.toISOString()) return { reservation, changed: false };
+    this.assertBookingAllowed(reservation.unitId);
 
     const movable: ReservationStatus[] = ["AWAITING_CONSENT", "AWAITING_VERIFICATION", "READY", "TOURING"];
     if (!movable.includes(reservation.status) || !reservation.slotStart) {
@@ -600,6 +609,7 @@ export class TourCore {
     options: { outsideTourHours?: boolean; holdForVisitorConfirm?: { confirmBy: Date } } = {},
   ): Promise<Reservation> {
     let reservation = await this.mustGetReservation(reservationId);
+    this.assertBookingAllowed(reservation.unitId);
     const start = new Date(slotStartIso);
     if (Number.isNaN(start.getTime())) throw new TourCoreError("INVALID_SLOT", "That tour time isn't valid.");
     if (reservation.status !== "INQUIRY") throw new TourCoreError("ALREADY_BOOKED", "This tour already has a time.");
@@ -708,6 +718,7 @@ export class TourCore {
   }): Promise<{ request: TourTimeRequest; created: boolean }> {
     const start = new Date(input.requestedStartsAt);
     if (Number.isNaN(start.getTime())) throw new TourCoreError("INVALID_SLOT", "That tour time isn't valid.");
+    this.assertBookingAllowed(input.unitId ?? (input.reservationId ? (await this.mustGetReservation(input.reservationId)).unitId : undefined));
     const prospect = await this.mustGetProspect(input.prospectId);
     const existing = await this.deps.store.list("tourTimeRequests");
     if (input.sourceMessageId) {
@@ -756,6 +767,7 @@ export class TourCore {
   async approveTourTimeRequest(requestId: string, options: { outsideTourHours?: boolean } = {}): Promise<{ request: TourTimeRequest; reservation: Reservation }> {
     const request = await this.mustGetTimeRequest(requestId);
     if (request.status !== "PENDING") throw new TourCoreError("REQUEST_CLOSED", "That time request has already been handled.");
+    this.assertBookingAllowed(request.unitId ?? (request.reservationId ? (await this.mustGetReservation(request.reservationId)).unitId : undefined));
     if (!request.reservationId) throw new TourCoreError("NO_RESERVATION", "That request isn't tied to a tour.");
     const current = await this.mustGetReservation(request.reservationId);
     this.assertMovableRequest(current);
@@ -810,6 +822,7 @@ export class TourCore {
   async acceptProposedTime(requestId: string): Promise<{ request: TourTimeRequest; reservation: Reservation }> {
     const request = await this.mustGetTimeRequest(requestId);
     if (request.status !== "PENDING" || !request.proposedAlternativeAt) throw new TourCoreError("NOTHING_PROPOSED", "There isn't another time waiting on the visitor.");
+    this.assertBookingAllowed(request.unitId ?? (request.reservationId ? (await this.mustGetReservation(request.reservationId)).unitId : undefined));
     if (!request.reservationId) throw new TourCoreError("NO_RESERVATION", "That request isn't tied to a tour.");
     const current = await this.mustGetReservation(request.reservationId);
     this.assertMovableRequest(current);
@@ -1024,6 +1037,33 @@ export class TourCore {
     await this.sendConversationText({ phone, body: VISITOR_CANCEL_FAILED, reservationId: reservation?.id });
     const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : `A visitor texting from ${phone}`;
     await this.notifyOperator(reservation, `${who} asked to cancel their tour, and I couldn't cancel it from here.`);
+  }
+
+  /**
+   * Calls off a booked tour that has not started: pending door access is
+   * revoked, the reservation is cancelled, and the visitor gets the approved
+   * cancel text. A tour already in progress is left alone.
+   */
+  async cancelBookedTour(reservationId: string, options: { reason: string; propertyWide: boolean }): Promise<Reservation> {
+    let reservation = await this.mustGetReservation(reservationId);
+    if (reservation.status === "TOURING") return reservation;
+    if (!reservation.slotStart || TERMINAL.includes(reservation.status)) return reservation;
+    await this.revokeGrants(reservation, options.reason);
+    reservation = await this.move(reservation, "CANCELLED", "RESERVATION_CANCELLED", { detail: options.reason });
+    const prospect = await this.mustGetProspect(reservation.prospectId);
+    const start = new Date(reservation.slotStart);
+    await this.textProspect(
+      prospect,
+      reservation.id,
+      bookedTourCalledOffText({
+        team: this.teamName(),
+        day: this.day(start),
+        time: this.time(start),
+        address: this.deps.config.property.address,
+        propertyWide: options.propertyWide,
+      }),
+    );
+    return reservation;
   }
 
   async placeOperatorHold(reservationId: string, reason: string): Promise<Reservation> {
@@ -1370,6 +1410,11 @@ export class TourCore {
 
   private record(type: AuditEventType, input: AuditInput): Promise<AuditEvent> {
     return this.audit.record(type, input);
+  }
+
+  private assertBookingAllowed(unitId?: string): void {
+    const check = this.deps.availability?.(unitId);
+    if (check && !check.allowed) throw new TourCoreError("TOURS_PAUSED", check.message);
   }
 
   private teamName(): string {

@@ -23,6 +23,7 @@ import { isHostedRailway } from "../install/deployment";
 import { statusLabel, type PublishBlocker } from "../setup/workspace";
 import { rememberCanonical, revertCanonical } from "../storage/canonical";
 import { StorageConflictError, StorageUnavailableError, StoreBusyError } from "../storage/errors";
+import { pauseTours, removeProperty, resumeTours, unitPausedFlag } from "./availability";
 import { exportAudit, parseLocalDate } from "./auditExport";
 import { AuditExportLinks } from "./auditExportLinks";
 import type { ConfirmationBook } from "./confirmations";
@@ -183,10 +184,13 @@ function setupState(ctx: ToolContext, id: string) {
 function setupSnapshot(ctx: ToolContext, id: string) {
   const { draft } = ctx.services.workspace.openDraft(id);
   const view = draftView(draft);
+  const saved = ctx.services.workspace.has(id) ? ctx.services.workspace.load(id) : undefined;
+  const pausedUnits = saved ? saved.config.units.filter((unit) => unitPausedFlag(saved.state, unit.id)).map((unit) => unit.name) : [];
   return {
     propertyId: id,
     name: view.property.name,
     address: view.property.address,
+    ...(saved ? { paused: !!saved.state.paused || pausedUnits.length === saved.config.units.length && saved.config.units.length > 0, removed: !!saved.state.removedAt, ...(pausedUnits.length ? { pausedUnits } : {}) } : {}),
     ...(draft.property.displayName ? { propertyName: draft.property.displayName } : {}),
     propertyType: draft.property.propertyType ? PROPERTY_TYPE_LABELS[draft.property.propertyType] : "Not chosen yet",
     timezone: `${view.property.timezoneLabel} (${view.property.timezone})`,
@@ -199,6 +203,7 @@ function setupSnapshot(ctx: ToolContext, id: string) {
       door: u.door?.name,
       route: u.route ? u.route.doorNames.join(" \u2192 ") : undefined,
       directions: u.route?.directions || undefined,
+      ...(saved ? { paused: unitPausedFlag(saved.state, u.id) } : {}),
     })),
     doors: view.doors.map((d) => ({ doorId: d.id, name: d.name, kind: d.kindLabel, ...(d.unitName ? { forUnit: d.unitName } : {}) })),
     tourHours: view.tourHours.summary ?? `${view.tourHours.daysLabel}, ${view.tourHours.hoursLabel}`,
@@ -348,14 +353,24 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "list_properties",
     title: "List properties",
     kind: "read",
-    description: "Every property set up in Tour Core, with its status. Use first when the operator hasn't said which property.",
+    description: "Every property set up in Tour Core, with its status. Removed properties are omitted. Paused properties say so. Use first when the operator hasn't said which property.",
     input: z.strictObject({}),
     run: async (ctx) => {
       const ws = ctx.services.workspace;
-      const properties = ws.propertyIds().map((id) => {
-        const { draft } = ws.openDraft(id);
-        return { propertyId: id, name: draft.property.name, address: draft.property.address, status: ws.has(id) ? statusLabel(ws.load(id)) : "Setup in progress" };
-      });
+      const properties = ws
+        .propertyIds()
+        .filter((id) => !ws.has(id) || !ws.load(id).state.removedAt)
+        .map((id) => {
+          const { draft } = ws.openDraft(id);
+          const saved = ws.has(id) ? ws.load(id) : undefined;
+          return {
+            propertyId: id,
+            name: draft.property.name,
+            address: draft.property.address,
+            status: saved ? statusLabel(saved) : "Setup in progress",
+            ...(saved ? { paused: !!saved.state.paused || (saved.config.units.length > 0 && saved.config.units.every((unit) => (saved.state.pausedUnitIds ?? []).includes(unit.id))) } : {}),
+          };
+        });
       return { summary: properties.length ? `${properties.length} ${properties.length === 1 ? "property" : "properties"}.` : "No properties are set up yet.", properties };
     },
   }),
@@ -363,7 +378,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "get_property_setup",
     title: "Get property setup",
     kind: "read",
-    description: "The property's current setup: address, units, doors, routes, tour hours, verification, messaging, and any problems. Read-only.",
+    description: "The property's current setup: address, units, doors, routes, tour hours, verification, messaging, whether tours are paused or the property was removed, and any problems. Read-only.",
     input: z.strictObject({ property: Property }),
     run: async (ctx, i) => {
       const id = resolvePropertyId(ctx.services.workspace, i.property);
@@ -387,7 +402,10 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     }),
     run: async (ctx, i) => {
       const ws = ctx.services.workspace;
-      const existing = ws.propertyIds().find((id) => ws.openDraft(id).draft.property.address.trim().toLowerCase() === i.address.trim().toLowerCase());
+      const existing = ws.propertyIds().find((id) => {
+        if (ws.has(id) && ws.load(id).state.removedAt) return false;
+        return ws.openDraft(id).draft.property.address.trim().toLowerCase() === i.address.trim().toLowerCase();
+      });
       if (existing) return { status: "already-exists", summary: `${i.address} is already set up. I'll keep working on that one.`, setup: setupSnapshot(ctx, existing) };
       const messagingMode = defaultMessagingMode(servicesOf(ctx).installedMessaging?.());
       const draft = createPropertySetup({ address: i.address, name: i.name, propertyType: i.propertyType, timezone: i.timezone, existingPropertyIds: ws.propertyIds(), messagingMode });
@@ -459,7 +477,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "list_units",
     title: "List units",
     kind: "read",
-    description: "The tourable units with their description, approved facts, own door and route.",
+    description: "The tourable units with their description, approved facts, own door, route, and whether that unit is paused for new bookings.",
     input: z.strictObject({ property: Property }),
     run: async (ctx, i) => {
       const id = resolvePropertyId(ctx.services.workspace, i.property);
@@ -1116,6 +1134,42 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const tour = await revokeTour(ctx.services, i.tourRef, i.reason);
       return { summary: `${target.name}'s tour is called off and their access is switched off.`, tour };
     },
+  }),
+  tool({
+    name: "pause_tours",
+    title: "Pause tours",
+    kind: "consequential",
+    description:
+      "Pauses new bookings at a property or one unit. Already-booked tours can be kept or cancelled with a text; a tour in progress always finishes. First call returns a yes/no question; if tours are already booked, say keep or cancel (bookedTours) and call again with confirmationCode only after an explicit yes. Resume with resume_tours. This is not an operator hold on one visitor.",
+    input: z.strictObject({
+      property: Property,
+      unit: z.string().max(100).optional().describe("One unit to pause. Leave out to pause the whole property."),
+      bookedTours: z.enum(["keep", "cancel"]).optional().describe("When tours are already booked: keep them, or cancel them with a text."),
+      confirmationCode: Code,
+    }),
+    run: (ctx, i) => pauseTours(ctx, i),
+  }),
+  tool({
+    name: "resume_tours",
+    title: "Resume tours",
+    kind: "consequential",
+    description:
+      "Resumes bookings at a paused property or unit. First call returns a yes/no question; call again with confirmationCode only after an explicit yes. Resuming the property clears every unit pause. Resuming one unit does not lift a property-wide pause.",
+    input: z.strictObject({
+      property: Property,
+      unit: z.string().max(100).optional().describe("One unit to resume. Leave out to resume the whole property."),
+      confirmationCode: Code,
+    }),
+    run: (ctx, i) => resumeTours(ctx, i),
+  }),
+  tool({
+    name: "remove_property",
+    title: "Remove a property",
+    kind: "consequential",
+    description:
+      "Removes a property from the operator's list (its records are kept). Booked visitors get a cancel text and pending door access is switched off. Refused while someone is on a tour. First call returns a yes/no question; call again with confirmationCode only after an explicit yes. Say remove, never archive.",
+    input: z.strictObject({ property: Property, confirmationCode: Code }),
+    run: (ctx, i) => removeProperty(ctx, i),
   }),
 
   // ------------------------------------------------------------ export

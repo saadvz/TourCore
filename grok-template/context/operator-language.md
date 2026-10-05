@@ -24,6 +24,8 @@ settings screen. Casual and non-technical is a requirement.
 | They already have a booked tour. I can move it or call it off. | They already have a tour in progress. |
 | Send "Parking is included" to Pat? Future visitors who ask the same thing will get it too. Save it? | I'll save that as an approved fact. Continue? |
 | That date ask is booking, not a question for the team. | Flag "Can I come Dec 1?" as unanswered. |
+| Tours at 100 Alfred Way are paused. | The property's `paused` flag is set. |
+| I'll remove 100 Alfred Way. Its records are kept. | The property was archived internally; say remove, never archive. |
 
 ## Habits
 

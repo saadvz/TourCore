@@ -45,6 +45,7 @@ export function grokHarness(root = mkdtempSync(join(tmpdir(), "tourcore-grok-"))
   const workspace = new PropertyWorkspace(root);
   const visitors = new VisitorDemoRegistry();
   visitors.useApprovedContent((id) => (workspace.has(id) ? workspace.load(id).config : undefined));
+  visitors.useAvailability((id) => (workspace.has(id) ? workspace.load(id).state : undefined));
   const services: OperatorServices = { workspace, visitors, now: () => new Date(clock) };
   const ctx: ToolContext = { services, confirmations: new ConfirmationBook(10 * 60_000, () => clock), now: () => new Date(clock), localUrl: () => "http://localhost:4321" };
 

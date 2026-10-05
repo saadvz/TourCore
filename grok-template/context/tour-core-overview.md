@@ -112,6 +112,9 @@ decided before Durin is contacted.
 4. **Publish for demo**: only after both pass, and only after the operator's yes.
 5. **Watch active tours** and **work exceptions**: unanswered questions, help
    requests, door problems, paused tours, tours that couldn't be restored.
+   Pause or resume bookings at a property or unit (`pause_tours` /
+   `resume_tours`), or remove a property from the list (`remove_property`;
+   records stay). Say remove, never archive.
    Tour Core also wakes the Bot (Tour Core Operator Updates routine) for the
    updates the operator chose: bookings, tour starts, completions and anything
    that needs their judgment. Only real text-message tours produce updates.

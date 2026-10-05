@@ -2,16 +2,19 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { TourCoreConfig } from "../config/tourCoreConfig";
 import { DemoClock } from "../core/clock";
+import { pausedPropertyVisitorText, pausedUnitVisitorText } from "../core/availabilityCopy";
 import { normalizePhone } from "../core/phone";
 import { orList } from "../core/questions";
 import { operatorConfirmBy } from "../core/customSlot";
 import { formatDay, formatLocalDate, formatTime, formatWeekday } from "../core/timezone";
 import type { SpokenTime } from "../core/spokenTime";
+import { bookingRefusal, isEffectivelyPaused, isRemoved, openUnits } from "../setup/availability";
+import type { PropertyState } from "../setup/workspace";
 import { entryReply } from "./entry";
 import { visitorTourOf } from "./identity";
 import { ONE_OFF_REPLACED_DETAIL } from "./oneOffGate";
 import { offerDate } from "./unavailableDay";
-import { isLiveHelpReservation, TourCore, VISITOR_CANCEL_DONE, visitorCancelConfirmFor, type AccessOutcome, type InboundMeta } from "../core/TourCore";
+import { isLiveHelpReservation, TourCore, TourCoreError, VISITOR_CANCEL_DONE, visitorCancelConfirmFor, type AccessOutcome, type InboundMeta } from "../core/TourCore";
 import { isCancelableReservation } from "../domain/stateMachine";
 import { parseIsoDate, type TourSlot } from "../core/schedule";
 import { createDurin, createStore, createVerificationProvider } from "../createTourCore";
@@ -202,6 +205,8 @@ export class VisitorDemoSession {
   private expected?: { stage: VisitorStage; awaiting: Awaiting };
   /** Where this tour reads the property's current approved content (set by the registry). */
   contentSource?: () => TourCoreConfig | undefined;
+  /** Pause / remove status, read at booking time so an operator's pause applies immediately. */
+  availabilitySource?: () => PropertyState | undefined;
 
   private _config: TourCoreConfig;
 
@@ -230,6 +235,10 @@ export class VisitorDemoSession {
       verification: createVerificationProvider(config),
       correlationId: this.id,
       approvedContent: () => this.contentSource?.(),
+      availability: (unitId) => {
+        const refused = bookingRefusal(this.availabilitySource?.(), this.config, unitId);
+        return refused ? { allowed: false, message: refused.message } : undefined;
+      },
       storageRead: options.storageRead,
       beforeAccess: options.beforeAccess,
       otherBusyStarts: options.otherBusyStarts,
@@ -556,6 +565,8 @@ export class VisitorDemoSession {
   /** Operator action: move the tour. The visitor is told through this conversation's own transport. */
   async reschedule(newStartsAt: string, options: { outsideTourHours?: boolean; customTime?: boolean; notice?: "default" | "moved" } = {}): Promise<{ changed: boolean }> {
     if (!this.reservationId) throw new SetupInputError("NO_TOUR", "This visitor hasn't booked a tour yet.");
+    const reservation = await this.reservation();
+    if (await this.refuseIfPaused(reservation?.unitId)) return { changed: false };
     const { changed } = await this.core.rescheduleReservation({ reservationId: this.reservationId, newStartsAt, ...options });
     await this.syncReplies();
     return { changed };
@@ -565,6 +576,7 @@ export class VisitorDemoSession {
   async bookOffered(slotStart: string): Promise<void> {
     const reservation = await this.reservation();
     if (!reservation) throw new SetupInputError("NO_TOUR", "Choose a unit before choosing a time.");
+    if (await this.refuseIfPaused(reservation.unitId)) return;
     await this.core.reserveSlot(reservation.id, slotStart);
     await this.syncReplies();
   }
@@ -573,6 +585,7 @@ export class VisitorDemoSession {
   async requestCustomTime(start: Date, sourceMessageId?: string): Promise<{ created: boolean; request: TourTimeRequest }> {
     const reservation = await this.reservation();
     if (!this.prospectId || !reservation) throw new SetupInputError("NO_TOUR", "Choose a unit before asking for a time.");
+    if (await this.refuseIfPaused(reservation.unitId)) return { created: false, request: { id: "", propertyId: this.propertyId, prospectId: this.prospectId, requestedStartsAt: start.toISOString(), requestedEndsAt: start.toISOString(), requestSource: "VISITOR", status: "DECLINED", createdAt: this.clock.now().toISOString() } };
     const { request, created } = await this.core.createTourTimeRequest({
       prospectId: this.prospectId,
       reservationId: reservation.id,
@@ -678,6 +691,8 @@ export class VisitorDemoSession {
   }
 
   async approveTimeRequest(requestId: string, options: { outsideTourHours?: boolean } = {}) {
+    const reservation = await this.reservation();
+    if (await this.refuseIfPaused(reservation?.unitId)) return;
     const result = await this.core.approveTourTimeRequest(requestId, options);
     await this.syncReplies();
     return result;
@@ -697,6 +712,8 @@ export class VisitorDemoSession {
   }
 
   async acceptAlternative(requestId: string) {
+    const reservation = await this.reservation();
+    if (await this.refuseIfPaused(reservation?.unitId)) return;
     const result = await this.core.acceptProposedTime(requestId);
     await this.syncReplies();
     return result;
@@ -818,6 +835,10 @@ export class VisitorDemoSession {
         if (!unit) throw new SetupInputError("UNIT_NOT_FOUND", "That unit isn't available.");
         const text = said.text ?? `I'd like to see ${unit.name}.`;
         this.say("visitor", text);
+        if (await this.refuseIfPaused(unit.id)) {
+          if (this.prospectId) await this.core.recordInbound(this.prospectId, this.reservationId, text, said.meta);
+          return;
+        }
         await this.inquire(unit.id);
         await this.core.recordInbound(this.prospectId!, this.reservationId, text, said.meta);
         return;
@@ -827,6 +848,7 @@ export class VisitorDemoSession {
         const local = parseIsoDate(date);
         const label = local ? formatLocalDate(local, this.config.property.timezone) : date;
         this.say("visitor", said.text ?? label);
+        if (await this.refuseIfPaused(r?.unitId)) return;
         await offerDate(this, date);
         return;
       }
@@ -834,7 +856,16 @@ export class VisitorDemoSession {
         const start = new Date(String(input.slotStart));
         const label = Number.isNaN(start.getTime()) ? String(input.slotStart) : formatTime(start, this.config.property.timezone);
         await visitorSays(`${label} works for me.`);
-        await this.core.reserveSlot(r!.id, String(input.slotStart));
+        if (await this.refuseIfPaused(r?.unitId)) return;
+        try {
+          await this.core.reserveSlot(r!.id, String(input.slotStart));
+        } catch (err) {
+          if (err instanceof TourCoreError && err.code === "TOURS_PAUSED") {
+            await this.reply(err.message);
+            return;
+          }
+          throw err;
+        }
         return;
       }
       case "consent":
@@ -933,10 +964,50 @@ export class VisitorDemoSession {
    * address and an operator-given name only when there is one. A single-family
    * home offers its next regular times; a building asks which unit.
    */
+  offerableUnits() {
+    return openUnits(this.config.units, this.availabilitySource?.());
+  }
+
+  private pauseState(): PropertyState | undefined {
+    return this.availabilitySource?.();
+  }
+
+  private propertyPausedCopy(): string {
+    return pausedPropertyVisitorText(this.config.property.address, this.config.operator.name, this.config.operator.visitorContact);
+  }
+
+  async refuseIfPaused(unitId?: string): Promise<boolean> {
+    const state = this.pauseState();
+    const unitIds = this.config.units.map((unit) => unit.id);
+    if (state && (isRemoved(state) || isEffectivelyPaused(state, unitIds))) {
+      await this.reply(this.propertyPausedCopy());
+      return true;
+    }
+    if (unitId && state) {
+      const refused = bookingRefusal(state, this.config, unitId);
+      if (refused?.reason === "paused-unit") {
+        const open = this.offerableUnits();
+        if (!open.length) {
+          await this.reply(this.propertyPausedCopy());
+          return true;
+        }
+        await this.reply(`${pausedUnitVisitorText(this.config.units.find((unit) => unit.id === unitId)?.name ?? "That unit")}\n\nWhich unit would you like to see?`, {
+          kind: "choose",
+          options: open.map((unit) => unit.name),
+          what: "a unit",
+        });
+        return true;
+      }
+    }
+    return false;
+  }
+
   async welcome(): Promise<void> {
-    const only = this.config.units.length === 1 && this.config.property.propertyType === "SINGLE_FAMILY" ? this.config.units[0] : undefined;
+    if (await this.refuseIfPaused()) return;
+    const open = this.offerableUnits();
+    const only = open.length === 1 && this.config.property.propertyType === "SINGLE_FAMILY" ? open[0] : undefined;
     if (only && !this.reservationId) await this.inquire(only.id, { announce: false });
-    const { body, prompt } = entryReply(this.config, this.offeredDates);
+    const { body, prompt } = entryReply(this.config, this.offeredDates, open);
     await this.reply(body, prompt);
   }
 
@@ -1012,10 +1083,11 @@ export class VisitorDemoSession {
 export class VisitorDemoRegistry {
   private readonly sessions = new Map<string, VisitorDemoSession>();
   private content?: (propertyId: string) => TourCoreConfig | undefined;
+  private availability?: (propertyId: string) => PropertyState | undefined;
 
   add(session: VisitorDemoSession): VisitorDemoSession {
     this.sessions.set(session.id, session);
-    if (this.content) this.attach(session);
+    if (this.content || this.availability) this.attach(session);
     return session;
   }
 
@@ -1029,9 +1101,14 @@ export class VisitorDemoRegistry {
     for (const s of this.sessions.values()) this.attach(s);
   }
 
+  useAvailability(availability: (propertyId: string) => PropertyState | undefined): void {
+    this.availability = availability;
+    for (const s of this.sessions.values()) this.attach(s);
+  }
+
   private attach(session: VisitorDemoSession): void {
-    const content = this.content!;
-    session.contentSource = () => content(session.propertyId);
+    if (this.content) session.contentSource = () => this.content!(session.propertyId);
+    if (this.availability) session.availabilitySource = () => this.availability!(session.propertyId);
   }
 
   get(id: string): VisitorDemoSession {

@@ -14,7 +14,8 @@ only by these instructions.
 ## Approval
 
 Consequential tools (`publish_demo_property`, `place_operator_hold`,
-`clear_operator_hold`, `revoke_tour_access`, `answer_flagged_question`,
+`clear_operator_hold`, `revoke_tour_access`, `pause_tours`, `resume_tours`,
+`remove_property`, `answer_flagged_question`,
 `approve_tour_time_request`, `reschedule_tour`, `schedule_one_off_tour`) work in
 two steps:
 

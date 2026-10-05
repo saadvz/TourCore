@@ -101,7 +101,8 @@ export class MessagingConversations {
     const line = message.to ?? this.deps.defaultLine?.();
     if (!this.deps.endpoints) adoptLegacyLine(ws, this.endpoints, line);
     const endpoint = this.endpoints.resolve(line);
-    if (!endpoint || !ws.has(endpoint.propertyId)) {
+    const removed = endpoint && ws.has(endpoint.propertyId) ? !!ws.load(endpoint.propertyId).state.removedAt : false;
+    if (!endpoint || !ws.has(endpoint.propertyId) || removed) {
       this.deps.log?.("A message arrived on a texting number that isn't connected to a property. It was not answered.");
       return {};
     }

@@ -155,6 +155,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
   const workspace = options.workspace ?? new PropertyWorkspace();
   const visitors = options.visitors ?? new VisitorDemoRegistry();
   visitors.useApprovedContent((id) => (workspace.has(id) ? workspace.load(id).config : undefined));
+  visitors.useAvailability((id) => (workspace.has(id) ? workspace.load(id).state : undefined));
   const dev = options.dev ?? false;
   const log = options.log ?? ((line: string) => console.log(`  ${line}`));
   const runtime = options.installation?.runtime ?? new FileRuntimeStore(join(workspace.root, "runtime"));

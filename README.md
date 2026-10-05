@@ -434,7 +434,8 @@ Terminal wizard ─────────────────────�
   saves exact names only), tour hours in everyday words, verification, messaging, review, `run_readiness_check`,
   `run_dry_tour`, `publish_demo_property`, `list_active_tours`, `inspect_tour`, the exception queue, holds, calling a
   tour off, answering a flagged question with a new approved fact, custom tour times (`approve_tour_time_request`,
-  `reschedule_tour`, `schedule_one_off_tour`), and `export_audit`. Every input is validated (unexpected fields are
+  `reschedule_tour`, `schedule_one_off_tour`), `pause_tours` / `resume_tours` (property or unit),
+  `remove_property` (records are kept), and `export_audit`. Every input is validated (unexpected fields are
   refused); every result is plain language. `npm run grok:tools` lists them.
 - **One-off tour** (`schedule_one_off_tour`): use it when the operator wants to set up a tour for a visitor who
   asked — including someone who hasn't texted in yet. The first call returns one yes/no question (ends `Book it?`);
@@ -467,7 +468,7 @@ Terminal wizard ─────────────────────�
   `Send "{answer}" to {name}? Future visitors who ask the same thing will get it too. Save it?`
 - **No door tool.** Nothing opens, unlocks, grants or mints access, changes the door-access mode or touches raw
   files. Doors open only through a visitor's own tour and Tour Core's policy.
-- **Explicit approval** for publish, pause, resume, call off, new approved facts, approving or moving a tour time,
+- **Explicit approval** for publish, pause or resume of tours at a property or unit, remove, pause/resume/call off of one visitor tour, new approved facts, approving or moving a tour time,
   and setting up a one-off tour: the first call changes nothing and returns the exact question plus a short-lived
   code bound to that action, target and current state; only a second call with the code acts, and only if nothing
   changed. Publish is also refused unless readiness and a practice tour passed for the exact setup.

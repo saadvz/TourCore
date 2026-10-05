@@ -397,7 +397,7 @@ async function fileCustomTime(turn: Turn, spoken: SpokenTime, alreadyRecorded = 
   }
   if (!reservation) {
     session.holdTime(spoken);
-    const menu: ReplyPrompt = { kind: "choose", options: session.config.units.map((unit) => unit.name), what: "a unit" };
+    const menu: ReplyPrompt = { kind: "choose", options: session.offerableUnits().map((unit) => unit.name), what: "a unit" };
     const body = `${resolved.label} isn't one of the regular tour times. Which unit should I ask the property team about?`;
     if (alreadyRecorded) {
       turn.markClarification();
@@ -471,7 +471,7 @@ function stepPrompt(session: VisitorDemoSession, stage: VisitorStage, awaiting?:
   }
   switch (stage) {
     case "choose-unit":
-      return { body: "Which unit would you like to see?", prompt: { kind: "choose", options: session.config.units.map((u) => u.name), what: "a unit" } };
+      return { body: "Which unit would you like to see?", prompt: { kind: "choose", options: session.offerableUnits().map((u) => u.name), what: "a unit" } };
     case "choose-date": {
       const labels = session.offeredDates.map((day) => day.label);
       if (!labels.length) return undefined;
@@ -551,7 +551,7 @@ async function handleCancelIntent(turn: Turn): Promise<boolean> {
 async function chooseUnit(turn: Turn): Promise<void> {
   const units = turn.session.config.units;
   const unit = turn.intent.type === "SELECT_UNIT" ? units.find((u) => same(u.name, (turn.intent as { unitName: string }).unitName)) : undefined;
-  const menu: ReplyPrompt = { kind: "choose", options: units.map((u) => u.name), what: "a unit" };
+  const menu: ReplyPrompt = { kind: "choose", options: turn.session.offerableUnits().map((u) => u.name), what: "a unit" };
   if (unit && turn.confident) {
     await turn.act("chooseUnit", { unitId: unit.id });
     const held = turn.session.takeHeldTime();
@@ -688,7 +688,7 @@ async function byStage(turn: Turn): Promise<void> {
       return session.greet(turn.said);
 
     case "choose-unit": {
-      const menu: ReplyPrompt = { kind: "choose", options: session.config.units.map((u) => u.name), what: "a unit" };
+      const menu: ReplyPrompt = { kind: "choose", options: session.offerableUnits().map((u) => u.name), what: "a unit" };
       if (intent.type === "SELECT_DATE") return showAskedDay(turn, intent);
       if (intent.type === "SELECT_UNIT") return chooseUnit(turn);
       if (intent.type === "REQUEST_HELP") return session.help(turn.said);

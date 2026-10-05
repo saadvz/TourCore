@@ -67,17 +67,23 @@ export function requireUnit(config: TourCoreConfig, ref: string): Unit {
 
 /** Which property a request is about: the one named, or the only one there is. */
 export function resolvePropertyId(ws: PropertyWorkspace, ref: string | undefined): string {
-  const ids = ws.propertyIds();
+  const all = ws.propertyIds().filter((id) => ws.has(id) || !!ws.loadDraft(id));
+  const visible = all.filter((id) => !ws.has(id) || !ws.load(id).state.removedAt);
+  const ids = visible;
   const describe = () => ids.map((id) => nameOf(ws, id)).join(", ");
   if (!ref?.trim()) {
     if (ids.length === 1) return ids[0]!;
     if (ids.length === 0) throw new SetupInputError("NO_PROPERTIES", "There aren't any properties set up yet.");
     throw new SetupInputError("PROPERTY_AMBIGUOUS", `Which property? There are ${ids.length}: ${describe()}.`);
   }
-  const entries = ids.map((id) => ({ id, ...labelsOf(ws, id) }));
-  const m = match(ref, entries, (e) => [e.id, e.name, e.address]);
-  if (m.kind === "exact" || m.kind === "inferred") return m.item.id;
-  if (m.kind === "ambiguous") throw new SetupInputError("PROPERTY_AMBIGUOUS", `"${ref}" could be ${m.candidates.map((c) => c.name).join(" or ")}. Which one?`);
+  const visibleEntries = visible.filter((id) => ws.has(id) || !!ws.loadDraft(id)).map((id) => ({ id, ...labelsOf(ws, id) }));
+  const shown = match(ref, visibleEntries, (e) => [e.id, e.name, e.address]);
+  if (shown.kind === "exact" || shown.kind === "inferred") return shown.item.id;
+  if (shown.kind === "ambiguous") throw new SetupInputError("PROPERTY_AMBIGUOUS", `"${ref}" could be ${shown.candidates.map((c) => c.name).join(" or ")}. Which one?`);
+  const entries = all.filter((id) => ws.has(id) || !!ws.loadDraft(id)).map((id) => ({ id, ...labelsOf(ws, id) }));
+  const hidden = match(ref, entries, (e) => [e.id, e.name, e.address]);
+  if (hidden.kind === "exact" || hidden.kind === "inferred") return hidden.item.id;
+  if (hidden.kind === "ambiguous") throw new SetupInputError("PROPERTY_AMBIGUOUS", `"${ref}" could be ${hidden.candidates.map((c) => c.name).join(" or ")}. Which one?`);
   throw new SetupInputError("PROPERTY_NOT_FOUND", `I couldn't find a property called "${ref}".${ids.length ? ` The properties are ${describe()}.` : ""}`);
 }
 

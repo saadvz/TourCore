@@ -32,7 +32,7 @@ export async function visitorView(session: VisitorDemoSession) {
       input = { kind: "intro", prefill: { ...VISITOR_DEFAULTS } };
       break;
     case "choose-unit":
-      for (const u of config.units) choices.push({ label: u.name, action: "chooseUnit", input: { unitId: u.id }, hint: u.summary || undefined });
+      for (const u of session.offerableUnits()) choices.push({ label: u.name, action: "chooseUnit", input: { unitId: u.id }, hint: u.summary || undefined });
       break;
     case "choose-date":
       for (const day of session.offeredDates) choices.push({ label: day.label, action: "chooseDate", input: { date: day.date } });

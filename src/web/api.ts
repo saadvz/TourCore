@@ -99,6 +99,7 @@ async function route(ctx: ApiContext, method: string, path: string, body: Record
   if (!ctx.visitors) {
     ctx.visitors = new VisitorDemoRegistry();
     ctx.visitors.useApprovedContent((id) => (ws.has(id) ? ws.load(id).config : undefined));
+    ctx.visitors.useAvailability((id) => (ws.has(id) ? ws.load(id).state : undefined));
   }
   const visitors = ctx.visitors;
   const now = ctx.now?.() ?? new Date();
