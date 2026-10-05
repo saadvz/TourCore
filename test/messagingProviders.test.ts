@@ -313,7 +313,7 @@ describe("installation messaging status", () => {
     expect(selection.readiness).toBe("NEEDS_ACTION");
   });
 
-  it("switching providers removes the old credentials and requires a new test", async () => {
+  it("switching providers keeps saved credentials, clears the connection test, and requires a new test", async () => {
     const h = installHarness();
     h.inst.files.ensure({ deploymentMode: "GROK_MANAGED_P0" });
     h.inst.files.setPublicBaseUrl(PUBLIC, "MANUAL");
@@ -323,15 +323,108 @@ describe("installation messaging status", () => {
     const { config } = h.workspace.save(hillsideConfig());
     h.workspace.recordReadiness(config.property.id, await runReadinessCheck(config, { now: new Date(h.now()) }));
 
-    await h.ok("choose_messaging_provider", { provider: "twilio" });
-    expect(h.inst.secrets.get("SENDBLUE_API_API_KEY")).toBeUndefined();
-    expect(h.inst.secrets.get("SENDBLUE_WEBHOOK_SECRET")).toBeUndefined();
+    const switched = await h.ok("choose_messaging_provider", { provider: "twilio" });
+    expect(switched.summary).toMatch(/I'll ask for the account details securely/);
+    expect(h.inst.secrets.get("SENDBLUE_API_API_KEY")).toBe(SB_KEY);
+    expect(h.inst.secrets.get("SENDBLUE_API_API_SECRET")).toBe(SB_SECRET);
+    expect(h.inst.secrets.get("SENDBLUE_FROM_NUMBER")).toBe(LINE);
+    expect(h.inst.secrets.get("SENDBLUE_WEBHOOK_SECRET")).toBe(SECRET);
     expect(h.inst.files.state().visitorMessaging).toBeUndefined();
     expect(h.inst.files.manifest()?.messagingProvider).toBe("TWILIO");
     expect(h.workspace.load(config.property.id).state.readiness?.passed).toBe(false);
     const status = await h.status();
     expect(status.components.find((c) => c.component === "VISITOR_MESSAGING")?.state).not.toBe("READY");
     expect(JSON.stringify(status)).toContain("provider=twilio status=NEEDS_ACTION");
+    expect(status.components.find((c) => c.component === "VISITOR_MESSAGING")?.next).toMatchObject({ action: "CONNECT_VISITOR_MESSAGING" });
+
+    const back = await h.ok("choose_messaging_provider", { provider: "sendblue" });
+    expect(back.summary).toMatch(/I'll test the saved account next/);
+    expect(h.inst.secrets.get("SENDBLUE_API_API_KEY")).toBe(SB_KEY);
+    expect(h.inst.secrets.get("SENDBLUE_FROM_NUMBER")).toBe(LINE);
+    const restored = await h.status();
+    expect(restored.components.find((c) => c.component === "VISITOR_MESSAGING")?.next).toMatchObject({ action: "TEST_VISITOR_MESSAGING" });
+    expect(JSON.stringify(restored)).not.toMatch(/I'll ask for them securely/);
+  });
+
+  it("switching to local and back to Sendblue keeps the stored account and line", async () => {
+    const h = installHarness();
+    h.inst.files.ensure({ deploymentMode: "GROK_MANAGED_P0" });
+    h.inst.files.setPublicBaseUrl(PUBLIC, "MANUAL");
+    await h.ok("choose_messaging_provider", { provider: "sendblue" });
+    h.inst.secrets.set({ SENDBLUE_API_API_KEY: SB_KEY, SENDBLUE_API_API_SECRET: SB_SECRET, SENDBLUE_FROM_NUMBER: LINE, SENDBLUE_WEBHOOK_SECRET: SECRET });
+    h.inst.files.recordCheck("visitorMessaging", { ok: true, at: new Date(h.now()).toISOString(), message: "ok", problems: [], publicBaseUrl: PUBLIC, provider: "sendblue" });
+
+    const toLocal = await h.ok("choose_messaging_provider", { provider: "local" });
+    expect(toLocal.summary).toMatch(/local loopback/i);
+    expect(h.inst.secrets.get("SENDBLUE_API_API_KEY")).toBe(SB_KEY);
+    expect(h.inst.secrets.get("SENDBLUE_API_API_SECRET")).toBe(SB_SECRET);
+    expect(h.inst.secrets.get("SENDBLUE_FROM_NUMBER")).toBe(LINE);
+    expect(h.inst.secrets.get("SENDBLUE_WEBHOOK_SECRET")).toBe(SECRET);
+    expect(h.inst.files.state().visitorMessaging).toBeUndefined();
+    expect(h.inst.files.manifest()?.messagingProvider).toBe("LOCAL");
+
+    const back = await h.ok("choose_messaging_provider", { provider: "sendblue" });
+    expect(back.summary).toBe("Visitor texting will use Sendblue. I'll test the saved account next.");
+    expect(h.inst.secrets.get("SENDBLUE_API_API_KEY")).toBe(SB_KEY);
+    expect(h.inst.secrets.get("SENDBLUE_API_API_SECRET")).toBe(SB_SECRET);
+    expect(h.inst.secrets.get("SENDBLUE_FROM_NUMBER")).toBe(LINE);
+    expect(h.inst.secrets.get("SENDBLUE_WEBHOOK_SECRET")).toBe(SECRET);
+    const messaging = (await h.status()).components.find((c) => c.component === "VISITOR_MESSAGING");
+    expect(messaging?.next).toMatchObject({ action: "TEST_VISITOR_MESSAGING" });
+    expect(messaging?.next?.action).not.toBe("CONNECT_VISITOR_MESSAGING");
+  });
+
+  it("switching providers keeps Twilio and Photon credentials and the chosen Photon line", async () => {
+    const h = installHarness();
+    h.inst.files.ensure({ deploymentMode: "GROK_MANAGED_P0" });
+    h.inst.files.setPublicBaseUrl(PUBLIC, "MANUAL");
+    await h.ok("choose_messaging_provider", { provider: "twilio" });
+    h.inst.secrets.set({
+      TOURCORE_TWILIO_ACCOUNT_SID: TWILIO_SID,
+      TOURCORE_TWILIO_AUTH_TOKEN: TWILIO_TOKEN,
+      TOURCORE_TWILIO_PHONE_NUMBER: TWILIO_NUMBER,
+      TOURCORE_PHOTON_PROJECT_ID: PHOTON_ID,
+      TOURCORE_PHOTON_PROJECT_SECRET: PHOTON_SECRET,
+      TOURCORE_PHOTON_PHONE_NUMBER: "+15555550123",
+    });
+    h.inst.files.writeState({
+      ...h.inst.files.state(),
+      messagingLines: [{ id: "a", address: "+15555550123", status: "available" }],
+    });
+
+    await h.ok("choose_messaging_provider", { provider: "local" });
+    expect(h.inst.secrets.get("TOURCORE_TWILIO_ACCOUNT_SID")).toBe(TWILIO_SID);
+    expect(h.inst.secrets.get("TOURCORE_TWILIO_AUTH_TOKEN")).toBe(TWILIO_TOKEN);
+    expect(h.inst.secrets.get("TOURCORE_TWILIO_PHONE_NUMBER")).toBe(TWILIO_NUMBER);
+    expect(h.inst.secrets.get("TOURCORE_PHOTON_PROJECT_ID")).toBe(PHOTON_ID);
+    expect(h.inst.secrets.get("TOURCORE_PHOTON_PROJECT_SECRET")).toBe(PHOTON_SECRET);
+    expect(h.inst.secrets.get("TOURCORE_PHOTON_PHONE_NUMBER")).toBe("+15555550123");
+    expect(h.inst.files.state().messagingLines?.map((line) => line.address)).toEqual(["+15555550123"]);
+
+    const toPhoton = await h.ok("choose_messaging_provider", { provider: "photon" });
+    expect(toPhoton.summary).toMatch(/I'll test the saved account next/);
+    expect(h.inst.secrets.get("TOURCORE_PHOTON_PHONE_NUMBER")).toBe("+15555550123");
+    expect(h.inst.secrets.get("TOURCORE_TWILIO_AUTH_TOKEN")).toBe(TWILIO_TOKEN);
+    expect(h.inst.files.state().messagingLines?.map((line) => line.address)).toEqual(["+15555550123"]);
+  });
+
+  it("set_services live or demo does not wipe installation messaging secrets", async () => {
+    const h = installHarness();
+    h.inst.files.ensure({ deploymentMode: "GROK_MANAGED_P0" });
+    h.inst.files.setPublicBaseUrl(PUBLIC, "MANUAL");
+    await h.ok("choose_messaging_provider", { provider: "sendblue" });
+    h.inst.secrets.set({ SENDBLUE_API_API_KEY: SB_KEY, SENDBLUE_API_API_SECRET: SB_SECRET, SENDBLUE_FROM_NUMBER: LINE, SENDBLUE_WEBHOOK_SECRET: SECRET });
+    const { config } = h.workspace.save(hillsideConfig());
+
+    await h.ok("set_services", { property: config.property.id, messaging: "demo" });
+    expect(h.inst.secrets.get("SENDBLUE_API_API_KEY")).toBe(SB_KEY);
+    expect(h.inst.secrets.get("SENDBLUE_FROM_NUMBER")).toBe(LINE);
+    await h.ok("set_services", { property: config.property.id, messaging: "sendblue" });
+    expect(h.inst.secrets.get("SENDBLUE_API_API_KEY")).toBe(SB_KEY);
+    expect(h.inst.secrets.get("SENDBLUE_API_API_SECRET")).toBe(SB_SECRET);
+    expect(h.inst.secrets.get("SENDBLUE_FROM_NUMBER")).toBe(LINE);
+    expect(h.inst.secrets.get("SENDBLUE_WEBHOOK_SECRET")).toBe(SECRET);
+    expect(h.inst.files.manifest()?.messagingProvider).toBe("SENDBLUE");
   });
 });
 

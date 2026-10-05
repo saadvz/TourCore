@@ -67,7 +67,7 @@ Build the public URL from `PUBLIC_BASE_URL`. Verify the provider's signature on 
 
 Register secret and non-secret names in `src/install/secretStore.ts`. The secure setup page asks only for `configFields()`. Secrets are write-only. Add the provider id to `MESSAGING_PROVIDER_IDS` and `MessagingProviderRegistry` (`src/messaging/registry.ts`). Selection is `TOURCORE_MESSAGING_PROVIDER` or the installation manifest. An unknown name fails clearly.
 
-`choose_messaging_provider` is the deliberate switch. It drops the previous provider's settings from active use, clears the connection test, and invalidates property readiness until the new provider passes.
+`choose_messaging_provider` is the deliberate switch. It takes the previous provider out of active use, clears the connection test, and invalidates property readiness until the new provider passes. Saved Sendblue, Twilio, and Photon credentials and attached lines stay. Switching to `local` must not blank carrier secrets. Switching back uses the stored account and a new connection test unless those details were never set.
 
 ## Health
 

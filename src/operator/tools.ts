@@ -808,7 +808,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Set messaging and records",
     kind: "change",
     description:
-      'Chooses how visitors are texted ("live" for real texts through the installation\'s messaging provider, "demo" for practice only). "sendblue" is accepted as an older name for "live". Records stay on this computer. Door access mode can\'t be changed here. Credentials are never set through chat.',
+      'Chooses how visitors are texted ("live" for real texts through the installation\'s messaging provider, "demo" for practice only). "sendblue" is accepted as an older name for "live". Does not change the installation provider and does not touch saved Sendblue, Twilio, or Photon credentials. Records stay on this computer. Door access mode can\'t be changed here. Credentials are never set through chat.',
     input: z.strictObject({ property: Property, messaging: z.enum(["live", "sendblue", "demo"]).optional(), records: z.enum(["this-computer", "google-drive"]).optional() }),
     run: async (ctx, i) => {
       if (i.records === "google-drive") throw new SetupInputError("STORAGE_UNAVAILABLE", "Keeping records in Google Drive isn't available yet. They'll stay on this computer for now.");

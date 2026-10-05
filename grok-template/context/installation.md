@@ -63,7 +63,10 @@ Sendblue. After the operator chooses, collect only that provider's fields
 with Grok's secure secret input, fill Tour Core's form, and submit it. Then
 follow the next step. Do not ask what to do next. The `local` provider is a
 QA loopback (no credentials, no real texts). Use `inject_local_sms` and
-`read_local_outbox` only on a property that is on local.
+`read_local_outbox` only on a property that is on local. Switching providers
+keeps saved credentials and attached lines for other providers. If that
+provider was already set up, follow the next step (usually a connection test)
+and do not ask the operator to re-enter those details.
 
 A routine webhook address and key use the same secure input. If the routine
 panel's copy buttons keep both values hidden on screen, those hidden values

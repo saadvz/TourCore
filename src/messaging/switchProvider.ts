@@ -8,6 +8,10 @@ import type { MessagingProviderId } from "./provider";
  * Deliberate provider change. Property and tour records stay. The previous
  * provider is taken out of active use, its webhook is removed when that is
  * safe, and messaging has to pass a connection test again.
+ *
+ * Saved Sendblue, Twilio, and Photon credentials and attached lines stay in
+ * the secret store. Switching to local (or any other provider) must not
+ * blank them. Switching back uses the stored account unless it was never set.
  */
 export async function chooseMessagingProvider(
   inst: Installation,
@@ -28,7 +32,6 @@ export async function chooseMessagingProvider(
     } catch {
       // The old address can be removed later. It is no longer the active provider.
     }
-    inst.secrets.delete(previous.settingNames() as never, new Date(inst.now()));
     if (options.workspace) {
       for (const id of options.workspace.propertyIds()) {
         const { config, state: property } = options.workspace.load(id);
@@ -43,11 +46,19 @@ export async function chooseMessagingProvider(
   delete next.visitorMessaging;
   inst.files.writeState(next);
   inst.files.update({ messagingProvider: manifestProviderName(provider) }, new Date(inst.now()));
+  return { changed: true, summary: switchSummary(inst, provider) };
+}
+
+function switchSummary(inst: Installation, provider: MessagingProviderId): string {
   if (provider === "local") {
-    return { changed: true, summary: "Visitor texting will use the local loopback. No real texts are sent." };
+    return "Visitor texting will use the local loopback. No real texts are sent.";
   }
   const name = provider === "sendblue" ? "Sendblue" : provider === "twilio" ? "Twilio" : "Photon";
-  return { changed: true, summary: `Visitor texting will use ${name}. I'll ask for the account details securely; they won't be shown in chat.` };
+  const incoming = createMessagingProvider(provider, { env: () => inst.env(), sendblue: () => inst.sendblueEnv() });
+  if (incoming.validateConfiguration().ok) {
+    return `Visitor texting will use ${name}. I'll test the saved account next.`;
+  }
+  return `Visitor texting will use ${name}. I'll ask for the account details securely; they won't be shown in chat.`;
 }
 
 function ownedWebhookUrls(inst: Installation, path: string): string[] {

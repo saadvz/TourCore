@@ -109,8 +109,10 @@ the operator correct it.
     a new property uses it on its own. Don't ask "How do you want to text
     people?". If `get_services` shows the property still on practice texts
     while texting is installed, `set_services` with `messaging: sendblue`
-    yourself. Where records live comes from `get_storage_status` (this computer, or Google Drive). Don't
-    ask about it.
+    yourself. `set_services` only sets live or practice texts for this property;
+    it does not change the installation provider or saved credentials. Where
+    records live comes from `get_storage_status` (this computer, or Google Drive).
+    Don't ask about it.
 11. Ask Tour Core's next question about visitor help word for word:
     **"What number can stuck visitors call? Pick one someone answers during tour hours."**
     Save a number with `update_property_details` `visitorContact`. If they skip,

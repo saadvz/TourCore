@@ -140,7 +140,7 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
     title: "Choose visitor texting",
     kind: "change",
     description:
-      "Records which messaging provider prospects will use: sendblue, twilio, photon, or local (QA loopback; no real texts). Takes no credentials. Switching removes the previous provider from active use and requires a new connection test. Property and tour records stay.",
+      "Records which messaging provider prospects will use: sendblue, twilio, photon, or local (QA loopback; no real texts). Takes no credentials. Switching takes the previous provider out of active use and requires a new connection test. Saved account details and attached lines for other providers stay. Property and tour records stay.",
     input: z.strictObject({ provider: z.enum(["sendblue", "twilio", "photon", "local"]) }),
     run: async (ctx, i) => {
       const inst = installation(ctx);
