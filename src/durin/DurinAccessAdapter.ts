@@ -1,7 +1,8 @@
 /**
- * The only way Tour Core touches physical access. Tour Core asks Durin for a
- * scoped, time-boxed grant on one of its own door ids; Durin owns the mapping
- * to real hardware. Tour Core never unlocks anything itself.
+ * The only way Tour Core touches physical access. Tour Core is built on the
+ * Durin Access Platform: it asks Durin for a scoped, time-boxed grant on one
+ * of its own door ids; Durin owns the mapping to real hardware. Tour Core
+ * never unlocks anything itself.
  */
 export interface DurinAccessAdapter {
   requestAccess(request: DurinAccessRequest): Promise<DurinAccessResult>;

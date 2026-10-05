@@ -223,9 +223,10 @@ has a next step until the infrastructure is ready, so Grok can't offer
 property setup early. Every step carries a `rule`: Tour Core decides the
 order, so Grok doesn't offer alternatives or ask the operator what to do
 next. Technical values (public address, connector address, providers) are
-under `technical`, marked for Grok only. A future component or provider
-(Google Drive as `STORAGE`, real Durin as `ACCESS`) changes what this
-returns; the Install Tour Core skill doesn't change.
+under `technical`, marked for Grok only. A later storage provider
+(Google Drive as `STORAGE`) or live Durin Access Platform credentials
+(`ACCESS`) changes what this returns; the Install Tour Core skill doesn't
+change. Tour Core is already built on the Durin Access Platform.
 
 ### Installation tools (MCP)
 

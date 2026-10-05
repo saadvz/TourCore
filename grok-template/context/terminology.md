@@ -27,7 +27,7 @@ calls it internally; use it only if the operator asks for technical detail.
 | called off | revoked |
 | needs attention, issue | an exception |
 | approved fact | an operator-written property or unit fact |
-| door system, door access | Durin (demo mode in P0) |
+| door system, door access | Durin Access Platform (Durin demo mode in P0). Never name Durin to the operator |
 | tour updates | operator events delivered to the Tour Core Operator Updates Grok Routine |
 | visitor texting is live | the property uses real texts through the installation's messaging provider (or local test texts if that building opted in) |
 
