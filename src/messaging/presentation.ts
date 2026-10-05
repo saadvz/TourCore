@@ -37,6 +37,8 @@ export function withPrompt(body: string, prompt: ReplyPrompt | undefined, channe
 
 /** "Reply 1 for Unit 101 or 2 for Unit 102." / a numbered list for longer menus. */
 function numbered(options: string[], after?: string): string {
+  // Empty `after` means the body already has the one instruction (e.g. "Reply yes for Monday at 8:15 AM, or pick a day:").
+  if (after === "") return options.map((o, i) => `${i + 1}) ${o}`).join("\n");
   if (options.length <= 3) {
     const parts = options.map((o, i) => `${i + 1} for ${o}`);
     const reply = `Reply ${parts.length > 1 ? `${parts.slice(0, -1).join(", ")} or ${parts.at(-1)}` : parts[0]}.`;

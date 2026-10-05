@@ -288,7 +288,11 @@ npm run sendblue:test -- --to +1XXXXXXXXXX   # manual: checks the connection, se
 
 Visitors don't need exact phrases. "hey I wanna see 101", "2 works", "yeah that's fine", "just pulled up", "I'm standing
 outside 101", "does this place have laundry?", "I'm all done" and "yeah have someone reach out" all work, as do the
-menu numbers, YES/NO, HELP, STOP and START.
+menu numbers, YES/NO, HELP, STOP and START. A tour day can be "today", "tomorrow", a weekday, or a calendar date
+("Dec 1", "December 1st", "1 Dec", "12/1", "Tuesday Oct 6"); without a year, Tour Core uses the next date on or after
+today in the property's time zone. A date or booking ask is not a flagged question for the team. If the day
+can't be resolved ("the 45th", "sometime next month"), Tour Core asks which day they meant and shows the day
+menu; it does not flag the property team.
 
 ```
 visitor text ─► interpreter ─► typed intent (ARRIVAL, AT_UNIT "Unit 101", ...) + confidence

@@ -30,6 +30,13 @@ have that information for this property. I've flagged it for the property
 team so they can get back to you.", plus an issue and an operator update. When
 the operator answers, the visitor gets the answer and the step they were on.
 
+Visitors can name a tour day as today, tomorrow, a weekday, or a calendar
+date ("Dec 1", "December 1st", "1 Dec", "12/1", "Tuesday Oct 6"). Without a
+year, Tour Core uses the next date on or after today in the property's time
+zone. A date or booking ask is handled as booking, not as a flagged question. If
+the day can't be resolved ("the 45th", "sometime next month"), Tour Core
+asks which day they meant and shows the day menu; it does not flag the team.
+
 ## Who does what
 
 | Part | Job |
