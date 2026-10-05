@@ -147,6 +147,7 @@ function currentStep(tour: TourSnapshot): string {
     const next = r.allowedRoute.find((d) => !opened.has(d));
     return last ? `At ${stopName(tour.config, last)}${next ? `, next: ${stopName(tour.config, next)}` : ""}` : "Arriving";
   }
+  if (r.awaitingVisitorConfirm) return "Waiting for the visitor to confirm";
   if (r.status === "READY") return "Not arrived yet";
   if (r.status === "COMPLETED") return "Left the property";
   return STATUS_LABELS[r.status];

@@ -104,6 +104,17 @@ export function formatDay(date: Date, timeZone: string): string {
   return clean(date.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone }));
 }
 
+/** "Monday" */
+export function formatWeekday(date: Date, timeZone: string): string {
+  return clean(date.toLocaleDateString("en-US", { weekday: "long", timeZone }));
+}
+
+/** "Mon, Oct 5 at 2:00 PM" — operator confirmation stamps that name the day and time. */
+export function formatConfirmStamp(date: Date, timeZone: string): string {
+  const day = clean(date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone }));
+  return `${day} at ${formatTime(date, timeZone)}`;
+}
+
 /** "Sep 27, 2:14 PM" */
 export function formatShortDateTime(date: Date, timeZone: string): string {
   const day = clean(date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone }));

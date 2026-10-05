@@ -66,8 +66,8 @@ you. No doors were refused.
 
 [`inspect_exception`; `answer_flagged_question` approvedFact "Parking is included." → question]
 
-**Tour Core:** I'll save "Parking is included." as an approved fact and send
-that answer to Pat. Continue?
+**Tour Core:** Save this answer? Future visitors who ask the same thing will
+get it too. Save it?
 
 **Operator:** Yes.
 

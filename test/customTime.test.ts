@@ -162,7 +162,10 @@ describe("the landlord decides", () => {
     await a.text("I'm here");
     a.clock.t = at(7);
     const asked = await a.grok("reschedule_tour", { visitor: "Testy", newStartsAt: "3:15 PM today" });
-    expect(asked.summary).toContain("I'll move Testy's tour from 2:00 PM to today at 3:15 PM");
+    expect(asked.summary).toContain("Move Testy's tour to today at 3:15 PM?");
+    expect(asked.summary).toContain("This is a one-off. Your regular tour hours stay the same, and Testy gets a text with the new time.");
+    expect(asked.summary).toContain("Move it?");
+    expect(asked.summary).not.toContain("Continue?");
     const done = await a.grok("reschedule_tour", { visitor: "Testy", newStartsAt: "3:15 PM today", confirmationCode: asked.confirmation.code });
     expect(done.summary).toContain("3:15 PM");
     expect(a.fake.sent.filter((message) => message.number === PHONE).at(-1)!.content).toContain("moved to today at 3:15 PM");
@@ -183,7 +186,10 @@ describe("the landlord decides", () => {
     const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
     const asked = await a.grok("approve_tour_time_request", { tourTimeRequestId: id });
     expect(asked.outsideHours).toBe(true);
-    expect(asked.summary).toContain("outside the property's normal");
+    expect(asked.summary).toContain("That's outside your tour hours.");
+    expect(asked.summary).toContain("Move it?");
+    expect(asked.summary).not.toContain("Continue?");
+    expect(asked.summary).not.toContain("create a one-time tour");
     await expect(a.grok("approve_tour_time_request", { tourTimeRequestId: id, confirmationCode: asked.confirmation.code })).rejects.toThrow(/outside normal touring hours/);
     await a.grok("approve_tour_time_request", { tourTimeRequestId: id, confirmationCode: asked.confirmation.code, acknowledgeOutsideHours: true });
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;

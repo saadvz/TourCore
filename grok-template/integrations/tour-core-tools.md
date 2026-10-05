@@ -60,6 +60,7 @@ again with the code after the operator's yes.
 | `decline_tour_time_request` | change | Declines the request and tells the visitor. A current booking stays confirmed |
 | `propose_tour_time` | change | Offers the visitor another time. The current booking stays until they agree |
 | `reschedule_tour` | consequential | Moves a tour to a time the landlord is directing, including a one-off. Asks once first. Regular hours stay the same |
+| `schedule_one_off_tour` | consequential | Sets up a tour for a visitor who asked, including someone who hasn't texted in. Asks once first. Regular hours stay the same |
 | `export_audit` | change | Writes a validated day's audit export (JSON + CSV) and summarizes it |
 | `get_installation_status` | read | Every installation component's state (runtime, public address, Grok connection, messaging, tour updates, records, access, property, readiness, practice tour, publish) and the next step |
 | `get_next_installation_step` | read | The one next step Tour Core decided, who does it, and the tool or skill to use |

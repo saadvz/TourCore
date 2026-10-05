@@ -129,4 +129,4 @@ property is not unpublished by an update.
 `list_exceptions` if an issue can't be found. A `tour.time_requested` update
 needs a decision: `list_tour_time_requests`, `inspect_tour_time_request`,
 `approve_tour_time_request`, `decline_tour_time_request`, `propose_tour_time`,
-and `reschedule_tour`.
+`reschedule_tour`, and `schedule_one_off_tour`.

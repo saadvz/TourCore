@@ -43,7 +43,7 @@ import { matchDoor, requireUnit, resolvePropertyId } from "./resolve";
 import { defaultMessagingMode, type OperatorServices } from "./services";
 import { publishGuards, publishProperty, readinessForProperty, runPracticeTour, visitorTexting } from "./setupFlow";
 import { findTour, inspectTourView, listActiveTours } from "./tours";
-import { approveTourTimeRequest, declineTourTimeRequest, inspectTourTimeRequest, listTourTimeRequests, proposeTourTime, rescheduleTour } from "./tourTimes";
+import { approveTourTimeRequest, declineTourTimeRequest, inspectTourTimeRequest, listTourTimeRequests, proposeTourTime, rescheduleTour, scheduleOneOffTour } from "./tourTimes";
 
 /**
  * Tour Core's operator tool contract: a narrow, provider-neutral list of
@@ -1024,7 +1024,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const first = x.visitorName.split(/\s+/)[0];
       const fingerprint = `${x.exceptionId}|${plan.appliesTo}|${plan.field ?? ""}|${plan.fact}`;
       if (!i.confirmationCode) {
-        return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, `I'll save "${plan.fact.replace(/\.$/, "")}" as an approved fact and send that answer to ${first}. Continue?`, {
+        return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, "Save this answer? Future visitors who ask the same thing will get it too. Save it?", {
           visitorWillReceive: visitorAnswerText(x.question!, plan.fact),
         });
       }
@@ -1141,7 +1141,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     input: z.strictObject({
       tourTimeRequestId: z.string().min(3).max(40).describe("The tourTimeRequestId. Never show it to the operator."),
       confirmationCode: Code,
-      acknowledgeOutsideHours: z.boolean().optional().describe("True only after the operator agreed to a one-time tour outside normal touring hours."),
+      acknowledgeOutsideHours: z.boolean().optional().describe("True only after the operator agreed to a one-off tour outside normal touring hours."),
     }),
     run: (ctx, i) => approveTourTimeRequest(ctx, i),
   }),
@@ -1180,9 +1180,26 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       visitor: z.string().min(1).max(80).optional().describe('The visitor, as the operator said the name, e.g. "Testa".'),
       newStartsAt: z.string().min(1).max(80).describe('The new time, such as "3:15 PM today".'),
       confirmationCode: Code,
-      acknowledgeOutsideHours: z.boolean().optional().describe("True only after the operator agreed to a one-time tour outside normal touring hours."),
+      acknowledgeOutsideHours: z.boolean().optional().describe("True only after the operator agreed to a one-off tour outside normal touring hours."),
     }),
     run: (ctx, i) => rescheduleTour(ctx, i),
+  }),
+  tool({
+    name: "schedule_one_off_tour",
+    title: "Set up a one-time tour",
+    kind: "consequential",
+    description:
+      "Sets up a tour for a visitor who asked for it, including someone who hasn't texted in yet. Pass their phone, the unit, and the time in everyday words. Optional name. Does not change the property's regular hours or which times are offered. First call returns one yes/no question; call again with confirmationCode only after an explicit yes that they asked for this tour. A time outside normal touring hours returns a stronger question; call again with confirmationCode and acknowledgeOutsideHours true only after they agree. The visitor is texted to confirm, then goes through the usual consent and identity steps.",
+    input: z.strictObject({
+      property: Property,
+      phone: z.string().min(7).max(30).describe("The visitor's phone number."),
+      visitorName: z.string().min(1).max(80).optional().describe("The visitor's name, if the operator said it."),
+      unit: Unit,
+      startsAt: z.string().min(1).max(80).describe('The tour time, such as "3:15 PM today" or "Monday at 11:15 AM".'),
+      confirmationCode: Code,
+      acknowledgeOutsideHours: z.boolean().optional().describe("True only after the operator agreed to a one-off tour outside normal touring hours."),
+    }),
+    run: (ctx, i) => scheduleOneOffTour(ctx, i),
   }),
 
   // ------------------------------------------------------ installation

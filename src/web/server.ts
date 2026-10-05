@@ -239,6 +239,8 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
     endpoints,
     messagingLine,
     persist: (session: VisitorDemoSession) => conversations.save(session),
+    openMessagingSession: (propertyId: string, phone: string) => conversations.openOutbound(propertyId, phone),
+    releaseUnconfirmedTours: () => conversations.releaseUnconfirmed(),
     needsAttention: (propertyId: string) => conversations.needsAttention(propertyId),
     installedMessaging: () => installedMessaging(installation),
   };
@@ -508,7 +510,10 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
     }
   });
   const retry = setInterval(() => {
-    alertWork = alertWork.then(() => installation.outbox.drain().then(() => undefined)).catch(() => undefined);
+    alertWork = alertWork
+      .then(() => conversations.releaseUnconfirmed())
+      .then(() => installation.outbox.drain().then(() => undefined))
+      .catch(() => undefined);
   }, options.alertRetryMs ?? 15_000);
   retry.unref();
   server.on("close", () => {

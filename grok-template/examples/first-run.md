@@ -291,8 +291,8 @@ them?
 [`answer_flagged_question` approvedFact "There's no pool, but there's a gym on
 the roof." → returns a question]
 
-**Tour Core:** I'll save "There's no pool, but there's a gym on the roof." as
-an approved fact and send that answer to Testy. Continue?
+**Tour Core:** Save this answer? Future visitors who ask the same thing will
+get it too. Save it?
 
 **Operator:** Yes.
 

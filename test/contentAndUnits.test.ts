@@ -197,7 +197,7 @@ describe("approved content changes keep the property published", () => {
 
     // Operator: "2 bedrooms."  → Grok calls the tool once and asks its question once.
     const asked = await h.ok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "2 bedrooms" });
-    expect(asked).toMatchObject({ status: "needs-confirmation", summary: 'I\'ll save "Unit 101 has 2 bedrooms" as an approved fact and send that answer to Testy. Continue?', visitorWillReceive: "Unit 101 has 2 bedrooms. Let me know if you have any other questions." });
+    expect(asked).toMatchObject({ status: "needs-confirmation", summary: "Save this answer? Future visitors who ask the same thing will get it too. Save it?", visitorWillReceive: "Unit 101 has 2 bedrooms. Let me know if you have any other questions." });
     // Operator: "Yes."  → done; no second application-level confirmation.
     const done = await h.ok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "2 bedrooms", confirmationCode: asked.confirmation.code });
     expect(done.status).toBeUndefined();

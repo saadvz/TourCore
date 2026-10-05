@@ -58,6 +58,16 @@ export const ReservationSchema = z.object({
       approvedAt: IsoDate,
     })
     .optional(),
+  /**
+   * The operator set this time; the visitor still has to reply YES before
+   * consent. The slot is busy until they confirm or the deadline passes.
+   */
+  awaitingVisitorConfirm: z
+    .object({
+      kind: z.literal("OPERATOR_SCHEDULED"),
+      confirmBy: IsoDate,
+    })
+    .optional(),
   consentId: z.string().optional(),
   verificationId: z.string().optional(),
   createdAt: IsoDate,
