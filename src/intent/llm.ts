@@ -33,6 +33,7 @@ const MODEL_INTENTS = [
   "FINISH_TOUR",
   "FOLLOW_UP_YES",
   "FOLLOW_UP_NO",
+  "CANCEL_TOUR",
   "UNKNOWN",
 ] as const;
 
@@ -70,6 +71,7 @@ Intents:
 - REQUEST_HELP: has a problem (door won't open, lost, can't find the unit) or wants a person.
 - FINISH_TOUR: says they are done touring.
 - FOLLOW_UP_YES / FOLLOW_UP_NO: answers whether the property team should follow up.
+- CANCEL_TOUR: wants to cancel a booked tour. "Can we cancel the tour?", "I want to cancel", "cancel", "I can't make it", "call off the tour" are CANCEL_TOUR, not a property question. A cancellation-policy question stays ASK_PROPERTY_QUESTION.
 - START_INQUIRY: a greeting, or wants to start booking.
 - UNKNOWN: anything else, or when unsure.
 
@@ -87,6 +89,7 @@ function lastAsked(step: ConversationStep, awaiting?: StepAwaiting, timezone?: s
     const weekday = formatDay(start, timezone ?? "UTC").split(",")[0]!;
     return `Reply yes for ${weekday} at ${formatTime(start, timezone ?? "UTC")}, or pick a day.`;
   }
+  if (awaiting?.kind === "confirm-cancel-tour") return `Cancel your tour on ${awaiting.day} at ${awaiting.time}? Reply YES or NO.`;
   switch (step) {
     case "choose-unit":
       return "Which unit would you like to see?";

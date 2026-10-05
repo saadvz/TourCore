@@ -15,6 +15,13 @@ const ACTIVE: ReservationStatus[] = ["RESERVED", "AWAITING_CONSENT", "AWAITING_V
 const INTERRUPTIONS: ReservationStatus[] = ["CANCELLED", "REVOKED", "OPERATOR_HOLD", "PROVIDER_FAILURE", "VERIFICATION_FAILED"];
 const PAUSED: ReservationStatus[] = ["OPERATOR_HOLD", "PROVIDER_FAILURE"];
 
+/** Booked (or held) tours a visitor can cancel by text, same set an operator can call off. */
+export const CANCELABLE: ReservationStatus[] = [...ACTIVE, ...PAUSED];
+
+export function isCancelableReservation(reservation: Reservation): boolean {
+  return Boolean(reservation.slotStart) && CANCELABLE.includes(reservation.status) && !reservation.awaitingVisitorConfirm;
+}
+
 export const TERMINAL: ReservationStatus[] = ["COMPLETED", "CANCELLED", "VERIFICATION_FAILED", "EXPIRED", "REVOKED"];
 
 export function canTransition(reservation: Reservation, to: ReservationStatus): boolean {

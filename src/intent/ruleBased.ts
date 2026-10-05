@@ -85,6 +85,27 @@ const FINISH = new RegExp(
 );
 const WEAK_FINISH = /\b(done|finished|leaving|heading out|wrapping up|wrap up|all set)\b/;
 
+const TOUR_NOUN = /\b(tour|showing|appointment|viewing|visit|booking|reservation)\b/;
+const CANCEL_VERB = /\b(cancel|cancelling|canceled|cancelled|call off|called off)\b/;
+const CANCEL_POLICY = /\b(cancellation policy|cancel(lation)? fees?)\b/;
+const CANT_MAKE_IT =
+  /\b(i |we )?(cannot|can not|will not|could not) make it\b|\b(i |we )?(cannot|can not|will not) (come|be there|attend)\b|\b(i |we )?(cannot|can not|will not) make (the |my |our )?(tour|showing|appointment|it)\b|\bwill not be able to make it\b/;
+const WANT_CANCEL = /\b((i |we )?(need|have|want|would like) to cancel|please cancel)\b/;
+const BARE_CANCEL = /^(please )?(cancel)( it)?$/;
+const YES_CANCEL = /^(yes|yeah|yep|yup|sure|ok|okay) (please )?(cancel)( it)?$/;
+
+/**
+ * Natural-language cancel of a booked tour. Matches varied phrasing the way
+ * YES/NO do — not one canned phrase. Cancellation-policy questions stay questions.
+ */
+export function isCancelTourAsk(raw: string): boolean {
+  const t = stripFiller(normalize(raw));
+  if (!t || CANCEL_POLICY.test(t) || /\b(do not|never) cancel\b/.test(t)) return false;
+  if (BARE_CANCEL.test(t) || YES_CANCEL.test(t)) return true;
+  if (WANT_CANCEL.test(t) || CANT_MAKE_IT.test(t)) return true;
+  return CANCEL_VERB.test(t) && TOUR_NOUN.test(t);
+}
+
 const YES_EXACT = /^(y|yes|yeah|yea|yeh|ya|yah|yep|yup|ye|yass|yes please|sure|ok|okay|k|kk|affirmative|correct|absolutely|definitely|certainly|of course)$/;
 const NO_EXACT = /^(n|no|nope|nah|no thanks|no thank you)$/;
 const YES_LEAD =
@@ -321,11 +342,23 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
   if (!t) return unknown();
 
   const keyword = keywordOf(raw);
-  if (keyword === "stop") return result({ type: "STOP_MESSAGES" }, 1);
+  // Bare "cancel" is a carrier opt-out keyword, but with a booked tour it means cancel the tour.
+  if (keyword === "stop") {
+    if (ctx.hasCancelableTour && isCancelTourAsk(raw) && normalize(raw) === "cancel") return result({ type: "CANCEL_TOUR" }, 1);
+    return result({ type: "STOP_MESSAGES" }, 1);
+  }
   if (keyword === "start") return result({ type: "START_MESSAGES" }, 1);
   if (keyword === "help") return result({ type: "REQUEST_HELP", problem: "GENERAL" }, 1);
   if (NATURAL_STOP.test(t)) return result({ type: "STOP_MESSAGES" }, 0.95);
   if (MANIPULATION.test(t)) return unknown({ manipulation: true, clarificationNeeded: true });
+
+  if (ctx.awaiting?.kind === "confirm-cancel-tour") {
+    const yn = yesNo(t);
+    if (yn.answer === "no" && yn.confidence >= 0.75) return result({ type: "KEEP_TOUR" }, yn.confidence);
+    if (yn.answer === "yes" && yn.confidence >= 0.75) return result({ type: "CONFIRM_CANCEL_TOUR" }, yn.confidence);
+    if (isCancelTourAsk(raw)) return result({ type: "CONFIRM_CANCEL_TOUR" }, 0.95);
+  }
+  if (ctx.hasCancelableTour && isCancelTourAsk(raw)) return result({ type: "CANCEL_TOUR" }, 0.95);
 
   if (ctx.awaiting?.kind === "confirm-custom-time" || ctx.awaiting?.kind === "confirm-alternative") {
     const answered = answerScheduling(ctx.awaiting, t, result);

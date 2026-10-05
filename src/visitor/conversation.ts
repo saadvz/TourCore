@@ -2,9 +2,11 @@ import { resolveSpokenTime } from "../core/customSlot";
 import { orList, unitsNamedIn } from "../core/questions";
 import { isoDate, parseIsoDate } from "../core/schedule";
 import { type DayReference, type SpokenTime } from "../core/spokenTime";
-import { addDays, formatDay, localDateOf, weekdayOf, zonedParts, type LocalDate } from "../core/timezone";
-import { VisitorDenialCopy, type InboundMeta } from "../core/TourCore";
+import { addDays, formatDay, formatTime, localDateOf, weekdayOf, zonedParts, type LocalDate } from "../core/timezone";
+import { VisitorDenialCopy, VISITOR_CANCEL_KEPT, visitorCancelConfirm, type InboundMeta } from "../core/TourCore";
+import { isCancelableReservation } from "../domain/stateMachine";
 import {
+  isCancelTourAsk,
   isConfident,
   keywordOf,
   LayeredIntentInterpreter,
@@ -69,6 +71,7 @@ async function contextFor(session: VisitorDemoSession, message: string, step: Vi
     ...(r ? { reservedUnit: session.config.units.find((u) => u.id === r.unitId)?.name } : {}),
     remainingStops: remaining.map((id) => stopRef(session, id)),
     doors: session.config.doors.map((d) => stopRef(session, d.id)),
+    hasCancelableTour: r ? isCancelableReservation(r) : false,
   };
 }
 
@@ -213,7 +216,9 @@ export async function handleVisitorText(
   if (intent.type === "STOP_MESSAGES" && turn.confident) await session.optOut(said);
   else if (intent.type === "START_MESSAGES" && turn.confident) await session.optIn(said);
   else if (keyword === "help") await session.help(said);
-  else if (firstMessage) {
+  else if (await handleCancelIntent(turn)) {
+    /* cancel-by-text: confirm, YES, or NO */
+  } else if (firstMessage) {
     if (intent.type === "SELECT_UNIT" && turn.confident) await chooseUnit(turn);
     else if (intent.type === "REQUEST_CUSTOM_TIME" && turn.confident) await openWithCustomTime(turn);
     else if (intent.type === "ASK_PROPERTY_QUESTION") await ask(turn, intent.question, () => session.welcome());
@@ -441,6 +446,8 @@ function stepPrompt(session: VisitorDemoSession, stage: VisitorStage, awaiting?:
       return { body: `Which door are you at: ${awaiting.stops.map((s) => s.label).join(" or ")}?`, prompt: { kind: "choose", options: awaiting.stops.map((s) => s.label), what: "a door" }, awaiting };
     case "confirm-finish":
       return { body: "Are you finished with your tour?", prompt: yesNo, awaiting };
+    case "confirm-cancel-tour":
+      return { body: visitorCancelConfirm(awaiting.day, awaiting.time), awaiting };
   }
   switch (stage) {
     case "choose-unit":
@@ -469,6 +476,52 @@ function stepPrompt(session: VisitorDemoSession, stage: VisitorStage, awaiting?:
 
 const CONSENT_QUESTION = "Is it OK if I text you about this tour and keep a record of your visit?";
 const FOLLOW_UP_QUESTION = "Would you like someone from the property team to follow up?";
+
+async function offerCancelConfirm(turn: Turn): Promise<void> {
+  const reservation = await turn.session.reservation();
+  const line = reservation ? turn.session.cancelConfirmLine(reservation) : undefined;
+  if (!line || !reservation?.slotStart) {
+    await turn.session.reportCancelFailed(turn.said);
+    return;
+  }
+  const start = new Date(reservation.slotStart);
+  const tz = turn.session.config.property.timezone;
+  await turn.clarify(line, undefined, { kind: "confirm-cancel-tour", day: formatDay(start, tz), time: formatTime(start, tz) });
+}
+
+/**
+ * Booked-tour cancel-by-text. Confirm first; never send the generic
+ * "I don't have that information" line for a clear cancel ask.
+ */
+async function handleCancelIntent(turn: Turn): Promise<boolean> {
+  const { session, intent } = turn;
+  const text = turn.said.text ?? "";
+  const cancelable = await session.hasCancelableTour();
+  const cancelAsk = intent.type === "CANCEL_TOUR" || intent.type === "CONFIRM_CANCEL_TOUR" || isCancelTourAsk(text);
+  const awaitingCancel = turn.awaiting?.kind === "confirm-cancel-tour";
+
+  if (awaitingCancel && intent.type === "KEEP_TOUR" && turn.confident) {
+    await turn.respond(VISITOR_CANCEL_KEPT);
+    return true;
+  }
+  if (awaitingCancel && intent.type === "CONFIRM_CANCEL_TOUR" && turn.confident) {
+    await session.cancelBookedTour(turn.said);
+    return true;
+  }
+  if (awaitingCancel && cancelAsk && intent.type !== "ASK_PROPERTY_QUESTION" && intent.type !== "REQUEST_HELP") {
+    await session.cancelBookedTour(turn.said);
+    return true;
+  }
+  if (cancelAsk && cancelable) {
+    await offerCancelConfirm(turn);
+    return true;
+  }
+  if (intent.type === "CANCEL_TOUR" && !cancelable) {
+    await session.reportCancelFailed(turn.said);
+    return true;
+  }
+  return false;
+}
 
 async function chooseUnit(turn: Turn): Promise<void> {
   const units = turn.session.config.units;

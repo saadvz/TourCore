@@ -30,6 +30,18 @@ have that information for this property. I've flagged it for the property
 team so they can get back to you.", plus an issue and an operator update. When
 the operator answers, the visitor gets the answer and the step they were on.
 
+A visitor with a booked (or held) tour can cancel by text in their own words —
+"Can we cancel the tour?", "I want to cancel the booked tour", "cancel",
+"please cancel my tour", "call off the tour", "I can't make it", "I need to
+cancel". That is not a property question. Tour Core confirms first:
+`Cancel your tour on {day} at {time}? Reply YES or NO.` YES cancels (doors
+off, status cancelled, audit) and they hear `Your tour is cancelled. Text me
+anytime to book another.` NO keeps the booking: `No problem. Your tour is
+still booked.` STOP still opts out. If cancel cannot finish, they get
+`I can't cancel it from here. I've asked the leasing team to call it off and
+get back to you.` and the team is flagged. Never use "I don't have that
+information" for a clear cancel ask.
+
 Visitors can name a tour day as today, tomorrow, a weekday, or a calendar
 date ("Dec 1", "December 1st", "1 Dec", "12/1", "Tuesday Oct 6"). Without a
 year, Tour Core uses the next date on or after today in the property's time

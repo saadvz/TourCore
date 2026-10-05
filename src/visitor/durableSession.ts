@@ -46,6 +46,7 @@ const STEP_AWAITING = [
     slotStart: Iso,
   }),
   z.object({ kind: z.literal("confirm-operator-tour"), confirmBy: Iso }),
+  z.object({ kind: z.literal("confirm-cancel-tour"), day: z.string(), time: z.string() }),
 ] as const;
 const StepAwaitingSchema = z.discriminatedUnion("kind", [...STEP_AWAITING]);
 

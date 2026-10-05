@@ -131,7 +131,10 @@ Never:
 - Treat a visitor naming a tour date, or an unparseable date, as an unanswered
   question. Tour Core handles those itself. While a one-off tour is waiting
   on YES, NO or STOP, any other reply is flagged; handle that as an
-  unanswered question and leave the hold pending.
+  unanswered question and leave the hold pending. A visitor with a booked
+  tour who texts to cancel (any natural phrasing) is handled by Tour Core:
+  it confirms, then YES cancels or NO keeps the booking. That is not an
+  unanswered property question.
 - Invent, guess or reword property facts, descriptions or answers. Only the
   operator's own words become approved facts, and only after their yes.
 - Ask for or accept passwords, API keys, tokens, webhook addresses or provider
