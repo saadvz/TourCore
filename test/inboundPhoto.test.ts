@@ -24,14 +24,13 @@ function form(fields: Record<string, string>): Buffer {
 }
 
 function phoneSession(now = MONDAY_7AM) {
-  const sent: string[] = [];
-  const transport = new DemoMessagingAdapter((line) => sent.push(line), "MESSAGING");
+  const transport = new DemoMessagingAdapter(() => {}, "MESSAGING");
   const session = new VisitorDemoSession("prop_100_alfred_way", loadConfig(), "t", { realNow: () => now, transport, kind: "messaging" });
   let n = 0;
   const say = (text: string, hasMedia = false) =>
     handleVisitorText(session, PHONE, text, { provider: "test", providerMessageId: `m_${++n}`, ...(hasMedia ? { hasMedia: true } : {}) });
-  const outbound = () => sent.slice();
-  return { session, say, outbound };
+  const replies = () => session.conversation.filter((m) => m.from === "tourcore").map((m) => m.text);
+  return { session, say, replies };
 }
 
 async function bookAndArrive(p: ReturnType<typeof phoneSession>) {
@@ -50,12 +49,14 @@ describe("inbound media parsing", () => {
     expect(parseSendblueInbound({ ...inbound("+15550102000", "", "h-photo"), media_url: "https://cdn.example.invalid/p.jpg" })).toMatchObject({
       message: { text: "", media: [{ url: "https://cdn.example.invalid/p.jpg" }] },
     });
-    expect(parseSendblueInbound({ ...inbound("+15550102000", "Hi", "h-empty"), media_url: "" }).message).not.toHaveProperty("media");
+    const empty = parseSendblueInbound({ ...inbound("+15550102000", "Hi", "h-empty"), media_url: "" });
+    expect(empty).toMatchObject({ message: { text: "Hi" } });
+    expect("message" in empty && empty.message.media).toBeUndefined();
   });
 
   it("Twilio reads NumMedia / MediaUrl fields", () => {
     const provider = new TwilioMessagingProvider({
-      env: () => ({ accountSid: "ACaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", authToken: "token", fromNumber: "+15555550123", fromNumberRaw: "+15555550123" }),
+      env: () => ({ fromNumber: "+15555550123", fromNumberRaw: "+15555550123" }),
     });
     const parsed = provider.parseInbound(
       form({
@@ -113,7 +114,7 @@ describe("inbound media parsing", () => {
       to: "+15555550123",
       text: "What's this stain?",
       media: [{ url: "https://example.invalid/p.jpg", contentType: "image/jpeg" }],
-    }))).toMatchObject({
+    })))).toMatchObject({
       message: { text: "What's this stain?", media: [{ url: "https://example.invalid/p.jpg", contentType: "image/jpeg" }] },
     });
   });
@@ -130,10 +131,11 @@ describe("honest photo reply", () => {
   it("a photo alone before booking gets the honesty reply once, not a greeting or a silent drop", async () => {
     const a = await liveApp({ cleanups });
     await a.optInSms();
-    const replies = await a.text("", undefined, PHOTO);
+    const handle = "same-photo-handle";
+    const replies = await a.text("", handle, PHOTO);
     expect(replies).toEqual([PHOTO_NOT_SUPPORTED]);
     expect(replies.join("\n")).not.toMatch(/MMS|inject_local_sms|Sendblue|Twilio|Photon/i);
-    const again = await a.text("", "same-photo-handle", PHOTO);
+    const again = await a.text("", handle, PHOTO);
     expect(again).toEqual([]);
     expect((await a.grok("list_exceptions")).exceptions).toEqual([]);
   });
@@ -152,9 +154,9 @@ describe("honest photo reply", () => {
   it("a photo during a tour gets the honesty reply and does not say it didn't catch that", async () => {
     const p = phoneSession(zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour: 13, minute: 58 }, "America/New_York").getTime());
     await bookAndArrive(p);
-    const before = p.outbound();
+    const before = p.replies();
     await p.say("", true);
-    const added = p.outbound().slice(before.length);
+    const added = p.replies().slice(before.length);
     expect(added).toEqual([PHOTO_NOT_SUPPORTED]);
     expect(added.join("\n")).not.toMatch(/didn't catch that|MMS/i);
   });
@@ -162,9 +164,9 @@ describe("honest photo reply", () => {
   it("a photo plus a question during a tour replies once and flags the text", async () => {
     const p = phoneSession(zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour: 13, minute: 58 }, "America/New_York").getTime());
     await bookAndArrive(p);
-    const before = p.outbound();
+    const before = p.replies();
     await p.say("Is there a pool?", true);
-    const added = p.outbound().slice(before.length);
+    const added = p.replies().slice(before.length);
     expect(added[0]).toBe(PHOTO_NOT_SUPPORTED);
     expect(added).toContain("I don't have that information for this property. I've flagged it for the property team so they can get back to you.");
     expect(added.filter((r) => r === PHOTO_NOT_SUPPORTED)).toHaveLength(1);
