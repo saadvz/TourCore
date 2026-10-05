@@ -256,7 +256,7 @@ describe("Tour Core journey", () => {
     const laterTour = await bookTour(laterCtx, "ready", { year: 2026, month: 9, day: 30 });
     expect((await laterTour.request("entrance")).decision.code).toBe("DENY_TOO_EARLY");
     expect(await prospectTexts(laterCtx)).toContain(earlyLater);
-    expect(earlyLater).toBe("You're a little early! I can open the doors from 1:50 PM on Wednesday, Sep 30. Text me again at 1:50 PM.");
+    expect(earlyLater).toBe("You're a little early! I can open the doors from 1:50 PM on Wednesday, Sep 30. Text me again then.");
 
     const doneCtx = setup();
     const done = await bookTour(doneCtx);

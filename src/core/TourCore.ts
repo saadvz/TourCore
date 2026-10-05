@@ -119,7 +119,8 @@ export class VisitorDenialCopy {
     if (!opensAt) return "You're a little early! I can open the doors from your tour time. Text me again at your tour time.";
     const atTime = ` at ${opensAt}`;
     const day = relative?.endsWith(atTime) ? relative.slice(0, -atTime.length) : relative;
-    return `You're a little early! I can open the doors from ${opensAt}${day ? ` ${day}` : ""}. Text me again at ${opensAt}.`;
+    const again = day && day !== "today" ? "Text me again then." : `Text me again at ${opensAt}.`;
+    return `You're a little early! I can open the doors from ${opensAt}${day ? ` ${day}` : ""}. ${again}`;
   }
 
   static followUpYes(team: string): string {
