@@ -4,8 +4,9 @@ Tour Core is an open-source self-touring tool. A prospect books a tour by text, 
 basic identity form, and then tours a unit on their own. Tour Core opens only the doors on their reserved
 route, and only during their reserved window. Afterward it sends a follow-up and keeps a full audit trail.
 
-**Tour Core does not control locks.** It requests authorized access through **Durin**, and only after its
-own policy check allows the request. If policy says no, Durin is never asked.
+**Tour Core is built on the Durin Access Platform.** It does not control locks. It requests authorized
+access through Durin, and only after its own policy check allows the request. If policy says no, Durin is
+never asked.
 
 This is a P0 demo: door access runs in Durin demo mode (no real doors open) and tour records are stored with the
 Tour Core installation. Real visitor texting uses the messaging provider the operator chooses.
@@ -715,8 +716,8 @@ TourCore.requestAccess()
 
 - `src/policy/evaluateAccess.ts` is a pure, deny-by-default policy. It checks the reservation, prospect, consent,
   verification, time window, exact route, reservation status and Durin health.
-- `src/durin/DurinAccessAdapter.ts` is the entire access contract: `requestAccess`, `revokeAccess` and `getHealth`.
-- `src/durin/MockDurinAccessAdapter.ts` is "Durin demo mode".
+- `src/durin/DurinAccessAdapter.ts` is the Durin Access Platform contract Tour Core is built on: `requestAccess`, `revokeAccess` and `getHealth`.
+- `src/durin/MockDurinAccessAdapter.ts` is Durin demo mode (same contract, no live doors).
 
 ## Layout
 
@@ -761,7 +762,11 @@ src/demo/          scripted demo (npm run demo)
 | Messaging | Sendblue for real phones, or demo messaging | Other providers behind the same `Messenger` contract |
 | Storage | On this computer (in-memory, plus JSON/CSV files) | Google Drive behind `TourCoreStore` |
 | Verification | Simulated form response, or practice verification | Real Google Form mapped to `BasicFormResponseSchema` |
-| Access | Durin demo mode | **Stays mocked** until the real Durin contract is ready |
+| Access | Durin demo mode (no live doors) | Live Durin Access Platform credentials/mode — same integration; demo vs live is the mode |
+
+Tour Core is already built on the Durin Access Platform. Demo uses Durin's demo path so no physical doors
+open. Production uses live Durin Access Platform credentials. Integration is assumed; what varies is demo
+vs live mode. Tour Core never controls locks; it requests scoped access through Durin after its own policy.
 
 Tour Core never stores government ID images. The basic form records claimed identity only (legal name, email,
 phone). It does not prove identity.

@@ -87,15 +87,16 @@ booked.
 | Operator (you) | Decides setup, answers, and anything consequential |
 | Grok Bot (Tour Core Bot) | Understands the operator and calls Tour Core's tools |
 | Tour Core | Keeps every record, applies policy, writes the audit |
-| Durin | Carries out access Tour Core has already approved |
+| Durin | The Durin Access Platform Tour Core is built on. Carries out access Tour Core has already approved |
 
 ## The access rule
 
-A door opens only when all of these hold for the visitor asking: their records
-are valid (reservation, consent, identity check), it's their tour time, the
-door is on their exact reserved route, and the system is healthy with no
-conflict, provider failure or operator hold. Anything else is a safe denial,
-decided before Durin is contacted.
+Tour Core is built on the Durin Access Platform. A door opens only when all of
+these hold for the visitor asking: their records are valid (reservation,
+consent, identity check), it's their tour time, the door is on their exact
+reserved route, and the system is healthy with no conflict, provider failure
+or operator hold. Anything else is a safe denial, decided before Durin is
+contacted. Say "door access" to the operator; never name Durin.
 
 ## What an operator does with the Bot
 

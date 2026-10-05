@@ -2,7 +2,8 @@
 
 Everything that belongs in the **Tour Core** Grok Bot team template, versioned
 with the code. Grok Bot is the installer and operator console; Tour Core stays
-the system of record and policy authority; Durin carries out approved access.
+the system of record and policy authority. It is built on the Durin Access
+Platform; Durin carries out approved access.
 
 ```
 Operator ─► Tour Core Bot ─► hosted Tour Core (hostedTourCoreUrl) ─► Durin

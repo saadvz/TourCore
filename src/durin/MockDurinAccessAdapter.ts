@@ -16,7 +16,7 @@ export interface MockDurinOptions {
   now?: () => Date;
 }
 
-/** Stand-in for Durin until the real contract is ready. Prints what it would do. */
+/** Durin demo mode: same Durin Access Platform contract, without opening real doors. Prints what it would do. */
 export class MockDurinAccessAdapter implements DurinAccessAdapter {
   readonly calls = { requestAccess: [] as DurinAccessRequest[], revokeAccess: [] as DurinRevokeRequest[] };
   private healthy = true;
