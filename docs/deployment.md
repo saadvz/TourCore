@@ -489,6 +489,13 @@ Checked against Railway's docs as of September 2026:
   is set automatically ([volumes](https://docs.railway.com/volumes)).
   Redeploying a service with a volume has a short period where the old and
   new containers are not both mounted. A deploy does not delete Drive records.
+  The hosted process inspects that mount at startup (mountinfo and device id)
+  and refuses to start if `TOURCORE_HOME` is unset or not on a persistent
+  volume. `/healthz` and `check_runtime_health` report the path, whether it is
+  persistent, and the mount that was found. `npm run check:storage` or
+  `node dist/server.js --check-storage` prints the verdict without starting
+  the server or writing files. `TOURCORE_ALLOW_EPHEMERAL_STORAGE=1` turns the
+  refusal into a warning for disposable demos.
 - `railway.json` / `railway.toml` are deprecated. New services cannot opt
   into them, and they stop being read on 2026-12-01
   ([config as code](https://docs.railway.com/config-as-code)). The desired
@@ -501,9 +508,10 @@ Checked against Railway's docs as of September 2026:
 
 Production start is `npm run build` then `npm start` (`node dist/server.js`).
 `npm run setup` stays the developer process. The hosted process exits if
-required configuration is malformed. It does not require a Google OAuth
-client, and it does not refuse to start because Drive is unreachable.
-`DIRECT_GOOGLE_DRIVE` is a separate optional mode.
+required configuration is malformed, or if `TOURCORE_HOME` is not on a
+persistent volume. It does not require a Google OAuth client, and it does
+not refuse to start because Drive is unreachable. `DIRECT_GOOGLE_DRIVE` is a
+separate optional mode.
 
 ### One-time admin setup
 

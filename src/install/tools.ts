@@ -113,7 +113,7 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
     name: "check_runtime_health",
     title: "Check Tour Core's health",
     kind: "read",
-    description: "Whether Tour Core is running and healthy: version, uptime, deployment mode, whether running tours can be saved, and alerts waiting to be delivered.",
+    description: "Whether Tour Core is running and healthy: version, uptime, deployment mode, whether running tours can be saved, alerts waiting to be delivered, the storage path, whether that path is on a persistent volume, and the mount that was found.",
     input: z.strictObject({}),
     run: async (ctx) => {
       const h = runtimeHealth(installation(ctx));

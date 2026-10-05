@@ -9,6 +9,7 @@ import type { OperatorServices } from "../operator/services";
 import { writeFileAtomic } from "../storage/atomicWrite";
 import { probeRuntimeStore } from "../storage/runtimeStore";
 import { TOURCORE_VERSION, type Installation } from "./installation";
+import { storageVolumeHealth, type StorageVolumeHealth } from "./persistentVolume";
 
 /**
  * The installation checks behind Tour Core's installation tools. Each one
@@ -31,7 +32,7 @@ function deployedCommitSha(env: NodeJS.ProcessEnv): string | null {
 export const installationFingerprint = (installationId: string | undefined) =>
   installationId ? createHash("sha256").update(`tour-core|${installationId}`).digest("hex").slice(0, 16) : undefined;
 
-export interface PublicHealth {
+export interface PublicHealth extends StorageVolumeHealth {
   ok: true;
   service: "tour-core";
   commit: string | null;
@@ -41,7 +42,13 @@ export interface PublicHealth {
 export function publicHealth(inst: Installation): PublicHealth {
   const id = safe(() => inst.files.manifest()?.installationId);
   const fingerprint = installationFingerprint(id);
-  return { ok: true, service: "tour-core", commit: deployedCommitSha(inst.env()), ...(fingerprint ? { installation: fingerprint } : {}) };
+  return {
+    ok: true,
+    service: "tour-core",
+    commit: deployedCommitSha(inst.env()),
+    ...(fingerprint ? { installation: fingerprint } : {}),
+    ...storageVolumeHealth(inst.options.root),
+  };
 }
 
 export function runtimeHealth(inst: Installation) {
@@ -62,6 +69,7 @@ export function runtimeHealth(inst: Installation) {
     deploymentMode: deployment.mode,
     runtimeRecords: storageOk ? "ok" : "can't be saved",
     alertsWaiting: alerts ? alerts.pending : undefined,
+    ...storageVolumeHealth(inst.options.root),
   };
 }
 

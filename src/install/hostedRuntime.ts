@@ -1,5 +1,6 @@
 import { isAbsolute, relative, resolve } from "node:path";
 import type { DeploymentMode } from "./deployment";
+import { allowEphemeralStorage } from "./persistentVolume";
 
 /**
  * HOSTED_RAILWAY_P0 runtime decisions. Railway injects PORT and
@@ -97,14 +98,15 @@ function inside(child: string, parent: string): boolean {
 export function hostedStateDir(env: NodeJS.ProcessEnv): { dir: string } | { problem: string } {
   const mount = env.RAILWAY_VOLUME_MOUNT_PATH?.trim();
   const home = env.TOURCORE_HOME?.trim();
-  if (mount && home && !inside(home, mount)) {
+  const allow = allowEphemeralStorage(env);
+  if (mount && home && !inside(home, mount) && !allow) {
     return { problem: "TOURCORE_HOME must be on the Railway volume (RAILWAY_VOLUME_MOUNT_PATH). The container disk is not durable." };
   }
   const dir = home || mount;
-  if (!dir || dir === "tourcore-data") {
+  if ((!dir || dir === "tourcore-data") && !allow) {
     return { problem: "HOSTED_RAILWAY_P0 needs a Railway volume mounted at /data. Set TOURCORE_HOME to that mount. That volume is the live operational store. The container filesystem is wiped on deploy." };
   }
-  return { dir };
+  return { dir: dir || "tourcore-data" };
 }
 
 export interface HostedConfig {

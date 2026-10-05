@@ -617,7 +617,14 @@ before Durin is called**. Then it runs completion (all doors re-locked) and the 
 Each property has one canonical `TourCoreConfig`, written by the setup flow to
 `tourcore-data/properties/<propertyId>/tourcore.config.json`. Status and check results go in `status.json`, and each
 practice tour's records go in `practice-tours/<time>/` (`tour-export.json` and `audit.csv`). Set `TOURCORE_HOME` to
-store this elsewhere; it's optional.
+store this elsewhere; it's optional for local development.
+
+On `HOSTED_RAILWAY_P0` (Railway), `TOURCORE_HOME` must be on the persistent volume, usually `/data`. The process
+refuses to start if that folder is unset or is not on a mounted volume, so a redeploy cannot wipe live records.
+`/healthz` and `check_runtime_health` report the storage path, whether it is on a persistent volume, and the mount
+that was found. `npm run check:storage` (or `node dist/server.js --check-storage`) prints the same verdict without
+starting the server or writing files, and exits non-zero when hosted mode would refuse. For a disposable demo only,
+`TOURCORE_ALLOW_EPHEMERAL_STORAGE=1` turns that refusal into a warning. Local `npm run setup` is not affected.
 
 The config holds the property (including its **IANA time zone**, e.g. `America/New_York`), operator alert contact,
 doors, units, routes, and tour hours: days, start, end, `slotEveryMinutes`, `tourLengthMinutes` and

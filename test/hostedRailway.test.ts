@@ -101,6 +101,8 @@ describe("HOSTED_RAILWAY_P0 runtime", () => {
     const config = validateHostedConfig(hostedEnv("/data"));
     expect(config).toMatchObject({ ok: true, port: 8080, host: "0.0.0.0", publicUrl: BASE, dataDir: "/data" });
     expect(validateHostedConfig({ TOURCORE_DEPLOYMENT_MODE: "HOSTED_RAILWAY_P0", PORT: "8080" }).ok).toBe(false);
+    expect(validateHostedConfig(hostedEnv("/data", { RAILWAY_VOLUME_MOUNT_PATH: "/data" })).ok).toBe(true);
+    expect(validateHostedConfig(hostedEnv("/var/lib/tourcore", { RAILWAY_VOLUME_MOUNT_PATH: "/data" })).ok).toBe(false);
   });
 
   it("never selects cloudflared, and every external URL uses the Railway address", async () => {
@@ -138,7 +140,14 @@ describe("HOSTED_RAILWAY_P0 runtime", () => {
     expect(health.status).toBe(200);
     const body = await health.text();
     expect(body).toMatch(/"service":"tour-core"/);
-    expect(JSON.parse(body)).toMatchObject({ ok: true, service: "tour-core", commit: null });
+    expect(JSON.parse(body)).toMatchObject({
+      ok: true,
+      service: "tour-core",
+      commit: null,
+      storagePath: expect.any(String),
+      persistentVolume: expect.any(Boolean),
+    });
+    expect(JSON.parse(body)).toHaveProperty("volumeMount");
     expect(body).not.toContain(SECRET);
     expect(body).not.toMatch(/trycloudflare|apiKey|refresh/i);
     const probe = hostedFetch(port, { host: "healthcheck.railway.app" });
@@ -152,7 +161,13 @@ describe("HOSTED_RAILWAY_P0 runtime", () => {
     const unsetRoot = tempDir();
     const unset = installation(unsetRoot, hostedEnv(unsetRoot));
     expect(publicHealth(unset).commit).toBeNull();
-    expect(runtimeHealth(unset)).toMatchObject({ version: expect.any(String), commit: null });
+    expect(runtimeHealth(unset)).toMatchObject({
+      version: expect.any(String),
+      commit: null,
+      storagePath: expect.any(String),
+      persistentVolume: expect.any(Boolean),
+    });
+    expect(runtimeHealth(unset)).toHaveProperty("volumeMount");
 
     const root = tempDir();
     const env = hostedEnv(root, { RAILWAY_GIT_COMMIT_SHA: sha });
