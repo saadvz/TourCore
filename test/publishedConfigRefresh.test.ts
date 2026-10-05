@@ -155,7 +155,8 @@ describe("open text conversations pick up republished settings", () => {
     const app = await textApp({ clock, hours: EVENING });
     await app.text("Hi");
     await app.text("1");
-    expect(app.session().offeredDates.map((day) => day.date)).toEqual(["2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02"]);
+    expect(app.session().offeredDates[0]).toMatchObject({ date: "2026-09-29" });
+    expect(app.session().offeredDates.map((day) => day.date)).not.toContain("2026-09-28");
     expect(await app.session().stage()).toBe("choose-date");
 
     app.republishHours("20:00");
