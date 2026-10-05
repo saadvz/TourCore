@@ -227,6 +227,72 @@ describe("operators can set up a one-time tour", () => {
     expect(visitor.at(-1)!.content).toBe("I didn't hear back, so I released your Tuesday at 2:00 PM tour. Text me anytime to book another.");
   });
 
+  it("YES still confirms the reserved one-off after published hours change", async () => {
+    const a = await liveApp({ cleanups });
+    await publish(a);
+    await a.approve("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "3:15 PM today" });
+    const current = a.ws.load(PROPERTY).config;
+    a.ws.save({ ...current, tourHours: { ...current.tourHours, start: "20:00", end: "23:00" } });
+
+    const yes = await a.text("YES");
+    expect(yes.join("\n")).toContain("Great, you're booked for 3:15 PM");
+    const tour = a.ws.listTours(PROPERTY).find((item) => item.kind === "messaging")!;
+    expect(a.ws.loadTour(PROPERTY, tour.tourId)!.bundle.reservations[0]!.slotStart).toBe("2026-09-28T19:15:00.000Z");
+  });
+
+  it("uses the latest published hours to decide if a one-off is outside hours", async () => {
+    const a = await liveApp({ cleanups });
+    await publish(a);
+    const current = a.ws.load(PROPERTY).config;
+    a.ws.save({ ...current, tourHours: { ...current.tourHours, start: "18:00", end: "21:00" } });
+
+    const evening = await a.grok("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "7:30 PM today" });
+    expect(evening.summary).toBe(
+      "Set up a tour for Dana at Unit 1A on Monday at 7:30 PM? Only say yes if they asked for this tour. Dana gets a text to confirm. Book it?",
+    );
+    expect(evening.summary).not.toContain("That's outside your tour hours");
+    expect(evening.outsideHours).not.toBe(true);
+
+    const afternoon = await a.grok("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "3:15 PM today" });
+    expect(afternoon.summary).toContain("That's outside your tour hours.");
+    expect(afternoon.summary).toContain("This is a one-off. Your regular tour hours stay the same, and Dana gets a text to confirm.");
+    expect(afternoon.outsideHours).toBe(true);
+  });
+
+  it("after they cancel, the next-opening copy and 'that' booking still work", async () => {
+    const a = await liveApp({ cleanups });
+    await publish(a);
+    await a.approve("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "3:15 PM today" });
+    await a.text("NO");
+
+    await a.text("TOUR");
+    await a.text("YES");
+    await a.text("1");
+    const saturday = await a.text("Saturday");
+    expect(saturday.join("\n")).toContain("Tours don't run on Saturdays. The next opening is Monday, Sep 28 at 2:00 PM. Want that, or another day?");
+    expect(saturday.join("\n")).not.toContain("I have tours available");
+
+    const booked = await a.text("that");
+    expect(booked.join("\n")).toContain("Great, you're booked for 2:00 PM");
+    expect(booked.join("\n")).toContain("Is it OK if I text you about this tour");
+  });
+
+  it("taking the offered next opening re-checks after a one-off reserves that start", async () => {
+    const a = await liveApp({ cleanups });
+    await publish(a);
+    await a.textFrom(OTHER, "TOUR");
+    await a.textFrom(OTHER, "YES");
+    await a.textFrom(OTHER, "1");
+    const saturday = await a.textFrom(OTHER, "Saturday");
+    expect(saturday.join("\n")).toContain("The next opening is Monday, Sep 28 at 2:00 PM. Want that, or another day?");
+
+    await a.approve("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "2:00 PM today" });
+    const that = await a.textFrom(OTHER, "that");
+    expect(that.join("\n")).toContain("Someone just grabbed that time. Here's what's left:");
+    expect(that.join("\n")).toContain("3:30 PM");
+    expect(that.join("\n")).not.toContain("2:00 PM");
+  });
+
   it("refuses when the property isn't published, the time is in the past, or it overlaps another tour", async () => {
     const a = await liveApp({ cleanups });
     await expect(a.grok("schedule_one_off_tour", { phone: PHONE, unit: "1A", startsAt: "3:15 PM today" })).rejects.toThrow(/isn't published with live visitor texting/);
