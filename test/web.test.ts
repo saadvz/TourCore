@@ -58,6 +58,40 @@ describe("browser setup", () => {
     expect(appJs.text).not.toContain("your own name");
     expect(appJs.text).toContain("What number can stuck visitors call? Pick one someone answers during tour hours.");
     expect(appJs.text).not.toContain("What email should visitors see when they text HELP?");
+    expect(appJs.text).toContain("Apartment or condo (one unit)");
+    expect(appJs.text).toContain("Multifamily (duplex / small building you own)");
+    expect(appJs.text).toContain("What's the unit number?");
+    expect(appJs.text).toContain("Do you control the building entrance, or only the unit door?");
+    expect(appJs.text).not.toContain('["APARTMENT_BUILDING", "Apartment building"]');
+  });
+
+  it("sets up one apartment or condo unit through the same commands the page uses", async () => {
+    const app = await startApp();
+    const created = await app.call("POST", "/api/properties", { address: "145 Main St, Hoboken, NJ 07030", propertyType: "APARTMENT_OR_CONDO" });
+    const id = created.body.summary.id as string;
+    await app.cmd(id, "addUnit", { name: "4B" });
+    await app.cmd(id, "setPropertyDetails", { buildingAccess: "BUILDING_AND_UNIT" });
+    await app.cmd(id, "addDoor", { name: "Lobby Entrance", kind: "ENTRANCE" });
+    await app.cmd(id, "setPropertyDetails", { entryInstructions: "Buzz 4B at the desk." });
+    const view = (await app.call("GET", `/api/properties/${id}`)).body.view;
+    expect(view.property).toMatchObject({
+      name: "145 Main St, Unit 4B",
+      propertyType: "APARTMENT_OR_CONDO",
+      propertyTypeLabel: "Apartment or condo (one unit)",
+      buildingAccess: "BUILDING_AND_UNIT",
+    });
+    expect(view.units).toHaveLength(1);
+    expect(view.units[0]).toMatchObject({
+      name: "Unit 4B",
+      entryInstructions: "Buzz 4B at the desk.",
+      route: { doorNames: ["Lobby Entrance", "Unit 4B Door"] },
+    });
+
+    await app.cmd(id, "setPropertyDetails", { buildingAccess: "UNIT_ONLY", skipEntryInstructions: true });
+    const unitOnly = (await app.call("GET", `/api/properties/${id}`)).body.view;
+    expect(unitOnly.property.buildingAccess).toBe("UNIT_ONLY");
+    expect(unitOnly.units[0].route.doorNames).toEqual(["Unit 4B Door"]);
+    expect(unitOnly.units[0].entryInstructions).toBeUndefined();
   });
 
   it("goes from a new property to published for demo through the real setup actions", async () => {

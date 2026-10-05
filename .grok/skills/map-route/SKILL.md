@@ -16,7 +16,10 @@ metadata:
 A route is the exact, ordered list of doors Tour Core will allow for a visitor
 to one unit. Tour Core refuses any door that isn't on it, before Durin is ever
 contacted. So a route must only contain doors that really exist and that the
-operator confirmed.
+operator confirmed. An apartment or condo that only controls the unit door
+starts and ends at that unit door — do not add a building entrance to the
+route. If they control the building entrance, the route is that entrance then
+the unit door.
 
 ## When to use
 
@@ -45,8 +48,9 @@ or the readiness check says a unit "doesn't have a complete route".
    - `unknown-doors`: tell the operator Tour Core doesn't have that door and
      list the doors it has. Ask whether they meant one of those or want to add a
      new door. Only if they ask to add it, `add_door`, then preview again.
-   - `has-problems`: read the problems (e.g. "needs to start at an entrance")
-     and ask how they'd like to fix it.
+   - `has-problems`: read the problems (e.g. "needs to start at an entrance"
+     — skip that for a unit-only apartment or condo) and ask how they'd like
+     to fix it.
 4. After a clear yes, `set_route` with the **exact door names** from the
    preview, in order, plus the operator's own directions if they gave any.
 5. `get_route` to confirm what was saved and read it back.

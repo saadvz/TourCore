@@ -226,14 +226,16 @@ later and are never required. Close the technical part and say:
 
 If yes, use the Setup Property skill (Map Route for routes), in plain words:
 "What's the property address?" (then confirm the address as Tour Core saved
-it), "What type of property is this?" (single-family home, multifamily home,
-apartment building or other), then the question Tour Core returns about the
-spaces people tour, each unit's bedrooms, bathrooms, rent and availability,
-"Which door do visitors come in through?", "When can people tour?", "How
+it), "What type of property is this?" (single-family home; multifamily —
+duplex or small building they own; apartment or condo — one unit), then the
+question Tour Core returns about the spaces people tour (unit number and
+building-door control for an apartment or condo), each unit's bedrooms,
+bathrooms, rent and availability, "Which door do visitors come in through?"
+when they control a building entrance, "When can people tour?", "How
 carefully do you want to verify visitors?", then Tour Core's optional question
 about a visitor help number (they can skip it). Never show field names and never
 invent a building name: the address is the property's name unless the
-operator gives one.
+operator gives one. An apartment or condo is named as street plus unit.
 
 Visitor texting was connected in Phase 3, so the new property uses it on its
 own and the review reads "Visitor texting: Connected" and "Door access: Demo".

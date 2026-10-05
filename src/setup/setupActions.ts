@@ -1,8 +1,11 @@
 import {
+  BUILDING_ACCESS,
+  BUILDING_ACCESS_LABELS,
   DEMO_VERIFICATION_FORM_URL,
   PROPERTY_TYPE_LABELS,
   PropertyTypeSchema,
   validateConfig,
+  type BuildingAccess,
   type Door,
   type PropertyType,
   type TourCoreConfig,
@@ -13,7 +16,7 @@ import { nextProfileQuestion, parseProfileValue, PROFILE_FIELDS, ProfileValueErr
 import type { ConfigIssue, ConfigSection } from "../config/validateConfig";
 import { formatPhone, parsePhone } from "../core/phone";
 import { formatClockTime, friendlyTimeZone, WEEKDAYS, type Weekday } from "../core/timezone";
-import { visitorSubject } from "../visitor/identity";
+import { isApartmentOrCondo, isSingleTourPlace, streetAndUnit, unitLabel, visitorSubject } from "../visitor/identity";
 import { inferTimeZone, resolveTimeZone, slugify } from "./parse";
 import { formatCanonical, parseUsAddress } from "./address";
 
@@ -125,7 +128,7 @@ function withLabel(property: SetupDraft["property"]): SetupDraft["property"] {
 
 function requirePropertyType(input: string): PropertyType {
   const parsed = PropertyTypeSchema.safeParse(input);
-  if (!parsed.success) throw new SetupInputError("PROPERTY_TYPE_UNKNOWN", "Choose a single-family home, a multifamily home, an apartment building, or other.");
+  if (!parsed.success) throw new SetupInputError("PROPERTY_TYPE_UNKNOWN", "Choose a single-family home, a multifamily home, or an apartment or condo.");
   return parsed.data;
 }
 
@@ -180,9 +183,20 @@ export function createPropertySetup(input: {
  */
 export function setPropertyDetails(
   draft: SetupDraft,
-  input: { name?: string; address?: string; propertyType?: string; timezone?: string; facts?: string[]; postalCode?: string; confirmAddress?: boolean },
+  input: {
+    name?: string;
+    address?: string;
+    propertyType?: string;
+    timezone?: string;
+    facts?: string[];
+    postalCode?: string;
+    confirmAddress?: boolean;
+    buildingAccess?: string;
+    entryInstructions?: string;
+    skipEntryInstructions?: boolean;
+  },
 ): SetupDraft {
-  const next = clone(draft);
+  let next = clone(draft);
   // A setup saved before names and addresses were kept apart: an earlier name that isn't the address was the operator's.
   if (next.property.displayName === undefined && next.property.name.trim() && next.property.name.trim() !== next.property.address.trim()) next.property.displayName = next.property.name.trim();
   if (input.name !== undefined) next.property.displayName = input.name.trim() || undefined;
@@ -209,14 +223,25 @@ export function setPropertyDetails(
   if (input.propertyType !== undefined) next.property.propertyType = requirePropertyType(input.propertyType);
   if (input.timezone !== undefined) next.property.timezone = requireTimeZone(input.timezone);
   if (input.facts !== undefined) next.property.facts = cleanFacts(input.facts);
+  if (input.buildingAccess !== undefined) next = setBuildingAccess(next, input.buildingAccess);
+  if (input.entryInstructions !== undefined || input.skipEntryInstructions) {
+    next = setEntryInstructions(next, { instructions: input.entryInstructions, skip: input.skipEntryInstructions });
+  }
   next.property = withLabel(next.property);
-  return next;
+  return refreshCondoLabel(next);
 }
 
 /** What Tour Core suggests calling the one tourable space of a single-family home. The operator can rename it. */
 export const SINGLE_FAMILY_SPACE_NAME = "Main Home";
 /** The single-family home's own door, when the operator hasn't named one. */
 export const SINGLE_FAMILY_DOOR_NAME = "Front Door";
+
+export const CONDO_UNIT_QUESTION = "What's the unit number?";
+export const BUILDING_ACCESS_QUESTION = "Do you control the building entrance, or only the unit door?";
+export const BUILDING_ENTRANCE_QUESTION = "What's the building entrance called?";
+export const ENTRY_INSTRUCTIONS_QUESTION = "How should visitors get in and find your unit?";
+
+export const BUILDING_ACCESS_CHOICES = BUILDING_ACCESS.map((choice) => ({ choice, label: BUILDING_ACCESS_LABELS[choice] }));
 
 /**
  * The one setup question that depends on the property type: how to ask about
@@ -226,6 +251,8 @@ export function tourableSpacesQuestion(draft: SetupDraft): { question: string; s
   switch (draft.property.propertyType) {
     case "SINGLE_FAMILY":
       return { question: `People will tour the whole home. Should I call it "${SINGLE_FAMILY_SPACE_NAME}", or would you like another name?`, suggestedName: SINGLE_FAMILY_SPACE_NAME };
+    case "APARTMENT_OR_CONDO":
+      return { question: CONDO_UNIT_QUESTION };
     case "MULTIFAMILY_HOME":
     case "APARTMENT_BUILDING":
       return { question: "Which units can people tour?" };
@@ -234,6 +261,78 @@ export function tourableSpacesQuestion(draft: SetupDraft): { question: string; s
     default:
       return undefined;
   }
+}
+
+export function entryInstructionsDecided(property: SetupDraft["property"]): boolean {
+  return !!property.entryInstructionsDecided;
+}
+
+export function condoNextQuestion(draft: SetupDraft): { nextQuestion: string; choices?: { choice: string; label: string }[] } | undefined {
+  if (!isApartmentOrCondo(draft.property)) return undefined;
+  if (!draft.units.length) return { nextQuestion: CONDO_UNIT_QUESTION };
+  if (!draft.property.buildingAccess) return { nextQuestion: BUILDING_ACCESS_QUESTION, choices: [...BUILDING_ACCESS_CHOICES] };
+  if (draft.property.buildingAccess === "BUILDING_AND_UNIT" && !draft.doors.some((d) => d.kind === "ENTRANCE")) {
+    return { nextQuestion: BUILDING_ENTRANCE_QUESTION };
+  }
+  if (!entryInstructionsDecided(draft.property)) return { nextQuestion: ENTRY_INSTRUCTIONS_QUESTION };
+  return undefined;
+}
+
+function requireBuildingAccess(input: string): BuildingAccess {
+  const parsed = BUILDING_ACCESS.find((value) => value === input);
+  if (!parsed) throw new SetupInputError("BUILDING_ACCESS_UNKNOWN", "Say whether you control the building entrance, or only the unit door.");
+  return parsed;
+}
+
+/** Default apartment or condo nickname is street + unit, never "Main Home". An operator-given public name still wins. */
+export function refreshCondoLabel(draft: SetupDraft): SetupDraft {
+  if (!isApartmentOrCondo(draft.property) || draft.property.displayName?.trim() || !draft.units[0]) return draft;
+  const next = clone(draft);
+  next.property.name = streetAndUnit(next.property, next.units[0]!.name);
+  return next;
+}
+
+export function setBuildingAccess(draft: SetupDraft, input: string): SetupDraft {
+  const access = requireBuildingAccess(input);
+  let next = clone(draft);
+  next.property.buildingAccess = access;
+  next = applyCondoRoute(next);
+  return refreshCondoLabel(next);
+}
+
+export function setEntryInstructions(draft: SetupDraft, input: { instructions?: string; skip?: boolean }): SetupDraft {
+  const next = clone(draft);
+  const unit = next.units[0];
+  const text = input.instructions?.trim();
+  if (unit) {
+    if (text) unit.entryInstructions = text;
+    else delete unit.entryInstructions;
+  }
+  if (input.skip || input.instructions !== undefined) next.property.entryInstructionsDecided = true;
+  return next;
+}
+
+/** Non-empty landlord instructions only. Skip stores nothing. */
+export function entryInstructionsFragment(instructions?: string): string | undefined {
+  const text = instructions?.trim();
+  return text ? `Here's how to get in: ${text}` : undefined;
+}
+
+/**
+ * After the operator answers the condo access questions, set the route:
+ * building entrance + unit door, or the unit door alone.
+ */
+export function applyCondoRoute(draft: SetupDraft): SetupDraft {
+  if (!isApartmentOrCondo(draft.property) || !draft.units[0]) return draft;
+  const unit = draft.units[0];
+  if (!unit.doorId) return draft;
+  const access = draft.property.buildingAccess;
+  if (!access) return draft;
+  const entrance = draft.doors.find((d) => d.kind === "ENTRANCE");
+  if (access === "UNIT_ONLY") return setRoute(draft, unit.id, [unit.doorId]);
+  if (!entrance) return draft;
+  const doors = [...new Set([entrance.id, unit.doorId])];
+  return setRoute(draft, unit.id, doors);
 }
 
 /** Keeps operator wording as written; only trims and drops blanks. */
@@ -305,7 +404,8 @@ export function addDoor(draft: SetupDraft, input: { name: string; kind: Door["ki
     if (!unit) throw new SetupInputError("UNIT_NOT_FOUND", "That unit isn't part of this property.");
     unit.doorId = door.id;
   }
-  return { draft: next, door };
+  const routed = input.kind === "ENTRANCE" && isApartmentOrCondo(next.property) ? applyCondoRoute(next) : next;
+  return { draft: routed, door };
 }
 
 export function renameDoor(draft: SetupDraft, doorId: string, name: string): SetupDraft {
@@ -374,7 +474,7 @@ export function renameUnit(draft: SetupDraft, unitId: string, name: string, opti
     for (const stop of route.stops) stop.guidance = stop.guidance.split(old).join(clean);
   }
   if (renameDoorToo) next = renameDoor(next, unit.doorId, defaultUnitDoorName(clean));
-  return next;
+  return refreshCondoLabel(next);
 }
 
 export function setUnitDetails(draft: SetupDraft, unitId: string, input: { summary?: string; facts?: string[] }): SetupDraft {
@@ -415,9 +515,12 @@ export function setUnitProfile(draft: SetupDraft, unitId: string, values: Partia
   return next;
 }
 
-/** Entrance -> unit door, when both exist. A suggestion only; nothing is saved until setRoute. */
+/** Entrance -> unit door, when both exist. A unit-only condo is just the unit door. */
 export function suggestRoute(draft: SetupDraft, unitId: string): string[] {
   const unit = draft.units.find((u) => u.id === unitId);
+  if (isApartmentOrCondo(draft.property) && draft.property.buildingAccess === "UNIT_ONLY") {
+    return [unit?.doorId].filter((id): id is string => !!id && draft.doors.some((d) => d.id === id));
+  }
   const entrance = draft.doors.find((d) => d.kind === "ENTRANCE");
   return [...new Set([entrance?.id, unit?.doorId].filter((id): id is string => !!id && draft.doors.some((d) => d.id === id)))];
 }
@@ -426,9 +529,18 @@ export function suggestRoute(draft: SetupDraft, unitId: string): string[] {
  * Adds a tourable space with its own door. In a single-family home the space
  * is the whole home: it's named "Main Home" unless the operator says
  * otherwise, its door is the home's entrance (added as "Front Door" if there
- * isn't one yet), and its route is just that door.
+ * isn't one yet), and its route is just that door. An apartment or condo is
+ * one unit: the operator's unit number, a unit door, and a route once they
+ * say whether they control the building entrance.
  */
 export function addTourableSpace(draft: SetupDraft, input: { name?: string; summary?: string; facts?: string[]; doorName?: string }): SetupDraft {
+  if (isApartmentOrCondo(draft.property)) {
+    if (draft.units.length) throw new SetupInputError("APARTMENT_OR_CONDO_ONE_UNIT", `An apartment or condo is one unit, and it's already set up as ${draft.units[0]!.name}.`);
+    const name = unitLabel(requireName(input.name, "UNIT_NAME_MISSING", "What's the unit number?"));
+    const { draft: withUnit, unit } = addUnit(draft, { ...input, name });
+    const withDoor = addDoor(withUnit, { name: input.doorName?.trim() || defaultUnitDoorName(unit.name), kind: "UNIT", unitId: unit.id }).draft;
+    return refreshCondoLabel(applyCondoRoute(withDoor));
+  }
   if (draft.property.propertyType !== "SINGLE_FAMILY") {
     const { draft: withUnit, unit } = addUnit(draft, { ...input, name: input.name ?? "" });
     return addDoor(withUnit, { name: input.doorName?.trim() || defaultUnitDoorName(unit.name), kind: "UNIT", unitId: unit.id }).draft;
@@ -483,7 +595,7 @@ export function setRoute(draft: SetupDraft, unitId: string, doorIds: string[], o
 }
 
 function guidanceFor(draft: SetupDraft, unit: Unit, doorId: string, isLast: boolean, directions?: string): string {
-  const place = draft.property.propertyType === "SINGLE_FAMILY" ? visitorSubject(draft.property, unit.name) : unit.name;
+  const place = isSingleTourPlace(draft.property) ? visitorSubject(draft.property, unit.name) : unit.name;
   if (isLast) return `Welcome to ${place}! Take your time, and text me any questions.`;
   const door = draft.doors.find((d) => d.id === doorId);
   if (door?.kind === "ENTRANCE") {
@@ -580,6 +692,9 @@ export function reviewSetup(draft: SetupDraft): SetupReview {
         draft.property.address,
         ...(draft.property.displayName ? [`Called: ${draft.property.displayName}`] : []),
         draft.property.propertyType ? PROPERTY_TYPE_LABELS[draft.property.propertyType] : "(property type not chosen yet)",
+        ...(isApartmentOrCondo(draft.property) && draft.property.buildingAccess === "UNIT_ONLY" ? ["Building entrance: visitors get in on their own"] : []),
+        ...(isApartmentOrCondo(draft.property) && draft.property.buildingAccess === "BUILDING_AND_UNIT" ? ["Building entrance: you control it"] : []),
+        ...(draft.units[0]?.entryInstructions ? [`Entry instructions: ${draft.units[0].entryInstructions}`] : []),
       ],
     },
     { editSection: "property", title: "TIMEZONE", lines: [`${draft.property.timezone} (${friendlyTimeZone(draft.property.timezone)})`] },

@@ -38,8 +38,17 @@ import {
   type SetupDraft,
 } from "../setup";
 import { unitDetailsView } from "../setup/presenters";
-import { addTourableSpace, setUnitProfile, SINGLE_FAMILY_SPACE_NAME } from "../setup/setupActions";
-import { PROPERTY_TYPE_LABELS, PROPERTY_TYPES, type PropertyType } from "../config/tourCoreConfig";
+import {
+  addTourableSpace,
+  BUILDING_ACCESS_CHOICES,
+  BUILDING_ACCESS_QUESTION,
+  ENTRY_INSTRUCTIONS_QUESTION,
+  setBuildingAccess,
+  setEntryInstructions,
+  setUnitProfile,
+  SINGLE_FAMILY_SPACE_NAME,
+} from "../setup/setupActions";
+import { PROPERTY_TYPE_LABELS, SETUP_PROPERTY_TYPES, type PropertyType } from "../config/tourCoreConfig";
 import { isCurrent } from "../setup/workspace";
 import { InputClosedError, Prompter, style } from "./prompter";
 
@@ -145,8 +154,9 @@ async function newProperty(): Promise<void> {
 
 function askPropertyType(current?: PropertyType): Promise<PropertyType> {
   io.say("");
-  const choices = PROPERTY_TYPES.map((t) => ({ label: PROPERTY_TYPE_LABELS[t], value: t }));
-  return io.choose("What type of property is this?", choices, current ? PROPERTY_TYPES.indexOf(current) + 1 : 3);
+  const choices = SETUP_PROPERTY_TYPES.map((t) => ({ label: PROPERTY_TYPE_LABELS[t], value: t }));
+  const currentIndex = current && (SETUP_PROPERTY_TYPES as readonly string[]).includes(current) ? SETUP_PROPERTY_TYPES.indexOf(current as (typeof SETUP_PROPERTY_TYPES)[number]) + 1 : 3;
+  return io.choose("What type of property is this?", choices, currentIndex);
 }
 
 async function askTimeZone(address: string, current?: string): Promise<string> {
@@ -163,11 +173,66 @@ async function askTimeZone(address: string, current?: string): Promise<string> {
   );
 }
 
+async function askUnitDetails(start: SetupDraft): Promise<SetupDraft> {
+  let draft = start;
+  io.say(dim("\nA few basics visitors always ask about. Type \"not provided\" for anything you don't know or don't want listed."));
+  for (const unit of draft.units) {
+    for (const [field, question, hint] of [
+      ["bedrooms", "How many bedrooms", '(0 or "studio" for a studio)'],
+      ["bathrooms", "How many bathrooms", ""],
+      ["monthlyRent", "What's the monthly rent for", "(e.g. $2,200)"],
+      ["availability", "When is it available,", '(e.g. "now" or "October 15")'],
+    ] as const) {
+      const current = unitDetailsView(draft.units.find((u) => u.id === unit.id)!).inputs[field];
+      draft = await retry(async () => {
+        const answer = await io.askRequired(`${question} ${unit.name}? ${hint}`.replace(/\s+$/, ""), current || undefined);
+        return setUnitProfile(draft, unit.id, { [field]: answer });
+      });
+    }
+  }
+  return draft;
+}
+
 async function editUnits(start: SetupDraft): Promise<SetupDraft> {
   let draft = start;
   const existingIds = draft.units.map((u) => u.id);
   io.say("");
   const singleFamily = draft.property.propertyType === "SINGLE_FAMILY";
+  const condo = draft.property.propertyType === "APARTMENT_OR_CONDO";
+
+  if (condo) {
+    draft = await retry(async () => {
+      const current = draft.units[0];
+      const name = await io.askRequired("What's the unit number?", current?.name);
+      return current ? renameUnit(draft, current.id, name) : addTourableSpace(draft, { name });
+    });
+    draft = await retry(async () => {
+      const current = draft.property.buildingAccess;
+      const access = await io.choose(
+        BUILDING_ACCESS_QUESTION,
+        BUILDING_ACCESS_CHOICES.map((c) => ({ label: c.label, value: c.choice })),
+        current ? BUILDING_ACCESS_CHOICES.findIndex((c) => c.choice === current) + 1 : 1,
+      );
+      return setBuildingAccess(draft, access);
+    });
+    if (draft.property.buildingAccess === "BUILDING_AND_UNIT") {
+      const entrance = draft.doors.find((d) => d.kind === "ENTRANCE");
+      draft = await retry(async () => {
+        const name = await io.askRequired("What's the building entrance called?", entrance?.name ?? SETUP_DEFAULTS.entranceName);
+        return entrance ? renameDoor(draft, entrance.id, name) : addDoor(draft, { name, kind: "ENTRANCE" }).draft;
+      });
+    }
+    const unit = draft.units[0]!;
+    const door = draft.doors.find((d) => d.id === unit.doorId);
+    draft = await retry(async () => {
+      const name = await io.askRequired(`What's the door to ${unit.name} called?`, door?.name ?? `${unit.name} Door`);
+      return door ? renameDoor(draft, door.id, name) : addDoor(draft, { name, kind: "UNIT", unitId: unit.id }).draft;
+    });
+    const instructions = await io.ask(`${ENTRY_INSTRUCTIONS_QUESTION} Leave blank to skip.`);
+    draft = setEntryInstructions(draft, instructions.trim() ? { instructions } : { skip: true });
+    return askUnitDetails(draft);
+  }
+
   const count = singleFamily ? 1 : await io.askParsed("How many units can people self-tour?", String(existingIds.length || 1), numberBetween(1, 50), "Please enter a number from 1 to 50.");
 
   if (singleFamily) {
@@ -186,21 +251,7 @@ async function editUnits(start: SetupDraft): Promise<SetupDraft> {
   }
   for (const id of existingIds.slice(count)) draft = removeUnit(draft, id);
 
-  io.say(dim("\nA few basics visitors always ask about. Type \"not provided\" for anything you don't know or don't want listed."));
-  for (const unit of draft.units) {
-    for (const [field, question, hint] of [
-      ["bedrooms", "How many bedrooms", '(0 or "studio" for a studio)'],
-      ["bathrooms", "How many bathrooms", ""],
-      ["monthlyRent", "What's the monthly rent for", "(e.g. $2,200)"],
-      ["availability", "When is it available,", '(e.g. "now" or "October 15")'],
-    ] as const) {
-      const current = unitDetailsView(draft.units.find((u) => u.id === unit.id)!).inputs[field];
-      draft = await retry(async () => {
-        const answer = await io.askRequired(`${question} ${unit.name}? ${hint}`.replace(/\s+$/, ""), current || undefined);
-        return setUnitProfile(draft, unit.id, { [field]: answer });
-      });
-    }
-  }
+  draft = await askUnitDetails(draft);
 
   io.say("");
   const entrance = draft.doors.find((d) => d.kind === "ENTRANCE");

@@ -6,6 +6,7 @@ import { UNNAMED_VISITOR } from "../domain/model";
 import { TERMINAL } from "../domain/stateMachine";
 import type { ExportBundle } from "../export/exportBundle";
 import { SetupInputError } from "../setup/setupActions";
+import { visitorSubject } from "../visitor/identity";
 import type { ConversationItem, TourRecord } from "../setup/workspace";
 import type { VisitorDemoSession } from "../visitor/session";
 import { STATUS_LABELS } from "../visitor/views";
@@ -115,7 +116,8 @@ export function visitorNameOf(tour: TourSnapshot): string {
 
 export function unitNameOf(tour: TourSnapshot): string | undefined {
   const r = currentReservation(tour);
-  return tour.config.units.find((u) => u.id === r?.unitId)?.name;
+  const unit = tour.config.units.find((u) => u.id === r?.unitId);
+  return unit ? visitorSubject(tour.config.property, unit.name) : undefined;
 }
 
 /** Still in play: a reservation that hasn't ended, or a live visitor who hasn't booked yet. */

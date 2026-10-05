@@ -6,8 +6,8 @@ calls it internally; use it only if the operator asks for technical detail.
 | Say this | Tour Core means |
 | --- | --- |
 | property, building, the address | a property setup (identified by its canonical address; `displayName` only if the operator gave one) |
-| single-family home, multifamily home, apartment building, other | the property type (`SINGLE_FAMILY`, `MULTIFAMILY_HOME`, `APARTMENT_BUILDING`, `OTHER`) |
-| unit, "Main Home" | a tourable unit (a single-family home has one, the whole home) |
+| single-family home, multifamily (duplex / small building you own), apartment or condo (one unit) | the property type (`SINGLE_FAMILY`, `MULTIFAMILY_HOME`, `APARTMENT_OR_CONDO`). Older files may still say apartment building or other |
+| unit, "Main Home", "145 Main St, Unit 4B" | a tourable unit (a single-family home has one, the whole home; an apartment or condo is one unit, named as street + unit) |
 | entrance | an ENTRANCE door |
 | hallway door, inside door | a COMMON door on a route |
 | the unit's door | the unit's own UNIT door |

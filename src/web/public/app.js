@@ -251,9 +251,8 @@ async function propertyStep(id) {
   const types = [
     ["", "Choose one"],
     ["SINGLE_FAMILY", "Single-family home"],
-    ["MULTIFAMILY_HOME", "Multifamily home"],
-    ["APARTMENT_BUILDING", "Apartment building"],
-    ["OTHER", "Other"],
+    ["MULTIFAMILY_HOME", "Multifamily (duplex / small building you own)"],
+    ["APARTMENT_OR_CONDO", "Apartment or condo (one unit)"],
   ];
   const propertyType = el("select", { required: true }, ...types.map(([value, label]) => el("option", { value, ...(value === (p?.propertyType ?? "") ? { selected: true } : {}) }, label)));
   const tz = timezonePicker(p?.timezone);
@@ -313,19 +312,53 @@ async function propertyStep(id) {
 function unitsStep(data) {
   const { view, summary } = data;
   const id = summary.id;
+  const condo = view.property.propertyType === "APARTMENT_OR_CONDO";
   return wizardShell(
     data,
     "units",
     el(
       "div",
       {},
-      el("h1", {}, "Which units can people tour?"),
-      el("p", { class: "lead" }, "Add each unit a visitor can tour on their own. Descriptions are optional, and only what you write is ever shared with visitors."),
+      el("h1", {}, condo ? "What's the unit number?" : "Which units can people tour?"),
+      el(
+        "p",
+        { class: "lead" },
+        condo
+          ? "This is one unit in a building. Visitors hear the street address and unit number — never a made-up building name."
+          : "Add each unit a visitor can tour on their own. Descriptions are optional, and only what you write is ever shared with visitors.",
+      ),
       issueList(view.issues.filter((i) => i.fix?.step === "units"), id, "units"),
       view.units.map((u) => unitCard(id, u)),
-      addUnitForm(id, view.units.length === 0),
+      condo && view.units.length ? condoAccessCard(id, view) : null,
+      !condo || view.units.length === 0 ? addUnitForm(id, view.units.length === 0, condo) : null,
     ),
     () => go(nextHref(id, "units")),
+  );
+}
+
+function condoAccessCard(id, view) {
+  const access = view.property.buildingAccess ?? "";
+  const building = el("select", {}, 
+    el("option", { value: "", ...(access ? {} : { selected: true }) }, "Choose one"),
+    el("option", { value: "BUILDING_AND_UNIT", ...(access === "BUILDING_AND_UNIT" ? { selected: true } : {}) }, "I control the building entrance"),
+    el("option", { value: "UNIT_ONLY", ...(access === "UNIT_ONLY" ? { selected: true } : {}) }, "I only control the unit door"),
+  );
+  const instructions = textarea(view.units[0]?.entryInstructions ?? "", "e.g. Use the lobby code 1234, then take the elevator to floor 4.");
+  const errors = errorBox();
+  const save = action(async () => {
+    await command(id, "setPropertyDetails", {
+      ...(building.value ? { buildingAccess: building.value } : {}),
+      ...(instructions.value.trim() ? { entryInstructions: instructions.value } : { skipEntryInstructions: true }),
+    });
+    rerender();
+  }, errors);
+  return el(
+    "div",
+    { class: "card" },
+    field("Do you control the building entrance, or only the unit door?", building),
+    field("How should visitors get in and find your unit?", instructions, "Optional. Sent only after they verify who they are. Leave blank to skip."),
+    errors.node,
+    el("div", { class: "actions" }, btn("Save", save, "primary")),
   );
 }
 
@@ -415,10 +448,10 @@ function detailInputs(current) {
   };
 }
 
-function addUnitForm(id, open) {
+function addUnitForm(id, open, condo) {
   const card = el("div", { class: "card" });
   const form = () => {
-    const name = input({ placeholder: "e.g. Unit 101" });
+    const name = input({ placeholder: condo ? "e.g. 4B" : "e.g. Unit 101" });
     const summary = input({ placeholder: "e.g. One-bedroom apartment on the first floor." });
     const facts = textarea("", 'e.g. "South-facing windows."');
     const doorName = input({ placeholder: "Leave blank to use the unit name + \"Door\"" });
@@ -427,7 +460,8 @@ function addUnitForm(id, open) {
     const addIt = async () => {
       const res = await command(id, "addUnit", { name: name.value, summary: summary.value, facts: lines(facts.value), doorName: doorName.value || undefined });
       const values = details.values();
-      const added = res.view?.units.find((x) => x.name.toLowerCase() === name.value.trim().toLowerCase());
+      const typed = name.value.trim().toLowerCase();
+      const added = res.view?.units.find((x) => x.name.toLowerCase() === typed || x.name.toLowerCase() === `unit ${typed}`);
       if (added && Object.keys(values).length) await command(id, "setUnitProfile", { unitId: added.id, values });
     };
     const save = action(async () => {
@@ -445,8 +479,8 @@ function addUnitForm(id, open) {
       }
     });
     set(card, 
-      el("h3", {}, "Add a unit"),
-      field("Unit name", name),
+      el("h3", {}, condo ? "Add your unit" : "Add a unit"),
+      field(condo ? "Unit number" : "Unit name", name),
       ...details.fields,
       field("Short description", summary, "Optional."),
       field("Other facts visitors can ask about", facts, "Optional. One per line."),
@@ -518,6 +552,7 @@ function doorRow(id, door, extra) {
 function doorsStep(data) {
   const { view, summary } = data;
   const id = summary.id;
+  const unitOnly = view.property.buildingAccess === "UNIT_ONLY";
   const entrances = view.doors.filter((d) => d.kind === "ENTRANCE");
   const main = entrances[0];
   const others = view.doors.filter((d) => d.kind === "COMMON" || (d.kind === "ENTRANCE" && d !== main));
@@ -606,8 +641,10 @@ function doorsStep(data) {
       el("h1", {}, "Doors"),
       el("p", { class: "lead" }, "Name the doors a visitor might use. Tour Core never opens a door itself; it asks Durin, and only for doors on the visitor's route."),
       issueList(view.issues.filter((i) => i.fix?.step === "doors"), id, "doors"),
-      el("h2", {}, "Main entrance"),
-      entranceSection,
+      el("h2", {}, unitOnly ? "Building entrance" : "Main entrance"),
+      unitOnly && !main
+        ? el("p", { class: "muted" }, "Visitors get into the building on their own. You only control the unit door, so it isn't on the tour route.")
+        : entranceSection,
       view.units.length ? [el("h2", {}, "Unit doors"), unitDoors] : null,
       el("h2", {}, "Other doors"),
       others.map((d) => doorRow(id, d, { removable: d.removable })),
