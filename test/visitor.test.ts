@@ -107,8 +107,9 @@ describe("visitor demo on the real engine", () => {
     await s.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: "555-999-0000" });
     expect(await s.stage()).toBe("stopped");
     expect(lastFromTourCore(s)).toBe(
-      "I can't open doors for this tour yet. The leasing team is reviewing your details and will text you here. Stay where you are and reply here. The leasing team usually replies within 15 minutes.",
+      "Thanks for filling that out. I couldn't confirm your details, so your tour is on hold for now. The leasing team will text you here. The leasing team will reply here as soon as they can.",
     );
+    expect(lastFromTourCore(s)).not.toMatch(/Stay where you are|I can't open doors yet|usually replies within 15 minutes/);
     expect(lastFromTourCore(s)).not.toContain(s.config.operator.contact);
   });
 

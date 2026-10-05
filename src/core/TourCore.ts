@@ -97,25 +97,38 @@ export const UNKNOWN_ANSWER = "I don't have that information for this property. 
  * `operator.contact` is never used here — that line is private.
  */
 export class VisitorDenialCopy {
-  static nextStep(team: string, visitorContact?: string): string {
-    if (visitorContact) return `Stay where you are. The ${team} usually replies within 15 minutes, or call ${formatPhone(visitorContact)}.`;
-    return `Stay where you are and reply here. The ${team} usually replies within 15 minutes.`;
+  static atDoor(team: string, visitorContact?: string): string {
+    if (visitorContact) return `Stay where you are. The ${team} will reply as soon as they can, or call ${formatPhone(visitorContact)}.`;
+    return `Stay where you are and reply here. The ${team} will reply as soon as they can.`;
+  }
+
+  static remote(team: string, visitorContact?: string): string {
+    if (visitorContact) return `The ${team} will reply here as soon as they can, or call ${formatPhone(visitorContact)}.`;
+    return `The ${team} will reply here as soon as they can.`;
   }
 
   static operatorHold(team: string, visitorContact?: string): string {
-    return `Your tour is paused for a moment. ${this.nextStep(team, visitorContact)}`;
+    return `Your tour is paused for a moment. ${this.atDoor(team, visitorContact)}`;
   }
 
   static doorsNotResponding(team: string, visitorContact?: string): string {
-    return `Sorry, the doors aren't responding right now. I've let the ${team} know. ${this.nextStep(team, visitorContact)}`;
+    return `Sorry, the doors aren't responding right now. I've let the ${team} know. ${this.atDoor(team, visitorContact)}`;
   }
 
-  static failedId(team: string, visitorContact?: string): string {
-    return `I can't open doors for this tour yet. The ${team} is reviewing your details and will text you here. ${this.nextStep(team, visitorContact)}`;
+  static failedIdAtDoor(team: string, visitorContact?: string): string {
+    return `I can't open doors for this tour yet. The ${team} is reviewing your details and will text you here. ${this.atDoor(team, visitorContact)}`;
+  }
+
+  static failedIdAtBooking(team: string, visitorContact?: string): string {
+    return `Thanks for filling that out. I couldn't confirm your details, so your tour is on hold for now. The ${team} will text you here. ${this.remote(team, visitorContact)}`;
   }
 
   static staleVerification(): string {
     return "Your ID check has expired, so I need a quick re-check before I can open doors.";
+  }
+
+  static missingConsent(): string {
+    return `Before I can open doors, I need your OK:\n${CONSENT_TEXT}`;
   }
 }
 
@@ -316,9 +329,8 @@ export class TourCore {
     await this.deps.store.put("verifications", verification);
 
     if (!outcome.passed) {
-      await this.textProspect(prospect, reservation.id, VisitorDenialCopy.failedId(this.teamName(), this.visitorHelpNumber()));
+      await this.textProspect(prospect, reservation.id, VisitorDenialCopy.failedIdAtBooking(this.teamName(), this.visitorHelpNumber()));
       await this.notifyOperator(reservation, `Identity form for ${prospect.name} didn't check out (${outcome.reason}). Please follow up.`);
-      if (staleRecheck) return reservation;
       return this.move(reservation, "VERIFICATION_FAILED", "VERIFICATION_FAILED", { detail: outcome.reason });
     }
 
@@ -1051,12 +1063,10 @@ export class TourCore {
     if (reservation && prospect && prospect.id === reservation.prospectId) {
       const unit = this.unitFor(reservation);
       if (code === "DENY_CONSENT_MISSING") {
-        await this.textProspect(prospect, reservation.id, CONSENT_TEXT, { kind: "yes-no" });
-      } else if (code === "DENY_VERIFICATION_STALE") {
-        await this.textProspect(prospect, reservation.id, VisitorDenialCopy.staleVerification(), {
-          kind: "form",
-          link: await this.verificationFormLink(reservation, prospect),
-        });
+        await this.textProspect(prospect, reservation.id, VisitorDenialCopy.missingConsent(), { kind: "yes-no" });
+      } else if (code === "DENY_VERIFICATION_STALE" || code === "DENY_VERIFICATION_INCOMPLETE") {
+        const ask = code === "DENY_VERIFICATION_STALE" ? { body: VisitorDenialCopy.staleVerification(), form: true } : this.deps.verification.request(prospect);
+        await this.textProspect(prospect, reservation.id, ask.body, ask.form ? { kind: "form", link: await this.verificationFormLink(reservation, prospect) } : undefined);
       } else {
         const text: Partial<Record<AccessDecisionCode, string>> = {
           DENY_TOO_EARLY: `You're a little early! I can open the doors from ${reservation.windowStart ? this.time(new Date(reservation.windowStart)) : "your tour time"}.`,
@@ -1068,7 +1078,7 @@ export class TourCore {
           DENY_OPERATOR_HOLD: VisitorDenialCopy.operatorHold(team, help),
           DENY_CANCELLED: "This tour is no longer active, so I can't open doors. Reply if you'd like to book a new time.",
           DENY_REVOKED: "This tour is no longer active, so I can't open doors. Reply if you'd like to book a new time.",
-          DENY_VERIFICATION_FAILED: VisitorDenialCopy.failedId(team, help),
+          DENY_VERIFICATION_FAILED: VisitorDenialCopy.failedIdAtDoor(team, help),
         };
         await this.textProspect(
           prospect,

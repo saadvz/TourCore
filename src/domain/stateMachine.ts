@@ -12,7 +12,7 @@ const HAPPY_PATH: Partial<Record<ReservationStatus, ReservationStatus[]>> = {
 
 /** Statuses where a booked tour is still live and can be interrupted. */
 const ACTIVE: ReservationStatus[] = ["RESERVED", "AWAITING_CONSENT", "AWAITING_VERIFICATION", "READY", "TOURING"];
-const INTERRUPTIONS: ReservationStatus[] = ["CANCELLED", "REVOKED", "OPERATOR_HOLD", "PROVIDER_FAILURE"];
+const INTERRUPTIONS: ReservationStatus[] = ["CANCELLED", "REVOKED", "OPERATOR_HOLD", "PROVIDER_FAILURE", "VERIFICATION_FAILED"];
 const PAUSED: ReservationStatus[] = ["OPERATOR_HOLD", "PROVIDER_FAILURE"];
 
 export const TERMINAL: ReservationStatus[] = ["COMPLETED", "CANCELLED", "VERIFICATION_FAILED", "EXPIRED", "REVOKED"];
