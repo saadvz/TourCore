@@ -1079,7 +1079,9 @@ export class VisitorDemoSession {
   async announceUnapprovedCustomTime(): Promise<boolean> {
     const request = await this.unapprovedCustomTimeRequest();
     if (!request) return false;
-    await this.reply(pendingCustomTimeLine(formatTime(new Date(request.requestedStartsAt), this.config.property.timezone)));
+    const start = new Date(request.requestedStartsAt);
+    const tz = this.config.property.timezone;
+    await this.reply(pendingCustomTimeLine(formatTime(start, tz), formatDay(start, tz)));
     return true;
   }
 

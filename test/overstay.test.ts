@@ -1366,7 +1366,9 @@ describe("QA review blocking items", () => {
     await ctx.say("DONE");
     await ctx.say("no");
     const time = formatTime(later, TZ);
-    expect(ctx.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1)).toBe(pendingCustomTimeLine(time));
+    const day = formatDay(later, TZ);
+    expect(day).not.toBe(formatDay(ctx.session.clock.now(), TZ));
+    expect(ctx.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1)).toBe(pendingCustomTimeLine(time, day));
     expect(ctx.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1)).not.toMatch(/Which day works|I have tours available/);
     expect((await ctx.session.store.get("tourTimeRequests", request.id))!.status).toBe("PENDING");
     expect((await ctx.session.reservation())!.id).toBe(request.reservationId);
@@ -1376,6 +1378,17 @@ describe("QA review blocking items", () => {
     const approved = (await ctx.session.store.get("tourTimeRequests", request.id))!;
     expect(approved.status).toBe("APPROVED");
     expect((await ctx.session.reservation())!.slotStart).toBe(later.toISOString());
+
+    const other = await touringSession("t-custom-after-done-thu");
+    const thursday = zonedTimeToUtc({ year: 2026, month: 10, day: 1, hour: 17, minute: 15 }, TZ);
+    const second = await other.session.requestCustomTime(thursday);
+    expect(second.created).toBe(true);
+    await other.say("DONE");
+    await other.say("no");
+    expect(formatDay(thursday, TZ)).not.toBe(formatDay(other.session.clock.now(), TZ));
+    expect(other.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1)).toBe(
+      pendingCustomTimeLine(formatTime(thursday, TZ), formatDay(thursday, TZ)),
+    );
   });
 
   it("rebook during an operator one-off tour stays secondary until DONE", async () => {
