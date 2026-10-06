@@ -127,7 +127,7 @@ const WEEKDAY_WORD: Record<string, string> = {
   SUN: "sunday",
 };
 const TIME_SHIFT_ASK =
-  /\b((?:make|move|switch|change)(?: it| the tour| that)? (?:later|earlier)|(?:a |an )?(?:later|earlier) (?:time|slot|opening)|(?:later|earlier) if possible|can we do (?:later|earlier))\b/;
+  /\b((?:make|move|switch|change)(?: it| the tour| that)? (?:later|earlier)|(?:a |an )?(?:later|earlier) (?:time|slot|opening)|(?:later|earlier) if possible|can we do (?:it )?(?:later|earlier)|later in the week|(?:is there )?anything (?:later|earlier)|sooner(?: would be better)?|(?:later|earlier) would be better)\b/;
 const NEGATED_CHANGE = /\b(no need to|do not need to|will not need to|would not need to|no reason to|not going to)\b.{0,40}\b(switch|reschedule|change|move|cancel)\b|\bno change\b/;
 const ARRIVAL_REMARK =
   /\b(be there|arrive|get there|show up|come by|get in)\b.{0,40}\b(earlier|later|early|late)\b|\b(might be|may be|could be|will be)\b.{0,30}\b(\d+\s*(min|minutes?) )?(early|late|earlier|later)\b|\b(\d+\s*(min|minutes?) )(early|late)\b/;
@@ -155,12 +155,40 @@ function isArrivalRemark(text: string): boolean {
   return ARRIVAL_REMARK.test(text);
 }
 
-function laterOrEarlierShift(text: string): "later" | "earlier" | undefined {
+function laterOrEarlierShift(text: string): "later" | "earlier" | "later-in-week" | undefined {
   const n = stripFiller(normalize(text));
   if (isArrivalRemark(n) || isNegatedChange(n)) return undefined;
-  if (/\b(make it later|move it later|a later time|later time|later slot|later if possible|can we do later)\b/.test(n)) return "later";
-  if (/\b(make it earlier|move it earlier|an earlier time|earlier time|earlier slot|earlier if possible|can we do earlier)\b/.test(n)) return "earlier";
+  if (/\blater in the week\b/.test(n)) return "later-in-week";
+  if (
+    /\b(make it earlier|move it earlier|an earlier time|earlier time|earlier slot|earlier if possible|can we do (?:it )?earlier|anything earlier|is there anything earlier|earlier would be better|sooner(?: would be better)?)\b/.test(n)
+  ) {
+    return "earlier";
+  }
+  if (
+    /\b(make it later|move it later|a later time|later time|later slot|later if possible|can we do (?:it )?later|anything later|later would be better)\b/.test(n)
+  ) {
+    return "later";
+  }
   return undefined;
+}
+
+/** A weekday or relative day they want instead — not a day they ruled out. */
+function requestedChangeDay(text: string): DayReference | undefined {
+  if (isNegatedChange(text) || isArrivalRemark(text)) return undefined;
+  const n = normalize(text);
+  const excluded = excludedDays(text);
+  const found: DayReference[] = [];
+  for (const [word, code] of Object.entries(WEEKDAY_CODE)) {
+    if (excluded.has(code)) continue;
+    if (new RegExp(`\\b${word}\\b`).test(n)) found.push({ weekday: code as NonNullable<DayReference["weekday"]> });
+  }
+  if (/\btoday\b/.test(n) && !excluded.has("today")) found.push({ relative: "today" });
+  if (/\btomorrow\b/.test(n) && !excluded.has("tomorrow")) found.push({ relative: "tomorrow" });
+  return found.length === 1 ? found[0] : undefined;
+}
+
+function isBareLaterOrEarlier(text: string): boolean {
+  return /^(later|earlier|sooner)$/.test(stripFiller(normalize(text)));
 }
 
 function isScheduleChangeRemainder(text: string): boolean {
@@ -1045,6 +1073,7 @@ async function isShownMenuBookingInput(turn: Turn): Promise<boolean> {
 async function tryShownSlotPick(turn: Turn, book: (slotStart: string) => Promise<void>): Promise<boolean> {
   const { session } = turn;
   const text = turn.said.text ?? "";
+  if (isBareLaterOrEarlier(text)) return false;
   const step: VisitorStage = session.selectedDate && session.lastShownSlots.length ? "choose-time" : "choose-date";
   const interpretation = await rulesOnly.interpret(await contextFor(session, text, step));
   const intent = interpretation.intent;
@@ -1054,7 +1083,9 @@ async function tryShownSlotPick(turn: Turn, book: (slotStart: string) => Promise
     await showAskedDay(turn, intent);
     return true;
   }
-  if (intent.type === "SELECT_TIME") {
+  const slotsLive = session.slotMenuLive && session.lastShownSlots.length > 0;
+  const datesLive = session.dateMenuLive && session.lastShownDates.length > 0;
+  if (intent.type === "SELECT_TIME" && slotsLive) {
     const slot =
       session.lastShownSlots.find((s) => same(s.label, intent.timeLabel)) ??
       session.offeredSlots.find((s) => same(s.label, intent.timeLabel));
@@ -1064,7 +1095,7 @@ async function tryShownSlotPick(turn: Turn, book: (slotStart: string) => Promise
       return true;
     }
   }
-  if (isBareMenuNumber(text) && session.lastShownSlots.length) {
+  if (isBareMenuNumber(text) && slotsLive) {
     const index = MENU_NUMBER.exec(text)?.[1];
     const slot = index ? session.lastShownSlots[Number(index) - 1] : undefined;
     if (slot) {
@@ -1073,7 +1104,7 @@ async function tryShownSlotPick(turn: Turn, book: (slotStart: string) => Promise
       return true;
     }
   }
-  if (isBareMenuNumber(text) && session.lastShownDates.length && !session.lastShownSlots.length) {
+  if (isBareMenuNumber(text) && datesLive && !slotsLive) {
     await showAskedDay(turn, intent.type === "SELECT_DATE" ? intent : {});
     return true;
   }
@@ -1112,6 +1143,34 @@ async function offerSameDayShift(turn: Turn, direction: "later" | "earlier"): Pr
   session.markTimesShown();
   const menu = timeMenu(formatDay(filtered[0]!.start, tz), filtered.map((slot) => slot.label));
   await session.reply(menu.body, menu.prompt);
+}
+
+/** Remaining bookable days this calendar week, not today. */
+async function offerRestOfWeek(turn: Turn): Promise<void> {
+  const { session } = turn;
+  await session.refreshOfferedSchedule();
+  const tz = session.config.property.timezone;
+  const today = localDateOf(session.clock.now(), tz);
+  const remaining: Record<string, number> = { MON: 6, TUE: 5, WED: 4, THU: 3, FRI: 2, SAT: 1, SUN: 0 };
+  const last = addDays(today, remaining[weekdayOf(today)] ?? 6);
+  const dates = session.offeredDates.filter((day) => {
+    const local = parseIsoDate(day.date);
+    if (!local) return false;
+    if (sameLocalDay(local, today)) return false;
+    const t = Date.UTC(local.year, local.month - 1, local.day);
+    const start = Date.UTC(today.year, today.month - 1, today.day);
+    const end = Date.UTC(last.year, last.month - 1, last.day);
+    return t > start && t <= end;
+  });
+  if (!dates.length) {
+    await offerOpenDays(turn, new Set(["today"]));
+    return;
+  }
+  session.offeredDates = dates;
+  session.selectedDate = undefined;
+  session.offeredSlots = [];
+  session.markDatesShown();
+  await turn.respond(DAY_MENU, { kind: "choose", options: dates.map((day) => day.label), what: "a day" });
 }
 
 function matchesLabel(text: string, labels: string[]): boolean {
@@ -1257,15 +1316,19 @@ async function byStage(turn: Turn): Promise<void> {
       if (isBareMenuNumber(text)) {
         const current = await session.reservation();
         const shownOtherDay =
+          session.slotMenuLive &&
           !!current?.slotStart &&
           session.lastShownSlots.length > 0 &&
           session.lastShownSlots.every((slot) => slot.start.toISOString() !== current.slotStart);
-        const shownDaysOnly = session.lastShownDates.length > 0 && session.lastShownSlots.length === 0 && (await session.hasLiveRegularTour());
+        const shownDaysOnly = session.dateMenuLive && session.lastShownDates.length > 0 && session.lastShownSlots.length === 0 && (await session.hasLiveRegularTour());
         if ((shownOtherDay || shownDaysOnly) && (await tryRegularSlotFromConsent(turn))) return;
         return turn.fallback(`${SORRY} ${question}`, yesNo);
       }
       if (changeAsk) {
+        const named = requestedChangeDay(text);
+        if (named) return showAskedDay(turn, named);
         const shift = laterOrEarlierShift(text);
+        if (shift === "later-in-week") return offerRestOfWeek(turn);
         if (shift) return offerSameDayShift(turn, shift);
         const spoken = spokenTimes(normalize(text));
         if (spoken.length === 1) return fileCustomTime(turn, spoken[0]!);
@@ -1309,11 +1372,11 @@ async function byStage(turn: Turn): Promise<void> {
 
     case "done":
     case "stopped":
-      if (session.lastShownSlots.length && (await tryShownSlotPick(turn, (slotStart) => session.bookOffered(slotStart).then(() => undefined)))) return;
       if (await session.isPaused()) {
         if (intent.type === "REQUEST_HELP") return session.help(turn.said);
         return turn.respond(VisitorDenialCopy.operatorHold(session.config.operator.name, session.config.operator.visitorContact));
       }
+      if (session.slotMenuLive && (await tryShownSlotPick(turn, (slotStart) => session.bookOffered(slotStart).then(() => undefined)))) return;
       if (intent.type === "ASK_PROPERTY_QUESTION") return handleEndedQuestion(turn);
       return turn.respond(TOUR_ENDED_REPLY);
   }
@@ -1343,7 +1406,7 @@ async function onArrival(turn: Turn): Promise<void> {
     case "FINISH_TOUR":
       return turn.respond("Your tour hasn't started yet.", { kind: "say", phrase: "I'm here", purpose: "when you arrive" });
     default:
-      if (session.lastShownSlots.length && (await tryShownSlotPick(turn, (slotStart) => session.bookOffered(slotStart).then(() => undefined)))) return;
+      if (session.slotMenuLive && (await tryShownSlotPick(turn, (slotStart) => session.bookOffered(slotStart).then(() => undefined)))) return;
       return turn.fallback(`${SORRY} You can ask me a question about the property.`, { kind: "say", phrase: "I'm here", purpose: "when you arrive" });
   }
 }
@@ -1615,7 +1678,7 @@ async function onTour(turn: Turn): Promise<void> {
     case "REQUEST_HELP":
       return session.help(turn.said);
     default:
-      if (session.lastShownSlots.length && (await tryShownSlotPick(turn, (slotStart) => session.confirmRebook(slotStart)))) return;
+      if (session.slotMenuLive && (await tryShownSlotPick(turn, (slotStart) => session.confirmRebook(slotStart)))) return;
       return turn.fallback(
         `${SORRY} You can ask me a question${next ? `, text "at ${session.stopLabel(next)}" when you get there,` : ","} or text "finish" when you're done.`,
         undefined,

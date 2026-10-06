@@ -175,6 +175,10 @@ export class VisitorDemoSession {
   lastShownDates: { date: string; label: string }[] = [];
   /** Time menu last shown to the visitor. */
   lastShownSlots: TourSlot[] = [];
+  /** True only for a time menu shown after the current booking was made or moved. */
+  slotMenuLive = false;
+  /** True only for a day menu shown after the current booking was made or moved. */
+  dateMenuLive = false;
   /** The published day list changed since the last day menu this visitor saw. */
   staleDateMenu = false;
   /** The published time list changed since the last time menu this visitor saw. */
@@ -315,12 +319,27 @@ export class VisitorDemoSession {
   markDatesShown(): void {
     this.lastShownDates = this.offeredDates.map((day) => ({ date: day.date, label: day.label }));
     this.staleDateMenu = false;
+    this.dateMenuLive = true;
+    this.lastShownSlots = [];
+    this.slotMenuLive = false;
   }
 
   /** The visitor just saw these times. Numbered replies now mean this list. */
   markTimesShown(): void {
     this.lastShownSlots = this.offeredSlots.map((slot) => ({ start: slot.start, label: slot.label }));
     this.staleTimeMenu = false;
+    this.slotMenuLive = true;
+  }
+
+  /** A booking was created or moved: leftover menus must not pick a time. */
+  clearShownMenus(): void {
+    this.lastShownSlots = [];
+    this.lastShownDates = [];
+    this.offeredSlots = [];
+    this.offeredDates = [];
+    this.selectedDate = undefined;
+    this.slotMenuLive = false;
+    this.dateMenuLive = false;
   }
 
   /** What the visitor had been shown (a snapshot), before menus are rebuilt from the current config. */
@@ -665,6 +684,7 @@ export class VisitorDemoSession {
       throw err;
     }
     this.pendingCustomRequestId = undefined;
+    this.clearShownMenus();
     await this.syncReplies();
     return true;
   }
@@ -688,6 +708,9 @@ export class VisitorDemoSession {
     const stillBooked = await this.futureBookedReservation(current);
     const curStart = stillBooked?.slotStart ? new Date(stillBooked.slotStart) : undefined;
     await this.reply(takenSlotLine(time, day, curStart ? { time: formatTime(curStart, tz), day: formatDay(curStart, tz) } : undefined));
+    const active = current ?? (await this.reservation());
+    const pending = await this.pendingBooking();
+    if (active?.status === "OPERATOR_HOLD" || pending?.status === "OPERATOR_HOLD") return;
     const openSlots = await this.core.availableSlots(localDateOf(start, tz));
     if (openSlots.length) {
       this.offeredSlots = openSlots;
@@ -1018,13 +1041,17 @@ export class VisitorDemoSession {
             await this.reply(err.message);
             return;
           }
-          if (err instanceof TourCoreError && err.code === "SLOT_UNCHANGED") return;
+          if (err instanceof TourCoreError && err.code === "SLOT_UNCHANGED") {
+            this.clearShownMenus();
+            return;
+          }
           if (err instanceof TourCoreError && err.code === "SLOT_UNAVAILABLE") {
             await this.replyTakenSlot(String(input.slotStart), r);
             return;
           }
           throw err;
         }
+        this.clearShownMenus();
         return;
       }
       case "consent":
@@ -1145,6 +1172,7 @@ export class VisitorDemoSession {
       this.pendingCustomRequestId = undefined;
       this.pendingRebook = false;
       this.rebookUnitId = undefined;
+      this.clearShownMenus();
       await this.syncReplies();
       return;
     }
@@ -1181,6 +1209,7 @@ export class VisitorDemoSession {
       this.pendingBookingId = this.reservationId;
       this.reservationId = oldId;
     }
+    this.clearShownMenus();
     await this.syncReplies();
   }
 
@@ -1210,8 +1239,7 @@ export class VisitorDemoSession {
     const tz = this.config.property.timezone;
     await this.reply(bookedForLine(formatTime(start, tz), formatDay(start, tz)));
     await this.reply(CONSENT_TEXT, { kind: "yes-no" });
-    this.lastShownDates = [];
-    this.lastShownSlots = [];
+    this.clearShownMenus();
     this.heldBookingTakenOver = false;
   }
 
@@ -1248,8 +1276,7 @@ export class VisitorDemoSession {
     const offerRegularTimes = !(await this.hasLiveRegularTour());
     await this.reply(pendingCustomTimeLine(formatTime(start, tz), formatDay(start, tz), { offerRegularTimes }));
     await this.core.markPendingCustomTimeNotice(request.id);
-    this.lastShownDates = [];
-    this.lastShownSlots = [];
+    this.clearShownMenus();
     return true;
   }
 

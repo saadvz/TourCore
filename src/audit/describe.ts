@@ -150,6 +150,8 @@ function sentence(
       return good(`${c.name} asked "${e.detail}" and got an answer from your approved facts.`);
     case "QUESTION_UNANSWERED":
       return blocked(`${c.name} asked "${e.detail}". There was no approved answer, so it was flagged for your team.`);
+    case "HANDLER_FAILED":
+      return blocked(e.detail);
     case "HELP_REQUESTED":
       return blocked(`${c.name} asked for help${e.detail ? ` near ${e.detail}` : ""}.`);
     case "FOLLOW_UP_RESPONSE":

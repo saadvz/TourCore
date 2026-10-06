@@ -326,6 +326,7 @@ function exceptionLine(x: OperatorException) {
     when: x.when,
     status: x.status,
     ...(x.resolution ? { resolution: x.resolution.note, ...(x.resolution.approvedFact ? { approvedFact: x.resolution.approvedFact } : {}) } : {}),
+    nextSteps: x.nextSteps,
   };
 }
 
@@ -1097,7 +1098,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "list_exceptions",
     title: "Show what needs attention",
     kind: "read",
-    description: "The queue of issues that need the team: unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored, and a visitor text Tour Core could not handle (the visitor was told the team will reply here). A grant that couldn't be saved after unlock is \"Tour Core couldn't save the visit record, so the tour was paused.\" A records check that fails before unlock keeps the door locked and does not open an issue. \"Visitor hasn't confirmed leaving\" stays open until they text DONE or the operator marks it handled; after-close alerts stop at 24 hours.",
+    description: "The queue of issues that need the team: unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored, and a visitor text Tour Core could not handle (handler-failed: the visitor was told the team will reply here; next step is to tell you what to say so you can text them, or to book or change their tour). A grant that couldn't be saved after unlock is \"Tour Core couldn't save the visit record, so the tour was paused.\" A records check that fails before unlock keeps the door locked and does not open an issue. \"Visitor hasn't confirmed leaving\" stays open until they text DONE or the operator marks it handled; after-close alerts stop at 24 hours.",
     input: z.strictObject({ property: Property, includeHandled: z.boolean().optional() }),
     run: async (ctx, i) => {
       const id = i.property ? resolvePropertyId(ctx.services.workspace, i.property) : undefined;
@@ -1133,7 +1134,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Answer a flagged question with a new approved fact",
     kind: "consequential",
     description:
-      "Only when the OPERATOR supplied the answer. As soon as they give it (e.g. \"2 bedrooms\"), call this without a code: Tour Core works out how it will be saved (a unit detail like bedrooms becomes that unit's value and the canonical sentence \"Unit 1A has 2 bedrooms.\"; anything else stays in the operator's words) and returns ONE question to ask. That question is Send \"{answer}\" to {name}? Future visitors who ask the same thing will get it too. Save it? — never Continue?. Don't ask a separate yes/no before it. After a clear yes, call again with confirmationCode: the fact is saved, the visitor gets exactly that fact, and the question is marked handled. The property stays published. Never make up or reword the answer.",
+      "Only when the OPERATOR supplied the answer or the reply. For an unanswered question: as soon as they give it (e.g. \"2 bedrooms\"), call this without a code. Tour Core works out how it will be saved and returns ONE question: Send \"{answer}\" to {name}? Future visitors who ask the same thing will get it too. Save it? — never Continue?. After a clear yes, call again with confirmationCode. For a handler-failed issue, this texts the visitor from the Tour Core number and does not save an approved fact; the confirmation is exactly Sent to {who}. Never make up or reword the answer.",
     input: z.strictObject({
       exceptionId: ExceptionId,
       approvedFact: z.string().min(1).max(300).describe("The operator's own words, e.g. \"2 bedrooms\" or \"Parking is included.\""),
@@ -1144,14 +1145,20 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const plan = await planFlaggedAnswer(ctx.services, { exceptionId: i.exceptionId, approvedFact: i.approvedFact, appliesTo: i.appliesTo }, ctx.now());
       const x = plan.exception;
       const first = x.visitorName.split(/\s+/)[0];
-      const fingerprint = `${x.exceptionId}|${plan.appliesTo}|${plan.field ?? ""}|${plan.fact}`;
+      const fingerprint = `${x.exceptionId}|${plan.appliesTo}|${plan.field ?? ""}|${plan.fact}|${plan.sendOnly ? "send" : "save"}`;
       if (!i.confirmationCode) {
+        if (plan.sendOnly) {
+          return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, `Sent to ${first}.`, { savedToSetup: false });
+        }
         return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, `Send "${plan.fact.replace(/\.$/, "")}" to ${first}? Future visitors who ask the same thing will get it too. Save it?`, {
           visitorWillReceive: visitorAnswerText(x.question!, plan.fact),
         });
       }
       ctx.confirmations.redeem(i.confirmationCode, "answer", x.exceptionId, fingerprint);
       const out = await answerFlaggedQuestion(ctx.services, { exceptionId: x.exceptionId, approvedFact: i.approvedFact, appliesTo: i.appliesTo }, ctx.now());
+      if (plan.sendOnly) {
+        return { summary: `Sent to ${first}.`, ...out };
+      }
       return {
         summary: `Saved "${out.approvedFact.replace(/\.$/, "")}"${out.visitorAnswered ? ` and sent it to ${first}` : "; their tour isn't running, so they weren't texted"}.${out.needsRecheck ? " The setup changed, so run the readiness check and a practice tour again before publishing." : ""}`,
         ...out,

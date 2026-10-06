@@ -163,9 +163,19 @@ export function alreadyAskedLine(time: string, day: string): string {
   return `I've already asked the property team about ${time} on ${day}.`;
 }
 
+/** Next step on a handler-failure issue. Never tells the team to add an approved fact. */
+export const HANDLER_FAILED_NEXT_STEP = "Tell me what to say and I'll text them, or book or change their tour yourself.";
+
 /** Landlord alert when a visitor text could not be handled. Raw errors stay in server logs. */
-export function handlerFailureAlertLine(who: string, message: string): string {
-  return `${who} texted "${message}" and I couldn't handle it, so they're waiting on you. I told them you'd reply as soon as you can.`;
+export function handlerFailureAlertLine(who: string, message: string, options?: { alreadyReplied?: boolean }): string {
+  const said = message.trim();
+  if (!said) {
+    return `${who} sent a text I couldn't handle, so they're waiting on you. I told them you'd reply as soon as you can.`;
+  }
+  if (options?.alreadyReplied) {
+    return `${who} texted "${said}" and I couldn't finish handling it. They got part of a reply, so they may still be waiting on you.`;
+  }
+  return `${who} texted "${said}" and I couldn't handle it, so they're waiting on you. I told them you'd reply as soon as you can.`;
 }
 
 /** Operator-facing refusal when propose comes in after the requested time has passed. */
@@ -1549,26 +1559,23 @@ export class TourCore {
 
   /**
    * Visitor text the engine could not handle: write a landlord-visible
-   * record (unanswered-question exception + operator notice) with visitor-safe
-   * copy only. Returns true once that record exists. Delivery SKIPPED is not
-   * required.
+   * HANDLER_FAILED record and operator notice with visitor-safe copy only.
+   * Returns true once that record exists. Delivery SKIPPED is not required.
    */
-  async alertHandlerFailure(input: { phone: string; visitorText: string; reservationId?: string }): Promise<boolean> {
+  async alertHandlerFailure(input: { phone: string; visitorText: string; reservationId?: string; alreadyReplied?: boolean }): Promise<boolean> {
     const phone = normalizePhone(input.phone);
     const said = input.visitorText.trim().slice(0, 300);
     const prospect = (await this.deps.store.list("prospects")).find((p) => p.phone === phone);
     const reservation = input.reservationId ? await this.deps.store.get("reservations", input.reservationId) : undefined;
     const who = prospect && prospect.name && prospect.name !== UNNAMED_VISITOR ? prospect.name.trim().split(/\s+/)[0]! : formatPhone(phone);
-    const detail = said || "a text I couldn't handle";
+    const line = handlerFailureAlertLine(who, said, { alreadyReplied: input.alreadyReplied });
     try {
-      await this.record("QUESTION_UNANSWERED", { reservationId: reservation?.id, prospectId: prospect?.id, detail });
+      await this.record("HANDLER_FAILED", { reservationId: reservation?.id, prospectId: prospect?.id, detail: line });
     } catch {
       return false;
     }
-    const recorded = (await this.deps.store.listAudit()).some((event) => event.type === "QUESTION_UNANSWERED" && event.detail === detail);
-    if (!recorded) return false;
     try {
-      await this.notifyOperator(reservation, handlerFailureAlertLine(who, detail));
+      await this.notifyOperator(reservation, line);
     } catch {
       /* The exception record is what counts; operator delivery may be skipped. */
     }

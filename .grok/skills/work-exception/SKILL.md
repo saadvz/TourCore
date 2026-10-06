@@ -1,6 +1,6 @@
 ---
 name: work-exception
-description: Show what needs the team's attention on live and recent tours (unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored, visitors who didn't confirm leaving), open one, and resolve it using only Tour Core's actions and the operator's own facts.
+description: Show what needs the team's attention on live and recent tours (unanswered questions, a visitor text Tour Core could not handle, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored, visitors who didn't confirm leaving), open one, and resolve it using only Tour Core's actions and the operator's own facts.
 when-to-use: "what needs attention", "show exceptions", "any problems", "open Pat's issue", "what's happening with Pat's tour", "show active tours", "pause the tour", "call off the tour", a Tour Core Operator Updates routine run
 allowed-tools: get_operator_update list_active_tours inspect_tour list_exceptions inspect_exception resolve_exception answer_flagged_question place_operator_hold clear_operator_hold revoke_tour_access pause_tours resume_tours remove_property list_tour_time_requests inspect_tour_time_request approve_tour_time_request decline_tour_time_request propose_tour_time reschedule_tour schedule_one_off_tour inject_local_sms read_local_outbox
 argument-hint: "[visitor or issue]"
@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Tour updates, exception queue, monitoring, holds and approved answers
-  version: "0.3.15"
+  version: "0.3.16"
 ---
 
 # Work Exception
@@ -42,9 +42,11 @@ Tour Core sends only an `eventId` and an event type; never names or details.
    > Testy's Unit 1A tour has started.
    > Testy's Unit 1A tour is complete.
 3. For an issue, if `stillOpen` is false (someone already handled it), stop
-   quietly. For an unanswered question, ask for the answer itself ("What
+   quietly.    For an unanswered question, ask for the answer itself ("What
    should I tell them?"), not a yes/no, then continue with **Resolve** below
-   when the operator replies.
+   when the operator replies. For a text Tour Core could not handle, ask
+   what to tell the visitor; `answer_flagged_question` texts them from this
+   number and does not save an approved fact.
 4. Don't act on the tour or the issue on your own. Never show ids or the
    payload.
 
@@ -107,6 +109,14 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   another readiness check or practice tour.
   If the operator doesn't know the answer, don't guess. Offer to mark it
   handled once they've dealt with it another way.
+- **Couldn't handle their text.** This is not a flagged question. Show the
+  landlord alert line as the detail. Next step:
+  `Tell me what to say and I'll text them, or book or change their tour yourself.`
+  When the operator gives the reply, call `answer_flagged_question` with
+  their words. Confirm with exactly `Sent to {who}.` After yes, it texts
+  the visitor from the Tour Core number, does not save an approved fact
+  (`savedToSetup` is false), and never says future visitors will get it
+  too. `resolve_exception` also closes it.
 - **Mark handled.** `resolve_exception` with a short note in the operator's
   words. It changes nothing else. For "Visitor hasn't confirmed leaving",
   marking it handled also ends the after-close visitor alerts (alerts also
@@ -147,13 +157,23 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   (`Sorry, {time} on {day} is already taken.` plus still-booked only for
   a held or future booking, never the tour in progress) and offers the
   remaining times that day or `If you'd like another time, just reply
-  with a day.` A numbered pick from that menu books it. Farewells and
+  with a day.`   A numbered pick from that menu books it only when the menu was shown
+  after the current booking; a leftover number, time, or bare later/earlier
+  does not move it. On hold, a taken slot gets the taken line and no menu.
+  Farewells and
   arrival remarks at consent record consent; later/earlier is a change
-  only when it modifies the tour time. A visitor text that cannot be
-  handled opens an issue and tells them the team will reply here, or
-  asks them to text again if no landlord record could be created. The
-  team is told `{who} texted "{their message}" and I couldn't handle it,
-  so they're waiting on you. I told them you'd reply as soon as you can.`
+  only when it modifies the tour time (`make it later`, `later in the week`,
+  `can we do it later`, `anything later`, `sooner would be better`). A
+  named day (`tuesday works better`) shows that day's times. A visitor
+  text that cannot be handled opens a handler-failed issue (not a flagged
+  question) and tells them the team will reply here, or asks them to text
+  again if no landlord record could be created. The team is told
+  `{who} texted "{their message}" and I couldn't handle it, so they're
+  waiting on you. I told them you'd reply as soon as you can.` After a
+  partial reply: `{who} texted "{their message}" and I couldn't finish
+  handling it. They got part of a reply, so they may still be waiting on
+  you.` Empty text: `{who} sent a text I couldn't handle, so they're
+  waiting on you. I told them you'd reply as soon as you can.`
   Approve and decline return `That time has already
   passed, so I've let {who} know their request ran out. You can still
   book them a one-off time.` Then use `schedule_one_off_tour` or

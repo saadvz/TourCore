@@ -16,6 +16,7 @@ import {
   bookedForLine,
   CONSENT_TEXT,
   customTimeAskedLine,
+  HANDLER_FAILED_NEXT_STEP,
   handlerFailureAlertLine,
   PENDING_CUSTOM_TIME_REGULAR_OPTION,
   pendingCustomTimeLine,
@@ -1308,11 +1309,9 @@ describe("a taken regular slot never files a custom-time request", () => {
     const [heldTour] = (await b.grok("list_active_tours")).tours;
     await b.approve("place_operator_hold", { tourRef: heldTour.tourRef, reason: "Checking the lobby" });
     const holdTaken = await b.text("Can I move it to Tuesday at 2:00?");
-    expect(holdTaken.join("\n")).toMatch(/2:00 PM|already taken|these times available/);
-    if (holdTaken.join("\n").includes("these times available")) {
-      const holdPick = await b.text("1");
-      expect(holdPick.join("\n")).not.toContain("Sorry, I didn't catch that.");
-    }
+    expect(holdTaken.join("\n")).toMatch(/2:00 PM|already taken/);
+    expect(holdTaken.join("\n")).not.toContain("these times available");
+    expect(holdTaken.join("\n")).not.toContain("Reply 1");
 
     const c = await liveApp({ cleanups });
     await c.textFrom(OTHER, "TOUR");
@@ -1437,6 +1436,55 @@ describe("yes-but change vs consent", () => {
     const replies = await a.text("yes but I'd rather do tuesday");
     expect(replies.join("\n")).toMatch(/Tuesday|2:00 PM|3:30 PM/);
     expect(replies.join("\n")).not.toContain("Sorry, I didn't catch that.");
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeFalsy();
+  });
+
+  it.each([
+    "yes, but later in the week would be better",
+    "yes, sooner would be better",
+    "yes, can we do it later?",
+    "yes, anything later?",
+    "yes, is there anything earlier?",
+  ])("%s is a change and is not recorded as consent or flagged as a question", async (phrase) => {
+    const a = await liveApp({ cleanups });
+    await firstBookingConsent(a);
+    const replies = await a.text(phrase);
+    expect(replies.join("\n")).toMatch(/Which day works for you\?|I have tours available|I have these times available|2:00 PM|3:30 PM/);
+    expect(replies.join("\n")).not.toContain("Sorry, I didn't catch that.");
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    const bundle = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle;
+    expect(bundle.reservations[0]!.consentId).toBeFalsy();
+    expect(bundle.auditEvents.some((event) => event.type === "QUESTION_UNANSWERED")).toBe(false);
+    expect(bundle.auditEvents.some((event) => event.type === "HANDLER_FAILED")).toBe(false);
+  });
+
+  it("yes, but later in the week would be better shows the rest of the week, not Monday's times only", async () => {
+    const a = await liveApp({ cleanups });
+    await firstBookingConsent(a);
+    const replies = await a.text("yes, but later in the week would be better");
+    expect(replies.join("\n")).toMatch(/Which day works for you\?|Tuesday|Wednesday/);
+    expect(replies.join("\n")).not.toContain("I have these times available Monday, Sep 28:");
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeFalsy();
+  });
+
+  it("yes but tuesday works better shows Tuesday's times", async () => {
+    const a = await liveApp({ cleanups });
+    await firstBookingConsent(a);
+    const replies = await a.text("yes but tuesday works better");
+    expect(replies.join("\n")).toMatch(/Tuesday|2:00 PM|3:30 PM/);
+    expect(replies.join("\n")).not.toContain("Which day works for you?");
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeFalsy();
+  });
+
+  it("no need, I'll switch to Wednesday shows Wednesday's times", async () => {
+    const a = await liveApp({ cleanups });
+    await firstBookingConsent(a);
+    const replies = await a.text("no need, I'll switch to Wednesday");
+    expect(replies.join("\n")).toMatch(/Wednesday|2:00 PM|3:30 PM/);
+    expect(replies.join("\n")).not.toContain("Which day works for you?");
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
     expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeFalsy();
   });
@@ -1644,7 +1692,7 @@ describe("a handler throw never leaves the visitor in silence", () => {
     const store = app.session().store;
     const append = store.appendAudit.bind(store);
     store.appendAudit = async (event) => {
-      if (event.type === "QUESTION_UNANSWERED") throw new Error("disk full");
+      if (event.type === "HANDLER_FAILED") throw new Error("disk full");
       return append(event);
     };
     app.explode();
@@ -1665,6 +1713,42 @@ describe("a handler throw never leaves the visitor in silence", () => {
     expect(replies).toContain("I found a time that works.");
     expect(replies).not.toContain(HANDLER_SNAG_ALERTED);
     expect(replies).not.toContain(HANDLER_SNAG_RETRY);
+    const events = await app.session().store.listAudit();
+    expect(
+      events.some(
+        (event) =>
+          event.type === "HANDLER_FAILED" &&
+          event.detail === handlerFailureAlertLine("(555) 010-2000", "Can I come at 3:30?", { alreadyReplied: true }),
+      ),
+    ).toBe(true);
+    expect(events.some((event) => event.detail.includes("I told them you'd reply as soon as you can."))).toBe(false);
+  });
+
+  it("an empty visitor text uses the sent-a-text landlord line", async () => {
+    const app = await throwingApp();
+    await app.text("Hi");
+    await app.text("1");
+    app.explode();
+    await app.text("   ");
+    const events = await app.session().store.listAudit();
+    expect(events.some((event) => event.type === "HANDLER_FAILED" && event.detail === handlerFailureAlertLine("(555) 010-2000", ""))).toBe(true);
+  });
+
+  it("a failed record step does not count an older identical event as this alert", async () => {
+    const app = await throwingApp();
+    await app.text("Hi");
+    await app.text("1");
+    await app.text("Is there a gym?");
+    const store = app.session().store;
+    const append = store.appendAudit.bind(store);
+    store.appendAudit = async (event) => {
+      if (event.type === "HANDLER_FAILED") throw new Error("disk full");
+      return append(event);
+    };
+    app.explode();
+    const replies = await app.text("Is there a gym?");
+    expect(replies.at(-1)).toBe(HANDLER_SNAG_RETRY);
+    expect(replies).not.toContain(HANDLER_SNAG_ALERTED);
   });
 
   it("a handler that returns without a reply gets the fallback line", async () => {
@@ -1688,6 +1772,8 @@ describe("a Sendblue handler throw raises a real landlord alert", () => {
     expect(replies).toContain(HANDLER_SNAG_ALERTED);
     const queue = await a.grok("list_exceptions");
     expect(queue.exceptions.length).toBeGreaterThan(0);
+    expect(queue.exceptions[0].what).toBe("Couldn't handle their text");
+    expect(queue.exceptions[0].what).not.toBe("Question with no approved answer");
     expect(a.routineEvents().some((event) => event.eventType === "exception.created")).toBe(true);
     const [active] = (await a.grok("list_active_tours")).tours;
     const inspect = JSON.stringify(await a.grok("inspect_tour", { tourRef: active.tourRef }));
@@ -1704,7 +1790,7 @@ describe("a Sendblue handler throw raises a real landlord alert", () => {
     const session = a.visitors.latestForPhone("prop_100_alfred_way", PHONE, "messaging")!;
     const append = session.store.appendAudit.bind(session.store);
     session.store.appendAudit = async (event) => {
-      if (event.type === "QUESTION_UNANSWERED") throw new Error("disk full");
+      if (event.type === "HANDLER_FAILED") throw new Error("disk full");
       return append(event);
     };
     session.bookOffered = async () => {
@@ -1713,5 +1799,164 @@ describe("a Sendblue handler throw raises a real landlord alert", () => {
     const replies = await a.text("Can I move it to 3:30?");
     expect(replies).toContain(HANDLER_SNAG_RETRY);
     expect(replies).not.toContain(HANDLER_SNAG_ALERTED);
+  });
+
+  it("a handler failure is its own issue, not a flagged question, and a reply does not save a fact", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    const session = a.visitors.latestForPhone("prop_100_alfred_way", PHONE, "messaging")!;
+    session.bookOffered = async () => {
+      throw new Error(`No reservation ${session.reservationId}`);
+    };
+    await a.text("Can I move it to 3:30?");
+    const queue = await a.grok("list_exceptions");
+    const issue = queue.exceptions.find((item: { what: string }) => item.what === "Couldn't handle their text");
+    expect(issue).toBeTruthy();
+    expect(issue.what).not.toBe("Question with no approved answer");
+    expect(issue.summary).toBe(handlerFailureAlertLine("Testy", "Can I move it to 3:30?"));
+    expect(issue.nextSteps).toContain(HANDLER_FAILED_NEXT_STEP);
+    expect(issue.nextSteps.join(" ")).not.toMatch(/approved fact/i);
+    const opened = await a.grok("inspect_exception", { exceptionId: issue.exceptionId });
+    expect(opened.issue.what).toBe("Couldn't handle their text");
+    expect(opened.issue.summary).toBe(handlerFailureAlertLine("Testy", "Can I move it to 3:30?"));
+    expect(opened.issue.nextSteps).toContain(HANDLER_FAILED_NEXT_STEP);
+    expect(opened.issue.question).toBeUndefined();
+    const event = a.routineEvents().find((item) => item.eventType === "exception.created");
+    expect(event).toBeTruthy();
+    const update = await a.grok("get_operator_update", { eventId: event!.eventId });
+    expect(update.issue.nextSteps).toContain(HANDLER_FAILED_NEXT_STEP);
+    expect(JSON.stringify(update)).not.toMatch(/approved facts|Future visitors who ask the same thing/);
+    const asked = await a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "The lobby door is on the left." });
+    expect(asked.summary).toBe("Sent to Testy.");
+    expect(asked.summary).not.toContain("Future visitors who ask the same thing will get it too");
+    const done = await a.grok("answer_flagged_question", {
+      exceptionId: issue.exceptionId,
+      approvedFact: "The lobby door is on the left.",
+      confirmationCode: asked.confirmation.code,
+    });
+    expect(done.savedToSetup).toBe(false);
+    expect(done.summary).toBe("Sent to Testy.");
+    expect(a.fake.sent.some((item) => item.number === PHONE && item.content === "The lobby door is on the left.")).toBe(true);
+    const facts = a.ws.load("prop_100_alfred_way").config.property.facts;
+    expect(facts).not.toContain("The lobby door is on the left.");
+    expect((await a.grok("list_exceptions")).exceptions.find((item: { exceptionId: string }) => item.exceptionId === issue.exceptionId)).toBeUndefined();
+  });
+
+  it("resolve_exception closes a handler-failure issue", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    const session = a.visitors.latestForPhone("prop_100_alfred_way", PHONE, "messaging")!;
+    session.bookOffered = async () => {
+      throw new Error("No reservation res_resolve");
+    };
+    await a.text("Can I move it to 3:30?");
+    const [issue] = (await a.grok("list_exceptions")).exceptions;
+    const resolved = await a.grok("resolve_exception", { exceptionId: issue.exceptionId, resolutionNote: "Called them." });
+    expect(resolved.issue.status).toBe("resolved");
+    expect((await a.grok("list_exceptions")).exceptions).toHaveLength(0);
+  });
+
+  it("answer_flagged_question still saves an approved fact for a real question", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    await a.text("Is parking included?");
+    const [issue] = (await a.grok("list_exceptions")).exceptions;
+    expect(issue.what).toBe("Question with no approved answer");
+    const asked = await a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "Street parking only." });
+    expect(asked.summary).toContain("Future visitors who ask the same thing will get it too");
+    const done = await a.approve("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "Street parking only." });
+    expect(done.savedToSetup).toBe(true);
+  });
+});
+
+describe("a leftover booking menu is not live", () => {
+  it("READY leftover 2, later, or 3:30 does not move Monday 2:00", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    for (const phrase of ["2", "later", "3:30"]) {
+      const replies = await a.text(phrase);
+      expect(replies.join("\n")).toContain("Sorry, I didn't catch that.");
+      expect(replies.join("\n")).not.toContain("That replaces your");
+      expect(replies.join("\n")).not.toContain(bookedForLine("3:30 PM", "Monday, Sep 28"));
+    }
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.visitorPhone === PHONE)!;
+    const reservation = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations.find((item) => item.status === "READY")!;
+    expect(reservation.slotStart).toBe(atTime(14).toISOString());
+  });
+
+  it("touring leftover 2 or later does not create a second booking", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    a.clock.t = at(13, 58);
+    await a.text("I'm here");
+    await a.text("at unit 1A");
+    for (const phrase of ["2", "later"]) {
+      const replies = await a.text(phrase);
+      expect(replies.join("\n")).toContain("Sorry, I didn't catch that.");
+    }
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.visitorPhone === PHONE)!;
+    const reservations = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations;
+    expect(reservations.filter((item) => item.status === "AWAITING_CONSENT")).toHaveLength(0);
+    expect(reservations.some((item) => item.status === "TOURING" && item.slotStart === atTime(14).toISOString())).toBe(true);
+  });
+
+  it("on hold, a leftover 1 keeps the hold message", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    const [tour] = (await a.grok("list_active_tours")).tours;
+    await a.approve("place_operator_hold", { tourRef: tour.tourRef, reason: "Checking the lobby" });
+    const replies = await a.text("1");
+    expect(replies.join("\n")).toMatch(/on hold/i);
+    expect(replies.join("\n")).not.toContain("Great, you're booked for 2:00 PM on Monday");
+    const saved = a.ws.listTours("prop_100_alfred_way").find((item) => item.visitorPhone === PHONE)!;
+    expect(a.ws.loadTour("prop_100_alfred_way", saved.tourId)!.bundle.reservations.some((item) => item.status === "OPERATOR_HOLD")).toBe(true);
+  });
+
+  it("at consent, a bare later does not move 2:00 to 3:30", async () => {
+    const a = await liveApp({ cleanups });
+    await firstBookingConsent(a);
+    const replies = await a.text("later");
+    expect(replies.join("\n")).toContain("Sorry, I didn't catch that.");
+    expect(replies.join("\n")).not.toContain(bookedForLine("3:30 PM", "Monday, Sep 28"));
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    const reservation = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!;
+    expect(reservation.slotStart).toBe(atTime(14).toISOString());
+    expect(reservation.consentId).toBeFalsy();
+  });
+
+  it("yes but make it later then a menu pick still moves the booking", async () => {
+    const a = await liveApp({ cleanups });
+    await firstBookingConsent(a);
+    const offered = await a.text("yes but make it later");
+    expect(offered.join("\n")).toContain("I have these times available Monday, Sep 28:");
+    const picked = await a.text("1");
+    expect(picked.join("\n")).toMatch(/3:30 PM|booked/);
+    expect(picked.join("\n")).not.toContain("Sorry, I didn't catch that.");
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.slotStart).toBe(atTime(15, 30).toISOString());
+  });
+});
+
+describe("a taken slot while on hold does not show a menu", () => {
+  it("keeps the hold, replies, and does not offer a numbered pick", async () => {
+    const a = await liveApp({ cleanups });
+    await a.textFrom(OTHER, "TOUR");
+    await a.textFrom(OTHER, "YES");
+    await a.textFrom(OTHER, "1");
+    await a.textFrom(OTHER, "Tuesday");
+    await a.textFrom(OTHER, "1");
+    await a.book();
+    const [tour] = (await a.grok("list_active_tours")).tours;
+    await a.approve("place_operator_hold", { tourRef: tour.tourRef, reason: "Checking the lobby" });
+    const replies = await a.text("Can I come Tuesday at 2:00?");
+    expect(replies.join("\n")).toContain(takenSlotLine("2:00 PM", "Tuesday, Sep 29", { time: "2:00 PM", day: "Monday, Sep 28" }));
+    expect(replies.join("\n")).not.toContain("these times available");
+    expect(replies.join("\n")).not.toContain("Reply 1");
+    expect(replies.length).toBeGreaterThan(0);
+    const saved = a.ws.listTours("prop_100_alfred_way").find((item) => item.visitorPhone === PHONE)!;
+    expect(a.ws.loadTour("prop_100_alfred_way", saved.tourId)!.bundle.reservations.some((item) => item.status === "OPERATOR_HOLD")).toBe(true);
+    const follow = await a.text("1");
+    expect(follow.join("\n")).toMatch(/on hold|Sorry, I didn't catch that/);
+    expect(follow.join("\n")).not.toContain(bookedForLine("3:30 PM", "Tuesday, Sep 29"));
   });
 });

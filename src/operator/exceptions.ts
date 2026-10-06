@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { HANDLER_FAILED_NEXT_STEP } from "../core/TourCore";
 import { formatShortDateTime } from "../core/timezone";
 import { profileFacts, questionTopic, structuredAnswer, type ProfileField, type UnitProfile } from "../config/unitProfile";
 import { MAX_FACT_LENGTH } from "../config/validateConfig";
@@ -36,6 +37,7 @@ import {
 
 export type ExceptionKind =
   | "unanswered-question"
+  | "handler-failed"
   | "needs-help"
   | "off-route-door"
   | "door-system"
@@ -49,6 +51,7 @@ export type ExceptionKind =
 
 const TITLES: Record<ExceptionKind, string> = {
   "unanswered-question": "Question with no approved answer",
+  "handler-failed": "Couldn't handle their text",
   "needs-help": "Visitor asked for help",
   "off-route-door": "Tried a door that isn't on their tour",
   "door-system": "Door system wasn't responding",
@@ -141,6 +144,8 @@ function kindFor(e: AuditEvent): ExceptionKind | undefined {
   switch (e.type) {
     case "QUESTION_UNANSWERED":
       return "unanswered-question";
+    case "HANDLER_FAILED":
+      return "handler-failed";
     case "HELP_REQUESTED":
       return "needs-help";
     case "ACCESS_DENIED":
@@ -178,6 +183,8 @@ function summaryFor(kind: ExceptionKind, e: AuditEvent, tour: TourSnapshot): str
   switch (kind) {
     case "unanswered-question":
       return `Asked "${e.detail}". There's no approved answer yet.`;
+    case "handler-failed":
+      return e.detail;
     case "needs-help":
       return `Asked for help${e.detail ? ` near ${e.detail}` : ""}.`;
     case "off-route-door":
@@ -211,6 +218,8 @@ function nextStepsFor(kind: ExceptionKind, tour: TourSnapshot | undefined, still
         "If you know the answer, tell me and I can add it to the approved facts and text the visitor (with your OK).",
         "Or mark it handled if you've already answered them another way.",
       ];
+    case "handler-failed":
+      return [HANDLER_FAILED_NEXT_STEP, "Mark it handled once you've dealt with it."];
     case "needs-help":
       return ["Reach out to the visitor.", "Mark it handled once they're sorted."];
     case "off-route-door":
@@ -497,6 +506,8 @@ export interface FlaggedAnswerPlan {
   /** The approved fact exactly as it will be saved and sent. */
   fact: string;
   where: string;
+  /** Handler-failure reply: text the visitor, never save an approved fact. */
+  sendOnly?: boolean;
 }
 
 /**
@@ -508,8 +519,12 @@ export interface FlaggedAnswerPlan {
  */
 export async function planFlaggedAnswer(services: OperatorServices, input: { exceptionId: string; approvedFact: string; appliesTo?: "property" | "unit" }, now: Date): Promise<FlaggedAnswerPlan> {
   const exception = await findException(services, input.exceptionId);
-  if (exception.kind !== "unanswered-question" || !exception.question) throw new SetupInputError("NOT_A_QUESTION", "That issue isn't an unanswered question.");
   if (exception.status === "resolved") throw new SetupInputError("ALREADY_RESOLVED", "That question has already been handled.");
+  if (exception.kind === "handler-failed") {
+    const words = cleanFact(input.approvedFact);
+    return { exception, appliesTo: "property", fact: words, where: exception.property, sendOnly: true };
+  }
+  if (exception.kind !== "unanswered-question" || !exception.question) throw new SetupInputError("NOT_A_QUESTION", "That issue isn't an unanswered question.");
   const words = cleanFact(input.approvedFact);
   const tour = exception.tourRef ? await findTour(services, exception.tourRef) : undefined;
   const unitId = exception.questionUnitId ?? (tour ? reservationOn(tour, exception.reservationId)?.unitId : undefined);
@@ -546,6 +561,32 @@ export async function answerFlaggedQuestion(
   const ws = services.workspace;
   const tour = exception.tourRef ? await findTour(services, exception.tourRef) : undefined;
   const wasPublished = ws.has(exception.propertyId) && ws.load(exception.propertyId).state.status === "PUBLISHED_FOR_DEMO";
+
+  if (plan.sendOnly) {
+    let visitorAnswered = false;
+    if (tour?.live) {
+      await tour.live.reply(fact);
+      await persistSession(services, tour.live);
+      visitorAnswered = true;
+    }
+    appendResolution(services, exception.propertyId, {
+      exceptionId: exception.exceptionId,
+      resolvedAt: now.toISOString(),
+      note: visitorAnswered ? "Sent a reply." : "The visitor's tour wasn't running, so they weren't texted.",
+      action: "answered",
+    });
+    const after = ws.has(exception.propertyId) ? ws.load(exception.propertyId) : undefined;
+    return {
+      approvedFact: fact,
+      addedTo: plan.where,
+      savedToSetup: false,
+      visitorAnswered,
+      visitorMessage: visitorAnswered ? fact : undefined,
+      setupStatus: after ? statusLabel(after) : "Setup in progress",
+      stillPublished: wasPublished && after?.state.status === "PUBLISHED_FOR_DEMO",
+      needsRecheck: false,
+    };
+  }
 
   const { draft } = ws.openDraft(exception.propertyId);
   let next;

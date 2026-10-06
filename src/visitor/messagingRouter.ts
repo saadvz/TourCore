@@ -217,6 +217,7 @@ export class MessagingConversations {
 
     const wasOptedOut = session.optedOut;
     const outboundBefore = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").length;
+    const auditBeforeIds = new Set((await session.store.listAudit().catch(() => [])).map((event) => event.id));
     try {
       await handleVisitorText(session, phone, message.text, meta, this.deps.interpreter);
     } catch (err) {
@@ -225,6 +226,8 @@ export class MessagingConversations {
         return { correlationId: session.id };
       }
       this.deps.log?.(`Handler error for visitor ${phone}: ${err instanceof Error ? err.message : "unknown error"}`);
+      const outboundAfterThrow = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").length;
+      const alreadyReplied = outboundAfterThrow > outboundBefore;
       let alertRecorded = false;
       try {
         const res = await session.reservation();
@@ -232,18 +235,14 @@ export class MessagingConversations {
           phone,
           visitorText: message.text,
           reservationId: res?.id,
+          alreadyReplied,
         });
       } catch {
         alertRecorded = false;
       }
       if (!alertRecorded) {
-        const said = message.text.trim().slice(0, 300);
         const audit = await session.store.listAudit().catch(() => []);
-        alertRecorded = audit.some(
-          (event) =>
-            (event.type === "QUESTION_UNANSWERED" || event.type === "OPERATOR_NOTIFIED") &&
-            event.detail.includes(said || "a text I couldn't handle"),
-        );
+        alertRecorded = audit.some((event) => !auditBeforeIds.has(event.id) && (event.type === "HANDLER_FAILED" || event.type === "OPERATOR_NOTIFIED"));
       }
       try {
         await this.save(session);

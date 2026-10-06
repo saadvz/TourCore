@@ -79,6 +79,9 @@ export const DurableSessionSchema = z.object({
   offeredSlots: z.array(z.object({ start: Iso, label: z.string() })).default([]),
   offeredDates: z.array(z.object({ date: z.string(), label: z.string() })).default([]),
   selectedDate: z.string().optional(),
+  /** A time menu shown after the current booking, so leftover numbers do not move it. */
+  slotMenuLive: z.boolean().optional(),
+  dateMenuLive: z.boolean().optional(),
   /** A custom time named before a unit was chosen. */
   heldTime: z
     .object({
@@ -141,6 +144,8 @@ export async function snapshotOf(session: VisitorDemoSession, links?: Verificati
     offeredSlots: session.offeredSlots.map((s) => ({ start: s.start.toISOString(), label: s.label })),
     offeredDates: session.offeredDates,
     ...(session.selectedDate ? { selectedDate: session.selectedDate } : {}),
+    ...(session.slotMenuLive ? { slotMenuLive: true } : {}),
+    ...(session.dateMenuLive ? { dateMenuLive: true } : {}),
     ...(session.heldTime ? { heldTime: session.heldTime } : {}),
     ...(session.pendingClarification ? { pending: session.pendingClarification } : {}),
     ...(r ? { routeProgress: { opened, ...(r.allowedRoute.find((d) => !opened.includes(d)) ? { next: r.allowedRoute.find((d) => !opened.includes(d)) } : {}) } } : {}),
@@ -256,6 +261,18 @@ export async function restoreSession(snapshot: DurableSession, deps: RestoreDeps
   session.pendingRebook = !!snapshot.pendingRebook;
   session.rebookUnitId = snapshot.rebookUnitId;
   session.rememberShownSchedule(snapshot.offeredDates ?? [], offeredSlots);
+  session.slotMenuLive = !!snapshot.slotMenuLive;
+  session.dateMenuLive = !!snapshot.dateMenuLive;
+  if (stage === "choose-time" && offeredSlots.length) {
+    session.slotMenuLive = true;
+    session.lastShownSlots = offeredSlots;
+  }
+  if (stage === "choose-date") {
+    session.dateMenuLive = true;
+    session.markDatesShown();
+  }
+  if (!session.slotMenuLive) session.lastShownSlots = [];
+  if (!session.dateMenuLive) session.lastShownDates = [];
   if (stage === "choose-date" || stage === "choose-time") {
     const before = JSON.stringify({
       dates: session.offeredDates,
