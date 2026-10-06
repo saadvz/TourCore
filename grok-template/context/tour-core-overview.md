@@ -27,9 +27,9 @@ to get out, does not start booking. Help booking does not hide those
 other words. "Which way out of the lobby" is not distress. A rebook or custom-time
 request during a tour stays secondary until that tour ends for any
 reason (done, closed, called off, cancelled, or expired), then
-unfinished consent or identity checks continue. A bare yes or no
-answers the latest question asked: a door check wins over pending
-consent for the new booking. While they are touring, `list_active_tours`,
+an unfinished identity form continues. A bare yes or no
+answers the latest question asked: a door check wins over a held
+booking. While they are touring, `list_active_tours`,
 `inspect_tour`, pause, resume and call-off target the running tour; the
 later booking is their next booking. After the running tour ends, texts
 and those tools move to the later booking, or a greeting starts a new
@@ -50,8 +50,8 @@ the later booking is `nextBooking`. After the follow-up
 reply, an unapproved custom-time request is told once that it is still
 with the property team; they can reply with a day for a regular
 time only when they do not already have a held or booked regular tour.
-A held rebook taking over gets the booked-for line, then the original
-consent question, then Reply YES or NO. Later texts use the normal
+A held rebook taking over gets the booked-for line, then the usual
+next steps. Later texts use the normal
 booking flow. Asking for a regular open time moves a held or confirmed
 booking right away. A taken regular slot keeps the current booking and
 says `Sorry, {time} on {day} is already taken.` plus `You're still booked
@@ -61,13 +61,13 @@ or `If you'd like another time, just reply with a day.` A numbered reply
 from that menu books the pick only when the menu was shown after the
 current booking, including after the operator moves it. On hold, send
 the taken line and no menu. Farewells and
-arrival remarks at consent (`yes, see you later`, `yes, I'll arrive
-earlier`, `yes, no need to switch`, `yes, the sooner the better`) record
-consent; `later`/`earlier`/`sooner` is
+arrival remarks after booking (`yes, see you later`, `yes, I'll arrive
+earlier`, `yes, no need to switch`, `yes, the sooner the better`) do not
+ask again; `later`/`earlier`/`sooner` is
 a change only when it is an actual ask (`make it later`, `earlier
 if possible`, `later in the week`, `can we do it later`, `anything later`,
 `sooner would be better`, `can we do it sooner`, `sooner?`).
-`yes, anything earlier is fine too` records consent. A named day (`tuesday
+`yes, anything earlier is fine too` does not ask again. A named day (`tuesday
 works better`) shows
 that day's times. A leftover number, time, or bare later/earlier/sooner
 does not move a booking. If a visitor text cannot be handled, they are told
@@ -108,13 +108,13 @@ Propose tells the operator `That request ran out because its time already
 passed, so your offer of {newTime} on {newDay} didn't go out. I've let
 {who} know, and you can still book them a one-off time.` and does not
 send the proposal. Approving a custom time that
-moves an unconfirmed held booking uses that same booked-for line, then
-the original consent question, then Reply YES or NO — not moved wording. While the leaving
+moves a confirmed booking uses the moved wording, then you're all set —
+not a second question. While the leaving
 issue is open after the close, stuck-inside texts and greetings stay
-on after-close handling. After the follow-up reply, unanswered consent is the
-booked-for line for the new time, then the original consent question.
+on after-close handling. After the follow-up reply, a booking that was
+still waiting gets the booked-for line, then the usual next steps.
 DONE after the close uses the usual thanks and follow-up; a yes is
-the same follow-up as a normal finish and does not record consent. STOP
+the same follow-up as a normal finish and does not ask again. STOP
 during a tour stops visitor texts only; the tour stays on its window and
 team alerts still go out. Afterwards it sends a recap and one follow-up
 question.
@@ -132,7 +132,7 @@ verification.
 ## Visitor questions, at every stage
 
 Prospects can ask about the property at any point: before choosing a unit,
-while choosing a time, before agreeing, during the identity form, after
+while choosing a time, during the identity form, after
 booking, before arriving, during and after the tour. No booking is needed to
 ask. Answers come only from approved facts, with the structured unit details
 first (bedrooms, bathrooms, rent, availability, square footage); the
@@ -141,7 +141,7 @@ it?" with several units and none chosen), Tour Core asks "Which unit do you
 mean: 1A, 1B or 2A?".
 
 After the answer, Tour Core puts the interrupted step back in front of them
-(the same unit menu, the same offered times, the same consent question or
+(the same unit menu, the same offered times, the same identity-form reminder or
 pending confirmation). A question it can't answer gets one text, "I'll let
 the property team know about your question.", plus an issue and an operator
 update. When the operator answers, the visitor gets the answer and the step

@@ -18,7 +18,7 @@ const app = () => liveApp({ cleanups });
 const UNIT_MENU = "Reply 1 for Unit 1A or 2 for Unit 2B.";
 const TIMES = "I have these times available Monday, Sep 28:\nReply 1 for 2:00 PM or 2 for 3:30 PM.";
 const DATE_MENU = "I have tours available. Which day works for you?\n1) Monday, Sep 28\n2) Tuesday, Sep 29\n3) Wednesday, Sep 30\n4) Thursday, Oct 1\n5) Friday, Oct 2\nReply with the number.";
-const CONSENT = "Is it OK if I text you about this tour and keep a record of your visit?\nReply YES or NO.";
+const FORM_STEP = "Your identity form is in my earlier message. Once it's filled out, I'll confirm your tour.";
 
 describe("approved-fact resolution", () => {
   const config = hillsideConfig();
@@ -100,7 +100,7 @@ describe("questions at every stage of a text conversation", () => {
     await a.text("1");
     await a.text("1");
     await a.text("1");
-    expect(await a.text("Is parking included?")).toEqual(["Here's what the property team shared: Street parking only.", CONSENT]);
+    expect(await a.text("Is parking included?")).toEqual(["Here's what the property team shared: Street parking only.", FORM_STEP]);
     const consent = await a.text("YES");
     expect(consent.join("\n")).toMatch(/\/verify\//);
     expect(await a.text("How many bathrooms does it have?")).toEqual(["Unit 1A has 1 bathroom.", "Your identity form is in my earlier message. Once it's filled out, I'll confirm your tour."]);
@@ -163,7 +163,7 @@ describe("questions at every stage of a text conversation", () => {
     expect(a.fake.sent.slice(before).map((s) => s.content)).toEqual(["There's a gym on the roof. Let me know if you have any other questions."]);
     expect((await a.text("2"))[0]).toContain("Great, you're booked for 3:30 PM");
     // The new fact is approved content from now on.
-    expect(await a.text("is there a gym?")).toEqual(["Here's what the property team shared: There's a gym on the roof.", CONSENT]);
+    expect(await a.text("is there a gym?")).toEqual(["Here's what the property team shared: There's a gym on the roof.", FORM_STEP]);
   });
 
   it("a question about one unit before booking is filed against that unit, and a detail answer is saved to it", async () => {

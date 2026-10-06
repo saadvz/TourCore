@@ -65,7 +65,7 @@ Intents:
 - SELECT_UNIT: picks a unit to tour. unitName required. Menu numbers follow the order of "units".
 - SELECT_TIME: picks an offered time. timeLabel required. Menu numbers follow the order of "timeChoices".
 - SELECT_DATE: names a tour day. "Can I come Dec 1?", "12/1", "December 1st", "1 Dec", or "Tuesday Oct 6" are SELECT_DATE, not a property question. Set date to YYYY-MM-DD using "today" in the context: a date without a year is the next occurrence on or after today. today/tomorrow/a weekday without a calendar date can omit date. An unparseable date ("the 45th", "sometime next month") is still SELECT_DATE, not a property question.
-- CONSENT_YES / CONSENT_NO: answers the consent question.
+- CONSENT_YES / CONSENT_NO: only if a visit-record question is still waiting. Booking does not ask one.
 - ARRIVAL: says they are at the property or building right now.
 - AT_UNIT: says they are at a unit's door right now. unitName only if they clearly named one.
 - AT_ROUTE_STOP: says they are at a non-unit stop (such as the entrance), or just "here" at their next stop. stopName only if named.
@@ -106,7 +106,7 @@ function lastAsked(step: ConversationStep, awaiting?: StepAwaiting, timezone?: s
     case "choose-time":
       return "Which of the open times works for you?";
     case "consent":
-      return "Is it OK if I text you about this tour and keep a record of your visit?";
+      return "";
     case "ready":
       return "Text me when you arrive at the property.";
     case "touring":

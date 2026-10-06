@@ -67,15 +67,14 @@ async function startPhoneApp(options: { sendError?: () => Error | undefined } = 
   return { ws, fake, text, local, port, id: config.property.id, setClock: (t: number) => (clock = t) };
 }
 
-/** Texts through booking and consent; returns the identity-form token from the link Tour Core sent. */
+/** Texts through booking; returns the identity-form token from the link Tour Core sent. */
 async function bookByText(app: Awaited<ReturnType<typeof startPhoneApp>>) {
   await app.text("TOUR");
   await app.text("YES");
   await app.text("1");
   await app.text("1");
-  await app.text("1");
-  const consent = await app.text("YES");
-  const link = consent.replies.join("\n").match(/https:\/\/tour\.example\/verify\/([A-Za-z0-9_-]+)/);
+  const booked = await app.text("1");
+  const link = booked.replies.join("\n").match(/https:\/\/tour\.example\/verify\/([A-Za-z0-9_-]+)/);
   return link![1]!;
 }
 
@@ -122,14 +121,13 @@ describe("a real phone over Sendblue", () => {
     expect(day.replies[0]).toContain("Reply 1 for 2:00 PM or 2 for 3:30 PM.");
 
     const time = await app.text("1");
-    expect(time.replies[0]).toContain("Is it OK if I text you about this tour");
-    expect(time.replies[0]).toMatch(/Reply YES or NO\.$/);
+    expect(time.replies.join("\n")).toContain("Great, you're booked for 2:00 PM on Monday, Sep 28.");
+    expect(time.replies.join("\n")).toContain("please fill out this short form");
+    expect(time.replies.join("\n")).not.toContain("Is it OK if I text you");
 
-    const consent = await app.text("YES");
-    const token = consent.replies[0]!.match(/\/verify\/([A-Za-z0-9_-]+)$/)?.[1];
-    expect(consent.replies[0]).toContain("please fill out this short form");
+    const token = time.replies.join("\n").match(/\/verify\/([A-Za-z0-9_-]+)/)?.[1];
     expect(token).toBeTruthy();
-    expect(consent.replies[0]).not.toContain("5550102000");
+    expect(time.replies.join("\n")).not.toContain("5550102000");
 
     const page = await app.local("GET", `/api/verify/${token}`);
     expect(page.body).toMatchObject({ ok: true, property: "100 Alfred Way", expiresInMinutes: 30 });
@@ -191,7 +189,7 @@ describe("a real phone over Sendblue", () => {
     await app.text("1", "dup-2");
     const first = await app.text("1", "dup-3");
     const retry = await app.text("1", "dup-3");
-    expect(first.replies).toHaveLength(1);
+    expect(first.replies).toHaveLength(2);
     expect(retry).toMatchObject({ status: 200, body: { duplicate: true }, replies: [] });
     const tours = app.ws.listTours(app.id);
     const { bundle } = app.ws.loadTour(app.id, tours[0]!.tourId)!;
@@ -206,9 +204,8 @@ describe("a real phone over Sendblue", () => {
     await app.text("YES");
     await app.text("hey I wanna see 101");
     await app.text("monday");
-    await app.text("1 works");
-    const consent = await app.text("yeah that's fine");
-    const token = consent.replies[0]!.match(/\/verify\/([A-Za-z0-9_-]+)$/)![1]!;
+    const booked = await app.text("1 works");
+    const token = booked.replies.join("\n").match(/\/verify\/([A-Za-z0-9_-]+)/)![1]!;
     await app.local("POST", `/api/verify/${token}`, { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: PHONE });
     app.setClock(at(13, 58));
 

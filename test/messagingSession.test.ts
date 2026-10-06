@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config/tourCoreConfig";
-import { VisitorDenialCopy } from "../src/core/TourCore";
+import { VISIT_RECORD_BASIS, VisitorDenialCopy } from "../src/core/TourCore";
 import { zonedTimeToUtc } from "../src/core/timezone";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
 import { withPrompt } from "../src/messaging/presentation";
@@ -53,16 +53,99 @@ describe("channel-aware wording", () => {
     await web.act("chooseUnit", { unitId: "apt_101" });
     await web.act("chooseDate", (await visitorView(web)).choices[0]!.input);
     await web.act("chooseTime", (await visitorView(web)).choices[0]!.input);
-    const webConsent = [...web.conversation].reverse().find((m) => m.from === "tourcore")!.text;
-    expect(webConsent).toContain("Is it OK if I text you about this tour");
-    expect(webConsent).not.toContain("Reply YES or NO");
+    const webBooked = web.conversation.filter((m) => m.from === "tourcore").slice(-2).map((m) => m.text).join("\n");
+    expect(webBooked).toContain("Great, you're booked for");
+    expect(webBooked).toContain("please fill out this short form");
+    expect(webBooked).not.toContain("Is it OK if I text you");
+    expect(webBooked).not.toContain("Reply YES or NO");
 
     const { say, lastReply } = phoneSession();
     await say("TOUR");
     await say("YES");
     await say("1");
     await say("2:00 pm");
-    expect(lastReply()).toMatch(/Is it OK if I text you about this tour.*\nReply YES or NO\.$/s);
+    expect(lastReply()).toContain("please fill out this short form");
+    expect(lastReply()).not.toContain("Is it OK if I text you");
+  });
+});
+
+describe("a visitor still waiting on the old visit-record question", () => {
+  async function rewindToAwaitingConsent(session: VisitorDemoSession) {
+    const reservation = (await session.reservation())!;
+    await session.store.put("reservations", { ...reservation, status: "AWAITING_CONSENT", consentId: undefined });
+    return reservation.id;
+  }
+
+  it("the next text finishes the booking and sends the identity form", async () => {
+    const { session, say } = phoneSession(new VerificationLinks({ baseUrl: () => "https://tour.example", now: () => MONDAY_7AM }));
+    await say("TOUR");
+    await say("YES");
+    await say("1");
+    await say("1");
+    await say("1");
+    const id = await rewindToAwaitingConsent(session);
+    const before = session.conversation.length;
+    await say("sounds good");
+    const sent = session.conversation.slice(before).filter((item) => item.from === "tourcore").map((item) => item.text).join("\n");
+    expect(sent).toContain("please fill out this short form");
+    expect(sent).not.toContain("You're all set");
+    expect(sent).not.toContain("Is it OK if I text you");
+    expect(sent).not.toContain("keep a record");
+    const reservation = (await session.store.get("reservations", id))!;
+    expect(reservation.status).toBe("AWAITING_VERIFICATION");
+    expect(reservation.consentId).toBeTruthy();
+    expect((await session.store.get("consents", reservation.consentId!))!.text).toBe(VISIT_RECORD_BASIS);
+    expect(await session.stage()).toBe("identity");
+  });
+
+  it("cancel still wins before that booking is finished", async () => {
+    const { session, say, lastReply } = phoneSession();
+    await say("TOUR");
+    await say("YES");
+    await say("1");
+    await say("1");
+    await say("1");
+    const id = await rewindToAwaitingConsent(session);
+    await say("Actually cancel that");
+    expect(lastReply()).toContain("Cancel your tour");
+    expect(lastReply()).not.toContain("please fill out this short form");
+    expect(lastReply()).not.toContain("Is it OK if I text you");
+    const waiting = (await session.store.get("reservations", id))!;
+    expect(waiting.status).toBe("AWAITING_CONSENT");
+    expect(waiting.consentId).toBeUndefined();
+    await say("YES");
+    expect((await session.store.get("reservations", id))!.status).toBe("CANCELLED");
+  });
+
+  it("a passed identity check means the next text is you're all set", async () => {
+    const { session, say, lastReply } = phoneSession();
+    await say("TOUR");
+    await say("YES");
+    await say("1");
+    await say("1");
+    await say("1");
+    await session.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: PHONE });
+    const id = await rewindToAwaitingConsent(session);
+    await say("ok");
+    const reservation = (await session.store.get("reservations", id))!;
+    expect(reservation.status).toBe("READY");
+    expect(lastReply()).toContain("You're all set for your tour");
+    expect(lastReply()).not.toContain("Is it OK if I text you");
+  });
+
+  it("declining the visit record still cancels only while that question was left open", async () => {
+    const { session, say } = phoneSession();
+    await say("TOUR");
+    await say("YES");
+    await say("1");
+    await say("1");
+    await say("1");
+    const id = await rewindToAwaitingConsent(session);
+    await session.core.recordConsent(id, false);
+    await session.refreshThread();
+    const reservation = (await session.store.get("reservations", id))!;
+    expect(reservation.status).toBe("CANCELLED");
+    expect(session.conversation.filter((item) => item.from === "tourcore").at(-1)!.text).toContain("No problem, I won't text you again about this tour");
   });
 });
 

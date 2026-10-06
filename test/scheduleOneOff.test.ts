@@ -55,7 +55,7 @@ describe("operators can set up a one-time tour", () => {
 
     const yes = await a.text("YES");
     expect(yes.join("\n")).toContain("Great, you're booked for 3:15 PM");
-    expect(yes.join("\n")).toContain("Is it OK if I text you about this tour");
+    expect(yes.join("\n")).toContain("please fill out this short form");
 
     const consent = await a.text("YES");
     expect(consent.join("\n")).toMatch(/identity|form|verify/i);
@@ -160,7 +160,7 @@ describe("operators can set up a one-time tour", () => {
 
     const yes = await a.text("YES");
     expect(yes.join("\n")).toContain("Great, you're booked for 3:15 PM");
-    expect(yes.join("\n")).toContain("Is it OK if I text you about this tour");
+    expect(yes.join("\n")).toContain("please fill out this short form");
     expect(yes.join("\n")).not.toContain("2:00 PM");
 
     const staleAfter = a.ws.loadTour(PROPERTY, stale!.record.tourId)!.bundle;
@@ -228,7 +228,7 @@ describe("operators can set up a one-time tour", () => {
 
     const yes = await a.text("YES");
     expect(yes.join("\n")).toContain("Great, you're booked for 2:00 PM");
-    expect(yes.join("\n")).toContain("Is it OK if I text you about this tour");
+    expect(yes.join("\n")).toContain("please fill out this short form");
   });
 
   it("refuses a booked tour with the reschedule or revoke wording", async () => {
@@ -415,7 +415,7 @@ describe("operators can set up a one-time tour", () => {
 
     const booked = await a.text("that");
     expect(booked.join("\n")).toContain("Great, you're booked for 2:00 PM");
-    expect(booked.join("\n")).toContain("Is it OK if I text you about this tour");
+    expect(booked.join("\n")).toContain("please fill out this short form");
   });
 
   it("taking the offered next opening re-checks after a one-off reserves that start", async () => {

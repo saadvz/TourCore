@@ -429,7 +429,9 @@ describe("natural texts drive the real tour", () => {
     expect(p.lastReply()).toContain("Happy to set up a self-guided tour of Unit 101");
     await p.say("1");
     await p.say("2 works");
-    expect(p.lastReply()).toContain("you're booked for 3:30 PM");
+    const booked = p.session.conversation.filter((m) => m.from === "tourcore").slice(-2).map((m) => m.text).join("\n");
+    expect(booked).toContain("you're booked for 3:30 PM");
+    expect(booked).toContain("please fill out this short form");
     await p.say("yeah that's fine");
     expect(await p.session.stage()).toBe("identity");
     await p.session.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: PHONE });
@@ -524,7 +526,8 @@ describe("natural texts drive the real tour", () => {
     expect(p.lastReply()).toContain("Unit 102");
     await p.say("1");
     await p.say("1");
-    await p.say("NO");
+    await p.say("Actually cancel that");
+    await p.say("YES");
     expect(await p.session.stage()).toBe("stopped");
     await p.say("HELP");
     expect(p.lastReply()).toContain("Tour Core:");

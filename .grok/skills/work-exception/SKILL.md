@@ -143,7 +143,7 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   text {who}, so nothing was sent and this is still open. If you can reach
   them another way, do that, then mark it handled.` The issue stays open
   until you mark it handled. Tour Core then returns Pat to where they were
-  (the same unit menu, offered times, consent question or tour step) without
+  (the same unit menu, offered times, identity-form reminder or tour step) without
   resending a live day or time menu. The property stays published: an
   approved fact never needs another readiness check or practice tour. The
   closed issue shows the answer that was sent, not "There's no approved
@@ -186,15 +186,15 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   for that closed tour, even when a later booking is held. While that
   leaving issue is open, those after-close texts run before a held
   booking can take over. A rebook held from during the tour continues after the
-  follow-up reply: if its consent is still unanswered, they get the
-  booked-for line for the new time, then the original consent
-  question. An unapproved custom-time request is told once that it is
+  follow-up reply: if that booking was still waiting, they get the
+  booked-for line, then the usual next steps.
+  An unapproved custom-time request is told once that it is
   still with the property team (`Your request for {time} on {day} is
   still with the property team. I'll text you as soon as they respond.`).
   The extra sentence (`If you'd rather pick one of the regular times
   instead, just reply with a day.`) is only for visitors with no held
   or booked regular tour. A held rebook taking over gets the booked-for
-  line, then the original consent question, then Reply YES or NO — not
+  line, then the usual next steps — not
   that regular-times sentence. Later texts use the normal booking flow.
   Booking a regular slot withdraws that request and, when it replaces a
   held or booked future tour, adds `That replaces your {time} tour on {day}.`
@@ -214,12 +214,12 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   later/earlier/sooner does not move it. On hold, a taken slot gets the
   taken line and no menu.
   Farewells and
-  arrival remarks at consent record consent; later/earlier/sooner is a
+  arrival remarks after booking do not ask again; later/earlier/sooner is a
   change only when it is an actual ask (`make it later`, `later in the week`,
   `can we do it later`, `anything later`, `sooner would be better`,
   `can we do it sooner`, `anything sooner`, `sooner?`). Idioms such as
   `yes, the sooner the better` and `yes, anything earlier is fine too`
-  record consent. A
+  do not ask again. A
   named day stays on the ask: `could I do Thursday at 2:45`, `would Thursday at 2:45 work`,
   `can I make Thursday`, `how about Thursday at 2:45`, and `can we do Thursday`,
   plus `tuesday works better`, which shows that day's times. Only a PENDING
@@ -249,9 +249,8 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   handled.` Do not text again.
   Default `list_tour_time_requests` hides withdrawn;
   show them with status withdrawn or all. A follow-up yes does not
-  record that consent. Approving a custom time that moves an unconfirmed
-  held booking uses that same booked-for line, then the original consent
-  question, then Reply YES or NO — not moved wording.
+  ask again. Approving a custom time that moves a confirmed
+  booking uses the moved wording, then you're all set — not a second question.
 - **After a closed tour.** Other visitor texts before that window ends
   alert the team once per message. DONE after the close uses the usual
   thanks and follow-up question; a yes is the same follow-up as a normal

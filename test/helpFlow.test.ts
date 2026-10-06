@@ -187,7 +187,8 @@ describe("help flow: one visitor reply, one open exception", () => {
     await p.say("1");
     await p.say("1");
     await p.say("1");
-    await p.say("NO");
+    await p.say("Actually cancel that");
+    await p.say("YES");
     expect((await p.session.reservation())?.status).toBe("CANCELLED");
     const before = await prospectOutbound(p.session);
     await p.say("HELP");

@@ -112,9 +112,14 @@ export class TourCoreError extends Error {
   }
 }
 
-export const CONSENT_TEXT = "Is it OK if I text you about this tour and keep a record of your visit (times and doors used)?";
+/**
+ * Stored on the consent record when a tour is booked. The visitor already
+ * opted in to texting; this is not a second question and is never sent.
+ */
+export const VISIT_RECORD_BASIS =
+  "Texting opt-in covers messages about this tour and a record of the visit (times and doors used).";
 
-/** The booking confirmation that precedes the consent question. */
+/** The booking confirmation. Next steps (the identity form, or you're all set) follow it. */
 export function bookedForLine(time: string, day: string): string {
   return `Great, you're booked for ${time} on ${day}.`;
 }
@@ -394,7 +399,7 @@ export class VisitorDenialCopy {
   }
 
   static missingConsent(): string {
-    return `Before I can open doors, I need your OK:\n${CONSENT_TEXT}`;
+    return "Before I can open doors, text me back and I'll finish setting up your tour.";
   }
 }
 
@@ -537,11 +542,10 @@ export class TourCore {
       reservation = await this.move(reservation, "RESERVED", "RESERVATION_CREATED", {
         detail: `${this.day(start)} at ${this.time(start)}; doors usable ${this.time(windowStart)}-${this.time(windowEnd)}`,
       });
-      reservation = await this.move(reservation, "AWAITING_CONSENT", "CONSENT_REQUESTED", { detail: "asked permission to text and keep tour records" });
+      reservation = await this.move(reservation, "AWAITING_CONSENT", "CONSENT_REQUESTED", { detail: "visit record covered by the texting opt-in" });
 
       await this.withdrawPendingCustomTimeRequests(prospect.id, reservation.id);
-      await this.textProspect(prospect, reservation.id, `${bookedForLine(this.time(start), this.day(start))}\n${CONSENT_TEXT}`, { kind: "yes-no" });
-      return reservation;
+      return this.confirmBookedVisit(reservation, start);
     });
   }
 
@@ -557,7 +561,7 @@ export class TourCore {
       reservationId: reservation.id,
       granted,
       scope: ["messaging", "tour_records"],
-      text: CONSENT_TEXT,
+      text: VISIT_RECORD_BASIS,
       recordedAt: this.nowIso(),
     };
     await this.deps.store.put("consents", consent);
@@ -789,9 +793,9 @@ export class TourCore {
     }
     if (input.notice === "moved") {
       const moved = tourMovedToText(visitorSubject(config.property, this.unitFor(reservation).name), this.time(start), this.day(start));
-      if (reservation.status === "AWAITING_CONSENT") {
+      if (reservation.status === "AWAITING_CONSENT" && !reservation.consentId) {
         await this.textProspect(prospect, reservation.id, moved);
-        await this.textProspect(prospect, reservation.id, CONSENT_TEXT, { kind: "yes-no" });
+        reservation = await this.recordConsent(reservation.id, true);
       } else if (reservation.status === "AWAITING_VERIFICATION") {
         await this.textProspect(prospect, reservation.id, moved);
       } else {
@@ -813,7 +817,7 @@ export class TourCore {
    * Books a one-off time onto an inquiry. Normal self-service still goes
    * through `reserveSlot`. This does not change the property's recurring hours.
    * `holdForVisitorConfirm` reserves the slot and waits for the visitor's YES
-   * before the usual consent text.
+   * before the booking is confirmed.
    */
   async bookCustomSlot(
     reservationId: string,
@@ -864,13 +868,11 @@ export class TourCore {
       };
       return this.putReservation(reservation);
     }
-    reservation = await this.move(reservation, "AWAITING_CONSENT", "CONSENT_REQUESTED", { detail: "asked permission to text and keep tour records" });
-    const prospect = await this.mustGetProspect(reservation.prospectId);
-    await this.textProspect(prospect, reservation.id, `${bookedForLine(this.time(start), this.day(start))}\n${CONSENT_TEXT}`, { kind: "yes-no" });
-    return reservation;
+    reservation = await this.move(reservation, "AWAITING_CONSENT", "CONSENT_REQUESTED", { detail: "visit record covered by the texting opt-in" });
+    return this.confirmBookedVisit(reservation, start);
   }
 
-  /** Visitor said YES to an operator-set tour: the usual consent question is next. */
+  /** Visitor said YES to an operator-set tour: confirm the booking. */
   async confirmOperatorScheduledTour(reservationId: string): Promise<Reservation> {
     let reservation = await this.mustGetReservation(reservationId);
     if (reservation.awaitingVisitorConfirm?.kind !== "OPERATOR_SCHEDULED" || reservation.status !== "RESERVED" || !reservation.slotStart) {
@@ -879,12 +881,9 @@ export class TourCore {
     const slotStart = reservation.slotStart;
     const { awaitingVisitorConfirm: _dropped, ...kept } = reservation;
     reservation = await this.putReservation({ ...kept, updatedAt: this.nowIso() });
-    reservation = await this.move(reservation, "AWAITING_CONSENT", "CONSENT_REQUESTED", { detail: "asked permission to text and keep tour records" });
+    reservation = await this.move(reservation, "AWAITING_CONSENT", "CONSENT_REQUESTED", { detail: "visit record covered by the texting opt-in" });
     if (TERMINAL.includes(reservation.status)) return reservation;
-    const prospect = await this.mustGetProspect(reservation.prospectId);
-    const start = new Date(slotStart);
-    await this.textProspect(prospect, reservation.id, `${bookedForLine(this.time(start), this.day(start))}\n${CONSENT_TEXT}`, { kind: "yes-no" });
-    return reservation;
+    return this.confirmBookedVisit(reservation, new Date(slotStart));
   }
 
   /** Visitor said NO to an operator-set tour: cancel, tell the team, and acknowledge. */
@@ -1958,7 +1957,7 @@ export class TourCore {
     if (reservation && prospect && prospect.id === reservation.prospectId) {
       const unit = this.unitFor(reservation);
       if (code === "DENY_CONSENT_MISSING") {
-        await this.textProspect(prospect, reservation.id, VisitorDenialCopy.missingConsent(), { kind: "yes-no" });
+        await this.textProspect(prospect, reservation.id, VisitorDenialCopy.missingConsent());
       } else if (code === "DENY_VERIFICATION_STALE" || code === "DENY_VERIFICATION_INCOMPLETE") {
         const ask = code === "DENY_VERIFICATION_STALE" ? { body: VisitorDenialCopy.staleVerification(), form: true } : this.deps.verification.request(prospect);
         await this.textProspect(prospect, reservation.id, ask.body, ask.form ? { kind: "form", link: await this.verificationFormLink(reservation, prospect) } : undefined);
@@ -2240,10 +2239,15 @@ export class TourCore {
     await this.withdrawPendingCustomTimeRequests(prospect.id, moved.id);
     await this.textProspect(prospect, moved.id, bookedForLine(this.time(start), this.day(start)));
     await this.textProspect(prospect, moved.id, replacesTourLine(this.time(from), this.day(from)));
-    if (isUnconfirmedHold(moved)) {
-      await this.textProspect(prospect, moved.id, CONSENT_TEXT, { kind: "yes-no" });
-    }
+    if (isUnconfirmedHold(moved)) return this.recordConsent(moved.id, true);
     return moved;
+  }
+
+  /** Booked-for line, then the identity form or the you're-all-set text. Writes the visit record from the texting opt-in. */
+  private async confirmBookedVisit(reservation: Reservation, start: Date): Promise<Reservation> {
+    const prospect = await this.mustGetProspect(reservation.prospectId);
+    await this.textProspect(prospect, reservation.id, bookedForLine(this.time(start), this.day(start)));
+    return this.recordConsent(reservation.id, true);
   }
 
   /** Empty leftover inquiries only. Slotted bookings go through replaceRegularBooking. Operator holds are never touched. */

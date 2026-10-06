@@ -228,7 +228,8 @@ describe("Tour Core journey", () => {
 
     const pending = await ctx.core.startInquiry({ name: "Pat Lee", phone: "(555) 010-4321", unitId: "apt_101" });
     const slot = (await ctx.core.availableSlots())[0]!;
-    await ctx.core.reserveSlot(pending.reservation.id, slot.start.toISOString());
+    const booked = await ctx.core.reserveSlot(pending.reservation.id, slot.start.toISOString());
+    await ctx.store.put("reservations", { ...booked, status: "AWAITING_CONSENT", consentId: undefined });
     ctx.clock.set(slot.start);
     expect(
       (await ctx.core.requestAccess({ reservationId: pending.reservation.id, prospectId: pending.prospect.id, doorId: "entrance" })).decision.code,
@@ -239,9 +240,9 @@ describe("Tour Core journey", () => {
     const consentText = bodies.find((b) => b.includes("Before I can open doors"));
     expect(staleText).toContain("Your ID check has expired, so I need a quick re-check before I can open doors.");
     expect(staleText).toContain("https://forms.example/tour-core-basic-id");
-    expect(consentText).toContain("Before I can open doors, I need your OK:");
-    expect(consentText).toContain("Is it OK if I text you about this tour and keep a record of your visit (times and doors used)?");
-    expect(consentText).toContain("Reply YES or NO.");
+    expect(consentText).toBe("Before I can open doors, text me back and I'll finish setting up your tour.");
+    expect(consentText).not.toContain("Is it OK if I text you");
+    expect(consentText).not.toContain("Reply YES or NO.");
     expect(bodies.filter((b) => b.includes("Finish the steps I sent earlier"))).toEqual([]);
     expect(bodies.join("\n")).not.toContain(ctx.config.operator.contact);
   });
@@ -464,11 +465,12 @@ describe("Tour Core journey", () => {
 
     const slot = (await ctx.core.availableSlots())[0]!;
     const booked = await ctx.core.reserveSlot(first.reservation.id, slot.start.toISOString());
-    expect(booked.status).toBe("AWAITING_CONSENT");
+    expect(booked.status).toBe("AWAITING_VERIFICATION");
+    expect(booked.consentId).toBeTruthy();
     await expect(ctx.core.reserveSlot(first.reservation.id, slot.start.toISOString())).rejects.toMatchObject({
       code: "SLOT_UNCHANGED",
     });
-    expect((await ctx.core.getReservation(first.reservation.id))!.status).toBe("AWAITING_CONSENT");
+    expect((await ctx.core.getReservation(first.reservation.id))!.status).toBe("AWAITING_VERIFICATION");
     expect((await ctx.core.auditTrail()).filter((e) => e.type === "RESERVATION_CREATED")).toHaveLength(1);
   });
 

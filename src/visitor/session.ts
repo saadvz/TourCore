@@ -14,7 +14,7 @@ import { entryReply, timeMenu } from "./entry";
 import { operatorUnitName, visitorTourOf } from "./identity";
 import { ONE_OFF_REPLACED_DETAIL } from "./oneOffGate";
 import { offerDate } from "./unavailableDay";
-import { alreadyAskedLine, bookedForLine, CONSENT_TEXT, customTimeAskedLine, isLiveHelpReservation, pendingCustomTimeLine, TAKEN_SLOT_OTHER_DAY, takenSlotLine, TourCore, TourCoreError, visitorCancelConfirmFor, visitorCancelDoneFor, type AccessOutcome, type InboundMeta } from "../core/TourCore";
+import { alreadyAskedLine, bookedForLine, customTimeAskedLine, isLiveHelpReservation, pendingCustomTimeLine, TAKEN_SLOT_OTHER_DAY, takenSlotLine, TourCore, TourCoreError, visitorCancelConfirmFor, visitorCancelDoneFor, type AccessOutcome, type InboundMeta } from "../core/TourCore";
 import { isCancelableReservation, PAUSED, TERMINAL } from "../domain/stateMachine";
 import { visitorCancelTarget, type VisitorCancelTarget } from "./cancelTarget";
 import { isoDate, parseIsoDate, type TourSlot } from "../core/schedule";
@@ -429,6 +429,10 @@ export class VisitorDemoSession {
       const slotStart = String((parsed.data as { slotStart?: string }).slotStart ?? "");
       if (slotStart && reservation?.slotStart === slotStart && reservation.status !== "INQUIRY") return;
     }
+    if (action === "consent" && (parsed.data as { agree?: boolean }).agree !== false) {
+      const reservation = await this.reservation();
+      if (reservation?.consentId) return;
+    }
     const stage = await this.stage();
     if (!ALLOWED[stage].includes(action as VisitorAction)) throw new SetupInputError("NOT_AVAILABLE", "That isn't available right now.");
     await this.run(action as VisitorAction, parsed.data as Record<string, unknown>, said);
@@ -518,7 +522,7 @@ export class VisitorDemoSession {
     await this.syncReplies();
   }
 
-  /** Records keyword campaign consent. Does not create a tour/record consent. */
+  /** Records the texting opt-in. Booking writes the visit record from that YES. */
   noteSmsConsent(status: SmsConsentStatus, keyword: string): void {
     const sender = normalizePhone(this.visitor?.phone ?? "");
     if (!sender || sender === "+") return;
@@ -733,7 +737,6 @@ export class VisitorDemoSession {
       return;
     }
     if (await this.activeNeedsConsent()) await this.announceHeldBookingConsent(reservation.id);
-    else await this.reply(CONSENT_TEXT, { kind: "yes-no" });
   }
 
   /** Asks the property team about a one-off time. An existing booking stays as it is. A request during a running tour is secondary, like a rebook. */
@@ -1171,7 +1174,11 @@ export class VisitorDemoSession {
       } catch (err) {
         if (err instanceof TourCoreError && err.code === "SLOT_UNCHANGED") {
           if (held.status === "AWAITING_CONSENT" && !held.consentId) await this.announceHeldBookingConsent(held.id);
-          else await this.reply(CONSENT_TEXT, { kind: "yes-no" });
+          else if (held.slotStart) {
+            const tz = this.config.property.timezone;
+            const start = new Date(held.slotStart);
+            await this.reply(bookedForLine(formatTime(start, tz), formatDay(start, tz)));
+          }
           return;
         }
         if (err instanceof TourCoreError && err.code === "TOURS_PAUSED") {
@@ -1246,16 +1253,39 @@ export class VisitorDemoSession {
     return (await this.store.listAudit()).some((e) => e.type === "FOLLOW_UP_RESPONSE" && e.reservationId === reservationId);
   }
 
-  /** Booked-for line, then the original consent question — so it is clearly about the new booking. */
+  /** Booked-for line, then the usual next steps. The texting opt-in already covers the visit record. */
   async announceHeldBookingConsent(reservationId?: string): Promise<void> {
     const active = reservationId ? await this.store.get("reservations", reservationId) : await this.reservation();
     if (!active?.slotStart || active.status !== "AWAITING_CONSENT" || active.consentId) return;
     const start = new Date(active.slotStart);
     const tz = this.config.property.timezone;
     await this.reply(bookedForLine(formatTime(start, tz), formatDay(start, tz)));
-    await this.reply(CONSENT_TEXT, { kind: "yes-no" });
+    await this.core.recordConsent(active.id, true);
+    await this.syncReplies();
     this.clearShownMenus();
     this.heldBookingTakenOver = false;
+  }
+
+  /**
+   * A booking left on the old visit-record question. The first texting YES
+   * already covers it, so the next text finishes the booking.
+   */
+  async finishVisitRecordFromTextingOptIn(said: Said = {}): Promise<boolean> {
+    const reservation = await this.reservation();
+    if (!reservation || reservation.consentId || reservation.status !== "AWAITING_CONSENT") return false;
+    if (said.text) await this.recordText(said);
+    await this.core.recordConsent(reservation.id, true);
+    await this.syncReplies();
+    return true;
+  }
+
+  /** Same grant for a booking held beside a tour that is still running. */
+  async grantPendingVisitRecord(): Promise<boolean> {
+    const pending = await this.pendingBooking();
+    if (!pending || pending.consentId || pending.status !== "AWAITING_CONSENT") return false;
+    await this.core.recordConsent(pending.id, true);
+    await this.syncReplies();
+    return true;
   }
 
   /** Unapproved custom-time request still waiting on the property team. */
