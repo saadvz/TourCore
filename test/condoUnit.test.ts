@@ -5,6 +5,7 @@ import { zonedTimeToUtc } from "../src/core/timezone";
 import { createTourCore } from "../src/createTourCore";
 import { MockDurinAccessAdapter } from "../src/durin/MockDurinAccessAdapter";
 import { ConsoleMessenger, DemoMessagingAdapter } from "../src/messaging/Messenger";
+import { formatPhone } from "../src/core/phone";
 import { who } from "../src/operator/tourTimes";
 import { midSentence, unitNameOf } from "../src/operator/tours";
 import { InMemoryStore } from "../src/storage/Store";
@@ -461,16 +462,19 @@ describe("apartment or condo visitor and landlord copy", () => {
     expect(thanks).not.toContain("Visitor");
   });
 
-  it("who() stays sentence-start; midSentence lowercases only mid-sentence", () => {
+  it("who() uses the phone label when unnamed, never a mid-sentence The visitor", () => {
     const unnamed = { bundle: { reservations: [], prospects: [] }, visitorPhone: "+15550102000" };
-    expect(who(unnamed as never)).toBe("The visitor");
-    expect(midSentence(who(unnamed as never))).toBe("the visitor");
-    expect(`${who(unnamed as never)} doesn't have a tour time to move yet.`).toBe("The visitor doesn't have a tour time to move yet.");
+    const label = formatPhone("+15550102000");
+    expect(who(unnamed as never)).toBe(label);
+    expect(midSentence(who(unnamed as never))).toBe(label);
+    expect(`${who(unnamed as never)} doesn't have a tour time to move yet.`).toBe(`${label} doesn't have a tour time to move yet.`);
     expect(`Declined. ${who(unnamed as never)}'s 3:00 PM tour is still confirmed.`).toBe(
-      "Declined. The visitor's 3:00 PM tour is still confirmed.",
+      `Declined. ${label}'s 3:00 PM tour is still confirmed.`,
     );
-    expect(`Move ${midSentence(who(unnamed as never))}'s tour`).toBe("Move the visitor's tour");
-    expect(`I asked ${midSentence(who(unnamed as never))} about 3:30 PM.`).toBe("I asked the visitor about 3:30 PM.");
+    expect(`Move ${midSentence(who(unnamed as never))}'s tour`).toBe(`Move ${label}'s tour`);
+    expect(`I asked ${midSentence(who(unnamed as never))} about 3:30 PM.`).toBe(`I asked ${label} about 3:30 PM.`);
+    expect(who({ bundle: { reservations: [], prospects: [] } } as never)).toBe("the visitor");
+    expect(`I asked ${midSentence("the visitor")} about 3:30 PM.`).not.toMatch(/The visitor/);
     expect(midSentence("A visitor texting from +15550102000")).toBe("a visitor texting from +15550102000");
     expect(midSentence("Pat Smith")).toBe("Pat Smith");
     expect(`Call off ${midSentence("A visitor texting from +15550102000")}'s tour`).toBe(

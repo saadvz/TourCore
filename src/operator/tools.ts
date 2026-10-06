@@ -43,6 +43,8 @@ import {
   placeHold,
   resolveException,
   revokeTour,
+  saveSendOptedOutLine,
+  saveSendUnreachableLine,
   visitorAnswerText,
   type OperatorException,
 } from "./exceptions";
@@ -1138,7 +1140,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Answer a flagged question with a new approved fact",
     kind: "consequential",
     description:
-      "Only when the OPERATOR supplied the answer or the reply. For an unanswered question: as soon as they give it (e.g. \"2 bedrooms\"), call this without a code. Tour Core works out how it will be saved and returns ONE question: Send \"{answer}\" to {name}? Future visitors who ask the same thing will get it too. Save it? — never Continue?. After a clear yes, call again with confirmationCode. A repeat on an unanswered question returns exactly That question has already been handled. For a handler-failed issue, this texts the visitor from the Tour Core number and does not save an approved fact. The first call returns Send \"{reply}\" to {who}? with the landlord's exact reply and no future-visitors line. After yes, when the text is in the outbox and the issue is closed, it returns exactly Sent to {who}. If the visitor can't be texted, it returns I couldn't text {who}, so nothing was sent and this is still open. If you can reach them another way, do that, then mark it handled. A repeat on a handler-failed issue returns exactly That's already been handled. Never make up or reword the answer.",
+      "Only when the OPERATOR supplied the answer or the reply. For an unanswered question: as soon as they give it (e.g. \"2 bedrooms\"), call this without a code. Tour Core works out how it will be saved and returns ONE question: Send \"{answer}\" to {name}? Future visitors who ask the same thing will get it too. Save it? — never Continue?. After a clear yes, call again with confirmationCode. After yes, if they opted out: Saved \"{answer}\" for future questions. {who} has turned off texts from us, so I didn't send it and this is still open. If you can reach them another way, do that, then mark it handled. If the send fails for any other reason: Saved \"{answer}\" for future questions, but I couldn't text {who}, so nothing was sent and this is still open. If you can reach them another way, do that, then mark it handled. A repeat on an unanswered question returns exactly That question has already been handled. For a handler-failed issue, this texts the visitor from the Tour Core number and does not save an approved fact. The first call returns Send \"{reply}\" to {who}? with the landlord's exact reply and no future-visitors line. After yes, when the text is in the outbox and the issue is closed, it returns exactly Sent to {who}. If the visitor can't be texted, it returns I couldn't text {who}, so nothing was sent and this is still open. If you can reach them another way, do that, then mark it handled. A repeat on a handler-failed issue returns exactly That's already been handled. Never make up or reword the answer.",
     input: z.strictObject({
       exceptionId: ExceptionId,
       approvedFact: z.string().min(1).max(300).describe("The operator's own words, e.g. \"2 bedrooms\" or \"Parking is included.\""),
@@ -1163,8 +1165,12 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       if (plan.sendOnly) {
         return { summary: `Sent to ${who}.`, ...out };
       }
+      const saved = out as { approvedFact?: string; sendMissed?: "opted-out" | "unreachable"; visitorAnswered?: boolean; needsRecheck?: boolean };
+      const answer = (saved.approvedFact ?? plan.fact).replace(/\.$/, "");
+      if (saved.sendMissed === "opted-out") return { summary: saveSendOptedOutLine(answer, who), ...out };
+      if (saved.sendMissed === "unreachable") return { summary: saveSendUnreachableLine(answer, who), ...out };
       return {
-        summary: `Saved "${out.approvedFact!.replace(/\.$/, "")}"${out.visitorAnswered ? ` and sent it to ${who}` : "; their tour isn't running, so they weren't texted"}.${out.needsRecheck ? " The setup changed, so run the readiness check and a practice tour again before publishing." : ""}`,
+        summary: `Saved "${answer}"${out.visitorAnswered ? ` and sent it to ${who}` : "; their tour isn't running, so they weren't texted"}.${out.needsRecheck ? " The setup changed, so run the readiness check and a practice tour again before publishing." : ""}`,
         ...out,
       };
     },
@@ -1337,7 +1343,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Offer another time",
     kind: "change",
     description:
-      "Offers the visitor a different time. Their current booking stays until they agree. Say the time in everyday words, like \"3:30 PM\". Use this when the operator wants to suggest another time. If the visitor already booked a regular time, the request is withdrawn: return They booked a regular time instead. If the requested time has already passed, the request is expired: return That request ran out because its time already passed, so your offer of {newTime} on {newDay} didn't go out. I've let {who} know, and you can still book them a one-off time. Then use schedule_one_off_tour or reschedule_tour. The visitor is texted the expiry line once — not the proposal. If already expired, return That request already ran out because its time passed, and {who} has been told. You can still book them a one-off time. Do not text again. That request has already been handled is only for a request that was already approved or declined.",
+      "Offers the visitor a different time. Their current booking stays until they agree. When nothing is booked yet, return Sent {who} {time} on {day}. Nothing's booked until they say yes. Say the time in everyday words, like \"3:30 PM\". Use this when the operator wants to suggest another time. If the visitor already booked a regular time, the request is withdrawn: return They booked a regular time instead. If the requested time has already passed, the request is expired: return That request ran out because its time already passed, so your offer of {newTime} on {newDay} didn't go out. I've let {who} know, and you can still book them a one-off time. Then use schedule_one_off_tour or reschedule_tour. The visitor is texted the expiry line once — not the proposal. If already expired, return That request already ran out because its time passed, and {who} has been told. You can still book them a one-off time. Do not text again. That request has already been handled is only for a request that was already approved or declined.",
     input: z.strictObject({
       tourTimeRequestId: z.string().min(3).max(40).describe("The tourTimeRequestId. Never show it to the operator."),
       newStartsAt: z.string().min(1).max(80).describe('The time to offer, such as "3:30 PM" or "tomorrow at 11:15 AM".'),

@@ -50,7 +50,10 @@ export function occupiedWindowsFromRecords(
     windows.push({ start, end: reservation.windowEnd ? new Date(reservation.windowEnd) : new Date(start.getTime() + lengthMs) });
   }
   for (const request of requests) {
-    if (request.status !== "PENDING" && request.status !== "APPROVED") continue;
+    // Only a still-open request holds the asked-for window. After approve,
+    // move, cancel, or revoke the reservation is the occupancy; a leftover
+    // APPROVED record must not keep the off-grid slot busy.
+    if (request.status !== "PENDING") continue;
     windows.push({ start: new Date(request.requestedStartsAt), end: new Date(request.requestedEndsAt) });
   }
   return windows;

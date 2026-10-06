@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { dayReference } from "../src/core/spokenTime";
+import { loadConfig } from "../src/config/tourCoreConfig";
+import { parseFlexibleTime } from "../src/core/customSlot";
+import { dayReference, spokenTimes } from "../src/core/spokenTime";
 import { normalize } from "../src/intent/normalize";
-import type { LocalDate } from "../src/core/timezone";
+import { zonedTimeToUtc, type LocalDate } from "../src/core/timezone";
 
 const oct4: LocalDate = { year: 2026, month: 10, day: 4 };
 const dec15: LocalDate = { year: 2026, month: 12, day: 15 };
@@ -53,5 +55,30 @@ describe("calendar dates in visitor text", () => {
     expect(asked("can I come the 45th")).toEqual({ unclear: true });
     expect(asked("sometime next month")).toEqual({ unclear: true });
     expect(asked("Can I come Feb 31?")).toEqual({ unclear: true });
+  });
+});
+
+describe("named days stay on could/would/can I do custom times", () => {
+  const monday = new Date(zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour: 10, minute: 0 }, "America/New_York"));
+  const config = loadConfig();
+
+  it.each([
+    ["Could I do Thursday at 2:45?", { weekday: "THU" as const, hour: 2, minute: 45 }],
+    ["Could I do Wednesday at 3:15?", { weekday: "WED" as const, hour: 3, minute: 15 }],
+    ["Can I come Thursday at 2:45?", { weekday: "THU" as const, hour: 2, minute: 45 }],
+    ["can we do Thursday at 2:45", { weekday: "THU" as const, hour: 2, minute: 45 }],
+    ["how about Thursday at 2:45", { weekday: "THU" as const, hour: 2, minute: 45 }],
+    ["would Thursday at 2:45 work", { weekday: "THU" as const, hour: 2, minute: 45 }],
+    ["could I make Thursday at 2:45", { weekday: "THU" as const, hour: 2, minute: 45 }],
+  ])("%s keeps the named day", (phrase, expected) => {
+    const spoken = spokenTimes(normalize(phrase), { year: 2026, month: 9, day: 28 });
+    expect(spoken).toHaveLength(1);
+    expect(spoken[0]).toMatchObject({ hour: expected.hour, minute: expected.minute, weekday: expected.weekday });
+    const resolved = parseFlexibleTime(phrase, config, monday);
+    expect(resolved.ok).toBe(true);
+    if (resolved.ok) {
+      const day = resolved.start.toLocaleDateString("en-US", { weekday: "long", timeZone: "America/New_York" });
+      expect(day.startsWith(expected.weekday === "THU" ? "Thursday" : "Wednesday")).toBe(true);
+    }
   });
 });
