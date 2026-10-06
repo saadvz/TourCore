@@ -1,7 +1,7 @@
 import type { Reservation } from "../domain/model";
 import { dayReference, spokenTimes } from "../core/spokenTime";
 import { addDays, localDateOf, weekdayOf, zonedParts, type LocalDate, type Weekday } from "../core/timezone";
-import { isCancelableReservation } from "../domain/stateMachine";
+import { isCancelableReservation, isRunningReservation, RUNNING } from "../domain/stateMachine";
 import { normalize } from "../intent/normalize";
 
 export type VisitorCancelTarget = {
@@ -9,7 +9,7 @@ export type VisitorCancelTarget = {
   laterWhileTouring: boolean;
 };
 
-export const TOURING_NOW: Reservation["status"][] = ["TOURING", "OPERATOR_HOLD", "PROVIDER_FAILURE"];
+export const TOURING_NOW = RUNNING;
 
 /**
  * The running tour is never cancelled by visitor text.
@@ -32,10 +32,10 @@ const WEEKDAY_WORD: Record<string, Weekday> = {
 /** Pick which booking cancel-by-text acts on. */
 export function visitorCancelTarget(input: { current?: Reservation; later?: Reservation }): VisitorCancelTarget | undefined {
   const later = input.later && isCancelableReservation(input.later) ? input.later : undefined;
-  if (input.current && TOURING_NOW.includes(input.current.status) && later) {
+  if (input.current && isRunningReservation(input.current.status) && later) {
     return { reservation: later, laterWhileTouring: true };
   }
-  if (input.current && TOURING_NOW.includes(input.current.status)) return undefined;
+  if (input.current && isRunningReservation(input.current.status)) return undefined;
   if (input.current && isCancelableReservation(input.current)) {
     return { reservation: input.current, laterWhileTouring: false };
   }

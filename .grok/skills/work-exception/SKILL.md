@@ -71,8 +71,8 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   including a held rebook, and counts only tours actually cancelled.
   If they are still touring, the cancel text says their tour right now
   isn't affected. A one-off overlap check sees the running tour and
-  every future or held booking. `reschedule_tour` will not move a tour
-  in progress; it can offer to move the later booking instead
+  every future or held booking.   `reschedule_tour` will not move a tour
+  in progress (including hold or a door-system problem); it can offer to move the later booking instead
   (`Want me to move their {oldTime} on {oldDay} booking to {newTime} on
   {newDay} instead?`; outside hours: `{who} is touring right now, so I
   can't move this tour. Their later booking is {oldTime} on {oldDay}, and
@@ -86,7 +86,9 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   cancel that one instead? Reply YES or NO.` A touring visitor with no
   later booking who texts cancel hears `You can't cancel the tour you're
   on, but you're free to wrap up whenever you like. Text me anytime if you
-  want to book another tour.` Calling
+  want to book another tour.` On hold or a door-system problem those
+  refusal lines insert `The {team} is still working on the problem and
+  will text you here.` after the first sentence. Calling
   off describes the tour that was called off; the later booking is
   `nextBooking`.
 - QA on the local loopback: `inject_local_sms` then `read_local_outbox` (separate
@@ -375,7 +377,9 @@ right now").
   booked. Want me to cancel that one instead? Reply YES or NO.` A touring
   visitor with no later booking who texts cancel hears `You can't cancel
   the tour you're on, but you're free to wrap up whenever you like. Text me
-  anytime if you want to book another tour.` A reply that isn't a
+  anytime if you want to book another tour.` On hold or a door-system
+  problem those refusal lines insert `The {team} is still working on the
+  problem and will text you here.` after the first sentence. A reply that isn't a
   clear yes or no on that confirm is
   flagged (`I'll check with the {team} and get back to you.`). That should
   not appear as a flagged question unless they were unclear on the confirm,

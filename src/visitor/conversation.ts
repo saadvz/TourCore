@@ -14,12 +14,12 @@ import {
   type InboundMeta,
 } from "../core/TourCore";
 import { cannotCancelRunningOfferLater, cannotCancelRunningTour, laterCancelConfirm } from "../core/availabilityCopy";
-import { namedCancelFocus, TOURING_NOW } from "./cancelTarget";
+import { namedCancelFocus } from "./cancelTarget";
 import { awaitingLatestYesNo, doorAskSupersedesCancel } from "./latestQuestion";
 import { isLeavingTour, T5_NO_OFFER_BARE_YES } from "../core/overstayCopy";
 import { afterCloseAlertOpen } from "./overstayScheduler";
 import { yesNo } from "../intent/yesNo";
-import { TERMINAL } from "../domain/stateMachine";
+import { isRunningReservation, TERMINAL } from "../domain/stateMachine";
 import { stripFiller } from "../intent/normalize";
 import {
   isCancelTourAsk,
@@ -333,6 +333,7 @@ async function contextFor(session: VisitorDemoSession, message: string, step: Vi
     remainingStops: remaining.map((id) => stopRef(session, id)),
     doors: session.config.doors.map((d) => stopRef(session, d.id)),
     hasCancelableTour: await session.hasCancelableTour(),
+    hasRunningTour: !!r && isRunningReservation(r.status),
   };
 }
 
@@ -881,7 +882,7 @@ function stepPrompt(session: VisitorDemoSession, stage: VisitorStage, awaiting?:
     case "confirm-cancel-tour":
       return {
         body: awaiting.namedRunning
-          ? cannotCancelRunningOfferLater(awaiting.time, awaiting.day)
+          ? cannotCancelRunningOfferLater(awaiting.time, awaiting.day, awaiting.team)
           : awaiting.laterWhileTouring
             ? laterCancelConfirm(awaiting.time, awaiting.day)
             : visitorCancelConfirm(awaiting.day, awaiting.time),
@@ -916,6 +917,11 @@ function stepPrompt(session: VisitorDemoSession, stage: VisitorStage, awaiting?:
 const CONSENT_QUESTION = "Is it OK if I text you about this tour and keep a record of your visit?";
 const FOLLOW_UP_QUESTION = "Would you like someone from the property team to follow up?";
 
+/** Pause-cancel team label, only on hold or a door-system problem. */
+function runningCancelTeam(session: VisitorDemoSession, status?: string): string | undefined {
+  return status === "OPERATOR_HOLD" || status === "PROVIDER_FAILURE" ? session.config.operator.name : undefined;
+}
+
 async function offerCancelConfirm(turn: Turn): Promise<void> {
   const target = await turn.session.cancelTarget();
   const line = target ? turn.session.cancelConfirmLine(target.reservation, target.laterWhileTouring) : undefined;
@@ -927,21 +933,24 @@ async function offerCancelConfirm(turn: Turn): Promise<void> {
   const tz = turn.session.config.property.timezone;
   const day = formatDay(start, tz);
   const time = formatTime(start, tz);
+  const current = await turn.session.reservation();
   const namedRunning =
     target.laterWhileTouring &&
     namedCancelFocus({
       text: turn.said.text ?? "",
-      current: await turn.session.reservation(),
+      current,
       later: await turn.session.pendingBooking(),
       timeZone: tz,
       now: turn.session.clock.now(),
     }) === "running";
-  await turn.clarify(namedRunning ? cannotCancelRunningOfferLater(time, day) : line, undefined, {
+  const team = runningCancelTeam(turn.session, current?.status);
+  await turn.clarify(namedRunning ? cannotCancelRunningOfferLater(time, day, team) : line, undefined, {
     kind: "confirm-cancel-tour",
     day,
     time,
     ...(target.laterWhileTouring ? { laterWhileTouring: true } : {}),
     ...(namedRunning ? { namedRunning: true } : {}),
+    ...(namedRunning && team ? { team } : {}),
   });
 }
 
@@ -980,8 +989,8 @@ async function handleCancelIntent(turn: Turn): Promise<boolean> {
   }
   if (cancelAsk && !cancelable) {
     const current = await session.reservation();
-    if (current && TOURING_NOW.includes(current.status)) {
-      await turn.respond(cannotCancelRunningTour());
+    if (current && isRunningReservation(current.status)) {
+      await turn.respond(cannotCancelRunningTour(runningCancelTeam(turn.session, current.status)));
       return true;
     }
   }

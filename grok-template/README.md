@@ -95,7 +95,9 @@ what never does.
   instead? Reply YES or NO.` A touring visitor with no later booking who
   texts cancel hears `You can't cancel the tour you're on, but you're free
   to wrap up whenever you like. Text me anytime if you want to book another
-  tour.` A reply that isn't a
+  tour.` On hold or a door-system problem those refusal lines insert
+  `The {team} is still working on the problem and will text you here.`
+  after the first sentence. A reply that isn't a
   clear yes or no is flagged. That is not a missing-fact flag.
 - **One-off tours.** When the operator wants to set up a tour for someone who
   asked (including a visitor who hasn't texted in, or who only got a day or
@@ -104,7 +106,7 @@ what never does.
   A leftover choosing menu is replaced; a booked tour, pending one-off, open
   tour window, or hold is refused. A time that overlaps a running tour or any
   future or held booking is refused before asking. `reschedule_tour` will not
-  move a tour in progress (`{who} is touring right now, so I can't move this
+  move a tour in progress, including hold or a door-system problem (`{who} is touring right now, so I can't move this
   tour. Once it ends, you can book them another time.`); if they have a later
   booking it asks `Want me to move their {oldTime} on {oldDay} booking to
   {newTime} on {newDay} instead?` (outside hours: `{who} is touring right

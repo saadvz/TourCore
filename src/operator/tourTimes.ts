@@ -5,7 +5,7 @@ import { isUnconfirmedHold, REQUEST_ALREADY_HANDLED, requestAlreadyExpiredLine, 
 import { formatConfirmStamp, formatDay, formatTime, formatWeekday, localDateOf } from "../core/timezone";
 import { formatPhone, parsePhone } from "../core/phone";
 import type { Reservation, TourTimeRequest } from "../domain/model";
-import { TERMINAL } from "../domain/stateMachine";
+import { isRunningReservation, TERMINAL } from "../domain/stateMachine";
 import { operatorPausedBookingRefuse } from "../setup/availability";
 import { SetupInputError } from "../setup/setupActions";
 import { oneOffBlockReason } from "../visitor/oneOffGate";
@@ -372,12 +372,13 @@ export async function rescheduleTour(
   const name = who(tour);
   const issued = input.confirmationCode ? ctx.confirmations.peek(input.confirmationCode) : undefined;
   const laterMoveConfirm = issued?.fingerprint.endsWith("|later");
-  if (reservation.status === "TOURING" || laterMoveConfirm) {
+  const running = isRunningReservation(reservation.status);
+  if (running || laterMoveConfirm) {
     const later =
-      reservation.status === "TOURING"
+      running
         ? nextReservation(tour, ctx.now())
         : tour.bundle.reservations.find((item) => item.id === issued?.target);
-    if (reservation.status === "TOURING" && !later?.slotStart) throw new SetupInputError("TOUR_IN_PROGRESS", tourInProgressCannotMove(name));
+    if (running && !later?.slotStart) throw new SetupInputError("TOUR_IN_PROGRESS", tourInProgressCannotMove(name));
     if (!later?.slotStart) throw new SetupInputError("NO_TOUR", `${name} doesn't have a later booking to move.`);
     const laterStart = new Date(later.slotStart);
     const resolved = parseFlexibleTime(input.newStartsAt, tour.config, ctx.now(), localDateOf(laterStart, tz));

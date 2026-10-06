@@ -4,7 +4,7 @@ import { formatPhone } from "../core/phone";
 import { formatDay, formatTime } from "../core/timezone";
 import type { AccessGrant, AuditEvent, Message, Prospect, Reservation } from "../domain/model";
 import { UNNAMED_VISITOR } from "../domain/model";
-import { TERMINAL } from "../domain/stateMachine";
+import { isRunningReservation, PAUSED, TERMINAL } from "../domain/stateMachine";
 import type { ExportBundle } from "../export/exportBundle";
 import { SetupInputError } from "../setup/setupActions";
 import { visitorSubject } from "../visitor/identity";
@@ -103,8 +103,6 @@ export async function findTour(services: OperatorServices, ref: string): Promise
   return tour;
 }
 
-const IN_PROGRESS: Reservation["status"][] = ["TOURING", "OPERATOR_HOLD", "PROVIDER_FAILURE"];
-
 /** The reservation a tour is about: a running tour wins over a later held booking. */
 export function currentReservation(tour: TourSnapshot): Reservation | undefined {
   return pickCurrentReservation(tour.bundle.reservations);
@@ -113,14 +111,14 @@ export function currentReservation(tour: TourSnapshot): Reservation | undefined 
 /** In-progress first, then the newest booking still in play, else the latest record. */
 export function pickCurrentReservation(reservations: Reservation[]): Reservation | undefined {
   if (!reservations.length) return undefined;
-  const running = reservations.find((r) => IN_PROGRESS.includes(r.status));
+  const running = reservations.find((r) => isRunningReservation(r.status));
   if (running) return running;
   const open = reservations.filter((r) => !TERMINAL.includes(r.status));
   return open.at(-1) ?? reservations.at(-1);
 }
 
 export function isFutureBooking(reservation: Reservation, now?: Date): boolean {
-  if (!reservation.slotStart || IN_PROGRESS.includes(reservation.status) || TERMINAL.includes(reservation.status)) return false;
+  if (!reservation.slotStart || isRunningReservation(reservation.status) || TERMINAL.includes(reservation.status)) return false;
   if (now && Date.parse(reservation.slotStart) <= now.getTime()) return false;
   return true;
 }
@@ -158,7 +156,7 @@ export function isActive(tour: TourSnapshot): boolean {
 
 export function isPaused(tour: TourSnapshot): boolean {
   const s = currentReservation(tour)?.status;
-  return s === "OPERATOR_HOLD" || s === "PROVIDER_FAILURE";
+  return !!s && PAUSED.includes(s);
 }
 
 function stopName(config: TourCoreConfig, doorId: string): string {

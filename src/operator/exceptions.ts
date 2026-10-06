@@ -7,6 +7,7 @@ import { formatShortDateTime } from "../core/timezone";
 import { profileFacts, questionTopic, structuredAnswer, type ProfileField, type UnitProfile } from "../config/unitProfile";
 import { MAX_FACT_LENGTH } from "../config/validateConfig";
 import { UNNAMED_VISITOR, type AuditEvent, type Reservation, type ReservationStatus } from "../domain/model";
+import { PAUSED } from "../domain/stateMachine";
 import { applySetupCommand } from "../setup/commands";
 import { SetupInputError } from "../setup/setupActions";
 import { statusLabel } from "../setup/workspace";
@@ -131,8 +132,7 @@ function appendResolution(services: OperatorServices, propertyId: string, entry:
 // ------------------------------------------------------------------ derive
 
 const id = (...parts: string[]) => `exc_${createHash("sha256").update(parts.join("|")).digest("hex").slice(0, 12)}`;
-const PAUSED: ReservationStatus[] = ["OPERATOR_HOLD", "PROVIDER_FAILURE"];
-const BLOCKING: ReservationStatus[] = ["OPERATOR_HOLD", "PROVIDER_FAILURE", "REVOKED", "CANCELLED", "VERIFICATION_FAILED", "EXPIRED"];
+const BLOCKING: ReservationStatus[] = [...PAUSED, "REVOKED", "CANCELLED", "VERIFICATION_FAILED", "EXPIRED"];
 const ACCESS_KINDS: Record<string, ExceptionKind | undefined> = {
   DENY_WRONG_ROUTE: "off-route-door",
   DENY_DURIN_UNHEALTHY: "door-system",

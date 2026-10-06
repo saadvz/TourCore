@@ -1,7 +1,7 @@
 import type { TourCoreConfig } from "../config/tourCoreConfig";
 import { formatDateTime, formatIsoOffset } from "../core/timezone";
 import type { AccessGrant, AuditEvent, Reservation } from "../domain/model";
-import { TERMINAL } from "../domain/stateMachine";
+import { isRunningReservation, TERMINAL } from "../domain/stateMachine";
 import type { ExportBundle } from "../export/exportBundle";
 import { visitorSubject } from "../visitor/identity";
 
@@ -53,7 +53,7 @@ export class AccessWindows {
   static currentReservation(tour: AccessWindowSource): Reservation | undefined {
     const reservations = tour.bundle.reservations;
     if (!reservations.length) return undefined;
-    const running = reservations.find((r) => r.status === "TOURING" || r.status === "OPERATOR_HOLD" || r.status === "PROVIDER_FAILURE");
+    const running = reservations.find((r) => isRunningReservation(r.status));
     if (running) return running;
     const open = reservations.filter((r) => !TERMINAL.includes(r.status));
     return open.at(-1) ?? reservations.at(-1);

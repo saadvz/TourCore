@@ -4,7 +4,7 @@ import { createMessenger } from "../createTourCore";
 import { pauseConfirmQuestion, PROPERTY_REMOVED_REFUSE, REMOVE_REFUSED_LIVE_TOUR, removeConfirmQuestion, removeSetupConfirmQuestion, removedPropertySummary, removedSetupSummary, resumeConfirmQuestion, toursAreBackText } from "../core/availabilityCopy";
 import { normalizePhone } from "../core/phone";
 import { newId, type AuditEvent, type AuditEventType, type Reservation } from "../domain/model";
-import { TERMINAL } from "../domain/stateMachine";
+import { isRunningReservation, TERMINAL } from "../domain/stateMachine";
 import { operatorFacingPropertyName, SetupInputError } from "../setup/setupActions";
 import { visitorSubject } from "../visitor/identity";
 import { isEffectivelyPaused, isRemoved, isUnitPaused } from "../setup/availability";
@@ -40,7 +40,7 @@ function redeem(ctx: Ctx, code: string, action: string, target: string, fingerpr
 }
 
 export function isBookedReservation(reservation: Reservation | undefined): reservation is Reservation {
-  return !!reservation?.slotStart && reservation.status !== "TOURING" && !TERMINAL.includes(reservation.status);
+  return !!reservation?.slotStart && !isRunningReservation(reservation.status) && !TERMINAL.includes(reservation.status);
 }
 
 function labelOf(services: OperatorServices, propertyId: string): string {
@@ -90,7 +90,7 @@ function clockOf(services: OperatorServices): Date {
   return services.now?.() ?? new Date();
 }
 
-async function bookedTours(services: OperatorServices, propertyId: string, unitId?: string): Promise<TourSnapshot[]> {
+export async function bookedTours(services: OperatorServices, propertyId: string, unitId?: string): Promise<TourSnapshot[]> {
   const tours = await tourSnapshots(services, { propertyId });
   const now = clockOf(services);
   return tours.filter((tour) => futureBookingsOn(tour, now, unitId).length > 0);
@@ -98,7 +98,7 @@ async function bookedTours(services: OperatorServices, propertyId: string, unitI
 
 async function anyoneTouring(services: OperatorServices, propertyId: string): Promise<boolean> {
   return (await tourSnapshots(services, { propertyId })).some((tour) =>
-    tour.bundle.reservations.some((reservation) => reservation.status === "TOURING" || reservation.status === "OPERATOR_HOLD" || reservation.status === "PROVIDER_FAILURE"),
+    tour.bundle.reservations.some((reservation) => isRunningReservation(reservation.status)),
   );
 }
 
@@ -120,7 +120,7 @@ async function sessionFor(services: OperatorServices, tour: TourSnapshot): Promi
   return session;
 }
 
-async function cancelBooked(
+export async function cancelBooked(
   services: OperatorServices,
   tours: TourSnapshot[],
   propertyWide: boolean,

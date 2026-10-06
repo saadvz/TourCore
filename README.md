@@ -414,6 +414,9 @@ visitor text ─► interpreter ─► typed intent (ARRIVAL, AT_UNIT "Unit 101"
   `You can't cancel the tour you're on, but you're free to wrap up whenever you like. Your later tour at {time} on {day} is still booked. Want me to cancel that one instead? Reply YES or NO.`
   YES and NO still use the later Done and stays-booked lines. A touring visitor with no later booking who texts any cancel hears
   `You can't cancel the tour you're on, but you're free to wrap up whenever you like. Text me anytime if you want to book another tour.`
+  On hold or a door-system problem, those refusal lines insert
+  `The {team} is still working on the problem and will text you here.` after the first sentence
+  (`{team}` is the same team label as the pause-cancel line). A bare cancel then is cancel, not STOP.
   Nothing is cancelled and the doors keep working. A reply that isn't a clear yes or no on that confirm is flagged:
   `I'll check with the {team} and get back to you.` STOP / opt-out is unchanged. If cancel cannot finish, they get
   `I can't cancel it from here. I've asked the leasing team to call it off and get back to you.` and the team is
@@ -541,7 +544,7 @@ Terminal wizard ─────────────────────�
 - **Confirmation wording**: tour-time and flagged-answer questions name the action and end with the verb —
   `Move it?`, `Book it?`, or `Save it?` — never `Continue?`. A move inside hours includes the old time
   (`Move Testy's tour from 2:00 PM on Monday, Sep 28 to 3:15 PM on Monday, Sep 28?`). A tour in progress cannot be moved
-  (`{who} is touring right now, so I can't move this tour. Once it ends, you can book them another time.`); if they have a later booking, that refusal asks
+  (`{who} is touring right now, so I can't move this tour. Once it ends, you can book them another time.`; hold and door-system problem use the same refusal); if they have a later booking, that refusal asks
   `Want me to move their {oldTime} on {oldDay} booking to {newTime} on {newDay} instead?`
   Outside hours:
   `{who} is touring right now, so I can't move this tour. Their later booking is {oldTime} on {oldDay}, and {newTime} on {newDay} is outside your tour hours. Want me to move it there anyway?`

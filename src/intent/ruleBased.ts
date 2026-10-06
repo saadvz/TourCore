@@ -314,7 +314,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
   const keyword = keywordOf(raw);
   // Bare "cancel" is a carrier opt-out keyword, but with a booked tour it means cancel the tour.
   if (keyword === "stop") {
-    if ((ctx.hasCancelableTour || ctx.step === "touring") && isCancelTourAsk(raw) && normalize(raw) === "cancel") {
+    if ((ctx.hasCancelableTour || ctx.hasRunningTour) && isCancelTourAsk(raw) && normalize(raw) === "cancel") {
       return result({ type: "CANCEL_TOUR" }, 1);
     }
     return result({ type: "STOP_MESSAGES" }, 1);
@@ -330,7 +330,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
     if (yn.answer === "yes" && yn.confidence >= 0.75) return result({ type: "CONFIRM_CANCEL_TOUR" }, yn.confidence);
     if (isCancelTourAsk(raw)) return result({ type: "CONFIRM_CANCEL_TOUR" }, 0.95);
   }
-  if (ctx.hasCancelableTour && isCancelTourAsk(raw)) return result({ type: "CANCEL_TOUR" }, 0.95);
+  if ((ctx.hasCancelableTour || ctx.hasRunningTour) && isCancelTourAsk(raw)) return result({ type: "CANCEL_TOUR" }, 0.95);
 
   if (ctx.awaiting?.kind === "confirm-custom-time" || ctx.awaiting?.kind === "confirm-alternative") {
     const answered = answerScheduling(ctx.awaiting, t, result);

@@ -15,7 +15,7 @@ import { operatorUnitName, visitorTourOf } from "./identity";
 import { ONE_OFF_REPLACED_DETAIL } from "./oneOffGate";
 import { offerDate } from "./unavailableDay";
 import { alreadyAskedLine, bookedForLine, CONSENT_TEXT, customTimeAskedLine, isLiveHelpReservation, pendingCustomTimeLine, TAKEN_SLOT_OTHER_DAY, takenSlotLine, TourCore, TourCoreError, visitorCancelConfirmFor, visitorCancelDoneFor, type AccessOutcome, type InboundMeta } from "../core/TourCore";
-import { isCancelableReservation, TERMINAL } from "../domain/stateMachine";
+import { isCancelableReservation, PAUSED, TERMINAL } from "../domain/stateMachine";
 import { visitorCancelTarget, type VisitorCancelTarget } from "./cancelTarget";
 import { isoDate, parseIsoDate, type TourSlot } from "../core/schedule";
 import { createDurin, createStore, createVerificationProvider } from "../createTourCore";
@@ -399,7 +399,7 @@ export class VisitorDemoSession {
   /** Paused by the team or by a door-system problem: not over, just waiting for the team. */
   async isPaused(): Promise<boolean> {
     const status = (await this.reservation())?.status;
-    return status === "OPERATOR_HOLD" || status === "PROVIDER_FAILURE";
+    return !!status && PAUSED.includes(status);
   }
 
   /** Doors on the reserved route that haven't been opened yet, in order. */

@@ -93,7 +93,7 @@ function lastAsked(step: ConversationStep, awaiting?: StepAwaiting, timezone?: s
     return `Reply yes for ${weekday} at ${formatTime(start, timezone ?? "UTC")}, or pick a day.`;
   }
   if (awaiting?.kind === "confirm-cancel-tour") {
-    if (awaiting.namedRunning) return cannotCancelRunningOfferLater(awaiting.time, awaiting.day);
+    if (awaiting.namedRunning) return cannotCancelRunningOfferLater(awaiting.time, awaiting.day, awaiting.team);
     return awaiting.laterWhileTouring
       ? laterCancelConfirm(awaiting.time, awaiting.day)
       : `Cancel your tour on ${awaiting.day} at ${awaiting.time}? Reply YES or NO.`;

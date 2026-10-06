@@ -158,7 +158,7 @@ window, or hold is refused — tell the operator Tour Core's words
 (`They already have a booked tour. I can move it or call it off.`), then
 move with `reschedule_tour` or call off with `revoke_tour_access` (resume a
 hold with `clear_operator_hold`). `reschedule_tour` will not move a tour in
-progress (`{who} is touring right now, so I can't move this tour. Once it
+progress, including hold or a door-system problem (`{who} is touring right now, so I can't move this tour. Once it
 ends, you can book them another time.`); if they have a later booking it
 asks `Want me to move their {oldTime} on {oldDay} booking to {newTime} on
 {newDay} instead?` (outside hours: `{who} is touring right now, so I can't

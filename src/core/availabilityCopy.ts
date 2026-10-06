@@ -76,14 +76,19 @@ export function laterCancelKept(time: string, day: string): string {
   return `Okay, your later tour at ${time} on ${day} stays booked.`;
 }
 
+/** Extra sentence on hold / door-system problem. `{team}` is the pause-cancel team label. */
+function runningProblemNote(team?: string): string {
+  return team ? ` The ${team} is still working on the problem and will text you here.` : "";
+}
+
 /** Visitor named the running tour while a later booking is held. YES/NO still use laterCancelDone / laterCancelKept. */
-export function cannotCancelRunningOfferLater(time: string, day: string): string {
-  return `You can't cancel the tour you're on, but you're free to wrap up whenever you like. Your later tour at ${time} on ${day} is still booked. Want me to cancel that one instead? Reply YES or NO.`;
+export function cannotCancelRunningOfferLater(time: string, day: string, team?: string): string {
+  return `You can't cancel the tour you're on, but you're free to wrap up whenever you like.${runningProblemNote(team)} Your later tour at ${time} on ${day} is still booked. Want me to cancel that one instead? Reply YES or NO.`;
 }
 
 /** Touring visitor with no later booking. Nothing is cancelled; doors keep working. */
-export function cannotCancelRunningTour(): string {
-  return "You can't cancel the tour you're on, but you're free to wrap up whenever you like. Text me anytime if you want to book another tour.";
+export function cannotCancelRunningTour(team?: string): string {
+  return `You can't cancel the tour you're on, but you're free to wrap up whenever you like.${runningProblemNote(team)} Text me anytime if you want to book another tour.`;
 }
 
 /** Call-off confirm. Optional when-clause is time first: "at {time} on {day}". */

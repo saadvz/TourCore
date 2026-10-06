@@ -20,8 +20,10 @@ import { bookedForLine, CONSENT_TEXT, TOUR_ENDED_REPLY, VISITOR_CANCEL_DONE, Vis
 import { formatDay, formatTime, zonedTimeToUtc } from "../src/core/timezone";
 import { MessagingEndpoints } from "../src/messaging/endpoints";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
+import { bookedTours, cancelBooked } from "../src/operator/availability";
 import { persistSession } from "../src/operator/services";
 import { tourRef } from "../src/operator/tours";
+import { transition } from "../src/domain/stateMachine";
 import { PropertyWorkspace, runReadinessCheck } from "../src/setup";
 import { MemoryRuntimeStore } from "../src/storage/runtimeStore";
 import { handleVisitorText } from "../src/visitor/conversation";
@@ -43,6 +45,34 @@ afterEach(() => cleanups.splice(0).forEach((c) => c()));
 
 function lastFrom(session: VisitorDemoSession): string {
   return session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1) ?? "";
+}
+
+async function doorFailureVisitor(
+  h: ReturnType<typeof grokHarness>,
+  id: string,
+  options: { name?: string; phone?: string } = {},
+) {
+  const v = await h.visitor(id, options);
+  const [first, last] = (options.name ?? "Pat Smith").split(" ");
+  await v.act("chooseTime", { slotStart: v.slot().toISOString() });
+  await v.act("consent", { agree: true });
+  await v.act("submitIdentity", {
+    firstName: first,
+    lastName: last,
+    email: "pat@example.com",
+    phone: options.phone ?? "555-010-2000",
+  });
+  h.setClock(v.slot().getTime());
+  await v.act("arrive");
+  v.session.durin.failNextRequest("door controller timeout");
+  await v.act("atStop", { doorId: "unit_101_door" });
+  expect((await v.session.reservation())!.status).toBe("PROVIDER_FAILURE");
+  return v;
+}
+
+async function markProviderFailure(session: VisitorDemoSession) {
+  const current = (await session.reservation())!;
+  await session.store.put("reservations", transition(current, "PROVIDER_FAILURE", session.clock.now()));
 }
 
 async function holdNextSlot(session: VisitorDemoSession, slotStart: Date) {
@@ -450,6 +480,79 @@ describe("should-fix: reschedule_tour refuses a tour in progress", () => {
     expect(sent.at(-2)).not.toMatch(/You're all set/);
   });
 
+  it("refuses a tour on operator hold the same way as a tour in progress", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const v = await h.touringVisitor(id, { name: "Riley Tester", phone: "555-010-2000" });
+    await v.session.operatorChange((core, reservationId) => core.placeOperatorHold(reservationId, "checking something"));
+    await persistSession(h.services, v.session);
+    expect(await h.fails("reschedule_tour", { visitor: "Riley", newStartsAt: "Friday, Oct 2 at 3:30 PM" })).toBe(
+      tourInProgressCannotMove("Riley"),
+    );
+  });
+
+  it("offers the later booking when the running tour is on operator hold", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const v = await h.touringVisitor(id, { name: "Riley Tester", phone: "555-010-2000" });
+    const thursday = zonedTimeToUtc({ year: 2026, month: 10, day: 1, hour: 14, minute: 0 }, TZ);
+    const pending = await holdNextSlot(v.session, thursday);
+    await v.session.operatorChange((core, reservationId) => core.placeOperatorHold(reservationId, "checking something"));
+    const runningId = (await v.session.reservation())!.id;
+    await persistSession(h.services, v.session);
+    const asked = await h.ok("reschedule_tour", { visitor: "Riley", newStartsAt: "Friday, Oct 2 at 3:30 PM" });
+    expect(asked.summary).toBe(moveLaterBookingInstead("Riley", "2:00 PM", "Thursday, Oct 1", "3:30 PM", "Friday, Oct 2"));
+    const done = await h.ok("reschedule_tour", {
+      visitor: "Riley",
+      newStartsAt: "Friday, Oct 2 at 3:30 PM",
+      confirmationCode: asked.confirmation.code,
+    });
+    expect(done.summary).toBe(movedLaterBookingSummary("Riley", "3:30 PM", "Friday, Oct 2"));
+    expect((await v.session.reservation())!.id).toBe(runningId);
+    expect((await v.session.reservation())!.status).toBe("OPERATOR_HOLD");
+    expect(new Date((await v.session.store.get("reservations", pending.id))!.slotStart!).getTime()).toBe(
+      zonedTimeToUtc({ year: 2026, month: 10, day: 2, hour: 15, minute: 30 }, TZ).getTime(),
+    );
+  });
+
+  it("refuses a tour on door failure the same way as a tour in progress", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const v = await doorFailureVisitor(h, id, { name: "Riley Tester", phone: "555-010-2000" });
+    await persistSession(h.services, v.session);
+    expect(await h.fails("reschedule_tour", { visitor: "Riley", newStartsAt: "Friday, Oct 2 at 3:30 PM" })).toBe(
+      tourInProgressCannotMove("Riley"),
+    );
+  });
+
+  it("offers the later booking when the running tour is on door failure", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const v = await h.touringVisitor(id, { name: "Riley Tester", phone: "555-010-2000" });
+    const thursday = zonedTimeToUtc({ year: 2026, month: 10, day: 1, hour: 14, minute: 0 }, TZ);
+    const pending = await holdNextSlot(v.session, thursday);
+    await markProviderFailure(v.session);
+    const runningId = (await v.session.reservation())!.id;
+    await persistSession(h.services, v.session);
+    const asked = await h.ok("reschedule_tour", { visitor: "Riley", newStartsAt: "Friday, Oct 2 at 3:30 PM" });
+    expect(asked.summary).toBe(moveLaterBookingInstead("Riley", "2:00 PM", "Thursday, Oct 1", "3:30 PM", "Friday, Oct 2"));
+    const done = await h.ok("reschedule_tour", {
+      visitor: "Riley",
+      newStartsAt: "Friday, Oct 2 at 3:30 PM",
+      confirmationCode: asked.confirmation.code,
+    });
+    expect(done.summary).toBe(movedLaterBookingSummary("Riley", "3:30 PM", "Friday, Oct 2"));
+    expect((await v.session.reservation())!.id).toBe(runningId);
+    expect((await v.session.reservation())!.status).toBe("PROVIDER_FAILURE");
+    expect(new Date((await v.session.store.get("reservations", pending.id))!.slotStart!).getTime()).toBe(
+      zonedTimeToUtc({ year: 2026, month: 10, day: 2, hour: 15, minute: 30 }, TZ).getTime(),
+    );
+  });
+
   it("names the destination and warns when the later move is outside hours", async () => {
     const h = grokHarness();
     cleanups.push(h.cleanup);
@@ -648,6 +751,63 @@ describe("nit: one-off overlap uses the extended window end", () => {
   });
 });
 
+describe("blocker: bare cancel on hold or door failure is cancel, not STOP", () => {
+  const HOLD_LATER =
+    "You can't cancel the tour you're on, but you're free to wrap up whenever you like. The leasing team is still working on the problem and will text you here. Your later tour at 2:00 PM on Friday, Oct 2 is still booked. Want me to cancel that one instead? Reply YES or NO.";
+
+  it("bare cancel on hold with a later booking asks the later-cancel line", async () => {
+    const ctx = await touringWithRebook("cancel-hold-later");
+    await ctx.session.operatorChange((core, id) => core.placeOperatorHold(id, "checking something"));
+    expect((await ctx.session.reservation())!.status).toBe("OPERATOR_HOLD");
+    await ctx.say("cancel");
+    expect(lastFrom(ctx.session)).toBe(laterCancelConfirm("2:00 PM", "Friday, Oct 2"));
+    expect((await ctx.session.reservation())!.status).toBe("OPERATOR_HOLD");
+    expect((await ctx.session.store.get("reservations", ctx.pending.id))!.status).toBe("AWAITING_CONSENT");
+    expect(ctx.session.optedOut).toBe(false);
+    await ctx.say("hi");
+    expect(lastFrom(ctx.session).length).toBeGreaterThan(0);
+    expect(ctx.session.optedOut).toBe(false);
+  });
+
+  it("naming the running tour on hold offers the later booking with the working-on-problem sentence", async () => {
+    const ctx = await touringWithRebook("cancel-hold-named");
+    await ctx.session.operatorChange((core, id) => core.placeOperatorHold(id, "checking something"));
+    await ctx.say("cancel this tour");
+    expect(lastFrom(ctx.session)).toBe(HOLD_LATER);
+    expect(lastFrom(ctx.session)).toBe(cannotCancelRunningOfferLater("2:00 PM", "Friday, Oct 2", "leasing team"));
+    expect((await ctx.session.reservation())!.status).toBe("OPERATOR_HOLD");
+    expect((await ctx.session.store.get("reservations", ctx.pending.id))!.status).toBe("AWAITING_CONSENT");
+    expect(ctx.session.optedOut).toBe(false);
+  });
+
+  it("bare cancel on door failure with a later booking asks the later-cancel line", async () => {
+    const ctx = await touringWithRebook("cancel-fail-later");
+    ctx.session.durin.failNextRequest("door controller timeout");
+    await ctx.say("I'm at 101");
+    expect((await ctx.session.reservation())!.status).toBe("PROVIDER_FAILURE");
+    await ctx.say("cancel");
+    expect(lastFrom(ctx.session)).toBe(laterCancelConfirm("2:00 PM", "Friday, Oct 2"));
+    expect((await ctx.session.reservation())!.status).toBe("PROVIDER_FAILURE");
+    expect((await ctx.session.store.get("reservations", ctx.pending.id))!.status).toBe("AWAITING_CONSENT");
+    expect(ctx.session.optedOut).toBe(false);
+    await ctx.say("hi");
+    expect(lastFrom(ctx.session).length).toBeGreaterThan(0);
+    expect(ctx.session.optedOut).toBe(false);
+  });
+
+  it("naming the running tour on door failure offers the later booking with the working-on-problem sentence", async () => {
+    const ctx = await touringWithRebook("cancel-fail-named");
+    ctx.session.durin.failNextRequest("door controller timeout");
+    await ctx.say("I'm at 101");
+    expect((await ctx.session.reservation())!.status).toBe("PROVIDER_FAILURE");
+    await ctx.say("cancel this tour");
+    expect(lastFrom(ctx.session)).toBe(HOLD_LATER);
+    expect((await ctx.session.reservation())!.status).toBe("PROVIDER_FAILURE");
+    expect((await ctx.session.store.get("reservations", ctx.pending.id))!.status).toBe("AWAITING_CONSENT");
+    expect(ctx.session.optedOut).toBe(false);
+  });
+});
+
 describe("should-fix: pause_tours counts each cancelled booking, not each tour", () => {
   it("skips a past no-show sitting next to a later booking that is cancelled", async () => {
     const h = grokHarness();
@@ -672,6 +832,36 @@ describe("should-fix: pause_tours counts each cancelled booking, not each tour",
     expect(done.cancelled).toBe(1);
     expect((await missedVisitor.session.store.get("reservations", missed.id))!.status).toBe("READY");
     expect((await kept.session.store.get("reservations", later.id))!.status).toBe("CANCELLED");
+  });
+
+  it("counts 0 for a booking cancelled after the snapshot and 1 for another visitor's real cancel", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const stale = await h.visitor(id, { name: "Pat Smith", phone: "555-010-2000" });
+    const two = stale.session.offeredSlots.find((slot) => slot.label.includes("2:00"));
+    await stale.act("chooseTime", { slotStart: (two?.start ?? stale.slot()).toISOString() });
+    await stale.act("consent", { agree: true });
+    await stale.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: "555-010-2000" });
+    const staleId = (await stale.session.reservation())!.id;
+    const real = await h.visitor(id, { name: "Riley Tester", phone: "555-010-2111" });
+    const three = real.session.offeredSlots.find((slot) => slot.label.includes("3:00"));
+    await real.act("chooseTime", { slotStart: (three?.start ?? real.slot()).toISOString() });
+    await real.act("consent", { agree: true });
+    await real.act("submitIdentity", { firstName: "Riley", lastName: "Tester", email: "riley@example.com", phone: "555-010-2111" });
+    const realId = (await real.session.reservation())!.id;
+    await persistSession(h.services, stale.session);
+    await persistSession(h.services, real.session);
+    const snapshot = await bookedTours(h.services, id);
+    expect(snapshot).toHaveLength(2);
+    await stale.session.operatorChange((core, reservationId) =>
+      core.cancelBookedTour(reservationId, { reason: "cancelled after snapshot", propertyWide: false }),
+    );
+    expect((await stale.session.store.get("reservations", staleId))!.status).toBe("CANCELLED");
+    const cancelled = await cancelBooked(h.services, snapshot, true, "tours paused");
+    expect(cancelled).toBe(1);
+    expect((await stale.session.store.get("reservations", staleId))!.status).toBe("CANCELLED");
+    expect((await real.session.store.get("reservations", realId))!.status).toBe("CANCELLED");
   });
 });
 
@@ -703,6 +893,36 @@ describe("nit: pause-cancel mid-tour copy covers hold and provider failure", () 
         touringNow: true,
       }),
     );
+  });
+
+  it("uses the touring-now cancel text while the running tour is on door failure", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const v = await h.touringVisitor(id, { name: "Riley Tester", phone: "555-010-2000" });
+    const slot = new Date(at(10));
+    const pending = await holdNextSlot(v.session, slot);
+    const runningId = (await v.session.reservation())!.id;
+    await markProviderFailure(v.session);
+    expect((await v.session.store.get("reservations", runningId))!.status).toBe("PROVIDER_FAILURE");
+    await persistSession(h.services, v.session);
+    const asked = await h.ok("pause_tours", { property: id });
+    const done = await h.ok("pause_tours", { property: id, bookedTours: "cancel", confirmationCode: asked.confirmation.code });
+    expect(done.cancelled).toBe(1);
+    expect((await v.session.store.get("reservations", pending.id))!.status).toBe("CANCELLED");
+    expect((await v.session.store.get("reservations", runningId))!.status).toBe("PROVIDER_FAILURE");
+    const { config } = h.workspace.load(id);
+    expect(lastFrom(v.session)).toBe(
+      bookedTourCalledOffText({
+        team: config.operator.name,
+        day: formatDay(slot, config.property.timezone),
+        time: formatTime(slot, config.property.timezone),
+        address: config.property.address,
+        propertyWide: true,
+        touringNow: true,
+      }),
+    );
+    expect(lastFrom(v.session)).toContain("Your tour right now isn't affected.");
   });
 });
 

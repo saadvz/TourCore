@@ -13,7 +13,7 @@ import {
   type TourTimeRequest,
   type Verification,
 } from "../domain/model";
-import { isCancelableReservation, TERMINAL, transition } from "../domain/stateMachine";
+import { isCancelableReservation, isRunningReservation, TERMINAL, transition } from "../domain/stateMachine";
 import type { DurinAccessAdapter, DurinAccessResult, DurinHealth } from "../durin/DurinAccessAdapter";
 import { MessagingError, type DeliveryReceipt, type MessageChannel, type Messenger } from "../messaging/Messenger";
 import { withPrompt, type ReplyPrompt } from "../messaging/presentation";
@@ -1352,7 +1352,7 @@ export class TourCore {
 
   async revokeReservation(reservationId: string, reason: string): Promise<Reservation> {
     let reservation = await this.mustGetReservation(reservationId);
-    const running = reservation.status === "TOURING" || reservation.status === "OPERATOR_HOLD" || reservation.status === "PROVIDER_FAILURE";
+    const running = isRunningReservation(reservation.status);
     const slotStart = reservation.slotStart;
     const siblings = (await this.deps.store.list("reservations")).some(
       (item) => item.id !== reservation.id && item.prospectId === reservation.prospectId && !!item.slotStart,
@@ -1413,7 +1413,7 @@ export class TourCore {
    */
   async cancelBookedTour(reservationId: string, options: { reason: string; propertyWide: boolean; removed?: boolean }): Promise<Reservation> {
     let reservation = await this.mustGetReservation(reservationId);
-    if (reservation.status === "TOURING" || reservation.status === "OPERATOR_HOLD" || reservation.status === "PROVIDER_FAILURE") {
+    if (isRunningReservation(reservation.status)) {
       return reservation;
     }
     if (!reservation.slotStart || TERMINAL.includes(reservation.status)) return reservation;
@@ -1423,9 +1423,7 @@ export class TourCore {
     const prospect = await this.mustGetProspect(reservation.prospectId);
     const start = new Date(slotStart);
     const touringNow = (await this.deps.store.list("reservations")).some(
-      (item) =>
-        item.id !== reservation.id &&
-        (item.status === "TOURING" || item.status === "OPERATOR_HOLD" || item.status === "PROVIDER_FAILURE"),
+      (item) => item.id !== reservation.id && isRunningReservation(item.status),
     );
     await this.textProspect(
       prospect,

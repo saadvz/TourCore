@@ -52,6 +52,7 @@ const STEP_AWAITING = [
     time: z.string(),
     laterWhileTouring: z.boolean().optional(),
     namedRunning: z.boolean().optional(),
+    team: z.string().optional(),
   }),
   z.object({ kind: z.literal("t15-questions") }),
   z.object({ kind: z.literal("t5-extension-offer") }),
