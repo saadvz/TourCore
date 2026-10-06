@@ -12,7 +12,9 @@ import {
   visitorCancelKept,
   type InboundMeta,
 } from "../core/TourCore";
+import { isLeavingTour } from "../core/overstayCopy";
 import { isCancelableReservation } from "../domain/stateMachine";
+import { stripFiller } from "../intent/normalize";
 import {
   isCancelTourAsk,
   isConfident,
@@ -278,10 +280,10 @@ export async function handleVisitorText(
 
   if (intent.type === "STOP_MESSAGES" && turn.confident) await session.optOut(said);
   else if (intent.type === "START_MESSAGES" && turn.confident) await session.optIn(said);
-  else if (keyword === "help") await session.help(said);
   else if (await handleOverstayReply(turn)) {
-    /* T-15 / T-5 / more-time / DONE after the tour has started */
-  } else if (await handleCancelIntent(turn)) {
+    /* T-15 / T-5 / more-time / DONE / after-close / rebook after no-time */
+  } else if (keyword === "help") await session.help(said);
+  else if (await handleCancelIntent(turn)) {
     /* cancel-by-text: confirm, YES, or NO */
   } else if (firstMessage) {
     if (intent.type === "SELECT_UNIT" && turn.confident) await chooseUnit(turn);
@@ -961,16 +963,38 @@ async function handleOverstayReply(turn: Turn): Promise<boolean> {
   const overstay = session.overstay;
   if (!overstay || !reservation?.windowEnd) return false;
   if (reservation.status !== "TOURING" && reservation.status !== "EXPIRED") return false;
+  const said = turn.said.text ?? "";
+
+  if (reservation.status === "EXPIRED") {
+    const confirmed = await session.core.hasConfirmedLeftAfterClose(reservation.id);
+    if (confirmed) return false;
+    if (isLeavingTour(stripFiller(normalize(said))) || (intent.type === "FINISH_TOUR" && turn.confident)) {
+      await session.recordText(turn.said);
+      await session.core.confirmLeftAfterClose(reservation.id);
+      overstay.cancel(reservation.id);
+      await session.refreshThread();
+      return true;
+    }
+    await session.recordText(turn.said);
+    await session.core.replyAfterOverstayClose(reservation.id, said);
+    await session.refreshThread();
+    return true;
+  }
+
+  if (overstay.takePendingRebook(reservation.id, said)) {
+    await startRebook(turn);
+    return true;
+  }
 
   // T-15 / T-5 / more-time replies first so "all set" after T-15 is not treated as leaving.
-  const reply = await overstay.replyToVisitor(session.core, reservation.id, turn.said.text ?? "");
+  const reply = await overstay.replyToVisitor(session.core, reservation.id, said);
   if (reply !== undefined) {
     await turn.respond(reply);
     return true;
   }
 
   if (intent.type === "FINISH_TOUR" && turn.confident) {
-    if (reservation.status === "TOURING") await turn.act("finish");
+    await turn.act("finish");
     overstay.cancel(reservation.id);
     return true;
   }
@@ -980,6 +1004,18 @@ async function handleOverstayReply(turn: Turn): Promise<boolean> {
     return true;
   }
   return false;
+}
+
+async function startRebook(turn: Turn): Promise<void> {
+  const { session } = turn;
+  await session.recordText(turn.said);
+  const dates = await session.beginRebook();
+  if (!dates.length) {
+    await session.reply(VisitorDenialCopy.noOpenTimes(session.config.operator.name));
+    return;
+  }
+  session.markDatesShown();
+  await session.reply(DAY_MENU, { kind: "choose", options: dates.map((day) => day.label), what: "a day" });
 }
 
 /** In the building: stops along the route, questions, help, finishing. */

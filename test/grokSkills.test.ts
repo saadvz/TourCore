@@ -145,7 +145,7 @@ describe("Grok skill scenarios", () => {
     expect(result.proofPoints).toContain("\u2713 The 15-minutes-left questions text was sent");
     expect(result.proofPoints).toContain("\u2713 The 5-minute extra-time offer was sent");
     expect(result.proofPoints).toContain("\u2713 A one-time 10-minute extension was granted");
-    expect(result.proofPoints).toContain("\u2713 The tour-end text was sent when extra time was not taken");
+    expect(result.proofPoints).toContain("\u2713 The tour-end text was sent (no extra time taken)");
     expect(result.proofPoints).toContain("\u2713 The 5-minutes-after check-in was sent");
     expect(result.proofPoints).toContain("\u2713 The tour was closed 15 minutes after the end");
     expect(result.proofPoints.every((p: string) => p.startsWith("\u2713"))).toBe(true);

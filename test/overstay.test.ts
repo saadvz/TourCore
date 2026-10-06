@@ -5,12 +5,14 @@ import { extensionAvailability, occupantFromReservation } from "../src/core/exte
 import {
   DOOR_AFTER_T,
   EXTENSION_AFTER_T,
+  LATE_ARRIVAL_EXPIRED,
   extensionAlreadyUsed,
   extensionGranted,
   extensionUnavailable,
   landlordExtensionGranted,
   landlordPlus15,
   landlordPlus5,
+  landlordRepliedAfterClose,
   plus15Closed,
   plus5CheckIn,
   T15_BARE_YES,
@@ -20,7 +22,11 @@ import {
   t5NoOffer,
   t5Offering,
   tourEnded,
+  tourFinishedFollowUp,
+  visitorRepliedAfterClose,
 } from "../src/core/overstayCopy";
+import { TourCoreError } from "../src/core/TourCore";
+import { runDryTour } from "../src/setup/dryTour";
 import { formatTime, zonedTimeToUtc } from "../src/core/timezone";
 import { newId, UNNAMED_VISITOR, type Reservation } from "../src/domain/model";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
@@ -60,7 +66,7 @@ async function startTour(ctx: ReturnType<typeof setup>) {
   return { tour, reservation, overstay, runtime, endLabel: async () => formatTime(new Date((await ctx.core.getReservation(reservation.id))!.windowEnd!), TZ) };
 }
 
-function busyReservation(ctx: ReturnType<typeof setup>, input: { start: Date; unitId?: string; doors?: string[]; oneOff?: boolean; pending?: boolean }): Reservation {
+function busyReservation(ctx: { config: TourCoreConfig; clock: { now: () => Date } }, input: { start: Date; unitId?: string; doors?: string[]; oneOff?: boolean; pending?: boolean }): Reservation {
   const start = input.start;
   const early = ctx.config.tourHours.earlyArrivalMinutes * 60_000;
   const length = ctx.config.tourHours.tourLengthMinutes * 60_000;
@@ -468,5 +474,187 @@ describe("overstay conversation", () => {
     expect(session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1)).toContain("I'll let the property team know about your question.");
     await say("I'm out");
     expect((await session.reservation())!.status).toBe("COMPLETED");
+  });
+
+  it("yes after the no-time line starts rebooking with real times", async () => {
+    const now = { t: zonedTimeToUtc({ ...TOUR_DAY, hour: 13, minute: 58 }, TZ).getTime() };
+    const transport = new DemoMessagingAdapter(() => {}, "MESSAGING");
+    const session = new VisitorDemoSession("prop_100_alfred_way", loadConfig(), "t-rebook", { realNow: () => now.t, transport, kind: "messaging" });
+    const runtime = new MemoryRuntimeStore();
+    session.overstay = new OverstayScheduler(runtime, { now: () => new Date(now.t) });
+    let n = 0;
+    const say = (text: string) => handleVisitorText(session, "+15550102000", text, { provider: "test", providerMessageId: `rb_${++n}` });
+    await say("TOUR");
+    await say("YES");
+    await say("1");
+    await say("1");
+    await say("1");
+    await say("yes");
+    await session.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: "+15550102000" });
+    const r = (await session.reservation())!;
+    now.t = Date.parse(r.slotStart!);
+    session.clock.jumpTo(new Date(now.t));
+    await say("I'm here");
+    session.overstay.ensure((await session.reservation())!, session.propertyId, session.tourId);
+    const end = new Date(r.windowEnd!);
+    await session.store.put("reservations", busyReservation({ config: session.config, clock: session.clock }, { start: end }));
+    now.t = end.getTime() - 12 * 60_000;
+    session.clock.jumpTo(new Date(now.t));
+    await say("can I have more time?");
+    expect(session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1)).toBe(extensionUnavailable(formatTime(end, TZ)));
+    await say("sure, another time");
+    const reply = session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1) ?? "";
+    expect(reply).toContain("I have tours available. Which day works for you?");
+    expect(reply).not.toContain("didn't catch that");
+    expect((await session.reservation())!.status).toBe("INQUIRY");
+    expect(session.overstay.get(r.id)?.pendingRebook).toBeFalsy();
+  });
+});
+
+describe("QA review blocking items", () => {
+  it("an extended tour holds the next slot so 2:45 cannot be booked after Jane is extended to 2:55", async () => {
+    const ctx = setup();
+    const hours = { ...ctx.config.tourHours, start: "14:00", end: "17:00", tourLengthMinutes: 45, slotEveryMinutes: 45, earlyArrivalMinutes: 0 };
+    const cfg = { ...ctx.config, tourHours: hours };
+    ctx.core.useConfig(cfg);
+    Object.assign(ctx, { config: cfg });
+    const started = await startTour(ctx);
+    ctx.clock.set(minutesFrom(new Date(started.reservation.windowEnd!), -5));
+    await started.overstay.handleAsk(ctx.core, started.reservation.id, "natural");
+    const jane = (await ctx.core.getReservation(started.reservation.id))!;
+    expect(formatTime(new Date(jane.windowEnd!), TZ)).toBe("2:55 PM");
+    const other = await ctx.core.startInquiry({ name: "Alex Other", phone: "(555) 010-9999", unitId: "apt_101" });
+    const twoFortyFive = (await ctx.core.availableSlots(TOUR_DAY)).find((s) => formatTime(s.start, TZ) === "2:45 PM");
+    expect(twoFortyFive).toBeUndefined();
+    await expect(ctx.core.reserveSlot(other.reservation.id, zonedTimeToUtc({ ...TOUR_DAY, hour: 14, minute: 45 }, TZ).toISOString())).rejects.toBeInstanceOf(TourCoreError);
+  });
+
+  it("door-after-T after they entered, another-time line if they never got in", async () => {
+    const entered = setup();
+    const a = await startTour(entered);
+    entered.clock.set(new Date(a.reservation.windowEnd!));
+    const denied = await a.tour.request("unit_101");
+    expect(denied.decision.code).toBe("DENY_EXPIRED");
+    expect(await outbound(entered, a.reservation.id)).toContain(DOOR_AFTER_T);
+
+    const neverIn = setup();
+    const late = await bookTour(neverIn);
+    neverIn.clock.set(minutesFrom(late.slotStart, 120));
+    const missed = await late.request("entrance");
+    expect(missed.decision.code).toBe("DENY_EXPIRED");
+    expect(await outbound(neverIn, late.reservation.id)).toContain(LATE_ARRIVAL_EXPIRED);
+    expect(await outbound(neverIn, late.reservation.id)).not.toContain(DOOR_AFTER_T);
+  });
+
+  it("replies after the +15 close alert the team; DONE after close uses the tour-ended thanks", async () => {
+    const withHelp = setup({ visitorContact: "+15550109999" });
+    const a = await startTour(withHelp);
+    const T = new Date(a.reservation.windowEnd!);
+    withHelp.clock.set(minutesFrom(T, 15));
+    await a.overstay.tickCore(withHelp.core, { propertyId: withHelp.config.property.id });
+    await withHelp.core.replyAfterOverstayClose(a.reservation.id, "I'm still inside, the door won't open");
+    expect(await outbound(withHelp, a.reservation.id)).toContain(visitorRepliedAfterClose("+15550109999"));
+    expect(await operatorAlerts(withHelp, a.reservation.id)).toContain(landlordRepliedAfterClose("Jane", PLACE, "I'm still inside, the door won't open"));
+    expect((await withHelp.core.auditTrail()).some((e) => e.type === "VISITOR_CONFIRMED_LEFT")).toBe(false);
+
+    const noHelp = setup();
+    const b = await startTour(noHelp);
+    noHelp.clock.set(minutesFrom(new Date(b.reservation.windowEnd!), 15));
+    await b.overstay.tickCore(noHelp.core, { propertyId: noHelp.config.property.id });
+    await noHelp.core.replyAfterOverstayClose(b.reservation.id, "HELP");
+    expect(await outbound(noHelp, b.reservation.id)).toContain(visitorRepliedAfterClose());
+
+    const left = setup();
+    const c = await startTour(left);
+    left.clock.set(minutesFrom(new Date(c.reservation.windowEnd!), 15));
+    await c.overstay.tickCore(left.core, { propertyId: left.config.property.id });
+    await left.core.confirmLeftAfterClose(c.reservation.id);
+    expect(await outbound(left, c.reservation.id)).toContain(tourFinishedFollowUp(PLACE, "Jane", "Two-bedroom, first floor, south-facing."));
+    expect((await left.core.auditTrail()).some((e) => e.type === "VISITOR_CONFIRMED_LEFT" && e.reservationId === c.reservation.id)).toBe(true);
+    expect((await operatorAlerts(left, c.reservation.id)).some((x) => x.includes("replied after their tour"))).toBe(false);
+  });
+
+  it("STOP during a tour tells the landlord and does not end the tour", async () => {
+    const ctx = setup();
+    const started = await startTour(ctx);
+    const result = await ctx.core.optOutOfMessaging("(555) 010-1234", "STOP");
+    expect(result.endedTour).toBe(false);
+    expect((await ctx.core.getReservation(started.reservation.id))!.status).toBe("TOURING");
+    const alerts = await operatorAlerts(ctx, started.reservation.id);
+    expect(alerts).toContain("Jane Smith replied STOP and won't get more messages.");
+    expect(alerts.some((a) => a.includes("Their tour was ended"))).toBe(false);
+  });
+
+  it("practice tour passes for a 15-minute tour and for the last slot of the day", async () => {
+    const base = loadConfig();
+    const short: TourCoreConfig = { ...base, tourHours: { ...base.tourHours, tourLengthMinutes: 15, slotEveryMinutes: 60, earlyArrivalMinutes: 0 } };
+    const fifteen = await runDryTour(short, { now: zonedTimeToUtc({ ...TOUR_DAY, hour: 7, minute: 0 }, TZ) });
+    expect(fifteen.passed).toBe(true);
+    expect(fifteen.checks.find((c) => c.id === "t15_questions")).toMatchObject({ ok: true, skipped: true });
+    expect(fifteen.checks.find((c) => c.id === "t15_questions")?.detail).toContain("15 minutes");
+
+    const lastSlot: TourCoreConfig = {
+      ...base,
+      tourHours: { ...base.tourHours, start: "16:00", end: "17:00", slotEveryMinutes: 90, tourLengthMinutes: 45, earlyArrivalMinutes: 10 },
+    };
+    const last = await runDryTour(lastSlot, { now: zonedTimeToUtc({ ...TOUR_DAY, hour: 7, minute: 0 }, TZ) });
+    expect(last.passed).toBe(true);
+    expect(last.checks.every((c) => c.ok)).toBe(true);
+    expect(last.failure).toBeUndefined();
+  });
+
+  it("no thanks to a T-5 offer then a later yes does not grant", async () => {
+    const ctx = setup();
+    const started = await startTour(ctx);
+    ctx.clock.set(minutesFrom(new Date(started.reservation.windowEnd!), -5));
+    await started.overstay.tickCore(ctx.core, { propertyId: ctx.config.property.id });
+    expect(await started.overstay.replyToVisitor(ctx.core, started.reservation.id, "no thanks")).toBe(T5_NO_OFFER_BARE_YES);
+    expect(await started.overstay.replyToVisitor(ctx.core, started.reservation.id, "is there a gym?")).toBeUndefined();
+    ctx.clock.set(minutesFrom(new Date(started.reservation.windowEnd!), -1));
+    expect(await started.overstay.replyToVisitor(ctx.core, started.reservation.id, "yes")).toBe(T15_BARE_YES);
+    expect((await ctx.core.getReservation(started.reservation.id))!.extensionGrantedAt).toBeUndefined();
+  });
+
+  it("after a T-5 extension, T-5 against the new end uses the no-offer wording", async () => {
+    const ctx = setup();
+    const started = await startTour(ctx);
+    ctx.clock.set(minutesFrom(new Date(started.reservation.windowEnd!), -5));
+    await started.overstay.tickCore(ctx.core, { propertyId: ctx.config.property.id });
+    expect(await started.overstay.handleAsk(ctx.core, started.reservation.id, "bare-yes")).toBe(extensionGranted(await started.endLabel()));
+    const newEnd = new Date((await ctx.core.getReservation(started.reservation.id))!.windowEnd!);
+    ctx.clock.set(minutesFrom(newEnd, -5));
+    await started.overstay.tickCore(ctx.core, { propertyId: ctx.config.property.id });
+    const texts = await outbound(ctx, started.reservation.id);
+    expect(texts).toContain(t5NoOffer(PLACE, await started.endLabel(), "Jane"));
+    expect(texts.filter((b) => b.includes("Want 10 more minutes?"))).toHaveLength(1);
+  });
+
+  it("entering at T-3 does not send a catch-up T-5", async () => {
+    const ctx = setup();
+    const tour = await bookTour(ctx);
+    ctx.clock.set(minutesFrom(new Date(tour.reservation.windowEnd!), -3));
+    await tour.request("entrance");
+    const reservation = (await ctx.core.getReservation(tour.reservation.id))!;
+    const overstay = new OverstayScheduler(new MemoryRuntimeStore(), { clock: ctx.clock });
+    overstay.ensure(reservation, ctx.config.property.id);
+    await overstay.tickCore(ctx.core, { propertyId: ctx.config.property.id });
+    const texts = await outbound(ctx, reservation.id);
+    expect(texts.some((b) => b.includes("ends in 5 minutes"))).toBe(false);
+    expect(await overstay.handleAsk(ctx.core, reservation.id, "natural")).toBe(extensionGranted(formatTime(new Date((await ctx.core.getReservation(reservation.id))!.windowEnd!), TZ)));
+  });
+
+  it("concurrent more-time asks grant only once", async () => {
+    const ctx = setup();
+    const started = await startTour(ctx);
+    ctx.clock.set(minutesFrom(new Date(started.reservation.windowEnd!), -8));
+    const [a, b] = await Promise.all([
+      started.overstay.handleAsk(ctx.core, started.reservation.id, "natural"),
+      started.overstay.handleAsk(ctx.core, started.reservation.id, "natural"),
+    ]);
+    const granted = [a, b].filter((x) => x.startsWith("You've got 10 more minutes"));
+    expect(granted).toHaveLength(1);
+    expect([a, b].filter((x) => x.startsWith("You've already used"))).toHaveLength(1);
+    expect((await ctx.core.auditTrail()).filter((e) => e.type === "TOUR_EXTENDED" && e.reservationId === started.reservation.id)).toHaveLength(1);
+    expect((await operatorAlerts(ctx, started.reservation.id)).filter((x) => x.includes("was extended"))).toHaveLength(1);
   });
 });

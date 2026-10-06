@@ -291,7 +291,7 @@ const PROOF: Record<string, (c: DryTourCheck) => string | undefined> = {
   t15_questions: () => "The 15-minutes-left questions text was sent",
   t5_warning: () => "The 5-minute extra-time offer was sent",
   extension_granted: () => "A one-time 10-minute extension was granted",
-  overstay_end: () => "The tour-end text was sent when extra time was not taken",
+  overstay_end: () => "The tour-end text was sent (no extra time taken)",
   overstay_plus5: () => "The 5-minutes-after check-in was sent",
   overstay_closed: () => "The tour was closed 15 minutes after the end",
   records: () => "Tour records were saved",
@@ -301,7 +301,9 @@ function proofPoints(result: DryTourResult): string[] {
   return result.checks.flatMap((c) => {
     if (!c.ok) return [`\u2717 ${c.label}${c.detail ? `: ${c.detail}` : ""}`];
     const text = (PROOF[c.id] ?? ((x: DryTourCheck) => x.label))(c);
-    return text ? [`\u2713 ${text}`] : [];
+    if (!text) return [];
+    if (c.skipped) return [`\u2013 ${text}: ${c.detail ?? "Skipped."}`];
+    return [`\u2713 ${text}`];
   });
 }
 
@@ -936,7 +938,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Run a practice tour",
     kind: "change",
     description:
-      "Runs one complete practice tour through the real engine (no one is texted, no real door opens) and returns the proof points: booking, verification, early denial, entrance (kept for a single-family home, even when that door is also the unit door), the unit door on a unit-door-only apartment or condo, later unit doors, off-route denial, duplicate, the T-15 questions text, the T-5 extra-time offer, a one-time 10-minute extension, completion, follow-up, and a second path through tour-end, the +5 leave check-in, and the +15 close. Uses simulated time; nobody waits.",
+      "Runs one complete practice tour through the real engine (no one is texted, no real door opens) and returns the proof points: booking, verification, early denial, entrance (kept for a single-family home, even when that door is also the unit door), the unit door on a unit-door-only apartment or condo, later unit doors, off-route denial, duplicate, the T-15 questions text, the T-5 extra-time offer, a one-time 10-minute extension, completion, follow-up, and a second path through tour-end, the +5 leave check-in, and the +15 close. Uses a deterministic simulated clock. A 15-minute tour skips T-15 with a reason (it would be the start). The last slot of the day still runs; extra time or the second path is skipped with a reason if it cannot apply. Nobody waits.",
     input: z.strictObject({ property: Property, unit: Unit.optional() }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);

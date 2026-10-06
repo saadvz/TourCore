@@ -12,8 +12,8 @@ export interface TimeInterval {
   endMs: number;
 }
 
-export function tourInterval(config: TourCoreConfig, start: Date): TimeInterval {
-  return { startMs: start.getTime(), endMs: start.getTime() + config.tourHours.tourLengthMinutes * 60_000 };
+export function tourInterval(config: TourCoreConfig, start: Date, end?: Date): TimeInterval {
+  return { startMs: start.getTime(), endMs: (end ?? new Date(start.getTime() + config.tourHours.tourLengthMinutes * 60_000)).getTime() };
 }
 
 export function intervalsOverlap(a: TimeInterval, b: TimeInterval): boolean {
@@ -120,15 +120,14 @@ export function parseFlexibleTime(text: string, config: TourCoreConfig, now: Dat
 }
 
 /** Up to two regular starts nearest to `requested` that don't overlap `busy`. */
-export function closestOpenSlots(config: TourCoreConfig, now: Date, requested: Date, busy: Date[]): Date[] {
-  const blocks = busy.map((start) => tourInterval(config, start));
+export function closestOpenSlots(config: TourCoreConfig, now: Date, requested: Date, busy: TimeInterval[]): Date[] {
   const candidates: Date[] = [];
   let day = localDateOf(now, config.property.timezone);
   for (let i = 0; i < 14; i++, day = addDays(day, 1)) {
     for (const slot of slotsOn(config, day)) {
       if (slot.start.getTime() <= now.getTime()) continue;
       const interval = tourInterval(config, slot.start);
-      if (blocks.some((block) => intervalsOverlap(interval, block))) continue;
+      if (busy.some((block) => intervalsOverlap(interval, block))) continue;
       candidates.push(slot.start);
     }
   }

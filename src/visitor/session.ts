@@ -962,6 +962,14 @@ export class VisitorDemoSession {
     }
   }
 
+  /** After the no-time line: start a new booking on the same unit and offer real days. */
+  async beginRebook(): Promise<{ date: string; label: string }[]> {
+    const current = await this.reservation();
+    if (!current) return [];
+    await this.inquire(current.unitId, { announce: false });
+    return this.offeredDates;
+  }
+
   private async inquire(unitId: string, options: { announce?: boolean } = {}): Promise<void> {
     const { prospect, reservation } = await this.core.startInquiry({ ...this.visitor!, unitId }, options);
     this.prospectId = prospect.id;

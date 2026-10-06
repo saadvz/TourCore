@@ -189,7 +189,7 @@ On the phone, the visitor:
    - "Skip ahead to my tour time" is a demo control that moves the demo clock forward.
 5. is guided along the route ("I'm at Unit 101");
 6. can ask questions, which are answered only from facts you entered and flagged for you when there's no answer;
-7. gets a 15-minutes-left "any questions?" text after the tour has started, then a 5-minute warning that offers one extra 10 minutes when the next time is free (an explicit ask for more time before that warning is granted when the slot is free; a bare yes to the questions text never grants time);
+7. gets a 15-minutes-left "any questions?" text after the tour has started, then a 5-minute warning that offers one extra 10 minutes when the next time is free (an explicit ask for more time any time before the tour ends is granted when the slot is free; a bare yes to the questions text never grants time; a no to the extra-time offer is acknowledged and a later bare yes does not grant; if extra time cannot be added they can say yes and book another look);
 8. can text DONE / I'm out / leaving at any point, or stay through the end: doors never open after the tour end, a +5 check-in asks if they've left, and at +15 the tour closes;
 9. finishes the tour and answers the follow-up question.
 
@@ -246,7 +246,7 @@ in their normal Messages app:
 - door access through Durin demo mode;
 - questions answered from approved facts only;
 - HELP and STOP;
-- a 15-minutes-left questions text and a 5-minute warning (one extra 10 minutes when that time is free; asking for more time before the warning is granted when the slot is free);
+- a 15-minutes-left questions text and a 5-minute warning (one extra 10 minutes when that time is free; asking for more time any time before the tour ends is granted when the slot is free; after the no-time line, yes books another look);
 - DONE / I'm out to end, or tour-end / +5 / +15 texts if they stay;
 - the follow-up question.
 
@@ -679,9 +679,10 @@ The practice tour runs inquiry, reservation, consent, verification, an early arr
 access, a duplicate request (no second grant), unit access with directions, and an **off-route door that is denied
 before Durin is called**. A unit-door-only apartment or condo proves the unit door instead of a building entrance.
 A single-family home keeps the entrance proof line, even when that door is also the unit door. It then proves
-overstay handling on simulated time: the T-15 questions text, the T-5 extra-time offer, a one-time 10-minute
+overstay handling on a deterministic simulated clock: the T-15 questions text, the T-5 extra-time offer, a one-time 10-minute
 extension, completion (all doors re-locked) and the follow-up, plus a second path through tour-end, the +5 leave
-check-in, and the +15 close. Then it saves the tour history.
+check-in, and the +15 close. A 15-minute tour skips T-15 with a reason. If extra time or the second path cannot
+apply, that step is skipped with a reason — never a failure and never silently. Then it saves the tour history.
 
 ## Configuration
 

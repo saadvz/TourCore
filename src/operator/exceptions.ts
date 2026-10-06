@@ -152,6 +152,8 @@ function kindFor(e: AuditEvent): ExceptionKind | undefined {
       return e.detail.startsWith("message") ? "message-failed" : undefined;
     case "TOUR_OVERSTAY_CLOSED":
       return "overstay";
+    case "VISITOR_CONFIRMED_LEFT":
+      return undefined;
     default:
       return undefined;
   }
@@ -239,15 +241,23 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
   const exceptionId = id(tour.propertyId, tour.tourId, e.id);
   const pauseKind = kind === "operator-hold" || kind === "provider-failure";
   const paused = pauseKind && stillApplies(e, tour);
+  const leftAfterClose =
+    kind === "overstay" &&
+    tour.bundle.auditEvents.some((later) => later.reservationId === e.reservationId && later.type === "VISITOR_CONFIRMED_LEFT" && later.seq > e.seq);
   const resolution = resolutions.get(exceptionId);
-  const status = resolution ? "resolved" : pauseKind && !paused ? "cleared" : "open";
+  const status = resolution ? "resolved" : pauseKind && !paused ? "cleared" : leftAfterClose ? "cleared" : "open";
+  const replies =
+    kind === "overstay"
+      ? tour.bundle.auditEvents.filter((later) => later.reservationId === e.reservationId && later.type === "OPERATOR_NOTIFIED" && later.detail.includes("replied after their tour"))
+      : [];
+  const extra = replies.map((later) => later.detail).join(" ");
   return {
     exceptionId,
     propertyId: tour.propertyId,
     property: tour.config.property.name,
     kind,
     title: TITLES[kind],
-    summary: summaryFor(kind, e, tour),
+    summary: extra ? `${summaryFor(kind, e, tour)} ${extra}` : summaryFor(kind, e, tour),
     visitorName: visitorNameOf(tour),
     unitName: unitNameOf(tour) ?? unitSubject(tour, e.unitId),
     tourRef: tourRef(tour.propertyId, tour.tourId),

@@ -287,7 +287,7 @@ describe("readiness, practice tour and publish", () => {
       "\u2713 Tour completed",
       "\u2713 Every door was locked again afterwards",
       "\u2713 Follow-up worked",
-      "\u2713 The tour-end text was sent when extra time was not taken",
+      "\u2713 The tour-end text was sent (no extra time taken)",
       "\u2713 The 5-minutes-after check-in was sent",
       "\u2713 The tour was closed 15 minutes after the end",
       "\u2713 Tour records were saved",

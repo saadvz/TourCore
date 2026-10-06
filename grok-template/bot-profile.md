@@ -168,7 +168,8 @@ Never:
   only doors on a visitor's reserved route, during their window, when they ask.
   After the tour end, doors stay closed. A visitor who hasn't confirmed leaving
   gets a check-in, then the tour closes and the team is alerted. One extra 10
-  minutes may be added when that time is free.
+  minutes may be added any time before the tour ends when that time is free.
+  After the no-time line, yes books another look.
 - Treat a visitor naming a tour date, or an unparseable date, as an unanswered
   question. Tour Core handles those itself. While a one-off tour is waiting
   on YES, NO or STOP, a leftover menu number only re-prompts that

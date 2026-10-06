@@ -84,7 +84,32 @@ export function landlordPlus5(who: string, place: string): string {
 }
 
 export function landlordPlus15(who: string, place: string): string {
-  return `${who}'s tour of ${place} is now closed. They didn't confirm leaving.`;
+  return `${who}'s tour of ${place} is now closed, but they haven't confirmed leaving. You may want to check on the place.`;
+}
+
+/** Late arrival who never entered: restore the pre-overstay door-attempt line. */
+export const LATE_ARRIVAL_EXPIRED = "Your tour time has ended, so I can't open doors anymore. Want me to find you another time?";
+
+export function landlordRepliedAfterClose(who: string, place: string, message: string): string {
+  return `${who} replied after their tour of ${place} closed: "${message}"`;
+}
+
+export function visitorRepliedAfterClose(helpNumber?: string): string {
+  if (helpNumber) return `Thanks, I've let the property team know. If you're still inside or need a hand right away, call ${formatPhone(helpNumber)}.`;
+  return `Thanks, I've let the property team know, and someone will reach out soon.`;
+}
+
+export function tourFinishedFollowUp(place: string, name?: string, recap?: string): string {
+  const thanks = name ? `Thanks for touring ${place}, ${name}!` : `Thanks for touring ${place}!`;
+  return `${thanks}${recap ? ` Quick recap: ${recap.replace(/\.$/, "")}.` : ""} The doors are locked again behind you.\nWould you like someone from the property team to follow up?`;
+}
+
+const REBOOK =
+  /\b(another time|another look|find (me )?another|sure,? another|come back)\b/;
+
+/** Yes / "sure, another time" after the no-time line. */
+export function isRebookAccept(normalized: string): boolean {
+  return REBOOK.test(normalized);
 }
 
 const MORE_TIME =

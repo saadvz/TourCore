@@ -29,7 +29,9 @@ import type { Clock } from "./clock";
 import { approvedAnswerText, approvedFacts, type ApprovedFact } from "./facts";
 import { formatPhone, normalizePhone } from "./phone";
 import { resolveQuestion } from "./questions";
-import { closestOpenSlots, intervalsOverlap, overlapSummary, placementOf, relativeWhen, releasedWhen, tourInterval, touringHoursLabel } from "./customSlot";
+import { closestOpenSlots, intervalsOverlap, overlapSummary, placementOf, relativeWhen, releasedWhen, tourInterval, touringHoursLabel, type TimeInterval } from "./customSlot";
+import { LATE_ARRIVAL_EXPIRED, landlordRepliedAfterClose, landlordWho, tourFinishedFollowUp, visitorRepliedAfterClose } from "./overstayCopy";
+import { withPropertySlotLock } from "./slotLock";
 import { BOOKING_HORIZON_DAYS, isoDate, nextTourDay, slotsOn, tourWindow, type TourSlot } from "./schedule";
 import { bookedTourCalledOffText } from "./availabilityCopy";
 import { propertyDirectionsUrl, tourDirectionsText } from "./mapsLink";
@@ -357,33 +359,35 @@ export class TourCore {
   async availableSlots(day?: LocalDate): Promise<TourSlot[]> {
     const now = this.deps.clock.now();
     const onDay = day ?? nextTourDay(this.deps.config, now);
-    const busy = await this.busyStarts();
+    const busy = await this.busyIntervals();
     return slotsOn(this.deps.config, onDay).filter((s) => s.start > now && !this.overlapsAny(s.start, busy));
   }
 
   async reserveSlot(reservationId: string, slotStartIso: string): Promise<Reservation> {
-    let reservation = await this.mustGetReservation(reservationId);
-    this.assertBookingAllowed(reservation.unitId);
-    const start = new Date(slotStartIso);
-    if (Number.isNaN(start.getTime())) throw new TourCoreError("INVALID_SLOT", "That tour time isn't valid");
-    if (reservation.slotStart === start.toISOString() && reservation.status !== "INQUIRY") return reservation;
-    if (reservation.status !== "INQUIRY") throw new TourCoreError("ALREADY_BOOKED", "This tour already has a time");
+    return this.withSlotLock(async () => {
+      let reservation = await this.mustGetReservation(reservationId);
+      this.assertBookingAllowed(reservation.unitId);
+      const start = new Date(slotStartIso);
+      if (Number.isNaN(start.getTime())) throw new TourCoreError("INVALID_SLOT", "That tour time isn't valid");
+      if (reservation.slotStart === start.toISOString() && reservation.status !== "INQUIRY") return reservation;
+      if (reservation.status !== "INQUIRY") throw new TourCoreError("ALREADY_BOOKED", "This tour already has a time");
 
-    const slots = await this.availableSlots(localDateOf(start, this.deps.config.property.timezone));
-    if (!slots.some((s) => s.start.getTime() === start.getTime())) {
-      throw new TourCoreError("SLOT_UNAVAILABLE", "That time is no longer available");
-    }
+      const slots = await this.availableSlots(localDateOf(start, this.deps.config.property.timezone));
+      if (!slots.some((s) => s.start.getTime() === start.getTime())) {
+        throw new TourCoreError("SLOT_UNAVAILABLE", "That time is no longer available");
+      }
 
-    const { windowStart, windowEnd } = tourWindow(this.deps.config, start);
-    reservation = { ...reservation, slotStart: start.toISOString(), windowStart: windowStart.toISOString(), windowEnd: windowEnd.toISOString() };
-    reservation = await this.move(reservation, "RESERVED", "RESERVATION_CREATED", {
-      detail: `${this.day(start)} at ${this.time(start)}; doors usable ${this.time(windowStart)}-${this.time(windowEnd)}`,
+      const { windowStart, windowEnd } = tourWindow(this.deps.config, start);
+      reservation = { ...reservation, slotStart: start.toISOString(), windowStart: windowStart.toISOString(), windowEnd: windowEnd.toISOString() };
+      reservation = await this.move(reservation, "RESERVED", "RESERVATION_CREATED", {
+        detail: `${this.day(start)} at ${this.time(start)}; doors usable ${this.time(windowStart)}-${this.time(windowEnd)}`,
+      });
+      reservation = await this.move(reservation, "AWAITING_CONSENT", "CONSENT_REQUESTED", { detail: "asked permission to text and keep tour records" });
+
+      const prospect = await this.mustGetProspect(reservation.prospectId);
+      await this.textProspect(prospect, reservation.id, `Great, you're booked for ${this.time(start)} on ${this.day(start)}.\n${CONSENT_TEXT}`, { kind: "yes-no" });
+      return reservation;
     });
-    reservation = await this.move(reservation, "AWAITING_CONSENT", "CONSENT_REQUESTED", { detail: "asked permission to text and keep tour records" });
-
-    const prospect = await this.mustGetProspect(reservation.prospectId);
-    await this.textProspect(prospect, reservation.id, `Great, you're booked for ${this.time(start)} on ${this.day(start)}.\n${CONSENT_TEXT}`, { kind: "yes-no" });
-    return reservation;
   }
 
   async recordConsent(reservationId: string, granted: boolean): Promise<Reservation> {
@@ -509,13 +513,10 @@ export class TourCore {
     await this.revokeGrants(reservation, "tour completed");
     reservation = await this.move(reservation, "COMPLETED", "TOUR_COMPLETED", { detail: "prospect finished the tour" });
     const place = visitorSubject(this.deps.config.property, unit.name);
-    const who = knownFirstName(prospect.name);
-    const thanks = who ? `Thanks for touring ${place}, ${who}!` : `Thanks for touring ${place}!`;
     await this.textProspect(
       prospect,
       reservation.id,
-      `${thanks}${unit.summary ? ` Quick recap: ${unit.summary.replace(/\.$/, "")}.` : ""} The doors are locked again behind you.\n` +
-        "Would you like someone from the property team to follow up?",
+      tourFinishedFollowUp(place, knownFirstName(prospect.name), unit.summary || undefined),
       { kind: "yes-no" },
     );
     await this.record("FOLLOW_UP_SENT", { reservationId: reservation.id, prospectId: prospect.id, detail: "recap + follow-up question" });
@@ -527,7 +528,8 @@ export class TourCore {
     const reservation = await this.mustGetReservation(reservationId);
     const now = this.deps.clock.now();
     const tz = this.deps.config.property.timezone;
-    const busy = (await this.busyStarts()).filter((start) => start.toISOString() !== reservation.slotStart);
+    const ownStart = reservation.slotStart ? Date.parse(reservation.slotStart) : undefined;
+    const busy = (await this.busyIntervals()).filter((interval) => interval.startMs !== ownStart);
     const out: TourSlot[] = [];
     let day = localDateOf(now, tz);
     for (let i = 0; i < 14 && out.length < limit; i++, day = addDays(day, 1)) {
@@ -554,6 +556,16 @@ export class TourCore {
     customTime?: boolean;
     outsideTourHours?: boolean;
     /** "moved" is the visitor confirmation for an approved or operator-directed change. */
+    notice?: "default" | "moved";
+  }): Promise<{ reservation: Reservation; changed: boolean }> {
+    return this.withSlotLock(() => this.doRescheduleReservation(input));
+  }
+
+  private async doRescheduleReservation(input: {
+    reservationId: string;
+    newStartsAt: string;
+    customTime?: boolean;
+    outsideTourHours?: boolean;
     notice?: "default" | "moved";
   }): Promise<{ reservation: Reservation; changed: boolean }> {
     let reservation = await this.mustGetReservation(input.reservationId);
@@ -636,6 +648,14 @@ export class TourCore {
    * before the usual consent text.
    */
   async bookCustomSlot(
+    reservationId: string,
+    slotStartIso: string,
+    options: { outsideTourHours?: boolean; holdForVisitorConfirm?: { confirmBy: Date } } = {},
+  ): Promise<Reservation> {
+    return this.withSlotLock(() => this.doBookCustomSlot(reservationId, slotStartIso, options));
+  }
+
+  private async doBookCustomSlot(
     reservationId: string,
     slotStartIso: string,
     options: { outsideTourHours?: boolean; holdForVisitorConfirm?: { confirmBy: Date } } = {},
@@ -1181,8 +1201,8 @@ export class TourCore {
     let endedTour = false;
     for (const reservation of (await this.deps.store.list("reservations")).filter((r) => r.prospectId === prospect.id && !TERMINAL.includes(r.status))) {
       if (reservation.status === "TOURING") {
-        // STOP blocks visitor texts. Doors stay on policy until T; overstay alerts still fire.
-        endedTour = true;
+        // STOP blocks visitor texts only. Doors stay on policy until T; overstay alerts still fire.
+        await this.notifyOperator(reservation, `${prospect.name} replied ${keyword.toUpperCase()} and won't get more messages.`);
         continue;
       }
       await this.revokeGrants(reservation, "visitor opted out of messages");
@@ -1230,10 +1250,22 @@ export class TourCore {
     return (await this.deps.otherBusyStarts?.()) ?? [];
   }
 
-  async messageVisitor(reservationId: string, body: string): Promise<void> {
+  async messageVisitor(reservationId: string, body: string): Promise<boolean> {
     const reservation = await this.mustGetReservation(reservationId);
     const prospect = await this.mustGetProspect(reservation.prospectId);
-    await this.textProspect(prospect, reservation.id, body);
+    return this.textProspect(prospect, reservation.id, body);
+  }
+
+  /** True when this visitor already received `body` (so a retry will not double-send). */
+  async visitorAlreadyReceived(reservationId: string, body: string): Promise<boolean> {
+    return (await this.deps.store.list("messages")).some(
+      (m) =>
+        m.reservationId === reservationId &&
+        m.audience === "PROSPECT" &&
+        m.direction === "OUTBOUND" &&
+        m.body === body &&
+        (m.deliveryStatus === "SENT" || m.deliveryStatus === "DELIVERED" || m.deliveryStatus === "SUPPRESSED"),
+    );
   }
 
   async alertOperator(reservationId: string, body: string): Promise<void> {
@@ -1251,6 +1283,15 @@ export class TourCore {
    * re-requests scoped Durin grants so already-opened doors stay valid.
    */
   async extendTourWindow(reservationId: string, extraMinutes = 10): Promise<Reservation> {
+    return this.withSlotLock(() => this.doExtendTourWindow(reservationId, extraMinutes));
+  }
+
+  /** Caller already holds the property slot lock (used by the overstay grant path). */
+  async extendTourWindowLocked(reservationId: string, extraMinutes = 10): Promise<Reservation> {
+    return this.doExtendTourWindow(reservationId, extraMinutes);
+  }
+
+  private async doExtendTourWindow(reservationId: string, extraMinutes = 10): Promise<Reservation> {
     const reservation = await this.mustGetReservation(reservationId);
     if (!reservation.windowEnd) throw new TourCoreError("NO_WINDOW", "This tour has no end time.");
     if (reservation.extensionGrantedAt) return reservation;
@@ -1279,6 +1320,39 @@ export class TourCore {
     if (reservation.status !== "TOURING") throw new TourCoreError("NOT_TOURING", `Reservation is ${reservation.status}`);
     await this.revokeGrants(reservation, "tour closed after time ended");
     return this.move(reservation, "EXPIRED", "TOUR_OVERSTAY_CLOSED", { detail: "visitor didn't confirm leaving" });
+  }
+
+  async hasConfirmedLeftAfterClose(reservationId: string): Promise<boolean> {
+    return (await this.deps.store.listAudit()).some((e) => e.reservationId === reservationId && e.type === "VISITOR_CONFIRMED_LEFT");
+  }
+
+  /** DONE / I'm out after the +15 close: same thanks as a normal finish, no after-close alert. */
+  async confirmLeftAfterClose(reservationId: string): Promise<void> {
+    const reservation = await this.mustGetReservation(reservationId);
+    if (reservation.status !== "EXPIRED") return;
+    if (await this.hasConfirmedLeftAfterClose(reservationId)) return;
+    const prospect = await this.mustGetProspect(reservation.prospectId);
+    const unit = this.unitFor(reservation);
+    const place = visitorSubject(this.deps.config.property, unit.name);
+    await this.record("VISITOR_CONFIRMED_LEFT", {
+      reservationId: reservation.id,
+      prospectId: prospect.id,
+      detail: "visitor confirmed they left after the tour closed",
+    });
+    await this.textProspect(prospect, reservation.id, tourFinishedFollowUp(place, knownFirstName(prospect.name), unit.summary || undefined), { kind: "yes-no" });
+    await this.record("FOLLOW_UP_SENT", { reservationId: reservation.id, prospectId: prospect.id, detail: "recap + follow-up question" });
+  }
+
+  /** Any other reply after the +15 close: one landlord alert and the property-team ack. */
+  async replyAfterOverstayClose(reservationId: string, message: string): Promise<void> {
+    const reservation = await this.mustGetReservation(reservationId);
+    if (reservation.status !== "EXPIRED") return;
+    if (await this.hasConfirmedLeftAfterClose(reservationId)) return;
+    const prospect = await this.mustGetProspect(reservation.prospectId);
+    const place = visitorSubject(this.deps.config.property, this.unitFor(reservation).name);
+    const said = message.trim().slice(0, 300);
+    await this.notifyOperator(reservation, landlordRepliedAfterClose(landlordWho(prospect.name), place, said));
+    await this.textProspect(prospect, reservation.id, visitorRepliedAfterClose(this.visitorHelpNumber()));
   }
 
   private async regrantUntil(reservation: Reservation, newEnd: Date): Promise<void> {
@@ -1522,7 +1596,9 @@ export class TourCore {
           DENY_TOO_EARLY: reservation.windowStart
             ? VisitorDenialCopy.tooEarly(this.time(new Date(reservation.windowStart)), this.whenPhrase(new Date(reservation.windowStart)))
             : VisitorDenialCopy.tooEarly(),
-          DENY_EXPIRED: "Your tour time has ended, so I can't open that door. Please head out the way you came in and text DONE once you're outside.",
+          DENY_EXPIRED: (await this.tourHadStarted(reservation))
+            ? "Your tour time has ended, so I can't open that door. Please head out the way you came in and text DONE once you're outside."
+            : LATE_ARRIVAL_EXPIRED,
           DENY_WRONG_ROUTE: `That door isn't part of your tour, so I can't open it. You're here to see ${visitorSubject(this.deps.config.property, unit.name)}. I've let the ${team} know in case you need a hand.`,
           DENY_DURIN_UNHEALTHY: VisitorDenialCopy.doorsNotResponding(team, help),
           DENY_PROVIDER_FAILURE: VisitorDenialCopy.doorsNotResponding(team, help),
@@ -1592,9 +1668,9 @@ export class TourCore {
     return this.deps.verification.defaultLink?.(prospect);
   }
 
-  private async textProspect(prospect: Prospect, reservationId: string | undefined, body: string, prompt?: ReplyPrompt): Promise<void> {
+  private async textProspect(prospect: Prospect, reservationId: string | undefined, body: string, prompt?: ReplyPrompt): Promise<boolean> {
     const current = (await this.deps.store.get("prospects", prospect.id)) ?? prospect;
-    await this.deliver({
+    return this.deliver({
       audience: "PROSPECT",
       to: current.phone,
       toName: current.name,
@@ -1624,7 +1700,7 @@ export class TourCore {
     prospectId?: string;
     reservationId?: string;
     suppressed?: boolean;
-  }): Promise<void> {
+  }): Promise<boolean> {
     const { store, messenger } = this.deps;
     const message: Message = {
       id: newId("msg"),
@@ -1641,7 +1717,7 @@ export class TourCore {
     };
     if (m.suppressed) {
       await store.put("messages", { ...message, deliveryStatus: "SUPPRESSED" });
-      return;
+      return true;
     }
     await store.put("messages", message);
     let receipt: DeliveryReceipt;
@@ -1666,7 +1742,9 @@ export class TourCore {
         code: receipt.error?.code,
         detail: `${m.audience === "OPERATOR" ? "alert" : "message"} not delivered`,
       });
+      return false;
     }
+    return true;
   }
 
   private unitFor(reservation: Reservation) {
@@ -1699,23 +1777,36 @@ export class TourCore {
     return prospect.name && prospect.name !== UNNAMED_VISITOR ? prospect.name.trim().split(/\s+/)[0]! : formatPhone(prospect.phone);
   }
 
-  private async busyStarts(exceptId?: string): Promise<Date[]> {
+  private withSlotLock<T>(fn: () => Promise<T>): Promise<T> {
+    return withPropertySlotLock(this.deps.config.property.id, fn);
+  }
+
+  private async tourHadStarted(reservation: Reservation): Promise<boolean> {
+    if (reservation.status === "TOURING" || reservation.status === "EXPIRED") return true;
+    return (await this.listGrants(reservation.id)).length > 0;
+  }
+
+  private async busyIntervals(exceptId?: string): Promise<TimeInterval[]> {
     await this.releaseExpiredOperatorScheduled();
     const mine = (await this.deps.store.list("reservations"))
       .filter((reservation) => reservation.id !== exceptId && reservation.slotStart && !TERMINAL.includes(reservation.status))
-      .map((reservation) => new Date(reservation.slotStart!));
-    const others = (await this.deps.otherBusyStarts?.()) ?? [];
+      .map((reservation) => {
+        const start = new Date(reservation.slotStart!);
+        const end = reservation.windowEnd ? new Date(reservation.windowEnd) : undefined;
+        return tourInterval(this.deps.config, start, end);
+      });
+    const others = ((await this.deps.otherBusyStarts?.()) ?? []).map((start) => tourInterval(this.deps.config, start));
     return [...mine, ...others];
   }
 
-  private overlapsAny(start: Date, busy: Date[]): boolean {
+  private overlapsAny(start: Date, busy: TimeInterval[]): boolean {
     const interval = tourInterval(this.deps.config, start);
-    return busy.some((other) => intervalsOverlap(interval, tourInterval(this.deps.config, other)));
+    return busy.some((other) => intervalsOverlap(interval, other));
   }
 
   private async assertNoConflict(start: Date, exceptId: string): Promise<void> {
-    const busy = await this.busyStarts(exceptId);
-    if (busy.some((other) => other.toISOString() === start.toISOString())) {
+    const busy = await this.busyIntervals(exceptId);
+    if (busy.some((other) => other.startMs === start.getTime())) {
       throw new TourCoreError("SLOT_UNAVAILABLE", "Another visitor already has that time.");
     }
     if (this.overlapsAny(start, busy)) {
