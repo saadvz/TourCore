@@ -393,7 +393,7 @@ export class TourCore {
     return slotsOn(this.deps.config, onDay).filter((s) => s.start > now && !this.overlapsAny(s.start, busy));
   }
 
-  async reserveSlot(reservationId: string, slotStartIso: string): Promise<Reservation> {
+  async reserveSlot(reservationId: string, slotStartIso: string, options: { replace?: boolean } = {}): Promise<Reservation> {
     return this.withSlotLock(async () => {
       await this.deps.slotLockBarrier?.("reserve");
       let reservation = await this.mustGetReservation(reservationId);
@@ -409,7 +409,7 @@ export class TourCore {
 
       const prospect = await this.mustGetProspect(reservation.prospectId);
       if (reservation.status !== "INQUIRY") {
-        if (!reservation.slotStart || !this.canReplaceRegularBooking(reservation)) {
+        if (!options.replace || !reservation.slotStart || !this.canReplaceRegularBooking(reservation)) {
           throw new TourCoreError("ALREADY_BOOKED", "This tour already has a time");
         }
         const from = new Date(reservation.slotStart);

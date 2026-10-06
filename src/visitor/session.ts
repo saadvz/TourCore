@@ -627,7 +627,7 @@ export class VisitorDemoSession {
     const reservation = await this.reservation();
     if (!reservation) throw new SetupInputError("NO_TOUR", "Choose a unit before choosing a time.");
     if (await this.refuseIfPaused(reservation.unitId)) return;
-    await this.core.reserveSlot(reservation.id, slotStart);
+    await this.core.reserveSlot(reservation.id, slotStart, reservation.slotStart ? { replace: true } : {});
     this.pendingCustomRequestId = undefined;
     await this.syncReplies();
   }
@@ -1083,6 +1083,8 @@ export class VisitorDemoSession {
     const tz = this.config.property.timezone;
     await this.reply(bookedForLine(formatTime(start, tz), formatDay(start, tz)));
     await this.reply(CONSENT_TEXT, { kind: "yes-no" });
+    this.lastShownDates = [];
+    this.lastShownSlots = [];
     this.heldBookingTakenOver = false;
   }
 
@@ -1123,6 +1125,8 @@ export class VisitorDemoSession {
     const offerRegularTimes = !(await this.hasLiveRegularTour());
     await this.reply(pendingCustomTimeLine(formatTime(start, tz), formatDay(start, tz), { offerRegularTimes }));
     await this.core.markPendingCustomTimeNotice(request.id);
+    this.lastShownDates = [];
+    this.lastShownSlots = [];
     return true;
   }
 

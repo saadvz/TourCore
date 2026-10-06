@@ -406,16 +406,16 @@ describe("a pending custom-time request does not block regular booking", () => {
     await chooseUnit(a);
     await a.text("Can I tour at 3:15?");
     const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
-    await a.text("Tuesday");
-    await a.text("actually never mind");
-    const later = zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour: 15, minute: 15 }, TZ);
-    const hi = await a.text("what about my 3:15?");
-    expect(hi.join("\n")).toContain("still with the property team");
-    const again = await a.text("any update?");
-    expect(again.join("\n")).not.toContain("still with the property team");
+    const times = await a.text("Tuesday");
+    expect(times.join("\n")).toMatch(/2:00 PM|3:30 PM|Which time/);
+    const abandon = await a.text("actually never mind");
+    expect(abandon.join("\n")).not.toContain("you're booked");
+    expect((await a.grok("list_tour_time_requests")).requests).toHaveLength(1);
     await a.approve("approve_tour_time_request", { tourTimeRequestId: id });
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
-    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.slotStart).toBe(later.toISOString());
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.slotStart).toBe(
+      zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour: 15, minute: 15 }, TZ).toISOString(),
+    );
   });
 
   it("approving mid-booking while they still have no regular slot books the custom time", async () => {

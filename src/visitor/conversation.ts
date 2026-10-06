@@ -857,20 +857,23 @@ async function isShownMenuBookingInput(turn: Turn): Promise<boolean> {
 
 /** From consent, a regular day or shown slot replaces the held/booked tour. */
 async function tryRegularSlotFromConsent(turn: Turn): Promise<boolean> {
-  const { session, intent } = turn;
+  const { session } = turn;
+  const text = turn.said.text ?? "";
+  const step: VisitorStage = session.selectedDate && session.lastShownSlots.length ? "choose-time" : "choose-date";
+  const interpretation = await rulesOnly.interpret(await contextFor(session, text, step));
+  const intent = interpretation.intent;
   if (intent.type === "SELECT_DATE" && (intent.date || intent.weekday || intent.relative)) {
     await showAskedDay(turn, intent);
     return true;
   }
   if (intent.type === "SELECT_TIME") {
     const slot = session.lastShownSlots.find((s) => same(s.label, intent.timeLabel)) ?? session.offeredSlots.find((s) => same(s.label, intent.timeLabel));
-    if (slot && turn.confident && session.lastShownSlots.length) {
+    if (slot && isConfident(interpretation) && session.lastShownSlots.length) {
       await session.recordText(turn.said);
       await session.bookOffered(slot.start.toISOString());
       return true;
     }
   }
-  const text = turn.said.text ?? "";
   if (isBareMenuNumber(text) && session.lastShownSlots.length) {
     const index = MENU_NUMBER.exec(text)?.[1];
     const slot = index ? session.lastShownSlots[Number(index) - 1] : undefined;
@@ -881,7 +884,7 @@ async function tryRegularSlotFromConsent(turn: Turn): Promise<boolean> {
     }
   }
   if (isBareMenuNumber(text) && session.lastShownDates.length && !session.lastShownSlots.length) {
-    await showAskedDay(turn, intent.type === "SELECT_DATE" ? intent : { weekday: undefined });
+    await showAskedDay(turn, intent.type === "SELECT_DATE" ? intent : {});
     return true;
   }
   return false;

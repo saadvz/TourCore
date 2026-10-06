@@ -77,7 +77,8 @@ async function bookAllSlots(session: VisitorDemoSession, day: LocalDate) {
   let n = 0;
   for (const slot of slots) {
     n += 1;
-    const { reservation } = await session.core.startInquiry({ name: `Other ${n}`, phone: `(555) 010-${3100 + n}`, unitId: "apt_101" }, { announce: false });
+    const phone = `(555) 010-${3100 + n + day.month * 40 + day.day}`;
+    const { reservation } = await session.core.startInquiry({ name: `Other ${n} ${day.day}`, phone, unitId: "apt_101" }, { announce: false });
     await session.core.reserveSlot(reservation.id, slot.start.toISOString());
   }
 }
