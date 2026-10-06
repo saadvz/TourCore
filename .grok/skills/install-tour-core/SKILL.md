@@ -323,7 +323,13 @@ ask the publish question again). Don't ask the operator how to text people.
 > demo mode, so no physical locks will open. I'll keep you updated on your
 > tours and let you know when something needs your attention.
 
-On the hosted product, after that, create a portable backup
+Then follow `get_next_installation_step`. When a property is already in
+operation, that step is `ADD_ANOTHER_PROPERTY`: ask its question, and if they
+want one more building call `create_property_setup` with the address they
+give (Setup Property skill). The building already published is not sent back
+to draft. If they don't want another, stop.
+
+On the hosted product, after the first publish, create a portable backup
 (`create_portable_backup`), save the file in Tour Core/Backups with the
 Google Drive connector, confirm the file is there, then call
 `confirm_backup_stored`. Say:
@@ -388,8 +394,9 @@ when that input isn't available), choosing or declining tour updates
 
 ## Stop when
 
-- Tour Core reports `DONE` (phase OPERATE), or the operator has what they
-  asked for.
+- The next step offers another property and the operator doesn't want one,
+  or the operator has what they asked for. Don't stop at the first publish
+  before that offer.
 - A person has to act (approval, login, MFA, or provider terms): say what to
   do and wait. A setup form is only for the operator when secure input could
   not be used.

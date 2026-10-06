@@ -24,6 +24,7 @@ import { activeFromNumber, createMessagingProvider, ensureMessagingSelection, ME
  *   runtime → public connection → Grok connection → visitor texting
  *   → first property → operator alerts (recommended) → readiness
  *   → practice tour → publish (explicit yes) → operate
+ *   → offer another property (the published one stays published)
  *
  * Copy rules: `operatorMessage`, `summary` and `lines` are safe to say to a
  * landlord as-is (no URLs, ports, commands, tool counts or protocol names).
@@ -124,6 +125,7 @@ export type InstallationAction =
   | "CONFIRM_BACKUP_DESTINATION"
   | "FINISH_GOOGLE_DRIVE"
   | "SET_UP_PROPERTY"
+  | "ADD_ANOTHER_PROPERTY"
   | "FINISH_PROPERTY_SETUP"
   | "OFFER_OPERATOR_ALERTS"
   | "CONNECT_OPERATOR_ALERTS"
@@ -212,6 +214,7 @@ const BOOTSTRAP = "npm run bootstrap:grok";
 
 export const OPERATOR_MESSAGES = {
   firstProperty: "Everything needed to start is connected and tested. Would you like to add your first property?",
+  anotherProperty: "Would you like to set up another property?",
   offerAlerts: "Your property is configured. Would you like me to keep you updated when someone books, starts or finishes a tour, and alert you if something needs your input?",
   recommendUpdates: "I recommend alerts for bookings, tour starts, completions and anything that needs your attention. Want to use those defaults?",
   validate:
@@ -536,16 +539,41 @@ function accessStatus(): ComponentStatus {
   return component("ACCESS", "READY", "Demo. No real doors open.", { provider: "DURIN_DEMO" });
 }
 
-/** The property onboarding works on: the published one, else the most recently saved, else a draft. */
+/**
+ * The property onboarding works on. An unfinished property wins, so a second
+ * building can be set up while another stays published. Otherwise the
+ * published one, else the most recently saved, else a draft.
+ */
 export function primaryProperty(ws: PropertyWorkspace): { id: string; saved: boolean } | undefined {
-  const ids = ws.propertyIds();
+  const ids = ws.propertyIds().filter((id) => !ws.has(id) || !ws.load(id).state.removedAt);
   if (!ids.length) return undefined;
   const saved = ws.list();
+  const unfinished = saved
+    .filter((p) => p.state.status !== "PUBLISHED_FOR_DEMO")
+    .sort((a, b) => (b.state.savedAt ?? "").localeCompare(a.state.savedAt ?? ""))[0];
+  if (unfinished) return { id: unfinished.config.property.id, saved: true };
+  const draftOnly = ids.find((id) => !saved.some((p) => p.config.property.id === id));
+  if (draftOnly) return { id: draftOnly, saved: false };
   const published = saved.find((p) => p.state.status === "PUBLISHED_FOR_DEMO");
   if (published) return { id: published.config.property.id, saved: true };
   const recent = [...saved].sort((a, b) => (b.state.savedAt ?? "").localeCompare(a.state.savedAt ?? ""))[0];
   if (recent) return { id: recent.config.property.id, saved: true };
   return { id: ids[0]!, saved: false };
+}
+
+function anotherPropertyStep(operate: string): InstallationStep {
+  return {
+    component: "PROPERTY",
+    action: "ADD_ANOTHER_PROPERTY",
+    phase: "OPERATE",
+    performedBy: "OPERATOR_DECISION",
+    operatorMessage: `${operate} ${OPERATOR_MESSAGES.anotherProperty}`,
+    tool: "create_property_setup",
+    skill: "setup-property",
+    optional: true,
+    grokInstructions:
+      "The published property stays published. If they want another property, ask for the street address and call create_property_setup, then follow get_next_installation_step for that property. If they don't want another, stop. Don't call create_property_setup before they say yes and give an address.",
+  };
 }
 
 function propertyStatus(services: OperatorServices, installed: InstalledMessaging | undefined): { status: ComponentStatus; ready: boolean; name?: string } {
@@ -747,13 +775,14 @@ export function getInstallationStatus(inst: Installation, services: OperatorServ
     !!primary && services.workspace.has(primary.id)
       ? visitorTexting(services, primary.id, services.workspace.load(primary.id).config.messagingMode, installed).state
       : undefined;
-  const nextStep = components.find((c) => c.state !== "READY" && c.next)?.next ?? {
-    component: null,
-    action: "DONE" as const,
-    phase: "OPERATE" as const,
-    performedBy: "GROK" as const,
-    operatorMessage: operateMessage(textingState === "connected" ? "connected" : textingState === "test-mode" ? "test-mode" : "practice", alertsOn),
-  };
+  const blocking = components.find((c) => c.state !== "READY" && c.next)?.next;
+  const nextStep =
+    blocking ??
+    anotherPropertyStep(operateMessage(textingState === "connected" ? "connected" : textingState === "test-mode" ? "test-mode" : "practice", alertsOn));
+  if (!blocking) {
+    const property = components.find((c) => c.component === "PROPERTY");
+    if (property) property.optionalActions = [...property.optionalActions, nextStep];
+  }
   const phase: OnboardingPhase = nextStep.phase;
   const url = inst.publicBaseUrl();
   const manifest = safe(() => inst.files.manifest());

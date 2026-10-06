@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { auditToCsv } from "../audit/audit";
-import { classifyChange, describeContentChanges, fullHash, legacySendblueFingerprints, safetyHash } from "../config/changeKinds";
+import { classifyChange, describeContentChanges, fullHash, legacySendblueFingerprints, legacyVisitorHelpSafetyHash, safetyHash } from "../config/changeKinds";
 import { TourCoreConfigSchema, TourCoreConfigShape, validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
 import { ExportBundleSchema, type ExportBundle } from "../export/exportBundle";
 import { writeFileAtomic, writeFolderAtomic, writeJsonAtomic } from "../storage/atomicWrite";
@@ -165,6 +165,7 @@ export class PropertyWorkspace {
     const statePath = this.statePath(propertyId);
     let stored: PropertyState | undefined = existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : undefined;
     if (raw.messagingMode === "sendblue") stored = this.migrateLiveMessaging(propertyId, config, stored);
+    stored = this.migrateVisitorHelpFingerprint(config, stored);
     // If a save was interrupted between the config and status files, fail closed: treat it as an unchecked draft.
     const state: PropertyState =
       stored && stored.configHash === hash
@@ -196,6 +197,29 @@ export class PropertyWorkspace {
     };
     this.writeState(next);
     return next;
+  }
+
+  /**
+   * The visitor help number used to sit in the safety fingerprint, so saving
+   * one sent a published property back to draft. It is approved content now.
+   * Fingerprints that still match the old hash move forward. A real
+   * structural change does not match, so those checks stay out of date.
+   */
+  private migrateVisitorHelpFingerprint(config: TourCoreConfig, stored: PropertyState | undefined): PropertyState | undefined {
+    if (!stored) return stored;
+    const legacy = legacyVisitorHelpSafetyHash(config);
+    const nextSafety = safetyHash(config);
+    if (legacy === nextSafety) return stored;
+    if (stored.safetyHash !== legacy && stored.readiness?.safetyHash !== legacy && stored.dryTour?.safetyHash !== legacy) return stored;
+    const old = { full: stored.configHash, safety: legacy };
+    const next = { full: stored.configHash, safety: nextSafety };
+    const migrated: PropertyState = {
+      ...retargetFingerprint(stored, old, next),
+      ...(stored.readiness ? { readiness: retargetFingerprint(stored.readiness, old, next) } : {}),
+      ...(stored.dryTour ? { dryTour: retargetFingerprint(stored.dryTour, old, next) } : {}),
+    };
+    this.writeState(migrated);
+    return migrated;
   }
 
   /**

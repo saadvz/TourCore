@@ -127,8 +127,10 @@ the operator correct it.
    answer the building-door question (and name the entrance, if they control
    it).
 8. Ask **"When can people tour?"** Pass their words to `set_tour_hours`
-   ("weekdays", "9 to 5"). Mention the visible defaults once (45-minute tours,
-   a new tour every hour, 10 minutes early) and change any they want.
+   ("weekdays", "9 to 5", "every day"). A new property starts at
+   Monday–Friday, 9:00 AM–5:00 PM. Mention the other visible defaults once
+   (45-minute tours, a new tour every hour, 10 minutes early) and change any
+   they want.
 9. Ask **"How carefully do you want to verify visitors?"** Offer "Basic
    identity form (free, recommended)" or "Practice verification (everyone
    passes; for trying things out)". `set_verification_policy`. Full ID checks
@@ -235,11 +237,13 @@ Tour Core's wording. Say
 visitor's tour.
 
 Later edits: facts and unit details (bedrooms, rent, availability,
-description, amenities, directions) are approved content: saving them keeps
-the property published and active tours use them right away. Doors, routes,
-tour hours, verification and messaging are structural: they send the property
-back to draft until readiness and a practice tour pass again. Tell the operator
-which it is before saving a structural change to a published property. After
+description, amenities, directions) and the visitor help number are approved
+content: saving them keeps the property published and active tours use them
+right away. A practice tour's T+15 close includes that number when it is set.
+Doors, routes, tour hours, verification and messaging are structural: they send
+the property back to draft until readiness and a practice tour pass again. Tell
+the operator which it is before saving a structural change to a published
+property. After
 the new hours are published, anyone already texting picks them up on their
 next message: a stale numbered day gets "Tour times just changed. Here's
 what's open now:" and the fresh days; "Tour" starts the day picker over from

@@ -243,7 +243,7 @@ describe("installation status", () => {
     expect(await next()).toEqual(["PUBLISH", "OPERATOR_DECISION", "publish_demo_property"]);
     await h.approve("publish_demo_property", {});
     const done = await h.status();
-    expect(done.nextStep.action).toBe("DONE");
+    expect(done.nextStep.action).toBe("ADD_ANOTHER_PROPERTY");
     expect(done.components.every((c) => c.state === "READY")).toBe(true);
     expect(done.lines).toContain("\u2713 Visitor texting: Visitor texting is connected and working (+15550109999).");
   });

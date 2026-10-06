@@ -1,10 +1,11 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { findApprovedAnswer, approvedFacts } from "../src/core/facts";
-import { classifyChange } from "../src/config/changeKinds";
+import { classifyChange, legacyVisitorHelpSafetyHash } from "../src/config/changeKinds";
+import { parsePhone } from "../src/core/phone";
 import { TourCoreConfigShape } from "../src/config/tourCoreConfig";
 import { missingProfileFields, nextProfileQuestion, parseBulkUnitDetails, parseProfileValue, profileFacts, type UnitProfile } from "../src/config/unitProfile";
 import { Installation } from "../src/install/installation";
@@ -277,9 +278,57 @@ describe("approved content changes keep the property published", () => {
     verification.verificationMode = "mock";
     const route = clone();
     route.routes[0].stops.reverse();
+    const help = clone();
+    help.operator = { ...help.operator, visitorContact: parsePhone("(973) 842-1983"), visitorHelpDecided: true };
+    const alerts = clone();
+    alerts.operator = { ...alerts.operator, contact: "+15550101111" };
     expect(classifyChange(cfg, cfg)).toBe("none");
-    for (const c of [facts, rent, directions]) expect(classifyChange(cfg, c)).toBe("content");
-    for (const c of [hours, verification, route]) expect(classifyChange(cfg, c)).toBe("structural");
+    for (const c of [facts, rent, directions, help]) expect(classifyChange(cfg, c)).toBe("content");
+    for (const c of [hours, verification, route, alerts]) expect(classifyChange(cfg, c)).toBe("structural");
+  });
+
+  it("setting (973) 842-1983 keeps a published property published and the practice tour closes at T+15", async () => {
+    const h = harness();
+    const id = await h.publish();
+    const before = h.workspace.load(id).state;
+    const saved = await h.ok("update_property_details", { visitorContact: "(973) 842-1983" });
+    expect(saved.setup.visitorHelpNumber).toBe("(973) 842-1983");
+    const afterSave = h.workspace.load(id);
+    expect(afterSave.config.operator.visitorContact).toBe(parsePhone("(973) 842-1983"));
+    expect(afterSave.state.status).toBe("PUBLISHED_FOR_DEMO");
+    expect(isCurrent(afterSave.state.readiness, afterSave.state)).toBe(true);
+    expect(isCurrent(afterSave.state.dryTour, afterSave.state)).toBe(true);
+    expect(afterSave.state.readiness).toEqual(before.readiness);
+    expect(h.workspace.contentChanges(id).at(-1)!.changes).toEqual(["visitor help number"]);
+
+    const practice = await h.ok("run_dry_tour");
+    expect(practice.passed).toBe(true);
+    expect(practice.summary).toBe("Practice tour passed.");
+    expect(practice.proofPoints).toContain("\u2713 The tour was closed 15 minutes after the end");
+    expect(practice.failure).toBeUndefined();
+    const afterPractice = h.workspace.load(id);
+    expect(afterPractice.state.status).toBe("PUBLISHED_FOR_DEMO");
+    expect(afterPractice.state.dryTour?.passed).toBe(true);
+    expect(isCurrent(afterPractice.state.dryTour, afterPractice.state)).toBe(true);
+    expect(await h.workspace.publishBlockers(id, new Date(h.now()))).toEqual([]);
+  });
+
+  it("an older safety fingerprint that still included the visitor help flag stays current", async () => {
+    const h = harness();
+    const id = await h.publish();
+    const folder = h.workspace.load(id);
+    const legacy = legacyVisitorHelpSafetyHash(folder.config);
+    expect(legacy).not.toBe(folder.state.safetyHash);
+    const statusPath = `${h.root}/properties/${id}/status.json`;
+    const status = JSON.parse(readFileSync(statusPath, "utf8"));
+    status.safetyHash = legacy;
+    status.readiness.safetyHash = legacy;
+    status.dryTour.safetyHash = legacy;
+    writeFileSync(statusPath, JSON.stringify(status));
+    const loaded = h.workspace.load(id);
+    expect(loaded.state.status).toBe("PUBLISHED_FOR_DEMO");
+    expect(isCurrent(loaded.state.readiness, loaded.state)).toBe(true);
+    expect(isCurrent(loaded.state.dryTour, loaded.state)).toBe(true);
   });
 });
 

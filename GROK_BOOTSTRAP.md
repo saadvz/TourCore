@@ -71,3 +71,5 @@ The other workflows (Setup Property, Map Route, Run Readiness Check, Simulate To
 Hosted product: approval, choose visitor texting, Google Drive backups through Grok (recommended; they can decline), property, alerts (recommended), readiness, practice, publish, then one portable backup. No second Google approval.
 
 Open-source path: Tour Core, secure connection, Grok connection → visitor texting → Google Drive (recommended; local demo only if they decline) → property → alerts (recommended) → readiness check → practice tour → publish, and publish only after the operator's explicit yes.
+
+A published property stays published when a visitor help number is saved. The next step can start another property.

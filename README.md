@@ -662,9 +662,10 @@ Publishing sets the property's status to `PUBLISHED_FOR_DEMO`. That is **not** a
 Changes afterward come in two kinds, decided in one place (`src/config/changeKinds.ts`):
 
 - **Approved content** (property facts, unit descriptions and facts, unit details such as bedrooms, bathrooms, rent,
-  availability, square footage and amenities, and route directions): audited in
+  availability, square footage and amenities, route directions, and the optional visitor help number): audited in
   `properties/<id>/content-changes.json`, used by active tours on their next question, and the property **stays
-  published**. No readiness check, practice tour or republish.
+  published**. No readiness check, practice tour or republish. Saving a help number such as `(973) 842-1983` does not
+  send the property back to draft. The practice tour's T+15 close includes that number when it is set.
 - **Structural / safety** (doors, which doors a route uses, entrances, units themselves, tour hours, verification,
   messaging, storage, access, alert contact): the property goes back to draft, and both checks must pass again before
   an explicit republish.
@@ -739,8 +740,8 @@ On `HOSTED_RAILWAY_P0` (Railway), `TOURCORE_HOME` must be on the persistent volu
 The config holds the property (including its **IANA time zone**, e.g. `America/New_York`), operator alert contact,
 doors, units, routes, and tour hours: days, start, end, `slotEveryMinutes`, `tourLengthMinutes` and
 `earlyArrivalMinutes`. It also holds `verificationMode`, `verificationValidForDays`, `messagingMode` (`demo` or `live`), optional `messagingProvider` (`local` opts this building into the QA loopback), `storageMode` and
-`accessMode`. The installation still has one primary live provider (Sendblue, Twilio, or Photon). A property may override that with `messagingProvider: "local"` so QA can inject texts without flipping the installation or drafting other published buildings. Full per-property live credentials are a later slice. Older property files that say `messagingMode: "sendblue"` are read as `live` and rewritten in place; that rename does not by itself require a new readiness check or a republish. Policy values live only in config. Setup shows the defaults (45-minute tours, hourly, 10 minutes early,
-checks reusable for 30 days) and lets the operator change them.
+`accessMode`. The installation still has one primary live provider (Sendblue, Twilio, or Photon). A property may override that with `messagingProvider: "local"` so QA can inject texts without flipping the installation or drafting other published buildings. Full per-property live credentials are a later slice. Older property files that say `messagingMode: "sendblue"` are read as `live` and rewritten in place; that rename does not by itself require a new readiness check or a republish. Policy values live only in config. A new property starts at Monday–Friday, 9:00 AM–5:00 PM. Setup shows the other defaults (45-minute tours, hourly, 10 minutes early,
+checks reusable for 30 days) and lets the operator change them. Changing those starting hours is a product choice; the tools keep this default and say so.
 
 **Approved facts.** `property.facts`, `unit.summary` and `unit.facts` hold only what the operator wrote.
 `approvedFacts(config, unitId)` (`src/core/facts.ts`) and `TourCore.approvedFacts(reservationId)` return them as

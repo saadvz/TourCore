@@ -384,7 +384,7 @@ export async function runDryTour(input: TourCoreConfig, options: DryTourOptions 
       const closed = await core.getReservation(otherRes.id);
       await check(
         { id: "overstay_closed", group: "wrapup", label: "T+15 close", outcome: "Tour closed and the team was alerted" },
-        messages.some((m) => m.audience === "PROSPECT" && m.body === plus15Closed(otherPlace)) &&
+        messages.some((m) => m.audience === "PROSPECT" && m.body === plus15Closed(otherPlace, config.operator.visitorContact)) &&
           closed?.status === "EXPIRED" &&
           (await core.auditTrail()).some((e) => e.type === "TOUR_OVERSTAY_CLOSED" && e.reservationId === otherRes.id),
       );
