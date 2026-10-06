@@ -30,7 +30,7 @@ import { approvedAnswerText, approvedFacts, type ApprovedFact } from "./facts";
 import { formatPhone, normalizePhone } from "./phone";
 import { resolveQuestion } from "./questions";
 import { closestOpenSlots, intervalsOverlap, overlapSummary, placementOf, relativeWhen, releasedWhen, tourInterval, touringHoursLabel, type TimeInterval } from "./customSlot";
-import { LATE_ARRIVAL_EXPIRED, landlordRepliedAfterClose, landlordWho, tourFinishedFollowUp, visitorRepliedAfterClose } from "./overstayCopy";
+import { DOOR_AFTER_T, LATE_ARRIVAL_EXPIRED, landlordRepliedAfterClose, landlordWho, tourFinishedFollowUp, visitorRepliedAfterClose } from "./overstayCopy";
 import { withPropertySlotLock } from "./slotLock";
 import { BOOKING_HORIZON_DAYS, isoDate, nextTourDay, slotsOn, tourWindow, type TourSlot } from "./schedule";
 import { bookedTourCalledOffText } from "./availabilityCopy";
@@ -1596,9 +1596,7 @@ export class TourCore {
           DENY_TOO_EARLY: reservation.windowStart
             ? VisitorDenialCopy.tooEarly(this.time(new Date(reservation.windowStart)), this.whenPhrase(new Date(reservation.windowStart)))
             : VisitorDenialCopy.tooEarly(),
-          DENY_EXPIRED: (await this.tourHadStarted(reservation))
-            ? "Your tour time has ended, so I can't open that door. Please head out the way you came in and text DONE once you're outside."
-            : LATE_ARRIVAL_EXPIRED,
+          DENY_EXPIRED: (await this.tourHadStarted(reservation)) ? DOOR_AFTER_T : LATE_ARRIVAL_EXPIRED,
           DENY_WRONG_ROUTE: `That door isn't part of your tour, so I can't open it. You're here to see ${visitorSubject(this.deps.config.property, unit.name)}. I've let the ${team} know in case you need a hand.`,
           DENY_DURIN_UNHEALTHY: VisitorDenialCopy.doorsNotResponding(team, help),
           DENY_PROVIDER_FAILURE: VisitorDenialCopy.doorsNotResponding(team, help),

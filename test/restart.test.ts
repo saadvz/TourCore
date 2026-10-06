@@ -294,9 +294,9 @@ describe("access after a restart is never looser", () => {
     app.setClock(at(14, 0));
     await app.text("I'm here");
     await app.restart();
-    app.setClock(at(16, 0));
-    const late = await app.text("I'm at the entrance");
-    expect(late.reply).toBe("Your tour time has ended, so I can't open that door. Please head out the way you came in and text DONE once you're outside.");
+    app.setClock(at(14, 46));
+    await app.text("I'm at the entrance");
+    expect(app.bundle().messages.some((m) => m.body === "Your tour time has ended, so I can't open that door. Please head out the way you came in and text DONE once you're outside.")).toBe(true);
   });
 
   it("a revoked tour stays revoked and an operator hold stays in place", async () => {

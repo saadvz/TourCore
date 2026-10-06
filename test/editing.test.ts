@@ -163,7 +163,7 @@ describe("operator-facing presenters", () => {
       "Tour completed",
       "Access revoked",
       "Follow-up sent",
-      "Tour-end text without extension",
+      "The tour-end text was sent (no extra time taken)",
       "T+5 leave check-in",
       "T+15 close",
       "Tour records saved",

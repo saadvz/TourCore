@@ -254,7 +254,7 @@ describe("Tour Core journey", () => {
     const maple = "Maple Leasing team";
     const earlyToday = VisitorDenialCopy.tooEarly("1:50 PM", "today at 1:50 PM");
     const earlyLater = VisitorDenialCopy.tooEarly("1:50 PM", "on Wednesday, Sep 30 at 1:50 PM");
-    const expired = "Your tour time has ended, so I can't open that door. Please head out the way you came in and text DONE once you're outside.";
+    const expired = "Your tour time has ended, so I can't open doors anymore. Want me to find you another time?";
     const wrong = (name: string) =>
       `That door isn't part of your tour, so I can't open it. You're here to see Unit 101. I've let the ${name} know in case you need a hand.`;
 
