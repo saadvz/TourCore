@@ -77,6 +77,16 @@ export function visitorSubject(property: NamedProperty, unitName: string): strin
   return unitName;
 }
 
+/**
+ * Setup-tool unit label. A single-family home uses the street line so
+ * "Main Home" never appears; other types keep the stored unit name
+ * ("Unit Loft", "1A").
+ */
+export function operatorUnitName(property: NamedProperty, unitName: string): string {
+  if (property.propertyType === "SINGLE_FAMILY") return visitorSubject(property, unitName);
+  return unitName;
+}
+
 /** Address visitors see: the public name plus the address when one was given, otherwise the address alone. */
 export function visitorPlace(property: Pick<NamedProperty, "address" | "displayName" | "name" | "canonicalAddress">): { address: string; publicName?: string } {
   const address = property.address.trim();

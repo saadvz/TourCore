@@ -146,8 +146,7 @@ export function operatorFacingPropertyName(draft: {
 function withLabel(property: SetupDraft["property"]): SetupDraft["property"] {
   const displayName = property.displayName?.trim();
   const { displayName: _dropped, ...rest } = property;
-  const street = streetLine(property);
-  return { ...rest, ...(displayName ? { displayName } : {}), name: displayName || street || property.address.trim() };
+  return { ...rest, ...(displayName ? { displayName } : {}), name: displayName || property.address.trim() };
 }
 
 function requirePropertyType(input: string): PropertyType {

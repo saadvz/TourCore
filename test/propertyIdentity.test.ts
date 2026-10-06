@@ -58,7 +58,7 @@ describe("canonical property identity", () => {
   it("keeps the address as the identity, uses it with visitors, and never invents a friendly name", async () => {
     const h = harness();
     const created = await h.ok("create_property_setup", { address: "144 Hillside Ave, Teaneck, NJ" });
-    expect(created.setup).toMatchObject({ name: "144 Hillside Ave, Teaneck, NJ", address: "144 Hillside Ave, Teaneck, NJ", propertyType: "Not chosen yet" });
+    expect(created.setup).toMatchObject({ name: "144 Hillside Ave", address: "144 Hillside Ave, Teaneck, NJ", propertyType: "Not chosen yet" });
     expect(created.setup.propertyName).toBeUndefined();
     const id = created.setup.propertyId as string;
     expect(h.workspace.openDraft(id).draft.property.displayName).toBeUndefined();

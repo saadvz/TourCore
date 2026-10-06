@@ -222,8 +222,8 @@ export class PropertyWorkspace {
       if (change === "content") this.appendContentChange(id, { at: now.toISOString(), changes: describeContentChanges(before!.config, config) });
     } else {
       // Earlier check results stay for history, but their fingerprint no longer matches, so they no longer count.
-      const { publishedAt: _dropped, ...rest } = previous ?? { propertyId: id };
-      state = { ...rest, propertyId: id, status: "DRAFT", configHash: hash, safetyHash: safetyHash(config), savedAt: now.toISOString() };
+      // Keep publishedAt so a previously published property that is back in draft still keeps records on remove.
+      state = { ...(previous ?? { propertyId: id }), propertyId: id, status: "DRAFT", configHash: hash, safetyHash: safetyHash(config), savedAt: now.toISOString() };
     }
     writeJsonAtomic(this.configPath(id), config);
     this.writeState(state);

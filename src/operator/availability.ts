@@ -274,13 +274,15 @@ export async function resumeTours(ctx: Ctx, input: { property?: string; unit?: s
   };
 }
 
-function isPublished(ctx: Ctx, propertyId: string): boolean {
-  return ctx.services.workspace.has(propertyId) && ctx.services.workspace.load(propertyId).state.status === "PUBLISHED_FOR_DEMO";
+function isUnpublished(ctx: Ctx, propertyId: string): boolean {
+  if (!ctx.services.workspace.has(propertyId)) return true;
+  const { state } = ctx.services.workspace.load(propertyId);
+  return state.status !== "PUBLISHED_FOR_DEMO" && !state.publishedAt;
 }
 
 export async function removeProperty(ctx: Ctx, input: { property?: string; confirmationCode?: string }) {
   const propertyId = resolvePropertyId(ctx.services.workspace, input.property);
-  const unpublished = !isPublished(ctx, propertyId);
+  const unpublished = isUnpublished(ctx, propertyId);
   const name = operatorFacingPropertyName(ctx.services.workspace.openDraft(propertyId).draft);
   if (!unpublished && isRemoved(ctx.services.workspace.load(propertyId).state)) {
     throw new SetupInputError("PROPERTY_REMOVED", "That property has already been removed.");

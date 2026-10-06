@@ -19,7 +19,7 @@ import { parseDays, parseMinutes, parseTimeOfDay } from "../setup/parse";
 import type { DryTourCheck, DryTourResult } from "../setup/dryTour";
 import type { ReadinessResult } from "../setup/readiness";
 import { condoNextQuestion, createPropertySetup, modeSentence, operatorFacingPropertyName, OperatorTeamCopy, SetupInputError, tourableSpacesQuestion, visitorHelpLines, visitorHelpQuestion, type SetupDraft } from "../setup/setupActions";
-import { visitorSubject } from "../visitor/identity";
+import { operatorUnitName } from "../visitor/identity";
 import { isHostedRailway } from "../install/deployment";
 import { statusLabel, type PublishBlocker } from "../setup/workspace";
 import { rememberCanonical, revertCanonical } from "../storage/canonical";
@@ -188,7 +188,7 @@ function setupSnapshot(ctx: ToolContext, id: string) {
   const { draft } = ctx.services.workspace.openDraft(id);
   const view = draftView(draft);
   const saved = ctx.services.workspace.has(id) ? ctx.services.workspace.load(id) : undefined;
-  const pausedUnits = saved ? saved.config.units.filter((unit) => unitPausedFlag(saved.state, unit.id)).map((unit) => visitorSubject(draft.property, unit.name)) : [];
+  const pausedUnits = saved ? saved.config.units.filter((unit) => unitPausedFlag(saved.state, unit.id)).map((unit) => operatorUnitName(draft.property, unit.name)) : [];
   return {
     propertyId: id,
     name: operatorFacingPropertyName(draft),
@@ -227,8 +227,8 @@ function setupSnapshot(ctx: ToolContext, id: string) {
 
 function unitDetailsView(ctx: ToolContext, id: string) {
   const { draft } = ctx.services.workspace.openDraft(id);
-  const missing = draft.units.map((u) => ({ unit: visitorSubject(draft.property, u.name), missing: missingProfileFields(u).map((f) => FIELD_WORDS[f]) })).filter((m) => m.missing.length);
-  const facing = draft.units.map((u) => ({ ...u, name: visitorSubject(draft.property, u.name) }));
+  const missing = draft.units.map((u) => ({ unit: operatorUnitName(draft.property, u.name), missing: missingProfileFields(u).map((f) => FIELD_WORDS[f]) })).filter((m) => m.missing.length);
+  const facing = draft.units.map((u) => ({ ...u, name: operatorUnitName(draft.property, u.name) }));
   const next = nextProfileQuestion(facing);
   const lines = facing.map(profileSummaryLine);
   return {
@@ -507,7 +507,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const id = resolvePropertyId(ctx.services.workspace, i.property);
       const { draft } = openDraft(ctx, i.property);
       const { units } = setupSnapshot(ctx, id);
-      return { summary: units.length ? units.map((u) => visitorSubject(draft.property, u.name)).join(", ") : "No units yet.", units };
+      return { summary: units.length ? units.map((u) => operatorUnitName(draft.property, u.name)).join(", ") : "No units yet.", units };
     },
   }),
   tool({
@@ -530,7 +530,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const setup = setupSnapshot(ctx, id);
       const unit = setup.units.find((u) => !draft.units.some((d) => d.id === u.unitId));
       const after = ctx.services.workspace.openDraft(id).draft;
-      return { summary: `Added ${unit ? visitorSubject(after.property, unit.name) : "a unit"} with ${unit?.door}.${unit?.route ? ` Route: ${unit.route}.` : ""}`, unit, ...state, ...propertyNextQuestion(after) };
+      return { summary: `Added ${unit ? operatorUnitName(after.property, unit.name) : "a unit"} with ${unit?.door}.${unit?.route ? ` Route: ${unit.route}.` : ""}`, unit, ...state, ...propertyNextQuestion(after) };
     },
   }),
   tool({
@@ -557,7 +557,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const setup = setupSnapshot(ctx, id);
       const updated = setup.units.find((u) => u.unitId === unit.id);
       const after = ctx.services.workspace.openDraft(id).draft;
-      return { summary: `Updated ${visitorSubject(after.property, updated?.name ?? unit.name)}.`, unit: updated, ...setupState(ctx, id) };
+      return { summary: `Updated ${operatorUnitName(after.property, updated?.name ?? unit.name)}.`, unit: updated, ...setupState(ctx, id) };
     },
   }),
   tool({
@@ -611,7 +611,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         touched.add(unit.id);
       }
       if (!touched.size) {
-        throw new SetupInputError("UNIT_DETAILS_NOT_FOUND", `I couldn't match those details to a unit. The units are ${draft.units.map((u) => visitorSubject(draft.property, u.name)).join(", ") || "none yet"}.`);
+        throw new SetupInputError("UNIT_DETAILS_NOT_FOUND", `I couldn't match those details to a unit. The units are ${draft.units.map((u) => operatorUnitName(draft.property, u.name)).join(", ") || "none yet"}.`);
       }
       ctx.services.workspace.persistEdit(next, ctx.now());
       return { ...unitDetailsView(ctx, id), ...(unknownUnits.length ? { notOnFile: unknownUnits } : {}), ...setupState(ctx, id) };
@@ -668,8 +668,8 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const view = draftView(draft).units.find((u) => u.id === unit.id)!;
       const name = (d: string) => draft.doors.find((x) => x.id === d)?.name ?? "a door that no longer exists";
       return {
-        summary: view.route ? `${visitorSubject(draft.property, unit.name)}: ${view.route.doorNames.join(" \u2192 ")}` : `${visitorSubject(draft.property, unit.name)} doesn't have a route yet.`,
-        unit: visitorSubject(draft.property, unit.name),
+        summary: view.route ? `${operatorUnitName(draft.property, unit.name)}: ${view.route.doorNames.join(" \u2192 ")}` : `${operatorUnitName(draft.property, unit.name)} doesn't have a route yet.`,
+        unit: operatorUnitName(draft.property, unit.name),
         route: view.route?.doorNames,
         directions: view.route?.directions || undefined,
         suggested: view.route ? undefined : view.suggestedRoute.map(name),
@@ -716,7 +716,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       return {
         status: problems.length ? "has-problems" : "ok",
         summary: `I have: ${resolved.join(" \u2192 ")}.${problems.length ? ` But: ${problems.join(" ")}` : " Is that right?"}`,
-        unit: visitorSubject(draft.property, unit.name),
+        unit: operatorUnitName(draft.property, unit.name),
         route: resolved,
         problems,
       };
@@ -749,7 +749,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         throw new SetupInputError("ROUTE_DOOR_UNKNOWN", `"${ref}" isn't a door on file.${hint} Nothing was saved.`);
       });
       const state = edit(ctx, id, draft, "setRoute", { unitId: unit.id, doorIds: doors.map((d) => d.id), directions: i.directions, onlyIfValid: true });
-      return { summary: `Saved ${visitorSubject(draft.property, unit.name)}: ${doors.map((d) => d.name).join(" \u2192 ")}.`, ...state };
+      return { summary: `Saved ${operatorUnitName(draft.property, unit.name)}: ${doors.map((d) => d.name).join(" \u2192 ")}.`, ...state };
     },
   }),
 

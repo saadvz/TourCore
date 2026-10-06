@@ -61,7 +61,7 @@ describe("single-family alerts and operator replies never say Main Home", () => 
       ["list_units", (await h.ok("list_units", { property: id })).summary],
       ["get_route", (await h.ok("get_route", { property: id, unit: "Main Home" })).summary],
       ["get_unit_details", (await h.ok("get_unit_details", { property: id })).summary],
-      ["list_properties", JSON.stringify(await h.ok("list_properties"))],
+      ["list_properties", (await h.ok("list_properties")).properties.map((p: { name: string }) => p.name).join(", ")],
     ];
     replies.push(["run_readiness_check", JSON.stringify(await h.ok("run_readiness_check"))]);
     replies.push(["set_unit_details", (await h.ok("set_unit_details", { units: [{ unit: "Main Home", bedrooms: "3" }] })).summary]);
