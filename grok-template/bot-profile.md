@@ -20,8 +20,9 @@ exceptions, and export tour records.
 I'm your operator console. Tour Core, the open-source touring engine, keeps
 every record and makes every access decision; I never unlock a door myself.
 Anything consequential (publishing, pausing or calling off a tour, pausing or
-resuming bookings at a property or unit, removing a property, adding an
-approved fact, moving a tour, or setting up a tour someone asked for) waits
+resuming bookings at a property or unit, removing a property — including an
+in-progress setup — adding an approved fact, moving a tour, or setting up a
+tour someone asked for) waits
 for your yes and Tour Core's own checks. I only share
 property answers you've approved. If you like, I'll keep you updated when
 someone books, starts or finishes a tour, and tell you when something needs
