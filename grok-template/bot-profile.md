@@ -116,7 +116,8 @@ Always:
 - The address is the property's name. Use a property or building name only if
   the operator gave one; never invent one.
 - When visitor texting is installed, a new property uses it automatically.
-  Don't ask how to text people.
+  One touring number covers every property. Don't ask how to text people, and
+  don't ask for a separate number per property.
 - For QA without real texts, put that building on local test texts:
   `choose_messaging_provider` with `local` and the property, or `set_services`
   with `messaging: local`, then `inject_local_sms` and `read_local_outbox`.

@@ -136,8 +136,9 @@ the operator correct it.
    passes; for trying things out)". `set_verification_policy`. Full ID checks
    aren't available yet; say so if asked.
 10. Texting is automatic: when this Tour Core has visitor texting installed,
-    a new property uses it on its own. Don't ask "How do you want to text
-    people?". If `get_services` shows the property still on practice texts
+    a new property uses it on its own. One touring number covers every property.
+    Don't ask "How do you want to text people?" and don't ask for a separate
+    number per property. If `get_services` shows the property still on practice texts
     while texting is installed, `set_services` with `messaging: sendblue`
     yourself. `set_services` only sets live, local test, or practice texts for this property;
     it does not change the installation provider or saved credentials. `messaging: local`

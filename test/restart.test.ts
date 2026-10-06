@@ -386,16 +386,18 @@ describe("which property answers on which texting number", () => {
     expect(app.logs.some((l) => l.includes("isn't connected to a property"))).toBe(true);
   });
 
-  it("one number, one property: a second claim is refused, a move lets go of the old number", () => {
+  it("one touring number covers every property, and a move lets go of the old number", () => {
     const endpoints = new MessagingEndpoints(new MemoryRuntimeStore());
     expect(endpoints.attach({ address: "+15550009999", provider: "sendblue", propertyId: "prop_a" })).toEqual({ changed: true });
-    expect(() => endpoints.attach({ address: "(555) 000-9999", provider: "sendblue", propertyId: "prop_b" })).toThrow(/already used for another property/);
+    expect(endpoints.attach({ address: "(555) 000-9999", provider: "sendblue", propertyId: "prop_b" })).toEqual({ changed: true });
+    expect([...(endpoints.resolve("+15550009999")?.propertyIds ?? [])].sort()).toEqual(["prop_a", "prop_b"]);
+    expect(endpoints.forProperty("prop_b")?.address).toBe("+15550009999");
     expect(endpoints.attach({ address: "+15550001111", provider: "sendblue", propertyId: "prop_a" })).toEqual({ changed: true, previous: "+15550009999" });
-    expect(endpoints.resolve("+15550009999")).toBeUndefined();
+    expect(endpoints.resolve("+15550009999")?.propertyIds).toEqual(["prop_b"]);
     expect(endpoints.resolve("555-000-1111")?.propertyId).toBe("prop_a");
   });
 
-  it("the readiness check shows the attached number and flags a number another property already uses", async () => {
+  it("the readiness check shows the attached number, and a second property shares it", async () => {
     const app = await durableApp();
     const readiness = await app.local("POST", `/api/properties/${PROPERTY}/readiness`, {});
     expect(readiness.body.readiness.checks.map((c: { label: string }) => c.label)).toContain("Tour progress can be safely saved");
@@ -406,10 +408,10 @@ describe("which property answers on which texting number", () => {
     app.ws().save({ ...other });
     const second = await app.local("POST", `/api/properties/prop_200_other_st/readiness`, {});
     const messaging = second.body.readiness.checks.find((c: { id: string }) => c.id === "messaging");
-    expect(messaging.ok).toBe(false);
-    expect(messaging.problems[0].message).toBe("This texting number is already used for 100 Alfred Way.");
-    expect(messaging.problems[0].message).not.toMatch(/prop_/);
-    expect(messaging.problems[0].message).not.toContain("Main Home");
+    expect(messaging.ok).toBe(true);
+    expect(messaging.problems).toEqual([]);
+    expect(JSON.stringify(second.body)).not.toMatch(/already used/);
+    expect((await app.local("GET", `/api/properties/prop_200_other_st/messaging`)).body.line).toBe(LINE);
   });
 
   it("a changed texting number sends a published property back to draft until readiness passes again", async () => {

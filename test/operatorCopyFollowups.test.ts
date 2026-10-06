@@ -81,8 +81,8 @@ describe("review_property_setup unit headings", () => {
   });
 });
 
-describe("shared texting number names the other property by street", () => {
-  it("readiness says the Critiquito line with the other home's street, never an id or Main Home", async () => {
+describe("one touring number covers every property", () => {
+  it("a second property's readiness passes on the same number, with no property id", async () => {
     const h = textingApp();
     const scratch = await finishSingleFamily(h, "12 Scratch Lane, Teaneck, NJ 07666");
     const first = await h.ok("run_readiness_check", { property: scratch });
@@ -91,13 +91,14 @@ describe("shared texting number names the other property by street", () => {
 
     const gate = await finishSingleFamily(h, "910 QA Gate Rd, Tenafly, NJ 07670");
     const second = await h.ok("run_readiness_check", { property: gate });
-    const messaging = (second.checks as Array<{ check: string; problems: string[] }>).find((c) =>
-      c.problems.some((p) => p.includes("already used")),
-    );
-    expect(messaging?.problems).toEqual(["This texting number is already used for 12 Scratch Lane."]);
-    expect(second.lines.join("\n")).toContain("This texting number is already used for 12 Scratch Lane.");
+    expect(second.passed).toBe(true);
+    expect(JSON.stringify(second)).not.toMatch(/already used/);
     expect(JSON.stringify(second)).not.toMatch(/prop_/);
     expect(JSON.stringify(second)).not.toContain("Main Home");
+    const line = "+15550109999";
+    expect(h.services.endpoints?.forProperty(scratch)?.address).toBe(line);
+    expect(h.services.endpoints?.forProperty(gate)?.address).toBe(line);
+    expect([...(h.services.endpoints?.resolve(line)?.propertyIds ?? [])].sort()).toEqual([gate, scratch].sort());
   });
 });
 

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { removedPropertyVisitorText } from "../core/availabilityCopy";
 import { normalizePhone } from "../core/phone";
 import { keywordOf, type IntentInterpreter } from "../intent";
-import { MessagingEndpoints } from "../messaging/endpoints";
+import { MessagingEndpoints, type MessagingEndpoint } from "../messaging/endpoints";
 import { hasInboundMedia, type InboundMessage } from "../messaging/inbound";
 import type { MessagingAdapter } from "../messaging/Messenger";
 import { TERMINAL } from "../domain/stateMachine";
@@ -22,6 +22,7 @@ import type { ResolvedConsentMode } from "../messaging/consentPolicy";
 import { isLeavingTour } from "../core/overstayCopy";
 import { normalize, stripFiller } from "../intent/normalize";
 import { handleVisitorText, isGreeting, startsNewBookingAfterClose } from "./conversation";
+import { pickerMiss, placeAliases, propertyPickerText, propertyShortName, resolveNamedPlace, STREET_MISS, menuChoice, type PlaceCandidate } from "./portfolioPick";
 import { OverstayScheduler } from "./overstayScheduler";
 import { oneOffBlockReason } from "./oneOffGate";
 import { markRemovedReply, shouldReplyRemoved } from "./removedReplies";
@@ -31,6 +32,27 @@ import { VisitorDemoSession, type VisitorDemoRegistry } from "./session";
 import type { VerificationLinks } from "./verificationLinks";
 
 type Transport = MessagingAdapter & { noteChannel?: (number: string, channel: InboundMessage["channel"]) => void };
+
+interface PendingPick {
+  schemaVersion: 1;
+  phone: string;
+  line: string;
+  offeredIds: string[];
+  matchIds: string[];
+  streetPrompt: boolean;
+  originalText: string;
+  at: string;
+}
+
+function pickKey(phone: string, line: string): string {
+  return `pick_${phone.replace(/\D/g, "")}_${line.replace(/\D/g, "")}`;
+}
+
+/** The property choice is not a tour reply. A bare number is not replayed as the first text. */
+function openerFor(original: string): string {
+  const text = original.trim();
+  return text && !menuChoice(text) ? text : "Tour";
+}
 
 export const RESTORE_TROUBLE = "I'm having trouble restoring your tour. I've alerted the property team.";
 export const HANDLER_SNAG_ALERTED = "Sorry, I hit a snag with that. I've let the property team know, and they'll reply here as soon as they can.";
@@ -70,7 +92,9 @@ export interface NeedsAttention {
  * Hands a verified, de-duplicated inbound message to the right visitor
  * conversation (the same session type the browser phone uses) and saves the
  * records afterwards. Provider-neutral: any messaging webhook can call it.
- * The receiving line decides the property; conversations are saved after
+ * One touring number covers every property. A first text that names the
+ * place, or a listing link, starts that property. An unclear first text asks
+ * which place, then stays on that choice. Conversations are saved after
  * every message and picked up again after a restart.
  */
 export class MessagingConversations {
@@ -87,7 +111,7 @@ export class MessagingConversations {
       links: VerificationLinks;
       /** Where conversation snapshots are kept. Defaults to memory only (nothing survives a restart). */
       runtime?: RuntimeStore;
-      /** Which property answers on which line. Defaults to adopting the line for the one real-phone property. */
+      /** Which properties share which line. Defaults to adopting the line for every real-phone property. */
       endpoints?: MessagingEndpoints;
       /** The line to assume when a provider doesn't say which number was texted. */
       defaultLine?: () => string | undefined;
@@ -110,6 +134,7 @@ export class MessagingConversations {
     },
   ) {
     const runtime = deps.runtime ?? new MemoryRuntimeStore();
+    this.runtime = runtime;
     this.persistence = new SessionPersistence(deps.workspace, runtime, deps.links);
     this.endpoints = deps.endpoints ?? new MessagingEndpoints(runtime);
     this.smsConsent = new SmsConsentDirectory(deps.workspace.root);
@@ -123,6 +148,7 @@ export class MessagingConversations {
     return session;
   }
 
+  private readonly runtime: RuntimeStore;
   private readonly endpoints: MessagingEndpoints;
   private readonly smsConsent: SmsConsentDirectory;
 
@@ -136,17 +162,177 @@ export class MessagingConversations {
     this.broken.clear();
   }
 
-  async receive(message: InboundMessage): Promise<{ correlationId?: string }> {
-    await this.releaseUnconfirmed();
-    const { workspace: ws, registry } = this.deps;
+  /**
+   * The property this text belongs to. A shared line with two or more published
+   * properties asks which place when the text doesn't already name one.
+   * Returns nothing when the text was answered here (the picker, or no property).
+   */
+  private async route(message: InboundMessage): Promise<{ propertyId: string; endpoint: MessagingEndpoint; message: InboundMessage } | undefined> {
+    const { workspace: ws } = this.deps;
     const line = message.to ?? this.deps.defaultLine?.();
     if (!this.deps.endpoints) adoptLegacyLine(ws, this.endpoints, line);
     const endpoint = this.endpoints.resolve(line);
-    if (!endpoint || !ws.has(endpoint.propertyId)) {
+    const ids = endpoint?.propertyIds.filter((id) => ws.has(id)) ?? [];
+    if (!endpoint || !ids.length || !line) {
       this.deps.log?.("A message arrived on a texting number that isn't connected to a property. It was not answered.");
-      return {};
+      return undefined;
     }
-    const propertyId = endpoint.propertyId;
+    const phone = normalizePhone(message.from);
+    const bound = await this.boundProperty(ids, phone, message.text);
+    if (bound) return { propertyId: bound, endpoint, message };
+    const pending = this.pendingPick(phone, endpoint.address);
+    if (pending) return this.answerPick(pending, message, endpoint);
+
+    const candidates = this.portfolioCandidates(ids);
+    if (!candidates.length) {
+      if (ids.length === 1) return { propertyId: ids[0]!, endpoint, message };
+      const named = this.namedPlace(message, ids);
+      if (named) return { propertyId: named, endpoint, message };
+      this.deps.log?.("A message arrived on a texting number that isn't connected to a property. It was not answered.");
+      return undefined;
+    }
+    if (candidates.length === 1) return { propertyId: candidates[0]!, endpoint, message };
+    const named = this.namedPlace(message, candidates);
+    if (named) return { propertyId: named, endpoint, message };
+
+    const keyword = keywordOf(message.text);
+    if (keyword === "stop" || keyword === "help") {
+      await this.answerLineKeyword(candidates, phone, keyword);
+      return undefined;
+    }
+    if (candidates.every((id) => this.isOptedOut(id, phone)) && keyword !== "start") return undefined;
+    await this.askWhichPlace(phone, endpoint.address, candidates, message.text);
+    return undefined;
+  }
+
+  private async answerPick(
+    pending: PendingPick,
+    message: InboundMessage,
+    endpoint: MessagingEndpoint,
+  ): Promise<{ propertyId: string; endpoint: MessagingEndpoint; message: InboundMessage } | undefined> {
+    const keyword = keywordOf(message.text);
+    if (keyword === "stop" || keyword === "help") {
+      if (keyword === "stop") this.clearPick(pending);
+      await this.answerLineKeyword(pending.matchIds, pending.phone, keyword);
+      return undefined;
+    }
+    const choice = menuChoice(message.text);
+    if (choice) {
+      const propertyId = pending.offeredIds[choice - 1];
+      if (!propertyId) {
+        await this.sendLine(pending.offeredIds[0], pending.phone, pickerMiss(pending.offeredIds.length));
+        return undefined;
+      }
+      this.clearPick(pending);
+      return { propertyId, endpoint, message: { ...message, text: openerFor(pending.originalText) } };
+    }
+    const named = this.namedPlace(message, pending.matchIds);
+    if (named) {
+      this.clearPick(pending);
+      return { propertyId: named, endpoint, message: { ...message, text: openerFor(pending.originalText) } };
+    }
+    const body = pending.streetPrompt && message.text.trim() ? STREET_MISS : pickerMiss(pending.offeredIds.length);
+    await this.sendLine(pending.offeredIds[0], pending.phone, body);
+    return undefined;
+  }
+
+  private async askWhichPlace(phone: string, line: string, candidates: string[], originalText: string): Promise<void> {
+    const offeredIds = candidates.slice(0, 3);
+    const streetPrompt = candidates.length > 3;
+    const names = offeredIds.map((id) => propertyShortName(this.deps.workspace.load(id).config.property));
+    this.runtime.put("portfolio-picks", pickKey(phone, line), {
+      schemaVersion: 1,
+      phone,
+      line,
+      offeredIds,
+      matchIds: candidates,
+      streetPrompt,
+      originalText,
+      at: (this.deps.now?.() ?? new Date()).toISOString(),
+    } satisfies PendingPick);
+    await this.sendLine(offeredIds[0], phone, propertyPickerText(names, streetPrompt));
+  }
+
+  private portfolioCandidates(ids: string[]): string[] {
+    const ws = this.deps.workspace;
+    const open = ids.filter((id) => ws.has(id) && !ws.load(id).state.removedAt);
+    const published = open.filter((id) => ws.load(id).state.status === "PUBLISHED_FOR_DEMO");
+    const pool = published.length ? published : open;
+    return [...pool].sort((a, b) => {
+      const left = ws.load(a).state;
+      const right = ws.load(b).state;
+      const byTime = (right.publishedAt ?? right.savedAt).localeCompare(left.publishedAt ?? left.savedAt);
+      return byTime || a.localeCompare(b);
+    });
+  }
+
+  private namedPlace(message: InboundMessage, ids: string[]): string | undefined {
+    const places = ids.filter((id) => this.deps.workspace.has(id)).map((id) => this.placeCandidate(id));
+    return resolveNamedPlace({ text: message.text, listingProperty: message.listingProperty }, places);
+  }
+
+  private placeCandidate(id: string): PlaceCandidate {
+    return { id, aliases: placeAliases(this.deps.workspace.load(id).config.property) };
+  }
+
+  private async boundProperty(ids: string[], phone: string, text: string): Promise<string | undefined> {
+    const broken = ids.find((id) => this.broken.has(`${id}:${phone}`));
+    const sessions = ids
+      .map((id) => this.deps.registry.latestForPhone(id, phone, "messaging"))
+      .filter((session): session is VisitorDemoSession => !!session);
+    const keep: VisitorDemoSession[] = [];
+    for (const session of sessions) {
+      const stage = await session.stage();
+      const finished = ["done", "stopped"].includes(stage) && !(await session.isPaused());
+      const stillThisTour = !finished || !!session.pendingBookingId || (await session.afterCloseStillOpen()) || !startsNewBookingAfterClose(text);
+      if (stillThisTour) keep.push(session);
+    }
+    keep.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+    if (keep[0]) return keep[0].propertyId;
+    return broken;
+  }
+
+  private async answerLineKeyword(propertyIds: string[], phone: string, keyword: "stop" | "help"): Promise<void> {
+    const propertyId = propertyIds.find((id) => this.deps.workspace.has(id));
+    if (!propertyId) return;
+    if (keyword === "help") {
+      await this.sendLine(propertyId, phone, smsHelpBody());
+      return;
+    }
+    const now = (this.deps.now?.() ?? new Date()).toISOString();
+    for (const id of propertyIds) {
+      this.setOptOut(id, phone, true);
+      this.smsConsent.save(id, { sender: phone, status: "opted_out", method: "keyword", keyword: "STOP", updatedAt: now, optedOutAt: now });
+    }
+    await this.sendLine(propertyId, phone, smsStopAck());
+  }
+
+  private async sendLine(propertyId: string | undefined, phone: string, body: string): Promise<void> {
+    await this.deps.transport(propertyId).send({ to: phone, audience: "PROSPECT", body }).catch(() => undefined);
+  }
+
+  private pendingPick(phone: string, line: string): PendingPick | undefined {
+    try {
+      const saved = this.runtime.get<PendingPick>("portfolio-picks", pickKey(phone, line));
+      if (!saved || saved.schemaVersion !== 1 || !saved.offeredIds?.length) return undefined;
+      return saved;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private clearPick(pending: PendingPick): void {
+    this.runtime.delete("portfolio-picks", pickKey(pending.phone, pending.line));
+  }
+
+  async receive(message: InboundMessage): Promise<{ correlationId?: string }> {
+    await this.releaseUnconfirmed();
+    const routed = await this.route(message);
+    if (!routed) return {};
+    message = routed.message;
+    const endpoint = routed.endpoint;
+    const propertyId = routed.propertyId;
+    const { workspace: ws, registry } = this.deps;
     if (ws.load(propertyId).state.removedAt) {
       await this.answerRemovedProperty(propertyId, message);
       return {};
@@ -589,11 +775,13 @@ export class MessagingConversations {
  * are left for the operator's readiness check.
  */
 export function adoptLegacyLine(workspace: PropertyWorkspace, endpoints: MessagingEndpoints, line: string | undefined, log?: (line: string) => void, provider = "sendblue"): void {
-  if (!line || endpoints.resolve(line)) return;
-  const candidates = workspace.list().filter((p) => isLiveMessaging(p.config.messagingMode) && !endpoints.forProperty(p.config.property.id));
-  const published = candidates.filter((p) => p.state.status === "PUBLISHED_FOR_DEMO");
-  const pick = published.length === 1 ? published[0] : candidates.length === 1 ? candidates[0] : undefined;
-  if (!pick) return;
-  endpoints.attach({ address: line, provider, propertyId: pick.config.property.id });
-  log?.(`Connected texting number ${line} to ${pick.config.property.name}.`);
+  if (!line) return;
+  const candidates = workspace.list().filter((p) => {
+    if (!isLiveMessaging(p.config.messagingMode) || p.state.removedAt) return false;
+    if (p.config.messagingProvider === "local" && provider !== "local") return false;
+    return !endpoints.forProperty(p.config.property.id);
+  });
+  if (!candidates.length) return;
+  for (const pick of candidates) endpoints.attach({ address: line, provider, propertyId: pick.config.property.id });
+  log?.(`Connected texting number ${line} to ${candidates.map((p) => p.config.property.name).join(", ")}.`);
 }

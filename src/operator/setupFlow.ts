@@ -5,7 +5,6 @@ import { runDryTour, type DryTourResult } from "../setup/dryTour";
 import { runReadinessCheck, type ReadinessResult } from "../setup/readiness";
 import { SetupInputError } from "../setup/setupActions";
 import { isCurrent, type PropertyState, type PublishBlocker, type PublishResult } from "../setup/workspace";
-import { streetLine } from "../visitor/identity";
 import type { InstalledMessaging, OperatorServices } from "./services";
 
 /**
@@ -17,7 +16,8 @@ import type { InstalledMessaging, OperatorServices } from "./services";
 /**
  * Connects this computer's texting number to a real-phone property before its
  * readiness check (freeing it when the property stops using real phones).
- * Returns why it can't, e.g. another property already answers on it.
+ * The same number covers every property. Returns why it can't, when the
+ * number itself isn't valid.
  */
 export function connectLine(services: OperatorServices, propertyId: string, messagingMode: string, now: Date): string | undefined {
   const endpoints = services.endpoints;
@@ -35,7 +35,6 @@ export function connectLine(services: OperatorServices, propertyId: string, mess
     const provider = local ? "local" : (installed?.provider ?? "sendblue");
     const { changed, previous } = endpoints.attach({ address: line, provider, propertyId }, now, {
       replaceIf: (id) => services.workspace.has(id) && isRemoved(services.workspace.load(id).state),
-      nameOf: (id) => ownerStreetLine(services, id),
     });
     if (changed && previous) services.workspace.invalidateReadiness(propertyId, "The texting number changed. Run the readiness check again.");
     return undefined;
@@ -45,30 +44,16 @@ export function connectLine(services: OperatorServices, propertyId: string, mess
   }
 }
 
-/** Street line the operator hears for another property. Never an id, never "Main Home". */
-function ownerStreetLine(services: OperatorServices, propertyId: string): string | undefined {
-  try {
-    const property = services.workspace.has(propertyId)
-      ? services.workspace.load(propertyId).config.property
-      : services.workspace.openDraft(propertyId).draft.property;
-    const street = streetLine(property);
-    return street && !/^main home$/i.test(street) ? street : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 /**
- * Whether visitors who text this property's number reach it, in the words
- * the operator hears. Separate from door access and records, which have
- * their own modes.
+ * Whether visitors who text this Tour Core's number reach this property, in
+ * the words the operator hears. Separate from door access and records, which
+ * have their own modes. One number covers every property.
  */
 export type VisitorTexting =
   | { state: "connected"; label: "Connected"; line?: string }
   | { state: "test-mode"; label: "test mode"; line?: string }
   | { state: "not-using-it"; label: "Not connected to this property yet"; problem: string }
   | { state: "not-working"; label: "Not working yet"; problem: string }
-  | { state: "number-in-use"; label: "Number used by another property"; problem: string }
   | { state: "practice"; label: "Practice only (nobody is texted)" };
 
 export const TEXTING_NOT_USED =
@@ -90,13 +75,6 @@ export function visitorTexting(services: OperatorServices, propertyId: string, m
   }
   if (installed && !installed.ready) return { state: "not-working", label: "Not working yet", problem: "Visitor texting isn't working yet, so texts to your touring number wouldn't reach this property." };
   const line = services.messagingLine?.();
-  const owner = line ? services.endpoints?.resolve(line) : undefined;
-  if (owner && owner.propertyId !== propertyId) {
-    const takenByRemoved = services.workspace.has(owner.propertyId) && isRemoved(services.workspace.load(owner.propertyId).state);
-    if (!takenByRemoved) {
-      return { state: "number-in-use", label: "Number used by another property", problem: "Your touring number already answers for another property, so texts wouldn't reach this one." };
-    }
-  }
   return { state: "connected", label: "Connected", ...(line ? { line } : {}) };
 }
 
@@ -116,7 +94,7 @@ export function publishGuards(services: OperatorServices, propertyId: string, me
   const local = usesLocalMessaging({ ...config, messagingMode }, installed);
   const texting = visitorTexting(services, propertyId, messagingMode, installed);
   if (texting.state === "not-using-it") return [{ code: "TEXTING_NOT_CONNECTED", message: texting.problem }];
-  if (texting.state === "not-working" || texting.state === "number-in-use") return [{ code: "TEXTING_NOT_WORKING", message: texting.problem }];
+  if (texting.state === "not-working") return [{ code: "TEXTING_NOT_WORKING", message: texting.problem }];
   const attached = services.endpoints?.forProperty(propertyId);
   const line = local ? localLoopbackNumber() : services.messagingLine?.();
   if (services.endpoints && line && !attached) {

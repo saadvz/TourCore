@@ -463,10 +463,15 @@ keep texting after the restart.
   processed time and conversation id.
 - **Finished tours stay finished.** After a restart, a finished visitor gets "This tour has ended. Text HI..." and HI
   starts a new tour.
-- **One texting number, one property** (`runtime/endpoints/`). The number is connected to a property by its readiness
-  check, the same number can't be claimed by a second property, a text to an unconnected number isn't answered, and
-  a changed number sends the property back to draft until readiness passes again. Setups from earlier versions are
-  connected automatically on first start.
+- **One touring number for every property** (`runtime/endpoints/`). The installation's texting number covers all of
+  that Tour Core's properties. A first text that names the place (for example `Tour 88 Pine`), or a listing link that
+  already chose it, starts that property with no question. An unclear first text (`Tour`) asks which place, then stays
+  on that choice for the rest of the tour. One published property skips the question. With four or more published
+  properties, the question lists the three most recently published, then `Or text the street name.` A street that
+  matches a published property locks it. If it does not: `I couldn't find that one. Reply 1, 2, or 3, or text the street name.` A text to a number
+  that isn't connected isn't answered, and a changed number sends that property back to draft until readiness passes
+  again. Setups from earlier versions are connected automatically on first start. Per-listing tracking numbers are not
+  part of this.
 
 The readiness check for a real-phone property includes **Tour progress can be safely saved**.
 

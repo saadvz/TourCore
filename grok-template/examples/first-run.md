@@ -160,7 +160,8 @@ trying things out.
 **Operator:** Basic form.
 
 [`set_verification_policy` basic-form. Texting isn't asked about: the property
-already uses the installed touring number. `review_property_setup`]
+already uses the installed touring number, which covers every property.
+`review_property_setup`]
 
 **Tour Core:** Here's what I have:
 144 Hillside Ave, Teaneck NJ

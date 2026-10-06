@@ -182,4 +182,4 @@ Manual checks for a real Sendblue, Twilio, or Photon line are in `docs/messaging
 
 ## Not in this milestone
 
-Linq is not implemented. Neither is full per-property live credentials (one building on Sendblue, another on Twilio). One installation still has one primary live provider and one public inbound number for that provider. A property may additionally opt into the local QA loopback. The inbound message already carries `to`, so a later router can choose a property without rewriting the visitor engine.
+Linq is not implemented. Neither is full per-property live credentials (one building on Sendblue, another on Twilio). One installation still has one primary live provider and one public inbound number for that provider, and that number covers every property. A first text that names the place, or a listing link, starts that property; an unclear first text asks which place. Per-listing tracking numbers are not part of this. A property may additionally opt into the local QA loopback.

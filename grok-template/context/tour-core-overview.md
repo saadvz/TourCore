@@ -1,7 +1,10 @@
 # Tour Core overview (reusable context)
 
-Tour Core is an open-source self-touring tool. A prospect texts the property's
-number, books a time, agrees to texts and tour records, confirms who they are,
+Tour Core is an open-source self-touring tool. A prospect texts the landlord's
+one touring number, which covers every property. A first text that names the
+place, or a listing link, starts that tour; an unclear first text asks which
+place, then stays on that choice. One published property does not ask. They book
+a time, agree to texts and tour records, confirm who they are,
 and tours one unit on their own. The text thread stays live through the tour:
 Tour Core guides them door by door. After the tour has started they get a
 15-minutes-left questions text, then a 5-minute warning. One extra 10 minutes
