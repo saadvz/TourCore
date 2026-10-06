@@ -344,10 +344,10 @@ describe("pause and remove", () => {
     const created = await h.ok("create_property_setup", {
       address: "1 QA Scratch Lane, Tenafly, NJ 07670",
       name: "QA Scratch Lane",
-      propertyType: "SINGLE_FAMILY",
+      propertyType: "APARTMENT_BUILDING",
     });
-    await h.ok("add_unit", { name: "Main Home" });
-    await h.ok("add_door", { name: "Side Hall", kind: "hallway" });
+    await h.ok("add_unit", { name: "Unit 1A" });
+    await h.ok("add_door", { name: "Lobby", kind: "entrance" });
     const listed = await h.ok("list_properties");
     expect(listed.properties).toEqual([
       expect.objectContaining({
