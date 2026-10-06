@@ -3,6 +3,7 @@ import { loadConfig } from "../src/config/tourCoreConfig";
 import { zonedTimeToUtc } from "../src/core/timezone";
 import { cannotCancelRunningTour } from "../src/core/availabilityCopy";
 import {
+  NOTHING_BOOKED_CANCEL,
   UNKNOWN_ANSWER,
   VISITOR_CANCEL_DONE,
   VISITOR_CANCEL_FAILED,
@@ -41,6 +42,89 @@ async function bookedAndReady(p: ReturnType<typeof phone>) {
   await p.session.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: PHONE });
   expect(await p.session.stage()).toBe("ready");
 }
+
+async function toDayMenu(p: ReturnType<typeof phone>) {
+  await p.say("TOUR");
+  await p.say("YES");
+  await p.say("1");
+  expect(p.lastReply()).toContain("Which day works for you?");
+  expect((await p.session.reservation())?.status).toBe("INQUIRY");
+}
+
+async function toTimeMenu(p: ReturnType<typeof phone>) {
+  await toDayMenu(p);
+  await p.say("1");
+  expect(p.lastReply()).toContain("times available");
+  expect(p.session.selectedDate).toBeTruthy();
+  expect((await p.session.reservation())?.status).toBe("INQUIRY");
+}
+
+describe("cancel before anything is booked", () => {
+  it("cancel at the day menu stops and does not repeat the menu", async () => {
+    const p = phone();
+    await toDayMenu(p);
+    await p.say("cancel that");
+    expect(p.lastReply()).toBe(NOTHING_BOOKED_CANCEL);
+    expect(p.lastReply()).not.toContain("didn't catch that");
+    expect(p.lastReply()).not.toContain("Which day works for you?");
+    expect((await p.session.reservation())?.status).toBe("INQUIRY");
+    expect(await p.audit("RESERVATION_CANCELLED")).toHaveLength(0);
+    expect(await p.audit("QUESTION_UNANSWERED")).toHaveLength(0);
+    expect(p.session.optedOut).toBe(false);
+    await p.say("hi");
+    expect(p.lastReply()).toContain("Which day works for you?");
+    expect(p.lastReply()).not.toContain("Text TOUR");
+    expect(p.lastReply()).not.toBe(NOTHING_BOOKED_CANCEL);
+  });
+
+  it("Actually cancel that at the time menu stops, then hi or Thursday starts scheduling again", async () => {
+    const hi = phone();
+    await toTimeMenu(hi);
+    await hi.say("Actually cancel that");
+    expect(hi.lastReply()).toBe(NOTHING_BOOKED_CANCEL);
+    expect(hi.lastReply()).not.toContain("didn't catch that");
+    expect(hi.lastReply()).not.toContain("Which time works for you?");
+    expect(hi.session.selectedDate).toBeUndefined();
+    expect(hi.session.optedOut).toBe(false);
+    expect((await hi.session.reservation())?.status).toBe("INQUIRY");
+    expect(await hi.audit("RESERVATION_CANCELLED")).toHaveLength(0);
+    await hi.say("hi");
+    expect(hi.lastReply()).toContain("Which day works for you?");
+    expect(hi.lastReply()).not.toContain("didn't catch that");
+    expect(hi.lastReply()).not.toContain("Text TOUR");
+    expect(hi.session.smsConsent).toBe("opted_in");
+
+    const thursday = phone();
+    await toTimeMenu(thursday);
+    await thursday.say("Actually cancel that");
+    expect(thursday.lastReply()).toBe(NOTHING_BOOKED_CANCEL);
+    await thursday.say("Thursday");
+    expect(thursday.lastReply()).toContain("times available");
+    expect(thursday.lastReply()).toContain("Thursday");
+    expect(thursday.lastReply()).not.toContain("didn't catch that");
+    expect(thursday.lastReply()).not.toBe(NOTHING_BOOKED_CANCEL);
+    expect(thursday.session.optedOut).toBe(false);
+  });
+
+  it("any later text, not only hi, starts scheduling again", async () => {
+    const p = phone();
+    await toTimeMenu(p);
+    await p.say("nevermind");
+    expect(p.lastReply()).toBe(NOTHING_BOOKED_CANCEL);
+    await p.say("ok");
+    expect(p.lastReply()).toContain("Which day works for you?");
+    expect(p.lastReply()).not.toContain("didn't catch that");
+    expect(p.lastReply()).not.toContain("Text TOUR");
+  });
+
+  it("bare cancel at the time menu still opts out", async () => {
+    const p = phone();
+    await toTimeMenu(p);
+    await p.say("cancel");
+    expect(p.session.optedOut).toBe(true);
+    expect(p.lastReply()).not.toBe(NOTHING_BOOKED_CANCEL);
+  });
+});
 
 describe("visitor cancel-by-text", () => {
   it("asks the exact confirm line, never the old info/flag line", async () => {

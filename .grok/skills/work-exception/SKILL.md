@@ -399,6 +399,13 @@ right now").
   flagged (`I'll check with the {team} and get back to you.`). That should
   not appear as a flagged question unless they were unclear on the confirm,
   or cancel could not finish (then the team is asked to call it off).
+  When nothing is booked yet, that same cancel phrasing at the day menu, the
+  time menu, or the property picker (a bare cancel is still STOP) clears the
+  step and replies `No problem, nothing's booked yet, so I'll stop here.
+  Text me anytime if you want to pick a time.` It does not ask YES or NO and
+  it does not say the tour is cancelled. The next text from someone already
+  opted in starts scheduling again, with no TOUR keyword. A named day is
+  used. At the property picker, that next text asks which place again.
   While a one-off tour is waiting on YES, NO or STOP, a leftover menu
   number only re-prompts; a real question is flagged. Handle a flagged
   question as an unanswered question and leave the hold pending.

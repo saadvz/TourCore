@@ -97,6 +97,8 @@ const BARE_CANCEL = /^(please )?(cancel)( it)?( please)?$/;
 /** "Actually cancel that" / "just call off this" — no tour noun required. */
 const LOOSE_CANCEL = /^(actually |just )?(please )?(cancel|call off)( that| this| it| them)?( please)?$/;
 const YES_CANCEL = /^(yes|yeah|yep|yup|sure|ok|okay) (please )?(cancel)( it)?$/;
+/** "nevermind" / "actually never mind" — only when nothing is booked. Not a STOP keyword. */
+const NEVERMIND = /^(actually |just )?(please )?(never mind|nevermind)( that| this| it)?( please)?$/;
 
 /**
  * Natural-language cancel of a booked tour. Matches varied phrasing the way
@@ -108,6 +110,17 @@ export function isCancelTourAsk(raw: string): boolean {
   if (BARE_CANCEL.test(t) || YES_CANCEL.test(t) || LOOSE_CANCEL.test(t)) return true;
   if (WANT_CANCEL.test(t) || CANT_MAKE_IT.test(t)) return true;
   return CANCEL_VERB.test(t) && TOUR_NOUN.test(t);
+}
+
+/**
+ * Cancel phrasing while nothing is booked yet. Bare "cancel" stays the
+ * carrier STOP keyword and is not this. Booked-tour cancel still uses
+ * isCancelTourAsk only.
+ */
+export function isUnbookedCancelAsk(raw: string): boolean {
+  if (keywordOf(raw) === "stop") return false;
+  if (isCancelTourAsk(raw)) return true;
+  return NEVERMIND.test(stripFiller(normalize(raw)));
 }
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

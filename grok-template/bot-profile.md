@@ -301,7 +301,13 @@ Never:
   working on the problem and will text you here.` after the first
   sentence. A reply that isn't a clear yes or no is flagged
   (`I'll check with the {team} and get back to you.`). That is not an
-  unanswered property question.
+  unanswered property question. When nothing is booked yet, that same cancel
+  phrasing at the day menu, the time menu, or the property picker (a bare
+  cancel is still STOP) clears the step and replies `No problem, nothing's
+  booked yet, so I'll stop here. Text me anytime if you want to pick a time.`
+  The next text from someone already opted in starts scheduling again, with
+  no TOUR keyword. At the property picker, that next text asks which place
+  again.
 - Invent, guess or reword property facts, descriptions or answers. Only the
   operator's own words become approved facts, and only after their yes.
 - Ask for or accept passwords, API keys, tokens, webhook addresses or provider

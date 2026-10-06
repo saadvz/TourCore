@@ -44,7 +44,12 @@ the readiness check and a practice tour passed for that exact setup.
   for the operator. A clear cancel ask on a booked tour is cancel-by-text
   (confirm, then YES cancels or NO keeps the booking). A reply that isn't a
   clear yes or no on that confirm is flagged with the usual check-back line,
-  not treated as a missing fact.
+  not treated as a missing fact. When nothing is booked yet, that same
+  phrasing at the day menu, time menu, or property picker (a bare cancel is
+  still STOP) clears the step and replies `No problem, nothing's booked yet,
+  so I'll stop here. Text me anytime if you want to pick a time.` The next
+  text from someone already opted in starts scheduling again, with no TOUR
+  keyword. At the property picker, that next text asks which place again.
 - The Bot never writes, guesses or rewords a fact. When the operator supplies a
   new one, it's added only after their yes, and the visitor receives exactly
   those words.

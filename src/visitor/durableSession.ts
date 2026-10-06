@@ -110,6 +110,8 @@ export const DurableSessionSchema = z.object({
   pendingCustomRequestId: z.string().optional(),
   followUpReservationId: z.string().optional(),
   heldBookingTakenOver: z.boolean().optional(),
+  /** Cancel before anything was booked. The next text starts scheduling again. */
+  schedulingIdle: z.boolean().optional(),
   optedOut: z.boolean().default(false),
   /** This leftover conversation was replaced by an operator-set one-off. */
   superseded: z.boolean().optional(),
@@ -164,6 +166,7 @@ export async function snapshotOf(session: VisitorDemoSession, links?: Verificati
     ...(session.pendingCustomRequestId ? { pendingCustomRequestId: session.pendingCustomRequestId } : {}),
     ...(session.followUpReservationId ? { followUpReservationId: session.followUpReservationId } : {}),
     ...(session.heldBookingTakenOver ? { heldBookingTakenOver: true } : {}),
+    ...(session.schedulingIdle ? { schedulingIdle: true } : {}),
     optedOut: session.optedOut,
     ...(session.superseded ? { superseded: true } : {}),
     createdAt: previous?.createdAt ?? session.startedAt.toISOString(),
@@ -233,6 +236,7 @@ export async function restoreSession(snapshot: DurableSession, deps: RestoreDeps
   session.pendingCustomRequestId = snapshot.pendingCustomRequestId;
   session.followUpReservationId = snapshot.followUpReservationId;
   session.heldBookingTakenOver = !!snapshot.heldBookingTakenOver;
+  session.schedulingIdle = !!snapshot.schedulingIdle;
 
   await validateCanonical(session, snapshot, config);
 
