@@ -25,7 +25,7 @@ import { fakeNetwork, ROUTINE_KEY, ROUTINE_URL } from "./installHarness";
 const at = (hour: number, minute = 0) => zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour, minute }, "America/New_York").getTime();
 const PHONE = "+15550102000";
 const TOKEN = "test-operator-token-abcdef";
-const FALLBACK = "I don't have that information for this property. I've flagged it for the property team so they can get back to you.";
+const FALLBACK = "I'll let the property team know about your question.";
 const cleanups: Array<() => void> = [];
 afterEach(() => cleanups.splice(0).forEach((c) => c()));
 

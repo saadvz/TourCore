@@ -278,10 +278,9 @@ calls `get_operator_update`.]
 
 **Tour Core:** Testy's Unit 1A tour has started.
 
-[Inside, Testy texts "Is there a pool?". Tour Core replies "I don't have that
-information for this property. I've flagged it for the property team so they
-can get back to you." and sends `exception.created`. The routine calls
-`get_operator_update`.]
+[Inside, Testy texts "Is there a pool?". Tour Core replies "I'll let the
+property team know about your question." and sends `exception.created`. The
+routine calls `get_operator_update`.]
 
 **Tour Core:** Testy, touring Unit 1A, asked whether the property has a pool.
 Tour Core doesn't have that yet. The tour is still active. What should I tell

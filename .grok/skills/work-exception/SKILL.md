@@ -211,6 +211,14 @@ right now").
   question as an unanswered question and leave the hold pending.
 - Treat a visitor photo as something to forward or as silence. Tour Core
   tells them `I can't take photos yet. Text your question and I'll pass it
-  along.` when the photo has no caption, or only `I can't take photos yet.`
-  when there is any text in the same message. That text is handled as usual.
-  Do not say "MMS" to the visitor.
+  along.` when the photo has no caption. A photo plus a question it can't
+  answer is one text: `I can't take photos yet, but I'll let the property
+  team know about your question.` (flagged; after an ended tour that line
+  adds `If you'd like to tour again, just text HI.`). Handleable text with
+  a photo still gets only `I can't take photos yet.` and is handled as
+  usual. Do not say "MMS" to the visitor.
+- Treat a real question after a tour has ended as dropped. Tour Core flags
+  it (`I'll let the property team know about your question. If you'd like
+  to tour again, just text HI.`) and, with a photo, uses the combined
+  photo line. A non-question keeps `This tour has ended. Text HI any time
+  to start a new one.` and is not flagged.

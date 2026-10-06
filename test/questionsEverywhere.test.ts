@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { resolveQuestion, unitsNamedIn } from "../src/core/questions";
+import { TOUR_ENDED_REPLY, UNKNOWN_ANSWER_ENDED } from "../src/core/TourCore";
 import { at, FALLBACK, hillsideConfig, liveApp } from "./liveApp";
 
 /**
@@ -117,7 +118,11 @@ describe("questions at every stage of a text conversation", () => {
     expect((await a.text("I'm done"))[0]).toContain("Thanks for touring Unit 1A");
     expect(await a.text("What's the rent?")).toEqual(["Unit 1A rents for $2,300 a month.", "Would you like someone from the property team to follow up?\nReply YES or NO."]);
     await a.text("no");
-    expect(await a.text("Does it have laundry?")).toEqual(["Here's what the property team shared: In-unit laundry."]);
+    expect(await a.text("Does it have laundry?")).toEqual([UNKNOWN_ANSWER_ENDED]);
+    expect((await a.grok("list_exceptions")).exceptions.map((x: { summary: string }) => x.summary)).toContain(
+      'Asked "Does it have laundry?". There\'s no approved answer yet.',
+    );
+    expect(await a.text("ok")).toEqual([TOUR_ENDED_REPLY]);
   });
 
   it("an unknown question at any stage: safe fallback, an exception for the team, and the visitor's step is kept", async () => {

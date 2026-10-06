@@ -174,7 +174,7 @@ describe("Grok skill scenarios", () => {
     ]);
     // "Open Pat's issue."
     const opened = await tool("inspect_exception", { exceptionId: queue.exceptions[0].exceptionId });
-    expect(opened.issue.recentMessages.at(-1).text).toContain("I've flagged it for the property team");
+    expect(opened.issue.recentMessages.at(-1).text).toContain("I'll let the property team know about your question.");
     // "Yes, parking is included."  Grok offers; "Yes."
     const { asked, done } = await yes("answer_flagged_question", { exceptionId: opened.issue.exceptionId, approvedFact: "Parking is included." });
     expect(asked.visitorWillReceive).toBe("Parking is included. Let me know if you have any other questions.");

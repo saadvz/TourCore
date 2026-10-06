@@ -125,8 +125,22 @@ export function isLiveHelpReservation(reservation: Reservation, now: Date): bool
   return helpContext(reservation, now) !== null;
 }
 
-/** What a visitor hears when the approved facts don't cover their question. The team is alerted at the same time. */
-export const UNKNOWN_ANSWER = "I don't have that information for this property. I've flagged it for the property team so they can get back to you.";
+/**
+ * Visitor copy when Tour Core can't answer a question. Design can tweak these
+ * constants. Do not mention tools, providers, or MMS.
+ */
+export const UNKNOWN_ANSWER = "I'll let the property team know about your question.";
+export const UNKNOWN_ANSWER_WITH_PHOTO = "I can't take photos yet, but I'll let the property team know about your question.";
+export const UNKNOWN_ANSWER_ENDED = "I'll let the property team know about your question. If you'd like to tour again, just text HI.";
+export const UNKNOWN_ANSWER_ENDED_WITH_PHOTO =
+  "I can't take photos yet, but I'll let the property team know about your question. If you'd like to tour again, just text HI.";
+export const TOUR_ENDED_REPLY = "This tour has ended. Text HI any time to start a new one.";
+
+/** One visitor text for an unanswered question. Photo and ended-tour variants replace the short photo line. */
+export function unknownAnswerReply(options: { hasMedia?: boolean; ended?: boolean } = {}): string {
+  if (options.ended) return options.hasMedia ? UNKNOWN_ANSWER_ENDED_WITH_PHOTO : UNKNOWN_ANSWER_ENDED;
+  return options.hasMedia ? UNKNOWN_ANSWER_WITH_PHOTO : UNKNOWN_ANSWER;
+}
 
 /** Visitor cancel-by-text: Critiquito-locked confirm, done, and keep-booked lines. */
 export const VISITOR_CANCEL_DONE = "You're cancelled. Text me anytime if you want to book again.";
@@ -889,7 +903,7 @@ export class TourCore {
    * visitor named or chose (`unitId`). A unit-specific question with no unit
    * to go on is asked back instead of guessed; nothing is sent in that case,
    * so the caller asks "Which unit do you mean?". With no matching fact the
-   * visitor gets the safe fallback and the question is flagged for the team.
+   * visitor gets UNKNOWN_ANSWER (or `unknownReply`) and the question is flagged for the team.
    * `recordInbound: false` when the visitor's words were already stored
    * (e.g. the reply naming the unit for an earlier question).
    */
@@ -900,6 +914,8 @@ export class TourCore {
     unitId?: string;
     meta?: InboundMeta;
     recordInbound?: boolean;
+    /** Visitor text when facts don't cover the question. Defaults to UNKNOWN_ANSWER. */
+    unknownReply?: string;
   }): Promise<{ outcome: "answered" | "unknown" | "which-unit"; facts: ApprovedFact[]; unitId?: string; units?: string[] }> {
     const phone = normalizePhone(input.phone);
     const read = this.deps.storageRead?.() ?? "live";
@@ -928,9 +944,10 @@ export class TourCore {
       return { outcome: "answered", facts: resolved.facts, ...(resolved.unitId ? { unitId: resolved.unitId } : {}) };
     }
     await this.record("QUESTION_UNANSWERED", { ...base, detail: asked });
-    await this.sendConversationText({ phone, body: UNKNOWN_ANSWER, reservationId: reservation?.id });
+    await this.sendConversationText({ phone, body: input.unknownReply ?? UNKNOWN_ANSWER, reservationId: reservation?.id });
     const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : `A visitor texting from ${phone}`;
-    const about = !reservation && resolved.unitId ? ` about ${this.deps.config.units.find((u) => u.id === resolved.unitId)?.name ?? "a unit"}` : "";
+    const named = resolved.unitId ? this.deps.config.units.find((u) => u.id === resolved.unitId) : undefined;
+    const about = !reservation && named ? ` about ${visitorSubject(this.deps.config.property, named.name)}` : "";
     await this.notifyOperator(reservation, `${who} asked "${asked}"${about}, and there's no approved answer yet.`);
     return { outcome: "unknown", facts: [], ...(resolved.unitId ? { unitId: resolved.unitId } : {}) };
   }
@@ -940,13 +957,13 @@ export class TourCore {
    * question is flagged, and sends `reply`. Used while an operator-set tour is
    * still waiting for YES — the hold stays pending.
    */
-  async flagUnansweredQuestion(input: { phone: string; question: string; reservationId?: string; meta?: InboundMeta; reply: string }): Promise<void> {
+  async flagUnansweredQuestion(input: { phone: string; question: string; reservationId?: string; meta?: InboundMeta; reply: string; recordInbound?: boolean }): Promise<void> {
     const phone = normalizePhone(input.phone);
     const prospect = (await this.deps.store.list("prospects")).find((p) => p.phone === phone);
     const reservation = input.reservationId ? await this.deps.store.get("reservations", input.reservationId) : undefined;
     const asked = input.question.trim().slice(0, 300);
     if (!asked) throw new TourCoreError("EMPTY_QUESTION", "Please type a question");
-    await this.recordIncoming({ phone, body: asked, prospectId: prospect?.id, reservationId: reservation?.id, meta: input.meta });
+    if (input.recordInbound !== false) await this.recordIncoming({ phone, body: asked, prospectId: prospect?.id, reservationId: reservation?.id, meta: input.meta });
     await this.record("QUESTION_UNANSWERED", { reservationId: reservation?.id, prospectId: prospect?.id, detail: asked });
     await this.sendConversationText({ phone, body: input.reply, reservationId: reservation?.id });
     const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : `A visitor texting from ${phone}`;

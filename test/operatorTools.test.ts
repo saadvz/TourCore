@@ -439,7 +439,7 @@ describe("live tours and exceptions", () => {
     const id = await h.publish();
     const v = await h.touringVisitor(id);
     await v.act("ask", { question: "Is parking included?" });
-    expect(v.session.conversation.at(-1)?.text).toBe("I don't have that information for this property. I've flagged it for the property team so they can get back to you.");
+    expect(v.session.conversation.at(-1)?.text).toBe("I'll let the property team know about your question.");
 
     const queue = await h.ok("list_exceptions");
     expect(queue.summary).toBe("1 thing needs attention.");
