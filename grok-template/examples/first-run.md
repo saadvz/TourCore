@@ -83,11 +83,12 @@ Is that the address?
 [`update_property_details` confirmAddress true → "What type of property is this?"]
 
 **Tour Core:** What type of property is this: a single-family home, a
-multifamily home, an apartment building, or something else?
+multifamily home (duplex or small building you own), or an apartment or
+condo (one unit)?
 
-**Operator:** An apartment building.
+**Operator:** A multifamily — I own the small building.
 
-[`update_property_details` propertyType APARTMENT_BUILDING → nextQuestion
+[`update_property_details` propertyType MULTIFAMILY_HOME → nextQuestion
 "Which units can people tour?"]
 
 **Tour Core:** Which units can people tour?
@@ -163,7 +164,7 @@ already uses the installed touring number. `review_property_setup`]
 
 **Tour Core:** Here's what I have:
 144 Hillside Ave, Teaneck NJ
-Apartment building
+Multifamily (duplex / small building you own)
 
 Unit 1A
 2 bed · 1 bath · $2,300/month · available now

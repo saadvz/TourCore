@@ -41,9 +41,15 @@ export function semanticIssues(cfg: TourCoreConfig): ConfigIssue[] {
   // Property
   if (!cfg.property.name.trim()) add("property", "PROPERTY_NAME_MISSING", "The property needs a name.");
   if (!cfg.property.address.trim()) add("property", "PROPERTY_ADDRESS_MISSING", "The property needs an address.");
-  if (!cfg.property.propertyType) add("property", "PROPERTY_TYPE_MISSING", "Say what type of property this is: a single-family home, a multifamily home, an apartment building, or something else.");
+  if (!cfg.property.propertyType) add("property", "PROPERTY_TYPE_MISSING", "Say what type of property this is: a single-family home, a multifamily home, or an apartment or condo.");
   const singleFamily = cfg.property.propertyType === "SINGLE_FAMILY";
-  if (singleFamily && cfg.units.length > 1) add("units", "SINGLE_FAMILY_ONE_SPACE", "A single-family home has one tourable space. If people tour more than one space here, choose \"Other\" as the property type.");
+  const apartmentOrCondo = cfg.property.propertyType === "APARTMENT_OR_CONDO";
+  const unitOnlyAccess = apartmentOrCondo && cfg.property.buildingAccess === "UNIT_ONLY";
+  if (singleFamily && cfg.units.length > 1) add("units", "SINGLE_FAMILY_ONE_SPACE", "A single-family home has one tourable space. If people tour more than one space here, choose multifamily or apartment or condo.");
+  if (apartmentOrCondo && cfg.units.length > 1) add("units", "APARTMENT_OR_CONDO_ONE_UNIT", "An apartment or condo is one unit in a building. If you own more than one unit here, choose multifamily.");
+  if (apartmentOrCondo && cfg.units.length === 1 && !cfg.property.buildingAccess) {
+    add("units", "BUILDING_ACCESS_MISSING", "Say whether you control the building entrance, or only the unit door.");
+  }
   if (!isValidTimeZone(cfg.property.timezone)) {
     add("property", "TIMEZONE_INVALID", `We don't recognize the time zone "${cfg.property.timezone}". Try something like America/New_York.`);
   }
@@ -60,7 +66,7 @@ export function semanticIssues(cfg: TourCoreConfig): ConfigIssue[] {
   for (const id of duplicates(cfg.routes.map((r) => r.id))) add("routes", "DUPLICATE_ROUTE_ID", `Two routes are labeled "${id}". Each unit should have one route.`);
 
   if (cfg.units.length === 0) add("units", "NO_UNITS", "Add at least one unit people can tour.");
-  if (!cfg.doors.some((d) => d.kind === "ENTRANCE")) add("units", "NO_ENTRANCE", "Add the main entrance visitors will use.");
+  if (!cfg.doors.some((d) => d.kind === "ENTRANCE") && !unitOnlyAccess) add("units", "NO_ENTRANCE", "Add the main entrance visitors will use.");
   if (cfg.doors.some((d) => !d.name.trim())) add("units", "DOOR_NAME_MISSING", "Every door needs a name.");
 
   const unitDoorOwners = new Map<string, string[]>();
@@ -105,7 +111,10 @@ export function semanticIssues(cfg: TourCoreConfig): ConfigIssue[] {
       continue;
     }
     if (ids.some((id) => !doorById.has(id))) add("routes", "ROUTE_DOOR_MISSING", `${label}'s route refers to a door that no longer exists.`);
-    if (doorById.get(ids[0]!)?.kind !== "ENTRANCE") add("routes", "ROUTE_START_NOT_ENTRANCE", `${label}'s route needs to start at an entrance.`);
+    const startsAtOwnUnitDoor = unitOnlyAccess && ids[0] === unit.doorId && doorById.get(ids[0]!)?.kind === "UNIT";
+    if (doorById.get(ids[0]!)?.kind !== "ENTRANCE" && !startsAtOwnUnitDoor) {
+      add("routes", "ROUTE_START_NOT_ENTRANCE", `${label}'s route needs to start at an entrance.`);
+    }
     if (ids[ids.length - 1] !== unit.doorId) add("routes", "ROUTE_END_NOT_UNIT", `${label}'s route needs to end at ${label}'s own door.`);
     if (duplicates(ids).length) add("routes", "ROUTE_REPEATS_DOOR", `${label}'s route lists the same door twice.`);
     for (const id of ids) {

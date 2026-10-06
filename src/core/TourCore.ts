@@ -18,7 +18,8 @@ import type { DurinAccessAdapter, DurinAccessResult, DurinHealth } from "../duri
 import { MessagingError, type DeliveryReceipt, type MessageChannel, type Messenger } from "../messaging/Messenger";
 import { withPrompt, type ReplyPrompt } from "../messaging/presentation";
 import { evaluateAccess, type AccessDecision, type AccessDecisionCode } from "../policy/evaluateAccess";
-import { visitorSubject, visitorTourOf } from "../visitor/identity";
+import { isSingleTourPlace, visitorSubject } from "../visitor/identity";
+import { entryInstructionsFragment } from "../setup/setupActions";
 import { StorageUnavailableError } from "../storage/errors";
 import type { TourCoreStore } from "../storage/Store";
 import type { VerificationProvider } from "../verification/basicForm";
@@ -297,7 +298,7 @@ export class TourCore {
     if (options.announce === false) return { prospect, reservation };
     const dates = await this.availableDates();
     const hello = prospect.name === UNNAMED_VISITOR ? "Hi!" : `Hi ${firstName(prospect.name)}!`;
-    const place = config.property.propertyType === "SINGLE_FAMILY" ? visitorTourOf(config.property) : `${unit.name} at ${config.property.address}`;
+    const place = isSingleTourPlace(config.property) ? visitorSubject(config.property, unit.name) : `${unit.name} at ${config.property.address}`;
     const intro =
       `${hello} Happy to set up a self-guided tour of ${place}.` +
       (unit.summary ? ` Here's what the property team shared: ${unit.summary.replace(/\.?$/, ".")}` : "");
@@ -482,10 +483,13 @@ export class TourCore {
 
     await this.revokeGrants(reservation, "tour completed");
     reservation = await this.move(reservation, "COMPLETED", "TOUR_COMPLETED", { detail: "prospect finished the tour" });
+    const place = visitorSubject(this.deps.config.property, unit.name);
+    const who = knownFirstName(prospect.name);
+    const thanks = who ? `Thanks for touring ${place}, ${who}!` : `Thanks for touring ${place}!`;
     await this.textProspect(
       prospect,
       reservation.id,
-      `Thanks for touring ${visitorSubject(this.deps.config.property, unit.name)}, ${firstName(prospect.name)}!${unit.summary ? ` Quick recap: ${unit.summary.replace(/\.$/, "")}.` : ""} The doors are locked again behind you.\n` +
+      `${thanks}${unit.summary ? ` Quick recap: ${unit.summary.replace(/\.$/, "")}.` : ""} The doors are locked again behind you.\n` +
         "Would you like someone from the property team to follow up?",
       { kind: "yes-no" },
     );
@@ -587,12 +591,12 @@ export class TourCore {
     const prospect = await this.mustGetProspect(reservation.prospectId);
     const when = `${this.day(start)} at ${this.time(start)}`;
     if (input.notice === "moved") {
-      await this.textProspect(prospect, reservation.id, `Your tour of ${visitorTourOf(config.property)} has been moved to ${this.whenPhrase(start)}. You're all set.`);
+      await this.textProspect(prospect, reservation.id, `Your tour of ${visitorSubject(config.property, this.unitFor(reservation).name)} has been moved to ${this.whenPhrase(start)}. You're all set.`);
     } else if (reservation.status === "READY") {
       await this.textProspect(prospect, reservation.id, `Your tour has moved to ${when}.\nDoors will work for you from ${this.time(windowStart)} to ${this.time(windowEnd)}.`, {
         kind: "say",
         phrase: "I'm here",
-        purpose: "when you arrive and I'll open the entrance",
+        purpose: this.arrivalPurpose(reservation),
       });
     } else {
       await this.textProspect(prospect, reservation.id, `Your tour has moved to ${when}. Everything else stays the same.`);
@@ -1287,10 +1291,12 @@ export class TourCore {
     const stop = config.routes.find((r) => r.id === approved.routeId)?.stops.find((s) => s.doorId === request.doorId);
     const opened = new Set((await this.listGrants(approved.id)).map((g) => g.doorId));
     const nextStop = approved.allowedRoute.find((d) => !opened.has(d));
+    const atBuildingEntrance = request.doorId === approved.allowedRoute[0] && door?.kind === "ENTRANCE";
+    const reminder = atBuildingEntrance ? entryInstructionsFragment(this.unitFor(approved).entryInstructions) : undefined;
     await this.textProspect(
       prospect!,
       approved.id,
-      `${door?.name ?? "The door"} is open for you now. ${stop?.guidance ?? ""}`.trim(),
+      `${door?.name ?? "The door"} is open for you now. ${stop?.guidance ?? ""}${reminder ? ` ${reminder}` : ""}`.trim(),
       nextStop ? { kind: "say", phrase: `at ${this.stopName(nextStop)}`, purpose: "when you get there" } : { kind: "say", phrase: "finish", purpose: "when you're done" },
     );
     return { decision, durinCalled: true, grant };
@@ -1307,16 +1313,24 @@ export class TourCore {
   private async markReady(reservation: Reservation, prospect: Prospect): Promise<Reservation> {
     const ready = await this.move(reservation, "READY", "TOUR_READY", { detail: "consent and verification satisfied" });
     const start = new Date(ready.slotStart!);
+    const fragment = entryInstructionsFragment(this.unitFor(ready).entryInstructions);
     await this.textProspect(
       prospect,
       ready.id,
       `You're all set for your tour on ${this.day(start)} at ${this.time(start)}!\n` +
-        `Doors will work for you from ${this.time(new Date(ready.windowStart!))} to ${this.time(new Date(ready.windowEnd!))}.`,
-      { kind: "say", phrase: "I'm here", purpose: "when you arrive and I'll open the entrance" },
+        `Doors will work for you from ${this.time(new Date(ready.windowStart!))} to ${this.time(new Date(ready.windowEnd!))}.` +
+        (fragment ? `\n${fragment}` : ""),
+      { kind: "say", phrase: "I'm here", purpose: this.arrivalPurpose(ready) },
     );
     const directions = propertyDirectionsUrl(this.deps.config.property);
     if (directions) await this.textProspect(prospect, ready.id, tourDirectionsText(directions));
     return ready;
+  }
+
+  /** Unit-only routes have no building door, so arrival copy must not mention one. */
+  private arrivalPurpose(reservation: Reservation): string {
+    const first = this.deps.config.doors.find((d) => d.id === reservation.allowedRoute[0]);
+    return first?.kind === "ENTRANCE" ? "when you arrive and I'll open the entrance" : "when you arrive and I'll open the unit door";
   }
 
   /** How a door is named in guidance: "Unit 101", "the entrance", or the door's own name. */
@@ -1604,4 +1618,10 @@ export class TourCore {
 
 function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] ?? name;
+}
+
+function knownFirstName(name: string): string | undefined {
+  const trimmed = name.trim();
+  if (!trimmed || trimmed === UNNAMED_VISITOR) return undefined;
+  return firstName(trimmed);
 }

@@ -420,8 +420,9 @@ clone whose git origin isn't the canonical repository.
 8. "Everything needed to start is connected and tested. Would you like to add your first property?"
 9. Grok configures the property conversationally (Setup Property, Map Route):
    the address (confirmed as Tour Core saved it; a name only if the operator
-   gives one), "What type of property is this?", the units (or "Main Home"
-   for a single-family home), each unit's bedrooms, bathrooms, rent and
+   gives one), "What type of property is this?" (single-family home,
+   multifamily, or apartment or condo), the units (or "Main Home" for a
+   single-family home, or one unit number for an apartment or condo), each unit's bedrooms, bathrooms, rent and
    availability (bulk answers welcome; "not sure" is saved as not provided,
    never guessed), doors, routes, hours and verification. The property uses
    the installed texting automatically; nobody is asked how to text people.

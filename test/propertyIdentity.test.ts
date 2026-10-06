@@ -99,7 +99,11 @@ describe("property type", () => {
     expect(zipped.nextQuestion).toBe("I have:\n144 Hillside Ave\nTeaneck, NJ 07666\nIs that the address?");
     const confirmed = await h.ok("update_property_details", { confirmAddress: true });
     expect(confirmed).toMatchObject({ nextQuestion: "What type of property is this?" });
-    expect(confirmed.choices.map((c: { label: string }) => c.label)).toEqual(["Single-family home", "Multifamily home", "Apartment building", "Other"]);
+    expect(confirmed.choices.map((c: { label: string }) => c.label)).toEqual([
+      "Single-family home",
+      "Multifamily (duplex / small building you own)",
+      "Apartment or condo (one unit)",
+    ]);
     const draft = h.workspace.openDraft(created.setup.propertyId).draft;
     expect(draft.property.propertyType).toBeUndefined();
     expect(draft.property.canonicalAddress).toMatchObject({ street: "144 Hillside Ave", city: "Teaneck", state: "NJ", postalCode: "07666" });

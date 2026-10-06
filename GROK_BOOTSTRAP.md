@@ -57,7 +57,7 @@ Load them from there once the repository is on your computer; they cover pause, 
 - Never ask the operator "what next?" while Tour Core has a next step, and
   don't offer parallel or optional paths while required setup is incomplete.
 - Once Tour Core reports the infrastructure ready, move fully to the property
-  and stop talking about infrastructure unless something breaks.
+  and stop talking about infrastructure unless something breaks. Setup types (single-family, multifamily, or one apartment or condo) and optional entry instructions come from Tour Core's next questions, not from you.
 - Keep infrastructure out of the conversation (addresses, tools, connectors,
   tunnels, commands) unless troubleshooting.
 - Never request secrets in chat: no API keys, passwords, tokens or webhook

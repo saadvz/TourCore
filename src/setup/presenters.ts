@@ -51,7 +51,7 @@ export interface IssueView {
   dev: { code: string; detail?: string };
 }
 
-const UNIT_CODES = ["NO_UNITS", "UNIT_NAME_MISSING", "DUPLICATE_UNIT_ID", "FACT_TOO_LONG", "TOO_MANY_FACTS"];
+const UNIT_CODES = ["NO_UNITS", "UNIT_NAME_MISSING", "DUPLICATE_UNIT_ID", "FACT_TOO_LONG", "TOO_MANY_FACTS", "BUILDING_ACCESS_MISSING", "APARTMENT_OR_CONDO_ONE_UNIT"];
 const DOOR_CODES = ["NO_ENTRANCE", "DOOR_NAME_MISSING", "DUPLICATE_DOOR_ID", "UNIT_DOOR_MISSING", "UNIT_DOOR_UNKNOWN", "UNIT_DOOR_NOT_UNIT", "UNIT_DOOR_SHARED"];
 
 /** Where to send the operator to fix a problem, in words they'd use. */
@@ -179,6 +179,7 @@ export function draftView(draft: SetupDraft) {
       details: unitDetailsView(u),
       door: door ? { id: door.id, name: door.name } : undefined,
       doorFollowsName: doorFollowsUnitName(draft, u.id),
+      entryInstructions: u.entryInstructions,
       route: route?.stops.length
         ? { doorIds: route.stops.map((s) => s.doorId), doorNames: route.stops.map((s) => doorName(s.doorId)), directions: route.directions ?? "" }
         : undefined,
@@ -211,6 +212,8 @@ export function draftView(draft: SetupDraft) {
     displayName: draft.property.displayName,
     propertyType: draft.property.propertyType,
     propertyTypeLabel: draft.property.propertyType ? PROPERTY_TYPE_LABELS[draft.property.propertyType] : undefined,
+    buildingAccess: draft.property.buildingAccess,
+    entryInstructionsDecided: draft.property.entryInstructionsDecided,
     timezone: draft.property.timezone,
     timezoneLabel: friendlyTimeZone(draft.property.timezone),
     facts: draft.property.facts,
@@ -224,6 +227,8 @@ export function draftView(draft: SetupDraft) {
       rows: [
         ...(property.address !== property.name ? [property.address] : []),
         property.propertyTypeLabel ?? "Property type not chosen yet",
+        ...(property.buildingAccess === "UNIT_ONLY" ? ["Building entrance: visitors get in on their own"] : []),
+        ...(property.buildingAccess === "BUILDING_AND_UNIT" ? ["Building entrance: you control it"] : []),
         `Timezone: ${property.timezoneLabel}`,
         ...property.facts,
       ],

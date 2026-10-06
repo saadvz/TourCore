@@ -25,8 +25,8 @@ export function structuralView(config: TourCoreConfig): unknown {
   const c = TourCoreConfigShape.parse(config);
   return {
     ...c,
-    property: { ...c.property, facts: undefined },
-    units: c.units.map((u) => ({ ...u, summary: undefined, facts: undefined, profile: undefined })),
+    property: { ...c.property, facts: undefined, entryInstructionsDecided: undefined },
+    units: c.units.map((u) => ({ ...u, summary: undefined, facts: undefined, profile: undefined, entryInstructions: undefined })),
     routes: c.routes.map((r) => ({ ...r, directions: undefined, stops: r.stops.map((s) => ({ doorId: s.doorId })) })),
   };
 }
@@ -68,6 +68,7 @@ export function describeContentChanges(before: TourCoreConfig, after: TourCoreCo
     if (!old) continue;
     if (!same(old.summary, u.summary)) out.push(`${u.name}: description`);
     if (!same(old.facts, u.facts)) out.push(`${u.name}: approved facts`);
+    if (!same(old.entryInstructions, u.entryInstructions)) out.push(`${u.name}: entry instructions`);
     for (const key of new Set([...Object.keys(old.profile ?? {}), ...Object.keys(u.profile ?? {})])) {
       const a = (old.profile as Record<string, { status: string; value?: unknown } | undefined> | undefined)?.[key];
       const b = (u.profile as Record<string, { status: string; value?: unknown } | undefined> | undefined)?.[key];

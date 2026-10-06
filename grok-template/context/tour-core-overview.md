@@ -10,7 +10,11 @@ The welcome is one message. It names the property by its address, and by a
 name the operator gave it only when there is one: "Hi! Welcome to the
 self-guided tours at 144 Hillside Ave. I can answer questions about the
 property and help you book a tour." Then the unit menu. A single-family home
-says "home" and offers the next regular tour time instead of a unit menu.
+says "home" and offers tour days instead of a unit menu. An apartment or condo
+(one unit) names the street plus unit ("145 Main St, Unit 4B"), never "Main
+Home", and also skips the unit menu. Entry instructions are not in the
+welcome; they arrive only on the you're-all-set text after identity
+verification.
 
 ## Visitor questions, at every stage
 
@@ -112,9 +116,10 @@ contacted. Say "door access" to the operator; never name Durin.
    computer, then asks the operator only for what needs a person (see
    `installation.md`).
 1. **Set up a property**: address (the property's identity; a name only if the
-   operator gives one), property type (single-family home, multifamily home,
-   apartment building or other), units, doors, routes, tour hours, visitor
-   verification. Visitor texting is used automatically when it's installed.
+   operator gives one), property type (single-family home; multifamily — duplex
+   or small building they own; apartment or condo — one unit), units, doors,
+   routes, tour hours, visitor verification. Visitor texting is used
+   automatically when it's installed.
 2. **Check readiness**: real checks against the pieces the setup uses.
 3. **Run a practice tour**: a full pretend tour with safety checks. Nobody is
    texted and no real door opens.

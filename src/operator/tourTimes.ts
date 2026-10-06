@@ -11,7 +11,7 @@ import { SmsConsentDirectory } from "../visitor/smsConsent";
 import type { ConfirmationBook } from "./confirmations";
 import { requireUnit, resolvePropertyId } from "./resolve";
 import { persistSession, type OperatorServices } from "./services";
-import { currentReservation, findTour, tourRef, tourSnapshots, unitNameOf, visitorNameOf, type TourSnapshot } from "./tours";
+import { currentReservation, findTour, midSentence, tourRef, tourSnapshots, unitNameOf, visitorNameOf, type TourSnapshot } from "./tours";
 
 interface Ctx {
   services: OperatorServices;
@@ -42,7 +42,8 @@ export async function findTimeRequest(services: OperatorServices, id: string): P
   return undefined;
 }
 
-function who(tour: TourSnapshot): string {
+/** Sentence-start form: "The visitor" or the first name. Use midSentence() mid-sentence. */
+export function who(tour: TourSnapshot): string {
   const name = visitorNameOf(tour);
   return name.startsWith("A visitor") ? "The visitor" : (name.split(/\s+/)[0] ?? name);
 }
@@ -62,9 +63,10 @@ function dayWord(start: Date, now: Date, tz: string): string {
   return `on ${formatDay(start, tz)}`;
 }
 
-function visitorTextNote(who: string, confirm: boolean, outside: boolean): string {
-  const text = `${who} gets a text ${confirm ? "to confirm" : "with the new time"}.`;
-  return outside ? `This is a one-off. Your regular tour hours stay the same, and ${text}` : text;
+function visitorTextNote(name: string, confirm: boolean, outside: boolean): string {
+  const action = confirm ? "to confirm" : "with the new time";
+  if (outside) return `This is a one-off. Your regular tour hours stay the same, and ${midSentence(name)} gets a text ${action}.`;
+  return `${name} gets a text ${action}.`;
 }
 
 function moveFromTo(from: Date, to: Date, now: Date, tz: string, outside: boolean): string {
@@ -77,8 +79,8 @@ function moveFromTo(from: Date, to: Date, now: Date, tz: string, outside: boolea
 function moveConfirmQuestion(input: { who: string; from?: Date; to: Date; now: Date; tz: string; outside: boolean; confirm: boolean }): string {
   const toLabel = input.outside ? formatConfirmStamp(input.to, input.tz) : relativeWhen(input.to, input.now, input.tz);
   const lead = input.from
-    ? `Move ${input.who}'s tour ${moveFromTo(input.from, input.to, input.now, input.tz, input.outside)}?`
-    : `Book ${input.who} for ${toLabel}?`;
+    ? `Move ${midSentence(input.who)}'s tour ${moveFromTo(input.from, input.to, input.now, input.tz, input.outside)}?`
+    : `Book ${midSentence(input.who)} for ${toLabel}?`;
   const extra = input.outside ? " That's outside your tour hours." : "";
   const verb = input.from ? "Move it?" : "Book it?";
   return `${lead}${extra} ${visitorTextNote(input.who, input.confirm, input.outside)} ${verb}`;
@@ -206,7 +208,7 @@ export async function proposeTourTime(ctx: Ctx, input: { tourTimeRequestId: stri
   await session.proposeAlternative(found.request.id, resolved.start.toISOString());
   await persistSession(ctx.services, session);
   return {
-    summary: `I asked ${who(found.tour)} about ${resolved.label}. Their current booking stays until they say yes.`,
+    summary: `I asked ${midSentence(who(found.tour))} about ${resolved.label}. Their current booking stays until they say yes.`,
     tourTimeRequestId: found.request.id,
   };
 }

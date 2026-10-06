@@ -566,12 +566,17 @@ npm run check:storage         # hosted volume verdict for TOURCORE_HOME; does no
 
 The street address is the property's identity and what visitors hear ("Welcome to the self-guided tour for 144
 Hillside Ave! ..."). A property or building name is used only if the operator gives one; Grok never invents one.
-Right after the address, Grok asks "What type of property is this?" (single-family home, multifamily home,
-apartment building, other), and the next questions follow the type: a single-family home is one space, "Main
-Home" by default, with its front door as the route and no unit menu for visitors; buildings get their units. A new
-property uses the installation's visitor texting automatically, so Grok never asks how to text people. The review
-reads back the address, type, each unit with its details and route, tours, verification, "Visitor texting:
-Connected" and "Door access: Demo".
+Right after the address, Grok asks "What type of property is this?" (single-family home; multifamily — a duplex
+or small building you own; apartment or condo — one unit). Whole-building apartment ownership is out of scope.
+The next questions follow the type: a single-family home is one space, "Main Home" by default, with its front
+door as the route and no unit menu for visitors. An apartment or condo asks for the unit number, then whether
+the landlord controls the building entrance or only the unit door. Control-both routes go through the building
+entrance and the unit door; unit-only routes are the unit door alone, and lobby wayfinding is optional landlord
+copy. Visitors hear the street address plus unit (for example `145 Main St, Unit 4B`), never "Main Home". Entry
+instructions, when set, go out only once — on the you're-all-set text after identity verification. Skip stores
+nothing. A new property uses the installation's visitor texting automatically, so Grok never asks how to text
+people. The review reads back the address, type, each unit with its details and route, tours, verification,
+"Visitor texting: Connected" and "Door access: Demo".
 
 ### Operator updates
 
@@ -639,7 +644,7 @@ The actions:
 | Action | What it does |
 | --- | --- |
 | `createPropertySetup` / `setPropertyDetails` | Property name, address and time zone (inferred from the address, always confirmed) |
-| `addUnit` / `renameUnit` / `setUnitDetails` / `removeUnit` | Tourable units, their description and approved facts. A rename can also rename the unit's door, but only if it still has the suggested name |
+| `addUnit` / `renameUnit` / `setUnitDetails` / `removeUnit` | Tourable units, their description and approved facts. A rename can also rename the unit's door, but only if it still has the suggested name. For an apartment or condo, rename applies the same unit casing as add (`4b` → `Unit 4B`, `loft` → `Unit Loft`) and refreshes the street-plus-unit nickname and matching unit door |
 | `addDoor` / `renameDoor` / `removeDoor` | Entrances, unit doors, and hallway or shared doors (ids are generated and can't collide) |
 | `setRoute` | Ordered doors for one unit, plus optional directions |
 | `setTourHours` | Days, hours, tour length, spacing, early-arrival allowance |

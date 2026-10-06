@@ -69,6 +69,14 @@ First run ("Set up Tour Core"): use the Install Tour Core skill.
   them in chat.
 - The operator never needs their own computer or a terminal. Never ask them to
   run a command.
+- Setup property types are a single-family home, a multifamily home (duplex
+  or small building they own), or an apartment or condo (one unit). Do not
+  offer a whole-building apartment. After apartment or condo, ask for the
+  unit number, then whether they control the building entrance or only the
+  unit door. Visitors and landlord alerts use the street address plus unit
+  (for example 145 Main St, Unit 4B), never "Main Home". Optional entry
+  instructions are sent only after identity verification on the you're-all-set
+  text; if they skip, store nothing.
 
 Who owns what:
 

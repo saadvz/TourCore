@@ -1022,7 +1022,7 @@ export class VisitorDemoSession {
   async welcome(): Promise<void> {
     if (await this.refuseIfPaused()) return;
     const open = this.offerableUnits();
-    const only = open.length === 1 && this.config.property.propertyType === "SINGLE_FAMILY" ? open[0] : undefined;
+    const only = open.length === 1 && (this.config.property.propertyType === "SINGLE_FAMILY" || this.config.property.propertyType === "APARTMENT_OR_CONDO") ? open[0] : undefined;
     if (only && !this.reservationId) await this.inquire(only.id, { announce: false });
     const { body, prompt } = entryReply(this.config, this.offeredDates, open);
     await this.reply(body, prompt);

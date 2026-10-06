@@ -70,8 +70,9 @@ what never does.
 
 - **Property identity and type.** The address is the property's name unless
   the operator gives one; the Bot never invents a building name. It asks
-  "What type of property is this?" (single-family home, multifamily home,
-  apartment building, other) and shapes the units question to match. A new
+  "What type of property is this?" (single-family home; multifamily — duplex
+  or small building they own; apartment or condo — one unit) and shapes the
+  units question to match. A new
   property uses the installed visitor texting automatically.
 - **Tour updates.** After the first property, the Bot offers to keep the
   operator posted on bookings, tour starts, completions and anything that

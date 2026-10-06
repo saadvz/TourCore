@@ -170,11 +170,17 @@ export async function runDryTour(input: TourCoreConfig, options: DryTourOptions 
     );
 
     clock.set(new Date(slot.start));
+    const firstIsUnitDoor = entranceId === unit.doorId;
     await at(`Visitor arrives on time and asks for ${doorName(entranceId)}`);
     const entrance = await request(entranceId);
     await flush();
     await check(
-      { id: "entrance", group: "safety", label: "Visitor arrives on time", outcome: "Entrance access approved" },
+      {
+        id: firstIsUnitDoor ? "unit_door" : "entrance",
+        group: "safety",
+        label: firstIsUnitDoor ? `Visitor enters ${unit.name}` : "Visitor arrives on time",
+        outcome: firstIsUnitDoor ? "Access approved" : "Entrance access approved",
+      },
       entrance.decision.allowed && !!entrance.grant,
       `${doorName(entranceId)} didn't open for a visitor who was on time.`,
     );
