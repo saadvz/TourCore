@@ -334,7 +334,7 @@ describe("a pending custom-time request does not block regular booking", () => {
     expect(request.status).toBe("WITHDRAWN");
     expect(request.operatorNote).toBe(WITHDRAWN_FOR_REGULAR_BOOKING);
     expect(bundle.reservations.some((item) => item.slotStart === later.toISOString())).toBe(false);
-    expect(bundle.reservations.some((item) => item.slotStart === zonedTimeToUtc({ year: 2026, month: 9, day: 29, hour: 14 }, TZ).toISOString())).toBe(true);
+    expect(bundle.reservations.some((item) => item.slotStart === zonedTimeToUtc({ year: 2026, month: 9, day: 29, hour: 14, minute: 0 }, TZ).toISOString())).toBe(true);
 
     const listed = await a.grok("list_tour_time_requests");
     const listedRequest = listed.requests.find((item: { tourTimeRequestId: string }) => item.tourTimeRequestId === id);
