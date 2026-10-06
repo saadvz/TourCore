@@ -163,6 +163,11 @@ export function alreadyAskedLine(time: string, day: string): string {
   return `I've already asked the property team about ${time} on ${day}.`;
 }
 
+/** Landlord alert when a visitor text could not be handled. Raw errors stay in server logs. */
+export function handlerFailureAlertLine(who: string, message: string): string {
+  return `${who} texted "${message}" and I couldn't handle it, so they're waiting on you. I told them you'd reply as soon as you can.`;
+}
+
 /** Operator-facing refusal when propose comes in after the requested time has passed. */
 export function requestProposePassedLine(who: string, newTime: string, newDay: string): string {
   return `That request ran out because its time already passed, so your offer of ${newTime} on ${newDay} didn't go out. I've let ${who} know, and you can still book them a one-off time.`;
@@ -1540,6 +1545,34 @@ export class TourCore {
   async alertOperator(reservationId: string, body: string): Promise<void> {
     const reservation = await this.mustGetReservation(reservationId);
     await this.notifyOperator(reservation, body);
+  }
+
+  /**
+   * Visitor text the engine could not handle: write a landlord-visible
+   * record (unanswered-question exception + operator notice) with visitor-safe
+   * copy only. Returns true once that record exists. Delivery SKIPPED is not
+   * required.
+   */
+  async alertHandlerFailure(input: { phone: string; visitorText: string; reservationId?: string }): Promise<boolean> {
+    const phone = normalizePhone(input.phone);
+    const said = input.visitorText.trim().slice(0, 300);
+    const prospect = (await this.deps.store.list("prospects")).find((p) => p.phone === phone);
+    const reservation = input.reservationId ? await this.deps.store.get("reservations", input.reservationId) : undefined;
+    const who = prospect && prospect.name && prospect.name !== UNNAMED_VISITOR ? prospect.name.trim().split(/\s+/)[0]! : formatPhone(phone);
+    const detail = said || "a text I couldn't handle";
+    try {
+      await this.record("QUESTION_UNANSWERED", { reservationId: reservation?.id, prospectId: prospect?.id, detail });
+    } catch {
+      return false;
+    }
+    const recorded = (await this.deps.store.listAudit()).some((event) => event.type === "QUESTION_UNANSWERED" && event.detail === detail);
+    if (!recorded) return false;
+    try {
+      await this.notifyOperator(reservation, handlerFailureAlertLine(who, detail));
+    } catch {
+      /* The exception record is what counts; operator delivery may be skipped. */
+    }
+    return true;
   }
 
   async revokeGrantsFor(reservationId: string, reason: string): Promise<void> {

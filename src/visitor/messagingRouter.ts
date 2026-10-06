@@ -216,6 +216,7 @@ export class MessagingConversations {
     }
 
     const wasOptedOut = session.optedOut;
+    const outboundBefore = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").length;
     try {
       await handleVisitorText(session, phone, message.text, meta, this.deps.interpreter);
     } catch (err) {
@@ -224,16 +225,36 @@ export class MessagingConversations {
         return { correlationId: session.id };
       }
       this.deps.log?.(`Handler error for visitor ${phone}: ${err instanceof Error ? err.message : "unknown error"}`);
-      let alertSent = false;
+      let alertRecorded = false;
       try {
         const res = await session.reservation();
-        await session.core.alertOperator(res?.id ?? "", `Tour Core error processing text from ${phone}: ${err instanceof Error ? err.message : "error"}`);
-        alertSent = true;
+        alertRecorded = await session.core.alertHandlerFailure({
+          phone,
+          visitorText: message.text,
+          reservationId: res?.id,
+        });
       } catch {
-        alertSent = false;
+        alertRecorded = false;
       }
-      const fallback = alertSent ? HANDLER_SNAG_ALERTED : HANDLER_SNAG_RETRY;
-      await transport.send({ to: phone, audience: "PROSPECT", body: fallback }).catch(() => undefined);
+      if (!alertRecorded) {
+        const said = message.text.trim().slice(0, 300);
+        const audit = await session.store.listAudit().catch(() => []);
+        alertRecorded = audit.some(
+          (event) =>
+            (event.type === "QUESTION_UNANSWERED" || event.type === "OPERATOR_NOTIFIED") &&
+            event.detail.includes(said || "a text I couldn't handle"),
+        );
+      }
+      try {
+        await this.save(session);
+      } catch (saveErr) {
+        this.deps.log?.(`Could not save the conversation after a handler error: ${saveErr instanceof Error ? saveErr.message : "unknown error"}`);
+      }
+      const outboundAfter = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").length;
+      if (outboundAfter === outboundBefore) {
+        const fallback = alertRecorded ? HANDLER_SNAG_ALERTED : HANDLER_SNAG_RETRY;
+        await transport.send({ to: phone, audience: "PROSPECT", body: fallback }).catch(() => undefined);
+      }
       return { correlationId: session.id };
     }
     if (session.optedOut !== wasOptedOut) this.setOptOut(propertyId, phone, session.optedOut);

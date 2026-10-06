@@ -310,7 +310,7 @@ export async function proposeTourTime(ctx: Ctx, input: { tourTimeRequestId: stri
   const contextDay = reservation?.slotStart ? localDateOf(new Date(reservation.slotStart), tz) : localDateOf(new Date(found.request.requestedStartsAt), tz);
   const resolved = parseFlexibleTime(input.newStartsAt, found.tour.config, ctx.now(), contextDay);
   if (!resolved.ok) {
-    if (/already passed/.test(resolved.ask)) throw new SetupInputError("SLOT_PAST", SLOT_ALREADY_PASSED);
+    if (resolved.code === "TIME_PASSED") throw new SetupInputError("SLOT_PAST", SLOT_ALREADY_PASSED);
     throw new SetupInputError("TIME_UNCLEAR", resolved.ask);
   }
   if (resolved.start.getTime() <= ctx.now().getTime()) throw new SetupInputError("SLOT_PAST", SLOT_ALREADY_PASSED);
@@ -425,7 +425,7 @@ export async function scheduleOneOffTour(
   const unit = requireUnit(config, input.unit);
   const resolved = parseFlexibleTime(input.startsAt, config, ctx.now());
   if (!resolved.ok) {
-    if (/already passed/.test(resolved.ask)) throw new SetupInputError("SLOT_PAST", SLOT_ALREADY_PASSED);
+    if (resolved.code === "TIME_PASSED") throw new SetupInputError("SLOT_PAST", SLOT_ALREADY_PASSED);
     throw new SetupInputError("TIME_UNCLEAR", resolved.ask);
   }
   if (resolved.start.getTime() <= ctx.now().getTime()) throw new SetupInputError("SLOT_PAST", SLOT_ALREADY_PASSED);

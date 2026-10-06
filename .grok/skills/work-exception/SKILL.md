@@ -142,9 +142,22 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   time instead.` If the requested time has already passed, the request
   expires: the visitor is texted once (`The property team couldn't get
   to your request for {newTime} on {newDay} in time.` plus still-booked
-  or reply-with-a-day). Approve and decline return `That time has already
+  or reply-with-a-day).   Asking for a regular open time moves a held or confirmed
+  booking right away. A taken regular slot keeps the current booking
+  (`Sorry, {time} on {day} is already taken.` plus still-booked only for
+  a held or future booking, never the tour in progress) and offers the
+  remaining times that day or `If you'd like another time, just reply
+  with a day.` A numbered pick from that menu books it. Farewells and
+  arrival remarks at consent record consent; later/earlier is a change
+  only when it modifies the tour time. A visitor text that cannot be
+  handled opens an issue and tells them the team will reply here, or
+  asks them to text again if no landlord record could be created. The
+  team is told `{who} texted "{their message}" and I couldn't handle it,
+  so they're waiting on you. I told them you'd reply as soon as you can.`
+  Approve and decline return `That time has already
   passed, so I've let {who} know their request ran out. You can still
-  book them a one-off time.` Propose returns `That request ran out
+  book them a one-off time.` Then use `schedule_one_off_tour` or
+  `reschedule_tour`. Propose returns `That request ran out
   because its time already passed, so your offer of {newTime} on {newDay}
   didn't go out. I've let {who} know, and you can still book them a
   one-off time.` and does not send the proposal to the visitor. If it
@@ -197,15 +210,19 @@ Tour Core sends only an `eventId` and an event type; never names or details.
 ### Custom tour times
 
 A visitor can ask for a time that isn't one of the regular slots, or to move
-a tour they already have. `tour.time_requested` wakes you even when ordinary
-tour updates are off, because someone has to decide. The regular hours do
-not change.
+a tour they already have. Asking for a regular open time moves a held or
+confirmed booking right away and withdraws a pending request. A taken
+regular slot keeps the current booking and shows what's left that day; a
+numbered pick from that menu books it. `tour.time_requested` wakes you even
+when ordinary tour updates are off, because someone has to decide. The
+regular hours do not change. If a request expired because its time passed,
+do not approve it — use `schedule_one_off_tour` or `reschedule_tour`.
 
 1. Call `get_operator_update` with the `eventId` and post its `summary`.
    It names the visitor, the time they want, and whether that time is outside
    normal touring hours.
 2. The landlord can say it naturally:
-   - "Approve 3:15" → `approve_tour_time_request`. Ask the question it returns, once. After a clear yes, call it again with `confirmationCode`. If the property is paused, it refuses (`Tours at {property} are paused. Resume them first.`) — say that, don't approve. If they already booked a regular time, the request is withdrawn (`They booked a regular time instead.`) — say that, don't approve, and don't text the visitor.
+   - "Approve 3:15" → `approve_tour_time_request`. Ask the question it returns, once. After a clear yes, call it again with `confirmationCode`. If the property is paused, it refuses (`Tours at {property} are paused. Resume them first.`) — say that, don't approve. If they already booked a regular time, the request is withdrawn (`They booked a regular time instead.`) — say that, don't approve, and don't text the visitor. If the request expired, return the ran-out line and use `schedule_one_off_tour` or `reschedule_tour`.
    - "Offer them 3:30" → `propose_tour_time`. The current booking stays until the visitor agrees.
    - "Decline" or "Keep the 4 PM booking" → `decline_tour_time_request`. If the request is withdrawn, Tour Core returns `They booked a regular time instead.` — say that and don't text the visitor.
    - "Move Testa to 3:15" → `reschedule_tour` with their name and the time. Ask the one question it returns, then call again after yes. If the property is paused, it refuses the same way.

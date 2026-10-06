@@ -29,7 +29,23 @@ with the property team; they can reply with a day for a regular
 time only when they do not already have a held or booked regular tour.
 A held rebook taking over gets the booked-for line, then the original
 consent question, then Reply YES or NO. Later texts use the normal
-booking flow. Booking a regular slot withdraws that request so a later
+booking flow. Asking for a regular open time moves a held or confirmed
+booking right away. A taken regular slot keeps the current booking and
+says `Sorry, {time} on {day} is already taken.` plus `You're still booked
+for {curTime} on {curDay}.` only when they have a held or future booking
+(never the tour already in progress), then the remaining times that day
+or `If you'd like another time, just reply with a day.` A numbered reply
+from that menu books the pick. Farewells and arrival remarks at consent
+(`yes, see you later`, `yes, I'll arrive earlier`, `yes, no need to
+switch`) record consent; `later`/`earlier` is a change only when it
+modifies the tour time (`make it later`, `earlier if possible`). If a
+visitor text cannot be handled, they are told `Sorry, I hit a snag with
+that. I've let the property team know, and they'll reply here as soon as
+they can.` when a landlord record was created, or `Sorry, I hit a snag
+with that. Could you text me again in a few minutes?` when it was not.
+The team sees `{who} texted "{their message}" and I couldn't handle it,
+so they're waiting on you. I told them you'd reply as soon as you can.`
+Booking a regular slot withdraws that request so a later
 approve cannot double-book; replacing a held or booked future tour also
 sends `That replaces your {time} tour on {day}.` Operators see
 `They booked a regular time instead.` If the requested time has already
@@ -39,6 +55,7 @@ then `You're still booked for {time} on {day}.` or
 `If you'd like another time, just reply with a day.` Approve and decline
 tell the operator `That time has already passed, so I've let {who} know
 their request ran out. You can still book them a one-off time.`
+Then use `schedule_one_off_tour` or `reschedule_tour`.
 Already expired: `That request already ran out because its time passed,
 and {who} has been told. You can still book them a one-off time.`
 Already approved or declined: `That request has already been handled.`

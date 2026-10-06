@@ -76,7 +76,10 @@ function chooseMeridiem(config: TourCoreConfig, day: LocalDate, spoken: SpokenTi
   return undefined;
 }
 
-export type ResolvedTime = { ok: true; start: Date; placement: SlotPlacement; label: string } | { ok: false; ask: string };
+export type SpokenTimeCode = "TIME_PASSED" | "TIME_UNCLEAR";
+export type ResolvedTime =
+  | { ok: true; start: Date; placement: SlotPlacement; label: string }
+  | { ok: false; ask: string; code?: SpokenTimeCode };
 
 function sameDay(a: LocalDate, b: LocalDate): boolean {
   return a.year === b.year && a.month === b.month && a.day === b.day;
@@ -102,10 +105,17 @@ export function resolveSpokenTime(config: TourCoreConfig, now: Date, spoken: Spo
   }
   const start = at(day, spoken.hour, spoken.minute, meridiem, tz);
   if (start.getTime() <= now.getTime()) {
-    if (spoken.day === "today" || (contextDay && sameDay(day, today) && !spoken.day && !spoken.weekday && !spoken.date)) {
-      return { ok: false, ask: "That time has already passed. What later time works for you?" };
+    const namedToday =
+      spoken.day === "today" ||
+      !!(spoken.weekday && sameDay(day, today)) ||
+      !!(spoken.date && sameDay(day, today)) ||
+      !!(contextDay && sameDay(day, today) && !spoken.day && !spoken.weekday && !spoken.date);
+    if (namedToday) {
+      return { ok: false, ask: "That time has already passed. What later time works for you?", code: "TIME_PASSED" };
     }
-    if (!spoken.day && !spoken.weekday && !spoken.date) return { ok: false, ask: "That time today has already passed. Did you mean tomorrow?" };
+    if (!spoken.day && !spoken.weekday && !spoken.date) {
+      return { ok: false, ask: "That time today has already passed. Did you mean tomorrow?", code: "TIME_PASSED" };
+    }
   }
   return { ok: true, start, placement: placementOf(config, start), label: formatTime(start, tz) };
 }

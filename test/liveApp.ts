@@ -11,6 +11,7 @@ import { setSendblueRuntime } from "../src/messaging/sendblue/runtime";
 import { PropertyWorkspace, runReadinessCheck } from "../src/setup";
 import { FileRuntimeStore } from "../src/storage/runtimeStore";
 import { createSetupServer, type TourCoreServer } from "../src/web/server";
+import { VisitorDemoRegistry } from "../src/visitor/session";
 import { fakeSendblue, inbound, SECRET, sendblueEnv } from "./fakeSendblue";
 import { fakeNetwork, ROUTINE_KEY, ROUTINE_URL } from "./installHarness";
 
@@ -59,7 +60,8 @@ export async function liveApp(
   const runtime = new FileRuntimeStore(join(root, "runtime"));
   const installation = new Installation({ root, runtime, secrets: new LocalSecretStore(join(root, "install", "secrets.json"), () => clock.t), now: () => clock.t, fetch: net.fetch as never, outbox: { baseDelayMs: 1000 } });
   if (fresh && options.routine !== false) installation.secrets.set({ TOURCORE_GROK_ROUTINE_URL: ROUTINE_URL, TOURCORE_GROK_ROUTINE_KEY: ROUTINE_KEY });
-  const server: TourCoreServer = createSetupServer({ workspace: ws, installation, now: () => new Date(clock.t), realNow: () => clock.t, operatorToken: () => TOKEN, log: () => {}, alertRetryMs: 3_600_000, ...(options.slotLockBarrier ? { slotLockBarrier: options.slotLockBarrier } : {}) });
+  const visitors = new VisitorDemoRegistry();
+  const server: TourCoreServer = createSetupServer({ workspace: ws, installation, visitors, now: () => new Date(clock.t), realNow: () => clock.t, operatorToken: () => TOKEN, log: () => {}, alertRetryMs: 3_600_000, ...(options.slotLockBarrier ? { slotLockBarrier: options.slotLockBarrier } : {}) });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   const port = (server.address() as { port: number }).port;
   let closed = false;
@@ -132,6 +134,6 @@ export async function liveApp(
   };
   const routineEvents = () => net.routineCalls().map((c) => JSON.parse(c.body!) as { eventType: string; eventId: string } & Record<string, string>);
   const outbox = (type?: string) => installation.outbox.records().filter((r) => !type || r.event.eventType === type);
-  return { root, clock, net, fake, installation, server, text, textFrom, optInSms, grok, approve, fillForm, book, routineEvents, outbox, close, ws };
+  return { root, clock, net, fake, installation, server, visitors, text, textFrom, optInSms, grok, approve, fillForm, book, routineEvents, outbox, close, ws };
 }
 export type LiveApp = Awaited<ReturnType<typeof liveApp>>;

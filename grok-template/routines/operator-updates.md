@@ -130,7 +130,8 @@ property is not unpublished by an update.
 needs a decision unless the request is withdrawn or expired. Withdrawn:
 `They booked a regular time instead.` Expired: `That time has already
 passed, so I've let {who} know their request ran out. You can still book
-them a one-off time.` Propose after the time passed: `That request
+them a one-off time.` Then use `schedule_one_off_tour` or `reschedule_tour`.
+Propose after the time passed: `That request
 ran out because its time already passed, so your offer of {newTime} on
 {newDay} didn't go out. I've let {who} know, and you can still book them
 a one-off time.` Already expired: `That request already ran out because

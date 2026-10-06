@@ -192,14 +192,30 @@ Never:
   regular-times sentence is only for visitors with no held or booked
   regular tour. A held rebook taking over gets the booked-for line, then
   the original consent question, then Reply YES or NO. Later texts use
-  the normal booking flow. Booking a regular slot withdraws that request
+  the normal booking flow. Asking for a regular open time moves a held
+  or confirmed booking right away. A taken regular slot keeps the current
+  booking (`Sorry, {time} on {day} is already taken.` plus still-booked
+  only for a held or future booking, never the tour in progress) and
+  offers the remaining times that day or `If you'd like another time,
+  just reply with a day.` A numbered pick from that menu books it.
+  Farewells and arrival remarks (`yes, see you later`, `yes, I'll arrive
+  earlier`, `yes, no need to switch`) record consent; later/earlier is a
+  change only when it modifies the tour time. A visitor text that cannot
+  be handled tells them the team will reply here when a landlord record
+  exists (`Sorry, I hit a snag with that. I've let the property team
+  know, and they'll reply here as soon as they can.`), or asks them to
+  text again (`Sorry, I hit a snag with that. Could you text me again in
+  a few minutes?`). The team is told `{who} texted "{their message}" and
+  I couldn't handle it, so they're waiting on you. I told them you'd
+  reply as soon as you can.` Booking a regular slot withdraws that request
   (`They booked a regular time instead.`). Replacing a held or booked
   future tour also sends `That replaces your {time} tour on {day}.`
   If the requested time has already passed, the visitor is texted once
   that the team couldn't get to it in time, then still-booked or
   reply-with-a-day. Approve and decline tell the operator `That time has
   already passed, so I've let {who} know their request ran out. You can
-  still book them a one-off time.` Propose tells the operator
+  still book them a one-off time.` Then use `schedule_one_off_tour` or
+  `reschedule_tour`. Propose tells the operator
   `That request ran out because its time already passed, so your offer
   of {newTime} on {newDay} didn't go out. I've let {who} know, and you
   can still book them a one-off time.` and does not send the proposal.

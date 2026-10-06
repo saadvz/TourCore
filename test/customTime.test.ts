@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config/tourCoreConfig";
@@ -17,6 +16,7 @@ import {
   bookedForLine,
   CONSENT_TEXT,
   customTimeAskedLine,
+  handlerFailureAlertLine,
   PENDING_CUSTOM_TIME_REGULAR_OPTION,
   pendingCustomTimeLine,
   proposeVisitorLine,
@@ -1265,8 +1265,103 @@ describe("a taken regular slot never files a custom-time request", () => {
     await a.text("I'm here");
     await a.text("at unit 1A");
     const replies = await a.text("Can I come Friday at 2:00?");
-    expect(replies.join("\n")).toContain(takenSlotLine("2:00 PM", "Friday, Oct 2", { time: "2:00 PM", day: "Monday, Sep 28" }));
+    expect(replies.join("\n")).toContain(takenSlotLine("2:00 PM", "Friday, Oct 2"));
+    expect(replies.join("\n")).not.toContain("You're still booked");
     expect((await a.grok("list_tour_time_requests")).requests).toHaveLength(0);
+  });
+
+  it("a taken slot during a tour names a held future booking, not the tour in progress", async () => {
+    const a = await liveApp({ cleanups });
+    await a.textFrom(OTHER, "TOUR");
+    await a.textFrom(OTHER, "YES");
+    await a.textFrom(OTHER, "1");
+    await a.textFrom(OTHER, "Friday");
+    await a.textFrom(OTHER, "1");
+    await a.book();
+    a.clock.t = at(13, 58);
+    await a.text("I'm here");
+    await a.text("at unit 1A");
+    const held = await a.text("Can I come Friday at 3:30?");
+    expect(held.join("\n")).toMatch(/3:30 PM|booked|asked/);
+    const replies = await a.text("Can I come Friday at 2:00?");
+    expect(replies.join("\n")).toContain(takenSlotLine("2:00 PM", "Friday, Oct 2", { time: "3:30 PM", day: "Friday, Oct 2" }));
+    expect(replies.join("\n")).not.toContain("You're still booked for 2:00 PM on Monday, Sep 28");
+    expect((await a.grok("list_tour_time_requests")).requests).toHaveLength(0);
+  });
+
+  it("a taken-slot menu pick works for booked, on-hold, and during-tour visitors", async () => {
+    const a = await liveApp({ cleanups });
+    await occupyMondaySlot(a, OTHER, "1");
+    await a.optInSms();
+    await a.text("1");
+    await a.text("Tuesday");
+    await a.text("1");
+    const taken = await a.text("Can I move it to Monday at 2:00?");
+    expect(taken.join("\n")).toContain("I have these times available Monday, Sep 28:");
+    const picked = await a.text("1");
+    expect(picked.join("\n")).toMatch(/3:30 PM|booked/);
+    expect(picked.join("\n")).not.toContain("Sorry, I didn't catch that.");
+
+    const b = await liveApp({ cleanups });
+    await occupyMondaySlot(b, OTHER, "1");
+    await bookMonday330(b);
+    const [heldTour] = (await b.grok("list_active_tours")).tours;
+    await b.approve("place_operator_hold", { tourRef: heldTour.tourRef, reason: "Checking the lobby" });
+    const holdTaken = await b.text("Can I move it to Tuesday at 2:00?");
+    expect(holdTaken.join("\n")).toMatch(/2:00 PM|already taken|these times available/);
+    if (holdTaken.join("\n").includes("these times available")) {
+      const holdPick = await b.text("1");
+      expect(holdPick.join("\n")).not.toContain("Sorry, I didn't catch that.");
+    }
+
+    const c = await liveApp({ cleanups });
+    await c.textFrom(OTHER, "TOUR");
+    await c.textFrom(OTHER, "YES");
+    await c.textFrom(OTHER, "1");
+    await c.textFrom(OTHER, "Friday");
+    await c.textFrom(OTHER, "1");
+    await c.book();
+    c.clock.t = at(13, 58);
+    await c.text("I'm here");
+    await c.text("at unit 1A");
+    const tourTaken = await c.text("Can I come Friday at 2:00?");
+    expect(tourTaken.join("\n")).toContain("I have these times available Friday, Oct 2:");
+    const tourPick = await c.text("1");
+    expect(tourPick.join("\n")).not.toContain("Sorry, I didn't catch that.");
+    const tour = c.ws.listTours("prop_100_alfred_way").find((item) => item.visitorPhone === PHONE)!;
+    const reservations = c.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations;
+    expect(reservations.some((item) => item.status === "INQUIRY" && !item.slotStart)).toBe(false);
+  });
+
+  it("a taken-slot rebook during a tour does not leave an empty inquiry", async () => {
+    const a = await liveApp({ cleanups });
+    await a.textFrom(OTHER, "TOUR");
+    await a.textFrom(OTHER, "YES");
+    await a.textFrom(OTHER, "1");
+    await a.textFrom(OTHER, "Friday");
+    await a.textFrom(OTHER, "1");
+    await a.book();
+    a.clock.t = at(13, 58);
+    await a.text("I'm here");
+    await a.text("at unit 1A");
+    await a.text("Can I come Friday at 2:00?");
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.visitorPhone === PHONE)!;
+    const reservations = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations;
+    expect(reservations.filter((item) => item.status === "INQUIRY")).toHaveLength(0);
+    expect(reservations.some((item) => item.status === "TOURING")).toBe(true);
+  });
+
+  it("confirmRebook while tours are paused uses the pause line", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    a.clock.t = at(13, 58);
+    await a.text("I'm here");
+    await a.text("at unit 1A");
+    await a.approve("pause_tours", { property: "prop_100_alfred_way", bookedTours: "keep" });
+    const replies = await a.text("Can I come Friday at 2:00?");
+    expect(replies.join("\n")).toMatch(/paused/i);
+    expect(replies.join("\n")).not.toContain(HANDLER_SNAG_RETRY);
+    expect(replies.join("\n")).not.toContain(HANDLER_SNAG_ALERTED);
   });
 
   it("a booked visitor moving to a taken slot still sees other open times that day", async () => {
@@ -1366,11 +1461,62 @@ describe("yes-but change vs consent", () => {
     expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeFalsy();
   });
 
-  it.each(["yes, no need to reschedule", "yes, I won't need to switch anything"])("%s records consent", async (phrase) => {
+  it.each([
+    "yes, see you later",
+    "yes later",
+    "yes, talk later",
+    "yes but I'll be there a bit earlier",
+    "yes, I'll arrive earlier",
+    "yes but I might be 5 min late",
+    "yes, no need to switch",
+    "yes, I won't need to reschedule",
+    "yes, no reason to change",
+    "yes, no need to reschedule",
+    "yes, I won't need to switch anything",
+  ])("%s records consent", async (phrase) => {
     const a = await liveApp({ cleanups });
     await firstBookingConsent(a);
     const replies = await a.text(phrase);
     expect(replies.join("\n")).not.toContain("Sorry, I didn't catch that.");
+    expect(replies.join("\n")).not.toContain("Great, you're booked for");
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeTruthy();
+  });
+
+  it("yes but earlier if possible offers earlier open times that day", async () => {
+    const a = await liveApp({ cleanups });
+    await a.optInSms();
+    await a.text("1");
+    await a.text("1");
+    const booked = await a.text("2");
+    expect(booked.join("\n")).toContain(bookedForLine("3:30 PM", "Monday, Sep 28"));
+    const replies = await a.text("yes but earlier if possible");
+    expect(replies.join("\n")).toContain("I have these times available Monday, Sep 28:");
+    expect(replies.join("\n")).toContain("2:00 PM");
+    expect(replies.join("\n")).not.toContain("Great, you're booked for 2:00 PM");
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeFalsy();
+  });
+
+  it("yes but make it later offers later open times and does not book", async () => {
+    const a = await liveApp({ cleanups });
+    await firstBookingConsent(a);
+    const replies = await a.text("yes but make it later");
+    expect(replies.join("\n")).toContain("I have these times available Monday, Sep 28:");
+    expect(replies.join("\n")).toContain("3:30 PM");
+    expect(replies.join("\n")).not.toContain(bookedForLine("3:30 PM", "Monday, Sep 28"));
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    const reservation = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!;
+    expect(reservation.consentId).toBeFalsy();
+    expect(reservation.slotStart).toBe(atTime(14).toISOString());
+  });
+
+  it("monday is fine but not tuesday is consent on a Monday booking", async () => {
+    const a = await liveApp({ cleanups });
+    await firstBookingConsent(a);
+    const replies = await a.text("monday is fine but not tuesday");
+    expect(replies.join("\n")).not.toContain("Which day works for you?");
+    expect(replies.join("\n")).not.toContain("I have tours available");
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
     expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeTruthy();
   });
@@ -1393,6 +1539,18 @@ describe("past-time copy", () => {
     await chooseUnit(a);
     const replies = await a.text("Can I come today at 6:00 AM?");
     expect(replies[0]).toBe(VISITOR_TIME_PASSED);
+  });
+
+  it("a same-day weekday or full date in the past is rejected up front", async () => {
+    const a = await liveApp({ cleanups });
+    await chooseUnit(a);
+    a.clock.t = at(15);
+    const weekday = await a.text("Can I come Monday at 2:30?");
+    expect(weekday[0]).toBe(VISITOR_TIME_PASSED);
+    expect((await a.grok("list_tour_time_requests")).requests).toHaveLength(0);
+    const dated = await a.text("Can I come September 28 at 2:30?");
+    expect(dated[0]).toBe(VISITOR_TIME_PASSED);
+    expect((await a.grok("list_tour_time_requests")).requests).toHaveLength(0);
   });
 
   it("an operator proposing a past time gets the pick-later line", async () => {
@@ -1479,12 +1637,15 @@ describe("a handler throw never leaves the visitor in silence", () => {
     expect(replies.length).toBeGreaterThan(0);
   });
 
-  it("sends the retry line when the operator alert also fails", async () => {
+  it("sends the retry line when the alert record cannot be created", async () => {
     const app = await throwingApp();
     await app.text("Hi");
     await app.text("1");
-    app.session().core.alertOperator = async () => {
-      throw new Error("alert down");
+    const store = app.session().store;
+    const append = store.appendAudit.bind(store);
+    store.appendAudit = async (event) => {
+      if (event.type === "QUESTION_UNANSWERED") throw new Error("disk full");
+      return append(event);
     };
     app.explode();
     const replies = await app.text("hello");
@@ -1492,12 +1653,65 @@ describe("a handler throw never leaves the visitor in silence", () => {
     expect(replies.length).toBeGreaterThan(0);
   });
 
-  it("never-silent guards stay in conversation and the router", () => {
-    const conversation = readFileSync(join(process.cwd(), "src/visitor/conversation.ts"), "utf8");
-    expect(conversation).toMatch(/outboundAfter === outboundBefore/);
-    expect(conversation).toContain("await session.reply(SORRY)");
-    const router = readFileSync(join(process.cwd(), "src/visitor/messagingRouter.ts"), "utf8");
-    expect(router).toContain("HANDLER_SNAG_ALERTED");
-    expect(router).toContain("HANDLER_SNAG_RETRY");
+  it("a handler that already replied does not send a second snag line", async () => {
+    const app = await throwingApp();
+    await app.text("Hi");
+    await app.text("1");
+    app.session().bookOffered = async () => {
+      await app.session().reply("I found a time that works.");
+      throw new Error("No reservation res_forced");
+    };
+    const replies = await app.text("Can I come at 3:30?");
+    expect(replies).toContain("I found a time that works.");
+    expect(replies).not.toContain(HANDLER_SNAG_ALERTED);
+    expect(replies).not.toContain(HANDLER_SNAG_RETRY);
+  });
+
+  it("a handler that returns without a reply gets the fallback line", async () => {
+    const app = await throwingApp();
+    await app.text("Hi");
+    app.session().welcome = async () => {};
+    const replies = await app.text("tour");
+    expect(replies.at(-1)).toBe("Sorry, I didn't catch that.");
+  });
+});
+
+describe("a Sendblue handler throw raises a real landlord alert", () => {
+  it("records an exception and texts the team-notified line", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    const session = a.visitors.latestForPhone("prop_100_alfred_way", PHONE, "messaging")!;
+    session.bookOffered = async () => {
+      throw new Error(`No reservation ${session.reservationId}`);
+    };
+    const replies = await a.text("Can I move it to 3:15?");
+    expect(replies).toContain(HANDLER_SNAG_ALERTED);
+    const queue = await a.grok("list_exceptions");
+    expect(queue.exceptions.length).toBeGreaterThan(0);
+    expect(a.routineEvents().some((event) => event.eventType === "exception.created")).toBe(true);
+    const [active] = (await a.grok("list_active_tours")).tours;
+    const inspect = JSON.stringify(await a.grok("inspect_tour", { tourRef: active.tourRef }));
+    expect(inspect).not.toContain(`No reservation ${session.reservationId}`);
+    expect(inspect).not.toMatch(/TypeError|No prospect /);
+    const saved = a.ws.loadTour("prop_100_alfred_way", a.ws.listTours("prop_100_alfred_way").find((item) => item.visitorPhone === PHONE)!.tourId)!.bundle;
+    expect(saved.auditEvents.some((event) => event.type === "OPERATOR_NOTIFIED" && event.detail === handlerFailureAlertLine("Testy", "Can I move it to 3:15?"))).toBe(true);
+    expect(saved.auditEvents.every((event) => !/No reservation |No prospect |Reservation is |TypeError/.test(event.detail))).toBe(true);
+  });
+
+  it("sends the retry line when the alert record cannot be written", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    const session = a.visitors.latestForPhone("prop_100_alfred_way", PHONE, "messaging")!;
+    const append = session.store.appendAudit.bind(session.store);
+    session.store.appendAudit = async (event) => {
+      if (event.type === "QUESTION_UNANSWERED") throw new Error("disk full");
+      return append(event);
+    };
+    session.bookOffered = async () => {
+      throw new Error("No reservation res_xyz");
+    };
+    const replies = await a.text("Can I move it to 3:15?");
+    expect(replies).toContain(HANDLER_SNAG_RETRY);
+    expect(replies).not.toContain(HANDLER_SNAG_ALERTED);
   });
 });

@@ -116,8 +116,21 @@ const WHICH_DAY = "Which day works for you?";
 const DAY_MENU = `I have tours available. ${WHICH_DAY}`;
 const MENU_NUMBER = /^\s*(?:#|number |option )?(\d{1,2})\s*[.!]?\s*$/i;
 const EXPLICIT_CHANGE_PHRASE = /\b(instead|switch|change to|move it|reschedule|another time|another day|different day)\b/;
-const NO_CHANGE = /\b(no change|no need to reschedule|will not need to switch)\b/;
 const WEEKDAY_OR_DAY = /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow)\b/;
+const WEEKDAY_WORD: Record<string, string> = {
+  MON: "monday",
+  TUE: "tuesday",
+  WED: "wednesday",
+  THU: "thursday",
+  FRI: "friday",
+  SAT: "saturday",
+  SUN: "sunday",
+};
+const TIME_SHIFT_ASK =
+  /\b((?:make|move|switch|change)(?: it| the tour| that)? (?:later|earlier)|(?:a |an )?(?:later|earlier) (?:time|slot|opening)|(?:later|earlier) if possible|can we do (?:later|earlier))\b/;
+const NEGATED_CHANGE = /\b(no need to|do not need to|will not need to|would not need to|no reason to|not going to)\b.{0,40}\b(switch|reschedule|change|move|cancel)\b/;
+const ARRIVAL_REMARK =
+  /\b(be there|arrive|get there|show up|come by|get in)\b.{0,40}\b(earlier|later|early|late)\b|\b(might be|may be|could be|will be)\b.{0,30}\b(\d+\s*(min|minutes?) )?(early|late|earlier|later)\b|\b(\d+\s*(min|minutes?) )(early|late)\b/;
 const WEEKDAY_CODE: Record<string, string> = {
   monday: "MON",
   tuesday: "TUE",
@@ -133,12 +146,30 @@ function namesDayOrTime(text: string): boolean {
   return WEEKDAY_OR_DAY.test(n) || spokenTimes(n).length > 0;
 }
 
+function isNegatedChange(text: string): boolean {
+  return NEGATED_CHANGE.test(text);
+}
+
+function isArrivalRemark(text: string): boolean {
+  if (TIME_SHIFT_ASK.test(text)) return false;
+  return ARRIVAL_REMARK.test(text);
+}
+
+function laterOrEarlierShift(text: string): "later" | "earlier" | undefined {
+  const n = stripFiller(normalize(text));
+  if (isArrivalRemark(n) || isNegatedChange(n)) return undefined;
+  if (/\b(make it later|move it later|a later time|later time|later slot|later if possible|can we do later)\b/.test(n)) return "later";
+  if (/\b(make it earlier|move it earlier|an earlier time|earlier time|earlier slot|earlier if possible|can we do earlier)\b/.test(n)) return "earlier";
+  return undefined;
+}
+
 function isScheduleChangeRemainder(text: string): boolean {
   const n = normalize(text);
-  if (/\b(different day|another day|another time|make it later|make it earlier|earlier if possible|later if possible)\b/.test(n)) return true;
+  if (isNegatedChange(n) || isArrivalRemark(n)) return false;
+  if (/\b(different day|another day|another time)\b/.test(n)) return true;
+  if (TIME_SHIFT_ASK.test(n)) return true;
   if (/\b(instead|switch|change to|move it|reschedule)\b/.test(n)) return true;
   if (namesDayOrTime(n)) return true;
-  if (/\b(later|earlier)\b/.test(n) && !/\b(a little late|min late|minutes late)\b/.test(n)) return true;
   return false;
 }
 
@@ -172,14 +203,13 @@ function dayAskExcluded(ask: DayReference, text: string, today: LocalDate): bool
   return false;
 }
 
-/** Change only with an explicit phrase, a later/earlier/different-day ask, or a hedge plus a named day/time. */
+/** Change only when the leftover words actually modify the tour time. Farewells and arrival remarks are not a change. */
 function hasExplicitChangeAsk(text: string): boolean {
   const n = stripFiller(normalize(text));
-  if (NO_CHANGE.test(n)) return false;
+  if (isNegatedChange(n) || isArrivalRemark(n)) return false;
   if (leftoverAfterConsent(text)) return false;
   if (EXPLICIT_CHANGE_PHRASE.test(n)) return true;
-  if (/\b(make it later|make it earlier|earlier if possible|later if possible)\b/.test(n)) return true;
-  if (/\b(later|earlier)\b/.test(n) && !/\b(a little late|min late|minutes late)\b/.test(n)) return true;
+  if (TIME_SHIFT_ASK.test(n)) return true;
   if (/\brather\b/.test(n) && namesDayOrTime(n)) return true;
   return /\b(but|instead)\b/.test(n) && namesDayOrTime(n);
 }
@@ -202,9 +232,19 @@ async function answerLeftoverAfterConsent(turn: Turn, text: string): Promise<voi
   });
 }
 
+async function affirmsBookedDay(turn: Turn): Promise<boolean> {
+  const reservation = await turn.session.reservation();
+  if (!reservation?.slotStart) return false;
+  const booked = weekdayOf(localDateOf(new Date(reservation.slotStart), turn.session.config.property.timezone));
+  const word = WEEKDAY_WORD[booked];
+  if (!word) return false;
+  const n = normalize(turn.said.text ?? "");
+  return new RegExp(`\\b${word}\\b.{0,24}\\b(fine|ok|okay|good|works|great)\\b`).test(n) || new RegExp(`\\b(fine|ok|okay|good|works|great).{0,24}\\b${word}\\b`).test(n);
+}
+
 /** A clear YES/NO, including yes/ok plus extra words. Change markers are not consent. */
 function clearConsentAnswer(text: string): "yes" | "no" | undefined {
-  const normalized = normalize(text).replace(NO_CHANGE, " ");
+  const normalized = normalize(text).replace(NEGATED_CHANGE, " ");
   if (hasExplicitChangeAsk(text)) return undefined;
   const t = stripFiller(normalized);
   if (hasExplicitChangeAsk(t)) return undefined;
@@ -1001,8 +1041,8 @@ async function isShownMenuBookingInput(turn: Turn): Promise<boolean> {
   return false;
 }
 
-/** From consent, a regular day or shown slot replaces the held/booked tour. */
-async function tryRegularSlotFromConsent(turn: Turn): Promise<boolean> {
+/** A day name, shown time, or menu number from a leftover slot/day menu. */
+async function tryShownSlotPick(turn: Turn, book: (slotStart: string) => Promise<void>): Promise<boolean> {
   const { session } = turn;
   const text = turn.said.text ?? "";
   const step: VisitorStage = session.selectedDate && session.lastShownSlots.length ? "choose-time" : "choose-date";
@@ -1020,7 +1060,7 @@ async function tryRegularSlotFromConsent(turn: Turn): Promise<boolean> {
       session.offeredSlots.find((s) => same(s.label, intent.timeLabel));
     if (slot && isConfident(interpretation)) {
       await session.recordText(turn.said);
-      await session.bookOffered(slot.start.toISOString());
+      await book(slot.start.toISOString());
       return true;
     }
   }
@@ -1029,7 +1069,7 @@ async function tryRegularSlotFromConsent(turn: Turn): Promise<boolean> {
     const slot = index ? session.lastShownSlots[Number(index) - 1] : undefined;
     if (slot) {
       await session.recordText(turn.said);
-      await session.bookOffered(slot.start.toISOString());
+      await book(slot.start.toISOString());
       return true;
     }
   }
@@ -1038,6 +1078,40 @@ async function tryRegularSlotFromConsent(turn: Turn): Promise<boolean> {
     return true;
   }
   return false;
+}
+
+/** From consent, a regular day or shown slot replaces the held/booked tour. */
+async function tryRegularSlotFromConsent(turn: Turn): Promise<boolean> {
+  return tryShownSlotPick(turn, (slotStart) => turn.session.bookOffered(slotStart).then(() => undefined));
+}
+
+async function offerSameDayShift(turn: Turn, direction: "later" | "earlier"): Promise<void> {
+  const { session } = turn;
+  await session.recordText(turn.said);
+  const reservation = await session.reservation();
+  const tz = session.config.property.timezone;
+  const current = reservation?.slotStart ? new Date(reservation.slotStart) : undefined;
+  const day = current ? localDateOf(current, tz) : localDateOf(session.clock.now(), tz);
+  const open = await session.core.availableSlots(day);
+  const filtered = current
+    ? open.filter((slot) => (direction === "later" ? slot.start.getTime() > current.getTime() : slot.start.getTime() < current.getTime()))
+    : open;
+  if (!filtered.length) {
+    await session.refreshOfferedSchedule();
+    const labels = session.offeredDates.map((item) => item.label);
+    session.markDatesShown();
+    if (!labels.length) {
+      await session.reply(VisitorDenialCopy.noOpenTimes(session.config.operator.name));
+      return;
+    }
+    await session.reply(DAY_MENU, { kind: "choose", options: labels, what: "a day" });
+    return;
+  }
+  session.offeredSlots = filtered;
+  session.selectedDate = isoDate(day);
+  session.markTimesShown();
+  const menu = timeMenu(formatDay(filtered[0]!.start, tz), filtered.map((slot) => slot.label));
+  await session.reply(menu.body, menu.prompt);
 }
 
 function matchesLabel(text: string, labels: string[]): boolean {
@@ -1169,6 +1243,10 @@ async function byStage(turn: Turn): Promise<void> {
     case "consent": {
       const question = CONSENT_QUESTION;
       const text = turn.said.text ?? "";
+      if (await affirmsBookedDay(turn)) {
+        await turn.act("consent", { agree: true });
+        return;
+      }
       const changeAsk = hasExplicitChangeAsk(text);
       const answer = clearConsentAnswer(text);
       if (answer && !changeAsk) {
@@ -1183,7 +1261,7 @@ async function byStage(turn: Turn): Promise<void> {
           session.lastShownSlots.length > 0 &&
           session.lastShownSlots.every((slot) => slot.start.toISOString() !== current.slotStart);
         const shownDaysOnly = session.lastShownDates.length > 0 && session.lastShownSlots.length === 0 && (await session.hasLiveRegularTour());
-        if ((shownOtherDay || shownDaysOnly) && (await tryRegularSlotFromConsent(turn))) return;
+        if ((shownOtherDay || shownDaysOnly || session.lastShownSlots.length > 0) && (await tryRegularSlotFromConsent(turn))) return;
         return turn.fallback(`${SORRY} ${question}`, yesNo);
       }
       const pending = await session.unapprovedCustomTimeRequest();
@@ -1193,6 +1271,8 @@ async function byStage(turn: Turn): Promise<void> {
         const spoken = spokenTimes(normalize(text));
         if (spoken.length === 1) return fileCustomTime(turn, spoken[0]!);
         if (intent.type === "REQUEST_CUSTOM_TIME" && turn.confident) return fileCustomTime(turn, asSpoken(intent));
+        const shift = laterOrEarlierShift(text);
+        if (shift) return offerSameDayShift(turn, shift);
         await offerOpenDays(turn, excludedDays(text));
         return;
       }
@@ -1227,6 +1307,7 @@ async function byStage(turn: Turn): Promise<void> {
 
     case "done":
     case "stopped":
+      if (session.lastShownSlots.length && (await tryShownSlotPick(turn, (slotStart) => session.bookOffered(slotStart).then(() => undefined)))) return;
       if (await session.isPaused()) {
         if (intent.type === "REQUEST_HELP") return session.help(turn.said);
         return turn.respond(VisitorDenialCopy.operatorHold(session.config.operator.name, session.config.operator.visitorContact));
@@ -1260,6 +1341,7 @@ async function onArrival(turn: Turn): Promise<void> {
     case "FINISH_TOUR":
       return turn.respond("Your tour hasn't started yet.", { kind: "say", phrase: "I'm here", purpose: "when you arrive" });
     default:
+      if (session.lastShownSlots.length && (await tryShownSlotPick(turn, (slotStart) => session.bookOffered(slotStart).then(() => undefined)))) return;
       return turn.fallback(`${SORRY} You can ask me a question about the property.`, { kind: "say", phrase: "I'm here", purpose: "when you arrive" });
   }
 }
@@ -1434,6 +1516,10 @@ async function handlePendingBookingReply(turn: Turn): Promise<boolean> {
   if (await outstandingProposedRequest(session)) return false;
   const text = turn.said.text ?? "";
   if (hasExplicitChangeAsk(text)) return false;
+  if (await affirmsBookedDay(turn)) {
+    await session.answerPendingConsent(true, turn.said);
+    return true;
+  }
   if (await session.pendingBookingNeedsConsent()) {
     const answer = clearConsentAnswer(text);
     if (answer === "yes") {
@@ -1491,6 +1577,7 @@ async function handlePendingRebookPick(turn: Turn): Promise<boolean> {
       return true;
     }
   }
+  if (await tryShownSlotPick(turn, (slotStart) => session.confirmRebook(slotStart))) return true;
   return false;
 }
 
@@ -1526,6 +1613,7 @@ async function onTour(turn: Turn): Promise<void> {
     case "REQUEST_HELP":
       return session.help(turn.said);
     default:
+      if (session.lastShownSlots.length && (await tryShownSlotPick(turn, (slotStart) => session.confirmRebook(slotStart)))) return;
       return turn.fallback(
         `${SORRY} You can ask me a question${next ? `, text "at ${session.stopLabel(next)}" when you get there,` : ","} or text "finish" when you're done.`,
         undefined,

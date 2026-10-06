@@ -15,7 +15,7 @@ import { operatorUnitName, visitorTourOf } from "./identity";
 import { ONE_OFF_REPLACED_DETAIL } from "./oneOffGate";
 import { offerDate } from "./unavailableDay";
 import { alreadyAskedLine, bookedForLine, CONSENT_TEXT, customTimeAskedLine, isLiveHelpReservation, pendingCustomTimeLine, TAKEN_SLOT_OTHER_DAY, takenSlotLine, TourCore, TourCoreError, VISITOR_CANCEL_DONE, visitorCancelConfirmFor, type AccessOutcome, type InboundMeta } from "../core/TourCore";
-import { isCancelableReservation } from "../domain/stateMachine";
+import { isCancelableReservation, TERMINAL } from "../domain/stateMachine";
 import { isoDate, parseIsoDate, type TourSlot } from "../core/schedule";
 import { createDurin, createStore, createVerificationProvider } from "../createTourCore";
 import type { TourCoreStore } from "../storage/Store";
@@ -669,13 +669,24 @@ export class VisitorDemoSession {
     return true;
   }
 
+  /** A held or booked future tour — never the tour already in progress. */
+  private async futureBookedReservation(current?: Reservation): Promise<Reservation | undefined> {
+    const held = await this.pendingBooking();
+    const live = (reservation?: Reservation) =>
+      !!reservation?.slotStart && reservation.status !== "TOURING" && !TERMINAL.includes(reservation.status);
+    if (live(held)) return held;
+    if (live(current)) return current;
+    return undefined;
+  }
+
   /** Taken regular slot: keep the current booking, never file a custom-time request. */
   private async replyTakenSlot(slotStart: string, current?: Reservation): Promise<void> {
     const tz = this.config.property.timezone;
     const start = new Date(slotStart);
     const time = formatTime(start, tz);
     const day = formatDay(start, tz);
-    const curStart = current?.slotStart ? new Date(current.slotStart) : undefined;
+    const stillBooked = await this.futureBookedReservation(current);
+    const curStart = stillBooked?.slotStart ? new Date(stillBooked.slotStart) : undefined;
     await this.reply(takenSlotLine(time, day, curStart ? { time: formatTime(curStart, tz), day: formatDay(curStart, tz) } : undefined));
     const openSlots = await this.core.availableSlots(localDateOf(start, tz));
     if (openSlots.length) {
@@ -1109,6 +1120,8 @@ export class VisitorDemoSession {
 
   /** Books the rebooked time. Creates a new reservation only on confirm; a running tour stays active. */
   async confirmRebook(slotStart: string): Promise<void> {
+    const current = await this.reservation();
+    if (await this.refuseIfPaused(this.rebookUnitId ?? current?.unitId)) return;
     const held = await this.pendingBooking();
     if (held?.slotStart && held.status !== "OPERATOR_HOLD" && held.status !== "PROVIDER_FAILURE" && held.status !== "TOURING" && held.status !== "COMPLETED" && held.status !== "CANCELLED" && held.status !== "REVOKED" && held.status !== "EXPIRED") {
       try {
@@ -1117,6 +1130,10 @@ export class VisitorDemoSession {
         if (err instanceof TourCoreError && err.code === "SLOT_UNCHANGED") {
           if (held.status === "AWAITING_CONSENT" && !held.consentId) await this.announceHeldBookingConsent(held.id);
           else await this.reply(CONSENT_TEXT, { kind: "yes-no" });
+          return;
+        }
+        if (err instanceof TourCoreError && err.code === "TOURS_PAUSED") {
+          await this.reply(err.message);
           return;
         }
         if (err instanceof TourCoreError && err.code === "SLOT_UNAVAILABLE") {
@@ -1131,19 +1148,27 @@ export class VisitorDemoSession {
       await this.syncReplies();
       return;
     }
-    const unitId = this.rebookUnitId ?? (await this.reservation())?.unitId;
+    const unitId = this.rebookUnitId ?? current?.unitId;
     if (!unitId) throw new SetupInputError("UNIT_NOT_FOUND", "That unit isn't available.");
-    const current = await this.reservation();
     const keepActive = current?.status === "TOURING";
     const oldId = this.reservationId;
-    if (!current || current.status !== "INQUIRY") {
+    const createdInquiry = !current || current.status !== "INQUIRY";
+    if (createdInquiry) {
       await this.inquire(unitId, { announce: false });
     }
+    const inquiryId = this.reservationId;
     try {
       const booked = await this.core.reserveSlot(this.reservationId!, slotStart);
       this.reservationId = booked.id;
     } catch (err) {
       if (keepActive && oldId) this.reservationId = oldId;
+      if (createdInquiry && inquiryId && inquiryId !== oldId) {
+        await this.core.cancelReservation(inquiryId, "requested time was taken").catch(() => undefined);
+      }
+      if (err instanceof TourCoreError && err.code === "TOURS_PAUSED") {
+        await this.reply(err.message);
+        return;
+      }
       if (err instanceof TourCoreError && err.code === "SLOT_UNAVAILABLE") {
         await this.replyTakenSlot(slotStart, current);
         return;
