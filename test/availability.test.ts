@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   bookedTourCalledOffText,
+  cannotCancelRunningOfferLater,
+  cannotCancelRunningTour,
   pauseConfirmQuestion,
   pausedPropertyOperatorRefuse,
   pausedPropertyVisitorText,
@@ -147,6 +149,29 @@ describe("availability copy", () => {
     );
     expect(bookedTourCalledOffText({ team: "leasing team", day: "Monday, Sep 28", time: "9:00 AM", address: "100 Alfred Way", propertyWide: true, removed: true })).not.toContain(
       "when tours are back",
+    );
+    expect(bookedTourCalledOffText({ team: "leasing team", day: "Thursday, Oct 1", time: "2:00 PM", address: "100 Alfred Way", propertyWide: true, touringNow: true })).toBe(
+      "Sorry, the leasing team had to cancel your later tour at 2:00 PM on Thursday, Oct 1. Your tour right now isn't affected. They'll text you when tours are back.",
+    );
+    expect(bookedTourCalledOffText({ team: "leasing team", day: "Thursday, Oct 1", time: "2:00 PM", address: "100 Alfred Way", propertyWide: false, touringNow: true })).toBe(
+      "Sorry, the leasing team had to cancel your later tour at 2:00 PM on Thursday, Oct 1. Your tour right now isn't affected. Text me anytime to book another.",
+    );
+    expect(bookedTourCalledOffText({ team: "leasing team", day: "Thursday, Oct 1", time: "2:00 PM", address: "100 Alfred Way", propertyWide: true, touringNow: true })).not.toContain(
+      "100 Alfred Way",
+    );
+    expect(cannotCancelRunningTour()).toBe(
+      "You can't cancel the tour you're on, but you're free to wrap up whenever you like. Text me anytime if you want to book another tour.",
+    );
+    expect(cannotCancelRunningTour()).not.toContain("is still working on the problem");
+    expect(cannotCancelRunningTour("leasing team")).toBe(
+      "You can't cancel the tour you're on, but you're free to wrap up whenever you like. The leasing team is still working on the problem and will text you here. Text me anytime if you want to book another tour.",
+    );
+    expect(cannotCancelRunningOfferLater("2:00 PM", "Thursday, Oct 1")).toBe(
+      "You can't cancel the tour you're on, but you're free to wrap up whenever you like. Your later tour at 2:00 PM on Thursday, Oct 1 is still booked. Want me to cancel that one instead? Reply YES or NO.",
+    );
+    expect(cannotCancelRunningOfferLater("2:00 PM", "Thursday, Oct 1")).not.toContain("is still working on the problem");
+    expect(cannotCancelRunningOfferLater("2:00 PM", "Thursday, Oct 1", "leasing team")).toBe(
+      "You can't cancel the tour you're on, but you're free to wrap up whenever you like. The leasing team is still working on the problem and will text you here. Your later tour at 2:00 PM on Thursday, Oct 1 is still booked. Want me to cancel that one instead? Reply YES or NO.",
     );
   });
 

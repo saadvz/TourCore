@@ -22,8 +22,28 @@ jammed, still in the unit, unable to leave, unable to get
 outside, unable to find the way out, where the way out is, or how
 to get out, does not start booking. Help booking does not hide those
 other words. "Which way out of the lobby" is not distress. A rebook or custom-time
-request during a tour stays secondary until that tour ends, then
-unfinished consent or identity checks continue. After the follow-up
+request during a tour stays secondary until that tour ends for any
+reason (done, closed, called off, cancelled, or expired), then
+unfinished consent or identity checks continue. A bare yes or no
+answers the latest question asked: a door check wins over pending
+consent for the new booking. While they are touring, `list_active_tours`,
+`inspect_tour`, pause, resume and call-off target the running tour; the
+later booking is their next booking. After the running tour ends, texts
+and those tools move to the later booking, or a greeting starts a new
+conversation if nothing is held. `pause_tours` with cancel cancels
+every real future booking, including a held rebook, and counts only
+tours actually cancelled; if they are still touring, the cancel text
+says their tour right now isn't affected. A one-off overlap check sees
+the running tour and every future or held booking. `reschedule_tour`
+will not move a tour in progress, including hold or a door-system problem (`{who} is touring right now, so I can't
+move this tour. Once it ends, you can book them another time.`); if they
+have a later booking it asks `Want me to move their {oldTime} on {oldDay}
+booking to {newTime} on {newDay} instead?` (outside hours: `{who} is
+touring right now, so I can't move this tour. Their later booking is
+{oldTime} on {oldDay}, and {newTime} on {newDay} is outside your tour
+hours. Want me to move it there anyway?`) and a yes is `Moved {who}'s
+later booking to {time} on {day}.`. Calling off describes the tour that was called off;
+the later booking is `nextBooking`. After the follow-up
 reply, an unapproved custom-time request is told once that it is still
 with the property team; they can reply with a day for a regular
 time only when they do not already have a held or booked regular tour.
@@ -84,9 +104,7 @@ Already approved or declined: `That request has already been handled.`
 Propose tells the operator `That request ran out because its time already
 passed, so your offer of {newTime} on {newDay} didn't go out. I've let
 {who} know, and you can still book them a one-off time.` and does not
-send the proposal. Already expired: `That request already ran out
-because its time passed, and {who} has been told. You can still book
-them a one-off time.` Approving a custom time that
+send the proposal. Approving a custom time that
 moves an unconfirmed held booking uses that same booked-for line, then
 the original consent question, then Reply YES or NO — not moved wording. While the leaving
 issue is open after the close, stuck-inside texts and greetings stay
@@ -157,7 +175,19 @@ cancel". That is not a property question. Tour Core confirms first:
 `Cancel your tour on {day} at {time}? Reply YES or NO.` YES cancels (doors
 off, status cancelled, audit) and they hear `You're cancelled. Text me
 anytime if you want to book again.` NO keeps the booking: `Okay, your tour
-stays on {day} at {time}.` A reply that isn't a clear yes or no is flagged:
+stays on {day} at {time}.` While they are touring and the cancel targets a
+later booking: `Cancel your later tour at {time} on {day}? Your tour right
+now isn't affected. Reply YES or NO.` YES: `Done, I've cancelled your later
+tour at {time} on {day}. Your tour right now isn't affected.` NO: `Okay,
+your later tour at {time} on {day} stays booked.` If they name the tour
+they are on: `You can't cancel the tour you're on, but you're free to wrap
+up whenever you like. Your later tour at {time} on {day} is still booked.
+Want me to cancel that one instead? Reply YES or NO.` A touring visitor
+with no later booking who texts cancel hears `You can't cancel the tour
+you're on, but you're free to wrap up whenever you like. Text me anytime
+if you want to book another tour.` On hold or a door-system problem those
+refusal lines insert `The {team} is still working on the problem and will
+text you here.` after the first sentence. A reply that isn't a clear yes or no is flagged:
 `I'll check with the {team} and get back to you.` STOP still opts out. If
 cancel cannot finish, they get
 `I can't cancel it from here. I've asked the leasing team to call it off and

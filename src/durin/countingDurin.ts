@@ -1,6 +1,10 @@
 import type { DurinAccessAdapter } from "./DurinAccessAdapter";
 
-export type CountingDurin = DurinAccessAdapter & { readonly requestCount: number; readonly revokeCount: number };
+export type CountingDurin = DurinAccessAdapter & {
+  readonly requestCount: number;
+  readonly revokeCount: number;
+  failNextRequest(reason: string): void;
+};
 
 /** Wraps any Durin adapter so demos and tests can prove when Durin was (not) asked to open a door. */
 export function countDurinCalls(inner: DurinAccessAdapter): CountingDurin {
@@ -22,5 +26,10 @@ export function countDurinCalls(inner: DurinAccessAdapter): CountingDurin {
       return inner.revokeAccess(req);
     },
     getHealth: () => inner.getHealth(),
+    failNextRequest(reason: string) {
+      if ("failNextRequest" in inner && typeof inner.failNextRequest === "function") {
+        inner.failNextRequest(reason);
+      }
+    },
   };
 }

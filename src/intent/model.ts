@@ -125,7 +125,7 @@ export type StepAwaiting =
   | { kind: "accept-next-opening"; date: string; slotStart: string }
   | { kind: "confirm-operator-tour"; confirmBy: string }
   /** Confirm a visitor cancel-by-text. Day/time match the booked-tour copy. */
-  | { kind: "confirm-cancel-tour"; day: string; time: string }
+  | { kind: "confirm-cancel-tour"; day: string; time: string; laterWhileTouring?: boolean; namedRunning?: boolean; team?: string }
   | { kind: "t15-questions" }
   | { kind: "t5-extension-offer" }
   | { kind: "t5-no-offer" };
@@ -159,6 +159,8 @@ export interface InterpretContext {
   timezone?: string;
   /** A booked (or held) tour the visitor can cancel by text. */
   hasCancelableTour?: boolean;
+  /** On-site now: touring, operator hold, or door-system problem. */
+  hasRunningTour?: boolean;
 }
 
 export interface IntentInterpreter {

@@ -13,7 +13,7 @@ import {
   type TourTimeRequest,
   type Verification,
 } from "../domain/model";
-import { isCancelableReservation, TERMINAL, transition } from "../domain/stateMachine";
+import { isCancelableReservation, isRunningReservation, TERMINAL, transition } from "../domain/stateMachine";
 import type { DurinAccessAdapter, DurinAccessResult, DurinHealth } from "../durin/DurinAccessAdapter";
 import { MessagingError, type DeliveryReceipt, type MessageChannel, type Messenger } from "../messaging/Messenger";
 import { withPrompt, type ReplyPrompt } from "../messaging/presentation";
@@ -33,7 +33,7 @@ import { closestOpenSlots, intervalsOverlap, occupiedInterval, overlapSummary, p
 import { DOOR_AFTER_T, LATE_ARRIVAL_EXPIRED, landlordRepliedAfterClose, landlordWho, tourFinishedFollowUp, visitorRepliedAfterClose } from "./overstayCopy";
 import { withPropertySlotLock } from "./slotLock";
 import { BOOKING_HORIZON_DAYS, isoDate, nextTourDay, slotsOn, tourWindow, type TourSlot } from "./schedule";
-import { bookedTourCalledOffText } from "./availabilityCopy";
+import { bookedTourCalledOffText, laterCancelConfirm, laterCancelDone, laterCancelKept, tourMovedToText } from "./availabilityCopy";
 import { propertyDirectionsUrl, tourDirectionsText } from "./mapsLink";
 import { addDays, formatDay as formatDayIn, formatTime as formatTimeIn, localDateOf, type LocalDate } from "./timezone";
 
@@ -289,10 +289,20 @@ export function visitorCancelKept(day: string, time: string): string {
   return `Okay, your tour stays on ${day} at ${time}.`;
 }
 
-export function visitorCancelConfirmFor(reservation: Reservation, timeZone: string): string | undefined {
+export function visitorCancelConfirmFor(reservation: Reservation, timeZone: string, laterWhileTouring = false): string | undefined {
   if (!reservation.slotStart) return undefined;
   const start = new Date(reservation.slotStart);
-  return visitorCancelConfirm(formatDayIn(start, timeZone), formatTimeIn(start, timeZone));
+  const day = formatDayIn(start, timeZone);
+  const time = formatTimeIn(start, timeZone);
+  return laterWhileTouring ? laterCancelConfirm(time, day) : visitorCancelConfirm(day, time);
+}
+
+export function visitorCancelKeptFor(day: string, time: string, laterWhileTouring = false): string {
+  return laterWhileTouring ? laterCancelKept(time, day) : visitorCancelKept(day, time);
+}
+
+export function visitorCancelDoneFor(day: string, time: string, laterWhileTouring = false): string {
+  return laterWhileTouring ? laterCancelDone(time, day) : VISITOR_CANCEL_DONE;
 }
 
 /**
@@ -316,8 +326,9 @@ export class VisitorDenialCopy {
     return `Your tour is on hold, and your tour time keeps running while the ${team} sorts this out. ${this.atDoor(team, visitorContact, { teamJustNamed: true })}`;
   }
 
-  static calledOff(team: string, visitorContact?: string): string {
-    return `Your tour has been called off, so the doors won't open for it. ${this.remote(team, visitorContact)}`;
+  static calledOff(team: string, visitorContact?: string, when?: { time: string; day: string }): string {
+    const named = when ? ` at ${when.time} on ${when.day}` : "";
+    return `Your tour${named} has been called off, so the doors won't open for it. ${this.remote(team, visitorContact)}`;
   }
 
   static tooEarly(opensAt?: string, relative?: string): string {
@@ -770,7 +781,13 @@ export class TourCore {
       return { reservation, changed: true };
     }
     if (input.notice === "moved") {
-      await this.textProspect(prospect, reservation.id, `Your tour of ${visitorSubject(config.property, this.unitFor(reservation).name)} has been moved to ${this.whenPhrase(start)}. You're all set.`);
+      const moved = tourMovedToText(visitorSubject(config.property, this.unitFor(reservation).name), this.time(start), this.day(start));
+      if (reservation.status === "AWAITING_CONSENT") {
+        await this.textProspect(prospect, reservation.id, moved);
+        await this.textProspect(prospect, reservation.id, CONSENT_TEXT, { kind: "yes-no" });
+      } else {
+        await this.textProspect(prospect, reservation.id, `${moved} You're all set.`);
+      }
     } else if (reservation.status === "READY") {
       await this.textProspect(prospect, reservation.id, `Your tour has moved to ${when}.\nDoors will work for you from ${this.time(windowStart)} to ${this.time(windowEnd)}.`, {
         kind: "say",
@@ -1335,10 +1352,17 @@ export class TourCore {
 
   async revokeReservation(reservationId: string, reason: string): Promise<Reservation> {
     let reservation = await this.mustGetReservation(reservationId);
+    const running = isRunningReservation(reservation.status);
+    const slotStart = reservation.slotStart;
+    const siblings = (await this.deps.store.list("reservations")).some(
+      (item) => item.id !== reservation.id && item.prospectId === reservation.prospectId && !!item.slotStart,
+    );
     await this.revokeGrants(reservation, reason);
     reservation = await this.move(reservation, "REVOKED", "RESERVATION_REVOKED", { detail: reason });
     const prospect = await this.mustGetProspect(reservation.prospectId);
-    await this.textProspect(prospect, reservation.id, VisitorDenialCopy.calledOff(this.teamName(), this.visitorHelpNumber()));
+    const when =
+      !running && siblings && slotStart ? { time: this.time(new Date(slotStart)), day: this.day(new Date(slotStart)) } : undefined;
+    await this.textProspect(prospect, reservation.id, VisitorDenialCopy.calledOff(this.teamName(), this.visitorHelpNumber(), when));
     return reservation;
   }
 
@@ -1389,13 +1413,18 @@ export class TourCore {
    */
   async cancelBookedTour(reservationId: string, options: { reason: string; propertyWide: boolean; removed?: boolean }): Promise<Reservation> {
     let reservation = await this.mustGetReservation(reservationId);
-    if (reservation.status === "TOURING") return reservation;
+    if (isRunningReservation(reservation.status)) {
+      return reservation;
+    }
     if (!reservation.slotStart || TERMINAL.includes(reservation.status)) return reservation;
     const slotStart = reservation.slotStart;
     await this.revokeGrants(reservation, options.reason);
     reservation = await this.move(reservation, "CANCELLED", "RESERVATION_CANCELLED", { detail: options.reason });
     const prospect = await this.mustGetProspect(reservation.prospectId);
     const start = new Date(slotStart);
+    const touringNow = (await this.deps.store.list("reservations")).some(
+      (item) => item.id !== reservation.id && isRunningReservation(item.status),
+    );
     await this.textProspect(
       prospect,
       reservation.id,
@@ -1406,6 +1435,7 @@ export class TourCore {
         address: this.deps.config.property.address,
         propertyWide: options.propertyWide,
         ...(options.removed ? { removed: true } : {}),
+        ...(touringNow ? { touringNow: true } : {}),
       }),
     );
     return reservation;

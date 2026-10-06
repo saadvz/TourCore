@@ -314,7 +314,9 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
   const keyword = keywordOf(raw);
   // Bare "cancel" is a carrier opt-out keyword, but with a booked tour it means cancel the tour.
   if (keyword === "stop") {
-    if (ctx.hasCancelableTour && isCancelTourAsk(raw) && normalize(raw) === "cancel") return result({ type: "CANCEL_TOUR" }, 1);
+    if ((ctx.hasCancelableTour || ctx.hasRunningTour) && isCancelTourAsk(raw) && normalize(raw) === "cancel") {
+      return result({ type: "CANCEL_TOUR" }, 1);
+    }
     return result({ type: "STOP_MESSAGES" }, 1);
   }
   if (keyword === "start") return result({ type: "START_MESSAGES" }, 1);
@@ -328,7 +330,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
     if (yn.answer === "yes" && yn.confidence >= 0.75) return result({ type: "CONFIRM_CANCEL_TOUR" }, yn.confidence);
     if (isCancelTourAsk(raw)) return result({ type: "CONFIRM_CANCEL_TOUR" }, 0.95);
   }
-  if (ctx.hasCancelableTour && isCancelTourAsk(raw)) return result({ type: "CANCEL_TOUR" }, 0.95);
+  if ((ctx.hasCancelableTour || ctx.hasRunningTour) && isCancelTourAsk(raw)) return result({ type: "CANCEL_TOUR" }, 0.95);
 
   if (ctx.awaiting?.kind === "confirm-custom-time" || ctx.awaiting?.kind === "confirm-alternative") {
     const answered = answerScheduling(ctx.awaiting, t, result);
@@ -522,6 +524,10 @@ function answerToAwaiting(awaiting: StepAwaiting, t: string, { result, unknown }
 function interpretOnTour(ctx: InterpretContext, t: string, asked: boolean, h: Helpers): IntentInterpretation {
   const { result, unknown, question, help, informational } = h;
   const touring = ctx.step === "touring";
+  // Already booked: "I'm here at 1:58" is arrival, not a new custom-time ask.
+  if (ctx.step === "ready" && /^(i am |we are |i |we )?(just |finally |now )*here(\s+at\b|\s*$)/.test(t)) {
+    return result({ type: "ARRIVAL" }, 0.95);
+  }
   const custom = schedulingIntent(ctx.message, t, false, result, unknown, ctx.today);
   if (custom) return custom;
 

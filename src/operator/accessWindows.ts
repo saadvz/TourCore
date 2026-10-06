@@ -1,6 +1,7 @@
 import type { TourCoreConfig } from "../config/tourCoreConfig";
 import { formatDateTime, formatIsoOffset } from "../core/timezone";
 import type { AccessGrant, AuditEvent, Reservation } from "../domain/model";
+import { isRunningReservation, TERMINAL } from "../domain/stateMachine";
 import type { ExportBundle } from "../export/exportBundle";
 import { visitorSubject } from "../visitor/identity";
 
@@ -50,7 +51,12 @@ export class AccessWindows {
   }
 
   static currentReservation(tour: AccessWindowSource): Reservation | undefined {
-    return tour.bundle.reservations.at(-1);
+    const reservations = tour.bundle.reservations;
+    if (!reservations.length) return undefined;
+    const running = reservations.find((r) => isRunningReservation(r.status));
+    if (running) return running;
+    const open = reservations.filter((r) => !TERMINAL.includes(r.status));
+    return open.at(-1) ?? reservations.at(-1);
   }
 
   static grants(tour: AccessWindowSource, reservationId = AccessWindows.currentReservation(tour)?.id): AccessGrantTimes[] {

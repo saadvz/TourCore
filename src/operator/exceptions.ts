@@ -7,6 +7,7 @@ import { formatShortDateTime } from "../core/timezone";
 import { profileFacts, questionTopic, structuredAnswer, type ProfileField, type UnitProfile } from "../config/unitProfile";
 import { MAX_FACT_LENGTH } from "../config/validateConfig";
 import { UNNAMED_VISITOR, type AuditEvent, type Reservation, type ReservationStatus } from "../domain/model";
+import { PAUSED } from "../domain/stateMachine";
 import { applySetupCommand } from "../setup/commands";
 import { SetupInputError } from "../setup/setupActions";
 import { statusLabel } from "../setup/workspace";
@@ -131,8 +132,7 @@ function appendResolution(services: OperatorServices, propertyId: string, entry:
 // ------------------------------------------------------------------ derive
 
 const id = (...parts: string[]) => `exc_${createHash("sha256").update(parts.join("|")).digest("hex").slice(0, 12)}`;
-const PAUSED: ReservationStatus[] = ["OPERATOR_HOLD", "PROVIDER_FAILURE"];
-const BLOCKING: ReservationStatus[] = ["OPERATOR_HOLD", "PROVIDER_FAILURE", "REVOKED", "CANCELLED", "VERIFICATION_FAILED", "EXPIRED"];
+const BLOCKING: ReservationStatus[] = [...PAUSED, "REVOKED", "CANCELLED", "VERIFICATION_FAILED", "EXPIRED"];
 const ACCESS_KINDS: Record<string, ExceptionKind | undefined> = {
   DENY_WRONG_ROUTE: "off-route-door",
   DENY_DURIN_UNHEALTHY: "door-system",
@@ -460,7 +460,7 @@ export async function placeHold(services: OperatorServices, ref: string, reason:
   const { tour, session, reservation } = await liveTour(services, ref);
   assertCanChange(tour, reservation, "hold");
   const why = reason.trim().slice(0, 300) || "paused by the property team";
-  await session.operatorChange((core, id) => core.placeOperatorHold(id, why));
+  await session.operatorChange((core, id) => core.placeOperatorHold(id, why), reservation.id);
   await persistSession(services, session);
   return tourSummary(await findTour(services, ref));
 }
@@ -469,7 +469,7 @@ export async function placeHold(services: OperatorServices, ref: string, reason:
 export async function clearHold(services: OperatorServices, ref: string) {
   const { tour, session, reservation } = await liveTour(services, ref);
   assertCanChange(tour, reservation, "resume");
-  await session.operatorChange((core, id) => core.resumeReservation(id));
+  await session.operatorChange((core, id) => core.resumeReservation(id), reservation.id);
   await persistSession(services, session);
   return tourSummary(await findTour(services, ref));
 }
@@ -478,10 +478,19 @@ export async function clearHold(services: OperatorServices, ref: string) {
 export async function revokeTour(services: OperatorServices, ref: string, reason: string) {
   const { tour, session, reservation } = await liveTour(services, ref);
   assertCanChange(tour, reservation, "revoke");
+  const calledOff = tourSummary(tour);
   const why = reason.trim().slice(0, 300) || "called off by the property team";
-  await session.operatorChange((core, id) => core.revokeReservation(id, why));
+  await session.operatorChange((core, id) => core.revokeReservation(id, why), reservation.id);
+  if (session.pendingBookingId === reservation.id) session.pendingBookingId = undefined;
+  await session.promotePendingBookingIfTourEnded();
   await persistSession(services, session);
-  return tourSummary(await findTour(services, ref));
+  return {
+    ...calledOff,
+    status: STATUS_LABELS.REVOKED,
+    currentStep: STATUS_LABELS.REVOKED,
+    active: false,
+    canChange: false,
+  };
 }
 
 export function cleanFact(fact: string): string {

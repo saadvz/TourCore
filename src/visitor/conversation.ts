@@ -10,13 +10,16 @@ import {
   unknownAnswerReply,
   VisitorDenialCopy,
   visitorCancelConfirm,
-  visitorCancelKept,
+  visitorCancelKeptFor,
   type InboundMeta,
 } from "../core/TourCore";
+import { cannotCancelRunningOfferLater, cannotCancelRunningTour, laterCancelConfirm } from "../core/availabilityCopy";
+import { namedCancelFocus } from "./cancelTarget";
+import { awaitingLatestYesNo, doorAskSupersedesCancel } from "./latestQuestion";
 import { isLeavingTour, T5_NO_OFFER_BARE_YES } from "../core/overstayCopy";
 import { afterCloseAlertOpen } from "./overstayScheduler";
 import { yesNo } from "../intent/yesNo";
-import { isCancelableReservation } from "../domain/stateMachine";
+import { isRunningReservation, TERMINAL } from "../domain/stateMachine";
 import { stripFiller } from "../intent/normalize";
 import {
   isCancelTourAsk,
@@ -329,7 +332,8 @@ async function contextFor(session: VisitorDemoSession, message: string, step: Vi
     ...(r ? { reservedUnit: session.config.units.find((u) => u.id === r.unitId)?.name } : {}),
     remainingStops: remaining.map((id) => stopRef(session, id)),
     doors: session.config.doors.map((d) => stopRef(session, d.id)),
-    hasCancelableTour: r ? isCancelableReservation(r) : false,
+    hasCancelableTour: await session.hasCancelableTour(),
+    hasRunningTour: !!r && isRunningReservation(r.status),
   };
 }
 
@@ -541,6 +545,13 @@ export async function handleVisitorText(
     else if (intent.type === "ASK_PROPERTY_QUESTION") await ask(turn, intent.question, () => session.welcome());
     else await session.greet(said);
   }   else await byStage(turn);
+  if (
+    awaiting?.kind === "confirm-cancel-tour" &&
+    doorAskSupersedesCancel(intent) &&
+    !session.pendingClarification
+  ) {
+    session.expect(stage, awaiting);
+  }
   if (session.overstay) await session.overstay.tickSession(session);
   if (keyword !== "stop" && !silent && typed) {
     const outboundAfter = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").length;
@@ -869,7 +880,14 @@ function stepPrompt(session: VisitorDemoSession, stage: VisitorStage, awaiting?:
     case "confirm-finish":
       return { body: "Are you finished with your tour?", prompt: yesNo, awaiting };
     case "confirm-cancel-tour":
-      return { body: visitorCancelConfirm(awaiting.day, awaiting.time), awaiting };
+      return {
+        body: awaiting.namedRunning
+          ? cannotCancelRunningOfferLater(awaiting.time, awaiting.day, awaiting.team)
+          : awaiting.laterWhileTouring
+            ? laterCancelConfirm(awaiting.time, awaiting.day)
+            : visitorCancelConfirm(awaiting.day, awaiting.time),
+        awaiting,
+      };
   }
   switch (stage) {
     case "choose-unit":
@@ -899,16 +917,41 @@ function stepPrompt(session: VisitorDemoSession, stage: VisitorStage, awaiting?:
 const CONSENT_QUESTION = "Is it OK if I text you about this tour and keep a record of your visit?";
 const FOLLOW_UP_QUESTION = "Would you like someone from the property team to follow up?";
 
+/** Pause-cancel team label, only on hold or a door-system problem. */
+function runningCancelTeam(session: VisitorDemoSession, status?: string): string | undefined {
+  return status === "OPERATOR_HOLD" || status === "PROVIDER_FAILURE" ? session.config.operator.name : undefined;
+}
+
 async function offerCancelConfirm(turn: Turn): Promise<void> {
-  const reservation = await turn.session.reservation();
-  const line = reservation ? turn.session.cancelConfirmLine(reservation) : undefined;
-  if (!line || !reservation?.slotStart) {
+  const target = await turn.session.cancelTarget();
+  const line = target ? turn.session.cancelConfirmLine(target.reservation, target.laterWhileTouring) : undefined;
+  if (!line || !target?.reservation.slotStart) {
     await turn.session.reportCancelFailed(turn.said);
     return;
   }
-  const start = new Date(reservation.slotStart);
+  const start = new Date(target.reservation.slotStart);
   const tz = turn.session.config.property.timezone;
-  await turn.clarify(line, undefined, { kind: "confirm-cancel-tour", day: formatDay(start, tz), time: formatTime(start, tz) });
+  const day = formatDay(start, tz);
+  const time = formatTime(start, tz);
+  const current = await turn.session.reservation();
+  const namedRunning =
+    target.laterWhileTouring &&
+    namedCancelFocus({
+      text: turn.said.text ?? "",
+      current,
+      later: await turn.session.pendingBooking(),
+      timeZone: tz,
+      now: turn.session.clock.now(),
+    }) === "running";
+  const team = runningCancelTeam(turn.session, current?.status);
+  await turn.clarify(namedRunning ? cannotCancelRunningOfferLater(time, day, team) : line, undefined, {
+    kind: "confirm-cancel-tour",
+    day,
+    time,
+    ...(target.laterWhileTouring ? { laterWhileTouring: true } : {}),
+    ...(namedRunning ? { namedRunning: true } : {}),
+    ...(namedRunning && team ? { team } : {}),
+  });
 }
 
 /**
@@ -922,16 +965,17 @@ async function handleCancelIntent(turn: Turn): Promise<boolean> {
   const cancelAsk = intent.type === "CANCEL_TOUR" || intent.type === "CONFIRM_CANCEL_TOUR" || isCancelTourAsk(text);
   const awaiting = turn.awaiting?.kind === "confirm-cancel-tour" ? turn.awaiting : undefined;
 
+  if (awaiting && doorAskSupersedesCancel(intent)) return false;
   if (awaiting && intent.type === "KEEP_TOUR" && turn.confident) {
-    await turn.respond(visitorCancelKept(awaiting.day, awaiting.time));
+    await turn.respond(visitorCancelKeptFor(awaiting.day, awaiting.time, awaiting.laterWhileTouring));
     return true;
   }
   if (awaiting && intent.type === "CONFIRM_CANCEL_TOUR" && turn.confident) {
-    await session.cancelBookedTour(turn.said);
+    await session.cancelBookedTour(turn.said, awaiting.laterWhileTouring);
     return true;
   }
   if (awaiting && cancelAsk && intent.type !== "ASK_PROPERTY_QUESTION" && intent.type !== "REQUEST_HELP") {
-    await session.cancelBookedTour(turn.said);
+    await session.cancelBookedTour(turn.said, awaiting.laterWhileTouring);
     return true;
   }
   if (awaiting && intent.type !== "REQUEST_HELP") {
@@ -942,6 +986,13 @@ async function handleCancelIntent(turn: Turn): Promise<boolean> {
   if (cancelAsk && cancelable) {
     await offerCancelConfirm(turn);
     return true;
+  }
+  if (cancelAsk && !cancelable) {
+    const current = await session.reservation();
+    if (current && isRunningReservation(current.status)) {
+      await turn.respond(cannotCancelRunningTour(runningCancelTeam(turn.session, current.status)));
+      return true;
+    }
   }
   if (intent.type === "CANCEL_TOUR" && !cancelable) {
     await session.reportCancelFailed(turn.said);
@@ -1557,7 +1608,7 @@ async function takeOverHeldBookingOnGreeting(turn: Turn): Promise<boolean> {
   if (!startsNewBookingAfterClose(text, intent)) return false;
   if (session.pendingBookingId) {
     const current = await session.reservation();
-    if (current && current.status !== "COMPLETED" && current.status !== "EXPIRED") return false;
+    if (current && !TERMINAL.includes(current.status)) return false;
     if (current?.status === "COMPLETED" && !(await session.hasFollowUpResponse(current.id))) return false;
     session.promotePendingBookingIfEnded();
   }
@@ -1608,6 +1659,8 @@ async function handlePendingBookingReply(turn: Turn): Promise<boolean> {
   if (!session.pendingBookingId) return false;
   if ((await session.stage()) === "follow-up") return false;
   if (await outstandingProposedRequest(session)) return false;
+  // A bare YES/NO answers the latest question asked — a door check wins over pending rebook consent.
+  if (awaitingLatestYesNo(turn.awaiting)) return false;
   const text = turn.said.text ?? "";
   if (hasExplicitChangeAsk(text)) return false;
   if (await affirmsBookedDay(turn)) {

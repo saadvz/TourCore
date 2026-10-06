@@ -147,7 +147,7 @@ describe("the landlord decides", () => {
     const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
     const done = await a.approve("approve_tour_time_request", { tourTimeRequestId: id });
     expect(done.summary).toContain("3:15 PM");
-    expect(a.fake.sent.filter((message) => message.number === PHONE).at(-1)!.content).toContain("moved to today at 3:15 PM");
+    expect(a.fake.sent.filter((message) => message.number === PHONE).at(-1)!.content).toContain("moved to 3:15 PM on Monday, Sep 28");
     expect(hoursOf(a)).toEqual(before);
     expect(slotsOn(a.ws.load("prop_100_alfred_way").config, { year: 2026, month: 9, day: 28 }).map((slot) => slot.label)).toEqual(["2:00 PM", "3:30 PM"]);
   });
@@ -216,9 +216,6 @@ describe("the landlord decides", () => {
   it("the landlord can move the tour directly, and access follows the new time", async () => {
     const a = await liveApp({ cleanups });
     await a.book();
-    a.clock.t = at(13, 58);
-    await a.text("I'm here");
-    a.clock.t = at(7);
     const asked = await a.grok("reschedule_tour", { visitor: "Testy", newStartsAt: "3:15 PM today" });
     expect(asked.summary).toContain("Move Testy's tour from 2:00 PM on Monday, Sep 28 to 3:15 PM on Monday, Sep 28?");
     expect(asked.summary).toContain("Testy gets a text with the new time.");
@@ -227,13 +224,26 @@ describe("the landlord decides", () => {
     expect(asked.summary).not.toContain("Continue?");
     const done = await a.grok("reschedule_tour", { visitor: "Testy", newStartsAt: "3:15 PM today", confirmationCode: asked.confirmation.code });
     expect(done.summary).toContain("3:15 PM");
-    expect(a.fake.sent.filter((message) => message.number === PHONE).at(-1)!.content).toContain("moved to today at 3:15 PM");
+    expect(a.fake.sent.filter((message) => message.number === PHONE).at(-1)!.content).toContain("moved to 3:15 PM on Monday, Sep 28");
 
     a.clock.t = at(13, 58);
     const early = await a.text("I'm here");
     expect(early.join("\n")).toContain("3:05 PM");
     a.clock.t = at(15, 10);
     const open = await a.text("I'm here");
+    expect(open.join("\n")).toContain("Entrance is open");
+  });
+
+  it("I'm here at 1:58 after a move to 3:15 is still early, and 3:10 opens", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    const asked = await a.grok("reschedule_tour", { visitor: "Testy", newStartsAt: "3:15 PM today" });
+    await a.grok("reschedule_tour", { visitor: "Testy", newStartsAt: "3:15 PM today", confirmationCode: asked.confirmation.code });
+    a.clock.t = at(13, 58);
+    const early = await a.text("I'm here at 1:58");
+    expect(early.join("\n")).toContain("3:05 PM");
+    a.clock.t = at(15, 10);
+    const open = await a.text("I'm here at 1:58");
     expect(open.join("\n")).toContain("Entrance is open");
   });
 
@@ -700,7 +710,7 @@ describe("a held rebook and a custom-time request stay one booking", () => {
     const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
     await a.approve("approve_tour_time_request", { tourTimeRequestId: id });
     const last = a.fake.sent.filter((message) => message.number === PHONE).at(-1)!.content;
-    expect(last).toContain("moved to today at 3:15 PM");
+    expect(last).toContain("moved to 3:15 PM on Monday, Sep 28");
     expect(last).not.toContain(CONSENT_TEXT);
   });
 });

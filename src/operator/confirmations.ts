@@ -43,6 +43,13 @@ export class ConfirmationBook {
     return { code, question, expiresInMinutes: Math.round(this.ttlMs / 60_000) };
   }
 
+  /** Looks up an unused code without consuming it. */
+  peek(code: string): { action: string; target: string; fingerprint: string } | undefined {
+    this.sweep();
+    const entry = this.pending.get(code.trim().toUpperCase());
+    return entry ? { action: entry.action, target: entry.target, fingerprint: entry.fingerprint } : undefined;
+  }
+
   /** Uses up the code. Throws in plain language if it doesn't match this exact action, target and state. */
   redeem(code: string, action: string, target: string, fingerprint: string): void {
     this.sweep();

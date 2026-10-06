@@ -84,14 +84,37 @@ what never does.
   they left off once it's answered. A booked-tour cancel by text (any natural
   phrasing) is handled by Tour Core: it confirms, then YES cancels (`You're
   cancelled. Text me anytime if you want to book again.`) or NO keeps the
-  booking (`Okay, your tour stays on {day} at {time}.`). A reply that isn't a
+  booking (`Okay, your tour stays on {day} at {time}.`). While they are
+  touring and the cancel targets a later booking: `Cancel your later tour at
+  {time} on {day}? Your tour right now isn't affected. Reply YES or NO.`;
+  YES `Done, I've cancelled your later tour at {time} on {day}. Your tour
+  right now isn't affected.`; NO `Okay, your later tour at {time} on {day}
+  stays booked.` If they name the tour they are on: `You can't cancel the
+  tour you're on, but you're free to wrap up whenever you like. Your later
+  tour at {time} on {day} is still booked. Want me to cancel that one
+  instead? Reply YES or NO.` A touring visitor with no later booking who
+  texts cancel hears `You can't cancel the tour you're on, but you're free
+  to wrap up whenever you like. Text me anytime if you want to book another
+  tour.` On hold or a door-system problem those refusal lines insert
+  `The {team} is still working on the problem and will text you here.`
+  after the first sentence. A reply that isn't a
   clear yes or no is flagged. That is not a missing-fact flag.
 - **One-off tours.** When the operator wants to set up a tour for someone who
   asked (including a visitor who hasn't texted in, or who only got a day or
   time menu and never booked), the Bot uses `schedule_one_off_tour` and asks
   the exact question Tour Core returns. Only a yes that they asked is enough.
   A leftover choosing menu is replaced; a booked tour, pending one-off, open
-  tour window, or hold is refused. Tell the operator Tour Core's words
+  tour window, or hold is refused. A time that overlaps a running tour or any
+  future or held booking is refused before asking. `reschedule_tour` will not
+  move a tour in progress, including hold or a door-system problem (`{who} is touring right now, so I can't move this
+  tour. Once it ends, you can book them another time.`); if they have a later
+  booking it asks `Want me to move their {oldTime} on {oldDay} booking to
+  {newTime} on {newDay} instead?` (outside hours: `{who} is touring right
+  now, so I can't move this tour. Their later booking is {oldTime} on
+  {oldDay}, and {newTime} on {newDay} is outside your tour hours. Want me
+  to move it there anyway?`) and a yes is `Moved {who}'s later booking
+  to {time} on {day}.`.
+  Tell the operator Tour Core's words
   (`They already have a booked tour. I can move it or call it off.`), then
   move with `reschedule_tour` or call off with `revoke_tour_access` (resume a
   hold with `clear_operator_hold`). If tours are paused, approve and

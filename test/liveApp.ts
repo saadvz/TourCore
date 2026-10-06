@@ -10,8 +10,8 @@ import { LocalSecretStore } from "../src/install/secretStore";
 import { setSendblueRuntime } from "../src/messaging/sendblue/runtime";
 import { PropertyWorkspace, runReadinessCheck } from "../src/setup";
 import { FileRuntimeStore } from "../src/storage/runtimeStore";
+import { VisitorDemoRegistry } from "../src/visitor";
 import { createSetupServer, type TourCoreServer } from "../src/web/server";
-import { VisitorDemoRegistry } from "../src/visitor/session";
 import { fakeSendblue, inbound, SECRET, sendblueEnv } from "./fakeSendblue";
 import { fakeNetwork, ROUTINE_KEY, ROUTINE_URL } from "./installHarness";
 

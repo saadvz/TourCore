@@ -13,7 +13,14 @@ const HAPPY_PATH: Partial<Record<ReservationStatus, ReservationStatus[]>> = {
 /** Statuses where a booked tour is still live and can be interrupted. */
 const ACTIVE: ReservationStatus[] = ["RESERVED", "AWAITING_CONSENT", "AWAITING_VERIFICATION", "READY", "TOURING"];
 const INTERRUPTIONS: ReservationStatus[] = ["CANCELLED", "REVOKED", "OPERATOR_HOLD", "PROVIDER_FAILURE", "VERIFICATION_FAILED"];
-const PAUSED: ReservationStatus[] = ["OPERATOR_HOLD", "PROVIDER_FAILURE"];
+/** Paused on-site: team hold or door-system problem. Still a running tour. */
+export const PAUSED: ReservationStatus[] = ["OPERATOR_HOLD", "PROVIDER_FAILURE"];
+/** On-site: walking the route, or paused on hold / a door-system problem. */
+export const RUNNING: ReservationStatus[] = ["TOURING", ...PAUSED];
+
+export function isRunningReservation(status: ReservationStatus): boolean {
+  return RUNNING.includes(status);
+}
 
 /** Booked (or held) tours a visitor can cancel by text, same set an operator can call off. */
 export const CANCELABLE: ReservationStatus[] = [...ACTIVE, ...PAUSED];

@@ -4,7 +4,7 @@ import { formatPhone } from "../core/phone";
 import { formatDay, formatTime } from "../core/timezone";
 import type { AccessGrant, AuditEvent, Message, Prospect, Reservation } from "../domain/model";
 import { UNNAMED_VISITOR } from "../domain/model";
-import { TERMINAL } from "../domain/stateMachine";
+import { isRunningReservation, PAUSED, TERMINAL } from "../domain/stateMachine";
 import type { ExportBundle } from "../export/exportBundle";
 import { SetupInputError } from "../setup/setupActions";
 import { visitorSubject } from "../visitor/identity";
@@ -103,9 +103,30 @@ export async function findTour(services: OperatorServices, ref: string): Promise
   return tour;
 }
 
-/** The reservation a tour is about: the latest one in its records. */
+/** The reservation a tour is about: a running tour wins over a later held booking. */
 export function currentReservation(tour: TourSnapshot): Reservation | undefined {
-  return tour.bundle.reservations.at(-1);
+  return pickCurrentReservation(tour.bundle.reservations);
+}
+
+/** In-progress first, then the newest booking still in play, else the latest record. */
+export function pickCurrentReservation(reservations: Reservation[]): Reservation | undefined {
+  if (!reservations.length) return undefined;
+  const running = reservations.find((r) => isRunningReservation(r.status));
+  if (running) return running;
+  const open = reservations.filter((r) => !TERMINAL.includes(r.status));
+  return open.at(-1) ?? reservations.at(-1);
+}
+
+export function isFutureBooking(reservation: Reservation, now?: Date): boolean {
+  if (!reservation.slotStart || isRunningReservation(reservation.status) || TERMINAL.includes(reservation.status)) return false;
+  if (now && Date.parse(reservation.slotStart) <= now.getTime()) return false;
+  return true;
+}
+
+/** A later booking held while this tour is still running. */
+export function nextReservation(tour: TourSnapshot, now?: Date): Reservation | undefined {
+  const current = currentReservation(tour);
+  return tour.bundle.reservations.filter((r) => isFutureBooking(r, now) && r.id !== current?.id).at(-1);
 }
 
 export function visitorNameOf(tour: TourSnapshot): string {
@@ -135,7 +156,7 @@ export function isActive(tour: TourSnapshot): boolean {
 
 export function isPaused(tour: TourSnapshot): boolean {
   const s = currentReservation(tour)?.status;
-  return s === "OPERATOR_HOLD" || s === "PROVIDER_FAILURE";
+  return !!s && PAUSED.includes(s);
 }
 
 function stopName(config: TourCoreConfig, doorId: string): string {
@@ -161,13 +182,29 @@ function currentStep(tour: TourSnapshot): string {
   return STATUS_LABELS[r.status];
 }
 
+function tourTimeOf(reservation: Reservation, tour: TourSnapshot): string | undefined {
+  if (!reservation.slotStart) return undefined;
+  const tz = tour.config.property.timezone;
+  const start = new Date(reservation.slotStart);
+  const end = reservation.windowEnd
+    ? new Date(reservation.windowEnd)
+    : new Date(Date.parse(reservation.slotStart) + tour.config.tourHours.tourLengthMinutes * 60_000);
+  return `${formatDay(start, tz)}, ${formatTime(start, tz)}\u2013${formatTime(end, tz)}`;
+}
+
 function tourTime(tour: TourSnapshot): string | undefined {
   const r = currentReservation(tour);
-  if (!r?.slotStart) return undefined;
-  const tz = tour.config.property.timezone;
-  const start = new Date(r.slotStart);
-  const end = new Date(Date.parse(r.slotStart) + tour.config.tourHours.tourLengthMinutes * 60_000);
-  return `${formatDay(start, tz)}, ${formatTime(start, tz)}\u2013${formatTime(end, tz)}`;
+  return r ? tourTimeOf(r, tour) : undefined;
+}
+
+export function nextBookingOf(tour: TourSnapshot) {
+  const next = nextReservation(tour);
+  if (!next) return undefined;
+  const time = tourTimeOf(next, tour);
+  return {
+    ...(time ? { tourTime: time } : {}),
+    status: STATUS_LABELS[next.status],
+  };
 }
 
 const SOURCE: Record<TourRecord["kind"], string> = { messaging: "Real phone", "visitor-demo": "Visitor demo", practice: "Practice tour" };
@@ -192,6 +229,7 @@ export function tourSummary(tour: TourSnapshot) {
     visitorName: visitorNameOf(tour),
     unitName: unitNameOf(tour),
     tourTime: tourTime(tour),
+    ...(nextBookingOf(tour) ? { nextBooking: nextBookingOf(tour) } : {}),
     status: statusOf(tour),
     currentStep: currentStep(tour),
     source: SOURCE[tour.kind],

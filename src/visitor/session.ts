@@ -14,8 +14,9 @@ import { entryReply, timeMenu } from "./entry";
 import { operatorUnitName, visitorTourOf } from "./identity";
 import { ONE_OFF_REPLACED_DETAIL } from "./oneOffGate";
 import { offerDate } from "./unavailableDay";
-import { alreadyAskedLine, bookedForLine, CONSENT_TEXT, customTimeAskedLine, isLiveHelpReservation, pendingCustomTimeLine, TAKEN_SLOT_OTHER_DAY, takenSlotLine, TourCore, TourCoreError, VISITOR_CANCEL_DONE, visitorCancelConfirmFor, type AccessOutcome, type InboundMeta } from "../core/TourCore";
-import { isCancelableReservation, TERMINAL } from "../domain/stateMachine";
+import { alreadyAskedLine, bookedForLine, CONSENT_TEXT, customTimeAskedLine, isLiveHelpReservation, pendingCustomTimeLine, TAKEN_SLOT_OTHER_DAY, takenSlotLine, TourCore, TourCoreError, visitorCancelConfirmFor, visitorCancelDoneFor, type AccessOutcome, type InboundMeta } from "../core/TourCore";
+import { isCancelableReservation, PAUSED, TERMINAL } from "../domain/stateMachine";
+import { visitorCancelTarget, type VisitorCancelTarget } from "./cancelTarget";
 import { isoDate, parseIsoDate, type TourSlot } from "../core/schedule";
 import { createDurin, createStore, createVerificationProvider } from "../createTourCore";
 import type { TourCoreStore } from "../storage/Store";
@@ -398,7 +399,7 @@ export class VisitorDemoSession {
   /** Paused by the team or by a door-system problem: not over, just waiting for the team. */
   async isPaused(): Promise<boolean> {
     const status = (await this.reservation())?.status;
-    return status === "OPERATOR_HOLD" || status === "PROVIDER_FAILURE";
+    return !!status && PAUSED.includes(status);
   }
 
   /** Doors on the reserved route that haven't been opened yet, in order. */
@@ -645,12 +646,14 @@ export class VisitorDemoSession {
   }
 
   /** Operator action: move the tour. The visitor is told through this conversation's own transport. */
-  async reschedule(newStartsAt: string, options: { outsideTourHours?: boolean; customTime?: boolean; notice?: "default" | "moved" | "none" } = {}): Promise<{ changed: boolean }> {
-    if (!this.reservationId) throw new SetupInputError("NO_TOUR", "This visitor hasn't booked a tour yet.");
-    const reservation = await this.reservation();
+  async reschedule(newStartsAt: string, options: { outsideTourHours?: boolean; customTime?: boolean; notice?: "default" | "moved" | "none"; reservationId?: string } = {}): Promise<{ changed: boolean }> {
+    const { reservationId: targetId, ...rest } = options;
+    const reservationId = targetId ?? this.reservationId;
+    if (!reservationId) throw new SetupInputError("NO_TOUR", "This visitor hasn't booked a tour yet.");
+    const reservation = targetId ? await this.store.get("reservations", targetId) : await this.reservation();
     const paused = operatorPausedBookingRefuse(this.pauseState(), this.config, reservation?.unitId);
     if (paused) throw new SetupInputError("TOURS_PAUSED", paused);
-    const { changed } = await this.core.rescheduleReservation({ reservationId: this.reservationId, newStartsAt, ...options });
+    const { changed } = await this.core.rescheduleReservation({ reservationId, newStartsAt, ...rest });
     this.clearShownMenus();
     await this.syncReplies();
     return { changed };
@@ -904,32 +907,39 @@ export class VisitorDemoSession {
     return request;
   }
 
-  async hasCancelableTour(): Promise<boolean> {
-    const reservation = await this.reservation();
-    return !!reservation && isCancelableReservation(reservation);
+  async cancelTarget(): Promise<VisitorCancelTarget | undefined> {
+    return visitorCancelTarget({ current: await this.reservation(), later: await this.pendingBooking() });
   }
 
-  cancelConfirmLine(reservation: Reservation): string | undefined {
-    return visitorCancelConfirmFor(reservation, this.config.property.timezone);
+  async hasCancelableTour(): Promise<boolean> {
+    return !!(await this.cancelTarget());
+  }
+
+  cancelConfirmLine(reservation: Reservation, laterWhileTouring = false): string | undefined {
+    return visitorCancelConfirmFor(reservation, this.config.property.timezone, laterWhileTouring);
   }
 
   /** Visitor confirmed cancel-by-text: revoke doors, cancel, audit, then the short done line. */
-  async cancelBookedTour(said: Said): Promise<"cancelled" | "failed"> {
+  async cancelBookedTour(said: Said, laterWhileTouring = false): Promise<"cancelled" | "failed"> {
     await this.recordText(said);
-    const reservation = await this.reservation();
+    const target = await this.cancelTarget();
     try {
-      if (!reservation || !isCancelableReservation(reservation)) {
+      if (!target || !isCancelableReservation(target.reservation)) {
         throw new SetupInputError("NOT_CANCELABLE", "This tour can't be cancelled from here.");
       }
-      await this.core.cancelTourByVisitor(reservation.id);
+      await this.core.cancelTourByVisitor(target.reservation.id);
       this.clearShownMenus();
-      await this.reply(VISITOR_CANCEL_DONE);
+      if (this.pendingBookingId === target.reservation.id) this.pendingBookingId = undefined;
+      const start = target.reservation.slotStart ? new Date(target.reservation.slotStart) : undefined;
+      const tz = this.config.property.timezone;
+      const later = laterWhileTouring || target.laterWhileTouring;
+      await this.reply(start ? visitorCancelDoneFor(formatDay(start, tz), formatTime(start, tz), later) : visitorCancelDoneFor("", "", later));
       return "cancelled";
     } catch {
       await this.core.flagVisitorCancelFailed({
         phone: this.visitor?.phone ?? "",
         text: said.text ?? "cancel",
-        reservationId: this.reservationId,
+        reservationId: target?.reservation.id ?? this.reservationId,
         meta: said.meta,
         recordInbound: false,
       });
@@ -955,9 +965,10 @@ export class VisitorDemoSession {
    * the engine; anything Tour Core tells the visitor goes out on this
    * conversation's own transport.
    */
-  async operatorChange<T>(run: (core: TourCore, reservationId: string) => Promise<T>): Promise<T> {
-    if (!this.reservationId) throw new SetupInputError("NO_TOUR", "This visitor hasn't booked a tour yet.");
-    const result = await run(this.core, this.reservationId);
+  async operatorChange<T>(run: (core: TourCore, reservationId: string) => Promise<T>, reservationId = this.reservationId): Promise<T> {
+    const id = reservationId ?? this.reservationId;
+    if (!id) throw new SetupInputError("NO_TOUR", "This visitor hasn't booked a tour yet.");
+    const result = await run(this.core, id);
     this.clearShownMenus();
     await this.syncReplies();
     return result;
@@ -1331,6 +1342,8 @@ export class VisitorDemoSession {
       if (left && !(await this.hasFollowUpResponse(current.id))) return false;
       return this.promotePendingBookingIfEnded();
     }
+    // Called off, cancelled, or otherwise ended: the held rebook takes over.
+    if (TERMINAL.includes(current.status)) return this.promotePendingBookingIfEnded();
     return false;
   }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config/tourCoreConfig";
 import { zonedTimeToUtc } from "../src/core/timezone";
+import { cannotCancelRunningTour } from "../src/core/availabilityCopy";
 import {
   UNKNOWN_ANSWER,
   VISITOR_CANCEL_DONE,
@@ -154,19 +155,45 @@ describe("visitor cancel-by-text", () => {
     expect((await p.audit("RESERVATION_CANCELLED"))[0]?.detail).toBe("visitor opted out of messages");
   });
 
-  it("revokes open doors when they cancel during the tour", async () => {
+  it("refuses a bare cancel while touring with no later booking and leaves doors working", async () => {
     const p = phone();
     await bookedAndReady(p);
     p.session.clock.jumpTo(new Date(at(13, 58)));
     await p.say("I'm here");
     expect(await p.grants()).toEqual(["entrance"]);
-    await p.say("I need to cancel");
-    expect(p.lastReply()).toBe(CONFIRM);
-    await p.say("yes");
-    expect(p.lastReply()).toBe(VISITOR_CANCEL_DONE);
-    expect((await p.session.reservation())?.status).toBe("CANCELLED");
-    expect(await p.grants()).toEqual([]);
-    expect((await p.audit("ACCESS_REVOKED")).length).toBeGreaterThan(0);
+    await p.say("cancel");
+    expect(p.lastReply()).toBe(cannotCancelRunningTour());
+    expect(p.lastReply()).not.toContain("is still working on the problem");
+    expect((await p.session.reservation())?.status).toBe("TOURING");
+    expect(await p.grants()).toEqual(["entrance"]);
+  });
+
+  it("refuses cancel my tour while touring with no later booking", async () => {
+    const p = phone();
+    await bookedAndReady(p);
+    p.session.clock.jumpTo(new Date(at(13, 58)));
+    await p.say("I'm here");
+    await p.say("cancel my tour");
+    expect(p.lastReply()).toBe(cannotCancelRunningTour());
+    expect(p.lastReply()).not.toContain("is still working on the problem");
+    expect((await p.session.reservation())?.status).toBe("TOURING");
+    expect(await p.grants()).toEqual(["entrance"]);
+  });
+
+  it("still opens a door after a refused cancel while touring with no later booking", async () => {
+    const p = phone();
+    await bookedAndReady(p);
+    p.session.clock.jumpTo(new Date(at(13, 58)));
+    await p.say("I'm here");
+    await p.say("cancel");
+    expect(p.lastReply()).toBe(cannotCancelRunningTour());
+    expect(p.lastReply()).not.toContain("is still working on the problem");
+    const before = p.session.durin.requestCount;
+    await p.say("I'm at 101");
+    expect((await p.session.reservation())?.status).toBe("TOURING");
+    expect(p.session.lastAccess).toMatchObject({ doorId: "unit_101", allowed: true });
+    expect(p.session.durin.requestCount).toBeGreaterThan(before);
+    expect((await p.grants()).length).toBeGreaterThan(0);
   });
 
   it("if cancel cannot finish, uses Critiquito's interim line and flags the team", async () => {
@@ -181,5 +208,45 @@ describe("visitor cancel-by-text", () => {
     expect(p.lastReply()).not.toContain("I don't have that information");
     expect((await p.session.reservation())?.status).toBe("READY");
     expect((await p.audit("QUESTION_UNANSWERED")).map((e) => e.detail)).toEqual(["YES"]);
+  });
+
+  const HOLD_REFUSE =
+    "You can't cancel the tour you're on, but you're free to wrap up whenever you like. The leasing team is still working on the problem and will text you here. Text me anytime if you want to book another tour.";
+
+  async function arrive(p: ReturnType<typeof phone>) {
+    await bookedAndReady(p);
+    p.session.clock.jumpTo(new Date(at(13, 58)));
+    await p.say("I'm here");
+  }
+
+  it("refuses a bare cancel on operator hold with no later booking", async () => {
+    const p = phone();
+    await arrive(p);
+    await p.session.operatorChange((core, id) => core.placeOperatorHold(id, "checking something"));
+    expect((await p.session.reservation())?.status).toBe("OPERATOR_HOLD");
+    await p.say("cancel");
+    expect(p.lastReply()).toBe(HOLD_REFUSE);
+    expect(p.lastReply()).toBe(cannotCancelRunningTour("leasing team"));
+    expect((await p.session.reservation())?.status).toBe("OPERATOR_HOLD");
+    expect(p.session.optedOut).toBe(false);
+    await p.say("hi");
+    expect(p.lastReply().length).toBeGreaterThan(0);
+    expect(p.session.optedOut).toBe(false);
+  });
+
+  it("refuses a bare cancel on door failure with no later booking", async () => {
+    const p = phone();
+    await arrive(p);
+    p.session.durin.failNextRequest("door controller timeout");
+    await p.say("I'm at 101");
+    expect((await p.session.reservation())?.status).toBe("PROVIDER_FAILURE");
+    await p.say("cancel");
+    expect(p.lastReply()).toBe(HOLD_REFUSE);
+    expect(p.lastReply()).toBe(cannotCancelRunningTour("leasing team"));
+    expect((await p.session.reservation())?.status).toBe("PROVIDER_FAILURE");
+    expect(p.session.optedOut).toBe(false);
+    await p.say("hi");
+    expect(p.lastReply().length).toBeGreaterThan(0);
+    expect(p.session.optedOut).toBe(false);
   });
 });
