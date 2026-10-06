@@ -286,6 +286,27 @@ describe("defect 4: pause_tours cancel actually cancels the held rebook", () => 
     });
     expect(access.decision.allowed).toBe(true);
   });
+
+  it("mid-tour cancel counts each held booking, not the running tour", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const v = await h.touringVisitor(id, { name: "Riley Tester", phone: "555-010-2000" });
+    const first = await holdNextSlot(v.session, new Date(at(10)));
+    const second = await holdNextSlot(v.session, zonedTimeToUtc({ year: 2026, month: 10, day: 1, hour: 14, minute: 0 }, TZ));
+    const runningId = (await v.session.reservation())!.id;
+    await persistSession(h.services, v.session);
+    const asked = await h.ok("pause_tours", { property: id });
+    expect(asked.bookedTours).toBe(1);
+    const done = await h.ok("pause_tours", { property: id, bookedTours: "cancel", confirmationCode: asked.confirmation.code });
+    expect(done.cancelled).toBe(2);
+    expect(done.summary).toMatch(/2 booked tours were cancelled/);
+    expect((await v.session.store.get("reservations", first.id))!.status).toBe("CANCELLED");
+    expect((await v.session.store.get("reservations", second.id))!.status).toBe("CANCELLED");
+    expect((await v.session.store.get("reservations", runningId))!.status).toBe("TOURING");
+    const cancelTexts = v.session.conversation.filter((c) => c.from === "tourcore" && c.text.includes("Your tour right now isn't affected"));
+    expect(cancelTexts).toHaveLength(2);
+  });
 });
 
 describe("heal persisted called-off tour plus held rebook", () => {
