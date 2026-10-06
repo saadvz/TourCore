@@ -1354,11 +1354,14 @@ export class TourCore {
     let reservation = await this.mustGetReservation(reservationId);
     const running = reservation.status === "TOURING" || reservation.status === "OPERATOR_HOLD" || reservation.status === "PROVIDER_FAILURE";
     const slotStart = reservation.slotStart;
+    const siblings = (await this.deps.store.list("reservations")).some(
+      (item) => item.id !== reservation.id && item.prospectId === reservation.prospectId && !!item.slotStart,
+    );
     await this.revokeGrants(reservation, reason);
     reservation = await this.move(reservation, "REVOKED", "RESERVATION_REVOKED", { detail: reason });
     const prospect = await this.mustGetProspect(reservation.prospectId);
     const when =
-      !running && slotStart ? { time: this.time(new Date(slotStart)), day: this.day(new Date(slotStart)) } : undefined;
+      !running && siblings && slotStart ? { time: this.time(new Date(slotStart)), day: this.day(new Date(slotStart)) } : undefined;
     await this.textProspect(prospect, reservation.id, VisitorDenialCopy.calledOff(this.teamName(), this.visitorHelpNumber(), when));
     return reservation;
   }

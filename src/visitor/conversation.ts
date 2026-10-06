@@ -1652,19 +1652,15 @@ async function handlePendingBookingReply(turn: Turn): Promise<boolean> {
     return true;
   }
   if (await session.pendingBookingNeedsConsent()) {
-    const last = session.conversation.filter((item) => item.from === "tourcore").at(-1)?.text ?? "";
-    const consentLatest = last === CONSENT_TEXT || last.endsWith(CONSENT_TEXT);
-    if (consentLatest) {
-      const yn = yesNo(stripFiller(normalize(text)));
-      if (yn.answer === "yes" && yn.confidence >= 0.75) {
-        await session.answerPendingConsent(true, turn.said);
-        await answerLeftoverAfterConsent(turn, text);
-        return true;
-      }
-      if (yn.answer === "no" && yn.confidence >= 0.75) {
-        await session.answerPendingConsent(false, turn.said);
-        return true;
-      }
+    const yn = yesNo(stripFiller(normalize(text)));
+    if (yn.answer === "yes" && yn.confidence >= 0.75) {
+      await session.answerPendingConsent(true, turn.said);
+      await answerLeftoverAfterConsent(turn, text);
+      return true;
+    }
+    if (yn.answer === "no" && yn.confidence >= 0.75) {
+      await session.answerPendingConsent(false, turn.said);
+      return true;
     }
   }
   if ((await session.pendingBookingNeedsVerification()) && /\b(form|link|identity|verify|verification)\b/.test(stripFiller(normalize(text)))) {
