@@ -530,7 +530,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const setup = setupSnapshot(ctx, id);
       const unit = setup.units.find((u) => !draft.units.some((d) => d.id === u.unitId));
       const after = ctx.services.workspace.openDraft(id).draft;
-      return { summary: `Added ${unit ? visitorSubject(after.property, unit.name) : unit?.name} with ${unit?.door}.${unit?.route ? ` Route: ${unit.route}.` : ""}`, unit, ...state, ...propertyNextQuestion(after) };
+      return { summary: `Added ${unit ? visitorSubject(after.property, unit.name) : "a unit"} with ${unit?.door}.${unit?.route ? ` Route: ${unit.route}.` : ""}`, unit, ...state, ...propertyNextQuestion(after) };
     },
   }),
   tool({

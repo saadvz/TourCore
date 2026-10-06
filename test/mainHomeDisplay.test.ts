@@ -80,7 +80,7 @@ describe("single-family alerts and operator replies never say Main Home", () => 
         now,
       );
       replies.push([eventType, String(update.summary)]);
-      expect(update.tour?.unitName, eventType).toBe("12 Oak St");
+      expect("tour" in update && update.tour ? update.tour.unitName : undefined, eventType).toBe("12 Oak St");
     }
 
     const inspected = await h.ok("inspect_tour", { tourRef: ref });
