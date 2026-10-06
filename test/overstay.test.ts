@@ -40,7 +40,7 @@ import { MessagingConversations, occupiedWindowsFromRecords } from "../src/visit
 import { MessagingEndpoints } from "../src/messaging/endpoints";
 import { PropertyWorkspace, runReadinessCheck } from "../src/setup";
 import { VerificationLinks } from "../src/visitor/verificationLinks";
-import { listExceptions } from "../src/operator/exceptions";
+import { listExceptions, resolveException } from "../src/operator/exceptions";
 import type { OccupiedWindow } from "../src/core/customSlot";
 import { AFTER_CLOSE_ALERT_MS, VISITOR_SEND_ATTEMPTS } from "../src/visitor/overstayScheduler";
 import { MemoryRuntimeStore } from "../src/storage/runtimeStore";
@@ -1301,13 +1301,14 @@ describe("QA review blocking items", () => {
     expect(tourReply).toMatch(/Which unit|I have tours available|Welcome|self-guided/);
   });
 
-  it("after-close distress includes gate, no way out, and lock emoji; leave-a-review and help-me-book do not", async () => {
-    for (const text of ["the gate won't open", "there's no way out", "hi 🔒"]) {
-      const closed = await closedTourSession(`t-distress-${text.slice(0, 12).replace(/\s/g, "-")}`);
+  it("after-close distress includes gate, no way out, lock emoji, can't get outside, and still in the unit; leave-a-review and help-me-book do not", async () => {
+    for (const text of ["the gate won't open", "there's no way out", "hi 🔒", "book another tour, I can't get outside", "book another tour, I'm still in the unit"]) {
+      const closed = await closedTourSession(`t-distress-${text.slice(0, 18).replace(/\s/g, "-")}`);
       await closed.say(text);
       expect(closed.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1)).toBe(visitorRepliedAfterClose());
       expect((await operatorAlertsFromSession(closed.session)).some((x) => x.includes("replied after their tour"))).toBe(true);
       expect((await closed.session.reservation())!.status).toBe("EXPIRED");
+      expect(closed.session.overstay!.get(closed.reservationId)?.cancelled).toBeFalsy();
     }
 
     const review = await closedTourSession("t-leave-review");
@@ -1320,6 +1321,12 @@ describe("QA review blocking items", () => {
     const helpReply = helpBook.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1) ?? "";
     expect(helpReply).not.toBe(visitorRepliedAfterClose());
     expect(helpReply).toMatch(/Which unit|I have tours available|Welcome|self-guided/);
+
+    const wayOut = await closedTourSession("t-way-out-lobby");
+    await wayOut.say("book another tour, which way out of the lobby");
+    const wayReply = wayOut.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1) ?? "";
+    expect(wayReply).not.toBe(visitorRepliedAfterClose());
+    expect(wayReply).toMatch(/Which unit|I have tours available|Welcome|self-guided/);
   });
 
   it("T-5 no-offer yes records the pending consent", async () => {
@@ -1611,13 +1618,25 @@ describe("overstay SMS router", () => {
     const path = await smsClosedTour("sms-resolve-hi", { rebook: true });
     const pendingId = path.session.pendingBookingId!;
     const pending = (await path.session.store.get("reservations", pendingId))!;
-    path.session.overstay!.closeAlertWindow(path.reservationId);
+    await path.text("hi");
+    expect(path.lastVisitor()).toBe(visitorRepliedAfterClose());
+    expect((await operatorAlertsFromSession(path.session)).filter((x) => x.includes("replied after their tour"))).toHaveLength(1);
+    expect(path.session.pendingBookingId).toBe(pendingId);
+    expect((await path.session.reservation())!.id).toBe(path.reservationId);
+
+    const services = { workspace: path.ws, visitors: path.registry, now: () => new Date(path.clock.t) };
+    const leaving = (await listExceptions(services, { includeClosed: true })).filter((e) => e.kind === "overstay" && e.status === "open");
+    expect(leaving).toHaveLength(1);
+    expect(leaving[0]!.reservationId).toBe(path.reservationId);
+    await resolveException(services, leaving[0]!.exceptionId, "Reached them. They are out.", new Date(path.clock.t));
+
     await path.text("hi");
     const replies = path.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text);
     const start = new Date(pending.slotStart!);
     expect(replies.at(-2)).toBe(bookedForLine(formatTime(start, TZ), formatDay(start, TZ)));
     expect(replies.at(-1)).toBe(`${CONSENT_TEXT}\nReply YES or NO.`);
     expect((await path.session.reservation())!.id).toBe(pendingId);
+    expect((await operatorAlertsFromSession(path.session)).filter((x) => x.includes("replied after their tour"))).toHaveLength(1);
   });
 
   it("router: hi more than 24 hours after the close starts a booking with no after-close alert", async () => {
@@ -1661,13 +1680,43 @@ describe("overstay SMS router", () => {
     expect(leaving.some((e) => e.status === "open")).toBe(true);
   });
 
+  it("router: help-me-book plus distress stays on after-close", async () => {
+    for (const text of ["help me book, I'm stuck inside", "I need help booking, the door is locked", "help me book another tour, I can't leave"]) {
+      const path = await smsClosedTour(`sms-help-distress-${text.slice(0, 12).replace(/\W/g, "")}`);
+      const beforeId = path.session.id;
+      await path.text(text);
+      expect(path.session.id).toBe(beforeId);
+      expect(path.lastVisitor()).toBe(visitorRepliedAfterClose());
+      expect((await operatorAlertsFromSession(path.session)).some((x) => x.includes("replied after their tour"))).toBe(true);
+      expect((await path.session.reservation())!.status).toBe("EXPIRED");
+      expect(path.session.overstay!.get(path.reservationId)?.cancelled).toBeFalsy();
+      expect(path.lastVisitor()).not.toMatch(/Which unit|I have tours available|Welcome|self-guided/);
+    }
+
+    const bookOnly = await smsClosedTour("sms-help-book-only");
+    await bookOnly.text("help me book");
+    expect(bookOnly.lastVisitor()).not.toBe(visitorRepliedAfterClose());
+    expect(bookOnly.lastVisitor()).toMatch(/Which unit|I have tours available|Welcome|self-guided/);
+
+    const review = await smsClosedTour("sms-leave-review");
+    await review.text("I'd like to leave a review");
+    expect(review.lastVisitor()).toBe(visitorRepliedAfterClose());
+    expect(mentionsAfterCloseDistress("I'd like to leave a review")).toBe(false);
+  });
+
   it("mentionsAfterCloseDistress matches gate and lock emoji, not leave-a-review or help booking", () => {
     expect(mentionsAfterCloseDistress("the gate won't open")).toBe(true);
     expect(mentionsAfterCloseDistress("there's no way out")).toBe(true);
     expect(mentionsAfterCloseDistress("hi 🔒")).toBe(true);
+    expect(mentionsAfterCloseDistress("I can't get outside")).toBe(true);
+    expect(mentionsAfterCloseDistress("I'm still in the unit")).toBe(true);
+    expect(mentionsAfterCloseDistress("help me book, I'm stuck inside")).toBe(true);
+    expect(mentionsAfterCloseDistress("I need help booking, the door is locked")).toBe(true);
+    expect(mentionsAfterCloseDistress("help me book another tour, I can't leave")).toBe(true);
     expect(mentionsAfterCloseDistress("I'd like to leave a review")).toBe(false);
     expect(mentionsAfterCloseDistress("help me book")).toBe(false);
     expect(mentionsAfterCloseDistress("help booking")).toBe(false);
+    expect(mentionsAfterCloseDistress("which way out of the lobby")).toBe(false);
   });
 });
 

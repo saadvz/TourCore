@@ -18,7 +18,9 @@ yo stays on after-close handling; a clear booking phrase (including
 see it again / schedule another visit) starts a new booking only when
 nothing is held. After 24 hours, greetings go back to normal. A
 greeting with more text, or anything about being stuck, locked,
-jammed, or unable to leave, does not start booking. A rebook or custom-time
+jammed, still in the unit, unable to leave, or unable to get
+outside, does not start booking. Help booking does not hide those
+other words. A rebook or custom-time
 request during a tour stays secondary until that tour ends, then
 unfinished consent or identity checks continue. After the follow-up
 reply, an unapproved custom-time request is told it is still with the

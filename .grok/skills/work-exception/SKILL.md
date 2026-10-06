@@ -110,10 +110,13 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   booking if nothing is held, or takes over a held booking. A clear
   booking phrase (including see it again / schedule another visit)
   starts a new booking when nothing is held; a greeting with more text,
-  or anything about being stuck, locked, jammed, or unable to leave,
-  still alerts the team and replies to the visitor. While that leaving
-  issue is open, those after-close texts run before a held booking can
-  take over. A rebook held from during the tour continues after the
+  or anything about being stuck, locked, jammed, still in the unit,
+  unable to leave, or unable to get outside, still alerts the team
+  and replies to the visitor. Help booking does not hide those other
+  words. Marking the leaving issue handled closes after-close alerts
+  for that closed tour, even when a later booking is held. While that
+  leaving issue is open, those after-close texts run before a held
+  booking can take over. A rebook held from during the tour continues after the
   follow-up reply: if its consent is still unanswered, they get the
   booked-for line for the new time, then the original consent
   question. An unapproved custom-time request is told it is still with

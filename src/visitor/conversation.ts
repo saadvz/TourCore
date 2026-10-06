@@ -61,7 +61,7 @@ export function isStandaloneGreeting(text: string): boolean {
 }
 
 const AFTER_CLOSE_DISTRESS =
-  /\b(stuck|trapped|inside|door|help|emergency|jammed|lock|locked|gate|let me out|lock in|cannot get out|can t get out|no way out|way out|will not open|cannot open)\b/;
+  /\b(stuck|trapped|inside|door|help|emergency|jammed|lock|locked|gate|let me out|lock in|cannot get out|can t get out|cannot get outside|can t get outside|no way out|will not open|cannot open|still in the unit|still inside)\b/;
 const LEAVE_DISTRESS = /\b(cannot leave|unable to leave|how do i leave|let me leave)\b/;
 const HELP_BOOKING = /\bhelp(?: me)? book(?:ing)?\b/;
 
@@ -69,8 +69,8 @@ const HELP_BOOKING = /\bhelp(?: me)? book(?:ing)?\b/;
 export function mentionsAfterCloseDistress(text: string): boolean {
   if (/🔒/.test(text)) return true;
   const t = stripFiller(normalize(text));
-  if (HELP_BOOKING.test(t)) return false;
-  return AFTER_CLOSE_DISTRESS.test(t) || LEAVE_DISTRESS.test(t);
+  const rest = HELP_BOOKING.test(t) ? t.replace(HELP_BOOKING, " ") : t;
+  return AFTER_CLOSE_DISTRESS.test(rest) || LEAVE_DISTRESS.test(rest);
 }
 
 /** A clear ask to book — not a bare greeting. Distress always wins. */

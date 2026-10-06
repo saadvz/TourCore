@@ -175,7 +175,9 @@ Never:
   booking phrase (including see it again / schedule another visit) starts
   a new booking only when nothing is held. After 24 hours, greetings go
   back to normal. A greeting with more text, or anything about being
-  stuck, locked, jammed, or unable to leave, does not start booking.
+  stuck, locked, jammed, still in the unit, unable to leave, or
+  unable to get outside, does not start booking. Help booking does
+  not hide those other words.
   DONE after the close uses the usual thanks and follow-up. STOP during
   a tour stops visitor texts only; the tour is not ended. One extra 10
   minutes may be added any time before the tour ends when that time is

@@ -91,6 +91,8 @@ export interface OperatorException {
   question?: string;
   /** The unit an unanswered question was about, when the visitor named one before booking. */
   questionUnitId?: string;
+  /** The reservation the issue is about. A leaving issue is the closed tour, not a later held rebook. */
+  reservationId?: string;
   /** open = needs a decision; cleared = no longer applies (e.g. the hold was lifted); resolved = the team closed it. */
   status: "open" | "cleared" | "resolved";
   resolution?: ExceptionResolution;
@@ -265,6 +267,7 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
     when: formatShortDateTime(new Date(e.at), tour.config.property.timezone),
     ...tourStatusFor(tour),
     ...(kind === "unanswered-question" ? { question: e.detail, ...(e.unitId ? { questionUnitId: e.unitId } : {}) } : {}),
+    ...(e.reservationId ? { reservationId: e.reservationId } : {}),
     status,
     ...(resolution ? { resolution } : {}),
     nextSteps: status === "open" ? nextStepsFor(kind, tour, paused) : [],
@@ -390,8 +393,8 @@ export async function resolveException(services: OperatorServices, exceptionId: 
   if (exception.kind === "overstay" && exception.tourRef) {
     try {
       const tour = await findTour(services, exception.tourRef);
-      const reservation = currentReservation(tour);
-      if (reservation) tour.live?.overstay?.closeAlertWindow(reservation.id);
+      const reservationId = exception.reservationId;
+      if (reservationId) tour.live?.overstay?.closeAlertWindow(reservationId);
     } catch {
       /* saved tours without a live conversation still clear via the ledger */
     }

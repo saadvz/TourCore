@@ -1098,7 +1098,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "resolve_exception",
     title: "Mark an issue handled",
     kind: "change",
-    description: "Closes one issue with the operator's note. Changes nothing else: no tour, access or setup change. For a leaving issue, marking it handled also ends after-close visitor alerts.",
+    description: "Closes one issue with the operator's note. Changes nothing else: no tour, access or setup change. For a leaving issue, marking it handled also ends after-close visitor alerts for that closed tour, even if a later booking is held.",
     input: z.strictObject({ exceptionId: ExceptionId, resolutionNote: z.string().min(1).max(500) }),
     run: async (ctx, i) => {
       const { alreadyResolved, exception } = await resolveException(ctx.services, i.exceptionId, i.resolutionNote, ctx.now());
