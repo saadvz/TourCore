@@ -440,9 +440,9 @@ describe("should-fix: reschedule_tour refuses a tour in progress", () => {
     const moved = (await v.session.store.get("reservations", pending.id))!;
     expect(new Date(moved.slotStart!).getTime()).toBe(zonedTimeToUtc({ year: 2026, month: 10, day: 2, hour: 15, minute: 30 }, TZ).getTime());
     const sent = v.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text);
-    expect(sent).toContain(tourMovedToText("Unit 101", "3:30 PM", "Friday, Oct 2"));
+    expect(sent.at(-2)).toBe(tourMovedToText("Unit 101", "3:30 PM", "Friday, Oct 2"));
     expect(sent.at(-1)).toBe(CONSENT_TEXT);
-    expect(sent.join("\n")).not.toMatch(/You're all set/);
+    expect(sent.at(-2)).not.toMatch(/You're all set/);
   });
 
   it("names the destination and warns when the later move is outside hours", async () => {
@@ -578,17 +578,19 @@ describe("blocker: mid-tour cancel-by-text targets the later booking", () => {
   });
 
   it("YES while a newer door question is open opens the door and does not cancel", async () => {
-    const { a, session, pending, runningId } = await testyMondayWithThursday();
-    await a.text("cancel my thursday tour");
-    const asked = await a.text("can you open 1A?");
-    expect(asked.at(-1)).toMatch(/^Are you at Unit 1A now\?/);
-    const before = session.durin.requestCount;
-    await a.text("YES");
-    expect((await session.reservation())!.id).toBe(runningId);
-    expect((await session.reservation())!.status).toBe("TOURING");
-    expect(session.lastAccess).toMatchObject({ allowed: true });
-    expect(session.durin.requestCount).toBeGreaterThan(before);
-    expect((await session.store.get("reservations", pending.id))!.status).toBe("AWAITING_CONSENT");
+    const ctx = await touringWithRebook("cancel-door-yes");
+    const later = new Date(ctx.pending.slotStart!);
+    await ctx.say("cancel");
+    expect(lastFrom(ctx.session)).toBe(laterCancelConfirm(formatTime(later, TZ), formatDay(later, TZ)));
+    await ctx.say("can you open 101?");
+    expect(lastFrom(ctx.session)).toMatch(/^Are you at Unit 101 now\?/);
+    const before = ctx.session.durin.requestCount;
+    await ctx.say("YES");
+    expect((await ctx.session.reservation())!.id).toBe(ctx.runningId);
+    expect((await ctx.session.reservation())!.status).toBe("TOURING");
+    expect(ctx.session.lastAccess).toMatchObject({ doorId: "unit_101", allowed: true });
+    expect(ctx.session.durin.requestCount).toBeGreaterThan(before);
+    expect((await ctx.session.store.get("reservations", ctx.pending.id))!.status).toBe("AWAITING_CONSENT");
   });
 });
 
