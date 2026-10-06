@@ -9,6 +9,9 @@ import { approvedFacts, findApprovedAnswer, type ApprovedFact } from "./facts";
  * conservatively: a unit the visitor named wins, then the unit they chose,
  * then the only unit there is. A question about one unit's details with no
  * unit to go on is asked back ("Which unit do you mean?"), never guessed.
+ * `pickedUnitId` is that ask's answer: it wins even if the original question
+ * named more than one unit. A reservation's current unit (`selectedUnitId`)
+ * does not skip that ask.
  */
 
 export type QuestionResolution =
@@ -71,12 +74,13 @@ function withoutUnitNames(question: string, units: Pick<Unit, "name">[]): string
   return out;
 }
 
-export function resolveQuestion(config: TourCoreConfig, asked: string, context: { selectedUnitId?: string } = {}): QuestionResolution {
+export function resolveQuestion(config: TourCoreConfig, asked: string, context: { selectedUnitId?: string; pickedUnitId?: string } = {}): QuestionResolution {
   const named = unitsNamedIn(asked, config.units);
   const question = withoutUnitNames(asked, config.units);
-  if (named.length > 1) return { kind: "which-unit", units: named.map((u) => u.name) };
+  const picked = context.pickedUnitId && config.units.some((u) => u.id === context.pickedUnitId) ? context.pickedUnitId : undefined;
+  if (named.length > 1 && !picked) return { kind: "which-unit", units: named.map((u) => u.name) };
   const unitId =
-    named[0]?.id ?? (context.selectedUnitId && config.units.some((u) => u.id === context.selectedUnitId) ? context.selectedUnitId : undefined) ?? (config.units.length === 1 ? config.units[0]!.id : undefined);
+    picked ?? named[0]?.id ?? (context.selectedUnitId && config.units.some((u) => u.id === context.selectedUnitId) ? context.selectedUnitId : undefined) ?? (config.units.length === 1 ? config.units[0]!.id : undefined);
   const unit = config.units.find((u) => u.id === unitId);
   const topic = questionTopic(question);
 

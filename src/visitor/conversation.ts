@@ -248,16 +248,18 @@ export async function handleVisitorText(
       const interpretation: IntentInterpretation = { intent: { type: "ASK_PROPERTY_QUESTION", question: pending.question }, confidence: 1, interpreter: "rules", clarificationNeeded: false };
       session.noteInterpretation(interpretation);
       await session.recordText(said);
-      const resolved = resolveQuestion(session.config, pending.question, { selectedUnitId: unit.id });
+      const resolved = resolveQuestion(session.config, pending.question, { selectedUnitId: unit.id, pickedUnitId: unit.id });
       if (resolved.kind === "unknown") photoAck.consume();
       else await photoAck.send();
+      const endedPick = (stage === "done" || stage === "stopped") && !(await session.isPaused());
       const out = await session.askQuestion(pending.question, {
         meta,
         unitId: unit.id,
         alreadyRecorded: true,
-        unknownReply: unknownAnswerReply({ hasMedia: photo }),
+        unknownReply: unknownAnswerReply({ hasMedia: photo && resolved.kind === "unknown", ended: endedPick }),
+        ...(endedPick ? { answerSuffix: TOUR_AGAIN_SUFFIX } : {}),
       });
-      if (out.outcome !== "which-unit") await resumeStep(session, stage, pending.resume);
+      if (out.outcome !== "which-unit" && !endedPick) await resumeStep(session, stage, pending.resume);
       return interpretation;
     }
   }
@@ -406,7 +408,8 @@ async function handleEndedQuestion(turn: Turn): Promise<void> {
   if (out.outcome === "which-unit") {
     const units = out.units ?? [];
     turn.markClarification();
-    await turn.session.reply(`Which unit do you mean: ${orList(units)}?${TOUR_AGAIN_SUFFIX}`, { kind: "choose", options: units, what: "a unit" });
+    turn.session.expect(turn.stage, { kind: "which-unit", question, units, ...(turn.awaiting ? { resume: turn.awaiting } : {}) });
+    await turn.session.reply(`Which unit do you mean: ${orList(units)}?`, { kind: "choose", options: units, what: "a unit" });
   }
 }
 

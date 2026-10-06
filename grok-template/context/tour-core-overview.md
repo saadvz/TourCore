@@ -33,8 +33,12 @@ pending confirmation). A question it can't answer gets one text, "I'll let
 the property team know about your question.", plus an issue and an operator
 update. When the operator answers, the visitor gets the answer and the step
 they were on. After a tour has ended, an approved-fact question is answered
-and that answer gets ` If you'd like to tour again, just text HI.` A question
-with no approved answer is flagged:
+and that answer gets ` If you'd like to tour again, just text HI.` (a period
+is added first if the answer has no `.` `!` or `?`). A question that fits
+more than one unit is asked back as `Which unit do you mean: {A} or {B}?`
+with no HI line; after the visitor picks a unit, the approved answer gets
+the HI line, or the locked ended flag text if that unit has no approved
+answer. A question with no approved answer is flagged:
 `I'll let the property team know about your question. If you'd like to tour
 again, just text HI.` A non-question keeps the ended-tour line and is not
 flagged.

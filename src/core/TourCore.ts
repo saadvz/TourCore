@@ -143,6 +143,16 @@ export function unknownAnswerReply(options: { hasMedia?: boolean; ended?: boolea
   return options.hasMedia ? UNKNOWN_ANSWER_WITH_PHOTO : UNKNOWN_ANSWER;
 }
 
+/** Append `suffix` to an approved answer. Adds a period first if the answer has no . ! or ?. Never doubles the suffix. */
+export function withAnswerSuffix(answer: string, suffix = ""): string {
+  if (!suffix) return answer;
+  let body = answer.replace(/\s+$/u, "");
+  const extra = suffix.replace(/^\s+/u, "");
+  if (extra && body.endsWith(extra)) body = body.slice(0, body.length - extra.length).replace(/\s+$/u, "");
+  if (body && !/[.!?]$/.test(body)) body += ".";
+  return body + suffix;
+}
+
 /** Visitor cancel-by-text: Critiquito-locked confirm, done, and keep-booked lines. */
 export const VISITOR_CANCEL_DONE = "You're cancelled. Text me anytime if you want to book again.";
 export const VISITOR_CANCEL_FAILED = "I can't cancel it from here. I've asked the leasing team to call it off and get back to you.";
@@ -919,14 +929,17 @@ export class TourCore {
     unknownReply?: string;
     /** Appended to an approved-fact answer (ended-tour HI line). */
     answerSuffix?: string;
+    /** Unit the visitor just picked from "Which unit do you mean?". */
+    pickedUnitId?: string;
   }): Promise<{ outcome: "answered" | "unknown" | "which-unit"; facts: ApprovedFact[]; unitId?: string; units?: string[] }> {
     const phone = normalizePhone(input.phone);
     const read = this.deps.storageRead?.() ?? "live";
+    const unitContext = { selectedUnitId: input.unitId, ...(input.pickedUnitId ? { pickedUnitId: input.pickedUnitId } : {}) };
     if (read !== "live") {
-      const resolved = resolveQuestion(this.approvedContent(), input.question.trim().slice(0, 300), { selectedUnitId: input.unitId });
+      const resolved = resolveQuestion(this.approvedContent(), input.question.trim().slice(0, 300), unitContext);
       if (resolved.kind === "which-unit") return { outcome: "which-unit", facts: [], units: resolved.units };
       if (read === "cached" && resolved.kind === "answer") {
-        await this.deps.messenger.send({ to: phone, audience: "PROSPECT", body: approvedAnswerText(resolved.facts) + (input.answerSuffix ?? "") });
+        await this.deps.messenger.send({ to: phone, audience: "PROSPECT", body: withAnswerSuffix(approvedAnswerText(resolved.facts), input.answerSuffix) });
         return { outcome: "answered", facts: resolved.facts, ...(resolved.unitId ? { unitId: resolved.unitId } : {}) };
       }
       await this.deps.messenger.send({ to: phone, audience: "PROSPECT", body: "I can't check that right now. Please try again in a little while." });
@@ -938,12 +951,12 @@ export class TourCore {
     if (!asked) throw new TourCoreError("EMPTY_QUESTION", "Please type a question");
     if (input.recordInbound !== false) await this.recordIncoming({ phone, body: asked, prospectId: prospect?.id, reservationId: reservation?.id, meta: input.meta });
 
-    const resolved = resolveQuestion(this.approvedContent(), asked, { selectedUnitId: input.unitId });
+    const resolved = resolveQuestion(this.approvedContent(), asked, unitContext);
     const base = { reservationId: reservation?.id, prospectId: prospect?.id, ...(resolved.kind !== "which-unit" && resolved.unitId ? { unitId: resolved.unitId } : {}) };
     if (resolved.kind === "which-unit") return { outcome: "which-unit", facts: [], units: resolved.units };
     if (resolved.kind === "answer") {
       await this.record("QUESTION_ANSWERED", { ...base, detail: asked });
-      await this.sendConversationText({ phone, body: approvedAnswerText(resolved.facts) + (input.answerSuffix ?? ""), reservationId: reservation?.id });
+      await this.sendConversationText({ phone, body: withAnswerSuffix(approvedAnswerText(resolved.facts), input.answerSuffix), reservationId: reservation?.id });
       return { outcome: "answered", facts: resolved.facts, ...(resolved.unitId ? { unitId: resolved.unitId } : {}) };
     }
     await this.record("QUESTION_UNANSWERED", { ...base, detail: asked });

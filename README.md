@@ -401,7 +401,11 @@ visitor text ─► interpreter ─► typed intent (ARRIVAL, AT_UNIT "Unit 101"
   `I can't cancel it from here. I've asked the leasing team to call it off and get back to you.` and the team is
   flagged — never the unanswered-question fallback for a clear cancel ask. Real questions still flag
   as usual. After a tour has ended (canceled or completed), an approved-fact question is answered and
-  that answer gets ` If you'd like to tour again, just text HI.` A question with no approved answer is
+  that answer gets ` If you'd like to tour again, just text HI.` (a period is added first if the answer
+  has no `.` `!` or `?`). A question that fits more than one unit is asked back as
+  `Which unit do you mean: {A} or {B}?` with no HI line; after the visitor picks a unit, the approved
+  answer gets the HI line, or the locked ended flag text if that unit has no approved answer.
+  A question with no approved answer is
   flagged: `I'll let the property team know about your question. If you'd like to tour again, just text HI.`
   (with a photo: `I can't take photos yet, but I'll let the property team know about your question. If you'd like to tour again, just text HI.`).
   A photo plus an answerable ended question gets `I can't take photos yet.` once, then the answer with the HI line.

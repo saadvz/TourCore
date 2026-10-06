@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import type { TourCoreConfig } from "../src/config/tourCoreConfig";
 import {
   TOUR_AGAIN_SUFFIX,
   TOUR_ENDED_REPLY,
@@ -10,6 +11,7 @@ import {
   UNKNOWN_ANSWER_ENDED_WITH_PHOTO,
   UNKNOWN_ANSWER_WITH_PHOTO,
   unknownAnswerReply,
+  withAnswerSuffix,
 } from "../src/core/TourCore";
 import { Installation } from "../src/install/installation";
 import { bindMessagingInstallation } from "../src/messaging/registry";
@@ -44,8 +46,8 @@ interface QuestionApp {
   operatorAlerts: () => string[];
 }
 
-async function sendblueApp(): Promise<QuestionApp> {
-  const a = await liveApp({ cleanups });
+async function sendblueApp(config?: TourCoreConfig): Promise<QuestionApp> {
+  const a = await liveApp({ cleanups, ...(config ? { config } : {}) });
   return {
     text: (body, options) => a.text(body, options?.id, options?.photo ? PHOTO : undefined),
     optIn: async () => {
@@ -71,14 +73,14 @@ async function sendblueApp(): Promise<QuestionApp> {
   };
 }
 
-async function localApp(): Promise<QuestionApp> {
+async function localApp(config?: TourCoreConfig): Promise<QuestionApp> {
   const root = mkdtempSync(join(tmpdir(), "tourcore-unknown-q-"));
   cleanups.push(resetLocalSmsOutbox());
   cleanups.push(() => rmSync(root, { recursive: true, force: true }));
   let clock = at(7);
   const ws = new PropertyWorkspace(root);
-  const { config } = ws.save(hillsideConfig());
-  ws.recordReadiness(config.property.id, await runReadinessCheck(config, { now: new Date(clock) }));
+  const { config: saved } = ws.save(config ?? hillsideConfig());
+  ws.recordReadiness(saved.property.id, await runReadinessCheck(saved, { now: new Date(clock) }));
   const runtime = new FileRuntimeStore(join(root, "runtime"));
   const env: NodeJS.ProcessEnv = {
     TOURCORE_MESSAGING_PROVIDER: "local",
@@ -118,13 +120,13 @@ async function localApp(): Promise<QuestionApp> {
     if (body.result.isError) throw new Error(body.result.content[0]!.text);
     return body.result.structuredContent;
   };
-  await grok("run_readiness_check", { property: config.property.id });
+  await grok("run_readiness_check", { property: saved.property.id });
   let n = 0;
   const text = async (body: string, options?: { id?: string; photo?: boolean }) => {
     const out = await grok("inject_local_sms", {
       from: LOCAL_VISITOR,
       text: body,
-      property: config.property.id,
+      property: saved.property.id,
       id: options?.id ?? `local_${++n}`,
       ...(options?.photo ? { hasMedia: true } : {}),
     });
@@ -172,8 +174,8 @@ async function localApp(): Promise<QuestionApp> {
   };
 }
 
-async function appFor(provider: Provider): Promise<QuestionApp> {
-  return provider === "sendblue" ? sendblueApp() : localApp();
+async function appFor(provider: Provider, config?: TourCoreConfig): Promise<QuestionApp> {
+  return provider === "sendblue" ? sendblueApp(config) : localApp(config);
 }
 
 const PARKING = "Here's what the property team shared: Street parking only.";
@@ -185,6 +187,24 @@ describe("unknownAnswerReply", () => {
     expect(unknownAnswerReply({ hasMedia: true })).toBe(UNKNOWN_ANSWER_WITH_PHOTO);
     expect(unknownAnswerReply({ ended: true })).toBe(UNKNOWN_ANSWER_ENDED);
     expect(unknownAnswerReply({ hasMedia: true, ended: true })).toBe(UNKNOWN_ANSWER_ENDED_WITH_PHOTO);
+  });
+});
+
+describe("withAnswerSuffix", () => {
+  it("adds a period when the approved answer has no terminal punctuation", () => {
+    expect(withAnswerSuffix("Here's what the property team shared: In-unit laundry", TOUR_AGAIN_SUFFIX)).toBe(
+      "Here's what the property team shared: In-unit laundry. If you'd like to tour again, just text HI.",
+    );
+  });
+
+  it("leaves answers that already end in . ! or ? alone", () => {
+    expect(withAnswerSuffix("Street parking only.", TOUR_AGAIN_SUFFIX)).toBe(`Street parking only.${TOUR_AGAIN_SUFFIX}`);
+    expect(withAnswerSuffix("Come see it!", TOUR_AGAIN_SUFFIX)).toBe(`Come see it!${TOUR_AGAIN_SUFFIX}`);
+    expect(withAnswerSuffix("Which one?", TOUR_AGAIN_SUFFIX)).toBe(`Which one?${TOUR_AGAIN_SUFFIX}`);
+  });
+
+  it("does not add the HI line twice", () => {
+    expect(withAnswerSuffix(`In-unit laundry.${TOUR_AGAIN_SUFFIX}`, TOUR_AGAIN_SUFFIX)).toBe(`In-unit laundry.${TOUR_AGAIN_SUFFIX}`);
   });
 });
 
@@ -286,6 +306,36 @@ describe.each(["sendblue", "local"] as const)("unanswered visitor questions (%s)
     expect(photoMentions(replies)).toBe(1);
     expect(replies.filter((r) => r === PHOTO_WITH_TEXT_REPLY).length + replies.filter((r) => r === UNKNOWN_ANSWER_WITH_PHOTO).length).toBe(1);
     expect(replies.join("\n")).not.toMatch(/MMS/i);
+  });
+
+  it("an ended-tour multi-unit question asks which unit without HI, then the pick gets HI once", async () => {
+    const a = await appFor(provider);
+    await a.book();
+    await a.finishTour();
+    const which = await a.text("How much is 1A or 2B?");
+    expect(which).toEqual(["Which unit do you mean: Unit 1A or Unit 2B?\nReply 1 for Unit 1A or 2 for Unit 2B."]);
+    expect(which.join("\n")).not.toContain("If you'd like to tour again");
+    expect(await a.text("2")).toEqual([`Unit 2B rents for $1,950 a month.${TOUR_AGAIN_SUFFIX}`]);
+    expect(await a.exceptions()).toEqual([]);
+    const again = await a.text("Is there a gym in 1A or 2B?");
+    expect(again).toEqual(["Which unit do you mean: Unit 1A or Unit 2B?\nReply 1 for Unit 1A or 2 for Unit 2B."]);
+    expect(again.join("\n")).not.toContain("If you'd like to tour again");
+    const flagged = await a.text("1");
+    expect(flagged).toEqual([UNKNOWN_ANSWER_ENDED]);
+    expect(flagged.join("\n").match(/If you'd like to tour again/g)).toEqual(["If you'd like to tour again"]);
+    expect((await a.exceptions()).map((x) => x.summary)).toEqual(['Asked "Is there a gym in 1A or 2B?". There\'s no approved answer yet.']);
+  });
+
+  it("adds a period before the HI line when an approved answer has no terminal punctuation", async () => {
+    const config = hillsideConfig();
+    config.property.facts = ["Street parking only.", "Pets are welcome"];
+    const a = await appFor(provider, config);
+    await a.book();
+    await a.finishTour();
+    expect(await a.text("Are pets welcome?")).toEqual([
+      "Here's what the property team shared: Pets are welcome. If you'd like to tour again, just text HI.",
+    ]);
+    expect(await a.exceptions()).toEqual([]);
   });
 
   it("an ended-tour photo question is one combined text and is flagged", async () => {

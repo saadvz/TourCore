@@ -219,10 +219,14 @@ right now").
   usual. Do not say "MMS" to the visitor.
 - Treat a real question after a tour has ended as dropped. Tour Core
   answers from approved facts first and appends ` If you'd like to tour
-  again, just text HI.` It flags only when there is no approved answer
-  (`I'll let the property team know about your question. If you'd like
-  to tour again, just text HI.`; with a photo, the combined photo line).
-  A photo plus an answerable ended question gets `I can't take photos yet.`
-  once, then the answer with the HI line. A non-question keeps
-  `This tour has ended. Text HI any time to start a new one.` and is not
-  flagged. Mention photos at most once per inbound.
+  again, just text HI.` (a period is added first if the answer has no
+  `.` `!` or `?`). A question that fits more than one unit is asked back
+  as `Which unit do you mean: {A} or {B}?` with no HI line; after they
+  pick a unit, the approved answer gets the HI line, or the locked ended
+  flag text if that unit has no approved answer. It flags only when there
+  is no approved answer (`I'll let the property team know about your
+  question. If you'd like to tour again, just text HI.`; with a photo,
+  the combined photo line). A photo plus an answerable ended question
+  gets `I can't take photos yet.` once, then the answer with the HI line.
+  A non-question keeps `This tour has ended. Text HI any time to start a
+  new one.` and is not flagged. Mention photos at most once per inbound.

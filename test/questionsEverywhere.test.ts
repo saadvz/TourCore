@@ -34,6 +34,13 @@ describe("approved-fact resolution", () => {
   it("prefers structured unit details, never the description, and asks which unit when it can't tell", () => {
     expect(resolveQuestion(config, "How much is 1A?")).toMatchObject({ kind: "answer", unitId: "apt_101", facts: [{ text: "Unit 1A rents for $2,300 a month.", profileField: "monthlyRent" }] });
     expect(resolveQuestion(config, "How much is it?")).toEqual({ kind: "which-unit", units: ["Unit 1A", "Unit 2B"] });
+    expect(resolveQuestion(config, "How much is 1A or 2B?")).toEqual({ kind: "which-unit", units: ["Unit 1A", "Unit 2B"] });
+    expect(resolveQuestion(config, "How much is 1A or 2B?", { selectedUnitId: "apt_101" })).toEqual({ kind: "which-unit", units: ["Unit 1A", "Unit 2B"] });
+    expect(resolveQuestion(config, "How much is 1A or 2B?", { selectedUnitId: "apt_102", pickedUnitId: "apt_102" })).toMatchObject({
+      kind: "answer",
+      unitId: "apt_102",
+      facts: [{ text: "Unit 2B rents for $1,950 a month." }],
+    });
     expect(resolveQuestion(config, "How much is it?", { selectedUnitId: "apt_102" })).toMatchObject({ kind: "answer", facts: [{ text: "Unit 2B rents for $1,950 a month." }] });
     expect(resolveQuestion(config, "How many bedrooms?", { selectedUnitId: "apt_101" })).toMatchObject({ facts: [{ text: "Unit 1A has 2 bedrooms." }] });
     // Building-wide facts need no unit.

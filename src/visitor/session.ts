@@ -542,6 +542,7 @@ export class VisitorDemoSession {
       question,
       reservationId: r?.id,
       unitId: options.unitId ?? r?.unitId,
+      ...(options.unitId ? { pickedUnitId: options.unitId } : {}),
       meta: options.meta,
       recordInbound: !options.alreadyRecorded,
       ...(options.unknownReply ? { unknownReply: options.unknownReply } : {}),
