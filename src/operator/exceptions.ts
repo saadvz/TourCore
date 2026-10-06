@@ -476,14 +476,14 @@ export async function planFlaggedAnswer(services: OperatorServices, input: { exc
     const value = structuredAnswer(topic, words, now);
     if (value) {
       const fact = profileFacts({ name: visitorSubject(draft.property, unit.name), profile: { [topic]: value } }).find((f) => f.field === topic)!.text;
-      return { exception, appliesTo: "unit", unitId: unit.id, field: topic, value, fact, where: unit.name };
+      return { exception, appliesTo: "unit", unitId: unit.id, field: topic, value, fact, where: visitorSubject(draft.property, unit.name) };
     }
   }
   const unitTopic = !!topic && ["bedrooms", "bathrooms", "monthlyRent", "availability", "squareFeet", "floor", "furnished", "features"].includes(topic);
   const appliesTo = input.appliesTo ?? (unit && unitTopic ? "unit" : "property");
   if (appliesTo === "unit" && !unit) throw new SetupInputError("UNIT_NOT_FOUND", "I couldn't tell which unit that question was about. Add it as a property fact instead.");
   const fact = /[.!?]$/.test(words) ? words : `${words}.`;
-  return { exception, appliesTo, unitId: unit?.id, fact: fact.charAt(0).toUpperCase() + fact.slice(1), where: appliesTo === "unit" ? unit!.name : exception.property };
+  return { exception, appliesTo, unitId: unit?.id, fact: fact.charAt(0).toUpperCase() + fact.slice(1), where: appliesTo === "unit" ? visitorSubject(draft.property, unit!.name) : exception.property };
 }
 
 /**

@@ -1,4 +1,5 @@
 import { isLiveMessaging, TourCoreConfigShape, validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
+import { visitorSubject } from "../visitor/identity";
 import { FIELD_WORDS, missingProfileFields } from "../config/unitProfile";
 import type { ConfigIssue, ConfigSection } from "../config/validateConfig";
 import { SimulatedClock } from "../core/clock";
@@ -103,7 +104,7 @@ export async function runReadinessCheck(
     if (missing.length) {
       fail("units", {
         code: "UNIT_INFO_MISSING",
-        message: `${unit.name} still needs ${listWords(missing.map((f) => FIELD_WORDS[f]))} (or say which you don't want listed).`,
+        message: `${visitorSubject(config.property, unit.name)} still needs ${listWords(missing.map((f) => FIELD_WORDS[f]))} (or say which you don't want listed).`,
         section: "units",
         unitId: unit.id,
       });

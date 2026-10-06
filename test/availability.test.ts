@@ -126,7 +126,10 @@ describe("availability copy", () => {
       "Remove 100 Alfred Way? Tours stop, 2 booked visitors get a cancel text, and it leaves your list. Its records are kept. Remove it?",
     );
     expect(removeConfirmQuestion("100 Alfred Way", 1)).toBe(
-      "Remove 100 Alfred Way? Tours stop, 1 booked visitor get a cancel text, and it leaves your list. Its records are kept. Remove it?",
+      "Remove 100 Alfred Way? Tours stop, 1 booked visitor gets a cancel text, and it leaves your list. Its records are kept. Remove it?",
+    );
+    expect(removeConfirmQuestion("100 Alfred Way", 0)).toBe(
+      "Remove 100 Alfred Way? Tours stop. No one is booked, so no cancel texts go out. It leaves your list. Its records are kept. Remove it?",
     );
     expect(removeSetupConfirmQuestion("QA Scratch Lane")).toBe(
       "Remove the setup for QA Scratch Lane? It isn't published yet, so no visitors are affected, but everything entered for it will be deleted for good.",
@@ -167,6 +170,8 @@ describe("availability copy", () => {
       pauseConfirmQuestion("100 Alfred Way", 2),
       pauseConfirmQuestion("100 Alfred Way", 0),
       removeConfirmQuestion("100 Alfred Way", 2),
+      removeConfirmQuestion("100 Alfred Way", 1),
+      removeConfirmQuestion("100 Alfred Way", 0),
       REMOVE_REFUSED_LIVE_TOUR,
       resumeConfirmQuestion("100 Alfred Way"),
       resumeConfirmQuestion("100 Alfred Way", 1),
@@ -395,8 +400,9 @@ describe("pause and remove", () => {
     const listed = await h.ok("list_properties");
     expect(listed.properties[0].status).toBe("Setup in progress");
     const { asked, done } = await h.approve("remove_property", { property: listed.properties[0].address });
-    expect(asked.summary).toBe(removeSetupConfirmQuestion(listed.properties[0].name));
-    expect(done.summary).toBe(removedSetupSummary(listed.properties[0].name));
+    expect(listed.properties[0].name).toBe("27 Oak Ln");
+    expect(asked.summary).toBe(removeSetupConfirmQuestion("27 Oak Ln"));
+    expect(done.summary).toBe(removedSetupSummary("27 Oak Ln"));
     expect((await h.ok("list_properties")).properties).toEqual([]);
   });
 
@@ -426,7 +432,7 @@ describe("pause and remove", () => {
         property: { address: "27 Oak Ln, Teaneck, NJ 07666", name: "Main Home", propertyType: "SINGLE_FAMILY" },
         units: [{ name: "Main Home" }],
       }),
-    ).toBe("27 Oak Ln, Teaneck, NJ 07666");
+    ).toBe("27 Oak Ln");
     expect(
       operatorFacingPropertyName({
         property: { address: "145 Main St, Hoboken, NJ 07030", propertyType: "APARTMENT_OR_CONDO", canonicalAddress: { street: "145 Main St" } },
@@ -489,6 +495,59 @@ describe("pause and remove", () => {
     expect(asked.summary).not.toMatch(/Loft|4B/);
     expect(done.summary).toBe(removedSetupSummary("500 QA Condo Ave"));
     expect(done.summary).not.toMatch(/Loft|4B/);
+  });
+
+  it("uses draft wording for a complete unpublished setup, and names a fresh draft by the street line", async () => {
+    const complete = app();
+    const created = await complete.ok("create_property_setup", {
+      address: "12 Oak St, Teaneck, NJ 07666",
+      propertyType: "SINGLE_FAMILY",
+    });
+    const id = created.setup.propertyId as string;
+    expect((await complete.ok("add_unit", {})).unit.name).toBe("Main Home");
+    expect(complete.workspace.has(id)).toBe(true);
+    expect(complete.workspace.load(id).state.status).toBe("DRAFT");
+    expect((await complete.ok("list_properties")).properties[0].status).not.toMatch(/Published/);
+    const asked = await complete.ok("remove_property", { property: id });
+    expect(asked.summary).toBe(removeSetupConfirmQuestion("12 Oak St"));
+    expect(asked.summary).not.toMatch(/Tours stop|booked visitor|Its records are kept/);
+    expect(asked.summary).not.toContain("Main Home");
+    const done = await complete.ok("remove_property", { property: id, confirmationCode: asked.confirmation.code });
+    expect(done.summary).toBe(removedSetupSummary("12 Oak St"));
+    expect(done.summary).not.toContain("Main Home");
+    expect((await complete.ok("list_properties")).properties).toEqual([]);
+    expect(complete.workspace.has(id)).toBe(false);
+    expect(existsSync(join(complete.root, "properties", id))).toBe(false);
+
+    const fresh = app();
+    await fresh.ok("create_property_setup", { address: "8 Pine Rd, Tenafly, NJ 07670" });
+    expect(operatorFacingPropertyName(fresh.workspace.openDraft(fresh.workspace.propertyIds()[0]!).draft)).toBe("8 Pine Rd");
+    expect((await fresh.ok("list_properties")).properties[0].name).toBe("8 Pine Rd");
+    const { asked: freshAsked, done: freshDone } = await fresh.approve("remove_property", {});
+    expect(freshAsked.summary).toBe(removeSetupConfirmQuestion("8 Pine Rd"));
+    expect(freshAsked.summary).not.toContain("Tenafly");
+    expect(freshAsked.summary).not.toContain("Main Home");
+    expect(freshDone.summary).toBe(removedSetupSummary("8 Pine Rd"));
+  });
+
+  it("published confirmation uses singular gets for one booked visitor and no-cancel copy for zero", async () => {
+    const empty = app();
+    const emptyId = await empty.publish();
+    const emptyName = operatorFacingPropertyName(empty.workspace.load(emptyId).config);
+    const emptyAsked = await empty.ok("remove_property", { property: emptyId });
+    expect(emptyAsked.summary).toBe(removeConfirmQuestion(emptyName, 0));
+    expect(emptyAsked.summary).toContain("No one is booked, so no cancel texts go out.");
+    expect(emptyAsked.summary).not.toMatch(/0 booked|booked visitors get/);
+
+    const one = app();
+    const oneId = await one.publish();
+    await readyVisitor(one, oneId);
+    const oneName = operatorFacingPropertyName(one.workspace.load(oneId).config);
+    const oneAsked = await one.ok("remove_property", { property: oneId });
+    expect(oneAsked.summary).toBe(removeConfirmQuestion(oneName, 1));
+    expect(oneAsked.summary).toContain("1 booked visitor gets");
+    expect(oneAsked.summary).not.toContain("1 booked visitors");
+    expect(oneAsked.summary).not.toContain("1 booked visitor get a");
   });
 
   it("still removes a published property and keeps its records", async () => {

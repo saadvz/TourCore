@@ -58,7 +58,10 @@ function formatUnitName(token: string): string {
 
 /** Street line visitors hear: "145 Main St", never a made-up building name. */
 export function streetLine(property: NamedProperty): string {
-  return property.canonicalAddress?.street?.trim() || property.address.split(",")[0]?.trim() || property.address.trim();
+  const stored = property.canonicalAddress?.street?.trim();
+  if (stored) return stored;
+  const fromAddress = property.address.split(",")[0]?.trim() || property.address.trim();
+  return fromAddress;
 }
 
 /** Default apartment or condo nickname: "145 Main St, Unit 4B". Never "Main Home". */

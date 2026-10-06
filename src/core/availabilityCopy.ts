@@ -70,8 +70,11 @@ export function resumeConfirmQuestion(property: string, waitingCount = 0): strin
 }
 
 export function removeConfirmQuestion(property: string, bookedCount: number): string {
-  const visitors = bookedCount === 1 ? "1 booked visitor" : `${bookedCount} booked visitors`;
-  return `Remove ${property}? Tours stop, ${visitors} get a cancel text, and it leaves your list. Its records are kept. Remove it?`;
+  if (bookedCount === 0) {
+    return `Remove ${property}? Tours stop. No one is booked, so no cancel texts go out. It leaves your list. Its records are kept. Remove it?`;
+  }
+  const visitors = bookedCount === 1 ? "1 booked visitor gets a cancel text" : `${bookedCount} booked visitors get a cancel text`;
+  return `Remove ${property}? Tours stop, ${visitors}, and it leaves your list. Its records are kept. Remove it?`;
 }
 
 export function removeSetupConfirmQuestion(name: string): string {

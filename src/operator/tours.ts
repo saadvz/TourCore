@@ -139,7 +139,7 @@ export function isPaused(tour: TourSnapshot): boolean {
 
 function stopName(config: TourCoreConfig, doorId: string): string {
   const unit = config.units.find((u) => u.doorId === doorId);
-  if (unit) return unit.name;
+  if (unit) return visitorSubject(config.property, unit.name);
   const door = config.doors.find((d) => d.id === doorId);
   return door?.kind === "ENTRANCE" ? "the entrance" : (door?.name ?? "a door");
 }

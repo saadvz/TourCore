@@ -11,7 +11,7 @@ import type { SpokenTime } from "../core/spokenTime";
 import { bookingRefusal, isEffectivelyPaused, isRemoved, openUnits, operatorPausedBookingRefuse } from "../setup/availability";
 import type { PropertyState } from "../setup/workspace";
 import { entryReply } from "./entry";
-import { visitorTourOf } from "./identity";
+import { visitorSubject, visitorTourOf } from "./identity";
 import { ONE_OFF_REPLACED_DETAIL } from "./oneOffGate";
 import { offerDate } from "./unavailableDay";
 import { isLiveHelpReservation, TourCore, TourCoreError, VISITOR_CANCEL_DONE, visitorCancelConfirmFor, type AccessOutcome, type InboundMeta } from "../core/TourCore";
@@ -1024,7 +1024,8 @@ export class VisitorDemoSession {
           this.notePauseWaiter(unitId);
           return true;
         }
-        await this.reply(`${pausedUnitVisitorText(this.config.units.find((unit) => unit.id === unitId)?.name ?? "That unit")}\n\nWhich unit would you like to see?`, {
+        const paused = this.config.units.find((unit) => unit.id === unitId);
+        await this.reply(`${pausedUnitVisitorText(paused ? visitorSubject(this.config.property, paused.name) : "That unit")}\n\nWhich unit would you like to see?`, {
           kind: "choose",
           options: open.map((unit) => unit.name),
           what: "a unit",

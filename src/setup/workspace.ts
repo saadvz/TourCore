@@ -284,15 +284,15 @@ export class PropertyWorkspace {
   }
 
   /**
-   * Deletes an in-progress setup that was never saved (draft only): the
-   * folder, units, doors, routes, and any other setup files. Saved properties
-   * stay on disk and are marked removed instead.
+   * Deletes an unpublished setup (draft-only, or saved but never published):
+   * the folder, units, doors, routes, and any other setup files. Published
+   * properties stay on disk and are marked removed instead.
    */
   removeInProgressSetup(propertyId: string): void {
-    if (this.has(propertyId)) {
-      throw new SetupInputError("PROPERTY_SAVED", "That property already has a saved setup.");
+    if (this.has(propertyId) && this.load(propertyId).state.status === "PUBLISHED_FOR_DEMO") {
+      throw new SetupInputError("PROPERTY_PUBLISHED", "That property is already published.");
     }
-    if (!this.loadDraft(propertyId)) throw new SetupInputError("PROPERTY_NOT_FOUND", "I couldn't find that property.");
+    if (!this.has(propertyId) && !this.loadDraft(propertyId)) throw new SetupInputError("PROPERTY_NOT_FOUND", "I couldn't find that property.");
     rmSync(this.dir(propertyId), { recursive: true, force: true });
   }
 
