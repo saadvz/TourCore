@@ -1206,7 +1206,7 @@ async function bookMonday330(a: LiveApp) {
   await a.optInSms();
   await a.text("1");
   await a.text("1");
-  await a.text("2");
+  await a.text("1");
   await a.fillForm(await a.text("YES"));
 }
 
@@ -1218,8 +1218,7 @@ describe("a taken regular slot never files a custom-time request", () => {
     for (const phrase of ["Can I move it to 2:00?", "Can I change it to 2:00?"]) {
       const replies = await a.text(phrase);
       expect(replies.join("\n")).toContain(takenSlotLine("2:00 PM", "Monday, Sep 28", { time: "3:30 PM", day: "Monday, Sep 28" }));
-      expect(replies.join("\n")).toContain("I have these times available Monday, Sep 28:");
-      expect(replies.join("\n")).toContain("3:30 PM");
+      expect(replies.join("\n")).toContain(TAKEN_SLOT_OTHER_DAY);
       expect((await a.grok("list_tour_time_requests")).requests).toHaveLength(0);
     }
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.visitorPhone === PHONE)!;
@@ -1232,7 +1231,7 @@ describe("a taken regular slot never files a custom-time request", () => {
     await a.optInSms();
     await a.text("1");
     await a.text("1");
-    await a.text("2");
+    await a.text("1");
     const replies = await a.text("Can I change it to 2:00?");
     expect(replies.join("\n")).toContain(takenSlotLine("2:00 PM", "Monday, Sep 28", { time: "3:30 PM", day: "Monday, Sep 28" }));
     expect(replies.join("\n")).not.toContain("You're still booked for 2:00 PM");
@@ -1270,6 +1269,21 @@ describe("a taken regular slot never files a custom-time request", () => {
     expect((await a.grok("list_tour_time_requests")).requests).toHaveLength(0);
   });
 
+  it("a booked visitor moving to a taken slot still sees other open times that day", async () => {
+    const a = await liveApp({ cleanups });
+    await occupyMondaySlot(a, OTHER, "1");
+    await a.optInSms();
+    await a.text("1");
+    await a.text("Tuesday");
+    await a.text("1");
+    await a.fillForm(await a.text("YES"));
+    const replies = await a.text("Can I move it to Monday at 2:00?");
+    expect(replies.join("\n")).toContain(takenSlotLine("2:00 PM", "Monday, Sep 28", { time: "2:00 PM", day: "Tuesday, Sep 29" }));
+    expect(replies.join("\n")).toContain("I have these times available Monday, Sep 28:");
+    expect(replies.join("\n")).toContain("3:30 PM");
+    expect((await a.grok("list_tour_time_requests")).requests).toHaveLength(0);
+  });
+
   it("a visitor with no booking yet does not get the still-booked sentence", async () => {
     const a = await liveApp({ cleanups });
     await occupyMondaySlot(a, OTHER, "1");
@@ -1285,9 +1299,10 @@ describe("a taken regular slot never files a custom-time request", () => {
   it("a taken slot with no open times that day asks them to reply with a day", async () => {
     const a = await liveApp({ cleanups });
     await occupyMondaySlot(a, OTHER, "1");
-    await occupyMondaySlot(a, OTHER2, "2");
-    await chooseUnit(a);
-    const replies = await a.text("Can I come at 2:00?");
+    await occupyMondaySlot(a, OTHER2, "1");
+    await a.optInSms();
+    await a.text("1");
+    const replies = await a.text("Can I come Monday at 2:00?");
     expect(replies.join("\n")).toContain(takenSlotLine("2:00 PM", "Monday, Sep 28"));
     expect(replies.join("\n")).not.toContain("You're still booked");
     expect(replies.join("\n")).toContain(TAKEN_SLOT_OTHER_DAY);
@@ -1302,7 +1317,7 @@ describe("yes-but change vs consent", () => {
       const a = await liveApp({ cleanups });
       await firstBookingConsent(a);
       const replies = await a.text(phrase);
-      expect(replies.join("\n")).toMatch(/Which day works for you\?|I have tours available/);
+      expect(replies.join("\n")).toMatch(/Which day works for you\?|I have tours available|3:30 PM|2:00 PM/);
       expect(replies.join("\n")).not.toContain("Sorry, I didn't catch that.");
       const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
       const bundle = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle;

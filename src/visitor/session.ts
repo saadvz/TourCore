@@ -407,6 +407,11 @@ export class VisitorDemoSession {
     if (!schema) throw new SetupInputError("UNKNOWN_ACTION", "That isn't something I can do.");
     const parsed = schema.safeParse(input ?? {});
     if (!parsed.success) throw new SetupInputError("INPUT_INVALID", "Some of that information is missing.");
+    if (action === "chooseTime") {
+      const reservation = await this.reservation();
+      const slotStart = String((parsed.data as { slotStart?: string }).slotStart ?? "");
+      if (slotStart && reservation?.slotStart === slotStart && reservation.status !== "INQUIRY") return;
+    }
     const stage = await this.stage();
     if (!ALLOWED[stage].includes(action as VisitorAction)) throw new SetupInputError("NOT_AVAILABLE", "That isn't available right now.");
     await this.run(action as VisitorAction, parsed.data as Record<string, unknown>, said);
