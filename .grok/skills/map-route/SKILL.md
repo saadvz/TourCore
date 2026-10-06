@@ -14,8 +14,8 @@ metadata:
 # Map Route
 
 A route is the exact, ordered list of doors Tour Core will allow for a visitor
-to one unit. Tour Core refuses any door that isn't on it, before Durin is ever
-contacted. So a route must only contain doors that really exist and that the
+to one unit. Tour Core refuses any door that isn't on it, before any door is
+unlocked. So a route must only contain doors that really exist and that the
 operator confirmed. An apartment or condo that only controls the unit door
 starts and ends at that unit door — do not add a building entrance to the
 route. If they control the building entrance, the route is that entrance then

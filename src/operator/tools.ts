@@ -6,7 +6,7 @@ import { INSTALLATION_TOOLS } from "../install/tools";
 import { installedMessaging } from "../install/status";
 import { addressReadback } from "../setup/address";
 import { PROPERTY_TYPE_LABELS, PROPERTY_TYPES, SETUP_PROPERTY_TYPES, validateConfig } from "../config/tourCoreConfig";
-import { FIELD_WORDS, missingProfileFields, nextProfileQuestion, parseBulkUnitDetails, profileSummaryLine } from "../config/unitProfile";
+import { extractValues, FIELD_WORDS, missingProfileFields, nextProfileQuestion, parseBulkUnitDetails, profileSummaryLine } from "../config/unitProfile";
 import { formatPhone } from "../core/phone";
 import { TourCoreError } from "../core/TourCore";
 import { PortableBackupError } from "../backup/portable";
@@ -230,6 +230,11 @@ function setupSnapshot(ctx: ToolContext, id: string) {
   };
 }
 
+/** The one tourable space on a single-family home. Multi-unit properties stay unspecified. */
+function soleSingleFamilyUnit(draft: SetupDraft) {
+  return draft.property.propertyType === "SINGLE_FAMILY" && draft.units.length === 1 ? draft.units[0] : undefined;
+}
+
 function unitDetailsView(ctx: ToolContext, id: string) {
   const { draft } = ctx.services.workspace.openDraft(id);
   const missing = draft.units.map((u) => ({ unit: operatorUnitName(draft.property, u.name), missing: missingProfileFields(u).map((f) => FIELD_WORDS[f]) })).filter((m) => m.missing.length);
@@ -284,7 +289,7 @@ const PROOF: Record<string, (c: DryTourCheck) => string | undefined> = {
   entrance: () => "Entrance access was allowed at the right time",
   unit_door: (c) => `${c.label.replace(/^Visitor enters /, "")} access was allowed`,
   duplicate: () => "A repeated request didn't create a second access grant",
-  wrong_door: (c) => `${c.label.replace(/^Visitor tries /, "")} (not on the route) was denied before Durin was contacted`,
+  wrong_door: (c) => `${c.label.replace(/^Visitor tries /, "")} (not on the route) was turned away before any door was unlocked`,
   completed: () => "Tour completed",
   revoked: () => "Every door was locked again afterwards",
   follow_up: () => "Follow-up worked",
@@ -578,14 +583,14 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Save unit details",
     kind: "change",
     description:
-      'Saves each unit\'s leasing details from the operator\'s own words: bedrooms, bathrooms, monthly rent and availability (required), plus square footage, floor, parking, laundry, pets, utilities, furnished and features. Pass a natural answer covering several units in "details" (e.g. "1A and 1B are 2 bed 1 bath for $2,200. 2A is 3 bed 2 bath for $2,800"), and/or per-unit values in "units". "I don\'t know", "not sure", "not available yet" or "don\'t list the price" are saved as not provided. Never fill in values yourself. Returns a summary to read back and the one question for anything still missing.',
+      'Saves each unit\'s leasing details from the operator\'s own words: bedrooms, bathrooms, monthly rent and availability (required), plus square footage, floor, parking, laundry, pets, utilities, furnished and features. Pass a natural answer covering several units in "details" (e.g. "1A and 1B are 2 bed 1 bath for $2,200. 2A is 3 bed 2 bath for $2,800"), and/or per-unit values in "units". On a single-family home with exactly one unit, omit the unit name and Tour Core uses that unit. Multi-unit properties still need a unit. "I don\'t know", "not sure", "not available yet" or "don\'t list the price" are saved as not provided. Never fill in values yourself. Returns a summary to read back and the one question for anything still missing.',
     input: z.strictObject({
       property: Property,
       details: z.string().max(2000).optional().describe("The operator's answer, as they said it."),
       units: z
         .array(
           z.strictObject({
-            unit: Unit,
+            unit: Unit.optional().describe("Which unit. Leave out on a single-family home that has exactly one unit."),
             bedrooms: UnitValue,
             bathrooms: UnitValue,
             monthlyRent: UnitValue,
@@ -616,10 +621,21 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
           next = applySetupCommand(next, "setUnitProfile", { unitId: unit.id, values: entry.values });
           touched.add(unit.id);
         }
+        if (!bulk.units.length && !bulk.unknownUnits.length) {
+          const only = soleSingleFamilyUnit(next);
+          const values = extractValues(i.details);
+          if (only && Object.keys(values).length) {
+            next = applySetupCommand(next, "setUnitProfile", { unitId: only.id, values });
+            touched.add(only.id);
+          }
+        }
       }
       for (const entry of i.units ?? []) {
         const { unit: ref, ...values } = entry;
-        const unit = requireUnit(next, ref);
+        const unit = ref ? requireUnit(next, ref) : soleSingleFamilyUnit(next);
+        if (!unit) {
+          throw new SetupInputError("UNIT_DETAILS_NOT_FOUND", `I couldn't match those details to a unit. The units are ${draft.units.map((u) => operatorUnitName(draft.property, u.name)).join(", ") || "none yet"}.`);
+        }
         next = applySetupCommand(next, "setUnitProfile", { unitId: unit.id, values: Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined)) });
         touched.add(unit.id);
       }
@@ -839,7 +855,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Get messaging and records",
     kind: "read",
     description:
-      'How visitors are texted and whether this property is connected to the touring number, where tour records are kept, and door access mode, each on its own (texting can be live while door access is demo). For local test texting the summary is "Texting is in test mode, so texts don\'t reach real phones. Real visitors won\'t get anything until live texting is turned on. Door access is still in demo mode, so no physical locks will open." — do not say texting is live and do not name the texting service. Never contains credentials.',
+      'How visitors are texted and whether this property is connected to the touring number, where tour records are kept, and door access mode, each on its own (texting can be live while door access is demo). For local or test-mode texting, messaging.current is "test" (never "live") and the status line is "Visitor texting: Test mode". The summary is "Texting is in test mode, so texts don\'t reach real phones. Real visitors won\'t get anything until live texting is turned on. Door access is still in demo mode, so no physical locks will open." — do not say texting is live and do not name the texting service. Never contains credentials.',
     input: z.strictObject({ property: Property }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
@@ -850,7 +866,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         summary: modes.sentence,
         lines: modes.lines,
         messaging: {
-          current: draft.messagingMode,
+          current: usesLocalMessaging(draft, servicesOf(ctx).installedMessaging?.()) ? "test" : draft.messagingMode,
           visitorTexting: modes.texting.label,
           connected: checks.every((c) => c.ok),
           checks: checks.map((c) => ({ check: c.label, ok: c.ok, message: c.message })),
@@ -925,7 +941,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Run the readiness check",
     kind: "change",
     description:
-      'Runs Tour Core\'s real readiness checks (property, hours, routes, verification, messaging, records, tour progress, Durin access, audit/export). A shared texting number names the other property by its street line ("This texting number is already used for 12 Scratch Lane."), never a property id and never "Main Home". Report the result as-is, including any advisory lines; never claim a check passed if it didn\'t.',
+      'Runs Tour Core\'s real readiness checks (property, hours, routes, verification, messaging, records, tour progress, door access, audit/export). A shared texting number names the other property by its street line ("This texting number is already used for 12 Scratch Lane."), never a property id and never "Main Home". Report the result as-is, including any advisory lines; never claim a check passed if it didn\'t. Never name Durin; say door access.',
     input: z.strictObject({ property: Property }),
     run: async (ctx, i) => {
       const id = resolvePropertyId(ctx.services.workspace, i.property);

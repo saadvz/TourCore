@@ -141,7 +141,7 @@ describe("Grok skill scenarios", () => {
     const result = await tool("run_dry_tour", { unit: "Unit 102" });
     expect(result.passed).toBe(true);
     expect(result.proofPoints).toContain("\u2713 Unit 102 access was allowed");
-    expect(result.proofPoints).toContain("\u2713 Unit 101 Door (not on the route) was denied before Durin was contacted");
+    expect(result.proofPoints).toContain("\u2713 Unit 101 Door (not on the route) was turned away before any door was unlocked");
     expect(result.proofPoints).toContain("\u2713 The 15-minutes-left questions text was sent");
     expect(result.proofPoints).toContain("\u2713 The 5-minute extra-time offer was sent");
     expect(result.proofPoints).toContain("\u2713 A one-time 10-minute extension was granted");
@@ -203,7 +203,7 @@ describe("Grok skill scenarios", () => {
 
     const queue = await tool("list_exceptions");
     const byWhat = Object.fromEntries(queue.exceptions.map((x: { what: string }) => [x.what, x]));
-    expect(byWhat["Door system problem"]).toMatchObject({ summary: "Durin couldn't open Lobby Entrance, so the tour was paused.", accessBlocked: true, tourStatus: "Door system problem. Access is blocked." });
+    expect(byWhat["Door system problem"]).toMatchObject({ summary: "The door system couldn't open Lobby Entrance, so the tour was paused.", accessBlocked: true, tourStatus: "Door system problem. Access is blocked." });
     expect(byWhat["Tour couldn't be restored"]).toMatchObject({ visitorName: "A visitor texting from +15550104444", accessBlocked: true });
 
     // "The lock's back. Resume Pat's tour." "Yes."

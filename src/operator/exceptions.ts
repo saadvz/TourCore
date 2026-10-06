@@ -13,6 +13,7 @@ import { resumeStep } from "../visitor/conversation";
 import type { OperatorServices } from "./services";
 import { persistSession } from "./services";
 import { visitorSubject } from "../visitor/identity";
+import { STATUS_LABELS } from "../visitor/views";
 import {
   currentReservation,
   findTour,
@@ -161,6 +162,17 @@ function kindFor(e: AuditEvent): ExceptionKind | undefined {
   }
 }
 
+function reservationOn(tour: TourSnapshot, reservationId?: string): Reservation | undefined {
+  if (reservationId) return tour.bundle.reservations.find((x) => x.id === reservationId);
+  return currentReservation(tour);
+}
+
+function unitNameOn(tour: TourSnapshot, reservationId?: string): string | undefined {
+  const r = reservationOn(tour, reservationId);
+  const unit = tour.config.units.find((u) => u.id === r?.unitId);
+  return unit ? visitorSubject(tour.config.property, unit.name) : undefined;
+}
+
 function summaryFor(kind: ExceptionKind, e: AuditEvent, tour: TourSnapshot): string {
   const door = tour.config.doors.find((d) => d.id === e.doorId)?.name ?? "a door that isn't on file";
   switch (kind) {
@@ -173,7 +185,7 @@ function summaryFor(kind: ExceptionKind, e: AuditEvent, tour: TourSnapshot): str
     case "door-system":
       return `The door system wasn't responding at ${door}, so it stayed locked.`;
     case "provider-failure":
-      return `Durin couldn't open ${door}, so the tour was paused.`;
+      return `The door system couldn't open ${door}, so the tour was paused.`;
     case "access-problem":
       return `Couldn't get into ${door}.`;
     case "verification-failed":
@@ -185,7 +197,7 @@ function summaryFor(kind: ExceptionKind, e: AuditEvent, tour: TourSnapshot): str
     case "restore-conflict":
       return "Couldn't be restored after a restart.";
     case "overstay":
-      return `Hasn't confirmed leaving ${unitNameOf(tour) ?? "the property"}.`;
+      return `Hasn't confirmed leaving ${unitNameOn(tour, e.reservationId) ?? "the property"}.`;
   }
 }
 
@@ -219,10 +231,10 @@ function nextStepsFor(kind: ExceptionKind, tour: TourSnapshot | undefined, still
   }
 }
 
-function tourStatusFor(tour: TourSnapshot | undefined): { tourStatus: string; accessBlocked: boolean } {
-  const r = tour ? currentReservation(tour) : undefined;
+function tourStatusFor(tour: TourSnapshot | undefined, reservationId?: string): { tourStatus: string; accessBlocked: boolean } {
+  const r = tour ? reservationOn(tour, reservationId) : undefined;
   if (!tour) return { tourStatus: "Access is blocked", accessBlocked: true };
-  const status = statusOf(tour);
+  const status = r ? STATUS_LABELS[r.status] : statusOf(tour);
   const blocked = !!r && BLOCKING.includes(r.status);
   return { tourStatus: blocked ? `${status}. Access is blocked.` : r && r.status === "TOURING" ? "Tour still active" : status, accessBlocked: blocked };
 }
@@ -261,11 +273,11 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
     title: TITLES[kind],
     summary: extra ? `${summaryFor(kind, e, tour)} ${extra}` : summaryFor(kind, e, tour),
     visitorName: visitorNameOf(tour),
-    unitName: unitNameOf(tour) ?? unitSubject(tour, e.unitId),
+    unitName: unitNameOn(tour, e.reservationId) ?? unitSubject(tour, e.unitId),
     tourRef: tourRef(tour.propertyId, tour.tourId),
     happenedAt: e.at,
     when: formatShortDateTime(new Date(e.at), tour.config.property.timezone),
-    ...tourStatusFor(tour),
+    ...tourStatusFor(tour, e.reservationId),
     ...(kind === "unanswered-question" ? { question: e.detail, ...(e.unitId ? { questionUnitId: e.unitId } : {}) } : {}),
     ...(e.reservationId ? { reservationId: e.reservationId } : {}),
     status,
@@ -498,7 +510,7 @@ export async function planFlaggedAnswer(services: OperatorServices, input: { exc
   if (exception.status === "resolved") throw new SetupInputError("ALREADY_RESOLVED", "That question has already been handled.");
   const words = cleanFact(input.approvedFact);
   const tour = exception.tourRef ? await findTour(services, exception.tourRef) : undefined;
-  const unitId = exception.questionUnitId ?? (tour ? currentReservation(tour)?.unitId : undefined);
+  const unitId = exception.questionUnitId ?? (tour ? reservationOn(tour, exception.reservationId)?.unitId : undefined);
   const { draft } = services.workspace.openDraft(exception.propertyId);
   const unit = draft.units.find((u) => u.id === unitId);
   const topic = questionTopic(exception.question);

@@ -65,6 +65,7 @@ function ownerStreetLine(services: OperatorServices, propertyId: string): string
  */
 export type VisitorTexting =
   | { state: "connected"; label: "Connected"; line?: string }
+  | { state: "test-mode"; label: "Test mode"; line?: string }
   | { state: "not-using-it"; label: "Not connected to this property yet"; problem: string }
   | { state: "not-working"; label: "Not working yet"; problem: string }
   | { state: "number-in-use"; label: "Number used by another property"; problem: string }
@@ -82,7 +83,7 @@ export function visitorTexting(services: OperatorServices, propertyId: string, m
   }
   if (usesLocalMessaging({ ...config, messagingMode }, installed)) {
     const line = services.endpoints?.forProperty(propertyId)?.address ?? localLoopbackNumber();
-    return { state: "connected", label: "Connected", line };
+    return { state: "test-mode", label: "Test mode", line };
   }
   if (!isLiveMessaging(messagingMode)) {
     return installed ? { state: "not-using-it", label: "Not connected to this property yet", problem: TEXTING_NOT_USED } : { state: "practice", label: "Practice only (nobody is texted)" };

@@ -52,7 +52,7 @@ const LABELS: Record<ReadinessCheckId, string> = {
   messaging: "Messaging",
   storage: "Records",
   progress: "Tour progress can be safely saved",
-  access: "Durin access",
+  access: "Door access",
   audit: "Audit/export",
 };
 
@@ -139,7 +139,7 @@ export async function runReadinessCheck(
   }
   await probe(fail, "access", "services", async () => {
     const health = await createDurin(config, new SimulatedClock(now), () => {}).getHealth();
-    if (!health.healthy) throw new Error("Durin isn't responding right now, so doors would stay locked.");
+    if (!health.healthy) throw new Error("The door system isn't responding right now, so doors would stay locked.");
   });
   if (issues.length === 0) {
     await probe(fail, "audit", undefined, async () => {

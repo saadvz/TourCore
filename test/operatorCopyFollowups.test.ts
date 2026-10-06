@@ -114,6 +114,15 @@ describe("local test texting status", () => {
     expect(got.summary).toBe(LOCAL_WITH_DEMO_DOORS);
     expect(got.summary.match(/\blive\b/gi)).toEqual(["live"]);
     expect(got.summary).not.toMatch(/Sendblue|Twilio|Photon|outbox|loopback|provider/i);
+    expect(got.messaging.current).toBe("test");
+    expect(got.messaging.current).not.toBe("live");
+    expect(got.messaging.visitorTexting).toBe("Test mode");
+    expect(got.lines).toContain("Visitor texting: Test mode");
+    expect(got.lines).not.toContain("Visitor texting: Connected");
+
+    const review = await h.ok("review_property_setup");
+    expect(review.lines).toContain("Visitor texting: Test mode");
+    expect(review.lines).not.toContain("Visitor texting: Connected");
   });
 
   it("publish on a local property uses the combined wording and omits the touring-number line", async () => {
@@ -145,6 +154,50 @@ describe("local test texting status", () => {
       `${name} is published for demo. Visitors can start a tour by texting your touring number. Visitor texting is live. Door access is still in demo mode, so no physical locks will open.`,
     );
     expect(done.summary).toContain("Visitors can start a tour by texting your touring number.");
+  });
+});
+
+describe("set_unit_details single-family auto-select", () => {
+  it("uses the only unit on a single-family home when no unit is specified", async () => {
+    const details = app();
+    await details.ok("create_property_setup", { address: "910 QA Gate Rd, Tenafly, NJ 07670", propertyType: "SINGLE_FAMILY" });
+    await details.ok("add_unit", {});
+    const byDetails = await details.ok("set_unit_details", { details: "3 bed 2 bath for $3,400, available now" });
+    expect(byDetails.complete).toBe(true);
+    expect(byDetails.lines).toEqual(["910 QA Gate Rd — 3 bed · 2 bath · $3,400/month · available now"]);
+
+    const fields = app();
+    await fields.ok("create_property_setup", { address: "12 Scratch Lane, Teaneck, NJ 07666", propertyType: "SINGLE_FAMILY" });
+    await fields.ok("add_unit", {});
+    const byFields = await fields.ok("set_unit_details", { units: [{ bedrooms: "3", bathrooms: "2", monthlyRent: "$3,400", availability: "now" }] });
+    expect(byFields.complete).toBe(true);
+    expect(byFields.lines).toEqual(["12 Scratch Lane — 3 bed · 2 bath · $3,400/month · available now"]);
+  });
+
+  it("still requires a unit on a multi-unit property", async () => {
+    const h = app();
+    await h.ok("create_property_setup", { address: "144 Hillside Ave, Teaneck, NJ 07666", propertyType: "MULTIFAMILY_HOME" });
+    await h.ok("add_unit", { name: "1A" });
+    await h.ok("add_unit", { name: "1B" });
+    expect(await h.fails("set_unit_details", { details: "2 bed 1 bath for $2,200, available now" })).toMatch(/couldn't match those details to a unit/);
+    expect(await h.fails("set_unit_details", { units: [{ bedrooms: "2", bathrooms: "1", monthlyRent: "$2,200", availability: "now" }] })).toMatch(/couldn't match those details to a unit/);
+    const named = await h.ok("set_unit_details", { units: [{ unit: "1A", bedrooms: "2", bathrooms: "1", monthlyRent: "$2,200", availability: "now" }] });
+    expect(named.lines[0]).toMatch(/^1A —/);
+  });
+});
+
+describe("operator-facing readiness and practice tour never name Durin", () => {
+  it("readiness and dry-tour output contain no Durin", async () => {
+    const h = app();
+    await h.setUpAlfredWay();
+    const readiness = await h.ok("run_readiness_check");
+    expect(readiness.passed).toBe(true);
+    expect(readiness.lines).toContain("\u2713 Door access");
+    expect(JSON.stringify(readiness)).not.toMatch(/Durin/);
+    const practice = await h.ok("run_dry_tour");
+    expect(practice.passed).toBe(true);
+    expect(practice.proofPoints).toContain("\u2713 Unit 102 Door (not on the route) was turned away before any door was unlocked");
+    expect(JSON.stringify(practice)).not.toMatch(/Durin/);
   });
 });
 

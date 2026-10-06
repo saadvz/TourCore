@@ -15,7 +15,7 @@ metadata:
 
 The readiness check exercises the real pieces the setup selects: the setup
 answers, tour hours, every unit's route, verification, visitor messaging, tour
-records, saving tour progress (real phones), Durin access and audit/export.
+records, saving tour progress (real phones), door access and audit/export.
 Report exactly what it returns.
 
 ## When to use
@@ -38,7 +38,7 @@ operator asks why something isn't ready.
    > ✓ Visitor messaging connected
    > ✓ Records
    > ✓ Tour progress can be safely saved
-   > ✓ Durin access
+   > ✓ Door access
    > ✓ Audit/export
    > No visitor help number is set, so stuck visitors can only text back.
    An advisory line after the checks does not fail the check. Say it plainly.

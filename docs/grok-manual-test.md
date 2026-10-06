@@ -240,7 +240,7 @@ the [setup guide](grok-template-setup.md).
 | 4 | Tour hours: *"Weekdays, 9 to 5"* | Bot reads back weekdays 9 AM–5 PM with the defaults |
 | 5 | Verification: basic form | Bot doesn't ask how to text people (the property already uses the installed texting); `get_services` shows messaging connected |
 | 6 | Confirm the read-back. Bot runs readiness | Checklist matches the browser app's readiness screen for the property, including "Visitor messaging connected" |
-| 7 | Bot runs the practice tour | Proof points including early arrival denied and Unit 102 Door denied before Durin was contacted; no text reaches your phone |
+| 7 | Bot runs the practice tour | Proof points including early arrival denied and Unit 102 Door turned away before any door was unlocked; no text reaches your phone |
 | 8 | Bot asks to publish. First say *"not yet"*, then *"yes"* | "not yet": still Draft in the browser app. "yes": Published for demo; Bot says visitor texting is live and door access is still in demo mode |
 | 9 | From the real phone, text the Sendblue number "Hi" and book Unit 101 at the next time; consent; fill the identity form | Normal visitor flow (unchanged) |
 | 10 | *"Show active tours"* | Your name, Unit 101, tour time, status; no ids |

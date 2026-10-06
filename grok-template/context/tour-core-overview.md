@@ -18,9 +18,10 @@ yo stays on after-close handling; a clear booking phrase (including
 see it again / schedule another visit) starts a new booking only when
 nothing is held. After 24 hours, greetings go back to normal. A
 greeting with more text, or anything about being stuck, locked,
-jammed, still in the unit, unable to leave, or unable to get
-outside, does not start booking. Help booking does not hide those
-other words. A rebook or custom-time
+jammed, still in the unit, unable to leave, unable to get
+outside, unable to find the way out, where the way out is, or how
+to get out, does not start booking. Help booking does not hide those
+other words. "Which way out of the lobby" is not distress. A rebook or custom-time
 request during a tour stays secondary until that tour ends, then
 unfinished consent or identity checks continue. After the follow-up
 reply, an unapproved custom-time request is told it is still with the
@@ -210,10 +211,10 @@ contacted. Say "door access" to the operator; never name Durin.
 - Tour Core runs on the Bot's cloud computer (a demo deployment) or at a
   stable self-hosted address.
 - Visitor messaging: the provider the operator chooses (Sendblue, Twilio, Photon, or local QA loopback). Do not assume Sendblue.
-- QA without a carrier: put that building on local test texts (`choose_messaging_provider` with `local` and the property, or `set_services` with `messaging: local`), then `inject_local_sms` and `read_local_outbox`. Replies are separate bubbles. `hasMedia` injects a photo inbound (the file is not forwarded; a photo alone is told it can't take photos yet, and a photo plus a question it can't answer is one combined text and is flagged). Those tools refuse unless that building is on local. Other published buildings stay on the installation's live texting. `get_services` / `set_services local` say "Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on. Door access is still in demo mode, so no physical locks will open." Do not say texting is live. Publishing a local building leaves out "Visitors can start a tour by texting your touring number." Switching the installation's provider keeps saved carrier credentials.
+- QA without a carrier: put that building on local test texts (`choose_messaging_provider` with `local` and the property, or `set_services` with `messaging: local`), then `inject_local_sms` and `read_local_outbox`. Replies are separate bubbles. `hasMedia` injects a photo inbound (the file is not forwarded; a photo alone is told it can't take photos yet, and a photo plus a question it can't answer is one combined text and is flagged). Those tools refuse unless that building is on local. Other published buildings stay on the installation's live texting. `get_services` reports `messaging.current` as `"test"` (never `"live"`) and "Visitor texting: Test mode". `get_services` / `set_services local` say "Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on. Door access is still in demo mode, so no physical locks will open." Do not say texting is live. Publishing a local building leaves out "Visitors can start a tour by texting your touring number." Switching the installation's provider keeps saved carrier credentials.
 - Operator updates: the Tour Core Operator Updates Grok Routine.
 - Tour records: on the hosted product, stored by hosted Tour Core. Google Drive keeps portable backups and exports through Grok's connector. Optional direct Drive remains a separate mode.
-- Door access: Durin demo mode. No physical door is controlled.
+- Door access: demo mode. No physical door is controlled.
 - Visitor verification: basic identity form (records claimed identity; it
   doesn't prove it).
 

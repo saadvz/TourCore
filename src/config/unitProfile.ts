@@ -259,7 +259,8 @@ export function parseBulkUnitDetails(text: string, unitNames: string[]): BulkUni
   return { units: [...out.entries()].filter(([, v]) => Object.keys(v).length).map(([unit, values]) => ({ unit, values })), unknownUnits: [...new Set(unknownUnits)] };
 }
 
-function extractValues(segment: string): Partial<Record<ProfileField, string>> {
+/** Values stated in a segment of operator text, without requiring a unit name. */
+export function extractValues(segment: string): Partial<Record<ProfileField, string>> {
   const s = segment.replace(/\s+/g, " ");
   const values: Partial<Record<ProfileField, string>> = {};
   const bed = /\b(\d+|one|two|three|four|five)\s*(?:-\s*)?(?:bed(?:room)?s?|br|bd)\b/i.exec(s) ?? (/\bstudio\b/i.test(s) ? ["studio", "studio"] : null);

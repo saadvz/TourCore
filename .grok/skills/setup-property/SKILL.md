@@ -93,7 +93,9 @@ the operator correct it.
 5. **Unit information, before doors and routes.** Ask for bedrooms, bathrooms,
    rent and availability, and accept a natural answer for several units at
    once ("1A and 1B are 2 bed 1 bath for $2,200. 2A is 3 bed 2 bath for
-   $2,800"): pass it as `details` to `set_unit_details`. Offer the optional
+   $2,800"): pass it as `details` to `set_unit_details`. On a single-family
+   home with exactly one unit, omit the unit name and Tour Core uses that
+   unit. Multi-unit properties still need a unit. Offer the optional
    details (square footage, floor, parking, laundry, pets, utilities,
    furnished, features) once. "I don't know", "not sure", "not available yet"
    and "don't list the price" are answers: pass them as the operator said
@@ -136,7 +138,9 @@ the operator correct it.
     yourself.     `set_services` only sets live, local test, or practice texts for this property;
     it does not change the installation provider or saved credentials. `messaging: local`
     puts this building on local test texts without drafting other published buildings.
-    For local, `get_services` and `set_services` say "Texting is in test mode, so texts
+    For local, `get_services` reports `messaging.current` as `"test"` (never
+    `"live"`) and the status line is "Visitor texting: Test mode". `get_services`
+    and `set_services` say "Texting is in test mode, so texts
     don't reach real phones. Real visitors won't get anything until live texting is
     turned on. Door access is still in demo mode, so no physical locks will open."
     Do not say texting is live and do not name the texting service.
@@ -175,7 +179,8 @@ the operator correct it.
     address. If they set a help number, that line shows the value instead of
     "not set". A single-family home's unit heading is the street line
     (for example "910 QA Gate Rd"), never "Main Home". Multifamily, apartment
-    and condo units keep their stored names.
+    and condo units keep their stored names. Local or test-mode texting reads
+    "Visitor texting: Test mode" instead of "Connected".
 13. On yes, the setup is saved. In a guided install, go back to Tour Core's
     next step (`get_next_installation_step`, Install Tour Core skill): it
     offers tour updates next, then runs the checks. Otherwise: "I'll run a

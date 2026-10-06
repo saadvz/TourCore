@@ -118,7 +118,9 @@ Always:
 - For QA without real texts, put that building on local test texts:
   `choose_messaging_provider` with `local` and the property, or `set_services`
   with `messaging: local`, then `inject_local_sms` and `read_local_outbox`.
-  `get_services` and `set_services local` say "Texting is in test mode, so
+  `get_services` reports `messaging.current` as `"test"` (never `"live"`) and
+  "Visitor texting: Test mode". `get_services` and `set_services local` say
+  "Texting is in test mode, so
   texts don't reach real phones. Real visitors won't get anything until live
   texting is turned on. Door access is still in demo mode, so no physical
   locks will open." Do not say texting is live and do not name the

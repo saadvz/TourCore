@@ -99,7 +99,7 @@ describe("previous practice tours", () => {
     const older = ws.loadTour(id, list[1]!.id)!;
     const view = tourDetailView(older.record, older.bundle, config);
     expect(view).toMatchObject({ title: "Practice tour", ranAtLabel: "Sep 27, 1:42 PM", outcomeLabel: "Passed", visitorName: "Pat Practice", unitName: "Unit 101" });
-    expect(view.safetyChecks?.find((g) => g.id === "safety")?.items.at(-1)?.outcome).toBe("Access correctly denied before Durin was contacted");
+    expect(view.safetyChecks?.find((g) => g.id === "safety")?.items.at(-1)?.outcome).toBe("turned away before any door was unlocked");
     expect(view.conversation.some((m) => m.from === "tourcore" && m.text.includes("Would you like someone from the property team to follow up?"))).toBe(true);
     expect(view.accessDecisions.map((e) => e.text)).toContain("Access to Unit 102 Door was denied because it was not part of Pat's tour.");
     expect(ws.exportTour(id, list[1]!.id)?.json).toContain('"schemaVersion": 1');

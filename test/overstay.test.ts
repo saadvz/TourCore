@@ -40,7 +40,9 @@ import { MessagingConversations, occupiedWindowsFromRecords } from "../src/visit
 import { MessagingEndpoints } from "../src/messaging/endpoints";
 import { PropertyWorkspace, runReadinessCheck } from "../src/setup";
 import { VerificationLinks } from "../src/visitor/verificationLinks";
-import { listExceptions, resolveException } from "../src/operator/exceptions";
+import { inspectException, listExceptions, resolveException } from "../src/operator/exceptions";
+import { ConfirmationBook } from "../src/operator/confirmations";
+import { callOperatorTool, type ToolContext } from "../src/operator/tools";
 import type { OccupiedWindow } from "../src/core/customSlot";
 import { AFTER_CLOSE_ALERT_MS, VISITOR_SEND_ATTEMPTS } from "../src/visitor/overstayScheduler";
 import { MemoryRuntimeStore } from "../src/storage/runtimeStore";
@@ -1717,6 +1719,56 @@ describe("overstay SMS router", () => {
     expect(mentionsAfterCloseDistress("help me book")).toBe(false);
     expect(mentionsAfterCloseDistress("help booking")).toBe(false);
     expect(mentionsAfterCloseDistress("which way out of the lobby")).toBe(false);
+    expect(mentionsAfterCloseDistress("can't find the way out")).toBe(true);
+    expect(mentionsAfterCloseDistress("cannot find the way out")).toBe(true);
+    expect(mentionsAfterCloseDistress("can't find my way out")).toBe(true);
+    expect(mentionsAfterCloseDistress("where is the way out")).toBe(true);
+    expect(mentionsAfterCloseDistress("where's the way out")).toBe(true);
+    expect(mentionsAfterCloseDistress("how do I get out")).toBe(true);
+    expect(mentionsAfterCloseDistress("book another tour, can't find the way out")).toBe(true);
+  });
+
+  it("router: book another tour plus can't find the way out stays on after-close", async () => {
+    const path = await smsClosedTour("sms-way-out-distress");
+    const beforeId = path.session.id;
+    await path.text("book another tour, can't find the way out");
+    expect(path.session.id).toBe(beforeId);
+    expect(path.lastVisitor()).toBe(visitorRepliedAfterClose());
+    expect((await operatorAlertsFromSession(path.session)).some((x) => x.includes("replied after their tour"))).toBe(true);
+    expect((await path.session.reservation())!.status).toBe("EXPIRED");
+    expect(path.session.overstay!.get(path.reservationId)?.cancelled).toBeFalsy();
+    expect(path.lastVisitor()).not.toMatch(/Which unit|I have tours available|Welcome|self-guided/);
+  });
+
+  it("leaving issue uses the ended-tour status when a held rebook is waiting for consent", async () => {
+    const path = await smsClosedTour("sms-leaving-held-consent", { rebook: true });
+    expect(path.session.pendingBookingId).toBeTruthy();
+    const pending = (await path.session.store.get("reservations", path.session.pendingBookingId!))!;
+    expect(pending.status).toBe("AWAITING_CONSENT");
+    const { record, bundle } = await path.session.record();
+    path.ws.recordVisitorDemo(path.session.propertyId, record, bundle);
+    const services = { workspace: path.ws, now: () => new Date(path.clock.t) };
+    const ctx: ToolContext = {
+      services,
+      confirmations: new ConfirmationBook(10 * 60_000, () => path.clock.t),
+      now: () => new Date(path.clock.t),
+    };
+    const listed = await callOperatorTool(ctx, "list_exceptions", {});
+    expect(listed.ok).toBe(true);
+    const leaving = (listed.result as { exceptions: Array<{ what: string; tourStatus: string; exceptionId: string }> }).exceptions.find(
+      (e) => e.what === "Visitor hasn't confirmed leaving",
+    );
+    expect(leaving).toBeTruthy();
+    expect(leaving!.tourStatus).toMatch(/Tour time ended/);
+    expect(leaving!.tourStatus).not.toContain("Waiting for consent");
+    const inspected = await callOperatorTool(ctx, "inspect_exception", { exceptionId: leaving!.exceptionId });
+    expect(inspected.ok).toBe(true);
+    const issue = (inspected.result as { issue: { tourStatus: string } }).issue;
+    expect(issue.tourStatus).toMatch(/Tour time ended/);
+    expect(issue.tourStatus).not.toContain("Waiting for consent");
+    const direct = (await listExceptions(services, { includeClosed: true })).find((e) => e.kind === "overstay");
+    expect(direct?.tourStatus).toMatch(/Tour time ended/);
+    expect((await inspectException(services, direct!.exceptionId)).tourStatus).toMatch(/Tour time ended/);
   });
 });
 

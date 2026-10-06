@@ -22,7 +22,7 @@ export interface DryTourCheck {
   group: DryTourGroup;
   /** What happened, e.g. "Visitor tries Unit 102 Door". */
   label: string;
-  /** What Tour Core did, e.g. "Access correctly denied before Durin was contacted". */
+  /** What Tour Core did, e.g. "turned away before any door was unlocked". */
   outcome?: string;
   ok: boolean;
   /** Plain-language reason when not ok, or why a step was skipped. */
@@ -264,7 +264,7 @@ export async function runDryTour(input: TourCoreConfig, options: DryTourOptions 
     const wrong = await request(offRoute);
     await flush();
     await check(
-      { id: "wrong_door", group: "safety", label: `Visitor tries ${doorName(offRoute)}`, outcome: "Access correctly denied before Durin was contacted" },
+      { id: "wrong_door", group: "safety", label: `Visitor tries ${doorName(offRoute)}`, outcome: "turned away before any door was unlocked" },
       !wrong.decision.allowed && wrong.decision.code === "DENY_WRONG_ROUTE" && durin.requestCount === before,
       "A door outside the route was not blocked correctly.",
     );

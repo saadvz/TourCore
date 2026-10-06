@@ -79,6 +79,8 @@ Tour Core sends only an `eventId` and an event type; never names or details.
    > 3. Sam Lee — Unit 103
    >    Hasn't confirmed leaving Unit 103.
    >    Tour time ended.
+   A leaving issue uses the ended tour's status ("Tour time ended"), even when
+   a later booking is held and waiting for consent.
 2. "Open Pat's issue": `inspect_exception` with that item's `exceptionId`. Show
    what happened, the visitor's words, where the tour stands and `nextSteps`.
 
