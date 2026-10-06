@@ -2277,6 +2277,8 @@ describe("an operator booking change stale-dates a leftover menu", () => {
 
   it("a leftover 1 after a one-off is confirmed does not book 2:00", async () => {
     const a = await liveApp({ cleanups });
+    a.ws.recordDryTour("prop_100_alfred_way", { passed: true, ranAt: new Date(a.clock.t).toISOString(), checks: [], audit: [] });
+    expect((await a.ws.publishDemoProperty("prop_100_alfred_way", new Date(a.clock.t))).published).toBe(true);
     await a.optInSms();
     await a.text("1");
     const menu = await a.text("1");
@@ -2288,8 +2290,11 @@ describe("an operator booking change stale-dates a leftover menu", () => {
     const leftover = await a.text("1");
     expect(leftover.join("\n")).not.toContain(bookedForLine("2:00 PM", "Monday, Sep 28"));
     expect(leftover.join("\n")).not.toContain(bookedForLine("3:30 PM", "Monday, Sep 28"));
-    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging" && item.visitorPhone === PHONE)!;
-    const reservation = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations.find((item) => item.slotStart && item.status !== "CANCELLED")!;
+    const reservation = a.ws
+      .listTours("prop_100_alfred_way")
+      .filter((item) => item.kind === "messaging" && item.visitorPhone === PHONE)
+      .flatMap((item) => a.ws.loadTour("prop_100_alfred_way", item.tourId)!.bundle.reservations)
+      .find((item) => item.slotStart && item.status !== "CANCELLED")!;
     expect(reservation.slotStart).toBe(atTime(15, 15).toISOString());
   });
 
@@ -2325,14 +2330,29 @@ describe("a held rebook leftover menu number does not move the booking", () => {
   it("overstay another-time leftover 2 leaves Thursday 2:00 held", async () => {
     const a = await liveApp({ cleanups });
     await a.book();
-    await a.textFrom(OTHER, "TOUR");
-    await a.textFrom(OTHER, "YES");
-    await a.textFrom(OTHER, "1");
-    await a.textFrom(OTHER, "1");
-    await a.textFrom(OTHER, "1");
     a.clock.t = at(13, 58);
     await a.text("I'm here");
     await a.text("at unit 1A");
+    const session = a.visitors.latestForPhone("prop_100_alfred_way", PHONE, "messaging")!;
+    const current = (await session.reservation())!;
+    const start = new Date(current.windowEnd!);
+    const now = session.clock.now().toISOString();
+    const length = session.config.tourHours.tourLengthMinutes * 60_000;
+    const early = session.config.tourHours.earlyArrivalMinutes * 60_000;
+    await session.store.put("reservations", {
+      id: "rsv_busy_next",
+      prospectId: "prs_busy_next",
+      propertyId: session.config.property.id,
+      unitId: current.unitId,
+      routeId: current.routeId,
+      allowedRoute: current.allowedRoute,
+      status: "READY",
+      slotStart: start.toISOString(),
+      windowStart: new Date(start.getTime() - early).toISOString(),
+      windowEnd: new Date(start.getTime() + length).toISOString(),
+      createdAt: now,
+      updatedAt: now,
+    });
     const noTime = await a.text("can I have more time?");
     expect(noTime.join("\n")).toContain("Sorry, I can't add more time to this tour");
     const offered = await a.text("sure, another time");

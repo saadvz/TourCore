@@ -47,7 +47,8 @@ export async function findTimeRequest(services: OperatorServices, id: string): P
 /** Sentence-start form: "The visitor" or the first name. Use midSentence() mid-sentence. */
 export function who(tour: TourSnapshot): string {
   const name = visitorNameOf(tour);
-  return name.startsWith("A visitor") ? "The visitor" : (name.split(/\s+/)[0] ?? name);
+  if (!name || name === "A visitor" || name.startsWith("A visitor") || /^\(?\+?\d/.test(name)) return "The visitor";
+  return name.split(/\s+/)[0] ?? name;
 }
 
 function visitorTextNote(name: string, confirm: boolean, outside: boolean): string {
