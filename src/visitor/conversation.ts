@@ -151,8 +151,8 @@ async function answerLeftoverAfterConsent(turn: Turn, text: string): Promise<voi
 
 /** A clear YES/NO, including yes/ok plus extra words. Change markers are not consent. */
 function clearConsentAnswer(text: string): "yes" | "no" | undefined {
-  const normalized = normalize(text);
-  if (hasExplicitChangeAsk(normalized)) return undefined;
+  const normalized = normalize(text).replace(NO_CHANGE, " ");
+  if (hasExplicitChangeAsk(text)) return undefined;
   const t = stripFiller(normalized);
   if (hasExplicitChangeAsk(t)) return undefined;
   const yn = yesNo(normalized);
@@ -380,6 +380,8 @@ export async function handleVisitorText(
   else if (intent.type === "START_MESSAGES" && turn.confident) await session.optIn(said);
   else if (await handleOverstayReply(turn)) {
     /* T-15 / T-5 / more-time / DONE / after-close / rebook after no-time */
+  } else if (await handlePostTourDistress(turn)) {
+    /* after DONE + follow-up, locked-in and other distress alert like +15 */
   } else if (await handlePendingRebookPick(turn)) {
     /* day/time for a secondary rebook; tour commands already won above */
   } else if (await handleProposedTimeReply(turn)) {
@@ -1173,6 +1175,17 @@ async function onArrival(turn: Turn): Promise<void> {
     default:
       return turn.fallback(`${SORRY} You can ask me a question about the property.`, { kind: "say", phrase: "I'm here", purpose: "when you arrive" });
   }
+}
+
+async function handlePostTourDistress(turn: Turn): Promise<boolean> {
+  if (!mentionsAfterCloseDistress(turn.said.text ?? "")) return false;
+  const reservation = await turn.session.reservation();
+  if (!reservation) return false;
+  if (reservation.status === "COMPLETED" && (await turn.session.hasFollowUpResponse(reservation.id))) {
+    await turn.session.alertDistress(turn.said);
+    return true;
+  }
+  return false;
 }
 
 async function handleOverstayReply(turn: Turn): Promise<boolean> {

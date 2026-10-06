@@ -943,7 +943,7 @@ describe("a request whose time has passed expires", () => {
     a.clock.t = at(15, 20);
     const before = a.fake.sent.filter((message) => message.number === PHONE).length;
     const result = await a.grok("approve_tour_time_request", { tourTimeRequestId: id });
-    expect(result.summary).toBe(requestTimePassedLine("Testy"));
+    expect(result.summary).toBe(requestTimePassedLine("The visitor"));
     const after = a.fake.sent.filter((message) => message.number === PHONE).map((message) => message.content).slice(before);
     expect(after.join("\n")).toContain(requestExpiredLine("3:15 PM", "Monday, Sep 28"));
     expect(after.join("\n")).toContain("If you'd like another time, just reply with a day.");
