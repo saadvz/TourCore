@@ -549,7 +549,10 @@ Terminal wizard ─────────────────────�
   Outside hours:
   `{who} is touring right now, so I can't move this tour. Their later booking is {oldTime} on {oldDay}, and {newTime} on {newDay} is outside your tour hours. Want me to move it there anyway?`
   A plain yes with the confirmation code moves it. A yes moves the later booking (`Moved {who}'s later booking to {time} on {day}.`). The visitor is told
-  `Your tour of {unit} has been moved to {time} on {day}.` READY keeps ` You're all set.` AWAITING_CONSENT does not; then the existing consent question.
+  `Your tour of {unit} has been moved to {time} on {day}.` READY keeps ` You're all set.` AWAITING_CONSENT does not; then the existing consent question. AWAITING_VERIFICATION omits ` You're all set.`
+  A named day stays on the custom-time ask (`could I do Thursday at 2:45`, `would Thursday at 2:45 work`, `can I make Thursday`, `how about Thursday at 2:45`, `can we do Thursday`). Only a PENDING custom-time request occupies an off-grid window; an APPROVED request does not.
+  Offering the time they asked for says `The property team can do {time} on {day} as a one-off.` A different time stays `The property team can't do {requestedTime} on {requestedDay}, but {proposedTime} on {proposedDay} works.` With a booking, the operator summary is `I asked {who} about {time} on {day}. Their current booking stays until they say yes.`
+  Calling off a tour also calls off any other live booking on that conversation that is not the held later one, so the screen cannot stay Ready while `hi` gets `This tour has ended. Text HI any time to start a new one.`
   `This is a one-off. Your regular tour hours stay the same`
   only for times outside tour hours. Flagged answers ask
   `Send "{answer}" to {name}? Future visitors who ask the same thing will get it too. Save it?`

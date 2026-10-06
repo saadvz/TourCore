@@ -137,7 +137,7 @@ the operator correct it.
     a new property uses it on its own. Don't ask "How do you want to text
     people?". If `get_services` shows the property still on practice texts
     while texting is installed, `set_services` with `messaging: sendblue`
-    yourself.     `set_services` only sets live, local test, or practice texts for this property;
+    yourself. `set_services` only sets live, local test, or practice texts for this property;
     it does not change the installation provider or saved credentials. `messaging: local`
     puts this building on local test texts without drafting other published buildings.
     For local, `get_services` reports `messaging.current` as `"test"` (never

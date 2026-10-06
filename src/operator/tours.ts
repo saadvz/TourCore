@@ -103,9 +103,19 @@ export async function findTour(services: OperatorServices, ref: string): Promise
   return tour;
 }
 
-/** The reservation a tour is about: a running tour wins over a later held booking. */
+/** The reservation a tour is about: the live conversation's booking, then a held rebook, else the heuristic. */
 export function currentReservation(tour: TourSnapshot): Reservation | undefined {
-  return pickCurrentReservation(tour.bundle.reservations);
+  const reservations = tour.bundle.reservations;
+  const live = tour.live;
+  if (!live) return pickCurrentReservation(reservations);
+  const pointed = live.reservationId ? reservations.find((r) => r.id === live.reservationId) : undefined;
+  if (pointed && !TERMINAL.includes(pointed.status)) return pointed;
+  const pending = live.pendingBookingId
+    ? reservations.find((r) => r.id === live.pendingBookingId && !TERMINAL.includes(r.status))
+    : undefined;
+  if (pending) return pending;
+  if (pointed) return pointed;
+  return pickCurrentReservation(reservations);
 }
 
 /** In-progress first, then the newest booking still in play, else the latest record. */

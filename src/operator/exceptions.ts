@@ -7,7 +7,7 @@ import { formatShortDateTime } from "../core/timezone";
 import { profileFacts, questionTopic, structuredAnswer, type ProfileField, type UnitProfile } from "../config/unitProfile";
 import { MAX_FACT_LENGTH } from "../config/validateConfig";
 import { UNNAMED_VISITOR, type AuditEvent, type Reservation, type ReservationStatus } from "../domain/model";
-import { PAUSED } from "../domain/stateMachine";
+import { PAUSED, TERMINAL } from "../domain/stateMachine";
 import { applySetupCommand } from "../setup/commands";
 import { SetupInputError } from "../setup/setupActions";
 import { statusLabel } from "../setup/workspace";
@@ -485,6 +485,13 @@ export async function revokeTour(services: OperatorServices, ref: string, reason
   const why = reason.trim().slice(0, 300) || "called off by the property team";
   await session.operatorChange((core, id) => core.revokeReservation(id, why), reservation.id);
   if (session.pendingBookingId === reservation.id) session.pendingBookingId = undefined;
+  // A later booking held on this conversation stays. Any other live booking does not,
+  // so call-off cannot leave a Ready reservation the visitor is no longer on.
+  for (const other of await session.store.list("reservations")) {
+    if (other.id === reservation.id || other.id === session.pendingBookingId) continue;
+    if (other.prospectId !== reservation.prospectId || !other.slotStart || TERMINAL.includes(other.status)) continue;
+    await session.operatorChange((core, id) => core.revokeReservation(id, why), other.id);
+  }
   await session.promotePendingBookingIfTourEnded();
   await persistSession(services, session);
   return {

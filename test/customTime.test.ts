@@ -172,18 +172,11 @@ describe("the landlord decides", () => {
     await a.text("Can I change it to 3:15?");
     const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
     expect((await a.grok("propose_tour_time", { tourTimeRequestId: id, newStartsAt: "3:30 PM" })).summary).toBe(
-      "I asked Testy about 3:30 PM. Their current booking stays until they say yes.",
+      "I asked Testy about 3:30 PM on Monday, Sep 28. Their current booking stays until they say yes.",
     );
     const proposed = a.fake.sent.filter((message) => message.number === PHONE).at(-1)!.content;
     expect(proposed).toBe(
-      proposeVisitorLine({
-        requestedTime: "3:15 PM",
-        requestedDay: "Monday, Sep 28",
-        proposedTime: "3:30 PM",
-        proposedDay: "Monday, Sep 28",
-        time: "2:00 PM",
-        day: "Monday, Sep 28",
-      }),
+      "The property team can't do 3:15 PM on Monday, Sep 28, but 3:30 PM on Monday, Sep 28 works. Reply YES to switch, or NO to keep your 2:00 PM tour on Monday, Sep 28.",
     );
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
     expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.slotStart).toBe(atTime(14).toISOString());
@@ -1116,6 +1109,34 @@ describe("a proposed time names both days", () => {
     expect(last).toBe(
       "The property team can't do 3:15 PM on Monday, Sep 28, but 3:30 PM on Monday, Sep 28 works. Reply YES to switch, or NO to keep looking.",
     );
+  });
+
+  it("offering the same outside-hours time does not say they can't do it and then that it works", async () => {
+    const a = await liveApp({ cleanups });
+    await chooseUnit(a);
+    await a.text("Can I tour Saturday at 10:00 AM?");
+    const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
+    await a.grok("propose_tour_time", { tourTimeRequestId: id, newStartsAt: "Saturday at 10:00 AM" });
+    const last = a.fake.sent.filter((message) => message.number === PHONE).at(-1)!.content;
+    expect(last).toBe(
+      "The property team can do 10:00 AM on Saturday, Oct 3 as a one-off. Reply YES to switch, or NO to keep looking.",
+    );
+    expect(last).not.toMatch(/can't do/);
+    expect(last).not.toContain("works");
+  });
+
+  it("offering the same outside-hours time keeps the current tour in the ending", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    await a.text("Can I change it to Saturday at 10:00 AM?");
+    const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
+    await a.grok("propose_tour_time", { tourTimeRequestId: id, newStartsAt: "Saturday at 10:00 AM" });
+    const last = a.fake.sent.filter((message) => message.number === PHONE).at(-1)!.content;
+    expect(last).toBe(
+      "The property team can do 10:00 AM on Saturday, Oct 3 as a one-off. Reply YES to switch, or NO to keep your 2:00 PM tour on Monday, Sep 28.",
+    );
+    expect(last).not.toMatch(/can't do/);
+    expect(last).not.toContain("works");
   });
 });
 
