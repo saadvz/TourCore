@@ -827,6 +827,9 @@ describe("QA review blocking items", () => {
     const reservation = (await core.getReservation(tour.reservation.id))!;
     const overstay = new OverstayScheduler(new MemoryRuntimeStore(), { clock });
     overstay.ensure(reservation, loaded.property.id);
+    const failedToVisitor = async () =>
+      (await core.auditTrail()).filter((e) => e.type === "MESSAGE_FAILED" && e.reservationId === reservation.id && e.detail === "message not delivered");
+    const beforeOverstay = (await failedToVisitor()).length;
     clock.set(minutesFrom(new Date(reservation.windowEnd!), 5));
     await overstay.tickCore(core, { propertyId: loaded.property.id });
     clock.set(minutesFrom(new Date(reservation.windowEnd!), 15));
@@ -838,12 +841,11 @@ describe("QA review blocking items", () => {
     expect((await core.auditTrail()).some((e) => e.type === "TOUR_OVERSTAY_CLOSED" && e.reservationId === reservation.id)).toBe(true);
     expect(visitorAttempts.filter((b) => b === plus5CheckIn(PLACE)).length).toBe(VISITOR_SEND_ATTEMPTS);
     expect(visitorAttempts.filter((b) => b.startsWith("Your tour of Unit 101 is now closed")).length).toBe(VISITOR_SEND_ATTEMPTS);
-    const failed = (await core.auditTrail()).filter((e) => e.type === "MESSAGE_FAILED" && e.reservationId === reservation.id && e.detail === "message not delivered");
-    expect(failed).toHaveLength(2);
+    expect(await failedToVisitor()).toHaveLength(beforeOverstay + 2);
     await overstay.tickCore(core, { propertyId: loaded.property.id });
     expect(alerts.filter((b) => b === landlordPlus5("Jane", PLACE))).toHaveLength(1);
     expect((await store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body === landlordPlus15("Jane", PLACE))).toHaveLength(1);
-    expect((await core.auditTrail()).filter((e) => e.type === "MESSAGE_FAILED" && e.reservationId === reservation.id && e.detail === "message not delivered")).toHaveLength(2);
+    expect(await failedToVisitor()).toHaveLength(beforeOverstay + 2);
   });
 
   it("a T-15 or T-5 that fails every retry is not marked sent and opens one delivery exception", async () => {
@@ -869,21 +871,25 @@ describe("QA review blocking items", () => {
     const reservation = (await core.getReservation(tour.reservation.id))!;
     const overstay = new OverstayScheduler(new MemoryRuntimeStore(), { clock });
     overstay.ensure(reservation, loaded.property.id);
+    const failedToVisitor = async () =>
+      (await core.auditTrail()).filter((e) => e.type === "MESSAGE_FAILED" && e.reservationId === reservation.id && e.detail === "message not delivered");
+    const beforeT15 = (await failedToVisitor()).length;
     clock.set(minutesFrom(new Date(reservation.windowEnd!), -15));
     await overstay.tickCore(core, { propertyId: loaded.property.id });
     expect(overstay.get(reservation.id)?.fired.t15).toBeUndefined();
     expect(overstay.get(reservation.id)?.sendFailed?.t15).toBe("1");
-    expect((await core.auditTrail()).filter((e) => e.type === "MESSAGE_FAILED" && e.reservationId === reservation.id && e.detail === "message not delivered")).toHaveLength(1);
+    expect(await failedToVisitor()).toHaveLength(beforeT15 + 1);
     await overstay.tickCore(core, { propertyId: loaded.property.id });
     expect(overstay.get(reservation.id)?.fired.t15).toBeUndefined();
-    expect((await core.auditTrail()).filter((e) => e.type === "MESSAGE_FAILED" && e.reservationId === reservation.id && e.detail === "message not delivered")).toHaveLength(1);
+    expect(await failedToVisitor()).toHaveLength(beforeT15 + 1);
 
+    const beforeT5 = (await failedToVisitor()).length;
     clock.set(minutesFrom(new Date(reservation.windowEnd!), -5));
     await overstay.tickCore(core, { propertyId: loaded.property.id });
     expect(overstay.get(reservation.id)?.fired.t5).toBeUndefined();
     expect(overstay.get(reservation.id)?.t5ForWindowEnd).toBeUndefined();
     expect(overstay.get(reservation.id)?.sendFailed?.t5).toBe(reservation.windowEnd);
-    expect((await core.auditTrail()).filter((e) => e.type === "MESSAGE_FAILED" && e.reservationId === reservation.id && e.detail === "message not delivered")).toHaveLength(2);
+    expect(await failedToVisitor()).toHaveLength(beforeT5 + 1);
   });
 
   it("follow-up yes after a normal tour and after a closed tour use the same visitor reply and landlord alert", async () => {
