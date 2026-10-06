@@ -92,7 +92,10 @@ what never does.
   stays booked.` If they name the tour they are on: `You can't cancel the
   tour you're on, but you're free to wrap up whenever you like. Your later
   tour at {time} on {day} is still booked. Want me to cancel that one
-  instead? Reply YES or NO.` A reply that isn't a
+  instead? Reply YES or NO.` A touring visitor with no later booking who
+  texts cancel hears `You can't cancel the tour you're on, but you're free
+  to wrap up whenever you like. Text me anytime if you want to book another
+  tour.` A reply that isn't a
   clear yes or no is flagged. That is not a missing-fact flag.
 - **One-off tours.** When the operator wants to set up a tour for someone who
   asked (including a visitor who hasn't texted in, or who only got a day or

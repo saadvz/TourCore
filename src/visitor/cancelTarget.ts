@@ -11,6 +11,12 @@ export type VisitorCancelTarget = {
 
 export const TOURING_NOW: Reservation["status"][] = ["TOURING", "OPERATOR_HOLD", "PROVIDER_FAILURE"];
 
+/**
+ * The running tour is never cancelled by visitor text.
+ * While they are touring and a later booking is held, cancel-by-text targets
+ * that later booking.
+ */
+
 export type NamedCancelFocus = "running" | "later" | "unspecified";
 
 const WEEKDAY_WORD: Record<string, Weekday> = {
@@ -23,15 +29,13 @@ const WEEKDAY_WORD: Record<string, Weekday> = {
   sunday: "SUN",
 };
 
-/**
- * While they are touring and a later booking is held, cancel-by-text targets
- * that later booking. The running tour is never cancelled by visitor text.
- */
+/** Pick which booking cancel-by-text acts on. */
 export function visitorCancelTarget(input: { current?: Reservation; later?: Reservation }): VisitorCancelTarget | undefined {
   const later = input.later && isCancelableReservation(input.later) ? input.later : undefined;
   if (input.current && TOURING_NOW.includes(input.current.status) && later) {
     return { reservation: later, laterWhileTouring: true };
   }
+  if (input.current && TOURING_NOW.includes(input.current.status)) return undefined;
   if (input.current && isCancelableReservation(input.current)) {
     return { reservation: input.current, laterWhileTouring: false };
   }

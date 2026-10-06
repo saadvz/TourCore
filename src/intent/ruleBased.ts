@@ -314,7 +314,9 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
   const keyword = keywordOf(raw);
   // Bare "cancel" is a carrier opt-out keyword, but with a booked tour it means cancel the tour.
   if (keyword === "stop") {
-    if (ctx.hasCancelableTour && isCancelTourAsk(raw) && normalize(raw) === "cancel") return result({ type: "CANCEL_TOUR" }, 1);
+    if ((ctx.hasCancelableTour || ctx.step === "touring") && isCancelTourAsk(raw) && normalize(raw) === "cancel") {
+      return result({ type: "CANCEL_TOUR" }, 1);
+    }
     return result({ type: "STOP_MESSAGES" }, 1);
   }
   if (keyword === "start") return result({ type: "START_MESSAGES" }, 1);

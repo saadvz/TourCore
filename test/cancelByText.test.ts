@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config/tourCoreConfig";
 import { zonedTimeToUtc } from "../src/core/timezone";
+import { cannotCancelRunningTour } from "../src/core/availabilityCopy";
 import {
   UNKNOWN_ANSWER,
   VISITOR_CANCEL_DONE,
@@ -154,19 +155,42 @@ describe("visitor cancel-by-text", () => {
     expect((await p.audit("RESERVATION_CANCELLED"))[0]?.detail).toBe("visitor opted out of messages");
   });
 
-  it("revokes open doors when they cancel during the tour", async () => {
+  it("refuses a bare cancel while touring with no later booking and leaves doors working", async () => {
     const p = phone();
     await bookedAndReady(p);
     p.session.clock.jumpTo(new Date(at(13, 58)));
     await p.say("I'm here");
     expect(await p.grants()).toEqual(["entrance"]);
-    await p.say("I need to cancel");
-    expect(p.lastReply()).toBe(CONFIRM);
-    await p.say("yes");
-    expect(p.lastReply()).toBe(VISITOR_CANCEL_DONE);
-    expect((await p.session.reservation())?.status).toBe("CANCELLED");
-    expect(await p.grants()).toEqual([]);
-    expect((await p.audit("ACCESS_REVOKED")).length).toBeGreaterThan(0);
+    await p.say("cancel");
+    expect(p.lastReply()).toBe(cannotCancelRunningTour());
+    expect((await p.session.reservation())?.status).toBe("TOURING");
+    expect(await p.grants()).toEqual(["entrance"]);
+  });
+
+  it("refuses cancel my tour while touring with no later booking", async () => {
+    const p = phone();
+    await bookedAndReady(p);
+    p.session.clock.jumpTo(new Date(at(13, 58)));
+    await p.say("I'm here");
+    await p.say("cancel my tour");
+    expect(p.lastReply()).toBe(cannotCancelRunningTour());
+    expect((await p.session.reservation())?.status).toBe("TOURING");
+    expect(await p.grants()).toEqual(["entrance"]);
+  });
+
+  it("still opens a door after a refused cancel while touring with no later booking", async () => {
+    const p = phone();
+    await bookedAndReady(p);
+    p.session.clock.jumpTo(new Date(at(13, 58)));
+    await p.say("I'm here");
+    await p.say("cancel");
+    expect(p.lastReply()).toBe(cannotCancelRunningTour());
+    const before = p.session.durin.requestCount;
+    await p.say("I'm at 101");
+    expect((await p.session.reservation())?.status).toBe("TOURING");
+    expect(p.session.lastAccess).toMatchObject({ doorId: "unit_101", allowed: true });
+    expect(p.session.durin.requestCount).toBeGreaterThan(before);
+    expect((await p.grants()).length).toBeGreaterThan(0);
   });
 
   it("if cancel cannot finish, uses Critiquito's interim line and flags the team", async () => {

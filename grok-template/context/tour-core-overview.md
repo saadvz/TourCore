@@ -182,7 +182,10 @@ tour at {time} on {day}. Your tour right now isn't affected.` NO: `Okay,
 your later tour at {time} on {day} stays booked.` If they name the tour
 they are on: `You can't cancel the tour you're on, but you're free to wrap
 up whenever you like. Your later tour at {time} on {day} is still booked.
-Want me to cancel that one instead? Reply YES or NO.` A reply that isn't a clear yes or no is flagged:
+Want me to cancel that one instead? Reply YES or NO.` A touring visitor
+with no later booking who texts cancel hears `You can't cancel the tour
+you're on, but you're free to wrap up whenever you like. Text me anytime
+if you want to book another tour.` A reply that isn't a clear yes or no is flagged:
 `I'll check with the {team} and get back to you.` STOP still opts out. If
 cancel cannot finish, they get
 `I can't cancel it from here. I've asked the leasing team to call it off and

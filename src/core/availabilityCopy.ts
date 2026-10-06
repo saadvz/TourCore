@@ -81,6 +81,11 @@ export function cannotCancelRunningOfferLater(time: string, day: string): string
   return `You can't cancel the tour you're on, but you're free to wrap up whenever you like. Your later tour at ${time} on ${day} is still booked. Want me to cancel that one instead? Reply YES or NO.`;
 }
 
+/** Touring visitor with no later booking. Nothing is cancelled; doors keep working. */
+export function cannotCancelRunningTour(): string {
+  return "You can't cancel the tour you're on, but you're free to wrap up whenever you like. Text me anytime if you want to book another tour.";
+}
+
 /** Call-off confirm. Optional when-clause is time first: "at {time} on {day}". */
 export function revokeConfirmQuestion(who: string, unit: string, when?: { time: string; day: string }): string {
   const named = when ? ` at ${when.time} on ${when.day}` : "";

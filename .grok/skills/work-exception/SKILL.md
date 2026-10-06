@@ -83,7 +83,10 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   isn't affected. Reply YES or NO.`). If they name the tour they are on:
   `You can't cancel the tour you're on, but you're free to wrap up whenever
   you like. Your later tour at {time} on {day} is still booked. Want me to
-  cancel that one instead? Reply YES or NO.` Calling
+  cancel that one instead? Reply YES or NO.` A touring visitor with no
+  later booking who texts cancel hears `You can't cancel the tour you're
+  on, but you're free to wrap up whenever you like. Text me anytime if you
+  want to book another tour.` Calling
   off describes the tour that was called off; the later booking is
   `nextBooking`.
 - QA on the local loopback: `inject_local_sms` then `read_local_outbox` (separate
@@ -369,7 +372,10 @@ right now").
   your later tour at {time} on {day} stays booked.` If they name the tour
   they are on: `You can't cancel the tour you're on, but you're free to
   wrap up whenever you like. Your later tour at {time} on {day} is still
-  booked. Want me to cancel that one instead? Reply YES or NO.` A reply that isn't a
+  booked. Want me to cancel that one instead? Reply YES or NO.` A touring
+  visitor with no later booking who texts cancel hears `You can't cancel
+  the tour you're on, but you're free to wrap up whenever you like. Text me
+  anytime if you want to book another tour.` A reply that isn't a
   clear yes or no on that confirm is
   flagged (`I'll check with the {team} and get back to you.`). That should
   not appear as a flagged question unless they were unclear on the confirm,

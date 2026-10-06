@@ -13,8 +13,8 @@ import {
   visitorCancelKeptFor,
   type InboundMeta,
 } from "../core/TourCore";
-import { cannotCancelRunningOfferLater, laterCancelConfirm } from "../core/availabilityCopy";
-import { namedCancelFocus } from "./cancelTarget";
+import { cannotCancelRunningOfferLater, cannotCancelRunningTour, laterCancelConfirm } from "../core/availabilityCopy";
+import { namedCancelFocus, TOURING_NOW } from "./cancelTarget";
 import { awaitingLatestYesNo, doorAskSupersedesCancel } from "./latestQuestion";
 import { isLeavingTour, T5_NO_OFFER_BARE_YES } from "../core/overstayCopy";
 import { afterCloseAlertOpen } from "./overstayScheduler";
@@ -977,6 +977,13 @@ async function handleCancelIntent(turn: Turn): Promise<boolean> {
   if (cancelAsk && cancelable) {
     await offerCancelConfirm(turn);
     return true;
+  }
+  if (cancelAsk && !cancelable) {
+    const current = await session.reservation();
+    if (current && TOURING_NOW.includes(current.status)) {
+      await turn.respond(cannotCancelRunningTour());
+      return true;
+    }
   }
   if (intent.type === "CANCEL_TOUR" && !cancelable) {
     await session.reportCancelFailed(turn.said);
