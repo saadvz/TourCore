@@ -574,6 +574,53 @@ describe("pause and remove", () => {
     expect(freshDone.summary).toBe(removedSetupSummary("8 Pine Rd"));
   });
 
+  it("a complete unpublished setup that ran a practice tour still uses draft wording and is deleted", async () => {
+    const wording = app();
+    const created = await wording.ok("create_property_setup", {
+      address: "12 Oak St, Teaneck, NJ 07666",
+      propertyType: "SINGLE_FAMILY",
+    });
+    const id = created.setup.propertyId as string;
+    await wording.ok("add_unit", {});
+    await wording.ok("set_unit_details", { units: [{ unit: "Main Home", bedrooms: "3", bathrooms: "2", monthlyRent: "$3,400", availability: "now" }] });
+    await wording.ok("set_tour_hours", { days: "weekdays", start: "9am", end: "5pm" });
+    await wording.ok("set_verification_policy", { level: "basic-form" });
+    await wording.ok("update_property_details", { skipVisitorHelp: true });
+    expect((await wording.ok("run_readiness_check")).passed).toBe(true);
+    expect((await wording.ok("run_dry_tour")).passed).toBe(true);
+    expect(wording.workspace.load(id).state.status).toBe("DRAFT");
+    expect(wording.workspace.load(id).state.publishedAt).toBeUndefined();
+    expect(wording.workspace.load(id).state.dryTour?.tourId).toBeTruthy();
+    expect(wording.workspace.listTours(id).some((tour) => tour.kind === "practice")).toBe(true);
+    expect(wording.workspace.hasTourOrReservationRecords(id)).toBe(false);
+    expect(wording.workspace.wasEverPublished(id)).toBe(false);
+    const asked = await wording.ok("remove_property", { property: id });
+    expect(asked.summary).toBe(
+      "Remove the setup for 12 Oak St? It isn't published yet, so no visitors are affected, but everything entered for it will be deleted for good.",
+    );
+    expect(asked.summary).toBe(removeSetupConfirmQuestion("12 Oak St"));
+    expect(asked.summary).not.toMatch(/Tours stop|Its records are kept/);
+    const done = await wording.ok("remove_property", { property: id, confirmationCode: asked.confirmation.code });
+    expect(done.summary).toBe(removedSetupSummary("12 Oak St"));
+    expect(wording.workspace.has(id)).toBe(false);
+    expect(existsSync(join(wording.root, "properties", id))).toBe(false);
+
+    const direct = app();
+    await direct.ok("create_property_setup", { address: "14 Oak St, Teaneck, NJ 07666", propertyType: "SINGLE_FAMILY" });
+    const directId = direct.workspace.propertyIds()[0]!;
+    await direct.ok("add_unit", {});
+    await direct.ok("set_unit_details", { units: [{ unit: "Main Home", bedrooms: "3", bathrooms: "2", monthlyRent: "$3,400", availability: "now" }] });
+    await direct.ok("set_tour_hours", { days: "weekdays", start: "9am", end: "5pm" });
+    await direct.ok("set_verification_policy", { level: "basic-form" });
+    await direct.ok("update_property_details", { skipVisitorHelp: true });
+    expect((await direct.ok("run_readiness_check")).passed).toBe(true);
+    expect((await direct.ok("run_dry_tour")).passed).toBe(true);
+    expect(direct.workspace.hasTourOrReservationRecords(directId)).toBe(false);
+    expect(() => direct.workspace.removeInProgressSetup(directId)).not.toThrow();
+    expect(direct.workspace.has(directId)).toBe(false);
+    expect(existsSync(join(direct.root, "properties", directId))).toBe(false);
+  });
+
   it("legacy draft with a booked tour but no publishedAt keeps records and cancels the visitor", async () => {
     const h = app();
     const id = await h.publish();
@@ -633,9 +680,10 @@ describe("pause and remove", () => {
     expect(existsSync(join(h.root, "properties", id))).toBe(true);
   });
 
-  it("removeInProgressSetup refuses when tour records exist", async () => {
+  it("removeInProgressSetup refuses when visitor tour records exist", async () => {
     const h = app();
     const id = await h.publish();
+    await readyVisitor(h, id);
     h.workspace.patchState(id, { status: "DRAFT", publishedAt: undefined });
     expect(h.workspace.load(id).state.status).toBe("DRAFT");
     expect(h.workspace.hasTourOrReservationRecords(id)).toBe(true);

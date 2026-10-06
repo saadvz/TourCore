@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Tour updates, exception queue, monitoring, holds and approved answers
-  version: "0.3.9"
+  version: "0.3.10"
 ---
 
 # Work Exception
@@ -113,7 +113,8 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   setup `list_properties` shows (same lookup by id, name, or address), whether
   or not that setup is complete, and removes it completely; published records
   stay, including a property sent back to draft that still has publishedAt,
-  tour or reservation records, or a publish event in its audit. Unpublished confirmation says it isn't published yet so no visitors
+  visitor tour or reservation records, or a publish event in its audit. A
+  practice tour alone does not count. Unpublished confirmation says it isn't published yet so no visitors
   are affected, but everything entered for it will be deleted for good.
   Published with no bookings says no one is booked, so no cancel texts go
   out; one booked visitor is singular. {name} is the operator-given property

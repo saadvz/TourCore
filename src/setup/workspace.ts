@@ -287,8 +287,8 @@ export class PropertyWorkspace {
    * Deletes an unpublished setup (draft-only, or saved but never published):
    * the folder, units, doors, routes, and any other setup files. Published
    * properties stay on disk and are marked removed instead. Refuses when
-   * visitor or practice tour records exist, even if status is no longer
-   * PUBLISHED_FOR_DEMO.
+   * real visitor tour or reservation records exist, even if status is no
+   * longer PUBLISHED_FOR_DEMO. A practice tour alone does not refuse.
    */
   removeInProgressSetup(propertyId: string): void {
     if (this.has(propertyId) && this.load(propertyId).state.status === "PUBLISHED_FOR_DEMO") {
@@ -301,15 +301,15 @@ export class PropertyWorkspace {
     rmSync(this.dir(propertyId), { recursive: true, force: true });
   }
 
-  /** Any tour folder or reservation export on disk — including practice tours. */
+  /** Real visitor tour folders or reservations on disk. Practice tours do not count. */
   hasTourOrReservationRecords(propertyId: string): boolean {
-    return this.listTours(propertyId).length > 0;
+    return this.visitorTours(propertyId).length > 0;
   }
 
   /**
    * True when this property was published or has evidence it was: current
-   * publication, a kept publishedAt, tour/reservation records, or a publish
-   * event in the property or tour audit files.
+   * publication, a kept publishedAt, visitor tour/reservation records, or a
+   * real publish event in the property audit. Practice tours do not count.
    */
   wasEverPublished(propertyId: string): boolean {
     if (this.has(propertyId)) {
@@ -323,14 +323,20 @@ export class PropertyWorkspace {
     const dir = this.dir(propertyId);
     if (!existsSync(dir)) return false;
     if (fileHasPublishEvidence(join(dir, "operator", "availability-events.json"))) return true;
-    const tours = this.toursDir(propertyId);
-    if (!existsSync(tours)) return false;
-    return readdirSync(tours, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .some((entry) => {
-        const folder = join(tours, entry.name);
-        return fileHasPublishEvidence(join(folder, "audit.csv")) || fileHasPublishEvidence(join(folder, "tour-export.json"));
-      });
+    return this.visitorTours(propertyId).some((tour) => {
+      const folder = join(this.toursDir(propertyId), tour.tourId);
+      return fileHasPublishEvidence(join(folder, "audit.csv")) || fileHasPublishEvidence(join(folder, "tour-export.json"));
+    });
+  }
+
+  private dryTourId(propertyId: string): string | undefined {
+    if (!this.has(propertyId)) return undefined;
+    return this.load(propertyId).state.dryTour?.tourId;
+  }
+
+  private visitorTours(propertyId: string): TourRecord[] {
+    const practiceId = this.dryTourId(propertyId);
+    return this.listTours(propertyId).filter((tour) => isRealVisitorTour(tour, practiceId));
   }
 
   /** The copy to edit: unsaved changes if there are any, otherwise the saved setup. */
@@ -530,21 +536,29 @@ export class PropertyWorkspace {
   }
 }
 
+const VISITOR_TOUR_ID = /_(visitor|text)(?:_\d+)?$/;
+
+function isRealVisitorTour(record: TourRecord, dryTourId?: string): boolean {
+  if (dryTourId && record.tourId === dryTourId) return false;
+  if (record.kind === "practice") return false;
+  if (record.kind === "visitor-demo" || record.kind === "messaging") return true;
+  return VISITOR_TOUR_ID.test(record.tourId);
+}
+
 function fileHasPublishEvidence(path: string): boolean {
   if (!existsSync(path)) return false;
   try {
     const raw = readFileSync(path, "utf8");
-    if (/PROPERTY_PUBLISHED|DEMO_PUBLISHED/.test(raw)) return true;
+    if (/\b(?:PROPERTY_PUBLISHED|DEMO_PUBLISHED)\b/.test(raw)) return true;
     const parsed = JSON.parse(raw) as { events?: unknown[]; auditEvents?: unknown[] } | unknown[];
     const events = Array.isArray(parsed) ? parsed : [...(parsed.events ?? []), ...(parsed.auditEvents ?? [])];
     return events.some((event) => {
       if (!event || typeof event !== "object") return false;
-      const item = event as { type?: unknown; detail?: unknown };
-      return /PUBLISH/i.test(String(item.type ?? "")) || /published for demo/i.test(String(item.detail ?? ""));
+      return /^(?:PROPERTY_PUBLISHED|DEMO_PUBLISHED)$/.test(String((event as { type?: unknown }).type ?? ""));
     });
   } catch {
     try {
-      return /PROPERTY_PUBLISHED|published for demo/i.test(readFileSync(path, "utf8"));
+      return /\b(?:PROPERTY_PUBLISHED|DEMO_PUBLISHED)\b/.test(readFileSync(path, "utf8"));
     } catch {
       return false;
     }

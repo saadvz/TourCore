@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Guided property setup, checked and practiced before publish
-  version: "0.3.12"
+  version: "0.3.13"
 ---
 
 # Setup Property
@@ -205,8 +205,8 @@ tours are back) and pending door access is switched off. Waiting visitors are
 not texted that tours are back. A later text to that line gets a goodbye and
 cannot book. It is refused while someone is on a tour. Published records stay
 (`export_audit`, `inspect_tour`) — including a property sent back to draft
-when it still has a publish timestamp, tour or reservation records, or a
-publish event in its audit. An unpublished setup is removed completely.
+when it still has a publish timestamp, visitor tour or reservation records, or a
+publish event in its audit. A practice tour alone does not count. An unpublished setup is removed completely.
 Ask the exact question it returns: unpublished (complete or not) uses
 **Remove the setup for {name}? It isn't published yet, so no visitors are
 affected, but everything entered for it will be deleted for good.** Published
