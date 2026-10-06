@@ -60,7 +60,8 @@ describe("shared portfolio line", () => {
       { address: "88 Pine St, Teaneck, NJ 07666" },
     ]);
     h = built.h;
-    [scratch, pine] = built.ids;
+    scratch = built.ids[0]!;
+    pine = built.ids[1]!;
     text = built.text;
   }, 120_000);
 
@@ -69,16 +70,17 @@ describe("shared portfolio line", () => {
   it("asks which place on an ambiguous first text, then 1 is that property's welcome", async () => {
     const phone = "+15555550111";
     const asked = await text(phone, "Tour");
+    // Newest published first: pine was published after Scratch House.
     expect(asked).toEqual([
-      ["Which place are you touring?", `1. ${short(h, scratch)}`, `2. ${short(h, pine)}`, "Reply 1 or 2."].join("\n"),
+      ["Which place are you touring?", `1. ${short(h, pine)}`, `2. ${short(h, scratch)}`, "Reply 1 or 2."].join("\n"),
     ]);
     const opened = await text(phone, "1");
     expect(opened).toHaveLength(1);
-    expect(opened[0]).toContain("Hi! Welcome to the self-guided tour for Scratch House");
+    expect(opened[0]).toContain("Hi! Welcome to the self-guided tour for 88 Pine St");
     expect(opened[0]).toContain("Which day works for you?");
     expect(opened[0]).not.toMatch(/got it|which place|I didn't catch/i);
-    expect(h.visitors.latestForPhone(scratch, phone, "messaging")?.propertyId).toBe(scratch);
-    expect(h.visitors.latestForPhone(pine, phone, "messaging")).toBeUndefined();
+    expect(h.visitors.latestForPhone(pine, phone, "messaging")?.propertyId).toBe(pine);
+    expect(h.visitors.latestForPhone(scratch, phone, "messaging")).toBeUndefined();
   });
 
   it("a bad reply uses the miss line and still waits for a pick", async () => {
@@ -90,10 +92,11 @@ describe("shared portfolio line", () => {
     expect(h.visitors.latestForPhone(pine, phone, "messaging")).toBeUndefined();
     const opened = await text(phone, "2");
     expect(opened).toHaveLength(1);
-    expect(opened[0]).toContain("88 Pine St");
+    expect(opened[0]).toContain("Scratch House");
     expect(opened[0]).toContain("Which day works for you?");
     expect(opened[0]).not.toMatch(/got it|which place/i);
-    expect(h.visitors.latestForPhone(pine, phone, "messaging")?.propertyId).toBe(pine);
+    expect(h.visitors.latestForPhone(scratch, phone, "messaging")?.propertyId).toBe(scratch);
+    expect(h.visitors.latestForPhone(pine, phone, "messaging")).toBeUndefined();
   });
 
   it("a named first text starts that property with no picker", async () => {
@@ -123,15 +126,17 @@ describe("shared portfolio line", () => {
   it("after a pick, a follow-up stays on the chosen property", async () => {
     const phone = "+15555550116";
     await text(phone, "Tour");
+    // 1 is the newer place (88 Pine). 2 locks Scratch House for the rest of the tour.
     await text(phone, "2");
     const day = await text(phone, "1");
     expect(day.join("\n")).toContain("I have these times available");
     expect(day.join("\n")).not.toContain("Which place are you touring?");
-    expect(h.visitors.latestForPhone(pine, phone, "messaging")?.propertyId).toBe(pine);
-    const namedOther = await text(phone, "Tour Scratch House");
+    expect(h.visitors.latestForPhone(scratch, phone, "messaging")?.propertyId).toBe(scratch);
+    const namedOther = await text(phone, "Tour 88 Pine");
     expect(namedOther.join("\n")).not.toContain("Which place are you touring?");
-    expect(h.visitors.latestForPhone(pine, phone, "messaging")?.propertyId).toBe(pine);
-    expect(h.visitors.latestForPhone(scratch, phone, "messaging")).toBeUndefined();
+    expect(namedOther.join("\n")).not.toContain("88 Pine St, Teaneck");
+    expect(h.visitors.latestForPhone(scratch, phone, "messaging")?.propertyId).toBe(scratch);
+    expect(h.visitors.latestForPhone(pine, phone, "messaging")).toBeUndefined();
   });
 });
 
