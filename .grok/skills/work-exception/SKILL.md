@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Tour updates, exception queue, monitoring, holds and approved answers
-  version: "0.3.4"
+  version: "0.3.5"
 ---
 
 # Work Exception
@@ -109,7 +109,10 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   Removal drops that list without sending it,
   and a later text to that line gets a goodbye and cannot book. Booked
   cancel text on remove does not say they'll be texted when tours are back.
-  Removal is refused while someone is on a tour. Say remove, never archive.
+  Removal is refused while someone is on a tour. It also finds an in-progress
+  setup `list_properties` shows (same lookup by id, name, or address) and
+  removes that setup completely; published records stay. If it was a setup
+  still in progress, say **Removed the setup for {name}.** Say remove, never archive.
 - Door-system problems and tours that couldn't be restored: explain in plain
   words, suggest reaching out to the visitor, and resume only once the operator
   says the doors are working.

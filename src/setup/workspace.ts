@@ -283,6 +283,19 @@ export class PropertyWorkspace {
     if (!this.has(propertyId)) rmSync(this.dir(propertyId), { recursive: true, force: true });
   }
 
+  /**
+   * Deletes an in-progress setup that was never saved (draft only): the
+   * folder, units, doors, routes, and any other setup files. Saved properties
+   * stay on disk and are marked removed instead.
+   */
+  removeInProgressSetup(propertyId: string): void {
+    if (this.has(propertyId)) {
+      throw new SetupInputError("PROPERTY_SAVED", "That property already has a saved setup.");
+    }
+    if (!this.loadDraft(propertyId)) throw new SetupInputError("PROPERTY_NOT_FOUND", "I couldn't find that property.");
+    rmSync(this.dir(propertyId), { recursive: true, force: true });
+  }
+
   /** The copy to edit: unsaved changes if there are any, otherwise the saved setup. */
   openDraft(propertyId: string): { draft: TourCoreConfig; unsavedChanges: boolean } {
     const draft = this.loadDraft(propertyId);

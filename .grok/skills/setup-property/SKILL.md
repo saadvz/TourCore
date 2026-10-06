@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Guided property setup, checked and practiced before publish
-  version: "0.3.5"
+  version: "0.3.6"
 ---
 
 # Setup Property
@@ -195,13 +195,17 @@ operator chooses keep or cancel). A tour in progress always finishes.
 `resume_tours` turns bookings back on and texts people who were told tours
 would be back (or who got a paused-unit line). A later visitor Tour, Hi, or
 book restarts booking the same way as a first text. `remove_property` takes the
-property off the list after the exact confirmation; booked visitors get a
-cancel text that the property isn't offering tours anymore (not that they'll
-be texted when tours are back) and pending door access is switched off.
-Waiting visitors are not texted that tours are back. A later text to that
-line gets a goodbye and cannot book. It is refused while someone is on a
-tour. Records stay (`export_audit`, `inspect_tour`). Say **remove**, never
-archive. This is not `place_operator_hold`, which pauses one visitor's tour.
+property off the list after the exact confirmation — including an in-progress
+setup `list_properties` still shows (same lookup by id, name, or address).
+Booked visitors get a cancel text that the property isn't offering tours
+anymore (not that they'll be texted when tours are back) and pending door
+access is switched off. Waiting visitors are not texted that tours are back.
+A later text to that line gets a goodbye and cannot book. It is refused while
+someone is on a tour. Published records stay (`export_audit`, `inspect_tour`);
+an in-progress setup is removed completely. If it was a setup still in
+progress, say **Removed the setup for {name}.** Otherwise keep Tour Core's
+wording. Say **remove**, never archive. This is not `place_operator_hold`,
+which pauses one visitor's tour.
 
 Later edits: facts and unit details (bedrooms, rent, availability,
 description, amenities, directions) are approved content: saving them keeps

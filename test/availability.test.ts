@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   bookedTourCalledOffText,
@@ -9,7 +11,9 @@ import {
   PROPERTY_REMOVED_REFUSE,
   REMOVE_REFUSED_LIVE_TOUR,
   removeConfirmQuestion,
+  removedPropertySummary,
   removedPropertyVisitorText,
+  removedSetupSummary,
   resumeConfirmQuestion,
   toursAreBackText,
 } from "../src/core/availabilityCopy";
@@ -67,6 +71,11 @@ describe("availability copy", () => {
 
   it("uses the approved paused-unit line", () => {
     expect(pausedUnitVisitorText("Unit 101")).toBe("Unit 101 isn't open for tours right now.");
+  });
+
+  it("uses the approved remove summaries for a published property and an in-progress setup", () => {
+    expect(removedPropertySummary("100 Alfred Way")).toBe("100 Alfred Way has been removed. Its records are kept.");
+    expect(removedSetupSummary("1 QA Scratch Lane")).toBe("Removed the setup for 1 QA Scratch Lane.");
   });
 
   it("uses the approved booked-tour cancel lines", () => {
@@ -328,6 +337,65 @@ describe("pause and remove", () => {
     const v = await readyVisitor(h, id);
     expect((await v.session.reservation())!.status).toBe("READY");
     expect((await h.ok("list_properties")).properties[0].paused).toBe(false);
+  });
+
+  it("removes an in-progress setup that list_properties shows, including units, doors, and routes", async () => {
+    const h = app();
+    const created = await h.ok("create_property_setup", {
+      address: "1 QA Scratch Lane, Tenafly, NJ 07670",
+      name: "QA Scratch Lane",
+      propertyType: "SINGLE_FAMILY",
+    });
+    await h.ok("add_unit", { name: "Main Home" });
+    await h.ok("add_door", { name: "Side Hall", kind: "hallway" });
+    const listed = await h.ok("list_properties");
+    expect(listed.properties).toEqual([
+      expect.objectContaining({
+        propertyId: created.setup.propertyId,
+        name: "QA Scratch Lane",
+        status: "Setup in progress",
+      }),
+    ]);
+    expect(h.workspace.has(created.setup.propertyId)).toBe(false);
+    expect(h.workspace.loadDraft(created.setup.propertyId)?.units.length).toBeGreaterThan(0);
+    expect(h.workspace.loadDraft(created.setup.propertyId)?.doors.length).toBeGreaterThan(0);
+
+    const asked = await h.ok("remove_property", { property: listed.properties[0].name });
+    expect(asked.summary).toBe(removeConfirmQuestion("QA Scratch Lane", 0));
+    const done = await h.ok("remove_property", { property: listed.properties[0].name, confirmationCode: asked.confirmation.code });
+    expect(done.summary).toBe(removedSetupSummary("QA Scratch Lane"));
+    expect((await h.ok("list_properties")).properties).toEqual([]);
+    expect(h.workspace.propertyIds()).not.toContain(created.setup.propertyId);
+    expect(existsSync(join(h.root, "properties", created.setup.propertyId))).toBe(false);
+    expect(await h.fails("get_property_setup", { property: "QA Scratch Lane" })).toMatch(/I couldn't find/);
+  });
+
+  it("finds an in-progress setup by address the same way list_properties does", async () => {
+    const h = app();
+    await h.ok("create_property_setup", { address: "27 Oak Ln, Teaneck, NJ 07666" });
+    const listed = await h.ok("list_properties");
+    expect(listed.properties[0].status).toBe("Setup in progress");
+    const { done } = await h.approve("remove_property", { property: listed.properties[0].address });
+    expect(done.summary).toBe(removedSetupSummary(listed.properties[0].name));
+    expect((await h.ok("list_properties")).properties).toEqual([]);
+  });
+
+  it("still removes a published property and keeps its records", async () => {
+    const h = app();
+    const id = await h.publish();
+    const { config } = h.workspace.load(id);
+    const { asked, done } = await h.approve("remove_property", { property: id });
+    expect(asked.summary).toBe(removeConfirmQuestion(config.property.name, 0));
+    expect(done.summary).toBe(removedPropertySummary(config.property.name));
+    expect((await h.ok("list_properties")).properties).toEqual([]);
+    expect(h.workspace.has(id)).toBe(true);
+    expect(h.workspace.load(id).state.removedAt).toBeTruthy();
+    expect(existsSync(join(h.root, "properties", id, "tourcore.config.json"))).toBe(true);
+  });
+
+  it("still says it couldn't find an unknown property", async () => {
+    const h = app();
+    expect(await h.fails("remove_property", { property: "No Such Place" })).toMatch(/I couldn't find that property|I couldn't find a property called "No Such Place"/);
   });
 
   it("refuses to remove a property while someone is on a tour", async () => {

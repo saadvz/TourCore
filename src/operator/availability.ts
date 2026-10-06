@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createMessenger } from "../createTourCore";
-import { pauseConfirmQuestion, PROPERTY_REMOVED_REFUSE, REMOVE_REFUSED_LIVE_TOUR, removeConfirmQuestion, resumeConfirmQuestion, toursAreBackText } from "../core/availabilityCopy";
+import { pauseConfirmQuestion, PROPERTY_REMOVED_REFUSE, REMOVE_REFUSED_LIVE_TOUR, removeConfirmQuestion, removedPropertySummary, removedSetupSummary, resumeConfirmQuestion, toursAreBackText } from "../core/availabilityCopy";
 import { normalizePhone } from "../core/phone";
 import { newId, type AuditEvent, type AuditEventType, type Reservation } from "../domain/model";
 import { TERMINAL } from "../domain/stateMachine";
@@ -275,8 +275,13 @@ export async function resumeTours(ctx: Ctx, input: { property?: string; unit?: s
 
 export async function removeProperty(ctx: Ctx, input: { property?: string; confirmationCode?: string }) {
   const propertyId = resolvePropertyId(ctx.services.workspace, input.property);
-  const { config, state } = ctx.services.workspace.load(propertyId);
-  if (isRemoved(state)) throw new SetupInputError("PROPERTY_REMOVED", "That property has already been removed.");
+  const inProgress = !ctx.services.workspace.has(propertyId);
+  const name = inProgress
+    ? ctx.services.workspace.openDraft(propertyId).draft.property.name
+    : ctx.services.workspace.load(propertyId).config.property.name;
+  if (!inProgress && isRemoved(ctx.services.workspace.load(propertyId).state)) {
+    throw new SetupInputError("PROPERTY_REMOVED", "That property has already been removed.");
+  }
   if (await anyoneTouring(ctx.services, propertyId)) {
     throw new SetupInputError("TOUR_IN_PROGRESS", REMOVE_REFUSED_LIVE_TOUR);
   }
@@ -284,18 +289,23 @@ export async function removeProperty(ctx: Ctx, input: { property?: string; confi
   const booked = await bookedTours(ctx.services, propertyId);
   const fingerprint = `${propertyId}|${booked.map((tour) => `${currentReservation(tour)?.id}:${currentReservation(tour)?.status}`).join(",")}`;
   if (!input.confirmationCode) {
-    return ask(ctx, "remove-property", propertyId, fingerprint, removeConfirmQuestion(config.property.name, booked.length), { bookedTours: booked.length });
+    return ask(ctx, "remove-property", propertyId, fingerprint, removeConfirmQuestion(name, booked.length), { bookedTours: booked.length });
   }
   redeem(ctx, input.confirmationCode, "remove-property", propertyId, fingerprint);
+
+  if (inProgress) {
+    ctx.services.workspace.removeInProgressSetup(propertyId);
+    return { status: "removed", summary: removedSetupSummary(name), cancelled: 0, removed: true };
+  }
 
   const cancelled = await cancelBooked(ctx.services, booked, true, "property removed", true);
   ctx.services.workspace.patchState(propertyId, { removedAt: ctx.now().toISOString(), paused: true });
   dropWaiters(ctx.services.workspace.root, propertyId);
-  appendAvailabilityEvent(ctx.services.workspace.root, propertyId, "PROPERTY_REMOVED", config.property.name, ctx.now().toISOString());
+  appendAvailabilityEvent(ctx.services.workspace.root, propertyId, "PROPERTY_REMOVED", name, ctx.now().toISOString());
 
   return {
     status: "removed",
-    summary: `${config.property.name} has been removed. Its records are kept.`,
+    summary: removedPropertySummary(name),
     cancelled,
     removed: true,
   };
