@@ -5,7 +5,7 @@ import { pauseConfirmQuestion, PROPERTY_REMOVED_REFUSE, REMOVE_REFUSED_LIVE_TOUR
 import { normalizePhone } from "../core/phone";
 import { newId, type AuditEvent, type AuditEventType, type Reservation } from "../domain/model";
 import { TERMINAL } from "../domain/stateMachine";
-import { SetupInputError } from "../setup/setupActions";
+import { operatorFacingPropertyName, SetupInputError } from "../setup/setupActions";
 import { isEffectivelyPaused, isRemoved, isUnitPaused } from "../setup/availability";
 import { dropUnitWaiters, dropWaiters, rememberWaiter, uniquePhones, waitersFor } from "../setup/pauseWaiters";
 import type { PropertyState, TourRecord } from "../setup/workspace";
@@ -277,7 +277,7 @@ export async function removeProperty(ctx: Ctx, input: { property?: string; confi
   const propertyId = resolvePropertyId(ctx.services.workspace, input.property);
   const inProgress = !ctx.services.workspace.has(propertyId);
   const name = inProgress
-    ? ctx.services.workspace.openDraft(propertyId).draft.property.name
+    ? operatorFacingPropertyName(ctx.services.workspace.openDraft(propertyId).draft)
     : ctx.services.workspace.load(propertyId).config.property.name;
   if (!inProgress && isRemoved(ctx.services.workspace.load(propertyId).state)) {
     throw new SetupInputError("PROPERTY_REMOVED", "That property has already been removed.");
@@ -301,6 +301,7 @@ export async function removeProperty(ctx: Ctx, input: { property?: string; confi
   redeem(ctx, input.confirmationCode, "remove-property", propertyId, fingerprint);
 
   if (inProgress) {
+    ctx.services.endpoints?.detach(propertyId);
     ctx.services.workspace.removeInProgressSetup(propertyId);
     return { status: "removed", summary: removedSetupSummary(name), cancelled: 0, removed: true };
   }

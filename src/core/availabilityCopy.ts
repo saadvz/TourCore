@@ -75,7 +75,7 @@ export function removeConfirmQuestion(property: string, bookedCount: number): st
 }
 
 export function removeSetupConfirmQuestion(name: string): string {
-  return `Remove the setup for ${name}? It isn't published yet, so no visitors are affected. Its records are kept. Remove it?`;
+  return `Remove the setup for ${name}? It isn't published yet, so no visitors are affected, but everything entered for it will be deleted for good.`;
 }
 
 export function removedSetupSummary(name: string): string {

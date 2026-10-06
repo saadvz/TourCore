@@ -25,6 +25,7 @@ import { loadConfig, type TourCoreConfig } from "../src/config/tourCoreConfig";
 import { createTourCore } from "../src/createTourCore";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
 import { MessagingEndpoints } from "../src/messaging/endpoints";
+import { localLoopbackNumber } from "../src/messaging/propertyScope";
 import { MemoryRuntimeStore } from "../src/storage/runtimeStore";
 import { handleVisitorText } from "../src/visitor/conversation";
 import { VisitorDemoSession } from "../src/visitor/session";
@@ -35,6 +36,7 @@ import { listWaiters } from "../src/setup/pauseWaiters";
 import { readAvailabilityEvents } from "../src/operator/availability";
 import { tourRef } from "../src/operator/tours";
 import { at, grokHarness, type GrokHarness } from "./grokHarness";
+import { operatorFacingPropertyName } from "../src/setup/setupActions";
 import { bookTour, setup } from "./helpers";
 
 const cleanups: Array<() => void> = [];
@@ -117,8 +119,10 @@ describe("availability copy", () => {
       "Remove 100 Alfred Way? Tours stop, 1 booked visitor get a cancel text, and it leaves your list. Its records are kept. Remove it?",
     );
     expect(removeSetupConfirmQuestion("QA Scratch Lane")).toBe(
-      "Remove the setup for QA Scratch Lane? It isn't published yet, so no visitors are affected. Its records are kept. Remove it?",
+      "Remove the setup for QA Scratch Lane? It isn't published yet, so no visitors are affected, but everything entered for it will be deleted for good.",
     );
+    expect(removeSetupConfirmQuestion("QA Scratch Lane")).not.toContain("Its records are kept");
+    expect(removeSetupConfirmQuestion("QA Scratch Lane")).not.toContain("Remove it?");
     expect(REMOVE_REFUSED_LIVE_TOUR).toBe("Someone is on a tour right now. Try again after it ends.");
     expect(resumeConfirmQuestion("100 Alfred Way")).toBe("Resume tours at 100 Alfred Way? New bookings can start again. Resume it?");
     expect(resumeConfirmQuestion("100 Alfred Way", 0)).toBe("Resume tours at 100 Alfred Way? New bookings can start again. Resume it?");
@@ -384,6 +388,66 @@ describe("pause and remove", () => {
     expect(asked.summary).toBe(removeSetupConfirmQuestion(listed.properties[0].name));
     expect(done.summary).toBe(removedSetupSummary(listed.properties[0].name));
     expect((await h.ok("list_properties")).properties).toEqual([]);
+  });
+
+  it("releases a local test number claimed by an in-progress setup", async () => {
+    const h = app();
+    const created = await h.ok("create_property_setup", { address: "1 QA Scratch Lane, Tenafly, NJ 07670", name: "QA Scratch Lane" });
+    const id = created.setup.propertyId as string;
+    await h.ok("set_services", { property: id, messaging: "local" });
+    const endpoints = new MessagingEndpoints(new MemoryRuntimeStore());
+    const line = localLoopbackNumber();
+    h.services.endpoints = endpoints;
+    endpoints.attach({ address: line, provider: "local", propertyId: id });
+    expect(endpoints.resolve(line)?.propertyId).toBe(id);
+
+    await h.approve("remove_property", { property: id });
+    expect(endpoints.resolve(line)).toBeUndefined();
+    expect(endpoints.forProperty(id)).toBeUndefined();
+
+    const next = await h.ok("create_property_setup", { address: "27 Oak Ln, Teaneck, NJ 07666" });
+    expect(endpoints.attach({ address: line, provider: "local", propertyId: next.setup.propertyId })).toEqual({ changed: true });
+    expect(endpoints.resolve(line)?.propertyId).toBe(next.setup.propertyId);
+  });
+
+  it("names an in-progress setup by the operator-given name or street plus unit, never Main Home", async () => {
+    expect(
+      operatorFacingPropertyName({
+        property: { address: "27 Oak Ln, Teaneck, NJ 07666", name: "Main Home", propertyType: "SINGLE_FAMILY" },
+        units: [{ name: "Main Home" }],
+      }),
+    ).toBe("27 Oak Ln, Teaneck, NJ 07666");
+    expect(
+      operatorFacingPropertyName({
+        property: { address: "145 Main St, Hoboken, NJ 07030", propertyType: "APARTMENT_OR_CONDO", canonicalAddress: { street: "145 Main St" } },
+        units: [{ name: "Unit 4B" }],
+      }),
+    ).toBe("145 Main St, Unit 4B");
+
+    const home = app();
+    await home.ok("create_property_setup", { address: "27 Oak Ln, Teaneck, NJ 07666", propertyType: "SINGLE_FAMILY" });
+    expect((await home.ok("add_unit", {})).unit.name).toBe("Main Home");
+    const homeId = home.workspace.propertyIds()[0]!;
+    const homeName = operatorFacingPropertyName(home.workspace.openDraft(homeId).draft);
+    expect(homeName).not.toMatch(/Main Home/i);
+    const removedHome = await home.approve("remove_property", { property: homeId });
+    expect(removedHome.asked.summary).not.toContain("Main Home");
+    expect(removedHome.done.summary).not.toContain("Main Home");
+    if (!home.workspace.has(homeId)) {
+      expect(removedHome.asked.summary).toBe(removeSetupConfirmQuestion(homeName));
+      expect(removedHome.done.summary).toBe(removedSetupSummary(homeName));
+    }
+
+    const condo = app();
+    await condo.ok("create_property_setup", { address: "145 Main St, Hoboken, NJ 07030", propertyType: "APARTMENT_OR_CONDO" });
+    await condo.ok("add_unit", { name: "4B" });
+    const listed = await condo.ok("list_properties");
+    expect(listed.properties[0].status).toBe("Setup in progress");
+    const { asked, done } = await condo.approve("remove_property", { property: listed.properties[0].propertyId });
+    expect(asked.summary).toBe(removeSetupConfirmQuestion("145 Main St, Unit 4B"));
+    expect(asked.summary).not.toContain("Main Home");
+    expect(done.summary).toBe(removedSetupSummary("145 Main St, Unit 4B"));
+    expect(done.summary).not.toContain("Main Home");
   });
 
   it("still removes a published property and keeps its records", async () => {

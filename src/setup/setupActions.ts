@@ -120,6 +120,26 @@ export function propertyLabel(property: { address: string; displayName?: string;
   return property.displayName?.trim() || property.address.trim() || property.name?.trim() || "";
 }
 
+const INTERNAL_SPACE_NAME = /^main home$/i;
+
+/**
+ * Operator-facing property name for remove and similar copy: their public
+ * name, or street plus unit for an apartment or condo, otherwise the address.
+ * Never the internal single-family space label "Main Home".
+ */
+export function operatorFacingPropertyName(draft: {
+  property: { address: string; displayName?: string; name?: string; propertyType?: PropertyType; canonicalAddress?: { street?: string } };
+  units: { name: string }[];
+}): string {
+  const given = draft.property.displayName?.trim();
+  if (given && !INTERNAL_SPACE_NAME.test(given)) return given;
+  if (isApartmentOrCondo(draft.property) && draft.units[0]) return streetAndUnit(draft.property, draft.units[0].name);
+  const address = draft.property.address.trim();
+  if (address) return address;
+  const fallback = draft.property.name?.trim() ?? "";
+  return INTERNAL_SPACE_NAME.test(fallback) ? "" : fallback;
+}
+
 function withLabel(property: SetupDraft["property"]): SetupDraft["property"] {
   const displayName = property.displayName?.trim();
   const { displayName: _dropped, ...rest } = property;

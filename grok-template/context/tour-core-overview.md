@@ -134,8 +134,10 @@ contacted. Say "door access" to the operator; never name Durin.
    property `list_properties` shows, including an in-progress setup;
    published records stay; an in-progress setup is removed completely;
    a draft confirmation says it isn't published yet so no visitors are
-   affected; a later text gets a goodbye and cannot book; booked cancel
-   text does not promise tours will be back). While paused, `approve_tour_time_request`
+   affected, but everything entered will be deleted for good; it names the
+   operator-given name or street plus unit, never Main Home; a later text
+   gets a goodbye and cannot book; booked cancel text does not promise tours
+   will be back). While paused, `approve_tour_time_request`
    and `reschedule_tour` refuse (`Tours at {property} are paused. Resume
    them first.`). Say remove, never archive.
    Tour Core also wakes the Bot (Tour Core Operator Updates routine) for the
