@@ -189,7 +189,9 @@ On the phone, the visitor:
    - "Skip ahead to my tour time" is a demo control that moves the demo clock forward.
 5. is guided along the route ("I'm at Unit 101");
 6. can ask questions, which are answered only from facts you entered and flagged for you when there's no answer;
-7. finishes the tour and answers the follow-up question.
+7. gets a 15-minutes-left "any questions?" text after the tour has started, then a 5-minute warning that offers one extra 10 minutes when the next time is free (an ask before that warning is deferred unless `EARLY_EXTENSION_ASK_GRANTS` is on);
+8. can text DONE / I'm out / leaving at any point, or stay through the end: doors never open after the tour end, a +5 check-in asks if they've left, and at +15 the tour closes;
+9. finishes the tour and answers the follow-up question.
 
 The **Test wrong door** demo control tries a door that isn't on the route. Tour Core refuses it and never contacts
 Durin.
@@ -244,6 +246,8 @@ in their normal Messages app:
 - door access through Durin demo mode;
 - questions answered from approved facts only;
 - HELP and STOP;
+- a 15-minutes-left questions text and a 5-minute warning (one extra 10 minutes when that time is free; an ask before the warning is deferred by default);
+- DONE / I'm out to end, or tour-end / +5 / +15 texts if they stay;
 - the follow-up question.
 
 Photos and other attachments are not forwarded yet. A photo alone gets one reply: "I can't take photos yet. Text your question and I'll pass it along." A photo with a question Tour Core can't answer gets one reply: "I can't take photos yet, but I'll let the property team know about your question." (and is flagged). A photo with handleable text (an approved-fact question or a booking reply such as `1` or `YES`) gets only "I can't take photos yet." and the text is handled as a normal message. Do not also send the short photo line when the combined unknown-question text is used. The same inbound is not answered twice. Someone who texted STOP gets no visitor texts; an unanswerable question is still flagged for the landlord. Landlord alerts and operator replies name a single-family home by its street line (for example `12 Oak St`) and an apartment or condo by street plus unit, never "Main Home".
@@ -336,8 +340,9 @@ npm run sendblue:test -- --to +1XXXXXXXXXX   # manual: checks the connection, se
   manifest, records, exports or logs, and never returned by a tool.
 - **Access.** Messaging never decides access. A failed send is recorded ("couldn't be delivered" in the live view) and
   never changes a policy decision. A wrong door texted from a phone is refused before Durin is contacted.
-- **STOP, UNSUBSCRIBE, CANCEL, QUIT.** Tour Core stops messaging that person, ends any tour in progress (open doors
-  are switched off), alerts the team, and stays quiet until START.
+- **STOP, UNSUBSCRIBE, CANCEL, QUIT.** Tour Core stops messaging that person and stays quiet until START. A tour that
+  hasn't started yet is ended (open doors are switched off) and the team is alerted. A tour already in progress stays
+  on its window: doors still follow policy until the end, and the leave check-in, close, and team alerts still fire.
 - **HELP.** Replies with who this is and every set contact (number first, then email), always ending with reply here; during a tour it also alerts them.
 
 ### Natural texts
@@ -427,7 +432,8 @@ keep texting after the restart.
 - **What the snapshot keeps** (`runtime/sessions/<id>.json`, schema version 1): the visitor's number and line,
   prospect and reservation ids, the tour-time menu last offered, an unanswered confirmation, route progress, the open
   identity-form link's times, the follow-up state, and timestamps. It never copies reservation, consent,
-  verification or grant data.
+  verification or grant data. Scheduled overstay steps (T-15, T-5, tour end, +5, +15) and whether they already
+  fired live in `runtime/overstay/`, so a restart neither resends nor skips.
 - **Restore checks before resuming.** The property, prospect, reservation, unit, route and doors must exist and agree,
   and a tour past identity must have its consent and passing check on file. Anything that doesn't check out is held
   for the team: the visitor is told "I'm having trouble restoring your tour. I've alerted the property team.", the
@@ -671,8 +677,10 @@ Validation (`src/config/validateConfig.ts`) returns machine-readable codes with 
 The practice tour runs inquiry, reservation, consent, verification, an early arrival (denied), arrival, entrance
 access, a duplicate request (no second grant), unit access with directions, and an **off-route door that is denied
 before Durin is called**. A unit-door-only apartment or condo proves the unit door instead of a building entrance.
-A single-family home keeps the entrance proof line, even when that door is also the unit door. Then it runs
-completion (all doors re-locked) and the follow-up, and saves the tour history.
+A single-family home keeps the entrance proof line, even when that door is also the unit door. It then proves
+overstay handling on simulated time: the T-15 questions text, the T-5 extra-time offer, a one-time 10-minute
+extension, completion (all doors re-locked) and the follow-up, plus a second path through tour-end, the +5 leave
+check-in, and the +15 close. Then it saves the tour history.
 
 ## Configuration
 

@@ -31,6 +31,7 @@ const MODEL_INTENTS = [
   "ASK_PROPERTY_QUESTION",
   "REQUEST_HELP",
   "FINISH_TOUR",
+  "ASK_MORE_TIME",
   "FOLLOW_UP_YES",
   "FOLLOW_UP_NO",
   "CANCEL_TOUR",
@@ -69,7 +70,8 @@ Intents:
 - AT_ROUTE_STOP: says they are at a non-unit stop (such as the entrance), or just "here" at their next stop. stopName only if named.
 - ASK_PROPERTY_QUESTION: asks about the property or the unit.
 - REQUEST_HELP: has a problem (door won't open, lost, can't find the unit) or wants a person.
-- FINISH_TOUR: says they are done touring.
+- FINISH_TOUR: says they are done touring, or that they have left (DONE, I'm out, leaving, I left).
+- ASK_MORE_TIME: asks for more time or 10 more minutes on the current tour.
 - FOLLOW_UP_YES / FOLLOW_UP_NO: answers whether the property team should follow up.
 - CANCEL_TOUR: wants to cancel a booked tour. "Can we cancel the tour?", "I want to cancel", "cancel", "I can't make it", "call off the tour" are CANCEL_TOUR, not a property question. A cancellation-policy question stays ASK_PROPERTY_QUESTION.
 - START_INQUIRY: a greeting, or wants to start booking.

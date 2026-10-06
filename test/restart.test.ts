@@ -284,7 +284,7 @@ describe("access after a restart is never looser", () => {
     await app.restart();
     app.setClock(at(16, 0));
     const late = await app.text("I'm here");
-    expect(late.reply).toBe("Your tour time has ended, so I can't open doors anymore. Want me to find you another time?");
+    expect(late.reply).toBe("Your tour time has ended, so I can't open that door. Please head out the way you came in and text DONE once you're outside.");
     expect(app.bundle().accessGrants).toHaveLength(0);
   });
 

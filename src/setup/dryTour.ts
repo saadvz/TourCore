@@ -8,7 +8,10 @@ import type { AuditEvent } from "../domain/model";
 import { countDurinCalls } from "../durin/countingDurin";
 import type { ExportBundle } from "../export/exportBundle";
 import type { Messenger } from "../messaging/Messenger";
-import { isApartmentOrCondo } from "../visitor/identity";
+import { MemoryRuntimeStore } from "../storage/runtimeStore";
+import { isApartmentOrCondo, visitorSubject } from "../visitor/identity";
+import { OverstayScheduler } from "../visitor/overstayScheduler";
+import { extensionGranted, plus15Closed, plus5CheckIn, t15Questions, t5Offering, tourEnded } from "../core/overstayCopy";
 
 export type DryTourGroup = "journey" | "safety" | "wrapup";
 
@@ -225,8 +228,38 @@ export async function runDryTour(input: TourCoreConfig, options: DryTourOptions 
       "A door outside the route was not blocked correctly.",
     );
 
+    await emit({ kind: "stage", title: "Overstay and extra time" });
+    const overstay = new OverstayScheduler(new MemoryRuntimeStore(), { clock });
+    const place = visitorSubject(config.property, unit.name);
+    const endLabel = async () => formatTime(new Date((await core.getReservation(reservation.id))!.windowEnd!), tz);
+    overstay.ensure((await core.getReservation(reservation.id))!, config.property.id);
+
+    clock.set(new Date(Date.parse(reservation.windowEnd!) - 15 * 60_000));
+    await at("15 minutes left");
+    await overstay.tickCore(core, { propertyId: config.property.id });
+    await flush();
+    const t15 = messages.some((m) => m.audience === "PROSPECT" && m.body === t15Questions(place, "Pat"));
+    await check({ id: "t15_questions", group: "wrapup", label: "T-15 any-questions text", outcome: "Sent after the tour started" }, t15);
+
+    clock.set(new Date(Date.parse(reservation.windowEnd!) - 5 * 60_000));
+    await at("5 minutes left");
+    await overstay.tickCore(core, { propertyId: config.property.id });
+    await flush();
+    const offered = messages.some((m) => m.audience === "PROSPECT" && m.body === t5Offering(place, await endLabel(), "Pat"));
+    await check({ id: "t5_warning", group: "wrapup", label: "T-5 extra-time offer", outcome: "Offered 10 more minutes" }, offered);
+
+    await at('Visitor asks for 10 more minutes');
+    const granted = await overstay.handleAsk(core, reservation.id, "natural");
+    reservation = (await core.getReservation(reservation.id))!;
+    await flush();
+    await check(
+      { id: "extension_granted", group: "wrapup", label: "One-time extension", outcome: "Tour end moved 10 minutes" },
+      granted === extensionGranted(await endLabel()) && !!reservation.extensionGrantedAt,
+      "The extra 10 minutes were not granted.",
+    );
+
     await emit({ kind: "stage", title: "Finishing up" });
-    clock.set(new Date(slot.start.getTime() + Math.floor(config.tourHours.tourLengthMinutes * 0.75) * 60_000));
+    clock.set(new Date(Date.parse(reservation.windowEnd!) - 8 * 60_000));
     await at("Visitor finishes the tour");
     const activeBefore = (await core.listGrants(reservation.id)).filter((g) => g.status === "ACTIVE").length;
     reservation = await core.completeTour(reservation.id);
@@ -241,9 +274,64 @@ export async function runDryTour(input: TourCoreConfig, options: DryTourOptions 
     const audit = await core.auditTrail();
     await check({ id: "follow_up", group: "wrapup", label: "Follow-up sent" }, audit.some((e) => e.type === "FOLLOW_UP_SENT"));
 
+    const later = slotsOn(config, day).find((s) => s.start.getTime() > slot.start.getTime());
+    if (later) {
+      await emit({ kind: "stage", title: "Overstay without extra time" });
+      const other = { name: "Sam Practice", phone: "+1 555 019 8888" };
+      const second = await core.startInquiry({ ...other, unitId: unit.id });
+      let otherRes = await core.reserveSlot(second.reservation.id, later.start.toISOString());
+      otherRes = await core.recordConsent(otherRes.id, true);
+      if (otherRes.status === "AWAITING_VERIFICATION") {
+        otherRes = await core.submitVerification(otherRes.id, {
+          responseId: `practice_overstay_${realNow.getTime()}`,
+          submittedAt: clock.now().toISOString(),
+          answers: { governmentFirstName: "Sam", governmentLastName: "Practice", email: "sam.practice@example.com", phone: other.phone },
+        });
+      }
+      clock.set(later.start);
+      await core.requestAccess({ reservationId: otherRes.id, prospectId: second.prospect.id, doorId: entranceId });
+      await flush();
+      const otherOverstay = new OverstayScheduler(new MemoryRuntimeStore(), { clock });
+      otherOverstay.ensure((await core.getReservation(otherRes.id))!, config.property.id);
+      const otherT = new Date((await core.getReservation(otherRes.id))!.windowEnd!);
+      const otherPlace = visitorSubject(config.property, unit.name);
+
+      clock.set(otherT);
+      await at("Tour end, no extra time");
+      await otherOverstay.tickCore(core, { propertyId: config.property.id });
+      await flush();
+      await check(
+        { id: "overstay_end", group: "wrapup", label: "Tour-end text without extension" },
+        messages.some((m) => m.audience === "PROSPECT" && m.body === tourEnded(otherPlace, "Sam")),
+      );
+
+      clock.set(new Date(otherT.getTime() + 5 * 60_000));
+      await at("5 minutes after the tour");
+      await otherOverstay.tickCore(core, { propertyId: config.property.id });
+      await flush();
+      await check(
+        { id: "overstay_plus5", group: "wrapup", label: "T+5 leave check-in" },
+        messages.some((m) => m.audience === "PROSPECT" && m.body === plus5CheckIn(otherPlace)) &&
+          messages.some((m) => m.audience === "OPERATOR" && m.body.includes("hasn't confirmed leaving")),
+      );
+
+      clock.set(new Date(otherT.getTime() + 15 * 60_000));
+      await at("15 minutes after the tour");
+      await otherOverstay.tickCore(core, { propertyId: config.property.id });
+      await flush();
+      const closed = await core.getReservation(otherRes.id);
+      await check(
+        { id: "overstay_closed", group: "wrapup", label: "T+15 close", outcome: "Tour closed and the team was alerted" },
+        messages.some((m) => m.audience === "PROSPECT" && m.body === plus15Closed(otherPlace)) &&
+          closed?.status === "EXPIRED" &&
+          (await core.auditTrail()).some((e) => e.type === "TOUR_OVERSTAY_CLOSED" && e.reservationId === otherRes.id),
+      );
+    }
+
     const bundle = await core.exportRecords();
-    await check({ id: "records", group: "wrapup", label: "Tour records saved" }, bundle.auditEvents.length === audit.length);
-    return { passed: true, ranAt: realNow.toISOString(), unitId: unit.id, checks, audit, messages, devLines, bundle };
+    const finalAudit = await core.auditTrail();
+    await check({ id: "records", group: "wrapup", label: "Tour records saved" }, bundle.auditEvents.length === finalAudit.length);
+    return { passed: true, ranAt: realNow.toISOString(), unitId: unit.id, checks, audit: finalAudit, messages, devLines, bundle };
   } catch (err) {
     await flush();
     const failure = err instanceof StopPractice ? err.message : "Something unexpected stopped the practice tour.";

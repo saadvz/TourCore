@@ -1,6 +1,6 @@
 ---
 name: work-exception
-description: Show what needs the team's attention on live and recent tours (unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored), open one, and resolve it using only Tour Core's actions and the operator's own facts.
+description: Show what needs the team's attention on live and recent tours (unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored, visitors who didn't confirm leaving), open one, and resolve it using only Tour Core's actions and the operator's own facts.
 when-to-use: "what needs attention", "show exceptions", "any problems", "open Pat's issue", "what's happening with Pat's tour", "show active tours", "pause the tour", "call off the tour", a Tour Core Operator Updates routine run
 allowed-tools: get_operator_update list_active_tours inspect_tour list_exceptions inspect_exception resolve_exception answer_flagged_question place_operator_hold clear_operator_hold revoke_tour_access pause_tours resume_tours remove_property list_tour_time_requests inspect_tour_time_request approve_tour_time_request decline_tour_time_request propose_tour_time reschedule_tour schedule_one_off_tour inject_local_sms read_local_outbox
 argument-hint: "[visitor or issue]"
@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Tour updates, exception queue, monitoring, holds and approved answers
-  version: "0.3.10"
+  version: "0.3.11"
 ---
 
 # Work Exception
@@ -74,6 +74,10 @@ Tour Core sends only an `eventId` and an event type; never names or details.
    > 2. Jamie Lee — Unit 102
    >    Couldn't be restored after a restart. No doors will open for it.
    >    Access is blocked.
+   >
+   > 3. Sam Lee — Unit 103
+   >    Hasn't confirmed leaving Unit 103.
+   >    Tour time ended.
 2. "Open Pat's issue": `inspect_exception` with that item's `exceptionId`. Show
    what happened, the visitor's words, where the tour stands and `nextSteps`.
 

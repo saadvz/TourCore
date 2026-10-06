@@ -47,6 +47,9 @@ const STEP_AWAITING = [
   }),
   z.object({ kind: z.literal("confirm-operator-tour"), confirmBy: Iso }),
   z.object({ kind: z.literal("confirm-cancel-tour"), day: z.string(), time: z.string() }),
+  z.object({ kind: z.literal("t15-questions") }),
+  z.object({ kind: z.literal("t5-extension-offer") }),
+  z.object({ kind: z.literal("t5-no-offer") }),
 ] as const;
 const StepAwaitingSchema = z.discriminatedUnion("kind", [...STEP_AWAITING]);
 

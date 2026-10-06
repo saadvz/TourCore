@@ -209,6 +209,8 @@ export class VisitorDemoSession {
   availabilitySource?: () => PropertyState | undefined;
   /** Records a visitor who was told tours would come back, or who got a paused-unit line. */
   rememberPauseWaiter?: (waiter: { phone: string; unitId?: string; at: string }) => void;
+  /** Overstay timeline for this conversation. Set by the messaging router and tests. */
+  overstay?: import("./overstayScheduler").OverstayScheduler;
 
   private _config: TourCoreConfig;
 
@@ -1076,6 +1078,11 @@ export class VisitorDemoSession {
       this.noted = undefined;
     }
     this.thread.push(item);
+  }
+
+  /** Pulls new Tour Core texts into the visitor thread (used after a scheduled overstay step). */
+  async refreshThread(): Promise<void> {
+    await this.syncReplies();
   }
 
   /** Appends Tour Core's new messages to the visitor thread (read from the store, in order), with delivery details. */

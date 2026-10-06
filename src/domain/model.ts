@@ -48,6 +48,10 @@ export const ReservationSchema = z.object({
   slotStart: IsoDate.optional(),
   windowStart: IsoDate.optional(),
   windowEnd: IsoDate.optional(),
+  /** Window end before a one-time 10-minute extension. */
+  originalWindowEnd: IsoDate.optional(),
+  /** Set when the visitor used their one extra 10 minutes. */
+  extensionGrantedAt: IsoDate.optional(),
   /**
    * A one-off time outside the property's normal touring hours. The recurring
    * schedule is unchanged; access uses this reservation's own times.
@@ -150,6 +154,8 @@ export const AuditEventTypeSchema = z.enum([
   "ACCESS_REVOKED",
   "TOUR_STARTED",
   "TOUR_COMPLETED",
+  "TOUR_EXTENDED",
+  "TOUR_OVERSTAY_CLOSED",
   "FOLLOW_UP_SENT",
   "RESERVATION_CANCELLED",
   "RESERVATION_REVOKED",

@@ -1180,12 +1180,13 @@ export class TourCore {
     }
     let endedTour = false;
     for (const reservation of (await this.deps.store.list("reservations")).filter((r) => r.prospectId === prospect.id && !TERMINAL.includes(r.status))) {
-      await this.revokeGrants(reservation, "visitor opted out of messages");
       if (reservation.status === "TOURING") {
-        await this.move(reservation, "REVOKED", "RESERVATION_REVOKED", { detail: "visitor opted out of messages" });
-      } else {
-        await this.move(reservation, "CANCELLED", "RESERVATION_CANCELLED", { detail: "visitor opted out of messages" });
+        // STOP blocks visitor texts. Doors stay on policy until T; overstay alerts still fire.
+        endedTour = true;
+        continue;
       }
+      await this.revokeGrants(reservation, "visitor opted out of messages");
+      await this.move(reservation, "CANCELLED", "RESERVATION_CANCELLED", { detail: "visitor opted out of messages" });
       endedTour = true;
       await this.notifyOperator(reservation, `${prospect.name} replied ${keyword.toUpperCase()} and won't get more messages. Their tour was ended.`);
     }
@@ -1207,6 +1208,105 @@ export class TourCore {
   }
 
   // ------------------------------------------------------------------ reads
+
+  get store() {
+    return this.deps.store;
+  }
+
+  async getProspect(id: string): Promise<Prospect | undefined> {
+    return this.deps.store.get("prospects", id);
+  }
+
+  unitName(reservation: Reservation): string {
+    return this.unitFor(reservation).name;
+  }
+
+  /** Visitor-facing help number only. Never `operator.contact`. */
+  visitorHelpNumber(): string | undefined {
+    return this.deps.config.operator.visitorContact;
+  }
+
+  async extraBusyStarts(): Promise<Date[]> {
+    return (await this.deps.otherBusyStarts?.()) ?? [];
+  }
+
+  async messageVisitor(reservationId: string, body: string): Promise<void> {
+    const reservation = await this.mustGetReservation(reservationId);
+    const prospect = await this.mustGetProspect(reservation.prospectId);
+    await this.textProspect(prospect, reservation.id, body);
+  }
+
+  async alertOperator(reservationId: string, body: string): Promise<void> {
+    const reservation = await this.mustGetReservation(reservationId);
+    await this.notifyOperator(reservation, body);
+  }
+
+  async revokeGrantsFor(reservationId: string, reason: string): Promise<void> {
+    const reservation = await this.mustGetReservation(reservationId);
+    await this.revokeGrants(reservation, reason);
+  }
+
+  /**
+   * Extends the access window and tour end by exactly 10 minutes and
+   * re-requests scoped Durin grants so already-opened doors stay valid.
+   */
+  async extendTourWindow(reservationId: string, extraMinutes = 10): Promise<Reservation> {
+    const reservation = await this.mustGetReservation(reservationId);
+    if (!reservation.windowEnd) throw new TourCoreError("NO_WINDOW", "This tour has no end time.");
+    if (reservation.extensionGrantedAt) return reservation;
+    const newEnd = new Date(Date.parse(reservation.windowEnd) + extraMinutes * 60_000);
+    const next: Reservation = {
+      ...reservation,
+      originalWindowEnd: reservation.originalWindowEnd ?? reservation.windowEnd,
+      windowEnd: newEnd.toISOString(),
+      extensionGrantedAt: this.nowIso(),
+      updatedAt: this.nowIso(),
+    };
+    await this.deps.store.put("reservations", next);
+    await this.record("TOUR_EXTENDED", {
+      reservationId: next.id,
+      prospectId: next.prospectId,
+      detail: `+${extraMinutes} minutes; doors until ${this.time(newEnd)}`,
+    });
+    await this.regrantUntil(next, newEnd);
+    return next;
+  }
+
+  /** Closes a tour that ran past T without a DONE. Doors off; no goodbye follow-up. */
+  async closeTourAsOverstay(reservationId: string): Promise<Reservation> {
+    const reservation = await this.mustGetReservation(reservationId);
+    if (reservation.status === "EXPIRED") return reservation;
+    if (reservation.status !== "TOURING") throw new TourCoreError("NOT_TOURING", `Reservation is ${reservation.status}`);
+    await this.revokeGrants(reservation, "tour closed after time ended");
+    return this.move(reservation, "EXPIRED", "TOUR_OVERSTAY_CLOSED", { detail: "visitor didn't confirm leaving" });
+  }
+
+  private async regrantUntil(reservation: Reservation, newEnd: Date): Promise<void> {
+    const active = (await this.listGrants(reservation.id)).filter((g) => g.status === "ACTIVE");
+    for (const grant of active) {
+      let result;
+      try {
+        result = await this.deps.durin.requestAccess({
+          reservationId: reservation.id,
+          prospectId: reservation.prospectId,
+          doorId: grant.doorId,
+          validFrom: grant.validFrom,
+          validUntil: newEnd.toISOString(),
+          idempotencyKey: `${reservation.id}:${grant.doorId}:ext:${newEnd.toISOString()}`,
+        });
+      } catch (err) {
+        result = { ok: false as const, reason: err instanceof Error ? err.message : "Durin request failed" };
+      }
+      if (!result.ok) continue;
+      await this.deps.store.put("accessGrants", { ...grant, validUntil: newEnd.toISOString(), durinGrantRef: result.grantRef });
+      await this.record("ACCESS_ALLOWED", {
+        reservationId: reservation.id,
+        prospectId: reservation.prospectId,
+        doorId: grant.doorId,
+        detail: `extension; Durin grant ${result.grantRef} until ${this.time(newEnd)}`,
+      });
+    }
+  }
 
   /** The only facts tour guidance may use for this reservation: the property's and the reserved unit's. */
   async approvedFacts(reservationId: string): Promise<ApprovedFact[]> {
@@ -1422,7 +1522,7 @@ export class TourCore {
           DENY_TOO_EARLY: reservation.windowStart
             ? VisitorDenialCopy.tooEarly(this.time(new Date(reservation.windowStart)), this.whenPhrase(new Date(reservation.windowStart)))
             : VisitorDenialCopy.tooEarly(),
-          DENY_EXPIRED: "Your tour time has ended, so I can't open doors anymore. Want me to find you another time?",
+          DENY_EXPIRED: "Your tour time has ended, so I can't open that door. Please head out the way you came in and text DONE once you're outside.",
           DENY_WRONG_ROUTE: `That door isn't part of your tour, so I can't open it. You're here to see ${visitorSubject(this.deps.config.property, unit.name)}. I've let the ${team} know in case you need a hand.`,
           DENY_DURIN_UNHEALTHY: VisitorDenialCopy.doorsNotResponding(team, help),
           DENY_PROVIDER_FAILURE: VisitorDenialCopy.doorsNotResponding(team, help),
@@ -1480,11 +1580,6 @@ export class TourCore {
 
   private teamName(): string {
     return this.deps.config.operator.name;
-  }
-
-  /** Visitor-facing help number only. Never `operator.contact`. */
-  private visitorHelpNumber(): string | undefined {
-    return this.deps.config.operator.visitorContact;
   }
 
   private isStalePassedCheck(verification: Verification | undefined): boolean {

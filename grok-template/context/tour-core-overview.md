@@ -3,8 +3,14 @@
 Tour Core is an open-source self-touring tool. A prospect texts the property's
 number, books a time, agrees to texts and tour records, confirms who they are,
 and tours one unit on their own. The text thread stays live through the tour:
-Tour Core guides them door by door. Afterwards it sends a recap and one
-follow-up question.
+Tour Core guides them door by door. After the tour has started they get a
+15-minutes-left questions text, then a 5-minute warning. One extra 10 minutes
+is offered when the next time is free; an ask before that warning is deferred
+unless early asks are turned on. After the end, doors never open. A +5 text
+asks if they've left; at +15 the tour closes and the team gets one issue.
+DONE, "I'm out", or "leaving" ends the tour with the usual goodbye. STOP
+stops visitor texts; team alerts still go out. Afterwards it sends a recap and
+one follow-up question.
 
 The welcome is one message. It names the property by its address, and by a
 name the operator gave it only when there is one: "Hi! Welcome to the

@@ -43,7 +43,8 @@ export type ExceptionKind =
   | "verification-failed"
   | "operator-hold"
   | "message-failed"
-  | "restore-conflict";
+  | "restore-conflict"
+  | "overstay";
 
 const TITLES: Record<ExceptionKind, string> = {
   "unanswered-question": "Question with no approved answer",
@@ -56,6 +57,7 @@ const TITLES: Record<ExceptionKind, string> = {
   "operator-hold": "Tour paused by your team",
   "message-failed": "Message couldn't be delivered",
   "restore-conflict": "Tour couldn't be restored",
+  overstay: "Visitor hasn't confirmed leaving",
 };
 
 export interface ExceptionResolution {
@@ -148,6 +150,8 @@ function kindFor(e: AuditEvent): ExceptionKind | undefined {
       return "operator-hold";
     case "MESSAGE_FAILED":
       return e.detail.startsWith("message") ? "message-failed" : undefined;
+    case "TOUR_OVERSTAY_CLOSED":
+      return "overstay";
     default:
       return undefined;
   }
@@ -176,6 +180,8 @@ function summaryFor(kind: ExceptionKind, e: AuditEvent, tour: TourSnapshot): str
       return "A message to the visitor couldn't be delivered.";
     case "restore-conflict":
       return "Couldn't be restored after a restart.";
+    case "overstay":
+      return `Hasn't confirmed leaving ${unitNameOf(tour) ?? "the property"}.`;
   }
 }
 
@@ -202,6 +208,8 @@ function nextStepsFor(kind: ExceptionKind, tour: TourSnapshot | undefined, still
       return stillPaused && canChange ? ["I can resume the tour (with your OK) or call it off.", "Mark it handled once it's sorted."] : ["Mark it handled."];
     case "restore-conflict":
       return ["Reach out to the visitor; no doors will open for this tour.", "If they text HI again, a fresh tour starts.", "Mark it handled."];
+    case "overstay":
+      return ["Reach out to the visitor if they may still be inside.", "Mark it handled once you've confirmed."];
     default:
       return ["Reach out to the visitor.", "Mark it handled."];
   }

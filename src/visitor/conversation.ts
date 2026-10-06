@@ -279,14 +279,17 @@ export async function handleVisitorText(
   if (intent.type === "STOP_MESSAGES" && turn.confident) await session.optOut(said);
   else if (intent.type === "START_MESSAGES" && turn.confident) await session.optIn(said);
   else if (keyword === "help") await session.help(said);
-  else if (await handleCancelIntent(turn)) {
+  else if (await handleOverstayReply(turn)) {
+    /* T-15 / T-5 / more-time / DONE after the tour has started */
+  } else if (await handleCancelIntent(turn)) {
     /* cancel-by-text: confirm, YES, or NO */
   } else if (firstMessage) {
     if (intent.type === "SELECT_UNIT" && turn.confident) await chooseUnit(turn);
     else if (intent.type === "REQUEST_CUSTOM_TIME" && turn.confident) await openWithCustomTime(turn);
     else if (intent.type === "ASK_PROPERTY_QUESTION") await ask(turn, intent.question, () => session.welcome());
     else await session.greet(said);
-  } else await byStage(turn);
+  }   else await byStage(turn);
+  if (session.overstay) await session.overstay.tickSession(session);
   return interpretation;
 }
 
@@ -950,6 +953,33 @@ async function onArrival(turn: Turn): Promise<void> {
     default:
       return turn.fallback(`${SORRY} You can ask me a question about the property.`, { kind: "say", phrase: "I'm here", purpose: "when you arrive" });
   }
+}
+
+async function handleOverstayReply(turn: Turn): Promise<boolean> {
+  const { session, intent } = turn;
+  const reservation = await session.reservation();
+  const overstay = session.overstay;
+  if (!overstay || !reservation?.windowEnd) return false;
+  if (reservation.status !== "TOURING" && reservation.status !== "EXPIRED") return false;
+
+  // T-15 / T-5 / more-time replies first so "all set" after T-15 is not treated as leaving.
+  const reply = await overstay.replyToVisitor(session.core, reservation.id, turn.said.text ?? "");
+  if (reply !== undefined) {
+    await turn.respond(reply);
+    return true;
+  }
+
+  if (intent.type === "FINISH_TOUR" && turn.confident) {
+    if (reservation.status === "TOURING") await turn.act("finish");
+    overstay.cancel(reservation.id);
+    return true;
+  }
+  if (intent.type === "ASK_MORE_TIME" && turn.confident) {
+    const body = await overstay.handleAsk(session.core, reservation.id, "natural");
+    await turn.respond(body);
+    return true;
+  }
+  return false;
 }
 
 /** In the building: stops along the route, questions, help, finishing. */

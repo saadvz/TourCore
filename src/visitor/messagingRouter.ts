@@ -18,6 +18,7 @@ import { publicBaseUrl } from "../messaging/publicUrl";
 import { effectiveEnv } from "../install/settings";
 import type { ResolvedConsentMode } from "../messaging/consentPolicy";
 import { handleVisitorText, isGreeting } from "./conversation";
+import { OverstayScheduler } from "./overstayScheduler";
 import { oneOffBlockReason } from "./oneOffGate";
 import { markRemovedReply, shouldReplyRemoved } from "./removedReplies";
 import { smsHelpBody, smsStopAck, SmsConsentDirectory } from "./smsConsent";
@@ -82,6 +83,14 @@ export class MessagingConversations {
     this.persistence = new SessionPersistence(deps.workspace, runtime, deps.links);
     this.endpoints = deps.endpoints ?? new MessagingEndpoints(runtime);
     this.smsConsent = new SmsConsentDirectory(deps.workspace.root);
+    this.overstay = new OverstayScheduler(runtime, { now: () => deps.now?.() ?? new Date() });
+  }
+
+  readonly overstay: OverstayScheduler;
+
+  private attachOverstay(session: VisitorDemoSession): VisitorDemoSession {
+    session.overstay = this.overstay;
+    return session;
   }
 
   private readonly endpoints: MessagingEndpoints;
@@ -138,16 +147,18 @@ export class MessagingConversations {
       }
       const tourId = ws.newVisitorTourId(propertyId, this.deps.now?.() ?? new Date(), "text");
       session = registry.add(
-        new VisitorDemoSession(propertyId, config, tourId, {
-          transport,
-          kind: "messaging",
-          verificationLinks: this.deps.links,
-          realNow: this.deps.realNow,
-          store: this.deps.storeFor?.(config),
-          storageRead: this.deps.storageRead,
-          beforeAccess: this.deps.beforeAccess,
-          otherBusyStarts: () => this.otherBusyStarts(propertyId, tourId),
-        }),
+        this.attachOverstay(
+          new VisitorDemoSession(propertyId, config, tourId, {
+            transport,
+            kind: "messaging",
+            verificationLinks: this.deps.links,
+            realNow: this.deps.realNow,
+            store: this.deps.storeFor?.(config),
+            storageRead: this.deps.storageRead,
+            beforeAccess: this.deps.beforeAccess,
+            otherBusyStarts: () => this.otherBusyStarts(propertyId, tourId),
+          }),
+        ),
       );
       // Someone who texted STOP earlier stays opted out until they text START.
       session.optedOut = this.isOptedOut(propertyId, phone);
@@ -196,16 +207,18 @@ export class MessagingConversations {
     if (!line) throw new SetupInputError("NO_MESSAGING_LINE", "Visitor texting isn't connected for that property.");
     const tourId = this.deps.workspace.newVisitorTourId(propertyId, this.deps.now?.() ?? new Date(), "text");
     const session = this.deps.registry.add(
-      new VisitorDemoSession(propertyId, config, tourId, {
-        transport: this.lazyTransport(propertyId),
-        kind: "messaging",
-        verificationLinks: this.deps.links,
-        realNow: this.deps.realNow,
-        store: this.deps.storeFor?.(config),
-        storageRead: this.deps.storageRead,
-        beforeAccess: this.deps.beforeAccess,
-        otherBusyStarts: () => this.otherBusyStarts(propertyId, tourId),
-      }),
+      this.attachOverstay(
+        new VisitorDemoSession(propertyId, config, tourId, {
+          transport: this.lazyTransport(propertyId),
+          kind: "messaging",
+          verificationLinks: this.deps.links,
+          realNow: this.deps.realNow,
+          store: this.deps.storeFor?.(config),
+          storageRead: this.deps.storageRead,
+          beforeAccess: this.deps.beforeAccess,
+          otherBusyStarts: () => this.otherBusyStarts(propertyId, tourId),
+        }),
+      ),
     );
     session.identify(e164);
     session.line = line;
@@ -230,6 +243,16 @@ export class MessagingConversations {
       }
     }
     return starts;
+  }
+
+  /** Fires due overstay steps on every live text-message tour. Concurrent calls share one pass. */
+  async tickOverstay(): Promise<void> {
+    for (const session of this.deps.registry.all()) {
+      if (session.kind !== "messaging") continue;
+      this.attachOverstay(session);
+      await this.overstay.tickSession(session);
+      await this.save(session);
+    }
   }
 
   /** Releases operator-set tours the visitor never confirmed. Safe to call often. */
@@ -293,7 +316,7 @@ export class MessagingConversations {
       if (this.deps.registry.find(snapshot.sessionId)) continue;
       try {
         const { session, notes } = await restoreSession(snapshot, { workspace: this.deps.workspace, transport: this.lazyTransport(snapshot.propertyId), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(snapshot.propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyStarts: (propertyId, tourId) => this.otherBusyStarts(propertyId, tourId) });
-        this.deps.registry.add(session);
+        this.deps.registry.add(this.attachOverstay(session));
         for (const note of notes) log(`Restoring a text-message tour: ${note}`);
         restored++;
       } catch (err) {
@@ -345,7 +368,7 @@ export class MessagingConversations {
         };
         try {
           const { session } = await restoreSession(pseudo, { workspace: ws, transport: this.lazyTransport(propertyId), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyStarts: (id, tourId) => this.otherBusyStarts(id, tourId) });
-          registry.add(session);
+          registry.add(this.attachOverstay(session));
           await this.save(session);
           restored++;
         } catch (err) {
