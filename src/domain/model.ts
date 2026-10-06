@@ -166,6 +166,7 @@ export const AuditEventTypeSchema = z.enum([
   "OPERATOR_NOTIFIED",
   "QUESTION_ANSWERED",
   "QUESTION_UNANSWERED",
+  "HANDLER_FAILED",
   "HELP_REQUESTED",
   "FOLLOW_UP_RESPONSE",
   "MESSAGING_OPTED_OUT",
@@ -175,6 +176,8 @@ export const AuditEventTypeSchema = z.enum([
   "TOUR_TIME_REQUESTED",
   "TOUR_TIME_REQUEST_APPROVED",
   "TOUR_TIME_REQUEST_DECLINED",
+  "TOUR_TIME_REQUEST_WITHDRAWN",
+  "TOUR_TIME_REQUEST_EXPIRED",
   "TOUR_TIME_ALTERNATIVE_PROPOSED",
   "TOUR_RESCHEDULED",
   "TOUR_TIME_OVERRIDE_APPROVED",
@@ -216,11 +219,13 @@ export const TourTimeRequestSchema = z.object({
   requestedStartsAt: IsoDate,
   requestedEndsAt: IsoDate,
   requestSource: z.enum(["VISITOR", "OPERATOR"]),
-  status: z.enum(["PENDING", "APPROVED", "DECLINED", "SUPERSEDED"]),
+  status: z.enum(["PENDING", "APPROVED", "DECLINED", "SUPERSEDED", "WITHDRAWN", "EXPIRED"]),
   createdAt: IsoDate,
   resolvedAt: IsoDate.optional(),
   resolvedBy: z.enum(["OPERATOR", "VISITOR"]).optional(),
   operatorNote: z.string().optional(),
+  /** First time the visitor was told this request is still with the team. */
+  pendingNoticeSentAt: IsoDate.optional(),
   /** A time the property team offered instead. The booking stays put until the visitor accepts. */
   proposedAlternativeAt: IsoDate.optional(),
   /** The provider's message id, so a retried text cannot open a second request. */

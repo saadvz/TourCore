@@ -204,7 +204,7 @@ describe("Grok skill scenarios", () => {
     const queue = await tool("list_exceptions");
     const byWhat = Object.fromEntries(queue.exceptions.map((x: { what: string }) => [x.what, x]));
     expect(byWhat["Door system problem"]).toMatchObject({ summary: "The door system couldn't open Lobby Entrance, so the tour was paused.", accessBlocked: true, tourStatus: "Door system problem. Access is blocked." });
-    expect(byWhat["Tour couldn't be restored"]).toMatchObject({ visitorName: "A visitor texting from +15550104444", accessBlocked: true });
+    expect(byWhat["Tour couldn't be restored"]).toMatchObject({ visitorName: "(555) 010-4444", accessBlocked: true });
 
     // "The lock's back. Resume Pat's tour." "Yes."
     const [tour] = (await tool("list_active_tours")).tours;

@@ -79,6 +79,9 @@ export const DurableSessionSchema = z.object({
   offeredSlots: z.array(z.object({ start: Iso, label: z.string() })).default([]),
   offeredDates: z.array(z.object({ date: z.string(), label: z.string() })).default([]),
   selectedDate: z.string().optional(),
+  /** A time menu shown after the current booking, so leftover numbers do not move it. */
+  slotMenuLive: z.boolean().optional(),
+  dateMenuLive: z.boolean().optional(),
   /** A custom time named before a unit was chosen. */
   heldTime: z
     .object({
@@ -97,6 +100,7 @@ export const DurableSessionSchema = z.object({
   pendingRebook: z.boolean().optional(),
   rebookUnitId: z.string().optional(),
   pendingBookingId: z.string().optional(),
+  pendingCustomRequestId: z.string().optional(),
   followUpReservationId: z.string().optional(),
   heldBookingTakenOver: z.boolean().optional(),
   optedOut: z.boolean().default(false),
@@ -140,6 +144,8 @@ export async function snapshotOf(session: VisitorDemoSession, links?: Verificati
     offeredSlots: session.offeredSlots.map((s) => ({ start: s.start.toISOString(), label: s.label })),
     offeredDates: session.offeredDates,
     ...(session.selectedDate ? { selectedDate: session.selectedDate } : {}),
+    ...(session.slotMenuLive ? { slotMenuLive: true } : {}),
+    ...(session.dateMenuLive ? { dateMenuLive: true } : {}),
     ...(session.heldTime ? { heldTime: session.heldTime } : {}),
     ...(session.pendingClarification ? { pending: session.pendingClarification } : {}),
     ...(r ? { routeProgress: { opened, ...(r.allowedRoute.find((d) => !opened.includes(d)) ? { next: r.allowedRoute.find((d) => !opened.includes(d)) } : {}) } } : {}),
@@ -148,6 +154,7 @@ export async function snapshotOf(session: VisitorDemoSession, links?: Verificati
     ...(session.pendingRebook ? { pendingRebook: true } : {}),
     ...(session.rebookUnitId ? { rebookUnitId: session.rebookUnitId } : {}),
     ...(session.pendingBookingId ? { pendingBookingId: session.pendingBookingId } : {}),
+    ...(session.pendingCustomRequestId ? { pendingCustomRequestId: session.pendingCustomRequestId } : {}),
     ...(session.followUpReservationId ? { followUpReservationId: session.followUpReservationId } : {}),
     ...(session.heldBookingTakenOver ? { heldBookingTakenOver: true } : {}),
     optedOut: session.optedOut,
@@ -171,6 +178,7 @@ export interface RestoreDeps {
   beforeAccess?: () => Promise<void>;
   otherBusyStarts?: (propertyId: string, tourId: string) => Promise<Date[]>;
   otherBusyWindows?: (propertyId: string, tourId: string) => Promise<import("../core/customSlot").OccupiedWindow[]>;
+  slotLockBarrier?: import("../core/TourCore").TourCoreDeps["slotLockBarrier"];
 }
 
 /**
@@ -206,6 +214,7 @@ export async function restoreSession(snapshot: DurableSession, deps: RestoreDeps
     beforeAccess: deps.beforeAccess,
     otherBusyStarts: deps.otherBusyStarts ? () => deps.otherBusyStarts!(snapshot.propertyId, snapshot.tourId) : undefined,
     otherBusyWindows: deps.otherBusyWindows ? () => deps.otherBusyWindows!(snapshot.propertyId, snapshot.tourId) : undefined,
+    ...(deps.slotLockBarrier ? { slotLockBarrier: deps.slotLockBarrier } : {}),
   });
   await session.hydrate(tour.record, tour.bundle);
   if (snapshot.superseded) session.superseded = true;
@@ -214,6 +223,7 @@ export async function restoreSession(snapshot: DurableSession, deps: RestoreDeps
   if (session.visitor!.phone !== snapshot.visitorPhone) throw new RestoreError("The visitor's number doesn't match this tour's records.");
   if (snapshot.reservationId) session.reservationId = snapshot.reservationId;
   session.pendingBookingId = snapshot.pendingBookingId;
+  session.pendingCustomRequestId = snapshot.pendingCustomRequestId;
   session.followUpReservationId = snapshot.followUpReservationId;
   session.heldBookingTakenOver = !!snapshot.heldBookingTakenOver;
 
@@ -251,6 +261,18 @@ export async function restoreSession(snapshot: DurableSession, deps: RestoreDeps
   session.pendingRebook = !!snapshot.pendingRebook;
   session.rebookUnitId = snapshot.rebookUnitId;
   session.rememberShownSchedule(snapshot.offeredDates ?? [], offeredSlots);
+  session.slotMenuLive = !!snapshot.slotMenuLive;
+  session.dateMenuLive = !!snapshot.dateMenuLive;
+  if (stage === "choose-time" && offeredSlots.length) {
+    session.slotMenuLive = true;
+    session.lastShownSlots = offeredSlots;
+  }
+  if (stage === "choose-date") {
+    session.dateMenuLive = true;
+    session.markDatesShown();
+  }
+  if (!session.slotMenuLive) session.lastShownSlots = [];
+  if (!session.dateMenuLive) session.lastShownDates = [];
   if (stage === "choose-date" || stage === "choose-time") {
     const before = JSON.stringify({
       dates: session.offeredDates,

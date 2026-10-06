@@ -463,9 +463,12 @@ describe("Tour Core journey", () => {
     expect(second.reservation.id).toBe(first.reservation.id);
 
     const slot = (await ctx.core.availableSlots())[0]!;
-    await ctx.core.reserveSlot(first.reservation.id, slot.start.toISOString());
-    const replay = await ctx.core.reserveSlot(first.reservation.id, slot.start.toISOString());
-    expect(replay.status).toBe("AWAITING_CONSENT");
+    const booked = await ctx.core.reserveSlot(first.reservation.id, slot.start.toISOString());
+    expect(booked.status).toBe("AWAITING_CONSENT");
+    await expect(ctx.core.reserveSlot(first.reservation.id, slot.start.toISOString())).rejects.toMatchObject({
+      code: "SLOT_UNCHANGED",
+    });
+    expect((await ctx.core.getReservation(first.reservation.id))!.status).toBe("AWAITING_CONSENT");
     expect((await ctx.core.auditTrail()).filter((e) => e.type === "RESERVATION_CREATED")).toHaveLength(1);
   });
 

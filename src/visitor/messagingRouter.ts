@@ -33,6 +33,8 @@ import type { VerificationLinks } from "./verificationLinks";
 type Transport = MessagingAdapter & { noteChannel?: (number: string, channel: InboundMessage["channel"]) => void };
 
 export const RESTORE_TROUBLE = "I'm having trouble restoring your tour. I've alerted the property team.";
+export const HANDLER_SNAG_ALERTED = "Sorry, I hit a snag with that. I've let the property team know, and they'll reply here as soon as they can.";
+export const HANDLER_SNAG_RETRY = "Sorry, I hit a snag with that. Could you text me again in a few minutes?";
 
 /** Live sessions and saved bundles share each tour's real effective end, including extensions. */
 export function occupiedWindowsFromRecords(
@@ -101,6 +103,7 @@ export class MessagingConversations {
       beforeAccess?: () => Promise<void>;
       /** Called after a conversation's records are saved, from any surface (e.g. to look for new exceptions). */
       onSaved?: (session: VisitorDemoSession) => void;
+      slotLockBarrier?: import("../core/TourCore").TourCoreDeps["slotLockBarrier"];
     },
   ) {
     const runtime = deps.runtime ?? new MemoryRuntimeStore();
@@ -197,6 +200,7 @@ export class MessagingConversations {
             storageRead: this.deps.storageRead,
             beforeAccess: this.deps.beforeAccess,
             otherBusyWindows: () => this.otherBusyWindows(propertyId, tourId),
+            ...(this.deps.slotLockBarrier ? { slotLockBarrier: this.deps.slotLockBarrier } : {}),
           }),
         ),
       );
@@ -212,6 +216,8 @@ export class MessagingConversations {
     }
 
     const wasOptedOut = session.optedOut;
+    const outboundBefore = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").length;
+    const auditBeforeIds = new Set((await session.store.listAudit().catch(() => [])).map((event) => event.id));
     try {
       await handleVisitorText(session, phone, message.text, meta, this.deps.interpreter);
     } catch (err) {
@@ -219,7 +225,36 @@ export class MessagingConversations {
         await transport.send({ to: phone, audience: "PROSPECT", body: "I couldn't save that, so nothing was booked or changed. Please try again in a little while." }).catch(() => undefined);
         return { correlationId: session.id };
       }
-      throw err;
+      this.deps.log?.(`Handler error for visitor ${phone}: ${err instanceof Error ? err.message : "unknown error"}`);
+      const outboundAfterThrow = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").length;
+      const alreadyReplied = outboundAfterThrow > outboundBefore;
+      let alertRecorded = false;
+      try {
+        const res = await session.reservation();
+        alertRecorded = await session.core.alertHandlerFailure({
+          phone,
+          visitorText: message.text,
+          reservationId: res?.id,
+          alreadyReplied,
+        });
+      } catch {
+        alertRecorded = false;
+      }
+      if (!alertRecorded) {
+        const audit = await session.store.listAudit().catch(() => []);
+        alertRecorded = audit.some((event) => !auditBeforeIds.has(event.id) && (event.type === "HANDLER_FAILED" || event.type === "OPERATOR_NOTIFIED"));
+      }
+      try {
+        await this.save(session);
+      } catch (saveErr) {
+        this.deps.log?.(`Could not save the conversation after a handler error: ${saveErr instanceof Error ? saveErr.message : "unknown error"}`);
+      }
+      const outboundAfter = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").length;
+      if (outboundAfter === outboundBefore) {
+        const fallback = alertRecorded ? HANDLER_SNAG_ALERTED : HANDLER_SNAG_RETRY;
+        await transport.send({ to: phone, audience: "PROSPECT", body: fallback }).catch(() => undefined);
+      }
+      return { correlationId: session.id };
     }
     if (session.optedOut !== wasOptedOut) this.setOptOut(propertyId, phone, session.optedOut);
     await this.save(session);
@@ -257,6 +292,7 @@ export class MessagingConversations {
           storageRead: this.deps.storageRead,
           beforeAccess: this.deps.beforeAccess,
           otherBusyWindows: () => this.otherBusyWindows(propertyId, tourId),
+          ...(this.deps.slotLockBarrier ? { slotLockBarrier: this.deps.slotLockBarrier } : {}),
         }),
       ),
     );
@@ -354,7 +390,7 @@ export class MessagingConversations {
       }
       if (this.deps.registry.find(snapshot.sessionId)) continue;
       try {
-        const { session, notes } = await restoreSession(snapshot, { workspace: this.deps.workspace, transport: this.lazyTransport(snapshot.propertyId), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(snapshot.propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyWindows: (propertyId, tourId) => this.otherBusyWindows(propertyId, tourId) });
+        const { session, notes } = await restoreSession(snapshot, { workspace: this.deps.workspace, transport: this.lazyTransport(snapshot.propertyId), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(snapshot.propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyWindows: (propertyId, tourId) => this.otherBusyWindows(propertyId, tourId), slotLockBarrier: this.deps.slotLockBarrier });
         this.deps.registry.add(this.attachOverstay(session));
         for (const note of notes) log(`Restoring a text-message tour: ${note}`);
         restored++;
@@ -406,7 +442,7 @@ export class MessagingConversations {
           updatedAt: record.updatedAt,
         };
         try {
-          const { session } = await restoreSession(pseudo, { workspace: ws, transport: this.lazyTransport(propertyId), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyWindows: (id, tourId) => this.otherBusyWindows(id, tourId) });
+          const { session } = await restoreSession(pseudo, { workspace: ws, transport: this.lazyTransport(propertyId), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyWindows: (id, tourId) => this.otherBusyWindows(id, tourId), slotLockBarrier: this.deps.slotLockBarrier });
           registry.add(this.attachOverstay(session));
           await this.save(session);
           restored++;

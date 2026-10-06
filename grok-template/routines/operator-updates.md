@@ -78,6 +78,13 @@ delivery with the same `eventId`, so treat a repeat as the same update.
 
    When the operator answers, the visitor gets the answer and is returned to
    the step they were on.
+   For a text Tour Core could not handle, show the landlord alert line.
+   Next step: `Tell me what to say and I'll text them, or book or change
+   their tour yourself.` `answer_flagged_question` texts them and does not
+   save an approved fact. Ask `Send "{reply}" to {who}?` then after yes
+   it returns `Sent to {who}.` If they cannot be texted:
+   `I couldn't text {who}, so nothing was sent and this is still open.
+   If you can reach them another way, do that, then mark it handled.`
 5. Don't act on tours or issues. Answering with a new approved fact, pausing,
    resuming or calling off a tour happen only when the operator replies, via
    the Work Exception skill and its confirmation questions.
@@ -127,7 +134,19 @@ property is not unpublished by an update.
 
 `get_operator_update`, `inspect_exception`, `inspect_tour`, and
 `list_exceptions` if an issue can't be found. A `tour.time_requested` update
-needs a decision: `list_tour_time_requests`, `inspect_tour_time_request`,
+needs a decision unless the request is withdrawn or expired. Withdrawn:
+`They booked a regular time instead.` Expired: `That time has already
+passed, so I've let {who} know their request ran out. You can still book
+them a one-off time.` Then use `schedule_one_off_tour` or `reschedule_tour`.
+Propose after the time passed: `That request
+ran out because its time already passed, so your offer of {newTime} on
+{newDay} didn't go out. I've let {who} know, and you can still book them
+a one-off time.` Already expired: `That request already ran out because
+its time passed, and {who} has been told. You can still book them a
+one-off time.` Already approved or declined: `That request has already
+been handled.`
+No decision is needed in those cases — don't approve, decline, or propose.
+For a waiting request: `list_tour_time_requests`, `inspect_tour_time_request`,
 `approve_tour_time_request`, `decline_tour_time_request`, `propose_tour_time`,
 `reschedule_tour`, and `schedule_one_off_tour`. Ask the exact question Tour
 Core returns (`Move it?` / `Book it?`). If tours are paused, approve and

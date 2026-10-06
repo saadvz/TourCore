@@ -455,11 +455,11 @@ describe("tour time confirmation wording", () => {
     await a.book();
     const asked = await a.grok("reschedule_tour", { visitor: "Testy", newStartsAt: "3:15 PM today" });
     expect(asked.summary).toBe(
-      "Move Testy's tour from 2:00 PM to 3:15 PM today? Testy gets a text with the new time. Move it?",
+      "Move Testy's tour from 2:00 PM on Monday, Sep 28 to 3:15 PM on Monday, Sep 28? Testy gets a text with the new time. Move it?",
     );
     const outside = await a.grok("reschedule_tour", { visitor: "Testy", newStartsAt: "7:30 PM today" });
     expect(outside.summary).toBe(
-      "Move Testy's tour from Mon, Sep 28 at 2:00 PM to Mon, Sep 28 at 7:30 PM? That's outside your tour hours. This is a one-off. Your regular tour hours stay the same, and Testy gets a text with the new time. Move it?",
+      "Move Testy's tour from 2:00 PM on Monday, Sep 28 to 7:30 PM on Monday, Sep 28? That's outside your tour hours. This is a one-off. Your regular tour hours stay the same, and Testy gets a text with the new time. Move it?",
     );
   });
 });

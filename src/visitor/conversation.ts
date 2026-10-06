@@ -1,7 +1,7 @@
 import { resolveSpokenTime } from "../core/customSlot";
 import { orList, resolveQuestion, unitsNamedIn } from "../core/questions";
 import { isoDate, parseIsoDate } from "../core/schedule";
-import { dayReference, type DayReference, type SpokenTime } from "../core/spokenTime";
+import { dayReference, spokenTimes, type DayReference, type SpokenTime } from "../core/spokenTime";
 import { addDays, formatDay, formatTime, localDateOf, weekdayOf, zonedParts, type LocalDate } from "../core/timezone";
 import {
   CONSENT_TEXT,
@@ -115,6 +115,196 @@ export const SCHEDULE_CHANGED_LEAD = "Tour times just changed. Here's what's ope
 const WHICH_DAY = "Which day works for you?";
 const DAY_MENU = `I have tours available. ${WHICH_DAY}`;
 const MENU_NUMBER = /^\s*(?:#|number |option )?(\d{1,2})\s*[.!]?\s*$/i;
+const EXPLICIT_CHANGE_PHRASE = /\b(instead|switch|change to|move it|reschedule|another time|another day|different day)\b/;
+const WEEKDAY_OR_DAY = /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow)\b/;
+const WEEKDAY_WORD: Record<string, string> = {
+  MON: "monday",
+  TUE: "tuesday",
+  WED: "wednesday",
+  THU: "thursday",
+  FRI: "friday",
+  SAT: "saturday",
+  SUN: "sunday",
+};
+const TIME_SHIFT_ASK =
+  /\b((?:make|move|switch|change)(?: it| the tour| that)? (?:later|earlier)|(?:a |an )?(?:later|earlier) (?:time|slot|opening)|(?:later|earlier) if possible|can we do (?:it )?(?:later|earlier)|later in the week|(?:is there )?anything (?:later|earlier)(?! is fine)|(?:later|earlier) would be better)\b/;
+/** "sooner" is a change only as an ask, not in consent idioms like "the sooner the better". */
+const SOONER_CHANGE_ASK =
+  /\b(sooner would be better|can we do (?:it )?sooner|(?:is there )?anything sooner|something sooner)\b/;
+const NEGATED_CHANGE = /\b(no need to|do not need to|will not need to|would not need to|no reason to|not going to)\b.{0,40}\b(switch|reschedule|change|move|cancel)\b|\bno change\b/;
+const ARRIVAL_REMARK =
+  /\b(be there|arrive|get there|show up|come by|get in)\b.{0,40}\b(earlier|later|early|late)\b|\b(might be|may be|could be|will be)\b.{0,30}\b(\d+\s*(min|minutes?) )?(early|late|earlier|later)\b|\b(\d+\s*(min|minutes?) )(early|late)\b/;
+const WEEKDAY_CODE: Record<string, string> = {
+  monday: "MON",
+  tuesday: "TUE",
+  wednesday: "WED",
+  thursday: "THU",
+  friday: "FRI",
+  saturday: "SAT",
+  sunday: "SUN",
+};
+
+function namesDayOrTime(text: string): boolean {
+  const n = normalize(text);
+  return WEEKDAY_OR_DAY.test(n) || spokenTimes(n).length > 0;
+}
+
+function isNegatedChange(text: string): boolean {
+  return NEGATED_CHANGE.test(text);
+}
+
+function isArrivalRemark(text: string): boolean {
+  if (TIME_SHIFT_ASK.test(text)) return false;
+  return ARRIVAL_REMARK.test(text);
+}
+
+function consentRemainder(text: string): string {
+  return text.replace(/^\s*(yes|yeah|yep|yup|ok|okay|sure)[,!.]?\s+/i, "").replace(/^but\s+/i, "").trim();
+}
+
+function isSoonerQuestionAsk(text: string): boolean {
+  return /^\s*sooner\s*\?+\s*$/i.test(text) || /^\s*sooner\s*\?+\s*$/i.test(consentRemainder(text));
+}
+
+function isSoonerChangeAsk(text: string): boolean {
+  if (isSoonerQuestionAsk(text)) return true;
+  const n = stripFiller(normalize(text));
+  if (SOONER_CHANGE_ASK.test(n)) return true;
+  return /\bsooner\b/.test(n) && namesDayOrTime(n);
+}
+
+function laterOrEarlierShift(text: string): "later" | "earlier" | "later-in-week" | undefined {
+  const n = stripFiller(normalize(text));
+  if (isArrivalRemark(n) || isNegatedChange(n)) return undefined;
+  if (/\blater in the week\b/.test(n)) return "later-in-week";
+  if (isSoonerChangeAsk(text)) return "earlier";
+  if (
+    /\b(make it earlier|move it earlier|an earlier time|earlier time|earlier slot|earlier if possible|can we do (?:it )?earlier|anything earlier|is there anything earlier|earlier would be better)\b/.test(n)
+  ) {
+    return "earlier";
+  }
+  if (
+    /\b(make it later|move it later|a later time|later time|later slot|later if possible|can we do (?:it )?later|anything later|later would be better)\b/.test(n)
+  ) {
+    return "later";
+  }
+  return undefined;
+}
+
+/** A weekday or relative day they want instead — not a day they ruled out. */
+function requestedChangeDay(text: string): DayReference | undefined {
+  if (isNegatedChange(text) || isArrivalRemark(text)) return undefined;
+  const n = normalize(text);
+  const excluded = excludedDays(text);
+  const found: DayReference[] = [];
+  for (const [word, code] of Object.entries(WEEKDAY_CODE)) {
+    if (excluded.has(code)) continue;
+    if (new RegExp(`\\b${word}\\b`).test(n)) found.push({ weekday: code as NonNullable<DayReference["weekday"]> });
+  }
+  if (/\btoday\b/.test(n) && !excluded.has("today")) found.push({ relative: "today" });
+  if (/\btomorrow\b/.test(n) && !excluded.has("tomorrow")) found.push({ relative: "tomorrow" });
+  return found.length === 1 ? found[0] : undefined;
+}
+
+function isBareLaterOrEarlier(text: string): boolean {
+  return /^(later|earlier|sooner)$/.test(stripFiller(normalize(text)));
+}
+
+function isScheduleChangeRemainder(text: string): boolean {
+  const n = normalize(text);
+  if (isNegatedChange(n) || isArrivalRemark(n)) return false;
+  if (isSoonerChangeAsk(text)) return true;
+  if (/\b(different day|another day|another time)\b/.test(n)) return true;
+  if (TIME_SHIFT_ASK.test(n)) return true;
+  if (/\b(instead|switch|change to|move it|reschedule)\b/.test(n)) return true;
+  if (namesDayOrTime(n)) return true;
+  return false;
+}
+
+/** Days the visitor ruled out ("not monday", "tomorrow I am busy"). Never pick these. */
+function excludedDays(text: string): Set<string> {
+  const n = normalize(text);
+  const excluded = new Set<string>();
+  for (const [word, code] of Object.entries(WEEKDAY_CODE)) {
+    if (new RegExp(`\\bnot ${word}\\b`).test(n) || new RegExp(`\\b${word} i am busy\\b`).test(n)) excluded.add(code);
+  }
+  if (/\bnot today\b/.test(n) || /\btoday i am busy\b/.test(n)) excluded.add("today");
+  if (/\bnot tomorrow\b/.test(n) || /\btomorrow i am busy\b/.test(n)) excluded.add("tomorrow");
+  return excluded;
+}
+
+function sameLocalDay(a: LocalDate, b: LocalDate): boolean {
+  return a.year === b.year && a.month === b.month && a.day === b.day;
+}
+
+function dayAskExcluded(ask: DayReference, text: string, today: LocalDate): boolean {
+  const excluded = excludedDays(text);
+  if (ask.relative === "today" && excluded.has("today")) return true;
+  if (ask.relative === "tomorrow" && excluded.has("tomorrow")) return true;
+  if (ask.weekday && excluded.has(ask.weekday)) return true;
+  if (ask.date) {
+    const wd = weekdayOf(ask.date);
+    if (excluded.has(wd)) return true;
+    if (excluded.has("today") && sameLocalDay(ask.date, today)) return true;
+    if (excluded.has("tomorrow") && sameLocalDay(ask.date, addDays(today, 1))) return true;
+  }
+  return false;
+}
+
+/** Change only when the leftover words actually modify the tour time. Farewells and arrival remarks are not a change. */
+function hasExplicitChangeAsk(text: string): boolean {
+  const n = stripFiller(normalize(text));
+  if (isNegatedChange(n) || isArrivalRemark(n)) return false;
+  if (leftoverAfterConsent(text)) return false;
+  if (EXPLICIT_CHANGE_PHRASE.test(n)) return true;
+  if (TIME_SHIFT_ASK.test(n)) return true;
+  if (isSoonerChangeAsk(text)) return true;
+  if (/\brather\b/.test(n) && namesDayOrTime(n)) return true;
+  return /\b(but|instead)\b/.test(n) && namesDayOrTime(n);
+}
+
+function leftoverAfterConsent(text: string): string | undefined {
+  const stripped = text.replace(/^\s*(yes|yeah|yep|yup|ok|okay|sure)[,!.]?\s+/i, "").replace(/^but\s+/i, "").trim();
+  if (!stripped) return undefined;
+  if (isScheduleChangeRemainder(stripped)) return undefined;
+  if (/\?/.test(stripped) || /\b(park|parking|entrance|prepare)\b/i.test(stripped)) return stripped;
+  return undefined;
+}
+
+async function answerLeftoverAfterConsent(turn: Turn, text: string): Promise<void> {
+  const leftover = leftoverAfterConsent(text);
+  if (!leftover) return;
+  await turn.session.askQuestion(leftover, {
+    meta: turn.said.meta,
+    alreadyRecorded: true,
+    unknownReply: unknownReplyFor(turn),
+  });
+}
+
+async function affirmsBookedDay(turn: Turn): Promise<boolean> {
+  const reservation = await turn.session.reservation();
+  if (!reservation?.slotStart) return false;
+  const booked = weekdayOf(localDateOf(new Date(reservation.slotStart), turn.session.config.property.timezone));
+  const word = WEEKDAY_WORD[booked];
+  if (!word) return false;
+  const n = normalize(turn.said.text ?? "");
+  return new RegExp(`\\b${word}\\b.{0,24}\\b(fine|ok|okay|good|works|great)\\b`).test(n) || new RegExp(`\\b(fine|ok|okay|good|works|great).{0,24}\\b${word}\\b`).test(n);
+}
+
+/** A clear YES/NO, including yes/ok plus extra words. Change markers are not consent. */
+function clearConsentAnswer(text: string): "yes" | "no" | undefined {
+  const normalized = normalize(text).replace(NEGATED_CHANGE, " ");
+  if (hasExplicitChangeAsk(text)) return undefined;
+  const t = stripFiller(normalized);
+  if (hasExplicitChangeAsk(t)) return undefined;
+  const yn = yesNo(normalized);
+  if (yn.answer && yn.confidence >= 0.75) return yn.answer;
+  const ynStripped = yesNo(t);
+  if (ynStripped.answer && ynStripped.confidence >= 0.75) return ynStripped.answer;
+  if (/\b(yes|yeah|yep|yup|ok|okay|sure)\b/.test(normalized) && !/\b(no|nope|nah)\b/.test(normalized)) return "yes";
+  if (/\b(no|nope|nah)\b/.test(normalized) && !/\b(yes|yeah|yep|ok|okay)\b/.test(normalized)) return "no";
+  return undefined;
+}
 
 const SORRY = "Sorry, I didn't catch that.";
 const rulesOnly = new LayeredIntentInterpreter();
@@ -271,6 +461,12 @@ export async function handleVisitorText(
   }
 
   // SMS campaign consent comes before any property or booking content.
+  if (!silent && keyword !== "stop" && session.core) {
+    await session.core.expirePassedTourTimeRequests();
+  }
+
+  const outboundBefore = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").length;
+
   if (session.kind === "messaging" && session.smsConsentMode !== "disabled" && session.smsConsent !== "opted_in") {
     await photoAck.send();
     await handleSmsGate(session, said, text);
@@ -326,8 +522,12 @@ export async function handleVisitorText(
   else if (intent.type === "START_MESSAGES" && turn.confident) await session.optIn(said);
   else if (await handleOverstayReply(turn)) {
     /* T-15 / T-5 / more-time / DONE / after-close / rebook after no-time */
+  } else if (await handlePostTourDistress(turn)) {
+    /* after DONE + follow-up, locked-in and other distress alert like +15 */
   } else if (await handlePendingRebookPick(turn)) {
     /* day/time for a secondary rebook; tour commands already won above */
+  } else if (await handleProposedTimeReply(turn)) {
+    /* outstanding operator proposal wins over held-booking consent */
   } else if (await handlePendingBookingReply(turn)) {
     /* consent / verification for a booking held while the current tour runs */
   } else if (await takeOverHeldBookingOnGreeting(turn)) {
@@ -342,6 +542,10 @@ export async function handleVisitorText(
     else await session.greet(said);
   }   else await byStage(turn);
   if (session.overstay) await session.overstay.tickSession(session);
+  if (keyword !== "stop" && !silent && typed) {
+    const outboundAfter = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").length;
+    if (outboundAfter === outboundBefore) await session.reply(SORRY);
+  }
   return interpretation;
 }
 
@@ -581,9 +785,17 @@ async function fileCustomTime(turn: Turn, spoken: SpokenTime, alreadyRecorded = 
     return;
   }
   const reservation = await session.reservation();
-  if (reservation?.status === "INQUIRY" && resolved.placement === "ON_GRID") {
-    if (!alreadyRecorded) await session.recordText(turn.said);
-    return session.bookOffered(resolved.start.toISOString());
+  if (resolved.placement === "ON_GRID") {
+    if (reservation?.status === "TOURING") {
+      if (!alreadyRecorded) await session.recordText(turn.said);
+      await session.confirmRebook(resolved.start.toISOString());
+      return;
+    }
+    if (reservation) {
+      if (!alreadyRecorded) await session.recordText(turn.said);
+      if (await session.bookOffered(resolved.start.toISOString())) return;
+      alreadyRecorded = true;
+    }
   }
   if (!reservation) {
     session.holdTime(spoken);
@@ -764,6 +976,11 @@ function dayOnOrAfter(start: LocalDate, weekday: NonNullable<DayReference["weekd
 
 async function showAskedDay(turn: Turn, ask: DayReference, alreadyRecorded = false): Promise<void> {
   const { session } = turn;
+  const today = localDateOf(session.clock.now(), session.config.property.timezone);
+  if (dayAskExcluded(ask, turn.said.text ?? "", today)) {
+    await offerOpenDays(turn, excludedDays(turn.said.text ?? ""));
+    return;
+  }
   const dates = session.offeredDates;
   const dateMenu = { kind: "choose" as const, options: dates.map((day) => day.label), what: "a day" };
   if (ask.date) {
@@ -778,7 +995,8 @@ async function showAskedDay(turn: Turn, ask: DayReference, alreadyRecorded = fal
   }
   if (!ask.weekday && !ask.relative) {
     const index = /^\s*(?:#|number |option )?(\d{1,2})\s*[.!]?\s*$/i.exec(turn.said.text ?? "")?.[1];
-    const picked = index ? dates[Number(index) - 1] : undefined;
+    const menu = session.lastShownDates;
+    const picked = index && menu.length ? menu[Number(index) - 1] : undefined;
     if (picked) return presentDay(turn, picked.date, alreadyRecorded);
     session.markDatesShown();
     if (alreadyRecorded) await session.reply(DAY_MENU, dateMenu);
@@ -799,11 +1017,36 @@ async function showAskedDay(turn: Turn, ask: DayReference, alreadyRecorded = fal
     await session.reply(lead, { kind: "choose", options, what: "a day" });
     return;
   }
-  const tz = session.config.property.timezone;
-  const today = localDateOf(session.clock.now(), tz);
   const start = ask.relative === "today" ? today : ask.relative === "tomorrow" || ask.nextWeek ? addDays(today, 1) : today;
   const day = ask.weekday ? dayOnOrAfter(start, ask.weekday) : start;
   await presentDay(turn, isoDate(day), alreadyRecorded);
+}
+
+/** Offer remaining regular days, skipping any the visitor ruled out. */
+async function offerOpenDays(turn: Turn, excluded: Set<string>): Promise<void> {
+  const { session } = turn;
+  await session.refreshOfferedSchedule();
+  const tz = session.config.property.timezone;
+  const today = localDateOf(session.clock.now(), tz);
+  const dates = session.offeredDates.filter((day) => {
+    const local = parseIsoDate(day.date);
+    if (!local) return true;
+    const wd = weekdayOf(local);
+    if (excluded.has(wd)) return false;
+    if (excluded.has("today") && sameLocalDay(local, today)) return false;
+    if (excluded.has("tomorrow") && sameLocalDay(local, addDays(today, 1))) return false;
+    return true;
+  });
+  session.offeredDates = dates;
+  session.selectedDate = undefined;
+  session.offeredSlots = [];
+  session.markDatesShown();
+  const labels = dates.map((day) => day.label);
+  if (!labels.length) {
+    await turn.respond(VisitorDenialCopy.noOpenTimes(session.config.operator.name));
+    return;
+  }
+  await turn.respond(DAY_MENU, { kind: "choose", options: labels, what: "a day" });
 }
 
 /** START_INQUIRY during booking: keep the unit, offer days again from the current schedule. */
@@ -822,6 +1065,133 @@ async function restartBookingDays(turn: Turn): Promise<void> {
 
 function isBareMenuNumber(text: string): boolean {
   return MENU_NUMBER.test(text);
+}
+
+/** Day name, or a number/time from a menu the visitor actually saw. */
+async function isShownMenuBookingInput(turn: Turn): Promise<boolean> {
+  const { session, intent } = turn;
+  const text = turn.said.text ?? "";
+  if (intent.type === "SELECT_DATE") {
+    if (intent.date || intent.weekday || intent.relative) return true;
+    const index = MENU_NUMBER.exec(text)?.[1];
+    return !!(index && session.lastShownDates[Number(index) - 1]);
+  }
+  if (intent.type === "SELECT_TIME") {
+    return session.lastShownSlots.some((slot) => same(slot.label, intent.timeLabel));
+  }
+  if (isBareMenuNumber(text)) {
+    if (session.selectedDate && session.lastShownSlots.length) {
+      const index = MENU_NUMBER.exec(text)?.[1];
+      return !!(index && session.lastShownSlots[Number(index) - 1]);
+    }
+    const index = MENU_NUMBER.exec(text)?.[1];
+    return !!(index && session.lastShownDates[Number(index) - 1]);
+  }
+  return false;
+}
+
+/** A day name, shown time, or menu number from a leftover slot/day menu. */
+async function tryShownSlotPick(turn: Turn, book: (slotStart: string) => Promise<void>): Promise<boolean> {
+  const { session } = turn;
+  const text = turn.said.text ?? "";
+  if (isBareLaterOrEarlier(text)) return false;
+  const step: VisitorStage = session.selectedDate && session.lastShownSlots.length ? "choose-time" : "choose-date";
+  const interpretation = await rulesOnly.interpret(await contextFor(session, text, step));
+  const intent = interpretation.intent;
+  if (intent.type === "SELECT_DATE" && (intent.date || intent.weekday || intent.relative)) {
+    const today = localDateOf(session.clock.now(), session.config.property.timezone);
+    if (dayAskExcluded(intent, text, today)) return false;
+    await showAskedDay(turn, intent);
+    return true;
+  }
+  const slotsLive = session.slotMenuLive && session.lastShownSlots.length > 0;
+  const datesLive = session.dateMenuLive && session.lastShownDates.length > 0;
+  if (intent.type === "SELECT_TIME" && slotsLive) {
+    const slot =
+      session.lastShownSlots.find((s) => same(s.label, intent.timeLabel)) ??
+      session.offeredSlots.find((s) => same(s.label, intent.timeLabel));
+    if (slot && isConfident(interpretation)) {
+      await session.recordText(turn.said);
+      await book(slot.start.toISOString());
+      return true;
+    }
+  }
+  if (isBareMenuNumber(text) && slotsLive) {
+    const index = MENU_NUMBER.exec(text)?.[1];
+    const slot = index ? session.lastShownSlots[Number(index) - 1] : undefined;
+    if (slot) {
+      await session.recordText(turn.said);
+      await book(slot.start.toISOString());
+      return true;
+    }
+  }
+  if (isBareMenuNumber(text) && datesLive && !slotsLive) {
+    await showAskedDay(turn, intent.type === "SELECT_DATE" ? intent : {});
+    return true;
+  }
+  return false;
+}
+
+/** From consent, a regular day or shown slot replaces the held/booked tour. */
+async function tryRegularSlotFromConsent(turn: Turn): Promise<boolean> {
+  return tryShownSlotPick(turn, (slotStart) => turn.session.bookOffered(slotStart).then(() => undefined));
+}
+
+async function offerSameDayShift(turn: Turn, direction: "later" | "earlier"): Promise<void> {
+  const { session } = turn;
+  await session.recordText(turn.said);
+  const reservation = await session.reservation();
+  const tz = session.config.property.timezone;
+  const current = reservation?.slotStart ? new Date(reservation.slotStart) : undefined;
+  const day = current ? localDateOf(current, tz) : localDateOf(session.clock.now(), tz);
+  const open = await session.core.availableSlots(day);
+  const filtered = current
+    ? open.filter((slot) => (direction === "later" ? slot.start.getTime() > current.getTime() : slot.start.getTime() < current.getTime()))
+    : open;
+  if (!filtered.length) {
+    await session.refreshOfferedSchedule();
+    const labels = session.offeredDates.map((item) => item.label);
+    session.markDatesShown();
+    if (!labels.length) {
+      await session.reply(VisitorDenialCopy.noOpenTimes(session.config.operator.name));
+      return;
+    }
+    await session.reply(DAY_MENU, { kind: "choose", options: labels, what: "a day" });
+    return;
+  }
+  session.offeredSlots = filtered;
+  session.selectedDate = isoDate(day);
+  session.markTimesShown();
+  const menu = timeMenu(formatDay(filtered[0]!.start, tz), filtered.map((slot) => slot.label));
+  await session.reply(menu.body, menu.prompt);
+}
+
+/** Remaining bookable days this calendar week, not today. */
+async function offerRestOfWeek(turn: Turn): Promise<void> {
+  const { session } = turn;
+  await session.refreshOfferedSchedule();
+  const tz = session.config.property.timezone;
+  const today = localDateOf(session.clock.now(), tz);
+  const remaining: Record<string, number> = { MON: 6, TUE: 5, WED: 4, THU: 3, FRI: 2, SAT: 1, SUN: 0 };
+  const last = addDays(today, remaining[weekdayOf(today)] ?? 6);
+  const dates = session.offeredDates.filter((day) => {
+    const local = parseIsoDate(day.date);
+    if (!local) return false;
+    if (sameLocalDay(local, today)) return false;
+    const t = Date.UTC(local.year, local.month - 1, local.day);
+    const start = Date.UTC(today.year, today.month - 1, today.day);
+    const end = Date.UTC(last.year, last.month - 1, last.day);
+    return t > start && t <= end;
+  });
+  if (!dates.length) {
+    await offerOpenDays(turn, new Set(["today"]));
+    return;
+  }
+  session.offeredDates = dates;
+  session.selectedDate = undefined;
+  session.offeredSlots = [];
+  session.markDatesShown();
+  await turn.respond(DAY_MENU, { kind: "choose", options: dates.map((day) => day.label), what: "a day" });
 }
 
 function matchesLabel(text: string, labels: string[]): boolean {
@@ -871,7 +1241,15 @@ async function byStage(turn: Turn): Promise<void> {
     if (named) return showAskedDay(turn, named);
     return fileCustomTime(turn, asSpoken(intent));
   }
-  if (intent.type === "ASK_PROPERTY_QUESTION" && turn.stage !== "stopped" && turn.stage !== "done" && turn.stage !== "intro") return ask(turn, intent.question);
+  if (
+    intent.type === "ASK_PROPERTY_QUESTION" &&
+    !hasExplicitChangeAsk(turn.said.text ?? "") &&
+    turn.stage !== "stopped" &&
+    turn.stage !== "done" &&
+    turn.stage !== "intro"
+  ) {
+    return ask(turn, intent.question);
+  }
 
   switch (turn.stage) {
     case "intro":
@@ -891,7 +1269,8 @@ async function byStage(turn: Turn): Promise<void> {
     }
 
     case "choose-date": {
-      if (await session.unapprovedCustomTimeRequest()) {
+      const pendingDateRequest = await session.unapprovedCustomTimeRequest();
+      if (pendingDateRequest && !pendingDateRequest.pendingNoticeSentAt && !(await isShownMenuBookingInput(turn))) {
         await session.recordText(turn.said);
         await session.announceUnapprovedCustomTime();
         return;
@@ -902,7 +1281,7 @@ async function byStage(turn: Turn): Promise<void> {
           return takeOfferedOpening(session, turn.awaiting, turn.said);
         }
       }
-      if (intent.type === "REQUEST_HELP") return session.help(turn.said);
+      if (mentionsAfterCloseDistress(turn.said.text ?? "") || intent.type === "REQUEST_HELP") return session.help(turn.said);
       if (intent.type === "START_INQUIRY") return restartBookingDays(turn);
       if (session.staleDateMenu) {
         const text = turn.said.text ?? "";
@@ -921,14 +1300,15 @@ async function byStage(turn: Turn): Promise<void> {
     }
 
     case "choose-time": {
-      if (await session.unapprovedCustomTimeRequest()) {
+      const pendingTimeRequest = await session.unapprovedCustomTimeRequest();
+      if (pendingTimeRequest && !pendingTimeRequest.pendingNoticeSentAt && !(await isShownMenuBookingInput(turn))) {
         await session.recordText(turn.said);
         await session.announceUnapprovedCustomTime();
         return;
       }
       const labels = session.offeredSlots.map((s) => s.label);
       const menu: ReplyPrompt = { kind: "choose", options: labels, what: "a time" };
-      if (intent.type === "REQUEST_HELP") return session.help(turn.said);
+      if (mentionsAfterCloseDistress(turn.said.text ?? "") || intent.type === "REQUEST_HELP") return session.help(turn.said);
       if (intent.type === "START_INQUIRY") return restartBookingDays(turn);
       if (session.staleTimeMenu || session.staleDateMenu) {
         const text = turn.said.text ?? "";
@@ -950,9 +1330,45 @@ async function byStage(turn: Turn): Promise<void> {
 
     case "consent": {
       const question = CONSENT_QUESTION;
-      if (intent.type === "CONSENT_YES" || intent.type === "CONSENT_NO") {
-        if (turn.confident) return turn.act("consent", { agree: intent.type === "CONSENT_YES" });
-        return turn.clarify(`Just to check: ${question.charAt(0).toLowerCase()}${question.slice(1)}`, yesNo);
+      const text = turn.said.text ?? "";
+      if (await affirmsBookedDay(turn)) {
+        await turn.act("consent", { agree: true });
+        return;
+      }
+      const changeAsk = hasExplicitChangeAsk(text);
+      const answer = clearConsentAnswer(text);
+      if (answer && !changeAsk) {
+        await turn.act("consent", { agree: answer === "yes" });
+        await answerLeftoverAfterConsent(turn, text);
+        return;
+      }
+      if (isBareMenuNumber(text)) {
+        const current = await session.reservation();
+        const shownOtherDay =
+          session.slotMenuLive &&
+          !!current?.slotStart &&
+          session.lastShownSlots.length > 0 &&
+          session.lastShownSlots.every((slot) => slot.start.toISOString() !== current.slotStart);
+        const shownDaysOnly = session.dateMenuLive && session.lastShownDates.length > 0 && session.lastShownSlots.length === 0 && (await session.hasLiveRegularTour());
+        if ((shownOtherDay || shownDaysOnly) && (await tryRegularSlotFromConsent(turn))) return;
+        return turn.fallback(`${SORRY} ${question}`, yesNo);
+      }
+      if (changeAsk) {
+        const named = requestedChangeDay(text);
+        if (named) return showAskedDay(turn, named);
+        const shift = laterOrEarlierShift(text);
+        if (shift === "later-in-week") return offerRestOfWeek(turn);
+        if (shift) return offerSameDayShift(turn, shift);
+        const spoken = spokenTimes(normalize(text));
+        if (spoken.length === 1) return fileCustomTime(turn, spoken[0]!);
+        if (intent.type === "REQUEST_CUSTOM_TIME" && turn.confident) return fileCustomTime(turn, asSpoken(intent));
+      }
+      const pending = await session.unapprovedCustomTimeRequest();
+      const allowSlot = changeAsk || !!pending?.pendingNoticeSentAt || (await session.hasLiveRegularTour());
+      if (allowSlot && (await tryRegularSlotFromConsent(turn))) return;
+      if (changeAsk) {
+        await offerOpenDays(turn, excludedDays(text));
+        return;
       }
       if (intent.type === "REQUEST_HELP") return session.help(turn.said);
       if (session.heldBookingTakenOver && (await session.activeNeedsConsent())) {
@@ -989,6 +1405,7 @@ async function byStage(turn: Turn): Promise<void> {
         if (intent.type === "REQUEST_HELP") return session.help(turn.said);
         return turn.respond(VisitorDenialCopy.operatorHold(session.config.operator.name, session.config.operator.visitorContact));
       }
+      if (session.slotMenuLive && (await tryShownSlotPick(turn, (slotStart) => session.bookOffered(slotStart).then(() => undefined)))) return;
       if (intent.type === "ASK_PROPERTY_QUESTION") return handleEndedQuestion(turn);
       return turn.respond(TOUR_ENDED_REPLY);
   }
@@ -1018,8 +1435,22 @@ async function onArrival(turn: Turn): Promise<void> {
     case "FINISH_TOUR":
       return turn.respond("Your tour hasn't started yet.", { kind: "say", phrase: "I'm here", purpose: "when you arrive" });
     default:
+      if (session.slotMenuLive && (await tryShownSlotPick(turn, (slotStart) => session.bookOffered(slotStart).then(() => undefined)))) return;
       return turn.fallback(`${SORRY} You can ask me a question about the property.`, { kind: "say", phrase: "I'm here", purpose: "when you arrive" });
   }
+}
+
+async function handlePostTourDistress(turn: Turn): Promise<boolean> {
+  if (!mentionsAfterCloseDistress(turn.said.text ?? "")) return false;
+  const session = turn.session;
+  const current = await session.reservation();
+  const reservations = await session.store.list("reservations");
+  const finished = reservations.find(
+    (reservation) => reservation.status === "COMPLETED" && (!current || reservation.prospectId === current.prospectId),
+  );
+  if (!finished || !(await session.hasFollowUpResponse(finished.id))) return false;
+  await session.alertDistress(turn.said, finished.id);
+  return true;
 }
 
 async function handleOverstayReply(turn: Turn): Promise<boolean> {
@@ -1139,18 +1570,58 @@ async function takeOverHeldBookingOnGreeting(turn: Turn): Promise<boolean> {
   return false;
 }
 
+async function outstandingProposedRequest(session: VisitorDemoSession) {
+  const requests = await session.store.list("tourTimeRequests");
+  const ids = new Set([session.reservationId, session.pendingBookingId, session.pendingCustomRequestId].filter((id): id is string => !!id));
+  return requests.find(
+    (request) =>
+      request.status === "PENDING" &&
+      request.proposedAlternativeAt &&
+      ((request.reservationId && ids.has(request.reservationId)) || request.id === session.pendingCustomRequestId),
+  );
+}
+
+async function handleProposedTimeReply(turn: Turn): Promise<boolean> {
+  const { session } = turn;
+  const request = turn.awaiting?.kind === "confirm-alternative"
+    ? (await session.store.get("tourTimeRequests", turn.awaiting.requestId)) ?? (await outstandingProposedRequest(session))
+    : await outstandingProposedRequest(session);
+  if (!request?.proposedAlternativeAt || request.status !== "PENDING") return false;
+  const text = turn.said.text ?? "";
+  if (hasExplicitChangeAsk(text)) return false;
+  const answer = clearConsentAnswer(text);
+  if (answer === "yes") {
+    await session.recordText(turn.said);
+    await session.acceptAlternative(request.id);
+    return true;
+  }
+  if (answer === "no") {
+    await session.recordText(turn.said);
+    await session.declineAlternative(request.id);
+    return true;
+  }
+  return false;
+}
+
 async function handlePendingBookingReply(turn: Turn): Promise<boolean> {
   const { session } = turn;
   if (!session.pendingBookingId) return false;
   if ((await session.stage()) === "follow-up") return false;
+  if (await outstandingProposedRequest(session)) return false;
   const text = turn.said.text ?? "";
+  if (hasExplicitChangeAsk(text)) return false;
+  if (await affirmsBookedDay(turn)) {
+    await session.answerPendingConsent(true, turn.said);
+    return true;
+  }
   if (await session.pendingBookingNeedsConsent()) {
-    const yn = yesNo(stripFiller(normalize(text)));
-    if (yn.answer === "yes" && yn.confidence >= 0.75) {
+    const answer = clearConsentAnswer(text);
+    if (answer === "yes") {
       await session.answerPendingConsent(true, turn.said);
+      await answerLeftoverAfterConsent(turn, text);
       return true;
     }
-    if (yn.answer === "no" && yn.confidence >= 0.75) {
+    if (answer === "no") {
       await session.answerPendingConsent(false, turn.said);
       return true;
     }
@@ -1200,6 +1671,7 @@ async function handlePendingRebookPick(turn: Turn): Promise<boolean> {
       return true;
     }
   }
+  if (await tryShownSlotPick(turn, (slotStart) => session.confirmRebook(slotStart))) return true;
   return false;
 }
 
@@ -1235,6 +1707,7 @@ async function onTour(turn: Turn): Promise<void> {
     case "REQUEST_HELP":
       return session.help(turn.said);
     default:
+      if (session.slotMenuLive && (await tryShownSlotPick(turn, (slotStart) => session.confirmRebook(slotStart)))) return;
       return turn.fallback(
         `${SORRY} You can ask me a question${next ? `, text "at ${session.stopLabel(next)}" when you get there,` : ","} or text "finish" when you're done.`,
         undefined,

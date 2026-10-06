@@ -1,6 +1,6 @@
 ---
 name: work-exception
-description: Show what needs the team's attention on live and recent tours (unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored, visitors who didn't confirm leaving), open one, and resolve it using only Tour Core's actions and the operator's own facts.
+description: Show what needs the team's attention on live and recent tours (unanswered questions, a visitor text Tour Core could not handle, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored, visitors who didn't confirm leaving), open one, and resolve it using only Tour Core's actions and the operator's own facts.
 when-to-use: "what needs attention", "show exceptions", "any problems", "open Pat's issue", "what's happening with Pat's tour", "show active tours", "pause the tour", "call off the tour", a Tour Core Operator Updates routine run
 allowed-tools: get_operator_update list_active_tours inspect_tour list_exceptions inspect_exception resolve_exception answer_flagged_question place_operator_hold clear_operator_hold revoke_tour_access pause_tours resume_tours remove_property list_tour_time_requests inspect_tour_time_request approve_tour_time_request decline_tour_time_request propose_tour_time reschedule_tour schedule_one_off_tour inject_local_sms read_local_outbox
 argument-hint: "[visitor or issue]"
@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Tour updates, exception queue, monitoring, holds and approved answers
-  version: "0.3.15"
+  version: "0.3.18"
 ---
 
 # Work Exception
@@ -42,9 +42,11 @@ Tour Core sends only an `eventId` and an event type; never names or details.
    > Testy's Unit 1A tour has started.
    > Testy's Unit 1A tour is complete.
 3. For an issue, if `stillOpen` is false (someone already handled it), stop
-   quietly. For an unanswered question, ask for the answer itself ("What
+   quietly.    For an unanswered question, ask for the answer itself ("What
    should I tell them?"), not a yes/no, then continue with **Resolve** below
-   when the operator replies.
+   when the operator replies. For a text Tour Core could not handle, ask
+   what to tell the visitor; `answer_flagged_question` texts them from this
+   number and does not save an approved fact.
 4. Don't act on the tour or the issue on your own. Never show ids or the
    payload.
 
@@ -106,7 +108,24 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   starting over. The property stays published: an approved fact never needs
   another readiness check or practice tour.
   If the operator doesn't know the answer, don't guess. Offer to mark it
-  handled once they've dealt with it another way.
+  handled once they've dealt with it another way. A repeat answer returns
+  exactly `That question has already been handled.`
+- **Couldn't handle their text.** This is not a flagged question. Show the
+  landlord alert line as the detail. Next step:
+  `Tell me what to say and I'll text them, or book or change their tour yourself.`
+  When the operator gives the reply, call `answer_flagged_question` with
+  their words. The first call returns exactly `Send "{reply}" to {who}?`
+  with the landlord's exact reply and no future-visitors line. After yes,
+  when the text is in the outbox and the issue is closed, it returns
+  exactly `Sent to {who}.` It texts the visitor from the Tour Core number,
+  does not save an approved fact (`savedToSetup` is false), and never
+  says future visitors will get it too. If the visitor cannot be texted,
+  it returns `I couldn't text {who}, so nothing was sent and this is
+  still open. If you can reach them another way, do that, then mark it
+  handled.` and leaves the issue open. {who} is their first name, or the
+  phone-based label when they have no name — never "A". `resolve_exception`
+  also closes it. A repeat answer or resolve returns exactly
+  `That's already been handled.`
 - **Mark handled.** `resolve_exception` with a short note in the operator's
   words. It changes nothing else. For "Visitor hasn't confirmed leaving",
   marking it handled also ends the after-close visitor alerts (alerts also
@@ -119,17 +138,75 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   booking phrase (including see it again / schedule another visit)
   starts a new booking when nothing is held; a greeting with more text,
   or anything about being stuck, locked, jammed, still in the unit,
-  unable to leave, or unable to get outside, still alerts the team
-  and replies to the visitor. Help booking does not hide those other
-  words. Marking the leaving issue handled closes after-close alerts
+  unable to leave, unable to get outside, unable to find the way out,
+  where the way out is, or how to get out, still alerts the team
+  and replies to the visitor. "Which way out of the lobby" is not
+  distress. Help booking does not hide those other words. Marking the leaving issue handled closes after-close alerts
   for that closed tour, even when a later booking is held. While that
   leaving issue is open, those after-close texts run before a held
   booking can take over. A rebook held from during the tour continues after the
   follow-up reply: if its consent is still unanswered, they get the
   booked-for line for the new time, then the original consent
-  question. An unapproved custom-time request is told it is still with
-  the property team instead of the day menu. A follow-up yes does not
-  record that consent.
+  question.   An unapproved custom-time request is told once that it is
+  still with the property team (`Your request for {time} on {day} is
+  still with the property team. I'll text you as soon as they respond.`).
+  The extra sentence (`If you'd rather pick one of the regular times
+  instead, just reply with a day.`) is only for visitors with no held
+  or booked regular tour. A held rebook taking over gets the booked-for
+  line, then the original consent question, then Reply YES or NO — not
+  that regular-times sentence. Later texts use the normal booking flow.
+  Booking a regular slot withdraws that request and, when it replaces a
+  held or booked future tour, adds `That replaces your {time} tour on {day}.`
+  list, inspect, and approve or decline then show `They booked a regular
+  time instead.` If the requested time has already passed, the request
+  expires: the visitor is texted once (`The property team couldn't get
+  to your request for {newTime} on {newDay} in time.` plus still-booked
+  or reply-with-a-day).   Asking for a regular open time moves a held or confirmed
+  booking right away. A taken regular slot keeps the current booking
+  (`Sorry, {time} on {day} is already taken.` plus still-booked only for
+  a held or future booking, never the tour in progress) and offers the
+  remaining times that day or `If you'd like another time, just reply
+  with a day.`   A numbered pick from that menu books it only when the menu was shown
+  after the current booking, including after the operator moves it
+  (`reschedule_tour`, approving a time request, accepting a proposed
+  time, a one-off, cancel, or revoke). A leftover number, time, or bare
+  later/earlier/sooner does not move it. On hold, a taken slot gets the
+  taken line and no menu.
+  Farewells and
+  arrival remarks at consent record consent; later/earlier/sooner is a
+  change only when it is an actual ask (`make it later`, `later in the week`,
+  `can we do it later`, `anything later`, `sooner would be better`,
+  `can we do it sooner`, `anything sooner`, `sooner?`). Idioms such as
+  `yes, the sooner the better` and `yes, anything earlier is fine too`
+  record consent. A
+  named day (`tuesday works better`) shows that day's times. A visitor
+  text that cannot be handled opens a handler-failed issue (not a flagged
+  question) and tells them the team will reply here, or asks them to text
+  again if no landlord record could be created. The team is told
+  `{who} texted "{their message}" and I couldn't handle it, so they're
+  waiting on you. I told them you'd reply as soon as you can.`   After a
+  partial reply: `{who} texted "{their message}" and I couldn't finish
+  handling it. They got part of a reply, so they may still be waiting on
+  you.` Partial reply plus empty text: `{who} sent a text I couldn't
+  finish handling. They got part of a reply, so they may still be waiting
+  on you.` Empty text with no reply: `{who} sent a text I couldn't handle,
+  so they're waiting on you. I told them you'd reply as soon as you can.`
+  Approve and decline return `That time has already
+  passed, so I've let {who} know their request ran out. You can still
+  book them a one-off time.` Then use `schedule_one_off_tour` or
+  `reschedule_tour`. Propose returns `That request ran out
+  because its time already passed, so your offer of {newTime} on {newDay}
+  didn't go out. I've let {who} know, and you can still book them a
+  one-off time.` and does not send the proposal to the visitor. If it
+  was already expired, return `That request already ran out because its
+  time passed, and {who} has been told. You can still book them a one-off
+  time.` Already approved or declined: `That request has already been
+  handled.` Do not text again.
+  Default `list_tour_time_requests` hides withdrawn;
+  show them with status withdrawn or all. A follow-up yes does not
+  record that consent. Approving a custom time that moves an unconfirmed
+  held booking uses that same booked-for line, then the original consent
+  question, then Reply YES or NO — not moved wording.
 - **After a closed tour.** Other visitor texts before that window ends
   alert the team once per message. DONE after the close uses the usual
   thanks and follow-up question; a yes is the same follow-up as a normal
@@ -170,20 +247,24 @@ Tour Core sends only an `eventId` and an event type; never names or details.
 ### Custom tour times
 
 A visitor can ask for a time that isn't one of the regular slots, or to move
-a tour they already have. `tour.time_requested` wakes you even when ordinary
-tour updates are off, because someone has to decide. The regular hours do
-not change.
+a tour they already have. Asking for a regular open time moves a held or
+confirmed booking right away and withdraws a pending request. A taken
+regular slot keeps the current booking and shows what's left that day; a
+numbered pick from that menu books it. `tour.time_requested` wakes you even
+when ordinary tour updates are off, because someone has to decide. The
+regular hours do not change. If a request expired because its time passed,
+do not approve it — use `schedule_one_off_tour` or `reschedule_tour`.
 
 1. Call `get_operator_update` with the `eventId` and post its `summary`.
    It names the visitor, the time they want, and whether that time is outside
    normal touring hours.
 2. The landlord can say it naturally:
-   - "Approve 3:15" → `approve_tour_time_request`. Ask the question it returns, once. After a clear yes, call it again with `confirmationCode`. If the property is paused, it refuses (`Tours at {property} are paused. Resume them first.`) — say that, don't approve.
+   - "Approve 3:15" → `approve_tour_time_request`. Ask the question it returns, once. After a clear yes, call it again with `confirmationCode`. If the property is paused, it refuses (`Tours at {property} are paused. Resume them first.`) — say that, don't approve. If they already booked a regular time, the request is withdrawn (`They booked a regular time instead.`) — say that, don't approve, and don't text the visitor. If the request expired, return the ran-out line and use `schedule_one_off_tour` or `reschedule_tour`.
    - "Offer them 3:30" → `propose_tour_time`. The current booking stays until the visitor agrees.
-   - "Decline" or "Keep the 4 PM booking" → `decline_tour_time_request`.
+   - "Decline" or "Keep the 4 PM booking" → `decline_tour_time_request`. If the request is withdrawn, Tour Core returns `They booked a regular time instead.` — say that and don't text the visitor.
    - "Move Testa to 3:15" → `reschedule_tour` with their name and the time. Ask the one question it returns, then call again after yes. If the property is paused, it refuses the same way.
    - "Set up a tour for Dana at 1A on Monday at 3:15" → `schedule_one_off_tour` with their phone, the unit and the time. Ask the one question it returns (it ends `Book it?`), then call again after yes. Only if they asked for this tour. A leftover day or time menu with nothing booked does not block — the one-off replaces it. If they already have a booked tour, say Tour Core's refusal word for word (`They already have a booked tour. I can move it or call it off.`), then use `reschedule_tour` to move it or `revoke_tour_access` to call it off. A pending one-off (`They already have a tour waiting for them to reply YES or NO. I can call it off, or we can wait for them to answer.` → `revoke_tour_access` or wait), an open tour window (`They're on a tour right now. I can call it off.` → `revoke_tour_access`), or a hold (`Their tour is on hold. I can resume it or call it off.` → `clear_operator_hold` or `revoke_tour_access`) is also refused. STOP / opt-out still refuses.
-   - "Who's waiting for a different time?" → `list_tour_time_requests`.
+   - "Who's waiting for a different time?" → `list_tour_time_requests`. Pending only by default. Withdrawn requests (visitor booked a regular time instead) are hidden unless you ask for withdrawn or all; they show `They booked a regular time instead.` — they are not pending.
 3. A time outside normal touring hours returns a stronger question. Call again
    with `confirmationCode` and `acknowledgeOutsideHours` true only after they
    agree to that one-time exception.

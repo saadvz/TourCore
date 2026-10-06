@@ -128,6 +128,10 @@ function sentence(
       return good(`The property team approved ${c.name}'s requested tour time.`);
     case "TOUR_TIME_REQUEST_DECLINED":
       return info(`The property team couldn't do ${c.name}'s requested tour time.`);
+    case "TOUR_TIME_REQUEST_WITHDRAWN":
+      return info(`${c.name} booked a regular time instead.`);
+    case "TOUR_TIME_REQUEST_EXPIRED":
+      return info(`${c.name}'s requested tour time had already passed.`);
     case "TOUR_TIME_ALTERNATIVE_PROPOSED":
       return info(`The property team offered ${c.name} a different tour time.`);
     case "TOUR_RESCHEDULED":
@@ -146,6 +150,8 @@ function sentence(
       return good(`${c.name} asked "${e.detail}" and got an answer from your approved facts.`);
     case "QUESTION_UNANSWERED":
       return blocked(`${c.name} asked "${e.detail}". There was no approved answer, so it was flagged for your team.`);
+    case "HANDLER_FAILED":
+      return blocked(e.detail);
     case "HELP_REQUESTED":
       return blocked(`${c.name} asked for help${e.detail ? ` near ${e.detail}` : ""}.`);
     case "FOLLOW_UP_RESPONSE":

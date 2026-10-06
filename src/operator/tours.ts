@@ -1,5 +1,6 @@
 import { describeHistory, type HistoryEntry } from "../audit/describe";
 import type { TourCoreConfig } from "../config/tourCoreConfig";
+import { formatPhone } from "../core/phone";
 import { formatDay, formatTime } from "../core/timezone";
 import type { AccessGrant, AuditEvent, Message, Prospect, Reservation } from "../domain/model";
 import { UNNAMED_VISITOR } from "../domain/model";
@@ -111,7 +112,7 @@ export function visitorNameOf(tour: TourSnapshot): string {
   const r = currentReservation(tour);
   const prospect: Prospect | undefined = tour.bundle.prospects.find((p) => p.id === r?.prospectId) ?? tour.bundle.prospects[0];
   const name = prospect?.name && prospect.name !== UNNAMED_VISITOR ? prospect.name : undefined;
-  return name ?? (tour.visitorPhone ? `A visitor texting from ${tour.visitorPhone}` : "A visitor");
+  return name ?? (tour.visitorPhone ? formatPhone(tour.visitorPhone) : "A visitor");
 }
 
 export function unitNameOf(tour: TourSnapshot): string | undefined {

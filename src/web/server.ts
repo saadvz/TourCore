@@ -99,6 +99,8 @@ export interface SetupServerOptions {
   installation?: Installation;
   /** How often pending operator alerts are retried. */
   alertRetryMs?: number;
+  /** Test hook: pause inside the property slot lock. */
+  slotLockBarrier?: import("../core/TourCore").TourCoreDeps["slotLockBarrier"];
 }
 
 /** The server plus a handle tests use to wait for background operator alerts. */
@@ -109,6 +111,7 @@ export interface TourCoreServer extends Server {
     /** Resolves once every alert scan and delivery started so far has finished. */
     settled(): Promise<void>;
     storageReady: Promise<{ ok: boolean; summary: string }>;
+    tickOverstay(): Promise<void>;
   };
 }
 
@@ -227,6 +230,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
     storeFor: (config) => installation.records.wrapStore(createStore(config)),
     storageRead: () => installation.records.storageRead(),
     beforeAccess: () => installation.records.beforeAccess(),
+    ...(options.slotLockBarrier ? { slotLockBarrier: options.slotLockBarrier } : {}),
   });
   const restored = installation.records
     .warm()
@@ -562,6 +566,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         } while (seen !== alertWork);
       },
       storageReady,
+      tickOverstay: () => conversations.tickOverstay(),
     },
   });
 }

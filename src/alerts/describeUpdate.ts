@@ -1,4 +1,5 @@
 import { placementOf, touringHoursLabel } from "../core/customSlot";
+import { requestTimePassedLine, WITHDRAWN_FOR_REGULAR_BOOKING } from "../core/TourCore";
 import { addDays, formatDay, formatTime, localDateOf } from "../core/timezone";
 import { UNNAMED_VISITOR } from "../domain/model";
 import { inspectException } from "../operator/exceptions";
@@ -45,7 +46,9 @@ export async function describeOperatorUpdate(services: OperatorServices, event: 
       instructions:
         x.kind === "unanswered-question"
           ? "Ask the operator for the answer itself (not a yes/no). When they give it, use answer_flagged_question; its question is the only confirmation."
-          : "Tell the operator what happened. Change nothing unless they ask, through the Work Exception skill.",
+          : x.kind === "handler-failed"
+            ? "Ask the operator what to tell the visitor. When they give it, use answer_flagged_question; it texts them from this number and does not save an approved fact. Ask Send \"{reply}\" to {who}? then after yes it returns Sent to {who}."
+            : "Tell the operator what happened. Change nothing unless they ask, through the Work Exception skill.",
     };
   }
   if (!event.tourId) throw new SetupInputError("UPDATE_INCOMPLETE", "That update doesn't point at a tour.");
@@ -94,6 +97,38 @@ async function describeTimeRequest(services: OperatorServices, event: OperatorEv
   const choices = currentAt
     ? "Would you like to approve that time, suggest another time, decline the request, or keep the current booking?"
     : "Would you like to approve that time, suggest another time, or decline the request?";
+  if (request.status === "WITHDRAWN") {
+    return {
+      eventType: event.eventType,
+      summary: `${who} — ${requested}. ${WITHDRAWN_FOR_REGULAR_BOOKING}`,
+      request: {
+        tourTimeRequestId: request.id,
+        tourRef: tourRef(tour.propertyId, tour.tourId),
+        visitorName: visitorNameOf(tour),
+        unitName: unitNameOf(tour),
+        requestedTime: requested,
+        ...(currentAt ? { currentTime: when(currentAt, now, tz) } : {}),
+        status: "withdrawn",
+      },
+      instructions: `${WITHDRAWN_FOR_REGULAR_BOOKING} No decision is needed.`,
+    };
+  }
+  if (request.status === "EXPIRED") {
+    return {
+      eventType: event.eventType,
+      summary: `${who} — ${requested}. ${requestTimePassedLine(who)}`,
+      request: {
+        tourTimeRequestId: request.id,
+        tourRef: tourRef(tour.propertyId, tour.tourId),
+        visitorName: visitorNameOf(tour),
+        unitName: unitNameOf(tour),
+        requestedTime: requested,
+        ...(currentAt ? { currentTime: when(currentAt, now, tz) } : {}),
+        status: "expired",
+      },
+      instructions: `${requestTimePassedLine(who)} No decision is needed.`,
+    };
+  }
   return {
     eventType: event.eventType,
     summary: `${asking}${note} ${choices}`,

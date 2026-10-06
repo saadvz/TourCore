@@ -36,6 +36,7 @@ import {
   describeChangeTarget,
   findException,
   inspectException,
+  ISSUE_ALREADY_HANDLED,
   listExceptions,
   placeHold,
   resolveException,
@@ -326,6 +327,7 @@ function exceptionLine(x: OperatorException) {
     when: x.when,
     status: x.status,
     ...(x.resolution ? { resolution: x.resolution.note, ...(x.resolution.approvedFact ? { approvedFact: x.resolution.approvedFact } : {}) } : {}),
+    nextSteps: x.nextSteps,
   };
 }
 
@@ -1097,7 +1099,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "list_exceptions",
     title: "Show what needs attention",
     kind: "read",
-    description: "The queue of issues that need the team: unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored. A grant that couldn't be saved after unlock is \"Tour Core couldn't save the visit record, so the tour was paused.\" A records check that fails before unlock keeps the door locked and does not open an issue. \"Visitor hasn't confirmed leaving\" stays open until they text DONE or the operator marks it handled; after-close alerts stop at 24 hours.",
+    description: "The queue of issues that need the team: unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored, and a visitor text Tour Core could not handle (handler-failed: the visitor was told the team will reply here; next step is to tell you what to say so you can text them, or to book or change their tour). A grant that couldn't be saved after unlock is \"Tour Core couldn't save the visit record, so the tour was paused.\" A records check that fails before unlock keeps the door locked and does not open an issue. \"Visitor hasn't confirmed leaving\" stays open until they text DONE or the operator marks it handled; after-close alerts stop at 24 hours.",
     input: z.strictObject({ property: Property, includeHandled: z.boolean().optional() }),
     run: async (ctx, i) => {
       const id = i.property ? resolvePropertyId(ctx.services.workspace, i.property) : undefined;
@@ -1121,11 +1123,12 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "resolve_exception",
     title: "Mark an issue handled",
     kind: "change",
-    description: "Closes one issue with the operator's note. Changes nothing else: no tour, access or setup change. For a leaving issue, marking it handled also ends after-close visitor alerts for that closed tour, even if a later booking is held.",
+    description: "Closes one issue with the operator's note. Changes nothing else: no tour, access or setup change. For a leaving issue, marking it handled also ends after-close visitor alerts for that closed tour, even if a later booking is held. A repeat on a handler-failed issue (couldn't handle their text) returns exactly That's already been handled.",
     input: z.strictObject({ exceptionId: ExceptionId, resolutionNote: z.string().min(1).max(500) }),
     run: async (ctx, i) => {
       const { alreadyResolved, exception } = await resolveException(ctx.services, i.exceptionId, i.resolutionNote, ctx.now());
-      return { summary: alreadyResolved ? "That was already marked handled." : `Marked handled: ${exception.visitorName}, ${exception.title.toLowerCase()}.`, issue: exceptionLine(exception) };
+      const already = exception.kind === "handler-failed" ? ISSUE_ALREADY_HANDLED : "That was already marked handled.";
+      return { summary: alreadyResolved ? already : `Marked handled: ${exception.visitorName}, ${exception.title.toLowerCase()}.`, issue: exceptionLine(exception) };
     },
   }),
   tool({
@@ -1133,7 +1136,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Answer a flagged question with a new approved fact",
     kind: "consequential",
     description:
-      "Only when the OPERATOR supplied the answer. As soon as they give it (e.g. \"2 bedrooms\"), call this without a code: Tour Core works out how it will be saved (a unit detail like bedrooms becomes that unit's value and the canonical sentence \"Unit 1A has 2 bedrooms.\"; anything else stays in the operator's words) and returns ONE question to ask. That question is Send \"{answer}\" to {name}? Future visitors who ask the same thing will get it too. Save it? — never Continue?. Don't ask a separate yes/no before it. After a clear yes, call again with confirmationCode: the fact is saved, the visitor gets exactly that fact, and the question is marked handled. The property stays published. Never make up or reword the answer.",
+      "Only when the OPERATOR supplied the answer or the reply. For an unanswered question: as soon as they give it (e.g. \"2 bedrooms\"), call this without a code. Tour Core works out how it will be saved and returns ONE question: Send \"{answer}\" to {name}? Future visitors who ask the same thing will get it too. Save it? — never Continue?. After a clear yes, call again with confirmationCode. A repeat on an unanswered question returns exactly That question has already been handled. For a handler-failed issue, this texts the visitor from the Tour Core number and does not save an approved fact. The first call returns Send \"{reply}\" to {who}? with the landlord's exact reply and no future-visitors line. After yes, when the text is in the outbox and the issue is closed, it returns exactly Sent to {who}. If the visitor can't be texted, it returns I couldn't text {who}, so nothing was sent and this is still open. If you can reach them another way, do that, then mark it handled. A repeat on a handler-failed issue returns exactly That's already been handled. Never make up or reword the answer.",
     input: z.strictObject({
       exceptionId: ExceptionId,
       approvedFact: z.string().min(1).max(300).describe("The operator's own words, e.g. \"2 bedrooms\" or \"Parking is included.\""),
@@ -1143,17 +1146,23 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     run: async (ctx, i) => {
       const plan = await planFlaggedAnswer(ctx.services, { exceptionId: i.exceptionId, approvedFact: i.approvedFact, appliesTo: i.appliesTo }, ctx.now());
       const x = plan.exception;
-      const first = x.visitorName.split(/\s+/)[0];
-      const fingerprint = `${x.exceptionId}|${plan.appliesTo}|${plan.field ?? ""}|${plan.fact}`;
+      const who = plan.who;
+      const fingerprint = `${x.exceptionId}|${plan.appliesTo}|${plan.field ?? ""}|${plan.fact}|${plan.sendOnly ? "send" : "save"}`;
       if (!i.confirmationCode) {
-        return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, `Send "${plan.fact.replace(/\.$/, "")}" to ${first}? Future visitors who ask the same thing will get it too. Save it?`, {
+        if (plan.sendOnly) {
+          return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, `Send "${plan.fact}" to ${who}?`, { savedToSetup: false });
+        }
+        return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, `Send "${plan.fact.replace(/\.$/, "")}" to ${who}? Future visitors who ask the same thing will get it too. Save it?`, {
           visitorWillReceive: visitorAnswerText(x.question!, plan.fact),
         });
       }
       ctx.confirmations.redeem(i.confirmationCode, "answer", x.exceptionId, fingerprint);
       const out = await answerFlaggedQuestion(ctx.services, { exceptionId: x.exceptionId, approvedFact: i.approvedFact, appliesTo: i.appliesTo }, ctx.now());
+      if (plan.sendOnly) {
+        return { summary: `Sent to ${who}.`, ...out };
+      }
       return {
-        summary: `Saved "${out.approvedFact.replace(/\.$/, "")}"${out.visitorAnswered ? ` and sent it to ${first}` : "; their tour isn't running, so they weren't texted"}.${out.needsRecheck ? " The setup changed, so run the readiness check and a practice tour again before publishing." : ""}`,
+        summary: `Saved "${out.approvedFact!.replace(/\.$/, "")}"${out.visitorAnswered ? ` and sent it to ${who}` : "; their tour isn't running, so they weren't texted"}.${out.needsRecheck ? " The setup changed, so run the readiness check and a practice tour again before publishing." : ""}`,
         ...out,
       };
     },
@@ -1273,10 +1282,11 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "List custom time requests",
     kind: "read",
     description:
-      "Who is waiting on a tour time that isn't a regular slot, or on moving a tour. Say this when the operator asks who wants a different time or to show custom-time requests. Pending only, unless includeHandled is set. No schedule jargon.",
+      "Who is waiting on a tour time that isn't a regular slot, or on moving a tour. Say this when the operator asks who wants a different time or to show custom-time requests. Pending requests only by default. Withdrawn and expired requests are hidden unless you pass status withdrawn, expired, or all, or includeHandled. A withdrawn request includes They booked a regular time instead. An expired request includes That time has already passed, so I've let {who} know their request ran out. You can still book them a one-off time. After an expired request, use schedule_one_off_tour or reschedule_tour — do not approve or propose that same time. Listing expires a request whose time has already passed and texts the visitor once. Asking for a regular time moves a held or confirmed booking right away and withdraws a pending request. No schedule jargon.",
     input: z.strictObject({
       property: Property,
-      includeHandled: z.boolean().optional().describe("Include requests that were already approved, declined or replaced."),
+      includeHandled: z.boolean().optional().describe("Include requests that were already approved, declined, replaced, or withdrawn."),
+      status: z.string().optional().describe('Filter: pending (default), withdrawn, expired, approved, declined, superseded, or all.'),
     }),
     run: (ctx, i) => listTourTimeRequests(ctx, i),
   }),
@@ -1284,7 +1294,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "inspect_tour_time_request",
     title: "Inspect a custom time request",
     kind: "read",
-    description: "One custom-time request in plain language: who, which unit, the time they want, their current booking if they have one, and whether that time is outside normal touring hours.",
+    description: "One custom-time request in plain language: who, which unit, the time they want, their current booking if they have one, and whether that time is outside normal touring hours. A withdrawn request is shown as withdrawn with They booked a regular time instead. An expired request is shown with That time has already passed, so I've let {who} know their request ran out. You can still book them a one-off time. After that, book them with schedule_one_off_tour or move them with reschedule_tour. Inspecting expires a request whose time has already passed and texts the visitor once.",
     input: z.strictObject({
       tourTimeRequestId: z.string().min(3).max(40).describe("The tourTimeRequestId from list_tour_time_requests or a tour update. Never show it to the operator."),
     }),
@@ -1295,7 +1305,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Approve a custom time",
     kind: "consequential",
     description:
-      "Approves a visitor's requested tour time as a one-off. Does not change the property's regular hours or which times are offered. First call returns one yes/no question that names the action and ends Move it? or Book it? — never Continue?. A move inside hours includes the old and new times. \"This is a one-off. Your regular tour hours stay the same\" only when the time is outside tour hours. Call again with confirmationCode only after an explicit yes. If the result says outsideHours, the question is the stronger outside-hours confirmation: call again with confirmationCode and acknowledgeOutsideHours true only after they agree to that. Refused when tours at that property or unit are paused (Tours at {property} are paused. Resume them first.) — tell the operator that, no visitor text.",
+      "Approves a visitor's requested tour time as a one-off. Does not change the property's regular hours or which times are offered. First call returns one yes/no question that names the action and ends Move it? or Book it? — never Continue?. A move always includes both days: Move {who}'s tour from {time} on {day} to {newTime} on {newDay}?. \"This is a one-off. Your regular tour hours stay the same\" only when the time is outside tour hours. Call again with confirmationCode only after an explicit yes. If the result says outsideHours, the question is the stronger outside-hours confirmation: call again with confirmationCode and acknowledgeOutsideHours true only after they agree to that. If the visitor already booked a regular time, the request is withdrawn: return They booked a regular time instead. If that time has already passed, the request is expired: return That time has already passed, so I've let {who} know their request ran out. You can still book them a one-off time. Then use schedule_one_off_tour or reschedule_tour. The visitor is texted once that the team couldn't get to the request in time. If already expired, return That request already ran out because its time passed, and {who} has been told. You can still book them a one-off time. Do not text again. Do not approve. That request has already been handled is only for a request that was already approved or declined. Refused when tours at that property or unit are paused (Tours at {property} are paused. Resume them first.) — tell the operator that, no visitor text.",
     input: z.strictObject({
       tourTimeRequestId: z.string().min(3).max(40).describe("The tourTimeRequestId. Never show it to the operator."),
       confirmationCode: Code,
@@ -1307,7 +1317,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "decline_tour_time_request",
     title: "Decline a custom time",
     kind: "change",
-    description: "Declines a requested time and tells the visitor. Their current booking, if they have one, stays confirmed. Use this for \"decline\" or \"keep the current booking\".",
+    description: "Declines a requested time and tells the visitor. Their current booking, if they have one, stays booked or confirmed. Use this for \"decline\" or \"keep the current booking\". If the visitor already booked a regular time, the request is withdrawn: return They booked a regular time instead. If that time has already passed, the request is expired: return That time has already passed, so I've let {who} know their request ran out. You can still book them a one-off time. Then use schedule_one_off_tour or reschedule_tour. The visitor is texted the expiry line once, not a decline. If already expired, return That request already ran out because its time passed, and {who} has been told. You can still book them a one-off time. Do not text again. Do not decline again. That request has already been handled is only for a request that was already approved or declined.",
     input: z.strictObject({
       tourTimeRequestId: z.string().min(3).max(40).describe("The tourTimeRequestId. Never show it to the operator."),
       note: z.string().max(300).optional().describe("A short note in the operator's words. Optional."),
@@ -1319,7 +1329,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Offer another time",
     kind: "change",
     description:
-      "Offers the visitor a different time. Their current booking stays until they agree. Say the time in everyday words, like \"3:30 PM\". Use this when the operator wants to suggest another time.",
+      "Offers the visitor a different time. Their current booking stays until they agree. Say the time in everyday words, like \"3:30 PM\". Use this when the operator wants to suggest another time. If the visitor already booked a regular time, the request is withdrawn: return They booked a regular time instead. If the requested time has already passed, the request is expired: return That request ran out because its time already passed, so your offer of {newTime} on {newDay} didn't go out. I've let {who} know, and you can still book them a one-off time. Then use schedule_one_off_tour or reschedule_tour. The visitor is texted the expiry line once — not the proposal. If already expired, return That request already ran out because its time passed, and {who} has been told. You can still book them a one-off time. Do not text again. That request has already been handled is only for a request that was already approved or declined.",
     input: z.strictObject({
       tourTimeRequestId: z.string().min(3).max(40).describe("The tourTimeRequestId. Never show it to the operator."),
       newStartsAt: z.string().min(1).max(80).describe('The time to offer, such as "3:30 PM" or "tomorrow at 11:15 AM".'),
