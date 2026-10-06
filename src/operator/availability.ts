@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createMessenger } from "../createTourCore";
-import { pauseConfirmQuestion, PROPERTY_REMOVED_REFUSE, REMOVE_REFUSED_LIVE_TOUR, removeConfirmQuestion, removedPropertySummary, removedSetupSummary, resumeConfirmQuestion, toursAreBackText } from "../core/availabilityCopy";
+import { pauseConfirmQuestion, PROPERTY_REMOVED_REFUSE, REMOVE_REFUSED_LIVE_TOUR, removeConfirmQuestion, removeSetupConfirmQuestion, removedPropertySummary, removedSetupSummary, resumeConfirmQuestion, toursAreBackText } from "../core/availabilityCopy";
 import { normalizePhone } from "../core/phone";
 import { newId, type AuditEvent, type AuditEventType, type Reservation } from "../domain/model";
 import { TERMINAL } from "../domain/stateMachine";
@@ -289,7 +289,14 @@ export async function removeProperty(ctx: Ctx, input: { property?: string; confi
   const booked = await bookedTours(ctx.services, propertyId);
   const fingerprint = `${propertyId}|${booked.map((tour) => `${currentReservation(tour)?.id}:${currentReservation(tour)?.status}`).join(",")}`;
   if (!input.confirmationCode) {
-    return ask(ctx, "remove-property", propertyId, fingerprint, removeConfirmQuestion(name, booked.length), { bookedTours: booked.length });
+    return ask(
+      ctx,
+      "remove-property",
+      propertyId,
+      fingerprint,
+      inProgress ? removeSetupConfirmQuestion(name) : removeConfirmQuestion(name, booked.length),
+      { bookedTours: booked.length },
+    );
   }
   redeem(ctx, input.confirmationCode, "remove-property", propertyId, fingerprint);
 

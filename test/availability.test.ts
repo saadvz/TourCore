@@ -11,6 +11,7 @@ import {
   PROPERTY_REMOVED_REFUSE,
   REMOVE_REFUSED_LIVE_TOUR,
   removeConfirmQuestion,
+  removeSetupConfirmQuestion,
   removedPropertySummary,
   removedPropertyVisitorText,
   removedSetupSummary,
@@ -114,6 +115,9 @@ describe("availability copy", () => {
     );
     expect(removeConfirmQuestion("100 Alfred Way", 1)).toBe(
       "Remove 100 Alfred Way? Tours stop, 1 booked visitor get a cancel text, and it leaves your list. Its records are kept. Remove it?",
+    );
+    expect(removeSetupConfirmQuestion("QA Scratch Lane")).toBe(
+      "Remove the setup for QA Scratch Lane? It isn't published yet, so no visitors are affected. Its records are kept. Remove it?",
     );
     expect(REMOVE_REFUSED_LIVE_TOUR).toBe("Someone is on a tour right now. Try again after it ends.");
     expect(resumeConfirmQuestion("100 Alfred Way")).toBe("Resume tours at 100 Alfred Way? New bookings can start again. Resume it?");
@@ -361,7 +365,8 @@ describe("pause and remove", () => {
     expect(h.workspace.loadDraft(created.setup.propertyId)?.doors.length).toBeGreaterThan(0);
 
     const asked = await h.ok("remove_property", { property: listed.properties[0].name });
-    expect(asked.summary).toBe(removeConfirmQuestion("QA Scratch Lane", 0));
+    expect(asked.summary).toBe(removeSetupConfirmQuestion("QA Scratch Lane"));
+    expect(asked.summary).not.toMatch(/Tours stop|booked visitors/);
     const done = await h.ok("remove_property", { property: listed.properties[0].name, confirmationCode: asked.confirmation.code });
     expect(done.summary).toBe(removedSetupSummary("QA Scratch Lane"));
     expect((await h.ok("list_properties")).properties).toEqual([]);
@@ -375,7 +380,8 @@ describe("pause and remove", () => {
     await h.ok("create_property_setup", { address: "27 Oak Ln, Teaneck, NJ 07666" });
     const listed = await h.ok("list_properties");
     expect(listed.properties[0].status).toBe("Setup in progress");
-    const { done } = await h.approve("remove_property", { property: listed.properties[0].address });
+    const { asked, done } = await h.approve("remove_property", { property: listed.properties[0].address });
+    expect(asked.summary).toBe(removeSetupConfirmQuestion(listed.properties[0].name));
     expect(done.summary).toBe(removedSetupSummary(listed.properties[0].name));
     expect((await h.ok("list_properties")).properties).toEqual([]);
   });

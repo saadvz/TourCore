@@ -74,6 +74,10 @@ export function removeConfirmQuestion(property: string, bookedCount: number): st
   return `Remove ${property}? Tours stop, ${visitors} get a cancel text, and it leaves your list. Its records are kept. Remove it?`;
 }
 
+export function removeSetupConfirmQuestion(name: string): string {
+  return `Remove the setup for ${name}? It isn't published yet, so no visitors are affected. Its records are kept. Remove it?`;
+}
+
 export function removedSetupSummary(name: string): string {
   return `Removed the setup for ${name}.`;
 }

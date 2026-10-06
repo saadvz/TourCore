@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Guided property setup, checked and practiced before publish
-  version: "0.3.6"
+  version: "0.3.7"
 ---
 
 # Setup Property
@@ -202,10 +202,12 @@ anymore (not that they'll be texted when tours are back) and pending door
 access is switched off. Waiting visitors are not texted that tours are back.
 A later text to that line gets a goodbye and cannot book. It is refused while
 someone is on a tour. Published records stay (`export_audit`, `inspect_tour`);
-an in-progress setup is removed completely. If it was a setup still in
-progress, say **Removed the setup for {name}.** Otherwise keep Tour Core's
-wording. Say **remove**, never archive. This is not `place_operator_hold`,
-which pauses one visitor's tour.
+an in-progress setup is removed completely. Ask the exact question it
+returns: for a draft, **Remove the setup for {name}? It isn't published yet,
+so no visitors are affected. Its records are kept. Remove it?** After yes, say
+**Removed the setup for {name}.** Otherwise keep Tour Core's wording. Say
+**remove**, never archive. This is not `place_operator_hold`, which pauses one
+visitor's tour.
 
 Later edits: facts and unit details (bedrooms, rent, availability,
 description, amenities, directions) are approved content: saving them keeps

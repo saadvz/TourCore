@@ -481,8 +481,8 @@ Terminal wizard ─────────────────────�
   `reschedule_tour`, `schedule_one_off_tour`; approve and reschedule refuse while that property is paused:
   `Tours at {property} are paused. Resume them first.`), `pause_tours` / `resume_tours` (property or unit;
   resume texts waiting visitors that tours are back; a later `Tour` / `Hi` / `book` restarts booking the same way
-  as a first text — a home gets the welcome and day list, not a leftover unit picker), `remove_property` (finds any property `list_properties` shows, including an in-progress setup; published records are kept; an in-progress setup is removed completely; booked cancel text does
-  not promise tours will be back; a later text gets a goodbye and cannot book), and `export_audit`. Every input is validated (unexpected fields are)
+  as a first text — a home gets the welcome and day list, not a leftover unit picker), `remove_property` (finds any property `list_properties` shows, including an in-progress setup; published records are kept; an in-progress setup is removed completely; draft confirmation says it isn't published yet so no visitors are affected; booked cancel text does
+  not promise tours will be back; a later text gets a goodbye and cannot book), and `export_audit`. Every input is validated (unexpected fields are))
   refused); every result is plain language. `npm run grok:tools` lists them.
 - **One-off tour** (`schedule_one_off_tour`): use it when the operator wants to set up a tour for a visitor who
   asked — including someone who hasn't texted in yet. The first call returns one yes/no question (ends `Book it?`);
