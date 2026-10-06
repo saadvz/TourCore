@@ -9,9 +9,14 @@ is granted when they ask any time before the tour ends and the next time is
 free; a bare yes to the questions text never grants time. After the no-time
 line, yes starts booking another look. After the end, doors never open. A +5 text
 asks if they've left; at +15 the tour closes and the team gets one issue.
-DONE, "I'm out", or "leaving" ends the tour with the usual goodbye. STOP
-stops visitor texts; team alerts still go out. Afterwards it sends a recap and
-one follow-up question.
+DONE, "I'm out", or "leaving" ends the tour with the usual goodbye. After a
++15 close, other replies alert the team once per message until DONE, the
+operator marks the leaving issue handled, or 24 hours pass. HI or a clear
+booking intent starts a new booking. DONE after the close uses the usual
+thanks and follow-up; a yes is the same follow-up as a normal finish. STOP
+during a tour stops visitor texts only; the tour stays on its window and
+team alerts still go out. Afterwards it sends a recap and one follow-up
+question.
 
 The welcome is one message. It names the property by its address, and by a
 name the operator gave it only when there is one: "Hi! Welcome to the

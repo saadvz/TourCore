@@ -12,6 +12,16 @@ export interface TimeInterval {
   endMs: number;
 }
 
+/** A held tour window shared across conversations, including extensions. */
+export interface OccupiedWindow {
+  start: Date;
+  end: Date;
+}
+
+export function occupiedInterval(window: OccupiedWindow): TimeInterval {
+  return { startMs: window.start.getTime(), endMs: window.end.getTime() };
+}
+
 export function tourInterval(config: TourCoreConfig, start: Date, end?: Date): TimeInterval {
   return { startMs: start.getTime(), endMs: (end ?? new Date(start.getTime() + config.tourHours.tourLengthMinutes * 60_000)).getTime() };
 }

@@ -29,7 +29,7 @@ import type { Clock } from "./clock";
 import { approvedAnswerText, approvedFacts, type ApprovedFact } from "./facts";
 import { formatPhone, normalizePhone } from "./phone";
 import { resolveQuestion } from "./questions";
-import { closestOpenSlots, intervalsOverlap, overlapSummary, placementOf, relativeWhen, releasedWhen, tourInterval, touringHoursLabel, type TimeInterval } from "./customSlot";
+import { closestOpenSlots, intervalsOverlap, occupiedInterval, overlapSummary, placementOf, relativeWhen, releasedWhen, tourInterval, touringHoursLabel, type OccupiedWindow, type TimeInterval } from "./customSlot";
 import { DOOR_AFTER_T, LATE_ARRIVAL_EXPIRED, landlordRepliedAfterClose, landlordWho, tourFinishedFollowUp, visitorRepliedAfterClose } from "./overstayCopy";
 import { withPropertySlotLock } from "./slotLock";
 import { BOOKING_HORIZON_DAYS, isoDate, nextTourDay, slotsOn, tourWindow, type TourSlot } from "./schedule";
@@ -63,6 +63,8 @@ export interface TourCoreDeps {
   beforeAccess?: () => Promise<void>;
   /** Other tours on this property that should count as busy (other conversations). */
   otherBusyStarts?: () => Promise<Date[]>;
+  /** Same as otherBusyStarts, with each tour's real effective end (including extensions). */
+  otherBusyWindows?: () => Promise<OccupiedWindow[]>;
   /**
    * When a property or unit is paused (or the property was removed), new
    * bookings must stop. Unset means booking is allowed (practice tours, older tests).
@@ -903,7 +905,8 @@ export class TourCore {
   /** Records the visitor's answer to the follow-up question. Only the first answer counts. */
   async recordFollowUpResponse(reservationId: string, wantsContact: boolean, inbound?: { text: string; meta?: InboundMeta }): Promise<void> {
     const reservation = await this.mustGetReservation(reservationId);
-    if (reservation.status !== "COMPLETED") throw new TourCoreError("NOT_COMPLETED", "The tour isn't finished yet");
+    const leftAfterClose = reservation.status === "EXPIRED" && (await this.hasConfirmedLeftAfterClose(reservationId));
+    if (reservation.status !== "COMPLETED" && !leftAfterClose) throw new TourCoreError("NOT_COMPLETED", "The tour isn't finished yet");
     const already = (await this.deps.store.listAudit()).some((e) => e.type === "FOLLOW_UP_RESPONSE" && e.reservationId === reservationId);
     if (already) return;
     const prospect = await this.mustGetProspect(reservation.prospectId);
@@ -1246,8 +1249,12 @@ export class TourCore {
     return this.deps.config.operator.visitorContact;
   }
 
-  async extraBusyStarts(): Promise<Date[]> {
-    return (await this.deps.otherBusyStarts?.()) ?? [];
+  async extraBusyWindows(): Promise<OccupiedWindow[]> {
+    const padded = ((await this.deps.otherBusyStarts?.()) ?? []).map((start) => ({
+      start,
+      end: new Date(start.getTime() + this.deps.config.tourHours.tourLengthMinutes * 60_000),
+    }));
+    return [...padded, ...((await this.deps.otherBusyWindows?.()) ?? [])];
   }
 
   async messageVisitor(reservationId: string, body: string): Promise<boolean> {
@@ -1793,8 +1800,9 @@ export class TourCore {
         const end = reservation.windowEnd ? new Date(reservation.windowEnd) : undefined;
         return tourInterval(this.deps.config, start, end);
       });
-    const others = ((await this.deps.otherBusyStarts?.()) ?? []).map((start) => tourInterval(this.deps.config, start));
-    return [...mine, ...others];
+    const startOnly = ((await this.deps.otherBusyStarts?.()) ?? []).map((start) => tourInterval(this.deps.config, start));
+    const windows = ((await this.deps.otherBusyWindows?.()) ?? []).map(occupiedInterval);
+    return [...mine, ...startOnly, ...windows];
   }
 
   private overlapsAny(start: Date, busy: TimeInterval[]): boolean {

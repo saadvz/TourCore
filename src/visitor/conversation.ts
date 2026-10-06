@@ -13,6 +13,7 @@ import {
   type InboundMeta,
 } from "../core/TourCore";
 import { isLeavingTour } from "../core/overstayCopy";
+import { afterCloseAlertOpen } from "./overstayScheduler";
 import { isCancelableReservation } from "../domain/stateMachine";
 import { stripFiller } from "../intent/normalize";
 import {
@@ -282,6 +283,8 @@ export async function handleVisitorText(
   else if (intent.type === "START_MESSAGES" && turn.confident) await session.optIn(said);
   else if (await handleOverstayReply(turn)) {
     /* T-15 / T-5 / more-time / DONE / after-close / rebook after no-time */
+  } else if (await handlePendingRebookPick(turn)) {
+    /* day/time for a secondary rebook; tour commands already won above */
   } else if (keyword === "help") await session.help(said);
   else if (await handleCancelIntent(turn)) {
     /* cancel-by-text: confirm, YES, or NO */
@@ -975,10 +978,25 @@ async function handleOverstayReply(turn: Turn): Promise<boolean> {
       await session.refreshThread();
       return true;
     }
-    await session.recordText(turn.said);
-    await session.core.replyAfterOverstayClose(reservation.id, said);
-    await session.refreshThread();
-    return true;
+    if (isClearBookingIntent(intent, said)) {
+      await startBookingAfterClose(turn);
+      return true;
+    }
+    const closedAt = (await session.store.listAudit()).find((e) => e.type === "TOUR_OVERSTAY_CLOSED" && e.reservationId === reservation.id)?.at;
+    if (
+      afterCloseAlertOpen({
+        nowMs: session.clock.now().getTime(),
+        closedAt,
+        confirmedLeft: false,
+        exceptionResolved: !!overstay.get(reservation.id)?.alertClosedAt,
+      })
+    ) {
+      await session.recordText(turn.said);
+      await session.core.replyAfterOverstayClose(reservation.id, said);
+      await session.refreshThread();
+      return true;
+    }
+    return false;
   }
 
   if (overstay.takePendingRebook(reservation.id, said)) {
@@ -1016,6 +1034,54 @@ async function startRebook(turn: Turn): Promise<void> {
   }
   session.markDatesShown();
   await session.reply(DAY_MENU, { kind: "choose", options: dates.map((day) => day.label), what: "a day" });
+}
+
+function isClearBookingIntent(intent: TourIntent, text: string): boolean {
+  if (intent.type === "START_INQUIRY") return true;
+  if (isGreeting(text)) return true;
+  const t = stripFiller(normalize(text));
+  return /\b(book (another |a )?(tour|look|showing)|another (tour|look|showing)|new tour|tour again|i would like to book)\b/.test(t);
+}
+
+async function startBookingAfterClose(turn: Turn): Promise<void> {
+  const { session } = turn;
+  session.pendingRebook = false;
+  session.rebookUnitId = undefined;
+  const current = await session.reservation();
+  if (current) session.overstay?.cancel(current.id);
+  session.reservationId = undefined;
+  await session.greet(turn.said);
+}
+
+async function handlePendingRebookPick(turn: Turn): Promise<boolean> {
+  const { session } = turn;
+  if (!session.pendingRebook) return false;
+  if (
+    turn.awaiting &&
+    (turn.awaiting.kind === "confirm-stop" ||
+      turn.awaiting.kind === "confirm-arrival" ||
+      turn.awaiting.kind === "confirm-finish" ||
+      turn.awaiting.kind === "choose-stop" ||
+      turn.awaiting.kind === "confirm-cancel-tour")
+  ) {
+    return false;
+  }
+  const step: VisitorStage = session.selectedDate ? "choose-time" : "choose-date";
+  const interpretation = await rulesOnly.interpret(await contextFor(session, turn.said.text ?? "", step, turn.awaiting));
+  if (interpretation.intent.type === "SELECT_DATE") {
+    await showAskedDay(turn, interpretation.intent);
+    return true;
+  }
+  if (interpretation.intent.type === "SELECT_TIME") {
+    const picked = interpretation.intent;
+    const slot = session.offeredSlots.find((s) => same(s.label, picked.timeLabel));
+    if (slot && isConfident(interpretation)) {
+      await session.recordText(turn.said);
+      await session.confirmRebook(slot.start.toISOString());
+      return true;
+    }
+  }
+  return false;
 }
 
 /** In the building: stops along the route, questions, help, finishing. */

@@ -63,7 +63,23 @@ export interface OverstayRecord {
   t5ForWindowEnd?: string;
   /** After the no-time line, a yes starts the rebook flow. */
   pendingRebook?: boolean;
+  /** Operator resolved the overstay exception — after-close alerts stop. */
+  alertClosedAt?: string;
   cancelled?: boolean;
+}
+
+export const AFTER_CLOSE_ALERT_MS = 24 * 60 * 60_000;
+export const VISITOR_SEND_ATTEMPTS = 3;
+
+export function afterCloseAlertOpen(input: {
+  nowMs: number;
+  closedAt?: string;
+  confirmedLeft: boolean;
+  exceptionResolved: boolean;
+}): boolean {
+  if (input.confirmedLeft || input.exceptionResolved) return false;
+  if (!input.closedAt) return false;
+  return input.nowMs - Date.parse(input.closedAt) < AFTER_CLOSE_ALERT_MS;
 }
 
 const OFFSETS: Record<OverstayStep, number> = {
@@ -133,6 +149,13 @@ export class OverstayScheduler {
     const existing = this.get(reservationId);
     if (!existing || existing.cancelled) return;
     this.put({ ...existing, cancelled: true, prompt: "none", pendingRebook: false });
+  }
+
+  /** Operator resolved the leaving exception: stop after-close alerts. */
+  closeAlertWindow(reservationId: string): void {
+    const existing = this.get(reservationId);
+    if (!existing || existing.alertClosedAt) return;
+    this.put({ ...existing, alertClosedAt: this.now().toISOString() });
   }
 
   private clearOffer(record: OverstayRecord): OverstayRecord {
@@ -233,7 +256,10 @@ export class OverstayScheduler {
 
   private async deliverStep(core: TourCore, reservationId: string, body: string): Promise<boolean> {
     if (await core.visitorAlreadyReceived(reservationId, body)) return true;
-    return core.messageVisitor(reservationId, body);
+    for (let attempt = 1; attempt <= VISITOR_SEND_ATTEMPTS; attempt++) {
+      if (await core.messageVisitor(reservationId, body)) return true;
+    }
+    return false;
   }
 
   private async fire(core: TourCore, reservationId: string, step: OverstayStep, session?: VisitorDemoSession): Promise<void> {
@@ -253,7 +279,7 @@ export class OverstayScheduler {
     if (step === "t15") {
       if (this.now().getTime() >= Date.parse(reservation.windowEnd!)) return;
       const body = t15Questions(place, name);
-      if (!(await this.deliverStep(core, reservationId, body))) return;
+      await this.deliverStep(core, reservationId, body);
       await this.markFired(reservationId, step, { prompt: "t15" });
       session?.expect("touring", { kind: "t15-questions" });
       return;
@@ -262,7 +288,7 @@ export class OverstayScheduler {
     if (step === "t5") {
       const available = !claimed.extensionGranted && (await this.available(core, reservation));
       const body = available ? t5Offering(place, end, name) : t5NoOffer(place, end, name);
-      if (!(await this.deliverStep(core, reservationId, body))) return;
+      await this.deliverStep(core, reservationId, body);
       const kind = available ? "offering" : "no-offer";
       await this.markFired(reservationId, step, {
         t5Kind: kind,
@@ -275,27 +301,27 @@ export class OverstayScheduler {
 
     if (step === "tEnd") {
       const body = tourEnded(place, name);
-      if (!(await this.deliverStep(core, reservationId, body))) return;
       await core.revokeGrantsFor(reservationId, "tour window ended");
       await this.markFired(reservationId, step, { prompt: "none", pendingRebook: false });
       const after = this.get(reservationId);
       if (after) this.clearOffer(after);
+      await this.deliverStep(core, reservationId, body);
       return;
     }
 
     if (step === "tPlus5") {
       const body = plus5CheckIn(place);
-      if (!(await this.deliverStep(core, reservationId, body))) return;
       await core.alertOperator(reservationId, landlordPlus5(who, place));
       await this.markFired(reservationId, step);
+      await this.deliverStep(core, reservationId, body);
       return;
     }
 
     const closed = plus15Closed(place, help);
-    if (!(await this.deliverStep(core, reservationId, closed))) return;
     await core.closeTourAsOverstay(reservationId);
     await core.alertOperator(reservationId, landlordPlus15(who, place));
     await this.markFired(reservationId, step, { pendingRebook: false });
+    await this.deliverStep(core, reservationId, closed);
   }
 
   async available(core: TourCore, reservation: Reservation): Promise<boolean> {
@@ -320,10 +346,9 @@ export class OverstayScheduler {
       const occupant = occupantFromTimeRequest(core.config, request);
       if (occupant) out.push(occupant);
     }
-    for (const start of await core.extraBusyStarts()) {
-      const windowStart = new Date(start.getTime() - core.config.tourHours.earlyArrivalMinutes * 60_000);
-      const windowEnd = new Date(start.getTime() + core.config.tourHours.tourLengthMinutes * 60_000);
-      out.push({ start, windowStart, windowEnd, unitId: "*", doors: ["*"], kind: "booked" });
+    for (const window of await core.extraBusyWindows()) {
+      const windowStart = new Date(window.start.getTime() - core.config.tourHours.earlyArrivalMinutes * 60_000);
+      out.push({ start: window.start, windowStart, windowEnd: window.end, unitId: "*", doors: ["*"], kind: "booked" });
     }
     return out;
   }

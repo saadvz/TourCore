@@ -94,6 +94,8 @@ export const DurableSessionSchema = z.object({
   /** The identity-form link currently open (no token). */
   verification: z.object({ issuedAt: Iso, expiresAt: Iso }).optional(),
   followUp: z.enum(["asked", "answered"]).optional(),
+  pendingRebook: z.boolean().optional(),
+  rebookUnitId: z.string().optional(),
   optedOut: z.boolean().default(false),
   /** This leftover conversation was replaced by an operator-set one-off. */
   superseded: z.boolean().optional(),
@@ -140,6 +142,8 @@ export async function snapshotOf(session: VisitorDemoSession, links?: Verificati
     ...(r ? { routeProgress: { opened, ...(r.allowedRoute.find((d) => !opened.includes(d)) ? { next: r.allowedRoute.find((d) => !opened.includes(d)) } : {}) } } : {}),
     ...(link ? { verification: { issuedAt: new Date(link.issuedAt).toISOString(), expiresAt: new Date(link.expiresAt).toISOString() } } : {}),
     ...(stage === "follow-up" ? { followUp: "asked" } : stage === "done" ? { followUp: "answered" } : {}),
+    ...(session.pendingRebook ? { pendingRebook: true } : {}),
+    ...(session.rebookUnitId ? { rebookUnitId: session.rebookUnitId } : {}),
     optedOut: session.optedOut,
     ...(session.superseded ? { superseded: true } : {}),
     createdAt: previous?.createdAt ?? session.startedAt.toISOString(),
@@ -160,6 +164,7 @@ export interface RestoreDeps {
   storageRead?: () => "live" | "cached" | "stale";
   beforeAccess?: () => Promise<void>;
   otherBusyStarts?: (propertyId: string, tourId: string) => Promise<Date[]>;
+  otherBusyWindows?: (propertyId: string, tourId: string) => Promise<import("../core/customSlot").OccupiedWindow[]>;
 }
 
 /**
@@ -194,6 +199,7 @@ export async function restoreSession(snapshot: DurableSession, deps: RestoreDeps
     storageRead: deps.storageRead,
     beforeAccess: deps.beforeAccess,
     otherBusyStarts: deps.otherBusyStarts ? () => deps.otherBusyStarts!(snapshot.propertyId, snapshot.tourId) : undefined,
+    otherBusyWindows: deps.otherBusyWindows ? () => deps.otherBusyWindows!(snapshot.propertyId, snapshot.tourId) : undefined,
   });
   await session.hydrate(tour.record, tour.bundle);
   if (snapshot.superseded) session.superseded = true;
@@ -232,6 +238,8 @@ export async function restoreSession(snapshot: DurableSession, deps: RestoreDeps
     ...(pending ? { pending } : {}),
     ...(snapshot.heldTime ? { heldTime: snapshot.heldTime } : {}),
   });
+  session.pendingRebook = !!snapshot.pendingRebook;
+  session.rebookUnitId = snapshot.rebookUnitId;
   session.rememberShownSchedule(snapshot.offeredDates ?? [], offeredSlots);
   if (stage === "choose-date" || stage === "choose-time") {
     const before = JSON.stringify({

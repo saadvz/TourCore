@@ -7,6 +7,8 @@ import { MessagingEndpoints } from "../messaging/endpoints";
 import { hasInboundMedia, type InboundMessage } from "../messaging/inbound";
 import type { MessagingAdapter } from "../messaging/Messenger";
 import { TERMINAL } from "../domain/stateMachine";
+import type { Reservation, TourTimeRequest } from "../domain/model";
+import type { OccupiedWindow } from "../core/customSlot";
 import { SetupInputError } from "../setup/setupActions";
 import { isCurrent, type PropertyWorkspace } from "../setup/workspace";
 import { writeJsonAtomic } from "../storage/atomicWrite";
@@ -29,6 +31,26 @@ import type { VerificationLinks } from "./verificationLinks";
 type Transport = MessagingAdapter & { noteChannel?: (number: string, channel: InboundMessage["channel"]) => void };
 
 export const RESTORE_TROUBLE = "I'm having trouble restoring your tour. I've alerted the property team.";
+
+/** Live sessions and saved bundles share each tour's real effective end, including extensions. */
+export function occupiedWindowsFromRecords(
+  tourLengthMinutes: number,
+  reservations: Reservation[],
+  requests: TourTimeRequest[] = [],
+): OccupiedWindow[] {
+  const lengthMs = tourLengthMinutes * 60_000;
+  const windows: OccupiedWindow[] = [];
+  for (const reservation of reservations) {
+    if (!reservation.slotStart || TERMINAL.includes(reservation.status)) continue;
+    const start = new Date(reservation.slotStart);
+    windows.push({ start, end: reservation.windowEnd ? new Date(reservation.windowEnd) : new Date(start.getTime() + lengthMs) });
+  }
+  for (const request of requests) {
+    if (request.status !== "PENDING" && request.status !== "APPROVED") continue;
+    windows.push({ start: new Date(request.requestedStartsAt), end: new Date(request.requestedEndsAt) });
+  }
+  return windows;
+}
 
 /** A conversation that couldn't be restored safely, as the operator sees it. */
 export interface NeedsAttention {
@@ -156,7 +178,7 @@ export class MessagingConversations {
             store: this.deps.storeFor?.(config),
             storageRead: this.deps.storageRead,
             beforeAccess: this.deps.beforeAccess,
-            otherBusyStarts: () => this.otherBusyStarts(propertyId, tourId),
+            otherBusyWindows: () => this.otherBusyWindows(propertyId, tourId),
           }),
         ),
       );
@@ -216,7 +238,7 @@ export class MessagingConversations {
           store: this.deps.storeFor?.(config),
           storageRead: this.deps.storageRead,
           beforeAccess: this.deps.beforeAccess,
-          otherBusyStarts: () => this.otherBusyStarts(propertyId, tourId),
+          otherBusyWindows: () => this.otherBusyWindows(propertyId, tourId),
         }),
       ),
     );
@@ -226,23 +248,22 @@ export class MessagingConversations {
     return session;
   }
 
-  private async otherBusyStarts(propertyId: string, exceptTourId: string): Promise<Date[]> {
-    const starts: Date[] = [];
+  private async otherBusyWindows(propertyId: string, exceptTourId: string): Promise<OccupiedWindow[]> {
+    const { config } = this.deps.workspace.load(propertyId);
+    const length = config.tourHours.tourLengthMinutes;
+    const windows: OccupiedWindow[] = [];
     const live = this.deps.registry.all().filter((session) => session.propertyId === propertyId && session.tourId !== exceptTourId);
     const seen = new Set<string>([exceptTourId]);
     for (const session of live) {
       seen.add(session.tourId);
-      const reservation = await session.reservation();
-      if (reservation?.slotStart && !TERMINAL.includes(reservation.status)) starts.push(new Date(reservation.slotStart));
+      windows.push(...occupiedWindowsFromRecords(length, await session.store.list("reservations"), await session.store.list("tourTimeRequests")));
     }
     for (const record of this.deps.workspace.listTours(propertyId)) {
       if (seen.has(record.tourId) || record.kind === "practice") continue;
       const saved = this.deps.workspace.loadTour(propertyId, record.tourId);
-      for (const reservation of saved?.bundle.reservations ?? []) {
-        if (reservation.slotStart && !TERMINAL.includes(reservation.status)) starts.push(new Date(reservation.slotStart));
-      }
+      windows.push(...occupiedWindowsFromRecords(length, saved?.bundle.reservations ?? [], saved?.bundle.tourTimeRequests ?? []));
     }
-    return starts;
+    return windows;
   }
 
   /** Fires due overstay steps on every live text-message tour. Concurrent calls share one pass. */
@@ -315,7 +336,7 @@ export class MessagingConversations {
       }
       if (this.deps.registry.find(snapshot.sessionId)) continue;
       try {
-        const { session, notes } = await restoreSession(snapshot, { workspace: this.deps.workspace, transport: this.lazyTransport(snapshot.propertyId), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(snapshot.propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyStarts: (propertyId, tourId) => this.otherBusyStarts(propertyId, tourId) });
+        const { session, notes } = await restoreSession(snapshot, { workspace: this.deps.workspace, transport: this.lazyTransport(snapshot.propertyId), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(snapshot.propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyWindows: (propertyId, tourId) => this.otherBusyWindows(propertyId, tourId) });
         this.deps.registry.add(this.attachOverstay(session));
         for (const note of notes) log(`Restoring a text-message tour: ${note}`);
         restored++;
@@ -367,7 +388,7 @@ export class MessagingConversations {
           updatedAt: record.updatedAt,
         };
         try {
-          const { session } = await restoreSession(pseudo, { workspace: ws, transport: this.lazyTransport(propertyId), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyStarts: (id, tourId) => this.otherBusyStarts(id, tourId) });
+          const { session } = await restoreSession(pseudo, { workspace: ws, transport: this.lazyTransport(propertyId), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyWindows: (id, tourId) => this.otherBusyWindows(id, tourId) });
           registry.add(this.attachOverstay(session));
           await this.save(session);
           restored++;

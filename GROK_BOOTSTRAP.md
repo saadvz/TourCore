@@ -7,7 +7,7 @@ attachments are needed: everything you need is in this repository.
 
 Tour Core is an open-source self-touring tool for landlords ("my AI landlord").
 Prospects text a property number, book, consent, verify and tour on their own;
-doors open only on their reserved route during their window. They can ask for 10 more minutes any time before the tour ends; if that time is not free they can book another look. Near the end they get a questions text, a 5-minute extra-time offer, then a leave check-in if they stay.
+doors open only on their reserved route during their window. They can ask for 10 more minutes any time before the tour ends; if that time is not free they can book another look. Near the end they get a questions text, a 5-minute extra-time offer, then a leave check-in if they stay. After a close, other texts alert the team until DONE, the leaving issue is marked handled, or 24 hours pass; HI starts a new booking. A follow-up yes after DONE is the same as after a normal finish. STOP during a tour stops visitor texts only.
 
 - **Tour Core** is the system of record and the policy authority, built on
   the Durin Access Platform. It keeps every record, decides access, never

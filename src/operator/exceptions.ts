@@ -13,6 +13,7 @@ import { resumeStep } from "../visitor/conversation";
 import type { OperatorServices } from "./services";
 import { persistSession } from "./services";
 import { visitorSubject } from "../visitor/identity";
+import { AFTER_CLOSE_ALERT_MS } from "../visitor/overstayScheduler";
 import {
   currentReservation,
   findTour,
@@ -237,15 +238,16 @@ function unitSubject(tour: TourSnapshot, unitId?: string): string | undefined {
   return unit ? visitorSubject(tour.config.property, unit.name) : undefined;
 }
 
-function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resolutions: Map<string, ExceptionResolution>): OperatorException {
+function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resolutions: Map<string, ExceptionResolution>, now = new Date()): OperatorException {
   const exceptionId = id(tour.propertyId, tour.tourId, e.id);
   const pauseKind = kind === "operator-hold" || kind === "provider-failure";
   const paused = pauseKind && stillApplies(e, tour);
   const leftAfterClose =
     kind === "overstay" &&
     tour.bundle.auditEvents.some((later) => later.reservationId === e.reservationId && later.type === "VISITOR_CONFIRMED_LEFT" && later.seq > e.seq);
+  const windowExpired = kind === "overstay" && now.getTime() - Date.parse(e.at) >= AFTER_CLOSE_ALERT_MS;
   const resolution = resolutions.get(exceptionId);
-  const status = resolution ? "resolved" : pauseKind && !paused ? "cleared" : leftAfterClose ? "cleared" : "open";
+  const status = resolution ? "resolved" : pauseKind && !paused ? "cleared" : leftAfterClose || windowExpired ? "cleared" : "open";
   const replies =
     kind === "overstay"
       ? tour.bundle.auditEvents.filter((later) => later.reservationId === e.reservationId && later.type === "OPERATOR_NOTIFIED" && later.detail.includes("replied after their tour"))
@@ -328,7 +330,7 @@ export async function listExceptions(services: OperatorServices, options: { prop
       for (const e of tour.bundle.auditEvents) {
         const kind = kindFor(e);
         if (kind === "needs-help") help.push(e);
-        else if (kind) out.push(fromEvent(tour, e, kind, resolutions));
+        else if (kind) out.push(fromEvent(tour, e, kind, resolutions, services.now?.() ?? new Date()));
       }
       out.push(...foldHelpExceptions(tour, help, resolutions));
     }
@@ -387,6 +389,15 @@ export async function resolveException(services: OperatorServices, exceptionId: 
   if (!clean) throw new SetupInputError("NOTE_MISSING", "Add a short note about how it was handled.");
   if (exception.status === "resolved") return { alreadyResolved: true, exception };
   appendResolution(services, exception.propertyId, { exceptionId, resolvedAt: now.toISOString(), note: clean, action: "resolved" });
+  if (exception.kind === "overstay" && exception.tourRef) {
+    try {
+      const tour = await findTour(services, exception.tourRef);
+      const reservation = currentReservation(tour);
+      if (reservation) tour.live?.overstay?.closeAlertWindow(reservation.id);
+    } catch {
+      /* saved tours without a live conversation still clear via the ledger */
+    }
+  }
   return { alreadyResolved: false, exception: await findException(services, exceptionId) };
 }
 

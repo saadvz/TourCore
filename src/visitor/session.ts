@@ -135,6 +135,8 @@ export interface VisitorSessionOptions {
   beforeAccess?: () => Promise<void>;
   /** Other tours on this property that should count as busy. */
   otherBusyStarts?: () => Promise<Date[]>;
+  /** Other tours' real held windows (start + effective end, including extensions). */
+  otherBusyWindows?: () => Promise<import("../core/customSlot").OccupiedWindow[]>;
 }
 
 /** How one typed message was read, kept on the visitor's line for developer details. Never model reasoning. */
@@ -211,6 +213,9 @@ export class VisitorDemoSession {
   rememberPauseWaiter?: (waiter: { phone: string; unitId?: string; at: string }) => void;
   /** Overstay timeline for this conversation. Set by the messaging router and tests. */
   overstay?: import("./overstayScheduler").OverstayScheduler;
+  /** Secondary rebooking while a tour is still the active booking. */
+  pendingRebook = false;
+  rebookUnitId?: string;
 
   private _config: TourCoreConfig;
 
@@ -246,6 +251,7 @@ export class VisitorDemoSession {
       storageRead: options.storageRead,
       beforeAccess: options.beforeAccess,
       otherBusyStarts: options.otherBusyStarts,
+      otherBusyWindows: options.otherBusyWindows,
       ...(links ? { verificationLink: ({ reservation, prospect }) => links.issue({ sessionId: this.id, reservationId: reservation.id, phone: prospect.phone }) } : {}),
     });
   }
@@ -345,7 +351,14 @@ export class VisitorDemoSession {
       case "TOURING":
         return "touring";
       case "COMPLETED":
-        return (await this.store.listAudit()).some((e) => e.type === "FOLLOW_UP_RESPONSE") ? "done" : "follow-up";
+        return (await this.store.listAudit()).some((e) => e.type === "FOLLOW_UP_RESPONSE" && e.reservationId === r.id) ? "done" : "follow-up";
+      case "EXPIRED": {
+        const audit = await this.store.listAudit();
+        const left = audit.some((e) => e.type === "VISITOR_CONFIRMED_LEFT" && e.reservationId === r.id);
+        const answered = audit.some((e) => e.type === "FOLLOW_UP_RESPONSE" && e.reservationId === r.id);
+        if (left && !answered) return "follow-up";
+        return "stopped";
+      }
       default:
         return "stopped";
     }
@@ -962,12 +975,38 @@ export class VisitorDemoSession {
     }
   }
 
-  /** After the no-time line: start a new booking on the same unit and offer real days. */
+  /** After the no-time line: offer days as a secondary flow. The running tour stays the active booking. */
   async beginRebook(): Promise<{ date: string; label: string }[]> {
     const current = await this.reservation();
     if (!current) return [];
-    await this.inquire(current.unitId, { announce: false });
+    this.rebookUnitId = current.unitId;
+    this.pendingRebook = true;
+    this.offeredDates = (await this.core.availableDates()).map(({ date, label }) => ({ date, label }));
+    this.selectedDate = undefined;
+    this.offeredSlots = [];
+    this.markDatesShown();
     return this.offeredDates;
+  }
+
+  /** Books the rebooked time. Creates a new reservation only on confirm; a running tour stays active. */
+  async confirmRebook(slotStart: string): Promise<void> {
+    const unitId = this.rebookUnitId ?? (await this.reservation())?.unitId;
+    if (!unitId) throw new SetupInputError("UNIT_NOT_FOUND", "That unit isn't available.");
+    const current = await this.reservation();
+    const keepActive = current?.status === "TOURING";
+    const oldId = this.reservationId;
+    if (!current || current.status !== "INQUIRY") {
+      await this.inquire(unitId, { announce: false });
+    }
+    try {
+      await this.core.reserveSlot(this.reservationId!, slotStart);
+    } catch (err) {
+      if (keepActive && oldId) this.reservationId = oldId;
+      throw err;
+    }
+    this.pendingRebook = false;
+    this.rebookUnitId = undefined;
+    if (keepActive && oldId) this.reservationId = oldId;
   }
 
   private async inquire(unitId: string, options: { announce?: boolean } = {}): Promise<void> {

@@ -25,11 +25,17 @@ import {
   tourFinishedFollowUp,
   visitorRepliedAfterClose,
 } from "../src/core/overstayCopy";
-import { TourCoreError } from "../src/core/TourCore";
+import { TourCoreError, TOUR_ENDED_REPLY, VisitorDenialCopy } from "../src/core/TourCore";
 import { runDryTour } from "../src/setup/dryTour";
 import { formatTime, zonedTimeToUtc } from "../src/core/timezone";
-import { newId, UNNAMED_VISITOR, type Reservation } from "../src/domain/model";
-import { DemoMessagingAdapter } from "../src/messaging/Messenger";
+import { newId, UNNAMED_VISITOR, type Reservation, type TourTimeRequest } from "../src/domain/model";
+import { DemoMessagingAdapter, type DeliveryReceipt, type MessagingAdapter, type OutgoingMessage } from "../src/messaging/Messenger";
+import { createTourCore } from "../src/createTourCore";
+import { MockDurinAccessAdapter } from "../src/durin/MockDurinAccessAdapter";
+import { InMemoryStore } from "../src/storage/Store";
+import { occupiedWindowsFromRecords } from "../src/visitor/messagingRouter";
+import type { OccupiedWindow } from "../src/core/customSlot";
+import { VISITOR_SEND_ATTEMPTS } from "../src/visitor/overstayScheduler";
 import { MemoryRuntimeStore } from "../src/storage/runtimeStore";
 import { handleVisitorText } from "../src/visitor/conversation";
 import { visitorSubject } from "../src/visitor/identity";
@@ -476,7 +482,7 @@ describe("overstay conversation", () => {
     expect((await session.reservation())!.status).toBe("COMPLETED");
   });
 
-  it("yes after the no-time line starts rebooking with real times", async () => {
+  it("rebook after no-time stays secondary: door and DONE still hit the running tour", async () => {
     const now = { t: zonedTimeToUtc({ ...TOUR_DAY, hour: 13, minute: 58 }, TZ).getTime() };
     const transport = new DemoMessagingAdapter(() => {}, "MESSAGING");
     const session = new VisitorDemoSession("prop_100_alfred_way", loadConfig(), "t-rebook", { realNow: () => now.t, transport, kind: "messaging" });
@@ -502,12 +508,35 @@ describe("overstay conversation", () => {
     session.clock.jumpTo(new Date(now.t));
     await say("can I have more time?");
     expect(session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text)).toContain(extensionUnavailable(formatTime(end, TZ)));
+    expect((await session.reservation())!.status).toBe("TOURING");
     await say("sure, another time");
     const reply = session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1) ?? "";
     expect(reply).toContain("I have tours available. Which day works for you?");
     expect(reply).not.toContain("didn't catch that");
-    expect((await session.reservation())!.status).toBe("INQUIRY");
+    expect((await session.reservation())!.status).toBe("TOURING");
+    expect((await session.reservation())!.id).toBe(r.id);
     expect(session.overstay.get(r.id)?.pendingRebook).toBeFalsy();
+    expect(session.pendingRebook).toBe(true);
+
+    await say("open the unit door");
+    const afterDoor = (await session.reservation())!;
+    expect(afterDoor.id).toBe(r.id);
+    expect(afterDoor.status).toBe("TOURING");
+    expect(session.lastAccess?.doorId).toBe("unit_101");
+    expect(session.lastAccess?.allowed).toBe(true);
+
+    await say("DONE");
+    expect((await session.reservation())!.status).toBe("COMPLETED");
+    expect(session.overstay.get(r.id)?.cancelled).toBe(true);
+    now.t = end.getTime() + 10 * 60_000;
+    session.clock.jumpTo(new Date(now.t));
+    await session.overstay.tickSession(session);
+    const afterDone = await session.store.list("messages");
+    expect(afterDone.some((m) => m.body === plus5CheckIn(PLACE))).toBe(false);
+
+    await say("1");
+    const afterDay = session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1) ?? "";
+    expect(afterDay.toLowerCase()).toMatch(/which time|no tours|already passed|next opening/);
   });
 });
 
@@ -657,4 +686,294 @@ describe("QA review blocking items", () => {
     expect((await ctx.core.auditTrail()).filter((e) => e.type === "TOUR_EXTENDED" && e.reservationId === started.reservation.id)).toHaveLength(1);
     expect((await operatorAlerts(ctx, started.reservation.id)).filter((x) => x.includes("was extended"))).toHaveLength(1);
   });
+
+  it("held extended and operator-created windows are shared across conversations so 2:45 cannot be booked after a 2:55 end", async () => {
+    const hours = { start: "14:00", end: "17:00", tourLengthMinutes: 45, slotEveryMinutes: 45, earlyArrivalMinutes: 0 } as const;
+    const twoPm = zonedTimeToUtc({ ...TOUR_DAY, hour: 14, minute: 0 }, TZ);
+    const twoFortyFive = zonedTimeToUtc({ ...TOUR_DAY, hour: 14, minute: 45 }, TZ);
+    const twoFiftyFive = zonedTimeToUtc({ ...TOUR_DAY, hour: 14, minute: 55 }, TZ);
+    const extraReservations: Reservation[] = [];
+    const extraRequests: TourTimeRequest[] = [];
+    const sessions: VisitorDemoSession[] = [];
+    const windowsFor = async (exceptTourId: string): Promise<OccupiedWindow[]> => {
+      const out: OccupiedWindow[] = [];
+      for (const session of sessions) {
+        if (session.tourId === exceptTourId) continue;
+        out.push(...occupiedWindowsFromRecords(hours.tourLengthMinutes, await session.store.list("reservations"), await session.store.list("tourTimeRequests")));
+      }
+      out.push(...occupiedWindowsFromRecords(hours.tourLengthMinutes, extraReservations, extraRequests));
+      return out;
+    };
+
+    const nowA = { t: twoPm.getTime() };
+    const jane = new VisitorDemoSession("prop_100_alfred_way", { ...loadConfig(), tourHours: { ...loadConfig().tourHours, ...hours } }, "t-jane", {
+      realNow: () => nowA.t,
+      transport: new DemoMessagingAdapter(() => {}, "MESSAGING"),
+      kind: "messaging",
+      otherBusyWindows: () => windowsFor("t-jane"),
+    });
+    jane.core.useConfig({ ...jane.config, tourHours: { ...jane.config.tourHours, ...hours } });
+    sessions.push(jane);
+
+    const nowB = { t: zonedTimeToUtc({ ...TOUR_DAY, hour: 10, minute: 0 }, TZ).getTime() };
+    const alex = new VisitorDemoSession("prop_100_alfred_way", { ...loadConfig(), tourHours: { ...loadConfig().tourHours, ...hours } }, "t-alex", {
+      realNow: () => nowB.t,
+      transport: new DemoMessagingAdapter(() => {}, "MESSAGING"),
+      kind: "messaging",
+      otherBusyWindows: () => windowsFor("t-alex"),
+    });
+    alex.core.useConfig({ ...alex.config, tourHours: { ...alex.config.tourHours, ...hours } });
+    sessions.push(alex);
+
+    extraReservations.push(
+      busyReservation({ config: jane.config, clock: jane.clock }, { start: twoPm, oneOff: true }),
+    );
+    extraReservations[0]!.windowEnd = twoFiftyFive.toISOString();
+    extraRequests.push({
+      id: newId("ttr"),
+      propertyId: jane.config.property.id,
+      prospectId: newId("prs"),
+      requestedStartsAt: twoPm.toISOString(),
+      requestedEndsAt: twoFiftyFive.toISOString(),
+      requestSource: "OPERATOR",
+      status: "APPROVED",
+      createdAt: twoPm.toISOString(),
+    });
+
+    const alexInquiry = await alex.core.startInquiry({ name: "Alex Other", phone: "(555) 010-9999", unitId: "apt_101" });
+    expect((await alex.core.availableSlots(TOUR_DAY)).find((s) => formatTime(s.start, TZ) === "2:45 PM")).toBeUndefined();
+    await expect(alex.core.reserveSlot(alexInquiry.reservation.id, twoFortyFive.toISOString())).rejects.toBeInstanceOf(TourCoreError);
+
+    extraReservations.length = 0;
+    extraRequests.length = 0;
+    const janeBooked = await bookOnSession(jane, twoPm);
+    nowA.t = twoPm.getTime();
+    jane.clock.jumpTo(twoPm);
+    await jane.core.requestAccess({ reservationId: janeBooked.id, prospectId: janeBooked.prospectId, doorId: "entrance" });
+    const janeOverstay = new OverstayScheduler(new MemoryRuntimeStore(), { now: () => new Date(nowA.t) });
+    jane.overstay = janeOverstay;
+    janeOverstay.ensure((await jane.core.getReservation(janeBooked.id))!, jane.propertyId, jane.tourId);
+    nowA.t = twoPm.getTime() + 40 * 60_000;
+    jane.clock.jumpTo(new Date(nowA.t));
+    await janeOverstay.handleAsk(jane.core, janeBooked.id, "natural");
+    expect(formatTime(new Date((await jane.core.getReservation(janeBooked.id))!.windowEnd!), TZ)).toBe("2:55 PM");
+    const alexAgain = await alex.core.startInquiry({ name: "Alex Other", phone: "(555) 010-9999", unitId: "apt_101" });
+    expect((await alex.core.availableSlots(TOUR_DAY)).find((s) => formatTime(s.start, TZ) === "2:45 PM")).toBeUndefined();
+    await expect(alex.core.reserveSlot(alexAgain.reservation.id, twoFortyFive.toISOString())).rejects.toBeInstanceOf(TourCoreError);
+  });
+
+  it("T-5 offer across conversations respects another visitor's existing booking", async () => {
+    const hours = { start: "14:00", end: "17:00", tourLengthMinutes: 45, slotEveryMinutes: 45, earlyArrivalMinutes: 0 } as const;
+    const twoPm = zonedTimeToUtc({ ...TOUR_DAY, hour: 14, minute: 0 }, TZ);
+    const twoFortyFive = zonedTimeToUtc({ ...TOUR_DAY, hour: 14, minute: 45 }, TZ);
+    const sessions: VisitorDemoSession[] = [];
+    const extras: Reservation[] = [];
+    const windowsFor = async (exceptTourId: string): Promise<OccupiedWindow[]> => {
+      const out: OccupiedWindow[] = [];
+      for (const session of sessions) {
+        if (session.tourId === exceptTourId) continue;
+        out.push(...occupiedWindowsFromRecords(hours.tourLengthMinutes, await session.store.list("reservations"), await session.store.list("tourTimeRequests")));
+      }
+      out.push(...occupiedWindowsFromRecords(hours.tourLengthMinutes, extras, []));
+      return out;
+    };
+    const now = { t: twoPm.getTime() };
+    const jane = new VisitorDemoSession("prop_100_alfred_way", { ...loadConfig(), tourHours: { ...loadConfig().tourHours, ...hours } }, "t-jane-t5", {
+      realNow: () => now.t,
+      transport: new DemoMessagingAdapter(() => {}, "MESSAGING"),
+      kind: "messaging",
+      otherBusyWindows: () => windowsFor("t-jane-t5"),
+    });
+    jane.core.useConfig({ ...jane.config, tourHours: { ...jane.config.tourHours, ...hours } });
+    sessions.push(jane);
+    extras.push(busyReservation({ config: jane.config, clock: jane.clock }, { start: twoFortyFive }));
+    const janeBooked = await bookOnSession(jane, twoPm);
+    now.t = twoPm.getTime();
+    jane.clock.jumpTo(twoPm);
+    await jane.core.requestAccess({ reservationId: janeBooked.id, prospectId: janeBooked.prospectId, doorId: "entrance" });
+    const overstay = new OverstayScheduler(new MemoryRuntimeStore(), { now: () => new Date(now.t) });
+    jane.overstay = overstay;
+    overstay.ensure((await jane.core.getReservation(janeBooked.id))!, jane.propertyId, jane.tourId);
+    now.t = twoPm.getTime() + 40 * 60_000;
+    jane.clock.jumpTo(new Date(now.t));
+    await overstay.tickCore(jane.core, { session: jane, propertyId: jane.propertyId, tourId: jane.tourId });
+    const texts = (await jane.store.list("messages")).filter((m) => m.audience === "PROSPECT").map((m) => m.body);
+    expect(texts).toContain(t5NoOffer(PLACE, formatTime(new Date((await jane.core.getReservation(janeBooked.id))!.windowEnd!), TZ), "Jane"));
+    expect(texts.some((b) => b.includes("Want 10 more minutes?"))).toBe(false);
+  });
+
+  it("failed visitor texts still send T+5 and T+15 alerts once, close the tour, and cap retries", async () => {
+    const visitorAttempts: string[] = [];
+    const failing: MessagingAdapter = {
+      provider: "fail-visitor",
+      presentation: "MESSAGING",
+      async send(message: OutgoingMessage): Promise<DeliveryReceipt> {
+        if (message.audience === "PROSPECT") {
+          visitorAttempts.push(message.body);
+          return { provider: "fail-visitor", channel: "SMS", status: "FAILED", sentAt: new Date().toISOString(), error: { code: "SEND_FAILED", message: "visitor send failed" } };
+        }
+        return { provider: "fail-visitor", channel: "SMS", status: "SENT", sentAt: new Date().toISOString() };
+      },
+    };
+    const loaded = loadConfig();
+    const clock = new SimulatedClock(zonedTimeToUtc({ ...TOUR_DAY, hour: 10, minute: 0 }, TZ));
+    const store = new InMemoryStore();
+    const durin = new MockDurinAccessAdapter({ doorNames: Object.fromEntries(loaded.doors.map((d) => [d.id, d.name])), log: () => {}, now: () => clock.now() });
+    const core = createTourCore(loaded, { clock, durin, messenger: failing, store });
+    const ctx = { config: loaded, clock, durin, core, store };
+    const tour = await bookTour(ctx);
+    clock.set(tour.slotStart);
+    await tour.request("entrance");
+    const reservation = (await core.getReservation(tour.reservation.id))!;
+    const overstay = new OverstayScheduler(new MemoryRuntimeStore(), { clock });
+    overstay.ensure(reservation, loaded.property.id);
+    clock.set(minutesFrom(new Date(reservation.windowEnd!), 5));
+    await overstay.tickCore(core, { propertyId: loaded.property.id });
+    clock.set(minutesFrom(new Date(reservation.windowEnd!), 15));
+    await overstay.tickCore(core, { propertyId: loaded.property.id });
+    const alerts = (await store.list("messages")).filter((m) => m.audience === "OPERATOR").map((m) => m.body);
+    expect(alerts.filter((b) => b === landlordPlus5("Jane", PLACE))).toHaveLength(1);
+    expect(alerts.filter((b) => b === landlordPlus15("Jane", PLACE))).toHaveLength(1);
+    expect((await core.getReservation(reservation.id))!.status).toBe("EXPIRED");
+    expect((await core.auditTrail()).some((e) => e.type === "TOUR_OVERSTAY_CLOSED" && e.reservationId === reservation.id)).toBe(true);
+    expect(visitorAttempts.filter((b) => b === plus5CheckIn(PLACE)).length).toBe(VISITOR_SEND_ATTEMPTS);
+    expect(visitorAttempts.filter((b) => b.startsWith("Your tour of Unit 101 is now closed")).length).toBe(VISITOR_SEND_ATTEMPTS);
+    await overstay.tickCore(core, { propertyId: loaded.property.id });
+    expect(alerts.filter((b) => b === landlordPlus5("Jane", PLACE))).toHaveLength(1);
+    expect((await store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body === landlordPlus15("Jane", PLACE))).toHaveLength(1);
+  });
+
+  it("follow-up yes after a normal tour and after a closed tour use the same visitor reply and landlord alert", async () => {
+    const followUpAlert = "Jane Smith toured Unit 101 and would like someone to follow up.";
+    const normal = setup();
+    const a = await startTour(normal);
+    await normal.core.completeTour(a.reservation.id);
+    await normal.core.recordFollowUpResponse(a.reservation.id, true, { text: "yes" });
+    expect(await outbound(normal, a.reservation.id)).toContain(VisitorDenialCopy.followUpYes(normal.config.operator.name));
+    expect(await operatorAlerts(normal, a.reservation.id)).toContain(followUpAlert);
+
+    const closed = setup();
+    const b = await startTour(closed);
+    closed.clock.set(minutesFrom(new Date(b.reservation.windowEnd!), 15));
+    await b.overstay.tickCore(closed.core, { propertyId: closed.config.property.id });
+    await closed.core.confirmLeftAfterClose(b.reservation.id);
+    await closed.core.recordFollowUpResponse(b.reservation.id, true, { text: "yes" });
+    expect(await outbound(closed, b.reservation.id)).toContain(VisitorDenialCopy.followUpYes(closed.config.operator.name));
+    expect(await operatorAlerts(closed, b.reservation.id)).toContain(followUpAlert);
+    expect(await outbound(closed, b.reservation.id).then((rows) => rows.filter((x) => x === visitorRepliedAfterClose()))).toHaveLength(0);
+  });
+
+  it("follow-up no after a closed tour uses the same ack as a normal finish", async () => {
+    const closed = setup();
+    const b = await startTour(closed);
+    closed.clock.set(minutesFrom(new Date(b.reservation.windowEnd!), 15));
+    await b.overstay.tickCore(closed.core, { propertyId: closed.config.property.id });
+    await closed.core.confirmLeftAfterClose(b.reservation.id);
+    await closed.core.recordFollowUpResponse(b.reservation.id, false, { text: "no" });
+    expect(await outbound(closed, b.reservation.id)).toContain("No problem. Thanks again for visiting!");
+  });
+
+  it("HI or a booking intent after the +15 close starts booking instead of the after-close alert", async () => {
+    const now = { t: zonedTimeToUtc({ ...TOUR_DAY, hour: 13, minute: 58 }, TZ).getTime() };
+    const session = new VisitorDemoSession("prop_100_alfred_way", loadConfig(), "t-hi-close", {
+      realNow: () => now.t,
+      transport: new DemoMessagingAdapter(() => {}, "MESSAGING"),
+      kind: "messaging",
+    });
+    const runtime = new MemoryRuntimeStore();
+    session.overstay = new OverstayScheduler(runtime, { now: () => new Date(now.t) });
+    let n = 0;
+    const say = (text: string) => handleVisitorText(session, "+15550102000", text, { provider: "test", providerMessageId: `hi_${++n}` });
+    await say("TOUR");
+    await say("YES");
+    await say("1");
+    await say("1");
+    await say("1");
+    await say("yes");
+    await session.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: "+15550102000" });
+    const r = (await session.reservation())!;
+    now.t = Date.parse(r.slotStart!);
+    session.clock.jumpTo(new Date(now.t));
+    await say("I'm here");
+    session.overstay.ensure((await session.reservation())!, session.propertyId, session.tourId);
+    now.t = Date.parse(r.windowEnd!) + 15 * 60_000;
+    session.clock.jumpTo(new Date(now.t));
+    await session.overstay.tickSession(session);
+    expect((await session.reservation())!.status).toBe("EXPIRED");
+    await say("I'd like to book another tour");
+    const afterBook = session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1) ?? "";
+    expect(afterBook).not.toBe(visitorRepliedAfterClose());
+    expect(afterBook).toMatch(/Which unit|I have tours available|Welcome|self-guided/);
+    expect((await operatorAlertsFromSession(session)).some((x) => x.includes("replied after their tour"))).toBe(false);
+  });
+
+  it("after-close alerts stop after DONE, operator resolve, or 24 hours", async () => {
+    async function closedSession() {
+      const now = { t: zonedTimeToUtc({ ...TOUR_DAY, hour: 13, minute: 58 }, TZ).getTime() };
+      const session = new VisitorDemoSession("prop_100_alfred_way", loadConfig(), `t-window-${Math.random().toString(16).slice(2)}`, {
+        realNow: () => now.t,
+        transport: new DemoMessagingAdapter(() => {}, "MESSAGING"),
+        kind: "messaging",
+      });
+      const runtime = new MemoryRuntimeStore();
+      session.overstay = new OverstayScheduler(runtime, { now: () => new Date(now.t) });
+      let n = 0;
+      const say = (text: string) => handleVisitorText(session, "+15550102000", text, { provider: "test", providerMessageId: `w_${session.tourId}_${++n}` });
+      await say("TOUR");
+      await say("YES");
+      await say("1");
+      await say("1");
+      await say("1");
+      await say("yes");
+      await session.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: "+15550102000" });
+      const r = (await session.reservation())!;
+      now.t = Date.parse(r.slotStart!);
+      session.clock.jumpTo(new Date(now.t));
+      await say("I'm here");
+      session.overstay.ensure((await session.reservation())!, session.propertyId, session.tourId);
+      now.t = Date.parse(r.windowEnd!) + 15 * 60_000;
+      session.clock.jumpTo(new Date(now.t));
+      await session.overstay.tickSession(session);
+      return { session, say, now, reservationId: r.id };
+    }
+
+    const stillInside = await closedSession();
+    await stillInside.say("the door is stuck");
+    expect(stillInside.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1)).toBe(visitorRepliedAfterClose());
+    expect((await operatorAlertsFromSession(stillInside.session)).filter((x) => x.includes("replied after their tour"))).toHaveLength(1);
+
+    const afterDone = await closedSession();
+    await afterDone.say("DONE");
+    const before = (await operatorAlertsFromSession(afterDone.session)).filter((x) => x.includes("replied after their tour")).length;
+    await afterDone.say("the door is stuck");
+    expect(afterDone.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1)).not.toBe(visitorRepliedAfterClose());
+    expect((await operatorAlertsFromSession(afterDone.session)).filter((x) => x.includes("replied after their tour"))).toHaveLength(before);
+
+    const resolved = await closedSession();
+    resolved.session.overstay!.closeAlertWindow(resolved.reservationId);
+    await resolved.say("the door is stuck");
+    expect(resolved.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1)).toBe(TOUR_ENDED_REPLY);
+    expect((await operatorAlertsFromSession(resolved.session)).some((x) => x.includes("replied after their tour"))).toBe(false);
+
+    const expired = await closedSession();
+    expired.now.t = expired.now.t + 24 * 60 * 60_000;
+    expired.session.clock.jumpTo(new Date(expired.now.t));
+    await expired.say("the door is stuck");
+    expect(expired.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1)).toBe(TOUR_ENDED_REPLY);
+    expect((await operatorAlertsFromSession(expired.session)).some((x) => x.includes("replied after their tour"))).toBe(false);
+  });
 });
+
+async function bookOnSession(session: VisitorDemoSession, start: Date) {
+  const { prospect, reservation } = await session.core.startInquiry({ name: "Jane Smith", phone: "(555) 010-1234", unitId: "apt_101" });
+  session.prospectId = prospect.id;
+  session.reservationId = reservation.id;
+  await session.core.reserveSlot(reservation.id, start.toISOString());
+  await session.core.recordConsent(reservation.id, true);
+  const ready = await session.core.submitVerification(reservation.id, basicForm());
+  return ready;
+}
+
+async function operatorAlertsFromSession(session: VisitorDemoSession) {
+  return (await session.store.list("messages")).filter((m) => m.audience === "OPERATOR").map((m) => m.body);
+}
