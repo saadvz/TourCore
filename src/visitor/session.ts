@@ -710,7 +710,8 @@ export class VisitorDemoSession {
     await this.reply(takenSlotLine(time, day, curStart ? { time: formatTime(curStart, tz), day: formatDay(curStart, tz) } : undefined));
     const active = current ?? (await this.reservation());
     const pending = await this.pendingBooking();
-    if (active?.status === "OPERATOR_HOLD" || pending?.status === "OPERATOR_HOLD") return;
+    const mine = (await this.store.list("reservations")).filter((item) => item.prospectId && item.prospectId === active?.prospectId);
+    if (active?.status === "OPERATOR_HOLD" || pending?.status === "OPERATOR_HOLD" || mine.some((item) => item.status === "OPERATOR_HOLD") || (await this.isPaused())) return;
     const openSlots = await this.core.availableSlots(localDateOf(start, tz));
     if (openSlots.length) {
       this.offeredSlots = openSlots;

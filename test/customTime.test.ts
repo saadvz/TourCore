@@ -1859,12 +1859,12 @@ describe("a Sendblue handler throw raises a real landlord alert", () => {
   it("answer_flagged_question still saves an approved fact for a real question", async () => {
     const a = await liveApp({ cleanups });
     await a.book();
-    await a.text("Is parking included?");
+    await a.text("Is there a gym?");
     const [issue] = (await a.grok("list_exceptions")).exceptions;
     expect(issue.what).toBe("Question with no approved answer");
-    const asked = await a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "Street parking only." });
+    const asked = await a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "There's a gym on the roof." });
     expect(asked.summary).toContain("Future visitors who ask the same thing will get it too");
-    const done = await a.approve("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "Street parking only." });
+    const done = await a.approve("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "There's a gym on the roof." });
     expect(done.savedToSetup).toBe(true);
   });
 });
@@ -1946,8 +1946,10 @@ describe("a taken slot while on hold does not show a menu", () => {
     await a.textFrom(OTHER, "Tuesday");
     await a.textFrom(OTHER, "1");
     await a.book();
-    const [tour] = (await a.grok("list_active_tours")).tours;
-    await a.approve("place_operator_hold", { tourRef: tour.tourRef, reason: "Checking the lobby" });
+    const tours = (await a.grok("list_active_tours")).tours as Array<{ tourRef: string; visitorName: string }>;
+    const tour = tours.find((item) => item.visitorName.startsWith("Testy"));
+    expect(tour).toBeTruthy();
+    await a.approve("place_operator_hold", { tourRef: tour!.tourRef, reason: "Checking the lobby" });
     const replies = await a.text("Can I come Tuesday at 2:00?");
     expect(replies.join("\n")).toContain(takenSlotLine("2:00 PM", "Tuesday, Sep 29", { time: "2:00 PM", day: "Monday, Sep 28" }));
     expect(replies.join("\n")).not.toContain("these times available");
