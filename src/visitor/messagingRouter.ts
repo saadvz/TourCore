@@ -54,6 +54,11 @@ function openerFor(original: string): string {
   return text && !menuChoice(text) ? text : "Tour";
 }
 
+/** A menu number or a street-name pick is the opt-in keyword. The original first text is what gets recorded. */
+function pickedOpener(message: InboundMessage, original: string): InboundMessage {
+  return { ...message, text: openerFor(original), countsAsOptIn: true };
+}
+
 export const RESTORE_TROUBLE = "I'm having trouble restoring your tour. I've alerted the property team.";
 export const HANDLER_SNAG_ALERTED = "Sorry, I hit a snag with that. I've let the property team know, and they'll reply here as soon as they can.";
 export const HANDLER_SNAG_RETRY = "Sorry, I hit a snag with that. Could you text me again in a few minutes?";
@@ -224,12 +229,12 @@ export class MessagingConversations {
         return undefined;
       }
       this.clearPick(pending);
-      return { propertyId, endpoint, message: { ...message, text: openerFor(pending.originalText) } };
+      return { propertyId, endpoint, message: pickedOpener(message, pending.originalText) };
     }
     const named = this.namedPlace(message, pending.matchIds);
     if (named) {
       this.clearPick(pending);
-      return { propertyId: named, endpoint, message: { ...message, text: openerFor(pending.originalText) } };
+      return { propertyId: named, endpoint, message: pickedOpener(message, pending.originalText) };
     }
     const body = pending.streetPrompt && message.text.trim() ? STREET_MISS : pickerMiss(pending.offeredIds.length);
     await this.sendLine(pending.offeredIds[0], pending.phone, body);
@@ -344,6 +349,7 @@ export class MessagingConversations {
       providerMessageId: message.providerMessageId,
       deliveryChannel: message.channel,
       ...(hasInboundMedia(message) ? { hasMedia: true } : {}),
+      ...(message.countsAsOptIn ? { countsAsOptIn: true } : {}),
     };
     const phone = normalizePhone(message.from);
 

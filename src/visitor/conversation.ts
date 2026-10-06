@@ -610,7 +610,7 @@ async function handleSmsGate(session: VisitorDemoSession, said: Said, text: stri
     return;
   }
   const normalized = normalize(text);
-  if (keyword === "start" || normalized === "tour") {
+  if (keyword === "start" || normalized === "tour" || said.meta?.countsAsOptIn) {
     await session.recordText(said);
     await session.allowMessagingAgain();
     session.noteSmsConsent("pending", keyword === "start" ? "START" : "TOUR");

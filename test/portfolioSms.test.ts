@@ -5,6 +5,9 @@ import type { InboundMessage } from "../src/messaging/inbound";
 import { MemoryRuntimeStore } from "../src/storage/runtimeStore";
 import { MessagingConversations } from "../src/visitor/messagingRouter";
 import { pickerMiss, placeAliases, propertyPickerText, propertyShortName, resolveNamedPlace, STREET_MISS } from "../src/visitor/portfolioPick";
+import { SMS_KEYWORD_PROMPT, smsDisclosure } from "../src/visitor/smsConsent";
+import { publicBaseUrl } from "../src/messaging/publicUrl";
+import { effectiveEnv } from "../src/install/settings";
 import { VerificationLinks } from "../src/visitor/verificationLinks";
 import { grokHarness, type GrokHarness } from "./grokHarness";
 
@@ -205,6 +208,83 @@ describe("four published properties", () => {
   });
 });
 
+describe("a property pick is the texting opt-in", () => {
+  let h: GrokHarness;
+  let pine: string;
+  let scratch: string;
+  let text: (from: string, body: string) => Promise<string[]>;
+  const disclosure = () => smsDisclosure(publicBaseUrl(effectiveEnv()));
+
+  beforeAll(async () => {
+    const built = await buildPublished(
+      [
+        { address: "12 Scratch Lane, Teaneck, NJ 07666", name: "Scratch House" },
+        { address: "88 Pine St, Teaneck, NJ 07666" },
+      ],
+      { consentMode: "keyword_confirm" },
+    );
+    h = built.h;
+    scratch = built.ids[0]!;
+    pine = built.ids[1]!;
+    text = built.text;
+  }, 120_000);
+
+  afterAll(() => h?.cleanup());
+
+  it("Hi then 1 sends the same disclosure as texting TOUR, never the keyword prompt", async () => {
+    const phone = "+15555550141";
+    const asked = await text(phone, "Hi");
+    expect(asked[0]).toContain("Which place are you touring?");
+    expect(asked.join("\n")).not.toContain(SMS_KEYWORD_PROMPT);
+
+    const picked = await text(phone, "1");
+    expect(picked).toEqual([disclosure()]);
+    expect(picked.join("\n")).not.toContain(SMS_KEYWORD_PROMPT);
+    expect(picked.join("\n")).not.toContain("Text TOUR");
+    expect(h.visitors.latestForPhone(pine, phone, "messaging")?.propertyId).toBe(pine);
+    expect(h.visitors.latestForPhone(scratch, phone, "messaging")).toBeUndefined();
+  });
+
+  it("a street-name pick in the 4+ list is the same opt-in", async () => {
+    const more = await buildPublished(
+      [
+        { address: "9 Birch Rd, Teaneck, NJ 07666" },
+        { address: "4 Oak Ave, Teaneck, NJ 07666" },
+        { address: "88 Pine St, Teaneck, NJ 07666" },
+        { address: "12 Scratch Lane, Teaneck, NJ 07666", name: "Scratch House" },
+      ],
+      { consentMode: "keyword_confirm" },
+    );
+    const newest = [...more.ids].sort((a, b) => publishedAt(more.h, b).localeCompare(publishedAt(more.h, a)));
+    const oldest = newest[3]!;
+    const phone = "+15555550144";
+    await more.text(phone, "Hi");
+    const picked = await more.text(phone, short(more.h, oldest));
+    expect(picked).toEqual([smsDisclosure(publicBaseUrl(effectiveEnv()))]);
+    expect(picked.join("\n")).not.toContain(SMS_KEYWORD_PROMPT);
+    expect(more.h.visitors.latestForPhone(oldest, phone, "messaging")?.propertyId).toBe(oldest);
+    more.h.cleanup();
+  });
+
+  it("keeps the welcome on reply 1 when texting consent is off", async () => {
+    expect(scratch).toBeTruthy();
+    const off = await buildPublished(
+      [
+        { address: "12 Scratch Lane, Teaneck, NJ 07666", name: "Scratch House" },
+        { address: "88 Pine St, Teaneck, NJ 07666" },
+      ],
+      { consentMode: "disabled" },
+    );
+    const phone = "+15555550145";
+    await off.text(phone, "Hi");
+    const opened = await off.text(phone, "1");
+    expect(opened[0]).toContain("Hi! Welcome");
+    expect(opened.join("\n")).not.toContain(SMS_KEYWORD_PROMPT);
+    expect(opened.join("\n")).not.toContain("Reply YES to continue");
+    off.h.cleanup();
+  });
+});
+
 function short(h: GrokHarness, id: string): string {
   return propertyShortName(h.workspace.load(id).config.property);
 }
@@ -215,7 +295,7 @@ function publishedAt(h: GrokHarness, id: string): string {
 
 async function buildPublished(
   homes: { address: string; name?: string }[],
-  options: { draft?: { address: string } } = {},
+  options: { draft?: { address: string }; consentMode?: "keyword_confirm" | "disabled" } = {},
 ) {
   const h = grokHarness();
   const ids: string[] = [];
@@ -244,7 +324,7 @@ async function buildPublished(
     realNow: () => h.now(),
     now: () => new Date(h.now()),
     defaultLine: () => LINE,
-    consentMode: () => "disabled",
+    consentMode: () => options.consentMode ?? "disabled",
   });
   let n = 0;
   const text = async (from: string, body: string, extra: Partial<InboundMessage> = {}) => {

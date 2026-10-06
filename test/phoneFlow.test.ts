@@ -80,6 +80,22 @@ async function bookByText(app: Awaited<ReturnType<typeof startPhoneApp>>) {
 }
 
 describe("a real phone over Sendblue", () => {
+  it("Actually cancel that wins at the prompt that is waiting after booking", async () => {
+    const app = await startPhoneApp();
+    await app.text("TOUR");
+    await app.text("YES");
+    await app.text("1");
+    await app.text("1");
+    const booked = await app.text("1");
+    expect(booked.replies.join("\n")).toContain("you're booked for");
+    const cancelAsk = await app.text("Actually cancel that");
+    expect(cancelAsk.replies.join("\n")).toContain("Cancel your tour");
+    expect(cancelAsk.replies.join("\n")).not.toContain("Sorry, I didn't catch that");
+    expect(cancelAsk.replies.join("\n")).not.toContain("Is it OK if I text you");
+    const cancelled = await app.text("YES");
+    expect(cancelled.replies.join("\n")).toMatch(/cancel/i);
+  });
+
   it("completes the whole tour by text, through the same visitor engine as the browser phone", async () => {
     const app = await startPhoneApp();
 

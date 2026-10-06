@@ -205,6 +205,8 @@ describe("rule-based interpretation", () => {
       "I want to cancel the booked tour",
       "cancel",
       "cancel please",
+      "Actually cancel that",
+      "just cancel it",
       "please cancel my tour",
       "call off the tour",
       "I can't make it",

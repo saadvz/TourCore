@@ -86,6 +86,8 @@ export interface InboundMeta {
   correlationId?: string;
   /** True when the inbound included a photo or other attachment. The file is not stored or forwarded. */
   hasMedia?: boolean;
+  /** Portfolio pick stands in for the TOUR keyword. Not shown to the visitor. */
+  countsAsOptIn?: boolean;
 }
 
 export interface AccessRequest {
