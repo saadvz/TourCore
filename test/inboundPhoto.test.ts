@@ -11,7 +11,8 @@ import { DemoMessagingAdapter } from "../src/messaging/Messenger";
 import { handleVisitorText, PHOTO_ALONE_REPLY, PHOTO_WITH_TEXT_REPLY } from "../src/visitor/conversation";
 import { VisitorDemoSession } from "../src/visitor";
 import { inbound, LINE } from "./fakeSendblue";
-import { FALLBACK, liveApp, PHONE } from "./liveApp";
+import { UNKNOWN_ANSWER_WITH_PHOTO } from "../src/core/TourCore";
+import { liveApp, PHONE } from "./liveApp";
 
 const MONDAY_7AM = zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour: 7, minute: 0 }, "America/New_York").getTime();
 const PHOTO = { media_url: "https://cdn.example.invalid/photo.jpg" };
@@ -144,10 +145,10 @@ describe("honest photo reply", () => {
     const a = await liveApp({ cleanups });
     await a.optInSms();
     const replies = await a.text("Is there a gym?", undefined, PHOTO);
-    expect(replies[0]).toBe(PHOTO_WITH_TEXT_REPLY);
+    expect(replies[0]).toBe(UNKNOWN_ANSWER_WITH_PHOTO);
+    expect(replies.filter((r) => r === PHOTO_WITH_TEXT_REPLY)).toHaveLength(0);
     expect(replies.join("\n")).not.toContain("Text your question");
-    expect(replies).toContain(FALLBACK);
-    expect(replies.filter((r) => r === PHOTO_WITH_TEXT_REPLY)).toHaveLength(1);
+    expect(replies.join("\n")).not.toMatch(/I don't have that information|flagged it for the property team/);
     const issues = (await a.grok("list_exceptions")).exceptions;
     expect(issues.map((x: { summary: string }) => x.summary)).toEqual(['Asked "Is there a gym?". There\'s no approved answer yet.']);
   });
@@ -160,6 +161,17 @@ describe("honest photo reply", () => {
     const added = p.replies().slice(before.length);
     expect(added).toEqual([PHOTO_ALONE_REPLY]);
     expect(added.join("\n")).not.toMatch(/didn't catch that|MMS/i);
+  });
+
+  it("a photo plus an approved-fact question keeps the short honesty line and the answer", async () => {
+    const a = await liveApp({ cleanups });
+    await a.optInSms();
+    const replies = await a.text("Is there parking?", undefined, PHOTO);
+    expect(replies[0]).toBe(PHOTO_WITH_TEXT_REPLY);
+    expect(replies).toContain("Here's what the property team shared: Street parking only.");
+    expect(replies.filter((r) => r === PHOTO_WITH_TEXT_REPLY)).toHaveLength(1);
+    expect(replies.join("\n")).not.toContain(UNKNOWN_ANSWER_WITH_PHOTO);
+    expect((await a.grok("list_exceptions")).exceptions).toEqual([]);
   });
 
   it("a photo plus a booking reply uses the short honesty line and continues the text path", async () => {
@@ -178,10 +190,9 @@ describe("honest photo reply", () => {
     const before = p.replies();
     await p.say("Is there a pool?", true);
     const added = p.replies().slice(before.length);
-    expect(added[0]).toBe(PHOTO_WITH_TEXT_REPLY);
+    expect(added).toEqual([UNKNOWN_ANSWER_WITH_PHOTO]);
     expect(added.join("\n")).not.toContain("Text your question");
-    expect(added).toContain("I don't have that information for this property. I've flagged it for the property team so they can get back to you.");
-    expect(added.filter((r) => r === PHOTO_WITH_TEXT_REPLY)).toHaveLength(1);
+    expect(added.filter((r) => r === PHOTO_WITH_TEXT_REPLY)).toHaveLength(0);
     expect((await p.session.store.listAudit()).some((e) => e.type === "QUESTION_UNANSWERED" && e.detail === "Is there a pool?")).toBe(true);
   });
 

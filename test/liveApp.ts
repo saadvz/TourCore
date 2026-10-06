@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect } from "vitest";
 import { loadConfig, type TourCoreConfig } from "../src/config/tourCoreConfig";
+import { UNKNOWN_ANSWER } from "../src/core/TourCore";
 import { zonedTimeToUtc } from "../src/core/timezone";
 import { Installation } from "../src/install/installation";
 import { LocalSecretStore } from "../src/install/secretStore";
@@ -16,7 +17,7 @@ import { fakeNetwork, ROUTINE_KEY, ROUTINE_URL } from "./installHarness";
 /** Monday 28 Sep 2026 at the property (America/New_York). */
 export const at = (hour: number, minute = 0) => zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour, minute }, "America/New_York").getTime();
 export const PHONE = "+15550102000";
-export const FALLBACK = "I don't have that information for this property. I've flagged it for the property team so they can get back to you.";
+export const FALLBACK = UNKNOWN_ANSWER;
 const TOKEN = "test-operator-token-abcdef";
 
 /**

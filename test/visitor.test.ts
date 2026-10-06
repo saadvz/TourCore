@@ -170,7 +170,7 @@ describe("visitor demo on the real engine", () => {
   it("says so, and flags it, when there is no approved answer", async () => {
     const s = await touring();
     await s.act("ask", { question: "Is there a gym?" });
-    expect(lastFromTourCore(s)).toBe("I don't have that information for this property. I've flagged it for the property team so they can get back to you.");
+    expect(lastFromTourCore(s)).toBe("I'll let the property team know about your question.");
     expect((await s.store.listAudit()).some((e) => e.type === "QUESTION_UNANSWERED" && e.detail === "Is there a gym?")).toBe(true);
     const live = await liveTourView(s);
     expect(live.questions.map((q) => q.text)).toContain('Pat asked "Is there a gym?". There was no approved answer, so it was flagged for your team.');

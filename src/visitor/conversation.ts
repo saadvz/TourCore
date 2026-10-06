@@ -1,9 +1,17 @@
 import { resolveSpokenTime } from "../core/customSlot";
-import { orList, unitsNamedIn } from "../core/questions";
+import { orList, resolveQuestion, unitsNamedIn } from "../core/questions";
 import { isoDate, parseIsoDate } from "../core/schedule";
 import { dayReference, type DayReference, type SpokenTime } from "../core/spokenTime";
 import { addDays, formatDay, formatTime, localDateOf, weekdayOf, zonedParts, type LocalDate } from "../core/timezone";
-import { VisitorDenialCopy, visitorCancelConfirm, visitorCancelKept, type InboundMeta } from "../core/TourCore";
+import {
+  TOUR_AGAIN_SUFFIX,
+  TOUR_ENDED_REPLY,
+  unknownAnswerReply,
+  VisitorDenialCopy,
+  visitorCancelConfirm,
+  visitorCancelKept,
+  type InboundMeta,
+} from "../core/TourCore";
 import { isCancelableReservation } from "../domain/stateMachine";
 import {
   isCancelTourAsk,
@@ -44,8 +52,23 @@ export const isGreeting = (text: string) => /^(hi|hello|hey|hiya|tour|book|start
 
 /** Locked visitor copy when an inbound is a photo with no caption. Do not say MMS. */
 export const PHOTO_ALONE_REPLY = "I can't take photos yet. Text your question and I'll pass it along.";
-/** Locked visitor copy when an inbound is a photo plus any text. Do not append the question prompt. */
+/** Locked visitor copy when an inbound is a photo plus handleable text. Unanswerable questions use UNKNOWN_ANSWER_WITH_PHOTO instead. */
 export const PHOTO_WITH_TEXT_REPLY = "I can't take photos yet.";
+
+/** Sends the short photo line unless a combined unknown-question text will replace it. */
+function photoAckFor(session: VisitorDemoSession, pending: boolean) {
+  let open = pending;
+  return {
+    consume() {
+      open = false;
+    },
+    async send() {
+      if (!open) return;
+      open = false;
+      await session.reply(PHOTO_WITH_TEXT_REPLY);
+    },
+  };
+}
 
 /** Lead when published hours changed and a numbered/old-menu reply can't be mapped safely. */
 export const SCHEDULE_CHANGED_LEAD = "Tour times just changed. Here's what's open now:";
@@ -117,6 +140,9 @@ class Turn {
     readonly awaiting?: StepAwaiting,
   ) {}
 
+  /** True when this inbound already got the short photo line. Combined unknown replies must not mention photos again. */
+  photoLineSent = false;
+
   markClarification(): void {
     this.note.clarification = true;
   }
@@ -174,14 +200,14 @@ export async function handleVisitorText(
 
   const photo = !!meta?.hasMedia;
   const typed = text.trim();
-  if (photo) {
-    const keyword = keywordOf(text);
-    const silent = session.optedOut && keyword !== "start" && keyword !== "stop";
-    if (!silent) await session.reply(typed ? PHOTO_WITH_TEXT_REPLY : PHOTO_ALONE_REPLY);
-    if (!typed) {
-      await session.recordText({ text: "(photo)", meta });
-      return undefined;
-    }
+  const keyword = keywordOf(text);
+  const silent = session.optedOut && keyword !== "start" && keyword !== "stop";
+  const photoAck = photoAckFor(session, photo && !!typed && !silent);
+
+  if (photo && !typed) {
+    if (!silent) await session.reply(PHOTO_ALONE_REPLY);
+    await session.recordText({ text: "(photo)", meta });
+    return undefined;
   }
 
   // Operator-set tour: YES/NO/STOP are about that confirmation, not the SMS keyword gate.
@@ -189,22 +215,25 @@ export async function handleVisitorText(
   if (session.pendingClarification?.awaiting.kind === "confirm-operator-tour") {
     const reservation = await session.reservation();
     if (reservation?.awaitingVisitorConfirm?.kind === "OPERATOR_SCHEDULED") {
+      await photoAck.send();
       await handleOperatorScheduledReply(session, said, text);
       return undefined;
     }
     session.takeExpected(session.pendingClarification.stage);
   }
 
-  // SMS campaign consent comes before any property or booking content.
-  if (session.kind === "messaging" && session.smsConsentMode !== "disabled" && session.smsConsent !== "opted_in") {
-    await handleSmsGate(session, said, text);
+  // Someone who opted out gets no texts. A real question is still flagged for the landlord.
+  // Check before the SMS keyword gate so STOP'd visitors aren't treated as un-enrolled senders.
+  if (session.optedOut && keyword !== "start" && keyword !== "stop") {
+    photoAck.consume();
+    await flagSilentOptedOutQuestion(session, said, text, photo, interpreter);
     return undefined;
   }
 
-  // Someone who opted out only gets START / STOP handled; nothing they send is interpreted or answered.
-  const keyword = keywordOf(text);
-  if (session.optedOut && keyword !== "start" && keyword !== "stop") {
-    await session.recordText(said);
+  // SMS campaign consent comes before any property or booking content.
+  if (session.kind === "messaging" && session.smsConsentMode !== "disabled" && session.smsConsent !== "opted_in") {
+    await photoAck.send();
+    await handleSmsGate(session, said, text);
     return undefined;
   }
 
@@ -219,8 +248,18 @@ export async function handleVisitorText(
       const interpretation: IntentInterpretation = { intent: { type: "ASK_PROPERTY_QUESTION", question: pending.question }, confidence: 1, interpreter: "rules", clarificationNeeded: false };
       session.noteInterpretation(interpretation);
       await session.recordText(said);
-      const out = await session.askQuestion(pending.question, { meta, unitId: unit.id, alreadyRecorded: true });
-      if (out.outcome !== "which-unit") await resumeStep(session, stage, pending.resume);
+      const resolved = resolveQuestion(session.config, pending.question, { selectedUnitId: unit.id, pickedUnitId: unit.id });
+      if (resolved.kind === "unknown") photoAck.consume();
+      else await photoAck.send();
+      const endedPick = (stage === "done" || stage === "stopped") && !(await session.isPaused());
+      const out = await session.askQuestion(pending.question, {
+        meta,
+        unitId: unit.id,
+        alreadyRecorded: true,
+        unknownReply: unknownAnswerReply({ hasMedia: photo && resolved.kind === "unknown", ended: endedPick }),
+        ...(endedPick ? { answerSuffix: TOUR_AGAIN_SUFFIX } : {}),
+      });
+      if (out.outcome !== "which-unit" && !endedPick) await resumeStep(session, stage, pending.resume);
       return interpretation;
     }
   }
@@ -229,6 +268,13 @@ export async function handleVisitorText(
   const note = session.noteInterpretation(interpretation);
   const turn = new Turn(session, said, stage, interpretation, note, awaiting);
   const { intent } = interpretation;
+  const ended = (stage === "done" || stage === "stopped") && !(await session.isPaused());
+  if (awaiting?.kind !== "confirm-cancel-tour" && (await willSendCombinedUnknown(session, intent, stage, ended, firstMessage))) {
+    photoAck.consume();
+  } else {
+    await photoAck.send();
+    turn.photoLineSent = photo && !!typed && !silent;
+  }
 
   if (intent.type === "STOP_MESSAGES" && turn.confident) await session.optOut(said);
   else if (intent.type === "START_MESSAGES" && turn.confident) await session.optIn(said);
@@ -324,6 +370,74 @@ function unitFromReply(session: VisitorDemoSession, text: string, offered: strin
   return pick ? units.find((u) => u.name === pick) : undefined;
 }
 
+function unknownReplyFor(turn: Turn, ended = false): string {
+  return unknownAnswerReply({ hasMedia: !!turn.said.meta?.hasMedia && !turn.photoLineSent, ended });
+}
+
+/** True when this turn will send a combined unknown-question text instead of the short photo line. */
+async function willSendCombinedUnknown(
+  session: VisitorDemoSession,
+  intent: TourIntent,
+  stage: VisitorStage,
+  ended: boolean,
+  firstMessage: boolean,
+): Promise<boolean> {
+  if (intent.type !== "ASK_PROPERTY_QUESTION") return false;
+  if (stage === "intro" && !firstMessage) return false;
+  if ((stage === "stopped" || stage === "done") && !ended) return false;
+  const r = await session.reservation();
+  return resolveQuestion(session.config, intent.question, { selectedUnitId: r?.unitId }).kind === "unknown";
+}
+
+/** Ended tour: answer from approved facts first; flag only when there is no answer. */
+async function handleEndedQuestion(turn: Turn): Promise<void> {
+  const question = turn.intent.type === "ASK_PROPERTY_QUESTION" ? turn.intent.question : (turn.said.text ?? "");
+  await turn.session.recordText(turn.said);
+  const r = await turn.session.reservation();
+  const resolved = resolveQuestion(turn.session.config, question, { selectedUnitId: r?.unitId });
+  if (resolved.kind === "unknown") {
+    await turn.session.flagUnknownQuestion(turn.said, { reply: unknownReplyFor(turn, true), alreadyRecorded: true });
+    return;
+  }
+  const out = await turn.session.askQuestion(question, {
+    meta: turn.said.meta,
+    alreadyRecorded: true,
+    unknownReply: unknownReplyFor(turn, true),
+    answerSuffix: TOUR_AGAIN_SUFFIX,
+  });
+  if (out.outcome === "which-unit") {
+    const units = out.units ?? [];
+    turn.markClarification();
+    turn.session.expect(turn.stage, { kind: "which-unit", question, units, ...(turn.awaiting ? { resume: turn.awaiting } : {}) });
+    await turn.session.reply(`Which unit do you mean: ${orList(units)}?`, { kind: "choose", options: units, what: "a unit" });
+  }
+}
+
+/** STOP'd visitors get no texts; an unanswerable question is still flagged. */
+async function flagSilentOptedOutQuestion(
+  session: VisitorDemoSession,
+  said: Said,
+  text: string,
+  photo: boolean,
+  interpreter: IntentInterpreter,
+): Promise<void> {
+  const stage = await session.stage();
+  const interpretation = await interpreter.interpret(await contextFor(session, text, stage));
+  session.noteInterpretation(interpretation);
+  if (interpretation.intent.type !== "ASK_PROPERTY_QUESTION") {
+    await session.recordText(said);
+    return;
+  }
+  const ended = (stage === "done" || stage === "stopped") && !(await session.isPaused());
+  const r = await session.reservation();
+  const resolved = resolveQuestion(session.config, interpretation.intent.question, { selectedUnitId: r?.unitId });
+  if (resolved.kind === "unknown") {
+    await session.flagUnknownQuestion(said, { reply: unknownAnswerReply({ hasMedia: photo, ended }) });
+    return;
+  }
+  await session.recordText(said);
+}
+
 /**
  * A property question, at any step. It's answered from approved facts only
  * (or flagged for the team), then the visitor is shown exactly where they
@@ -333,7 +447,11 @@ function unitFromReply(session: VisitorDemoSession, text: string, offered: strin
 async function ask(turn: Turn, question: string, resume?: () => Promise<void>): Promise<void> {
   const { session } = turn;
   await session.recordText(turn.said);
-  const out = await session.askQuestion(question, { meta: turn.said.meta, alreadyRecorded: true });
+  const out = await session.askQuestion(question, {
+    meta: turn.said.meta,
+    alreadyRecorded: true,
+    unknownReply: unknownReplyFor(turn),
+  });
   if (turn.interpretation.mentionedTime && out.outcome !== "which-unit") {
     await confirmMentionedTime(turn, turn.interpretation.mentionedTime);
     return;
@@ -527,8 +645,8 @@ async function offerCancelConfirm(turn: Turn): Promise<void> {
 }
 
 /**
- * Booked-tour cancel-by-text. Confirm first; never send the generic
- * "I don't have that information" line for a clear cancel ask.
+ * Booked-tour cancel-by-text. Confirm first; never send the unanswered-
+ * question fallback for a clear cancel ask.
  */
 async function handleCancelIntent(turn: Turn): Promise<boolean> {
   const { session, intent } = turn;
@@ -698,7 +816,7 @@ async function byStage(turn: Turn): Promise<void> {
     if (named) return showAskedDay(turn, named);
     return fileCustomTime(turn, asSpoken(intent));
   }
-  if (intent.type === "ASK_PROPERTY_QUESTION" && turn.stage !== "stopped" && turn.stage !== "intro") return ask(turn, intent.question);
+  if (intent.type === "ASK_PROPERTY_QUESTION" && turn.stage !== "stopped" && turn.stage !== "done" && turn.stage !== "intro") return ask(turn, intent.question);
 
   switch (turn.stage) {
     case "intro":
@@ -801,7 +919,8 @@ async function byStage(turn: Turn): Promise<void> {
         if (intent.type === "REQUEST_HELP") return session.help(turn.said);
         return turn.respond(VisitorDenialCopy.operatorHold(session.config.operator.name, session.config.operator.visitorContact));
       }
-      return turn.respond("This tour has ended. Text HI any time to start a new one.");
+      if (intent.type === "ASK_PROPERTY_QUESTION") return handleEndedQuestion(turn);
+      return turn.respond(TOUR_ENDED_REPLY);
   }
 }
 

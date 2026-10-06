@@ -222,6 +222,11 @@ function stillApplies(e: AuditEvent, tour: TourSnapshot): boolean {
   return !tour.bundle.auditEvents.some((later) => later.seq > e.seq && later.reservationId === e.reservationId && (later.type === "RESERVATION_RESUMED" || later.type === "OPERATOR_HOLD_PLACED" || later.type === "PROVIDER_FAILURE"));
 }
 
+function unitSubject(tour: TourSnapshot, unitId?: string): string | undefined {
+  const unit = tour.config.units.find((u) => u.id === unitId);
+  return unit ? visitorSubject(tour.config.property, unit.name) : undefined;
+}
+
 function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resolutions: Map<string, ExceptionResolution>): OperatorException {
   const exceptionId = id(tour.propertyId, tour.tourId, e.id);
   const pauseKind = kind === "operator-hold" || kind === "provider-failure";
@@ -236,7 +241,7 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
     title: TITLES[kind],
     summary: summaryFor(kind, e, tour),
     visitorName: visitorNameOf(tour),
-    unitName: unitNameOf(tour) ?? tour.config.units.find((u) => u.id === e.unitId)?.name,
+    unitName: unitNameOf(tour) ?? unitSubject(tour, e.unitId),
     tourRef: tourRef(tour.propertyId, tour.tourId),
     happenedAt: e.at,
     when: formatShortDateTime(new Date(e.at), tour.config.property.timezone),

@@ -29,18 +29,34 @@ mean: 1A, 1B or 2A?".
 
 After the answer, Tour Core puts the interrupted step back in front of them
 (the same unit menu, the same offered times, the same consent question or
-pending confirmation). A question it can't answer gets a safe reply, "I don't
-have that information for this property. I've flagged it for the property
-team so they can get back to you.", plus an issue and an operator update. When
-the operator answers, the visitor gets the answer and the step they were on.
+pending confirmation). A question it can't answer gets one text, "I'll let
+the property team know about your question.", plus an issue and an operator
+update. When the operator answers, the visitor gets the answer and the step
+they were on. After a tour has ended, an approved-fact question is answered
+and that answer gets ` If you'd like to tour again, just text HI.` (a period
+is added first if the answer has no `.` `!` or `?`). A question that fits
+more than one unit is asked back as `Which unit do you mean: {A} or {B}?`
+with no HI line; after the visitor picks a unit, the approved answer gets
+the HI line, or the locked ended flag text if that unit has no approved
+answer. A question with no approved answer is flagged:
+`I'll let the property team know about your question. If you'd like to tour
+again, just text HI.` A non-question keeps the ended-tour line and is not
+flagged.
 
 Photos are not forwarded yet. A photo alone gets one plain reply:
 `I can't take photos yet. Text your question and I'll pass it along.`
-A photo with any text (a question or a booking reply such as `1` or `YES`)
-gets only `I can't take photos yet.`; the text is handled as usual
-(answered from approved facts, flagged for the team, or used as the booking
-reply). Do not append “Text your question…”. The same inbound is not
-answered twice. Do not say "MMS" to a visitor.
+A photo plus a question Tour Core can't answer gets one text:
+`I can't take photos yet, but I'll let the property team know about your question.`
+(and is flagged). After an ended tour, that line adds
+`If you'd like to tour again, just text HI.` A photo plus an answerable
+ended question gets `I can't take photos yet.` once, then the answer with
+the HI line. A photo with handleable text (an approved-fact question or a
+booking reply such as `1` or `YES`) gets only `I can't take photos yet.`;
+the text is handled as usual. Mention photos at most once per inbound.
+Do not also send the short photo line when the combined unknown-question
+text is used.
+Do not append “Text your question…”. The same inbound is not answered twice.
+Do not say "MMS" to a visitor.
 
 A visitor with a booked (or held) tour can cancel by text in their own words —
 "Can we cancel the tour?", "I want to cancel the booked tour", "cancel",
@@ -53,8 +69,7 @@ stays on {day} at {time}.` A reply that isn't a clear yes or no is flagged:
 `I'll check with the {team} and get back to you.` STOP still opts out. If
 cancel cannot finish, they get
 `I can't cancel it from here. I've asked the leasing team to call it off and
-get back to you.` and the team is flagged. Never use "I don't have that
-information" for a clear cancel ask.
+get back to you.` and the team is flagged. Never use the unanswered-question fallback for a clear cancel ask.
 
 Visitors can name a tour day as today, tomorrow, a weekday, or a calendar
 date ("Dec 1", "December 1st", "1 Dec", "12/1", "Tuesday Oct 6"). Without a
@@ -163,7 +178,7 @@ contacted. Say "door access" to the operator; never name Durin.
 - Tour Core runs on the Bot's cloud computer (a demo deployment) or at a
   stable self-hosted address.
 - Visitor messaging: the provider the operator chooses (Sendblue, Twilio, Photon, or local QA loopback). Do not assume Sendblue.
-- QA without a carrier: put that building on local test texts (`choose_messaging_provider` with `local` and the property, or `set_services` with `messaging: local`), then `inject_local_sms` and `read_local_outbox`. Replies are separate bubbles. `hasMedia` injects a photo inbound (the visitor is told photos can't come through yet; the file is not forwarded). Those tools refuse unless that building is on local. Other published buildings stay on the installation's live texting. Switching the installation's provider keeps saved carrier credentials.
+- QA without a carrier: put that building on local test texts (`choose_messaging_provider` with `local` and the property, or `set_services` with `messaging: local`), then `inject_local_sms` and `read_local_outbox`. Replies are separate bubbles. `hasMedia` injects a photo inbound (the file is not forwarded; a photo alone is told it can't take photos yet, and a photo plus a question it can't answer is one combined text and is flagged). Those tools refuse unless that building is on local. Other published buildings stay on the installation's live texting. Switching the installation's provider keeps saved carrier credentials.
 - Operator updates: the Tour Core Operator Updates Grok Routine.
 - Tour records: on the hosted product, stored by hosted Tour Core. Google Drive keeps portable backups and exports through Grok's connector. Optional direct Drive remains a separate mode.
 - Door access: Durin demo mode. No physical door is controlled.

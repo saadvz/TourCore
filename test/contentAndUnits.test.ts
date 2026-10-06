@@ -224,7 +224,7 @@ describe("approved content changes keep the property published", () => {
     const id = await h.publish();
     const v = await h.touringVisitor(id);
     await v.act("ask", { question: "Is there a dishwasher?" });
-    expect(v.session.conversation.at(-1)!.text).toMatch(/^I don't have that information/);
+    expect(v.session.conversation.at(-1)!.text).toBe("I'll let the property team know about your question.");
     await h.ok("update_unit", { unit: "Unit 101", facts: ["The kitchen has a dishwasher."] });
     expect(h.workspace.load(id).state.status).toBe("PUBLISHED_FOR_DEMO");
     await v.act("ask", { question: "Is there a dishwasher?" });
@@ -384,7 +384,7 @@ describe("minimum unit information", () => {
     await h.approve("publish_demo_property", {});
     const v = await h.touringVisitor(id);
     await v.act("ask", { question: "How much is the rent?" });
-    expect(v.session.conversation.at(-1)!.text).toMatch(/^I don't have that information/);
+    expect(v.session.conversation.at(-1)!.text).toBe("I'll let the property team know about your question.");
     expect((await h.ok("list_exceptions")).exceptions[0].what).toBe("Question with no approved answer");
   });
 

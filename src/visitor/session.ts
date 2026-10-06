@@ -535,18 +535,35 @@ export class VisitorDemoSession {
    * conversation's own step changes. `unitId` overrides the unit context (the
    * visitor just said which unit they meant).
    */
-  async askQuestion(question: string, options: { meta?: InboundMeta; unitId?: string; alreadyRecorded?: boolean } = {}): Promise<QuestionOutcome> {
+  async askQuestion(question: string, options: { meta?: InboundMeta; unitId?: string; alreadyRecorded?: boolean; unknownReply?: string; answerSuffix?: string } = {}): Promise<QuestionOutcome> {
     const r = await this.reservation();
     const out = await this.core.answerPropertyQuestion({
       phone: this.visitor?.phone ?? "",
       question,
       reservationId: r?.id,
       unitId: options.unitId ?? r?.unitId,
+      ...(options.unitId ? { pickedUnitId: options.unitId } : {}),
       meta: options.meta,
       recordInbound: !options.alreadyRecorded,
+      ...(options.unknownReply ? { unknownReply: options.unknownReply } : {}),
+      ...(options.answerSuffix ? { answerSuffix: options.answerSuffix } : {}),
     });
     await this.syncReplies();
     return { outcome: out.outcome, ...(out.units ? { units: out.units } : {}) };
+  }
+
+  /** Flags a question for the team and sends `reply` (skipped when they opted out). */
+  async flagUnknownQuestion(said: Said, options: { reply: string; alreadyRecorded?: boolean; silent?: boolean }): Promise<void> {
+    await this.core.flagUnansweredQuestion({
+      phone: this.visitor?.phone ?? "",
+      question: said.text ?? "",
+      reservationId: this.reservationId,
+      meta: said.meta,
+      reply: options.reply,
+      recordInbound: !options.alreadyRecorded,
+      silent: options.silent ?? this.optedOut,
+    });
+    await this.syncReplies();
   }
 
   /** Sends a fresh identity-form link (the earlier one stops working). */

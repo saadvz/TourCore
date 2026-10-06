@@ -70,8 +70,9 @@ To exercise the real visitor SMS path without Sendblue or a carrier:
    the stored account and a new connection test.
 2. `inject_local_sms` with the visitor's `from` number, the property line
    (`to`) or property, and their `text`. Set `hasMedia` when the inbound is a
-   photo; Tour Core replies that it can't take photos yet and does not
-   forward the file. That is the same path as
+   photo; Tour Core does not forward the file. A photo alone is told it
+   can't take photos yet; a photo plus a question it can't answer is one
+   combined text and is flagged. That is the same path as
    `POST /webhooks/local` → `handleProviderWebhook` → `conversations.receive`.
 3. `read_local_outbox` for that conversation. Return **separate bubbles in
    order** (each body is one SMS). Never concatenate them.

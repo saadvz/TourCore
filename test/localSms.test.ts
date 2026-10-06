@@ -14,6 +14,7 @@ import { FileRuntimeStore } from "../src/storage/runtimeStore";
 import { createSetupServer } from "../src/web/server";
 import { grokHarness } from "./grokHarness";
 import { installHarness, SB_KEY, SB_SECRET } from "./installHarness";
+import { UNKNOWN_ANSWER_WITH_PHOTO } from "../src/core/TourCore";
 import { PHOTO_ALONE_REPLY, PHOTO_WITH_TEXT_REPLY } from "../src/visitor/conversation";
 import { hillsideConfig } from "./liveApp";
 import { LINE, PUBLIC } from "./fakeSendblue";
@@ -187,10 +188,10 @@ describe("inject_local_sms and read_local_outbox", () => {
     expect(again.duplicate).toBe(true);
     expect(again.bubbles).toEqual([]);
     const caption = await app.grok("inject_local_sms", { from: VISITOR, text: "Is there a gym?", hasMedia: true, property: app.id });
-    expect(caption.bubbles[0].body).toBe(PHOTO_WITH_TEXT_REPLY);
-    expect(caption.bubbles.filter((b: { body: string }) => b.body === PHOTO_WITH_TEXT_REPLY)).toHaveLength(1);
+    expect(caption.bubbles[0].body).toBe(UNKNOWN_ANSWER_WITH_PHOTO);
+    expect(caption.bubbles.filter((b: { body: string }) => b.body === PHOTO_WITH_TEXT_REPLY)).toHaveLength(0);
     expect(caption.bubbles.some((b: { body: string }) => b.body.includes("Text your question"))).toBe(false);
-    expect(caption.bubbles.some((b: { body: string }) => b.body.includes("flagged it for the property team"))).toBe(true);
+    expect(caption.bubbles.some((b: { body: string }) => b.body === UNKNOWN_ANSWER_WITH_PHOTO)).toBe(true);
   });
 
   it("feeds POST /webhooks/local through the same visitor pipeline", async () => {
