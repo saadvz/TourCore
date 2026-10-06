@@ -98,7 +98,13 @@ what never does.
   tour.` On hold or a door-system problem those refusal lines insert
   `The {team} is still working on the problem and will text you here.`
   after the first sentence. A reply that isn't a
-  clear yes or no is flagged. That is not a missing-fact flag.
+  clear yes or no is flagged. That is not a missing-fact flag. When nothing
+  is booked yet, that same cancel phrasing at the day menu, the time menu, or
+  the property picker (a bare cancel is still STOP) clears the step and
+  replies `No problem, nothing's booked yet, so I'll stop here. Text me
+  anytime if you want to pick a time.` The next text from someone already
+  opted in starts scheduling again, with no TOUR keyword. At the property
+  picker, that next text asks which place again.
 - **One-off tours.** When the operator wants to set up a tour for someone who
   asked (including a visitor who hasn't texted in, or who only got a day or
   time menu and never booked), the Bot uses `schedule_one_off_tour` and asks

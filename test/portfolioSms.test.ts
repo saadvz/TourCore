@@ -4,6 +4,8 @@ import { MessagingEndpoints } from "../src/messaging/endpoints";
 import type { InboundMessage } from "../src/messaging/inbound";
 import { MemoryRuntimeStore } from "../src/storage/runtimeStore";
 import { MessagingConversations } from "../src/visitor/messagingRouter";
+import { NOTHING_BOOKED_CANCEL } from "../src/core/TourCore";
+import { smsStopAck } from "../src/visitor/smsConsent";
 import { pickerMiss, placeAliases, propertyPickerText, propertyShortName, resolveNamedPlace, STREET_MISS } from "../src/visitor/portfolioPick";
 import { SMS_KEYWORD_PROMPT, smsDisclosure } from "../src/visitor/smsConsent";
 import { publicBaseUrl } from "../src/messaging/publicUrl";
@@ -124,6 +126,42 @@ describe("shared portfolio line", () => {
     expect(linked.join("\n")).not.toContain("Which place are you touring?");
     expect(linked.join("\n")).toContain("Scratch House");
     expect(h.visitors.latestForPhone(scratch, other, "messaging")?.propertyId).toBe(scratch);
+  });
+
+  it("cancel at the property picker stops, then the next text asks which place again", async () => {
+    const phone = "+15555550117";
+    const asked = await text(phone, "Hi");
+    expect(asked[0]).toContain("Which place are you touring?");
+    const stopped = await text(phone, "Actually cancel that");
+    expect(stopped).toEqual([NOTHING_BOOKED_CANCEL]);
+    expect(stopped[0]).not.toContain("didn't catch that");
+    expect(stopped[0]).not.toContain("Which place");
+    expect(h.visitors.latestForPhone(scratch, phone, "messaging")).toBeUndefined();
+    expect(h.visitors.latestForPhone(pine, phone, "messaging")).toBeUndefined();
+    const again = await text(phone, "hi");
+    expect(again[0]).toContain("Which place are you touring?");
+    expect(again[0]).not.toContain("didn't catch that");
+
+    const dayPhone = "+15555550146";
+    await text(dayPhone, "Hi");
+    const stoppedDay = await text(dayPhone, "Actually cancel that");
+    expect(stoppedDay).toEqual([NOTHING_BOOKED_CANCEL]);
+    const thursday = await text(dayPhone, "Thursday");
+    expect(thursday[0]).toContain("Which place are you touring?");
+    expect(thursday[0]).not.toBe(NOTHING_BOOKED_CANCEL);
+    expect(thursday[0]).not.toContain("didn't catch that");
+  });
+
+  it("nevermind at the picker uses the same stop line, and bare cancel still opts out", async () => {
+    const phone = "+15555550118";
+    await text(phone, "Tour");
+    const stopped = await text(phone, "nevermind");
+    expect(stopped).toEqual([NOTHING_BOOKED_CANCEL]);
+    const opted = await text("+15555550119", "Tour");
+    expect(opted[0]).toContain("Which place are you touring?");
+    const out = await text("+15555550119", "cancel");
+    expect(out.join("\n")).toBe(smsStopAck());
+    expect(out.join("\n")).not.toContain("nothing's booked");
   });
 
   it("after a pick, a follow-up stays on the chosen property", async () => {

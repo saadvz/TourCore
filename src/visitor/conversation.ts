@@ -4,6 +4,7 @@ import { isoDate, parseIsoDate } from "../core/schedule";
 import { dayReference, spokenTimes, type DayReference, type SpokenTime } from "../core/spokenTime";
 import { addDays, formatDay, formatTime, localDateOf, weekdayOf, zonedParts, type LocalDate } from "../core/timezone";
 import {
+  NOTHING_BOOKED_CANCEL,
   TOUR_AGAIN_SUFFIX,
   TOUR_ENDED_REPLY,
   unknownAnswerReply,
@@ -22,6 +23,7 @@ import { isRunningReservation, TERMINAL } from "../domain/stateMachine";
 import { stripFiller } from "../intent/normalize";
 import {
   isCancelTourAsk,
+  isUnbookedCancelAsk,
   isConfident,
   keywordOf,
   LayeredIntentInterpreter,
@@ -542,7 +544,9 @@ export async function handleVisitorText(
     /* after the tour ends, HI continues the held booking with booked-for then consent */
   } else if (keyword === "help") await session.help(said);
   else if (await handleCancelIntent(turn)) {
-    /* cancel-by-text: confirm, YES, or NO */
+    /* cancel-by-text: confirm, YES, or NO; or stop when nothing is booked */
+  } else if (await resumeClearedScheduling(turn)) {
+    /* the text after an unbooked cancel starts scheduling again */
   } else if (firstMessage) {
     if (intent.type === "SELECT_UNIT" && turn.confident) await chooseUnit(turn);
     else if (intent.type === "REQUEST_CUSTOM_TIME" && turn.confident) await openWithCustomTime(turn);
@@ -1009,11 +1013,24 @@ async function handleCancelIntent(turn: Turn): Promise<boolean> {
       return true;
     }
   }
+  if (!cancelable && isUnbookedCancelAsk(text) && (await inUnbookedScheduling(session, turn.stage))) {
+    session.clearUnbookedSchedule();
+    await turn.respond(NOTHING_BOOKED_CANCEL);
+    return true;
+  }
   if (intent.type === "CANCEL_TOUR" && !cancelable) {
     await session.reportCancelFailed(turn.said);
     return true;
   }
   return false;
+}
+
+/** Day menu, time menu, or unit menu, and no tour is booked. */
+async function inUnbookedScheduling(session: VisitorDemoSession, stage: VisitorStage): Promise<boolean> {
+  if (stage !== "choose-unit" && stage !== "choose-date" && stage !== "choose-time") return false;
+  const current = await session.reservation();
+  if (!current) return true;
+  return current.status === "INQUIRY" && !current.slotStart;
 }
 
 async function chooseUnit(turn: Turn): Promise<void> {
@@ -1116,17 +1133,63 @@ async function offerOpenDays(turn: Turn, excluded: Set<string>): Promise<void> {
 }
 
 /** START_INQUIRY during booking: keep the unit, offer days again from the current schedule. */
-async function restartBookingDays(turn: Turn): Promise<void> {
+async function restartBookingDays(turn: Turn, alreadyRecorded = false): Promise<void> {
   const { session } = turn;
   session.selectedDate = undefined;
   await session.refreshOfferedSchedule();
   const labels = session.offeredDates.map((day) => day.label);
+  const menu = { kind: "choose" as const, options: labels, what: "a day" };
   if (!labels.length) {
-    await turn.respond(VisitorDenialCopy.noOpenTimes(session.config.operator.name));
+    const line = VisitorDenialCopy.noOpenTimes(session.config.operator.name);
+    if (alreadyRecorded) await session.reply(line);
+    else await turn.respond(line);
     return;
   }
   session.markDatesShown();
-  await turn.respond(DAY_MENU, { kind: "choose", options: labels, what: "a day" });
+  if (alreadyRecorded) await session.reply(DAY_MENU, menu);
+  else await turn.respond(DAY_MENU, menu);
+}
+
+/** After an unbooked cancel, show the day list again, or the welcome when no unit is chosen yet. */
+async function restartScheduling(turn: Turn, alreadyRecorded = false): Promise<void> {
+  const reservation = await turn.session.reservation();
+  if (reservation?.status === "INQUIRY") {
+    await restartBookingDays(turn, alreadyRecorded);
+    return;
+  }
+  if (alreadyRecorded) await turn.session.welcome();
+  else await turn.session.greet(turn.said);
+}
+
+/**
+ * The text after "nothing's booked, I'll stop here." Any text starts
+ * scheduling again. A named day or time is used. A bare menu number is not.
+ */
+async function resumeClearedScheduling(turn: Turn): Promise<boolean> {
+  const { session, intent } = turn;
+  if (!session.schedulingIdle) return false;
+  const reservation = await session.reservation();
+  const open = !reservation || (reservation.status === "INQUIRY" && !reservation.slotStart);
+  if (!open) {
+    session.schedulingIdle = false;
+    return false;
+  }
+  session.schedulingIdle = false;
+  if (intent.type === "SELECT_DATE" && (intent.weekday || intent.relative || intent.date) && reservation?.status === "INQUIRY") {
+    await session.refreshOfferedSchedule();
+    await showAskedDay(turn, intent);
+    return true;
+  }
+  if (intent.type === "REQUEST_CUSTOM_TIME" && turn.confident && reservation?.status === "INQUIRY") {
+    await fileCustomTime(turn, asSpoken(intent));
+    return true;
+  }
+  if (intent.type === "ASK_PROPERTY_QUESTION") {
+    await ask(turn, intent.question, () => restartScheduling(turn, true));
+    return true;
+  }
+  await restartScheduling(turn);
+  return true;
 }
 
 function isBareMenuNumber(text: string): boolean {

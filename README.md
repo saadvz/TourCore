@@ -420,7 +420,7 @@ visitor text ─► interpreter ─► typed intent (ARRIVAL, AT_UNIT "Unit 101"
   Nothing is cancelled and the doors keep working. A reply that isn't a clear yes or no on that confirm is flagged:
   `I'll check with the {team} and get back to you.` STOP / opt-out is unchanged. If cancel cannot finish, they get
   `I can't cancel it from here. I've asked the leasing team to call it off and get back to you.` and the team is
-  flagged — never the unanswered-question fallback for a clear cancel ask. Real questions still flag
+  flagged — never the unanswered-question fallback for a clear cancel ask. When nothing is booked yet, that same cancel phrasing at the day menu, the time menu, or the property picker (`Actually cancel that`, `cancel that`, `cancel please`, `nevermind`; a bare `cancel` is still STOP) clears the step and replies `No problem, nothing's booked yet, so I'll stop here. Text me anytime if you want to pick a time.` It does not ask YES or NO and it does not say the tour is cancelled. The next text from someone already opted in starts scheduling again, with no TOUR keyword. A named day is used. At the property picker, that next text asks which place again. Real questions still flag
   as usual. After a tour has ended (canceled or completed), an approved-fact question is answered and
   that answer gets ` If you'd like to tour again, just text HI.` (a period is added first if the answer
   has no `.` `!` or `?`). A question that fits more than one unit is asked back as

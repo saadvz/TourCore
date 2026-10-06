@@ -195,6 +195,7 @@ text you here.` after the first sentence. A reply that isn't a clear yes or no i
 cancel cannot finish, they get
 `I can't cancel it from here. I've asked the leasing team to call it off and
 get back to you.` and the team is flagged. Never use the unanswered-question fallback for a clear cancel ask.
+When nothing is booked yet, that same cancel phrasing at the day menu, the time menu, or the property picker (`Actually cancel that`, `cancel that`, `cancel please`, `nevermind`; a bare `cancel` is still STOP) clears the step and replies `No problem, nothing's booked yet, so I'll stop here. Text me anytime if you want to pick a time.` It does not ask YES or NO and it does not say the tour is cancelled. The next text from someone already opted in starts scheduling again, with no TOUR keyword. A named day is used. At the property picker, that next text asks which place again.
 
 Visitors can name a tour day as today, tomorrow, a weekday, or a calendar
 date ("Dec 1", "December 1st", "1 Dec", "12/1", "Tuesday Oct 6"). Without a

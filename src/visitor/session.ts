@@ -232,6 +232,11 @@ export class VisitorDemoSession {
   followUpReservationId?: string;
   /** The active booking was a held rebook that just took over after the tour ended. */
   heldBookingTakenOver = false;
+  /**
+   * Cancel arrived before anything was booked. Menus are cleared.
+   * The next text starts scheduling again; it does not need TOUR.
+   */
+  schedulingIdle = false;
 
   private _config: TourCoreConfig;
 
@@ -482,6 +487,21 @@ export class VisitorDemoSession {
     const time = this.heldTime;
     this.heldTime = undefined;
     return time;
+  }
+
+  /**
+   * Drop a day or time menu when nothing is booked. The inquiry stays.
+   * The next text starts scheduling again.
+   */
+  clearUnbookedSchedule(): void {
+    this.selectedDate = undefined;
+    this.offeredSlots = [];
+    this.heldTime = undefined;
+    this.clearShownMenus();
+    this.expected = undefined;
+    this.staleDateMenu = false;
+    this.staleTimeMenu = false;
+    this.schedulingIdle = true;
   }
 
   /** What Tour Core was waiting for, if the conversation is still at the same step. One reply only. */

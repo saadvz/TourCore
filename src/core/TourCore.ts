@@ -290,6 +290,9 @@ export function withAnswerSuffix(answer: string, suffix = ""): string {
 
 /** Visitor cancel-by-text: Critiquito-locked confirm, done, and keep-booked lines. */
 export const VISITOR_CANCEL_DONE = "You're cancelled. Text me anytime if you want to book again.";
+/** Nothing is booked. The menu is cleared. The next text starts scheduling again. */
+export const NOTHING_BOOKED_CANCEL =
+  "No problem, nothing's booked yet, so I'll stop here. Text me anytime if you want to pick a time.";
 export const VISITOR_CANCEL_FAILED = "I can't cancel it from here. I've asked the leasing team to call it off and get back to you.";
 
 export function visitorCancelConfirm(day: string, time: string): string {

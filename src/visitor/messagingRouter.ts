@@ -2,7 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { removedPropertyVisitorText } from "../core/availabilityCopy";
 import { normalizePhone } from "../core/phone";
-import { keywordOf, type IntentInterpreter } from "../intent";
+import { isUnbookedCancelAsk, keywordOf, type IntentInterpreter } from "../intent";
+import { NOTHING_BOOKED_CANCEL } from "../core/TourCore";
 import { MessagingEndpoints, type MessagingEndpoint } from "../messaging/endpoints";
 import { hasInboundMedia, type InboundMessage } from "../messaging/inbound";
 import { timeOutboundSend } from "../messaging/inboundTiming";
@@ -220,6 +221,11 @@ export class MessagingConversations {
     if (keyword === "stop" || keyword === "help") {
       if (keyword === "stop") this.clearPick(pending);
       await this.answerLineKeyword(pending.matchIds, pending.phone, keyword);
+      return undefined;
+    }
+    if (isUnbookedCancelAsk(message.text)) {
+      this.clearPick(pending);
+      await this.sendLine(pending.offeredIds[0], pending.phone, NOTHING_BOOKED_CANCEL);
       return undefined;
     }
     const choice = menuChoice(message.text);
