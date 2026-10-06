@@ -16,7 +16,7 @@ import { nextProfileQuestion, parseProfileValue, PROFILE_FIELDS, ProfileValueErr
 import type { ConfigIssue, ConfigSection } from "../config/validateConfig";
 import { formatPhone, parsePhone } from "../core/phone";
 import { formatClockTime, friendlyTimeZone, WEEKDAYS, type Weekday } from "../core/timezone";
-import { isApartmentOrCondo, isSingleTourPlace, streetAndUnit, unitLabel, visitorSubject } from "../visitor/identity";
+import { isApartmentOrCondo, isSingleTourPlace, streetAndUnit, streetLine, unitLabel, visitorSubject } from "../visitor/identity";
 import { inferTimeZone, resolveTimeZone, slugify } from "./parse";
 import { formatCanonical, parseUsAddress } from "./address";
 
@@ -118,6 +118,33 @@ function requireTimeZone(input: string): string {
 /** How the property is named to visitors and the operator: their own name for it, otherwise the canonical address. */
 export function propertyLabel(property: { address: string; displayName?: string; name?: string }): string {
   return property.displayName?.trim() || property.address.trim() || property.name?.trim() || "";
+}
+
+const INTERNAL_SPACE_NAME = /^main home$/i;
+
+/**
+ * Operator-facing property name for remove and similar copy: their public
+ * name, or street plus unit when an apartment or condo has exactly one unit,
+ * otherwise the street or address. Never the internal single-family space
+ * label "Main Home".
+ */
+export function operatorFacingPropertyName(draft: {
+  property: { address: string; displayName?: string; name?: string; propertyType?: PropertyType; canonicalAddress?: { street?: string } };
+  units: { name: string }[];
+}): string {
+  const given = draft.property.displayName?.trim();
+  if (given && !INTERNAL_SPACE_NAME.test(given)) return given;
+  if (isApartmentOrCondo(draft.property) && draft.units.length === 1) {
+    return streetAndUnit(draft.property, draft.units[0]!.name);
+  }
+  if (isApartmentOrCondo(draft.property) && draft.units.length > 1) {
+    const street = streetLine(draft.property);
+    if (street) return street;
+  }
+  const address = draft.property.address.trim();
+  if (address) return address;
+  const fallback = draft.property.name?.trim() ?? "";
+  return INTERNAL_SPACE_NAME.test(fallback) ? "" : fallback;
 }
 
 function withLabel(property: SetupDraft["property"]): SetupDraft["property"] {

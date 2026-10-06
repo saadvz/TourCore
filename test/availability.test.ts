@@ -1,3 +1,5 @@
+import { existsSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   bookedTourCalledOffText,
@@ -9,7 +11,10 @@ import {
   PROPERTY_REMOVED_REFUSE,
   REMOVE_REFUSED_LIVE_TOUR,
   removeConfirmQuestion,
+  removeSetupConfirmQuestion,
+  removedPropertySummary,
   removedPropertyVisitorText,
+  removedSetupSummary,
   resumeConfirmQuestion,
   toursAreBackText,
 } from "../src/core/availabilityCopy";
@@ -20,6 +25,7 @@ import { loadConfig, type TourCoreConfig } from "../src/config/tourCoreConfig";
 import { createTourCore } from "../src/createTourCore";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
 import { MessagingEndpoints } from "../src/messaging/endpoints";
+import { localLoopbackNumber } from "../src/messaging/propertyScope";
 import { MemoryRuntimeStore } from "../src/storage/runtimeStore";
 import { handleVisitorText } from "../src/visitor/conversation";
 import { VisitorDemoSession } from "../src/visitor/session";
@@ -30,6 +36,7 @@ import { listWaiters } from "../src/setup/pauseWaiters";
 import { readAvailabilityEvents } from "../src/operator/availability";
 import { tourRef } from "../src/operator/tours";
 import { at, grokHarness, type GrokHarness } from "./grokHarness";
+import { operatorFacingPropertyName } from "../src/setup/setupActions";
 import { bookTour, setup } from "./helpers";
 
 const cleanups: Array<() => void> = [];
@@ -39,6 +46,16 @@ function app(): GrokHarness {
   const h = grokHarness();
   cleanups.push(h.cleanup);
   return h;
+}
+
+/** Single-family add_unit can persist a valid config. Keep the folder as a draft-only setup. */
+function keepAsInProgressSetup(h: GrokHarness, propertyId: string): void {
+  if (!h.workspace.has(propertyId)) return;
+  const config = h.workspace.load(propertyId).config;
+  const dir = join(h.root, "properties", propertyId);
+  rmSync(join(dir, "tourcore.config.json"), { force: true });
+  rmSync(join(dir, "status.json"), { force: true });
+  h.workspace.saveDraft(config);
 }
 
 function lastFrom(session: VisitorDemoSession, from: "tourcore" | "visitor" = "tourcore"): string {
@@ -67,6 +84,11 @@ describe("availability copy", () => {
 
   it("uses the approved paused-unit line", () => {
     expect(pausedUnitVisitorText("Unit 101")).toBe("Unit 101 isn't open for tours right now.");
+  });
+
+  it("uses the approved remove summaries for a published property and an in-progress setup", () => {
+    expect(removedPropertySummary("100 Alfred Way")).toBe("100 Alfred Way has been removed. Its records are kept.");
+    expect(removedSetupSummary("1 QA Scratch Lane")).toBe("Removed the setup for 1 QA Scratch Lane.");
   });
 
   it("uses the approved booked-tour cancel lines", () => {
@@ -106,6 +128,11 @@ describe("availability copy", () => {
     expect(removeConfirmQuestion("100 Alfred Way", 1)).toBe(
       "Remove 100 Alfred Way? Tours stop, 1 booked visitor get a cancel text, and it leaves your list. Its records are kept. Remove it?",
     );
+    expect(removeSetupConfirmQuestion("QA Scratch Lane")).toBe(
+      "Remove the setup for QA Scratch Lane? It isn't published yet, so no visitors are affected, but everything entered for it will be deleted for good.",
+    );
+    expect(removeSetupConfirmQuestion("QA Scratch Lane")).not.toContain("Its records are kept");
+    expect(removeSetupConfirmQuestion("QA Scratch Lane")).not.toContain("Remove it?");
     expect(REMOVE_REFUSED_LIVE_TOUR).toBe("Someone is on a tour right now. Try again after it ends.");
     expect(resumeConfirmQuestion("100 Alfred Way")).toBe("Resume tours at 100 Alfred Way? New bookings can start again. Resume it?");
     expect(resumeConfirmQuestion("100 Alfred Way", 0)).toBe("Resume tours at 100 Alfred Way? New bookings can start again. Resume it?");
@@ -328,6 +355,158 @@ describe("pause and remove", () => {
     const v = await readyVisitor(h, id);
     expect((await v.session.reservation())!.status).toBe("READY");
     expect((await h.ok("list_properties")).properties[0].paused).toBe(false);
+  });
+
+  it("removes an in-progress setup that list_properties shows, including units, doors, and routes", async () => {
+    const h = app();
+    const created = await h.ok("create_property_setup", {
+      address: "1 QA Scratch Lane, Tenafly, NJ 07670",
+      name: "QA Scratch Lane",
+      propertyType: "APARTMENT_BUILDING",
+    });
+    await h.ok("add_unit", { name: "Unit 1A" });
+    await h.ok("add_door", { name: "Lobby", kind: "entrance" });
+    const listed = await h.ok("list_properties");
+    expect(listed.properties).toEqual([
+      expect.objectContaining({
+        propertyId: created.setup.propertyId,
+        name: "QA Scratch Lane",
+        status: "Setup in progress",
+      }),
+    ]);
+    expect(h.workspace.has(created.setup.propertyId)).toBe(false);
+    expect(h.workspace.loadDraft(created.setup.propertyId)?.units.length).toBeGreaterThan(0);
+    expect(h.workspace.loadDraft(created.setup.propertyId)?.doors.length).toBeGreaterThan(0);
+
+    const asked = await h.ok("remove_property", { property: listed.properties[0].name });
+    expect(asked.summary).toBe(removeSetupConfirmQuestion("QA Scratch Lane"));
+    expect(asked.summary).not.toMatch(/Tours stop|booked visitors/);
+    const done = await h.ok("remove_property", { property: listed.properties[0].name, confirmationCode: asked.confirmation.code });
+    expect(done.summary).toBe(removedSetupSummary("QA Scratch Lane"));
+    expect((await h.ok("list_properties")).properties).toEqual([]);
+    expect(h.workspace.propertyIds()).not.toContain(created.setup.propertyId);
+    expect(existsSync(join(h.root, "properties", created.setup.propertyId))).toBe(false);
+    expect(await h.fails("get_property_setup", { property: "QA Scratch Lane" })).toMatch(/I couldn't find/);
+  });
+
+  it("finds an in-progress setup by address the same way list_properties does", async () => {
+    const h = app();
+    await h.ok("create_property_setup", { address: "27 Oak Ln, Teaneck, NJ 07666" });
+    const listed = await h.ok("list_properties");
+    expect(listed.properties[0].status).toBe("Setup in progress");
+    const { asked, done } = await h.approve("remove_property", { property: listed.properties[0].address });
+    expect(asked.summary).toBe(removeSetupConfirmQuestion(listed.properties[0].name));
+    expect(done.summary).toBe(removedSetupSummary(listed.properties[0].name));
+    expect((await h.ok("list_properties")).properties).toEqual([]);
+  });
+
+  it("releases a local test number claimed by an in-progress setup", async () => {
+    const h = app();
+    const created = await h.ok("create_property_setup", { address: "1 QA Scratch Lane, Tenafly, NJ 07670", name: "QA Scratch Lane" });
+    const id = created.setup.propertyId as string;
+    await h.ok("set_services", { property: id, messaging: "local" });
+    const endpoints = new MessagingEndpoints(new MemoryRuntimeStore());
+    const line = localLoopbackNumber();
+    h.services.endpoints = endpoints;
+    endpoints.attach({ address: line, provider: "local", propertyId: id });
+    expect(endpoints.resolve(line)?.propertyId).toBe(id);
+
+    await h.approve("remove_property", { property: id });
+    expect(endpoints.resolve(line)).toBeUndefined();
+    expect(endpoints.forProperty(id)).toBeUndefined();
+
+    const next = await h.ok("create_property_setup", { address: "27 Oak Ln, Teaneck, NJ 07666" });
+    expect(endpoints.attach({ address: line, provider: "local", propertyId: next.setup.propertyId })).toEqual({ changed: true });
+    expect(endpoints.resolve(line)?.propertyId).toBe(next.setup.propertyId);
+  });
+
+  it("names an in-progress setup by the operator-given name or street plus unit, never Main Home", async () => {
+    expect(
+      operatorFacingPropertyName({
+        property: { address: "27 Oak Ln, Teaneck, NJ 07666", name: "Main Home", propertyType: "SINGLE_FAMILY" },
+        units: [{ name: "Main Home" }],
+      }),
+    ).toBe("27 Oak Ln, Teaneck, NJ 07666");
+    expect(
+      operatorFacingPropertyName({
+        property: { address: "145 Main St, Hoboken, NJ 07030", propertyType: "APARTMENT_OR_CONDO", canonicalAddress: { street: "145 Main St" } },
+        units: [{ name: "Unit 4B" }],
+      }),
+    ).toBe("145 Main St, Unit 4B");
+    expect(
+      operatorFacingPropertyName({
+        property: { address: "500 QA Condo Ave, Tenafly, NJ 07670", propertyType: "APARTMENT_OR_CONDO", canonicalAddress: { street: "500 QA Condo Ave" } },
+        units: [{ name: "Unit Loft" }, { name: "Unit 4B" }],
+      }),
+    ).toBe("500 QA Condo Ave");
+
+    const home = app();
+    await home.ok("create_property_setup", { address: "27 Oak Ln, Teaneck, NJ 07666", propertyType: "SINGLE_FAMILY" });
+    expect((await home.ok("add_unit", {})).unit.name).toBe("Main Home");
+    const homeId = home.workspace.propertyIds()[0]!;
+    keepAsInProgressSetup(home, homeId);
+    expect(home.workspace.has(homeId)).toBe(false);
+    expect((await home.ok("list_properties")).properties[0].status).toBe("Setup in progress");
+    const homeName = operatorFacingPropertyName(home.workspace.openDraft(homeId).draft);
+    expect(homeName).not.toMatch(/Main Home/i);
+    const removedHome = await home.approve("remove_property", { property: homeId });
+    expect(removedHome.asked.summary).toBe(removeSetupConfirmQuestion(homeName));
+    expect(removedHome.done.summary).toBe(removedSetupSummary(homeName));
+    expect(removedHome.asked.summary).not.toContain("Main Home");
+    expect(removedHome.done.summary).not.toContain("Main Home");
+
+    const condo = app();
+    await condo.ok("create_property_setup", { address: "145 Main St, Hoboken, NJ 07030", propertyType: "APARTMENT_OR_CONDO" });
+    await condo.ok("add_unit", { name: "4B" });
+    const listed = await condo.ok("list_properties");
+    expect(listed.properties[0].status).toBe("Setup in progress");
+    const { asked, done } = await condo.approve("remove_property", { property: listed.properties[0].propertyId });
+    expect(asked.summary).toBe(removeSetupConfirmQuestion("145 Main St, Unit 4B"));
+    expect(asked.summary).not.toContain("Main Home");
+    expect(done.summary).toBe(removedSetupSummary("145 Main St, Unit 4B"));
+    expect(done.summary).not.toContain("Main Home");
+  });
+
+  it("names a two-unit in-progress condo by the street alone", async () => {
+    const h = app();
+    const created = await h.ok("create_property_setup", {
+      address: "500 QA Condo Ave, Tenafly, NJ 07670",
+      propertyType: "APARTMENT_OR_CONDO",
+    });
+    const id = created.setup.propertyId as string;
+    const draft = h.workspace.openDraft(id).draft;
+    h.workspace.saveDraft({
+      ...draft,
+      units: [
+        { id: "unit_loft", name: "Unit Loft", doorId: "", summary: "", facts: [] },
+        { id: "unit_4b", name: "Unit 4B", doorId: "", summary: "", facts: [] },
+      ],
+    });
+    expect(h.workspace.has(id)).toBe(false);
+    expect(operatorFacingPropertyName(h.workspace.openDraft(id).draft)).toBe("500 QA Condo Ave");
+    const { asked, done } = await h.approve("remove_property", { property: id });
+    expect(asked.summary).toBe(removeSetupConfirmQuestion("500 QA Condo Ave"));
+    expect(asked.summary).not.toMatch(/Loft|4B/);
+    expect(done.summary).toBe(removedSetupSummary("500 QA Condo Ave"));
+    expect(done.summary).not.toMatch(/Loft|4B/);
+  });
+
+  it("still removes a published property and keeps its records", async () => {
+    const h = app();
+    const id = await h.publish();
+    const { config } = h.workspace.load(id);
+    const { asked, done } = await h.approve("remove_property", { property: id });
+    expect(asked.summary).toBe(removeConfirmQuestion(config.property.name, 0));
+    expect(done.summary).toBe(removedPropertySummary(config.property.name));
+    expect((await h.ok("list_properties")).properties).toEqual([]);
+    expect(h.workspace.has(id)).toBe(true);
+    expect(h.workspace.load(id).state.removedAt).toBeTruthy();
+    expect(existsSync(join(h.root, "properties", id, "tourcore.config.json"))).toBe(true);
+  });
+
+  it("still says it couldn't find an unknown property", async () => {
+    const h = app();
+    expect(await h.fails("remove_property", { property: "No Such Place" })).toMatch(/I couldn't find that property|I couldn't find a property called "No Such Place"/);
   });
 
   it("refuses to remove a property while someone is on a tour", async () => {

@@ -6,6 +6,7 @@ import type { PropertyWorkspace, PublishResult } from "./workspace";
  */
 export {
   createPropertySetup,
+  operatorFacingPropertyName,
   setPropertyDetails,
   setAlertContact,
   addUnit,
