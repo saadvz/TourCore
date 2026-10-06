@@ -581,9 +581,16 @@ async function fileCustomTime(turn: Turn, spoken: SpokenTime, alreadyRecorded = 
     return;
   }
   const reservation = await session.reservation();
-  if (reservation?.status === "INQUIRY" && resolved.placement === "ON_GRID") {
-    if (!alreadyRecorded) await session.recordText(turn.said);
-    return session.bookOffered(resolved.start.toISOString());
+  if (resolved.placement === "ON_GRID") {
+    if (reservation?.status === "INQUIRY") {
+      if (!alreadyRecorded) await session.recordText(turn.said);
+      return session.bookOffered(resolved.start.toISOString());
+    }
+    if (reservation?.status === "TOURING") {
+      if (!alreadyRecorded) await session.recordText(turn.said);
+      await session.confirmRebook(resolved.start.toISOString());
+      return;
+    }
   }
   if (!reservation) {
     session.holdTime(spoken);
@@ -778,7 +785,8 @@ async function showAskedDay(turn: Turn, ask: DayReference, alreadyRecorded = fal
   }
   if (!ask.weekday && !ask.relative) {
     const index = /^\s*(?:#|number |option )?(\d{1,2})\s*[.!]?\s*$/i.exec(turn.said.text ?? "")?.[1];
-    const picked = index ? dates[Number(index) - 1] : undefined;
+    const menu = session.lastShownDates;
+    const picked = index && menu.length ? menu[Number(index) - 1] : undefined;
     if (picked) return presentDay(turn, picked.date, alreadyRecorded);
     session.markDatesShown();
     if (alreadyRecorded) await session.reply(DAY_MENU, dateMenu);
@@ -822,6 +830,61 @@ async function restartBookingDays(turn: Turn): Promise<void> {
 
 function isBareMenuNumber(text: string): boolean {
   return MENU_NUMBER.test(text);
+}
+
+/** Day name, or a number/time from a menu the visitor actually saw. */
+async function isShownMenuBookingInput(turn: Turn): Promise<boolean> {
+  const { session, intent } = turn;
+  const text = turn.said.text ?? "";
+  if (intent.type === "SELECT_DATE") {
+    if (intent.date || intent.weekday || intent.relative) return true;
+    const index = MENU_NUMBER.exec(text)?.[1];
+    return !!(index && session.lastShownDates[Number(index) - 1]);
+  }
+  if (intent.type === "SELECT_TIME") {
+    return session.lastShownSlots.some((slot) => same(slot.label, intent.timeLabel));
+  }
+  if (isBareMenuNumber(text)) {
+    if (session.selectedDate && session.lastShownSlots.length) {
+      const index = MENU_NUMBER.exec(text)?.[1];
+      return !!(index && session.lastShownSlots[Number(index) - 1]);
+    }
+    const index = MENU_NUMBER.exec(text)?.[1];
+    return !!(index && session.lastShownDates[Number(index) - 1]);
+  }
+  return false;
+}
+
+/** From consent, a regular day or shown slot replaces the held/booked tour. */
+async function tryRegularSlotFromConsent(turn: Turn): Promise<boolean> {
+  const { session, intent } = turn;
+  if (intent.type === "SELECT_DATE" && (intent.date || intent.weekday || intent.relative)) {
+    await showAskedDay(turn, intent);
+    return true;
+  }
+  if (intent.type === "SELECT_TIME") {
+    const slot = session.lastShownSlots.find((s) => same(s.label, intent.timeLabel)) ?? session.offeredSlots.find((s) => same(s.label, intent.timeLabel));
+    if (slot && turn.confident && session.lastShownSlots.length) {
+      await session.recordText(turn.said);
+      await session.bookOffered(slot.start.toISOString());
+      return true;
+    }
+  }
+  const text = turn.said.text ?? "";
+  if (isBareMenuNumber(text) && session.lastShownSlots.length) {
+    const index = MENU_NUMBER.exec(text)?.[1];
+    const slot = index ? session.lastShownSlots[Number(index) - 1] : undefined;
+    if (slot) {
+      await session.recordText(turn.said);
+      await session.bookOffered(slot.start.toISOString());
+      return true;
+    }
+  }
+  if (isBareMenuNumber(text) && session.lastShownDates.length && !session.lastShownSlots.length) {
+    await showAskedDay(turn, intent.type === "SELECT_DATE" ? intent : { weekday: undefined });
+    return true;
+  }
+  return false;
 }
 
 function matchesLabel(text: string, labels: string[]): boolean {
@@ -892,7 +955,7 @@ async function byStage(turn: Turn): Promise<void> {
 
     case "choose-date": {
       const pendingDateRequest = await session.unapprovedCustomTimeRequest();
-      if (pendingDateRequest && !pendingDateRequest.pendingNoticeSentAt) {
+      if (pendingDateRequest && !pendingDateRequest.pendingNoticeSentAt && !(await isShownMenuBookingInput(turn))) {
         await session.recordText(turn.said);
         await session.announceUnapprovedCustomTime();
         return;
@@ -903,7 +966,7 @@ async function byStage(turn: Turn): Promise<void> {
           return takeOfferedOpening(session, turn.awaiting, turn.said);
         }
       }
-      if (intent.type === "REQUEST_HELP") return session.help(turn.said);
+      if (mentionsAfterCloseDistress(turn.said.text ?? "") || intent.type === "REQUEST_HELP") return session.help(turn.said);
       if (intent.type === "START_INQUIRY") return restartBookingDays(turn);
       if (session.staleDateMenu) {
         const text = turn.said.text ?? "";
@@ -923,14 +986,14 @@ async function byStage(turn: Turn): Promise<void> {
 
     case "choose-time": {
       const pendingTimeRequest = await session.unapprovedCustomTimeRequest();
-      if (pendingTimeRequest && !pendingTimeRequest.pendingNoticeSentAt) {
+      if (pendingTimeRequest && !pendingTimeRequest.pendingNoticeSentAt && !(await isShownMenuBookingInput(turn))) {
         await session.recordText(turn.said);
         await session.announceUnapprovedCustomTime();
         return;
       }
       const labels = session.offeredSlots.map((s) => s.label);
       const menu: ReplyPrompt = { kind: "choose", options: labels, what: "a time" };
-      if (intent.type === "REQUEST_HELP") return session.help(turn.said);
+      if (mentionsAfterCloseDistress(turn.said.text ?? "") || intent.type === "REQUEST_HELP") return session.help(turn.said);
       if (intent.type === "START_INQUIRY") return restartBookingDays(turn);
       if (session.staleTimeMenu || session.staleDateMenu) {
         const text = turn.said.text ?? "";
@@ -952,6 +1015,7 @@ async function byStage(turn: Turn): Promise<void> {
 
     case "consent": {
       const question = CONSENT_QUESTION;
+      if (await tryRegularSlotFromConsent(turn)) return;
       if (intent.type === "CONSENT_YES" || intent.type === "CONSENT_NO") {
         if (turn.confident) return turn.act("consent", { agree: intent.type === "CONSENT_YES" });
         return turn.clarify(`Just to check: ${question.charAt(0).toLowerCase()}${question.slice(1)}`, yesNo);

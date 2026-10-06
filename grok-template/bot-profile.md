@@ -183,14 +183,19 @@ Never:
   minutes may be added any time before the tour ends when that time is
   free. After the no-time line, yes books another look without taking
   over the tour that is still running. A custom-time request during a
-  tour is also secondary. After the follow-up reply, an unapproved
-  request is told once that it is still with the property team and they
-  can reply with a day for a regular time. Later texts use the normal
-  booking flow. Booking a regular slot withdraws that request
-  (`They booked a regular time instead.`). That new booking
-  becomes the active one after the follow-up reply; a follow-up yes does
-  not record consent. Unanswered consent is then the booked-for line for
-  the new time, then the original consent question. If the T-5 text
+  tour is also secondary.   After the follow-up reply, an unapproved
+  request is told once that it is still with the property team. The
+  regular-times sentence is only for visitors with no held or booked
+  regular tour. A held rebook taking over gets the booked-for line, then
+  the original consent question, then Reply YES or NO. Later texts use
+  the normal booking flow. Booking a regular slot withdraws that request
+  (`They booked a regular time instead.`). Replacing a held or booked
+  future tour also sends `That replaces your {day} {time} tour.`
+  Approving a custom time that moves an unconfirmed held booking uses
+  that same booked-for then consent ask, not moved wording. That new
+  booking becomes the active one after the follow-up reply; a follow-up
+  yes does not record consent. Unanswered consent is then the booked-for
+  line for the new time, then the original consent question. If the T-5 text
   cannot offer extra time, a later yes records pending consent. While
   the leaving issue is open, stuck-inside texts and greetings stay on
   after-close handling.

@@ -138,6 +138,8 @@ export interface VisitorSessionOptions {
   otherBusyStarts?: () => Promise<Date[]>;
   /** Other tours' real held windows (start + effective end, including extensions). */
   otherBusyWindows?: () => Promise<import("../core/customSlot").OccupiedWindow[]>;
+  /** Test hook: pause inside the property slot lock. */
+  slotLockBarrier?: (op: "reserve" | "approve" | "decline" | "propose") => Promise<void>;
 }
 
 /** How one typed message was read, kept on the visitor's line for developer details. Never model reasoning. */
@@ -219,6 +221,8 @@ export class VisitorDemoSession {
   rebookUnitId?: string;
   /** New reservation booked during a running tour; becomes active when that tour ends. */
   pendingBookingId?: string;
+  /** Custom-time request filed against a held or current booking. Never overwrites pendingBookingId. */
+  pendingCustomRequestId?: string;
   /** Finished tour still waiting on the follow-up question after a held booking was promoted. */
   followUpReservationId?: string;
   /** The active booking was a held rebook that just took over after the tour ended. */
@@ -259,6 +263,7 @@ export class VisitorDemoSession {
       beforeAccess: options.beforeAccess,
       otherBusyStarts: options.otherBusyStarts,
       otherBusyWindows: options.otherBusyWindows,
+      ...(options.slotLockBarrier ? { slotLockBarrier: options.slotLockBarrier } : {}),
       ...(links ? { verificationLink: ({ reservation, prospect }) => links.issue({ sessionId: this.id, reservationId: reservation.id, phone: prospect.phone }) } : {}),
     });
   }
@@ -607,7 +612,7 @@ export class VisitorDemoSession {
   }
 
   /** Operator action: move the tour. The visitor is told through this conversation's own transport. */
-  async reschedule(newStartsAt: string, options: { outsideTourHours?: boolean; customTime?: boolean; notice?: "default" | "moved" } = {}): Promise<{ changed: boolean }> {
+  async reschedule(newStartsAt: string, options: { outsideTourHours?: boolean; customTime?: boolean; notice?: "default" | "moved" | "none" } = {}): Promise<{ changed: boolean }> {
     if (!this.reservationId) throw new SetupInputError("NO_TOUR", "This visitor hasn't booked a tour yet.");
     const reservation = await this.reservation();
     const paused = operatorPausedBookingRefuse(this.pauseState(), this.config, reservation?.unitId);
@@ -623,6 +628,7 @@ export class VisitorDemoSession {
     if (!reservation) throw new SetupInputError("NO_TOUR", "Choose a unit before choosing a time.");
     if (await this.refuseIfPaused(reservation.unitId)) return;
     await this.core.reserveSlot(reservation.id, slotStart);
+    this.pendingCustomRequestId = undefined;
     await this.syncReplies();
   }
 
@@ -633,12 +639,17 @@ export class VisitorDemoSession {
     if (await this.refuseIfPaused(reservation.unitId)) return { created: false, request: { id: "", propertyId: this.propertyId, prospectId: this.prospectId, requestedStartsAt: start.toISOString(), requestedEndsAt: start.toISOString(), requestSource: "VISITOR", status: "DECLINED", createdAt: this.clock.now().toISOString() } };
     const running = reservation.status === "TOURING";
     let requestReservationId = reservation.id;
-    if (running) {
-      const oldId = this.reservationId;
-      await this.inquire(reservation.unitId, { announce: false });
-      requestReservationId = this.reservationId!;
-      this.pendingBookingId = requestReservationId;
-      this.reservationId = oldId;
+    const held = await this.pendingBooking();
+    if (held && held.slotStart && held.status !== "CANCELLED" && held.status !== "REVOKED" && held.status !== "EXPIRED") {
+      requestReservationId = held.id;
+    } else if (running) {
+      if (!this.pendingBookingId) {
+        const oldId = this.reservationId;
+        await this.inquire(reservation.unitId, { announce: false });
+        this.pendingBookingId = this.reservationId;
+        this.reservationId = oldId;
+      }
+      requestReservationId = this.pendingBookingId!;
     }
     const { request, created } = await this.core.createTourTimeRequest({
       prospectId: this.prospectId,
@@ -648,9 +659,14 @@ export class VisitorDemoSession {
       requestSource: "VISITOR",
       ...(sourceMessageId ? { sourceMessageId } : {}),
     });
+    if (created) this.pendingCustomRequestId = request.id;
     const label = formatTime(start, this.config.property.timezone);
+    const target = requestReservationId === held?.id ? held : reservation;
     if (!created) {
       await this.reply(`I've already asked the property team about ${label}. I'll let you know when they respond.`);
+    } else if (target.slotStart && target.id !== reservation.id && running) {
+      const current = formatTime(new Date(target.slotStart), this.config.property.timezone);
+      await this.reply(`I've asked the property team about moving your tour to ${label}. Your ${current} tour is still confirmed until they approve a change.`);
     } else if (running || !reservation.slotStart) {
       await this.reply(`${label} isn't one of the regular tour times, but I can ask the property team. I'll let you know once they respond.`);
     } else {
@@ -750,6 +766,7 @@ export class VisitorDemoSession {
     if (paused) throw new SetupInputError("TOURS_PAUSED", paused);
     const result = await this.core.approveTourTimeRequest(requestId, options);
     await this.syncReplies();
+    if (result.needsConsentAsk) await this.announceConsentForMovedBooking(result.reservation.id);
     return result;
   }
 
@@ -771,6 +788,7 @@ export class VisitorDemoSession {
     if (await this.refuseIfPaused(reservation?.unitId)) return;
     const result = await this.core.acceptProposedTime(requestId);
     await this.syncReplies();
+    if (result.needsConsentAsk) await this.announceConsentForMovedBooking(result.reservation.id);
     return result;
   }
 
@@ -1058,8 +1076,8 @@ export class VisitorDemoSession {
   }
 
   /** Booked-for line, then the original consent question — so it is clearly about the new booking. */
-  async announceHeldBookingConsent(): Promise<void> {
-    const active = await this.reservation();
+  async announceHeldBookingConsent(reservationId?: string): Promise<void> {
+    const active = reservationId ? await this.store.get("reservations", reservationId) : await this.reservation();
     if (!active?.slotStart || active.status !== "AWAITING_CONSENT" || active.consentId) return;
     const start = new Date(active.slotStart);
     const tz = this.config.property.timezone;
@@ -1068,11 +1086,32 @@ export class VisitorDemoSession {
     this.heldBookingTakenOver = false;
   }
 
+  /** Same two-reply consent ask the held-booking takeover uses, for an unconfirmed move. */
+  async announceConsentForMovedBooking(reservationId: string): Promise<void> {
+    await this.announceHeldBookingConsent(reservationId);
+  }
+
   /** Unapproved custom-time request still waiting on the property team. */
   async unapprovedCustomTimeRequest(): Promise<TourTimeRequest | undefined> {
-    const ids = new Set([this.reservationId, this.pendingBookingId].filter((id): id is string => !!id));
     const requests = await this.store.list("tourTimeRequests");
+    if (this.pendingCustomRequestId) {
+      const named = requests.find((request) => request.id === this.pendingCustomRequestId && request.status === "PENDING");
+      if (named) return named;
+    }
+    const ids = new Set([this.reservationId, this.pendingBookingId].filter((id): id is string => !!id));
     return requests.find((request) => request.status === "PENDING" && request.reservationId && ids.has(request.reservationId));
+  }
+
+  /** A held or booked future regular tour that is still live. */
+  async hasLiveRegularTour(): Promise<boolean> {
+    for (const id of [this.pendingBookingId, this.reservationId]) {
+      if (!id) continue;
+      const reservation = await this.store.get("reservations", id);
+      if (reservation?.slotStart && reservation.status !== "CANCELLED" && reservation.status !== "REVOKED" && reservation.status !== "EXPIRED" && reservation.status !== "COMPLETED") {
+        return true;
+      }
+    }
+    return false;
   }
 
   /** After a tour ends, tell the visitor their custom-time request is still with the team. Once per request. */
@@ -1081,9 +1120,8 @@ export class VisitorDemoSession {
     if (!request || request.pendingNoticeSentAt) return false;
     const start = new Date(request.requestedStartsAt);
     const tz = this.config.property.timezone;
-    await this.refreshOfferedSchedule();
-    this.markDatesShown();
-    await this.reply(pendingCustomTimeLine(formatTime(start, tz), formatDay(start, tz)));
+    const offerRegularTimes = !(await this.hasLiveRegularTour());
+    await this.reply(pendingCustomTimeLine(formatTime(start, tz), formatDay(start, tz), { offerRegularTimes }));
     await this.core.markPendingCustomTimeNotice(request.id);
     return true;
   }
@@ -1159,7 +1197,7 @@ export class VisitorDemoSession {
     this.offeredDates = await this.core.availableDates();
     this.selectedDate = undefined;
     this.offeredSlots = [];
-    this.markDatesShown();
+    if (options.announce !== false) this.markDatesShown();
   }
 
   /** Times for one day. An empty list means that day has no open regular tours. */
@@ -1236,6 +1274,7 @@ export class VisitorDemoSession {
     if (only && !this.reservationId) await this.inquire(only.id, { announce: false });
     const { body, prompt } = entryReply(this.config, this.offeredDates, open);
     await this.reply(body, prompt);
+    if (prompt?.kind === "choose" && prompt.what === "a day") this.markDatesShown();
   }
 
   private async currentPlace(): Promise<string | undefined> {

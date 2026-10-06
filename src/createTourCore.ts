@@ -119,5 +119,6 @@ export function createTourCore(config: TourCoreConfig, overrides: Partial<TourCo
     ...(overrides.correlationId ? { correlationId: overrides.correlationId } : {}),
     ...(overrides.otherBusyStarts ? { otherBusyStarts: overrides.otherBusyStarts } : {}),
     ...(overrides.otherBusyWindows ? { otherBusyWindows: overrides.otherBusyWindows } : {}),
+    ...(overrides.slotLockBarrier ? { slotLockBarrier: overrides.slotLockBarrier } : {}),
   });
 }

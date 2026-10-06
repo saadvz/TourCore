@@ -124,6 +124,8 @@ function sentence(
       return good(`The property team approved ${c.name}'s requested tour time.`);
     case "TOUR_TIME_REQUEST_DECLINED":
       return info(`The property team couldn't do ${c.name}'s requested tour time.`);
+    case "TOUR_TIME_REQUEST_WITHDRAWN":
+      return info(`${c.name} booked a regular time instead.`);
     case "TOUR_TIME_ALTERNATIVE_PROPOSED":
       return info(`The property team offered ${c.name} a different tour time.`);
     case "TOUR_RESCHEDULED":

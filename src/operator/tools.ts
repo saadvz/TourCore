@@ -1250,10 +1250,11 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "List custom time requests",
     kind: "read",
     description:
-      "Who is waiting on a tour time that isn't a regular slot, or on moving a tour. Say this when the operator asks who wants a different time or to show custom-time requests. Pending and withdrawn (visitor booked a regular time instead) by default. Set includeHandled for approved, declined, or replaced requests. A withdrawn request includes the reason They booked a regular time instead. No schedule jargon.",
+      "Who is waiting on a tour time that isn't a regular slot, or on moving a tour. Say this when the operator asks who wants a different time or to show custom-time requests. Pending requests only by default. Withdrawn requests (visitor booked a regular time instead) are hidden unless you pass status withdrawn or all, or includeHandled. A withdrawn request includes the reason They booked a regular time instead. No schedule jargon.",
     input: z.strictObject({
       property: Property,
-      includeHandled: z.boolean().optional().describe("Include requests that were already approved, declined or replaced. Withdrawn requests already appear without this."),
+      includeHandled: z.boolean().optional().describe("Include requests that were already approved, declined, replaced, or withdrawn."),
+      status: z.string().optional().describe('Filter: pending (default), withdrawn, approved, declined, superseded, or all.'),
     }),
     run: (ctx, i) => listTourTimeRequests(ctx, i),
   }),
@@ -1296,7 +1297,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Offer another time",
     kind: "change",
     description:
-      "Offers the visitor a different time. Their current booking stays until they agree. Say the time in everyday words, like \"3:30 PM\". Use this when the operator wants to suggest another time.",
+      "Offers the visitor a different time. Their current booking stays until they agree. Say the time in everyday words, like \"3:30 PM\". Use this when the operator wants to suggest another time. If the visitor already booked a regular time, the request is withdrawn: return They booked a regular time instead. Do not offer another time and do not text the visitor.",
     input: z.strictObject({
       tourTimeRequestId: z.string().min(3).max(40).describe("The tourTimeRequestId. Never show it to the operator."),
       newStartsAt: z.string().min(1).max(80).describe('The time to offer, such as "3:30 PM" or "tomorrow at 11:15 AM".'),

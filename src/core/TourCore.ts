@@ -70,6 +70,11 @@ export interface TourCoreDeps {
    * bookings must stop. Unset means booking is allowed (practice tours, older tests).
    */
   availability?: (unitId?: string) => { allowed: boolean; message: string } | undefined;
+  /**
+   * Test hook: runs after the property slot lock is taken, before the
+   * critical section. Lets tests pause one locker so another can queue.
+   */
+  slotLockBarrier?: (op: "reserve" | "approve" | "decline" | "propose") => Promise<void>;
 }
 
 export interface InboundMeta {
@@ -110,16 +115,23 @@ export function bookedForLine(time: string, day: string): string {
   return `Great, you're booked for ${time} on ${day}.`;
 }
 
-/** After a tour ends, an unapproved custom-time request stays with the team. */
 export const PENDING_CUSTOM_TIME_REGULAR_OPTION =
   "If you'd rather pick one of the regular times instead, just reply with a day.";
 
-export function pendingCustomTimeLine(time: string, day: string): string {
-  return `Your request for ${time} on ${day} is still with the property team. I'll text you as soon as they respond. ${PENDING_CUSTOM_TIME_REGULAR_OPTION}`;
+/** After a tour ends, an unapproved custom-time request stays with the team. */
+export function pendingCustomTimeLine(time: string, day: string, options?: { offerRegularTimes?: boolean }): string {
+  const base = `Your request for ${time} on ${day} is still with the property team. I'll text you as soon as they respond.`;
+  if (options?.offerRegularTimes === false) return base;
+  return `${base} ${PENDING_CUSTOM_TIME_REGULAR_OPTION}`;
 }
 
 /** Operator-facing reason when a visitor books a regular slot instead of waiting. */
 export const WITHDRAWN_FOR_REGULAR_BOOKING = "They booked a regular time instead.";
+
+/** Visitor confirmation when a regular pick replaces a held or booked future tour. */
+export function replacesTourLine(day: string, time: string): string {
+  return `That replaces your ${day} ${time} tour.`;
+}
 
 /** Repeat help on the same reservation re-alerts the team at most once per this window. */
 export const HELP_ALERT_WINDOW_MS = 5 * 60_000;
@@ -383,18 +395,37 @@ export class TourCore {
 
   async reserveSlot(reservationId: string, slotStartIso: string): Promise<Reservation> {
     return this.withSlotLock(async () => {
+      await this.deps.slotLockBarrier?.("reserve");
       let reservation = await this.mustGetReservation(reservationId);
       this.assertBookingAllowed(reservation.unitId);
       const start = new Date(slotStartIso);
       if (Number.isNaN(start.getTime())) throw new TourCoreError("INVALID_SLOT", "That tour time isn't valid");
       if (reservation.slotStart === start.toISOString() && reservation.status !== "INQUIRY") return reservation;
-      if (reservation.status !== "INQUIRY") throw new TourCoreError("ALREADY_BOOKED", "This tour already has a time");
 
       const slots = await this.availableSlots(localDateOf(start, this.deps.config.property.timezone));
       if (!slots.some((s) => s.start.getTime() === start.getTime())) {
         throw new TourCoreError("SLOT_UNAVAILABLE", "That time is no longer available");
       }
 
+      const prospect = await this.mustGetProspect(reservation.prospectId);
+      if (reservation.status !== "INQUIRY") {
+        if (!reservation.slotStart || !this.canReplaceRegularBooking(reservation)) {
+          throw new TourCoreError("ALREADY_BOOKED", "This tour already has a time");
+        }
+        const from = new Date(reservation.slotStart);
+        const fromDay = this.day(from);
+        const fromTime = this.time(from);
+        reservation = (await this.doRescheduleReservation({ reservationId: reservation.id, newStartsAt: slotStartIso, notice: "none" })).reservation;
+        await this.withdrawPendingCustomTimeRequests(prospect.id, reservation.id);
+        await this.textProspect(prospect, reservation.id, bookedForLine(this.time(start), this.day(start)));
+        await this.textProspect(prospect, reservation.id, replacesTourLine(fromDay, fromTime));
+        if (reservation.status === "AWAITING_CONSENT" && !reservation.consentId) {
+          await this.textProspect(prospect, reservation.id, CONSENT_TEXT, { kind: "yes-no" });
+        }
+        return reservation;
+      }
+
+      await this.cancelOtherLiveBookings(prospect.id, reservation.id);
       const { windowStart, windowEnd } = tourWindow(this.deps.config, start);
       reservation = { ...reservation, slotStart: start.toISOString(), windowStart: windowStart.toISOString(), windowEnd: windowEnd.toISOString() };
       reservation = await this.move(reservation, "RESERVED", "RESERVATION_CREATED", {
@@ -402,7 +433,6 @@ export class TourCore {
       });
       reservation = await this.move(reservation, "AWAITING_CONSENT", "CONSENT_REQUESTED", { detail: "asked permission to text and keep tour records" });
 
-      const prospect = await this.mustGetProspect(reservation.prospectId);
       await this.withdrawPendingCustomTimeRequests(prospect.id, reservation.id);
       await this.textProspect(prospect, reservation.id, `${bookedForLine(this.time(start), this.day(start))}\n${CONSENT_TEXT}`, { kind: "yes-no" });
       return reservation;
@@ -574,8 +604,8 @@ export class TourCore {
     /** Lets a one-off time through. Inside touring hours is enough; outside hours still needs `outsideTourHours`. */
     customTime?: boolean;
     outsideTourHours?: boolean;
-    /** "moved" is the visitor confirmation for an approved or operator-directed change. */
-    notice?: "default" | "moved";
+    /** "moved" is the visitor confirmation for an approved or operator-directed change. "none" sends no visitor text. */
+    notice?: "default" | "moved" | "none";
   }): Promise<{ reservation: Reservation; changed: boolean }> {
     return this.withSlotLock(() => this.doRescheduleReservation(input));
   }
@@ -585,7 +615,7 @@ export class TourCore {
     newStartsAt: string;
     customTime?: boolean;
     outsideTourHours?: boolean;
-    notice?: "default" | "moved";
+    notice?: "default" | "moved" | "none";
   }): Promise<{ reservation: Reservation; changed: boolean }> {
     let reservation = await this.mustGetReservation(input.reservationId);
     const start = new Date(input.newStartsAt);
@@ -646,6 +676,9 @@ export class TourCore {
 
     const prospect = await this.mustGetProspect(reservation.prospectId);
     const when = `${this.day(start)} at ${this.time(start)}`;
+    if (input.notice === "none") {
+      return { reservation, changed: true };
+    }
     if (input.notice === "moved") {
       await this.textProspect(prospect, reservation.id, `Your tour of ${visitorSubject(config.property, this.unitFor(reservation).name)} has been moved to ${this.whenPhrase(start)}. You're all set.`);
     } else if (reservation.status === "READY") {
@@ -858,81 +891,117 @@ export class TourCore {
         operatorNote: WITHDRAWN_FOR_REGULAR_BOOKING,
       };
       await this.deps.store.put("tourTimeRequests", next);
+      await this.record("TOUR_TIME_REQUEST_WITHDRAWN", {
+        reservationId: request.reservationId ?? reservationId,
+        prospectId,
+        detail: WITHDRAWN_FOR_REGULAR_BOOKING,
+      });
       withdrawn.push(next);
     }
     return withdrawn;
   }
 
-  async approveTourTimeRequest(requestId: string, options: { outsideTourHours?: boolean } = {}): Promise<{ request: TourTimeRequest; reservation: Reservation }> {
-    const request = await this.mustGetTimeRequest(requestId);
+  private assertPendingTimeRequest(request: TourTimeRequest): void {
+    if (request.status === "WITHDRAWN") throw new TourCoreError("REQUEST_WITHDRAWN", WITHDRAWN_FOR_REGULAR_BOOKING);
     if (request.status !== "PENDING") throw new TourCoreError("REQUEST_CLOSED", "That time request has already been handled.");
-    this.assertBookingAllowed(request.unitId ?? (request.reservationId ? (await this.mustGetReservation(request.reservationId)).unitId : undefined));
-    if (!request.reservationId) throw new TourCoreError("NO_RESERVATION", "That request isn't tied to a tour.");
-    const current = await this.mustGetReservation(request.reservationId);
-    this.assertMovableRequest(current);
-    const outside = placementOf(this.deps.config, new Date(request.requestedStartsAt)) === "OUTSIDE_HOURS";
-    if (outside && !options.outsideTourHours) {
-      throw new TourCoreError("OUTSIDE_TOUR_HOURS", `${this.time(new Date(request.requestedStartsAt))} is outside the property's normal ${touringHoursLabel(this.deps.config)} touring hours.`);
-    }
-    const reservation =
-      current.status === "INQUIRY" || !current.slotStart
-        ? await this.bookCustomSlot(current.id, request.requestedStartsAt, options)
-        : (await this.rescheduleReservation({ reservationId: current.id, newStartsAt: request.requestedStartsAt, customTime: true, outsideTourHours: options.outsideTourHours, notice: "moved" })).reservation;
-    const approved = await this.resolveRequest(request, "APPROVED", "OPERATOR");
-    await this.record("TOUR_TIME_REQUEST_APPROVED", { reservationId: reservation.id, prospectId: request.prospectId, detail: `approved ${this.whenPhrase(new Date(request.requestedStartsAt))}` });
-    return { request: approved, reservation };
+  }
+
+  async approveTourTimeRequest(requestId: string, options: { outsideTourHours?: boolean } = {}): Promise<{ request: TourTimeRequest; reservation: Reservation; needsConsentAsk?: boolean }> {
+    return this.withSlotLock(async () => {
+      await this.deps.slotLockBarrier?.("approve");
+      const request = await this.mustGetTimeRequest(requestId);
+      this.assertPendingTimeRequest(request);
+      this.assertBookingAllowed(request.unitId ?? (request.reservationId ? (await this.mustGetReservation(request.reservationId)).unitId : undefined));
+      if (!request.reservationId) throw new TourCoreError("NO_RESERVATION", "That request isn't tied to a tour.");
+      const current = await this.mustGetReservation(request.reservationId);
+      this.assertMovableRequest(current);
+      const outside = placementOf(this.deps.config, new Date(request.requestedStartsAt)) === "OUTSIDE_HOURS";
+      if (outside && !options.outsideTourHours) {
+        throw new TourCoreError("OUTSIDE_TOUR_HOURS", `${this.time(new Date(request.requestedStartsAt))} is outside the property's normal ${touringHoursLabel(this.deps.config)} touring hours.`);
+      }
+      const unconfirmed = current.status === "AWAITING_CONSENT" && !current.consentId;
+      let reservation: Reservation;
+      let needsConsentAsk = false;
+      if (current.status === "INQUIRY" || !current.slotStart) {
+        reservation = await this.doBookCustomSlot(current.id, request.requestedStartsAt, options);
+      } else if (unconfirmed) {
+        reservation = (await this.doRescheduleReservation({ reservationId: current.id, newStartsAt: request.requestedStartsAt, customTime: true, outsideTourHours: options.outsideTourHours, notice: "none" })).reservation;
+        needsConsentAsk = true;
+      } else {
+        reservation = (await this.doRescheduleReservation({ reservationId: current.id, newStartsAt: request.requestedStartsAt, customTime: true, outsideTourHours: options.outsideTourHours, notice: "moved" })).reservation;
+      }
+      const approved = await this.resolveRequest(request, "APPROVED", "OPERATOR");
+      await this.record("TOUR_TIME_REQUEST_APPROVED", { reservationId: reservation.id, prospectId: request.prospectId, detail: `approved ${this.whenPhrase(new Date(request.requestedStartsAt))}` });
+      return { request: approved, reservation, ...(needsConsentAsk ? { needsConsentAsk: true } : {}) };
+    });
   }
 
   async declineTourTimeRequest(requestId: string, note?: string): Promise<TourTimeRequest> {
-    const request = await this.mustGetTimeRequest(requestId);
-    if (request.status !== "PENDING") throw new TourCoreError("REQUEST_CLOSED", "That time request has already been handled.");
-    const declined = await this.resolveRequest(request, "DECLINED", "OPERATOR", note);
-    const reservation = request.reservationId ? await this.deps.store.get("reservations", request.reservationId) : undefined;
-    const prospect = await this.mustGetProspect(request.prospectId);
-    const current = reservation?.slotStart ? ` Your ${this.time(new Date(reservation.slotStart))} tour is still confirmed.` : "";
-    await this.textProspect(prospect, request.reservationId, `The property team couldn't approve ${this.time(new Date(request.requestedStartsAt))}.${current}`);
-    await this.record("TOUR_TIME_REQUEST_DECLINED", { reservationId: request.reservationId, prospectId: request.prospectId, detail: note?.trim() || "declined" });
-    return declined;
+    return this.withSlotLock(async () => {
+      await this.deps.slotLockBarrier?.("decline");
+      const request = await this.mustGetTimeRequest(requestId);
+      this.assertPendingTimeRequest(request);
+      const declined = await this.resolveRequest(request, "DECLINED", "OPERATOR", note);
+      const reservation = request.reservationId ? await this.deps.store.get("reservations", request.reservationId) : undefined;
+      const prospect = await this.mustGetProspect(request.prospectId);
+      const current = reservation?.slotStart ? ` Your ${this.time(new Date(reservation.slotStart))} tour is still confirmed.` : "";
+      await this.textProspect(prospect, request.reservationId, `The property team couldn't approve ${this.time(new Date(request.requestedStartsAt))}.${current}`);
+      await this.record("TOUR_TIME_REQUEST_DECLINED", { reservationId: request.reservationId, prospectId: request.prospectId, detail: note?.trim() || "declined" });
+      return declined;
+    });
   }
 
   /** Offers another time. The existing booking is not moved until the visitor accepts. */
   async proposeTourTime(requestId: string, alternativeStartsAt: string): Promise<TourTimeRequest> {
-    const request = await this.mustGetTimeRequest(requestId);
-    if (request.status !== "PENDING") throw new TourCoreError("REQUEST_CLOSED", "That time request has already been handled.");
-    const start = new Date(alternativeStartsAt);
-    if (Number.isNaN(start.getTime())) throw new TourCoreError("INVALID_SLOT", "That tour time isn't valid.");
-    const { windowEnd } = tourWindow(this.deps.config, start);
-    if (windowEnd <= this.deps.clock.now()) throw new TourCoreError("SLOT_PAST", "That tour time has already passed.");
-    if (request.reservationId) await this.assertNoConflict(start, request.reservationId);
-    const next: TourTimeRequest = { ...request, proposedAlternativeAt: start.toISOString(), operatorNote: `offered ${this.time(start)}` };
-    await this.deps.store.put("tourTimeRequests", next);
-    const prospect = await this.mustGetProspect(request.prospectId);
-    const reservation = request.reservationId ? await this.deps.store.get("reservations", request.reservationId) : undefined;
-    const keep = reservation?.slotStart ? ` or NO to keep your ${this.time(new Date(reservation.slotStart))} time` : " or NO to keep looking";
-    await this.textProspect(
-      prospect,
-      request.reservationId,
-      `The property team can't do ${this.time(new Date(request.requestedStartsAt))}, but ${this.time(start)} works. Reply YES to switch to ${this.time(start)}${keep}.`,
-    );
-    await this.record("TOUR_TIME_ALTERNATIVE_PROPOSED", { reservationId: request.reservationId, prospectId: request.prospectId, detail: `offered ${this.whenPhrase(start)}` });
-    return next;
+    return this.withSlotLock(async () => {
+      await this.deps.slotLockBarrier?.("propose");
+      const request = await this.mustGetTimeRequest(requestId);
+      this.assertPendingTimeRequest(request);
+      const start = new Date(alternativeStartsAt);
+      if (Number.isNaN(start.getTime())) throw new TourCoreError("INVALID_SLOT", "That tour time isn't valid.");
+      const { windowEnd } = tourWindow(this.deps.config, start);
+      if (windowEnd <= this.deps.clock.now()) throw new TourCoreError("SLOT_PAST", "That tour time has already passed.");
+      if (request.reservationId) await this.assertNoConflict(start, request.reservationId);
+      const next: TourTimeRequest = { ...request, proposedAlternativeAt: start.toISOString(), operatorNote: `offered ${this.time(start)}` };
+      await this.deps.store.put("tourTimeRequests", next);
+      const prospect = await this.mustGetProspect(request.prospectId);
+      const reservation = request.reservationId ? await this.deps.store.get("reservations", request.reservationId) : undefined;
+      const keep = reservation?.slotStart ? ` or NO to keep your ${this.time(new Date(reservation.slotStart))} time` : " or NO to keep looking";
+      await this.textProspect(
+        prospect,
+        request.reservationId,
+        `The property team can't do ${this.time(new Date(request.requestedStartsAt))}, but ${this.time(start)} works. Reply YES to switch to ${this.time(start)}${keep}.`,
+      );
+      await this.record("TOUR_TIME_ALTERNATIVE_PROPOSED", { reservationId: request.reservationId, prospectId: request.prospectId, detail: `offered ${this.whenPhrase(start)}` });
+      return next;
+    });
   }
 
-  async acceptProposedTime(requestId: string): Promise<{ request: TourTimeRequest; reservation: Reservation }> {
-    const request = await this.mustGetTimeRequest(requestId);
-    if (request.status !== "PENDING" || !request.proposedAlternativeAt) throw new TourCoreError("NOTHING_PROPOSED", "There isn't another time waiting on the visitor.");
-    this.assertBookingAllowed(request.unitId ?? (request.reservationId ? (await this.mustGetReservation(request.reservationId)).unitId : undefined));
-    if (!request.reservationId) throw new TourCoreError("NO_RESERVATION", "That request isn't tied to a tour.");
-    const current = await this.mustGetReservation(request.reservationId);
-    this.assertMovableRequest(current);
-    const outside = placementOf(this.deps.config, new Date(request.proposedAlternativeAt)) === "OUTSIDE_HOURS";
-    const reservation =
-      current.status === "INQUIRY" || !current.slotStart
-        ? await this.bookCustomSlot(current.id, request.proposedAlternativeAt, { outsideTourHours: outside })
-        : (await this.rescheduleReservation({ reservationId: current.id, newStartsAt: request.proposedAlternativeAt, customTime: true, outsideTourHours: outside, notice: "moved" })).reservation;
-    const approved = await this.resolveRequest(request, "APPROVED", "VISITOR");
-    await this.record("TOUR_TIME_REQUEST_APPROVED", { reservationId: reservation.id, prospectId: request.prospectId, detail: `visitor accepted ${this.whenPhrase(new Date(request.proposedAlternativeAt))}` });
-    return { request: approved, reservation };
+  async acceptProposedTime(requestId: string): Promise<{ request: TourTimeRequest; reservation: Reservation; needsConsentAsk?: boolean }> {
+    return this.withSlotLock(async () => {
+      const request = await this.mustGetTimeRequest(requestId);
+      this.assertPendingTimeRequest(request);
+      if (!request.proposedAlternativeAt) throw new TourCoreError("NOTHING_PROPOSED", "There isn't another time waiting on the visitor.");
+      this.assertBookingAllowed(request.unitId ?? (request.reservationId ? (await this.mustGetReservation(request.reservationId)).unitId : undefined));
+      if (!request.reservationId) throw new TourCoreError("NO_RESERVATION", "That request isn't tied to a tour.");
+      const current = await this.mustGetReservation(request.reservationId);
+      this.assertMovableRequest(current);
+      const outside = placementOf(this.deps.config, new Date(request.proposedAlternativeAt)) === "OUTSIDE_HOURS";
+      const unconfirmed = current.status === "AWAITING_CONSENT" && !current.consentId;
+      let reservation: Reservation;
+      let needsConsentAsk = false;
+      if (current.status === "INQUIRY" || !current.slotStart) {
+        reservation = await this.doBookCustomSlot(current.id, request.proposedAlternativeAt, { outsideTourHours: outside });
+      } else if (unconfirmed) {
+        reservation = (await this.doRescheduleReservation({ reservationId: current.id, newStartsAt: request.proposedAlternativeAt, customTime: true, outsideTourHours: outside, notice: "none" })).reservation;
+        needsConsentAsk = true;
+      } else {
+        reservation = (await this.doRescheduleReservation({ reservationId: current.id, newStartsAt: request.proposedAlternativeAt, customTime: true, outsideTourHours: outside, notice: "moved" })).reservation;
+      }
+      const approved = await this.resolveRequest(request, "APPROVED", "VISITOR");
+      await this.record("TOUR_TIME_REQUEST_APPROVED", { reservationId: reservation.id, prospectId: request.prospectId, detail: `visitor accepted ${this.whenPhrase(new Date(request.proposedAlternativeAt))}` });
+      return { request: approved, reservation, ...(needsConsentAsk ? { needsConsentAsk: true } : {}) };
+    });
   }
 
   async declineProposedTime(requestId: string): Promise<TourTimeRequest> {
@@ -1879,6 +1948,20 @@ export class TourCore {
     if (TERMINAL.includes(reservation.status)) throw new TourCoreError("NOT_RESCHEDULABLE", "That tour has already finished.");
     if (reservation.status === "OPERATOR_HOLD" || reservation.status === "PROVIDER_FAILURE") {
       throw new TourCoreError("NOT_RESCHEDULABLE", "That tour is paused, so its time can't be changed yet.");
+    }
+  }
+
+  private canReplaceRegularBooking(reservation: Reservation): boolean {
+    return !TERMINAL.includes(reservation.status) && reservation.status !== "TOURING" && reservation.status !== "OPERATOR_HOLD" && reservation.status !== "PROVIDER_FAILURE";
+  }
+
+  /** A visitor may hold only one future booking. Cancel any other live hold when they pick a regular slot. */
+  private async cancelOtherLiveBookings(prospectId: string, keepId: string): Promise<void> {
+    for (const other of await this.deps.store.list("reservations")) {
+      if (other.id === keepId || other.prospectId !== prospectId) continue;
+      if (!other.slotStart || TERMINAL.includes(other.status)) continue;
+      if (other.status === "TOURING") continue;
+      await this.cancelReservation(other.id, "replaced by a regular booking");
     }
   }
 

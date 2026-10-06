@@ -24,10 +24,16 @@ other words. A rebook or custom-time
 request during a tour stays secondary until that tour ends, then
 unfinished consent or identity checks continue. After the follow-up
 reply, an unapproved custom-time request is told once that it is still
-with the property team and they can reply with a day for a regular
-time. Later texts use the normal booking flow. Booking a regular slot
-withdraws that request so a later approve cannot double-book; operators
-see `They booked a regular time instead.` While the leaving
+with the property team; they can reply with a day for a regular
+time only when they do not already have a held or booked regular tour.
+A held rebook taking over gets the booked-for line, then the original
+consent question, then Reply YES or NO. Later texts use the normal
+booking flow. Booking a regular slot withdraws that request so a later
+approve cannot double-book; replacing a held or booked future tour also
+sends `That replaces your {day} {time} tour.` Operators see
+`They booked a regular time instead.` Approving a custom time that
+moves an unconfirmed held booking uses that same booked-for then
+consent ask, not moved wording. While the leaving
 issue is open after the close, stuck-inside texts and greetings stay
 on after-close handling. After the follow-up reply, unanswered consent is the
 booked-for line for the new time, then the original consent question.
