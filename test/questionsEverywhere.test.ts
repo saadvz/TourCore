@@ -89,8 +89,8 @@ describe("questions at every stage of a text conversation", () => {
     await a.optInSms();
     await a.text("1");
     await a.text("1");
-    expect(await a.text("Does it have laundry?")).toEqual(["Here's what the property team shared: In-unit laundry.", TIMES]);
-    expect(await a.text("Does 1A have laundry?")).toEqual(["Here's what the property team shared: In-unit laundry.", TIMES]);
+    expect(await a.text("Does it have laundry?")).toEqual(["Here's what the property team shared: In-unit laundry."]);
+    expect(await a.text("Does 1A have laundry?")).toEqual(["Here's what the property team shared: In-unit laundry."]);
     expect((await a.text("2"))[0]).toContain("Great, you're booked for 3:30 PM");
   });
 
@@ -137,9 +137,9 @@ describe("questions at every stage of a text conversation", () => {
     await a.optInSms();
     expect(await a.text("Is there a gym?")).toEqual([FALLBACK, expect.stringContaining("Which unit would you like to see?")]);
     await a.text("1");
-    expect(await a.text("Is there a pool?")).toEqual([FALLBACK, DATE_MENU]);
+    expect(await a.text("Is there a pool?")).toEqual([FALLBACK]);
     await a.text("1");
-    expect(await a.text("Can I bring my bike inside?")).toEqual([FALLBACK, TIMES]);
+    expect(await a.text("Can I bring my bike inside?")).toEqual([FALLBACK]);
     await a.text("1");
     const issues = (await a.grok("list_exceptions")).exceptions;
     expect(issues.map((x: { summary: string }) => x.summary).sort()).toEqual(
@@ -155,12 +155,12 @@ describe("questions at every stage of a text conversation", () => {
     await a.optInSms();
     await a.text("1");
     await a.text("1");
-    expect(await a.text("Is there a gym?")).toEqual([FALLBACK, TIMES]);
+    expect(await a.text("Is there a gym?")).toEqual([FALLBACK]);
     const [issue] = (await a.grok("list_exceptions")).exceptions;
     const before = a.fake.sent.length;
     const out = await a.approve("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "There's a gym on the roof." });
     expect(out.visitorAnswered).toBe(true);
-    expect(a.fake.sent.slice(before).map((s) => s.content)).toEqual(["There's a gym on the roof. Let me know if you have any other questions.", TIMES]);
+    expect(a.fake.sent.slice(before).map((s) => s.content)).toEqual(["There's a gym on the roof. Let me know if you have any other questions."]);
     expect((await a.text("2"))[0]).toContain("Great, you're booked for 3:30 PM");
     // The new fact is approved content from now on.
     expect(await a.text("is there a gym?")).toEqual(["Here's what the property team shared: There's a gym on the roof.", CONSENT]);

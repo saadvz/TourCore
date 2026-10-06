@@ -88,9 +88,11 @@ describe("date-first availability", () => {
     await a.text("Thursday");
     const rent = (await a.text("How much is rent?")).join("\n");
     expect(rent).toContain("Unit 1A rents for $2,300 a month.");
-    expect(rent).toContain("I have these times available Thursday, Oct 1:");
+    expect(rent).not.toContain("I have these times available Thursday, Oct 1:");
     expect(rent).not.toContain("Monday, Sep 28");
     expect((await a.grok("list_exceptions")).exceptions).toEqual([]);
+    const pick = (await a.text("1")).join("\n");
+    expect(pick).toMatch(/2:00 PM|booked/);
   });
 
   it("files a custom time on the selected day, and on a different day when one is named", async () => {
@@ -128,7 +130,9 @@ describe("single-family visitor language", () => {
     expect(rent).toContain("144 Hillside Ave rents for $2,300 a month.");
     expect(rent).not.toContain("Main Home");
     expect(rent).not.toMatch(/\bunit\b/i);
-    expect(rent).toContain("Thursday, Oct 1");
+    expect(rent).not.toContain("I have these times available");
+    const pick = (await a.text("1")).join("\n");
+    expect(pick).toMatch(/2:00 PM|Thursday, Oct 1|booked/);
   });
 
   it("keeps an explicit public name, still with the address", async () => {
