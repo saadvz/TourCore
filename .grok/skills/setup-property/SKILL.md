@@ -136,6 +136,10 @@ the operator correct it.
     yourself.     `set_services` only sets live, local test, or practice texts for this property;
     it does not change the installation provider or saved credentials. `messaging: local`
     puts this building on local test texts without drafting other published buildings.
+    For local, `get_services` and `set_services` say "Texting is in test mode, so texts
+    don't reach real phones. Real visitors won't get anything until live texting is
+    turned on. Door access is still in demo mode, so no physical locks will open."
+    Do not say texting is live and do not name the texting service.
     Where
     records live comes from `get_storage_status` (this computer, or Google Drive).
     Don't ask about it.
@@ -169,7 +173,9 @@ the operator correct it.
 
     If the operator gave the property a name, a "Called: ..." line follows the
     address. If they set a help number, that line shows the value instead of
-    "not set".
+    "not set". A single-family home's unit heading is the street line
+    (for example "910 QA Gate Rd"), never "Main Home". Multifamily, apartment
+    and condo units keep their stored names.
 13. On yes, the setup is saved. In a guided install, go back to Tour Core's
     next step (`get_next_installation_step`, Install Tour Core skill): it
     offers tour updates next, then runs the checks. Otherwise: "I'll run a
@@ -188,7 +194,9 @@ the operator correct it.
     `messaging: sendblue`, `run_readiness_check`, `run_dry_tour`, then ask the
     publish question again. After publishing, say each part as it is: "Visitor
     texting is live. Door access is still in demo mode, so no physical locks
-    will open." Never say "everything runs in demo mode".
+    will open." For local test texts, use the test-mode sentence plus the door
+    line, and do not say visitors can start a tour by texting the touring
+    number. Never say "everything runs in demo mode".
 
 **Pause, resume, or remove.** These are not setup edits and do not change the
 published configuration. `pause_tours` stops new bookings at a property or one

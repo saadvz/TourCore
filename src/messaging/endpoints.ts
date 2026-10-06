@@ -20,6 +20,12 @@ export interface MessagingEndpoint {
 
 const keyOf = (address: string) => `line_${address.replace(/\D/g, "")}`;
 
+/** Operator-facing: the other property's street line, never an id and never "Main Home". */
+export function lineInUseMessage(otherStreet?: string): string {
+  const street = otherStreet?.trim();
+  return street ? `This texting number is already used for ${street}.` : "This texting number is already used for another property.";
+}
+
 export class MessagingEndpoints {
   constructor(private readonly store: RuntimeStore) {}
 
@@ -47,13 +53,17 @@ export class MessagingEndpoints {
    * different property. A property moving to a new line lets go of its old
    * one. `previous` is the property's earlier line, when it had one.
    */
-  attach(input: { address: string; provider: string; propertyId: string }, now = new Date(), options?: { replaceIf?: (propertyId: string) => boolean }): { changed: boolean; previous?: string } {
+  attach(
+    input: { address: string; provider: string; propertyId: string },
+    now = new Date(),
+    options?: { replaceIf?: (propertyId: string) => boolean; nameOf?: (propertyId: string) => string | undefined },
+  ): { changed: boolean; previous?: string } {
     const address = toE164(input.address);
     if (!address) throw new SetupInputError("LINE_INVALID", "That messaging number isn't a valid phone number.");
     const owner = this.resolve(address);
     if (owner && owner.propertyId !== input.propertyId) {
       if (options?.replaceIf?.(owner.propertyId)) this.store.delete("endpoints", keyOf(owner.address));
-      else throw new SetupInputError("LINE_IN_USE", `This texting number is already used for another property (${owner.propertyId}). Each number can answer for one property.`);
+      else throw new SetupInputError("LINE_IN_USE", lineInUseMessage(options?.nameOf?.(owner.propertyId)));
     }
     const current = this.forProperty(input.propertyId);
     if (current?.address === address && current.provider === input.provider) return { changed: false };

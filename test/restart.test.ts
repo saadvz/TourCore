@@ -396,7 +396,9 @@ describe("which property answers on which texting number", () => {
     const second = await app.local("POST", `/api/properties/prop_200_other_st/readiness`, {});
     const messaging = second.body.readiness.checks.find((c: { id: string }) => c.id === "messaging");
     expect(messaging.ok).toBe(false);
-    expect(messaging.problems[0].message).toContain("already used for another property");
+    expect(messaging.problems[0].message).toBe("This texting number is already used for 100 Alfred Way.");
+    expect(messaging.problems[0].message).not.toMatch(/prop_/);
+    expect(messaging.problems[0].message).not.toContain("Main Home");
   });
 
   it("a changed texting number sends a published property back to draft until readiness passes again", async () => {

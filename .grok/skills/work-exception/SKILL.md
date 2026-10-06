@@ -58,7 +58,8 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   > Current step: at Unit 101
 - "What's happening with Pat's tour?": find Pat's `tourRef` from the list, then
   `inspect_tour`. Summarize status, latest activity, questions, access denials
-  and anything in `needsAttention`.
+  and anything in `needsAttention`. The summary already names the status once
+  (no "Cancelled. Cancelled.").
 - QA on the local loopback: `inject_local_sms` then `read_local_outbox` (separate
   bubbles, never one blob). Those tools refuse unless that building is on local
   test texts. Other published buildings can stay on live visitor texting.

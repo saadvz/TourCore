@@ -29,7 +29,8 @@ calls it internally; use it only if the operator asks for technical detail.
 | approved fact | an operator-written property or unit fact |
 | door system, door access | Durin Access Platform (Durin demo mode in P0). Never name Durin to the operator |
 | tour updates | operator events delivered to the Tour Core Operator Updates Grok Routine |
-| visitor texting is live | the property uses real texts through the installation's messaging provider (or local test texts if that building opted in) |
+| visitor texting is live | the property uses real texts through the installation's messaging provider (Sendblue, Twilio, or Photon) |
+| texting is in test mode | the property uses local test texts (`get_services` / `set_services local`); texts stay off real phones |
 
 Handles you'll see in tool results and must never show: `propertyId`,
 `unitId`, `doorId`, `tourRef`, `exceptionId`, `eventId`, `confirmation.code`.

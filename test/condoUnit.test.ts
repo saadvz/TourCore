@@ -272,7 +272,7 @@ describe("apartment or condo setup", () => {
     expect(h.workspace.openDraft(skipped.setup.propertyId).draft.units[0]!.entryInstructions).toBeUndefined();
 
     const review = await h.ok("review_property_setup");
-    expect(review.lines).toEqual(expect.arrayContaining(["Apartment or condo (one unit)", "Building entrance: you control it", "  Route: Lobby Entrance → Unit 4B Door"]));
+    expect(review.lines).toEqual(expect.arrayContaining(["Apartment or condo (one unit)", "Unit 4B", "Building entrance: you control it", "  Route: Lobby Entrance → Unit 4B Door"]));
     expect(review.lines.join("\n")).not.toMatch(/Main Home/);
     expect(review.lines.join("\n")).not.toMatch(/Entry instructions:/);
   });
