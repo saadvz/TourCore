@@ -13,7 +13,7 @@ import {
   type TourTimeRequest,
   type Verification,
 } from "../domain/model";
-import { isCancelableReservation, isRunningReservation, TERMINAL, transition } from "../domain/stateMachine";
+import { canTransition, isCancelableReservation, isRunningReservation, TERMINAL, transition } from "../domain/stateMachine";
 import type { DurinAccessAdapter, DurinAccessResult, DurinHealth } from "../durin/DurinAccessAdapter";
 import { MessagingError, type DeliveryReceipt, type MessageChannel, type Messenger } from "../messaging/Messenger";
 import { withPrompt, type ReplyPrompt } from "../messaging/presentation";
@@ -194,7 +194,10 @@ export function proposeVisitorLine(input: {
   time?: string;
   day?: string;
 }): string {
-  const lead = `The property team can't do ${input.requestedTime} on ${input.requestedDay}, but ${input.proposedTime} on ${input.proposedDay} works.`;
+  const sameSlot = input.requestedTime === input.proposedTime && input.requestedDay === input.proposedDay;
+  const lead = sameSlot
+    ? `The property team can do ${input.proposedTime} on ${input.proposedDay} as a one-off.`
+    : `The property team can't do ${input.requestedTime} on ${input.requestedDay}, but ${input.proposedTime} on ${input.proposedDay} works.`;
   return input.time && input.day
     ? `${lead} Reply YES to switch, or NO to keep your ${input.time} tour on ${input.day}.`
     : `${lead} Reply YES to switch, or NO to keep looking.`;
@@ -448,7 +451,7 @@ export class TourCore {
       createdAt: this.nowIso(),
       updatedAt: this.nowIso(),
     };
-    await store.put("reservations", reservation);
+    await this.putReservation(reservation);
     await this.record("INQUIRY_STARTED", {
       reservationId: reservation.id,
       prospectId: prospect.id,
@@ -556,8 +559,8 @@ export class TourCore {
       recordedAt: this.nowIso(),
     };
     await this.deps.store.put("consents", consent);
-    reservation = { ...reservation, consentId: consent.id };
-    await this.deps.store.put("reservations", reservation);
+    reservation = await this.putReservation({ ...reservation, consentId: consent.id });
+    if (TERMINAL.includes(reservation.status)) return reservation;
     await this.record("CONSENT_RECORDED", {
       reservationId: reservation.id,
       prospectId: prospect.id,
@@ -628,7 +631,7 @@ export class TourCore {
     }
 
     reservation = { ...reservation, verificationId: verification.id };
-    if (staleRecheck) await this.deps.store.put("reservations", reservation);
+    if (staleRecheck) reservation = await this.putReservation(reservation);
     await this.record("VERIFICATION_COMPLETED", {
       reservationId: reservation.id,
       prospectId: prospect.id,
@@ -754,9 +757,10 @@ export class TourCore {
     if (reservation.status === "TOURING") {
       reservation = await this.move(moved, "READY", "RESERVATION_RESCHEDULED", { detail });
     } else {
-      reservation = { ...moved, updatedAt: this.nowIso() };
-      await this.deps.store.put("reservations", reservation);
-      await this.record("RESERVATION_RESCHEDULED", { reservationId: reservation.id, prospectId: reservation.prospectId, detail });
+      reservation = await this.putReservation({ ...moved, updatedAt: this.nowIso() });
+      if (!TERMINAL.includes(reservation.status)) {
+        await this.record("RESERVATION_RESCHEDULED", { reservationId: reservation.id, prospectId: reservation.prospectId, detail });
+      }
     }
 
     if (input.customTime) {
@@ -774,6 +778,7 @@ export class TourCore {
         detail: "one-time tour outside normal touring hours",
       });
     }
+    if (TERMINAL.includes(reservation.status)) return { reservation, changed: false };
 
     const prospect = await this.mustGetProspect(reservation.prospectId);
     const when = `${this.day(start)} at ${this.time(start)}`;
@@ -855,8 +860,7 @@ export class TourCore {
         awaitingVisitorConfirm: { kind: "OPERATOR_SCHEDULED", confirmBy: options.holdForVisitorConfirm.confirmBy.toISOString() },
         updatedAt: this.nowIso(),
       };
-      await this.deps.store.put("reservations", reservation);
-      return reservation;
+      return this.putReservation(reservation);
     }
     reservation = await this.move(reservation, "AWAITING_CONSENT", "CONSENT_REQUESTED", { detail: "asked permission to text and keep tour records" });
     const prospect = await this.mustGetProspect(reservation.prospectId);
@@ -872,9 +876,9 @@ export class TourCore {
     }
     const slotStart = reservation.slotStart;
     const { awaitingVisitorConfirm: _dropped, ...kept } = reservation;
-    reservation = { ...kept, updatedAt: this.nowIso() };
-    await this.deps.store.put("reservations", reservation);
+    reservation = await this.putReservation({ ...kept, updatedAt: this.nowIso() });
     reservation = await this.move(reservation, "AWAITING_CONSENT", "CONSENT_REQUESTED", { detail: "asked permission to text and keep tour records" });
+    if (TERMINAL.includes(reservation.status)) return reservation;
     const prospect = await this.mustGetProspect(reservation.prospectId);
     const start = new Date(slotStart);
     await this.textProspect(prospect, reservation.id, `${bookedForLine(this.time(start), this.day(start))}\n${CONSENT_TEXT}`, { kind: "yes-no" });
@@ -1651,14 +1655,15 @@ export class TourCore {
       extensionGrantedAt: this.nowIso(),
       updatedAt: this.nowIso(),
     };
-    await this.deps.store.put("reservations", next);
+    const saved = await this.putReservation(next);
+    if (saved.status !== next.status) return saved;
     await this.record("TOUR_EXTENDED", {
-      reservationId: next.id,
-      prospectId: next.prospectId,
+      reservationId: saved.id,
+      prospectId: saved.prospectId,
       detail: `+${extraMinutes} minutes; doors until ${this.time(newEnd)}`,
     });
-    await this.regrantUntil(next, newEnd);
-    return next;
+    await this.regrantUntil(saved, newEnd);
+    return saved;
   }
 
   /** Closes a tour that ran past T without a DONE. Doors off; no goodbye follow-up. */
@@ -1882,6 +1887,7 @@ export class TourCore {
 
   private async markReady(reservation: Reservation, prospect: Prospect): Promise<Reservation> {
     const ready = await this.move(reservation, "READY", "TOUR_READY", { detail: "consent and verification satisfied" });
+    if (ready.status !== "READY") return ready;
     const start = new Date(ready.slotStart!);
     const fragment = entryInstructionsFragment(this.unitFor(ready).entryInstructions);
     await this.textProspect(
@@ -1994,21 +2000,37 @@ export class TourCore {
     }
   }
 
+  /**
+   * Writes a reservation unless that would bring a called-off or otherwise
+   * finished tour back to a live status. A stale in-memory copy must not
+   * undo revoke.
+   */
+  private async putReservation(reservation: Reservation): Promise<Reservation> {
+    const stored = await this.deps.store.get("reservations", reservation.id);
+    if (stored && TERMINAL.includes(stored.status) && !TERMINAL.includes(reservation.status)) return stored;
+    await this.deps.store.put("reservations", reservation);
+    return reservation;
+  }
+
   private async move(
     reservation: Reservation,
     to: ReservationStatus,
     type: AuditEventType,
     extra: Omit<AuditInput, "statusChange" | "reservationId" | "prospectId">,
   ): Promise<Reservation> {
-    const next = transition(reservation, to, this.deps.clock.now());
-    await this.deps.store.put("reservations", next);
+    const stored = await this.deps.store.get("reservations", reservation.id);
+    const base = stored && TERMINAL.includes(stored.status) && !TERMINAL.includes(reservation.status) ? stored : reservation;
+    if (TERMINAL.includes(base.status) && !canTransition(base, to)) return base;
+    const next = transition(base, to, this.deps.clock.now());
+    const saved = await this.putReservation(next);
+    if (saved.status !== next.status) return saved;
     await this.record(type, {
-      reservationId: next.id,
-      prospectId: next.prospectId,
-      statusChange: { from: reservation.status, to },
+      reservationId: saved.id,
+      prospectId: saved.prospectId,
+      statusChange: { from: base.status, to },
       ...extra,
     });
-    return next;
+    return saved;
   }
 
   private record(type: AuditEventType, input: AuditInput): Promise<AuditEvent> {

@@ -329,7 +329,7 @@ export async function proposeTourTime(ctx: Ctx, input: { tourTimeRequestId: stri
   const hasBooking = !!reservation?.slotStart && !TERMINAL.includes(reservation.status);
   return {
     summary: hasBooking
-      ? `I asked ${midSentence(visitorWho)} about ${resolved.label}. Their current booking stays until they say yes.`
+      ? `I asked ${midSentence(visitorWho)} about ${timeOnDay(resolved.start, tz)}. Their current booking stays until they say yes.`
       : `Sent ${visitorWho} ${timeOnDay(resolved.start, tz)}. Nothing's booked until they say yes.`,
     tourTimeRequestId: found.request.id,
   };
