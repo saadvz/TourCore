@@ -125,7 +125,7 @@ export type StepAwaiting =
   | { kind: "accept-next-opening"; date: string; slotStart: string }
   | { kind: "confirm-operator-tour"; confirmBy: string }
   /** Confirm a visitor cancel-by-text. Day/time match the booked-tour copy. */
-  | { kind: "confirm-cancel-tour"; day: string; time: string }
+  | { kind: "confirm-cancel-tour"; day: string; time: string; laterWhileTouring?: boolean }
   | { kind: "t15-questions" }
   | { kind: "t5-extension-offer" }
   | { kind: "t5-no-offer" };

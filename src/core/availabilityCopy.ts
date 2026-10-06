@@ -38,19 +38,43 @@ export function bookedTourCalledOffText(input: {
   return input.propertyWide ? `${lead} They'll text you when tours are back.` : `${lead} Text me anytime to book another.`;
 }
 
-/** Operator refuse when reschedule_tour targets a tour in progress. */
+/** Operator refuse when reschedule_tour targets a tour in progress and nothing later is held. */
 export function tourInProgressCannotMove(who: string): string {
-  return `${who} is touring right now, so I can't move this tour.`;
+  return `${who} is touring right now, so I can't move this tour. Once it ends, you can book them another time.`;
 }
 
-/** Offer to move the later booking instead of the tour in progress. */
-export function moveLaterBookingInstead(who: string, time: string, day: string): string {
-  return `${who} is touring right now, so I can't move this tour. Want me to move their ${time} on ${day} booking instead?`;
+/** Offer to move the later booking instead of the tour in progress. Time first; destination named. */
+export function moveLaterBookingInstead(who: string, oldTime: string, oldDay: string, newTime: string, newDay: string): string {
+  return `${who} is touring right now, so I can't move this tour. Want me to move their ${oldTime} on ${oldDay} booking to ${newTime} on ${newDay} instead?`;
+}
+
+/** Operator summary after a yes on that later-booking offer. */
+export function movedLaterBookingSummary(who: string, time: string, day: string): string {
+  return `Moved ${who}'s later booking to ${time} on ${day}.`;
 }
 
 /** Visitor text after an operator-directed move. Keep whatever follows this sentence unchanged. */
 export function tourMovedToText(unit: string, time: string, day: string): string {
   return `Your tour of ${unit} has been moved to ${time} on ${day}.`;
+}
+
+/** Mid-tour visitor cancel of a later booking. Do not reuse the normal cancel lines. */
+export function laterCancelConfirm(time: string, day: string): string {
+  return `Cancel your later tour at ${time} on ${day}? Your tour right now isn't affected. Reply YES or NO.`;
+}
+
+export function laterCancelDone(time: string, day: string): string {
+  return `Done, I've cancelled your later tour at ${time} on ${day}. Your tour right now isn't affected.`;
+}
+
+export function laterCancelKept(time: string, day: string): string {
+  return `Okay, your later tour at ${time} on ${day} stays booked.`;
+}
+
+/** Call-off confirm. Optional when-clause is time first: "at {time} on {day}". */
+export function revokeConfirmQuestion(who: string, unit: string, when?: { time: string; day: string }): string {
+  const named = when ? ` at ${when.time} on ${when.day}` : "";
+  return `Call off ${who}'s tour of ${unit}${named}? All their access will be switched off and they'll be told. This can't be undone.`;
 }
 
 /** Operator-facing refuse when approving or moving a time on a paused property. */

@@ -91,7 +91,11 @@ function lastAsked(step: ConversationStep, awaiting?: StepAwaiting, timezone?: s
     const weekday = formatDay(start, timezone ?? "UTC").split(",")[0]!;
     return `Reply yes for ${weekday} at ${formatTime(start, timezone ?? "UTC")}, or pick a day.`;
   }
-  if (awaiting?.kind === "confirm-cancel-tour") return `Cancel your tour on ${awaiting.day} at ${awaiting.time}? Reply YES or NO.`;
+  if (awaiting?.kind === "confirm-cancel-tour") {
+    return awaiting.laterWhileTouring
+      ? `Cancel your later tour at ${awaiting.time} on ${awaiting.day}? Your tour right now isn't affected. Reply YES or NO.`
+      : `Cancel your tour on ${awaiting.day} at ${awaiting.time}? Reply YES or NO.`;
+  }
   switch (step) {
     case "choose-unit":
       return "Which unit would you like to see?";

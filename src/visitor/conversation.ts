@@ -10,13 +10,15 @@ import {
   unknownAnswerReply,
   VisitorDenialCopy,
   visitorCancelConfirm,
-  visitorCancelKept,
+  visitorCancelKeptFor,
   type InboundMeta,
 } from "../core/TourCore";
+import { laterCancelConfirm } from "../core/availabilityCopy";
+import { awaitingLatestYesNo, doorAskSupersedesCancel } from "./latestQuestion";
 import { isLeavingTour, T5_NO_OFFER_BARE_YES } from "../core/overstayCopy";
 import { afterCloseAlertOpen } from "./overstayScheduler";
 import { yesNo } from "../intent/yesNo";
-import { isCancelableReservation, TERMINAL } from "../domain/stateMachine";
+import { TERMINAL } from "../domain/stateMachine";
 import { stripFiller } from "../intent/normalize";
 import {
   isCancelTourAsk,
@@ -329,7 +331,7 @@ async function contextFor(session: VisitorDemoSession, message: string, step: Vi
     ...(r ? { reservedUnit: session.config.units.find((u) => u.id === r.unitId)?.name } : {}),
     remainingStops: remaining.map((id) => stopRef(session, id)),
     doors: session.config.doors.map((d) => stopRef(session, d.id)),
-    hasCancelableTour: r ? isCancelableReservation(r) : false,
+    hasCancelableTour: await session.hasCancelableTour(),
   };
 }
 
@@ -869,7 +871,10 @@ function stepPrompt(session: VisitorDemoSession, stage: VisitorStage, awaiting?:
     case "confirm-finish":
       return { body: "Are you finished with your tour?", prompt: yesNo, awaiting };
     case "confirm-cancel-tour":
-      return { body: visitorCancelConfirm(awaiting.day, awaiting.time), awaiting };
+      return {
+        body: awaiting.laterWhileTouring ? laterCancelConfirm(awaiting.time, awaiting.day) : visitorCancelConfirm(awaiting.day, awaiting.time),
+        awaiting,
+      };
   }
   switch (stage) {
     case "choose-unit":
@@ -900,15 +905,20 @@ const CONSENT_QUESTION = "Is it OK if I text you about this tour and keep a reco
 const FOLLOW_UP_QUESTION = "Would you like someone from the property team to follow up?";
 
 async function offerCancelConfirm(turn: Turn): Promise<void> {
-  const reservation = await turn.session.reservation();
-  const line = reservation ? turn.session.cancelConfirmLine(reservation) : undefined;
-  if (!line || !reservation?.slotStart) {
+  const target = await turn.session.cancelTarget();
+  const line = target ? turn.session.cancelConfirmLine(target.reservation, target.laterWhileTouring) : undefined;
+  if (!line || !target?.reservation.slotStart) {
     await turn.session.reportCancelFailed(turn.said);
     return;
   }
-  const start = new Date(reservation.slotStart);
+  const start = new Date(target.reservation.slotStart);
   const tz = turn.session.config.property.timezone;
-  await turn.clarify(line, undefined, { kind: "confirm-cancel-tour", day: formatDay(start, tz), time: formatTime(start, tz) });
+  await turn.clarify(line, undefined, {
+    kind: "confirm-cancel-tour",
+    day: formatDay(start, tz),
+    time: formatTime(start, tz),
+    ...(target.laterWhileTouring ? { laterWhileTouring: true } : {}),
+  });
 }
 
 /**
@@ -922,16 +932,17 @@ async function handleCancelIntent(turn: Turn): Promise<boolean> {
   const cancelAsk = intent.type === "CANCEL_TOUR" || intent.type === "CONFIRM_CANCEL_TOUR" || isCancelTourAsk(text);
   const awaiting = turn.awaiting?.kind === "confirm-cancel-tour" ? turn.awaiting : undefined;
 
+  if (awaiting && doorAskSupersedesCancel(intent)) return false;
   if (awaiting && intent.type === "KEEP_TOUR" && turn.confident) {
-    await turn.respond(visitorCancelKept(awaiting.day, awaiting.time));
+    await turn.respond(visitorCancelKeptFor(awaiting.day, awaiting.time, awaiting.laterWhileTouring));
     return true;
   }
   if (awaiting && intent.type === "CONFIRM_CANCEL_TOUR" && turn.confident) {
-    await session.cancelBookedTour(turn.said);
+    await session.cancelBookedTour(turn.said, awaiting.laterWhileTouring);
     return true;
   }
   if (awaiting && cancelAsk && intent.type !== "ASK_PROPERTY_QUESTION" && intent.type !== "REQUEST_HELP") {
-    await session.cancelBookedTour(turn.said);
+    await session.cancelBookedTour(turn.said, awaiting.laterWhileTouring);
     return true;
   }
   if (awaiting && intent.type !== "REQUEST_HELP") {
@@ -1603,17 +1614,6 @@ async function handleProposedTimeReply(turn: Turn): Promise<boolean> {
   return false;
 }
 
-function awaitingLatestYesNo(awaiting?: StepAwaiting): boolean {
-  return (
-    !!awaiting &&
-    (awaiting.kind === "confirm-stop" ||
-      awaiting.kind === "confirm-arrival" ||
-      awaiting.kind === "confirm-finish" ||
-      awaiting.kind === "choose-stop" ||
-      awaiting.kind === "confirm-cancel-tour")
-  );
-}
-
 async function handlePendingBookingReply(turn: Turn): Promise<boolean> {
   const { session } = turn;
   if (!session.pendingBookingId) return false;
@@ -1659,7 +1659,16 @@ async function startBookingAfterClose(turn: Turn): Promise<void> {
 async function handlePendingRebookPick(turn: Turn): Promise<boolean> {
   const { session } = turn;
   if (!session.pendingRebook) return false;
-  if (awaitingLatestYesNo(turn.awaiting)) return false;
+  if (
+    turn.awaiting &&
+    (turn.awaiting.kind === "confirm-stop" ||
+      turn.awaiting.kind === "confirm-arrival" ||
+      turn.awaiting.kind === "confirm-finish" ||
+      turn.awaiting.kind === "choose-stop" ||
+      turn.awaiting.kind === "confirm-cancel-tour")
+  ) {
+    return false;
+  }
   const step: VisitorStage = session.selectedDate ? "choose-time" : "choose-date";
   const interpretation = await rulesOnly.interpret(await contextFor(session, turn.said.text ?? "", step, turn.awaiting));
   if (interpretation.intent.type === "SELECT_DATE") {

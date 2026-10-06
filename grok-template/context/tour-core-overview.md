@@ -35,8 +35,11 @@ every real future booking, including a held rebook, and counts only
 tours actually cancelled; if they are still touring, the cancel text
 says their tour right now isn't affected. A one-off overlap check sees
 the running tour and every future or held booking. `reschedule_tour`
-will not move a tour in progress; it can offer to move the later
-booking instead. Calling off describes the tour that was called off;
+will not move a tour in progress (`{who} is touring right now, so I can't
+move this tour. Once it ends, you can book them another time.`); if they
+have a later booking it asks `Want me to move their {oldTime} on {oldDay}
+booking to {newTime} on {newDay} instead?` and a yes is `Moved {who}'s
+later booking to {time} on {day}.`. Calling off describes the tour that was called off;
 the later booking is `nextBooking`. After the follow-up
 reply, an unapproved custom-time request is told once that it is still
 with the property team; they can reply with a day for a regular
@@ -169,7 +172,11 @@ cancel". That is not a property question. Tour Core confirms first:
 `Cancel your tour on {day} at {time}? Reply YES or NO.` YES cancels (doors
 off, status cancelled, audit) and they hear `You're cancelled. Text me
 anytime if you want to book again.` NO keeps the booking: `Okay, your tour
-stays on {day} at {time}.` A reply that isn't a clear yes or no is flagged:
+stays on {day} at {time}.` While they are touring and the cancel targets a
+later booking: `Cancel your later tour at {time} on {day}? Your tour right
+now isn't affected. Reply YES or NO.` YES: `Done, I've cancelled your later
+tour at {time} on {day}. Your tour right now isn't affected.` NO: `Okay,
+your later tour at {time} on {day} stays booked.` A reply that isn't a clear yes or no is flagged:
 `I'll check with the {team} and get back to you.` STOP still opts out. If
 cancel cannot finish, they get
 `I can't cancel it from here. I've asked the leasing team to call it off and

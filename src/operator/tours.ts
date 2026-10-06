@@ -119,14 +119,16 @@ export function pickCurrentReservation(reservations: Reservation[]): Reservation
   return open.at(-1) ?? reservations.at(-1);
 }
 
-export function isFutureBooking(reservation: Reservation): boolean {
-  return !!reservation.slotStart && !IN_PROGRESS.includes(reservation.status) && !TERMINAL.includes(reservation.status);
+export function isFutureBooking(reservation: Reservation, now?: Date): boolean {
+  if (!reservation.slotStart || IN_PROGRESS.includes(reservation.status) || TERMINAL.includes(reservation.status)) return false;
+  if (now && Date.parse(reservation.slotStart) <= now.getTime()) return false;
+  return true;
 }
 
 /** A later booking held while this tour is still running. */
-export function nextReservation(tour: TourSnapshot): Reservation | undefined {
+export function nextReservation(tour: TourSnapshot, now?: Date): Reservation | undefined {
   const current = currentReservation(tour);
-  return tour.bundle.reservations.filter((r) => isFutureBooking(r) && r.id !== current?.id).at(-1);
+  return tour.bundle.reservations.filter((r) => isFutureBooking(r, now) && r.id !== current?.id).at(-1);
 }
 
 export function visitorNameOf(tour: TourSnapshot): string {

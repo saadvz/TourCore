@@ -33,7 +33,7 @@ import { closestOpenSlots, intervalsOverlap, occupiedInterval, overlapSummary, p
 import { DOOR_AFTER_T, LATE_ARRIVAL_EXPIRED, landlordRepliedAfterClose, landlordWho, tourFinishedFollowUp, visitorRepliedAfterClose } from "./overstayCopy";
 import { withPropertySlotLock } from "./slotLock";
 import { BOOKING_HORIZON_DAYS, isoDate, nextTourDay, slotsOn, tourWindow, type TourSlot } from "./schedule";
-import { bookedTourCalledOffText, tourMovedToText } from "./availabilityCopy";
+import { bookedTourCalledOffText, laterCancelConfirm, laterCancelDone, laterCancelKept, tourMovedToText } from "./availabilityCopy";
 import { propertyDirectionsUrl, tourDirectionsText } from "./mapsLink";
 import { addDays, formatDay as formatDayIn, formatTime as formatTimeIn, localDateOf, type LocalDate } from "./timezone";
 
@@ -289,10 +289,20 @@ export function visitorCancelKept(day: string, time: string): string {
   return `Okay, your tour stays on ${day} at ${time}.`;
 }
 
-export function visitorCancelConfirmFor(reservation: Reservation, timeZone: string): string | undefined {
+export function visitorCancelConfirmFor(reservation: Reservation, timeZone: string, laterWhileTouring = false): string | undefined {
   if (!reservation.slotStart) return undefined;
   const start = new Date(reservation.slotStart);
-  return visitorCancelConfirm(formatDayIn(start, timeZone), formatTimeIn(start, timeZone));
+  const day = formatDayIn(start, timeZone);
+  const time = formatTimeIn(start, timeZone);
+  return laterWhileTouring ? laterCancelConfirm(time, day) : visitorCancelConfirm(day, time);
+}
+
+export function visitorCancelKeptFor(day: string, time: string, laterWhileTouring = false): string {
+  return laterWhileTouring ? laterCancelKept(time, day) : visitorCancelKept(day, time);
+}
+
+export function visitorCancelDoneFor(day: string, time: string, laterWhileTouring = false): string {
+  return laterWhileTouring ? laterCancelDone(time, day) : VISITOR_CANCEL_DONE;
 }
 
 /**
@@ -770,7 +780,13 @@ export class TourCore {
       return { reservation, changed: true };
     }
     if (input.notice === "moved") {
-      await this.textProspect(prospect, reservation.id, `${tourMovedToText(visitorSubject(config.property, this.unitFor(reservation).name), this.time(start), this.day(start))} You're all set.`);
+      const moved = tourMovedToText(visitorSubject(config.property, this.unitFor(reservation).name), this.time(start), this.day(start));
+      if (reservation.status === "AWAITING_CONSENT") {
+        await this.textProspect(prospect, reservation.id, moved);
+        await this.textProspect(prospect, reservation.id, CONSENT_TEXT, { kind: "yes-no" });
+      } else {
+        await this.textProspect(prospect, reservation.id, `${moved} You're all set.`);
+      }
     } else if (reservation.status === "READY") {
       await this.textProspect(prospect, reservation.id, `Your tour has moved to ${when}.\nDoors will work for you from ${this.time(windowStart)} to ${this.time(windowEnd)}.`, {
         kind: "say",

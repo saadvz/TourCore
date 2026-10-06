@@ -8,6 +8,8 @@ import { addressReadback } from "../setup/address";
 import { PROPERTY_TYPE_LABELS, PROPERTY_TYPES, SETUP_PROPERTY_TYPES, validateConfig } from "../config/tourCoreConfig";
 import { extractValues, FIELD_WORDS, missingProfileFields, nextProfileQuestion, parseBulkUnitDetails, profileSummaryLine } from "../config/unitProfile";
 import { formatPhone } from "../core/phone";
+import { formatDay, formatTime } from "../core/timezone";
+import { revokeConfirmQuestion } from "../core/availabilityCopy";
 import { TourCoreError } from "../core/TourCore";
 import { PortableBackupError } from "../backup/portable";
 import { InvalidTransitionError } from "../domain/stateMachine";
@@ -1204,12 +1206,18 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Call off a tour",
     kind: "consequential",
     description:
-      "Calls off one tour for good: all its access is switched off and the visitor is told. This can't be undone. When the visitor is touring and also has a later booking, this calls off the running tour; the later booking then becomes the one you can call off or they can cancel by text. After any end (done, closed, called off, cancelled), conversation moves to that later booking. The result's tour object is the tour that was called off; a later or held booking is nextBooking, not tour. First call returns a yes/no question; call again with confirmationCode only after an explicit yes. Visitors can also cancel a booked tour by text in their own words; Tour Core confirms first (Cancel your tour on {day} at {time}? Reply YES or NO.). YES: You're cancelled. Text me anytime if you want to book again. NO: Okay, your tour stays on {day} at {time}. A reply that isn't a clear yes or no is flagged (I'll check with the {team} and get back to you.). STOP still opts out. A clear cancel ask is never treated as a missing property fact.",
+      "Calls off one tour for good: all its access is switched off and the visitor is told. This can't be undone. When the visitor is touring and also has a later booking, this calls off the running tour; the later booking then becomes the one you can call off or they can cancel by text. After any end (done, closed, called off, cancelled), conversation moves to that later booking. The result's tour object is the tour that was called off; a later or held booking is nextBooking, not tour. The confirm names that booking at {time} on {day} when it has a start time. First call returns a yes/no question; call again with confirmationCode only after an explicit yes. Visitors can also cancel a booked tour by text in their own words; Tour Core confirms first (Cancel your tour on {day} at {time}? Reply YES or NO.). YES: You're cancelled. Text me anytime if you want to book again. NO: Okay, your tour stays on {day} at {time}. While they are touring and the cancel targets a later booking: Cancel your later tour at {time} on {day}? Your tour right now isn't affected. Reply YES or NO. YES: Done, I've cancelled your later tour at {time} on {day}. Your tour right now isn't affected. NO: Okay, your later tour at {time} on {day} stays booked. A reply that isn't a clear yes or no is flagged (I'll check with the {team} and get back to you.). STOP still opts out. A clear cancel ask is never treated as a missing property fact.",
     input: z.strictObject({ tourRef: TourRef, reason: z.string().min(1).max(300), confirmationCode: Code }),
     run: async (ctx, i) => {
       const target = await describeChangeTarget(ctx.services, i.tourRef, "revoke");
       const fingerprint = reservationFingerprint(target.reservation);
-      if (!i.confirmationCode) return needsConfirmation(ctx, "revoke", i.tourRef, fingerprint, `Call off ${midSentence(target.name)}'s tour of ${target.unit}? All their access will be switched off and they'll be told. This can't be undone.`);
+      if (!i.confirmationCode) {
+        const tz = target.tour.config.property.timezone;
+        const when = target.reservation.slotStart
+          ? { time: formatTime(new Date(target.reservation.slotStart), tz), day: formatDay(new Date(target.reservation.slotStart), tz) }
+          : undefined;
+        return needsConfirmation(ctx, "revoke", i.tourRef, fingerprint, revokeConfirmQuestion(midSentence(target.name), target.unit, when));
+      }
       ctx.confirmations.redeem(i.confirmationCode, "revoke", i.tourRef, fingerprint);
       const tour = await revokeTour(ctx.services, i.tourRef, i.reason);
       return { summary: `${target.name}'s tour is called off and their access is switched off.`, tour };
@@ -1341,7 +1349,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Move a tour",
     kind: "consequential",
     description:
-      "Moves a visitor's tour to a time the landlord is directing, including a one-off time that isn't a regular slot. Pass the visitor's name and the new time in everyday words. Does not change the property's regular hours. Refuses to move a tour in progress ({who} is touring right now, so I can't move this tour.). If they also have a later booking, that refusal asks whether to move that booking instead (Want me to move their {time} on {day} booking instead?); a yes moves the later booking, not the tour they are on. First call returns one yes/no question that names the old and new times and ends Move it? — never Continue?. \"This is a one-off. Your regular tour hours stay the same\" only when the time is outside tour hours. Call again with confirmationCode only after an explicit yes. A time outside normal touring hours returns a stronger question; call again with confirmationCode and acknowledgeOutsideHours true only after they agree. The visitor is told Your tour of {unit} has been moved to {time} on {day}. Refused when tours at that property or unit are paused (Tours at {property} are paused. Resume them first.) — tell the operator that, no visitor text.",
+      "Moves a visitor's tour to a time the landlord is directing, including a one-off time that isn't a regular slot. Pass the visitor's name and the new time in everyday words. Does not change the property's regular hours. Refuses to move a tour in progress ({who} is touring right now, so I can't move this tour. Once it ends, you can book them another time.). If they also have a later booking, that refusal asks whether to move that booking instead (Want me to move their {oldTime} on {oldDay} booking to {newTime} on {newDay} instead?); outside hours appends That's outside your tour hours. and needs acknowledgeOutsideHours. A yes moves the later booking, not the tour they are on, and the operator summary is Moved {who}'s later booking to {time} on {day}. First call returns one yes/no question that names the old and new times and ends Move it? — never Continue?. \"This is a one-off. Your regular tour hours stay the same\" only when the time is outside tour hours. Call again with confirmationCode only after an explicit yes. A time outside normal touring hours returns a stronger question; call again with confirmationCode and acknowledgeOutsideHours true only after they agree. The visitor is told Your tour of {unit} has been moved to {time} on {day}. READY keeps You're all set. AWAITING_CONSENT does not; then the existing consent question. Refused when tours at that property or unit are paused (Tours at {property} are paused. Resume them first.) — tell the operator that, no visitor text.",
     input: z.strictObject({
       reservationId: z.string().min(3).max(40).optional().describe("The reservation, when you already have it. Never show it."),
       tourRef: TourRef.optional(),

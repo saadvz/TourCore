@@ -1,5 +1,5 @@
 import { isLiveMessaging } from "../config/tourCoreConfig";
-import { moveLaterBookingInstead, tourInProgressCannotMove } from "../core/availabilityCopy";
+import { moveLaterBookingInstead, movedLaterBookingSummary, tourInProgressCannotMove } from "../core/availabilityCopy";
 import { intervalsOverlap, parseFlexibleTime, placementOf, relativeWhen, tourInterval, touringHoursLabel } from "../core/customSlot";
 import { isUnconfirmedHold, REQUEST_ALREADY_HANDLED, requestAlreadyExpiredLine, requestProposePassedLine, requestTimePassedLine, SLOT_ALREADY_PASSED, TourCoreError, WITHDRAWN_FOR_REGULAR_BOOKING } from "../core/TourCore";
 import { formatConfirmStamp, formatDay, formatTime, formatWeekday, localDateOf } from "../core/timezone";
@@ -371,14 +371,15 @@ export async function rescheduleTour(
   const tz = tour.config.property.timezone;
   const name = who(tour);
   if (reservation.status === "TOURING") {
-    const later = nextReservation(tour);
+    const later = nextReservation(tour, ctx.now());
     if (!later?.slotStart) throw new SetupInputError("TOUR_IN_PROGRESS", tourInProgressCannotMove(name));
     const laterStart = new Date(later.slotStart);
     const resolved = parseFlexibleTime(input.newStartsAt, tour.config, ctx.now(), localDateOf(laterStart, tz));
     if (!resolved.ok) throw new SetupInputError("TIME_UNCLEAR", resolved.ask);
     const outside = resolved.placement === "OUTSIDE_HOURS";
     const fingerprint = `${later.id}|${later.updatedAt}|${resolved.start.toISOString()}|${outside}`;
-    const offer = moveLaterBookingInstead(name, formatTime(laterStart, tz), formatDay(laterStart, tz));
+    const extra = outside ? " That's outside your tour hours." : "";
+    const offer = `${moveLaterBookingInstead(name, formatTime(laterStart, tz), formatDay(laterStart, tz), formatTime(resolved.start, tz), formatDay(resolved.start, tz))}${extra}`;
     if (!input.confirmationCode) {
       return ask(ctx, "reschedule-tour", later.id, fingerprint, offer, outside ? { outsideHours: true } : {});
     }
@@ -389,7 +390,7 @@ export async function rescheduleTour(
     await session.reschedule(resolved.start.toISOString(), { customTime: true, outsideTourHours: outside, notice: "moved", reservationId: later.id });
     await persistSession(ctx.services, session);
     return {
-      summary: `${name}'s tour is now ${relativeWhen(resolved.start, ctx.now(), tz)}. They've been told. The regular tour times are unchanged.`,
+      summary: movedLaterBookingSummary(name, formatTime(resolved.start, tz), formatDay(resolved.start, tz)),
       rescheduled: true,
       tourRef: tourRef(tour.propertyId, tour.tourId),
     };
@@ -414,7 +415,7 @@ export async function rescheduleTour(
     throw new SetupInputError("OUTSIDE_HOURS", "Moving a tour outside normal touring hours needs a clear yes to that specifically.");
   }
   redeem(ctx, input.confirmationCode, "reschedule-tour", reservation.id, fingerprint);
-  await session.reschedule(resolved.start.toISOString(), { customTime: true, outsideTourHours: outside, notice: "moved" });
+  await session.reschedule(resolved.start.toISOString(), { customTime: true, outsideTourHours: outside, notice: "moved", reservationId: reservation.id });
   await persistSession(ctx.services, session);
   return {
     summary: `${name}'s tour is now ${relativeWhen(resolved.start, ctx.now(), tz)}. They've been told. The regular tour times are unchanged.`,
@@ -497,7 +498,7 @@ function occupyingReservations(tour: TourSnapshot): Reservation[] {
 async function assertOneOffSlotFree(ctx: Ctx, propertyId: string, wanted: ReturnType<typeof tourInterval>): Promise<void> {
   for (const tour of await tourSnapshots(ctx.services, { propertyId })) {
     for (const reservation of occupyingReservations(tour)) {
-      if (intervalsOverlap(wanted, tourInterval(tour.config, new Date(reservation.slotStart!)))) {
+      if (intervalsOverlap(wanted, tourInterval(tour.config, new Date(reservation.slotStart!), reservation.windowEnd ? new Date(reservation.windowEnd) : undefined))) {
         throw new SetupInputError("SLOT_OVERLAP", "That time overlaps another tour.");
       }
     }

@@ -82,13 +82,18 @@ export function appendAvailabilityEvent(root: string, propertyId: string, type: 
   return event;
 }
 
-function futureBookingsOn(tour: TourSnapshot, unitId?: string): Reservation[] {
-  return tour.bundle.reservations.filter((reservation) => isFutureBooking(reservation) && (!unitId || reservation.unitId === unitId));
+function futureBookingsOn(tour: TourSnapshot, now: Date, unitId?: string): Reservation[] {
+  return tour.bundle.reservations.filter((reservation) => isFutureBooking(reservation, now) && (!unitId || reservation.unitId === unitId));
+}
+
+function clockOf(services: OperatorServices): Date {
+  return services.now?.() ?? new Date();
 }
 
 async function bookedTours(services: OperatorServices, propertyId: string, unitId?: string): Promise<TourSnapshot[]> {
   const tours = await tourSnapshots(services, { propertyId });
-  return tours.filter((tour) => futureBookingsOn(tour, unitId).length > 0);
+  const now = clockOf(services);
+  return tours.filter((tour) => futureBookingsOn(tour, now, unitId).length > 0);
 }
 
 async function anyoneTouring(services: OperatorServices, propertyId: string): Promise<boolean> {
@@ -126,9 +131,10 @@ async function cancelBooked(
   for (const tour of tours) {
     const session = await sessionFor(services, tour);
     let remembered = false;
-    for (const reservation of futureBookingsOn(tour)) {
+    const now = clockOf(services);
+    for (const reservation of futureBookingsOn(tour, now)) {
       const latest = await session.store.get("reservations", reservation.id);
-      if (!latest || !isFutureBooking(latest)) continue;
+      if (!latest || !isFutureBooking(latest, now)) continue;
       const before = latest.status;
       const after = await session.operatorChange((core, id) => core.cancelBookedTour(id, { reason, propertyWide, ...(removed ? { removed: true } : {}) }), latest.id);
       if (session.pendingBookingId === latest.id) session.pendingBookingId = undefined;

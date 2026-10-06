@@ -84,7 +84,12 @@ what never does.
   they left off once it's answered. A booked-tour cancel by text (any natural
   phrasing) is handled by Tour Core: it confirms, then YES cancels (`You're
   cancelled. Text me anytime if you want to book again.`) or NO keeps the
-  booking (`Okay, your tour stays on {day} at {time}.`). A reply that isn't a
+  booking (`Okay, your tour stays on {day} at {time}.`). While they are
+  touring and the cancel targets a later booking: `Cancel your later tour at
+  {time} on {day}? Your tour right now isn't affected. Reply YES or NO.`;
+  YES `Done, I've cancelled your later tour at {time} on {day}. Your tour
+  right now isn't affected.`; NO `Okay, your later tour at {time} on {day}
+  stays booked.` A reply that isn't a
   clear yes or no is flagged. That is not a missing-fact flag.
 - **One-off tours.** When the operator wants to set up a tour for someone who
   asked (including a visitor who hasn't texted in, or who only got a day or
@@ -93,7 +98,11 @@ what never does.
   A leftover choosing menu is replaced; a booked tour, pending one-off, open
   tour window, or hold is refused. A time that overlaps a running tour or any
   future or held booking is refused before asking. `reschedule_tour` will not
-  move a tour in progress; it can offer to move a later booking instead.
+  move a tour in progress (`{who} is touring right now, so I can't move this
+  tour. Once it ends, you can book them another time.`); if they have a later
+  booking it asks `Want me to move their {oldTime} on {oldDay} booking to
+  {newTime} on {newDay} instead?` and a yes is `Moved {who}'s later booking
+  to {time} on {day}.`.
   Tell the operator Tour Core's words
   (`They already have a booked tour. I can move it or call it off.`), then
   move with `reschedule_tour` or call off with `revoke_tour_access` (resume a
