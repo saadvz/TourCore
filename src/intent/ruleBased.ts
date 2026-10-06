@@ -523,7 +523,7 @@ function interpretOnTour(ctx: InterpretContext, t: string, asked: boolean, h: He
   const { result, unknown, question, help, informational } = h;
   const touring = ctx.step === "touring";
   // Already booked: "I'm here at 1:58" is arrival, not a new custom-time ask.
-  if (ctx.step === "ready" && /^(i am |we are |i |we )?(just |finally |now )*(here|arrived|got here|made it)\b/.test(t)) {
+  if (ctx.step === "ready" && /^(i am |we are |i |we )?(just |finally |now )*here(\s+at\b|\s*$)/.test(t)) {
     return result({ type: "ARRIVAL" }, 0.95);
   }
   const custom = schedulingIntent(ctx.message, t, false, result, unknown, ctx.today);
