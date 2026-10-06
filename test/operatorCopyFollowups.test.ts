@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { MessagingEndpoints } from "../src/messaging/endpoints";
-import { LOCAL_TEST_TEXTING } from "../src/setup/setupActions";
+import { localTestModeSentence } from "../src/setup/setupActions";
 import { inspectTourSummary, tourRef } from "../src/operator/tours";
 import { STATUS_LABELS } from "../src/visitor/views";
 import { grokHarness, type GrokHarness } from "./grokHarness";
@@ -97,20 +97,54 @@ describe("shared texting number names the other property by street", () => {
   });
 });
 
+const LOCAL_WITH_DEMO_DOORS =
+  "Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on. Door access is still in demo mode, so no physical locks will open.";
+
 describe("local test texting status", () => {
-  it("get_services and set_services local pin the test-mode sentence, not live", async () => {
+  it("get_services and set_services local pin the test-mode sentence plus the door line", async () => {
     const h = app();
     await h.ok("create_property_setup", { address: "12 Scratch Lane, Teaneck, NJ 07666", propertyType: "SINGLE_FAMILY" });
     const set = await h.ok("set_services", { messaging: "local" });
-    expect(set.summary).toBe(LOCAL_TEST_TEXTING);
-    expect(set.summary).toBe("Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on.");
+    expect(set.summary).toBe(LOCAL_WITH_DEMO_DOORS);
+    expect(set.summary).toBe(localTestModeSentence(true));
     expect(set.summary.match(/\blive\b/gi)).toEqual(["live"]);
     expect(set.summary).not.toMatch(/Sendblue|Twilio|Photon|outbox|loopback|provider/i);
 
     const got = await h.ok("get_services");
-    expect(got.summary).toBe(LOCAL_TEST_TEXTING);
+    expect(got.summary).toBe(LOCAL_WITH_DEMO_DOORS);
     expect(got.summary.match(/\blive\b/gi)).toEqual(["live"]);
     expect(got.summary).not.toMatch(/Sendblue|Twilio|Photon|outbox|loopback|provider/i);
+  });
+
+  it("publish on a local property uses the combined wording and omits the touring-number line", async () => {
+    const h = app();
+    await h.ok("create_property_setup", { address: "12 Scratch Lane, Teaneck, NJ 07666", propertyType: "SINGLE_FAMILY" });
+    await h.ok("add_unit", {});
+    await h.ok("set_unit_details", { units: [{ unit: "Main Home", bedrooms: "3", bathrooms: "2", monthlyRent: "$3,400", availability: "now" }] });
+    await h.ok("set_tour_hours", { days: "weekdays", start: "9am", end: "5pm" });
+    await h.ok("set_verification_policy", { level: "basic-form" });
+    await h.ok("update_property_details", { skipVisitorHelp: true });
+    await h.ok("set_services", { messaging: "local" });
+    expect((await h.ok("run_readiness_check")).passed).toBe(true);
+    expect((await h.ok("run_dry_tour")).passed).toBe(true);
+    const { done } = await h.approve("publish_demo_property", {});
+    const name = h.workspace.load(h.workspace.propertyIds()[0]!).config.property.name;
+    expect(done.summary).toBe(`${name} is published for demo. ${LOCAL_WITH_DEMO_DOORS}`);
+    expect(done.summary).not.toContain("Visitors can start a tour by texting your touring number");
+    expect(done.modes).toBe(LOCAL_WITH_DEMO_DOORS);
+  });
+
+  it("real-provider publish still includes the touring-number line and live wording", async () => {
+    const h = textingApp();
+    const id = await finishSingleFamily(h, "144 Hillside Ave, Teaneck, NJ 07666");
+    expect((await h.ok("run_readiness_check", { property: id })).passed).toBe(true);
+    expect((await h.ok("run_dry_tour", { property: id })).passed).toBe(true);
+    const { done } = await h.approve("publish_demo_property", { property: id });
+    const name = h.workspace.load(id).config.property.name;
+    expect(done.summary).toBe(
+      `${name} is published for demo. Visitors can start a tour by texting your touring number. Visitor texting is live. Door access is still in demo mode, so no physical locks will open.`,
+    );
+    expect(done.summary).toContain("Visitors can start a tour by texting your touring number.");
   });
 });
 

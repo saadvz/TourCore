@@ -18,7 +18,7 @@ import { draftView, readinessView, saveStateView } from "../setup/presenters";
 import { parseDays, parseMinutes, parseTimeOfDay } from "../setup/parse";
 import type { DryTourCheck, DryTourResult } from "../setup/dryTour";
 import type { ReadinessResult } from "../setup/readiness";
-import { condoNextQuestion, createPropertySetup, LOCAL_TEST_TEXTING, modeSentence, operatorFacingPropertyName, OperatorTeamCopy, SetupInputError, tourableSpacesQuestion, visitorHelpLines, visitorHelpQuestion, type SetupDraft } from "../setup/setupActions";
+import { condoNextQuestion, createPropertySetup, localTestModeSentence, modeSentence, operatorFacingPropertyName, OperatorTeamCopy, SetupInputError, tourableSpacesQuestion, visitorHelpLines, visitorHelpQuestion, type SetupDraft } from "../setup/setupActions";
 import { usesLocalMessaging } from "../messaging/propertyScope";
 import { operatorUnitName } from "../visitor/identity";
 import { isHostedRailway } from "../install/deployment";
@@ -147,7 +147,9 @@ function subsystemLines(ctx: ToolContext, id: string, draft: SetupDraft) {
   return {
     texting,
     lines: [`Visitor texting: ${texting.label}`, `Door access: ${draft.accessMode === "durin-mock" ? "Demo" : "Connected"}`],
-    sentence: local ? LOCAL_TEST_TEXTING : modeSentence(texting.state === "connected", draft.accessMode === "durin-mock"),
+    sentence: local
+      ? localTestModeSentence(draft.accessMode === "durin-mock")
+      : modeSentence(texting.state === "connected", draft.accessMode === "durin-mock"),
   };
 }
 
@@ -829,7 +831,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Get messaging and records",
     kind: "read",
     description:
-      'How visitors are texted and whether this property is connected to the touring number, where tour records are kept, and door access mode, each on its own (texting can be live while door access is demo). For local test texting the summary is "Texting is in test mode, so texts don\'t reach real phones. Real visitors won\'t get anything until live texting is turned on." — do not say texting is live and do not name the texting service. Never contains credentials.',
+      'How visitors are texted and whether this property is connected to the touring number, where tour records are kept, and door access mode, each on its own (texting can be live while door access is demo). For local test texting the summary is "Texting is in test mode, so texts don\'t reach real phones. Real visitors won\'t get anything until live texting is turned on. Door access is still in demo mode, so no physical locks will open." — do not say texting is live and do not name the texting service. Never contains credentials.',
     input: z.strictObject({ property: Property }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
@@ -859,7 +861,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Set messaging and records",
     kind: "change",
     description:
-      'Chooses how visitors are texted for this building: "live" for real texts through the installation\'s messaging provider, "local" for QA test texts on this building only (other published buildings stay as they are), or "demo" for practice only. "sendblue" is accepted as an older name for "live". Local summary: "Texting is in test mode, so texts don\'t reach real phones. Real visitors won\'t get anything until live texting is turned on." Do not say texting is live and do not name the texting service. Does not change the installation provider and does not touch saved Sendblue, Twilio, or Photon credentials. Records stay on this computer. Door access mode can\'t be changed here. Credentials are never set through chat.',
+      'Chooses how visitors are texted for this building: "live" for real texts through the installation\'s messaging provider, "local" for QA test texts on this building only (other published buildings stay as they are), or "demo" for practice only. "sendblue" is accepted as an older name for "live". Local summary: "Texting is in test mode, so texts don\'t reach real phones. Real visitors won\'t get anything until live texting is turned on. Door access is still in demo mode, so no physical locks will open." Do not say texting is live and do not name the texting service. Does not change the installation provider and does not touch saved Sendblue, Twilio, or Photon credentials. Records stay on this computer. Door access mode can\'t be changed here. Credentials are never set through chat.',
     input: z.strictObject({ property: Property, messaging: z.enum(["live", "sendblue", "demo", "local"]).optional(), records: z.enum(["this-computer", "google-drive"]).optional() }),
     run: async (ctx, i) => {
       if (i.records === "google-drive") throw new SetupInputError("STORAGE_UNAVAILABLE", "Keeping records in Google Drive isn't available yet. They'll stay on this computer for now.");
@@ -947,7 +949,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Publish for demo",
     kind: "consequential",
     description:
-      "Publishes the property for demo so visitors can start tours. Only works when the saved setup is valid and both the readiness check and a practice tour passed for this exact setup. Open conversations then use these published settings (hours, units, and so on) on every inbound text. First call returns a yes/no question; ask it and call again with confirmationCode only after an explicit yes.",
+      'Publishes the property for demo so visitors can start tours. Only works when the saved setup is valid and both the readiness check and a practice tour passed for this exact setup. Open conversations then use these published settings (hours, units, and so on) on every inbound text. First call returns a yes/no question; ask it and call again with confirmationCode only after an explicit yes. For a real texting provider the summary includes "Visitors can start a tour by texting your touring number." Leave that line out entirely when this building is on local or test-only texts.',
     input: z.strictObject({ property: Property, confirmationCode: Code }),
     run: async (ctx, i) => {
       const ws = ctx.services.workspace;
@@ -976,12 +978,12 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         : [{ code: "NOT_SAVED", message: "Finish the setup answers first." }];
       if (blockers.length) return blocked(blockers);
       const { config, state } = saved!;
-      const modes = subsystemLines(ctx, id, config).sentence;
+      const modes = subsystemLines(ctx, id, config);
       if (state.status === "PUBLISHED_FOR_DEMO") {
         return {
           published: true,
           status: "already-published",
-          summary: `${config.property.name} is already published for demo. ${modes}`,
+          summary: `${config.property.name} is already published for demo. ${modes.sentence}`,
           instructions: "This property is already published. Tell the operator that. Do not ask them to publish again.",
         };
       }
@@ -990,13 +992,13 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       ctx.confirmations.redeem(i.confirmationCode, "publish", id, fingerprint);
       const result = await publishProperty(services, id, ctx.now());
       if (!result.published) return blocked(result.blockers);
-      const live = subsystemLines(ctx, id, config).texting.state === "connected";
+      const realPhones = modes.texting.state === "connected" && !usesLocalMessaging(config, services.installedMessaging?.());
       const again = ctx.services.workspace.load(id);
       return {
         published: true,
         status: again.state.status === "PUBLISHED_FOR_DEMO" ? "published" : "unpublished",
-        summary: `${config.property.name} is published for demo.${live ? " Visitors can start a tour by texting your touring number." : ""} ${modes}`,
-        modes,
+        summary: `${config.property.name} is published for demo.${realPhones ? " Visitors can start a tour by texting your touring number." : ""} ${modes.sentence}`,
+        modes: modes.sentence,
         instructions: "Publishing finished. Tell the operator the property is published, using summary. Do not say it still needs a yes.",
       };
     },

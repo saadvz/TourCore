@@ -138,7 +138,8 @@ the operator correct it.
     puts this building on local test texts without drafting other published buildings.
     For local, `get_services` and `set_services` say "Texting is in test mode, so texts
     don't reach real phones. Real visitors won't get anything until live texting is
-    turned on." Do not say texting is live and do not name the texting service.
+    turned on. Door access is still in demo mode, so no physical locks will open."
+    Do not say texting is live and do not name the texting service.
     Where
     records live comes from `get_storage_status` (this computer, or Google Drive).
     Don't ask about it.
@@ -193,7 +194,9 @@ the operator correct it.
     `messaging: sendblue`, `run_readiness_check`, `run_dry_tour`, then ask the
     publish question again. After publishing, say each part as it is: "Visitor
     texting is live. Door access is still in demo mode, so no physical locks
-    will open." Never say "everything runs in demo mode".
+    will open." For local test texts, use the test-mode sentence plus the door
+    line, and do not say visitors can start a tour by texting the touring
+    number. Never say "everything runs in demo mode".
 
 **Pause, resume, or remove.** These are not setup edits and do not change the
 published configuration. `pause_tours` stops new bookings at a property or one

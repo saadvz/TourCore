@@ -276,7 +276,7 @@ A property can opt into local test texts while the installation's primary provid
 QA scratch recipe (keep a published live building on Sendblue):
 
 1. Leave the installation on Sendblue (do **not** call `choose_messaging_provider` with `local` and no property).
-2. Put only the scratch building on local: `choose_messaging_provider` with `local` **and** that property, or `set_services` with `messaging: local`. `get_services` and `set_services local` say "Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on." — not that texting is live, and without naming the texting service.
+2. Put only the scratch building on local: `choose_messaging_provider` with `local` **and** that property, or `set_services` with `messaging: local`. `get_services` and `set_services local` say "Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on. Door access is still in demo mode, so no physical locks will open." — not that texting is live, and without naming the texting service. Publishing a local building leaves out "Visitors can start a tour by texting your touring number."
 3. Run `inject_local_sms` / `read_local_outbox` against the scratch property.
 4. Confirm the live building is still Published. Switching or injecting for scratch must not draft or disconnect it.
 

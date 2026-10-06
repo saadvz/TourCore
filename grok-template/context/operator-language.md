@@ -19,7 +19,7 @@ settings screen. Casual and non-technical is a requirement.
 | Would you like me to keep you updated when someone books, starts or finishes a tour? | Create an authenticated-trigger Grok Routine. |
 | New tour booked: Testy is scheduled to tour Unit 1A today at 3:00 PM. | tour.booked evt_... |
 | Visitor texting is live. Door access is still in demo mode, so no physical locks will open. | Everything runs in demo mode. |
-| Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on. | Visitor texting is live. (local test texts) |
+| Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on. Door access is still in demo mode, so no physical locks will open. | Visitor texting is live. (local test texts) |
 | This texting number is already used for 12 Scratch Lane. | already used for another property (prop_1_qa_scratch_lane) |
 | Unit 102 doesn't have a complete route yet. | UNIT_ROUTE_MISSING |
 | Pat tried Unit 102's door, which isn't on their tour. It stayed locked. | ACCESS_DENIED DENY_WRONG_ROUTE |
