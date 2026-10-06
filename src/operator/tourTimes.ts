@@ -1,9 +1,10 @@
 import { isLiveMessaging } from "../config/tourCoreConfig";
+import { moveLaterBookingInstead, tourInProgressCannotMove } from "../core/availabilityCopy";
 import { intervalsOverlap, parseFlexibleTime, placementOf, relativeWhen, tourInterval, touringHoursLabel } from "../core/customSlot";
 import { isUnconfirmedHold, REQUEST_ALREADY_HANDLED, requestAlreadyExpiredLine, requestProposePassedLine, requestTimePassedLine, SLOT_ALREADY_PASSED, TourCoreError, WITHDRAWN_FOR_REGULAR_BOOKING } from "../core/TourCore";
 import { formatConfirmStamp, formatDay, formatTime, formatWeekday, localDateOf } from "../core/timezone";
 import { formatPhone, parsePhone } from "../core/phone";
-import type { TourTimeRequest } from "../domain/model";
+import type { Reservation, TourTimeRequest } from "../domain/model";
 import { TERMINAL } from "../domain/stateMachine";
 import { operatorPausedBookingRefuse } from "../setup/availability";
 import { SetupInputError } from "../setup/setupActions";
@@ -13,7 +14,7 @@ import type { ConfirmationBook } from "./confirmations";
 import { requireUnit, resolvePropertyId } from "./resolve";
 import { persistSession, type OperatorServices } from "./services";
 import { visitorSubject } from "../visitor/identity";
-import { currentReservation, findTour, midSentence, tourRef, tourSnapshots, unitNameOf, visitorNameOf, type TourSnapshot } from "./tours";
+import { currentReservation, findTour, midSentence, nextReservation, tourRef, tourSnapshots, unitNameOf, visitorNameOf, type TourSnapshot } from "./tours";
 
 interface Ctx {
   services: OperatorServices;
@@ -368,11 +369,35 @@ export async function rescheduleTour(
   refuseIfPaused(ctx, tour.propertyId, reservation?.unitId);
   if (!reservation?.slotStart) throw new SetupInputError("NO_TOUR", `${who(tour)} doesn't have a tour time to move yet.`);
   const tz = tour.config.property.timezone;
+  const name = who(tour);
+  if (reservation.status === "TOURING") {
+    const later = nextReservation(tour);
+    if (!later?.slotStart) throw new SetupInputError("TOUR_IN_PROGRESS", tourInProgressCannotMove(name));
+    const laterStart = new Date(later.slotStart);
+    const resolved = parseFlexibleTime(input.newStartsAt, tour.config, ctx.now(), localDateOf(laterStart, tz));
+    if (!resolved.ok) throw new SetupInputError("TIME_UNCLEAR", resolved.ask);
+    const outside = resolved.placement === "OUTSIDE_HOURS";
+    const fingerprint = `${later.id}|${later.updatedAt}|${resolved.start.toISOString()}|${outside}`;
+    const offer = moveLaterBookingInstead(name, formatTime(laterStart, tz), formatDay(laterStart, tz));
+    if (!input.confirmationCode) {
+      return ask(ctx, "reschedule-tour", later.id, fingerprint, offer, outside ? { outsideHours: true } : {});
+    }
+    if (outside && !input.acknowledgeOutsideHours) {
+      throw new SetupInputError("OUTSIDE_HOURS", "Moving a tour outside normal touring hours needs a clear yes to that specifically.");
+    }
+    redeem(ctx, input.confirmationCode, "reschedule-tour", later.id, fingerprint);
+    await session.reschedule(resolved.start.toISOString(), { customTime: true, outsideTourHours: outside, notice: "moved", reservationId: later.id });
+    await persistSession(ctx.services, session);
+    return {
+      summary: `${name}'s tour is now ${relativeWhen(resolved.start, ctx.now(), tz)}. They've been told. The regular tour times are unchanged.`,
+      rescheduled: true,
+      tourRef: tourRef(tour.propertyId, tour.tourId),
+    };
+  }
   const resolved = parseFlexibleTime(input.newStartsAt, tour.config, ctx.now(), localDateOf(new Date(reservation.slotStart), tz));
   if (!resolved.ok) throw new SetupInputError("TIME_UNCLEAR", resolved.ask);
   const outside = resolved.placement === "OUTSIDE_HOURS";
   const fingerprint = `${reservation.id}|${reservation.updatedAt}|${resolved.start.toISOString()}|${outside}`;
-  const name = who(tour);
   if (!input.confirmationCode) {
     const question = moveConfirmQuestion({
       who: name,
@@ -431,13 +456,7 @@ export async function scheduleOneOffTour(
   }
   if (resolved.start.getTime() <= ctx.now().getTime()) throw new SetupInputError("SLOT_PAST", SLOT_ALREADY_PASSED);
   const wanted = tourInterval(config, resolved.start);
-  for (const tour of await tourSnapshots(ctx.services, { propertyId })) {
-    const reservation = currentReservation(tour);
-    if (!reservation?.slotStart || TERMINAL.includes(reservation.status)) continue;
-    if (intervalsOverlap(wanted, tourInterval(config, new Date(reservation.slotStart)))) {
-      throw new SetupInputError("SLOT_OVERLAP", "That time overlaps another tour.");
-    }
-  }
+  await assertOneOffSlotFree(ctx, propertyId, wanted);
   const outside = resolved.placement === "OUTSIDE_HOURS";
   const tz = config.property.timezone;
   const whoLabel = input.visitorName?.trim() ? input.visitorName.trim().split(/\s+/)[0]! : formatPhone(phone);
@@ -453,12 +472,34 @@ export async function scheduleOneOffTour(
     throw new SetupInputError("OUTSIDE_HOURS", "Setting up a tour outside normal touring hours needs a clear yes to that specifically.");
   }
   redeem(ctx, input.confirmationCode, "schedule-one-off", `${propertyId}:${phone}`, fingerprint);
+  await assertOneOffSlotFree(ctx, propertyId, wanted);
   const session = await ctx.services.openMessagingSession(propertyId, phone);
-  await session.scheduleOneOff({ unitId: unit.id, start: resolved.start, outsideHours: outside, name: input.visitorName });
-  await persistSession(ctx.services, session);
+  try {
+    await session.scheduleOneOff({ unitId: unit.id, start: resolved.start, outsideHours: outside, name: input.visitorName });
+    await persistSession(ctx.services, session);
+  } catch (err) {
+    await session.supersedeForOperatorOneOff();
+    await persistSession(ctx.services, session);
+    throw err;
+  }
   return {
     summary: `I texted ${whoLabel} to confirm a tour of ${visitorSubject(config.property, unit.name)} ${whenLabel}. The regular tour times are unchanged.`,
     scheduled: true,
     tourRef: tourRef(propertyId, session.tourId),
   };
+}
+
+/** Running tour and every future or held booking occupy a slot. */
+function occupyingReservations(tour: TourSnapshot): Reservation[] {
+  return tour.bundle.reservations.filter((reservation) => reservation.slotStart && !TERMINAL.includes(reservation.status));
+}
+
+async function assertOneOffSlotFree(ctx: Ctx, propertyId: string, wanted: ReturnType<typeof tourInterval>): Promise<void> {
+  for (const tour of await tourSnapshots(ctx.services, { propertyId })) {
+    for (const reservation of occupyingReservations(tour)) {
+      if (intervalsOverlap(wanted, tourInterval(tour.config, new Date(reservation.slotStart!)))) {
+        throw new SetupInputError("SLOT_OVERLAP", "That time overlaps another tour.");
+      }
+    }
+  }
 }

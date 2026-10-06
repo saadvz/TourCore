@@ -197,7 +197,7 @@ function tourTime(tour: TourSnapshot): string | undefined {
   return r ? tourTimeOf(r, tour) : undefined;
 }
 
-function nextBookingOf(tour: TourSnapshot) {
+export function nextBookingOf(tour: TourSnapshot) {
   const next = nextReservation(tour);
   if (!next) return undefined;
   const time = tourTimeOf(next, tour);

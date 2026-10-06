@@ -32,7 +32,12 @@ later booking is their next booking. After the running tour ends, texts
 and those tools move to the later booking, or a greeting starts a new
 conversation if nothing is held. `pause_tours` with cancel cancels
 every real future booking, including a held rebook, and counts only
-tours actually cancelled. After the follow-up
+tours actually cancelled; if they are still touring, the cancel text
+says their tour right now isn't affected. A one-off overlap check sees
+the running tour and every future or held booking. `reschedule_tour`
+will not move a tour in progress; it can offer to move the later
+booking instead. Calling off describes the tour that was called off;
+the later booking is `nextBooking`. After the follow-up
 reply, an unapproved custom-time request is told once that it is still
 with the property team; they can reply with a day for a regular
 time only when they do not already have a held or booked regular tour.

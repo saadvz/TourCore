@@ -91,7 +91,10 @@ what never does.
   time menu and never booked), the Bot uses `schedule_one_off_tour` and asks
   the exact question Tour Core returns. Only a yes that they asked is enough.
   A leftover choosing menu is replaced; a booked tour, pending one-off, open
-  tour window, or hold is refused. Tell the operator Tour Core's words
+  tour window, or hold is refused. A time that overlaps a running tour or any
+  future or held booking is refused before asking. `reschedule_tour` will not
+  move a tour in progress; it can offer to move a later booking instead.
+  Tell the operator Tour Core's words
   (`They already have a booked tour. I can move it or call it off.`), then
   move with `reschedule_tour` or call off with `revoke_tour_access` (resume a
   hold with `clear_operator_hold`). If tours are paused, approve and

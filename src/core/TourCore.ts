@@ -33,7 +33,7 @@ import { closestOpenSlots, intervalsOverlap, occupiedInterval, overlapSummary, p
 import { DOOR_AFTER_T, LATE_ARRIVAL_EXPIRED, landlordRepliedAfterClose, landlordWho, tourFinishedFollowUp, visitorRepliedAfterClose } from "./overstayCopy";
 import { withPropertySlotLock } from "./slotLock";
 import { BOOKING_HORIZON_DAYS, isoDate, nextTourDay, slotsOn, tourWindow, type TourSlot } from "./schedule";
-import { bookedTourCalledOffText } from "./availabilityCopy";
+import { bookedTourCalledOffText, tourMovedToText } from "./availabilityCopy";
 import { propertyDirectionsUrl, tourDirectionsText } from "./mapsLink";
 import { addDays, formatDay as formatDayIn, formatTime as formatTimeIn, localDateOf, type LocalDate } from "./timezone";
 
@@ -770,7 +770,7 @@ export class TourCore {
       return { reservation, changed: true };
     }
     if (input.notice === "moved") {
-      await this.textProspect(prospect, reservation.id, `Your tour of ${visitorSubject(config.property, this.unitFor(reservation).name)} has been moved to ${this.whenPhrase(start)}. You're all set.`);
+      await this.textProspect(prospect, reservation.id, `${tourMovedToText(visitorSubject(config.property, this.unitFor(reservation).name), this.time(start), this.day(start))} You're all set.`);
     } else if (reservation.status === "READY") {
       await this.textProspect(prospect, reservation.id, `Your tour has moved to ${when}.\nDoors will work for you from ${this.time(windowStart)} to ${this.time(windowEnd)}.`, {
         kind: "say",
@@ -1396,6 +1396,7 @@ export class TourCore {
     reservation = await this.move(reservation, "CANCELLED", "RESERVATION_CANCELLED", { detail: options.reason });
     const prospect = await this.mustGetProspect(reservation.prospectId);
     const start = new Date(slotStart);
+    const touringNow = (await this.deps.store.list("reservations")).some((item) => item.id !== reservation.id && item.status === "TOURING");
     await this.textProspect(
       prospect,
       reservation.id,
@@ -1406,6 +1407,7 @@ export class TourCore {
         address: this.deps.config.property.address,
         propertyWide: options.propertyWide,
         ...(options.removed ? { removed: true } : {}),
+        ...(touringNow ? { touringNow: true } : {}),
       }),
     );
     return reservation;

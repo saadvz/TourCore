@@ -645,12 +645,14 @@ export class VisitorDemoSession {
   }
 
   /** Operator action: move the tour. The visitor is told through this conversation's own transport. */
-  async reschedule(newStartsAt: string, options: { outsideTourHours?: boolean; customTime?: boolean; notice?: "default" | "moved" | "none" } = {}): Promise<{ changed: boolean }> {
-    if (!this.reservationId) throw new SetupInputError("NO_TOUR", "This visitor hasn't booked a tour yet.");
-    const reservation = await this.reservation();
+  async reschedule(newStartsAt: string, options: { outsideTourHours?: boolean; customTime?: boolean; notice?: "default" | "moved" | "none"; reservationId?: string } = {}): Promise<{ changed: boolean }> {
+    const { reservationId: targetId, ...rest } = options;
+    const reservationId = targetId ?? this.reservationId;
+    if (!reservationId) throw new SetupInputError("NO_TOUR", "This visitor hasn't booked a tour yet.");
+    const reservation = targetId ? await this.store.get("reservations", targetId) : await this.reservation();
     const paused = operatorPausedBookingRefuse(this.pauseState(), this.config, reservation?.unitId);
     if (paused) throw new SetupInputError("TOURS_PAUSED", paused);
-    const { changed } = await this.core.rescheduleReservation({ reservationId: this.reservationId, newStartsAt, ...options });
+    const { changed } = await this.core.rescheduleReservation({ reservationId, newStartsAt, ...rest });
     this.clearShownMenus();
     await this.syncReplies();
     return { changed };

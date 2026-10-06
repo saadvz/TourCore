@@ -148,6 +148,15 @@ describe("availability copy", () => {
     expect(bookedTourCalledOffText({ team: "leasing team", day: "Monday, Sep 28", time: "9:00 AM", address: "100 Alfred Way", propertyWide: true, removed: true })).not.toContain(
       "when tours are back",
     );
+    expect(bookedTourCalledOffText({ team: "leasing team", day: "Thursday, Oct 1", time: "2:00 PM", address: "100 Alfred Way", propertyWide: true, touringNow: true })).toBe(
+      "Sorry, the leasing team had to cancel your later tour at 2:00 PM on Thursday, Oct 1. Your tour right now isn't affected. They'll text you when tours are back.",
+    );
+    expect(bookedTourCalledOffText({ team: "leasing team", day: "Thursday, Oct 1", time: "2:00 PM", address: "100 Alfred Way", propertyWide: false, touringNow: true })).toBe(
+      "Sorry, the leasing team had to cancel your later tour at 2:00 PM on Thursday, Oct 1. Your tour right now isn't affected. Text me anytime to book another.",
+    );
+    expect(bookedTourCalledOffText({ team: "leasing team", day: "Thursday, Oct 1", time: "2:00 PM", address: "100 Alfred Way", propertyWide: true, touringNow: true })).not.toContain(
+      "100 Alfred Way",
+    );
   });
 
   it("uses the approved operator refuse when approving or moving a time on a paused property", () => {

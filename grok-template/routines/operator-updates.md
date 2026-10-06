@@ -157,7 +157,11 @@ nothing booked is replaced. A booked tour, pending one-off, open tour
 window, or hold is refused — tell the operator Tour Core's words
 (`They already have a booked tour. I can move it or call it off.`), then
 move with `reschedule_tour` or call off with `revoke_tour_access` (resume a
-hold with `clear_operator_hold`). YES / STOP / NO / no-reply are handled by Tour
+hold with `clear_operator_hold`). `reschedule_tour` will not move a tour in
+progress; it can offer to move a later booking instead. A one-off overlap
+check sees the running tour and every future or held booking. Calling off
+describes the tour that was called off; a later booking is `nextBooking`.
+YES / STOP / NO / no-reply are handled by Tour
 Core (one release text if they never reply, unless they opted out; STOP is
 opt-out only). A leftover menu number only re-prompts the confirmation
 line — no team issue. A real question before they confirm is flagged for

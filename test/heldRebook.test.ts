@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config/tourCoreConfig";
-import { bookedTourCalledOffText } from "../src/core/availabilityCopy";
+import { bookedTourCalledOffText, moveLaterBookingInstead, tourInProgressCannotMove, tourMovedToText } from "../src/core/availabilityCopy";
 import { bookedForLine, CONSENT_TEXT, TOUR_ENDED_REPLY, VISITOR_CANCEL_DONE } from "../src/core/TourCore";
 import { formatDay, formatTime, zonedTimeToUtc } from "../src/core/timezone";
 import { MessagingEndpoints } from "../src/messaging/endpoints";
@@ -18,6 +18,7 @@ import { OverstayScheduler } from "../src/visitor/overstayScheduler";
 import { VisitorDemoRegistry, VisitorDemoSession } from "../src/visitor/session";
 import { VerificationLinks } from "../src/visitor/verificationLinks";
 import { at, grokHarness } from "./grokHarness";
+import { liveApp, PHONE as LIVE_PHONE } from "./liveApp";
 
 const TZ = "America/New_York";
 const PHONE = "+15550102000";
@@ -244,6 +245,47 @@ describe("defect 4: pause_tours cancel actually cancels the held rebook", () => 
     const open = await v.session.core.availableSlots({ year: 2026, month: 9, day: 28 });
     expect(open.some((s) => s.start.getTime() === slot.getTime())).toBe(true);
   });
+
+  it("mid-tour cancel cancels the held rebook, counts 1, texts once, and keeps the running tour", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const v = await h.touringVisitor(id, { name: "Riley Tester", phone: "555-010-2000" });
+    const slot = new Date(at(10));
+    const pending = await holdNextSlot(v.session, slot);
+    const runningId = (await v.session.reservation())!.id;
+    await persistSession(h.services, v.session);
+    const beforeTexts = v.session.conversation.filter((c) => c.from === "tourcore").length;
+    const asked = await h.ok("pause_tours", { property: id });
+    expect(asked.bookedTours).toBe(1);
+    const done = await h.ok("pause_tours", { property: id, bookedTours: "cancel", confirmationCode: asked.confirmation.code });
+    expect(done.cancelled).toBe(1);
+    expect(done.summary).toMatch(/1 booked tour was cancelled/);
+    expect((await v.session.store.get("reservations", pending.id))!.status).toBe("CANCELLED");
+    expect((await v.session.store.get("reservations", runningId))!.status).toBe("TOURING");
+    expect((await v.session.reservation())!.id).toBe(runningId);
+    const { config } = h.workspace.load(id);
+    const expected = bookedTourCalledOffText({
+      team: config.operator.name,
+      day: formatDay(slot, config.property.timezone),
+      time: formatTime(slot, config.property.timezone),
+      address: config.property.address,
+      propertyWide: true,
+      touringNow: true,
+    });
+    expect(expected).toBe(
+      "Sorry, the leasing team had to cancel your later tour at 10:00 AM on Monday, Sep 28. Your tour right now isn't affected. They'll text you when tours are back.",
+    );
+    const sent = v.session.conversation.filter((c) => c.from === "tourcore").slice(beforeTexts);
+    expect(sent.filter((c) => c.text === expected)).toHaveLength(1);
+    expect(lastFrom(v.session)).toBe(expected);
+    const access = await v.session.core.requestAccess({
+      reservationId: runningId,
+      prospectId: v.session.prospectId!,
+      doorId: "lobby_entrance",
+    });
+    expect(access.decision.allowed).toBe(true);
+  });
 });
 
 describe("heal persisted called-off tour plus held rebook", () => {
@@ -296,6 +338,107 @@ describe("nit: inspect_tour shows the extended end time", () => {
     const inspected = await h.ok("inspect_tour", { tourRef: tourRef(id, v.session.tourId) });
     expect(inspected.tour.tourTime).toBe("Monday, Sep 28, 9:00 AM\u20139:55 AM");
     expect(inspected.tour.accessGrants.every((g: { validUntil: string }) => g.validUntil === "Monday, Sep 28, 9:55 AM")).toBe(true);
+  });
+});
+
+describe("should-fix: one-off overlap sees a held rebook", () => {
+  it("refuses Dana for Testy's held Thursday slot and leaves no stray tour", async () => {
+    const a = await liveApp({ cleanups });
+    a.ws.recordDryTour(PROPERTY, { passed: true, ranAt: new Date(a.clock.t).toISOString(), checks: [], audit: [] });
+    expect((await a.ws.publishDemoProperty(PROPERTY, new Date(a.clock.t))).published).toBe(true);
+    await a.book();
+    a.clock.t = at(14);
+    await a.text("I'm here");
+    const session = a.visitors.latestForPhone(PROPERTY, LIVE_PHONE, "messaging")!;
+    const thursday = zonedTimeToUtc({ year: 2026, month: 10, day: 1, hour: 14, minute: 0 }, TZ);
+    await holdNextSlot(session, thursday);
+    await expect(
+      a.grok("schedule_one_off_tour", {
+        phone: "+15550109999",
+        visitorName: "Dana",
+        unit: "1A",
+        startsAt: "Thursday, Oct 1 at 2:00 PM",
+      }),
+    ).rejects.toThrow("That time overlaps another tour.");
+    const listed = await a.grok("list_active_tours");
+    expect(listed.tours.map((t: { visitorName: string }) => t.visitorName)).not.toContain("Dana");
+    expect(JSON.stringify(listed)).not.toMatch(/Choosing a time/);
+    expect(listed.tours.some((t: { visitorName: string; status: string }) => t.visitorName.includes("Dana"))).toBe(false);
+  });
+});
+
+describe("should-fix: reschedule_tour refuses a tour in progress", () => {
+  it("refuses with a plain line when there is no later booking", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    await h.touringVisitor(id, { name: "Riley Tester", phone: "555-010-2000" });
+    expect(await h.fails("reschedule_tour", { visitor: "Riley", newStartsAt: "Friday, Oct 2 at 3:30 PM" })).toBe(
+      tourInProgressCannotMove("Riley"),
+    );
+  });
+
+  it("offers the later booking, and a yes moves that booking not the running tour", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const v = await h.touringVisitor(id, { name: "Riley Tester", phone: "555-010-2000" });
+    const thursday = zonedTimeToUtc({ year: 2026, month: 10, day: 1, hour: 14, minute: 0 }, TZ);
+    const pending = await holdNextSlot(v.session, thursday);
+    const runningId = (await v.session.reservation())!.id;
+    await persistSession(h.services, v.session);
+    const asked = await h.ok("reschedule_tour", { visitor: "Riley", newStartsAt: "Friday, Oct 2 at 3:30 PM" });
+    expect(asked.summary).toBe(moveLaterBookingInstead("Riley", "2:00 PM", "Thursday, Oct 1"));
+    const done = await h.ok("reschedule_tour", {
+      visitor: "Riley",
+      newStartsAt: "Friday, Oct 2 at 3:30 PM",
+      confirmationCode: asked.confirmation.code,
+    });
+    expect(done.rescheduled).toBe(true);
+    expect((await v.session.reservation())!.id).toBe(runningId);
+    expect((await v.session.reservation())!.status).toBe("TOURING");
+    const moved = (await v.session.store.get("reservations", pending.id))!;
+    expect(new Date(moved.slotStart!).getTime()).toBe(zonedTimeToUtc({ year: 2026, month: 10, day: 2, hour: 15, minute: 30 }, TZ).getTime());
+    expect(lastFrom(v.session)).toBe(`${tourMovedToText("Unit 101", "3:30 PM", "Friday, Oct 2")} You're all set.`);
+  });
+});
+
+describe("should-fix: revoke result describes the called-off tour", () => {
+  it("puts the held booking on nextBooking, not tour", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const v = await h.touringVisitor(id, { name: "Riley Tester", phone: "555-010-2000" });
+    await holdNextSlot(v.session, new Date(at(10)));
+    await persistSession(h.services, v.session);
+    const ref = tourRef(id, v.session.tourId);
+    const done = await h.approve("revoke_tour_access", { tourRef: ref, reason: "Need the unit back" });
+    expect(done.done.summary).toMatch(/called off/);
+    expect(done.done.tour).toMatchObject({
+      visitorName: "Riley Tester",
+      status: "Called off",
+      tourTime: "Monday, Sep 28, 9:00 AM\u20139:45 AM",
+      nextBooking: { tourTime: "Monday, Sep 28, 10:00 AM\u201310:45 AM", status: "Waiting for consent" },
+    });
+    expect(done.done.tour.status).not.toBe("Waiting for consent");
+  });
+});
+
+describe("should-fix: visitor moved-to copy is time then day", () => {
+  it("texts Your tour of Unit 1A has been moved to 3:30 PM on Friday, Oct 2", async () => {
+    const a = await liveApp({ cleanups });
+    a.ws.recordDryTour(PROPERTY, { passed: true, ranAt: new Date(a.clock.t).toISOString(), checks: [], audit: [] });
+    expect((await a.ws.publishDemoProperty(PROPERTY, new Date(a.clock.t))).published).toBe(true);
+    await a.book();
+    const asked = await a.grok("reschedule_tour", { visitor: "Testy", newStartsAt: "Friday, Oct 2 at 3:30 PM" });
+    await a.grok("reschedule_tour", {
+      visitor: "Testy",
+      newStartsAt: "Friday, Oct 2 at 3:30 PM",
+      confirmationCode: asked.confirmation.code,
+    });
+    expect(a.fake.sent.filter((message) => message.number === LIVE_PHONE).at(-1)!.content).toBe(
+      `${tourMovedToText("Unit 1A", "3:30 PM", "Friday, Oct 2")} You're all set.`,
+    );
   });
 });
 

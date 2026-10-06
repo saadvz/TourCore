@@ -478,12 +478,19 @@ export async function clearHold(services: OperatorServices, ref: string) {
 export async function revokeTour(services: OperatorServices, ref: string, reason: string) {
   const { tour, session, reservation } = await liveTour(services, ref);
   assertCanChange(tour, reservation, "revoke");
+  const calledOff = tourSummary(tour);
   const why = reason.trim().slice(0, 300) || "called off by the property team";
   await session.operatorChange((core, id) => core.revokeReservation(id, why), reservation.id);
   if (session.pendingBookingId === reservation.id) session.pendingBookingId = undefined;
   await session.promotePendingBookingIfTourEnded();
   await persistSession(services, session);
-  return tourSummary(await findTour(services, ref));
+  return {
+    ...calledOff,
+    status: STATUS_LABELS.REVOKED,
+    currentStep: STATUS_LABELS.REVOKED,
+    active: false,
+    canChange: false,
+  };
 }
 
 export function cleanFact(fact: string): string {

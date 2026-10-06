@@ -153,7 +153,10 @@ Always:
   question is flagged for the team; the hold stays pending. If they never
   reply, the time is released and they get one text unless they opted out,
   then no further texts. Regular hours stay the same. `This is a one-off…`
-  only when the time is outside tour hours. If they already have a booked tour, say Tour Core's
+  only when the time is outside tour hours. A time that overlaps a running
+  tour or any future or held booking is refused before asking (`That time
+  overlaps another tour.`). `reschedule_tour` will not move a tour in
+  progress; it can offer to move a later booking instead. If they already have a booked tour, say Tour Core's
   refusal word for word (`They already have a booked tour. I can move it or
   call it off.`), then use `reschedule_tour` to move it or `revoke_tour_access`
   to call it off. A pending one-off, open tour window, or hold uses that
@@ -189,7 +192,12 @@ Never:
   over the tour that is still running. A custom-time request during a
   tour is also secondary. A bare yes or no answers the latest question
   asked. While they are touring, operator tools act on the running tour;
-  the later booking is their next booking. After the running tour ends
+  the later booking is their next booking. A one-off overlap check sees
+  the running tour and every future or held booking. `reschedule_tour`
+  will not move a tour in progress; it can offer to move the later
+  booking instead. Calling off describes the tour that was called off;
+  the later booking is `nextBooking`. Cancelling a later booking while
+  they are touring tells them their tour right now isn't affected. After the running tour ends
   for any reason, texts and operator actions move to that later booking,
   or a greeting starts a new conversation if nothing is held. After the follow-up reply, an unapproved
   request is told once that it is still with the property team. The
