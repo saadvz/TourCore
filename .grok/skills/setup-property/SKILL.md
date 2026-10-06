@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Guided property setup, checked and practiced before publish
-  version: "0.3.4"
+  version: "0.3.5"
 ---
 
 # Setup Property
@@ -72,7 +72,8 @@ the operator correct it.
      its own door automatically ("Unit 1A Door").
    - **Apartment or condo (one unit):** ask **"What's the unit number?"** then
      `add_unit` with that number (`"4B"` is stored as `"Unit 4B"`; `"loft"` as
-     `"Unit Loft"`). `update_unit` uses the same casing when they rename. Then
+     `"Unit Loft"`). `update_unit` uses the same casing when they rename and
+     confirms with that stored name ("Updated Unit Loft.", not "Updated loft."). Then
      ask Tour Core's next question: **"Do you control the building entrance, or
      only the unit door?"** Save `buildingAccess` `BUILDING_AND_UNIT` or
      `UNIT_ONLY` with `update_property_details`. If they control the building

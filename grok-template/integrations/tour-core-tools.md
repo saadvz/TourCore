@@ -27,7 +27,7 @@ again with the code after the operator's yes.
 | `update_property_details` | change | Property type, address, operator-given name, time zone, approved property facts, apartment or condo building-door control (`BUILDING_AND_UNIT` / `UNIT_ONLY`), optional entry instructions (`skipEntryInstructions` stores nothing), who gets alerts, optional visitor help number (never the team's private alert line); `skipVisitorHelp` records an explicit skip; returns `nextQuestion` (unit number and building-door control for an apartment or condo, then the optional help-number step) |
 | `list_units` | read | Units with description, facts, door, route, and whether that unit is paused |
 | `add_unit` | change | Adds a unit and its own door. For a single-family home the name is optional ("Main Home"), its door is the home's entrance ("Front Door" unless named) and its route is set automatically. For an apartment or condo, name is the unit number (required); the route waits until they say whether they control the building entrance. Never a made-up unit number |
-| `update_unit` | change | Renames a unit or changes its description/facts. For an apartment or condo, the new name is cased the same way as add_unit and the street-plus-unit nickname and matching unit door are refreshed |
+| `update_unit` | change | Renames a unit or changes its description/facts. For an apartment or condo, the new name is cased the same way as add_unit and the street-plus-unit nickname and matching unit door are refreshed. The confirmation echoes the stored display name ("Updated Unit Loft."), not the raw input |
 | `set_unit_details` | change | Saves units' bedrooms, bathrooms, rent, availability and optional details from the operator's words (bulk answers welcome); "not sure" is saved as not provided |
 | `get_unit_details` | read | Unit details as short lines, what's still missing, and the one question to ask next |
 | `list_doors` | read | Every door on file |
@@ -45,7 +45,7 @@ again with the code after the operator's yes.
 | `read_local_outbox` | read | QA only. Outbound local-loopback replies as separate bubbles in send order (body + timestamp). Never one concatenated blob. Refuses unless that property is on local |
 | `review_property_setup` | read | The setup as short lines to read back: address, "Called: ..." if named, property type, each unit with its details and route, "Tours: ...", "Verification: ...", "Visitor texting: Connected", "Door access: Demo", visitor help number (or "not set") |
 | `run_readiness_check` | change | The real readiness checks, recorded for publish |
-| `run_dry_tour` | change | A full practice tour with safety proof points, recorded for publish |
+| `run_dry_tour` | change | A full practice tour with safety proof points, recorded for publish. A single-family home keeps the entrance proof line; a unit-door-only apartment or condo shows the unit-door proof instead |
 | `publish_demo_property` | consequential | Publishes for demo, only when readiness and a practice tour passed for this exact setup. Open conversations then use these published settings (hours, units, and so on) on every inbound text. In a Grok-managed install it refuses while the property still uses practice texts although texting is installed, returning a `summary` and a `remediation` (switch to real texts, re-run readiness and the practice tour, ask again) |
 | `list_active_tours` | read | Tours happening now |
 | `inspect_tour` | read | One tour: status, activity, questions, denials, what needs attention |

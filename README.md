@@ -644,7 +644,7 @@ The actions:
 | Action | What it does |
 | --- | --- |
 | `createPropertySetup` / `setPropertyDetails` | Property name, address and time zone (inferred from the address, always confirmed) |
-| `addUnit` / `renameUnit` / `setUnitDetails` / `removeUnit` | Tourable units, their description and approved facts. A rename can also rename the unit's door, but only if it still has the suggested name. For an apartment or condo, rename applies the same unit casing as add (`4b` → `Unit 4B`, `loft` → `Unit Loft`) and refreshes the street-plus-unit nickname and matching unit door |
+| `addUnit` / `renameUnit` / `setUnitDetails` / `removeUnit` | Tourable units, their description and approved facts. A rename can also rename the unit's door, but only if it still has the suggested name. For an apartment or condo, rename applies the same unit casing as add (`4b` → `Unit 4B`, `loft` → `Unit Loft`) and refreshes the street-plus-unit nickname and matching unit door. `update_unit` confirms with that stored name (`Updated Unit Loft.`), not the raw input |
 | `addDoor` / `renameDoor` / `removeDoor` | Entrances, unit doors, and hallway or shared doors (ids are generated and can't collide) |
 | `setRoute` | Ordered doors for one unit, plus optional directions |
 | `setTourHours` | Days, hours, tour length, spacing, early-arrival allowance |
@@ -661,7 +661,9 @@ Validation (`src/config/validateConfig.ts`) returns machine-readable codes with 
 
 The practice tour runs inquiry, reservation, consent, verification, an early arrival (denied), arrival, entrance
 access, a duplicate request (no second grant), unit access with directions, and an **off-route door that is denied
-before Durin is called**. Then it runs completion (all doors re-locked) and the follow-up, and saves the tour history.
+before Durin is called**. A unit-door-only apartment or condo proves the unit door instead of a building entrance.
+A single-family home keeps the entrance proof line, even when that door is also the unit door. Then it runs
+completion (all doors re-locked) and the follow-up, and saves the tour history.
 
 ## Configuration
 

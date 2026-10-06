@@ -8,17 +8,17 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Practice tour with safety proof points
-  version: "0.2.2"
+  version: "0.2.3"
 ---
 
 # Simulate Tour
 
 The practice tour books a pretend visitor, records consent, verifies them,
 tries an early arrival, opens the first door on the route at the right time
-(the building entrance, or the unit door when that is the only door), repeats a
-request, opens any later doors, tries a door that isn't on the route, completes
-the tour and sends the follow-up, all through the real engine and policy with
-Durin in demo mode.
+(the building entrance, including a single-family front door, or the unit door
+on a unit-door-only apartment or condo), repeats a request, opens any later
+doors, tries a door that isn't on the route, completes the tour and sends the
+follow-up, all through the real engine and policy with Durin in demo mode.
 
 ## When to use
 
@@ -48,6 +48,10 @@ wants to prove the tour still works.
    On a unit-door-only apartment or condo (no building entrance on the route),
    show the unit-door proof instead of an entrance line:
    > ✓ Unit 4B access was allowed
+
+   A single-family home keeps the entrance line, even when its unit door is
+   the front entrance. Do not say "{space name} access was allowed" for that
+   first door.
 4. If it stopped, say which step failed and why, in the tool's words, and
    suggest the next step (usually fixing the setup and checking again).
 

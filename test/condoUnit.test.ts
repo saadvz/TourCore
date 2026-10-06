@@ -212,7 +212,7 @@ describe("apartment or condo setup", () => {
 
     const result = await runDryTour(draft, { now: zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour: 7, minute: 0 }, draft.property.timezone) });
     expect(result.passed).toBe(true);
-    expect(result.checks.map((c) => c.id)).toContain("entrance");
+    expect(result.checks.find((c) => c.id === "entrance")).toMatchObject({ ok: true, label: "Visitor arrives on time", outcome: "Entrance access approved" });
     expect(result.checks.map((c) => c.id)).toContain("unit_door");
     const opened = result.bundle!.accessGrants.map((g) => g.doorId);
     expect(opened).toEqual(expect.arrayContaining(draft.routes[0]!.stops.map((s) => s.doorId)));
@@ -233,6 +233,21 @@ describe("apartment or condo setup", () => {
     expect(result.bundle!.accessGrants.map((g) => g.doorId)).toEqual([draft.units[0]!.doorId]);
     expect(result.checks.map((c) => c.id)).not.toContain("entrance");
     expect(result.checks.find((c) => c.id === "unit_door")).toMatchObject({ ok: true, label: "Visitor enters Unit 4B" });
+  });
+
+  it("keeps the entrance proof on a single-family home whose unit door is the front entrance", async () => {
+    let draft = createPropertySetup({ address: "1 QA Scratch Lane, Tenafly, NJ 07670", propertyType: "SINGLE_FAMILY" });
+    draft = addTourableSpace(draft, { name: "QA Scratch Home" });
+    draft = setUnitProfile(draft, draft.units[0]!.id, { bedrooms: "3", bathrooms: "2", monthlyRent: "$4,200", availability: "now" });
+    expect(validateConfig(draft)).toEqual([]);
+    expect(draft.units[0]).toMatchObject({ name: "QA Scratch Home", doorId: draft.doors.find((d) => d.kind === "ENTRANCE")!.id });
+    expect(draft.routes[0]!.stops.map((s) => s.doorId)).toEqual([draft.units[0]!.doorId]);
+
+    const result = await runDryTour(draft, { now: zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour: 7, minute: 0 }, draft.property.timezone) });
+    expect(result.passed).toBe(true);
+    expect(result.checks.find((c) => c.id === "entrance")).toMatchObject({ ok: true, label: "Visitor arrives on time", outcome: "Entrance access approved" });
+    expect(result.checks.map((c) => c.id)).not.toContain("unit_door");
+    expect(result.checks.some((c) => c.label.includes("QA Scratch Home"))).toBe(false);
   });
 
   it("asks building-door control, then the building entrance, then optional entry instructions", async () => {
@@ -268,10 +283,17 @@ describe("apartment or condo setup", () => {
     await h.ok("update_property_details", { confirmAddress: true });
     await h.ok("add_unit", { name: "Garden" });
     const renamed = await h.ok("update_unit", { unit: "Unit Garden", newName: "loft", alsoRenameDoor: true });
+    expect(renamed.summary).toBe("Updated Unit Loft.");
+    expect(renamed.summary).not.toMatch(/Updated loft\./i);
     expect(renamed.unit).toMatchObject({ name: "Unit Loft", door: "Unit Loft Door" });
     const id = h.workspace.propertyIds()[0]!;
     expect(h.workspace.openDraft(id).draft.property.name).toBe("145 Main St, Unit Loft");
     expect(h.workspace.openDraft(id).draft.units[0]!.name).toBe("Unit Loft");
+
+    const recased = await h.ok("update_unit", { unit: "Unit Loft", newName: "4b" });
+    expect(recased.summary).toBe("Updated Unit 4B.");
+    expect(recased.summary).not.toMatch(/Updated 4b\./i);
+    expect(recased.unit).toMatchObject({ name: "Unit 4B" });
   });
 
   it("unit-only setup never puts a building door on the route", async () => {
@@ -295,6 +317,19 @@ describe("apartment or condo setup", () => {
     expect(practice.passed).toBe(true);
     expect(practice.proofPoints.join("\n")).toContain("Unit 4B access was allowed");
     expect(practice.proofPoints.join("\n")).not.toContain("Entrance access was allowed");
+  });
+
+  it("single-family practice tour keeps the entrance proof line, not the unit-door wording", async () => {
+    const h = harness();
+    await h.ok("create_property_setup", { address: "1 QA Scratch Lane, Tenafly, NJ 07670", propertyType: "SINGLE_FAMILY" });
+    await h.ok("update_property_details", { confirmAddress: true });
+    await h.ok("add_unit", { name: "QA Scratch Home" });
+    await h.ok("set_unit_details", { units: [{ unit: "QA Scratch Home", bedrooms: "3", bathrooms: "2", monthlyRent: "$4,200", availability: "now" }] });
+    await h.ok("set_tour_hours", { days: "weekdays", start: "9am", end: "5pm" });
+    const practice = await h.ok("run_dry_tour");
+    expect(practice.passed).toBe(true);
+    expect(practice.proofPoints).toContain("\u2713 Entrance access was allowed at the right time");
+    expect(practice.proofPoints.join("\n")).not.toContain("QA Scratch Home access was allowed");
   });
 });
 
