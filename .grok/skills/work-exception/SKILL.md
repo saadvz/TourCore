@@ -101,10 +101,13 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   handled once they've dealt with it another way.
 - **Mark handled.** `resolve_exception` with a short note in the operator's
   words. It changes nothing else. For "Visitor hasn't confirmed leaving",
-  marking it handled also ends the after-close visitor alerts (the same
-  window also ends when they text DONE / I'm out, or 24 hours after the
-  close). A later HI or a clear booking intent starts a new booking
-  instead of alerting.
+  marking it handled also ends the after-close visitor alerts (alerts also
+  stop when they text DONE / I'm out, or 24 hours after the close). The
+  leaving issue itself stays open until they text DONE or you mark it
+  handled. A later standalone HI or a clear booking phrase starts a new
+  booking instead of alerting; a greeting with more text, or anything
+  about being stuck or locked in, still alerts the team and replies to
+  the visitor.
 - **After a closed tour.** Other visitor texts before that window ends
   alert the team once per message. DONE after the close uses the usual
   thanks and follow-up question; a yes is the same follow-up as a normal

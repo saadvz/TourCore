@@ -216,6 +216,8 @@ export class VisitorDemoSession {
   /** Secondary rebooking while a tour is still the active booking. */
   pendingRebook = false;
   rebookUnitId?: string;
+  /** New reservation booked during a running tour; becomes active when that tour ends. */
+  pendingBookingId?: string;
 
   private _config: TourCoreConfig;
 
@@ -842,7 +844,7 @@ export class VisitorDemoSession {
     const phone = prospect?.phone ?? record.visitorPhone;
     if (phone) this.visitor = { name: prospect?.name ?? UNNAMED_VISITOR, phone };
     this.prospectId = prospect?.id;
-    this.reservationId = bundle.reservations.at(-1)?.id;
+    this.reservationId = bundle.reservations.find((r) => r.status === "TOURING")?.id ?? bundle.reservations.at(-1)?.id;
     this.optedOut = !!prospect?.messagingOptedOut;
   }
 
@@ -946,6 +948,7 @@ export class VisitorDemoSession {
       case "finish":
         await visitorSays("I'm done with the tour.");
         await this.core.completeTour(r!.id);
+        this.promotePendingBookingIfEnded();
         return;
       case "followUp":
         this.say("visitor", said.text ?? (input.wantsContact ? "Yes, please." : "No, thanks."));
@@ -1006,7 +1009,61 @@ export class VisitorDemoSession {
     }
     this.pendingRebook = false;
     this.rebookUnitId = undefined;
-    if (keepActive && oldId) this.reservationId = oldId;
+    if (keepActive && oldId) {
+      this.pendingBookingId = this.reservationId;
+      this.reservationId = oldId;
+    }
+    await this.syncReplies();
+  }
+
+  async pendingBooking(): Promise<Reservation | undefined> {
+    return this.pendingBookingId ? this.store.get("reservations", this.pendingBookingId) : undefined;
+  }
+
+  async pendingBookingNeedsConsent(): Promise<boolean> {
+    const pending = await this.pendingBooking();
+    return !!pending && pending.status === "AWAITING_CONSENT" && !pending.consentId;
+  }
+
+  async pendingBookingNeedsVerification(): Promise<boolean> {
+    const pending = await this.pendingBooking();
+    return !!pending && pending.status === "AWAITING_VERIFICATION";
+  }
+
+  async answerPendingConsent(agree: boolean, said: Said): Promise<void> {
+    if (!this.pendingBookingId) return;
+    await this.recordText(said);
+    await this.core.recordConsent(this.pendingBookingId, agree);
+    await this.syncReplies();
+  }
+
+  async resendPendingVerification(said: Said): Promise<void> {
+    if (!this.pendingBookingId || !this.visitor) return;
+    await this.recordText(said);
+    const link = this.links?.issue({ sessionId: this.id, reservationId: this.pendingBookingId, phone: this.visitor.phone });
+    await this.reply("Here's your identity form link again. The earlier link no longer works.", { kind: "form", link });
+  }
+
+  /** When the running tour has ended, the pending booking becomes the active one. */
+  promotePendingBookingIfEnded(): boolean {
+    if (!this.pendingBookingId) return false;
+    const currentId = this.reservationId;
+    if (currentId === this.pendingBookingId) {
+      this.pendingBookingId = undefined;
+      return false;
+    }
+    this.reservationId = this.pendingBookingId;
+    this.pendingBookingId = undefined;
+    return true;
+  }
+
+  async promotePendingBookingIfTourEnded(): Promise<boolean> {
+    if (!this.pendingBookingId) return false;
+    const current = await this.reservation();
+    if (!current || current.status === "COMPLETED" || current.status === "EXPIRED") {
+      return this.promotePendingBookingIfEnded();
+    }
+    return false;
   }
 
   private async inquire(unitId: string, options: { announce?: boolean } = {}): Promise<void> {

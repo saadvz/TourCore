@@ -65,6 +65,8 @@ export interface OverstayRecord {
   pendingRebook?: boolean;
   /** Operator resolved the overstay exception — after-close alerts stop. */
   alertClosedAt?: string;
+  /** Visitor text failed every retry. Value is the windowEnd for t5, otherwise "1". */
+  sendFailed?: Partial<Record<OverstayStep, string>>;
   cancelled?: boolean;
 }
 
@@ -108,8 +110,8 @@ export function latestDueStep(record: OverstayRecord, nowMs: number): OverstaySt
   if (dueAfterEntry(record, "tPlus15", nowMs) && !record.fired.tPlus15) return "tPlus15";
   if (dueAfterEntry(record, "tPlus5", nowMs) && nowMs < end + OFFSETS.tPlus15 && !record.fired.tPlus5) return "tPlus5";
   if (dueAfterEntry(record, "tEnd", nowMs) && nowMs < end + OFFSETS.tPlus5 && !record.fired.tEnd) return "tEnd";
-  if (dueAfterEntry(record, "t5", nowMs) && nowMs < end && record.t5ForWindowEnd !== record.windowEnd) return "t5";
-  if (dueAfterEntry(record, "t15", nowMs) && nowMs < end - 5 * 60_000 && !record.extensionGranted && shouldSendT15(record, nowMs)) return "t15";
+  if (dueAfterEntry(record, "t5", nowMs) && nowMs < end && record.t5ForWindowEnd !== record.windowEnd && record.sendFailed?.t5 !== record.windowEnd) return "t5";
+  if (dueAfterEntry(record, "t15", nowMs) && nowMs < end - 5 * 60_000 && !record.extensionGranted && !record.sendFailed?.t15 && shouldSendT15(record, nowMs)) return "t15";
   return undefined;
 }
 
@@ -257,9 +259,15 @@ export class OverstayScheduler {
   private async deliverStep(core: TourCore, reservationId: string, body: string): Promise<boolean> {
     if (await core.visitorAlreadyReceived(reservationId, body)) return true;
     for (let attempt = 1; attempt <= VISITOR_SEND_ATTEMPTS; attempt++) {
-      if (await core.messageVisitor(reservationId, body)) return true;
+      if (await core.messageVisitor(reservationId, body, { recordFailure: attempt === VISITOR_SEND_ATTEMPTS })) return true;
     }
     return false;
+  }
+
+  private markSendFailed(reservationId: string, step: OverstayStep, token: string): void {
+    const current = this.get(reservationId);
+    if (!current) return;
+    this.put({ ...current, sendFailed: { ...current.sendFailed, [step]: token } });
   }
 
   private async fire(core: TourCore, reservationId: string, step: OverstayStep, session?: VisitorDemoSession): Promise<void> {
@@ -278,17 +286,25 @@ export class OverstayScheduler {
 
     if (step === "t15") {
       if (this.now().getTime() >= Date.parse(reservation.windowEnd!)) return;
+      if (claimed.sendFailed?.t15) return;
       const body = t15Questions(place, name);
-      await this.deliverStep(core, reservationId, body);
+      if (!(await this.deliverStep(core, reservationId, body))) {
+        this.markSendFailed(reservationId, step, "1");
+        return;
+      }
       await this.markFired(reservationId, step, { prompt: "t15" });
       session?.expect("touring", { kind: "t15-questions" });
       return;
     }
 
     if (step === "t5") {
+      if (claimed.sendFailed?.t5 === claimed.windowEnd) return;
       const available = !claimed.extensionGranted && (await this.available(core, reservation));
       const body = available ? t5Offering(place, end, name) : t5NoOffer(place, end, name);
-      await this.deliverStep(core, reservationId, body);
+      if (!(await this.deliverStep(core, reservationId, body))) {
+        this.markSendFailed(reservationId, step, claimed.windowEnd);
+        return;
+      }
       const kind = available ? "offering" : "no-offer";
       await this.markFired(reservationId, step, {
         t5Kind: kind,

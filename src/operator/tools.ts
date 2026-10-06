@@ -1074,7 +1074,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "list_exceptions",
     title: "Show what needs attention",
     kind: "read",
-    description: "The queue of issues that need the team: unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored.",
+    description: "The queue of issues that need the team: unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored. \"Visitor hasn't confirmed leaving\" stays open until they text DONE or the operator marks it handled; after-close alerts stop at 24 hours.",
     input: z.strictObject({ property: Property, includeHandled: z.boolean().optional() }),
     run: async (ctx, i) => {
       const id = i.property ? resolvePropertyId(ctx.services.workspace, i.property) : undefined;
@@ -1098,7 +1098,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "resolve_exception",
     title: "Mark an issue handled",
     kind: "change",
-    description: "Closes one issue with the operator's note. Changes nothing else: no tour, access or setup change.",
+    description: "Closes one issue with the operator's note. Changes nothing else: no tour, access or setup change. For a leaving issue, marking it handled also ends after-close visitor alerts.",
     input: z.strictObject({ exceptionId: ExceptionId, resolutionNote: z.string().min(1).max(500) }),
     run: async (ctx, i) => {
       const { alreadyResolved, exception } = await resolveException(ctx.services, i.exceptionId, i.resolutionNote, ctx.now());

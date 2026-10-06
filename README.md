@@ -190,7 +190,7 @@ On the phone, the visitor:
 5. is guided along the route ("I'm at Unit 101");
 6. can ask questions, which are answered only from facts you entered and flagged for you when there's no answer;
 7. gets a 15-minutes-left "any questions?" text after the tour has started, then a 5-minute warning that offers one extra 10 minutes when the next time is free (an explicit ask for more time any time before the tour ends is granted when the slot is free; a bare yes to the questions text never grants time; a no to the extra-time offer is acknowledged and a later bare yes does not grant; if extra time cannot be added they can say yes and book another look);
-8. can text DONE / I'm out / leaving at any point, or stay through the end: doors never open after the tour end, a +5 check-in asks if they've left, and at +15 the tour closes. After that close, other replies alert the team once per message until DONE, the operator marks the "Visitor hasn't confirmed leaving" issue handled, or 24 hours pass. HI or a clear booking intent starts a new booking instead. DONE after the close uses the usual thanks and follow-up question;
+8. can text DONE / I'm out / leaving at any point, or stay through the end: doors never open after the tour end, a +5 check-in asks if they've left, and at +15 the tour closes. After that close, other replies alert the team once per message and always reply to the visitor, until DONE, the operator marks the "Visitor hasn't confirmed leaving" issue handled, or 24 hours pass (alerts stop at 24 hours; the leaving issue stays open until DONE or the operator marks it handled). A standalone HI or a clear booking phrase starts a new booking; a greeting with more text, or anything about being stuck, locked, or still inside, never starts booking. A rebook made during the tour stays secondary until that tour ends, then unfinished consent or identity checks continue. If extra time is offered while that consent is still unanswered, a yes takes the extra time and the consent question is asked again on its own. DONE after the close uses the usual thanks and follow-up question;
 9. finishes the tour and answers the follow-up question. Yes uses the same path after a normal finish and after a closed tour: the visitor is told someone will be in touch, and the team is told they would like a follow-up.
 
 The **Test wrong door** demo control tries a door that isn't on the route. Tour Core refuses it and never contacts
@@ -248,7 +248,7 @@ in their normal Messages app:
 - HELP and STOP;
 - a 15-minutes-left questions text and a 5-minute warning (one extra 10 minutes when that time is free; asking for more time any time before the tour ends is granted when the slot is free; after the no-time line, yes books another look);
 - DONE / I'm out to end, or tour-end / +5 / +15 texts if they stay;
-- after a +15 close, other texts alert the team (one alert per message) until DONE, the operator marks the leaving issue handled, or 24 hours pass; HI or "I'd like to book another tour" starts booking;
+- after a +15 close, other texts alert the team (one alert per message) and always reply to the visitor, until DONE, the operator marks the leaving issue handled, or 24 hours pass (alerts only; the leaving issue stays open until DONE or handled); a standalone HI or "I'd like to book another tour" starts booking; a greeting plus more text, or anything about being stuck or locked in, does not;
 - the follow-up question (the same yes/no path after a normal finish and after DONE following a close).
 
 Photos and other attachments are not forwarded yet. A photo alone gets one reply: "I can't take photos yet. Text your question and I'll pass it along." A photo with a question Tour Core can't answer gets one reply: "I can't take photos yet, but I'll let the property team know about your question." (and is flagged). A photo with handleable text (an approved-fact question or a booking reply such as `1` or `YES`) gets only "I can't take photos yet." and the text is handled as a normal message. Do not also send the short photo line when the combined unknown-question text is used. The same inbound is not answered twice. Someone who texted STOP gets no visitor texts; an unanswerable question is still flagged for the landlord. Landlord alerts and operator replies name a single-family home by its street line (for example `12 Oak St`) and an apartment or condo by street plus unit, never "Main Home".
@@ -340,7 +340,8 @@ npm run sendblue:test -- --to +1XXXXXXXXXX   # manual: checks the connection, se
   `http://localhost:4321/install`, which wins over `.env`). They're never written to config, the installation
   manifest, records, exports or logs, and never returned by a tool.
 - **Access.** Messaging never decides access. A failed send is recorded ("couldn't be delivered" in the live view) and
-  never changes a policy decision. A wrong door texted from a phone is refused before Durin is contacted.
+  never changes a policy decision. A leave-check text that fails every retry opens at most one delivery exception per
+  step (T-15, T-5, T+5, T+15); a T-15 or T-5 that never went out is not marked sent. A wrong door texted from a phone is refused before Durin is contacted.
 - **STOP, UNSUBSCRIBE, CANCEL, QUIT.** Tour Core stops messaging that person and stays quiet until START. A tour that
   hasn't started yet is ended (open doors are switched off) and the team is alerted. A tour already in progress stays
   on its window: doors still follow policy until the end, and the leave check-in, close, and team alerts still fire.

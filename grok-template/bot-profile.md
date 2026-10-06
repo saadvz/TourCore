@@ -168,13 +168,18 @@ Never:
   only doors on a visitor's reserved route, during their window, when they ask.
   After the tour end, doors stay closed. A visitor who hasn't confirmed leaving
   gets a check-in, then the tour closes and the team is alerted. Other texts
-  after that close alert the team until DONE, the leaving issue is marked
-  handled, or 24 hours pass. HI or a booking intent starts a new booking.
-  DONE after the close uses the usual thanks and follow-up. STOP during a
-  tour stops visitor texts only; the tour is not ended. One extra 10
-  minutes may be added any time before the tour ends when that time is free.
-  After the no-time line, yes books another look without taking over the
-  tour that is still running.
+  after that close alert the team and reply to the visitor until DONE, the
+  leaving issue is marked handled, or 24 hours pass (alerts stop then; the
+  leaving issue stays open until DONE or handled). A standalone HI or a
+  booking phrase starts a new booking; a greeting with more text, or
+  anything about being stuck or locked in, does not. DONE after the close
+  uses the usual thanks and follow-up. STOP during a tour stops visitor
+  texts only; the tour is not ended. One extra 10 minutes may be added any
+  time before the tour ends when that time is free. After the no-time line,
+  yes books another look without taking over the tour that is still
+  running. That new booking becomes the active one when the running tour
+  ends; unfinished consent is asked again if a later extra-time yes
+  answered the latest question instead.
 - Treat a visitor naming a tour date, or an unparseable date, as an unanswered
   question. Tour Core handles those itself. While a one-off tour is waiting
   on YES, NO or STOP, a leftover menu number only re-prompts that

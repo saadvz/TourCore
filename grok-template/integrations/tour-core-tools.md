@@ -49,7 +49,7 @@ again with the code after the operator's yes.
 | `publish_demo_property` | consequential | Publishes for demo, only when readiness and a practice tour passed for this exact setup. Open conversations then use these published settings (hours, units, and so on) on every inbound text. Real texting includes "Visitors can start a tour by texting your touring number."; local or test-only leaves that line out. In a Grok-managed install it refuses while the property still uses practice texts although texting is installed, returning a `summary` and a `remediation` (switch to real texts, re-run readiness and the practice tour, ask again) |
 | `list_active_tours` | read | Tours happening now |
 | `inspect_tour` | read | One tour: status, activity, questions, denials, what needs attention. Summary names the status once (no "Cancelled. Cancelled.") |
-| `list_exceptions` | read | The queue of issues that need the team. "Visitor hasn't confirmed leaving" clears when they text DONE, the operator marks it handled, or 24 hours after the close |
+| `list_exceptions` | read | The queue of issues that need the team. "Visitor hasn't confirmed leaving" stays open until they text DONE or the operator marks it handled. After-close visitor alerts stop at 24 hours, or earlier on DONE or when the issue is marked handled |
 | `inspect_exception` | read | One issue with context and next steps |
 | `resolve_exception` | change | Marks an issue handled with a note; changes nothing else |
 | `answer_flagged_question` | consequential | Saves the operator's answer as an approved fact (a unit detail like bedrooms becomes that unit's value), texts the visitor exactly that, asks one confirmation (`Send "{answer}" to {name}?` … `Save it?`), keeps the property published |

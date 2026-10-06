@@ -103,7 +103,7 @@ export class TourCoreError extends Error {
   }
 }
 
-const CONSENT_TEXT = "Is it OK if I text you about this tour and keep a record of your visit (times and doors used)?";
+export const CONSENT_TEXT = "Is it OK if I text you about this tour and keep a record of your visit (times and doors used)?";
 
 /** Repeat help on the same reservation re-alerts the team at most once per this window. */
 export const HELP_ALERT_WINDOW_MS = 5 * 60_000;
@@ -1257,10 +1257,10 @@ export class TourCore {
     return [...padded, ...((await this.deps.otherBusyWindows?.()) ?? [])];
   }
 
-  async messageVisitor(reservationId: string, body: string): Promise<boolean> {
+  async messageVisitor(reservationId: string, body: string, options?: { recordFailure?: boolean }): Promise<boolean> {
     const reservation = await this.mustGetReservation(reservationId);
     const prospect = await this.mustGetProspect(reservation.prospectId);
-    return this.textProspect(prospect, reservation.id, body);
+    return this.textProspect(prospect, reservation.id, body, undefined, options);
   }
 
   /** True when this visitor already received `body` (so a retry will not double-send). */
@@ -1673,7 +1673,7 @@ export class TourCore {
     return this.deps.verification.defaultLink?.(prospect);
   }
 
-  private async textProspect(prospect: Prospect, reservationId: string | undefined, body: string, prompt?: ReplyPrompt): Promise<boolean> {
+  private async textProspect(prospect: Prospect, reservationId: string | undefined, body: string, prompt?: ReplyPrompt, options?: { recordFailure?: boolean }): Promise<boolean> {
     const current = (await this.deps.store.get("prospects", prospect.id)) ?? prospect;
     return this.deliver({
       audience: "PROSPECT",
@@ -1683,6 +1683,7 @@ export class TourCore {
       prospectId: current.id,
       reservationId,
       suppressed: !!current.messagingOptedOut,
+      recordFailure: options?.recordFailure,
     });
   }
 
@@ -1705,6 +1706,7 @@ export class TourCore {
     prospectId?: string;
     reservationId?: string;
     suppressed?: boolean;
+    recordFailure?: boolean;
   }): Promise<boolean> {
     const { store, messenger } = this.deps;
     const message: Message = {
@@ -1741,12 +1743,14 @@ export class TourCore {
       ...(receipt.error ? { deliveryError: receipt.error.code } : {}),
     });
     if (receipt.status === "FAILED") {
-      await this.record("MESSAGE_FAILED", {
-        reservationId: m.reservationId,
-        prospectId: m.prospectId,
-        code: receipt.error?.code,
-        detail: `${m.audience === "OPERATOR" ? "alert" : "message"} not delivered`,
-      });
+      if (m.recordFailure !== false) {
+        await this.record("MESSAGE_FAILED", {
+          reservationId: m.reservationId,
+          prospectId: m.prospectId,
+          code: receipt.error?.code,
+          detail: `${m.audience === "OPERATOR" ? "alert" : "message"} not delivered`,
+        });
+      }
       return false;
     }
     return true;

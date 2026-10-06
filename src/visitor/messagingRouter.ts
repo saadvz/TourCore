@@ -19,7 +19,9 @@ import { isLiveMessaging } from "../config/tourCoreConfig";
 import { publicBaseUrl } from "../messaging/publicUrl";
 import { effectiveEnv } from "../install/settings";
 import type { ResolvedConsentMode } from "../messaging/consentPolicy";
-import { handleVisitorText, isGreeting } from "./conversation";
+import { isLeavingTour } from "../core/overstayCopy";
+import { normalize, stripFiller } from "../intent/normalize";
+import { handleVisitorText, isGreeting, startsNewBookingAfterClose } from "./conversation";
 import { OverstayScheduler } from "./overstayScheduler";
 import { oneOffBlockReason } from "./oneOffGate";
 import { markRemovedReply, shouldReplyRemoved } from "./removedReplies";
@@ -157,8 +159,12 @@ export class MessagingConversations {
     if (trouble && !(await this.answerBroken(trouble, message.text))) return { correlationId: trouble.sessionId };
 
     let session = registry.latestForPhone(propertyId, phone, "messaging");
-    // A finished tour is never reopened: a greeting starts a new one (repeat tour). A paused tour isn't finished.
-    if (session && ["done", "stopped"].includes(await session.stage()) && !(await session.isPaused()) && isGreeting(message.text) && !session.optedOut) session = undefined;
+    if (session && !isLeavingTour(stripFiller(normalize(message.text)))) {
+      await session.promotePendingBookingIfTourEnded();
+    }
+    // A finished tour is never reopened: a standalone greeting or booking phrase starts a new one.
+    // Greeting-plus-distress after a close stays on this conversation so the team is alerted.
+    if (session && ["done", "stopped"].includes(await session.stage()) && !(await session.isPaused()) && startsNewBookingAfterClose(message.text) && !session.optedOut) session = undefined;
 
     if (!session) {
       const { config, state } = ws.load(propertyId);
