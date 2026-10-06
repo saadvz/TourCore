@@ -550,8 +550,8 @@ export class VisitorDemoSession {
     return { outcome: out.outcome, ...(out.units ? { units: out.units } : {}) };
   }
 
-  /** Flags a question for the team and sends `reply` (suppressed if they opted out). */
-  async flagUnknownQuestion(said: Said, options: { reply: string; alreadyRecorded?: boolean }): Promise<void> {
+  /** Flags a question for the team and sends `reply` (skipped when they opted out). */
+  async flagUnknownQuestion(said: Said, options: { reply: string; alreadyRecorded?: boolean; silent?: boolean }): Promise<void> {
     await this.core.flagUnansweredQuestion({
       phone: this.visitor?.phone ?? "",
       question: said.text ?? "",
@@ -559,6 +559,7 @@ export class VisitorDemoSession {
       meta: said.meta,
       reply: options.reply,
       recordInbound: !options.alreadyRecorded,
+      silent: options.silent ?? this.optedOut,
     });
     await this.syncReplies();
   }

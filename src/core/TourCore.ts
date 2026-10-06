@@ -957,7 +957,7 @@ export class TourCore {
    * question is flagged, and sends `reply`. Used while an operator-set tour is
    * still waiting for YES — the hold stays pending.
    */
-  async flagUnansweredQuestion(input: { phone: string; question: string; reservationId?: string; meta?: InboundMeta; reply: string; recordInbound?: boolean }): Promise<void> {
+  async flagUnansweredQuestion(input: { phone: string; question: string; reservationId?: string; meta?: InboundMeta; reply: string; recordInbound?: boolean; silent?: boolean }): Promise<void> {
     const phone = normalizePhone(input.phone);
     const prospect = (await this.deps.store.list("prospects")).find((p) => p.phone === phone);
     const reservation = input.reservationId ? await this.deps.store.get("reservations", input.reservationId) : undefined;
@@ -965,7 +965,7 @@ export class TourCore {
     if (!asked) throw new TourCoreError("EMPTY_QUESTION", "Please type a question");
     if (input.recordInbound !== false) await this.recordIncoming({ phone, body: asked, prospectId: prospect?.id, reservationId: reservation?.id, meta: input.meta });
     await this.record("QUESTION_UNANSWERED", { reservationId: reservation?.id, prospectId: prospect?.id, detail: asked });
-    await this.sendConversationText({ phone, body: input.reply, reservationId: reservation?.id });
+    if (!input.silent) await this.sendConversationText({ phone, body: input.reply, reservationId: reservation?.id });
     const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : `A visitor texting from ${phone}`;
     await this.notifyOperator(reservation, `${who} asked "${asked}", and there's no approved answer yet.`);
   }
