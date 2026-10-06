@@ -639,7 +639,7 @@ function doorsStep(data) {
       "div",
       {},
       el("h1", {}, "Doors"),
-      el("p", { class: "lead" }, "Name the doors a visitor might use. Tour Core never opens a door itself; it asks Durin, and only for doors on the visitor's route."),
+      el("p", { class: "lead" }, "Name the doors a visitor might use. Tour Core never opens a door itself; it asks the door system, and only for doors on the visitor's route."),
       issueList(view.issues.filter((i) => i.fix?.step === "doors"), id, "doors"),
       el("h2", {}, unitOnly ? "Building entrance" : "Main entrance"),
       unitOnly && !main
@@ -1065,7 +1065,7 @@ async function showPractice(container, id, p, summary) {
       "div",
       { class: g.id === "safety" ? "card safety" : "card" },
       el("h2", {}, g.title),
-      g.id === "safety" ? el("p", { class: "muted" }, "Tour Core checks every door request itself. Durin is only contacted when the answer is yes.") : null,
+      g.id === "safety" ? el("p", { class: "muted" }, "Tour Core only asks the door system to unlock a door after its own safety checks pass.") : null,
       list,
     );
     return { g, list, box };
@@ -1161,7 +1161,7 @@ async function publishedScreen(id) {
       "div",
       { class: "notice" },
       el("strong", {}, "This is a demo configuration."),
-      el("p", {}, "No production access system is connected. Messages appear on screen, tour records stay on this computer, and Durin runs in demo mode, so no real doors open."),
+      el("p", {}, "No real door system is connected. Messages appear on screen, tour records stay on this computer, and door access runs in demo mode, so no real doors open."),
     ),
     devBlock(s.dev),
     el(

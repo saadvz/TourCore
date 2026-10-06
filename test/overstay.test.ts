@@ -40,7 +40,11 @@ import { MessagingConversations, occupiedWindowsFromRecords } from "../src/visit
 import { MessagingEndpoints } from "../src/messaging/endpoints";
 import { PropertyWorkspace, runReadinessCheck } from "../src/setup";
 import { VerificationLinks } from "../src/visitor/verificationLinks";
-import { listExceptions, resolveException } from "../src/operator/exceptions";
+import { inspectException, listExceptions, resolveException } from "../src/operator/exceptions";
+import { describeOperatorUpdate } from "../src/alerts/describeUpdate";
+import { exceptionCreatedEvent } from "../src/alerts/operatorEvents";
+import { ConfirmationBook } from "../src/operator/confirmations";
+import { callOperatorTool, type ToolContext } from "../src/operator/tools";
 import type { OccupiedWindow } from "../src/core/customSlot";
 import { AFTER_CLOSE_ALERT_MS, VISITOR_SEND_ATTEMPTS } from "../src/visitor/overstayScheduler";
 import { MemoryRuntimeStore } from "../src/storage/runtimeStore";
@@ -1729,10 +1733,105 @@ describe("overstay SMS router", () => {
     expect(mentionsAfterCloseDistress("help me book")).toBe(false);
     expect(mentionsAfterCloseDistress("help booking")).toBe(false);
     expect(mentionsAfterCloseDistress("which way out of the lobby")).toBe(false);
+    expect(mentionsAfterCloseDistress("can't find the way out")).toBe(true);
+    expect(mentionsAfterCloseDistress("cannot find the way out")).toBe(true);
+    expect(mentionsAfterCloseDistress("can't find my way out")).toBe(true);
+    expect(mentionsAfterCloseDistress("where is the way out")).toBe(true);
+    expect(mentionsAfterCloseDistress("where's the way out")).toBe(true);
+    expect(mentionsAfterCloseDistress("how do I get out")).toBe(true);
+    expect(mentionsAfterCloseDistress("cannot find a way out")).toBe(true);
+    expect(mentionsAfterCloseDistress("can't find a way out")).toBe(true);
+    expect(mentionsAfterCloseDistress("can not find the way out")).toBe(true);
+    expect(mentionsAfterCloseDistress("how can I get out")).toBe(true);
+    expect(mentionsAfterCloseDistress("where's the exit")).toBe(true);
+    expect(mentionsAfterCloseDistress("where is the exit")).toBe(true);
+    expect(mentionsAfterCloseDistress("book another tour, can't find the way out")).toBe(true);
+    expect(mentionsAfterCloseDistress("which way out of the lobby")).toBe(false);
+  });
+
+  it("router: book another tour plus can't find the way out stays on after-close", async () => {
+    const path = await smsClosedTour("sms-way-out-distress");
+    const beforeId = path.session.id;
+    await path.text("book another tour, can't find the way out");
+    expect(path.session.id).toBe(beforeId);
+    expect(path.lastVisitor()).toBe(visitorRepliedAfterClose());
+    expect((await operatorAlertsFromSession(path.session)).some((x) => x.includes("replied after their tour"))).toBe(true);
+    expect((await path.session.reservation())!.status).toBe("EXPIRED");
+    expect(path.session.overstay!.get(path.reservationId)?.cancelled).toBeFalsy();
+    expect(path.lastVisitor()).not.toMatch(/Which unit|I have tours available|Welcome|self-guided/);
+  });
+
+  it("router: cannot find a way out and where's the exit stay on after-close", async () => {
+    for (const text of ["cannot find a way out", "can't find a way out", "can not find the way out", "how can I get out", "where's the exit"]) {
+      const path = await smsClosedTour(`sms-way-out-${text.slice(0, 12).replace(/\W/g, "")}`);
+      const beforeId = path.session.id;
+      await path.text(`book another tour, ${text}`);
+      expect(path.session.id).toBe(beforeId);
+      expect(path.lastVisitor()).toBe(visitorRepliedAfterClose());
+      expect((await operatorAlertsFromSession(path.session)).some((x) => x.includes("replied after their tour"))).toBe(true);
+      expect(path.lastVisitor()).not.toMatch(/Which unit|I have tours available|Welcome|self-guided/);
+    }
+  });
+
+  it("leaving issue uses the ended-tour status when a held rebook is waiting for consent", async () => {
+    const path = await smsClosedTour("sms-leaving-held-consent", { rebook: true });
+    expect(path.session.pendingBookingId).toBeTruthy();
+    const pending = (await path.session.store.get("reservations", path.session.pendingBookingId!))!;
+    expect(pending.status).toBe("AWAITING_CONSENT");
+    const { record, bundle } = await path.session.record();
+    path.ws.recordVisitorDemo(path.session.propertyId, record, bundle);
+    const services = { workspace: path.ws, now: () => new Date(path.clock.t) };
+    const ctx: ToolContext = {
+      services,
+      confirmations: new ConfirmationBook(10 * 60_000, () => path.clock.t),
+      now: () => new Date(path.clock.t),
+    };
+    const listed = await callOperatorTool(ctx, "list_exceptions", {});
+    if (!listed.ok) throw new Error(listed.error);
+    const leaving = (listed.result as { exceptions: Array<{ what: string; tourStatus: string; exceptionId: string }> }).exceptions.find(
+      (e) => e.what === "Visitor hasn't confirmed leaving",
+    );
+    expect(leaving).toBeTruthy();
+    expect(leaving!.tourStatus).toMatch(/Tour time ended/);
+    expect(leaving!.tourStatus).not.toContain("Waiting for consent");
+    const inspected = await callOperatorTool(ctx, "inspect_exception", { exceptionId: leaving!.exceptionId });
+    if (!inspected.ok) throw new Error(inspected.error);
+    const issue = (inspected.result as { issue: { tourStatus: string } }).issue;
+    expect(issue.tourStatus).toMatch(/Tour time ended/);
+    expect(issue.tourStatus).not.toContain("Waiting for consent");
+    const direct = (await listExceptions(services, { includeClosed: true })).find((e) => e.kind === "overstay");
+    expect(direct?.tourStatus).toMatch(/Tour time ended/);
+    expect((await inspectException(services, direct!.exceptionId)).tourStatus).toMatch(/Tour time ended/);
+    const update = await describeOperatorUpdate(
+      services,
+      exceptionCreatedEvent({
+        propertyId: path.session.propertyId,
+        exceptionId: leaving!.exceptionId,
+        occurredAt: new Date(path.clock.t).toISOString(),
+      }),
+      new Date(path.clock.t),
+    );
+    expect(update.summary).toMatch(/Tour time ended/);
+    expect(update.summary).not.toContain("Waiting for consent");
+    expect(update.summary).not.toMatch(/\.\./);
+    expect(update.summary.endsWith(".")).toBe(true);
+    expect("issue" in update && update.issue ? update.issue.tourStatus : "").toMatch(/Tour time ended/);
+  });
+
+  it("a non-leaving issue also uses its own reservation when a later booking is held", async () => {
+    const path = await smsClosedTour("sms-question-held-consent", { rebook: true, question: "Is parking included?" });
+    const { record, bundle } = await path.session.record();
+    path.ws.recordVisitorDemo(path.session.propertyId, record, bundle);
+    const services = { workspace: path.ws, now: () => new Date(path.clock.t) };
+    const question = (await listExceptions(services, { includeClosed: true })).find((e) => e.kind === "unanswered-question");
+    expect(question).toBeTruthy();
+    expect(question!.tourStatus).toMatch(/Tour time ended/);
+    expect(question!.tourStatus).not.toContain("Waiting for consent");
+    expect((await inspectException(services, question!.exceptionId)).tourStatus).toMatch(/Tour time ended/);
   });
 });
 
-async function smsClosedTour(label: string, options: { rebook?: boolean; customTime?: boolean } = {}) {
+async function smsClosedTour(label: string, options: { rebook?: boolean; customTime?: boolean; question?: string } = {}) {
   const clock = { t: zonedTimeToUtc({ ...TOUR_DAY, hour: 13, minute: 58 }, TZ).getTime() };
   const root = mkdtempSync(join(tmpdir(), `tourcore-sms-${label}-`));
   smsRoots.push(root);
@@ -1779,6 +1878,7 @@ async function smsClosedTour(label: string, options: { rebook?: boolean; customT
   clock.t = Date.parse(booked.slotStart!);
   await text("I'm here");
   const touring = (await session().reservation())!;
+  if (options.question) await text(options.question);
   if (options.rebook) {
     await session().store.put("reservations", busyReservation({ config: session().config, clock: session().clock }, { start: new Date(touring.windowEnd!) }));
     clock.t = Date.parse(touring.windowEnd!) - 12 * 60_000;

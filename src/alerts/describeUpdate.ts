@@ -41,7 +41,7 @@ export async function describeOperatorUpdate(services: OperatorServices, event: 
     return {
       eventType: event.eventType,
       stillOpen: x.status === "open",
-      summary: `${who}${x.unitName ? `, ${x.unitName}` : ""}: ${x.summary} ${x.tourStatus}.`,
+      summary: `${who}${x.unitName ? `, ${x.unitName}` : ""}: ${[x.summary.replace(/\.+$/, ""), x.tourStatus.replace(/\.+$/, "")].filter(Boolean).join(" ")}.`,
       issue: { exceptionId: x.exceptionId, what: x.title, question: x.question, tourStatus: x.tourStatus, nextSteps: x.nextSteps, tourRef: x.tourRef },
       instructions:
         x.kind === "unanswered-question"

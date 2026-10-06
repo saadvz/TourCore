@@ -79,6 +79,14 @@ Tour Core sends only an `eventId` and an event type; never names or details.
    > 3. Sam Lee — Unit 103
    >    Hasn't confirmed leaving Unit 103.
    >    Tour time ended.
+   >
+   > 4. Jane Smith — Unit 101
+   >    Tour Core couldn't save the visit record, so the tour was paused.
+   A records check that fails before unlock keeps the door locked ("Tour Core
+   couldn't save the visit record, so {door} stayed locked.") and does not
+   open an issue; the booking stays ready. A leaving issue uses the ended
+   tour's status ("Tour time ended"), even when a later booking is held and
+   waiting for consent.
 2. "Open Pat's issue": `inspect_exception` with that item's `exceptionId`. Show
    what happened, the visitor's words, where the tour stands and `nextSteps`.
 
@@ -111,9 +119,10 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   booking phrase (including see it again / schedule another visit)
   starts a new booking when nothing is held; a greeting with more text,
   or anything about being stuck, locked, jammed, still in the unit,
-  unable to leave, or unable to get outside, still alerts the team
-  and replies to the visitor. Help booking does not hide those other
-  words. Marking the leaving issue handled closes after-close alerts
+  unable to leave, unable to get outside, unable to find the way out,
+  where the way out is, or how to get out, still alerts the team
+  and replies to the visitor. "Which way out of the lobby" is not
+  distress. Help booking does not hide those other words. Marking the leaving issue handled closes after-close alerts
   for that closed tour, even when a later booking is held. While that
   leaving issue is open, those after-close texts run before a held
   booking can take over. A rebook held from during the tour continues after the

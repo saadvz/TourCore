@@ -245,7 +245,7 @@ describe("readiness, practice tour and publish", () => {
     const readiness = await h.ok("run_readiness_check");
     expect(readiness.passed).toBe(false);
     expect(readiness.lines).toContain("\u2717 Unit routes: Unit 102 does not have a complete route.");
-    expect(readiness.lines).toContain("\u2713 Durin access");
+    expect(readiness.lines).toContain("\u2713 Door access");
   });
 
   it("runs the real readiness check and practice tour and reports the proof points", async () => {
@@ -262,7 +262,7 @@ describe("readiness, practice tour and publish", () => {
       "\u2713 Verification",
       "\u2713 Messaging",
       "\u2713 Records",
-      "\u2713 Durin access",
+      "\u2713 Door access",
       "\u2713 Audit/export",
       "No visitor help number is set, so stuck visitors can only text back.",
     ]);
@@ -280,7 +280,7 @@ describe("readiness, practice tour and publish", () => {
       "\u2713 Entrance access was allowed at the right time",
       "\u2713 A repeated request didn't create a second access grant",
       "\u2713 Unit 101 access was allowed",
-      "\u2713 Unit 102 Door (not on the route) was denied before Durin was contacted",
+      "\u2713 Unit 102 Door (not on the route) was turned away before any door was unlocked",
       "\u2713 The 15-minutes-left questions text was sent",
       "\u2713 The 5-minute extra-time offer was sent",
       "\u2713 A one-time 10-minute extension was granted",

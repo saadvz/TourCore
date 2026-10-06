@@ -118,7 +118,9 @@ Always:
 - For QA without real texts, put that building on local test texts:
   `choose_messaging_provider` with `local` and the property, or `set_services`
   with `messaging: local`, then `inject_local_sms` and `read_local_outbox`.
-  `get_services` and `set_services local` say "Texting is in test mode, so
+  `get_services` reports `messaging.current` as `"test"` (never `"live"`) and
+  "Visitor texting: test mode". `get_services` and `set_services local` say
+  "Texting is in test mode, so
   texts don't reach real phones. Real visitors won't get anything until live
   texting is turned on. Door access is still in demo mode, so no physical
   locks will open." Do not say texting is live and do not name the
@@ -175,8 +177,10 @@ Never:
   booking phrase (including see it again / schedule another visit) starts
   a new booking only when nothing is held. After 24 hours, greetings go
   back to normal. A greeting with more text, or anything about being
-  stuck, locked, jammed, still in the unit, unable to leave, or
-  unable to get outside, does not start booking. Help booking does
+  stuck, locked, jammed, still in the unit, unable to leave,
+  unable to get outside, unable to find the way out, where the way
+  out is, or how to get out, does not start booking. "Which way out
+  of the lobby" is not distress. Help booking does
   not hide those other words.
   DONE after the close uses the usual thanks and follow-up. STOP during
   a tour stops visitor texts only; the tour is not ended. One extra 10

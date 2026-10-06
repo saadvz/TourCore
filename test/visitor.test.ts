@@ -150,7 +150,7 @@ describe("visitor demo on the real engine", () => {
     expect(s.conversation.at(-2)!.text).toBe(
       "That door isn't part of your tour, so I can't open it. You're here to see Unit 101. I've let the leasing team know in case you need a hand.",
     );
-    expect(s.conversation.at(-1)).toMatchObject({ from: "demo", text: "Demo safety check: Tour Core refused this door and never contacted Durin." });
+    expect(s.conversation.at(-1)).toMatchObject({ from: "demo", text: "Demo safety check: Tour Core kept this door locked because it's not on their route." });
 
     const live = await liveTourView(s);
     expect(live.recent.map((e) => e.text)).toContain("Access to Unit 102 Door was denied because it was not part of Pat's tour.");

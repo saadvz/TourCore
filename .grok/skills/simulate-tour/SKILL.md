@@ -21,8 +21,8 @@ doors, tries a door that isn't on the route, sends the 15-minutes-left
 questions text and the 5-minute extra-time offer, grants one 10-minute
 extension, completes the tour and sends the follow-up, then runs a second path
 through tour-end, the +5 leave check-in, and the +15 close — all on a
-deterministic simulated clock through the real engine and policy with Durin in
-demo mode. A 15-minute tour skips T-15 with a reason (it would be the start).
+deterministic simulated clock through the real engine and policy with door
+access in demo mode. A 15-minute tour skips T-15 with a reason (it would be the start).
 If extra time or the second path cannot apply (last slot of the day, no later
 time), that step is reported as skipped with a reason — never a failure and
 never silently.
@@ -47,7 +47,7 @@ wants to prove the tour still works.
    > ✓ Early arrival was denied
    > ✓ Entrance access was allowed at the right time
    > ✓ Unit 101 access was allowed
-   > ✓ Unit 102 Door (not on the route) was denied before Durin was contacted
+   > ✓ Unit 102 Door (not on the route) was turned away before any door was unlocked
    > ✓ A repeated request didn't create a second access grant
    > ✓ The 15-minutes-left questions text was sent
    > ✓ The 5-minute extra-time offer was sent
