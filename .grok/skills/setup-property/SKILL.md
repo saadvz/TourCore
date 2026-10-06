@@ -139,7 +139,7 @@ the operator correct it.
     it does not change the installation provider or saved credentials. `messaging: local`
     puts this building on local test texts without drafting other published buildings.
     For local, `get_services` reports `messaging.current` as `"test"` (never
-    `"live"`) and the status line is "Visitor texting: Test mode". `get_services`
+    `"live"`) and the status line is "Visitor texting: test mode". `get_services`
     and `set_services` say "Texting is in test mode, so texts
     don't reach real phones. Real visitors won't get anything until live texting is
     turned on. Door access is still in demo mode, so no physical locks will open."
@@ -180,7 +180,7 @@ the operator correct it.
     "not set". A single-family home's unit heading is the street line
     (for example "910 QA Gate Rd"), never "Main Home". Multifamily, apartment
     and condo units keep their stored names. Local or test-mode texting reads
-    "Visitor texting: Test mode" instead of "Connected".
+    "Visitor texting: test mode" instead of "Connected".
 13. On yes, the setup is saved. In a guided install, go back to Tour Core's
     next step (`get_next_installation_step`, Install Tour Core skill): it
     offers tour updates next, then runs the checks. Otherwise: "I'll run a

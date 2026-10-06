@@ -13,6 +13,8 @@ import { HOSTED_SETUP_SESSION_MINUTES, HOSTED_SETUP_WRITES, DEFAULT_SETUP_SESSIO
 import { STORAGE_TOOLS } from "./storageTools";
 import { BACKUP_TOOLS } from "../backup/tools";
 import { getInstallationStatus, INSTALLATION_COMPONENTS, OPTIONAL_COMPONENTS, type ComponentStatus, type InstallationComponent } from "./status";
+import { ensureMessagingSelection } from "../messaging/registry";
+import { LOCAL_TEST_TEXTING } from "../setup/setupActions";
 
 /**
  * Installation tools for the operator's agent host. They report and test the
@@ -185,7 +187,13 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
       const { checks, incomingMessages, previousAddress, textingNumber, message, lines, needsLineChoice } = r;
       return {
         ok: r.ok,
-        summary: needsLineChoice ? "Photon is connected. Choose one of the available lines." : r.ok ? "Visitor texting is connected and working." : "Visitor texting isn't working yet.",
+        summary: needsLineChoice
+          ? "Photon is connected. Choose one of the available lines."
+          : r.ok
+            ? ensureMessagingSelection(installation(ctx)).provider === "local"
+              ? LOCAL_TEST_TEXTING
+              : "Visitor texting is connected and working."
+            : "Visitor texting isn't working yet.",
         ...(textingNumber ? { textingNumber } : {}),
         ...(needsLineChoice ? { needsLineChoice: true, lines } : {}),
         technical: { note: TECHNICAL_NOTE, detail: message, checks, incomingMessages, ...(previousAddress ? { previousAddress } : {}) },

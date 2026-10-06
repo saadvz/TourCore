@@ -1,4 +1,5 @@
 import { isLiveMessaging, TourCoreConfigShape, validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
+import { usesLocalMessaging } from "../messaging/propertyScope";
 import { visitorSubject } from "../visitor/identity";
 import { FIELD_WORDS, missingProfileFields } from "../config/unitProfile";
 import type { ConfigIssue, ConfigSection } from "../config/validateConfig";
@@ -77,6 +78,8 @@ export async function runReadinessCheck(
     runtime?: RuntimeStore;
     /** Why this property can't have its texting number (e.g. another property already uses it). */
     lineProblem?: string;
+    /** Installation messaging provider, so local loopback is labeled test mode. */
+    installed?: { provider?: string };
   } = {},
 ): Promise<ReadinessResult> {
   const now = options.now ?? new Date();
@@ -159,7 +162,10 @@ export async function runReadinessCheck(
   }
 
   const result = finish(problems, now);
-  if (isLiveMessaging(config.messagingMode)) {
+  if (usesLocalMessaging(config, options.installed)) {
+    const messaging = result.checks.find((c) => c.id === "messaging")!;
+    messaging.label = messaging.ok ? "Visitor texting: test mode" : "Visitor messaging";
+  } else if (isLiveMessaging(config.messagingMode)) {
     const messaging = result.checks.find((c) => c.id === "messaging")!;
     messaging.label = messaging.ok ? "Visitor messaging connected" : "Visitor messaging";
   }

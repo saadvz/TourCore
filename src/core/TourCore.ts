@@ -1457,7 +1457,13 @@ export class TourCore {
       await this.deps.beforeAccess?.();
     } catch (err) {
       if (err instanceof StorageUnavailableError) {
-        const failed: AccessDecision = { allowed: false, code: "DENY_PROVIDER_FAILURE", reason: "Tour records couldn't be confirmed, so the door stays closed." };
+        const failed: AccessDecision = { allowed: false, code: "DENY_STORAGE_FAILURE", reason: "Tour records couldn't be confirmed, so the door stays closed." };
+        try {
+          await this.record("ACCESS_DENIED", { ...base, code: failed.code, detail: failed.reason });
+          await this.explainDenial(failed.code, approved, prospect, request.doorId);
+        } catch {
+          // Records are unavailable; the door stays locked without a saved denial.
+        }
         return { decision: failed, durinCalled: false };
       }
       throw err;
@@ -1501,7 +1507,10 @@ export class TourCore {
     } catch (err) {
       if (err instanceof StorageUnavailableError) {
         await this.deps.durin.revokeAccess({ reservationId: approved.id, doorId: request.doorId, grantRef: result.grantRef }).catch(() => undefined);
-        const failed: AccessDecision = { allowed: false, code: "DENY_PROVIDER_FAILURE", reason: "Tour records couldn't be saved, so the door stays closed." };
+        const failed: AccessDecision = { allowed: false, code: "DENY_STORAGE_FAILURE", reason: "Tour records couldn't be saved, so the door stays closed." };
+        const paused = await this.move(approved, "PROVIDER_FAILURE", "PROVIDER_FAILURE", { doorId: request.doorId, code: "DENY_STORAGE_FAILURE", detail: failed.reason });
+        await this.record("ACCESS_DENIED", { ...base, code: failed.code, detail: failed.reason });
+        await this.explainDenial(failed.code, paused, prospect, request.doorId);
         return { decision: failed, durinCalled: true };
       }
       throw err;
@@ -1599,7 +1608,7 @@ export class TourCore {
   ): Promise<void> {
     const team = this.teamName();
     const help = this.visitorHelpNumber();
-    const needsOperator: AccessDecisionCode[] = ["DENY_WRONG_ROUTE", "DENY_DURIN_UNHEALTHY", "DENY_PROVIDER_FAILURE", "DENY_UNKNOWN", "DENY_PROSPECT_MISMATCH", "DENY_NO_RESERVATION"];
+    const needsOperator: AccessDecisionCode[] = ["DENY_WRONG_ROUTE", "DENY_DURIN_UNHEALTHY", "DENY_PROVIDER_FAILURE", "DENY_STORAGE_FAILURE", "DENY_UNKNOWN", "DENY_PROSPECT_MISMATCH", "DENY_NO_RESERVATION"];
 
     if (reservation && prospect && prospect.id === reservation.prospectId) {
       const unit = this.unitFor(reservation);
@@ -1617,6 +1626,7 @@ export class TourCore {
           DENY_WRONG_ROUTE: `That door isn't part of your tour, so I can't open it. You're here to see ${visitorSubject(this.deps.config.property, unit.name)}. I've let the ${team} know in case you need a hand.`,
           DENY_DURIN_UNHEALTHY: VisitorDenialCopy.doorsNotResponding(team, help),
           DENY_PROVIDER_FAILURE: VisitorDenialCopy.doorsNotResponding(team, help),
+          DENY_STORAGE_FAILURE: VisitorDenialCopy.doorsNotResponding(team, help),
           DENY_TOUR_COMPLETED: "Your tour is finished, so the doors are locked again. Want to book another visit?",
           DENY_OPERATOR_HOLD: VisitorDenialCopy.operatorHold(team, help),
           DENY_CANCELLED: "This tour is no longer active, so I can't open doors. Reply if you'd like to book a new time.",
@@ -1636,7 +1646,9 @@ export class TourCore {
       const alert =
         code === "DENY_WRONG_ROUTE"
           ? `${who} tried ${door}, which isn't on their tour. It stayed locked.`
-          : code === "DENY_DURIN_UNHEALTHY" || code === "DENY_PROVIDER_FAILURE"
+          : code === "DENY_STORAGE_FAILURE"
+            ? "Tour Core couldn't save the visit record, so the tour was paused."
+            : code === "DENY_DURIN_UNHEALTHY" || code === "DENY_PROVIDER_FAILURE"
             ? `The doors aren't responding for ${who}'s tour. They're waiting at ${door}.`
             : `${who} couldn't get into ${door}. They may need a hand.`;
       await this.notifyOperator(reservation, alert);

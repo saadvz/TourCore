@@ -255,7 +255,10 @@ export function parseBulkUnitDetails(text: string, unitNames: string[]): BulkUni
     const values = extractValues(segment);
     for (const name of g.names) out.set(name, { ...out.get(name), ...values });
   });
-  const unknownUnits = [...text.matchAll(/\b(?:unit|apt\.?|apartment|suite)\s+([A-Za-z0-9-]+)/gi)].map((m) => m[1]!).filter((n) => !aliases.some((a) => a.alias.toLowerCase() === n.toLowerCase() || a.name.toLowerCase() === `unit ${n}`.toLowerCase()));
+  const amenityToken = /^(laundry|washer|dryer|parking|pets?|utilities|furnished|features)$/i;
+  const unknownUnits = [...text.matchAll(/(?<![A-Za-z-])(?:unit|apt\.?|apartment|suite)\s+([A-Za-z0-9-]+)/gi)]
+    .map((m) => m[1]!)
+    .filter((n) => !amenityToken.test(n) && !aliases.some((a) => a.alias.toLowerCase() === n.toLowerCase() || a.name.toLowerCase() === `unit ${n}`.toLowerCase()));
   return { units: [...out.entries()].filter(([, v]) => Object.keys(v).length).map(([unit, values]) => ({ unit, values })), unknownUnits: [...new Set(unknownUnits)] };
 }
 

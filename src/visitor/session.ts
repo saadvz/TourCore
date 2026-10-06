@@ -993,7 +993,7 @@ export class VisitorDemoSession {
         this.say(
           "demo",
           !access.decision.allowed && !access.durinCalled
-            ? "Demo safety check: Tour Core refused this door and never contacted Durin."
+            ? "Demo safety check: Tour Core kept this door locked because it's not on their route."
             : "Demo safety check FAILED: this door should not have opened.",
         );
         return;

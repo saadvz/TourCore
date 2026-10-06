@@ -1,10 +1,14 @@
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import { MessagingEndpoints } from "../src/messaging/endpoints";
-import { localTestModeSentence } from "../src/setup/setupActions";
+import { LOCAL_TEST_TEXTING, localTestModeSentence, modeSentence } from "../src/setup/setupActions";
 import { inspectTourSummary, tourRef } from "../src/operator/tours";
 import { STATUS_LABELS } from "../src/visitor/views";
 import { grokHarness, type GrokHarness } from "./grokHarness";
 import { installHarness, SB_KEY, SB_SECRET, type InstallHarness } from "./installHarness";
+import { OPERATOR_MESSAGES, operateMessage } from "../src/install/status";
+import { parseBulkUnitDetails } from "../src/config/unitProfile";
+import { createPropertySetup, draftView } from "../src/setup";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => cleanups.splice(0).forEach((fn) => fn()));
@@ -116,12 +120,12 @@ describe("local test texting status", () => {
     expect(got.summary).not.toMatch(/Sendblue|Twilio|Photon|outbox|loopback|provider/i);
     expect(got.messaging.current).toBe("test");
     expect(got.messaging.current).not.toBe("live");
-    expect(got.messaging.visitorTexting).toBe("Test mode");
-    expect(got.lines).toContain("Visitor texting: Test mode");
+    expect(got.messaging.visitorTexting).toBe("test mode");
+    expect(got.lines).toContain("Visitor texting: test mode");
     expect(got.lines).not.toContain("Visitor texting: Connected");
 
     const review = await h.ok("review_property_setup");
-    expect(review.lines).toContain("Visitor texting: Test mode");
+    expect(review.lines).toContain("Visitor texting: test mode");
     expect(review.lines).not.toContain("Visitor texting: Connected");
   });
 
@@ -184,6 +188,37 @@ describe("set_unit_details single-family auto-select", () => {
     const named = await h.ok("set_unit_details", { units: [{ unit: "1A", bedrooms: "2", bathrooms: "1", monthlyRent: "$2,200", availability: "now" }] });
     expect(named.lines[0]).toMatch(/^1A —/);
   });
+
+  it("treats in-unit laundry as an amenity, not a unit, and still auto-picks the single-family home", async () => {
+    const phrase = "3 bed 2 bath for $3,400, available now, in-unit laundry";
+    expect(parseBulkUnitDetails(phrase, ["Main Home"]).unknownUnits).toEqual([]);
+    expect(parseBulkUnitDetails("3 bed 2 bath, in-unit washer", ["Main Home"]).unknownUnits).toEqual([]);
+    expect(parseBulkUnitDetails("3 bed 2 bath, in-unit dryer", ["Main Home"]).unknownUnits).toEqual([]);
+    expect(parseBulkUnitDetails("3 bed 2 bath, in-unit parking", ["Main Home"]).unknownUnits).toEqual([]);
+    const h = app();
+    await h.ok("create_property_setup", { address: "910 QA Gate Rd, Tenafly, NJ 07670", propertyType: "SINGLE_FAMILY" });
+    await h.ok("add_unit", {});
+    const saved = await h.ok("set_unit_details", { details: phrase });
+    expect(saved.complete).toBe(true);
+    expect(saved.lines).toEqual(["910 QA Gate Rd — 3 bed · 2 bath · $3,400/month · available now"]);
+    expect(saved.notOnFile).toBeUndefined();
+  });
+
+  it("still errors clearly when in-unit laundry is mentioned on a multi-unit property without a unit", async () => {
+    const h = app();
+    await h.ok("create_property_setup", { address: "144 Hillside Ave, Teaneck, NJ 07666", propertyType: "MULTIFAMILY_HOME" });
+    await h.ok("add_unit", { name: "1A" });
+    await h.ok("add_unit", { name: "1B" });
+    expect(await h.fails("set_unit_details", { details: "3 bed 2 bath for $3,400, available now, in-unit laundry" })).toMatch(
+      /couldn't match those details to a unit/,
+    );
+  });
+
+  it("tells the operator to add a unit first on a single-family home with no unit yet", async () => {
+    const h = app();
+    await h.ok("create_property_setup", { address: "910 QA Gate Rd, Tenafly, NJ 07670", propertyType: "SINGLE_FAMILY" });
+    expect(await h.fails("set_unit_details", { details: "3 bed 2 bath for $3,400, available now" })).toBe("Add a unit first.");
+  });
 });
 
 describe("operator-facing readiness and practice tour never name Durin", () => {
@@ -198,6 +233,108 @@ describe("operator-facing readiness and practice tour never name Durin", () => {
     expect(practice.passed).toBe(true);
     expect(practice.proofPoints).toContain("\u2713 Unit 102 Door (not on the route) was turned away before any door was unlocked");
     expect(JSON.stringify(practice)).not.toMatch(/Durin/);
+  });
+
+  it("web, CLI, grok disconnect, and the wrong-door demo line never name Durin", () => {
+    expect(readFileSync("src/web/public/app.js", "utf8")).not.toMatch(/Durin/);
+    expect(readFileSync("src/cli/setup.ts", "utf8")).not.toMatch(/Durin/);
+    expect(readFileSync("src/tools/grok.ts", "utf8")).not.toMatch(/Durin/);
+    expect(readFileSync("src/tools/grok.ts", "utf8")).toContain("door access settings are unchanged");
+    const session = readFileSync("src/visitor/session.ts", "utf8");
+    expect(session).toContain("Demo safety check: Tour Core kept this door locked because it's not on their route.");
+    expect(session).not.toMatch(/never contacted Durin/);
+  });
+});
+
+describe("local test-mode surfaces reuse the test-mode sentences", () => {
+  it("operateMessage uses the local test-mode sentence, not practice-only", () => {
+    expect(operateMessage("test-mode", true)).toBe(
+      `Your property is published. ${localTestModeSentence(true)} I'll keep you updated on your tours and let you know when something needs your attention.`,
+    );
+    expect(operateMessage("test-mode", true)).not.toContain("Visitor texts are practice only");
+    expect(operateMessage("connected", true)).toBe(OPERATOR_MESSAGES.operate);
+    expect(operateMessage("practice", true)).toBe(
+      `Your property is published. ${modeSentence(false, true)} I'll keep you updated on your tours and let you know when something needs your attention.`,
+    );
+  });
+
+  it("readiness on a local property uses Visitor texting: test mode; live Sendblue stays connected", async () => {
+    const local = app();
+    await local.ok("create_property_setup", { address: "12 Scratch Lane, Teaneck, NJ 07666", propertyType: "SINGLE_FAMILY" });
+    await local.ok("add_unit", {});
+    await local.ok("set_unit_details", { units: [{ bedrooms: "3", bathrooms: "2", monthlyRent: "$3,400", availability: "now" }] });
+    await local.ok("set_tour_hours", { days: "weekdays", start: "9am", end: "5pm" });
+    await local.ok("set_verification_policy", { level: "basic-form" });
+    await local.ok("update_property_details", { skipVisitorHelp: true });
+    await local.ok("set_services", { messaging: "local" });
+    const readiness = await local.ok("run_readiness_check");
+    expect(readiness.passed).toBe(true);
+    expect(readiness.lines).toContain("\u2713 Visitor texting: test mode");
+    expect(readiness.lines.join("\n")).not.toMatch(/Visitor messaging connected/);
+
+    const live = textingApp();
+    const id = await finishSingleFamily(live, "144 Hillside Ave, Teaneck, NJ 07666");
+    const liveReadiness = await live.ok("run_readiness_check", { property: id });
+    expect(liveReadiness.passed).toBe(true);
+    expect(liveReadiness.lines).toContain("\u2713 Visitor messaging connected");
+    expect(liveReadiness.lines.join("\n")).not.toMatch(/Visitor texting: test mode/);
+  });
+
+  it("installation local loopback uses the test-mode sentence; live Sendblue stays connected and working", async () => {
+    const local = installHarness({ env: { TOURCORE_DEPLOYMENT_MODE: "GROK_MANAGED_P0" } });
+    cleanups.push(local.cleanup);
+    local.inst.files.ensure({ deploymentMode: "GROK_MANAGED_P0" });
+    local.inst.files.setPublicBaseUrl(TUNNEL, "CLOUDFLARE_QUICK_TUNNEL");
+    await local.ok("choose_messaging_provider", { provider: "local" });
+    const tested = await local.ok("test_visitor_messaging");
+    expect(tested.ok).toBe(true);
+    expect(tested.summary).toBe(LOCAL_TEST_TEXTING);
+    const messaging = (await local.status()).components.find((c) => c.component === "VISITOR_MESSAGING");
+    expect(messaging).toMatchObject({ state: "READY", summary: LOCAL_TEST_TEXTING });
+    const component = await local.ok("get_installation_component", { component: "VISITOR_MESSAGING" });
+    expect(component.summary).toBe(LOCAL_TEST_TEXTING);
+    expect(component.summary).not.toMatch(/connected and working/);
+
+    const live = textingApp();
+    const liveMessaging = (await live.status()).components.find((c) => c.component === "VISITOR_MESSAGING");
+    expect(liveMessaging?.state).toBe("READY");
+    expect(liveMessaging?.summary).toMatch(/^Visitor texting is connected and working/);
+    const liveTest = await live.ok("test_visitor_messaging");
+    expect(liveTest.summary).toBe("Visitor texting is connected and working.");
+  });
+
+  it("after a local publish, the operate step uses the test-mode sentence", async () => {
+    const h = installHarness({ env: { TOURCORE_DEPLOYMENT_MODE: "GROK_MANAGED_P0" } });
+    cleanups.push(h.cleanup);
+    h.inst.files.ensure({ deploymentMode: "GROK_MANAGED_P0" });
+    h.inst.files.setPublicBaseUrl(TUNNEL, "CLOUDFLARE_QUICK_TUNNEL");
+    h.inst.files.recordCheck("publicEndpointCheck", { ok: true, at: new Date(h.now()).toISOString(), message: "ok", url: TUNNEL });
+    h.connectGrok();
+    await h.ok("choose_messaging_provider", { provider: "local" });
+    await h.ok("test_visitor_messaging");
+    await h.ok("use_local_demo_storage");
+    const id = await finishSingleFamily(h, "12 Scratch Lane, Teaneck, NJ 07666");
+    await h.ok("set_services", { property: id, messaging: "local" });
+    await h.ok("skip_optional_setup", { component: "OPERATOR_ALERTS" });
+    expect((await h.ok("run_readiness_check", { property: id })).passed).toBe(true);
+    expect((await h.ok("run_dry_tour", { property: id })).passed).toBe(true);
+    await h.approve("publish_demo_property", { property: id });
+    const step = await h.ok("get_next_installation_step");
+    expect(step.action).toBe("DONE");
+    expect(step.operatorMessage).toContain(LOCAL_TEST_TEXTING);
+    expect(step.operatorMessage).not.toContain("Visitor texts are practice only");
+    const publish = (await h.status()).components.find((c) => c.component === "PUBLISH");
+    expect(publish?.summary).toMatch(/Visitor texting: test mode/);
+  });
+});
+
+describe("Critiquito demo-card and real door access copy", () => {
+  it("uses the demo-card sentence and Real door access for the live choice", () => {
+    const view = draftView(createPropertySetup({ address: "12 Scratch Lane, Teaneck, NJ 07666", propertyType: "SINGLE_FAMILY" }));
+    expect(view.services.items.map((item) => item.text)).toContain(
+      "Tour Core only asks the door system to unlock a door after its own safety checks pass.",
+    );
+    expect(readFileSync("src/setup/setupActions.ts", "utf8")).toContain('durin: "Real door access"');
   });
 });
 

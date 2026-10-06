@@ -396,7 +396,7 @@ async function editServices(draft: SetupDraft): Promise<SetupDraft> {
   ]);
   io.say("");
   const accessMode = await io.choose("How should doors be opened?", [
-    { label: "Durin demo mode", hint: "no real doors open. Tour Core only asks Durin for access after its safety checks pass", value: "durin-mock" as const },
+    { label: "Door access demo mode", hint: "no real doors open. Tour Core only asks the door system to unlock a door after its own safety checks pass", value: "durin-mock" as const },
   ]);
   return setServices(draft, { storageMode, messagingMode, accessMode });
 }
@@ -565,7 +565,7 @@ async function publishFlow(id: string): Promise<void> {
   io.say(green(bold(`\nPublished for demo.`)) + ` ${config.property.name} is set up for demo tours.`);
   io.say(
     dim(
-      "This is a demo, not a live launch: texts show on screen, records stay on this computer, and doors run in Durin demo mode, so no real doors open.",
+      "This is a demo, not a live launch: texts show on screen, records stay on this computer, and doors run in demo mode, so no real doors open.",
     ),
   );
 }

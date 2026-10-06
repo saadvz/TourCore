@@ -9,6 +9,8 @@ import { zonedTimeToUtc } from "../src/core/timezone";
 import { createVerificationProvider } from "../src/createTourCore";
 import { MockDurinAccessAdapter } from "../src/durin/MockDurinAccessAdapter";
 import { Installation } from "../src/install/installation";
+import { listExceptions } from "../src/operator/exceptions";
+import { PropertyWorkspace } from "../src/setup/workspace";
 import { ConsoleMessenger } from "../src/messaging/Messenger";
 import { InMemoryStore } from "../src/storage/Store";
 import { claimLease, collectCanonical, copyMigration, factReadMode, prepareMigration, resolveCachedRecord, restoreCanonical, verifyMigration } from "../src/storage/canonical";
@@ -18,6 +20,7 @@ import { StorageConflictError, StorageUnavailableError } from "../src/storage/er
 import { FakeGoogleDrive, GoogleDriveStore, googleScopeParam } from "../src/storage/googleDrive";
 import { authorizationUrl, checkState, createPending, exchangeCode } from "../src/storage/googleOAuth";
 import { FileRuntimeStore } from "../src/storage/runtimeStore";
+import { describeHistory } from "../src/audit/describe";
 import { basicForm, TOUR_DAY } from "./helpers";
 
 const cleanups: Array<() => void> = [];
@@ -256,7 +259,7 @@ describe("failure behavior", () => {
     clock.set(slot.start);
     const denied = await closed.requestAccess({ reservationId: reservation.id, prospectId: started.prospect.id, doorId: "entrance" });
     expect(denied.durinCalled).toBe(false);
-    expect(denied.decision.code).toBe("DENY_PROVIDER_FAILURE");
+    expect(denied.decision.code).toBe("DENY_STORAGE_FAILURE");
     expect(durin.calls.requestAccess).toHaveLength(0);
 
     clock.set(zonedTimeToUtc({ ...TOUR_DAY, hour: 10, minute: 0 }, config.property.timezone));
@@ -279,9 +282,32 @@ describe("failure behavior", () => {
     clock.set(slot.start);
     const outcome = await core2.requestAccess({ reservationId: ready.id, prospectId: started2.prospect.id, doorId: "entrance" });
     expect(outcome.decision.allowed).toBe(false);
+    expect(outcome.decision.code).toBe("DENY_STORAGE_FAILURE");
     expect(durin2.calls.requestAccess).toHaveLength(1);
     expect(durin2.calls.revokeAccess).toHaveLength(1);
     expect(grants).toBe(1);
+    const bundle = await core2.exportRecords();
+    expect(bundle.reservations.find((r) => r.id === ready.id)?.status).toBe("PROVIDER_FAILURE");
+    expect(bundle.auditEvents.some((e) => e.type === "ACCESS_DENIED" && e.code === "DENY_STORAGE_FAILURE")).toBe(true);
+    expect(bundle.auditEvents.some((e) => e.type === "PROVIDER_FAILURE" && e.code === "DENY_STORAGE_FAILURE")).toBe(true);
+    const history = describeHistory(bundle.auditEvents, bundle, config.property.timezone).map((e) => e.text);
+    const door = config.doors.find((d) => d.id === "entrance")!.name;
+    expect(history).toContain(`Tour Core couldn't save the visit record, so ${door} stayed locked.`);
+    expect(history).toContain("Tour Core couldn't save the visit record, so the tour was paused.");
+    expect(history).not.toContain(`The door system couldn't open ${door}, so it stayed locked.`);
+    const ws = new PropertyWorkspace(tempDir());
+    ws.save(config);
+    ws.recordVisitorDemo(config.property.id, {
+      schemaVersion: 1,
+      tourId: "2026-09-28T14-00-00-000Z_storage",
+      kind: "visitor-demo",
+      ranAt: clock.now().toISOString(),
+      updatedAt: clock.now().toISOString(),
+      outcome: "in-progress",
+    }, bundle);
+    const issues = await listExceptions({ workspace: ws, now: () => clock.now() });
+    expect(issues.map((e) => e.summary)).toContain("Tour Core couldn't save the visit record, so the tour was paused.");
+    expect(issues.map((e) => e.summary)).not.toContain(`The door system couldn't open ${door}, so the tour was paused.`);
   });
 });
 

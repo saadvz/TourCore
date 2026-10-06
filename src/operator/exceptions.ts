@@ -185,7 +185,9 @@ function summaryFor(kind: ExceptionKind, e: AuditEvent, tour: TourSnapshot): str
     case "door-system":
       return `The door system wasn't responding at ${door}, so it stayed locked.`;
     case "provider-failure":
-      return `The door system couldn't open ${door}, so the tour was paused.`;
+      return e.code === "DENY_STORAGE_FAILURE"
+        ? "Tour Core couldn't save the visit record, so the tour was paused."
+        : `The door system couldn't open ${door}, so the tour was paused.`;
     case "access-problem":
       return `Couldn't get into ${door}.`;
     case "verification-failed":

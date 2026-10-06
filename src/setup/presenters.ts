@@ -153,7 +153,7 @@ function servicesView(draft: SetupDraft) {
       },
       {
         title: draft.accessMode === "durin-mock" ? "Door access demo mode" : CHOICE_LABELS.access[draft.accessMode],
-        text: "No real doors open. Tour Core asks the access system for access only after its own safety checks pass.",
+        text: "Tour Core only asks the door system to unlock a door after its own safety checks pass.",
         dev: { mode: draft.accessMode, adapter: "MockDurinAccessAdapter" },
       },
     ],

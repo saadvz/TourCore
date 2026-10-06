@@ -96,7 +96,7 @@ function disconnect(): void {
   const removed = grants().revokeAll();
   say(`Disconnected Grok: removed ${removed.grants} approval${removed.grants === 1 ? "" : "s"} and ${removed.clients} registered client${removed.clients === 1 ? "" : "s"}.`);
   say("Their tokens stop working right away, even in a running Tour Core.");
-  say("Properties, tour history, Sendblue, visitor sessions and Durin settings are unchanged.");
+  say("Properties, tour history, Sendblue, visitor sessions and door access settings are unchanged.");
 }
 
 function tools(): void {

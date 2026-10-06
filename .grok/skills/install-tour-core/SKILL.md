@@ -239,7 +239,7 @@ operator gives one. An apartment or condo is named as street plus unit.
 
 Visitor texting was connected in Phase 3, so the new property uses it on its
 own and the review reads "Visitor texting: Connected" (or "Visitor texting:
-Test mode" for local or test-mode texting) and "Door access: Demo".
+test mode" for local or test-mode texting) and "Door access: Demo".
 Don't ask how to text people. From here on, don't talk about infrastructure
 unless something breaks.
 

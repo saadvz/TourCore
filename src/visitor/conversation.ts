@@ -61,7 +61,7 @@ export function isStandaloneGreeting(text: string): boolean {
 }
 
 const AFTER_CLOSE_DISTRESS =
-  /\b(stuck|trapped|inside|door|help|emergency|jammed|lock|locked|gate|let me out|lock in|cannot get out|can t get out|cannot get outside|can t get outside|no way out|will not open|cannot open|still in the unit|still inside|cannot find (?:the|my) way out|where is the way out|how do i get out)\b/;
+  /\b(stuck|trapped|inside|door|help|emergency|jammed|lock|locked|gate|let me out|lock in|cannot get out|can t get out|cannot get outside|can t get outside|no way out|will not open|cannot open|still in the unit|still inside|cannot find (?:the |my |a )?way out|can not find (?:the |my |a )?way out|where is the way out|where is the exit|how do i get out|how can i get out)\b/;
 const LEAVE_DISTRESS = /\b(cannot leave|unable to leave|how do i leave|let me leave)\b/;
 const HELP_BOOKING = /\bhelp(?: me)? book(?:ing)?\b/;
 

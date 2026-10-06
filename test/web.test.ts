@@ -227,7 +227,7 @@ describe("browser setup", () => {
     if (phone.demoControls.some((c: { action: string }) => c.action === "demoSkipAhead")) await tap("demoSkipAhead");
     phone = await tap("arrive");
     phone = await tap("demoWrongDoor");
-    expect(phone.thread.at(-1).text).toBe("Demo safety check: Tour Core refused this door and never contacted Durin.");
+    expect(phone.thread.at(-1).text).toBe("Demo safety check: Tour Core kept this door locked because it's not on their route.");
     expect(phone.dev).toBeUndefined();
 
     const live = await app.call("GET", `/api/visitor-demos/${sid}/live`);

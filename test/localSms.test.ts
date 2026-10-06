@@ -259,6 +259,7 @@ describe("inject_local_sms and read_local_outbox", () => {
     expect(chosen.summary).toMatch(/local loopback/i);
     const tested = await h.ok("test_visitor_messaging");
     expect(tested.ok).toBe(true);
+    expect(tested.summary).toBe("Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on.");
     expect(h.inst.files.manifest()?.messagingProvider).toBe("LOCAL");
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();

@@ -65,7 +65,7 @@ function ownerStreetLine(services: OperatorServices, propertyId: string): string
  */
 export type VisitorTexting =
   | { state: "connected"; label: "Connected"; line?: string }
-  | { state: "test-mode"; label: "Test mode"; line?: string }
+  | { state: "test-mode"; label: "test mode"; line?: string }
   | { state: "not-using-it"; label: "Not connected to this property yet"; problem: string }
   | { state: "not-working"; label: "Not working yet"; problem: string }
   | { state: "number-in-use"; label: "Number used by another property"; problem: string }
@@ -83,7 +83,7 @@ export function visitorTexting(services: OperatorServices, propertyId: string, m
   }
   if (usesLocalMessaging({ ...config, messagingMode }, installed)) {
     const line = services.endpoints?.forProperty(propertyId)?.address ?? localLoopbackNumber();
-    return { state: "test-mode", label: "Test mode", line };
+    return { state: "test-mode", label: "test mode", line };
   }
   if (!isLiveMessaging(messagingMode)) {
     return installed ? { state: "not-using-it", label: "Not connected to this property yet", problem: TEXTING_NOT_USED } : { state: "practice", label: "Practice only (nobody is texted)" };
@@ -136,7 +136,12 @@ export async function publishProperty(services: OperatorServices, propertyId: st
 
 export async function checkReadiness(services: OperatorServices, propertyId: string, config: TourCoreConfig, now: Date): Promise<ReadinessResult> {
   const lineProblem = connectLine(services, propertyId, config.messagingMode, now);
-  return runReadinessCheck(config, { now, runtime: services.runtime, ...(lineProblem ? { lineProblem } : {}) });
+  return runReadinessCheck(config, {
+    now,
+    runtime: services.runtime,
+    installed: services.installedMessaging?.(),
+    ...(lineProblem ? { lineProblem } : {}),
+  });
 }
 
 /**
@@ -152,7 +157,7 @@ export async function readinessForProperty(
   const { draft, unsavedChanges } = ws.openDraft(propertyId);
   if (unsavedChanges) {
     if (validateConfig(draft).length) {
-      return { result: await runReadinessCheck(draft, { now, runtime: services.runtime }), savedChanges: false, recorded: false };
+      return { result: await runReadinessCheck(draft, { now, runtime: services.runtime, installed: services.installedMessaging?.() }), savedChanges: false, recorded: false };
     }
     ws.save(draft, now);
   }

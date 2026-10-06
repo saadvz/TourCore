@@ -621,12 +621,13 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
           next = applySetupCommand(next, "setUnitProfile", { unitId: unit.id, values: entry.values });
           touched.add(unit.id);
         }
-        if (!bulk.units.length && !bulk.unknownUnits.length) {
+        if (!bulk.units.length) {
           const only = soleSingleFamilyUnit(next);
           const values = extractValues(i.details);
           if (only && Object.keys(values).length) {
             next = applySetupCommand(next, "setUnitProfile", { unitId: only.id, values });
             touched.add(only.id);
+            unknownUnits = [];
           }
         }
       }
@@ -640,6 +641,9 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         touched.add(unit.id);
       }
       if (!touched.size) {
+        if (draft.property.propertyType === "SINGLE_FAMILY" && draft.units.length === 0) {
+          throw new SetupInputError("UNIT_DETAILS_NOT_FOUND", "Add a unit first.");
+        }
         throw new SetupInputError("UNIT_DETAILS_NOT_FOUND", `I couldn't match those details to a unit. The units are ${draft.units.map((u) => operatorUnitName(draft.property, u.name)).join(", ") || "none yet"}.`);
       }
       ctx.services.workspace.persistEdit(next, ctx.now());
@@ -855,7 +859,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Get messaging and records",
     kind: "read",
     description:
-      'How visitors are texted and whether this property is connected to the touring number, where tour records are kept, and door access mode, each on its own (texting can be live while door access is demo). For local or test-mode texting, messaging.current is "test" (never "live") and the status line is "Visitor texting: Test mode". The summary is "Texting is in test mode, so texts don\'t reach real phones. Real visitors won\'t get anything until live texting is turned on. Door access is still in demo mode, so no physical locks will open." — do not say texting is live and do not name the texting service. Never contains credentials.',
+      'How visitors are texted and whether this property is connected to the touring number, where tour records are kept, and door access mode, each on its own (texting can be live while door access is demo). For local or test-mode texting, messaging.current is "test" (never "live") and the status line is "Visitor texting: test mode". The summary is "Texting is in test mode, so texts don\'t reach real phones. Real visitors won\'t get anything until live texting is turned on. Door access is still in demo mode, so no physical locks will open." — do not say texting is live and do not name the texting service. Never contains credentials.',
     input: z.strictObject({ property: Property }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
@@ -875,7 +879,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
           choices: MESSAGING_CHOICES,
         },
         records: { current: "this-computer", choices: RECORDS_CHOICES },
-        doorAccess: "Demo: no physical locks open. Tour Core asks the access system only after its own checks pass.",
+        doorAccess: "Demo: no physical locks open. Tour Core only asks the door system to unlock a door after its own safety checks pass.",
         alertsGoTo: draft.operator.name,
       };
     },
