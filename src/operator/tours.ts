@@ -103,9 +103,30 @@ export async function findTour(services: OperatorServices, ref: string): Promise
   return tour;
 }
 
-/** The reservation a tour is about: the latest one in its records. */
+const IN_PROGRESS: Reservation["status"][] = ["TOURING", "OPERATOR_HOLD", "PROVIDER_FAILURE"];
+
+/** The reservation a tour is about: a running tour wins over a later held booking. */
 export function currentReservation(tour: TourSnapshot): Reservation | undefined {
-  return tour.bundle.reservations.at(-1);
+  return pickCurrentReservation(tour.bundle.reservations);
+}
+
+/** In-progress first, then the newest booking still in play, else the latest record. */
+export function pickCurrentReservation(reservations: Reservation[]): Reservation | undefined {
+  if (!reservations.length) return undefined;
+  const running = reservations.find((r) => IN_PROGRESS.includes(r.status));
+  if (running) return running;
+  const open = reservations.filter((r) => !TERMINAL.includes(r.status));
+  return open.at(-1) ?? reservations.at(-1);
+}
+
+export function isFutureBooking(reservation: Reservation): boolean {
+  return !!reservation.slotStart && !IN_PROGRESS.includes(reservation.status) && !TERMINAL.includes(reservation.status);
+}
+
+/** A later booking held while this tour is still running. */
+export function nextReservation(tour: TourSnapshot): Reservation | undefined {
+  const current = currentReservation(tour);
+  return tour.bundle.reservations.filter((r) => isFutureBooking(r) && r.id !== current?.id).at(-1);
 }
 
 export function visitorNameOf(tour: TourSnapshot): string {
@@ -161,13 +182,29 @@ function currentStep(tour: TourSnapshot): string {
   return STATUS_LABELS[r.status];
 }
 
+function tourTimeOf(reservation: Reservation, tour: TourSnapshot): string | undefined {
+  if (!reservation.slotStart) return undefined;
+  const tz = tour.config.property.timezone;
+  const start = new Date(reservation.slotStart);
+  const end = reservation.windowEnd
+    ? new Date(reservation.windowEnd)
+    : new Date(Date.parse(reservation.slotStart) + tour.config.tourHours.tourLengthMinutes * 60_000);
+  return `${formatDay(start, tz)}, ${formatTime(start, tz)}\u2013${formatTime(end, tz)}`;
+}
+
 function tourTime(tour: TourSnapshot): string | undefined {
   const r = currentReservation(tour);
-  if (!r?.slotStart) return undefined;
-  const tz = tour.config.property.timezone;
-  const start = new Date(r.slotStart);
-  const end = new Date(Date.parse(r.slotStart) + tour.config.tourHours.tourLengthMinutes * 60_000);
-  return `${formatDay(start, tz)}, ${formatTime(start, tz)}\u2013${formatTime(end, tz)}`;
+  return r ? tourTimeOf(r, tour) : undefined;
+}
+
+function nextBookingOf(tour: TourSnapshot) {
+  const next = nextReservation(tour);
+  if (!next) return undefined;
+  const time = tourTimeOf(next, tour);
+  return {
+    ...(time ? { tourTime: time } : {}),
+    status: STATUS_LABELS[next.status],
+  };
 }
 
 const SOURCE: Record<TourRecord["kind"], string> = { messaging: "Real phone", "visitor-demo": "Visitor demo", practice: "Practice tour" };
@@ -192,6 +229,7 @@ export function tourSummary(tour: TourSnapshot) {
     visitorName: visitorNameOf(tour),
     unitName: unitNameOf(tour),
     tourTime: tourTime(tour),
+    ...(nextBookingOf(tour) ? { nextBooking: nextBookingOf(tour) } : {}),
     status: statusOf(tour),
     currentStep: currentStep(tour),
     source: SOURCE[tour.kind],

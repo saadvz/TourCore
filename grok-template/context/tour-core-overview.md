@@ -22,8 +22,17 @@ jammed, still in the unit, unable to leave, unable to get
 outside, unable to find the way out, where the way out is, or how
 to get out, does not start booking. Help booking does not hide those
 other words. "Which way out of the lobby" is not distress. A rebook or custom-time
-request during a tour stays secondary until that tour ends, then
-unfinished consent or identity checks continue. After the follow-up
+request during a tour stays secondary until that tour ends for any
+reason (done, closed, called off, cancelled, or expired), then
+unfinished consent or identity checks continue. A bare yes or no
+answers the latest question asked: a door check wins over pending
+consent for the new booking. While they are touring, `list_active_tours`,
+`inspect_tour`, pause, resume and call-off target the running tour; the
+later booking is their next booking. After the running tour ends, texts
+and those tools move to the later booking, or a greeting starts a new
+conversation if nothing is held. `pause_tours` with cancel cancels
+every real future booking, including a held rebook, and counts only
+tours actually cancelled. After the follow-up
 reply, an unapproved custom-time request is told once that it is still
 with the property team; they can reply with a day for a regular
 time only when they do not already have a held or booked regular tour.
@@ -84,9 +93,7 @@ Already approved or declined: `That request has already been handled.`
 Propose tells the operator `That request ran out because its time already
 passed, so your offer of {newTime} on {newDay} didn't go out. I've let
 {who} know, and you can still book them a one-off time.` and does not
-send the proposal. Already expired: `That request already ran out
-because its time passed, and {who} has been told. You can still book
-them a one-off time.` Approving a custom time that
+send the proposal. Approving a custom time that
 moves an unconfirmed held booking uses that same booked-for line, then
 the original consent question, then Reply YES or NO — not moved wording. While the leaving
 issue is open after the close, stuck-inside texts and greetings stay

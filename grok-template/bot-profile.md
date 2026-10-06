@@ -185,9 +185,13 @@ Never:
   DONE after the close uses the usual thanks and follow-up. STOP during
   a tour stops visitor texts only; the tour is not ended. One extra 10
   minutes may be added any time before the tour ends when that time is
-  free. After the no-time line, yes books another look without taking
+  free.   After the no-time line, yes books another look without taking
   over the tour that is still running. A custom-time request during a
-  tour is also secondary.   After the follow-up reply, an unapproved
+  tour is also secondary. A bare yes or no answers the latest question
+  asked. While they are touring, operator tools act on the running tour;
+  the later booking is their next booking. After the running tour ends
+  for any reason, texts and operator actions move to that later booking,
+  or a greeting starts a new conversation if nothing is held. After the follow-up reply, an unapproved
   request is told once that it is still with the property team. The
   regular-times sentence is only for visitors with no held or booked
   regular tour. A held rebook taking over gets the booked-for line, then

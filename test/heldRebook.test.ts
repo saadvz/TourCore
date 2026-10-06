@@ -1,0 +1,359 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { loadConfig } from "../src/config/tourCoreConfig";
+import { bookedTourCalledOffText } from "../src/core/availabilityCopy";
+import { bookedForLine, CONSENT_TEXT, TOUR_ENDED_REPLY, VISITOR_CANCEL_DONE } from "../src/core/TourCore";
+import { formatDay, formatTime, zonedTimeToUtc } from "../src/core/timezone";
+import { MessagingEndpoints } from "../src/messaging/endpoints";
+import { DemoMessagingAdapter } from "../src/messaging/Messenger";
+import { persistSession } from "../src/operator/services";
+import { tourRef } from "../src/operator/tours";
+import { PropertyWorkspace, runReadinessCheck } from "../src/setup";
+import { MemoryRuntimeStore } from "../src/storage/runtimeStore";
+import { handleVisitorText } from "../src/visitor/conversation";
+import { MessagingConversations } from "../src/visitor/messagingRouter";
+import { OverstayScheduler } from "../src/visitor/overstayScheduler";
+import { VisitorDemoRegistry, VisitorDemoSession } from "../src/visitor/session";
+import { VerificationLinks } from "../src/visitor/verificationLinks";
+import { at, grokHarness } from "./grokHarness";
+
+const TZ = "America/New_York";
+const PHONE = "+15550102000";
+const LINE = "+15550001111";
+const PROPERTY = "prop_100_alfred_way";
+const TOUR_DAY = { year: 2026, month: 9, day: 28 };
+
+const cleanups: Array<() => void> = [];
+afterEach(() => cleanups.splice(0).forEach((c) => c()));
+
+function lastFrom(session: VisitorDemoSession): string {
+  return session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1) ?? "";
+}
+
+async function holdNextSlot(session: VisitorDemoSession, slotStart: Date) {
+  const current = (await session.reservation())!;
+  session.rebookUnitId = current.unitId;
+  await session.confirmRebook(slotStart.toISOString());
+  const pending = (await session.pendingBooking())!;
+  expect(pending.id).not.toBe(current.id);
+  expect((await session.reservation())!.id).toBe(current.id);
+  return pending;
+}
+
+async function touringWithRebook(label: string) {
+  const now = { t: zonedTimeToUtc({ ...TOUR_DAY, hour: 13, minute: 58 }, TZ).getTime() };
+  const session = new VisitorDemoSession(PROPERTY, loadConfig(), label, {
+    realNow: () => now.t,
+    transport: new DemoMessagingAdapter(() => {}, "MESSAGING"),
+    kind: "messaging",
+  });
+  session.overstay = new OverstayScheduler(new MemoryRuntimeStore(), { now: () => new Date(now.t) });
+  let n = 0;
+  const say = (text: string) => handleVisitorText(session, PHONE, text, { provider: "test", providerMessageId: `${label}_${++n}` });
+  await say("TOUR");
+  await say("YES");
+  await say("1");
+  await say("1");
+  await say("1");
+  await say("yes");
+  await session.act("submitIdentity", { firstName: "Riley", lastName: "Tester", email: "riley@example.com", phone: PHONE });
+  const booked = (await session.reservation())!;
+  now.t = Date.parse(booked.slotStart!);
+  session.clock.jumpTo(new Date(now.t));
+  await say("I'm here");
+  session.overstay.ensure((await session.reservation())!, session.propertyId, session.tourId);
+  const later = zonedTimeToUtc({ year: 2026, month: 10, day: 2, hour: 14, minute: 0 }, TZ);
+  const pending = await holdNextSlot(session, later);
+  return { session, say, now, runningId: booked.id, pending, later };
+}
+
+describe("defect 1: bare yes answers the latest question", () => {
+  it("yes to a door check opens the door and leaves rebook consent pending", async () => {
+    const ctx = await touringWithRebook("d1-door-yes");
+    expect(await ctx.session.pendingBookingNeedsConsent()).toBe(true);
+    await ctx.say("can you open 101?");
+    expect(lastFrom(ctx.session)).toMatch(/^Are you at Unit 101 now\?/);
+    const before = ctx.session.durin.requestCount;
+    await ctx.say("yes");
+    expect((await ctx.session.reservation())!.id).toBe(ctx.runningId);
+    expect((await ctx.session.reservation())!.status).toBe("TOURING");
+    expect(ctx.session.lastAccess).toMatchObject({ doorId: "unit_101", allowed: true });
+    expect(ctx.session.durin.requestCount).toBeGreaterThan(before);
+    expect(await ctx.session.pendingBookingNeedsConsent()).toBe(true);
+    expect((await ctx.session.store.get("reservations", ctx.pending.id))!.consentId).toBeUndefined();
+    expect(lastFrom(ctx.session)).not.toMatch(/You're all set for your tour/);
+  });
+
+  it("yes records consent when the consent ask is the latest question", async () => {
+    const ctx = await touringWithRebook("d1-consent-yes");
+    expect(await ctx.session.pendingBookingNeedsConsent()).toBe(true);
+    await ctx.say("yes");
+    expect((await ctx.session.reservation())!.id).toBe(ctx.runningId);
+    expect((await ctx.session.reservation())!.status).toBe("TOURING");
+    const booked = (await ctx.session.store.get("reservations", ctx.pending.id))!;
+    expect(booked.consentId).toBeTruthy();
+    expect(["AWAITING_VERIFICATION", "READY"]).toContain(booked.status);
+  });
+});
+
+describe("defect 2: operator tools target the running tour", () => {
+  async function touringRebookHarness() {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const v = await h.touringVisitor(id, { name: "Riley Tester", phone: "555-010-2000" });
+    const pending = await holdNextSlot(v.session, new Date(at(10)));
+    await persistSession(h.services, v.session);
+    const ref = tourRef(id, v.session.tourId);
+    return { h, id, v, pending, ref };
+  }
+
+  it("list_active_tours and inspect_tour show the running tour and the next booking", async () => {
+    const { h, pending, ref } = await touringRebookHarness();
+    const list = await h.ok("list_active_tours");
+    expect(list.tours).toHaveLength(1);
+    expect(list.tours[0]).toMatchObject({
+      visitorName: "Riley Tester",
+      status: "Touring",
+      tourTime: "Monday, Sep 28, 9:00 AM\u20139:45 AM",
+      nextBooking: { tourTime: "Monday, Sep 28, 10:00 AM\u201310:45 AM", status: "Waiting for consent" },
+    });
+    const inspected = await h.ok("inspect_tour", { tourRef: ref });
+    expect(inspected.tour.status).toBe("Touring");
+    expect(inspected.tour.tourTime).toBe("Monday, Sep 28, 9:00 AM\u20139:45 AM");
+    expect(inspected.tour.nextBooking).toEqual({ tourTime: "Monday, Sep 28, 10:00 AM\u201310:45 AM", status: "Waiting for consent" });
+    expect(inspected.tour.accessGrants.some((g: { doorName: string }) => g.doorName === "Lobby Entrance")).toBe(true);
+    expect(pending.status).toBe("AWAITING_CONSENT");
+  });
+
+  it("pause and resume the running tour while a rebook is held", async () => {
+    const { h, v, ref } = await touringRebookHarness();
+    const held = await h.approve("place_operator_hold", { tourRef: ref, reason: "Checking the lobby camera" });
+    expect(held.done.summary).toMatch(/Riley Tester's tour is paused/);
+    expect((await v.session.reservation())!.status).toBe("OPERATOR_HOLD");
+    expect(v.session.pendingBookingId).toBeTruthy();
+    const listed = await h.ok("list_active_tours");
+    expect(listed.tours[0].status).toBe("Paused");
+    expect(listed.tours[0].nextBooking?.status).toBe("Waiting for consent");
+    const resumed = await h.approve("clear_operator_hold", { tourRef: ref });
+    expect(resumed.done.summary).toMatch(/Riley Tester's tour is resumed/);
+    expect((await v.session.reservation())!.status).toBe("TOURING");
+    expect(await h.fails("clear_operator_hold", { tourRef: ref })).toMatch(/isn't paused/);
+  });
+});
+
+describe("defect 3: ended running tour hands conversation to the held rebook", () => {
+  it("called off: visitor can cancel the rebook, operator can revoke it", async () => {
+    const ctx = await touringWithRebook("d3-revoked");
+    await ctx.session.operatorChange((core, id) => core.revokeReservation(id, "called off"));
+    expect((await ctx.session.store.get("reservations", ctx.runningId))!.status).toBe("REVOKED");
+    expect(ctx.session.pendingBookingId).toBe(ctx.pending.id);
+    await ctx.say("please cancel my Saturday tour");
+    expect((await ctx.session.reservation())!.id).toBe(ctx.pending.id);
+    expect(lastFrom(ctx.session)).toBe(
+      `Cancel your tour on ${formatDay(ctx.later, TZ)} at ${formatTime(ctx.later, TZ)}? Reply YES or NO.`,
+    );
+    await ctx.say("yes");
+    expect(lastFrom(ctx.session)).toBe(VISITOR_CANCEL_DONE);
+    expect((await ctx.session.store.get("reservations", ctx.pending.id))!.status).toBe("CANCELLED");
+  });
+
+  it("cancelled: held rebook takes over so HI is not the ended-tour loop", async () => {
+    const ctx = await touringWithRebook("d3-cancelled");
+    await ctx.session.core.cancelTourByVisitor(ctx.runningId);
+    await ctx.say("HI");
+    expect((await ctx.session.reservation())!.id).toBe(ctx.pending.id);
+    expect(lastFrom(ctx.session)).not.toBe(TOUR_ENDED_REPLY);
+    const start = new Date(ctx.pending.slotStart!);
+    expect(ctx.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text)).toContain(
+      bookedForLine(formatTime(start, TZ), formatDay(start, TZ)),
+    );
+    expect(lastFrom(ctx.session)).toContain(CONSENT_TEXT);
+  });
+
+  it("done: after follow-up, the held rebook is the active booking", async () => {
+    const ctx = await touringWithRebook("d3-done");
+    await ctx.say("DONE");
+    expect((await ctx.session.reservation())!.id).toBe(ctx.runningId);
+    await ctx.say("no");
+    expect((await ctx.session.reservation())!.id).toBe(ctx.pending.id);
+    expect(await ctx.session.pendingBookingNeedsConsent() || (await ctx.session.activeNeedsConsent())).toBe(true);
+  });
+
+  it("expired: after the leaving window, the held rebook takes over", async () => {
+    const ctx = await touringWithRebook("d3-expired");
+    ctx.now.t = Date.parse((await ctx.session.reservation())!.windowEnd!) + 15 * 60_000;
+    ctx.session.clock.jumpTo(new Date(ctx.now.t));
+    await ctx.session.overstay!.tickSession(ctx.session);
+    expect((await ctx.session.reservation())!.status).toBe("EXPIRED");
+    ctx.session.overstay!.closeAlertWindow(ctx.runningId);
+    await ctx.say("HI");
+    expect((await ctx.session.reservation())!.id).toBe(ctx.pending.id);
+    expect(lastFrom(ctx.session)).not.toBe(TOUR_ENDED_REPLY);
+  });
+
+  it("operator can revoke the held rebook after the running tour is called off", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const v = await h.touringVisitor(id, { name: "Riley Tester", phone: "555-010-2000" });
+    const pending = await holdNextSlot(v.session, new Date(at(10)));
+    const ref = tourRef(id, v.session.tourId);
+    await h.approve("revoke_tour_access", { tourRef: ref, reason: "Need the unit back" });
+    expect((await v.session.store.get("reservations", (await v.session.store.list("reservations")).find((r) => r.status === "REVOKED")!.id))!.status).toBe("REVOKED");
+    expect((await v.session.reservation())!.id).toBe(pending.id);
+    const again = await h.approve("revoke_tour_access", { tourRef: ref, reason: "Visitor asked to cancel Saturday" });
+    expect(again.done.summary).toMatch(/called off/);
+    expect((await v.session.store.get("reservations", pending.id))!.status).toBe("REVOKED");
+  });
+});
+
+describe("defect 4: pause_tours cancel actually cancels the held rebook", () => {
+  it("after the running tour is called off, cancel frees the Saturday slot", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const v = await h.touringVisitor(id, { name: "Riley Tester", phone: "555-010-2000" });
+    const slot = new Date(at(10));
+    const pending = await holdNextSlot(v.session, slot);
+    await persistSession(h.services, v.session);
+    const ref = tourRef(id, v.session.tourId);
+    await h.approve("revoke_tour_access", { tourRef: ref, reason: "Need the unit back" });
+    expect((await v.session.store.get("reservations", pending.id))!.status).toBe("AWAITING_CONSENT");
+    const asked = await h.ok("pause_tours", { property: id });
+    expect(asked.bookedTours).toBe(1);
+    const done = await h.ok("pause_tours", { property: id, bookedTours: "cancel", confirmationCode: asked.confirmation.code });
+    expect(done.cancelled).toBe(1);
+    expect(done.summary).toMatch(/1 booked tour was cancelled/);
+    const cancelled = (await v.session.store.get("reservations", pending.id))!;
+    expect(cancelled.status).toBe("CANCELLED");
+    const audit = await v.session.store.listAudit();
+    expect(audit.some((e) => e.type === "RESERVATION_CANCELLED" && e.reservationId === pending.id)).toBe(true);
+    const { config } = h.workspace.load(id);
+    expect(lastFrom(v.session)).toBe(
+      bookedTourCalledOffText({
+        team: config.operator.name,
+        day: formatDay(slot, config.property.timezone),
+        time: formatTime(slot, config.property.timezone),
+        address: config.property.address,
+        propertyWide: true,
+      }),
+    );
+    const open = await v.session.core.availableSlots({ year: 2026, month: 9, day: 28 });
+    expect(open.some((s) => s.start.getTime() === slot.getTime())).toBe(true);
+  });
+});
+
+describe("heal persisted called-off tour plus held rebook", () => {
+  it("operator can revoke the held rebook and visitor texts route to it", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const v = await h.touringVisitor(id, { name: "Riley Tester", phone: "555-010-2000" });
+    const pending = await holdNextSlot(v.session, new Date(at(10)));
+    const runningId = v.session.reservationId!;
+    await v.session.operatorChange((core, id) => core.revokeReservation(id, "called off"));
+    expect(v.session.reservationId).toBe(runningId);
+    expect(v.session.pendingBookingId).toBe(pending.id);
+    expect((await v.session.store.get("reservations", runningId))!.status).toBe("REVOKED");
+    await persistSession(h.services, v.session);
+    const ref = tourRef(id, v.session.tourId);
+    const inspected = await h.ok("inspect_tour", { tourRef: ref });
+    expect(inspected.tour.status).toBe("Waiting for consent");
+    expect(inspected.tour.tourTime).toBe("Monday, Sep 28, 10:00 AM\u201310:45 AM");
+    await h.approve("revoke_tour_access", { tourRef: ref, reason: "Cancel the Saturday booking" });
+    expect((await v.session.store.get("reservations", pending.id))!.status).toBe("REVOKED");
+  });
+
+  it("visitor texts on persisted stuck state go to the held rebook, or a new conversation if none", async () => {
+    const withHeld = await touringWithRebook("heal-held");
+    await withHeld.session.operatorChange((core, id) => core.revokeReservation(id, "called off"));
+    expect(withHeld.session.reservationId).toBe(withHeld.runningId);
+    expect(withHeld.session.pendingBookingId).toBe(withHeld.pending.id);
+    await withHeld.say("HI");
+    expect((await withHeld.session.reservation())!.id).toBe(withHeld.pending.id);
+    expect(lastFrom(withHeld.session)).not.toBe(TOUR_ENDED_REPLY);
+
+    const path = await smsStuckTour({ held: false });
+    const beforeId = path.session.id;
+    await path.text("HI");
+    expect(path.session.id).not.toBe(beforeId);
+    expect(lastFrom(path.session)).not.toBe(TOUR_ENDED_REPLY);
+    expect(lastFrom(path.session).toLowerCase()).toMatch(/welcome|which unit|which day/);
+  });
+});
+
+describe("nit: inspect_tour shows the extended end time", () => {
+  it("after a 10-minute extension, tour time ends at 9:55 AM", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const v = await h.touringVisitor(id);
+    await v.session.core.extendTourWindow(v.session.reservationId!, 10);
+    await persistSession(h.services, v.session);
+    const inspected = await h.ok("inspect_tour", { tourRef: tourRef(id, v.session.tourId) });
+    expect(inspected.tour.tourTime).toBe("Monday, Sep 28, 9:00 AM\u20139:55 AM");
+    expect(inspected.tour.accessGrants.every((g: { validUntil: string }) => g.validUntil === "Monday, Sep 28, 9:55 AM")).toBe(true);
+  });
+});
+
+async function smsStuckTour(options: { held: boolean }) {
+  const clock = { t: zonedTimeToUtc({ ...TOUR_DAY, hour: 9, minute: 0 }, TZ).getTime() };
+  const root = mkdtempSync(join(tmpdir(), "tourcore-heal-"));
+  cleanups.push(() => rmSync(root, { recursive: true, force: true }));
+  const ws = new PropertyWorkspace(root);
+  const { config } = ws.save(loadConfig());
+  ws.recordReadiness(config.property.id, await runReadinessCheck(config, { now: new Date(clock.t) }));
+  const runtime = new MemoryRuntimeStore();
+  const endpoints = new MessagingEndpoints(runtime);
+  endpoints.attach({ address: LINE, provider: "demo", propertyId: PROPERTY });
+  const registry = new VisitorDemoRegistry();
+  const router = new MessagingConversations({
+    workspace: ws,
+    registry,
+    runtime,
+    endpoints,
+    transport: () => new DemoMessagingAdapter(() => {}, "MESSAGING"),
+    links: new VerificationLinks({ baseUrl: () => undefined }),
+    realNow: () => clock.t,
+    now: () => new Date(clock.t),
+    defaultLine: () => LINE,
+    consentMode: () => "disabled",
+  });
+  let n = 0;
+  const text = async (body: string) => {
+    await router.receive({
+      provider: "test",
+      providerMessageId: `heal_${++n}`,
+      from: PHONE,
+      to: LINE,
+      text: body,
+      channel: "SMS",
+      receivedAt: new Date(clock.t).toISOString(),
+    });
+  };
+  await text("TOUR");
+  await text("YES");
+  await text("1");
+  await text("1");
+  await text("1");
+  await text("yes");
+  const session = () => registry.latestForPhone(PROPERTY, PHONE, "messaging")!;
+  await session().act("submitIdentity", { firstName: "Riley", lastName: "Tester", email: "riley@example.com", phone: PHONE });
+  const booked = (await session().reservation())!;
+  clock.t = Date.parse(booked.slotStart!);
+  await text("I'm here");
+  if (options.held) {
+    await holdNextSlot(session(), zonedTimeToUtc({ year: 2026, month: 10, day: 2, hour: 14, minute: 0 }, TZ));
+  }
+  await session().operatorChange((core, id) => core.revokeReservation(id, "called off"));
+  await router.save(session());
+  return {
+    get session() {
+      return session();
+    },
+    text,
+  };
+}

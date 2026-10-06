@@ -16,7 +16,7 @@ import {
 import { isLeavingTour, T5_NO_OFFER_BARE_YES } from "../core/overstayCopy";
 import { afterCloseAlertOpen } from "./overstayScheduler";
 import { yesNo } from "../intent/yesNo";
-import { isCancelableReservation } from "../domain/stateMachine";
+import { isCancelableReservation, TERMINAL } from "../domain/stateMachine";
 import { stripFiller } from "../intent/normalize";
 import {
   isCancelTourAsk,
@@ -1557,7 +1557,7 @@ async function takeOverHeldBookingOnGreeting(turn: Turn): Promise<boolean> {
   if (!startsNewBookingAfterClose(text, intent)) return false;
   if (session.pendingBookingId) {
     const current = await session.reservation();
-    if (current && current.status !== "COMPLETED" && current.status !== "EXPIRED") return false;
+    if (current && !TERMINAL.includes(current.status)) return false;
     if (current?.status === "COMPLETED" && !(await session.hasFollowUpResponse(current.id))) return false;
     session.promotePendingBookingIfEnded();
   }
@@ -1603,11 +1603,24 @@ async function handleProposedTimeReply(turn: Turn): Promise<boolean> {
   return false;
 }
 
+function awaitingLatestYesNo(awaiting?: StepAwaiting): boolean {
+  return (
+    !!awaiting &&
+    (awaiting.kind === "confirm-stop" ||
+      awaiting.kind === "confirm-arrival" ||
+      awaiting.kind === "confirm-finish" ||
+      awaiting.kind === "choose-stop" ||
+      awaiting.kind === "confirm-cancel-tour")
+  );
+}
+
 async function handlePendingBookingReply(turn: Turn): Promise<boolean> {
   const { session } = turn;
   if (!session.pendingBookingId) return false;
   if ((await session.stage()) === "follow-up") return false;
   if (await outstandingProposedRequest(session)) return false;
+  // A bare YES/NO answers the latest question asked — a door check wins over pending rebook consent.
+  if (awaitingLatestYesNo(turn.awaiting)) return false;
   const text = turn.said.text ?? "";
   if (hasExplicitChangeAsk(text)) return false;
   if (await affirmsBookedDay(turn)) {
@@ -1646,16 +1659,7 @@ async function startBookingAfterClose(turn: Turn): Promise<void> {
 async function handlePendingRebookPick(turn: Turn): Promise<boolean> {
   const { session } = turn;
   if (!session.pendingRebook) return false;
-  if (
-    turn.awaiting &&
-    (turn.awaiting.kind === "confirm-stop" ||
-      turn.awaiting.kind === "confirm-arrival" ||
-      turn.awaiting.kind === "confirm-finish" ||
-      turn.awaiting.kind === "choose-stop" ||
-      turn.awaiting.kind === "confirm-cancel-tour")
-  ) {
-    return false;
-  }
+  if (awaitingLatestYesNo(turn.awaiting)) return false;
   const step: VisitorStage = session.selectedDate ? "choose-time" : "choose-date";
   const interpretation = await rulesOnly.interpret(await contextFor(session, turn.said.text ?? "", step, turn.awaiting));
   if (interpretation.intent.type === "SELECT_DATE") {

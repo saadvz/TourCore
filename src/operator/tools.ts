@@ -1072,7 +1072,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "list_active_tours",
     title: "Show active tours",
     kind: "read",
-    description: "Visitor tours happening now: who, which unit, tour time, status, and where they are.",
+    description: "Visitor tours happening now: who, which unit, tour time (including any extra time), status, and where they are. When someone is touring and also has a later booking, this is the running tour; the later booking is listed as their next booking.",
     input: z.strictObject({ property: Property }),
     run: async (ctx, i) => {
       const id = i.property ? resolvePropertyId(ctx.services.workspace, i.property) : undefined;
@@ -1084,7 +1084,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "inspect_tour",
     title: "Inspect a tour",
     kind: "read",
-    description: "What's happening on one tour: status, latest activity, questions, access grant times, access denials, recent messages, and anything that needs the team. The summary names the status once (do not repeat Cancelled, Called off, Finished, or other terminal states).",
+    description: "What's happening on one tour: status, latest activity, questions, access grant times, access denials, recent messages, and anything that needs the team. Tour time includes extra time if the window was extended. When someone is touring and also has a later booking, this is the running tour and the later booking is their next booking. The summary names the status once (do not repeat Cancelled, Called off, Finished, or other terminal states).",
     input: z.strictObject({ tourRef: TourRef }),
     run: async (ctx, i) => {
       const tour = await findTour(ctx.services, i.tourRef);
@@ -1172,7 +1172,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Pause a tour",
     kind: "consequential",
     description:
-      "Pauses one running tour: its doors are switched off and none open until the team resumes it. First call returns a yes/no question; call again with confirmationCode only after an explicit yes.",
+      "Pauses one running tour: its doors are switched off and none open until the team resumes it. When the visitor also has a later booking, this pauses the tour that is in progress. First call returns a yes/no question; call again with confirmationCode only after an explicit yes.",
     input: z.strictObject({ tourRef: TourRef, reason: z.string().min(1).max(300), confirmationCode: Code }),
     run: async (ctx, i) => {
       const target = await describeChangeTarget(ctx.services, i.tourRef, "hold");
@@ -1188,7 +1188,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Resume a paused tour",
     kind: "consequential",
     description:
-      "Resumes a tour paused by the team or by a door-system problem. Doors still open only when Tour Core's policy allows (right time, right route). First call returns a yes/no question; call again with confirmationCode only after an explicit yes.",
+      "Resumes a tour paused by the team or by a door-system problem. When the visitor also has a later booking, this resumes the tour that was paused. Doors still open only when Tour Core's policy allows (right time, right route). First call returns a yes/no question; call again with confirmationCode only after an explicit yes.",
     input: z.strictObject({ tourRef: TourRef, confirmationCode: Code }),
     run: async (ctx, i) => {
       const target = await describeChangeTarget(ctx.services, i.tourRef, "resume");
@@ -1204,7 +1204,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Call off a tour",
     kind: "consequential",
     description:
-      "Calls off one tour for good: all its access is switched off and the visitor is told. This can't be undone. First call returns a yes/no question; call again with confirmationCode only after an explicit yes. Visitors can also cancel a booked tour by text in their own words; Tour Core confirms first (Cancel your tour on {day} at {time}? Reply YES or NO.). YES: You're cancelled. Text me anytime if you want to book again. NO: Okay, your tour stays on {day} at {time}. A reply that isn't a clear yes or no is flagged (I'll check with the {team} and get back to you.). STOP still opts out. A clear cancel ask is never treated as a missing property fact.",
+      "Calls off one tour for good: all its access is switched off and the visitor is told. This can't be undone. When the visitor is touring and also has a later booking, this calls off the running tour; the later booking then becomes the one you can call off or they can cancel by text. After any end (done, closed, called off, cancelled), conversation moves to that later booking. First call returns a yes/no question; call again with confirmationCode only after an explicit yes. Visitors can also cancel a booked tour by text in their own words; Tour Core confirms first (Cancel your tour on {day} at {time}? Reply YES or NO.). YES: You're cancelled. Text me anytime if you want to book again. NO: Okay, your tour stays on {day} at {time}. A reply that isn't a clear yes or no is flagged (I'll check with the {team} and get back to you.). STOP still opts out. A clear cancel ask is never treated as a missing property fact.",
     input: z.strictObject({ tourRef: TourRef, reason: z.string().min(1).max(300), confirmationCode: Code }),
     run: async (ctx, i) => {
       const target = await describeChangeTarget(ctx.services, i.tourRef, "revoke");
@@ -1220,7 +1220,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Pause tours",
     kind: "consequential",
     description:
-      "Pauses new bookings at a property or one unit. Already-booked tours can be kept or cancelled with a text; a tour in progress always finishes. First call returns a yes/no question; if tours are already booked, say keep or cancel (bookedTours) and call again with confirmationCode only after an explicit yes. Resume with resume_tours. This is not an operator hold on one visitor.",
+      "Pauses new bookings at a property or one unit. Already-booked tours can be kept or cancelled with a text, including a later booking held while someone is still touring; a tour in progress always finishes. The cancelled count is only tours actually cancelled, never one that already ended. First call returns a yes/no question; if tours are already booked, say keep or cancel (bookedTours) and call again with confirmationCode only after an explicit yes. Resume with resume_tours. This is not an operator hold on one visitor.",
     input: z.strictObject({
       property: Property,
       unit: z.string().max(100).optional().describe("One unit to pause. Leave out to pause the whole property."),

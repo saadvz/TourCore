@@ -955,9 +955,10 @@ export class VisitorDemoSession {
    * the engine; anything Tour Core tells the visitor goes out on this
    * conversation's own transport.
    */
-  async operatorChange<T>(run: (core: TourCore, reservationId: string) => Promise<T>): Promise<T> {
-    if (!this.reservationId) throw new SetupInputError("NO_TOUR", "This visitor hasn't booked a tour yet.");
-    const result = await run(this.core, this.reservationId);
+  async operatorChange<T>(run: (core: TourCore, reservationId: string) => Promise<T>, reservationId = this.reservationId): Promise<T> {
+    const id = reservationId ?? this.reservationId;
+    if (!id) throw new SetupInputError("NO_TOUR", "This visitor hasn't booked a tour yet.");
+    const result = await run(this.core, id);
     this.clearShownMenus();
     await this.syncReplies();
     return result;
@@ -1331,6 +1332,8 @@ export class VisitorDemoSession {
       if (left && !(await this.hasFollowUpResponse(current.id))) return false;
       return this.promotePendingBookingIfEnded();
     }
+    // Called off, cancelled, or otherwise ended: the held rebook takes over.
+    if (TERMINAL.includes(current.status)) return this.promotePendingBookingIfEnded();
     return false;
   }
 

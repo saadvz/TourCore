@@ -169,7 +169,7 @@ export class MessagingConversations {
     // While the leaving issue is still open, after-close handling runs first.
     if (session && session.pendingBookingId && startsNewBookingAfterClose(message.text) && !(await session.afterCloseStillOpen())) {
       const current = await session.reservation();
-      if (!current || current.status === "COMPLETED" || current.status === "EXPIRED") {
+      if (!current || TERMINAL.includes(current.status)) {
         session.promotePendingBookingIfEnded();
       }
     }

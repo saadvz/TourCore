@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Tour updates, exception queue, monitoring, holds and approved answers
-  version: "0.3.18"
+  version: "0.3.19"
 ---
 
 # Work Exception
@@ -61,7 +61,14 @@ Tour Core sends only an `eventId` and an event type; never names or details.
 - "What's happening with Pat's tour?": find Pat's `tourRef` from the list, then
   `inspect_tour`. Summarize status, latest activity, questions, access denials
   and anything in `needsAttention`. The summary already names the status once
-  (no "Cancelled. Cancelled.").
+  (no "Cancelled. Cancelled."). Tour time includes extra time if the window
+  was extended. When they are touring and also have a later booking, these
+  tools show the running tour; the later booking is their next booking.
+- Pause, resume, or call off that running tour. After it ends for any reason
+  (done, closed, called off, cancelled), the later booking takes over and can
+  be called off or cancelled by text. If nothing is held, HI starts a new
+  conversation. `pause_tours` with cancel cancels every real future booking,
+  including a held rebook, and counts only tours actually cancelled.
 - QA on the local loopback: `inject_local_sms` then `read_local_outbox` (separate
   bubbles, never one blob). Those tools refuse unless that building is on local
   test texts. Other published buildings can stay on live visitor texting.
@@ -218,7 +225,9 @@ Tour Core sends only an `eventId` and an event type; never names or details.
 - **Pause a tour** (`place_operator_hold`), **resume** (`clear_operator_hold`),
   **call off** (`revoke_tour_access`): each returns a yes/no question first.
   Ask it word for word; call again with `confirmationCode` only after a clear
-  yes. Calling off can't be undone; say so.
+  yes. Calling off can't be undone; say so. When the visitor is touring and
+  also has a later booking, these act on the running tour. After that tour
+  ends, they act on the later booking.
 - **Pause or resume bookings** at a property or unit (`pause_tours`,
   `resume_tours`), or **remove a property** (`remove_property`): these are not
   the same as holding one visitor. Ask the exact question first. If tours are

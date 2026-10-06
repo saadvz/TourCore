@@ -460,7 +460,7 @@ export async function placeHold(services: OperatorServices, ref: string, reason:
   const { tour, session, reservation } = await liveTour(services, ref);
   assertCanChange(tour, reservation, "hold");
   const why = reason.trim().slice(0, 300) || "paused by the property team";
-  await session.operatorChange((core, id) => core.placeOperatorHold(id, why));
+  await session.operatorChange((core, id) => core.placeOperatorHold(id, why), reservation.id);
   await persistSession(services, session);
   return tourSummary(await findTour(services, ref));
 }
@@ -469,7 +469,7 @@ export async function placeHold(services: OperatorServices, ref: string, reason:
 export async function clearHold(services: OperatorServices, ref: string) {
   const { tour, session, reservation } = await liveTour(services, ref);
   assertCanChange(tour, reservation, "resume");
-  await session.operatorChange((core, id) => core.resumeReservation(id));
+  await session.operatorChange((core, id) => core.resumeReservation(id), reservation.id);
   await persistSession(services, session);
   return tourSummary(await findTour(services, ref));
 }
@@ -479,7 +479,9 @@ export async function revokeTour(services: OperatorServices, ref: string, reason
   const { tour, session, reservation } = await liveTour(services, ref);
   assertCanChange(tour, reservation, "revoke");
   const why = reason.trim().slice(0, 300) || "called off by the property team";
-  await session.operatorChange((core, id) => core.revokeReservation(id, why));
+  await session.operatorChange((core, id) => core.revokeReservation(id, why), reservation.id);
+  if (session.pendingBookingId === reservation.id) session.pendingBookingId = undefined;
+  await session.promotePendingBookingIfTourEnded();
   await persistSession(services, session);
   return tourSummary(await findTour(services, ref));
 }
