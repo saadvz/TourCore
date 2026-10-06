@@ -1754,7 +1754,7 @@ describe("overstay SMS router", () => {
       now: () => new Date(path.clock.t),
     };
     const listed = await callOperatorTool(ctx, "list_exceptions", {});
-    expect(listed.ok).toBe(true);
+    if (!listed.ok) throw new Error(listed.error);
     const leaving = (listed.result as { exceptions: Array<{ what: string; tourStatus: string; exceptionId: string }> }).exceptions.find(
       (e) => e.what === "Visitor hasn't confirmed leaving",
     );
@@ -1762,7 +1762,7 @@ describe("overstay SMS router", () => {
     expect(leaving!.tourStatus).toMatch(/Tour time ended/);
     expect(leaving!.tourStatus).not.toContain("Waiting for consent");
     const inspected = await callOperatorTool(ctx, "inspect_exception", { exceptionId: leaving!.exceptionId });
-    expect(inspected.ok).toBe(true);
+    if (!inspected.ok) throw new Error(inspected.error);
     const issue = (inspected.result as { issue: { tourStatus: string } }).issue;
     expect(issue.tourStatus).toMatch(/Tour time ended/);
     expect(issue.tourStatus).not.toContain("Waiting for consent");
