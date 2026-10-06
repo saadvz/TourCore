@@ -127,7 +127,7 @@ const WEEKDAY_WORD: Record<string, string> = {
   SUN: "sunday",
 };
 const TIME_SHIFT_ASK =
-  /\b((?:make|move|switch|change)(?: it| the tour| that)? (?:later|earlier)|(?:a |an )?(?:later|earlier) (?:time|slot|opening)|(?:later|earlier) if possible|can we do (?:it )?(?:later|earlier)|later in the week|(?:is there )?anything (?:later|earlier)|(?:later|earlier) would be better)\b/;
+  /\b((?:make|move|switch|change)(?: it| the tour| that)? (?:later|earlier)|(?:a |an )?(?:later|earlier) (?:time|slot|opening)|(?:later|earlier) if possible|can we do (?:it )?(?:later|earlier)|later in the week|(?:is there )?anything (?:later|earlier)(?! is fine)|(?:later|earlier) would be better)\b/;
 /** "sooner" is a change only as an ask, not in consent idioms like "the sooner the better". */
 const SOONER_CHANGE_ASK =
   /\b(sooner would be better|can we do (?:it )?sooner|(?:is there )?anything sooner|something sooner)\b/;
@@ -158,7 +158,16 @@ function isArrivalRemark(text: string): boolean {
   return ARRIVAL_REMARK.test(text);
 }
 
+function consentRemainder(text: string): string {
+  return text.replace(/^\s*(yes|yeah|yep|yup|ok|okay|sure)[,!.]?\s+/i, "").replace(/^but\s+/i, "").trim();
+}
+
+function isSoonerQuestionAsk(text: string): boolean {
+  return /^\s*sooner\s*\?+\s*$/i.test(text) || /^\s*sooner\s*\?+\s*$/i.test(consentRemainder(text));
+}
+
 function isSoonerChangeAsk(text: string): boolean {
+  if (isSoonerQuestionAsk(text)) return true;
   const n = stripFiller(normalize(text));
   if (SOONER_CHANGE_ASK.test(n)) return true;
   return /\bsooner\b/.test(n) && namesDayOrTime(n);
@@ -168,7 +177,7 @@ function laterOrEarlierShift(text: string): "later" | "earlier" | "later-in-week
   const n = stripFiller(normalize(text));
   if (isArrivalRemark(n) || isNegatedChange(n)) return undefined;
   if (/\blater in the week\b/.test(n)) return "later-in-week";
-  if (isSoonerChangeAsk(n)) return "earlier";
+  if (isSoonerChangeAsk(text)) return "earlier";
   if (
     /\b(make it earlier|move it earlier|an earlier time|earlier time|earlier slot|earlier if possible|can we do (?:it )?earlier|anything earlier|is there anything earlier|earlier would be better)\b/.test(n)
   ) {
@@ -204,6 +213,7 @@ function isBareLaterOrEarlier(text: string): boolean {
 function isScheduleChangeRemainder(text: string): boolean {
   const n = normalize(text);
   if (isNegatedChange(n) || isArrivalRemark(n)) return false;
+  if (isSoonerChangeAsk(text)) return true;
   if (/\b(different day|another day|another time)\b/.test(n)) return true;
   if (TIME_SHIFT_ASK.test(n)) return true;
   if (/\b(instead|switch|change to|move it|reschedule)\b/.test(n)) return true;
@@ -248,7 +258,7 @@ function hasExplicitChangeAsk(text: string): boolean {
   if (leftoverAfterConsent(text)) return false;
   if (EXPLICIT_CHANGE_PHRASE.test(n)) return true;
   if (TIME_SHIFT_ASK.test(n)) return true;
-  if (isSoonerChangeAsk(n)) return true;
+  if (isSoonerChangeAsk(text)) return true;
   if (/\brather\b/.test(n) && namesDayOrTime(n)) return true;
   return /\b(but|instead)\b/.test(n) && namesDayOrTime(n);
 }

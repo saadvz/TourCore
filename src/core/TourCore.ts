@@ -1264,7 +1264,7 @@ export class TourCore {
     }
     await this.record("QUESTION_UNANSWERED", { ...base, detail: asked });
     await this.sendConversationText({ phone, body: input.unknownReply ?? UNKNOWN_ANSWER, reservationId: reservation?.id });
-    const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : `A visitor texting from ${phone}`;
+    const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : formatPhone(phone);
     const named = resolved.unitId ? this.deps.config.units.find((u) => u.id === resolved.unitId) : undefined;
     const about = !reservation && named ? ` about ${visitorSubject(this.deps.config.property, named.name)}` : "";
     await this.notifyOperator(reservation, `${who} asked "${asked}"${about}, and there's no approved answer yet.`);
@@ -1285,7 +1285,7 @@ export class TourCore {
     if (input.recordInbound !== false) await this.recordIncoming({ phone, body: asked, prospectId: prospect?.id, reservationId: reservation?.id, meta: input.meta });
     await this.record("QUESTION_UNANSWERED", { reservationId: reservation?.id, prospectId: prospect?.id, detail: asked });
     if (!input.silent) await this.sendConversationText({ phone, body: input.reply, reservationId: reservation?.id });
-    const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : `A visitor texting from ${phone}`;
+    const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : formatPhone(phone);
     await this.notifyOperator(reservation, `${who} asked "${asked}", and there's no approved answer yet.`);
   }
 
@@ -1378,7 +1378,7 @@ export class TourCore {
     if (input.recordInbound !== false) await this.recordIncoming({ phone, body: asked, prospectId: prospect?.id, reservationId: reservation?.id, meta: input.meta });
     await this.record("QUESTION_UNANSWERED", { reservationId: reservation?.id, prospectId: prospect?.id, detail: asked });
     await this.sendConversationText({ phone, body: VISITOR_CANCEL_FAILED, reservationId: reservation?.id });
-    const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : `A visitor texting from ${phone}`;
+    const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : formatPhone(phone);
     await this.notifyOperator(reservation, `${who} asked to cancel their tour, and I couldn't cancel it from here.`);
   }
 

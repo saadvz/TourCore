@@ -372,7 +372,7 @@ export async function listExceptions(services: OperatorServices, options: { prop
         kind: "restore-conflict",
         title: TITLES["restore-conflict"],
         summary: `Couldn't be restored after a restart (${broken.problem.replace(/\.$/, "")}). No doors will open for it.`,
-        visitorName: earlier ? visitorNameOf(earlier) : `A visitor texting from ${broken.visitorPhone}`,
+        visitorName: earlier ? visitorNameOf(earlier) : formatPhone(broken.visitorPhone),
         unitName: earlier ? unitNameOf(earlier) : undefined,
         happenedAt: at,
         when: formatShortDateTime(new Date(at), config.property.timezone),
@@ -513,17 +513,34 @@ export interface FlaggedAnswerPlan {
   who: string;
 }
 
+export const QUESTION_ALREADY_HANDLED = "That question has already been handled.";
+export const ISSUE_ALREADY_HANDLED = "That's already been handled.";
+
+function looksLikePhoneLabel(name: string): boolean {
+  return /^\(?\+?\d/.test(name);
+}
+
 /** Operator-facing visitor label: first name, or the phone-based alert label. Never an id, never "A". */
 export function operatorWhoLabel(visitorName: string | undefined, phone?: string): string {
   const name = visitorName?.trim();
-  if (name && name !== UNNAMED_VISITOR && !/^A visitor\b/i.test(name)) {
+  if (name && name !== UNNAMED_VISITOR && !/^A visitor\b/i.test(name) && !looksLikePhoneLabel(name)) {
     return name.split(/\s+/)[0]!;
   }
-  return phone ? formatPhone(phone) : "the visitor";
+  if (phone) return formatPhone(phone);
+  if (name && looksLikePhoneLabel(name)) return name;
+  return "the visitor";
 }
 
 export function sendOnlyUnreachableLine(who: string): string {
   return `I couldn't text ${who}, so nothing was sent and this is still open. If you can reach them another way, do that, then mark it handled.`;
+}
+
+const MISSED_SEND = new Set(["SUPPRESSED", "FAILED", "SKIPPED"]);
+
+async function sendOnlyMissedVisitor(session: { store: { list: (kind: "messages") => Promise<Array<{ audience: string; direction: string; body: string; deliveryStatus?: string }>> } }, body: string): Promise<boolean> {
+  const outbound = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND");
+  const last = [...outbound].reverse().find((m) => m.body === body) ?? outbound.at(-1);
+  return !last || !last.deliveryStatus || MISSED_SEND.has(last.deliveryStatus);
 }
 
 /**
@@ -535,7 +552,9 @@ export function sendOnlyUnreachableLine(who: string): string {
  */
 export async function planFlaggedAnswer(services: OperatorServices, input: { exceptionId: string; approvedFact: string; appliesTo?: "property" | "unit" }, now: Date): Promise<FlaggedAnswerPlan> {
   const exception = await findException(services, input.exceptionId);
-  if (exception.status === "resolved") throw new SetupInputError("ALREADY_RESOLVED", "That question has already been handled.");
+  if (exception.status === "resolved") {
+    throw new SetupInputError("ALREADY_RESOLVED", exception.kind === "handler-failed" ? ISSUE_ALREADY_HANDLED : QUESTION_ALREADY_HANDLED);
+  }
   const tourForWho = exception.tourRef ? await findTour(services, exception.tourRef) : undefined;
   const who = operatorWhoLabel(exception.visitorName, tourForWho?.visitorPhone);
   if (exception.kind === "handler-failed") {
@@ -586,6 +605,9 @@ export async function answerFlaggedQuestion(
     }
     await tour.live.reply(fact);
     await persistSession(services, tour.live);
+    if (await sendOnlyMissedVisitor(tour.live, fact)) {
+      throw new SetupInputError("VISITOR_UNREACHABLE", sendOnlyUnreachableLine(plan.who));
+    }
     appendResolution(services, exception.propertyId, {
       exceptionId: exception.exceptionId,
       resolvedAt: now.toISOString(),

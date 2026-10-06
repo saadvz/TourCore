@@ -207,7 +207,8 @@ Never:
   record consent; later/earlier/sooner is a
   change only when it is an actual ask (`make it later`, `later in
   the week`, `can we do it later`, `anything later`, `sooner would be
-  better`, `can we do it sooner`). A named day (`tuesday works better`)
+  better`, `can we do it sooner`, `sooner?`). `yes, anything earlier is
+  fine too` records consent. A named day (`tuesday works better`)
   shows that day's times.
   A visitor text that cannot be handled opens a handler-failed issue
   (not a flagged question) and tells them the team will reply here when
@@ -227,7 +228,9 @@ Never:
   Ask `Send "{reply}" to {who}?` then after yes it returns `Sent to {who}.`
   If they cannot be texted: `I couldn't text {who}, so nothing was sent
   and this is still open. If you can reach them another way, do that,
-  then mark it handled.` Booking a regular slot withdraws that request
+  then mark it handled.` A repeat answer or resolve on that issue
+  returns `That's already been handled.` A repeat answer on a flagged
+  question returns `That question has already been handled.` Booking a regular slot withdraws that request
   (`They booked a regular time instead.`). Replacing a held or booked
   future tour also sends `That replaces your {time} tour on {day}.`
   If the requested time has already passed, the visitor is texted once

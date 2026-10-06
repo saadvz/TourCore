@@ -12,7 +12,8 @@ import { HANDLER_SNAG_ALERTED, HANDLER_SNAG_RETRY, MessagingConversations } from
 import { VisitorDemoRegistry } from "../src/visitor/session";
 import { VerificationLinks } from "../src/visitor/verificationLinks";
 import { formatPhone } from "../src/core/phone";
-import { operatorWhoLabel, sendOnlyUnreachableLine } from "../src/operator/exceptions";
+import { ISSUE_ALREADY_HANDLED, operatorWhoLabel, QUESTION_ALREADY_HANDLED, sendOnlyUnreachableLine } from "../src/operator/exceptions";
+import { apiError, fakeSendblue } from "./fakeSendblue";
 import {
   alreadyAskedLine,
   bookedForLine,
@@ -1452,6 +1453,10 @@ describe("yes-but change vs consent", () => {
     "anything sooner",
     "is there anything sooner",
     "something sooner",
+    "yes, can we do it sooner?",
+    "yes, is there anything sooner?",
+    "yes, anything sooner?",
+    "yes, something sooner?",
     "yes, sooner tuesday",
   ])("%s is a change and is not recorded as consent or flagged as a question", async (phrase) => {
     const a = await liveApp({ cleanups });
@@ -1532,6 +1537,7 @@ describe("yes-but change vs consent", () => {
     "yes, the sooner the better",
     "yes, the sooner I see it the better",
     "yes, see you sooner rather than later",
+    "yes, anything earlier is fine too",
   ])("%s records consent", async (phrase) => {
     const a = await liveApp({ cleanups });
     await firstBookingConsent(a);
@@ -1916,7 +1922,12 @@ describe("a Sendblue handler throw raises a real landlord alert", () => {
     const issue = (await a.grok("list_exceptions")).exceptions.find((item: { what: string }) => item.what === "Couldn't handle their text");
     expect(issue).toBeTruthy();
     const who = formatPhone(PHONE);
+    expect(issue.visitorName).toBe(who);
     expect(operatorWhoLabel(issue.visitorName, PHONE)).toBe(who);
+    expect((await a.grok("list_active_tours")).tours[0].visitorName).toBe(who);
+    const opened = await a.grok("inspect_exception", { exceptionId: issue.exceptionId });
+    expect(opened.issue.visitorName).toBe(who);
+    expect(opened.summary).toContain(who);
     const asked = await a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "The lobby door is on the left." });
     expect(asked.confirmation.question).toBe(`Send "The lobby door is on the left." to ${who}?`);
     expect(asked.summary).toBe(`Send "The lobby door is on the left." to ${who}?`);
@@ -1928,6 +1939,32 @@ describe("a Sendblue handler throw raises a real landlord alert", () => {
     });
     expect(done.summary).toBe(`Sent to ${who}.`);
     expect(done.summary).not.toBe("Sent to A.");
+  });
+
+  it("an unnamed flagged question uses the phone label on Send, Saved, list, inspect, and resolve", async () => {
+    const a = await liveApp({ cleanups });
+    await a.optInSms();
+    await a.text("Is there a pool?");
+    const who = formatPhone(PHONE);
+    const issue = (await a.grok("list_exceptions")).exceptions.find((item: { what: string }) => item.what === "Question with no approved answer");
+    expect(issue.visitorName).toBe(who);
+    expect((await a.grok("list_active_tours")).tours[0].visitorName).toBe(who);
+    const opened = await a.grok("inspect_exception", { exceptionId: issue.exceptionId });
+    expect(opened.issue.visitorName).toBe(who);
+    const asked = await a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "No pool" });
+    expect(asked.summary).toBe(`Send "No pool" to ${who}? Future visitors who ask the same thing will get it too. Save it?`);
+    expect(asked.confirmation.question).toBe(`Send "No pool" to ${who}? Future visitors who ask the same thing will get it too. Save it?`);
+    expect(asked.summary).not.toMatch(/\bA\b/);
+    const done = await a.grok("answer_flagged_question", {
+      exceptionId: issue.exceptionId,
+      approvedFact: "No pool",
+      confirmationCode: asked.confirmation.code,
+    });
+    expect(done.summary).toBe(`Saved "No pool" and sent it to ${who}.`);
+    expect(done.summary).not.toContain(" to A.");
+    const again = await a.grok("resolve_exception", { exceptionId: issue.exceptionId, resolutionNote: "Already sent." });
+    expect(again.summary).toBe("That was already marked handled.");
+    expect(again.issue.visitorName).toBe(who);
   });
 
   it("send-only leaves the issue open when the visitor cannot be texted", async () => {
@@ -1964,6 +2001,83 @@ describe("a Sendblue handler throw raises a real landlord alert", () => {
     expect(asked.summary).toContain("Future visitors who ask the same thing will get it too");
     const done = await a.approve("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "There's a gym on the roof." });
     expect(done.savedToSetup).toBe(true);
+  });
+
+  it("a repeat answer or resolve on a handler-failed issue says That's already been handled.", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    const session = a.visitors.latestForPhone("prop_100_alfred_way", PHONE, "messaging")!;
+    session.bookOffered = async () => {
+      throw new Error(`No reservation ${session.reservationId}`);
+    };
+    await a.text("Can I move it to 3:30?");
+    const issue = (await a.grok("list_exceptions")).exceptions.find((item: { what: string }) => item.what === "Couldn't handle their text");
+    await a.approve("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "The lobby door is on the left." });
+    await expect(a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "The lobby door is on the left." })).rejects.toThrow(ISSUE_ALREADY_HANDLED);
+    const resolved = await a.grok("resolve_exception", { exceptionId: issue.exceptionId, resolutionNote: "Already sent." });
+    expect(resolved.summary).toBe(ISSUE_ALREADY_HANDLED);
+  });
+
+  it("a repeat answer on a flagged question says That question has already been handled.", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    await a.text("Is there a gym?");
+    const [issue] = (await a.grok("list_exceptions")).exceptions;
+    await a.approve("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "There's a gym on the roof." });
+    await expect(a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "There's a gym on the roof." })).rejects.toThrow(QUESTION_ALREADY_HANDLED);
+  });
+
+  it("send-only after STOP still leaves the issue open across a restart", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    const session = a.visitors.latestForPhone("prop_100_alfred_way", PHONE, "messaging")!;
+    session.bookOffered = async () => {
+      throw new Error(`No reservation ${session.reservationId}`);
+    };
+    await a.text("Can I move it to 3:30?");
+    const issue = (await a.grok("list_exceptions")).exceptions.find((item: { what: string }) => item.what === "Couldn't handle their text");
+    a.clock.t = at(13, 58);
+    await a.text("I'm here");
+    await a.text("at unit 1A");
+    await a.text("STOP");
+    const b = await liveApp({ root: a.root, clock: a.clock, net: a.net, fake: a.fake, cleanups });
+    const asked = await b.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "Call you shortly." });
+    expect(asked.confirmation.question).toBe('Send "Call you shortly." to Testy?');
+    const before = b.fake.sent.filter((item) => item.number === PHONE && item.content === "Call you shortly.").length;
+    await expect(
+      b.grok("answer_flagged_question", {
+        exceptionId: issue.exceptionId,
+        approvedFact: "Call you shortly.",
+        confirmationCode: asked.confirmation.code,
+      }),
+    ).rejects.toThrow(sendOnlyUnreachableLine("Testy"));
+    expect(b.fake.sent.filter((item) => item.number === PHONE && item.content === "Call you shortly.")).toHaveLength(before);
+    expect((await b.grok("list_exceptions")).exceptions.find((item: { exceptionId: string }) => item.exceptionId === issue.exceptionId)).toBeTruthy();
+  });
+
+  it("send-only leaves the issue open when the provider returns 400", async () => {
+    let fail = false;
+    const fake = fakeSendblue({ sendError: () => (fail ? apiError(400) : undefined) });
+    const a = await liveApp({ cleanups, fake });
+    await a.book();
+    const session = a.visitors.latestForPhone("prop_100_alfred_way", PHONE, "messaging")!;
+    session.bookOffered = async () => {
+      throw new Error(`No reservation ${session.reservationId}`);
+    };
+    await a.text("Can I move it to 3:30?");
+    const [issue] = (await a.grok("list_exceptions")).exceptions;
+    const asked = await a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "Call you shortly." });
+    fail = true;
+    const before = a.fake.sent.filter((item) => item.number === PHONE && item.content === "Call you shortly.").length;
+    await expect(
+      a.grok("answer_flagged_question", {
+        exceptionId: issue.exceptionId,
+        approvedFact: "Call you shortly.",
+        confirmationCode: asked.confirmation.code,
+      }),
+    ).rejects.toThrow(sendOnlyUnreachableLine("Testy"));
+    expect(a.fake.sent.filter((item) => item.number === PHONE && item.content === "Call you shortly.")).toHaveLength(before);
+    expect((await a.grok("list_exceptions")).exceptions.find((item: { exceptionId: string }) => item.exceptionId === issue.exceptionId)).toBeTruthy();
   });
 });
 
@@ -2034,6 +2148,18 @@ describe("a leftover booking menu is not live", () => {
     const reservation = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!;
     expect(reservation.slotStart).toBe(atTime(14).toISOString());
     expect(reservation.consentId).toBeFalsy();
+  });
+
+  it("at consent, sooner? is a change and offers the day menu", async () => {
+    const a = await liveApp({ cleanups });
+    await firstBookingConsent(a);
+    const replies = await a.text("sooner?");
+    expect(replies.join("\n")).toMatch(/Which day works for you\?|I have tours available/);
+    expect(replies.join("\n")).not.toContain("Sorry, I didn't catch that.");
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    const bundle = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle;
+    expect(bundle.reservations[0]!.consentId).toBeFalsy();
+    expect(bundle.auditEvents.some((event) => event.type === "QUESTION_UNANSWERED")).toBe(false);
   });
 
   it("yes but make it later then a menu pick still moves the booking", async () => {
@@ -2130,42 +2256,96 @@ describe("an operator booking change stale-dates a leftover menu", () => {
     const reservation = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations.find((item) => item.slotStart && item.status !== "CANCELLED")!;
     expect(reservation.slotStart).toBe(atTime(15, 15).toISOString());
   });
+
+  it("accepting a proposed 4:30 then leftover 1 does not move to 3:30", async () => {
+    const a = await liveApp({ cleanups });
+    await takenTuesdayMenu(a);
+    await a.text("Can I come at 3:15?");
+    const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
+    await a.grok("propose_tour_time", { tourTimeRequestId: id, newStartsAt: "4:30 PM" });
+    const taken = await a.text("Can I come Tuesday at 2:00?");
+    expect(taken.join("\n")).toContain("Reply 1 for 3:30 PM");
+    const accepted = await a.text("yes");
+    expect(accepted.join("\n")).toMatch(/4:30 PM|booked/);
+    const leftover = await a.text("1");
+    expect(leftover.join("\n")).not.toContain("That replaces your");
+    expect(leftover.join("\n")).not.toContain(bookedForLine("3:30 PM", "Tuesday, Sep 29"));
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.visitorPhone === PHONE)!;
+    const reservation = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations.find((item) => item.slotStart && item.status !== "CANCELLED")!;
+    expect(reservation.slotStart).toBe(atTime(16, 30).toISOString());
+  });
+
+  it("a leftover 1 after a one-off is confirmed does not book 2:00", async () => {
+    const a = await liveApp({ cleanups });
+    await a.optInSms();
+    await a.text("1");
+    const menu = await a.text("1");
+    expect(menu.join("\n")).toContain("2:00 PM");
+    expect(menu.join("\n")).toContain("3:30 PM");
+    await a.approve("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "3:15 PM today" });
+    const yes = await a.text("YES");
+    expect(yes.join("\n")).toContain("Great, you're booked for 3:15 PM");
+    const leftover = await a.text("1");
+    expect(leftover.join("\n")).not.toContain(bookedForLine("2:00 PM", "Monday, Sep 28"));
+    expect(leftover.join("\n")).not.toContain(bookedForLine("3:30 PM", "Monday, Sep 28"));
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging" && item.visitorPhone === PHONE)!;
+    const reservation = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations.find((item) => item.slotStart && item.status !== "CANCELLED")!;
+    expect(reservation.slotStart).toBe(atTime(15, 15).toISOString());
+  });
+
+  it("a leftover 1 after cancel-by-text does not book Tuesday 3:30", async () => {
+    const a = await liveApp({ cleanups });
+    await takenTuesdayMenu(a);
+    await a.text("cancel");
+    await a.text("yes");
+    const leftover = await a.text("1");
+    expect(leftover.join("\n")).not.toContain(bookedForLine("3:30 PM", "Tuesday, Sep 29"));
+    expect(leftover.join("\n")).not.toContain("That replaces your");
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.visitorPhone === PHONE)!;
+    const open = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations.find((item) => item.slotStart && item.status !== "CANCELLED");
+    expect(open).toBeUndefined();
+  });
+
+  it("a leftover 1 after revoke does not book Tuesday 3:30", async () => {
+    const a = await liveApp({ cleanups });
+    await takenTuesdayMenu(a);
+    const tours = (await a.grok("list_active_tours")).tours as Array<{ tourRef: string; visitorName: string }>;
+    const tour = tours.find((item) => item.visitorName.startsWith("Testy"));
+    await a.approve("revoke_tour_access", { tourRef: tour!.tourRef, reason: "Called off" });
+    const leftover = await a.text("1");
+    expect(leftover.join("\n")).not.toContain(bookedForLine("3:30 PM", "Tuesday, Sep 29"));
+    expect(leftover.join("\n")).not.toContain("That replaces your");
+    const saved = a.ws.listTours("prop_100_alfred_way").find((item) => item.visitorPhone === PHONE)!;
+    const open = a.ws.loadTour("prop_100_alfred_way", saved.tourId)!.bundle.reservations.find((item) => item.slotStart && item.status !== "CANCELLED" && item.status !== "REVOKED");
+    expect(open).toBeUndefined();
+  });
 });
 
 describe("a held rebook leftover menu number does not move the booking", () => {
-  it("bare 2 before consent, after consent, and while arrival is pending leaves Thursday 2:00 held", async () => {
+  it("overstay another-time leftover 2 leaves Thursday 2:00 held", async () => {
     const a = await liveApp({ cleanups });
     await a.book();
+    await a.textFrom(OTHER, "TOUR");
+    await a.textFrom(OTHER, "YES");
+    await a.textFrom(OTHER, "1");
+    await a.textFrom(OTHER, "1");
+    await a.textFrom(OTHER, "1");
     a.clock.t = at(13, 58);
     await a.text("I'm here");
     await a.text("at unit 1A");
-    const booked = await a.text("Can I come Thursday at 2:00?");
+    const noTime = await a.text("can I have more time?");
+    expect(noTime.join("\n")).toContain("Sorry, I can't add more time to this tour");
+    const offered = await a.text("sure, another time");
+    expect(offered.join("\n")).toMatch(/Which day works for you\?|I have tours available/);
+    await a.text("Thursday");
+    const booked = await a.text("1");
     expect(booked.join("\n")).toMatch(/2:00 PM|Thursday/);
-    const session = a.visitors.latestForPhone("prop_100_alfred_way", PHONE, "messaging")!;
-    expect(session.pendingBookingId).toBeTruthy();
+    const leftover = await a.text("2");
+    expect(leftover.join("\n")).not.toContain("That replaces your");
+    expect(leftover.join("\n")).not.toContain(bookedForLine("3:30 PM", "Thursday, Oct 1"));
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.visitorPhone === PHONE)!;
+    const held = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations.find((item) => item.status === "AWAITING_CONSENT");
     const thursday = zonedTimeToUtc({ year: 2026, month: 10, day: 1, hour: 14, minute: 0 }, "America/New_York");
-    const heldSlot = async () => {
-      const pending = session.pendingBookingId ?? session.reservationId;
-      const reservation = pending ? await session.store.get("reservations", pending) : undefined;
-      return reservation?.slotStart;
-    };
-    expect(await heldSlot()).toBe(thursday.toISOString());
-
-    const before = await a.text("2");
-    expect(before.join("\n")).toContain("Sorry, I didn't catch that.");
-    expect(before.join("\n")).not.toContain("That replaces your");
-    expect(await heldSlot()).toBe(thursday.toISOString());
-
-    await a.text("yes");
-    const after = await a.text("2");
-    expect(after.join("\n")).toContain("Sorry, I didn't catch that.");
-    expect(after.join("\n")).not.toContain("That replaces your");
-    expect(await heldSlot()).toBe(thursday.toISOString());
-
-    session.expect("touring", { kind: "confirm-stop", stop: { doorName: "Unit 1A", kind: "UNIT", unitName: "Unit 1A", label: "Unit 1A" } });
-    const pendingArrival = await a.text("2");
-    expect(pendingArrival.join("\n")).toMatch(/Sorry, I didn't catch that|Are you at Unit 1A now/);
-    expect(pendingArrival.join("\n")).not.toContain("That replaces your");
-    expect(await heldSlot()).toBe(thursday.toISOString());
+    expect(held?.slotStart).toBe(thursday.toISOString());
   });
 });

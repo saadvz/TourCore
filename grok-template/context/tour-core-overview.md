@@ -43,7 +43,8 @@ earlier`, `yes, no need to switch`, `yes, the sooner the better`) record
 consent; `later`/`earlier`/`sooner` is
 a change only when it is an actual ask (`make it later`, `earlier
 if possible`, `later in the week`, `can we do it later`, `anything later`,
-`sooner would be better`, `can we do it sooner`). A named day (`tuesday
+`sooner would be better`, `can we do it sooner`, `sooner?`).
+`yes, anything earlier is fine too` records consent. A named day (`tuesday
 works better`) shows
 that day's times. A leftover number, time, or bare later/earlier/sooner
 does not move a booking. If a visitor text cannot be handled, they are told
@@ -63,7 +64,9 @@ you'd reply as soon as you can.` `answer_flagged_question` on that issue texts t
 visitor and does not save a fact. First call: `Send "{reply}" to {who}?`
 After yes: `Sent to {who}.` If they cannot be texted: `I couldn't text
 {who}, so nothing was sent and this is still open. If you can reach them
-another way, do that, then mark it handled.`
+another way, do that, then mark it handled.` A repeat answer or resolve
+on that issue returns `That's already been handled.` A repeat answer on a
+flagged question returns `That question has already been handled.`
 Booking a regular slot withdraws that request so a later
 approve cannot double-book; replacing a held or booked future tour also
 sends `That replaces your {time} tour on {day}.` Operators see

@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Tour updates, exception queue, monitoring, holds and approved answers
-  version: "0.3.17"
+  version: "0.3.18"
 ---
 
 # Work Exception
@@ -108,7 +108,8 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   starting over. The property stays published: an approved fact never needs
   another readiness check or practice tour.
   If the operator doesn't know the answer, don't guess. Offer to mark it
-  handled once they've dealt with it another way.
+  handled once they've dealt with it another way. A repeat answer returns
+  exactly `That question has already been handled.`
 - **Couldn't handle their text.** This is not a flagged question. Show the
   landlord alert line as the detail. Next step:
   `Tell me what to say and I'll text them, or book or change their tour yourself.`
@@ -123,7 +124,8 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   still open. If you can reach them another way, do that, then mark it
   handled.` and leaves the issue open. {who} is their first name, or the
   phone-based label when they have no name — never "A". `resolve_exception`
-  also closes it.
+  also closes it. A repeat answer or resolve returns exactly
+  `That's already been handled.`
 - **Mark handled.** `resolve_exception` with a short note in the operator's
   words. It changes nothing else. For "Visitor hasn't confirmed leaving",
   marking it handled also ends the after-close visitor alerts (alerts also
@@ -174,8 +176,9 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   arrival remarks at consent record consent; later/earlier/sooner is a
   change only when it is an actual ask (`make it later`, `later in the week`,
   `can we do it later`, `anything later`, `sooner would be better`,
-  `can we do it sooner`, `anything sooner`). Idioms such as `yes, the
-  sooner the better` record consent. A
+  `can we do it sooner`, `anything sooner`, `sooner?`). Idioms such as
+  `yes, the sooner the better` and `yes, anything earlier is fine too`
+  record consent. A
   named day (`tuesday works better`) shows that day's times. A visitor
   text that cannot be handled opens a handler-failed issue (not a flagged
   question) and tells them the team will reply here, or asks them to text
