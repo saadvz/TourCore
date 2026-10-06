@@ -230,8 +230,14 @@ export class GoogleDriveStore implements DocumentStore {
 
   async get(path: string): Promise<StoredDocument | undefined> {
     await this.reloadCatalog();
+    return this.readListed(path);
+  }
+
+  /** Reads one catalog entry already loaded. Does not reload the catalog. */
+  private async readListed(path: string): Promise<StoredDocument | undefined> {
     const entry = this.catalog.entries[path];
     if (!entry) return undefined;
+    const generation = this.catalog.generation;
     const read = await retryIdempotent(() => this.client.readFile(entry.fileId));
     let envelope: Envelope;
     try {
@@ -243,7 +249,7 @@ export class GoogleDriveStore implements DocumentStore {
     assertStoreSchema(envelope.schemaVersion);
     const sha256 = sha256Json(envelope.body);
     if (sha256 !== entry.sha256) throw new StorageTornError();
-    return { path, schemaVersion: envelope.schemaVersion, kind: envelope.kind, body: envelope.body, revision: `${this.catalog.generation}:${sha256}`, sha256 };
+    return { path, schemaVersion: envelope.schemaVersion, kind: envelope.kind, body: envelope.body, revision: `${generation}:${sha256}`, sha256 };
   }
 
   async put(path: string, body: unknown, options: PutOptions): Promise<StoredDocument> {
@@ -345,12 +351,8 @@ export class GoogleDriveStore implements DocumentStore {
   async list(prefix = ""): Promise<StoredDocument[]> {
     await this.reloadCatalog();
     const paths = Object.keys(this.catalog.entries).filter((path) => path.startsWith(prefix));
-    const docs: StoredDocument[] = [];
-    for (const path of paths) {
-      const doc = await this.get(path);
-      if (doc) docs.push(doc);
-    }
-    return docs;
+    const docs = await Promise.all(paths.map((path) => this.readListed(path)));
+    return docs.filter((doc): doc is StoredDocument => !!doc);
   }
 
   async delete(path: string, options?: { ifRevision?: string }): Promise<void> {

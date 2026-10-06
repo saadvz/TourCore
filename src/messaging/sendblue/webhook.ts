@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { toE164 } from "../Messenger";
 import type { InboundMessage } from "../inbound";
+import { runInboundSmsTiming, smsCorrelationId } from "../inboundTiming";
 import type { MessagingLedger } from "../ledger";
 import { channelFromService } from "./adapter";
 
@@ -130,7 +131,11 @@ export async function handleSendblueWebhook(
   const key = `sendblue:in:${parsed.message.providerMessageId}`;
   if (!deps.ledger.claim(key, now, { provider: "sendblue", messageId: parsed.message.providerMessageId })) return { status: 200, body: { duplicate: true } };
   try {
-    const handled = await deps.receive(parsed.message);
+    const handled = await runInboundSmsTiming(
+      smsCorrelationId("sendblue", parsed.message.providerMessageId),
+      deps.log ?? (() => undefined),
+      () => deps.receive(parsed.message),
+    );
     deps.ledger.complete(key, undefined, { correlationId: handled ? handled.correlationId : undefined, at: deps.now?.() });
     return { status: 200, body: { ok: true } };
   } catch (err) {

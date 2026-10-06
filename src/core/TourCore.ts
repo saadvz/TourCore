@@ -15,6 +15,7 @@ import {
 } from "../domain/model";
 import { canTransition, isCancelableReservation, isRunningReservation, TERMINAL, transition } from "../domain/stateMachine";
 import type { DurinAccessAdapter, DurinAccessResult, DurinHealth } from "../durin/DurinAccessAdapter";
+import { timeOutboundSend } from "../messaging/inboundTiming";
 import { MessagingError, type DeliveryReceipt, type MessageChannel, type Messenger } from "../messaging/Messenger";
 import { withPrompt, type ReplyPrompt } from "../messaging/presentation";
 import { evaluateAccess, type AccessDecision, type AccessDecisionCode } from "../policy/evaluateAccess";
@@ -2113,7 +2114,9 @@ export class TourCore {
     await store.put("messages", message);
     let receipt: DeliveryReceipt;
     try {
-      receipt = await messenger.send({ to: m.to, toName: m.toName, audience: m.audience, body: m.body, idempotencyKey: message.id, correlationId: this.deps.correlationId });
+      receipt = await timeOutboundSend(() =>
+        messenger.send({ to: m.to, toName: m.toName, audience: m.audience, body: m.body, idempotencyKey: message.id, correlationId: this.deps.correlationId }),
+      );
     } catch (err) {
       const code = err instanceof MessagingError ? err.code : "MESSAGING_FAILED";
       receipt = { provider: messenger.provider, channel: "UNKNOWN", status: "FAILED", sentAt: this.nowIso(), error: { code, message: err instanceof Error ? err.message : "send failed" } };

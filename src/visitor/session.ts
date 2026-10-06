@@ -863,11 +863,20 @@ export class VisitorDemoSession {
 
   async releaseUnconfirmedOperatorTour(): Promise<void> {
     await this.core.releaseExpiredOperatorScheduled();
-    const reservation = await this.reservation();
-    if (this.expected?.awaiting.kind === "confirm-operator-tour" && reservation?.awaitingVisitorConfirm?.kind !== "OPERATOR_SCHEDULED") {
-      this.expected = undefined;
-    }
+    await this.settleOperatorConfirmPrompt();
     await this.syncReplies();
+  }
+
+  /**
+   * True when this session is waiting on an operator-scheduled confirm, so the
+   * caller still needs to save. Clears that prompt once the hold is gone.
+   */
+  async settleOperatorConfirmPrompt(): Promise<boolean> {
+    const waiting = this.expected?.awaiting.kind === "confirm-operator-tour";
+    if (!waiting) return false;
+    const reservation = await this.reservation();
+    if (reservation?.awaitingVisitorConfirm?.kind !== "OPERATOR_SCHEDULED") this.expected = undefined;
+    return true;
   }
 
   async approveTimeRequest(requestId: string, options: { outsideTourHours?: boolean } = {}) {

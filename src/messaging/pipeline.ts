@@ -1,4 +1,5 @@
 import type { InboundMessage } from "./inbound";
+import { runInboundSmsTiming, smsCorrelationId } from "./inboundTiming";
 import type { MessagingLedger } from "./ledger";
 import type { MessagingProvider, WebhookHttpRequest } from "./provider";
 
@@ -49,7 +50,11 @@ export async function handleProviderWebhook(
     return { status: 200, body: { duplicate: true } };
   }
   try {
-    const handled = await deps.receive(parsed.message);
+    const handled = await runInboundSmsTiming(
+      smsCorrelationId(provider.id, parsed.message.providerMessageId),
+      deps.log ?? (() => undefined),
+      () => deps.receive(parsed.message),
+    );
     deps.ledger.complete(key, undefined, { correlationId: handled?.correlationId, at: deps.now?.() });
     return { status: 200, body: { ok: true } };
   } catch (err) {

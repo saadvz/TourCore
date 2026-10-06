@@ -5,6 +5,7 @@ import { normalizePhone } from "../core/phone";
 import { keywordOf, type IntentInterpreter } from "../intent";
 import { MessagingEndpoints, type MessagingEndpoint } from "../messaging/endpoints";
 import { hasInboundMedia, type InboundMessage } from "../messaging/inbound";
+import { timeOutboundSend } from "../messaging/inboundTiming";
 import type { MessagingAdapter } from "../messaging/Messenger";
 import { TERMINAL } from "../domain/stateMachine";
 import type { Reservation, TourTimeRequest } from "../domain/model";
@@ -313,7 +314,7 @@ export class MessagingConversations {
   }
 
   private async sendLine(propertyId: string | undefined, phone: string, body: string): Promise<void> {
-    await this.deps.transport(propertyId).send({ to: phone, audience: "PROSPECT", body }).catch(() => undefined);
+    await timeOutboundSend(() => this.deps.transport(propertyId).send({ to: phone, audience: "PROSPECT", body })).catch(() => undefined);
   }
 
   private pendingPick(phone: string, line: string): PendingPick | undefined {
@@ -525,12 +526,30 @@ export class MessagingConversations {
     }
   }
 
-  /** Releases operator-set tours the visitor never confirmed. Safe to call often. */
+  /**
+   * Releases operator-set tours the visitor never confirmed. One scan per
+   * shared record store. Nothing is saved unless a tour was released or a
+   * session is still waiting on that confirm.
+   */
   async releaseUnconfirmed(): Promise<void> {
+    const groups = new Map<TourCoreStore, VisitorDemoSession[]>();
     for (const session of this.deps.registry.all()) {
       if (session.kind !== "messaging") continue;
-      await session.releaseUnconfirmedOperatorTour();
-      await this.save(session);
+      const list = groups.get(session.store) ?? [];
+      list.push(session);
+      groups.set(session.store, list);
+    }
+    for (const sessions of groups.values()) {
+      const released = await sessions[0]!.core.releaseExpiredOperatorScheduled();
+      let waiting = false;
+      for (const session of sessions) {
+        if (await session.settleOperatorConfirmPrompt()) waiting = true;
+      }
+      if (released.length === 0 && !waiting) continue;
+      for (const session of sessions) {
+        await session.refreshThread();
+        await this.save(session);
+      }
     }
   }
 

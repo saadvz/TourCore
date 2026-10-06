@@ -81,6 +81,24 @@ describe("Google Drive store", () => {
     expect(await store.get("a.json")).toMatchObject({ body: { n: 1 } });
   });
 
+  it("lists files with one catalog read", async () => {
+    const fake = new FakeGoogleDrive();
+    const store = await GoogleDriveStore.open(fake, "Tour Core", "store_list");
+    await store.put("a.json", { schemaVersion: 1, n: 1 }, { schemaVersion: 1, kind: "record" });
+    await store.put("b.json", { schemaVersion: 1, n: 2 }, { schemaVersion: 1, kind: "record" });
+    await store.put("c.json", { schemaVersion: 1, n: 3 }, { schemaVersion: 1, kind: "record" });
+    const catalogId = [...fake.files.values()].find((file) => file.meta.name === "_catalog.json")!.meta.id;
+    fake.reads.length = 0;
+    const listed = await store.list("");
+    expect(listed.map((doc) => doc.path).sort()).toEqual(["a.json", "b.json", "c.json"]);
+    expect(fake.reads.filter((id) => id === catalogId)).toHaveLength(1);
+    expect(fake.reads).toHaveLength(4);
+    fake.reads.length = 0;
+    expect(await store.get("b.json")).toMatchObject({ body: { n: 2 } });
+    expect(fake.reads.filter((id) => id === catalogId)).toHaveLength(1);
+    expect(fake.reads).toHaveLength(2);
+  });
+
   it("leaves every file private", async () => {
     const fake = new FakeGoogleDrive();
     const store = await GoogleDriveStore.open(fake, "Tour Core", "store_private");

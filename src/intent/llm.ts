@@ -2,6 +2,7 @@ import { z } from "zod";
 import { cannotCancelRunningOfferLater, laterCancelConfirm } from "../core/availabilityCopy";
 import { isoDate, parseIsoDate } from "../core/schedule";
 import { formatDay, formatTime } from "../core/timezone";
+import { addInboundModelMs, intentModelTimeoutMs } from "../messaging/inboundTiming";
 import { HelpProblemSchema, type StepAwaiting, type ConversationStep, type IntentInterpretation, type IntentInterpreter, type InterpretContext, type TourIntent } from "./model";
 
 /**
@@ -198,7 +199,13 @@ export class LLMIntentInterpreter implements IntentInterpreter {
       ...(ctx.today ? { today: isoDate(ctx.today) } : {}),
       message: ctx.message.slice(0, 500),
     });
-    const text = await this.model.complete({ system: SYSTEM, user, signal: AbortSignal.timeout(this.options.timeoutMs ?? 4000) });
+    const started = Date.now();
+    let text = "";
+    try {
+      text = await this.model.complete({ system: SYSTEM, user, signal: AbortSignal.timeout(intentModelTimeoutMs(this.options.timeoutMs)) });
+    } finally {
+      addInboundModelMs(Date.now() - started);
+    }
     const parsed = ModelReplySchema.safeParse(jsonBlock(text));
     if (!parsed.success) return rejected;
     const intent = toIntent(parsed.data, ctx);
