@@ -13,13 +13,17 @@ DONE, "I'm out", or "leaving" ends the tour with the usual goodbye. After a
 +15 close, other replies alert the team once per message and always reply
 to the visitor, until DONE, the operator marks the leaving issue handled,
 or 24 hours pass (alerts stop then; the leaving issue stays open until
-DONE or handled). A standalone HI or a clear booking phrase starts a new
-booking; a greeting with more text, or anything about being stuck or
-locked in, does not. A rebook during a tour stays secondary until that
-tour ends, then unfinished consent or identity checks continue. After
-the tour ends, unanswered consent is asked again as the booked-for
-line for the new time, then the original consent question. DONE after the close uses the usual
-thanks and follow-up; a yes is the same follow-up as a normal finish. STOP
+DONE or handled). A standalone HI or yo, or a clear booking phrase (including
+see it again / schedule another visit), starts a new booking; a
+greeting with more text, or anything about being stuck, locked,
+jammed, or unable to leave, does not. A rebook or custom-time
+request during a tour stays secondary until that tour ends, then
+unfinished consent or identity checks continue. While the leaving
+issue is open after the close, stuck-inside texts stay on after-close
+handling. After the follow-up reply, unanswered consent is the
+booked-for line for the new time, then the original consent question.
+DONE after the close uses the usual thanks and follow-up; a yes is
+the same follow-up as a normal finish and does not record consent. STOP
 during a tour stops visitor texts only; the tour stays on its window and
 team alerts still go out. Afterwards it sends a recap and one follow-up
 question.

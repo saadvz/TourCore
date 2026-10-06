@@ -1038,6 +1038,8 @@ describe("QA review blocking items", () => {
     const booked = (await ctx.session.store.get("reservations", pending!.id))!;
     expect(["AWAITING_VERIFICATION", "READY"]).toContain(booked.status);
     await ctx.say("DONE");
+    expect((await ctx.session.reservation())!.id).toBe(firstId);
+    await ctx.say("no");
     const active = (await ctx.session.reservation())!;
     expect(active.id).toBe(pending!.id);
     if (active.status === "AWAITING_VERIFICATION") {
@@ -1098,6 +1100,104 @@ describe("QA review blocking items", () => {
     bookedThenConsent(resolved, pendingResolved);
   });
 
+  it("unanswered rebook consent: follow-up yes does not record consent, then booked-for and consent go out", async () => {
+    const ctx = await touringSession("t-rebook-follow-yes");
+    await rebookNextOpenTime(ctx);
+    const pending = (await ctx.session.pendingBooking())!;
+    expect(await ctx.session.pendingBookingNeedsConsent()).toBe(true);
+    await ctx.say("DONE");
+    expect((await ctx.session.reservation())!.id).toBe(ctx.reservationId);
+    expect((await ctx.session.store.get("reservations", pending.id))!.consentId).toBeUndefined();
+    await ctx.say("yes");
+    const booked = (await ctx.session.store.get("reservations", pending.id))!;
+    expect(booked.consentId).toBeUndefined();
+    expect(booked.status).toBe("AWAITING_CONSENT");
+    const replies = ctx.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text);
+    expect(replies).toContain(VisitorDenialCopy.followUpYes(ctx.session.config.operator.name));
+    const start = new Date(pending.slotStart!);
+    expect(replies.at(-2)).toBe(bookedForLine(formatTime(start, TZ), formatDay(start, TZ)));
+    expect(replies.at(-1)).toBe(`${CONSENT_TEXT}\nReply YES or NO.`);
+    const followIdx = replies.lastIndexOf(VisitorDenialCopy.followUpYes(ctx.session.config.operator.name));
+    expect(followIdx).toBeGreaterThan(-1);
+    expect(followIdx).toBeLessThan(replies.length - 2);
+    const alerts = await operatorAlertsFromSession(ctx.session);
+    expect(alerts).toContain(`Pat Smith toured ${PLACE} and would like someone to follow up.`);
+  });
+
+  it("unanswered rebook consent: follow-up no then booked-for and consent go out", async () => {
+    const ctx = await touringSession("t-rebook-follow-no");
+    await rebookNextOpenTime(ctx);
+    const pending = (await ctx.session.pendingBooking())!;
+    await ctx.say("DONE");
+    await ctx.say("no");
+    expect((await ctx.session.store.get("reservations", pending.id))!.consentId).toBeUndefined();
+    expect((await ctx.session.store.get("reservations", pending.id))!.status).toBe("AWAITING_CONSENT");
+    const replies = ctx.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text);
+    expect(replies).toContain("No problem. Thanks again for visiting!");
+    const start = new Date(pending.slotStart!);
+    expect(replies.at(-2)).toBe(bookedForLine(formatTime(start, TZ), formatDay(start, TZ)));
+    expect(replies.at(-1)).toBe(`${CONSENT_TEXT}\nReply YES or NO.`);
+    const alerts = await operatorAlertsFromSession(ctx.session);
+    expect(alerts.some((x) => x.includes("would like someone to follow up"))).toBe(false);
+  });
+
+  it("after +15 close with a held booking, stuck-inside is after-close not help", async () => {
+    const ctx = await touringSession("t-rebook-stuck");
+    await rebookNextOpenTime(ctx);
+    ctx.now.t = Date.parse(ctx.windowEnd) + 15 * 60_000;
+    ctx.session.clock.jumpTo(new Date(ctx.now.t));
+    await ctx.session.overstay!.tickSession(ctx.session);
+    expect((await ctx.session.reservation())!.status).toBe("EXPIRED");
+    expect(ctx.session.pendingBookingId).toBeTruthy();
+    const text = "I'm still stuck inside, the door won't open";
+    await ctx.say(text);
+    const replies = ctx.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text);
+    expect(replies.at(-1)).toBe(visitorRepliedAfterClose());
+    expect(replies.at(-1)).not.toMatch(/help/i);
+    const alerts = await operatorAlertsFromSession(ctx.session);
+    expect(alerts.some((x) => x.includes("replied after their tour") && x.includes(text.slice(0, 40)))).toBe(true);
+    expect(alerts.some((x) => x.includes("asked for help"))).toBe(false);
+    expect((await ctx.session.reservation())!.id).toBe(ctx.reservationId);
+    expect((await ctx.session.reservation())!.status).toBe("EXPIRED");
+    expect(ctx.session.overstay!.get(ctx.reservationId)?.cancelled).toBeFalsy();
+    expect(ctx.session.pendingBookingId).toBeTruthy();
+
+    const { mkdtempSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { PropertyWorkspace } = await import("../src/setup/workspace");
+    const { listExceptions } = await import("../src/operator/exceptions");
+    const root = mkdtempSync(join(tmpdir(), "tourcore-stuck-exc-"));
+    const ws = new PropertyWorkspace(root);
+    ws.save(ctx.session.config);
+    const { record, bundle } = await ctx.session.record();
+    ws.recordVisitorDemo(ctx.session.propertyId, record, bundle);
+    const leaving = (await listExceptions({ workspace: ws, now: () => new Date(ctx.now.t) }, { includeClosed: true })).filter((e) => e.kind === "overstay");
+    expect(leaving.some((e) => e.status === "open")).toBe(true);
+  });
+
+  it("DONE after +15 close with a held booking sends follow-up before the booking takes over", async () => {
+    const ctx = await touringSession("t-rebook-close-done");
+    await rebookNextOpenTime(ctx);
+    const pending = (await ctx.session.pendingBooking())!;
+    ctx.now.t = Date.parse(ctx.windowEnd) + 15 * 60_000;
+    ctx.session.clock.jumpTo(new Date(ctx.now.t));
+    await ctx.session.overstay!.tickSession(ctx.session);
+    await ctx.say("DONE");
+    const afterDone = ctx.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1) ?? "";
+    expect(afterDone).toContain("Would you like someone from the property team to follow up?");
+    expect((await ctx.session.reservation())!.id).toBe(ctx.reservationId);
+    expect((await ctx.session.reservation())!.status).toBe("EXPIRED");
+    expect((await ctx.session.store.get("reservations", pending.id))!.status).toBe("AWAITING_CONSENT");
+    await ctx.say("yes");
+    const replies = ctx.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text);
+    expect(replies).toContain(VisitorDenialCopy.followUpYes(ctx.session.config.operator.name));
+    const start = new Date(pending.slotStart!);
+    expect(replies.at(-2)).toBe(bookedForLine(formatTime(start, TZ), formatDay(start, TZ)));
+    expect(replies.at(-1)).toBe(`${CONSENT_TEXT}\nReply YES or NO.`);
+    expect((await ctx.session.reservation())!.id).toBe(pending.id);
+  });
+
   it("T-5 yes takes extra time, then re-asks the pending consent as its own text", async () => {
     const ctx = await touringSession("t-rebook-t5-yes");
     await rebookNextOpenTime(ctx);
@@ -1135,6 +1235,19 @@ describe("QA review blocking items", () => {
     await lockedBook.say("hi I want to book but the door is locked");
     expect(lockedBook.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1)).toBe(visitorRepliedAfterClose());
     expect((await lockedBook.session.reservation())!.status).toBe("EXPIRED");
+
+    const bookingDistress = [
+      "hey can I book another tour? I can't leave the building",
+      "want to schedule again but the door is jammed",
+    ];
+    for (const text of bookingDistress) {
+      const closed = await closedTourSession(`t-distress-book-phrase-${bookingDistress.indexOf(text)}`);
+      await closed.say(text);
+      expect(closed.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1)).toBe(visitorRepliedAfterClose());
+      expect((await operatorAlertsFromSession(closed.session)).some((x) => x.includes("replied after their tour") && x.includes(text.slice(0, 40)))).toBe(true);
+      expect((await closed.session.reservation())!.status).toBe("EXPIRED");
+      expect(closed.session.overstay!.get(closed.reservationId)?.cancelled).toBeFalsy();
+    }
   });
 
   it("a standalone hello after the +15 close starts booking", async () => {
@@ -1144,7 +1257,124 @@ describe("QA review blocking items", () => {
     expect(after).not.toBe(visitorRepliedAfterClose());
     expect(after).toMatch(/Which unit|I have tours available|Welcome|self-guided/);
   });
+
+  it("after the +15 close, yo and see-it-again start booking unless distress is present", async () => {
+    const yo = await closedTourSession("t-yo-close");
+    await yo.say("yo");
+    const yoReply = yo.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1) ?? "";
+    expect(yoReply).not.toBe(visitorRepliedAfterClose());
+    expect(yoReply).toMatch(/Which unit|I have tours available|Welcome|self-guided/);
+
+    const again = await closedTourSession("t-see-again");
+    await again.say("can I see it again");
+    const againReply = again.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1) ?? "";
+    expect(againReply).not.toBe(visitorRepliedAfterClose());
+    expect(againReply).toMatch(/Which unit|I have tours available|Welcome|self-guided/);
+
+    const visit = await closedTourSession("t-schedule-visit");
+    await visit.say("schedule another visit");
+    const visitReply = visit.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1) ?? "";
+    expect(visitReply).not.toBe(visitorRepliedAfterClose());
+    expect(visitReply).toMatch(/Which unit|I have tours available|Welcome|self-guided/);
+
+    const tour = await closedTourSession("t-schedule-tour");
+    await tour.say("schedule another tour");
+    const tourReply = tour.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1) ?? "";
+    expect(tourReply).not.toBe(visitorRepliedAfterClose());
+    expect(tourReply).toMatch(/Which unit|I have tours available|Welcome|self-guided/);
+  });
+
+  it("T-5 no-offer yes records the pending consent", async () => {
+    const ctx = await touringSession("t-rebook-t5-no-offer");
+    await rebookNextOpenTime(ctx);
+    const pendingId = ctx.session.pendingBookingId!;
+    expect(await ctx.session.pendingBookingNeedsConsent()).toBe(true);
+    const running = (await ctx.session.reservation())!;
+    ctx.now.t = Date.parse(running.windowEnd!) - 5 * 60_000;
+    ctx.session.clock.jumpTo(new Date(ctx.now.t));
+    await ctx.session.overstay!.tickSession(ctx.session);
+    expect(ctx.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).some((b) => b.includes("Text DONE once you're outside."))).toBe(true);
+    await ctx.say("yes");
+    const replies = ctx.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text);
+    expect(replies.at(-1)).not.toBe(T5_NO_OFFER_BARE_YES);
+    expect(replies.some((b) => b.startsWith("You're all set for your tour") || /identity|form|verify/i.test(b))).toBe(true);
+    const booked = (await ctx.session.store.get("reservations", pendingId))!;
+    expect(booked.consentId).toBeTruthy();
+    expect(["AWAITING_VERIFICATION", "READY"]).toContain(booked.status);
+    expect((await ctx.session.reservation())!.id).toBe(ctx.reservationId);
+    expect((await ctx.session.reservation())!.status).toBe("TOURING");
+  });
+
+  it("a custom-time request during a tour stays secondary like a rebook", async () => {
+    const ctx = await touringSession("t-custom-secondary");
+    const firstId = ctx.reservationId;
+    const later = zonedTimeToUtc({ year: 2026, month: 9, day: 29, hour: 15, minute: 15 }, TZ);
+    const { request, created } = await ctx.session.requestCustomTime(later);
+    expect(created).toBe(true);
+    expect(request.reservationId).not.toBe(firstId);
+    expect((await ctx.session.reservation())!.id).toBe(firstId);
+    expect((await ctx.session.reservation())!.status).toBe("TOURING");
+    expect(ctx.session.pendingBookingId).toBe(request.reservationId);
+    const replies = ctx.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text);
+    expect(replies.at(-1)).toContain("isn't one of the regular tour times");
+    expect(replies.at(-1)).not.toContain("moving your tour");
+  });
+
+  it("rebook during an operator one-off tour stays secondary until DONE", async () => {
+    const ctx = await operatorOneOffTouringSession("t-oneoff-rebook");
+    const firstId = ctx.reservationId;
+    await rebookNextOpenTime(ctx);
+    expect((await ctx.session.reservation())!.id).toBe(firstId);
+    expect((await ctx.session.reservation())!.status).toBe("TOURING");
+    const pending = await ctx.session.pendingBooking();
+    expect(pending?.id).not.toBe(firstId);
+    await ctx.say("DONE");
+    expect((await ctx.session.reservation())!.id).toBe(firstId);
+    await ctx.say("no");
+    expect((await ctx.session.reservation())!.id).toBe(pending!.id);
+  });
+
+  it("rebook during an approved time-request tour stays secondary until DONE", async () => {
+    const ctx = await approvedRequestTouringSession("t-approved-rebook");
+    const firstId = ctx.reservationId;
+    await rebookNextOpenTime(ctx);
+    expect((await ctx.session.reservation())!.id).toBe(firstId);
+    expect((await ctx.session.reservation())!.status).toBe("TOURING");
+    const pending = await ctx.session.pendingBooking();
+    expect(pending?.id).not.toBe(firstId);
+    await ctx.say("DONE");
+    expect((await ctx.session.reservation())!.id).toBe(firstId);
+    await ctx.say("no");
+    expect((await ctx.session.reservation())!.id).toBe(pending!.id);
+  });
 });
+
+async function readySession(tourId: string, options: { visitorContact?: string } = {}) {
+  const loaded = loadConfig();
+  const config =
+    options.visitorContact !== undefined
+      ? { ...loaded, operator: { ...loaded.operator, visitorContact: options.visitorContact } }
+      : loaded;
+  const now = { t: zonedTimeToUtc({ ...TOUR_DAY, hour: 13, minute: 58 }, TZ).getTime() };
+  const session = new VisitorDemoSession("prop_100_alfred_way", config, tourId, {
+    realNow: () => now.t,
+    transport: new DemoMessagingAdapter(() => {}, "MESSAGING"),
+    kind: "messaging",
+  });
+  const runtime = new MemoryRuntimeStore();
+  session.overstay = new OverstayScheduler(runtime, { now: () => new Date(now.t) });
+  let n = 0;
+  const say = (text: string) => handleVisitorText(session, "+15550102000", text, { provider: "test", providerMessageId: `${tourId}_${++n}` });
+  await say("TOUR");
+  await say("YES");
+  await say("1");
+  await say("1");
+  await say("1");
+  await say("yes");
+  await session.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: "+15550102000" });
+  const r = (await session.reservation())!;
+  return { session, say, now, reservationId: r.id, windowEnd: r.windowEnd! };
+}
 
 async function touringSession(tourId: string, options: { visitorContact?: string } = {}) {
   const loaded = loadConfig();
@@ -1175,6 +1405,47 @@ async function touringSession(tourId: string, options: { visitorContact?: string
   await say("I'm here");
   session.overstay.ensure((await session.reservation())!, session.propertyId, session.tourId);
   return { session, say, now, reservationId: r.id, windowEnd: r.windowEnd! };
+}
+
+async function operatorOneOffTouringSession(tourId: string) {
+  const config = loadConfig();
+  const now = { t: zonedTimeToUtc({ ...TOUR_DAY, hour: 10, minute: 0 }, TZ).getTime() };
+  const session = new VisitorDemoSession("prop_100_alfred_way", config, tourId, {
+    realNow: () => now.t,
+    transport: new DemoMessagingAdapter(() => {}, "MESSAGING"),
+    kind: "messaging",
+  });
+  const runtime = new MemoryRuntimeStore();
+  session.overstay = new OverstayScheduler(runtime, { now: () => new Date(now.t) });
+  session.identify("+15550102000");
+  const start = zonedTimeToUtc({ ...TOUR_DAY, hour: 15, minute: 15 }, TZ);
+  await session.scheduleOneOff({ unitId: "apt_101", start, outsideHours: false, name: "Pat Smith" });
+  let n = 0;
+  const say = (text: string) => handleVisitorText(session, "+15550102000", text, { provider: "test", providerMessageId: `${tourId}_${++n}` });
+  await say("YES");
+  await say("yes");
+  await session.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: "+15550102000" });
+  const r = (await session.reservation())!;
+  now.t = Date.parse(r.slotStart!);
+  session.clock.jumpTo(new Date(now.t));
+  await say("I'm here");
+  session.overstay.ensure((await session.reservation())!, session.propertyId, session.tourId);
+  return { session, say, now, reservationId: r.id, windowEnd: r.windowEnd! };
+}
+
+async function approvedRequestTouringSession(tourId: string) {
+  const ctx = await readySession(tourId);
+  const later = zonedTimeToUtc({ ...TOUR_DAY, hour: 15, minute: 30 }, TZ);
+  const { request, created } = await ctx.session.requestCustomTime(later);
+  expect(created).toBe(true);
+  await ctx.session.core.approveTourTimeRequest(request.id);
+  await ctx.session.refreshThread();
+  const r = (await ctx.session.reservation())!;
+  ctx.now.t = Date.parse(r.slotStart!);
+  ctx.session.clock.jumpTo(new Date(ctx.now.t));
+  await ctx.say("I'm here");
+  ctx.session.overstay!.ensure((await ctx.session.reservation())!, ctx.session.propertyId, ctx.session.tourId);
+  return { session: ctx.session, say: ctx.say, now: ctx.now, reservationId: r.id, windowEnd: r.windowEnd! };
 }
 
 async function rebookNextOpenTime(ctx: Awaited<ReturnType<typeof touringSession>>) {

@@ -159,11 +159,12 @@ export class MessagingConversations {
     if (trouble && !(await this.answerBroken(trouble, message.text))) return { correlationId: trouble.sessionId };
 
     let session = registry.latestForPhone(propertyId, phone, "messaging");
-    if (session && !isLeavingTour(stripFiller(normalize(message.text)))) {
+    if (session && !isLeavingTour(stripFiller(normalize(message.text))) && !(await session.afterCloseStillOpen())) {
       await session.promotePendingBookingIfTourEnded();
     }
     // A held rebook after a close stays on this thread: HI continues that booking instead of starting over.
-    if (session && session.pendingBookingId && startsNewBookingAfterClose(message.text)) {
+    // While the leaving issue is still open, after-close handling runs first.
+    if (session && session.pendingBookingId && startsNewBookingAfterClose(message.text) && !(await session.afterCloseStillOpen())) {
       const current = await session.reservation();
       if (!current || current.status === "COMPLETED" || current.status === "EXPIRED") {
         session.promotePendingBookingIfEnded();

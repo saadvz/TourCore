@@ -13,7 +13,7 @@ import {
   visitorCancelKept,
   type InboundMeta,
 } from "../core/TourCore";
-import { isLeavingTour } from "../core/overstayCopy";
+import { isLeavingTour, T5_NO_OFFER_BARE_YES } from "../core/overstayCopy";
 import { afterCloseAlertOpen } from "./overstayScheduler";
 import { yesNo } from "../intent/yesNo";
 import { isCancelableReservation } from "../domain/stateMachine";
@@ -55,13 +55,13 @@ export { keywordOf, type Keyword } from "../intent";
 
 export const isGreeting = (text: string) => /^(hi|hello|hey|hiya|tour|book|start over|new tour|hi there|good (morning|afternoon|evening))\b/.test(normalize(text));
 
-/** A greeting and nothing else — "hi", "hello!" — not "Hi, I'm still stuck". */
+/** A greeting and nothing else — "hi", "hello!", "yo" — not "Hi, I'm still stuck". */
 export function isStandaloneGreeting(text: string): boolean {
-  return /^(hi|hello|hey|hiya|hi there|good (morning|afternoon|evening))$/.test(normalize(text));
+  return /^(hi|hello|hey|hiya|yo|hi there|good (morning|afternoon|evening))$/.test(normalize(text));
 }
 
 const AFTER_CLOSE_DISTRESS =
-  /\b(stuck|locked|inside|trapped|door|help|cannot get out|can t get out)\b/;
+  /\b(stuck|trapped|inside|door|help|emergency|jammed|lock|locked|leave|let me out|lock in|cannot leave|cannot get out|can t get out|can t leave)\b/;
 
 /** After-close distress: never start a booking, even when booking words are also present. */
 export function mentionsAfterCloseDistress(text: string): boolean {
@@ -75,7 +75,7 @@ export function startsNewBookingAfterClose(text: string, intent?: TourIntent): b
   if (intent?.type === "START_INQUIRY") return true;
   const t = stripFiller(normalize(text));
   if (/^(tour|book|start over|new tour)$/.test(t)) return true;
-  return /\b(book (another |a )?(tour|look|showing)|another (tour|look|showing)|new tour|tour again|i would like to book)\b/.test(t);
+  return /\b(book (another |a )?(tour|look|showing)|another (tour|look|showing)|new tour|tour again|i would like to book|see it again|schedule another (visit|tour))\b/.test(t);
 }
 
 /** Locked visitor copy when an inbound is a photo with no caption. Do not say MMS. */
@@ -265,9 +265,9 @@ export async function handleVisitorText(
     return undefined;
   }
 
-  // A closed or finished tour yields to the pending rebook, except DONE / I'm out
-  // on the expired tour — that still confirms they left.
-  if (!isLeavingTour(stripFiller(normalize(text)))) {
+  // After-close handling stays on the expired tour while the leaving issue is
+  // open. A held booking is not promoted until that window ends.
+  if (!isLeavingTour(stripFiller(normalize(text))) && !(await session.afterCloseStillOpen())) {
     await session.promotePendingBookingIfTourEnded();
   }
 
@@ -1017,7 +1017,6 @@ async function handleOverstayReply(turn: Turn): Promise<boolean> {
       overstay.cancel(reservation.id);
       await session.refreshThread();
       session.followUpReservationId = reservation.id;
-      session.promotePendingBookingIfEnded();
       return true;
     }
     if (startsNewBookingAfterClose(said, intent)) {
@@ -1057,6 +1056,10 @@ async function handleOverstayReply(turn: Turn): Promise<boolean> {
   // T-15 / T-5 / more-time replies first so "all set" after T-15 is not treated as leaving.
   const reply = await overstay.replyToVisitor(session.core, reservation.id, said);
   if (reply !== undefined) {
+    if (reply === T5_NO_OFFER_BARE_YES && (await session.pendingBookingNeedsConsent())) {
+      await session.answerPendingConsent(true, turn.said);
+      return true;
+    }
     await turn.respond(reply);
     if (reply.startsWith("You've got 10 more minutes.") && (await session.pendingBookingNeedsConsent())) {
       await session.reply(CONSENT_TEXT);
@@ -1111,6 +1114,7 @@ async function takeOverHeldBookingOnGreeting(turn: Turn): Promise<boolean> {
 async function handlePendingBookingReply(turn: Turn): Promise<boolean> {
   const { session } = turn;
   if (!session.pendingBookingId) return false;
+  if ((await session.stage()) === "follow-up") return false;
   const text = turn.said.text ?? "";
   if (await session.pendingBookingNeedsConsent()) {
     const yn = yesNo(stripFiller(normalize(text)));
