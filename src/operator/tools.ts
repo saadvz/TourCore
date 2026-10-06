@@ -288,6 +288,12 @@ const PROOF: Record<string, (c: DryTourCheck) => string | undefined> = {
   completed: () => "Tour completed",
   revoked: () => "Every door was locked again afterwards",
   follow_up: () => "Follow-up worked",
+  t15_questions: () => "The 15-minutes-left questions text was sent",
+  t5_warning: () => "The 5-minute extra-time offer was sent",
+  extension_granted: () => "A one-time 10-minute extension was granted",
+  overstay_end: () => "The tour-end text was sent (no extra time taken)",
+  overstay_plus5: () => "The 5-minutes-after check-in was sent",
+  overstay_closed: () => "The tour was closed 15 minutes after the end",
   records: () => "Tour records were saved",
 };
 
@@ -295,7 +301,9 @@ function proofPoints(result: DryTourResult): string[] {
   return result.checks.flatMap((c) => {
     if (!c.ok) return [`\u2717 ${c.label}${c.detail ? `: ${c.detail}` : ""}`];
     const text = (PROOF[c.id] ?? ((x: DryTourCheck) => x.label))(c);
-    return text ? [`\u2713 ${text}`] : [];
+    if (!text) return [];
+    if (c.skipped) return [`\u2013 ${text}: ${c.detail ?? "Skipped."}`];
+    return [`\u2713 ${text}`];
   });
 }
 
@@ -930,7 +938,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Run a practice tour",
     kind: "change",
     description:
-      "Runs one complete practice tour through the real engine (no one is texted, no real door opens) and returns the proof points: booking, verification, early denial, entrance (kept for a single-family home, even when that door is also the unit door), the unit door on a unit-door-only apartment or condo, later unit doors, off-route denial, duplicate, completion, follow-up.",
+      "Runs one complete practice tour through the real engine (no one is texted, no real door opens) and returns the proof points: booking, verification, early denial, entrance (kept for a single-family home, even when that door is also the unit door), the unit door on a unit-door-only apartment or condo, later unit doors, off-route denial, duplicate, the T-15 questions text, the T-5 extra-time offer, a one-time 10-minute extension, completion, follow-up, and a second path through tour-end, the +5 leave check-in, and the +15 close. Uses a deterministic simulated clock. A 15-minute tour skips T-15 with a reason (it would be the start). The last slot of the day still runs; extra time or the second path is skipped with a reason if it cannot apply. Nobody waits.",
     input: z.strictObject({ property: Property, unit: Unit.optional() }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
@@ -1066,7 +1074,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "list_exceptions",
     title: "Show what needs attention",
     kind: "read",
-    description: "The queue of issues that need the team: unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored.",
+    description: "The queue of issues that need the team: unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored. \"Visitor hasn't confirmed leaving\" stays open until they text DONE or the operator marks it handled; after-close alerts stop at 24 hours.",
     input: z.strictObject({ property: Property, includeHandled: z.boolean().optional() }),
     run: async (ctx, i) => {
       const id = i.property ? resolvePropertyId(ctx.services.workspace, i.property) : undefined;
@@ -1090,7 +1098,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "resolve_exception",
     title: "Mark an issue handled",
     kind: "change",
-    description: "Closes one issue with the operator's note. Changes nothing else: no tour, access or setup change.",
+    description: "Closes one issue with the operator's note. Changes nothing else: no tour, access or setup change. For a leaving issue, marking it handled also ends after-close visitor alerts for that closed tour, even if a later booking is held.",
     input: z.strictObject({ exceptionId: ExceptionId, resolutionNote: z.string().min(1).max(500) }),
     run: async (ctx, i) => {
       const { alreadyResolved, exception } = await resolveException(ctx.services, i.exceptionId, i.resolutionNote, ctx.now());

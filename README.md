@@ -189,7 +189,9 @@ On the phone, the visitor:
    - "Skip ahead to my tour time" is a demo control that moves the demo clock forward.
 5. is guided along the route ("I'm at Unit 101");
 6. can ask questions, which are answered only from facts you entered and flagged for you when there's no answer;
-7. finishes the tour and answers the follow-up question.
+7. gets a 15-minutes-left "any questions?" text after the tour has started, then a 5-minute warning that offers one extra 10 minutes when the next time is free (an explicit ask for more time any time before the tour ends is granted when the slot is free; a bare yes to the questions text never grants time; a no to the extra-time offer is acknowledged and a later bare yes does not grant; if extra time cannot be added they can say yes and book another look);
+8. can text DONE / I'm out / leaving at any point, or stay through the end: doors never open after the tour end, a +5 check-in asks if they've left, and at +15 the tour closes. After that close, other replies alert the team once per message and always reply to the visitor, until DONE, the operator marks the "Visitor hasn't confirmed leaving" issue handled, or 24 hours pass (alerts stop at 24 hours; the leaving issue stays open until DONE or the operator marks it handled). While that 24-hour window is open, a standalone HI (including yo) stays on after-close handling; a clear booking phrase (including see it again / schedule another visit or tour) starts a new booking only when nothing is held. After 24 hours, greetings go back to normal: HI starts a booking if nothing is held, or takes over a held booking. A greeting with more text, or anything about being stuck, locked, jammed, trapped, still inside, still in the unit, unable to leave, unable to get outside, a gate that will not open, no way out, or an emergency, never starts booking. Help booking or help me book is a booking phrase, but other distress words in the same text still alert. A rebook or custom-time request made during the tour stays secondary until that tour ends, then unfinished consent or identity checks continue. If extra time is offered while that consent is still unanswered, a yes takes the extra time and the consent question is asked again on its own. If the T-5 text cannot offer extra time, a later yes records that pending consent. After the tour ends, a follow-up yes or no is the usual follow-up (it does not record consent); then unanswered consent is asked again as the booked-for line for the new time, then the original consent question. If they have an unapproved custom-time request, they get "Your request for {time} on {day} is still with the property team. I'll text you as soon as they respond." instead of the day menu. While the leaving issue is still open after the +15 close, stuck-inside texts and greetings alert the team and reply with the after-close line — they do not take over a held booking or fire a help alert. DONE after the close uses the usual thanks and follow-up question; only after that reply does a held booking take over.
+9. finishes the tour and answers the follow-up question. Yes uses the same path after a normal finish and after a closed tour: the visitor is told someone will be in touch, and the team is told they would like a follow-up.
 
 The **Test wrong door** demo control tries a door that isn't on the route. Tour Core refuses it and never contacts
 Durin.
@@ -244,7 +246,10 @@ in their normal Messages app:
 - door access through Durin demo mode;
 - questions answered from approved facts only;
 - HELP and STOP;
-- the follow-up question.
+- a 15-minutes-left questions text and a 5-minute warning (one extra 10 minutes when that time is free; asking for more time any time before the tour ends is granted when the slot is free; after the no-time line, yes books another look);
+- DONE / I'm out to end, or tour-end / +5 / +15 texts if they stay;
+- after a +15 close, other texts alert the team (one alert per message) and always reply to the visitor, until DONE, the operator marks the leaving issue handled, or 24 hours pass (alerts only; the leaving issue stays open until DONE or handled); while that window is open a standalone HI stays on after-close handling, and a clear booking phrase starts booking only when nothing is held; after 24 hours a greeting starts a booking or takes over a held one; a greeting plus more text, or anything about being stuck or locked in, does not;
+- the follow-up question (the same yes/no path after a normal finish and after DONE following a close).
 
 Photos and other attachments are not forwarded yet. A photo alone gets one reply: "I can't take photos yet. Text your question and I'll pass it along." A photo with a question Tour Core can't answer gets one reply: "I can't take photos yet, but I'll let the property team know about your question." (and is flagged). A photo with handleable text (an approved-fact question or a booking reply such as `1` or `YES`) gets only "I can't take photos yet." and the text is handled as a normal message. Do not also send the short photo line when the combined unknown-question text is used. The same inbound is not answered twice. Someone who texted STOP gets no visitor texts; an unanswerable question is still flagged for the landlord. Landlord alerts and operator replies name a single-family home by its street line (for example `12 Oak St`) and an apartment or condo by street plus unit, never "Main Home".
 
@@ -335,9 +340,12 @@ npm run sendblue:test -- --to +1XXXXXXXXXX   # manual: checks the connection, se
   `http://localhost:4321/install`, which wins over `.env`). They're never written to config, the installation
   manifest, records, exports or logs, and never returned by a tool.
 - **Access.** Messaging never decides access. A failed send is recorded ("couldn't be delivered" in the live view) and
-  never changes a policy decision. A wrong door texted from a phone is refused before Durin is contacted.
-- **STOP, UNSUBSCRIBE, CANCEL, QUIT.** Tour Core stops messaging that person, ends any tour in progress (open doors
-  are switched off), alerts the team, and stays quiet until START.
+  never changes a policy decision. A leave-check text that fails every retry opens at most one delivery exception per
+  step (T-15, T-5, T+5, T+15); a T-15 or T-5 that never went out is not marked sent. A wrong door texted from a phone is refused before Durin is contacted.
+- **STOP, UNSUBSCRIBE, CANCEL, QUIT.** Tour Core stops messaging that person and stays quiet until START. A tour that
+  hasn't started yet is ended (open doors are switched off) and the team is alerted. A tour already in progress stays
+  on its window: doors still follow policy until the end, and the leave check-in, close, and team alerts still fire.
+  The team is told they replied STOP and won't get more messages; the tour itself is not ended.
 - **HELP.** Replies with who this is and every set contact (number first, then email), always ending with reply here; during a tour it also alerts them.
 
 ### Natural texts
@@ -427,7 +435,8 @@ keep texting after the restart.
 - **What the snapshot keeps** (`runtime/sessions/<id>.json`, schema version 1): the visitor's number and line,
   prospect and reservation ids, the tour-time menu last offered, an unanswered confirmation, route progress, the open
   identity-form link's times, the follow-up state, and timestamps. It never copies reservation, consent,
-  verification or grant data.
+  verification or grant data. Scheduled overstay steps (T-15, T-5, tour end, +5, +15) and whether they already
+  fired live in `runtime/overstay/`, so a restart neither resends nor skips.
 - **Restore checks before resuming.** The property, prospect, reservation, unit, route and doors must exist and agree,
   and a tour past identity must have its consent and passing check on file. Anything that doesn't check out is held
   for the team: the visitor is told "I'm having trouble restoring your tour. I've alerted the property team.", the
@@ -672,8 +681,11 @@ Validation (`src/config/validateConfig.ts`) returns machine-readable codes with 
 The practice tour runs inquiry, reservation, consent, verification, an early arrival (denied), arrival, entrance
 access, a duplicate request (no second grant), unit access with directions, and an **off-route door that is denied
 before Durin is called**. A unit-door-only apartment or condo proves the unit door instead of a building entrance.
-A single-family home keeps the entrance proof line, even when that door is also the unit door. Then it runs
-completion (all doors re-locked) and the follow-up, and saves the tour history.
+A single-family home keeps the entrance proof line, even when that door is also the unit door. It then proves
+overstay handling on a deterministic simulated clock: the T-15 questions text, the T-5 extra-time offer, a one-time 10-minute
+extension, completion (all doors re-locked) and the follow-up, plus a second path through tour-end, the +5 leave
+check-in, and the +15 close. A 15-minute tour skips T-15 with a reason. If extra time or the second path cannot
+apply, that step is skipped with a reason — never a failure and never silently. Then it saves the tour history.
 
 ## Configuration
 

@@ -60,6 +60,7 @@ export const TourIntentSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("ASK_PROPERTY_QUESTION"), question: z.string().trim().min(1).max(300) }),
   z.object({ type: z.literal("REQUEST_HELP"), problem: HelpProblemSchema.optional() }),
   z.object({ type: z.literal("FINISH_TOUR") }),
+  z.object({ type: z.literal("ASK_MORE_TIME") }),
   z.object({ type: z.literal("FOLLOW_UP_YES") }),
   z.object({ type: z.literal("FOLLOW_UP_NO") }),
   z.object({ type: z.literal("STOP_MESSAGES") }),
@@ -124,7 +125,10 @@ export type StepAwaiting =
   | { kind: "accept-next-opening"; date: string; slotStart: string }
   | { kind: "confirm-operator-tour"; confirmBy: string }
   /** Confirm a visitor cancel-by-text. Day/time match the booked-tour copy. */
-  | { kind: "confirm-cancel-tour"; day: string; time: string };
+  | { kind: "confirm-cancel-tour"; day: string; time: string }
+  | { kind: "t15-questions" }
+  | { kind: "t5-extension-offer" }
+  | { kind: "t5-no-offer" };
 
 /**
  * Something Tour Core just asked the visitor. `which-unit` interrupts the
@@ -176,6 +180,7 @@ const STATE_CHANGING: ReadonlySet<IntentType> = new Set([
   "CONSENT_YES",
   "CONSENT_NO",
   "FINISH_TOUR",
+  "ASK_MORE_TIME",
   "FOLLOW_UP_YES",
   "FOLLOW_UP_NO",
   "STOP_MESSAGES",

@@ -43,7 +43,8 @@ export type ExceptionKind =
   | "verification-failed"
   | "operator-hold"
   | "message-failed"
-  | "restore-conflict";
+  | "restore-conflict"
+  | "overstay";
 
 const TITLES: Record<ExceptionKind, string> = {
   "unanswered-question": "Question with no approved answer",
@@ -56,6 +57,7 @@ const TITLES: Record<ExceptionKind, string> = {
   "operator-hold": "Tour paused by your team",
   "message-failed": "Message couldn't be delivered",
   "restore-conflict": "Tour couldn't be restored",
+  overstay: "Visitor hasn't confirmed leaving",
 };
 
 export interface ExceptionResolution {
@@ -89,6 +91,8 @@ export interface OperatorException {
   question?: string;
   /** The unit an unanswered question was about, when the visitor named one before booking. */
   questionUnitId?: string;
+  /** The reservation the issue is about. A leaving issue is the closed tour, not a later held rebook. */
+  reservationId?: string;
   /** open = needs a decision; cleared = no longer applies (e.g. the hold was lifted); resolved = the team closed it. */
   status: "open" | "cleared" | "resolved";
   resolution?: ExceptionResolution;
@@ -148,6 +152,10 @@ function kindFor(e: AuditEvent): ExceptionKind | undefined {
       return "operator-hold";
     case "MESSAGE_FAILED":
       return e.detail.startsWith("message") ? "message-failed" : undefined;
+    case "TOUR_OVERSTAY_CLOSED":
+      return "overstay";
+    case "VISITOR_CONFIRMED_LEFT":
+      return undefined;
     default:
       return undefined;
   }
@@ -176,6 +184,8 @@ function summaryFor(kind: ExceptionKind, e: AuditEvent, tour: TourSnapshot): str
       return "A message to the visitor couldn't be delivered.";
     case "restore-conflict":
       return "Couldn't be restored after a restart.";
+    case "overstay":
+      return `Hasn't confirmed leaving ${unitNameOf(tour) ?? "the property"}.`;
   }
 }
 
@@ -202,6 +212,8 @@ function nextStepsFor(kind: ExceptionKind, tour: TourSnapshot | undefined, still
       return stillPaused && canChange ? ["I can resume the tour (with your OK) or call it off.", "Mark it handled once it's sorted."] : ["Mark it handled."];
     case "restore-conflict":
       return ["Reach out to the visitor; no doors will open for this tour.", "If they text HI again, a fresh tour starts.", "Mark it handled."];
+    case "overstay":
+      return ["Reach out to the visitor if they may still be inside.", "Mark it handled once you've confirmed."];
     default:
       return ["Reach out to the visitor.", "Mark it handled."];
   }
@@ -231,15 +243,23 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
   const exceptionId = id(tour.propertyId, tour.tourId, e.id);
   const pauseKind = kind === "operator-hold" || kind === "provider-failure";
   const paused = pauseKind && stillApplies(e, tour);
+  const leftAfterClose =
+    kind === "overstay" &&
+    tour.bundle.auditEvents.some((later) => later.reservationId === e.reservationId && later.type === "VISITOR_CONFIRMED_LEFT" && later.seq > e.seq);
   const resolution = resolutions.get(exceptionId);
-  const status = resolution ? "resolved" : pauseKind && !paused ? "cleared" : "open";
+  const status = resolution ? "resolved" : pauseKind && !paused ? "cleared" : leftAfterClose ? "cleared" : "open";
+  const replies =
+    kind === "overstay"
+      ? tour.bundle.auditEvents.filter((later) => later.reservationId === e.reservationId && later.type === "OPERATOR_NOTIFIED" && later.detail.includes("replied after their tour"))
+      : [];
+  const extra = replies.map((later) => later.detail).join(" ");
   return {
     exceptionId,
     propertyId: tour.propertyId,
     property: tour.config.property.name,
     kind,
     title: TITLES[kind],
-    summary: summaryFor(kind, e, tour),
+    summary: extra ? `${summaryFor(kind, e, tour)} ${extra}` : summaryFor(kind, e, tour),
     visitorName: visitorNameOf(tour),
     unitName: unitNameOf(tour) ?? unitSubject(tour, e.unitId),
     tourRef: tourRef(tour.propertyId, tour.tourId),
@@ -247,6 +267,7 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
     when: formatShortDateTime(new Date(e.at), tour.config.property.timezone),
     ...tourStatusFor(tour),
     ...(kind === "unanswered-question" ? { question: e.detail, ...(e.unitId ? { questionUnitId: e.unitId } : {}) } : {}),
+    ...(e.reservationId ? { reservationId: e.reservationId } : {}),
     status,
     ...(resolution ? { resolution } : {}),
     nextSteps: status === "open" ? nextStepsFor(kind, tour, paused) : [],
@@ -369,6 +390,15 @@ export async function resolveException(services: OperatorServices, exceptionId: 
   if (!clean) throw new SetupInputError("NOTE_MISSING", "Add a short note about how it was handled.");
   if (exception.status === "resolved") return { alreadyResolved: true, exception };
   appendResolution(services, exception.propertyId, { exceptionId, resolvedAt: now.toISOString(), note: clean, action: "resolved" });
+  if (exception.kind === "overstay" && exception.tourRef) {
+    try {
+      const tour = await findTour(services, exception.tourRef);
+      const reservationId = exception.reservationId;
+      if (reservationId) tour.live?.overstay?.closeAlertWindow(reservationId);
+    } catch {
+      /* saved tours without a live conversation still clear via the ledger */
+    }
+  }
   return { alreadyResolved: false, exception: await findException(services, exceptionId) };
 }
 

@@ -1,3 +1,4 @@
+import { isMoreTimeAsk } from "../core/overstayCopy";
 import { dayReference, namesTourDay, spokenTimes, vagueTimeRequest, type SpokenTime } from "../core/spokenTime";
 import type { IntentInterpretation, IntentInterpreter, InterpretContext, StepAwaiting, StopRef, TourIntent } from "./model";
 import { normalize, numberWord, ordinalWord, stripFiller } from "./normalize";
@@ -81,7 +82,7 @@ const FINISH = new RegExp(
   [
     String.raw`^(i am |we are |i think i am |i think we are |i think )?(all |pretty much |just )?(done|finished|through)( now| here| for (now|today))?( with (the |my |this |our )?(tour|showing|visit|viewing|it|everything|the place|the unit|the apartment))?$`,
     String.raw`^(finish|finish up|end|complete|wrap up|stop|done with)( the| my| this| our)? (tour|showing|visit)$`,
-    String.raw`^(finish|finished|finish tour|end tour|that is it|that is all|that is everything|that is about it|leaving|i am leaving|we are leaving|heading out|i am heading out|we are heading out|all set|i am all set|we are all set|tour (is )?(done|over|finished|complete)|done touring|i have seen (it all|everything|enough)|seen everything|i have left|i left)$`,
+    String.raw`^(finish|finished|finish tour|end tour|that is it|that is all|that is everything|that is about it|leaving|i am leaving|we are leaving|heading out|i am heading out|we are heading out|all set|i am all set|we are all set|tour (is )?(done|over|finished|complete)|done touring|i have seen (it all|everything|enough)|seen everything|i have left|i left|i am out|im out|i am outside|done)$`,
   ].join("|"),
 );
 const WEAK_FINISH = /\b(done|finished|leaving|heading out|wrapping up|wrap up|all set)\b/;
@@ -494,6 +495,9 @@ interface Helpers {
 }
 
 function answerToAwaiting(awaiting: StepAwaiting, t: string, { result, unknown }: Helpers): IntentInterpretation | undefined {
+  if (awaiting.kind === "t15-questions" || awaiting.kind === "t5-extension-offer" || awaiting.kind === "t5-no-offer") {
+    return undefined;
+  }
   if (awaiting.kind === "choose-stop") {
     const pick = pickOption(t, awaiting.stops.length);
     return pick ? result(stopIntent(awaiting.stops[pick.index]!), 0.95) : undefined;
@@ -530,6 +534,7 @@ function interpretOnTour(ctx: InterpretContext, t: string, asked: boolean, h: He
   if (helpful) return helpful;
 
   if (touring && FINISH.test(t)) return result({ type: "FINISH_TOUR" }, 0.95);
+  if (touring && isMoreTimeAsk(t)) return result({ type: "ASK_MORE_TIME" }, 0.95);
 
   const named = uniqueStops(ctx.doors.filter((d) => mentionsDoor(t, d)));
   const opening = OPEN.test(t);

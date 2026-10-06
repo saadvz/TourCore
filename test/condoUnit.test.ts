@@ -214,7 +214,7 @@ describe("apartment or condo setup", () => {
     expect(result.passed).toBe(true);
     expect(result.checks.find((c) => c.id === "entrance")).toMatchObject({ ok: true, label: "Visitor arrives on time", outcome: "Entrance access approved" });
     expect(result.checks.map((c) => c.id)).toContain("unit_door");
-    const opened = result.bundle!.accessGrants.map((g) => g.doorId);
+    const opened = [...new Set(result.bundle!.accessGrants.map((g) => g.doorId))];
     expect(opened).toEqual(expect.arrayContaining(draft.routes[0]!.stops.map((s) => s.doorId)));
     expect(opened).toHaveLength(2);
   });
@@ -230,7 +230,7 @@ describe("apartment or condo setup", () => {
 
     const result = await runDryTour(draft, { now: zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour: 7, minute: 0 }, draft.property.timezone) });
     expect(result.passed).toBe(true);
-    expect(result.bundle!.accessGrants.map((g) => g.doorId)).toEqual([draft.units[0]!.doorId]);
+    expect([...new Set(result.bundle!.accessGrants.map((g) => g.doorId))]).toEqual([draft.units[0]!.doorId]);
     expect(result.checks.map((c) => c.id)).not.toContain("entrance");
     expect(result.checks.find((c) => c.id === "unit_door")).toMatchObject({ ok: true, label: "Visitor enters Unit 4B" });
   });

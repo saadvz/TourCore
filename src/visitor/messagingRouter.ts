@@ -7,6 +7,8 @@ import { MessagingEndpoints } from "../messaging/endpoints";
 import { hasInboundMedia, type InboundMessage } from "../messaging/inbound";
 import type { MessagingAdapter } from "../messaging/Messenger";
 import { TERMINAL } from "../domain/stateMachine";
+import type { Reservation, TourTimeRequest } from "../domain/model";
+import type { OccupiedWindow } from "../core/customSlot";
 import { SetupInputError } from "../setup/setupActions";
 import { isCurrent, type PropertyWorkspace } from "../setup/workspace";
 import { writeJsonAtomic } from "../storage/atomicWrite";
@@ -17,7 +19,10 @@ import { isLiveMessaging } from "../config/tourCoreConfig";
 import { publicBaseUrl } from "../messaging/publicUrl";
 import { effectiveEnv } from "../install/settings";
 import type { ResolvedConsentMode } from "../messaging/consentPolicy";
-import { handleVisitorText, isGreeting } from "./conversation";
+import { isLeavingTour } from "../core/overstayCopy";
+import { normalize, stripFiller } from "../intent/normalize";
+import { handleVisitorText, isGreeting, startsNewBookingAfterClose } from "./conversation";
+import { OverstayScheduler } from "./overstayScheduler";
 import { oneOffBlockReason } from "./oneOffGate";
 import { markRemovedReply, shouldReplyRemoved } from "./removedReplies";
 import { smsHelpBody, smsStopAck, SmsConsentDirectory } from "./smsConsent";
@@ -28,6 +33,26 @@ import type { VerificationLinks } from "./verificationLinks";
 type Transport = MessagingAdapter & { noteChannel?: (number: string, channel: InboundMessage["channel"]) => void };
 
 export const RESTORE_TROUBLE = "I'm having trouble restoring your tour. I've alerted the property team.";
+
+/** Live sessions and saved bundles share each tour's real effective end, including extensions. */
+export function occupiedWindowsFromRecords(
+  tourLengthMinutes: number,
+  reservations: Reservation[],
+  requests: TourTimeRequest[] = [],
+): OccupiedWindow[] {
+  const lengthMs = tourLengthMinutes * 60_000;
+  const windows: OccupiedWindow[] = [];
+  for (const reservation of reservations) {
+    if (!reservation.slotStart || TERMINAL.includes(reservation.status)) continue;
+    const start = new Date(reservation.slotStart);
+    windows.push({ start, end: reservation.windowEnd ? new Date(reservation.windowEnd) : new Date(start.getTime() + lengthMs) });
+  }
+  for (const request of requests) {
+    if (request.status !== "PENDING" && request.status !== "APPROVED") continue;
+    windows.push({ start: new Date(request.requestedStartsAt), end: new Date(request.requestedEndsAt) });
+  }
+  return windows;
+}
 
 /** A conversation that couldn't be restored safely, as the operator sees it. */
 export interface NeedsAttention {
@@ -82,6 +107,14 @@ export class MessagingConversations {
     this.persistence = new SessionPersistence(deps.workspace, runtime, deps.links);
     this.endpoints = deps.endpoints ?? new MessagingEndpoints(runtime);
     this.smsConsent = new SmsConsentDirectory(deps.workspace.root);
+    this.overstay = new OverstayScheduler(runtime, { now: () => deps.now?.() ?? new Date() });
+  }
+
+  readonly overstay: OverstayScheduler;
+
+  private attachOverstay(session: VisitorDemoSession): VisitorDemoSession {
+    session.overstay = this.overstay;
+    return session;
   }
 
   private readonly endpoints: MessagingEndpoints;
@@ -126,8 +159,24 @@ export class MessagingConversations {
     if (trouble && !(await this.answerBroken(trouble, message.text))) return { correlationId: trouble.sessionId };
 
     let session = registry.latestForPhone(propertyId, phone, "messaging");
-    // A finished tour is never reopened: a greeting starts a new one (repeat tour). A paused tour isn't finished.
-    if (session && ["done", "stopped"].includes(await session.stage()) && !(await session.isPaused()) && isGreeting(message.text) && !session.optedOut) session = undefined;
+    if (session && !isLeavingTour(stripFiller(normalize(message.text))) && !(await session.afterCloseStillOpen())) {
+      await session.promotePendingBookingIfTourEnded();
+    }
+    // A held rebook after a close stays on this thread: HI continues that booking instead of starting over.
+    // While the leaving issue is still open, after-close handling runs first.
+    if (session && session.pendingBookingId && startsNewBookingAfterClose(message.text) && !(await session.afterCloseStillOpen())) {
+      const current = await session.reservation();
+      if (!current || current.status === "COMPLETED" || current.status === "EXPIRED") {
+        session.promotePendingBookingIfEnded();
+      }
+    }
+    // A finished tour is never reopened: a standalone greeting or booking phrase starts a new one.
+    // Keep this thread while a leaving issue is still in the 24-hour after-close window,
+    // or while a booking is held from during the tour.
+    if (session && ["done", "stopped"].includes(await session.stage()) && !(await session.isPaused()) && startsNewBookingAfterClose(message.text) && !session.optedOut) {
+      const keep = !!session.pendingBookingId || (await session.afterCloseStillOpen());
+      if (!keep) session = undefined;
+    }
 
     if (!session) {
       const { config, state } = ws.load(propertyId);
@@ -138,16 +187,18 @@ export class MessagingConversations {
       }
       const tourId = ws.newVisitorTourId(propertyId, this.deps.now?.() ?? new Date(), "text");
       session = registry.add(
-        new VisitorDemoSession(propertyId, config, tourId, {
-          transport,
-          kind: "messaging",
-          verificationLinks: this.deps.links,
-          realNow: this.deps.realNow,
-          store: this.deps.storeFor?.(config),
-          storageRead: this.deps.storageRead,
-          beforeAccess: this.deps.beforeAccess,
-          otherBusyStarts: () => this.otherBusyStarts(propertyId, tourId),
-        }),
+        this.attachOverstay(
+          new VisitorDemoSession(propertyId, config, tourId, {
+            transport,
+            kind: "messaging",
+            verificationLinks: this.deps.links,
+            realNow: this.deps.realNow,
+            store: this.deps.storeFor?.(config),
+            storageRead: this.deps.storageRead,
+            beforeAccess: this.deps.beforeAccess,
+            otherBusyWindows: () => this.otherBusyWindows(propertyId, tourId),
+          }),
+        ),
       );
       // Someone who texted STOP earlier stays opted out until they text START.
       session.optedOut = this.isOptedOut(propertyId, phone);
@@ -196,16 +247,18 @@ export class MessagingConversations {
     if (!line) throw new SetupInputError("NO_MESSAGING_LINE", "Visitor texting isn't connected for that property.");
     const tourId = this.deps.workspace.newVisitorTourId(propertyId, this.deps.now?.() ?? new Date(), "text");
     const session = this.deps.registry.add(
-      new VisitorDemoSession(propertyId, config, tourId, {
-        transport: this.lazyTransport(propertyId),
-        kind: "messaging",
-        verificationLinks: this.deps.links,
-        realNow: this.deps.realNow,
-        store: this.deps.storeFor?.(config),
-        storageRead: this.deps.storageRead,
-        beforeAccess: this.deps.beforeAccess,
-        otherBusyStarts: () => this.otherBusyStarts(propertyId, tourId),
-      }),
+      this.attachOverstay(
+        new VisitorDemoSession(propertyId, config, tourId, {
+          transport: this.lazyTransport(propertyId),
+          kind: "messaging",
+          verificationLinks: this.deps.links,
+          realNow: this.deps.realNow,
+          store: this.deps.storeFor?.(config),
+          storageRead: this.deps.storageRead,
+          beforeAccess: this.deps.beforeAccess,
+          otherBusyWindows: () => this.otherBusyWindows(propertyId, tourId),
+        }),
+      ),
     );
     session.identify(e164);
     session.line = line;
@@ -213,23 +266,32 @@ export class MessagingConversations {
     return session;
   }
 
-  private async otherBusyStarts(propertyId: string, exceptTourId: string): Promise<Date[]> {
-    const starts: Date[] = [];
+  private async otherBusyWindows(propertyId: string, exceptTourId: string): Promise<OccupiedWindow[]> {
+    const { config } = this.deps.workspace.load(propertyId);
+    const length = config.tourHours.tourLengthMinutes;
+    const windows: OccupiedWindow[] = [];
     const live = this.deps.registry.all().filter((session) => session.propertyId === propertyId && session.tourId !== exceptTourId);
     const seen = new Set<string>([exceptTourId]);
     for (const session of live) {
       seen.add(session.tourId);
-      const reservation = await session.reservation();
-      if (reservation?.slotStart && !TERMINAL.includes(reservation.status)) starts.push(new Date(reservation.slotStart));
+      windows.push(...occupiedWindowsFromRecords(length, await session.store.list("reservations"), await session.store.list("tourTimeRequests")));
     }
     for (const record of this.deps.workspace.listTours(propertyId)) {
       if (seen.has(record.tourId) || record.kind === "practice") continue;
       const saved = this.deps.workspace.loadTour(propertyId, record.tourId);
-      for (const reservation of saved?.bundle.reservations ?? []) {
-        if (reservation.slotStart && !TERMINAL.includes(reservation.status)) starts.push(new Date(reservation.slotStart));
-      }
+      windows.push(...occupiedWindowsFromRecords(length, saved?.bundle.reservations ?? [], saved?.bundle.tourTimeRequests ?? []));
     }
-    return starts;
+    return windows;
+  }
+
+  /** Fires due overstay steps on every live text-message tour. Concurrent calls share one pass. */
+  async tickOverstay(): Promise<void> {
+    for (const session of this.deps.registry.all()) {
+      if (session.kind !== "messaging") continue;
+      this.attachOverstay(session);
+      await this.overstay.tickSession(session);
+      await this.save(session);
+    }
   }
 
   /** Releases operator-set tours the visitor never confirmed. Safe to call often. */
@@ -292,8 +354,8 @@ export class MessagingConversations {
       }
       if (this.deps.registry.find(snapshot.sessionId)) continue;
       try {
-        const { session, notes } = await restoreSession(snapshot, { workspace: this.deps.workspace, transport: this.lazyTransport(snapshot.propertyId), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(snapshot.propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyStarts: (propertyId, tourId) => this.otherBusyStarts(propertyId, tourId) });
-        this.deps.registry.add(session);
+        const { session, notes } = await restoreSession(snapshot, { workspace: this.deps.workspace, transport: this.lazyTransport(snapshot.propertyId), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(snapshot.propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyWindows: (propertyId, tourId) => this.otherBusyWindows(propertyId, tourId) });
+        this.deps.registry.add(this.attachOverstay(session));
         for (const note of notes) log(`Restoring a text-message tour: ${note}`);
         restored++;
       } catch (err) {
@@ -344,8 +406,8 @@ export class MessagingConversations {
           updatedAt: record.updatedAt,
         };
         try {
-          const { session } = await restoreSession(pseudo, { workspace: ws, transport: this.lazyTransport(propertyId), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyStarts: (id, tourId) => this.otherBusyStarts(id, tourId) });
-          registry.add(session);
+          const { session } = await restoreSession(pseudo, { workspace: ws, transport: this.lazyTransport(propertyId), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyWindows: (id, tourId) => this.otherBusyWindows(id, tourId) });
+          registry.add(this.attachOverstay(session));
           await this.save(session);
           restored++;
         } catch (err) {

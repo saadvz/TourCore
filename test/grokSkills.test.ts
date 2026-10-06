@@ -142,6 +142,12 @@ describe("Grok skill scenarios", () => {
     expect(result.passed).toBe(true);
     expect(result.proofPoints).toContain("\u2713 Unit 102 access was allowed");
     expect(result.proofPoints).toContain("\u2713 Unit 101 Door (not on the route) was denied before Durin was contacted");
+    expect(result.proofPoints).toContain("\u2713 The 15-minutes-left questions text was sent");
+    expect(result.proofPoints).toContain("\u2713 The 5-minute extra-time offer was sent");
+    expect(result.proofPoints).toContain("\u2713 A one-time 10-minute extension was granted");
+    expect(result.proofPoints).toContain("\u2713 The tour-end text was sent (no extra time taken)");
+    expect(result.proofPoints).toContain("\u2713 The 5-minutes-after check-in was sent");
+    expect(result.proofPoints).toContain("\u2713 The tour was closed 15 minutes after the end");
     expect(result.proofPoints.every((p: string) => p.startsWith("\u2713"))).toBe(true);
     expect(h.visitors.all()).toHaveLength(0);
   });

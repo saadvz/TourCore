@@ -14,7 +14,7 @@ import { entryReply } from "./entry";
 import { operatorUnitName, visitorTourOf } from "./identity";
 import { ONE_OFF_REPLACED_DETAIL } from "./oneOffGate";
 import { offerDate } from "./unavailableDay";
-import { isLiveHelpReservation, TourCore, TourCoreError, VISITOR_CANCEL_DONE, visitorCancelConfirmFor, type AccessOutcome, type InboundMeta } from "../core/TourCore";
+import { bookedForLine, CONSENT_TEXT, isLiveHelpReservation, pendingCustomTimeLine, TourCore, TourCoreError, VISITOR_CANCEL_DONE, visitorCancelConfirmFor, type AccessOutcome, type InboundMeta } from "../core/TourCore";
 import { isCancelableReservation } from "../domain/stateMachine";
 import { parseIsoDate, type TourSlot } from "../core/schedule";
 import { createDurin, createStore, createVerificationProvider } from "../createTourCore";
@@ -29,6 +29,7 @@ import type { ExportBundle } from "../export/exportBundle";
 import type { Awaiting, IntentInterpretation } from "../intent";
 import { smsHelpBody, smsStopAck, type SmsCampaignConsent, type SmsConsentStatus } from "./smsConsent";
 import type { VerificationLinks } from "./verificationLinks";
+import { afterCloseAlertOpen } from "./overstayScheduler";
 
 /**
  * One visitor conversation driving the real Tour Core engine. The same
@@ -135,6 +136,8 @@ export interface VisitorSessionOptions {
   beforeAccess?: () => Promise<void>;
   /** Other tours on this property that should count as busy. */
   otherBusyStarts?: () => Promise<Date[]>;
+  /** Other tours' real held windows (start + effective end, including extensions). */
+  otherBusyWindows?: () => Promise<import("../core/customSlot").OccupiedWindow[]>;
 }
 
 /** How one typed message was read, kept on the visitor's line for developer details. Never model reasoning. */
@@ -209,6 +212,17 @@ export class VisitorDemoSession {
   availabilitySource?: () => PropertyState | undefined;
   /** Records a visitor who was told tours would come back, or who got a paused-unit line. */
   rememberPauseWaiter?: (waiter: { phone: string; unitId?: string; at: string }) => void;
+  /** Overstay timeline for this conversation. Set by the messaging router and tests. */
+  overstay?: import("./overstayScheduler").OverstayScheduler;
+  /** Secondary rebooking while a tour is still the active booking. */
+  pendingRebook = false;
+  rebookUnitId?: string;
+  /** New reservation booked during a running tour; becomes active when that tour ends. */
+  pendingBookingId?: string;
+  /** Finished tour still waiting on the follow-up question after a held booking was promoted. */
+  followUpReservationId?: string;
+  /** The active booking was a held rebook that just took over after the tour ended. */
+  heldBookingTakenOver = false;
 
   private _config: TourCoreConfig;
 
@@ -244,6 +258,7 @@ export class VisitorDemoSession {
       storageRead: options.storageRead,
       beforeAccess: options.beforeAccess,
       otherBusyStarts: options.otherBusyStarts,
+      otherBusyWindows: options.otherBusyWindows,
       ...(links ? { verificationLink: ({ reservation, prospect }) => links.issue({ sessionId: this.id, reservationId: reservation.id, phone: prospect.phone }) } : {}),
     });
   }
@@ -330,6 +345,9 @@ export class VisitorDemoSession {
     const r = await this.reservation();
     if (!r) return "choose-unit";
     if (r.awaitingVisitorConfirm) return "intro";
+    if (this.followUpReservationId && (await this.activeNeedsConsent()) && !(await this.hasFollowUpResponse(this.followUpReservationId))) {
+      return "follow-up";
+    }
     switch (r.status) {
       case "INQUIRY":
         return this.selectedDate ? "choose-time" : "choose-date";
@@ -343,7 +361,14 @@ export class VisitorDemoSession {
       case "TOURING":
         return "touring";
       case "COMPLETED":
-        return (await this.store.listAudit()).some((e) => e.type === "FOLLOW_UP_RESPONSE") ? "done" : "follow-up";
+        return (await this.store.listAudit()).some((e) => e.type === "FOLLOW_UP_RESPONSE" && e.reservationId === r.id) ? "done" : "follow-up";
+      case "EXPIRED": {
+        const audit = await this.store.listAudit();
+        const left = audit.some((e) => e.type === "VISITOR_CONFIRMED_LEFT" && e.reservationId === r.id);
+        const answered = audit.some((e) => e.type === "FOLLOW_UP_RESPONSE" && e.reservationId === r.id);
+        if (left && !answered) return "follow-up";
+        return "stopped";
+      }
       default:
         return "stopped";
     }
@@ -601,14 +626,23 @@ export class VisitorDemoSession {
     await this.syncReplies();
   }
 
-  /** Asks the property team about a one-off time. An existing booking stays as it is. */
+  /** Asks the property team about a one-off time. An existing booking stays as it is. A request during a running tour is secondary, like a rebook. */
   async requestCustomTime(start: Date, sourceMessageId?: string): Promise<{ created: boolean; request: TourTimeRequest }> {
     const reservation = await this.reservation();
     if (!this.prospectId || !reservation) throw new SetupInputError("NO_TOUR", "Choose a unit before asking for a time.");
     if (await this.refuseIfPaused(reservation.unitId)) return { created: false, request: { id: "", propertyId: this.propertyId, prospectId: this.prospectId, requestedStartsAt: start.toISOString(), requestedEndsAt: start.toISOString(), requestSource: "VISITOR", status: "DECLINED", createdAt: this.clock.now().toISOString() } };
+    const running = reservation.status === "TOURING";
+    let requestReservationId = reservation.id;
+    if (running) {
+      const oldId = this.reservationId;
+      await this.inquire(reservation.unitId, { announce: false });
+      requestReservationId = this.reservationId!;
+      this.pendingBookingId = requestReservationId;
+      this.reservationId = oldId;
+    }
     const { request, created } = await this.core.createTourTimeRequest({
       prospectId: this.prospectId,
-      reservationId: reservation.id,
+      reservationId: requestReservationId,
       unitId: reservation.unitId,
       requestedStartsAt: start.toISOString(),
       requestSource: "VISITOR",
@@ -617,11 +651,11 @@ export class VisitorDemoSession {
     const label = formatTime(start, this.config.property.timezone);
     if (!created) {
       await this.reply(`I've already asked the property team about ${label}. I'll let you know when they respond.`);
-    } else if (reservation.slotStart) {
+    } else if (running || !reservation.slotStart) {
+      await this.reply(`${label} isn't one of the regular tour times, but I can ask the property team. I'll let you know once they respond.`);
+    } else {
       const current = formatTime(new Date(reservation.slotStart), this.config.property.timezone);
       await this.reply(`I've asked the property team about moving your tour to ${label}. Your ${current} tour is still confirmed until they approve a change.`);
-    } else {
-      await this.reply(`${label} isn't one of the regular tour times, but I can ask the property team. I'll let you know once they respond.`);
     }
     return { created, request };
   }
@@ -827,7 +861,7 @@ export class VisitorDemoSession {
     const phone = prospect?.phone ?? record.visitorPhone;
     if (phone) this.visitor = { name: prospect?.name ?? UNNAMED_VISITOR, phone };
     this.prospectId = prospect?.id;
-    this.reservationId = bundle.reservations.at(-1)?.id;
+    this.reservationId = bundle.reservations.find((r) => r.status === "TOURING")?.id ?? bundle.reservations.at(-1)?.id;
     this.optedOut = !!prospect?.messagingOptedOut;
   }
 
@@ -931,11 +965,18 @@ export class VisitorDemoSession {
       case "finish":
         await visitorSays("I'm done with the tour.");
         await this.core.completeTour(r!.id);
+        this.followUpReservationId = r!.id;
         return;
-      case "followUp":
+      case "followUp": {
+        const followUpId = this.followUpReservationId ?? r!.id;
         this.say("visitor", said.text ?? (input.wantsContact ? "Yes, please." : "No, thanks."));
-        await this.core.recordFollowUpResponse(r!.id, !!input.wantsContact, { text: said.text ?? (input.wantsContact ? "Yes" : "No"), meta: said.meta });
+        await this.core.recordFollowUpResponse(followUpId, !!input.wantsContact, { text: said.text ?? (input.wantsContact ? "Yes" : "No"), meta: said.meta });
+        this.followUpReservationId = undefined;
+        this.promotePendingBookingIfEnded();
+        if (await this.activeNeedsConsent()) await this.announceHeldBookingConsent();
+        else await this.announceUnapprovedCustomTime();
         return;
+      }
       case "demoSkipAhead": {
         const windowStart = Date.parse(r!.windowStart!);
         const slot = Date.parse(r!.slotStart!);
@@ -958,6 +999,154 @@ export class VisitorDemoSession {
         return;
       }
     }
+  }
+
+  /** After the no-time line: offer days as a secondary flow. The running tour stays the active booking. */
+  async beginRebook(): Promise<{ date: string; label: string }[]> {
+    const current = await this.reservation();
+    if (!current) return [];
+    this.rebookUnitId = current.unitId;
+    this.pendingRebook = true;
+    this.offeredDates = (await this.core.availableDates()).map(({ date, label }) => ({ date, label }));
+    this.selectedDate = undefined;
+    this.offeredSlots = [];
+    this.markDatesShown();
+    return this.offeredDates;
+  }
+
+  /** Books the rebooked time. Creates a new reservation only on confirm; a running tour stays active. */
+  async confirmRebook(slotStart: string): Promise<void> {
+    const unitId = this.rebookUnitId ?? (await this.reservation())?.unitId;
+    if (!unitId) throw new SetupInputError("UNIT_NOT_FOUND", "That unit isn't available.");
+    const current = await this.reservation();
+    const keepActive = current?.status === "TOURING";
+    const oldId = this.reservationId;
+    if (!current || current.status !== "INQUIRY") {
+      await this.inquire(unitId, { announce: false });
+    }
+    try {
+      await this.core.reserveSlot(this.reservationId!, slotStart);
+    } catch (err) {
+      if (keepActive && oldId) this.reservationId = oldId;
+      throw err;
+    }
+    this.pendingRebook = false;
+    this.rebookUnitId = undefined;
+    if (keepActive && oldId) {
+      this.pendingBookingId = this.reservationId;
+      this.reservationId = oldId;
+    }
+    await this.syncReplies();
+  }
+
+  async pendingBooking(): Promise<Reservation | undefined> {
+    return this.pendingBookingId ? this.store.get("reservations", this.pendingBookingId) : undefined;
+  }
+
+  async pendingBookingNeedsConsent(): Promise<boolean> {
+    const pending = await this.pendingBooking();
+    return !!pending && pending.status === "AWAITING_CONSENT" && !pending.consentId;
+  }
+
+  async activeNeedsConsent(): Promise<boolean> {
+    const active = await this.reservation();
+    return !!active && active.status === "AWAITING_CONSENT" && !active.consentId;
+  }
+
+  async hasFollowUpResponse(reservationId: string): Promise<boolean> {
+    return (await this.store.listAudit()).some((e) => e.type === "FOLLOW_UP_RESPONSE" && e.reservationId === reservationId);
+  }
+
+  /** Booked-for line, then the original consent question — so it is clearly about the new booking. */
+  async announceHeldBookingConsent(): Promise<void> {
+    const active = await this.reservation();
+    if (!active?.slotStart || active.status !== "AWAITING_CONSENT" || active.consentId) return;
+    const start = new Date(active.slotStart);
+    const tz = this.config.property.timezone;
+    await this.reply(bookedForLine(formatTime(start, tz), formatDay(start, tz)));
+    await this.reply(CONSENT_TEXT, { kind: "yes-no" });
+    this.heldBookingTakenOver = false;
+  }
+
+  /** Unapproved custom-time request still waiting on the property team. */
+  async unapprovedCustomTimeRequest(): Promise<TourTimeRequest | undefined> {
+    const ids = new Set([this.reservationId, this.pendingBookingId].filter((id): id is string => !!id));
+    const requests = await this.store.list("tourTimeRequests");
+    return requests.find((request) => request.status === "PENDING" && request.reservationId && ids.has(request.reservationId));
+  }
+
+  /** After a tour ends, tell the visitor their custom-time request is still with the team. */
+  async announceUnapprovedCustomTime(): Promise<boolean> {
+    const request = await this.unapprovedCustomTimeRequest();
+    if (!request) return false;
+    const start = new Date(request.requestedStartsAt);
+    const tz = this.config.property.timezone;
+    await this.reply(pendingCustomTimeLine(formatTime(start, tz), formatDay(start, tz)));
+    return true;
+  }
+
+  async pendingBookingNeedsVerification(): Promise<boolean> {
+    const pending = await this.pendingBooking();
+    return !!pending && pending.status === "AWAITING_VERIFICATION";
+  }
+
+  async answerPendingConsent(agree: boolean, said: Said): Promise<void> {
+    if (!this.pendingBookingId) return;
+    await this.recordText(said);
+    await this.core.recordConsent(this.pendingBookingId, agree);
+    await this.syncReplies();
+  }
+
+  async resendPendingVerification(said: Said): Promise<void> {
+    if (!this.pendingBookingId || !this.visitor) return;
+    await this.recordText(said);
+    const link = this.links?.issue({ sessionId: this.id, reservationId: this.pendingBookingId, phone: this.visitor.phone });
+    await this.reply("Here's your identity form link again. The earlier link no longer works.", { kind: "form", link });
+  }
+
+  /** When the running tour has ended, the pending booking becomes the active one. */
+  promotePendingBookingIfEnded(): boolean {
+    if (!this.pendingBookingId) return false;
+    const currentId = this.reservationId;
+    if (currentId === this.pendingBookingId) {
+      this.pendingBookingId = undefined;
+      return false;
+    }
+    this.reservationId = this.pendingBookingId;
+    this.pendingBookingId = undefined;
+    this.heldBookingTakenOver = true;
+    return true;
+  }
+
+  async promotePendingBookingIfTourEnded(): Promise<boolean> {
+    if (!this.pendingBookingId) return false;
+    if (await this.afterCloseStillOpen()) return false;
+    const current = await this.reservation();
+    if (!current) return this.promotePendingBookingIfEnded();
+    if (current.status === "COMPLETED") {
+      if (!(await this.hasFollowUpResponse(current.id))) return false;
+      return this.promotePendingBookingIfEnded();
+    }
+    if (current.status === "EXPIRED") {
+      const left = await this.core.hasConfirmedLeftAfterClose(current.id);
+      if (left && !(await this.hasFollowUpResponse(current.id))) return false;
+      return this.promotePendingBookingIfEnded();
+    }
+    return false;
+  }
+
+  /** After-close alerts and the leaving issue are still open — do not promote a held booking. */
+  async afterCloseStillOpen(): Promise<boolean> {
+    const current = await this.reservation();
+    if (!current || current.status !== "EXPIRED") return false;
+    if (await this.core.hasConfirmedLeftAfterClose(current.id)) return false;
+    const closedAt = (await this.store.listAudit()).find((e) => e.type === "TOUR_OVERSTAY_CLOSED" && e.reservationId === current.id)?.at;
+    return afterCloseAlertOpen({
+      nowMs: this.clock.now().getTime(),
+      closedAt,
+      confirmedLeft: false,
+      exceptionResolved: !!this.overstay?.get(current.id)?.alertClosedAt,
+    });
   }
 
   private async inquire(unitId: string, options: { announce?: boolean } = {}): Promise<void> {
@@ -1076,6 +1265,11 @@ export class VisitorDemoSession {
       this.noted = undefined;
     }
     this.thread.push(item);
+  }
+
+  /** Pulls new Tour Core texts into the visitor thread (used after a scheduled overstay step). */
+  async refreshThread(): Promise<void> {
+    await this.syncReplies();
   }
 
   /** Appends Tour Core's new messages to the visitor thread (read from the store, in order), with delivery details. */

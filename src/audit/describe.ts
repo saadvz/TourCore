@@ -94,6 +94,12 @@ function sentence(
       return info(`${c.name} started the tour.`);
     case "TOUR_COMPLETED":
       return good(`${c.name} finished the tour.`);
+    case "TOUR_EXTENDED":
+      return info(`${c.name}'s tour was extended by 10 minutes.`);
+    case "TOUR_OVERSTAY_CLOSED":
+      return info(`${c.name}'s tour was closed after they didn't confirm leaving.`);
+    case "VISITOR_CONFIRMED_LEFT":
+      return good(`${c.name} confirmed they had left after the tour closed.`);
     case "FOLLOW_UP_SENT":
       return info(`A follow-up message was sent to ${c.name}.`);
     case "RESERVATION_CANCELLED":

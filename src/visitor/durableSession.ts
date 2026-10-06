@@ -47,6 +47,9 @@ const STEP_AWAITING = [
   }),
   z.object({ kind: z.literal("confirm-operator-tour"), confirmBy: Iso }),
   z.object({ kind: z.literal("confirm-cancel-tour"), day: z.string(), time: z.string() }),
+  z.object({ kind: z.literal("t15-questions") }),
+  z.object({ kind: z.literal("t5-extension-offer") }),
+  z.object({ kind: z.literal("t5-no-offer") }),
 ] as const;
 const StepAwaitingSchema = z.discriminatedUnion("kind", [...STEP_AWAITING]);
 
@@ -91,6 +94,11 @@ export const DurableSessionSchema = z.object({
   /** The identity-form link currently open (no token). */
   verification: z.object({ issuedAt: Iso, expiresAt: Iso }).optional(),
   followUp: z.enum(["asked", "answered"]).optional(),
+  pendingRebook: z.boolean().optional(),
+  rebookUnitId: z.string().optional(),
+  pendingBookingId: z.string().optional(),
+  followUpReservationId: z.string().optional(),
+  heldBookingTakenOver: z.boolean().optional(),
   optedOut: z.boolean().default(false),
   /** This leftover conversation was replaced by an operator-set one-off. */
   superseded: z.boolean().optional(),
@@ -137,6 +145,11 @@ export async function snapshotOf(session: VisitorDemoSession, links?: Verificati
     ...(r ? { routeProgress: { opened, ...(r.allowedRoute.find((d) => !opened.includes(d)) ? { next: r.allowedRoute.find((d) => !opened.includes(d)) } : {}) } } : {}),
     ...(link ? { verification: { issuedAt: new Date(link.issuedAt).toISOString(), expiresAt: new Date(link.expiresAt).toISOString() } } : {}),
     ...(stage === "follow-up" ? { followUp: "asked" } : stage === "done" ? { followUp: "answered" } : {}),
+    ...(session.pendingRebook ? { pendingRebook: true } : {}),
+    ...(session.rebookUnitId ? { rebookUnitId: session.rebookUnitId } : {}),
+    ...(session.pendingBookingId ? { pendingBookingId: session.pendingBookingId } : {}),
+    ...(session.followUpReservationId ? { followUpReservationId: session.followUpReservationId } : {}),
+    ...(session.heldBookingTakenOver ? { heldBookingTakenOver: true } : {}),
     optedOut: session.optedOut,
     ...(session.superseded ? { superseded: true } : {}),
     createdAt: previous?.createdAt ?? session.startedAt.toISOString(),
@@ -157,6 +170,7 @@ export interface RestoreDeps {
   storageRead?: () => "live" | "cached" | "stale";
   beforeAccess?: () => Promise<void>;
   otherBusyStarts?: (propertyId: string, tourId: string) => Promise<Date[]>;
+  otherBusyWindows?: (propertyId: string, tourId: string) => Promise<import("../core/customSlot").OccupiedWindow[]>;
 }
 
 /**
@@ -191,12 +205,17 @@ export async function restoreSession(snapshot: DurableSession, deps: RestoreDeps
     storageRead: deps.storageRead,
     beforeAccess: deps.beforeAccess,
     otherBusyStarts: deps.otherBusyStarts ? () => deps.otherBusyStarts!(snapshot.propertyId, snapshot.tourId) : undefined,
+    otherBusyWindows: deps.otherBusyWindows ? () => deps.otherBusyWindows!(snapshot.propertyId, snapshot.tourId) : undefined,
   });
   await session.hydrate(tour.record, tour.bundle);
   if (snapshot.superseded) session.superseded = true;
   session.line = snapshot.line;
   if (!session.visitor) session.identify(snapshot.visitorPhone);
   if (session.visitor!.phone !== snapshot.visitorPhone) throw new RestoreError("The visitor's number doesn't match this tour's records.");
+  if (snapshot.reservationId) session.reservationId = snapshot.reservationId;
+  session.pendingBookingId = snapshot.pendingBookingId;
+  session.followUpReservationId = snapshot.followUpReservationId;
+  session.heldBookingTakenOver = !!snapshot.heldBookingTakenOver;
 
   await validateCanonical(session, snapshot, config);
 
@@ -229,6 +248,8 @@ export async function restoreSession(snapshot: DurableSession, deps: RestoreDeps
     ...(pending ? { pending } : {}),
     ...(snapshot.heldTime ? { heldTime: snapshot.heldTime } : {}),
   });
+  session.pendingRebook = !!snapshot.pendingRebook;
+  session.rebookUnitId = snapshot.rebookUnitId;
   session.rememberShownSchedule(snapshot.offeredDates ?? [], offeredSlots);
   if (stage === "choose-date" || stage === "choose-time") {
     const before = JSON.stringify({

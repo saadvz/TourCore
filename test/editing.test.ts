@@ -156,7 +156,18 @@ describe("operator-facing presenters", () => {
     expect(safety).toContain("Visitor arrives on time: Entrance access approved");
     expect(safety).toContain("Visitor enters Unit 101: Access approved");
     expect(safety).toContain("Visitor tries Unit 102 Door: Access correctly denied before Durin was contacted");
-    expect(view.groups[2]!.items.map((i) => i.label)).toEqual(["Tour completed", "Access revoked", "Follow-up sent", "Tour records saved"]);
+    expect(view.groups[2]!.items.map((i) => i.label)).toEqual([
+      "T-15 any-questions text",
+      "T-5 extra-time offer",
+      "One-time extension",
+      "Tour completed",
+      "Access revoked",
+      "Follow-up sent",
+      "The tour-end text was sent (no extra time taken)",
+      "T+5 leave check-in",
+      "T+15 close",
+      "Tour records saved",
+    ]);
     expect(view.messages.length).toBeGreaterThan(0);
   });
 

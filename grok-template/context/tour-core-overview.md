@@ -3,8 +3,36 @@
 Tour Core is an open-source self-touring tool. A prospect texts the property's
 number, books a time, agrees to texts and tour records, confirms who they are,
 and tours one unit on their own. The text thread stays live through the tour:
-Tour Core guides them door by door. Afterwards it sends a recap and one
-follow-up question.
+Tour Core guides them door by door. After the tour has started they get a
+15-minutes-left questions text, then a 5-minute warning. One extra 10 minutes
+is granted when they ask any time before the tour ends and the next time is
+free; a bare yes to the questions text never grants time. After the no-time
+line, yes starts booking another look. After the end, doors never open. A +5 text
+asks if they've left; at +15 the tour closes and the team gets one issue.
+DONE, "I'm out", or "leaving" ends the tour with the usual goodbye. After a
++15 close, other replies alert the team once per message and always reply
+to the visitor, until DONE, the operator marks the leaving issue handled,
+or 24 hours pass (alerts stop then; the leaving issue stays open until
+DONE or handled). While that 24-hour window is open, a standalone HI or
+yo stays on after-close handling; a clear booking phrase (including
+see it again / schedule another visit) starts a new booking only when
+nothing is held. After 24 hours, greetings go back to normal. A
+greeting with more text, or anything about being stuck, locked,
+jammed, still in the unit, unable to leave, or unable to get
+outside, does not start booking. Help booking does not hide those
+other words. A rebook or custom-time
+request during a tour stays secondary until that tour ends, then
+unfinished consent or identity checks continue. After the follow-up
+reply, an unapproved custom-time request is told it is still with the
+property team instead of the day menu. While the leaving
+issue is open after the close, stuck-inside texts and greetings stay
+on after-close handling. After the follow-up reply, unanswered consent is the
+booked-for line for the new time, then the original consent question.
+DONE after the close uses the usual thanks and follow-up; a yes is
+the same follow-up as a normal finish and does not record consent. STOP
+during a tour stops visitor texts only; the tour stays on its window and
+team alerts still go out. Afterwards it sends a recap and one follow-up
+question.
 
 The welcome is one message. It names the property by its address, and by a
 name the operator gave it only when there is one: "Hi! Welcome to the

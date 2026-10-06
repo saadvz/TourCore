@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Practice tour with safety proof points
-  version: "0.2.3"
+  version: "0.2.4"
 ---
 
 # Simulate Tour
@@ -17,8 +17,15 @@ The practice tour books a pretend visitor, records consent, verifies them,
 tries an early arrival, opens the first door on the route at the right time
 (the building entrance, including a single-family front door, or the unit door
 on a unit-door-only apartment or condo), repeats a request, opens any later
-doors, tries a door that isn't on the route, completes the tour and sends the
-follow-up, all through the real engine and policy with Durin in demo mode.
+doors, tries a door that isn't on the route, sends the 15-minutes-left
+questions text and the 5-minute extra-time offer, grants one 10-minute
+extension, completes the tour and sends the follow-up, then runs a second path
+through tour-end, the +5 leave check-in, and the +15 close — all on a
+deterministic simulated clock through the real engine and policy with Durin in
+demo mode. A 15-minute tour skips T-15 with a reason (it would be the start).
+If extra time or the second path cannot apply (last slot of the day, no later
+time), that step is reported as skipped with a reason — never a failure and
+never silently.
 
 ## When to use
 
@@ -42,8 +49,14 @@ wants to prove the tour still works.
    > ✓ Unit 101 access was allowed
    > ✓ Unit 102 Door (not on the route) was denied before Durin was contacted
    > ✓ A repeated request didn't create a second access grant
+   > ✓ The 15-minutes-left questions text was sent
+   > ✓ The 5-minute extra-time offer was sent
+   > ✓ A one-time 10-minute extension was granted
    > ✓ Tour completed
    > ✓ Follow-up worked
+   > ✓ The tour-end text was sent (no extra time taken)
+   > ✓ The 5-minutes-after check-in was sent
+   > ✓ The tour was closed 15 minutes after the end
 
    On a unit-door-only apartment or condo (no building entrance on the route),
    show the unit-door proof instead of an entrance line:

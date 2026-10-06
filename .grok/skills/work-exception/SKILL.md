@@ -1,6 +1,6 @@
 ---
 name: work-exception
-description: Show what needs the team's attention on live and recent tours (unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored), open one, and resolve it using only Tour Core's actions and the operator's own facts.
+description: Show what needs the team's attention on live and recent tours (unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored, visitors who didn't confirm leaving), open one, and resolve it using only Tour Core's actions and the operator's own facts.
 when-to-use: "what needs attention", "show exceptions", "any problems", "open Pat's issue", "what's happening with Pat's tour", "show active tours", "pause the tour", "call off the tour", a Tour Core Operator Updates routine run
 allowed-tools: get_operator_update list_active_tours inspect_tour list_exceptions inspect_exception resolve_exception answer_flagged_question place_operator_hold clear_operator_hold revoke_tour_access pause_tours resume_tours remove_property list_tour_time_requests inspect_tour_time_request approve_tour_time_request decline_tour_time_request propose_tour_time reschedule_tour schedule_one_off_tour inject_local_sms read_local_outbox
 argument-hint: "[visitor or issue]"
@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Tour updates, exception queue, monitoring, holds and approved answers
-  version: "0.3.10"
+  version: "0.3.14"
 ---
 
 # Work Exception
@@ -75,6 +75,10 @@ Tour Core sends only an `eventId` and an event type; never names or details.
    > 2. Jamie Lee — Unit 102
    >    Couldn't be restored after a restart. No doors will open for it.
    >    Access is blocked.
+   >
+   > 3. Sam Lee — Unit 103
+   >    Hasn't confirmed leaving Unit 103.
+   >    Tour time ended.
 2. "Open Pat's issue": `inspect_exception` with that item's `exceptionId`. Show
    what happened, the visitor's words, where the tour stands and `nextSteps`.
 
@@ -96,7 +100,36 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   If the operator doesn't know the answer, don't guess. Offer to mark it
   handled once they've dealt with it another way.
 - **Mark handled.** `resolve_exception` with a short note in the operator's
-  words. It changes nothing else.
+  words. It changes nothing else. For "Visitor hasn't confirmed leaving",
+  marking it handled also ends the after-close visitor alerts (alerts also
+  stop when they text DONE / I'm out, or 24 hours after the close). The
+  leaving issue itself stays open until they text DONE or you mark it
+  handled. While the 24-hour after-close window is open, a standalone
+  HI or yo stays on after-close handling. After 24 hours, greetings go
+  back to normal even if the leaving issue is still open: HI starts a
+  booking if nothing is held, or takes over a held booking. A clear
+  booking phrase (including see it again / schedule another visit)
+  starts a new booking when nothing is held; a greeting with more text,
+  or anything about being stuck, locked, jammed, still in the unit,
+  unable to leave, or unable to get outside, still alerts the team
+  and replies to the visitor. Help booking does not hide those other
+  words. Marking the leaving issue handled closes after-close alerts
+  for that closed tour, even when a later booking is held. While that
+  leaving issue is open, those after-close texts run before a held
+  booking can take over. A rebook held from during the tour continues after the
+  follow-up reply: if its consent is still unanswered, they get the
+  booked-for line for the new time, then the original consent
+  question. An unapproved custom-time request is told it is still with
+  the property team instead of the day menu. A follow-up yes does not
+  record that consent.
+- **After a closed tour.** Other visitor texts before that window ends
+  alert the team once per message. DONE after the close uses the usual
+  thanks and follow-up question; a yes is the same follow-up as a normal
+  finish (`{name} toured {place} and would like someone to follow up.`).
+- **STOP during a tour.** Visitor texts stop. The tour stays on its
+  window; doors still follow policy, and the leave check-in, close, and
+  team alerts still fire. The team is told they replied STOP and won't
+  get more messages. The tour is not ended.
 - **Pause a tour** (`place_operator_hold`), **resume** (`clear_operator_hold`),
   **call off** (`revoke_tour_access`): each returns a yes/no question first.
   Ask it word for word; call again with `confirmationCode` only after a clear

@@ -247,6 +247,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         await alerts.baseline();
         installation.files.writeState({ ...installation.files.state(), alertsBaselineAt: new Date(installation.now()).toISOString() });
       }
+      await conversations.tickOverstay();
       await installation.outbox.drain();
     } catch (err) {
       log(`Couldn't check for pending operator alerts: ${err instanceof Error ? err.message : "unknown error"}`);
@@ -538,6 +539,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
   const retry = setInterval(() => {
     alertWork = alertWork
       .then(() => conversations.releaseUnconfirmed())
+      .then(() => conversations.tickOverstay())
       .then(() => installation.outbox.drain().then(() => undefined))
       .catch(() => undefined);
   }, options.alertRetryMs ?? 15_000);

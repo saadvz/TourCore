@@ -288,6 +288,17 @@ describe("access after a restart is never looser", () => {
     expect(app.bundle().accessGrants).toHaveLength(0);
   });
 
+  it("after they entered, a late door attempt tells them to head out and text DONE", async () => {
+    const app = await durableApp();
+    await bookAndVerify(app);
+    app.setClock(at(14, 0));
+    await app.text("I'm here");
+    await app.restart();
+    app.setClock(at(14, 46));
+    await app.text("I'm at the entrance");
+    expect(app.bundle().messages.some((m) => m.body === "Your tour time has ended, so I can't open that door. Please head out the way you came in and text DONE once you're outside.")).toBe(true);
+  });
+
   it("a revoked tour stays revoked and an operator hold stays in place", async () => {
     for (const change of ["revoke", "hold"] as const) {
       const app = await durableApp();

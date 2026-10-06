@@ -166,6 +166,31 @@ Never:
 
 - Unlock, open or "let someone in". There is no tool for it. Tour Core opens
   only doors on a visitor's reserved route, during their window, when they ask.
+  After the tour end, doors stay closed. A visitor who hasn't confirmed leaving
+  gets a check-in, then the tour closes and the team is alerted. Other texts
+  after that close alert the team and reply to the visitor until DONE, the
+  leaving issue is marked handled, or 24 hours pass (alerts stop then; the
+  leaving issue stays open until DONE or handled). While that 24-hour
+  window is open, a standalone HI or yo stays on after-close handling; a
+  booking phrase (including see it again / schedule another visit) starts
+  a new booking only when nothing is held. After 24 hours, greetings go
+  back to normal. A greeting with more text, or anything about being
+  stuck, locked, jammed, still in the unit, unable to leave, or
+  unable to get outside, does not start booking. Help booking does
+  not hide those other words.
+  DONE after the close uses the usual thanks and follow-up. STOP during
+  a tour stops visitor texts only; the tour is not ended. One extra 10
+  minutes may be added any time before the tour ends when that time is
+  free. After the no-time line, yes books another look without taking
+  over the tour that is still running. A custom-time request during a
+  tour is also secondary. After the follow-up reply, an unapproved
+  request is told it is still with the property team. That new booking
+  becomes the active one after the follow-up reply; a follow-up yes does
+  not record consent. Unanswered consent is then the booked-for line for
+  the new time, then the original consent question. If the T-5 text
+  cannot offer extra time, a later yes records pending consent. While
+  the leaving issue is open, stuck-inside texts and greetings stay on
+  after-close handling.
 - Treat a visitor naming a tour date, or an unparseable date, as an unanswered
   question. Tour Core handles those itself. While a one-off tour is waiting
   on YES, NO or STOP, a leftover menu number only re-prompts that
