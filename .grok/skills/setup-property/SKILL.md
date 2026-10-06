@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Guided property setup, checked and practiced before publish
-  version: "0.3.9"
+  version: "0.3.10"
 ---
 
 # Setup Property
@@ -205,7 +205,8 @@ someone is on a tour. Published records stay (`export_audit`, `inspect_tour`);
 an in-progress setup is removed completely. Ask the exact question it
 returns: for a draft, **Remove the setup for {name}? It isn't published yet,
 so no visitors are affected, but everything entered for it will be deleted for
-good.** {name} is the operator-given property name or street plus unit, never
+good.** {name} is the operator-given property name, or street plus unit when
+there is exactly one unit, otherwise the street or address — never
 "Main Home". After yes, say **Removed the setup for {name}.** Otherwise keep
 Tour Core's wording. Say
 **remove**, never archive. This is not `place_operator_hold`, which pauses one

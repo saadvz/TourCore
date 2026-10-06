@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Tour updates, exception queue, monitoring, holds and approved answers
-  version: "0.3.6"
+  version: "0.3.7"
 ---
 
 # Work Exception
@@ -114,7 +114,8 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   removes that setup completely; published records stay. For a draft, the
   question says it isn't published yet so no visitors are affected, but
   everything entered for it will be deleted for good. {name} is the
-  operator-given property name or street plus unit, never "Main Home". If it
+  operator-given property name, or street plus unit when there is exactly one
+  unit, otherwise the street or address — never "Main Home". If it
   was a setup still in progress, say **Removed the setup for {name}.** Say remove, never archive.
 - Door-system problems and tours that couldn't be restored: explain in plain
   words, suggest reaching out to the visitor, and resume only once the operator

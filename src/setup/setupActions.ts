@@ -16,7 +16,7 @@ import { nextProfileQuestion, parseProfileValue, PROFILE_FIELDS, ProfileValueErr
 import type { ConfigIssue, ConfigSection } from "../config/validateConfig";
 import { formatPhone, parsePhone } from "../core/phone";
 import { formatClockTime, friendlyTimeZone, WEEKDAYS, type Weekday } from "../core/timezone";
-import { isApartmentOrCondo, isSingleTourPlace, streetAndUnit, unitLabel, visitorSubject } from "../visitor/identity";
+import { isApartmentOrCondo, isSingleTourPlace, streetAndUnit, streetLine, unitLabel, visitorSubject } from "../visitor/identity";
 import { inferTimeZone, resolveTimeZone, slugify } from "./parse";
 import { formatCanonical, parseUsAddress } from "./address";
 
@@ -124,8 +124,9 @@ const INTERNAL_SPACE_NAME = /^main home$/i;
 
 /**
  * Operator-facing property name for remove and similar copy: their public
- * name, or street plus unit for an apartment or condo, otherwise the address.
- * Never the internal single-family space label "Main Home".
+ * name, or street plus unit when an apartment or condo has exactly one unit,
+ * otherwise the street or address. Never the internal single-family space
+ * label "Main Home".
  */
 export function operatorFacingPropertyName(draft: {
   property: { address: string; displayName?: string; name?: string; propertyType?: PropertyType; canonicalAddress?: { street?: string } };
@@ -133,7 +134,13 @@ export function operatorFacingPropertyName(draft: {
 }): string {
   const given = draft.property.displayName?.trim();
   if (given && !INTERNAL_SPACE_NAME.test(given)) return given;
-  if (isApartmentOrCondo(draft.property) && draft.units[0]) return streetAndUnit(draft.property, draft.units[0].name);
+  if (isApartmentOrCondo(draft.property) && draft.units.length === 1) {
+    return streetAndUnit(draft.property, draft.units[0]!.name);
+  }
+  if (isApartmentOrCondo(draft.property) && draft.units.length > 1) {
+    const street = streetLine(draft.property);
+    if (street) return street;
+  }
   const address = draft.property.address.trim();
   if (address) return address;
   const fallback = draft.property.name?.trim() ?? "";

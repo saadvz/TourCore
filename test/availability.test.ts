@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -46,6 +46,16 @@ function app(): GrokHarness {
   const h = grokHarness();
   cleanups.push(h.cleanup);
   return h;
+}
+
+/** Single-family add_unit can persist a valid config. Keep the folder as a draft-only setup. */
+function keepAsInProgressSetup(h: GrokHarness, propertyId: string): void {
+  if (!h.workspace.has(propertyId)) return;
+  const config = h.workspace.load(propertyId).config;
+  const dir = join(h.root, "properties", propertyId);
+  rmSync(join(dir, "tourcore.config.json"), { force: true });
+  rmSync(join(dir, "status.json"), { force: true });
+  h.workspace.saveDraft(config);
 }
 
 function lastFrom(session: VisitorDemoSession, from: "tourcore" | "visitor" = "tourcore"): string {
@@ -423,20 +433,27 @@ describe("pause and remove", () => {
         units: [{ name: "Unit 4B" }],
       }),
     ).toBe("145 Main St, Unit 4B");
+    expect(
+      operatorFacingPropertyName({
+        property: { address: "500 QA Condo Ave, Tenafly, NJ 07670", propertyType: "APARTMENT_OR_CONDO", canonicalAddress: { street: "500 QA Condo Ave" } },
+        units: [{ name: "Unit Loft" }, { name: "Unit 4B" }],
+      }),
+    ).toBe("500 QA Condo Ave");
 
     const home = app();
     await home.ok("create_property_setup", { address: "27 Oak Ln, Teaneck, NJ 07666", propertyType: "SINGLE_FAMILY" });
     expect((await home.ok("add_unit", {})).unit.name).toBe("Main Home");
     const homeId = home.workspace.propertyIds()[0]!;
+    keepAsInProgressSetup(home, homeId);
+    expect(home.workspace.has(homeId)).toBe(false);
+    expect((await home.ok("list_properties")).properties[0].status).toBe("Setup in progress");
     const homeName = operatorFacingPropertyName(home.workspace.openDraft(homeId).draft);
     expect(homeName).not.toMatch(/Main Home/i);
     const removedHome = await home.approve("remove_property", { property: homeId });
+    expect(removedHome.asked.summary).toBe(removeSetupConfirmQuestion(homeName));
+    expect(removedHome.done.summary).toBe(removedSetupSummary(homeName));
     expect(removedHome.asked.summary).not.toContain("Main Home");
     expect(removedHome.done.summary).not.toContain("Main Home");
-    if (!home.workspace.has(homeId)) {
-      expect(removedHome.asked.summary).toBe(removeSetupConfirmQuestion(homeName));
-      expect(removedHome.done.summary).toBe(removedSetupSummary(homeName));
-    }
 
     const condo = app();
     await condo.ok("create_property_setup", { address: "145 Main St, Hoboken, NJ 07030", propertyType: "APARTMENT_OR_CONDO" });
@@ -448,6 +465,30 @@ describe("pause and remove", () => {
     expect(asked.summary).not.toContain("Main Home");
     expect(done.summary).toBe(removedSetupSummary("145 Main St, Unit 4B"));
     expect(done.summary).not.toContain("Main Home");
+  });
+
+  it("names a two-unit in-progress condo by the street alone", async () => {
+    const h = app();
+    const created = await h.ok("create_property_setup", {
+      address: "500 QA Condo Ave, Tenafly, NJ 07670",
+      propertyType: "APARTMENT_OR_CONDO",
+    });
+    const id = created.setup.propertyId as string;
+    const draft = h.workspace.openDraft(id).draft;
+    h.workspace.saveDraft({
+      ...draft,
+      units: [
+        { id: "unit_loft", name: "Unit Loft", doorId: "", summary: "", facts: [] },
+        { id: "unit_4b", name: "Unit 4B", doorId: "", summary: "", facts: [] },
+      ],
+    });
+    expect(h.workspace.has(id)).toBe(false);
+    expect(operatorFacingPropertyName(h.workspace.openDraft(id).draft)).toBe("500 QA Condo Ave");
+    const { asked, done } = await h.approve("remove_property", { property: id });
+    expect(asked.summary).toBe(removeSetupConfirmQuestion("500 QA Condo Ave"));
+    expect(asked.summary).not.toMatch(/Loft|4B/);
+    expect(done.summary).toBe(removedSetupSummary("500 QA Condo Ave"));
+    expect(done.summary).not.toMatch(/Loft|4B/);
   });
 
   it("still removes a published property and keeps its records", async () => {
