@@ -26,6 +26,7 @@ import {
   proposeVisitorLine,
   replacesTourLine,
   REQUEST_ALREADY_HANDLED,
+  TOUR_ENDED_REPLY,
   requestAlreadyExpiredLine,
   requestExpiredLine,
   requestProposePassedLine,
@@ -2277,24 +2278,19 @@ describe("an operator booking change stale-dates a leftover menu", () => {
 
   it("a leftover 1 after a one-off is confirmed does not book 2:00", async () => {
     const a = await liveApp({ cleanups });
-    a.ws.recordDryTour("prop_100_alfred_way", { passed: true, ranAt: new Date(a.clock.t).toISOString(), checks: [], audit: [] });
-    expect((await a.ws.publishDemoProperty("prop_100_alfred_way", new Date(a.clock.t))).published).toBe(true);
     await a.optInSms();
     await a.text("1");
     const menu = await a.text("1");
     expect(menu.join("\n")).toContain("2:00 PM");
     expect(menu.join("\n")).toContain("3:30 PM");
-    await a.approve("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "3:15 PM today" });
+    const session = a.visitors.latestForPhone("prop_100_alfred_way", PHONE, "messaging")!;
+    await session.scheduleOneOff({ unitId: "apt_101", start: atTime(15, 15), outsideHours: false, name: "Dana" });
     const yes = await a.text("YES");
     expect(yes.join("\n")).toContain("Great, you're booked for 3:15 PM");
     const leftover = await a.text("1");
     expect(leftover.join("\n")).not.toContain(bookedForLine("2:00 PM", "Monday, Sep 28"));
     expect(leftover.join("\n")).not.toContain(bookedForLine("3:30 PM", "Monday, Sep 28"));
-    const reservation = a.ws
-      .listTours("prop_100_alfred_way")
-      .filter((item) => item.kind === "messaging" && item.visitorPhone === PHONE)
-      .flatMap((item) => a.ws.loadTour("prop_100_alfred_way", item.tourId)!.bundle.reservations)
-      .find((item) => item.slotStart && item.status !== "CANCELLED")!;
+    const reservation = (await session.store.list("reservations")).find((item) => item.slotStart && item.status !== "CANCELLED")!;
     expect(reservation.slotStart).toBe(atTime(15, 15).toISOString());
   });
 
@@ -2304,6 +2300,7 @@ describe("an operator booking change stale-dates a leftover menu", () => {
     await a.text("cancel");
     await a.text("yes");
     const leftover = await a.text("1");
+    expect(leftover.join("\n")).toContain(TOUR_ENDED_REPLY);
     expect(leftover.join("\n")).not.toContain(bookedForLine("3:30 PM", "Tuesday, Sep 29"));
     expect(leftover.join("\n")).not.toContain("That replaces your");
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.visitorPhone === PHONE)!;
@@ -2318,6 +2315,7 @@ describe("an operator booking change stale-dates a leftover menu", () => {
     const tour = tours.find((item) => item.visitorName.startsWith("Testy"));
     await a.approve("revoke_tour_access", { tourRef: tour!.tourRef, reason: "Called off" });
     const leftover = await a.text("1");
+    expect(leftover.join("\n")).toContain(TOUR_ENDED_REPLY);
     expect(leftover.join("\n")).not.toContain(bookedForLine("3:30 PM", "Tuesday, Sep 29"));
     expect(leftover.join("\n")).not.toContain("That replaces your");
     const saved = a.ws.listTours("prop_100_alfred_way").find((item) => item.visitorPhone === PHONE)!;
