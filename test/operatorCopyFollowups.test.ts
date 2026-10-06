@@ -34,18 +34,19 @@ function textingApp(): InstallHarness {
 async function finishSingleFamily(h: InstallHarness, address: string, propertyType: "SINGLE_FAMILY" | "MULTIFAMILY_HOME" | "APARTMENT_OR_CONDO" = "SINGLE_FAMILY") {
   const created = await h.ok("create_property_setup", { address, propertyType });
   const id = created.setup.propertyId as string;
-  if (propertyType === "SINGLE_FAMILY") await h.ok("add_unit", {});
-  else if (propertyType === "MULTIFAMILY_HOME") await h.ok("add_unit", { name: "1A" });
+  const at = { property: id };
+  if (propertyType === "SINGLE_FAMILY") await h.ok("add_unit", at);
+  else if (propertyType === "MULTIFAMILY_HOME") await h.ok("add_unit", { ...at, name: "1A" });
   else {
-    await h.ok("add_unit", { name: "4B" });
-    await h.ok("update_property_details", { buildingAccess: "UNIT_ONLY" });
-    await h.ok("update_property_details", { skipEntryInstructions: true });
+    await h.ok("add_unit", { ...at, name: "4B" });
+    await h.ok("update_property_details", { ...at, buildingAccess: "UNIT_ONLY" });
+    await h.ok("update_property_details", { ...at, skipEntryInstructions: true });
   }
   const unit = propertyType === "SINGLE_FAMILY" ? "Main Home" : propertyType === "MULTIFAMILY_HOME" ? "1A" : "Unit 4B";
-  await h.ok("set_unit_details", { units: [{ unit, bedrooms: "3", bathrooms: "2", monthlyRent: "$3,400", availability: "now" }] });
-  await h.ok("set_tour_hours", { days: "weekdays", start: "9am", end: "5pm" });
-  await h.ok("set_verification_policy", { level: "basic-form" });
-  await h.ok("update_property_details", { skipVisitorHelp: true });
+  await h.ok("set_unit_details", { ...at, units: [{ unit, bedrooms: "3", bathrooms: "2", monthlyRent: "$3,400", availability: "now" }] });
+  await h.ok("set_tour_hours", { ...at, days: "weekdays", start: "9am", end: "5pm" });
+  await h.ok("set_verification_policy", { ...at, level: "basic-form" });
+  await h.ok("update_property_details", { ...at, skipVisitorHelp: true });
   return id;
 }
 
