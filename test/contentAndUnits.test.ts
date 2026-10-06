@@ -301,6 +301,18 @@ describe("minimum unit information", () => {
     for (const u of bulk.units) expect(u.values.availability).toBeUndefined();
   });
 
+  it("treats W/D as laundry, not unit W, and ignores ordinary words after 'unit'", () => {
+    expect(parseBulkUnitDetails("1A has W/D, 3 bed 2 bath $3,400", ["1A", "W", "Laundry Suite"])).toEqual({
+      units: [{ unit: "1A", values: { bedrooms: "3", bathrooms: "2", monthlyRent: "$3,400" } }],
+      unknownUnits: [],
+    });
+    expect(parseBulkUnitDetails("W is 1 bed 1 bath for $1,800", ["1A", "W"])).toEqual({
+      units: [{ unit: "W", values: { bedrooms: "1", bathrooms: "1", monthlyRent: "$1,800" } }],
+      unknownUnits: [],
+    });
+    expect(parseBulkUnitDetails("the unit has 3 bedrooms and the unit is available now", ["Main Home"]).unknownUnits).toEqual([]);
+  });
+
   it("setup asks only for what's still missing, and summarizes concisely", async () => {
     const h = harness();
     await h.ok("create_property_setup", { address: "12 Elm St, Brooklyn, NY", name: "12 Elm St", propertyType: "APARTMENT_BUILDING" });

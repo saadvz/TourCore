@@ -4,11 +4,13 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config/tourCoreConfig";
 import { SimulatedClock } from "../src/core/clock";
-import { TourCore } from "../src/core/TourCore";
+import { TourCore, VisitorDenialCopy } from "../src/core/TourCore";
 import { zonedTimeToUtc } from "../src/core/timezone";
 import { createVerificationProvider } from "../src/createTourCore";
 import { MockDurinAccessAdapter } from "../src/durin/MockDurinAccessAdapter";
 import { Installation } from "../src/install/installation";
+import { listExceptions } from "../src/operator/exceptions";
+import { PropertyWorkspace } from "../src/setup/workspace";
 import { ConsoleMessenger } from "../src/messaging/Messenger";
 import { InMemoryStore } from "../src/storage/Store";
 import { claimLease, collectCanonical, copyMigration, factReadMode, prepareMigration, resolveCachedRecord, restoreCanonical, verifyMigration } from "../src/storage/canonical";
@@ -18,6 +20,7 @@ import { StorageConflictError, StorageUnavailableError } from "../src/storage/er
 import { FakeGoogleDrive, GoogleDriveStore, googleScopeParam } from "../src/storage/googleDrive";
 import { authorizationUrl, checkState, createPending, exchangeCode } from "../src/storage/googleOAuth";
 import { FileRuntimeStore } from "../src/storage/runtimeStore";
+import { describeHistory } from "../src/audit/describe";
 import { basicForm, TOUR_DAY } from "./helpers";
 
 const cleanups: Array<() => void> = [];
@@ -233,7 +236,7 @@ describe("failure behavior", () => {
     expect(await inner.list("reservations")).toEqual([]);
   });
 
-  it("does not call Durin when canonical records cannot be confirmed, and revokes if the grant cannot be saved", async () => {
+  it("does not call Durin when canonical records cannot be confirmed before unlock, keeps the booking ready, and hands the visitor off", async () => {
     const config = loadConfig();
     const clock = new SimulatedClock(zonedTimeToUtc({ ...TOUR_DAY, hour: 10, minute: 0 }, config.property.timezone));
     const durin = new MockDurinAccessAdapter({ doorNames: Object.fromEntries(config.doors.map((door) => [door.id, door.name])), now: () => clock.now() });
@@ -256,10 +259,40 @@ describe("failure behavior", () => {
     clock.set(slot.start);
     const denied = await closed.requestAccess({ reservationId: reservation.id, prospectId: started.prospect.id, doorId: "entrance" });
     expect(denied.durinCalled).toBe(false);
-    expect(denied.decision.code).toBe("DENY_PROVIDER_FAILURE");
+    expect(denied.decision.code).toBe("DENY_STORAGE_FAILURE");
     expect(durin.calls.requestAccess).toHaveLength(0);
+    const bundle = await closed.exportRecords();
+    const door = config.doors.find((d) => d.id === "entrance")!.name;
+    const locked = `Tour Core couldn't save the visit record, so ${door} stayed locked.`;
+    expect(bundle.reservations.find((r) => r.id === reservation.id)?.status).toBe("READY");
+    expect(bundle.auditEvents.some((e) => e.type === "PROVIDER_FAILURE")).toBe(false);
+    expect(bundle.auditEvents.filter((e) => e.type === "OPERATOR_NOTIFIED").map((e) => e.detail)).toContain(locked);
+    const visitorReply = bundle.messages.filter((m) => m.audience === "PROSPECT").map((m) => m.body).at(-1);
+    const expectedVisitor = VisitorDenialCopy.doorsNotResponding(config.operator.name, config.operator.visitorContact);
+    expect(visitorReply).toBe(expectedVisitor);
+    expect(visitorReply).toContain("I've let the leasing team know");
+    expect(visitorReply).toMatch(/Stay where you are and reply here|or call/);
+    expect(visitorReply).not.toMatch(/durin/i);
+    const history = describeHistory(bundle.auditEvents, bundle, config.property.timezone).map((e) => e.text);
+    expect(history).toContain(locked);
+    expect(history).not.toContain("Tour Core couldn't save the visit record, so the tour was paused.");
+    const ws = new PropertyWorkspace(tempDir());
+    ws.save(config);
+    ws.recordVisitorDemo(config.property.id, {
+      schemaVersion: 1,
+      tourId: "2026-09-28T14-00-00-000Z_storage-pre",
+      kind: "visitor-demo",
+      ranAt: clock.now().toISOString(),
+      updatedAt: clock.now().toISOString(),
+      outcome: "in-progress",
+    }, bundle);
+    const issues = await listExceptions({ workspace: ws, now: () => clock.now() });
+    expect(issues).toEqual([]);
+  });
 
-    clock.set(zonedTimeToUtc({ ...TOUR_DAY, hour: 10, minute: 0 }, config.property.timezone));
+  it("revokes if the grant cannot be saved and pauses the tour", async () => {
+    const config = loadConfig();
+    const clock = new SimulatedClock(zonedTimeToUtc({ ...TOUR_DAY, hour: 10, minute: 0 }, config.property.timezone));
     let grants = 0;
     const flaky = new InMemoryStore();
     const basePut = flaky.put.bind(flaky);
@@ -273,15 +306,44 @@ describe("failure behavior", () => {
     const durin2 = new MockDurinAccessAdapter({ doorNames: Object.fromEntries(config.doors.map((door) => [door.id, door.name])), now: () => clock.now() });
     const core2 = new TourCore({ config, clock, store: flaky, durin: durin2, messenger: new ConsoleMessenger(() => {}), verification: createVerificationProvider(config) });
     const started2 = await core2.startInquiry({ name: "Jane Smith", phone: "(555) 010-9999", unitId: "apt_101" });
+    const slot = (await core2.availableSlots(TOUR_DAY))[0]!;
     await core2.reserveSlot(started2.reservation.id, slot.start.toISOString());
     let ready = await core2.recordConsent(started2.reservation.id, true);
     if (ready.status === "AWAITING_VERIFICATION") ready = await core2.submitVerification(started2.reservation.id, basicForm("(555) 010-9999"));
     clock.set(slot.start);
     const outcome = await core2.requestAccess({ reservationId: ready.id, prospectId: started2.prospect.id, doorId: "entrance" });
     expect(outcome.decision.allowed).toBe(false);
+    expect(outcome.decision.code).toBe("DENY_STORAGE_FAILURE");
     expect(durin2.calls.requestAccess).toHaveLength(1);
     expect(durin2.calls.revokeAccess).toHaveLength(1);
     expect(grants).toBe(1);
+    const bundle = await core2.exportRecords();
+    const door = config.doors.find((d) => d.id === "entrance")!.name;
+    const paused = "Tour Core couldn't save the visit record, so the tour was paused.";
+    expect(bundle.reservations.find((r) => r.id === ready.id)?.status).toBe("PROVIDER_FAILURE");
+    expect(bundle.auditEvents.some((e) => e.type === "ACCESS_DENIED" && e.code === "DENY_STORAGE_FAILURE")).toBe(true);
+    expect(bundle.auditEvents.some((e) => e.type === "PROVIDER_FAILURE" && e.code === "DENY_STORAGE_FAILURE")).toBe(true);
+    expect(bundle.auditEvents.filter((e) => e.type === "OPERATOR_NOTIFIED").map((e) => e.detail)).toContain(paused);
+    expect(bundle.auditEvents.filter((e) => e.type === "OPERATOR_NOTIFIED").map((e) => e.detail)).not.toContain(
+      `Tour Core couldn't save the visit record, so ${door} stayed locked.`,
+    );
+    const history = describeHistory(bundle.auditEvents, bundle, config.property.timezone).map((e) => e.text);
+    expect(history).toContain(`Tour Core couldn't save the visit record, so ${door} stayed locked.`);
+    expect(history).toContain(paused);
+    expect(history).not.toContain(`The door system couldn't open ${door}, so it stayed locked.`);
+    const ws = new PropertyWorkspace(tempDir());
+    ws.save(config);
+    ws.recordVisitorDemo(config.property.id, {
+      schemaVersion: 1,
+      tourId: "2026-09-28T14-00-00-000Z_storage",
+      kind: "visitor-demo",
+      ranAt: clock.now().toISOString(),
+      updatedAt: clock.now().toISOString(),
+      outcome: "in-progress",
+    }, bundle);
+    const issues = await listExceptions({ workspace: ws, now: () => clock.now() });
+    expect(issues.map((e) => e.summary)).toContain(paused);
+    expect(issues.map((e) => e.summary)).not.toContain(`The door system couldn't open ${door}, so the tour was paused.`);
   });
 });
 

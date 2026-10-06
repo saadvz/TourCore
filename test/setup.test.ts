@@ -239,7 +239,7 @@ describe("readiness check", () => {
       "Verification",
       "Messaging",
       "Records",
-      "Durin access",
+      "Door access",
       "Audit/export",
     ]);
     expect(result.advisories).toEqual(["No visitor help number is set, so stuck visitors can only text back."]);
@@ -290,7 +290,7 @@ describe("practice tour", () => {
     const { draft, ids } = buildProperty();
     const result = await runDryTour(draft, { unitId: ids.u101, now: MONDAY_MORNING });
     const safety = result.checks.find((c) => c.id === "wrong_door");
-    expect(safety).toMatchObject({ ok: true, group: "safety", outcome: "Access correctly denied before Durin was contacted" });
+    expect(safety).toMatchObject({ ok: true, group: "safety", outcome: "turned away before any door was unlocked" });
     const denied = result.audit.find((e) => e.type === "ACCESS_DENIED" && e.doorId === ids.d102);
     expect(denied?.code).toBe("DENY_WRONG_ROUTE");
     expect(result.bundle!.accessGrants.some((g) => g.doorId === ids.d102)).toBe(false);

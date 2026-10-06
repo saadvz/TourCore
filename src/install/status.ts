@@ -5,7 +5,7 @@ import { MCP_PATH } from "../mcp/paths";
 import { describeUpdates, enabledUpdates } from "../alerts/preferences";
 import type { InstalledMessaging, OperatorServices } from "../operator/services";
 import { publishGuards, visitorTexting } from "../operator/setupFlow";
-import { modeSentence } from "../setup/setupActions";
+import { LOCAL_TEST_TEXTING, localTestModeSentence, modeSentence } from "../setup/setupActions";
 import { isCurrent, type PropertyWorkspace } from "../setup/workspace";
 import { probeRuntimeStore } from "../storage/runtimeStore";
 import { DEPLOYMENT_MODE_LABELS, type DeploymentMode } from "./deployment";
@@ -433,7 +433,11 @@ function messagingStatus(inst: Installation): ComponentStatus {
       next: accountProblem ? { ...connect, action: "FIX_VISITOR_MESSAGING", operatorMessage: `${check.problems[0] ?? check.message} I'll ask for the details securely; they won't be shown in chat.` } : test,
     });
   }
-  return component("VISITOR_MESSAGING", "READY", `Visitor texting is connected and working${number ? ` (${number})` : ""}.`, {
+  const readySummary =
+    provider.id === "local"
+      ? LOCAL_TEST_TEXTING
+      : `Visitor texting is connected and working${number ? ` (${number})` : ""}.`;
+  return component("VISITOR_MESSAGING", "READY", readySummary, {
     provider: provider.id,
     technical: [statusLine("CONNECTED")],
   });
@@ -676,7 +680,8 @@ function validationStatuses(services: OperatorServices, propertyReady: boolean, 
   const name = config.property.name;
   const guards = publishGuards(services, primary.id, config.messagingMode, installed);
   const texting = visitorTexting(services, primary.id, config.messagingMode, installed);
-  const liveSummary = `${name} is published. Visitor texting: ${texting.state === "connected" ? "live" : "practice only"}. Door access: ${config.accessMode === "durin-mock" ? "demo" : "connected"}.`;
+  const textingStatus = texting.state === "test-mode" ? "test mode" : texting.state === "connected" ? "live" : "practice only";
+  const liveSummary = `${name} is published. Visitor texting: ${textingStatus}. Door access: ${config.accessMode === "durin-mock" ? "demo" : "connected"}.`;
   const readinessOk = !!state.readiness?.passed && isCurrent(state.readiness, state);
   const dryOk = !!state.dryTour?.passed && isCurrent(state.dryTour, state);
   const published = state.status === "PUBLISHED_FOR_DEMO";
@@ -738,13 +743,16 @@ export function getInstallationStatus(inst: Installation, services: OperatorServ
   ];
   const alertsOn = components.find((c) => c.component === "OPERATOR_ALERTS")!.state === "READY";
   const primary = primaryProperty(services.workspace);
-  const textingLive = !!primary && services.workspace.has(primary.id) && visitorTexting(services, primary.id, services.workspace.load(primary.id).config.messagingMode, installed).state === "connected";
+  const textingState =
+    !!primary && services.workspace.has(primary.id)
+      ? visitorTexting(services, primary.id, services.workspace.load(primary.id).config.messagingMode, installed).state
+      : undefined;
   const nextStep = components.find((c) => c.state !== "READY" && c.next)?.next ?? {
     component: null,
     action: "DONE" as const,
     phase: "OPERATE" as const,
     performedBy: "GROK" as const,
-    operatorMessage: operateMessage(textingLive, alertsOn),
+    operatorMessage: operateMessage(textingState === "connected" ? "connected" : textingState === "test-mode" ? "test-mode" : "practice", alertsOn),
   };
   const phase: OnboardingPhase = nextStep.phase;
   const url = inst.publicBaseUrl();
@@ -765,10 +773,11 @@ export function getInstallationStatus(inst: Installation, services: OperatorServ
   };
 }
 
-/** What operating means today, per subsystem: texting can be live while door access is still demo. */
-export function operateMessage(textingLive: boolean, alertsOn: boolean): string {
-  if (textingLive) return alertsOn ? OPERATOR_MESSAGES.operate : OPERATOR_MESSAGES.operateWithoutAlerts;
-  return `Your property is published. ${modeSentence(false, true)} ${alertsOn ? "I'll keep you updated on your tours and let you know when something needs your attention." : "Ask me any time to show active tours or what needs your attention."}`;
+/** What operating means today, per subsystem: texting can be live or test-mode while door access is still demo. */
+export function operateMessage(texting: "connected" | "test-mode" | "practice", alertsOn: boolean): string {
+  if (texting === "connected") return alertsOn ? OPERATOR_MESSAGES.operate : OPERATOR_MESSAGES.operateWithoutAlerts;
+  const modes = texting === "test-mode" ? localTestModeSentence(true) : modeSentence(false, true);
+  return `Your property is published. ${modes} ${alertsOn ? "I'll keep you updated on your tours and let you know when something needs your attention." : "Ask me any time to show active tours or what needs your attention."}`;
 }
 
 function summaryFor(phase: OnboardingPhase, infrastructureReady: boolean, components: ComponentStatus[]): string {

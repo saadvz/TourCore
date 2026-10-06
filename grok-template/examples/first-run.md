@@ -234,7 +234,7 @@ we turn it on.
 ✓ Visitor messaging connected
 ✓ Records
 ✓ Tour progress can be safely saved
-✓ Durin access
+✓ Door access
 ✓ Audit/export
 
 [`run_dry_tour`]
@@ -245,7 +245,7 @@ Practice tour passed:
 ✓ Early arrival was denied
 ✓ Entrance access was allowed at the right time
 ✓ Unit 1A access was allowed
-✓ Unit 1B Door (not on the route) was denied before Durin was contacted
+✓ Unit 1B Door (not on the route) was turned away before any door was unlocked
 ✓ A repeated request didn't create a second access grant
 ✓ Tour completed
 ✓ Follow-up worked

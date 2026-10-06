@@ -113,7 +113,11 @@ function sentence(
     case "RESERVATION_RESUMED":
       return info(`${c.name}'s tour was resumed.`);
     case "PROVIDER_FAILURE":
-      return blocked(`The door system had a problem during ${c.name}'s tour, so the tour was paused.`);
+      return blocked(
+        e.code === "DENY_STORAGE_FAILURE"
+          ? "Tour Core couldn't save the visit record, so the tour was paused."
+          : `The door system had a problem during ${c.name}'s tour, so the tour was paused.`,
+      );
     case "OPERATOR_NOTIFIED":
       return info(`${c.team} was alerted: ${e.detail}`);
     case "RESERVATION_RESCHEDULED":
@@ -164,7 +168,9 @@ function denial(code: string | undefined, c: { name: string; door: string }): st
     case "DENY_DURIN_UNHEALTHY":
       return `The door system wasn't responding, so ${c.door} stayed locked.`;
     case "DENY_PROVIDER_FAILURE":
-      return `Durin couldn't open ${c.door}, so it stayed locked.`;
+      return `The door system couldn't open ${c.door}, so it stayed locked.`;
+    case "DENY_STORAGE_FAILURE":
+      return `Tour Core couldn't save the visit record, so ${c.door} stayed locked.`;
     case "DENY_CONSENT_MISSING":
     case "DENY_VERIFICATION_INCOMPLETE":
     case "DENY_VERIFICATION_STALE":

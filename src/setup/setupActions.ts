@@ -69,7 +69,7 @@ export const CHOICE_LABELS = {
   },
   messaging: { demo: "Demo messaging (texts show on screen)", live: "Real texts to visitors' phones" },
   storage: { memory: "Demo records (kept on this computer)", "google-drive": "Google Drive" },
-  access: { "durin-mock": "Durin demo mode (no real doors open)", durin: "Durin" },
+  access: { "durin-mock": "Door access demo mode (no real doors open)", durin: "Real door access" },
 } as const;
 
 /**

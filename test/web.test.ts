@@ -107,14 +107,14 @@ describe("browser setup", () => {
     const readiness = await app.call("POST", `/api/properties/${id}/readiness`, {});
     expect(readiness.body.readiness.passed).toBe(true);
     expect(readiness.body.readiness.checks.map((c: { label: string }) => c.label)).toEqual([
-      "Property details", "Unit information", "Tour hours", "Unit routes", "Verification", "Messaging", "Records", "Durin access", "Audit/export",
+      "Property details", "Unit information", "Tour hours", "Unit routes", "Verification", "Messaging", "Records", "Door access", "Audit/export",
     ]);
     expect(readiness.body.summary.saved).toBe(true);
 
     const practice = await app.call("POST", `/api/properties/${id}/practice`, {});
     expect(practice.body.practice.passed).toBe(true);
     const safety = practice.body.practice.groups.find((g: { id: string }) => g.id === "safety");
-    expect(safety.items.at(-1)).toMatchObject({ label: "Visitor tries Unit 102 Door", outcome: "Access correctly denied before Durin was contacted", ok: true });
+    expect(safety.items.at(-1)).toMatchObject({ label: "Visitor tries Unit 102 Door", outcome: "turned away before any door was unlocked", ok: true });
 
     const published = await app.call("POST", `/api/properties/${id}/publish`, {});
     expect(published.body).toMatchObject({ published: true, summary: { status: "PUBLISHED_FOR_DEMO", statusLabel: "Published for demo" } });
@@ -227,7 +227,7 @@ describe("browser setup", () => {
     if (phone.demoControls.some((c: { action: string }) => c.action === "demoSkipAhead")) await tap("demoSkipAhead");
     phone = await tap("arrive");
     phone = await tap("demoWrongDoor");
-    expect(phone.thread.at(-1).text).toBe("Demo safety check: Tour Core refused this door and never contacted Durin.");
+    expect(phone.thread.at(-1).text).toBe("Demo safety check: Tour Core kept this door locked because it's not on their route.");
     expect(phone.dev).toBeUndefined();
 
     const live = await app.call("GET", `/api/visitor-demos/${sid}/live`);

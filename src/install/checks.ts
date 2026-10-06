@@ -10,6 +10,7 @@ import { writeFileAtomic } from "../storage/atomicWrite";
 import { probeRuntimeStore } from "../storage/runtimeStore";
 import { TOURCORE_VERSION, type Installation } from "./installation";
 import { storageVolumeHealth, type StorageVolumeHealth } from "./persistentVolume";
+import { LOCAL_TEST_TEXTING } from "../setup/setupActions";
 
 /**
  * The installation checks behind Tour Core's installation tools. Each one
@@ -119,7 +120,7 @@ export async function testVisitorMessaging(inst: Installation, options: { onConn
     previousWebhookUrl: previous,
   });
   const problems = [...(result.problem ? [result.problem] : []), ...result.checks.filter((c) => !c.ok).map((c) => c.message)];
-  const message = result.ok ? "Visitor texting is connected." : (problems[0] ?? "Visitor texting isn't connected yet.");
+  const message = result.ok ? (selection.provider === "local" ? LOCAL_TEST_TEXTING : "Visitor texting is connected.") : (problems[0] ?? "Visitor texting isn't connected yet.");
   const number = activeFromNumber(inst);
   inst.files.recordCheck("visitorMessaging", {
     ok: result.ok,
