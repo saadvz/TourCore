@@ -94,7 +94,7 @@ export function dayReference(normalized: string, today?: LocalDate): DayReferenc
   if (calendar) return calendar;
   const weekday = weekdayOfText(normalized);
   if (weekday) {
-    const scheduling = /\b(what about|how about|anything|available|availability|what times|which times|do you have|can i come|could i come|instead)\b/.test(normalized) || normalized.split(" ").length <= 4;
+    const scheduling = /\b(what about|how about|anything|available|availability|what times|which times|do you have|can i come|could i come|can i tour|can we tour|can i visit|can we visit|can i do|can we do|instead)\b/.test(normalized) || normalized.split(" ").length <= 4;
     if (!scheduling) return undefined;
     return { weekday: weekday.day, ...(weekday.next ? { nextWeek: true } : {}) };
   }

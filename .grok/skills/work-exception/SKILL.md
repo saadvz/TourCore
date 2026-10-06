@@ -128,9 +128,14 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   line, then the original consent question, then Reply YES or NO — not
   that regular-times sentence. Later texts use the normal booking flow.
   Booking a regular slot withdraws that request and, when it replaces a
-  held or booked future tour, adds `That replaces your {day} {time} tour.`
+  held or booked future tour, adds `That replaces your {time} tour on {day}.`
   list, inspect, and approve or decline then show `They booked a regular
-  time instead.` Default `list_tour_time_requests` hides withdrawn;
+  time instead.` If the requested time has already passed, the request
+  expires: the visitor is texted once (`The property team couldn't get
+  to your request for {newTime} on {newDay} in time.` plus still-booked
+  or reply-with-a-day), and operators see `That time has already passed,
+  so I can't book it. You can offer them a different time instead.`
+  Default `list_tour_time_requests` hides withdrawn;
   show them with status withdrawn or all. A follow-up yes does not
   record that consent. Approving a custom time that moves an unconfirmed
   held booking uses that same booked-for line, then the original consent

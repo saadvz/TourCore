@@ -101,6 +101,7 @@ export class MessagingConversations {
       beforeAccess?: () => Promise<void>;
       /** Called after a conversation's records are saved, from any surface (e.g. to look for new exceptions). */
       onSaved?: (session: VisitorDemoSession) => void;
+      slotLockBarrier?: import("../core/TourCore").TourCoreDeps["slotLockBarrier"];
     },
   ) {
     const runtime = deps.runtime ?? new MemoryRuntimeStore();
@@ -197,6 +198,7 @@ export class MessagingConversations {
             storageRead: this.deps.storageRead,
             beforeAccess: this.deps.beforeAccess,
             otherBusyWindows: () => this.otherBusyWindows(propertyId, tourId),
+            ...(this.deps.slotLockBarrier ? { slotLockBarrier: this.deps.slotLockBarrier } : {}),
           }),
         ),
       );
@@ -257,6 +259,7 @@ export class MessagingConversations {
           storageRead: this.deps.storageRead,
           beforeAccess: this.deps.beforeAccess,
           otherBusyWindows: () => this.otherBusyWindows(propertyId, tourId),
+          ...(this.deps.slotLockBarrier ? { slotLockBarrier: this.deps.slotLockBarrier } : {}),
         }),
       ),
     );
@@ -354,7 +357,7 @@ export class MessagingConversations {
       }
       if (this.deps.registry.find(snapshot.sessionId)) continue;
       try {
-        const { session, notes } = await restoreSession(snapshot, { workspace: this.deps.workspace, transport: this.lazyTransport(snapshot.propertyId), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(snapshot.propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyWindows: (propertyId, tourId) => this.otherBusyWindows(propertyId, tourId) });
+        const { session, notes } = await restoreSession(snapshot, { workspace: this.deps.workspace, transport: this.lazyTransport(snapshot.propertyId), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(snapshot.propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyWindows: (propertyId, tourId) => this.otherBusyWindows(propertyId, tourId), slotLockBarrier: this.deps.slotLockBarrier });
         this.deps.registry.add(this.attachOverstay(session));
         for (const note of notes) log(`Restoring a text-message tour: ${note}`);
         restored++;
@@ -406,7 +409,7 @@ export class MessagingConversations {
           updatedAt: record.updatedAt,
         };
         try {
-          const { session } = await restoreSession(pseudo, { workspace: ws, transport: this.lazyTransport(propertyId), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyWindows: (id, tourId) => this.otherBusyWindows(id, tourId) });
+          const { session } = await restoreSession(pseudo, { workspace: ws, transport: this.lazyTransport(propertyId), links: this.deps.links, realNow: this.deps.realNow, store: this.storeForProperty(propertyId), storageRead: this.deps.storageRead, beforeAccess: this.deps.beforeAccess, otherBusyWindows: (id, tourId) => this.otherBusyWindows(id, tourId), slotLockBarrier: this.deps.slotLockBarrier });
           registry.add(this.attachOverstay(session));
           await this.save(session);
           restored++;

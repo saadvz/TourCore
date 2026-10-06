@@ -115,6 +115,26 @@ export const SCHEDULE_CHANGED_LEAD = "Tour times just changed. Here's what's ope
 const WHICH_DAY = "Which day works for you?";
 const DAY_MENU = `I have tours available. ${WHICH_DAY}`;
 const MENU_NUMBER = /^\s*(?:#|number |option )?(\d{1,2})\s*[.!]?\s*$/i;
+const CONSENT_CHANGE_MARKERS = /\b(but|instead|can i do|can we do|rather|change|switch|different)\b/;
+
+function hasExplicitChangeAsk(text: string): boolean {
+  return CONSENT_CHANGE_MARKERS.test(stripFiller(normalize(text)));
+}
+
+/** A clear YES/NO, including yes/ok plus extra words. Change markers are not consent. */
+function clearConsentAnswer(text: string): "yes" | "no" | undefined {
+  const normalized = normalize(text);
+  if (hasExplicitChangeAsk(normalized)) return undefined;
+  const t = stripFiller(normalized);
+  if (hasExplicitChangeAsk(t)) return undefined;
+  const yn = yesNo(normalized);
+  if (yn.answer && yn.confidence >= 0.75) return yn.answer;
+  const ynStripped = yesNo(t);
+  if (ynStripped.answer && ynStripped.confidence >= 0.75) return ynStripped.answer;
+  if (/\b(yes|yeah|yep|yup|ok|okay|sure)\b/.test(normalized) && !/\b(no|nope|nah)\b/.test(normalized)) return "yes";
+  if (/\b(no|nope|nah)\b/.test(normalized) && !/\b(yes|yeah|yep|ok|okay)\b/.test(normalized)) return "no";
+  return undefined;
+}
 
 const SORRY = "Sorry, I didn't catch that.";
 const rulesOnly = new LayeredIntentInterpreter();
@@ -328,6 +348,8 @@ export async function handleVisitorText(
     /* T-15 / T-5 / more-time / DONE / after-close / rebook after no-time */
   } else if (await handlePendingRebookPick(turn)) {
     /* day/time for a secondary rebook; tour commands already won above */
+  } else if (await handleProposedTimeReply(turn)) {
+    /* outstanding operator proposal wins over held-booking consent */
   } else if (await handlePendingBookingReply(turn)) {
     /* consent / verification for a booking held while the current tour runs */
   } else if (await takeOverHeldBookingOnGreeting(turn)) {
@@ -582,14 +604,14 @@ async function fileCustomTime(turn: Turn, spoken: SpokenTime, alreadyRecorded = 
   }
   const reservation = await session.reservation();
   if (resolved.placement === "ON_GRID") {
-    if (reservation?.status === "INQUIRY") {
-      if (!alreadyRecorded) await session.recordText(turn.said);
-      return session.bookOffered(resolved.start.toISOString());
-    }
     if (reservation?.status === "TOURING") {
       if (!alreadyRecorded) await session.recordText(turn.said);
       await session.confirmRebook(resolved.start.toISOString());
       return;
+    }
+    if (reservation) {
+      if (!alreadyRecorded) await session.recordText(turn.said);
+      return session.bookOffered(resolved.start.toISOString());
     }
   }
   if (!reservation) {
@@ -867,8 +889,10 @@ async function tryRegularSlotFromConsent(turn: Turn): Promise<boolean> {
     return true;
   }
   if (intent.type === "SELECT_TIME") {
-    const slot = session.lastShownSlots.find((s) => same(s.label, intent.timeLabel)) ?? session.offeredSlots.find((s) => same(s.label, intent.timeLabel));
-    if (slot && isConfident(interpretation) && session.lastShownSlots.length) {
+    const slot =
+      session.lastShownSlots.find((s) => same(s.label, intent.timeLabel)) ??
+      session.offeredSlots.find((s) => same(s.label, intent.timeLabel));
+    if (slot && isConfident(interpretation)) {
       await session.recordText(turn.said);
       await session.bookOffered(slot.start.toISOString());
       return true;
@@ -1018,11 +1042,26 @@ async function byStage(turn: Turn): Promise<void> {
 
     case "consent": {
       const question = CONSENT_QUESTION;
-      if (await tryRegularSlotFromConsent(turn)) return;
-      if (intent.type === "CONSENT_YES" || intent.type === "CONSENT_NO") {
-        if (turn.confident) return turn.act("consent", { agree: intent.type === "CONSENT_YES" });
-        return turn.clarify(`Just to check: ${question.charAt(0).toLowerCase()}${question.slice(1)}`, yesNo);
+      const text = turn.said.text ?? "";
+      const changeAsk = hasExplicitChangeAsk(text);
+      const answer = clearConsentAnswer(text);
+      if (answer && !changeAsk) {
+        return turn.act("consent", { agree: answer === "yes" });
       }
+      if (isBareMenuNumber(text)) {
+        const current = await session.reservation();
+        const shownOtherDay =
+          !!current?.slotStart &&
+          session.lastShownSlots.length > 0 &&
+          session.lastShownSlots.every((slot) => slot.start.toISOString() !== current.slotStart);
+        const shownDaysOnly = session.lastShownDates.length > 0 && session.lastShownSlots.length === 0 && (await session.hasLiveRegularTour());
+        if ((shownOtherDay || shownDaysOnly) && (await tryRegularSlotFromConsent(turn))) return;
+        return turn.fallback(`${SORRY} ${question}`, yesNo);
+      }
+      const pending = await session.unapprovedCustomTimeRequest();
+      const allowSlot = changeAsk || !!pending?.pendingNoticeSentAt || (await session.hasLiveRegularTour());
+      if (allowSlot && (await tryRegularSlotFromConsent(turn))) return;
+      if (changeAsk && intent.type === "REQUEST_CUSTOM_TIME" && turn.confident) return fileCustomTime(turn, asSpoken(intent));
       if (intent.type === "REQUEST_HELP") return session.help(turn.said);
       if (session.heldBookingTakenOver && (await session.activeNeedsConsent())) {
         await session.announceHeldBookingConsent();
@@ -1208,18 +1247,53 @@ async function takeOverHeldBookingOnGreeting(turn: Turn): Promise<boolean> {
   return false;
 }
 
+async function outstandingProposedRequest(session: VisitorDemoSession) {
+  const requests = await session.store.list("tourTimeRequests");
+  const ids = new Set([session.reservationId, session.pendingBookingId, session.pendingCustomRequestId].filter((id): id is string => !!id));
+  return requests.find(
+    (request) =>
+      request.status === "PENDING" &&
+      request.proposedAlternativeAt &&
+      ((request.reservationId && ids.has(request.reservationId)) || request.id === session.pendingCustomRequestId),
+  );
+}
+
+async function handleProposedTimeReply(turn: Turn): Promise<boolean> {
+  const { session } = turn;
+  const request = turn.awaiting?.kind === "confirm-alternative"
+    ? (await session.store.get("tourTimeRequests", turn.awaiting.requestId)) ?? (await outstandingProposedRequest(session))
+    : await outstandingProposedRequest(session);
+  if (!request?.proposedAlternativeAt || request.status !== "PENDING") return false;
+  const text = turn.said.text ?? "";
+  if (hasExplicitChangeAsk(text)) return false;
+  const answer = clearConsentAnswer(text);
+  if (answer === "yes") {
+    await session.recordText(turn.said);
+    await session.acceptAlternative(request.id);
+    return true;
+  }
+  if (answer === "no") {
+    await session.recordText(turn.said);
+    await session.declineAlternative(request.id);
+    return true;
+  }
+  return false;
+}
+
 async function handlePendingBookingReply(turn: Turn): Promise<boolean> {
   const { session } = turn;
   if (!session.pendingBookingId) return false;
   if ((await session.stage()) === "follow-up") return false;
+  if (await outstandingProposedRequest(session)) return false;
   const text = turn.said.text ?? "";
+  if (hasExplicitChangeAsk(text)) return false;
   if (await session.pendingBookingNeedsConsent()) {
-    const yn = yesNo(stripFiller(normalize(text)));
-    if (yn.answer === "yes" && yn.confidence >= 0.75) {
+    const answer = clearConsentAnswer(text);
+    if (answer === "yes") {
       await session.answerPendingConsent(true, turn.said);
       return true;
     }
-    if (yn.answer === "no" && yn.confidence >= 0.75) {
+    if (answer === "no") {
       await session.answerPendingConsent(false, turn.said);
       return true;
     }

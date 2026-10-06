@@ -127,7 +127,11 @@ property is not unpublished by an update.
 
 `get_operator_update`, `inspect_exception`, `inspect_tour`, and
 `list_exceptions` if an issue can't be found. A `tour.time_requested` update
-needs a decision: `list_tour_time_requests`, `inspect_tour_time_request`,
+needs a decision unless the request is withdrawn or expired. Withdrawn:
+`They booked a regular time instead.` Expired: `That time has already
+passed, so I can't book it. You can offer them a different time instead.`
+No decision is needed in those cases — don't approve, decline, or propose.
+For a waiting request: `list_tour_time_requests`, `inspect_tour_time_request`,
 `approve_tour_time_request`, `decline_tour_time_request`, `propose_tour_time`,
 `reschedule_tour`, and `schedule_one_off_tour`. Ask the exact question Tour
 Core returns (`Move it?` / `Book it?`). If tours are paused, approve and

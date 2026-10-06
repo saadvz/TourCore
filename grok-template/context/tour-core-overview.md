@@ -30,8 +30,12 @@ A held rebook taking over gets the booked-for line, then the original
 consent question, then Reply YES or NO. Later texts use the normal
 booking flow. Booking a regular slot withdraws that request so a later
 approve cannot double-book; replacing a held or booked future tour also
-sends `That replaces your {day} {time} tour.` Operators see
-`They booked a regular time instead.` Approving a custom time that
+sends `That replaces your {time} tour on {day}.` Operators see
+`They booked a regular time instead.` If the requested time has already
+passed, approve or propose expires it and texts the visitor once:
+`The property team couldn't get to your request for {newTime} on {newDay} in time.`
+then `You're still booked for {time} on {day}.` or
+`If you'd like another time, just reply with a day.` Approving a custom time that
 moves an unconfirmed held booking uses that same booked-for line, then
 the original consent question, then Reply YES or NO — not moved wording. While the leaving
 issue is open after the close, stuck-inside texts and greetings stay

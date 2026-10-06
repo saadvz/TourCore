@@ -1,5 +1,5 @@
 import { placementOf, touringHoursLabel } from "../core/customSlot";
-import { WITHDRAWN_FOR_REGULAR_BOOKING } from "../core/TourCore";
+import { REQUEST_TIME_PASSED, WITHDRAWN_FOR_REGULAR_BOOKING } from "../core/TourCore";
 import { addDays, formatDay, formatTime, localDateOf } from "../core/timezone";
 import { UNNAMED_VISITOR } from "../domain/model";
 import { inspectException } from "../operator/exceptions";
@@ -109,6 +109,22 @@ async function describeTimeRequest(services: OperatorServices, event: OperatorEv
         status: "withdrawn",
       },
       instructions: `${WITHDRAWN_FOR_REGULAR_BOOKING} No decision is needed.`,
+    };
+  }
+  if (request.status === "EXPIRED") {
+    return {
+      eventType: event.eventType,
+      summary: `${who} — ${requested}. ${REQUEST_TIME_PASSED}`,
+      request: {
+        tourTimeRequestId: request.id,
+        tourRef: tourRef(tour.propertyId, tour.tourId),
+        visitorName: visitorNameOf(tour),
+        unitName: unitNameOf(tour),
+        requestedTime: requested,
+        ...(currentAt ? { currentTime: when(currentAt, now, tz) } : {}),
+        status: "expired",
+      },
+      instructions: `${REQUEST_TIME_PASSED} No decision is needed.`,
     };
   }
   return {

@@ -173,6 +173,7 @@ export interface RestoreDeps {
   beforeAccess?: () => Promise<void>;
   otherBusyStarts?: (propertyId: string, tourId: string) => Promise<Date[]>;
   otherBusyWindows?: (propertyId: string, tourId: string) => Promise<import("../core/customSlot").OccupiedWindow[]>;
+  slotLockBarrier?: import("../core/TourCore").TourCoreDeps["slotLockBarrier"];
 }
 
 /**
@@ -208,6 +209,7 @@ export async function restoreSession(snapshot: DurableSession, deps: RestoreDeps
     beforeAccess: deps.beforeAccess,
     otherBusyStarts: deps.otherBusyStarts ? () => deps.otherBusyStarts!(snapshot.propertyId, snapshot.tourId) : undefined,
     otherBusyWindows: deps.otherBusyWindows ? () => deps.otherBusyWindows!(snapshot.propertyId, snapshot.tourId) : undefined,
+    ...(deps.slotLockBarrier ? { slotLockBarrier: deps.slotLockBarrier } : {}),
   });
   await session.hydrate(tour.record, tour.bundle);
   if (snapshot.superseded) session.superseded = true;

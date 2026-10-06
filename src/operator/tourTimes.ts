@@ -1,7 +1,7 @@
 import { isLiveMessaging } from "../config/tourCoreConfig";
 import { intervalsOverlap, parseFlexibleTime, placementOf, relativeWhen, tourInterval, touringHoursLabel } from "../core/customSlot";
-import { TourCoreError, WITHDRAWN_FOR_REGULAR_BOOKING } from "../core/TourCore";
-import { addDays, formatConfirmStamp, formatDay, formatTime, formatWeekday, localDateOf } from "../core/timezone";
+import { isUnconfirmedHold, REQUEST_ALREADY_HANDLED, REQUEST_TIME_PASSED, TourCoreError, WITHDRAWN_FOR_REGULAR_BOOKING } from "../core/TourCore";
+import { formatConfirmStamp, formatDay, formatTime, formatWeekday, localDateOf } from "../core/timezone";
 import { formatPhone, parsePhone } from "../core/phone";
 import type { TourTimeRequest } from "../domain/model";
 import { TERMINAL } from "../domain/stateMachine";
@@ -50,32 +50,33 @@ export function who(tour: TourSnapshot): string {
   return name.startsWith("A visitor") ? "The visitor" : (name.split(/\s+/)[0] ?? name);
 }
 
-function sameLocalDay(a: Date, b: Date, tz: string): boolean {
-  const left = localDateOf(a, tz);
-  const right = localDateOf(b, tz);
-  return left.year === right.year && left.month === right.month && left.day === right.day;
-}
-
-function dayWord(start: Date, now: Date, tz: string): string {
-  const today = localDateOf(now, tz);
-  const day = localDateOf(start, tz);
-  if (day.year === today.year && day.month === today.month && day.day === today.day) return "today";
-  const tomorrow = addDays(today, 1);
-  if (day.year === tomorrow.year && day.month === tomorrow.month && day.day === tomorrow.day) return "tomorrow";
-  return `on ${formatDay(start, tz)}`;
-}
-
 function visitorTextNote(name: string, confirm: boolean, outside: boolean): string {
   const action = confirm ? "to confirm" : "with the new time";
   if (outside) return `This is a one-off. Your regular tour hours stay the same, and ${midSentence(name)} gets a text ${action}.`;
   return `${name} gets a text ${action}.`;
 }
 
-function moveFromTo(from: Date, to: Date, now: Date, tz: string, outside: boolean): string {
-  if (outside || !sameLocalDay(from, to, tz)) {
-    return `from ${formatConfirmStamp(from, tz)} to ${formatConfirmStamp(to, tz)}`;
-  }
-  return `from ${formatTime(from, tz)} to ${formatTime(to, tz)} ${dayWord(to, now, tz)}`;
+function moveFromTo(from: Date, to: Date, _now: Date, tz: string, _outside: boolean): string {
+  return `from ${formatTime(from, tz)} on ${formatDay(from, tz)} to ${formatTime(to, tz)} on ${formatDay(to, tz)}`;
+}
+
+function operatorDeclineSummary(name: string, reservation: { slotStart?: string; status: string; consentId?: string } | undefined, tz: string): string {
+  if (!reservation?.slotStart) return "Declined.";
+  const time = formatTime(new Date(reservation.slotStart), tz);
+  const day = formatDay(new Date(reservation.slotStart), tz);
+  return isUnconfirmedHold(reservation)
+    ? `Declined. ${name} is still booked for ${time} on ${day}.`
+    : `Declined. ${name}'s ${time} tour on ${day} is still confirmed.`;
+}
+
+function expiredResult(request: TourTimeRequest) {
+  return {
+    summary: REQUEST_TIME_PASSED,
+    expired: true,
+    status: "expired" as const,
+    reason: REQUEST_TIME_PASSED,
+    tourTimeRequestId: request.id,
+  };
 }
 
 function moveConfirmQuestion(input: { who: string; from?: Date; to: Date; now: Date; tz: string; outside: boolean; confirm: boolean }): string {
@@ -104,6 +105,7 @@ function requestView(tour: TourSnapshot, request: TourTimeRequest, now: Date) {
     outsideHours: placement === "OUTSIDE_HOURS",
     regularTime: placement === "ON_GRID",
     ...(request.status === "WITHDRAWN" ? { reason: WITHDRAWN_FOR_REGULAR_BOOKING } : {}),
+    ...(request.status === "EXPIRED" ? { reason: REQUEST_TIME_PASSED } : {}),
   };
 }
 
@@ -163,6 +165,14 @@ export async function inspectTourTimeRequest(ctx: Ctx, tourTimeRequestId: string
       reason: WITHDRAWN_FOR_REGULAR_BOOKING,
     };
   }
+  if (found.request.status === "EXPIRED") {
+    return {
+      summary: `${view.visitorName} — ${view.requestedTime}. ${REQUEST_TIME_PASSED}`,
+      ...view,
+      note: REQUEST_TIME_PASSED,
+      reason: REQUEST_TIME_PASSED,
+    };
+  }
   const note = view.outsideHours
     ? `${formatTime(new Date(found.request.requestedStartsAt), found.tour.config.property.timezone)} is outside the property's normal ${touringHoursLabel(found.tour.config)} touring hours.`
     : view.regularTime
@@ -175,7 +185,8 @@ export async function approveTourTimeRequest(ctx: Ctx, input: { tourTimeRequestI
   const found = await findTimeRequest(ctx.services, input.tourTimeRequestId);
   if (!found) throw new SetupInputError("REQUEST_NOT_FOUND", "I couldn't find that time request.");
   if (found.request.status === "WITHDRAWN") return withdrawnResult(found.request);
-  if (found.request.status !== "PENDING") throw new SetupInputError("REQUEST_CLOSED", "That request has already been handled.");
+  if (found.request.status === "EXPIRED") return expiredResult(found.request);
+  if (found.request.status !== "PENDING") throw new SetupInputError("REQUEST_CLOSED", REQUEST_ALREADY_HANDLED);
   refuseIfPaused(
     ctx,
     found.tour.propertyId,
@@ -188,6 +199,17 @@ export async function approveTourTimeRequest(ctx: Ctx, input: { tourTimeRequestI
   const fingerprint = `${found.request.id}|${found.request.requestedStartsAt}|${outside}`;
   const name = who(found.tour);
   const reservation = found.tour.bundle.reservations.find((item) => item.id === found.request.reservationId);
+  if (start.getTime() <= ctx.now().getTime()) {
+    try {
+      await session.approveTimeRequest(found.request.id, { outsideTourHours: outside });
+    } catch (err) {
+      if (err instanceof TourCoreError && err.code === "REQUEST_EXPIRED") {
+        await persistSession(ctx.services, session);
+        return expiredResult(found.request);
+      }
+      throw err;
+    }
+  }
   if (!input.confirmationCode) {
     const question = moveConfirmQuestion({
       who: name,
@@ -208,6 +230,10 @@ export async function approveTourTimeRequest(ctx: Ctx, input: { tourTimeRequestI
     await session.approveTimeRequest(found.request.id, { outsideTourHours: outside });
   } catch (err) {
     if (err instanceof TourCoreError && err.code === "REQUEST_WITHDRAWN") return withdrawnResult(found.request);
+    if (err instanceof TourCoreError && err.code === "REQUEST_EXPIRED") {
+      await persistSession(ctx.services, session);
+      return expiredResult(found.request);
+    }
     throw err;
   }
   await persistSession(ctx.services, session);
@@ -222,24 +248,30 @@ export async function declineTourTimeRequest(ctx: Ctx, input: { tourTimeRequestI
   const found = await findTimeRequest(ctx.services, input.tourTimeRequestId);
   if (!found) throw new SetupInputError("REQUEST_NOT_FOUND", "I couldn't find that time request.");
   if (found.request.status === "WITHDRAWN") return withdrawnResult(found.request);
+  if (found.request.status === "EXPIRED") return expiredResult(found.request);
+  if (found.request.status !== "PENDING") throw new SetupInputError("REQUEST_CLOSED", REQUEST_ALREADY_HANDLED);
   const session = requireLive(found.tour);
   try {
     await session.declineTimeRequest(found.request.id, input.note);
   } catch (err) {
     if (err instanceof TourCoreError && err.code === "REQUEST_WITHDRAWN") return withdrawnResult(found.request);
+    if (err instanceof TourCoreError && err.code === "REQUEST_EXPIRED") {
+      await persistSession(ctx.services, session);
+      return expiredResult(found.request);
+    }
     throw err;
   }
   await persistSession(ctx.services, session);
   const reservation = found.tour.bundle.reservations.find((item) => item.id === found.request.reservationId);
-  const kept = reservation?.slotStart ? ` ${who(found.tour)}'s ${formatTime(new Date(reservation.slotStart), found.tour.config.property.timezone)} tour is still confirmed.` : "";
-  return { summary: `Declined.${kept}`, tourTimeRequestId: found.request.id };
+  return { summary: operatorDeclineSummary(who(found.tour), reservation, found.tour.config.property.timezone), tourTimeRequestId: found.request.id };
 }
 
 export async function proposeTourTime(ctx: Ctx, input: { tourTimeRequestId: string; newStartsAt: string }) {
   const found = await findTimeRequest(ctx.services, input.tourTimeRequestId);
   if (!found) throw new SetupInputError("REQUEST_NOT_FOUND", "I couldn't find that time request.");
   if (found.request.status === "WITHDRAWN") return withdrawnResult(found.request);
-  if (found.request.status !== "PENDING") throw new SetupInputError("REQUEST_CLOSED", "That request has already been handled.");
+  if (found.request.status === "EXPIRED") return expiredResult(found.request);
+  if (found.request.status !== "PENDING") throw new SetupInputError("REQUEST_CLOSED", REQUEST_ALREADY_HANDLED);
   const session = requireLive(found.tour);
   const tz = found.tour.config.property.timezone;
   const reservation = found.tour.bundle.reservations.find((item) => item.id === found.request.reservationId);
@@ -250,6 +282,10 @@ export async function proposeTourTime(ctx: Ctx, input: { tourTimeRequestId: stri
     await session.proposeAlternative(found.request.id, resolved.start.toISOString());
   } catch (err) {
     if (err instanceof TourCoreError && err.code === "REQUEST_WITHDRAWN") return withdrawnResult(found.request);
+    if (err instanceof TourCoreError && err.code === "REQUEST_EXPIRED") {
+      await persistSession(ctx.services, session);
+      return expiredResult(found.request);
+    }
     throw err;
   }
   await persistSession(ctx.services, session);
