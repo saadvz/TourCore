@@ -144,7 +144,8 @@ describe("property type", () => {
     await h.ok("set_tour_hours", { days: "weekdays", start: "9am", end: "5pm" });
     const id = "prop_27_oak_ln_teaneck_nj";
     expect(validateConfig(h.workspace.load(id).config)).toEqual([]);
-    expect((await h.ok("review_property_setup")).lines).toEqual(expect.arrayContaining(["Single-family home", "Main Home", "  3 bed \u00b7 2 bath \u00b7 $3,400/month \u00b7 available now", "  Route: Front Door"]));
+    expect((await h.ok("review_property_setup")).lines).toEqual(expect.arrayContaining(["Single-family home", "27 Oak Ln", "  3 bed \u00b7 2 bath \u00b7 $3,400/month \u00b7 available now", "  Route: Front Door"]));
+    expect((await h.ok("review_property_setup")).lines).not.toContain("Main Home");
     expect((await h.ok("run_readiness_check")).passed).toBe(true);
     expect((await h.ok("run_dry_tour")).passed).toBe(true);
     expect((await h.approve("publish_demo_property", {})).done.published).toBe(true);

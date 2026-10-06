@@ -77,6 +77,10 @@ export const CHOICE_LABELS = {
  * blanket "everything is in demo mode": visitor texting can be live while
  * door access is still demo.
  */
+/** Local QA texting: honest, and "live" appears only in this sentence. */
+export const LOCAL_TEST_TEXTING =
+  "Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on.";
+
 export function modeSentence(textingLive: boolean, accessDemo: boolean): string {
   const texting = textingLive ? "Visitor texting is live." : "Visitor texts are practice only, so nobody is texted.";
   const doors = accessDemo ? "Door access is still in demo mode, so no physical locks will open." : "Door access is connected.";

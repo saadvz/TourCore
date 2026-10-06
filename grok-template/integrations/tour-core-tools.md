@@ -39,16 +39,16 @@ again with the code after the operator's yes.
 | `set_tour_hours` | change | Sets tour hours from everyday words. Hours are structural: a published property goes back to draft until readiness, a practice tour, and publish. After those hours are published, open visitor conversations use them on the next inbound text |
 | `get_verification_policy` | read | Visitor verification choice and reuse window |
 | `set_verification_policy` | change | Basic identity form or practice verification |
-| `get_services` | read | Messaging choice and connection, records location, door access mode |
-| `set_services` | change | Live texts, local test texts for this building, or practice texts; records location. Local does not change the installation or other buildings |
+| `get_services` | read | Messaging choice and connection, records location, door access mode. Local test texting summary: "Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on." — not that texting is live |
+| `set_services` | change | Live texts, local test texts for this building, or practice texts; records location. Local does not change the installation or other buildings. Local summary is the test-mode sentence above; do not name the texting service |
 | `inject_local_sms` | change | QA only. Injects a visitor SMS on the local loopback (same path as a real inbound webhook). `hasMedia` marks a photo; Tour Core does not forward it. A photo alone is told it can't take photos yet; a photo plus a question it can't answer is one combined text and is flagged. Refuses unless that building is on local test texts |
 | `read_local_outbox` | read | QA only. Outbound local-loopback replies as separate bubbles in send order (body + timestamp). Never one concatenated blob. Refuses unless that property is on local |
-| `review_property_setup` | read | The setup as short lines to read back: address, "Called: ..." if named, property type, each unit with its details and route, "Tours: ...", "Verification: ...", "Visitor texting: Connected", "Door access: Demo", visitor help number (or "not set") |
-| `run_readiness_check` | change | The real readiness checks, recorded for publish |
+| `review_property_setup` | read | The setup as short lines to read back: address, "Called: ..." if named, property type, each unit with its details and route, "Tours: ...", "Verification: ...", "Visitor texting: Connected", "Door access: Demo", visitor help number (or "not set"). A single-family home's unit heading is the street line, never "Main Home" |
+| `run_readiness_check` | change | The real readiness checks, recorded for publish. A shared texting number names the other property by street line ("This texting number is already used for 12 Scratch Lane."), never an id |
 | `run_dry_tour` | change | A full practice tour with safety proof points, recorded for publish. A single-family home keeps the entrance proof line; a unit-door-only apartment or condo shows the unit-door proof instead |
 | `publish_demo_property` | consequential | Publishes for demo, only when readiness and a practice tour passed for this exact setup. Open conversations then use these published settings (hours, units, and so on) on every inbound text. In a Grok-managed install it refuses while the property still uses practice texts although texting is installed, returning a `summary` and a `remediation` (switch to real texts, re-run readiness and the practice tour, ask again) |
 | `list_active_tours` | read | Tours happening now |
-| `inspect_tour` | read | One tour: status, activity, questions, denials, what needs attention |
+| `inspect_tour` | read | One tour: status, activity, questions, denials, what needs attention. Summary names the status once (no "Cancelled. Cancelled.") |
 | `list_exceptions` | read | The queue of issues that need the team |
 | `inspect_exception` | read | One issue with context and next steps |
 | `resolve_exception` | change | Marks an issue handled with a note; changes nothing else |

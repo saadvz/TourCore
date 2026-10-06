@@ -5,6 +5,7 @@ import { runDryTour, type DryTourResult } from "../setup/dryTour";
 import { runReadinessCheck, type ReadinessResult } from "../setup/readiness";
 import { SetupInputError } from "../setup/setupActions";
 import { isCurrent, type PropertyState, type PublishBlocker, type PublishResult } from "../setup/workspace";
+import { streetLine } from "../visitor/identity";
 import type { InstalledMessaging, OperatorServices } from "./services";
 
 /**
@@ -34,12 +35,26 @@ export function connectLine(services: OperatorServices, propertyId: string, mess
     const provider = local ? "local" : (installed?.provider ?? "sendblue");
     const { changed, previous } = endpoints.attach({ address: line, provider, propertyId }, now, {
       replaceIf: (id) => services.workspace.has(id) && isRemoved(services.workspace.load(id).state),
+      nameOf: (id) => ownerStreetLine(services, id),
     });
     if (changed && previous) services.workspace.invalidateReadiness(propertyId, "The texting number changed. Run the readiness check again.");
     return undefined;
   } catch (err) {
     if (err instanceof SetupInputError) return err.message;
     throw err;
+  }
+}
+
+/** Street line the operator hears for another property. Never an id, never "Main Home". */
+function ownerStreetLine(services: OperatorServices, propertyId: string): string | undefined {
+  try {
+    const property = services.workspace.has(propertyId)
+      ? services.workspace.load(propertyId).config.property
+      : services.workspace.openDraft(propertyId).draft.property;
+    const street = streetLine(property);
+    return street && !/^main home$/i.test(street) ? street : undefined;
+  } catch {
+    return undefined;
   }
 }
 

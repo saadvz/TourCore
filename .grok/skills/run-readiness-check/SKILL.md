@@ -46,8 +46,10 @@ operator asks why something isn't ready.
    the fix ("Want me to map Unit 102's route now?"). Use **Map Route** or
    **Setup Property** for the fix, only with the operator's OK.
 4. Problems on the Tour Core computer itself (for example "Visitor messaging
-   isn't connected yet" or the texting number is used by another property)
-   can't be fixed from chat. Say what needs doing there, in plain words.
+   isn't connected yet" or "This texting number is already used for
+   12 Scratch Lane.") can't be fixed from chat. A shared number names the
+   other property by its street line, never a property id and never
+   "Main Home". Say what needs doing there, in plain words.
 5. After a fix, run the check again.
 
 ## Validate

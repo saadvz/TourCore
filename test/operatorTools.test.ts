@@ -540,6 +540,8 @@ describe("live tours and exceptions", () => {
     expect(v.session.conversation.at(-1)?.text).toBe(VisitorDenialCopy.calledOff("leasing team"));
     expect((await v.session.core.listGrants(v.session.reservationId!)).every((g) => g.status === "REVOKED")).toBe(true);
     const afterRevoke = await h.ok("inspect_tour", { tourRef: tour.tourRef });
+    expect(afterRevoke.summary).toBe("Pat Smith, Unit 101: Called off.");
+    expect(afterRevoke.summary).not.toMatch(/Called off\. Called off\./);
     expect(afterRevoke.tour.accessGrants.every((g: { endedAt?: string; endedAtIso?: string }) => g.endedAt === "Monday, Sep 28, 9:00 AM" && g.endedAtIso === "2026-09-28T09:00:00-04:00")).toBe(true);
 
     expect(await h.fails("revoke_tour_access", { tourRef: tour.tourRef, reason: "again" })).toMatch(/already called off/);
