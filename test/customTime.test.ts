@@ -710,7 +710,7 @@ describe("a held rebook and a custom-time request stay one booking", () => {
     const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
     await a.approve("approve_tour_time_request", { tourTimeRequestId: id });
     const last = a.fake.sent.filter((message) => message.number === PHONE).at(-1)!.content;
-    expect(last).toContain("moved to today at 3:15 PM");
+    expect(last).toContain("moved to 3:15 PM on Monday, Sep 28");
     expect(last).not.toContain(CONSENT_TEXT);
   });
 });

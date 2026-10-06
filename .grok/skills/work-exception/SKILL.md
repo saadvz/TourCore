@@ -71,7 +71,7 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   including a held rebook, and counts only tours actually cancelled.
   If they are still touring, the cancel text says their tour right now
   isn't affected. A one-off overlap check sees the running tour and
-  every future or held booking.   `reschedule_tour` will not move a tour
+  every future or held booking. `reschedule_tour` will not move a tour
   in progress (including hold or a door-system problem); it can offer to move the later booking instead
   (`Want me to move their {oldTime} on {oldDay} booking to {newTime} on
   {newDay} instead?`; outside hours: `{who} is touring right now, so I
