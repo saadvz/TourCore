@@ -277,13 +277,16 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
       ? tour.bundle.auditEvents.filter((later) => later.reservationId === e.reservationId && later.type === "OPERATOR_NOTIFIED" && later.detail.includes("replied after their tour"))
       : [];
   const extra = replies.map((later) => later.detail).join(" ");
+  const asked = kind === "unanswered-question" && e.detail ? e.detail : undefined;
+  const sent = resolution?.approvedFact?.replace(/\.$/, "");
+  const main = asked && sent ? `Asked "${asked}". Sent "${sent}".` : summaryFor(kind, e, tour);
   return {
     exceptionId,
     propertyId: tour.propertyId,
     property: tour.config.property.name,
     kind,
     title: TITLES[kind],
-    summary: extra ? `${summaryFor(kind, e, tour)} ${extra}` : summaryFor(kind, e, tour),
+    summary: extra ? `${main} ${extra}` : main,
     visitorName: visitorNameOf(tour),
     unitName: unitNameOn(tour, e.reservationId) ?? unitSubject(tour, e.unitId),
     tourRef: tourRef(tour.propertyId, tour.tourId),
@@ -544,11 +547,26 @@ export function sendOnlyUnreachableLine(who: string): string {
   return `I couldn't text ${who}, so nothing was sent and this is still open. If you can reach them another way, do that, then mark it handled.`;
 }
 
+export function saveSendOptedOutLine(answer: string, who: string): string {
+  return `Saved "${answer}" for future questions. ${who} has turned off texts from us, so I didn't send it and this is still open. If you can reach them another way, do that, then mark it handled.`;
+}
+
+export function saveSendUnreachableLine(answer: string, who: string): string {
+  return `Saved "${answer}" for future questions, but I couldn't text ${who}, so nothing was sent and this is still open. If you can reach them another way, do that, then mark it handled.`;
+}
+
 const MISSED_SEND = new Set(["SUPPRESSED", "FAILED", "SKIPPED"]);
 
-async function sendOnlyMissedVisitor(session: { store: { list: (kind: "messages") => Promise<Array<{ audience: string; direction: string; body: string; deliveryStatus?: string }>> } }, body: string): Promise<boolean> {
+async function lastProspectOutbound(
+  session: { store: { list: (kind: "messages") => Promise<Array<{ audience: string; direction: string; body: string; deliveryStatus?: string }>> } },
+  body: string,
+): Promise<{ body: string; deliveryStatus?: string } | undefined> {
   const outbound = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND");
-  const last = [...outbound].reverse().find((m) => m.body === body) ?? outbound.at(-1);
+  return [...outbound].reverse().find((m) => m.body === body) ?? outbound.at(-1);
+}
+
+async function sendOnlyMissedVisitor(session: { store: { list: (kind: "messages") => Promise<Array<{ audience: string; direction: string; body: string; deliveryStatus?: string }>> } }, body: string): Promise<boolean> {
+  const last = await lastProspectOutbound(session, body);
   return !last || !last.deliveryStatus || MISSED_SEND.has(last.deliveryStatus);
 }
 
@@ -649,28 +667,38 @@ export async function answerFlaggedQuestion(
   const saved = ws.persistEdit(next, now);
 
   let visitorAnswered = false;
+  let sendMissed: "opted-out" | "unreachable" | undefined;
+  const visitorMessage = visitorAnswerText(exception.question!, fact);
   if (tour?.live) {
-    await tour.live.reply(visitorAnswerText(exception.question!, fact));
+    await tour.live.reply(visitorMessage);
     // Then back to where the visitor is now: the same menu, times or confirmation they were on.
     await resumeStep(tour.live);
     await persistSession(services, tour.live);
-    visitorAnswered = true;
+    if (await sendOnlyMissedVisitor(tour.live, visitorMessage)) {
+      const last = await lastProspectOutbound(tour.live, visitorMessage);
+      sendMissed = last?.deliveryStatus === "SUPPRESSED" || tour.live.optedOut ? "opted-out" : "unreachable";
+    } else {
+      visitorAnswered = true;
+    }
   }
-  appendResolution(services, exception.propertyId, {
-    exceptionId: exception.exceptionId,
-    resolvedAt: now.toISOString(),
-    note: visitorAnswered ? "Answered with a new approved fact." : "Added a new approved fact; the visitor's tour wasn't running, so they weren't texted.",
-    action: "answered",
-    approvedFact: fact,
-    visitorAnswered,
-  });
+  if (!sendMissed) {
+    appendResolution(services, exception.propertyId, {
+      exceptionId: exception.exceptionId,
+      resolvedAt: now.toISOString(),
+      note: visitorAnswered ? "Answered with a new approved fact." : "Added a new approved fact; the visitor's tour wasn't running, so they weren't texted.",
+      action: "answered",
+      approvedFact: fact,
+      visitorAnswered,
+    });
+  }
   const after = ws.has(exception.propertyId) ? ws.load(exception.propertyId) : undefined;
   return {
     approvedFact: fact,
     addedTo: plan.where,
     savedToSetup: saved === "saved",
     visitorAnswered,
-    visitorMessage: visitorAnswered ? visitorAnswerText(exception.question!, fact) : undefined,
+    visitorMessage: visitorAnswered ? visitorMessage : undefined,
+    ...(sendMissed ? { sendMissed } : {}),
     setupStatus: after ? statusLabel(after) : "Setup in progress",
     stillPublished: wasPublished && after?.state.status === "PUBLISHED_FOR_DEMO",
     /** Only if something structural changed (never for an approved fact). */

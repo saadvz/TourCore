@@ -12,7 +12,7 @@ import { HANDLER_SNAG_ALERTED, HANDLER_SNAG_RETRY, MessagingConversations } from
 import { VisitorDemoRegistry } from "../src/visitor/session";
 import { VerificationLinks } from "../src/visitor/verificationLinks";
 import { formatPhone } from "../src/core/phone";
-import { ISSUE_ALREADY_HANDLED, operatorWhoLabel, QUESTION_ALREADY_HANDLED, sendOnlyUnreachableLine } from "../src/operator/exceptions";
+import { ISSUE_ALREADY_HANDLED, operatorWhoLabel, QUESTION_ALREADY_HANDLED, saveSendOptedOutLine, saveSendUnreachableLine, sendOnlyUnreachableLine } from "../src/operator/exceptions";
 import { apiError, fakeSendblue } from "./fakeSendblue";
 import {
   alreadyAskedLine,
@@ -204,12 +204,13 @@ describe("the landlord decides", () => {
     expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.slotStart).toBe(atTime(15, 30).toISOString());
   });
 
-  it("reschedule before a time is booked keeps The visitor at the start of the error", async () => {
+  it("reschedule before a time is booked uses the phone label, never The visitor mid-sentence", async () => {
     const a = await liveApp({ cleanups });
     await ask(a, "Can I tour at 3:15?");
     const [tour] = (await a.grok("list_active_tours")).tours;
+    const who = formatPhone(PHONE);
     await expect(a.grok("reschedule_tour", { tourRef: tour.tourRef, newStartsAt: "3:30 PM" })).rejects.toThrow(
-      /The visitor doesn't have a tour time to move yet/,
+      `${who} doesn't have a tour time to move yet.`,
     );
   });
 
@@ -973,7 +974,7 @@ describe("a request whose time has passed expires", () => {
     a.clock.t = at(15, 20);
     const before = a.fake.sent.filter((message) => message.number === PHONE).length;
     const result = await a.grok("approve_tour_time_request", { tourTimeRequestId: id });
-    expect(result.summary).toBe(requestTimePassedLine("The visitor"));
+    expect(result.summary).toBe(requestTimePassedLine(formatPhone(PHONE)));
     const after = a.fake.sent.filter((message) => message.number === PHONE).map((message) => message.content).slice(before);
     expect(after.join("\n")).toContain(requestExpiredLine("3:15 PM", "Monday, Sep 28"));
     expect(after.join("\n")).toContain("If you'd like another time, just reply with a day.");
@@ -2375,5 +2376,177 @@ describe("a held rebook leftover menu number does not move the booking", () => {
     const held = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations.find((item) => item.status === "AWAITING_CONSENT");
     const thursday = zonedTimeToUtc({ year: 2026, month: 10, day: 1, hour: 14, minute: 0 }, "America/New_York");
     expect(held?.slotStart).toBe(thursday.toISOString());
+  });
+});
+
+function hourlyHillside() {
+  const config = hillsideConfig();
+  return { ...config, tourHours: { ...config.tourHours, slotEveryMinutes: 60 } };
+}
+
+describe("save+send after a missed visitor text", () => {
+  it("STOP keeps the issue open and uses the opted-out line", async () => {
+    const a = await liveApp({ cleanups });
+    await a.optInSms();
+    await a.text("Is there a gym?");
+    const issue = (await a.grok("list_exceptions")).exceptions.find((item: { what: string }) => item.what === "Question with no approved answer");
+    await a.text("STOP");
+    const who = formatPhone(PHONE);
+    const asked = await a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "There's no gym" });
+    const done = await a.grok("answer_flagged_question", {
+      exceptionId: issue.exceptionId,
+      approvedFact: "There's no gym",
+      confirmationCode: asked.confirmation.code,
+    });
+    expect(done.summary).toBe(saveSendOptedOutLine("There's no gym", who));
+    expect(done.visitorAnswered).toBe(false);
+    expect(a.fake.sent.some((item) => item.number === PHONE && item.content.includes("There's no gym"))).toBe(false);
+    expect((await a.grok("list_exceptions")).exceptions.find((item: { exceptionId: string }) => item.exceptionId === issue.exceptionId)).toBeTruthy();
+    const facts = a.ws.load("prop_100_alfred_way").config.property.facts.join("\n");
+    expect(facts).toMatch(/no gym/i);
+  });
+
+  it("a provider 400 keeps the issue open and uses the other-failure line", async () => {
+    let fail = false;
+    const fake = fakeSendblue({ sendError: () => (fail ? apiError(400) : undefined) });
+    const a = await liveApp({ cleanups, fake });
+    await a.optInSms();
+    await a.text("Is there a gym?");
+    const issue = (await a.grok("list_exceptions")).exceptions.find((item: { what: string }) => item.what === "Question with no approved answer");
+    const asked = await a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "There's no gym" });
+    fail = true;
+    const who = formatPhone(PHONE);
+    const done = await a.grok("answer_flagged_question", {
+      exceptionId: issue.exceptionId,
+      approvedFact: "There's no gym",
+      confirmationCode: asked.confirmation.code,
+    });
+    expect(done.summary).toBe(saveSendUnreachableLine("There's no gym", who));
+    expect(done.visitorAnswered).toBe(false);
+    expect((await a.grok("list_exceptions")).exceptions.find((item: { exceptionId: string }) => item.exceptionId === issue.exceptionId)).toBeTruthy();
+    const facts = a.ws.load("prop_100_alfred_way").config.property.facts.join("\n");
+    expect(facts).toMatch(/no gym/i);
+  });
+});
+
+describe("SMS opt-in yes plus sooner opens the day menu", () => {
+  it("yes, sooner the better! is YES and the day menu, not Reply YES to continue", async () => {
+    const a = await liveApp({ cleanups });
+    await a.text("TOUR");
+    const replies = await a.text("yes, sooner the better!");
+    expect(replies.join("\n")).not.toContain("Reply YES to continue");
+    expect(replies.join("\n")).toMatch(/Which day works for you\?|I have tours available/);
+  });
+});
+
+describe("a flagged answer on a live day menu", () => {
+  it("sends the answer once, keeps the numbers, and the closed issue shows the answer", async () => {
+    const a = await liveApp({ cleanups });
+    await a.optInSms();
+    await a.text("1");
+    const menu = await a.text("1");
+    expect(menu.join("\n")).toMatch(/Which day works for you\?|I have tours available/);
+    await a.text("Is there a gym?");
+    const issue = (await a.grok("list_exceptions")).exceptions.find((item: { what: string }) => item.what === "Question with no approved answer");
+    const done = await a.approve("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "There's a gym on the roof." });
+    expect(done.visitorAnswered).toBe(true);
+    const sent = a.fake.sent.filter((item) => item.number === PHONE && item.content.includes("There's a gym on the roof."));
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.content).not.toMatch(/Which day works for you\?|I have tours available/);
+    const opened = await a.grok("inspect_exception", { exceptionId: issue.exceptionId });
+    expect(opened.summary).toContain('Sent "There\'s a gym on the roof"');
+    expect(opened.summary).not.toContain("There's no approved answer yet.");
+    const pick = await a.text("2");
+    expect(pick.join("\n")).toMatch(/Tuesday|2:00 PM|3:30 PM/);
+  });
+});
+
+describe("operator copy for book, propose, and activity", () => {
+  it("books with Book {who} for {time} on {day} and set-for the same way", async () => {
+    const a = await liveApp({ cleanups });
+    await ask(a, "Can I tour at 3:15?");
+    const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
+    const who = formatPhone(PHONE);
+    const asked = await a.grok("approve_tour_time_request", { tourTimeRequestId: id });
+    expect(asked.summary).toContain(`Book ${who} for 3:15 PM on Monday, Sep 28?`);
+    expect(asked.summary).not.toMatch(/for on /);
+    const done = await a.grok("approve_tour_time_request", { tourTimeRequestId: id, confirmationCode: asked.confirmation.code });
+    expect(done.summary).toContain(`${who}'s tour is set for 3:15 PM on Monday, Sep 28.`);
+    expect(done.summary).not.toMatch(/set for on /);
+  });
+
+  it("propose_tour_time with no booking says nothing is booked until they say yes", async () => {
+    const a = await liveApp({ cleanups });
+    await ask(a, "Can I tour at 3:15?");
+    const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
+    const who = formatPhone(PHONE);
+    const result = await a.grok("propose_tour_time", { tourTimeRequestId: id, newStartsAt: "3:30 PM" });
+    expect(result.summary).toBe(`Sent ${who} 3:30 PM on Monday, Sep 28. Nothing's booked until they say yes.`);
+    expect(result.summary).not.toContain("Their current booking stays until they say yes.");
+  });
+
+  it("a visitor-accepted proposal logs accepted, never approved", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    await a.text("Can I change it to 3:15?");
+    const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
+    await a.grok("propose_tour_time", { tourTimeRequestId: id, newStartsAt: "3:30 PM" });
+    await a.text("yes");
+    const [tour] = (await a.grok("list_active_tours")).tours;
+    const inspect = await a.grok("inspect_tour", { tourRef: tour.tourRef });
+    const activity = (inspect.tour.latestActivity as string[]).join("\n");
+    expect(activity).toContain("Testy accepted 3:30 PM on Monday, Sep 28.");
+    expect(activity).not.toMatch(/Testy approved|Visitor accepted|The property team approved Testy's requested/);
+  });
+});
+
+describe("an off-grid slot is released after move, cancel, or revoke", () => {
+  it("approve then reschedule then revoke brings the neighbouring grid slot back", async () => {
+    const a = await liveApp({ cleanups, config: hourlyHillside() });
+    await a.optInSms();
+    await a.text("1");
+    await a.text("Can I come Thursday at 2:45?");
+    const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
+    await a.approve("approve_tour_time_request", { tourTimeRequestId: id });
+    const [tour] = (await a.grok("list_active_tours")).tours;
+    await a.approve("reschedule_tour", { tourRef: tour.tourRef, newStartsAt: "2:00 PM Friday" });
+    await a.approve("revoke_tour_access", { tourRef: tour.tourRef, reason: "Called off" });
+    const days = await a.textFrom(OTHER, "TOUR").then(() => a.textFrom(OTHER, "YES")).then(() => a.textFrom(OTHER, "1"));
+    expect(days.join("\n")).toMatch(/Thursday/);
+    const thursday = await a.textFrom(OTHER, "Thursday");
+    expect(thursday.join("\n")).toContain("3:00 PM");
+  });
+
+  it("propose then accept then cancel brings the neighbouring grid slot back", async () => {
+    const a = await liveApp({ cleanups, config: hourlyHillside() });
+    await a.optInSms();
+    await a.text("1");
+    await a.text("Could I do Wednesday at 3:15?");
+    const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
+    await a.grok("propose_tour_time", { tourTimeRequestId: id, newStartsAt: "3:30 PM" });
+    await a.text("yes");
+    const [tour] = (await a.grok("list_active_tours")).tours;
+    await a.approve("revoke_tour_access", { tourRef: tour.tourRef, reason: "Cancelled" });
+    await a.textFrom(OTHER, "TOUR");
+    await a.textFrom(OTHER, "YES");
+    await a.textFrom(OTHER, "1");
+    const wednesday = await a.textFrom(OTHER, "Wednesday");
+    expect(wednesday.join("\n")).toContain("3:00 PM");
+  });
+});
+
+describe("an already-decided time request update", () => {
+  it("does not ask to move the tour from the same time to itself", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    await a.text("Can I change it to 3:15?");
+    const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
+    await a.approve("approve_tour_time_request", { tourTimeRequestId: id });
+    const record = a.outbox("tour.time_requested").at(-1);
+    expect(record).toBeTruthy();
+    const update = await a.grok("get_operator_update", { eventId: record!.event.eventId });
+    expect(update.summary).not.toMatch(/from 3:15 PM to 3:15 PM/);
+    expect(update.summary).toContain(REQUEST_ALREADY_HANDLED);
+    expect(update.instructions).toContain("No decision is needed.");
   });
 });

@@ -18,7 +18,7 @@ import { namedCancelFocus } from "./cancelTarget";
 import { awaitingLatestYesNo, doorAskSupersedesCancel } from "./latestQuestion";
 import { isLeavingTour, T5_NO_OFFER_BARE_YES } from "../core/overstayCopy";
 import { afterCloseAlertOpen } from "./overstayScheduler";
-import { yesNo } from "../intent/yesNo";
+import { isFlexibleYes, yesNo } from "../intent/yesNo";
 import { isRunningReservation, TERMINAL } from "../domain/stateMachine";
 import { stripFiller } from "../intent/normalize";
 import {
@@ -617,11 +617,21 @@ async function handleSmsGate(session: VisitorDemoSession, said: Said, text: stri
     await session.reply(smsDisclosure(session.complianceBaseUrl?.()), undefined, { deliverDespiteOptOut: true });
     return;
   }
-  if (session.smsConsent === "pending" && normalized === "yes") {
+  if (session.smsConsent === "pending" && isFlexibleYes(normalized)) {
     await session.recordText(said);
     await session.allowMessagingAgain();
     session.noteSmsConsent("opted_in", "YES");
     await session.reply(smsOptInConfirmation(), undefined, { deliverDespiteOptOut: true });
+    const leftover = consentRemainder(text);
+    if (leftover && /\bsooner\b/.test(normalize(leftover))) {
+      await session.refreshOfferedSchedule();
+      const labels = session.offeredDates.map((day) => day.label);
+      if (labels.length) {
+        session.markDatesShown();
+        await session.reply(DAY_MENU, { kind: "choose", options: labels, what: "a day" });
+        return;
+      }
+    }
     if (!(await session.reservation())) await session.welcome();
     return;
   }
@@ -863,8 +873,12 @@ export async function resumeStep(session: VisitorDemoSession, stage?: VisitorSta
   const p = stepPrompt(session, now, stage === undefined ? pending : stage === now ? awaiting : undefined);
   if (!p) return;
   if (p.awaiting) session.expect(now, p.awaiting);
+  const menuAlreadyLive =
+    (now === "choose-date" && session.dateMenuLive && session.lastShownDates.length > 0) ||
+    (now === "choose-time" && session.slotMenuLive && session.lastShownSlots.length > 0);
   if (now === "choose-date") session.markDatesShown();
   if (now === "choose-time") session.markTimesShown();
+  if (menuAlreadyLive) return;
   await session.reply(p.body, p.prompt);
 }
 

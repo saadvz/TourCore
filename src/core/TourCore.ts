@@ -785,6 +785,8 @@ export class TourCore {
       if (reservation.status === "AWAITING_CONSENT") {
         await this.textProspect(prospect, reservation.id, moved);
         await this.textProspect(prospect, reservation.id, CONSENT_TEXT, { kind: "yes-no" });
+      } else if (reservation.status === "AWAITING_VERIFICATION") {
+        await this.textProspect(prospect, reservation.id, moved);
       } else {
         await this.textProspect(prospect, reservation.id, `${moved} You're all set.`);
       }
@@ -1174,7 +1176,11 @@ export class TourCore {
         reservation = (await this.doRescheduleReservation({ reservationId: current.id, newStartsAt: request.proposedAlternativeAt, customTime: true, outsideTourHours: outside, notice: "moved" })).reservation;
       }
       const approved = await this.resolveRequest(request, "APPROVED", "VISITOR");
-      await this.record("TOUR_TIME_REQUEST_APPROVED", { reservationId: reservation.id, prospectId: request.prospectId, detail: `visitor accepted ${this.whenPhrase(new Date(request.proposedAlternativeAt))}` });
+      await this.record("TOUR_TIME_REQUEST_APPROVED", {
+        reservationId: reservation.id,
+        prospectId: request.prospectId,
+        detail: `visitor accepted ${this.time(new Date(request.proposedAlternativeAt!))} on ${this.day(new Date(request.proposedAlternativeAt!))}`,
+      });
       return { request: approved, reservation, ...(needsConsentAsk ? { needsConsentAsk: true } : {}) };
     });
   }

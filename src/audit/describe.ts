@@ -1,5 +1,6 @@
+import { formatPhone } from "../core/phone";
 import { formatTime } from "../core/timezone";
-import type { AuditEvent } from "../domain/model";
+import { UNNAMED_VISITOR, type AuditEvent } from "../domain/model";
 import type { ExportBundle } from "../export/exportBundle";
 
 export interface HistoryEntry {
@@ -22,7 +23,16 @@ type Context = Pick<ExportBundle, "doors" | "units" | "prospects" | "reservation
  */
 export function describeHistory(events: AuditEvent[], context: Context, timeZone: string): HistoryEntry[] {
   const door = (id?: string) => context.doors.find((d) => d.id === id)?.name ?? "a door that isn't on file";
-  const person = (id?: string) => context.prospects.find((p) => p.id === id)?.name.split(/\s+/)[0] ?? "The visitor";
+  const person = (id?: string) => {
+    const prospect = context.prospects.find((p) => p.id === id);
+    const name = prospect?.name?.trim();
+    if (name && name !== UNNAMED_VISITOR && !/^A visitor\b/i.test(name) && !/^\(?\+?\d/.test(name)) {
+      return name.split(/\s+/)[0]!;
+    }
+    if (prospect?.phone) return formatPhone(prospect.phone);
+    if (name && /^\(?\+?\d/.test(name)) return name;
+    return "the visitor";
+  };
   const unitFor = (reservationId?: string) => {
     const res = context.reservations.find((r) => r.id === reservationId);
     return context.units.find((u) => u.id === res?.unitId)?.name ?? "the unit";
@@ -125,6 +135,9 @@ function sentence(
     case "TOUR_TIME_REQUESTED":
       return info(`${c.name} asked for a different tour time.`);
     case "TOUR_TIME_REQUEST_APPROVED":
+      if (e.detail.startsWith("visitor accepted ")) {
+        return good(`${c.name} accepted ${e.detail.slice("visitor accepted ".length)}.`);
+      }
       return good(`The property team approved ${c.name}'s requested tour time.`);
     case "TOUR_TIME_REQUEST_DECLINED":
       return info(`The property team couldn't do ${c.name}'s requested tour time.`);

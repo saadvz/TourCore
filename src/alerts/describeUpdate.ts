@@ -1,5 +1,5 @@
 import { placementOf, touringHoursLabel } from "../core/customSlot";
-import { requestTimePassedLine, WITHDRAWN_FOR_REGULAR_BOOKING } from "../core/TourCore";
+import { REQUEST_ALREADY_HANDLED, requestTimePassedLine, WITHDRAWN_FOR_REGULAR_BOOKING } from "../core/TourCore";
 import { addDays, formatDay, formatTime, localDateOf } from "../core/timezone";
 import { UNNAMED_VISITOR } from "../domain/model";
 import { inspectException } from "../operator/exceptions";
@@ -129,6 +129,22 @@ async function describeTimeRequest(services: OperatorServices, event: OperatorEv
       instructions: `${requestTimePassedLine(who)} No decision is needed.`,
     };
   }
+  if (request.status !== "PENDING") {
+    return {
+      eventType: event.eventType,
+      summary: `${who} — ${requested}. ${REQUEST_ALREADY_HANDLED}`,
+      request: {
+        tourTimeRequestId: request.id,
+        tourRef: tourRef(tour.propertyId, tour.tourId),
+        visitorName: visitorNameOf(tour),
+        unitName: unitNameOf(tour),
+        requestedTime: requested,
+        ...(currentAt ? { currentTime: when(currentAt, now, tz) } : {}),
+        status: request.status.toLowerCase(),
+      },
+      instructions: `${REQUEST_ALREADY_HANDLED} No decision is needed.`,
+    };
+  }
   return {
     eventType: event.eventType,
     summary: `${asking}${note} ${choices}`,
@@ -140,7 +156,7 @@ async function describeTimeRequest(services: OperatorServices, event: OperatorEv
       unitName: unitNameOf(tour),
       requestedTime: requested,
       ...(currentAt ? { currentTime: when(currentAt, now, tz) } : {}),
-      status: request.status === "PENDING" ? "waiting" : request.status.toLowerCase(),
+        status: "waiting",
     },
     instructions:
       "A decision is required. Use approve_tour_time_request, propose_tour_time, or decline_tour_time_request. For a move the landlord is directing, use reschedule_tour. Ask once, using the question Tour Core returns, before approving or moving a tour. A time outside normal touring hours needs the stronger confirmation Tour Core returns. Don't change the property's regular hours. If the time overlaps another tour, say so and don't approve it.",

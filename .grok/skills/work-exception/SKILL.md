@@ -132,10 +132,19 @@ Tour Core sends only an `eventId` and an event type; never names or details.
 
   Ask exactly that, once. Don't ask a separate "want me to add it?" first.
   After a clear yes, call again with `confirmationCode`, then say what Pat was
-  sent. Tour Core then returns Pat to where they were (the same unit menu,
-  offered times, consent question or tour step), so they carry on without
-  starting over. The property stays published: an approved fact never needs
-  another readiness check or practice tour.
+  sent. If they turned off texts (STOP), it still saves the answer and
+  returns exactly `Saved "{answer}" for future questions. {who} has turned
+  off texts from us, so I didn't send it and this is still open. If you can
+  reach them another way, do that, then mark it handled.` Any other send
+  failure returns `Saved "{answer}" for future questions, but I couldn't
+  text {who}, so nothing was sent and this is still open. If you can reach
+  them another way, do that, then mark it handled.` The issue stays open
+  until you mark it handled. Tour Core then returns Pat to where they were
+  (the same unit menu, offered times, consent question or tour step) without
+  resending a live day or time menu. The property stays published: an
+  approved fact never needs another readiness check or practice tour. The
+  closed issue shows the answer that was sent, not "There's no approved
+  answer yet."
   If the operator doesn't know the answer, don't guess. Offer to mark it
   handled once they've dealt with it another way. A repeat answer returns
   exactly `That question has already been handled.`

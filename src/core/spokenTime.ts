@@ -94,7 +94,12 @@ export function dayReference(normalized: string, today?: LocalDate): DayReferenc
   if (calendar) return calendar;
   const weekday = weekdayOfText(normalized);
   if (weekday) {
-    const scheduling = /\b(what about|how about|anything|available|availability|what times|which times|do you have|can i come|could i come|can i tour|can we tour|can i visit|can we visit|can i do|can we do|instead|move it|move to|change to|change it|reschedule)\b/.test(normalized) || normalized.split(" ").length <= 4;
+    const scheduling =
+      /\b(what about|how about|anything|available|availability|what times|which times|do you have|can i come|could i come|can i tour|can we tour|can i visit|can we visit|can i do|could i do|can we do|could we do|can i make|could i make|can we make|instead|move it|move to|change to|change it|reschedule)\b/.test(
+        normalized,
+      ) ||
+      /\bwould\b.+\bwork\b/.test(normalized) ||
+      normalized.split(" ").length <= 4;
     if (!scheduling) return undefined;
     return { weekday: weekday.day, ...(weekday.next ? { nextWeek: true } : {}) };
   }
@@ -148,7 +153,8 @@ const MONTH_THEN_DAY = new RegExp(`\\b(?:(${WEEKDAY_TOKEN})\\s+)?(${MONTH_TOKEN}
 const DAY_THEN_MONTH = new RegExp(`\\b(?:(${WEEKDAY_TOKEN})\\s+)?(${DAY_TOKEN})\\s+(${MONTH_TOKEN})(?:\\s+(${YEAR_TOKEN}))?\\b`);
 const NUMERIC_DATE = new RegExp(`\\b(?:(${WEEKDAY_TOKEN})\\s+)?(1[0-2]|0?[1-9])\\s+(${DAY_TOKEN})(?:\\s+(${YEAR_TOKEN}))?\\b`);
 const NUMERIC_ONLY = new RegExp(`^(1[0-2]|0?[1-9])\\s+(${DAY_TOKEN})(?:\\s+(${YEAR_TOKEN}))?$`);
-const NUMERIC_SCHEDULING = /\b(what about|how about|anything|available|availability|what times|which times|do you have|can i come|could i come|instead|come|tour|visit|book|on)\b/;
+const NUMERIC_SCHEDULING =
+  /\b(what about|how about|anything|available|availability|what times|which times|do you have|can i come|could i come|can i do|could i do|can we do|could we do|can i make|could i make|instead|come|tour|visit|book|on|would)\b/;
 
 function calendarDateOf(normalized: string, today?: LocalDate): DayReference | undefined {
   const named = MONTH_THEN_DAY.exec(normalized) ?? DAY_THEN_MONTH.exec(normalized);

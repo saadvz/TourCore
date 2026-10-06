@@ -100,6 +100,11 @@ export function formatTime(date: Date, timeZone: string): string {
   return clean(date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone }));
 }
 
+/** Clock first, then the calendar day: "2:45 PM on Thursday, Oct 9". */
+export function timeOnDay(date: Date, timeZone: string): string {
+  return `${formatTime(date, timeZone)} on ${formatDay(date, timeZone)}`;
+}
+
 export function formatDay(date: Date, timeZone: string): string {
   return clean(date.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone }));
 }

@@ -2,7 +2,7 @@ import { isLiveMessaging } from "../config/tourCoreConfig";
 import { moveLaterBookingInstead, moveLaterBookingOutsideHours, movedLaterBookingSummary, tourInProgressCannotMove } from "../core/availabilityCopy";
 import { intervalsOverlap, parseFlexibleTime, placementOf, relativeWhen, tourInterval, touringHoursLabel } from "../core/customSlot";
 import { isUnconfirmedHold, REQUEST_ALREADY_HANDLED, requestAlreadyExpiredLine, requestProposePassedLine, requestTimePassedLine, SLOT_ALREADY_PASSED, TourCoreError, WITHDRAWN_FOR_REGULAR_BOOKING } from "../core/TourCore";
-import { formatConfirmStamp, formatDay, formatTime, formatWeekday, localDateOf } from "../core/timezone";
+import { formatDay, formatTime, formatWeekday, localDateOf, timeOnDay } from "../core/timezone";
 import { formatPhone, parsePhone } from "../core/phone";
 import type { Reservation, TourTimeRequest } from "../domain/model";
 import { isRunningReservation, TERMINAL } from "../domain/stateMachine";
@@ -14,6 +14,7 @@ import type { ConfirmationBook } from "./confirmations";
 import { requireUnit, resolvePropertyId } from "./resolve";
 import { persistSession, type OperatorServices } from "./services";
 import { visitorSubject } from "../visitor/identity";
+import { operatorWhoLabel } from "./exceptions";
 import { currentReservation, findTour, midSentence, nextReservation, tourRef, tourSnapshots, unitNameOf, visitorNameOf, type TourSnapshot } from "./tours";
 
 interface Ctx {
@@ -45,11 +46,9 @@ export async function findTimeRequest(services: OperatorServices, id: string): P
   return undefined;
 }
 
-/** Sentence-start form: "The visitor" or the first name. Use midSentence() mid-sentence. */
+/** First name, or the phone label when unnamed. Never "The visitor" mid-sentence. */
 export function who(tour: TourSnapshot): string {
-  const name = visitorNameOf(tour);
-  if (!name || name === "A visitor" || name.startsWith("A visitor") || /^\(?\+?\d/.test(name)) return "The visitor";
-  return name.split(/\s+/)[0] ?? name;
+  return operatorWhoLabel(visitorNameOf(tour), tour.visitorPhone);
 }
 
 function visitorTextNote(name: string, confirm: boolean, outside: boolean): string {
@@ -113,10 +112,9 @@ async function expirePassedOnLiveTours(services: OperatorServices): Promise<void
 }
 
 function moveConfirmQuestion(input: { who: string; from?: Date; to: Date; now: Date; tz: string; outside: boolean; confirm: boolean }): string {
-  const toLabel = input.outside ? formatConfirmStamp(input.to, input.tz) : relativeWhen(input.to, input.now, input.tz);
   const lead = input.from
     ? `Move ${midSentence(input.who)}'s tour ${moveFromTo(input.from, input.to, input.now, input.tz, input.outside)}?`
-    : `Book ${midSentence(input.who)} for ${toLabel}?`;
+    : `Book ${input.who} for ${timeOnDay(input.to, input.tz)}?`;
   const extra = input.outside ? " That's outside your tour hours." : "";
   const verb = input.from ? "Move it?" : "Book it?";
   return `${lead}${extra} ${visitorTextNote(input.who, input.confirm, input.outside)} ${verb}`;
@@ -272,7 +270,7 @@ export async function approveTourTimeRequest(ctx: Ctx, input: { tourTimeRequestI
   }
   await persistSession(ctx.services, session);
   return {
-    summary: `${name}'s tour is set for ${relativeWhen(start, ctx.now(), tz)}. They've been told. The regular tour times are unchanged.`,
+    summary: `${name}'s tour is set for ${timeOnDay(start, tz)}. They've been told. The regular tour times are unchanged.`,
     approved: true,
     tourTimeRequestId: found.request.id,
   };
@@ -327,8 +325,12 @@ export async function proposeTourTime(ctx: Ctx, input: { tourTimeRequestId: stri
     throw err;
   }
   await persistSession(ctx.services, session);
+  const visitorWho = who(found.tour);
+  const hasBooking = !!reservation?.slotStart && !TERMINAL.includes(reservation.status);
   return {
-    summary: `I asked ${midSentence(who(found.tour))} about ${resolved.label}. Their current booking stays until they say yes.`,
+    summary: hasBooking
+      ? `I asked ${midSentence(visitorWho)} about ${resolved.label}. Their current booking stays until they say yes.`
+      : `Sent ${visitorWho} ${timeOnDay(resolved.start, tz)}. Nothing's booked until they say yes.`,
     tourTimeRequestId: found.request.id,
   };
 }
