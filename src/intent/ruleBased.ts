@@ -94,6 +94,8 @@ const CANT_MAKE_IT =
   /\b(i |we )?(cannot|can not|will not|could not) make it\b|\b(i |we )?(cannot|can not|will not) (come|be there|attend)\b|\b(i |we )?(cannot|can not|will not) make (the |my |our )?(tour|showing|appointment|it)\b|\bwill not be able to make it\b/;
 const WANT_CANCEL = /\b((i |we )?(need|have|want|would like) to cancel|please cancel)\b/;
 const BARE_CANCEL = /^(please )?(cancel)( it)?( please)?$/;
+/** "Actually cancel that" / "just call off this" — no tour noun required. */
+const LOOSE_CANCEL = /^(actually |just )?(please )?(cancel|call off)( that| this| it| them)?( please)?$/;
 const YES_CANCEL = /^(yes|yeah|yep|yup|sure|ok|okay) (please )?(cancel)( it)?$/;
 
 /**
@@ -103,7 +105,7 @@ const YES_CANCEL = /^(yes|yeah|yep|yup|sure|ok|okay) (please )?(cancel)( it)?$/;
 export function isCancelTourAsk(raw: string): boolean {
   const t = stripFiller(normalize(raw));
   if (!t || CANCEL_POLICY.test(t) || /\b(do not|never) cancel\b/.test(t)) return false;
-  if (BARE_CANCEL.test(t) || YES_CANCEL.test(t)) return true;
+  if (BARE_CANCEL.test(t) || YES_CANCEL.test(t) || LOOSE_CANCEL.test(t)) return true;
   if (WANT_CANCEL.test(t) || CANT_MAKE_IT.test(t)) return true;
   return CANCEL_VERB.test(t) && TOUR_NOUN.test(t);
 }

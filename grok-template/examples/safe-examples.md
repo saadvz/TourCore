@@ -162,7 +162,7 @@ Dana gets: "Hi, this is the leasing team at 100 Alfred Way. We set up a tour
 for you on Monday at 3:15 PM. Reply YES to confirm, NO to cancel, or STOP to
 opt out."
 
-- YES → usual consent, then identity.
+- YES → booking confirmation, then the identity form.
 - STOP → only the standard opt-out confirmation. Nothing further.
 - NO → "No problem. I cancelled that tour. Text me anytime to book another."
 - A leftover menu number such as "1" → only "Reply YES to confirm, NO to

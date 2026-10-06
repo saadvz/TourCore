@@ -4,7 +4,6 @@ import { isoDate, parseIsoDate } from "../core/schedule";
 import { dayReference, spokenTimes, type DayReference, type SpokenTime } from "../core/spokenTime";
 import { addDays, formatDay, formatTime, localDateOf, weekdayOf, zonedParts, type LocalDate } from "../core/timezone";
 import {
-  CONSENT_TEXT,
   TOUR_AGAIN_SUFFIX,
   TOUR_ENDED_REPLY,
   unknownAnswerReply,
@@ -269,9 +268,14 @@ function hasExplicitChangeAsk(text: string): boolean {
 function leftoverAfterConsent(text: string): string | undefined {
   const stripped = text.replace(/^\s*(yes|yeah|yep|yup|ok|okay|sure)[,!.]?\s+/i, "").replace(/^but\s+/i, "").trim();
   if (!stripped) return undefined;
-  if (isScheduleChangeRemainder(stripped)) return undefined;
+  if (isIdentityFormAsk(stripped) || isScheduleChangeRemainder(stripped)) return undefined;
   if (/\?/.test(stripped) || /\b(park|parking|entrance|prepare)\b/i.test(stripped)) return stripped;
   return undefined;
+}
+
+/** "Where's the form?" resends the identity link. It is not a property question. */
+function isIdentityFormAsk(text: string): boolean {
+  return /\b(form|links?|identity|verif\w*|id check|my id)\b/.test(stripFiller(normalize(text)));
 }
 
 async function answerLeftoverAfterConsent(turn: Turn, text: string): Promise<void> {
@@ -596,8 +600,8 @@ async function handleOperatorScheduledReply(session: VisitorDemoSession, said: S
 
 /**
  * Keyword campaign gate. Property questions, availability, and booking stay
- * closed until the sender replies YES to the disclosure. Tour/record consent
- * is a later step and is not decided here.
+ * closed until the sender replies YES to the disclosure. That YES is also
+ * enough to keep a record of the visit; booking does not ask again.
  */
 async function handleSmsGate(session: VisitorDemoSession, said: Said, text: string): Promise<void> {
   const keyword = keywordOf(text);
@@ -610,7 +614,7 @@ async function handleSmsGate(session: VisitorDemoSession, said: Said, text: stri
     return;
   }
   const normalized = normalize(text);
-  if (keyword === "start" || normalized === "tour") {
+  if (keyword === "start" || normalized === "tour" || said.meta?.countsAsOptIn) {
     await session.recordText(said);
     await session.allowMessagingAgain();
     session.noteSmsConsent("pending", keyword === "start" ? "START" : "TOUR");
@@ -917,8 +921,6 @@ function stepPrompt(session: VisitorDemoSession, stage: VisitorStage, awaiting?:
       const day = session.selectedDate ? formatDay(session.offeredSlots[0]!.start, session.config.property.timezone) : formatDay(session.offeredSlots[0]!.start, session.config.property.timezone);
       return timeMenu(day, labels);
     }
-    case "consent":
-      return { body: CONSENT_QUESTION, prompt: yesNo };
     case "identity":
       return { body: "Your identity form is in my earlier message. Once it's filled out, I'll confirm your tour." };
     case "follow-up":
@@ -928,7 +930,6 @@ function stepPrompt(session: VisitorDemoSession, stage: VisitorStage, awaiting?:
   }
 }
 
-const CONSENT_QUESTION = "Is it OK if I text you about this tour and keep a record of your visit?";
 const FOLLOW_UP_QUESTION = "Would you like someone from the property team to follow up?";
 
 /** Pause-cancel team label, only on hold or a door-system problem. */
@@ -1197,7 +1198,60 @@ async function tryShownSlotPick(turn: Turn, book: (slotStart: string) => Promise
   return false;
 }
 
-/** From consent, a regular day or shown slot replaces the held/booked tour. */
+/**
+ * A number from a menu shown after booking (a later time, or another day).
+ * A leftover number from the menu that booked this slot resends the form instead.
+ */
+async function acceptShownBookingChange(turn: Turn): Promise<boolean> {
+  const text = turn.said.text ?? "";
+  if (!isBareMenuNumber(text)) return false;
+  const { session } = turn;
+  const current = await session.reservation();
+  const shownOtherDay =
+    session.slotMenuLive &&
+    !!current?.slotStart &&
+    session.lastShownSlots.length > 0 &&
+    session.lastShownSlots.every((slot) => slot.start.toISOString() !== current.slotStart);
+  const shownDaysOnly =
+    session.dateMenuLive && session.lastShownDates.length > 0 && session.lastShownSlots.length === 0 && (await session.hasLiveRegularTour());
+  if (!(shownOtherDay || shownDaysOnly)) return false;
+  return tryRegularSlotFromConsent(turn);
+}
+
+/** A booked visitor can still move the time. This does not ask a second consent question. */
+async function offerBookedTimeChange(turn: Turn): Promise<boolean> {
+  const { session, intent } = turn;
+  const text = turn.said.text ?? "";
+  if (!hasExplicitChangeAsk(text)) return false;
+  const named = requestedChangeDay(text);
+  if (named) {
+    await showAskedDay(turn, named);
+    return true;
+  }
+  const shift = laterOrEarlierShift(text);
+  if (shift === "later-in-week") {
+    await offerRestOfWeek(turn);
+    return true;
+  }
+  if (shift) {
+    await offerSameDayShift(turn, shift);
+    return true;
+  }
+  const spoken = spokenTimes(normalize(text));
+  if (spoken.length === 1) {
+    await fileCustomTime(turn, spoken[0]!);
+    return true;
+  }
+  if (intent.type === "REQUEST_CUSTOM_TIME" && turn.confident) {
+    await fileCustomTime(turn, asSpoken(intent));
+    return true;
+  }
+  if (await tryRegularSlotFromConsent(turn)) return true;
+  await offerOpenDays(turn, excludedDays(text));
+  return true;
+}
+
+/** From a booked tour, a regular day or shown slot replaces that tour. */
 async function tryRegularSlotFromConsent(turn: Turn): Promise<boolean> {
   return tryShownSlotPick(turn, (slotStart) => turn.session.bookOffered(slotStart).then(() => undefined));
 }
@@ -1393,58 +1447,20 @@ async function byStage(turn: Turn): Promise<void> {
       return turn.fallback(`${SORRY} Which time works for you?`, menu);
     }
 
-    case "consent": {
-      const question = CONSENT_QUESTION;
-      const text = turn.said.text ?? "";
-      if (await affirmsBookedDay(turn)) {
-        await turn.act("consent", { agree: true });
-        return;
-      }
-      const changeAsk = hasExplicitChangeAsk(text);
-      const answer = clearConsentAnswer(text);
-      if (answer && !changeAsk) {
-        await turn.act("consent", { agree: answer === "yes" });
-        await answerLeftoverAfterConsent(turn, text);
-        return;
-      }
-      if (isBareMenuNumber(text)) {
-        const current = await session.reservation();
-        const shownOtherDay =
-          session.slotMenuLive &&
-          !!current?.slotStart &&
-          session.lastShownSlots.length > 0 &&
-          session.lastShownSlots.every((slot) => slot.start.toISOString() !== current.slotStart);
-        const shownDaysOnly = session.dateMenuLive && session.lastShownDates.length > 0 && session.lastShownSlots.length === 0 && (await session.hasLiveRegularTour());
-        if ((shownOtherDay || shownDaysOnly) && (await tryRegularSlotFromConsent(turn))) return;
-        return turn.fallback(`${SORRY} ${question}`, yesNo);
-      }
-      if (changeAsk) {
-        const named = requestedChangeDay(text);
-        if (named) return showAskedDay(turn, named);
-        const shift = laterOrEarlierShift(text);
-        if (shift === "later-in-week") return offerRestOfWeek(turn);
-        if (shift) return offerSameDayShift(turn, shift);
-        const spoken = spokenTimes(normalize(text));
-        if (spoken.length === 1) return fileCustomTime(turn, spoken[0]!);
-        if (intent.type === "REQUEST_CUSTOM_TIME" && turn.confident) return fileCustomTime(turn, asSpoken(intent));
-      }
-      const pending = await session.unapprovedCustomTimeRequest();
-      const allowSlot = changeAsk || !!pending?.pendingNoticeSentAt || (await session.hasLiveRegularTour());
-      if (allowSlot && (await tryRegularSlotFromConsent(turn))) return;
-      if (changeAsk) {
-        await offerOpenDays(turn, excludedDays(text));
-        return;
-      }
-      if (intent.type === "REQUEST_HELP") return session.help(turn.said);
-      if (session.heldBookingTakenOver && (await session.activeNeedsConsent())) {
-        await session.announceHeldBookingConsent();
-        return;
-      }
-      return turn.fallback(`${SORRY} ${question}`, yesNo);
-    }
+    case "consent":
+      await session.finishVisitRecordFromTextingOptIn(turn.said);
+      return;
 
     case "identity":
       if (intent.type === "REQUEST_HELP") return session.help(turn.said);
+      if (isIdentityFormAsk(turn.said.text ?? "")) return session.resendVerificationLink(turn.said);
+      if (await offerBookedTimeChange(turn)) return;
+      if (await acceptShownBookingChange(turn)) return;
+      if (leftoverAfterConsent(turn.said.text ?? "")) {
+        await session.recordText(turn.said);
+        await answerLeftoverAfterConsent(turn, turn.said.text ?? "");
+        return;
+      }
       return session.resendVerificationLink(turn.said);
 
     case "ready":
@@ -1583,7 +1599,7 @@ async function handleOverstayReply(turn: Turn): Promise<boolean> {
     }
     await turn.respond(reply);
     if (reply.startsWith("You've got 10 more minutes.") && (await session.pendingBookingNeedsConsent())) {
-      await session.reply(CONSENT_TEXT, { kind: "yes-no" });
+      await session.grantPendingVisitRecord();
     }
     return true;
   }
@@ -1613,7 +1629,7 @@ async function startRebook(turn: Turn): Promise<void> {
   await session.reply(DAY_MENU, { kind: "choose", options: dates.map((day) => day.label), what: "a day" });
 }
 
-/** After a tour ends, a greeting continues the held booking: booked-for line, then the original consent question. */
+/** After a tour ends, a greeting continues the held booking: booked-for line, then the usual next steps. */
 async function takeOverHeldBookingOnGreeting(turn: Turn): Promise<boolean> {
   const { session, intent } = turn;
   const text = turn.said.text ?? "";
@@ -1677,21 +1693,10 @@ async function handlePendingBookingReply(turn: Turn): Promise<boolean> {
   if (awaitingLatestYesNo(turn.awaiting)) return false;
   const text = turn.said.text ?? "";
   if (hasExplicitChangeAsk(text)) return false;
-  if (await affirmsBookedDay(turn)) {
+  if (await session.pendingBookingNeedsConsent()) {
+    if (isCancelTourAsk(text)) return false;
     await session.answerPendingConsent(true, turn.said);
     return true;
-  }
-  if (await session.pendingBookingNeedsConsent()) {
-    const answer = clearConsentAnswer(text);
-    if (answer === "yes") {
-      await session.answerPendingConsent(true, turn.said);
-      await answerLeftoverAfterConsent(turn, text);
-      return true;
-    }
-    if (answer === "no") {
-      await session.answerPendingConsent(false, turn.said);
-      return true;
-    }
   }
   if ((await session.pendingBookingNeedsVerification()) && /\b(form|link|identity|verify|verification)\b/.test(stripFiller(normalize(text)))) {
     await session.resendPendingVerification(turn.said);

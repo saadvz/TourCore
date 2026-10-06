@@ -177,11 +177,11 @@ export async function runDryTour(input: TourCoreConfig, options: DryTourOptions 
     await flush();
     await check(
       { id: "reserved", group: "journey", label: "Tour reserved", outcome: `${slot.label}, ${formatLocalDate(day, tz)}` },
-      reservation.status === "AWAITING_CONSENT",
+      !!reservation.consentId && (reservation.status === "AWAITING_VERIFICATION" || reservation.status === "READY"),
     );
     const request = (doorId: string) => core.requestAccess({ reservationId: reservation.id, prospectId: prospect.id, doorId });
 
-    await at('Visitor replies "YES"');
+    await at("Texting opt-in already covers the visit record");
     reservation = await core.recordConsent(reservation.id, true);
     await flush();
     await check({ id: "consent", group: "journey", label: "Consent recorded" }, !!reservation.consentId);

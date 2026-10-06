@@ -87,16 +87,19 @@ describe("visitor demo on the real engine", () => {
     await chooseFirstTime(s);
     const start = s.offeredSlots[0]!.start.toISOString();
     await expect(s.act("chooseTime", { slotStart: start })).resolves.toBeUndefined();
-    expect(await s.stage()).toBe("consent");
+    expect(await s.stage()).toBe("identity");
   });
 
-  it("booking, consent and the basic identity form go through the engine", async () => {
+  it("booking and the basic identity form go through the engine", async () => {
     const s = newSession();
     await s.act("begin", { name: "Pat Smith", phone: "(555) 010-2000" });
     await s.act("chooseUnit", { unitId: "apt_101" });
     await chooseFirstTime(s);
-    expect(await s.stage()).toBe("consent");
-    expect(lastFromTourCore(s)).toContain("Is it OK if I text you about this tour");
+    expect(await s.stage()).toBe("identity");
+    const booked = s.conversation.filter((m) => m.from === "tourcore").slice(-2).map((m) => m.text).join("\n");
+    expect(booked).toContain("Great, you're booked for");
+    expect(booked).toContain("please fill out this short form");
+    expect(booked).not.toContain("Is it OK if I text you");
 
     await s.act("consent", { agree: true });
     const form = await visitorView(s);

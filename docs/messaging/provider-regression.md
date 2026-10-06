@@ -61,13 +61,12 @@ Text the property number from the phone. Record every reply.
 3. Choose the first unit (`1`).
 4. Choose the first day (`1`).
 5. Choose the first time (`1`).
-6. Reply `YES` to the tour consent question.
-7. Open the identity-form link and submit it.
-8. Ask one property question, such as parking.
-9. Text `HELP`. Confirm the reply includes how to opt out and does not invent a support address.
-10. Text `STOP`. Confirm the opt-out reply and that a later booking text gets no tour reply.
-11. Text `START`. Confirm you can continue.
-12. In Tour Core, confirm one booking exists for that phone, not two, and the inbound record's provider is the one you are testing.
+6. Open the identity-form link from the booking text and submit it.
+7. Ask one property question, such as parking.
+8. Text `HELP`. Confirm the reply includes how to opt out and does not invent a support address.
+9. Text `STOP`. Confirm the opt-out reply and that a later booking text gets no tour reply.
+10. Text `START`. Confirm you can continue.
+11. In Tour Core, confirm one booking exists for that phone, not two, and the inbound record's provider is the one you are testing.
 
 Repeat the first inbound text once, immediately, if you can provoke a webhook retry. The second delivery must not send a second reply or create a second booking.
 

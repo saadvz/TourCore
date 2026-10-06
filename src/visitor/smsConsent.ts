@@ -7,9 +7,9 @@ import { campaignConfirmation, campaignDisclosure, MESSAGE_RATES } from "../web/
 import { writeJsonAtomic } from "../storage/atomicWrite";
 
 /**
- * SMS campaign consent is separate from the later tour/record consent.
- * A phone number, or an older tour, is not consent. Only an explicit keyword
- * event writes a record.
+ * SMS campaign consent. A phone number, or an older tour, is not consent.
+ * Only an explicit keyword event writes a record. That YES also covers
+ * messages about the tour and a record of the visit.
  */
 
 export const SmsCampaignConsentSchema = z.object({

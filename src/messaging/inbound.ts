@@ -26,6 +26,11 @@ export interface InboundMessage {
    * already chose it. A street, public name, or property id. Not a tracking number.
    */
   listingProperty?: string;
+  /**
+   * The visitor picked a property from the portfolio menu (a number or a street
+   * name). That pick is the opt-in keyword, the same as texting TOUR.
+   */
+  countsAsOptIn?: boolean;
 }
 
 /** True when the inbound included a photo or other attachment. Presence only; Tour Core does not download or forward files. */

@@ -109,7 +109,7 @@ describe("call-off and Ready cannot disagree", () => {
     v.session.rebookUnitId = current.unitId;
     await v.session.confirmRebook(new Date(at(10)).toISOString());
     const pending = (await v.session.pendingBooking())!;
-    expect(pending.status).toBe("AWAITING_CONSENT");
+    expect(pending.status).toBe("READY");
     const stale = { ...pending };
     await v.session.operatorChange((core, reservationId) => core.revokeReservation(reservationId, "called off"), pending.id);
     expect((await v.session.store.get("reservations", pending.id))!.status).toBe("REVOKED");

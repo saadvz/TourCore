@@ -217,7 +217,7 @@ Never:
   request is told once that it is still with the property team. The
   regular-times sentence is only for visitors with no held or booked
   regular tour. A held rebook taking over gets the booked-for line, then
-  the original consent question, then Reply YES or NO. Later texts use
+  the usual next steps. Later texts use
   the normal booking flow. Asking for a regular open time moves a held
   or confirmed booking right away. A taken regular slot keeps the current
   booking (`Sorry, {time} on {day} is already taken.` plus still-booked
@@ -230,11 +230,11 @@ Never:
   no menu. Farewells and arrival remarks
   (`yes, see you later`, `yes, I'll arrive
   earlier`, `yes, no need to switch`, `yes, the sooner the better`)
-  record consent; later/earlier/sooner is a
+  do not ask again; later/earlier/sooner is a
   change only when it is an actual ask (`make it later`, `later in
   the week`, `can we do it later`, `anything later`, `sooner would be
   better`, `can we do it sooner`, `sooner?`). `yes, anything earlier is
-  fine too` records consent. A named day (`tuesday works better`)
+  fine too` does not ask again. A named day (`tuesday works better`)
   shows that day's times.
   A visitor text that cannot be handled opens a handler-failed issue
   (not a flagged question) and tells them the team will reply here when
@@ -270,13 +270,12 @@ Never:
   can still book them a one-off time.` and does not send the proposal.
   Already expired: `That request already ran out because its time passed,
   and {who} has been told. You can still book them a one-off time.`
-  Already approved or declined: `That request has already been handled.` Approving a custom time that moves an unconfirmed held booking uses
-  that same booked-for line, then the original consent question, then
-  Reply YES or NO — not moved wording. That new
+  Already approved or declined: `That request has already been handled.` Approving a custom time that moves a confirmed booking uses
+  the moved wording, then you're all set — not a second question. That new
   booking becomes the active one after the follow-up reply; a follow-up
-  yes does not record consent. Unanswered consent is then the booked-for
-  line for the new time, then the original consent question. If the T-5 text
-  cannot offer extra time, a later yes records pending consent. While
+  yes does not ask again. A booking still waiting is then the booked-for
+  line, then the usual next steps. If the T-5 text
+  cannot offer extra time, a later yes does not ask again. While
   the leaving issue is open, stuck-inside texts and greetings stay on
   after-close handling.
 - Treat a visitor naming a tour date, or an unparseable date, as an unanswered

@@ -17,7 +17,6 @@ import { apiError, fakeSendblue } from "./fakeSendblue";
 import {
   alreadyAskedLine,
   bookedForLine,
-  CONSENT_TEXT,
   customTimeAskedLine,
   HANDLER_FAILED_NEXT_STEP,
   handlerFailureAlertLine,
@@ -468,7 +467,8 @@ describe("a pending custom-time request does not block regular booking", () => {
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
     const reservation = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!;
     expect(reservation.slotStart).toBe(zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour: 15, minute: 15 }, TZ).toISOString());
-    expect(reservation.status).toBe("AWAITING_CONSENT");
+    expect(reservation.status).toBe("AWAITING_VERIFICATION");
+    expect(reservation.consentId).toBeTruthy();
   });
 
   it("I'm locked in after the pending line alerts the landlord like a +15 close", async () => {
@@ -642,15 +642,16 @@ async function tourThenRebookFridayThenCustom(a: LiveApp) {
 }
 
 describe("a held rebook and a custom-time request stay one booking", () => {
-  it("after DONE and follow-up, the Friday hold takes over with booked-for then consent, not the regular-times sentence", async () => {
+  it("after DONE and follow-up, the Friday booking is already confirmed and the custom request stays pending", async () => {
     const a = await liveApp({ cleanups });
     const { follow, friday } = await tourThenRebookFridayThenCustom(a);
     const texts = follow.join("\n");
-    expect(texts).toContain(bookedForLine(formatTime(friday, TZ), formatDay(friday, TZ)));
-    expect(texts).toContain(CONSENT_TEXT);
-    expect(texts).toContain("Reply YES or NO.");
+    const thread = a.fake.sent.filter((message) => message.number === PHONE).map((message) => message.content).join("\n");
+    expect(thread).toContain(bookedForLine(formatTime(friday, TZ), formatDay(friday, TZ)));
+    expect(thread).toContain("You're all set");
+    expect(texts).not.toContain("Is it OK if I text you");
     expect(texts).not.toContain(PENDING_CUSTOM_TIME_REGULAR_OPTION);
-    expect(texts).not.toContain("still with the property team");
+    expect(texts).toContain("still with the property team");
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
     const bundle = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle;
     const live = bundle.reservations.filter((item) => item.slotStart && item.status !== "COMPLETED" && item.status !== "CANCELLED");
@@ -662,14 +663,12 @@ describe("a held rebook and a custom-time request stay one booking", () => {
   it("picking Tuesday replaces the Friday hold, releases that slot, and sends That replaces your 2:00 PM tour on Friday, Oct 2.", async () => {
     const a = await liveApp({ cleanups });
     const { friday } = await tourThenRebookFridayThenCustom(a);
-    await a.text("Tuesday");
-    const booked = await a.text("1");
+    const booked = await a.text("Can I come Tuesday at 2:00?");
     const texts = booked.join("\n");
     const tuesday = zonedTimeToUtc({ year: 2026, month: 9, day: 29, hour: 14, minute: 0 }, TZ);
     expect(texts).toContain(bookedForLine(formatTime(tuesday, TZ), formatDay(tuesday, TZ)));
     expect(texts).toContain(replacesTourLine(formatTime(friday, TZ), formatDay(friday, TZ)));
-    expect(texts).toContain(CONSENT_TEXT);
-    expect(texts).toContain("Reply YES or NO.");
+    expect(texts).not.toContain("Is it OK if I text you");
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
     const bundle = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle;
     expect(bundle.reservations.some((item) => item.slotStart === friday.toISOString() && item.status !== "CANCELLED")).toBe(false);
@@ -677,19 +676,18 @@ describe("a held rebook and a custom-time request stay one booking", () => {
     expect(bundle.tourTimeRequests.every((request) => request.status !== "PENDING")).toBe(true);
   });
 
-  it("approving the custom time moves an unconfirmed Friday hold with the full booked-for then consent ask", async () => {
+  it("approving the custom time moves the confirmed Friday booking with the moved wording", async () => {
     const a = await liveApp({ cleanups });
     await tourThenRebookFridayThenCustom(a);
     const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
     const before = a.fake.sent.filter((message) => message.number === PHONE).map((message) => message.content);
     await a.approve("approve_tour_time_request", { tourTimeRequestId: id });
     const after = a.fake.sent.filter((message) => message.number === PHONE).map((message) => message.content).slice(before.length);
+    expect(after.join("\n")).toContain("moved to 3:15 PM on Friday, Oct 2");
+    expect(after.join("\n")).toContain("You're all set");
+    expect(after.join("\n")).not.toContain("Is it OK if I text you");
+    expect(after.join("\n")).not.toContain("Reply YES or NO");
     const custom = zonedTimeToUtc({ year: 2026, month: 10, day: 2, hour: 15, minute: 15 }, TZ);
-    expect(after).toEqual([
-      bookedForLine(formatTime(custom, TZ), formatDay(custom, TZ)),
-      `${CONSENT_TEXT}\nReply YES or NO.`,
-    ]);
-    expect(after.join("\n")).not.toMatch(/moved to|rescheduled/i);
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
     const bundle = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle;
     const live = bundle.reservations.filter((item) => item.slotStart && item.status !== "COMPLETED" && item.status !== "CANCELLED");
@@ -705,7 +703,7 @@ describe("a held rebook and a custom-time request stay one booking", () => {
     await a.approve("approve_tour_time_request", { tourTimeRequestId: id });
     const last = a.fake.sent.filter((message) => message.number === PHONE).at(-1)!.content;
     expect(last).toContain("moved to 3:15 PM on Monday, Sep 28");
-    expect(last).not.toContain(CONSENT_TEXT);
+    expect(last).not.toContain("Is it OK if I text you");
   });
 });
 
@@ -715,7 +713,8 @@ async function firstBookingConsent(a: LiveApp) {
   await a.text("1");
   const booked = await a.text("1");
   expect(booked.join("\n")).toContain(bookedForLine("2:00 PM", "Monday, Sep 28"));
-  expect(booked.join("\n")).toContain("Reply YES or NO.");
+  expect(booked.join("\n")).toContain("please fill out this short form");
+  expect(booked.join("\n")).not.toContain("Is it OK if I text you");
   return booked;
 }
 
@@ -743,9 +742,10 @@ describe("consent is not hijacked by a regular-slot pick", () => {
     const a = await liveApp({ cleanups });
     await firstBookingConsent(a);
     const replies = await a.text("1");
-    expect(replies.join("\n")).toMatch(/Is it OK if I text you about this tour|Reply YES or NO/);
+    expect(replies.join("\n")).toMatch(/please fill out this short form|identity form/);
+    expect(replies.join("\n")).not.toContain("Is it OK if I text you");
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
-    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeFalsy();
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeTruthy();
   });
 
   it("yes see you tuesday and ok tuesday record consent, not Tuesday's menu", async () => {
@@ -772,11 +772,12 @@ describe("consent is not hijacked by a regular-slot pick", () => {
     const a = await liveApp({ cleanups });
     await firstBookingConsent(a);
     const replies = await a.text("2");
-    expect(replies.join("\n")).toMatch(/Is it OK if I text you about this tour|Reply YES or NO/);
+    expect(replies.join("\n")).toMatch(/please fill out this short form|identity form/);
+    expect(replies.join("\n")).not.toContain("Is it OK if I text you");
     expect(replies.join("\n")).not.toContain("That replaces your");
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
     expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.slotStart).toBe(atTime(14).toISOString());
-    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeFalsy();
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeTruthy();
   });
 
   it("yes see you friday after a held takeover records consent, not Friday's menu", async () => {
@@ -795,7 +796,7 @@ describe("consent is not hijacked by a regular-slot pick", () => {
     const replies = await a.text("yes, but can I do Tuesday instead?");
     expect(replies.join("\n")).toMatch(/Which time|2:00 PM|3:30 PM/);
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
-    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeFalsy();
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeTruthy();
   });
 
   it("yes but can we do 3:30 instead replaces the 2:00 booking and is not recorded as consent first", async () => {
@@ -807,12 +808,12 @@ describe("consent is not hijacked by a regular-slot pick", () => {
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
     const reservation = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations.find((item) => item.slotStart && item.status !== "CANCELLED")!;
     expect(reservation.slotStart).toBe(atTime(15, 30).toISOString());
-    expect(reservation.consentId).toBeFalsy();
+    expect(reservation.consentId).toBeTruthy();
   });
 });
 
 describe("an operator proposal wins over held-booking consent", () => {
-  it("YES to a proposed time during a tour moves the unconfirmed hold and asks consent", async () => {
+  it("YES to a proposed time during a tour moves the confirmed hold without another consent question", async () => {
     const a = await liveApp({ cleanups });
     await a.book();
     a.clock.t = at(13, 58);
@@ -826,16 +827,17 @@ describe("an operator proposal wins over held-booking consent", () => {
     const replies = await a.text("YES");
     expect(replies.join("\n")).not.toContain("You're all set for your tour on Friday");
     const friday330 = zonedTimeToUtc({ year: 2026, month: 10, day: 2, hour: 15, minute: 30 }, TZ);
-    expect(replies.join("\n")).toContain(bookedForLine(formatTime(friday330, TZ), formatDay(friday330, TZ)));
-    expect(replies.join("\n")).toContain(CONSENT_TEXT);
-    expect(replies.join("\n")).toContain("Reply YES or NO.");
+    expect(replies.join("\n")).toContain("moved to 3:30 PM on Friday, Oct 2");
+    expect(replies.join("\n")).toContain("You're all set.");
+    expect(replies.join("\n")).not.toContain("Is it OK if I text you");
+    expect(replies.join("\n")).not.toContain("Reply YES or NO.");
     expect(a.fake.sent.filter((message) => message.number === PHONE).length).toBeGreaterThan(before);
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
     const bundle = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle;
     expect(bundle.tourTimeRequests[0]!.status).toBe("APPROVED");
     const hold = bundle.reservations.find((item) => item.id !== bundle.reservations.find((r) => r.status === "TOURING")?.id && item.slotStart && item.status !== "CANCELLED")!;
     expect(hold.slotStart).toBe(friday330.toISOString());
-    expect(hold.consentId).toBeFalsy();
+    expect(hold.consentId).toBeTruthy();
   });
 
   it("NO to a proposed time during a tour keeps the hold and resolves the request", async () => {
@@ -859,17 +861,17 @@ describe("an operator proposal wins over held-booking consent", () => {
 });
 
 describe("decline and request copy names booked vs confirmed and includes the day", () => {
-  it("declining an unconfirmed Friday hold uses the booked wording with both days", async () => {
+  it("declining a change to a confirmed Friday booking uses the confirmed wording with both days", async () => {
     const a = await liveApp({ cleanups });
     await tourThenRebookFridayThenCustom(a);
     const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
     const asked = await a.grok("approve_tour_time_request", { tourTimeRequestId: id });
     expect(asked.summary).toContain("Move Testy's tour from 2:00 PM on Friday, Oct 2 to 3:15 PM on Friday, Oct 2?");
     expect((await a.grok("decline_tour_time_request", { tourTimeRequestId: id })).summary).toBe(
-      "Declined. Testy is still booked for 2:00 PM on Friday, Oct 2.",
+      "Declined. Testy's 2:00 PM tour on Friday, Oct 2 is still confirmed.",
     );
     const last = a.fake.sent.filter((message) => message.number === PHONE).at(-1)!.content;
-    expect(last).toBe("The property team couldn't approve 3:15 PM on Friday, Oct 2. You're still booked for 2:00 PM on Friday, Oct 2.");
+    expect(last).toBe("The property team couldn't approve 3:15 PM on Friday, Oct 2. Your 2:00 PM tour on Friday, Oct 2 is still confirmed.");
   });
 
   it("a first during-tour request acknowledgement says booked and includes the day", async () => {
@@ -1180,7 +1182,7 @@ describe("yes plus extra words stays consent unless it is a real change", () => 
     const replies = await a.text("yes, switch to wednesday");
     expect(replies.join("\n")).toMatch(/Which time|2:00 PM|3:30 PM/);
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
-    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeFalsy();
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeTruthy();
   });
 });
 
@@ -1207,7 +1209,7 @@ describe("a named day on a move is kept", () => {
     const replies = await a.text("Can I move it to Tuesday at 2:00?");
     expect(replies.join("\n")).toContain(bookedForLine("2:00 PM", "Tuesday, Sep 29"));
     expect(replies.join("\n")).toContain(replacesTourLine("2:00 PM", "Monday, Sep 28"));
-    expect(replies.join("\n")).not.toContain(CONSENT_TEXT);
+    expect(replies.join("\n")).not.toContain("Is it OK if I text you");
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
     const reservation = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations.find((item) => item.slotStart && item.status !== "CANCELLED")!;
     expect(reservation.slotStart).toBe(zonedTimeToUtc({ year: 2026, month: 9, day: 29, hour: 14, minute: 0 }, TZ).toISOString());
@@ -1219,7 +1221,7 @@ describe("a named day on a move is kept", () => {
     await a.book();
     const replies = await a.text("Can I move it to Tuesday at 3:15?");
     expect(replies.join("\n")).toContain(customTimeAskedLine("3:15 PM", "Tuesday, Sep 29", "2:00 PM", "Monday, Sep 28"));
-    expect(replies.join("\n")).not.toContain(CONSENT_TEXT);
+    expect(replies.join("\n")).not.toContain("Is it OK if I text you");
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
     expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.tourTimeRequests[0]!.requestedStartsAt).toBe(
       zonedTimeToUtc({ year: 2026, month: 9, day: 29, hour: 15, minute: 15 }, TZ).toISOString(),
@@ -1275,7 +1277,7 @@ describe("a taken regular slot never files a custom-time request", () => {
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.visitorPhone === PHONE)!;
     const reservation = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations.find((item) => item.slotStart && item.status !== "CANCELLED")!;
     expect(reservation.slotStart).toBe(atTime(15, 30).toISOString());
-    expect(reservation.consentId).toBeFalsy();
+    expect(reservation.consentId).toBeTruthy();
     expect((await a.grok("list_tour_time_requests")).requests).toHaveLength(0);
   });
 
@@ -1451,7 +1453,7 @@ describe("yes-but change vs consent", () => {
       expect(replies.join("\n")).not.toContain("Sorry, I didn't catch that.");
       const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
       const bundle = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle;
-      expect(bundle.reservations[0]!.consentId).toBeFalsy();
+      expect(bundle.reservations[0]!.consentId).toBeTruthy();
       expect(bundle.auditEvents.some((event) => event.type === "QUESTION_UNANSWERED")).toBe(false);
     },
   );
@@ -1463,7 +1465,7 @@ describe("yes-but change vs consent", () => {
     expect(replies.join("\n")).toContain("4:00 PM");
     expect(replies.join("\n")).not.toContain("Sorry, I didn't catch that.");
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
-    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeFalsy();
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeTruthy();
   });
 
   it("yes but I'd rather do tuesday uses Tuesday and is not Sorry", async () => {
@@ -1473,7 +1475,7 @@ describe("yes-but change vs consent", () => {
     expect(replies.join("\n")).toMatch(/Tuesday|2:00 PM|3:30 PM/);
     expect(replies.join("\n")).not.toContain("Sorry, I didn't catch that.");
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
-    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeFalsy();
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeTruthy();
   });
 
   it.each([
@@ -1499,7 +1501,7 @@ describe("yes-but change vs consent", () => {
     expect(replies.join("\n")).not.toContain("Sorry, I didn't catch that.");
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
     const bundle = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle;
-    expect(bundle.reservations[0]!.consentId).toBeFalsy();
+    expect(bundle.reservations[0]!.consentId).toBeTruthy();
     expect(bundle.auditEvents.some((event) => event.type === "QUESTION_UNANSWERED")).toBe(false);
     expect(bundle.auditEvents.some((event) => event.type === "HANDLER_FAILED")).toBe(false);
   });
@@ -1511,7 +1513,7 @@ describe("yes-but change vs consent", () => {
     expect(replies.join("\n")).toMatch(/Which day works for you\?|Tuesday|Wednesday/);
     expect(replies.join("\n")).not.toContain("I have these times available Monday, Sep 28:");
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
-    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeFalsy();
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeTruthy();
   });
 
   it("yes but tuesday works better shows Tuesday's times", async () => {
@@ -1521,7 +1523,7 @@ describe("yes-but change vs consent", () => {
     expect(replies.join("\n")).toMatch(/Tuesday|2:00 PM|3:30 PM/);
     expect(replies.join("\n")).not.toContain("Which day works for you?");
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
-    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeFalsy();
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeTruthy();
   });
 
   it("no need, I'll switch to Wednesday shows Wednesday's times", async () => {
@@ -1531,7 +1533,7 @@ describe("yes-but change vs consent", () => {
     expect(replies.join("\n")).toMatch(/Wednesday|2:00 PM|3:30 PM/);
     expect(replies.join("\n")).not.toContain("Which day works for you?");
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
-    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeFalsy();
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeTruthy();
   });
 
   it("yes but not monday does not show Monday's times", async () => {
@@ -1541,7 +1543,7 @@ describe("yes-but change vs consent", () => {
     expect(replies.join("\n")).not.toContain("Monday, Sep 28");
     expect(replies.join("\n")).toMatch(/Which day works for you\?|Tuesday/);
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
-    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeFalsy();
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeTruthy();
   });
 
   it("yes, but tomorrow I'm busy does not show tomorrow's times", async () => {
@@ -1551,7 +1553,7 @@ describe("yes-but change vs consent", () => {
     expect(replies.join("\n")).not.toContain("Tuesday, Sep 29");
     expect(replies.join("\n")).toMatch(/Which day works for you\?|Monday, Sep 28|Wednesday/);
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
-    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeFalsy();
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeTruthy();
   });
 
   it.each([
@@ -1594,7 +1596,7 @@ describe("yes-but change vs consent", () => {
     expect(replies.join("\n")).not.toMatch(/Which day works for you\?|I have tours available/);
     expect(replies.join("\n")).not.toContain(bookedForLine("2:00 PM", "Monday, Sep 28"));
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
-    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeFalsy();
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeTruthy();
   });
 
   it("yes but earlier if possible offers earlier open times that day", async () => {
@@ -1609,7 +1611,7 @@ describe("yes-but change vs consent", () => {
     expect(replies.join("\n")).toContain("2:00 PM");
     expect(replies.join("\n")).not.toContain("Great, you're booked for 2:00 PM");
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
-    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeFalsy();
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeTruthy();
   });
 
   it("yes but make it later offers later open times and does not book", async () => {
@@ -1621,7 +1623,7 @@ describe("yes-but change vs consent", () => {
     expect(replies.join("\n")).not.toContain(bookedForLine("3:30 PM", "Monday, Sep 28"));
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
     const reservation = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!;
-    expect(reservation.consentId).toBeFalsy();
+    expect(reservation.consentId).toBeTruthy();
     expect(reservation.slotStart).toBe(atTime(14).toISOString());
   });
 
@@ -2177,26 +2179,28 @@ describe("a leftover booking menu is not live", () => {
     const a = await liveApp({ cleanups });
     await firstBookingConsent(a);
     const replies = await a.text("later");
-    expect(replies.join("\n")).toContain("Sorry, I didn't catch that.");
+    expect(replies.join("\n")).toMatch(/please fill out this short form|identity form/);
+    expect(replies.join("\n")).not.toContain("Sorry, I didn't catch that.");
     expect(replies.join("\n")).not.toContain(bookedForLine("3:30 PM", "Monday, Sep 28"));
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
     const reservation = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!;
     expect(reservation.slotStart).toBe(atTime(14).toISOString());
-    expect(reservation.consentId).toBeFalsy();
+    expect(reservation.consentId).toBeTruthy();
   });
 
   it("at consent, a bare sooner does not open a day menu or move the booking", async () => {
     const a = await liveApp({ cleanups });
     await firstBookingConsent(a);
     const replies = await a.text("sooner");
-    expect(replies.join("\n")).toContain("Sorry, I didn't catch that.");
+    expect(replies.join("\n")).toMatch(/please fill out this short form|identity form/);
+    expect(replies.join("\n")).not.toContain("Sorry, I didn't catch that.");
     expect(replies.join("\n")).not.toContain("Which day works for you?");
     expect(replies.join("\n")).not.toContain("I have tours available");
     expect(replies.join("\n")).not.toContain(bookedForLine("3:30 PM", "Monday, Sep 28"));
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
     const reservation = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!;
     expect(reservation.slotStart).toBe(atTime(14).toISOString());
-    expect(reservation.consentId).toBeFalsy();
+    expect(reservation.consentId).toBeTruthy();
   });
 
   it("at consent, sooner? is a change and offers the day menu", async () => {
@@ -2207,7 +2211,7 @@ describe("a leftover booking menu is not live", () => {
     expect(replies.join("\n")).not.toContain("Sorry, I didn't catch that.");
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
     const bundle = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle;
-    expect(bundle.reservations[0]!.consentId).toBeFalsy();
+    expect(bundle.reservations[0]!.consentId).toBeTruthy();
     expect(bundle.auditEvents.some((event) => event.type === "QUESTION_UNANSWERED")).toBe(false);
   });
 
@@ -2410,9 +2414,10 @@ describe("a held rebook leftover menu number does not move the booking", () => {
     expect(leftover.join("\n")).not.toContain("That replaces your");
     expect(leftover.join("\n")).not.toContain(bookedForLine("3:30 PM", "Thursday, Oct 1"));
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.visitorPhone === PHONE)!;
-    const held = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations.find((item) => item.status === "AWAITING_CONSENT");
     const thursday = zonedTimeToUtc({ year: 2026, month: 10, day: 1, hour: 14, minute: 0 }, "America/New_York");
+    const held = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations.find((item) => item.slotStart === thursday.toISOString() && item.status !== "CANCELLED" && item.status !== "TOURING");
     expect(held?.slotStart).toBe(thursday.toISOString());
+    expect(held?.consentId).toBeTruthy();
   });
 });
 

@@ -16,7 +16,7 @@ import {
   tourInProgressCannotMove,
   tourMovedToText,
 } from "../src/core/availabilityCopy";
-import { bookedForLine, CONSENT_TEXT, TOUR_ENDED_REPLY, VISITOR_CANCEL_DONE, VisitorDenialCopy } from "../src/core/TourCore";
+import { bookedForLine, TOUR_ENDED_REPLY, VISITOR_CANCEL_DONE, VisitorDenialCopy } from "../src/core/TourCore";
 import { formatDay, formatTime, zonedTimeToUtc } from "../src/core/timezone";
 import { MessagingEndpoints } from "../src/messaging/endpoints";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
@@ -112,9 +112,10 @@ async function touringWithRebook(label: string, later = zonedTimeToUtc({ year: 2
 }
 
 describe("defect 1: bare yes answers the latest question", () => {
-  it("yes to a door check opens the door and leaves rebook consent pending", async () => {
+  it("yes to a door check opens the door and leaves the later booking confirmed", async () => {
     const ctx = await touringWithRebook("d1-door-yes");
-    expect(await ctx.session.pendingBookingNeedsConsent()).toBe(true);
+    expect(await ctx.session.pendingBookingNeedsConsent()).toBe(false);
+    expect((await ctx.session.store.get("reservations", ctx.pending.id))!.consentId).toBeTruthy();
     await ctx.say("can you open 101?");
     expect(lastFrom(ctx.session)).toMatch(/^Are you at Unit 101 now\?/);
     const before = ctx.session.durin.requestCount;
@@ -123,36 +124,38 @@ describe("defect 1: bare yes answers the latest question", () => {
     expect((await ctx.session.reservation())!.status).toBe("TOURING");
     expect(ctx.session.lastAccess).toMatchObject({ doorId: "unit_101", allowed: true });
     expect(ctx.session.durin.requestCount).toBeGreaterThan(before);
-    expect(await ctx.session.pendingBookingNeedsConsent()).toBe(true);
-    expect((await ctx.session.store.get("reservations", ctx.pending.id))!.consentId).toBeUndefined();
+    expect(await ctx.session.pendingBookingNeedsConsent()).toBe(false);
     expect(lastFrom(ctx.session)).not.toMatch(/You're all set for your tour/);
+    expect(lastFrom(ctx.session)).not.toContain("Is it OK if I text you");
   });
 
-  it("yes records consent when the consent ask is the latest question", async () => {
+  it("a bare yes during the tour does not drop the later booking", async () => {
     const ctx = await touringWithRebook("d1-consent-yes");
-    expect(await ctx.session.pendingBookingNeedsConsent()).toBe(true);
+    expect(await ctx.session.pendingBookingNeedsConsent()).toBe(false);
+    const bookedBefore = (await ctx.session.store.get("reservations", ctx.pending.id))!;
+    expect(bookedBefore.consentId).toBeTruthy();
+    expect(bookedBefore.status).toBe("READY");
     await ctx.say("yes");
     expect((await ctx.session.reservation())!.id).toBe(ctx.runningId);
     expect((await ctx.session.reservation())!.status).toBe("TOURING");
-    const booked = (await ctx.session.store.get("reservations", ctx.pending.id))!;
-    expect(booked.consentId).toBeTruthy();
-    expect(["AWAITING_VERIFICATION", "READY"]).toContain(booked.status);
+    expect((await ctx.session.store.get("reservations", ctx.pending.id))!.status).toBe("READY");
   });
 
   it.each(["yes, no need to switch", "yes, no change needed", "yes, I won't need to reschedule", "yes but I might be 5 min late"])(
-    "%s records consent for the held Thursday booking",
+    "%s leaves the held Thursday booking confirmed",
     async (phrase) => {
       const thursday = zonedTimeToUtc({ year: 2026, month: 10, day: 1, hour: 14, minute: 0 }, TZ);
       const ctx = await touringWithRebook(`farewell-${phrase.length}`, thursday);
-      expect(await ctx.session.pendingBookingNeedsConsent()).toBe(true);
+      expect(await ctx.session.pendingBookingNeedsConsent()).toBe(false);
       await ctx.say(phrase);
       expect((await ctx.session.reservation())!.id).toBe(ctx.runningId);
       expect((await ctx.session.reservation())!.status).toBe("TOURING");
       const booked = (await ctx.session.store.get("reservations", ctx.pending.id))!;
       expect(booked.consentId).toBeTruthy();
-      expect(booked.status).not.toBe("AWAITING_CONSENT");
-      expect(lastFrom(ctx.session)).toMatch(/^You're all set for your tour on Thursday, Oct 1 at 2:00 PM!/);
-      expect(lastFrom(ctx.session)).not.toContain("Sorry, I didn't catch that");
+      expect(booked.status).toBe("READY");
+      const thread = ctx.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).join("\n");
+      expect(thread).toContain("You're all set for your tour on Thursday, Oct 1 at 2:00 PM!");
+      expect(thread).not.toContain("Is it OK if I text you");
     },
   );
 });
@@ -177,14 +180,14 @@ describe("defect 2: operator tools target the running tour", () => {
       visitorName: "Riley Tester",
       status: "Touring",
       tourTime: "Monday, Sep 28, 9:00 AM\u20139:45 AM",
-      nextBooking: { tourTime: "Monday, Sep 28, 10:00 AM\u201310:45 AM", status: "Waiting for consent" },
+      nextBooking: { tourTime: "Monday, Sep 28, 10:00 AM\u201310:45 AM", status: "Ready, waiting for arrival" },
     });
     const inspected = await h.ok("inspect_tour", { tourRef: ref });
     expect(inspected.tour.status).toBe("Touring");
     expect(inspected.tour.tourTime).toBe("Monday, Sep 28, 9:00 AM\u20139:45 AM");
-    expect(inspected.tour.nextBooking).toEqual({ tourTime: "Monday, Sep 28, 10:00 AM\u201310:45 AM", status: "Waiting for consent" });
+    expect(inspected.tour.nextBooking).toEqual({ tourTime: "Monday, Sep 28, 10:00 AM\u201310:45 AM", status: "Ready, waiting for arrival" });
     expect(inspected.tour.accessGrants.some((g: { doorName: string }) => g.doorName === "Lobby Entrance")).toBe(true);
-    expect(pending.status).toBe("AWAITING_CONSENT");
+    expect(pending.status).toBe("READY");
   });
 
   it("pause and resume the running tour while a rebook is held", async () => {
@@ -195,7 +198,7 @@ describe("defect 2: operator tools target the running tour", () => {
     expect(v.session.pendingBookingId).toBeTruthy();
     const listed = await h.ok("list_active_tours");
     expect(listed.tours[0].status).toBe("Paused");
-    expect(listed.tours[0].nextBooking?.status).toBe("Waiting for consent");
+    expect(listed.tours[0].nextBooking?.status).toBe("Ready, waiting for arrival");
     const resumed = await h.approve("clear_operator_hold", { tourRef: ref });
     expect(resumed.done.summary).toMatch(/Riley Tester's tour is resumed/);
     expect((await v.session.reservation())!.status).toBe("TOURING");
@@ -229,7 +232,8 @@ describe("defect 3: ended running tour hands conversation to the held rebook", (
     expect(ctx.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text)).toContain(
       bookedForLine(formatTime(start, TZ), formatDay(start, TZ)),
     );
-    expect(lastFrom(ctx.session)).toContain(CONSENT_TEXT);
+    expect(ctx.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).join("\n")).toContain("You're all set");
+    expect(lastFrom(ctx.session)).not.toContain("Is it OK if I text you");
   });
 
   it("done: after follow-up, the held rebook is the active booking", async () => {
@@ -238,7 +242,8 @@ describe("defect 3: ended running tour hands conversation to the held rebook", (
     expect((await ctx.session.reservation())!.id).toBe(ctx.runningId);
     await ctx.say("no");
     expect((await ctx.session.reservation())!.id).toBe(ctx.pending.id);
-    expect(await ctx.session.pendingBookingNeedsConsent() || (await ctx.session.activeNeedsConsent())).toBe(true);
+    expect(await ctx.session.pendingBookingNeedsConsent() || (await ctx.session.activeNeedsConsent())).toBe(false);
+    expect((await ctx.session.reservation())!.consentId).toBeTruthy();
   });
 
   it("expired: after the leaving window, the held rebook takes over", async () => {
@@ -286,7 +291,7 @@ describe("defect 4: pause_tours cancel actually cancels the held rebook", () => 
     await persistSession(h.services, v.session);
     const ref = tourRef(id, v.session.tourId);
     await h.approve("revoke_tour_access", { tourRef: ref, reason: "Need the unit back" });
-    expect((await v.session.store.get("reservations", pending.id))!.status).toBe("AWAITING_CONSENT");
+    expect((await v.session.store.get("reservations", pending.id))!.status).toBe("READY");
     const asked = await h.ok("pause_tours", { property: id });
     expect(asked.bookedTours).toBe(1);
     const done = await h.ok("pause_tours", { property: id, bookedTours: "cancel", confirmationCode: asked.confirmation.code });
@@ -393,7 +398,7 @@ describe("heal persisted called-off tour plus held rebook", () => {
     await persistSession(h.services, v.session);
     const ref = tourRef(id, v.session.tourId);
     const inspected = await h.ok("inspect_tour", { tourRef: ref });
-    expect(inspected.tour.status).toBe("Waiting for consent");
+    expect(inspected.tour.status).toBe("Ready, waiting for arrival");
     expect(inspected.tour.tourTime).toBe("Monday, Sep 28, 10:00 AM\u201310:45 AM");
     await h.approve("revoke_tour_access", { tourRef: ref, reason: "Cancel the Saturday booking" });
     expect((await v.session.store.get("reservations", pending.id))!.status).toBe("REVOKED");
@@ -491,9 +496,9 @@ describe("should-fix: reschedule_tour refuses a tour in progress", () => {
     const moved = (await v.session.store.get("reservations", pending.id))!;
     expect(new Date(moved.slotStart!).getTime()).toBe(zonedTimeToUtc({ year: 2026, month: 10, day: 2, hour: 15, minute: 30 }, TZ).getTime());
     const sent = v.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text);
-    expect(sent.at(-2)).toBe(tourMovedToText("Unit 101", "3:30 PM", "Friday, Oct 2"));
-    expect(sent.at(-1)).toBe(CONSENT_TEXT);
-    expect(sent.at(-2)).not.toMatch(/You're all set/);
+    expect(sent.at(-1)).toContain("Your tour of Unit 101 has been moved to 3:30 PM on Friday, Oct 2.");
+    expect(sent.at(-1)).toContain("You're all set.");
+    expect(sent.join("\n")).not.toContain("Is it OK if I text you");
   });
 
   it("refuses a tour on operator hold the same way as a tour in progress", async () => {
@@ -634,9 +639,9 @@ describe("should-fix: revoke result describes the called-off tour", () => {
       visitorName: "Riley Tester",
       status: "Called off",
       tourTime: "Monday, Sep 28, 9:00 AM\u20139:45 AM",
-      nextBooking: { tourTime: "Monday, Sep 28, 10:00 AM\u201310:45 AM", status: "Waiting for consent" },
+      nextBooking: { tourTime: "Monday, Sep 28, 10:00 AM\u201310:45 AM", status: "Ready, waiting for arrival" },
     });
-    expect(done.done.tour.status).not.toBe("Waiting for consent");
+    expect(done.done.tour.status).not.toBe("Ready, waiting for arrival");
   });
 });
 
@@ -666,7 +671,7 @@ describe("blocker: mid-tour cancel-by-text targets the later booking", () => {
     const { a, session, pending, runningId } = await testyMondayWithThursday();
     const replies = await a.text("cancel my thursday tour");
     expect(replies.at(-1)).toBe(laterCancelConfirm("2:00 PM", "Thursday, Oct 1"));
-    await runningUntouched(session, runningId, pending.id, "AWAITING_CONSENT");
+    await runningUntouched(session, runningId, pending.id, "READY");
   });
 
   it("YES cancels only the later Thursday booking", async () => {
@@ -682,14 +687,14 @@ describe("blocker: mid-tour cancel-by-text targets the later booking", () => {
     await a.text("cancel my thursday tour");
     const replies = await a.text("NO");
     expect(replies.at(-1)).toBe(laterCancelKept("2:00 PM", "Thursday, Oct 1"));
-    await runningUntouched(session, runningId, pending.id, "AWAITING_CONSENT");
+    await runningUntouched(session, runningId, pending.id, "READY");
   });
 
   it("bare cancel also targets the later booking", async () => {
     const { a, session, pending, runningId } = await testyMondayWithThursday();
     const replies = await a.text("cancel");
     expect(replies.at(-1)).toBe(laterCancelConfirm("2:00 PM", "Thursday, Oct 1"));
-    await runningUntouched(session, runningId, pending.id, "AWAITING_CONSENT");
+    await runningUntouched(session, runningId, pending.id, "READY");
   });
 
   it.each(["cancel my monday tour", "cancel today's tour", "cancel my 2pm tour", "cancel this tour", "cancel my current tour"])(
@@ -698,7 +703,7 @@ describe("blocker: mid-tour cancel-by-text targets the later booking", () => {
       const { a, session, pending, runningId } = await testyMondayWithThursday();
       const replies = await a.text(phrase);
       expect(replies.at(-1)).toBe(cannotCancelRunningOfferLater("2:00 PM", "Thursday, Oct 1"));
-      await runningUntouched(session, runningId, pending.id, "AWAITING_CONSENT");
+      await runningUntouched(session, runningId, pending.id, "READY");
     },
   );
 
@@ -715,7 +720,7 @@ describe("blocker: mid-tour cancel-by-text targets the later booking", () => {
     await a.text("cancel my current tour");
     const replies = await a.text("NO");
     expect(replies.at(-1)).toBe(laterCancelKept("2:00 PM", "Thursday, Oct 1"));
-    await runningUntouched(session, runningId, pending.id, "AWAITING_CONSENT");
+    await runningUntouched(session, runningId, pending.id, "READY");
   });
 
   it("YES after a door that opened directly cancels the later booking, not consent", async () => {
@@ -743,7 +748,7 @@ describe("blocker: mid-tour cancel-by-text targets the later booking", () => {
     expect((await ctx.session.reservation())!.status).toBe("TOURING");
     expect(ctx.session.lastAccess).toMatchObject({ doorId: "unit_101", allowed: true });
     expect(ctx.session.durin.requestCount).toBeGreaterThan(before);
-    expect((await ctx.session.store.get("reservations", ctx.pending.id))!.status).toBe("AWAITING_CONSENT");
+    expect((await ctx.session.store.get("reservations", ctx.pending.id))!.status).toBe("READY");
   });
 });
 
@@ -778,7 +783,7 @@ describe("blocker: bare cancel on hold or door failure is cancel, not STOP", () 
     await ctx.say("cancel");
     expect(lastFrom(ctx.session)).toBe(laterCancelConfirm("2:00 PM", "Friday, Oct 2"));
     expect((await ctx.session.reservation())!.status).toBe("OPERATOR_HOLD");
-    expect((await ctx.session.store.get("reservations", ctx.pending.id))!.status).toBe("AWAITING_CONSENT");
+    expect((await ctx.session.store.get("reservations", ctx.pending.id))!.status).toBe("READY");
     expect(ctx.session.optedOut).toBe(false);
     await ctx.say("hi");
     expect(lastFrom(ctx.session).length).toBeGreaterThan(0);
@@ -792,7 +797,7 @@ describe("blocker: bare cancel on hold or door failure is cancel, not STOP", () 
     expect(lastFrom(ctx.session)).toBe(HOLD_LATER);
     expect(lastFrom(ctx.session)).toBe(cannotCancelRunningOfferLater("2:00 PM", "Friday, Oct 2", "leasing team"));
     expect((await ctx.session.reservation())!.status).toBe("OPERATOR_HOLD");
-    expect((await ctx.session.store.get("reservations", ctx.pending.id))!.status).toBe("AWAITING_CONSENT");
+    expect((await ctx.session.store.get("reservations", ctx.pending.id))!.status).toBe("READY");
     expect(ctx.session.optedOut).toBe(false);
   });
 
@@ -804,7 +809,7 @@ describe("blocker: bare cancel on hold or door failure is cancel, not STOP", () 
     await ctx.say("cancel");
     expect(lastFrom(ctx.session)).toBe(laterCancelConfirm("2:00 PM", "Friday, Oct 2"));
     expect((await ctx.session.reservation())!.status).toBe("PROVIDER_FAILURE");
-    expect((await ctx.session.store.get("reservations", ctx.pending.id))!.status).toBe("AWAITING_CONSENT");
+    expect((await ctx.session.store.get("reservations", ctx.pending.id))!.status).toBe("READY");
     expect(ctx.session.optedOut).toBe(false);
     await ctx.say("hi");
     expect(lastFrom(ctx.session).length).toBeGreaterThan(0);
@@ -819,7 +824,7 @@ describe("blocker: bare cancel on hold or door failure is cancel, not STOP", () 
     await ctx.say("cancel this tour");
     expect(lastFrom(ctx.session)).toBe(HOLD_LATER);
     expect((await ctx.session.reservation())!.status).toBe("PROVIDER_FAILURE");
-    expect((await ctx.session.store.get("reservations", ctx.pending.id))!.status).toBe("AWAITING_CONSENT");
+    expect((await ctx.session.store.get("reservations", ctx.pending.id))!.status).toBe("READY");
     expect(ctx.session.optedOut).toBe(false);
   });
 });

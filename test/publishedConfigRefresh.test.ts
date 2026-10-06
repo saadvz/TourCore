@@ -70,6 +70,14 @@ async function textApp(options: { clock: number; hours?: TourHours }) {
     const session = registry.latestForPhone(PROPERTY, PHONE, "messaging")!;
     return [...session.conversation].reverse().find((item) => item.from === "tourcore")!.text;
   };
+  const recent = () => {
+    const session = registry.latestForPhone(PROPERTY, PHONE, "messaging")!;
+    return [...session.conversation]
+      .filter((item) => item.from === "tourcore")
+      .slice(-3)
+      .map((item) => item.text)
+      .join("\n");
+  };
   const session = () => registry.latestForPhone(PROPERTY, PHONE, "messaging")!;
   const republishHours = (hours: string | Partial<TourHours>) => {
     const current = ws.load(PROPERTY).config;
@@ -106,7 +114,7 @@ async function textApp(options: { clock: number; hours?: TourHours }) {
     };
     return { registry: next, router: restored, session: () => next.latestForPhone(PROPERTY, PHONE, "messaging")!, text };
   };
-  return { ws, registry, text, session, republishHours, restart };
+  return { ws, registry, text, recent, session, republishHours, restart };
 }
 
 describe("open text conversations pick up republished settings", () => {
@@ -227,9 +235,11 @@ describe("open text conversations pick up republished settings", () => {
     expect(await app.session().stage()).toBe("choose-date");
 
     app.republishHours({ end: "23:30" });
-    const stillOpen = await app.text("that");
+    await app.text("that");
     const tuesday815 = zonedTimeToUtc({ year: 2026, month: 9, day: 29, hour: 20, minute: 15 }, "America/New_York").toISOString();
-    expect(stillOpen).toContain("you're booked for 8:15 PM on Tuesday, Sep 29");
+    expect(app.recent()).toContain("you're booked for 8:15 PM on Tuesday, Sep 29");
+    expect(app.recent()).toContain("please fill out this short form");
+    expect(app.recent()).not.toContain("Is it OK if I text you");
     expect((await app.session().reservation())!.slotStart).toBe(tuesday815);
 
     const closed = await textApp({ clock, hours: EVENING });
@@ -250,8 +260,10 @@ describe("open text conversations pick up republished settings", () => {
     await app.text("Hi");
     await app.text("1");
     await app.text("1");
-    const booked = await app.text("1");
-    expect(booked).toContain("you're booked for 2:00 PM");
+    await app.text("1");
+    expect(app.recent()).toContain("you're booked for 2:00 PM");
+    expect(app.recent()).toContain("please fill out this short form");
+    expect(app.recent()).not.toContain("Is it OK if I text you");
     const before = (await app.session().reservation())!;
     expect(before.slotStart).toBe(at(14).toISOString());
 

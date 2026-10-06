@@ -54,7 +54,13 @@ function textVisitor(options: { config?: TourCoreConfig; now: number }) {
   let n = 0;
   const say = (text: string) => handleVisitorText(session, PHONE, text, { provider: "test", providerMessageId: `m_${++n}` });
   const lastReply = () => [...session.conversation].reverse().find((m) => m.from === "tourcore")!.text;
-  return { session, say, lastReply };
+  const recent = () =>
+    session.conversation
+      .filter((m) => m.from === "tourcore")
+      .slice(-3)
+      .map((m) => m.text)
+      .join("\n");
+  return { session, say, lastReply, recent };
 }
 
 async function toChooseDate(p: ReturnType<typeof textVisitor>) {
@@ -168,11 +174,12 @@ describe("typed day questions use the shared copy", () => {
     await toChooseDate(p);
     await p.say("Is there a tour for today?");
     await p.say("that");
-    expect(p.lastReply()).toContain("Great, you're booked for 8:15 AM on Monday, Oct 5.");
-    expect(p.lastReply()).toContain("Is it OK if I text you about this tour");
+    expect(p.recent()).toContain("Great, you're booked for 8:15 AM on Monday, Oct 5.");
+    expect(p.recent()).toContain("please fill out this short form");
+    expect(p.recent()).not.toContain("Is it OK if I text you");
     expect(p.lastReply()).not.toContain("I have these times available");
     expect(p.lastReply()).not.toContain("Sorry, I didn't catch that. Which day works for you?");
-    expect(await p.session.stage()).toBe("consent");
+    expect(await p.session.stage()).toBe("identity");
     expect((await p.session.reservation())?.slotStart).toBe(at(2026, 10, 5, 8, 15).toISOString());
   });
 
@@ -184,11 +191,11 @@ describe("typed day questions use the shared copy", () => {
       await p.say("Can I come Dec 1?");
       expect(p.lastReply()).toContain("I can't book that far ahead yet. The next opening is Monday, Oct 5 at 8:15 AM. Reply yes to take it, or pick a day:");
       await p.say(text);
-      expect(p.lastReply(), text).toContain("Great, you're booked for 8:15 AM on Monday, Oct 5.");
+      expect(p.recent(), text).toContain("Great, you're booked for 8:15 AM on Monday, Oct 5.");
       expect(p.lastReply(), text).not.toContain("Sorry, I didn't catch that. Which day works for you?");
       expect(p.lastReply(), text).not.toContain("Reply yes for Monday at 8:15 AM, or pick a day.");
       expect(p.lastReply(), text).not.toContain("I have these times available");
-      expect(await p.session.stage(), text).toBe("consent");
+      expect(await p.session.stage(), text).toBe("identity");
       expect((await p.session.reservation())?.slotStart).toBe(at(2026, 10, 5, 8, 15).toISOString());
     },
   );
@@ -204,7 +211,7 @@ describe("typed day questions use the shared copy", () => {
     expect(p.lastReply()).not.toContain("I have tours available");
     expect(await p.session.stage()).toBe("choose-date");
     await p.say("Yes I'll take it");
-    expect(p.lastReply()).toContain("Great, you're booked for 8:15 AM on Monday, Oct 5.");
+    expect(p.recent()).toContain("Great, you're booked for 8:15 AM on Monday, Oct 5.");
     expect((await p.session.reservation())?.slotStart).toBe(at(2026, 10, 5, 8, 15).toISOString());
   });
 
@@ -250,7 +257,7 @@ describe("typed day questions use the shared copy", () => {
     expect(added[0]!.text).not.toContain("I have tours available");
     expect((await p.session.store.listAudit()).filter((e) => e.type === "QUESTION_UNANSWERED")).toHaveLength(0);
     await p.say("yes");
-    expect(p.lastReply()).toContain("Great, you're booked for 8:15 AM on Monday, Oct 5.");
+    expect(p.recent()).toContain("Great, you're booked for 8:15 AM on Monday, Oct 5.");
     expect((await p.session.reservation())?.slotStart).toBe(at(2026, 10, 5, 8, 15).toISOString());
   });
 

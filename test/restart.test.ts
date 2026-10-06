@@ -146,7 +146,8 @@ describe("a text-message tour picks up where it left off after a restart", () =>
     expect(day.reply).toContain("Reply 1 for 2:00 PM or 2 for 3:30 PM.");
     const time = await app.text("1");
     expect(time.reply).toContain("you're booked for 2:00 PM");
-    expect(time.reply).toContain("Is it OK if I text you about this tour");
+    expect(time.reply).toContain("please fill out this short form");
+    expect(time.reply).not.toContain("Is it OK if I text you");
 
     expect(app.tours()).toHaveLength(1);
     const b = app.bundle();
@@ -171,12 +172,14 @@ describe("a text-message tour picks up where it left off after a restart", () =>
     expect(time.reply).not.toContain("Monday, Sep 28");
   });
 
-  it("consent: a natural yes after the restart answers the consent question", async () => {
+  it("booking already includes the identity form, and a restart still has that consent", async () => {
     const app = await durableApp();
     await bookToConsent(app);
+    expect(app.bundle().consents).toHaveLength(1);
     await app.restart();
-    const consent = await app.text("yeah that's fine");
-    expect(consent.reply).toContain("please fill out this short form");
+    const again = await app.text("yeah that's fine");
+    expect(again.reply).toMatch(/identity form|please fill out this short form/);
+    expect(again.reply).not.toContain("Is it OK if I text you");
     expect(app.bundle().consents).toHaveLength(1);
   });
 
@@ -345,7 +348,7 @@ describe("retried webhooks after a restart", () => {
     await app.text("1", "evt-1");
     await app.text("1", "evt-2");
     const first = await app.text("1", "ABC");
-    expect(first.replies).toHaveLength(1);
+    expect(first.replies).toHaveLength(2);
 
     await app.restart();
     const retry = await app.text("1", "ABC");
@@ -498,11 +501,14 @@ describe("restoring fails closed", () => {
 
   it("canonical records win over a snapshot that fell behind", async () => {
     const app = await durableApp();
-    await bookToConsent(app);
-    // Snapshot written, then a later step only reached the canonical records (as if the process stopped in between).
+    await app.text("TOUR");
+    await app.text("YES");
+    await app.text("1");
+    await app.text("1");
+    // Snapshot written at the time menu, then the booking only reached the canonical records.
     const sessionFile = readdirSync(join(app.root, "runtime", "sessions"))[0]!;
     const behind = readFileSync(join(app.root, "runtime", "sessions", sessionFile), "utf8");
-    await app.text("yes");
+    await app.text("1");
     writeFileSync(join(app.root, "runtime", "sessions", sessionFile), behind);
 
     await app.restart();
