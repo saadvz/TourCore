@@ -75,6 +75,7 @@ export function campaignDisclosure(privacyUrl: string, termsUrl: string, brand =
 export function campaignConfirmation(brand = DEFAULT_PUBLIC_BRAND_NAME): string {
   return [
     `${brand}: You're opted in. I can answer questions about the property and help you schedule and complete a self-guided tour.`,
+    "I'll keep a record of your visit times and the doors you use.",
     "",
     "Reply STOP at any time to opt out.",
   ].join("\n");

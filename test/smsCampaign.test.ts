@@ -77,8 +77,9 @@ describe("SMS keyword campaign", () => {
     expect(parked.replies.join("\n")).not.toContain("Which unit");
 
     const yes = await app.text("YES");
-    expect(yes.replies[0]).toContain("You're opted in. I can answer questions about the property and help you schedule and complete a self-guided tour.");
-    expect(yes.replies[0]).toContain("Reply STOP at any time to opt out.");
+    expect(yes.replies[0]).toContain(
+      "You're opted in. I can answer questions about the property and help you schedule and complete a self-guided tour.\nI'll keep a record of your visit times and the doors you use.\n\nReply STOP at any time to opt out.",
+    );
     expect(yes.replies.join("\n")).toContain("Which unit would you like to see?");
 
     const file = JSON.parse(readFileSync(join(app.root, "properties", app.id, "sms-campaign-consent.json"), "utf8"));
