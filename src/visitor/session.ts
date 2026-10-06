@@ -335,9 +335,6 @@ export class VisitorDemoSession {
   clearShownMenus(): void {
     this.lastShownSlots = [];
     this.lastShownDates = [];
-    this.offeredSlots = [];
-    this.offeredDates = [];
-    this.selectedDate = undefined;
     this.slotMenuLive = false;
     this.dateMenuLive = false;
   }
