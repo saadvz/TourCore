@@ -318,6 +318,8 @@ export async function handleVisitorText(
     /* day/time for a secondary rebook; tour commands already won above */
   } else if (await handlePendingBookingReply(turn)) {
     /* consent / verification for a booking held while the current tour runs */
+  } else if (await takeOverHeldBookingOnGreeting(turn)) {
+    /* after the tour ends, HI continues the held booking with booked-for then consent */
   } else if (keyword === "help") await session.help(said);
   else if (await handleCancelIntent(turn)) {
     /* cancel-by-text: confirm, YES, or NO */
@@ -931,6 +933,10 @@ async function byStage(turn: Turn): Promise<void> {
         return turn.clarify(`Just to check: ${question.charAt(0).toLowerCase()}${question.slice(1)}`, yesNo);
       }
       if (intent.type === "REQUEST_HELP") return session.help(turn.said);
+      if (session.heldBookingTakenOver && (await session.activeNeedsConsent())) {
+        await session.announceHeldBookingConsent();
+        return;
+      }
       return turn.fallback(`${SORRY} ${question}`, yesNo);
     }
 
@@ -950,6 +956,7 @@ async function byStage(turn: Turn): Promise<void> {
         if (turn.confident) return turn.act("followUp", { wantsContact: intent.type === "FOLLOW_UP_YES" });
         return turn.clarify(`Just to check: ${question.charAt(0).toLowerCase()}${question.slice(1)}`, yesNo);
       }
+      if (await takeOverHeldBookingOnGreeting(turn)) return;
       if (intent.type === "REQUEST_HELP") return session.help(turn.said);
       return turn.fallback(`${SORRY} ${question}`, yesNo);
     }
@@ -1009,10 +1016,19 @@ async function handleOverstayReply(turn: Turn): Promise<boolean> {
       await session.core.confirmLeftAfterClose(reservation.id);
       overstay.cancel(reservation.id);
       await session.refreshThread();
+      session.followUpReservationId = reservation.id;
       session.promotePendingBookingIfEnded();
       return true;
     }
     if (startsNewBookingAfterClose(said, intent)) {
+      if (session.pendingBookingId) {
+        session.promotePendingBookingIfEnded();
+        if (await session.activeNeedsConsent()) {
+          await session.recordText(turn.said);
+          await session.announceHeldBookingConsent();
+          return true;
+        }
+      }
       await startBookingAfterClose(turn);
       return true;
     }
@@ -1071,6 +1087,25 @@ async function startRebook(turn: Turn): Promise<void> {
   }
   session.markDatesShown();
   await session.reply(DAY_MENU, { kind: "choose", options: dates.map((day) => day.label), what: "a day" });
+}
+
+/** After a tour ends, a greeting continues the held booking: booked-for line, then the original consent question. */
+async function takeOverHeldBookingOnGreeting(turn: Turn): Promise<boolean> {
+  const { session, intent } = turn;
+  const text = turn.said.text ?? "";
+  if (!startsNewBookingAfterClose(text, intent)) return false;
+  if (session.pendingBookingId) {
+    const current = await session.reservation();
+    if (current && current.status !== "COMPLETED" && current.status !== "EXPIRED") return false;
+    session.promotePendingBookingIfEnded();
+  }
+  if ((session.heldBookingTakenOver || session.followUpReservationId) && (await session.activeNeedsConsent())) {
+    session.followUpReservationId = undefined;
+    await session.recordText(turn.said);
+    await session.announceHeldBookingConsent();
+    return true;
+  }
+  return false;
 }
 
 async function handlePendingBookingReply(turn: Turn): Promise<boolean> {

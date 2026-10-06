@@ -25,9 +25,9 @@ import {
   tourFinishedFollowUp,
   visitorRepliedAfterClose,
 } from "../src/core/overstayCopy";
-import { CONSENT_TEXT, TourCoreError, TOUR_ENDED_REPLY, VisitorDenialCopy } from "../src/core/TourCore";
+import { bookedForLine, CONSENT_TEXT, TourCoreError, TOUR_ENDED_REPLY, VisitorDenialCopy } from "../src/core/TourCore";
 import { runDryTour } from "../src/setup/dryTour";
-import { formatTime, zonedTimeToUtc } from "../src/core/timezone";
+import { formatDay, formatTime, zonedTimeToUtc } from "../src/core/timezone";
 import { newId, UNNAMED_VISITOR, type Reservation, type TourTimeRequest } from "../src/domain/model";
 import { DemoMessagingAdapter, type DeliveryReceipt, type MessagingAdapter, type OutgoingMessage } from "../src/messaging/Messenger";
 import { createTourCore } from "../src/createTourCore";
@@ -1053,15 +1053,49 @@ describe("QA review blocking items", () => {
   });
 
   it("unanswered rebook consent: after DONE, hi continues the booking instead of tour-ended", async () => {
-    const ctx = await touringSession("t-rebook-hi");
-    await rebookNextOpenTime(ctx);
-    expect(await ctx.session.pendingBookingNeedsConsent()).toBe(true);
-    await ctx.say("DONE");
-    expect((await ctx.session.reservation())!.status).toBe("AWAITING_CONSENT");
-    await ctx.say("hi");
-    const last = ctx.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1) ?? "";
-    expect(last).not.toBe(TOUR_ENDED_REPLY);
-    expect(last.toLowerCase()).toContain("is it ok if i text you");
+    const bookedThenConsent = (ctx: Awaited<ReturnType<typeof touringSession>>, pending: Reservation) => {
+      const replies = ctx.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text);
+      const start = new Date(pending.slotStart!);
+      expect(replies.at(-2)).toBe(bookedForLine(formatTime(start, TZ), formatDay(start, TZ)));
+      expect(replies.at(-1)).toBe(CONSENT_TEXT);
+      expect(replies.at(-1)).not.toBe(TOUR_ENDED_REPLY);
+    };
+
+    const hi = await touringSession("t-rebook-hi");
+    await rebookNextOpenTime(hi);
+    const pendingHi = (await hi.session.pendingBooking())!;
+    expect(await hi.session.pendingBookingNeedsConsent()).toBe(true);
+    await hi.say("DONE");
+    await hi.say("hi");
+    bookedThenConsent(hi, pendingHi);
+    expect((await hi.session.reservation())!.status).toBe("AWAITING_CONSENT");
+
+    const follow = await touringSession("t-rebook-hi-follow");
+    await rebookNextOpenTime(follow);
+    const pendingFollow = (await follow.session.pendingBooking())!;
+    await follow.say("DONE");
+    await follow.say("yes");
+    bookedThenConsent(follow, pendingFollow);
+
+    const out = await touringSession("t-rebook-im-out");
+    await rebookNextOpenTime(out);
+    const pendingOut = (await out.session.pendingBooking())!;
+    out.now.t = Date.parse(out.windowEnd) + 15 * 60_000;
+    out.session.clock.jumpTo(new Date(out.now.t));
+    await out.session.overstay!.tickSession(out.session);
+    await out.say("I'm out");
+    await out.say("hi");
+    bookedThenConsent(out, pendingOut);
+
+    const resolved = await touringSession("t-rebook-resolve");
+    await rebookNextOpenTime(resolved);
+    const pendingResolved = (await resolved.session.pendingBooking())!;
+    resolved.now.t = Date.parse(resolved.windowEnd) + 15 * 60_000;
+    resolved.session.clock.jumpTo(new Date(resolved.now.t));
+    await resolved.session.overstay!.tickSession(resolved.session);
+    resolved.session.overstay!.closeAlertWindow(resolved.reservationId);
+    await resolved.say("hi");
+    bookedThenConsent(resolved, pendingResolved);
   });
 
   it("T-5 yes takes extra time, then re-asks the pending consent as its own text", async () => {

@@ -179,7 +179,9 @@ Never:
   yes books another look without taking over the tour that is still
   running. That new booking becomes the active one when the running tour
   ends; unfinished consent is asked again if a later extra-time yes
-  answered the latest question instead.
+  answered the latest question instead. After the tour ends, unanswered
+  consent is the booked-for line for the new time, then the original
+  consent question.
 - Treat a visitor naming a tour date, or an unparseable date, as an unanswered
   question. Tour Core handles those itself. While a one-off tour is waiting
   on YES, NO or STOP, a leftover menu number only re-prompts that

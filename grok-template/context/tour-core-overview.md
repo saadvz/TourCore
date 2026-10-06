@@ -16,7 +16,9 @@ or 24 hours pass (alerts stop then; the leaving issue stays open until
 DONE or handled). A standalone HI or a clear booking phrase starts a new
 booking; a greeting with more text, or anything about being stuck or
 locked in, does not. A rebook during a tour stays secondary until that
-tour ends, then unfinished consent or identity checks continue. DONE after the close uses the usual
+tour ends, then unfinished consent or identity checks continue. After
+the tour ends, unanswered consent is asked again as the booked-for
+line for the new time, then the original consent question. DONE after the close uses the usual
 thanks and follow-up; a yes is the same follow-up as a normal finish. STOP
 during a tour stops visitor texts only; the tour stays on its window and
 team alerts still go out. Afterwards it sends a recap and one follow-up

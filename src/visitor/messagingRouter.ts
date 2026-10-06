@@ -162,6 +162,13 @@ export class MessagingConversations {
     if (session && !isLeavingTour(stripFiller(normalize(message.text)))) {
       await session.promotePendingBookingIfTourEnded();
     }
+    // A held rebook after a close stays on this thread: HI continues that booking instead of starting over.
+    if (session && session.pendingBookingId && startsNewBookingAfterClose(message.text)) {
+      const current = await session.reservation();
+      if (!current || current.status === "COMPLETED" || current.status === "EXPIRED") {
+        session.promotePendingBookingIfEnded();
+      }
+    }
     // A finished tour is never reopened: a standalone greeting or booking phrase starts a new one.
     // Greeting-plus-distress after a close stays on this conversation so the team is alerted.
     if (session && ["done", "stopped"].includes(await session.stage()) && !(await session.isPaused()) && startsNewBookingAfterClose(message.text) && !session.optedOut) session = undefined;

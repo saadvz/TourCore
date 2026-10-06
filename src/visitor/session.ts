@@ -14,7 +14,7 @@ import { entryReply } from "./entry";
 import { operatorUnitName, visitorTourOf } from "./identity";
 import { ONE_OFF_REPLACED_DETAIL } from "./oneOffGate";
 import { offerDate } from "./unavailableDay";
-import { isLiveHelpReservation, TourCore, TourCoreError, VISITOR_CANCEL_DONE, visitorCancelConfirmFor, type AccessOutcome, type InboundMeta } from "../core/TourCore";
+import { bookedForLine, CONSENT_TEXT, isLiveHelpReservation, TourCore, TourCoreError, VISITOR_CANCEL_DONE, visitorCancelConfirmFor, type AccessOutcome, type InboundMeta } from "../core/TourCore";
 import { isCancelableReservation } from "../domain/stateMachine";
 import { parseIsoDate, type TourSlot } from "../core/schedule";
 import { createDurin, createStore, createVerificationProvider } from "../createTourCore";
@@ -218,6 +218,10 @@ export class VisitorDemoSession {
   rebookUnitId?: string;
   /** New reservation booked during a running tour; becomes active when that tour ends. */
   pendingBookingId?: string;
+  /** Finished tour still waiting on the follow-up question after a held booking was promoted. */
+  followUpReservationId?: string;
+  /** The active booking was a held rebook that just took over after the tour ended. */
+  heldBookingTakenOver = false;
 
   private _config: TourCoreConfig;
 
@@ -340,6 +344,9 @@ export class VisitorDemoSession {
     const r = await this.reservation();
     if (!r) return "choose-unit";
     if (r.awaitingVisitorConfirm) return "intro";
+    if (this.followUpReservationId && (await this.activeNeedsConsent()) && !(await this.hasFollowUpResponse(this.followUpReservationId))) {
+      return "follow-up";
+    }
     switch (r.status) {
       case "INQUIRY":
         return this.selectedDate ? "choose-time" : "choose-date";
@@ -948,12 +955,17 @@ export class VisitorDemoSession {
       case "finish":
         await visitorSays("I'm done with the tour.");
         await this.core.completeTour(r!.id);
+        this.followUpReservationId = r!.id;
         this.promotePendingBookingIfEnded();
         return;
-      case "followUp":
+      case "followUp": {
+        const followUpId = this.followUpReservationId ?? r!.id;
         this.say("visitor", said.text ?? (input.wantsContact ? "Yes, please." : "No, thanks."));
-        await this.core.recordFollowUpResponse(r!.id, !!input.wantsContact, { text: said.text ?? (input.wantsContact ? "Yes" : "No"), meta: said.meta });
+        await this.core.recordFollowUpResponse(followUpId, !!input.wantsContact, { text: said.text ?? (input.wantsContact ? "Yes" : "No"), meta: said.meta });
+        this.followUpReservationId = undefined;
+        if (await this.activeNeedsConsent()) await this.announceHeldBookingConsent();
         return;
+      }
       case "demoSkipAhead": {
         const windowStart = Date.parse(r!.windowStart!);
         const slot = Date.parse(r!.slotStart!);
@@ -1025,6 +1037,26 @@ export class VisitorDemoSession {
     return !!pending && pending.status === "AWAITING_CONSENT" && !pending.consentId;
   }
 
+  async activeNeedsConsent(): Promise<boolean> {
+    const active = await this.reservation();
+    return !!active && active.status === "AWAITING_CONSENT" && !active.consentId;
+  }
+
+  async hasFollowUpResponse(reservationId: string): Promise<boolean> {
+    return (await this.store.listAudit()).some((e) => e.type === "FOLLOW_UP_RESPONSE" && e.reservationId === reservationId);
+  }
+
+  /** Booked-for line, then the original consent question — so it is clearly about the new booking. */
+  async announceHeldBookingConsent(): Promise<void> {
+    const active = await this.reservation();
+    if (!active?.slotStart || active.status !== "AWAITING_CONSENT" || active.consentId) return;
+    const start = new Date(active.slotStart);
+    const tz = this.config.property.timezone;
+    await this.reply(bookedForLine(formatTime(start, tz), formatDay(start, tz)));
+    await this.reply(CONSENT_TEXT, { kind: "yes-no" });
+    this.heldBookingTakenOver = false;
+  }
+
   async pendingBookingNeedsVerification(): Promise<boolean> {
     const pending = await this.pendingBooking();
     return !!pending && pending.status === "AWAITING_VERIFICATION";
@@ -1054,13 +1086,21 @@ export class VisitorDemoSession {
     }
     this.reservationId = this.pendingBookingId;
     this.pendingBookingId = undefined;
+    this.heldBookingTakenOver = true;
     return true;
   }
 
   async promotePendingBookingIfTourEnded(): Promise<boolean> {
     if (!this.pendingBookingId) return false;
     const current = await this.reservation();
-    if (!current || current.status === "COMPLETED" || current.status === "EXPIRED") {
+    if (!current) return this.promotePendingBookingIfEnded();
+    if (current.status === "COMPLETED") {
+      if (!(await this.hasFollowUpResponse(current.id))) return false;
+      return this.promotePendingBookingIfEnded();
+    }
+    if (current.status === "EXPIRED") {
+      const left = await this.core.hasConfirmedLeftAfterClose(current.id);
+      if (!left || !(await this.hasFollowUpResponse(current.id))) return false;
       return this.promotePendingBookingIfEnded();
     }
     return false;

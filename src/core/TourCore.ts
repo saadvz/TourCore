@@ -105,6 +105,11 @@ export class TourCoreError extends Error {
 
 export const CONSENT_TEXT = "Is it OK if I text you about this tour and keep a record of your visit (times and doors used)?";
 
+/** The booking confirmation that precedes the consent question. */
+export function bookedForLine(time: string, day: string): string {
+  return `Great, you're booked for ${time} on ${day}.`;
+}
+
 /** Repeat help on the same reservation re-alerts the team at most once per this window. */
 export const HELP_ALERT_WINDOW_MS = 5 * 60_000;
 
@@ -387,7 +392,7 @@ export class TourCore {
       reservation = await this.move(reservation, "AWAITING_CONSENT", "CONSENT_REQUESTED", { detail: "asked permission to text and keep tour records" });
 
       const prospect = await this.mustGetProspect(reservation.prospectId);
-      await this.textProspect(prospect, reservation.id, `Great, you're booked for ${this.time(start)} on ${this.day(start)}.\n${CONSENT_TEXT}`, { kind: "yes-no" });
+      await this.textProspect(prospect, reservation.id, `${bookedForLine(this.time(start), this.day(start))}\n${CONSENT_TEXT}`, { kind: "yes-no" });
       return reservation;
     });
   }
@@ -701,7 +706,7 @@ export class TourCore {
     }
     reservation = await this.move(reservation, "AWAITING_CONSENT", "CONSENT_REQUESTED", { detail: "asked permission to text and keep tour records" });
     const prospect = await this.mustGetProspect(reservation.prospectId);
-    await this.textProspect(prospect, reservation.id, `Great, you're booked for ${this.time(start)} on ${this.day(start)}.\n${CONSENT_TEXT}`, { kind: "yes-no" });
+    await this.textProspect(prospect, reservation.id, `${bookedForLine(this.time(start), this.day(start))}\n${CONSENT_TEXT}`, { kind: "yes-no" });
     return reservation;
   }
 
@@ -718,7 +723,7 @@ export class TourCore {
     reservation = await this.move(reservation, "AWAITING_CONSENT", "CONSENT_REQUESTED", { detail: "asked permission to text and keep tour records" });
     const prospect = await this.mustGetProspect(reservation.prospectId);
     const start = new Date(slotStart);
-    await this.textProspect(prospect, reservation.id, `Great, you're booked for ${this.time(start)} on ${this.day(start)}.\n${CONSENT_TEXT}`, { kind: "yes-no" });
+    await this.textProspect(prospect, reservation.id, `${bookedForLine(this.time(start), this.day(start))}\n${CONSENT_TEXT}`, { kind: "yes-no" });
     return reservation;
   }
 

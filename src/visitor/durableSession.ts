@@ -97,6 +97,8 @@ export const DurableSessionSchema = z.object({
   pendingRebook: z.boolean().optional(),
   rebookUnitId: z.string().optional(),
   pendingBookingId: z.string().optional(),
+  followUpReservationId: z.string().optional(),
+  heldBookingTakenOver: z.boolean().optional(),
   optedOut: z.boolean().default(false),
   /** This leftover conversation was replaced by an operator-set one-off. */
   superseded: z.boolean().optional(),
@@ -146,6 +148,8 @@ export async function snapshotOf(session: VisitorDemoSession, links?: Verificati
     ...(session.pendingRebook ? { pendingRebook: true } : {}),
     ...(session.rebookUnitId ? { rebookUnitId: session.rebookUnitId } : {}),
     ...(session.pendingBookingId ? { pendingBookingId: session.pendingBookingId } : {}),
+    ...(session.followUpReservationId ? { followUpReservationId: session.followUpReservationId } : {}),
+    ...(session.heldBookingTakenOver ? { heldBookingTakenOver: true } : {}),
     optedOut: session.optedOut,
     ...(session.superseded ? { superseded: true } : {}),
     createdAt: previous?.createdAt ?? session.startedAt.toISOString(),
@@ -210,6 +214,8 @@ export async function restoreSession(snapshot: DurableSession, deps: RestoreDeps
   if (session.visitor!.phone !== snapshot.visitorPhone) throw new RestoreError("The visitor's number doesn't match this tour's records.");
   if (snapshot.reservationId) session.reservationId = snapshot.reservationId;
   session.pendingBookingId = snapshot.pendingBookingId;
+  session.followUpReservationId = snapshot.followUpReservationId;
+  session.heldBookingTakenOver = !!snapshot.heldBookingTakenOver;
 
   await validateCanonical(session, snapshot, config);
 
