@@ -125,8 +125,8 @@ const INTERNAL_SPACE_NAME = /^main home$/i;
 /**
  * Operator-facing property name for remove and similar copy: their public
  * name, or street plus unit when an apartment or condo has exactly one unit,
- * otherwise the street or address. Never the internal single-family space
- * label "Main Home".
+ * otherwise the street line (derived from the address when the stored street
+ * is empty). Never the internal single-family space label "Main Home".
  */
 export function operatorFacingPropertyName(draft: {
   property: { address: string; displayName?: string; name?: string; propertyType?: PropertyType; canonicalAddress?: { street?: string } };
@@ -137,12 +137,8 @@ export function operatorFacingPropertyName(draft: {
   if (isApartmentOrCondo(draft.property) && draft.units.length === 1) {
     return streetAndUnit(draft.property, draft.units[0]!.name);
   }
-  if (isApartmentOrCondo(draft.property) && draft.units.length > 1) {
-    const street = streetLine(draft.property);
-    if (street) return street;
-  }
-  const address = draft.property.address.trim();
-  if (address) return address;
+  const street = streetLine(draft.property);
+  if (street && !INTERNAL_SPACE_NAME.test(street)) return street;
   const fallback = draft.property.name?.trim() ?? "";
   return INTERNAL_SPACE_NAME.test(fallback) ? "" : fallback;
 }

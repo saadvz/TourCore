@@ -23,7 +23,7 @@ calls it internally; use it only if the operator asks for technical detail.
 | practice tour | dry tour |
 | published for demo | PUBLISHED_FOR_DEMO (not production) |
 | paused | tours at a property or unit are paused (`pause_tours`); or one visitor tour is on operator hold / a door-system failure |
-| removed | the property was removed (`remove_property`); published records are kept; an in-progress setup is removed completely. Never say archive |
+| removed | the property was removed (`remove_property`); published records are kept (including a draft that still has publish evidence; a practice tour alone is not evidence); an unpublished setup is removed completely. Never say archive |
 | called off | revoked |
 | needs attention, issue | an exception |
 | approved fact | an operator-written property or unit fact |

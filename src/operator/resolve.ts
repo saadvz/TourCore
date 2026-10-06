@@ -1,6 +1,7 @@
 import type { Door, TourCoreConfig, Unit } from "../config/tourCoreConfig";
-import { SetupInputError } from "../setup/setupActions";
+import { operatorFacingPropertyName, SetupInputError } from "../setup/setupActions";
 import type { PropertyWorkspace } from "../setup/workspace";
+import { visitorSubject } from "../visitor/identity";
 
 /**
  * Turns what an operator calls something ("the lobby", "101") into the one
@@ -43,7 +44,7 @@ export function match<T>(ref: string, items: T[], keys: (item: T) => string[]): 
 }
 
 export function matchUnit(config: TourCoreConfig, ref: string): Match<Unit> {
-  return match(ref, config.units, (u) => [u.id, u.name]);
+  return match(ref, config.units, (u) => [u.id, u.name, visitorSubject(config.property, u.name)]);
 }
 
 /** Door references; within a unit's route, "unit door" / "its door" mean that unit's own door. */
@@ -59,9 +60,9 @@ export function requireUnit(config: TourCoreConfig, ref: string): Unit {
   const m = matchUnit(config, ref);
   if (m.kind === "exact" || m.kind === "inferred") return m.item;
   if (m.kind === "ambiguous") {
-    throw new SetupInputError("UNIT_AMBIGUOUS", `"${ref}" could be ${m.candidates.map((u) => u.name).join(" or ")}. Which one?`);
+    throw new SetupInputError("UNIT_AMBIGUOUS", `"${ref}" could be ${m.candidates.map((u) => visitorSubject(config.property, u.name)).join(" or ")}. Which one?`);
   }
-  const known = config.units.map((u) => u.name);
+  const known = config.units.map((u) => visitorSubject(config.property, u.name));
   throw new SetupInputError("UNIT_NOT_FOUND", `I don't have a unit called "${ref}".${known.length ? ` The units are ${known.join(", ")}.` : " No units have been added yet."}`);
 }
 
@@ -89,7 +90,7 @@ export function resolvePropertyId(ws: PropertyWorkspace, ref: string | undefined
 
 function labelsOf(ws: PropertyWorkspace, id: string): { name: string; address: string } {
   const { draft } = ws.openDraft(id);
-  return { name: draft.property.name, address: draft.property.address };
+  return { name: operatorFacingPropertyName(draft) || draft.property.name, address: draft.property.address };
 }
 
 function nameOf(ws: PropertyWorkspace, id: string): string {

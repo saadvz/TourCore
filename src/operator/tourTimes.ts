@@ -11,6 +11,7 @@ import { SmsConsentDirectory } from "../visitor/smsConsent";
 import type { ConfirmationBook } from "./confirmations";
 import { requireUnit, resolvePropertyId } from "./resolve";
 import { persistSession, type OperatorServices } from "./services";
+import { visitorSubject } from "../visitor/identity";
 import { currentReservation, findTour, midSentence, tourRef, tourSnapshots, unitNameOf, visitorNameOf, type TourSnapshot } from "./tours";
 
 interface Ctx {
@@ -323,7 +324,8 @@ export async function scheduleOneOffTour(
   const fingerprint = `${propertyId}|${phone}|${unit.id}|${resolved.start.toISOString()}|${outside}`;
   if (!input.confirmationCode) {
     const extra = outside ? " That's outside your tour hours." : "";
-    const question = `Set up a tour for ${whoLabel} at ${unit.name} ${whenLabel}? Only say yes if they asked for this tour.${extra} ${visitorTextNote(whoLabel, true, outside)} Book it?`;
+    const place = visitorSubject(config.property, unit.name);
+    const question = `Set up a tour for ${whoLabel} at ${place} ${whenLabel}? Only say yes if they asked for this tour.${extra} ${visitorTextNote(whoLabel, true, outside)} Book it?`;
     return ask(ctx, "schedule-one-off", `${propertyId}:${phone}`, fingerprint, question, outside ? { outsideHours: true } : {});
   }
   if (outside && !input.acknowledgeOutsideHours) {
@@ -334,7 +336,7 @@ export async function scheduleOneOffTour(
   await session.scheduleOneOff({ unitId: unit.id, start: resolved.start, outsideHours: outside, name: input.visitorName });
   await persistSession(ctx.services, session);
   return {
-    summary: `I texted ${whoLabel} to confirm a tour of ${unit.name} ${whenLabel}. The regular tour times are unchanged.`,
+    summary: `I texted ${whoLabel} to confirm a tour of ${visitorSubject(config.property, unit.name)} ${whenLabel}. The regular tour times are unchanged.`,
     scheduled: true,
     tourRef: tourRef(propertyId, session.tourId),
   };

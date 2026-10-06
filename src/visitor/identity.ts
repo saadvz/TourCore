@@ -58,7 +58,10 @@ function formatUnitName(token: string): string {
 
 /** Street line visitors hear: "145 Main St", never a made-up building name. */
 export function streetLine(property: NamedProperty): string {
-  return property.canonicalAddress?.street?.trim() || property.address.split(",")[0]?.trim() || property.address.trim();
+  const stored = property.canonicalAddress?.street?.trim();
+  if (stored) return stored;
+  const fromAddress = property.address.split(",")[0]?.trim() || property.address.trim();
+  return fromAddress;
 }
 
 /** Default apartment or condo nickname: "145 Main St, Unit 4B". Never "Main Home". */
@@ -71,6 +74,16 @@ export function streetAndUnit(property: NamedProperty, unitName: string): string
 export function visitorSubject(property: NamedProperty, unitName: string): string {
   if (property.propertyType === "SINGLE_FAMILY") return visitorTourOf(property);
   if (property.propertyType === "APARTMENT_OR_CONDO") return streetAndUnit(property, unitName);
+  return unitName;
+}
+
+/**
+ * Setup-tool unit label. A single-family home uses the street line so
+ * "Main Home" never appears; other types keep the stored unit name
+ * ("Unit Loft", "1A").
+ */
+export function operatorUnitName(property: NamedProperty, unitName: string): string {
+  if (property.propertyType === "SINGLE_FAMILY") return visitorSubject(property, unitName);
   return unitName;
 }
 

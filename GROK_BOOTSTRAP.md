@@ -48,7 +48,7 @@ computer, never the operator's:
 
 The other workflows (Setup Property, Map Route, Run Readiness Check, Simulate
 Tour, Work Exception, Export Audit, Backup Tour Core) are in `.grok/skills/`.
-Load them from there once the repository is on your computer; they cover pause, resume and remove (including an in-progress setup; approve and reschedule refuse while paused; after resume a visitor Tour restarts booking).
+Load them from there once the repository is on your computer; they cover pause, resume and remove (including an unpublished setup, complete or not; approve and reschedule refuse while paused; after resume a visitor Tour restarts booking).
 
 ## Rules
 

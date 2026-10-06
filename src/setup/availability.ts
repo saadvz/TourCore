@@ -1,4 +1,5 @@
 import type { TourCoreConfig } from "../config/tourCoreConfig";
+import { operatorUnitName, visitorSubject } from "../visitor/identity";
 import {
   pausedPropertyOperatorRefuse,
   pausedPropertyVisitorText,
@@ -48,7 +49,7 @@ export function bookingRefusal(state: PropertyState | undefined, config: TourCor
   }
   if (unitId && isUnitPaused(state, unitId)) {
     const unit = config.units.find((item) => item.id === unitId);
-    return { reason: "paused-unit", message: pausedUnitVisitorText(unit?.name ?? "That unit") };
+    return { reason: "paused-unit", message: pausedUnitVisitorText(unit ? operatorUnitName(config.property, unit.name) : "That unit") };
   }
   return undefined;
 }
@@ -64,7 +65,8 @@ export function operatorPausedBookingRefuse(
   const unitIds = config.units.map((unit) => unit.id);
   if (isEffectivelyPaused(state, unitIds)) return pausedPropertyOperatorRefuse(config.property.name);
   if (unitId && isUnitPaused(state, unitId)) {
-    return pausedUnitOperatorRefuse(config.units.find((item) => item.id === unitId)?.name ?? "That unit");
+    const paused = config.units.find((item) => item.id === unitId);
+    return pausedUnitOperatorRefuse(paused ? visitorSubject(config.property, paused.name) : "That unit");
   }
   return undefined;
 }

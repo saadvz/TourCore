@@ -2,6 +2,7 @@ import type { TourCoreConfig } from "../config/tourCoreConfig";
 import { formatDateTime, formatIsoOffset } from "../core/timezone";
 import type { AccessGrant, AuditEvent, Reservation } from "../domain/model";
 import type { ExportBundle } from "../export/exportBundle";
+import { visitorSubject } from "../visitor/identity";
 
 /**
  * Operator-facing access-window times, derived from saved AccessGrant
@@ -108,7 +109,8 @@ export class AccessWindows {
 
   private static attribution(tour: AccessWindowSource, reservationId: string): { tourRef?: string; unitName?: string } {
     const reservation = tour.bundle.reservations.find((r) => r.id === reservationId);
-    const unitName = reservation ? tour.config.units.find((u) => u.id === reservation.unitId)?.name : undefined;
+    const unit = reservation ? tour.config.units.find((u) => u.id === reservation.unitId) : undefined;
+    const unitName = unit ? visitorSubject(tour.config.property, unit.name) : undefined;
     const tourRef = tour.propertyId && tour.tourId ? `${tour.propertyId}~${tour.tourId}` : undefined;
     return { ...(tourRef ? { tourRef } : {}), ...(unitName ? { unitName } : {}) };
   }

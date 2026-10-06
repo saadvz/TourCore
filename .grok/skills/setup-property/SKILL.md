@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Guided property setup, checked and practiced before publish
-  version: "0.3.10"
+  version: "0.3.13"
 ---
 
 # Setup Property
@@ -85,7 +85,9 @@ the operator correct it.
      `entryInstructions`, or `skipEntryInstructions: true` if they skip.
      Skip stores nothing. Visitors hear those words only after identity
      verification, on the you're-all-set text. The nickname is the street
-     plus unit (`145 Main St, Unit 4B`), never "Main Home".
+     plus unit (`145 Main St, Unit 4B`), never "Main Home". Mid-tour texts
+     say `at Unit 4B`; a single-family home says `the front door`, never
+     "Main Home".
 
    Never write a description or fact yourself.
 5. **Unit information, before doors and routes.** Ask for bedrooms, bathrooms,
@@ -195,19 +197,24 @@ operator chooses keep or cancel). A tour in progress always finishes.
 `resume_tours` turns bookings back on and texts people who were told tours
 would be back (or who got a paused-unit line). A later visitor Tour, Hi, or
 book restarts booking the same way as a first text. `remove_property` takes the
-property off the list after the exact confirmation — including an in-progress
-setup `list_properties` still shows (same lookup by id, name, or address).
-Booked visitors get a cancel text that the property isn't offering tours
-anymore (not that they'll be texted when tours are back) and pending door
-access is switched off. Waiting visitors are not texted that tours are back.
-A later text to that line gets a goodbye and cannot book. It is refused while
-someone is on a tour. Published records stay (`export_audit`, `inspect_tour`);
-an in-progress setup is removed completely. Ask the exact question it
-returns: for a draft, **Remove the setup for {name}? It isn't published yet,
-so no visitors are affected, but everything entered for it will be deleted for
-good.** {name} is the operator-given property name, or street plus unit when
-there is exactly one unit, otherwise the street or address — never
-"Main Home". After yes, say **Removed the setup for {name}.** Otherwise keep
+property off the list after the exact confirmation — including an unpublished
+setup `list_properties` still shows (same lookup by id, name, or address),
+whether or not that setup is complete. Booked visitors get a cancel text that
+the property isn't offering tours anymore (not that they'll be texted when
+tours are back) and pending door access is switched off. Waiting visitors are
+not texted that tours are back. A later text to that line gets a goodbye and
+cannot book. It is refused while someone is on a tour. Published records stay
+(`export_audit`, `inspect_tour`) — including a property sent back to draft
+when it still has a publish timestamp, visitor tour or reservation records, or a
+publish event in its audit. A practice tour alone does not count. An unpublished setup is removed completely.
+Ask the exact question it returns: unpublished (complete or not) uses
+**Remove the setup for {name}? It isn't published yet, so no visitors are
+affected, but everything entered for it will be deleted for good.** Published
+with no bookings says **No one is booked, so no cancel texts go out.** One
+booked visitor is singular (**1 booked visitor gets**). {name} is the
+operator-given property name, or street plus unit when there is exactly one
+unit, otherwise the street line — never "Main Home". After yes on a draft,
+say **Removed the setup for {name}.** Otherwise keep
 Tour Core's wording. Say
 **remove**, never archive. This is not `place_operator_hold`, which pauses one
 visitor's tour.

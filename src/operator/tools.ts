@@ -18,7 +18,8 @@ import { draftView, readinessView, saveStateView } from "../setup/presenters";
 import { parseDays, parseMinutes, parseTimeOfDay } from "../setup/parse";
 import type { DryTourCheck, DryTourResult } from "../setup/dryTour";
 import type { ReadinessResult } from "../setup/readiness";
-import { condoNextQuestion, createPropertySetup, modeSentence, OperatorTeamCopy, SetupInputError, tourableSpacesQuestion, visitorHelpLines, visitorHelpQuestion, type SetupDraft } from "../setup/setupActions";
+import { condoNextQuestion, createPropertySetup, modeSentence, operatorFacingPropertyName, OperatorTeamCopy, SetupInputError, tourableSpacesQuestion, visitorHelpLines, visitorHelpQuestion, type SetupDraft } from "../setup/setupActions";
+import { operatorUnitName } from "../visitor/identity";
 import { isHostedRailway } from "../install/deployment";
 import { statusLabel, type PublishBlocker } from "../setup/workspace";
 import { rememberCanonical, revertCanonical } from "../storage/canonical";
@@ -187,10 +188,10 @@ function setupSnapshot(ctx: ToolContext, id: string) {
   const { draft } = ctx.services.workspace.openDraft(id);
   const view = draftView(draft);
   const saved = ctx.services.workspace.has(id) ? ctx.services.workspace.load(id) : undefined;
-  const pausedUnits = saved ? saved.config.units.filter((unit) => unitPausedFlag(saved.state, unit.id)).map((unit) => unit.name) : [];
+  const pausedUnits = saved ? saved.config.units.filter((unit) => unitPausedFlag(saved.state, unit.id)).map((unit) => operatorUnitName(draft.property, unit.name)) : [];
   return {
     propertyId: id,
-    name: view.property.name,
+    name: operatorFacingPropertyName(draft),
     address: view.property.address,
     ...(saved ? { paused: !!saved.state.paused || pausedUnits.length === saved.config.units.length && saved.config.units.length > 0, removed: !!saved.state.removedAt, ...(pausedUnits.length ? { pausedUnits } : {}) } : {}),
     ...(draft.property.displayName ? { propertyName: draft.property.displayName } : {}),
@@ -226,9 +227,10 @@ function setupSnapshot(ctx: ToolContext, id: string) {
 
 function unitDetailsView(ctx: ToolContext, id: string) {
   const { draft } = ctx.services.workspace.openDraft(id);
-  const missing = draft.units.map((u) => ({ unit: u.name, missing: missingProfileFields(u).map((f) => FIELD_WORDS[f]) })).filter((m) => m.missing.length);
-  const next = nextProfileQuestion(draft.units);
-  const lines = draft.units.map(profileSummaryLine);
+  const missing = draft.units.map((u) => ({ unit: operatorUnitName(draft.property, u.name), missing: missingProfileFields(u).map((f) => FIELD_WORDS[f]) })).filter((m) => m.missing.length);
+  const facing = draft.units.map((u) => ({ ...u, name: operatorUnitName(draft.property, u.name) }));
+  const next = nextProfileQuestion(facing);
+  const lines = facing.map(profileSummaryLine);
   return {
     summary: next ? `${lines.join("\n")}\n\n${next.question}` : `${lines.join("\n")}\n\nDoes that look right?`,
     lines,
@@ -371,7 +373,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
           const saved = ws.has(id) ? ws.load(id) : undefined;
           return {
             propertyId: id,
-            name: draft.property.name,
+            name: operatorFacingPropertyName(draft),
             address: draft.property.address,
             status: saved ? statusLabel(saved) : "Setup in progress",
             ...(saved ? { paused: !!saved.state.paused || (saved.config.units.length > 0 && saved.config.units.every((unit) => (saved.state.pausedUnitIds ?? []).includes(unit.id))) } : {}),
@@ -503,8 +505,9 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     input: z.strictObject({ property: Property }),
     run: async (ctx, i) => {
       const id = resolvePropertyId(ctx.services.workspace, i.property);
+      const { draft } = openDraft(ctx, i.property);
       const { units } = setupSnapshot(ctx, id);
-      return { summary: units.length ? units.map((u) => u.name).join(", ") : "No units yet.", units };
+      return { summary: units.length ? units.map((u) => operatorUnitName(draft.property, u.name)).join(", ") : "No units yet.", units };
     },
   }),
   tool({
@@ -527,7 +530,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const setup = setupSnapshot(ctx, id);
       const unit = setup.units.find((u) => !draft.units.some((d) => d.id === u.unitId));
       const after = ctx.services.workspace.openDraft(id).draft;
-      return { summary: `Added ${unit?.name} with ${unit?.door}.${unit?.route ? ` Route: ${unit.route}.` : ""}`, unit, ...state, ...propertyNextQuestion(after) };
+      return { summary: `Added ${unit ? operatorUnitName(after.property, unit.name) : "a unit"} with ${unit?.door}.${unit?.route ? ` Route: ${unit.route}.` : ""}`, unit, ...state, ...propertyNextQuestion(after) };
     },
   }),
   tool({
@@ -553,7 +556,8 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       ctx.services.workspace.persistEdit(next, ctx.now());
       const setup = setupSnapshot(ctx, id);
       const updated = setup.units.find((u) => u.unitId === unit.id);
-      return { summary: `Updated ${updated?.name ?? unit.name}.`, unit: updated, ...setupState(ctx, id) };
+      const after = ctx.services.workspace.openDraft(id).draft;
+      return { summary: `Updated ${operatorUnitName(after.property, updated?.name ?? unit.name)}.`, unit: updated, ...setupState(ctx, id) };
     },
   }),
   tool({
@@ -607,7 +611,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         touched.add(unit.id);
       }
       if (!touched.size) {
-        throw new SetupInputError("UNIT_DETAILS_NOT_FOUND", `I couldn't match those details to a unit. The units are ${draft.units.map((u) => u.name).join(", ") || "none yet"}.`);
+        throw new SetupInputError("UNIT_DETAILS_NOT_FOUND", `I couldn't match those details to a unit. The units are ${draft.units.map((u) => operatorUnitName(draft.property, u.name)).join(", ") || "none yet"}.`);
       }
       ctx.services.workspace.persistEdit(next, ctx.now());
       return { ...unitDetailsView(ctx, id), ...(unknownUnits.length ? { notOnFile: unknownUnits } : {}), ...setupState(ctx, id) };
@@ -664,8 +668,8 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const view = draftView(draft).units.find((u) => u.id === unit.id)!;
       const name = (d: string) => draft.doors.find((x) => x.id === d)?.name ?? "a door that no longer exists";
       return {
-        summary: view.route ? `${unit.name}: ${view.route.doorNames.join(" \u2192 ")}` : `${unit.name} doesn't have a route yet.`,
-        unit: unit.name,
+        summary: view.route ? `${operatorUnitName(draft.property, unit.name)}: ${view.route.doorNames.join(" \u2192 ")}` : `${operatorUnitName(draft.property, unit.name)} doesn't have a route yet.`,
+        unit: operatorUnitName(draft.property, unit.name),
         route: view.route?.doorNames,
         directions: view.route?.directions || undefined,
         suggested: view.route ? undefined : view.suggestedRoute.map(name),
@@ -712,7 +716,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       return {
         status: problems.length ? "has-problems" : "ok",
         summary: `I have: ${resolved.join(" \u2192 ")}.${problems.length ? ` But: ${problems.join(" ")}` : " Is that right?"}`,
-        unit: unit.name,
+        unit: operatorUnitName(draft.property, unit.name),
         route: resolved,
         problems,
       };
@@ -745,7 +749,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         throw new SetupInputError("ROUTE_DOOR_UNKNOWN", `"${ref}" isn't a door on file.${hint} Nothing was saved.`);
       });
       const state = edit(ctx, id, draft, "setRoute", { unitId: unit.id, doorIds: doors.map((d) => d.id), directions: i.directions, onlyIfValid: true });
-      return { summary: `Saved ${unit.name}: ${doors.map((d) => d.name).join(" \u2192 ")}.`, ...state };
+      return { summary: `Saved ${operatorUnitName(draft.property, unit.name)}: ${doors.map((d) => d.name).join(" \u2192 ")}.`, ...state };
     },
   }),
 
@@ -1198,7 +1202,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Remove a property",
     kind: "consequential",
     description:
-      "Removes a property from the operator's list, including an in-progress setup that hasn't been published yet. Finds it the same way as list_properties (id, name, or address). A published property's records are kept; an in-progress setup is removed completely (units, doors, and routes go with it). Booked visitors get a cancel text that the property isn't offering tours anymore — not that they'll be texted when tours are back — and pending door access is switched off. Waiting visitors from a pause are not texted that tours are back; that list is dropped. A later text to the property's line gets a goodbye and cannot book. Refused while someone is on a tour. First call returns a yes/no question (for a draft: it isn't published yet, so no visitors are affected, but everything entered for it will be deleted for good). Name the property by the operator-given name, or street plus unit when there is exactly one unit, otherwise the street or address — never Main Home. Call again with confirmationCode only after an explicit yes. Say remove, never archive.",
+      "Removes a property from the operator's list, including a setup that hasn't been published yet (complete or not). Finds it the same way as list_properties (id, name, or address). A published property's records are kept — including one sent back to draft that still has publishedAt, visitor tour or reservation records, or a publish event in its audit. A practice tour alone does not count. An unpublished setup is removed completely (units, doors, and routes go with it). Booked visitors get a cancel text that the property isn't offering tours anymore — not that they'll be texted when tours are back — and pending door access is switched off. Waiting visitors from a pause are not texted that tours are back; that list is dropped. A later text to the property's line gets a goodbye and cannot book. Refused while someone is on a tour. First call returns a yes/no question: unpublished uses the draft wording (it isn't published yet, so no visitors are affected, but everything entered for it will be deleted for good) whether or not the setup is complete. Published with no bookings says no one is booked, so no cancel texts go out; one booked visitor is singular (gets), two or more stay plural. Name the property by the operator-given name, or street plus unit when there is exactly one unit, otherwise the street line — never Main Home. Call again with confirmationCode only after an explicit yes. Say remove, never archive.",
     input: z.strictObject({ property: Property, confirmationCode: Code }),
     run: (ctx, i) => removeProperty(ctx, i),
   }),
