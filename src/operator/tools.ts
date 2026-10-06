@@ -613,6 +613,9 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       let next = draft;
       const touched = new Set<string>();
       let unknownUnits: string[] = [];
+      if (draft.property.propertyType === "SINGLE_FAMILY" && draft.units.length === 0) {
+        throw new SetupInputError("UNIT_DETAILS_NOT_FOUND", "Add a unit first.");
+      }
       if (i.details) {
         const bulk = parseBulkUnitDetails(i.details, draft.units.map((u) => u.name));
         unknownUnits = bulk.unknownUnits;

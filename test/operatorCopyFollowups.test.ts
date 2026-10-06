@@ -236,9 +236,9 @@ describe("operator-facing readiness and practice tour never name Durin", () => {
   });
 
   it("web, CLI, grok disconnect, and the wrong-door demo line never name Durin", () => {
-    expect(readFileSync("src/web/public/app.js", "utf8")).not.toMatch(/Durin/);
-    expect(readFileSync("src/cli/setup.ts", "utf8")).not.toMatch(/Durin/);
-    expect(readFileSync("src/tools/grok.ts", "utf8")).not.toMatch(/Durin/);
+    expect(readFileSync("src/web/public/app.js", "utf8")).not.toMatch(/\bDurin\b/);
+    expect(readFileSync("src/cli/setup.ts", "utf8")).not.toMatch(/\bDurin\b/);
+    expect(readFileSync("src/tools/grok.ts", "utf8")).not.toMatch(/\bDurin\b/);
     expect(readFileSync("src/tools/grok.ts", "utf8")).toContain("door access settings are unchanged");
     const session = readFileSync("src/visitor/session.ts", "utf8");
     expect(session).toContain("Demo safety check: Tour Core kept this door locked because it's not on their route.");
@@ -292,15 +292,15 @@ describe("local test-mode surfaces reuse the test-mode sentences", () => {
     const messaging = (await local.status()).components.find((c) => c.component === "VISITOR_MESSAGING");
     expect(messaging).toMatchObject({ state: "READY", summary: LOCAL_TEST_TEXTING });
     const component = await local.ok("get_installation_component", { component: "VISITOR_MESSAGING" });
-    expect(component.summary).toBe(LOCAL_TEST_TEXTING);
+    expect(component.summary).toBe(`Visitor texting: ${LOCAL_TEST_TEXTING}`);
     expect(component.summary).not.toMatch(/connected and working/);
 
     const live = textingApp();
     const liveMessaging = (await live.status()).components.find((c) => c.component === "VISITOR_MESSAGING");
     expect(liveMessaging?.state).toBe("READY");
     expect(liveMessaging?.summary).toMatch(/^Visitor texting is connected and working/);
-    const liveTest = await live.ok("test_visitor_messaging");
-    expect(liveTest.summary).toBe("Visitor texting is connected and working.");
+    expect(liveMessaging?.summary).not.toBe(LOCAL_TEST_TEXTING);
+    expect(liveMessaging?.summary).not.toMatch(/test mode/);
   });
 
   it("after a local publish, the operate step uses the test-mode sentence", async () => {

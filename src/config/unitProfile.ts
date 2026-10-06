@@ -221,6 +221,8 @@ export interface BulkUnitDetails {
 }
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const AMENITY_UNIT_TOKEN = /^(laundry|washer|dryer|parking|pets?|utilities|furnished|features)$/i;
+const unknownUnitMentions = (text: string) => [...text.matchAll(/(?<![A-Za-z-])(?:unit|apt\.?|apartment|suite)\s+([A-Za-z0-9-]+)/gi)].map((m) => m[1]!);
 
 /**
  * Reads a natural answer that covers several units at once, e.g. "1A and 1B
@@ -229,6 +231,9 @@ const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  * named just before it. Only values that are actually stated are returned.
  */
 export function parseBulkUnitDetails(text: string, unitNames: string[]): BulkUnitDetails {
+  if (!unitNames.length) {
+    return { units: [], unknownUnits: [...new Set(unknownUnitMentions(text).filter((n) => !AMENITY_UNIT_TOKEN.test(n)))] };
+  }
   const aliases = unitNames.flatMap((name) => {
     const short = name.replace(/^(unit|apt\.?|apartment|suite)\s+/i, "");
     return [...new Set([name, short])].map((alias) => ({ name, alias }));
@@ -255,10 +260,9 @@ export function parseBulkUnitDetails(text: string, unitNames: string[]): BulkUni
     const values = extractValues(segment);
     for (const name of g.names) out.set(name, { ...out.get(name), ...values });
   });
-  const amenityToken = /^(laundry|washer|dryer|parking|pets?|utilities|furnished|features)$/i;
-  const unknownUnits = [...text.matchAll(/(?<![A-Za-z-])(?:unit|apt\.?|apartment|suite)\s+([A-Za-z0-9-]+)/gi)]
-    .map((m) => m[1]!)
-    .filter((n) => !amenityToken.test(n) && !aliases.some((a) => a.alias.toLowerCase() === n.toLowerCase() || a.name.toLowerCase() === `unit ${n}`.toLowerCase()));
+  const unknownUnits = unknownUnitMentions(text).filter(
+    (n) => !AMENITY_UNIT_TOKEN.test(n) && !aliases.some((a) => a.alias.toLowerCase() === n.toLowerCase() || a.name.toLowerCase() === `unit ${n}`.toLowerCase()),
+  );
   return { units: [...out.entries()].filter(([, v]) => Object.keys(v).length).map(([unit, values]) => ({ unit, values })), unknownUnits: [...new Set(unknownUnits)] };
 }
 
