@@ -63,7 +63,9 @@ describe("inbound sms timing", () => {
     const lines: string[] = [];
     await runInboundSmsTiming("sms:test:none", (line) => lines.push(line), async () => undefined);
     expect(phases(lines)).toEqual(["webhook_received", "processing_finished", "done"]);
-    expect(lines.at(-1)).toMatch(/modelMs=0 sendMs=0 tourCoreMs=0/);
+    const done = lines.at(-1)!;
+    expect(done).toMatch(/modelMs=0 sendMs=0/);
+    expect(Number(/tourCoreMs=(\d+)/.exec(done)?.[1])).toBe(Number(/elapsedMs=(\d+)/.exec(done)?.[1]));
   });
 
   it("caps a hung intent model at 3.5s and counts that wait", async () => {
