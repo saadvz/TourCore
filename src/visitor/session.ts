@@ -766,7 +766,7 @@ export class VisitorDemoSession {
     if (paused) throw new SetupInputError("TOURS_PAUSED", paused);
     const result = await this.core.approveTourTimeRequest(requestId, options);
     await this.syncReplies();
-    if (result.needsConsentAsk) await this.announceConsentForMovedBooking(result.reservation.id);
+    if (result.needsConsentAsk) await this.announceHeldBookingConsent(result.reservation.id);
     return result;
   }
 
@@ -788,7 +788,7 @@ export class VisitorDemoSession {
     if (await this.refuseIfPaused(reservation?.unitId)) return;
     const result = await this.core.acceptProposedTime(requestId);
     await this.syncReplies();
-    if (result.needsConsentAsk) await this.announceConsentForMovedBooking(result.reservation.id);
+    if (result.needsConsentAsk) await this.announceHeldBookingConsent(result.reservation.id);
     return result;
   }
 
@@ -1086,11 +1086,6 @@ export class VisitorDemoSession {
     this.lastShownDates = [];
     this.lastShownSlots = [];
     this.heldBookingTakenOver = false;
-  }
-
-  /** Same two-reply consent ask the held-booking takeover uses, for an unconfirmed move. */
-  async announceConsentForMovedBooking(reservationId: string): Promise<void> {
-    await this.announceHeldBookingConsent(reservationId);
   }
 
   /** Unapproved custom-time request still waiting on the property team. */

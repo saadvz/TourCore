@@ -133,8 +133,8 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   time instead.` Default `list_tour_time_requests` hides withdrawn;
   show them with status withdrawn or all. A follow-up yes does not
   record that consent. Approving a custom time that moves an unconfirmed
-  held booking uses that same booked-for then consent ask, not moved
-  wording.
+  held booking uses that same booked-for line, then the original consent
+  question, then Reply YES or NO — not moved wording.
 - **After a closed tour.** Other visitor texts before that window ends
   alert the team once per message. DONE after the close uses the usual
   thanks and follow-up question; a yes is the same follow-up as a normal

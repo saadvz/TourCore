@@ -192,7 +192,8 @@ Never:
   (`They booked a regular time instead.`). Replacing a held or booked
   future tour also sends `That replaces your {day} {time} tour.`
   Approving a custom time that moves an unconfirmed held booking uses
-  that same booked-for then consent ask, not moved wording. That new
+  that same booked-for line, then the original consent question, then
+  Reply YES or NO — not moved wording. That new
   booking becomes the active one after the follow-up reply; a follow-up
   yes does not record consent. Unanswered consent is then the booked-for
   line for the new time, then the original consent question. If the T-5 text

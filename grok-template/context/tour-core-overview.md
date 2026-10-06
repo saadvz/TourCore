@@ -32,8 +32,8 @@ booking flow. Booking a regular slot withdraws that request so a later
 approve cannot double-book; replacing a held or booked future tour also
 sends `That replaces your {day} {time} tour.` Operators see
 `They booked a regular time instead.` Approving a custom time that
-moves an unconfirmed held booking uses that same booked-for then
-consent ask, not moved wording. While the leaving
+moves an unconfirmed held booking uses that same booked-for line, then
+the original consent question, then Reply YES or NO — not moved wording. While the leaving
 issue is open after the close, stuck-inside texts and greetings stay
 on after-close handling. After the follow-up reply, unanswered consent is the
 booked-for line for the new time, then the original consent question.

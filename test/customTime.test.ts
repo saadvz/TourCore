@@ -643,17 +643,11 @@ describe("a held rebook and a custom-time request stay one booking", () => {
     await a.approve("approve_tour_time_request", { tourTimeRequestId: id });
     const after = a.fake.sent.filter((message) => message.number === PHONE).map((message) => message.content).slice(before.length);
     const custom = zonedTimeToUtc({ year: 2026, month: 10, day: 2, hour: 15, minute: 15 }, TZ);
-    const booked = bookedForLine(formatTime(custom, TZ), formatDay(custom, TZ));
-    expect(after.some((line) => line === booked)).toBe(true);
-    const consentIdx = after.findIndex((line) => line.includes(CONSENT_TEXT));
-    expect(consentIdx).toBeGreaterThanOrEqual(0);
-    expect(after[consentIdx]).toContain(CONSENT_TEXT);
-    expect(after[consentIdx]).toContain("Reply YES or NO.");
+    expect(after).toEqual([
+      bookedForLine(formatTime(custom, TZ), formatDay(custom, TZ)),
+      `${CONSENT_TEXT}\nReply YES or NO.`,
+    ]);
     expect(after.join("\n")).not.toMatch(/moved to|rescheduled/i);
-    const bookedIdx = after.findIndex((line) => line === booked);
-    expect(bookedIdx).toBeGreaterThanOrEqual(0);
-    expect(consentIdx).toBeGreaterThan(bookedIdx);
-    expect(after.some((line) => line.includes(bookedForLine(formatTime(custom, TZ), formatDay(custom, TZ))) && line.includes("Reply YES or NO.") && !line.includes(CONSENT_TEXT))).toBe(false);
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
     const bundle = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle;
     const live = bundle.reservations.filter((item) => item.slotStart && item.status !== "COMPLETED" && item.status !== "CANCELLED");
