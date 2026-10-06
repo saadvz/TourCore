@@ -104,16 +104,21 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   marking it handled also ends the after-close visitor alerts (alerts also
   stop when they text DONE / I'm out, or 24 hours after the close). The
   leaving issue itself stays open until they text DONE or you mark it
-  handled. A later standalone HI or yo, or a clear booking phrase
-  (including see it again / schedule another visit), starts a new
-  booking instead of alerting; a greeting with more text, or anything
-  about being stuck, locked, jammed, or unable to leave, still alerts
-  the team and replies to the visitor. While that leaving issue is
-  open, those after-close texts run before a held booking can take
-  over. A rebook held from during the tour continues after the
+  handled. While the 24-hour after-close window is open, a standalone
+  HI or yo stays on after-close handling. After 24 hours, greetings go
+  back to normal even if the leaving issue is still open: HI starts a
+  booking if nothing is held, or takes over a held booking. A clear
+  booking phrase (including see it again / schedule another visit)
+  starts a new booking when nothing is held; a greeting with more text,
+  or anything about being stuck, locked, jammed, or unable to leave,
+  still alerts the team and replies to the visitor. While that leaving
+  issue is open, those after-close texts run before a held booking can
+  take over. A rebook held from during the tour continues after the
   follow-up reply: if its consent is still unanswered, they get the
   booked-for line for the new time, then the original consent
-  question. A follow-up yes does not record that consent.
+  question. An unapproved custom-time request is told it is still with
+  the property team instead of the day menu. A follow-up yes does not
+  record that consent.
 - **After a closed tour.** Other visitor texts before that window ends
   alert the team once per message. DONE after the close uses the usual
   thanks and follow-up question; a yes is the same follow-up as a normal

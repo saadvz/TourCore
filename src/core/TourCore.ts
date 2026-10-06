@@ -110,6 +110,11 @@ export function bookedForLine(time: string, day: string): string {
   return `Great, you're booked for ${time} on ${day}.`;
 }
 
+/** After a tour ends, an unapproved custom-time request stays with the team. */
+export function pendingCustomTimeLine(time: string): string {
+  return `Your request for ${time} is still with the property team. I'll text you as soon as they respond.`;
+}
+
 /** Repeat help on the same reservation re-alerts the team at most once per this window. */
 export const HELP_ALERT_WINDOW_MS = 5 * 60_000;
 

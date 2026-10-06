@@ -14,7 +14,7 @@ import { entryReply } from "./entry";
 import { operatorUnitName, visitorTourOf } from "./identity";
 import { ONE_OFF_REPLACED_DETAIL } from "./oneOffGate";
 import { offerDate } from "./unavailableDay";
-import { bookedForLine, CONSENT_TEXT, isLiveHelpReservation, TourCore, TourCoreError, VISITOR_CANCEL_DONE, visitorCancelConfirmFor, type AccessOutcome, type InboundMeta } from "../core/TourCore";
+import { bookedForLine, CONSENT_TEXT, isLiveHelpReservation, pendingCustomTimeLine, TourCore, TourCoreError, VISITOR_CANCEL_DONE, visitorCancelConfirmFor, type AccessOutcome, type InboundMeta } from "../core/TourCore";
 import { isCancelableReservation } from "../domain/stateMachine";
 import { parseIsoDate, type TourSlot } from "../core/schedule";
 import { createDurin, createStore, createVerificationProvider } from "../createTourCore";
@@ -974,6 +974,7 @@ export class VisitorDemoSession {
         this.followUpReservationId = undefined;
         this.promotePendingBookingIfEnded();
         if (await this.activeNeedsConsent()) await this.announceHeldBookingConsent();
+        else await this.announceUnapprovedCustomTime();
         return;
       }
       case "demoSkipAhead": {
@@ -1067,6 +1068,21 @@ export class VisitorDemoSession {
     this.heldBookingTakenOver = false;
   }
 
+  /** Unapproved custom-time request still waiting on the property team. */
+  async unapprovedCustomTimeRequest(): Promise<TourTimeRequest | undefined> {
+    const ids = new Set([this.reservationId, this.pendingBookingId].filter((id): id is string => !!id));
+    const requests = await this.store.list("tourTimeRequests");
+    return requests.find((request) => request.status === "PENDING" && request.reservationId && ids.has(request.reservationId));
+  }
+
+  /** After a tour ends, tell the visitor their custom-time request is still with the team. */
+  async announceUnapprovedCustomTime(): Promise<boolean> {
+    const request = await this.unapprovedCustomTimeRequest();
+    if (!request) return false;
+    await this.reply(pendingCustomTimeLine(formatTime(new Date(request.requestedStartsAt), this.config.property.timezone)));
+    return true;
+  }
+
   async pendingBookingNeedsVerification(): Promise<boolean> {
     const pending = await this.pendingBooking();
     return !!pending && pending.status === "AWAITING_VERIFICATION";
@@ -1111,7 +1127,7 @@ export class VisitorDemoSession {
     }
     if (current.status === "EXPIRED") {
       const left = await this.core.hasConfirmedLeftAfterClose(current.id);
-      if (!left || !(await this.hasFollowUpResponse(current.id))) return false;
+      if (left && !(await this.hasFollowUpResponse(current.id))) return false;
       return this.promotePendingBookingIfEnded();
     }
     return false;

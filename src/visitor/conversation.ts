@@ -61,21 +61,33 @@ export function isStandaloneGreeting(text: string): boolean {
 }
 
 const AFTER_CLOSE_DISTRESS =
-  /\b(stuck|trapped|inside|door|help|emergency|jammed|lock|locked|leave|let me out|lock in|cannot leave|cannot get out|can t get out|can t leave)\b/;
+  /\b(stuck|trapped|inside|door|help|emergency|jammed|lock|locked|gate|let me out|lock in|cannot get out|can t get out|no way out|way out|will not open|cannot open)\b/;
+const LEAVE_DISTRESS = /\b(cannot leave|unable to leave|how do i leave|let me leave)\b/;
+const HELP_BOOKING = /\bhelp(?: me)? book(?:ing)?\b/;
 
 /** After-close distress: never start a booking, even when booking words are also present. */
 export function mentionsAfterCloseDistress(text: string): boolean {
-  return AFTER_CLOSE_DISTRESS.test(stripFiller(normalize(text)));
+  if (/🔒/.test(text)) return true;
+  const t = stripFiller(normalize(text));
+  if (HELP_BOOKING.test(t)) return false;
+  return AFTER_CLOSE_DISTRESS.test(t) || LEAVE_DISTRESS.test(t);
+}
+
+/** A clear ask to book — not a bare greeting. Distress always wins. */
+export function isClearBookingPhrase(text: string, intent?: TourIntent): boolean {
+  if (mentionsAfterCloseDistress(text)) return false;
+  if (intent?.type === "START_INQUIRY") return true;
+  const t = stripFiller(normalize(text));
+  if (/^(tour|book|start over|new tour)$/.test(t)) return true;
+  if (HELP_BOOKING.test(t)) return true;
+  return /\b(book (another |a )?(tour|look|showing)|another (tour|look|showing)|new tour|tour again|i would like to book|see it again|schedule another (visit|tour))\b/.test(t);
 }
 
 /** After a +15 close, only a standalone greeting or a clear booking phrase starts a new booking. */
 export function startsNewBookingAfterClose(text: string, intent?: TourIntent): boolean {
   if (mentionsAfterCloseDistress(text)) return false;
   if (isStandaloneGreeting(text)) return true;
-  if (intent?.type === "START_INQUIRY") return true;
-  const t = stripFiller(normalize(text));
-  if (/^(tour|book|start over|new tour)$/.test(t)) return true;
-  return /\b(book (another |a )?(tour|look|showing)|another (tour|look|showing)|new tour|tour again|i would like to book|see it again|schedule another (visit|tour))\b/.test(t);
+  return isClearBookingPhrase(text, intent);
 }
 
 /** Locked visitor copy when an inbound is a photo with no caption. Do not say MMS. */
@@ -879,6 +891,11 @@ async function byStage(turn: Turn): Promise<void> {
     }
 
     case "choose-date": {
+      if (await session.unapprovedCustomTimeRequest()) {
+        await session.recordText(turn.said);
+        await session.announceUnapprovedCustomTime();
+        return;
+      }
       if (turn.awaiting?.kind === "accept-next-opening") {
         const today = localDateOf(session.clock.now(), session.config.property.timezone);
         if (acceptsOfferedOpening(turn.said.text ?? "", today)) {
@@ -904,6 +921,11 @@ async function byStage(turn: Turn): Promise<void> {
     }
 
     case "choose-time": {
+      if (await session.unapprovedCustomTimeRequest()) {
+        await session.recordText(turn.said);
+        await session.announceUnapprovedCustomTime();
+        return;
+      }
       const labels = session.offeredSlots.map((s) => s.label);
       const menu: ReplyPrompt = { kind: "choose", options: labels, what: "a time" };
       if (intent.type === "REQUEST_HELP") return session.help(turn.said);
@@ -1019,30 +1041,33 @@ async function handleOverstayReply(turn: Turn): Promise<boolean> {
       session.followUpReservationId = reservation.id;
       return true;
     }
-    if (startsNewBookingAfterClose(said, intent)) {
-      if (session.pendingBookingId) {
-        session.promotePendingBookingIfEnded();
-        if (await session.activeNeedsConsent()) {
-          await session.recordText(turn.said);
-          await session.announceHeldBookingConsent();
-          return true;
-        }
-      }
-      await startBookingAfterClose(turn);
-      return true;
-    }
     const closedAt = (await session.store.listAudit()).find((e) => e.type === "TOUR_OVERSTAY_CLOSED" && e.reservationId === reservation.id)?.at;
-    if (
-      afterCloseAlertOpen({
-        nowMs: session.clock.now().getTime(),
-        closedAt,
-        confirmedLeft: false,
-        exceptionResolved: !!overstay.get(reservation.id)?.alertClosedAt,
-      })
-    ) {
+    const afterCloseOpen = afterCloseAlertOpen({
+      nowMs: session.clock.now().getTime(),
+      closedAt,
+      confirmedLeft: false,
+      exceptionResolved: !!overstay.get(reservation.id)?.alertClosedAt,
+    });
+    if (afterCloseOpen) {
+      if (isClearBookingPhrase(said, intent) && !session.pendingBookingId) {
+        await startBookingAfterClose(turn);
+        return true;
+      }
       await session.recordText(turn.said);
       await session.core.replyAfterOverstayClose(reservation.id, said);
       await session.refreshThread();
+      return true;
+    }
+    if (session.pendingBookingId) {
+      session.promotePendingBookingIfEnded();
+      if (await session.activeNeedsConsent()) {
+        await session.recordText(turn.said);
+        await session.announceHeldBookingConsent();
+        return true;
+      }
+    }
+    if (startsNewBookingAfterClose(said, intent)) {
+      await startBookingAfterClose(turn);
       return true;
     }
     return false;
@@ -1062,7 +1087,7 @@ async function handleOverstayReply(turn: Turn): Promise<boolean> {
     }
     await turn.respond(reply);
     if (reply.startsWith("You've got 10 more minutes.") && (await session.pendingBookingNeedsConsent())) {
-      await session.reply(CONSENT_TEXT);
+      await session.reply(CONSENT_TEXT, { kind: "yes-no" });
     }
     return true;
   }
@@ -1096,10 +1121,13 @@ async function startRebook(turn: Turn): Promise<void> {
 async function takeOverHeldBookingOnGreeting(turn: Turn): Promise<boolean> {
   const { session, intent } = turn;
   const text = turn.said.text ?? "";
+  if (await session.afterCloseStillOpen()) return false;
+  if (session.followUpReservationId && !(await session.hasFollowUpResponse(session.followUpReservationId))) return false;
   if (!startsNewBookingAfterClose(text, intent)) return false;
   if (session.pendingBookingId) {
     const current = await session.reservation();
     if (current && current.status !== "COMPLETED" && current.status !== "EXPIRED") return false;
+    if (current?.status === "COMPLETED" && !(await session.hasFollowUpResponse(current.id))) return false;
     session.promotePendingBookingIfEnded();
   }
   if ((session.heldBookingTakenOver || session.followUpReservationId) && (await session.activeNeedsConsent())) {

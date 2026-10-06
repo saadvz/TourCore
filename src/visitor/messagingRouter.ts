@@ -171,8 +171,12 @@ export class MessagingConversations {
       }
     }
     // A finished tour is never reopened: a standalone greeting or booking phrase starts a new one.
-    // Greeting-plus-distress after a close stays on this conversation so the team is alerted.
-    if (session && ["done", "stopped"].includes(await session.stage()) && !(await session.isPaused()) && startsNewBookingAfterClose(message.text) && !session.optedOut) session = undefined;
+    // Keep this thread while a leaving issue is still in the 24-hour after-close window,
+    // or while a booking is held from during the tour.
+    if (session && ["done", "stopped"].includes(await session.stage()) && !(await session.isPaused()) && startsNewBookingAfterClose(message.text) && !session.optedOut) {
+      const keep = !!session.pendingBookingId || (await session.afterCloseStillOpen());
+      if (!keep) session = undefined;
+    }
 
     if (!session) {
       const { config, state } = ws.load(propertyId);
