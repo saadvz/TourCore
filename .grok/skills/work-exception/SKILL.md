@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Tour updates, exception queue, monitoring, holds and approved answers
-  version: "0.3.14"
+  version: "0.3.15"
 ---
 
 # Work Exception
@@ -79,8 +79,14 @@ Tour Core sends only an `eventId` and an event type; never names or details.
    > 3. Sam Lee — Unit 103
    >    Hasn't confirmed leaving Unit 103.
    >    Tour time ended.
-   A leaving issue uses the ended tour's status ("Tour time ended"), even when
-   a later booking is held and waiting for consent.
+   >
+   > 4. Jane Smith — Unit 101
+   >    Tour Core couldn't save the visit record, so the tour was paused.
+   A records check that fails before unlock keeps the door locked ("Tour Core
+   couldn't save the visit record, so {door} stayed locked.") and does not
+   open an issue; the booking stays ready. A leaving issue uses the ended
+   tour's status ("Tour time ended"), even when a later booking is held and
+   waiting for consent.
 2. "Open Pat's issue": `inspect_exception` with that item's `exceptionId`. Show
    what happened, the visitor's words, where the tour stands and `nextSteps`.
 

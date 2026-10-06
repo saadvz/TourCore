@@ -583,7 +583,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Save unit details",
     kind: "change",
     description:
-      'Saves each unit\'s leasing details from the operator\'s own words: bedrooms, bathrooms, monthly rent and availability (required), plus square footage, floor, parking, laundry, pets, utilities, furnished and features. Pass a natural answer covering several units in "details" (e.g. "1A and 1B are 2 bed 1 bath for $2,200. 2A is 3 bed 2 bath for $2,800"), and/or per-unit values in "units". On a single-family home with exactly one unit, omit the unit name and Tour Core uses that unit. Multi-unit properties still need a unit. "I don\'t know", "not sure", "not available yet" or "don\'t list the price" are saved as not provided. Never fill in values yourself. Returns a summary to read back and the one question for anything still missing.',
+      'Saves each unit\'s leasing details from the operator\'s own words: bedrooms, bathrooms, monthly rent and availability (required), plus square footage, floor, parking, laundry, pets, utilities, furnished and features. Pass a natural answer covering several units in "details" (e.g. "1A and 1B are 2 bed 1 bath for $2,200. 2A is 3 bed 2 bath for $2,800"), and/or per-unit values in "units". On a single-family home with exactly one unit, omit the unit name and Tour Core uses that unit. A single-family home with no unit yet returns "Add the house as a unit first, then I\'ll save these details." Multi-unit properties still need a unit. "I don\'t know", "not sure", "not available yet" or "don\'t list the price" are saved as not provided. Never fill in values yourself. Returns a summary to read back and the one question for anything still missing.',
     input: z.strictObject({
       property: Property,
       details: z.string().max(2000).optional().describe("The operator's answer, as they said it."),
@@ -614,7 +614,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const touched = new Set<string>();
       let unknownUnits: string[] = [];
       if (draft.property.propertyType === "SINGLE_FAMILY" && draft.units.length === 0) {
-        throw new SetupInputError("UNIT_DETAILS_NOT_FOUND", "Add a unit first.");
+        throw new SetupInputError("UNIT_DETAILS_NOT_FOUND", "Add the house as a unit first, then I'll save these details.");
       }
       if (i.details) {
         const bulk = parseBulkUnitDetails(i.details, draft.units.map((u) => u.name));
@@ -645,7 +645,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       }
       if (!touched.size) {
         if (draft.property.propertyType === "SINGLE_FAMILY" && draft.units.length === 0) {
-          throw new SetupInputError("UNIT_DETAILS_NOT_FOUND", "Add a unit first.");
+          throw new SetupInputError("UNIT_DETAILS_NOT_FOUND", "Add the house as a unit first, then I'll save these details.");
         }
         throw new SetupInputError("UNIT_DETAILS_NOT_FOUND", `I couldn't match those details to a unit. The units are ${draft.units.map((u) => operatorUnitName(draft.property, u.name)).join(", ") || "none yet"}.`);
       }
@@ -1097,7 +1097,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "list_exceptions",
     title: "Show what needs attention",
     kind: "read",
-    description: "The queue of issues that need the team: unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored. \"Visitor hasn't confirmed leaving\" stays open until they text DONE or the operator marks it handled; after-close alerts stop at 24 hours.",
+    description: "The queue of issues that need the team: unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored. A grant that couldn't be saved after unlock is \"Tour Core couldn't save the visit record, so the tour was paused.\" A records check that fails before unlock keeps the door locked and does not open an issue. \"Visitor hasn't confirmed leaving\" stays open until they text DONE or the operator marks it handled; after-close alerts stop at 24 hours.",
     input: z.strictObject({ property: Property, includeHandled: z.boolean().optional() }),
     run: async (ctx, i) => {
       const id = i.property ? resolvePropertyId(ctx.services.workspace, i.property) : undefined;

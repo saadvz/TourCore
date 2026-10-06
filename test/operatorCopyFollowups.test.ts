@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import { MessagingEndpoints } from "../src/messaging/endpoints";
 import { LOCAL_TEST_TEXTING, localTestModeSentence, modeSentence } from "../src/setup/setupActions";
@@ -217,7 +217,31 @@ describe("set_unit_details single-family auto-select", () => {
   it("tells the operator to add a unit first on a single-family home with no unit yet", async () => {
     const h = app();
     await h.ok("create_property_setup", { address: "910 QA Gate Rd, Tenafly, NJ 07670", propertyType: "SINGLE_FAMILY" });
-    expect(await h.fails("set_unit_details", { details: "3 bed 2 bath for $3,400, available now" })).toBe("Add a unit first.");
+    expect(await h.fails("set_unit_details", { details: "3 bed 2 bath for $3,400, available now" })).toBe(
+      "Add the house as a unit first, then I'll save these details.",
+    );
+  });
+
+  it("saves 1A details when the phrase also has W/D, and does not treat ordinary words as units", async () => {
+    expect(parseBulkUnitDetails("1A has W/D, 3 bed 2 bath $3,400", ["1A", "W", "Laundry Suite"])).toEqual({
+      units: [{ unit: "1A", values: { bedrooms: "3", bathrooms: "2", monthlyRent: "$3,400" } }],
+      unknownUnits: [],
+    });
+    expect(parseBulkUnitDetails("W is 2 bed 1 bath for $2,200", ["1A", "W"])).toEqual({
+      units: [{ unit: "W", values: { bedrooms: "2", bathrooms: "1", monthlyRent: "$2,200" } }],
+      unknownUnits: [],
+    });
+    expect(parseBulkUnitDetails("the unit has 3 bed 2 bath", ["Main Home"]).unknownUnits).toEqual([]);
+    expect(parseBulkUnitDetails("the unit is 3 bed and the unit with laundry", ["Main Home"]).unknownUnits).toEqual([]);
+    const h = app();
+    await h.ok("create_property_setup", { address: "144 Hillside Ave, Teaneck, NJ 07666", propertyType: "APARTMENT_BUILDING" });
+    await h.ok("add_unit", { name: "1A" });
+    await h.ok("add_unit", { name: "W" });
+    await h.ok("add_unit", { name: "Laundry Suite" });
+    const saved = await h.ok("set_unit_details", { details: "1A has W/D, 3 bed 2 bath $3,400" });
+    expect(saved.lines[0]).toMatch(/^1A — 3 bed · 2 bath · \$3,400\/month/);
+    expect(saved.lines.join("\n")).not.toMatch(/^W — 3 bed/m);
+    expect(saved.notOnFile).toBeUndefined();
   });
 });
 
@@ -236,13 +260,39 @@ describe("operator-facing readiness and practice tour never name Durin", () => {
   });
 
   it("web, CLI, grok disconnect, and the wrong-door demo line never name Durin", () => {
-    expect(readFileSync("src/web/public/app.js", "utf8")).not.toMatch(/\bDurin\b/);
-    expect(readFileSync("src/cli/setup.ts", "utf8")).not.toMatch(/\bDurin\b/);
-    expect(readFileSync("src/tools/grok.ts", "utf8")).not.toMatch(/\bDurin\b/);
-    expect(readFileSync("src/tools/grok.ts", "utf8")).toContain("door access settings are unchanged");
+    const allowed = /durin-mock|createDurin|countDurinCalls|CountingDurin|MockDurin|durinCalled|durinLines|durinRequests|durinHealth|DENY_DURIN_UNHEALTHY|DURIN_DEMO|never name Durin|Never name Durin|before Durin|deps\.durin|this\.durin|src\/durin/i;
+    const unexpected = (file: string) =>
+      readFileSync(file, "utf8")
+        .split("\n")
+        .filter((line) => /\bdurin\b/i.test(line) && !allowed.test(line))
+        .map((line) => `${file}: ${line.trim()}`);
+    expect([
+      ...readdirSync("src/web/public").filter((name) => /\.(js|html)$/.test(name)).flatMap((name) => unexpected(`src/web/public/${name}`)),
+      ...unexpected("src/cli/setup.ts"),
+      ...unexpected("src/cli/prompter.ts"),
+      ...unexpected("src/tools/grok.ts"),
+    ]).toEqual([]);
+    expect(readFileSync("src/web/public/app.js", "utf8")).toContain("No real door system is connected.");
+    expect(readFileSync("src/tools/grok.ts", "utf8")).toContain("texting settings, visitor sessions and door access settings are unchanged");
     const session = readFileSync("src/visitor/session.ts", "utf8");
     expect(session).toContain("Demo safety check: Tour Core kept this door locked because it's not on their route.");
-    expect(session).not.toMatch(/never contacted Durin/);
+    expect(session).not.toMatch(/never contacted Durin/i);
+  });
+
+  it("readiness, practice tour, install status, and visitor session copy never name Durin", async () => {
+    const h = app();
+    await h.setUpAlfredWay();
+    const readiness = await h.ok("run_readiness_check");
+    expect(JSON.stringify(readiness)).not.toMatch(/\bdurin\b/i);
+    const practice = await h.ok("run_dry_tour");
+    expect(JSON.stringify(practice)).not.toMatch(/\bdurin\b/i);
+    const install = installHarness({ env: { TOURCORE_DEPLOYMENT_MODE: "GROK_MANAGED_P0" } });
+    cleanups.push(install.cleanup);
+    const status = await install.status();
+    expect(JSON.stringify({ summary: status.summary, lines: status.lines, components: status.components.map((c) => c.summary) })).not.toMatch(/\bdurin\b/i);
+    const session = readFileSync("src/visitor/session.ts", "utf8");
+    expect(session).toContain("Demo safety check: Tour Core kept this door locked because it's not on their route.");
+    expect(session).not.toMatch(/Demo safety check:.*\bdurin\b/i);
   });
 });
 

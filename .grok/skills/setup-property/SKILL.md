@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Guided property setup, checked and practiced before publish
-  version: "0.3.13"
+  version: "0.3.14"
 ---
 
 # Setup Property
@@ -95,7 +95,9 @@ the operator correct it.
    once ("1A and 1B are 2 bed 1 bath for $2,200. 2A is 3 bed 2 bath for
    $2,800"): pass it as `details` to `set_unit_details`. On a single-family
    home with exactly one unit, omit the unit name and Tour Core uses that
-   unit. Multi-unit properties still need a unit. Offer the optional
+   unit. A single-family home with no unit yet: "Add the house as a unit
+   first, then I'll save these details." Multi-unit properties still need a
+   unit. Offer the optional
    details (square footage, floor, parking, laundry, pets, utilities,
    furnished, features) once. "I don't know", "not sure", "not available yet"
    and "don't list the price" are answers: pass them as the operator said

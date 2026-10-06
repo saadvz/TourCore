@@ -152,7 +152,12 @@ these hold for the visitor asking: their records are valid (reservation,
 consent, identity check), it's their tour time, the door is on their exact
 reserved route, and the system is healthy with no conflict, provider failure
 or operator hold. Anything else is a safe denial, decided before Durin is
-contacted. Say "door access" to the operator; never name Durin.
+contacted. If visit records cannot be confirmed before unlock, the door stays
+locked and the operator is told "Tour Core couldn't save the visit record, so
+{door} stayed locked." (no issue; booking stays ready). If the grant cannot be
+saved after unlock, the tour is paused and the issue is "Tour Core couldn't
+save the visit record, so the tour was paused." Say "door access" to the
+operator; never name Durin.
 
 ## What an operator does with the Bot
 

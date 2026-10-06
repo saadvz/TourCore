@@ -598,7 +598,9 @@ people. The review reads back the address, type, each unit with its details and 
 test-mode texting) and "Door access: Demo". A single-family home's
 unit heading is the street line (for example `910 QA Gate Rd`), never "Main Home".
 On a single-family home with exactly one unit, `set_unit_details` uses that
-unit when none is named; multi-unit properties still need a unit.
+unit when none is named; multi-unit properties still need a unit. A
+single-family home with no unit yet is told "Add the house as a unit first,
+then I'll save these details."
 
 ### Operator updates
 
@@ -745,8 +747,16 @@ TourCore.requestAccess()
    ├─ evaluateAccess()  ── DENY ──► audit ACCESS_DENIED, explain, stop (Durin never called)
    │        │ ALLOW
    ├─ existing active grant? ──► reuse it (no second grant)
+   ├─ records check     ── fail ──► DENY_STORAGE_FAILURE, door stays locked, booking stays ready (no issue)
    └─ durin.requestAccess()  ── failure ──► PROVIDER_FAILURE, safe denial, operator alerted
 ```
+
+If visit records cannot be confirmed before unlock, the operator alert is
+"Tour Core couldn't save the visit record, so {door} stayed locked." The
+visitor gets the usual doors-aren't-responding handoff (the property team has
+been told, plus how to reach them). If the grant cannot be saved after unlock,
+the grant is revoked, the tour is paused, an issue is opened, and the operator
+alert is "Tour Core couldn't save the visit record, so the tour was paused."
 
 - `src/policy/evaluateAccess.ts` is a pure, deny-by-default policy. It checks the reservation, prospect, consent,
   verification, time window, exact route, reservation status and Durin health.

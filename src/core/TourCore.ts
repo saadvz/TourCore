@@ -1647,7 +1647,9 @@ export class TourCore {
         code === "DENY_WRONG_ROUTE"
           ? `${who} tried ${door}, which isn't on their tour. It stayed locked.`
           : code === "DENY_STORAGE_FAILURE"
-            ? "Tour Core couldn't save the visit record, so the tour was paused."
+            ? reservation?.status === "PROVIDER_FAILURE"
+              ? "Tour Core couldn't save the visit record, so the tour was paused."
+              : `Tour Core couldn't save the visit record, so ${door} stayed locked.`
             : code === "DENY_DURIN_UNHEALTHY" || code === "DENY_PROVIDER_FAILURE"
             ? `The doors aren't responding for ${who}'s tour. They're waiting at ${door}.`
             : `${who} couldn't get into ${door}. They may need a hand.`;

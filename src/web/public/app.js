@@ -1161,7 +1161,7 @@ async function publishedScreen(id) {
       "div",
       { class: "notice" },
       el("strong", {}, "This is a demo configuration."),
-      el("p", {}, "No production access system is connected. Messages appear on screen, tour records stay on this computer, and door access runs in demo mode, so no real doors open."),
+      el("p", {}, "No real door system is connected. Messages appear on screen, tour records stay on this computer, and door access runs in demo mode, so no real doors open."),
     ),
     devBlock(s.dev),
     el(

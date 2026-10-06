@@ -157,8 +157,8 @@ call the tools at all.
 
 **Disconnect Grok.** Click **Disconnect Grok** on `http://localhost:4321/grok`,
 or run `npm run grok:disconnect`. Every Grok token stops working at once, even
-in a running Tour Core. Properties, tour history, Sendblue, visitor sessions
-and Durin settings are untouched. To connect again, reconnect Tour Core in
+in a running Tour Core. Properties, tour history, texting settings, visitor
+sessions and door access settings are unchanged. To connect again, reconnect Tour Core in
 Grok and approve.
 
 **If the tunnel address changes** (a new `trycloudflare.com` URL): in a

@@ -222,7 +222,58 @@ export interface BulkUnitDetails {
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const AMENITY_UNIT_TOKEN = /^(laundry|washer|dryer|parking|pets?|utilities|furnished|features)$/i;
-const unknownUnitMentions = (text: string) => [...text.matchAll(/(?<![A-Za-z-])(?:unit|apt\.?|apartment|suite)\s+([A-Za-z0-9-]+)/gi)].map((m) => m[1]!);
+const UNKNOWN_UNIT_STOPWORDS = new Set([
+  "a",
+  "an",
+  "the",
+  "and",
+  "or",
+  "but",
+  "is",
+  "are",
+  "was",
+  "were",
+  "be",
+  "been",
+  "being",
+  "has",
+  "have",
+  "had",
+  "with",
+  "for",
+  "of",
+  "to",
+  "in",
+  "on",
+  "at",
+  "by",
+  "from",
+  "as",
+  "this",
+  "that",
+  "these",
+  "those",
+  "it",
+  "its",
+  "also",
+  "just",
+  "only",
+  "not",
+  "no",
+  "yes",
+]);
+const unknownUnitMentions = (text: string) =>
+  [...text.matchAll(/(?<![A-Za-z-])(?:unit|apt\.?|apartment|suite)\s+([A-Za-z0-9-]+)/gi)]
+    .map((m) => m[1]!)
+    .filter((n) => !UNKNOWN_UNIT_STOPWORDS.has(n.toLowerCase()));
+
+/** One-letter aliases only count as a unit when they stand alone, not as W/D or A/C. */
+function isSlashCompound(text: string, match: RegExpMatchArray, alias: string): boolean {
+  if (alias.length !== 1) return false;
+  const end = match.index! + match[0].length;
+  const aliasStart = end - alias.length;
+  return text[aliasStart - 1] === "/" || text[end] === "/";
+}
 
 /**
  * Reads a natural answer that covers several units at once, e.g. "1A and 1B
@@ -243,6 +294,7 @@ export function parseBulkUnitDetails(text: string, unitNames: string[]): BulkUni
   const mentions: { name: string; start: number; end: number }[] = [];
   for (const m of text.matchAll(pattern)) {
     const alias = aliases.find((a) => a.alias.toLowerCase() === m[1]!.toLowerCase())!;
+    if (isSlashCompound(text, m, alias.alias)) continue;
     mentions.push({ name: alias.name, start: m.index!, end: m.index! + m[0].length });
   }
   const groups: { names: string[]; end: number }[] = [];
