@@ -560,8 +560,8 @@ export class VisitorDemoSession {
   }
 
   /** After a finished tour, distress texts the visitor and alerts the landlord like a +15 close. */
-  async alertDistress(said: Said): Promise<void> {
-    const reservation = await this.reservation();
+  async alertDistress(said: Said, reservationId?: string): Promise<void> {
+    const reservation = reservationId ? await this.store.get("reservations", reservationId) : await this.reservation();
     if (!reservation) {
       await this.help(said);
       return;

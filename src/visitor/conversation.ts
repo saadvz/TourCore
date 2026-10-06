@@ -1140,10 +1140,6 @@ async function byStage(turn: Turn): Promise<void> {
         if (intent.type === "REQUEST_HELP") return session.help(turn.said);
         return turn.respond(VisitorDenialCopy.operatorHold(session.config.operator.name, session.config.operator.visitorContact));
       }
-      if (mentionsAfterCloseDistress(turn.said.text ?? "")) {
-        await session.alertDistress(turn.said);
-        return;
-      }
       if (intent.type === "ASK_PROPERTY_QUESTION") return handleEndedQuestion(turn);
       return turn.respond(TOUR_ENDED_REPLY);
   }
@@ -1179,13 +1175,15 @@ async function onArrival(turn: Turn): Promise<void> {
 
 async function handlePostTourDistress(turn: Turn): Promise<boolean> {
   if (!mentionsAfterCloseDistress(turn.said.text ?? "")) return false;
-  const reservation = await turn.session.reservation();
-  if (!reservation) return false;
-  if (reservation.status === "COMPLETED" && (await turn.session.hasFollowUpResponse(reservation.id))) {
-    await turn.session.alertDistress(turn.said);
-    return true;
-  }
-  return false;
+  const session = turn.session;
+  const current = await session.reservation();
+  const reservations = await session.store.list("reservations");
+  const finished = reservations.find(
+    (reservation) => reservation.status === "COMPLETED" && (!current || reservation.prospectId === current.prospectId),
+  );
+  if (!finished || !(await session.hasFollowUpResponse(finished.id))) return false;
+  await session.alertDistress(turn.said, finished.id);
+  return true;
 }
 
 async function handleOverstayReply(turn: Turn): Promise<boolean> {
