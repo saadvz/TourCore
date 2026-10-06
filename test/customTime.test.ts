@@ -1684,7 +1684,7 @@ describe("a Sendblue handler throw raises a real landlord alert", () => {
     session.bookOffered = async () => {
       throw new Error(`No reservation ${session.reservationId}`);
     };
-    const replies = await a.text("Can I move it to 3:15?");
+    const replies = await a.text("Can I move it to 3:30?");
     expect(replies).toContain(HANDLER_SNAG_ALERTED);
     const queue = await a.grok("list_exceptions");
     expect(queue.exceptions.length).toBeGreaterThan(0);
@@ -1694,7 +1694,7 @@ describe("a Sendblue handler throw raises a real landlord alert", () => {
     expect(inspect).not.toContain(`No reservation ${session.reservationId}`);
     expect(inspect).not.toMatch(/TypeError|No prospect /);
     const saved = a.ws.loadTour("prop_100_alfred_way", a.ws.listTours("prop_100_alfred_way").find((item) => item.visitorPhone === PHONE)!.tourId)!.bundle;
-    expect(saved.auditEvents.some((event) => event.type === "OPERATOR_NOTIFIED" && event.detail === handlerFailureAlertLine("Testy", "Can I move it to 3:15?"))).toBe(true);
+    expect(saved.auditEvents.some((event) => event.type === "OPERATOR_NOTIFIED" && event.detail === handlerFailureAlertLine("Testy", "Can I move it to 3:30?"))).toBe(true);
     expect(saved.auditEvents.every((event) => !/No reservation |No prospect |Reservation is |TypeError/.test(event.detail))).toBe(true);
   });
 
@@ -1710,7 +1710,7 @@ describe("a Sendblue handler throw raises a real landlord alert", () => {
     session.bookOffered = async () => {
       throw new Error("No reservation res_xyz");
     };
-    const replies = await a.text("Can I move it to 3:15?");
+    const replies = await a.text("Can I move it to 3:30?");
     expect(replies).toContain(HANDLER_SNAG_RETRY);
     expect(replies).not.toContain(HANDLER_SNAG_ALERTED);
   });

@@ -128,7 +128,7 @@ const WEEKDAY_WORD: Record<string, string> = {
 };
 const TIME_SHIFT_ASK =
   /\b((?:make|move|switch|change)(?: it| the tour| that)? (?:later|earlier)|(?:a |an )?(?:later|earlier) (?:time|slot|opening)|(?:later|earlier) if possible|can we do (?:later|earlier))\b/;
-const NEGATED_CHANGE = /\b(no need to|do not need to|will not need to|would not need to|no reason to|not going to)\b.{0,40}\b(switch|reschedule|change|move|cancel)\b/;
+const NEGATED_CHANGE = /\b(no need to|do not need to|will not need to|would not need to|no reason to|not going to)\b.{0,40}\b(switch|reschedule|change|move|cancel)\b|\bno change\b/;
 const ARRIVAL_REMARK =
   /\b(be there|arrive|get there|show up|come by|get in)\b.{0,40}\b(earlier|later|early|late)\b|\b(might be|may be|could be|will be)\b.{0,30}\b(\d+\s*(min|minutes?) )?(early|late|earlier|later)\b|\b(\d+\s*(min|minutes?) )(early|late)\b/;
 const WEEKDAY_CODE: Record<string, string> = {
@@ -1261,18 +1261,20 @@ async function byStage(turn: Turn): Promise<void> {
           session.lastShownSlots.length > 0 &&
           session.lastShownSlots.every((slot) => slot.start.toISOString() !== current.slotStart);
         const shownDaysOnly = session.lastShownDates.length > 0 && session.lastShownSlots.length === 0 && (await session.hasLiveRegularTour());
-        if ((shownOtherDay || shownDaysOnly || session.lastShownSlots.length > 0) && (await tryRegularSlotFromConsent(turn))) return;
+        if ((shownOtherDay || shownDaysOnly) && (await tryRegularSlotFromConsent(turn))) return;
         return turn.fallback(`${SORRY} ${question}`, yesNo);
+      }
+      if (changeAsk) {
+        const shift = laterOrEarlierShift(text);
+        if (shift) return offerSameDayShift(turn, shift);
+        const spoken = spokenTimes(normalize(text));
+        if (spoken.length === 1) return fileCustomTime(turn, spoken[0]!);
+        if (intent.type === "REQUEST_CUSTOM_TIME" && turn.confident) return fileCustomTime(turn, asSpoken(intent));
       }
       const pending = await session.unapprovedCustomTimeRequest();
       const allowSlot = changeAsk || !!pending?.pendingNoticeSentAt || (await session.hasLiveRegularTour());
       if (allowSlot && (await tryRegularSlotFromConsent(turn))) return;
       if (changeAsk) {
-        const spoken = spokenTimes(normalize(text));
-        if (spoken.length === 1) return fileCustomTime(turn, spoken[0]!);
-        if (intent.type === "REQUEST_CUSTOM_TIME" && turn.confident) return fileCustomTime(turn, asSpoken(intent));
-        const shift = laterOrEarlierShift(text);
-        if (shift) return offerSameDayShift(turn, shift);
         await offerOpenDays(turn, excludedDays(text));
         return;
       }
