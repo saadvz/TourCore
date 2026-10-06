@@ -177,6 +177,12 @@ export function statusOf(tour: TourSnapshot): string {
   return tour.live ? "Browsing" : "Not started";
 }
 
+/** One operator-facing inspect line. Terminal status is not repeated as the step. */
+export function inspectTourSummary(view: { visitorName: string; unitName?: string; status: string; currentStep: string }): string {
+  const who = `${view.visitorName}${view.unitName ? `, ${view.unitName}` : ""}`;
+  return view.currentStep && view.currentStep !== view.status ? `${who}: ${view.status}. ${view.currentStep}.` : `${who}: ${view.status}.`;
+}
+
 /** One line per tour, in words an operator uses. */
 export function tourSummary(tour: TourSnapshot) {
   return {

@@ -182,7 +182,7 @@ contacted. Say "door access" to the operator; never name Durin.
 - Tour Core runs on the Bot's cloud computer (a demo deployment) or at a
   stable self-hosted address.
 - Visitor messaging: the provider the operator chooses (Sendblue, Twilio, Photon, or local QA loopback). Do not assume Sendblue.
-- QA without a carrier: put that building on local test texts (`choose_messaging_provider` with `local` and the property, or `set_services` with `messaging: local`), then `inject_local_sms` and `read_local_outbox`. Replies are separate bubbles. `hasMedia` injects a photo inbound (the file is not forwarded; a photo alone is told it can't take photos yet, and a photo plus a question it can't answer is one combined text and is flagged). Those tools refuse unless that building is on local. Other published buildings stay on the installation's live texting. Switching the installation's provider keeps saved carrier credentials.
+- QA without a carrier: put that building on local test texts (`choose_messaging_provider` with `local` and the property, or `set_services` with `messaging: local`), then `inject_local_sms` and `read_local_outbox`. Replies are separate bubbles. `hasMedia` injects a photo inbound (the file is not forwarded; a photo alone is told it can't take photos yet, and a photo plus a question it can't answer is one combined text and is flagged). Those tools refuse unless that building is on local. Other published buildings stay on the installation's live texting. `get_services` / `set_services local` say "Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on. Door access is still in demo mode, so no physical locks will open." Do not say texting is live. Publishing a local building leaves out "Visitors can start a tour by texting your touring number." Switching the installation's provider keeps saved carrier credentials.
 - Operator updates: the Tour Core Operator Updates Grok Routine.
 - Tour records: on the hosted product, stored by hosted Tour Core. Google Drive keeps portable backups and exports through Grok's connector. Optional direct Drive remains a separate mode.
 - Door access: Durin demo mode. No physical door is controlled.
@@ -191,4 +191,5 @@ contacted. Say "door access" to the operator; never name Durin.
 
 "Published for demo" is not a production launch. Describe each part as it is
 ("Visitor texting is live. Door access is still in demo mode, so no physical
-locks will open."); never say "everything runs in demo mode".
+locks will open."); for local test texts, use the test-mode sentence above.
+Never say "everything runs in demo mode".

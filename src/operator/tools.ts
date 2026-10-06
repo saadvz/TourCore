@@ -18,7 +18,8 @@ import { draftView, readinessView, saveStateView } from "../setup/presenters";
 import { parseDays, parseMinutes, parseTimeOfDay } from "../setup/parse";
 import type { DryTourCheck, DryTourResult } from "../setup/dryTour";
 import type { ReadinessResult } from "../setup/readiness";
-import { condoNextQuestion, createPropertySetup, modeSentence, operatorFacingPropertyName, OperatorTeamCopy, SetupInputError, tourableSpacesQuestion, visitorHelpLines, visitorHelpQuestion, type SetupDraft } from "../setup/setupActions";
+import { condoNextQuestion, createPropertySetup, localTestModeSentence, modeSentence, operatorFacingPropertyName, OperatorTeamCopy, SetupInputError, tourableSpacesQuestion, visitorHelpLines, visitorHelpQuestion, type SetupDraft } from "../setup/setupActions";
+import { usesLocalMessaging } from "../messaging/propertyScope";
 import { operatorUnitName } from "../visitor/identity";
 import { isHostedRailway } from "../install/deployment";
 import { statusLabel, type PublishBlocker } from "../setup/workspace";
@@ -45,7 +46,7 @@ import {
 import { matchDoor, requireUnit, resolvePropertyId } from "./resolve";
 import { defaultMessagingMode, type OperatorServices } from "./services";
 import { publishGuards, publishProperty, readinessForProperty, runPracticeTour, visitorTexting } from "./setupFlow";
-import { findTour, inspectTourView, listActiveTours, midSentence } from "./tours";
+import { findTour, inspectTourSummary, inspectTourView, listActiveTours, midSentence } from "./tours";
 import { approveTourTimeRequest, declineTourTimeRequest, inspectTourTimeRequest, listTourTimeRequests, proposeTourTime, rescheduleTour, scheduleOneOffTour } from "./tourTimes";
 import { injectLocalSms, readLocalOutbox } from "./localSms";
 
@@ -140,11 +141,15 @@ function propertyNextQuestion(draft: SetupDraft): { nextQuestion: string; choice
 
 /** The visitor-facing texting and door lines, kept apart: texting can be live while door access is demo. */
 function subsystemLines(ctx: ToolContext, id: string, draft: SetupDraft) {
-  const texting = visitorTexting(servicesOf(ctx), id, draft.messagingMode);
+  const services = servicesOf(ctx);
+  const texting = visitorTexting(services, id, draft.messagingMode);
+  const local = usesLocalMessaging(draft, services.installedMessaging?.());
   return {
     texting,
     lines: [`Visitor texting: ${texting.label}`, `Door access: ${draft.accessMode === "durin-mock" ? "Demo" : "Connected"}`],
-    sentence: modeSentence(texting.state === "connected", draft.accessMode === "durin-mock"),
+    sentence: local
+      ? localTestModeSentence(draft.accessMode === "durin-mock")
+      : modeSentence(texting.state === "connected", draft.accessMode === "durin-mock"),
   };
 }
 
@@ -826,7 +831,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Get messaging and records",
     kind: "read",
     description:
-      "How visitors are texted and whether this property is connected to the touring number, where tour records are kept, and door access mode, each on its own (texting can be live while door access is demo). Never contains credentials.",
+      'How visitors are texted and whether this property is connected to the touring number, where tour records are kept, and door access mode, each on its own (texting can be live while door access is demo). For local test texting the summary is "Texting is in test mode, so texts don\'t reach real phones. Real visitors won\'t get anything until live texting is turned on. Door access is still in demo mode, so no physical locks will open." — do not say texting is live and do not name the texting service. Never contains credentials.',
     input: z.strictObject({ property: Property }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
@@ -856,7 +861,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Set messaging and records",
     kind: "change",
     description:
-      'Chooses how visitors are texted for this building: "live" for real texts through the installation\'s messaging provider, "local" for QA test texts on this building only (other published buildings stay as they are), or "demo" for practice only. "sendblue" is accepted as an older name for "live". Does not change the installation provider and does not touch saved Sendblue, Twilio, or Photon credentials. Records stay on this computer. Door access mode can\'t be changed here. Credentials are never set through chat.',
+      'Chooses how visitors are texted for this building: "live" for real texts through the installation\'s messaging provider, "local" for QA test texts on this building only (other published buildings stay as they are), or "demo" for practice only. "sendblue" is accepted as an older name for "live". Local summary: "Texting is in test mode, so texts don\'t reach real phones. Real visitors won\'t get anything until live texting is turned on. Door access is still in demo mode, so no physical locks will open." Do not say texting is live and do not name the texting service. Does not change the installation provider and does not touch saved Sendblue, Twilio, or Photon credentials. Records stay on this computer. Door access mode can\'t be changed here. Credentials are never set through chat.',
     input: z.strictObject({ property: Property, messaging: z.enum(["live", "sendblue", "demo", "local"]).optional(), records: z.enum(["this-computer", "google-drive"]).optional() }),
     run: async (ctx, i) => {
       if (i.records === "google-drive") throw new SetupInputError("STORAGE_UNAVAILABLE", "Keeping records in Google Drive isn't available yet. They'll stay on this computer for now.");
@@ -874,7 +879,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Review the setup",
     kind: "read",
     description:
-      'Everything on one page, as short lines to read back to the operator ("Here\'s what I have: ..."): the address, property type, each tourable unit with its details and route, tour hours, verification, visitor texting and door access, and the visitor help number (or "not set"). Plus anything still missing. No addresses of Tour Core itself or other technical details.',
+      'Everything on one page, as short lines to read back to the operator ("Here\'s what I have: ..."): the address, property type, each tourable unit with its details and route, tour hours, verification, visitor texting and door access, and the visitor help number (or "not set"). A single-family home\'s unit heading is the street line (same helper as operatorUnitName), never "Main Home". Multifamily, apartment and condo units keep their stored names. Plus anything still missing. No addresses of Tour Core itself or other technical details.',
     input: z.strictObject({ property: Property }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
@@ -888,7 +893,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         ...(draft.property.buildingAccess === "BUILDING_AND_UNIT" ? ["Building entrance: you control it"] : []),
         ...(draft.units[0]?.entryInstructions ? [`Entry instructions: ${draft.units[0].entryInstructions}`] : []),
         "",
-        ...view.units.flatMap((u) => [u.name, `  ${u.details.line.slice(u.details.line.indexOf(" \u2014 ") + 3)}`, `  Route: ${u.route ? u.route.doorNames.join(" \u2192 ") : "not set yet"}`]),
+        ...view.units.flatMap((u) => [operatorUnitName(draft.property, u.name), `  ${u.details.line.slice(u.details.line.indexOf(" \u2014 ") + 3)}`, `  Route: ${u.route ? u.route.doorNames.join(" \u2192 ") : "not set yet"}`]),
         ...(view.units.length ? [] : ["No tourable units yet"]),
         "",
         `Tours: ${view.tourHours.summary ?? `${view.tourHours.daysLabel}, ${view.tourHours.hoursLabel}`}`,
@@ -912,7 +917,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Run the readiness check",
     kind: "change",
     description:
-      "Runs Tour Core's real readiness checks (property, hours, routes, verification, messaging, records, tour progress, Durin access, audit/export). Report the result as-is, including any advisory lines; never claim a check passed if it didn't.",
+      'Runs Tour Core\'s real readiness checks (property, hours, routes, verification, messaging, records, tour progress, Durin access, audit/export). A shared texting number names the other property by its street line ("This texting number is already used for 12 Scratch Lane."), never a property id and never "Main Home". Report the result as-is, including any advisory lines; never claim a check passed if it didn\'t.',
     input: z.strictObject({ property: Property }),
     run: async (ctx, i) => {
       const id = resolvePropertyId(ctx.services.workspace, i.property);
@@ -944,7 +949,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Publish for demo",
     kind: "consequential",
     description:
-      "Publishes the property for demo so visitors can start tours. Only works when the saved setup is valid and both the readiness check and a practice tour passed for this exact setup. Open conversations then use these published settings (hours, units, and so on) on every inbound text. First call returns a yes/no question; ask it and call again with confirmationCode only after an explicit yes.",
+      'Publishes the property for demo so visitors can start tours. Only works when the saved setup is valid and both the readiness check and a practice tour passed for this exact setup. Open conversations then use these published settings (hours, units, and so on) on every inbound text. First call returns a yes/no question; ask it and call again with confirmationCode only after an explicit yes. For a real texting provider the summary includes "Visitors can start a tour by texting your touring number." Leave that line out entirely when this building is on local or test-only texts.',
     input: z.strictObject({ property: Property, confirmationCode: Code }),
     run: async (ctx, i) => {
       const ws = ctx.services.workspace;
@@ -973,12 +978,12 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         : [{ code: "NOT_SAVED", message: "Finish the setup answers first." }];
       if (blockers.length) return blocked(blockers);
       const { config, state } = saved!;
-      const modes = subsystemLines(ctx, id, config).sentence;
+      const modes = subsystemLines(ctx, id, config);
       if (state.status === "PUBLISHED_FOR_DEMO") {
         return {
           published: true,
           status: "already-published",
-          summary: `${config.property.name} is already published for demo. ${modes}`,
+          summary: `${config.property.name} is already published for demo. ${modes.sentence}`,
           instructions: "This property is already published. Tell the operator that. Do not ask them to publish again.",
         };
       }
@@ -987,13 +992,13 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       ctx.confirmations.redeem(i.confirmationCode, "publish", id, fingerprint);
       const result = await publishProperty(services, id, ctx.now());
       if (!result.published) return blocked(result.blockers);
-      const live = subsystemLines(ctx, id, config).texting.state === "connected";
+      const realPhones = modes.texting.state === "connected" && !usesLocalMessaging(config, services.installedMessaging?.());
       const again = ctx.services.workspace.load(id);
       return {
         published: true,
         status: again.state.status === "PUBLISHED_FOR_DEMO" ? "published" : "unpublished",
-        summary: `${config.property.name} is published for demo.${live ? " Visitors can start a tour by texting your touring number." : ""} ${modes}`,
-        modes,
+        summary: `${config.property.name} is published for demo.${realPhones ? " Visitors can start a tour by texting your touring number." : ""} ${modes.sentence}`,
+        modes: modes.sentence,
         instructions: "Publishing finished. Tell the operator the property is published, using summary. Do not say it still needs a yes.",
       };
     },
@@ -1046,13 +1051,13 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "inspect_tour",
     title: "Inspect a tour",
     kind: "read",
-    description: "What's happening on one tour: status, latest activity, questions, access grant times, access denials, recent messages, and anything that needs the team.",
+    description: "What's happening on one tour: status, latest activity, questions, access grant times, access denials, recent messages, and anything that needs the team. The summary names the status once (do not repeat Cancelled, Called off, Finished, or other terminal states).",
     input: z.strictObject({ tourRef: TourRef }),
     run: async (ctx, i) => {
       const tour = await findTour(ctx.services, i.tourRef);
       const attention = (await listExceptions(ctx.services, { propertyId: tour.propertyId })).filter((x) => x.tourRef === i.tourRef).map(exceptionLine);
       const view = inspectTourView(tour);
-      return { summary: `${view.visitorName}${view.unitName ? `, ${view.unitName}` : ""}: ${view.status}. ${view.currentStep}.`, tour: view, needsAttention: attention };
+      return { summary: inspectTourSummary(view), tour: view, needsAttention: attention };
     },
   }),
 
