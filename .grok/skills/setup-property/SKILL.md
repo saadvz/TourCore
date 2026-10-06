@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Guided property setup, checked and practiced before publish
-  version: "0.3.11"
+  version: "0.3.12"
 ---
 
 # Setup Property
@@ -85,7 +85,9 @@ the operator correct it.
      `entryInstructions`, or `skipEntryInstructions: true` if they skip.
      Skip stores nothing. Visitors hear those words only after identity
      verification, on the you're-all-set text. The nickname is the street
-     plus unit (`145 Main St, Unit 4B`), never "Main Home".
+     plus unit (`145 Main St, Unit 4B`), never "Main Home". Mid-tour texts
+     say `at Unit 4B`; a single-family home says `the front door`, never
+     "Main Home".
 
    Never write a description or fact yourself.
 5. **Unit information, before doors and routes.** Ask for bedrooms, bathrooms,
@@ -202,7 +204,9 @@ the property isn't offering tours anymore (not that they'll be texted when
 tours are back) and pending door access is switched off. Waiting visitors are
 not texted that tours are back. A later text to that line gets a goodbye and
 cannot book. It is refused while someone is on a tour. Published records stay
-(`export_audit`, `inspect_tour`); an unpublished setup is removed completely.
+(`export_audit`, `inspect_tour`) — including a property sent back to draft
+when it still has a publish timestamp, tour or reservation records, or a
+publish event in its audit. An unpublished setup is removed completely.
 Ask the exact question it returns: unpublished (complete or not) uses
 **Remove the setup for {name}? It isn't published yet, so no visitors are
 affected, but everything entered for it will be deleted for good.** Published

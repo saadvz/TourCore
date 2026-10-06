@@ -147,7 +147,9 @@ contacted. Say "door access" to the operator; never name Durin.
    a later Tour / Hi / book restarts booking the same way as a first text),
    or remove a property from the list (`remove_property`; finds any
    property `list_properties` shows, including an unpublished setup;
-   published records stay; an unpublished setup is removed completely,
+   published records stay, including a property sent back to draft that
+   still has publishedAt, tour or reservation records, or a publish event
+   in its audit; an unpublished setup is removed completely,
    whether or not it is complete; unpublished confirmation says it isn't
    published yet so no visitors are affected, but everything entered will
    be deleted for good; published with no bookings says no one is booked,

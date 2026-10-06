@@ -33,10 +33,13 @@ import { MessagingConversations } from "../src/visitor/messagingRouter";
 import { smsHelpBody, smsStopAck } from "../src/visitor/smsConsent";
 import { VerificationLinks } from "../src/visitor/verificationLinks";
 import { listWaiters } from "../src/setup/pauseWaiters";
-import { readAvailabilityEvents } from "../src/operator/availability";
+import { availabilityEventsPath, readAvailabilityEvents } from "../src/operator/availability";
 import { tourRef } from "../src/operator/tours";
 import { at, grokHarness, type GrokHarness } from "./grokHarness";
-import { operatorFacingPropertyName } from "../src/setup/setupActions";
+import { operatorFacingPropertyName, SetupInputError } from "../src/setup/setupActions";
+import { bookingRefusal } from "../src/setup/availability";
+import { operatorUnitName } from "../src/visitor/identity";
+import { writeJsonAtomic } from "../src/storage/atomicWrite";
 import { bookTour, setup } from "./helpers";
 
 const cleanups: Array<() => void> = [];
@@ -84,6 +87,47 @@ describe("availability copy", () => {
 
   it("uses the approved paused-unit line", () => {
     expect(pausedUnitVisitorText("Unit 101")).toBe("Unit 101 isn't open for tours right now.");
+  });
+
+  it("paused-unit visitor text uses the short unit label, or the street line for a single-family home", () => {
+    const condo = {
+      address: "145 Main St, Hoboken, NJ 07030",
+      propertyType: "APARTMENT_OR_CONDO" as const,
+      canonicalAddress: { street: "145 Main St" },
+    };
+    const home = {
+      address: "12 Oak St, Teaneck, NJ 07666",
+      propertyType: "SINGLE_FAMILY" as const,
+      canonicalAddress: { street: "12 Oak St" },
+    };
+    expect(pausedUnitVisitorText(operatorUnitName(condo, "Unit 4B"))).toBe("Unit 4B isn't open for tours right now.");
+    expect(pausedUnitVisitorText(operatorUnitName(condo, "Unit 4B"))).not.toContain("145 Main St");
+    expect(pausedUnitVisitorText(operatorUnitName(home, "Main Home"))).toBe("12 Oak St isn't open for tours right now.");
+    expect(pausedUnitVisitorText(operatorUnitName(home, "Main Home"))).not.toContain("Main Home");
+
+    const { config } = setup();
+    const unit = config.units[0]!;
+    const other = config.units[1]!;
+    expect(
+      bookingRefusal({ propertyId: config.property.id, status: "DRAFT", configHash: "", savedAt: "", pausedUnitIds: [unit.id] }, config, unit.id)?.message,
+    ).toBe("Unit 101 isn't open for tours right now.");
+    const sfConfig = {
+      ...config,
+      property: {
+        ...config.property,
+        propertyType: "SINGLE_FAMILY" as const,
+        address: home.address,
+        name: home.address,
+        canonicalAddress: { ...(config.property.canonicalAddress ?? { street: "12 Oak St", city: "Teaneck", state: "NJ", formatted: home.address }), street: "12 Oak St" },
+      },
+      units: [
+        { ...unit, id: "home", name: "Main Home" },
+        { ...other, id: "cottage", name: "Cottage" },
+      ],
+    };
+    expect(
+      bookingRefusal({ propertyId: sfConfig.property.id, status: "DRAFT", configHash: "", savedAt: "", pausedUnitIds: ["home"] }, sfConfig, "home")?.message,
+    ).toBe("12 Oak St isn't open for tours right now.");
   });
 
   it("uses the approved remove summaries for a published property and an in-progress setup", () => {
@@ -528,6 +572,76 @@ describe("pause and remove", () => {
     expect(freshAsked.summary).not.toContain("Tenafly");
     expect(freshAsked.summary).not.toContain("Main Home");
     expect(freshDone.summary).toBe(removedSetupSummary("8 Pine Rd"));
+  });
+
+  it("legacy draft with a booked tour but no publishedAt keeps records and cancels the visitor", async () => {
+    const h = app();
+    const id = await h.publish();
+    const v = await readyVisitor(h, id);
+    const reservation = (await v.session.reservation())!;
+    h.workspace.patchState(id, { status: "DRAFT", publishedAt: undefined });
+    expect(h.workspace.load(id).state.publishedAt).toBeUndefined();
+    expect(h.workspace.load(id).state.status).toBe("DRAFT");
+    expect(h.workspace.hasTourOrReservationRecords(id)).toBe(true);
+
+    const name = operatorFacingPropertyName(h.workspace.load(id).config);
+    const asked = await h.ok("remove_property", { property: id });
+    expect(asked.summary).toBe(removeConfirmQuestion(name, 1));
+    expect(asked.summary).toContain("1 booked visitor gets");
+    expect(asked.summary).not.toMatch(/isn't published yet/);
+    const done = await h.ok("remove_property", { property: id, confirmationCode: asked.confirmation.code });
+    expect(done.summary).toBe(removedPropertySummary(name));
+    expect(h.workspace.has(id)).toBe(true);
+    expect(h.workspace.load(id).state.removedAt).toBeTruthy();
+    expect(existsSync(join(h.root, "properties", id, "tourcore.config.json"))).toBe(true);
+    expect((await v.session.reservation())!.status).toBe("CANCELLED");
+    const { config } = h.workspace.load(id);
+    expect(lastFrom(v.session)).toBe(
+      bookedTourCalledOffText({
+        team: config.operator.name,
+        day: formatDay(new Date(reservation.slotStart!), config.property.timezone),
+        time: formatTime(new Date(reservation.slotStart!), config.property.timezone),
+        address: config.property.address,
+        propertyWide: true,
+        removed: true,
+      }),
+    );
+  });
+
+  it("legacy draft with only a publish audit event keeps records", async () => {
+    const h = app();
+    const created = await h.ok("create_property_setup", { address: "12 Oak St, Teaneck, NJ 07666", propertyType: "SINGLE_FAMILY" });
+    const id = created.setup.propertyId as string;
+    await h.ok("add_unit", {});
+    expect(h.workspace.has(id)).toBe(true);
+    expect(h.workspace.load(id).state.publishedAt).toBeUndefined();
+    expect(h.workspace.listTours(id)).toEqual([]);
+    writeJsonAtomic(availabilityEventsPath(h.root, id), {
+      schemaVersion: 1,
+      events: [{ id: "aud_legacy_publish", seq: 1, type: "PROPERTY_PUBLISHED", at: new Date(h.now()).toISOString(), detail: "published for demo" }],
+    });
+    expect(h.workspace.wasEverPublished(id)).toBe(true);
+
+    const asked = await h.ok("remove_property", { property: id });
+    expect(asked.summary).toBe(removeConfirmQuestion("12 Oak St", 0));
+    expect(asked.summary).toContain("No one is booked, so no cancel texts go out.");
+    expect(asked.summary).not.toMatch(/isn't published yet/);
+    const done = await h.ok("remove_property", { property: id, confirmationCode: asked.confirmation.code });
+    expect(done.summary).toBe(removedPropertySummary("12 Oak St"));
+    expect(h.workspace.has(id)).toBe(true);
+    expect(h.workspace.load(id).state.removedAt).toBeTruthy();
+    expect(existsSync(join(h.root, "properties", id))).toBe(true);
+  });
+
+  it("removeInProgressSetup refuses when tour records exist", async () => {
+    const h = app();
+    const id = await h.publish();
+    h.workspace.patchState(id, { status: "DRAFT", publishedAt: undefined });
+    expect(h.workspace.load(id).state.status).toBe("DRAFT");
+    expect(h.workspace.hasTourOrReservationRecords(id)).toBe(true);
+    expect(() => h.workspace.removeInProgressSetup(id)).toThrow(new SetupInputError("PROPERTY_PUBLISHED", "That property is already published."));
+    expect(h.workspace.has(id)).toBe(true);
+    expect(existsSync(join(h.root, "properties", id, "tourcore.config.json"))).toBe(true);
   });
 
   it("published confirmation uses singular gets for one booked visitor and no-cancel copy for zero", async () => {

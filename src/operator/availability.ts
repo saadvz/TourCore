@@ -275,9 +275,7 @@ export async function resumeTours(ctx: Ctx, input: { property?: string; unit?: s
 }
 
 function isUnpublished(ctx: Ctx, propertyId: string): boolean {
-  if (!ctx.services.workspace.has(propertyId)) return true;
-  const { state } = ctx.services.workspace.load(propertyId);
-  return state.status !== "PUBLISHED_FOR_DEMO" && !state.publishedAt;
+  return !ctx.services.workspace.wasEverPublished(propertyId);
 }
 
 export async function removeProperty(ctx: Ctx, input: { property?: string; confirmationCode?: string }) {

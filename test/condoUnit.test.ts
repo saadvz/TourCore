@@ -390,6 +390,35 @@ describe("apartment or condo visitor and landlord copy", () => {
     expect(opened).not.toContain("Here's how to get in");
   });
 
+  it("mid-tour copy says at Unit 4B, never the street-plus-unit nickname", async () => {
+    const draft = condoDraft("BUILDING_AND_UNIT");
+    const booked = await bookCondo(draft);
+    expect(booked.core.stopName(draft.units[0]!.doorId)).toBe("Unit 4B");
+    expect(booked.core.stopName(draft.units[0]!.doorId)).not.toContain("145 Main St");
+    booked.clock.set(new Date(booked.ready.slotStart!));
+    await booked.request(draft.routes[0]!.stops[0]!.doorId);
+    const afterEntrance = (await booked.outbound()).join("\n");
+    expect(afterEntrance).toContain('Text "at Unit 4B" when you get there.');
+    expect(afterEntrance).not.toContain("at 145 Main St, Unit 4B");
+    expect(afterEntrance).not.toContain("Main Home");
+  });
+
+  it("single-family mid-tour copy uses the door name, never Main Home", () => {
+    let draft = createPropertySetup({ address: "12 Oak St, Teaneck, NJ 07666", propertyType: "SINGLE_FAMILY" });
+    draft = addTourableSpace(draft, {});
+    const clock = new SimulatedClock(zonedTimeToUtc({ ...TOUR_DAY, hour: 10, minute: 0 }, draft.property.timezone));
+    const core = createTourCore(draft, {
+      clock,
+      durin: new MockDurinAccessAdapter({ doorNames: Object.fromEntries(draft.doors.map((d) => [d.id, d.name])), log: () => {}, now: () => clock.now() }),
+      messenger: new ConsoleMessenger(() => {}),
+      store: new InMemoryStore(),
+    });
+    const doorId = draft.units[0]!.doorId;
+    expect(core.stopName(doorId)).toBe("the front door");
+    expect(core.stopName(doorId)).not.toContain("Main Home");
+    expect(core.stopName(doorId)).not.toBe("12 Oak St");
+  });
+
   it("landlord alerts name the street and unit, never Main Home", () => {
     const draft = condoDraft("UNIT_ONLY");
     const tour = { config: draft, bundle: { reservations: [{ unitId: draft.units[0]!.id }] } };

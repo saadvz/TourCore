@@ -18,7 +18,7 @@ import type { DurinAccessAdapter, DurinAccessResult, DurinHealth } from "../duri
 import { MessagingError, type DeliveryReceipt, type MessageChannel, type Messenger } from "../messaging/Messenger";
 import { withPrompt, type ReplyPrompt } from "../messaging/presentation";
 import { evaluateAccess, type AccessDecision, type AccessDecisionCode } from "../policy/evaluateAccess";
-import { isSingleTourPlace, visitorSubject } from "../visitor/identity";
+import { isSingleTourPlace, streetLine, visitorSubject } from "../visitor/identity";
 import { entryInstructionsFragment } from "../setup/setupActions";
 import { StorageUnavailableError } from "../storage/errors";
 import type { TourCoreStore } from "../storage/Store";
@@ -1366,11 +1366,18 @@ export class TourCore {
     return first?.kind === "ENTRANCE" ? "when you arrive and I'll open the entrance" : "when you arrive and I'll open the unit door";
   }
 
-  /** How a door is named in guidance: "Unit 101", "the entrance", or the door's own name. */
+  /** How a door is named in visitor guidance: "Unit 4B", "the front door", or "the entrance". Never "Main Home". */
   stopName(doorId: string): string {
     const unit = this.deps.config.units.find((u) => u.doorId === doorId);
-    if (unit) return visitorSubject(this.deps.config.property, unit.name);
     const door = this.deps.config.doors.find((d) => d.id === doorId);
+    if (unit) {
+      if (this.deps.config.property.propertyType === "SINGLE_FAMILY") {
+        const named = door?.name?.trim();
+        if (named) return `the ${named.replace(/^the\s+/i, "").toLowerCase()}`;
+        return streetLine(this.deps.config.property);
+      }
+      return unit.name;
+    }
     return door?.kind === "ENTRANCE" ? "the entrance" : door?.name ?? "the next door";
   }
 
