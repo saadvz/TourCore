@@ -1057,7 +1057,7 @@ describe("QA review blocking items", () => {
       const replies = ctx.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text);
       const start = new Date(pending.slotStart!);
       expect(replies.at(-2)).toBe(bookedForLine(formatTime(start, TZ), formatDay(start, TZ)));
-      expect(replies.at(-1)).toBe(CONSENT_TEXT);
+      expect(replies.at(-1)).toBe(`${CONSENT_TEXT}\nReply YES or NO.`);
       expect(replies.at(-1)).not.toBe(TOUR_ENDED_REPLY);
     };
 
