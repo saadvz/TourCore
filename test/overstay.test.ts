@@ -28,7 +28,7 @@ import {
   tourFinishedFollowUp,
   visitorRepliedAfterClose,
 } from "../src/core/overstayCopy";
-import { bookedForLine, CONSENT_TEXT, pendingCustomTimeLine, TourCoreError, TOUR_ENDED_REPLY, VisitorDenialCopy } from "../src/core/TourCore";
+import { bookedForLine, CONSENT_TEXT, customTimeAskedLine, pendingCustomTimeLine, TourCoreError, TOUR_ENDED_REPLY, VisitorDenialCopy } from "../src/core/TourCore";
 import { runDryTour } from "../src/setup/dryTour";
 import { formatDay, formatTime, zonedTimeToUtc } from "../src/core/timezone";
 import { newId, UNNAMED_VISITOR, type Reservation, type TourTimeRequest } from "../src/domain/model";
@@ -1361,7 +1361,9 @@ describe("QA review blocking items", () => {
     expect((await ctx.session.reservation())!.status).toBe("TOURING");
     expect(ctx.session.pendingBookingId).toBe(request.reservationId);
     const replies = ctx.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text);
-    expect(replies.at(-1)).toContain("isn't one of the regular tour times");
+    const current = (await ctx.session.reservation())!;
+    const currentStart = new Date(current.slotStart!);
+    expect(replies.at(-1)).toBe(customTimeAskedLine(formatTime(later, TZ), formatDay(later, TZ), formatTime(currentStart, TZ), formatDay(currentStart, TZ)));
     expect(replies.at(-1)).not.toContain("moving your tour");
   });
 
