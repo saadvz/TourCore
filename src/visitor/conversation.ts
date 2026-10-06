@@ -4,6 +4,7 @@ import { isoDate, parseIsoDate } from "../core/schedule";
 import { dayReference, type DayReference, type SpokenTime } from "../core/spokenTime";
 import { addDays, formatDay, formatTime, localDateOf, weekdayOf, zonedParts, type LocalDate } from "../core/timezone";
 import {
+  TOUR_AGAIN_SUFFIX,
   TOUR_ENDED_REPLY,
   unknownAnswerReply,
   VisitorDenialCopy,
@@ -139,6 +140,9 @@ class Turn {
     readonly awaiting?: StepAwaiting,
   ) {}
 
+  /** True when this inbound already got the short photo line. Combined unknown replies must not mention photos again. */
+  photoLineSent = false;
+
   markClarification(): void {
     this.note.clarification = true;
   }
@@ -267,6 +271,7 @@ export async function handleVisitorText(
     photoAck.consume();
   } else {
     await photoAck.send();
+    turn.photoLineSent = photo && !!typed && !silent;
   }
 
   if (intent.type === "STOP_MESSAGES" && turn.confident) await session.optOut(said);
@@ -363,6 +368,10 @@ function unitFromReply(session: VisitorDemoSession, text: string, offered: strin
   return pick ? units.find((u) => u.name === pick) : undefined;
 }
 
+function unknownReplyFor(turn: Turn, ended = false): string {
+  return unknownAnswerReply({ hasMedia: !!turn.said.meta?.hasMedia && !turn.photoLineSent, ended });
+}
+
 /** True when this turn will send a combined unknown-question text instead of the short photo line. */
 async function willSendCombinedUnknown(
   session: VisitorDemoSession,
@@ -372,22 +381,36 @@ async function willSendCombinedUnknown(
   firstMessage: boolean,
 ): Promise<boolean> {
   if (intent.type !== "ASK_PROPERTY_QUESTION") return false;
-  if (ended) return true;
   if (stage === "intro" && !firstMessage) return false;
-  if (stage === "stopped" || stage === "done") return false;
+  if ((stage === "stopped" || stage === "done") && !ended) return false;
   const r = await session.reservation();
   return resolveQuestion(session.config, intent.question, { selectedUnitId: r?.unitId }).kind === "unknown";
 }
 
-async function flagEndedQuestion(turn: Turn): Promise<void> {
+/** Ended tour: answer from approved facts first; flag only when there is no answer. */
+async function handleEndedQuestion(turn: Turn): Promise<void> {
+  const question = turn.intent.type === "ASK_PROPERTY_QUESTION" ? turn.intent.question : (turn.said.text ?? "");
   await turn.session.recordText(turn.said);
-  await turn.session.flagUnknownQuestion(turn.said, {
-    reply: unknownAnswerReply({ hasMedia: !!turn.said.meta?.hasMedia, ended: true }),
+  const r = await turn.session.reservation();
+  const resolved = resolveQuestion(turn.session.config, question, { selectedUnitId: r?.unitId });
+  if (resolved.kind === "unknown") {
+    await turn.session.flagUnknownQuestion(turn.said, { reply: unknownReplyFor(turn, true), alreadyRecorded: true });
+    return;
+  }
+  const out = await turn.session.askQuestion(question, {
+    meta: turn.said.meta,
     alreadyRecorded: true,
+    unknownReply: unknownReplyFor(turn, true),
+    answerSuffix: TOUR_AGAIN_SUFFIX,
   });
+  if (out.outcome === "which-unit") {
+    const units = out.units ?? [];
+    turn.markClarification();
+    await turn.session.reply(`Which unit do you mean: ${orList(units)}?${TOUR_AGAIN_SUFFIX}`, { kind: "choose", options: units, what: "a unit" });
+  }
 }
 
-/** STOP'd visitors get no texts; an unanswerable (or ended) question is still flagged. */
+/** STOP'd visitors get no texts; an unanswerable question is still flagged. */
 async function flagSilentOptedOutQuestion(
   session: VisitorDemoSession,
   said: Said,
@@ -405,7 +428,7 @@ async function flagSilentOptedOutQuestion(
   const ended = (stage === "done" || stage === "stopped") && !(await session.isPaused());
   const r = await session.reservation();
   const resolved = resolveQuestion(session.config, interpretation.intent.question, { selectedUnitId: r?.unitId });
-  if (ended || resolved.kind === "unknown") {
+  if (resolved.kind === "unknown") {
     await session.flagUnknownQuestion(said, { reply: unknownAnswerReply({ hasMedia: photo, ended }) });
     return;
   }
@@ -424,7 +447,7 @@ async function ask(turn: Turn, question: string, resume?: () => Promise<void>): 
   const out = await session.askQuestion(question, {
     meta: turn.said.meta,
     alreadyRecorded: true,
-    unknownReply: unknownAnswerReply({ hasMedia: !!turn.said.meta?.hasMedia }),
+    unknownReply: unknownReplyFor(turn),
   });
   if (turn.interpretation.mentionedTime && out.outcome !== "which-unit") {
     await confirmMentionedTime(turn, turn.interpretation.mentionedTime);
@@ -893,7 +916,7 @@ async function byStage(turn: Turn): Promise<void> {
         if (intent.type === "REQUEST_HELP") return session.help(turn.said);
         return turn.respond(VisitorDenialCopy.operatorHold(session.config.operator.name, session.config.operator.visitorContact));
       }
-      if (intent.type === "ASK_PROPERTY_QUESTION") return flagEndedQuestion(turn);
+      if (intent.type === "ASK_PROPERTY_QUESTION") return handleEndedQuestion(turn);
       return turn.respond(TOUR_ENDED_REPLY);
   }
 }

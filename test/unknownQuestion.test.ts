@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  TOUR_AGAIN_SUFFIX,
   TOUR_ENDED_REPLY,
   UNKNOWN_ANSWER,
   UNKNOWN_ANSWER_ENDED,
@@ -38,7 +39,9 @@ interface QuestionApp {
   book: () => Promise<void>;
   finishTour: () => Promise<void>;
   cancelTour: () => Promise<void>;
+  beginCancel: () => Promise<string[]>;
   exceptions: () => Promise<Array<{ summary: string; unitName?: string }>>;
+  operatorAlerts: () => string[];
 }
 
 async function sendblueApp(): Promise<QuestionApp> {
@@ -62,7 +65,9 @@ async function sendblueApp(): Promise<QuestionApp> {
       await a.text("please cancel my tour");
       await a.text("YES");
     },
+    beginCancel: () => a.text("please cancel my tour"),
     exceptions: async () => (await a.grok("list_exceptions")).exceptions,
+    operatorAlerts: () => a.fake.sent.filter((s) => s.number !== PHONE).map((s) => s.content),
   };
 }
 
@@ -161,13 +166,18 @@ async function localApp(): Promise<QuestionApp> {
       await text("please cancel my tour");
       await text("YES");
     },
+    beginCancel: () => text("please cancel my tour"),
     exceptions: async () => (await grok("list_exceptions")).exceptions,
+    operatorAlerts: () => [],
   };
 }
 
 async function appFor(provider: Provider): Promise<QuestionApp> {
   return provider === "sendblue" ? sendblueApp() : localApp();
 }
+
+const PARKING = "Here's what the property team shared: Street parking only.";
+const photoMentions = (replies: string[]) => (replies.join("\n").match(/can't take photos/gi) ?? []).length;
 
 describe("unknownAnswerReply", () => {
   it("picks the locked visitor line for each case", () => {
@@ -244,6 +254,38 @@ describe.each(["sendblue", "local"] as const)("unanswered visitor questions (%s)
     expect(replies).toContain(TOUR_ENDED_REPLY);
     expect(replies.join("\n")).not.toContain(UNKNOWN_ANSWER_ENDED_WITH_PHOTO);
     expect(await a.exceptions()).toEqual([]);
+  });
+
+  it("an ended-tour approved-fact question is answered with the HI line and is not flagged", async () => {
+    const a = await appFor(provider);
+    await a.book();
+    await a.finishTour();
+    expect(await a.text("Is there parking?")).toEqual([`${PARKING}${TOUR_AGAIN_SUFFIX}`]);
+    expect(await a.exceptions()).toEqual([]);
+    expect(a.operatorAlerts().join("\n")).not.toMatch(/no approved answer/i);
+  });
+
+  it("an ended-tour photo plus an approved-fact question keeps the short photo line, then the answer with HI, and is not flagged", async () => {
+    const a = await appFor(provider);
+    await a.book();
+    await a.cancelTour();
+    const replies = await a.text("Is there parking?", { photo: true });
+    expect(replies[0]).toBe(PHOTO_WITH_TEXT_REPLY);
+    expect(replies).toContain(`${PARKING}${TOUR_AGAIN_SUFFIX}`);
+    expect(photoMentions(replies)).toBe(1);
+    expect(replies.join("\n")).not.toContain(UNKNOWN_ANSWER_ENDED_WITH_PHOTO);
+    expect(await a.exceptions()).toEqual([]);
+    expect(a.operatorAlerts().join("\n")).not.toMatch(/no approved answer/i);
+  });
+
+  it("a photo plus a question while cancel confirmation is pending mentions photos only once", async () => {
+    const a = await appFor(provider);
+    await a.book();
+    await a.beginCancel();
+    const replies = await a.text("Is there a gym?", { photo: true });
+    expect(photoMentions(replies)).toBe(1);
+    expect(replies.filter((r) => r === PHOTO_WITH_TEXT_REPLY).length + replies.filter((r) => r === UNKNOWN_ANSWER_WITH_PHOTO).length).toBe(1);
+    expect(replies.join("\n")).not.toMatch(/MMS/i);
   });
 
   it("an ended-tour photo question is one combined text and is flagged", async () => {

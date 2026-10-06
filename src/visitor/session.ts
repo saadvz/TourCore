@@ -535,7 +535,7 @@ export class VisitorDemoSession {
    * conversation's own step changes. `unitId` overrides the unit context (the
    * visitor just said which unit they meant).
    */
-  async askQuestion(question: string, options: { meta?: InboundMeta; unitId?: string; alreadyRecorded?: boolean; unknownReply?: string } = {}): Promise<QuestionOutcome> {
+  async askQuestion(question: string, options: { meta?: InboundMeta; unitId?: string; alreadyRecorded?: boolean; unknownReply?: string; answerSuffix?: string } = {}): Promise<QuestionOutcome> {
     const r = await this.reservation();
     const out = await this.core.answerPropertyQuestion({
       phone: this.visitor?.phone ?? "",
@@ -545,6 +545,7 @@ export class VisitorDemoSession {
       meta: options.meta,
       recordInbound: !options.alreadyRecorded,
       ...(options.unknownReply ? { unknownReply: options.unknownReply } : {}),
+      ...(options.answerSuffix ? { answerSuffix: options.answerSuffix } : {}),
     });
     await this.syncReplies();
     return { outcome: out.outcome, ...(out.units ? { units: out.units } : {}) };

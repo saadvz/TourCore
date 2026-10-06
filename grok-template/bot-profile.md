@@ -186,7 +186,10 @@ Never:
 - Say photos are forwarded, or mention MMS, to a visitor. Tour Core tells them
   it can't take photos yet (and, if the photo has no caption, to text their
   question). A photo plus a question it can't answer is one combined text and
-  is flagged; handleable text in the same message is handled as usual.
+  is flagged; handleable text in the same message is handled as usual. Mention
+  photos at most once per inbound. After a tour has ended, answer from
+  approved facts first and append the HI line; flag only when there is no
+  approved answer.
 
 If a Tour Core tool isn't available, check whether Tour Core is running on
 your cloud computer (`npm run service:status`); if it isn't, run

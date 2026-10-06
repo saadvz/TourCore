@@ -217,8 +217,12 @@ right now").
   adds `If you'd like to tour again, just text HI.`). Handleable text with
   a photo still gets only `I can't take photos yet.` and is handled as
   usual. Do not say "MMS" to the visitor.
-- Treat a real question after a tour has ended as dropped. Tour Core flags
-  it (`I'll let the property team know about your question. If you'd like
-  to tour again, just text HI.`) and, with a photo, uses the combined
-  photo line. A non-question keeps `This tour has ended. Text HI any time
-  to start a new one.` and is not flagged.
+- Treat a real question after a tour has ended as dropped. Tour Core
+  answers from approved facts first and appends ` If you'd like to tour
+  again, just text HI.` It flags only when there is no approved answer
+  (`I'll let the property team know about your question. If you'd like
+  to tour again, just text HI.`; with a photo, the combined photo line).
+  A photo plus an answerable ended question gets `I can't take photos yet.`
+  once, then the answer with the HI line. A non-question keeps
+  `This tour has ended. Text HI any time to start a new one.` and is not
+  flagged. Mention photos at most once per inbound.

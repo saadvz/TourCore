@@ -32,7 +32,9 @@ After the answer, Tour Core puts the interrupted step back in front of them
 pending confirmation). A question it can't answer gets one text, "I'll let
 the property team know about your question.", plus an issue and an operator
 update. When the operator answers, the visitor gets the answer and the step
-they were on. After a tour has ended, a real question is still flagged:
+they were on. After a tour has ended, an approved-fact question is answered
+and that answer gets ` If you'd like to tour again, just text HI.` A question
+with no approved answer is flagged:
 `I'll let the property team know about your question. If you'd like to tour
 again, just text HI.` A non-question keeps the ended-tour line and is not
 flagged.
@@ -42,10 +44,13 @@ Photos are not forwarded yet. A photo alone gets one plain reply:
 A photo plus a question Tour Core can't answer gets one text:
 `I can't take photos yet, but I'll let the property team know about your question.`
 (and is flagged). After an ended tour, that line adds
-`If you'd like to tour again, just text HI.` A photo with handleable text
-(an approved-fact question or a booking reply such as `1` or `YES`) gets
-only `I can't take photos yet.`; the text is handled as usual. Do not also
-send the short photo line when the combined unknown-question text is used.
+`If you'd like to tour again, just text HI.` A photo plus an answerable
+ended question gets `I can't take photos yet.` once, then the answer with
+the HI line. A photo with handleable text (an approved-fact question or a
+booking reply such as `1` or `YES`) gets only `I can't take photos yet.`;
+the text is handled as usual. Mention photos at most once per inbound.
+Do not also send the short photo line when the combined unknown-question
+text is used.
 Do not append “Text your question…”. The same inbound is not answered twice.
 Do not say "MMS" to a visitor.
 

@@ -131,9 +131,10 @@ export function isLiveHelpReservation(reservation: Reservation, now: Date): bool
  */
 export const UNKNOWN_ANSWER = "I'll let the property team know about your question.";
 export const UNKNOWN_ANSWER_WITH_PHOTO = "I can't take photos yet, but I'll let the property team know about your question.";
-export const UNKNOWN_ANSWER_ENDED = "I'll let the property team know about your question. If you'd like to tour again, just text HI.";
-export const UNKNOWN_ANSWER_ENDED_WITH_PHOTO =
-  "I can't take photos yet, but I'll let the property team know about your question. If you'd like to tour again, just text HI.";
+/** Appended to an approved-fact answer after a tour has ended. Also used in the locked ended unknown lines. */
+export const TOUR_AGAIN_SUFFIX = " If you'd like to tour again, just text HI.";
+export const UNKNOWN_ANSWER_ENDED = `${UNKNOWN_ANSWER}${TOUR_AGAIN_SUFFIX}`;
+export const UNKNOWN_ANSWER_ENDED_WITH_PHOTO = `${UNKNOWN_ANSWER_WITH_PHOTO}${TOUR_AGAIN_SUFFIX}`;
 export const TOUR_ENDED_REPLY = "This tour has ended. Text HI any time to start a new one.";
 
 /** One visitor text for an unanswered question. Photo and ended-tour variants replace the short photo line. */
@@ -916,6 +917,8 @@ export class TourCore {
     recordInbound?: boolean;
     /** Visitor text when facts don't cover the question. Defaults to UNKNOWN_ANSWER. */
     unknownReply?: string;
+    /** Appended to an approved-fact answer (ended-tour HI line). */
+    answerSuffix?: string;
   }): Promise<{ outcome: "answered" | "unknown" | "which-unit"; facts: ApprovedFact[]; unitId?: string; units?: string[] }> {
     const phone = normalizePhone(input.phone);
     const read = this.deps.storageRead?.() ?? "live";
@@ -923,7 +926,7 @@ export class TourCore {
       const resolved = resolveQuestion(this.approvedContent(), input.question.trim().slice(0, 300), { selectedUnitId: input.unitId });
       if (resolved.kind === "which-unit") return { outcome: "which-unit", facts: [], units: resolved.units };
       if (read === "cached" && resolved.kind === "answer") {
-        await this.deps.messenger.send({ to: phone, audience: "PROSPECT", body: approvedAnswerText(resolved.facts) });
+        await this.deps.messenger.send({ to: phone, audience: "PROSPECT", body: approvedAnswerText(resolved.facts) + (input.answerSuffix ?? "") });
         return { outcome: "answered", facts: resolved.facts, ...(resolved.unitId ? { unitId: resolved.unitId } : {}) };
       }
       await this.deps.messenger.send({ to: phone, audience: "PROSPECT", body: "I can't check that right now. Please try again in a little while." });
@@ -940,7 +943,7 @@ export class TourCore {
     if (resolved.kind === "which-unit") return { outcome: "which-unit", facts: [], units: resolved.units };
     if (resolved.kind === "answer") {
       await this.record("QUESTION_ANSWERED", { ...base, detail: asked });
-      await this.sendConversationText({ phone, body: approvedAnswerText(resolved.facts), reservationId: reservation?.id });
+      await this.sendConversationText({ phone, body: approvedAnswerText(resolved.facts) + (input.answerSuffix ?? ""), reservationId: reservation?.id });
       return { outcome: "answered", facts: resolved.facts, ...(resolved.unitId ? { unitId: resolved.unitId } : {}) };
     }
     await this.record("QUESTION_UNANSWERED", { ...base, detail: asked });
