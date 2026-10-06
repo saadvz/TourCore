@@ -618,8 +618,8 @@ describe("nit: pause_tours cancel skips a READY no-show", () => {
     cleanups.push(h.cleanup);
     const id = await h.publish();
     const v = await h.visitor(id, { name: "Pat Smith", phone: "555-010-2000" });
-    const two = v.session.offeredSlots.find((slot) => slot.label.includes("2:00")) ?? v.slot();
-    await v.act("chooseTime", { slotStart: two.start.toISOString() });
+    const two = v.session.offeredSlots.find((slot) => slot.label.includes("2:00"));
+    await v.act("chooseTime", { slotStart: (two?.start ?? v.slot()).toISOString() });
     await v.act("consent", { agree: true });
     await v.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: "555-010-2000" });
     expect((await v.session.reservation())!.status).toBe("READY");

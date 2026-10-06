@@ -215,7 +215,8 @@ export async function pauseTours(
 ) {
   const target = pauseTarget(ctx, input.property, input.unit);
   const booked = await bookedTours(ctx.services, target.propertyId, target.unitId);
-  const fingerprint = `${target.propertyId}|${target.unitId ?? ""}|${booked.flatMap((tour) => futureBookingsOn(tour, target.unitId).map((reservation) => `${reservation.id}:${reservation.status}`)).join(",")}`;
+  const now = clockOf(ctx.services);
+  const fingerprint = `${target.propertyId}|${target.unitId ?? ""}|${booked.flatMap((tour) => futureBookingsOn(tour, now, target.unitId).map((reservation) => `${reservation.id}:${reservation.status}`)).join(",")}`;
   if (!input.confirmationCode) {
     return ask(ctx, "pause-tours", target.propertyId, fingerprint, pauseConfirmQuestion(target.label, booked.length), {
       bookedTours: booked.length,
@@ -305,7 +306,8 @@ export async function removeProperty(ctx: Ctx, input: { property?: string; confi
   }
 
   const booked = await bookedTours(ctx.services, propertyId);
-  const fingerprint = `${propertyId}|${booked.flatMap((tour) => futureBookingsOn(tour).map((reservation) => `${reservation.id}:${reservation.status}`)).join(",")}`;
+  const now = clockOf(ctx.services);
+  const fingerprint = `${propertyId}|${booked.flatMap((tour) => futureBookingsOn(tour, now).map((reservation) => `${reservation.id}:${reservation.status}`)).join(",")}`;
   if (!input.confirmationCode) {
     return ask(
       ctx,
