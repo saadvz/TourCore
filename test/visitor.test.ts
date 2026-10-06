@@ -80,6 +80,16 @@ describe("visitor demo on the real engine", () => {
     expect(v.choices.map((c) => c.label)).toEqual(["Monday, Sep 28 \u00b7 2:00 PM", "Monday, Sep 28 \u00b7 3:30 PM"]);
   });
 
+  it("tapping the same time again is a no-op", async () => {
+    const s = newSession();
+    await s.act("begin", { name: "Pat Smith", phone: "(555) 010-2000" });
+    await s.act("chooseUnit", { unitId: "apt_101" });
+    await chooseFirstTime(s);
+    const start = s.offeredSlots[0]!.start.toISOString();
+    await expect(s.act("chooseTime", { slotStart: start })).resolves.toBeUndefined();
+    expect(await s.stage()).toBe("consent");
+  });
+
   it("booking, consent and the basic identity form go through the engine", async () => {
     const s = newSession();
     await s.act("begin", { name: "Pat Smith", phone: "(555) 010-2000" });

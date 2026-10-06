@@ -143,13 +143,15 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   expires: the visitor is texted once (`The property team couldn't get
   to your request for {newTime} on {newDay} in time.` plus still-booked
   or reply-with-a-day). Approve and decline return `That time has already
-  passed, so I've let {who} know their request ran out. You can offer
-  them a different time instead.` Propose returns `That request ran out
+  passed, so I've let {who} know their request ran out. You can still
+  book them a one-off time.` Propose returns `That request ran out
   because its time already passed, so your offer of {newTime} on {newDay}
   didn't go out. I've let {who} know, and you can still book them a
   one-off time.` and does not send the proposal to the visitor. If it
-  was already expired, return `That request has already been handled.`
-  and do not text again.
+  was already expired, return `That request already ran out because its
+  time passed, and {who} has been told. You can still book them a one-off
+  time.` Already approved or declined: `That request has already been
+  handled.` Do not text again.
   Default `list_tour_time_requests` hides withdrawn;
   show them with status withdrawn or all. A follow-up yes does not
   record that consent. Approving a custom time that moves an unconfirmed

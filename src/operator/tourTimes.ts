@@ -1,6 +1,6 @@
 import { isLiveMessaging } from "../config/tourCoreConfig";
 import { intervalsOverlap, parseFlexibleTime, placementOf, relativeWhen, tourInterval, touringHoursLabel } from "../core/customSlot";
-import { isUnconfirmedHold, REQUEST_ALREADY_HANDLED, requestProposePassedLine, requestTimePassedLine, TourCoreError, WITHDRAWN_FOR_REGULAR_BOOKING } from "../core/TourCore";
+import { isUnconfirmedHold, REQUEST_ALREADY_HANDLED, requestAlreadyExpiredLine, requestProposePassedLine, requestTimePassedLine, SLOT_ALREADY_PASSED, TourCoreError, WITHDRAWN_FOR_REGULAR_BOOKING } from "../core/TourCore";
 import { formatConfirmStamp, formatDay, formatTime, formatWeekday, localDateOf } from "../core/timezone";
 import { formatPhone, parsePhone } from "../core/phone";
 import type { TourTimeRequest } from "../domain/model";
@@ -69,12 +69,13 @@ function operatorDeclineSummary(name: string, reservation: { slotStart?: string;
     : `Declined. ${name}'s ${time} tour on ${day} is still confirmed.`;
 }
 
-function alreadyHandledResult(request: TourTimeRequest) {
+function alreadyExpiredResult(visitorWho: string, request: TourTimeRequest) {
+  const summary = requestAlreadyExpiredLine(visitorWho);
   return {
-    summary: REQUEST_ALREADY_HANDLED,
+    summary,
     expired: true,
     status: "expired" as const,
-    reason: REQUEST_ALREADY_HANDLED,
+    reason: summary,
     tourTimeRequestId: request.id,
   };
 }
@@ -218,31 +219,29 @@ export async function approveTourTimeRequest(ctx: Ctx, input: { tourTimeRequestI
   const found = await findTimeRequest(ctx.services, input.tourTimeRequestId);
   if (!found) throw new SetupInputError("REQUEST_NOT_FOUND", "I couldn't find that time request.");
   if (found.request.status === "WITHDRAWN") return withdrawnResult(found.request);
-  if (found.request.status === "EXPIRED") return alreadyHandledResult(found.request);
+  if (found.request.status === "EXPIRED") return alreadyExpiredResult(who(found.tour), found.request);
   if (found.request.status !== "PENDING") throw new SetupInputError("REQUEST_CLOSED", REQUEST_ALREADY_HANDLED);
+  const session = requireLive(found.tour);
+  const name = who(found.tour);
+  if (new Date(found.request.requestedStartsAt).getTime() <= ctx.now().getTime()) {
+    try {
+      await session.core.expirePassedTourTimeRequests();
+    } catch (err) {
+      if (!(err instanceof TourCoreError && err.code === "REQUEST_EXPIRED")) throw err;
+    }
+    await persistSession(ctx.services, session);
+    return expiredResult(name, found.request);
+  }
   refuseIfPaused(
     ctx,
     found.tour.propertyId,
     found.request.unitId ?? found.tour.bundle.reservations.find((item) => item.id === found.request.reservationId)?.unitId,
   );
-  const session = requireLive(found.tour);
   const tz = found.tour.config.property.timezone;
   const start = new Date(found.request.requestedStartsAt);
   const outside = placementOf(found.tour.config, start) === "OUTSIDE_HOURS";
   const fingerprint = `${found.request.id}|${found.request.requestedStartsAt}|${outside}`;
-  const name = who(found.tour);
   const reservation = found.tour.bundle.reservations.find((item) => item.id === found.request.reservationId);
-  if (start.getTime() <= ctx.now().getTime()) {
-    try {
-      await session.approveTimeRequest(found.request.id, { outsideTourHours: outside });
-    } catch (err) {
-      if (err instanceof TourCoreError && err.code === "REQUEST_EXPIRED") {
-        await persistSession(ctx.services, session);
-        return expiredResult(name, found.request);
-      }
-      throw err;
-    }
-  }
   if (!input.confirmationCode) {
     const question = moveConfirmQuestion({
       who: name,
@@ -281,7 +280,7 @@ export async function declineTourTimeRequest(ctx: Ctx, input: { tourTimeRequestI
   const found = await findTimeRequest(ctx.services, input.tourTimeRequestId);
   if (!found) throw new SetupInputError("REQUEST_NOT_FOUND", "I couldn't find that time request.");
   if (found.request.status === "WITHDRAWN") return withdrawnResult(found.request);
-  if (found.request.status === "EXPIRED") return alreadyHandledResult(found.request);
+  if (found.request.status === "EXPIRED") return alreadyExpiredResult(who(found.tour), found.request);
   if (found.request.status !== "PENDING") throw new SetupInputError("REQUEST_CLOSED", REQUEST_ALREADY_HANDLED);
   const session = requireLive(found.tour);
   try {
@@ -303,14 +302,18 @@ export async function proposeTourTime(ctx: Ctx, input: { tourTimeRequestId: stri
   const found = await findTimeRequest(ctx.services, input.tourTimeRequestId);
   if (!found) throw new SetupInputError("REQUEST_NOT_FOUND", "I couldn't find that time request.");
   if (found.request.status === "WITHDRAWN") return withdrawnResult(found.request);
-  if (found.request.status === "EXPIRED") return alreadyHandledResult(found.request);
+  if (found.request.status === "EXPIRED") return alreadyExpiredResult(who(found.tour), found.request);
   if (found.request.status !== "PENDING") throw new SetupInputError("REQUEST_CLOSED", REQUEST_ALREADY_HANDLED);
   const session = requireLive(found.tour);
   const tz = found.tour.config.property.timezone;
   const reservation = found.tour.bundle.reservations.find((item) => item.id === found.request.reservationId);
   const contextDay = reservation?.slotStart ? localDateOf(new Date(reservation.slotStart), tz) : localDateOf(new Date(found.request.requestedStartsAt), tz);
   const resolved = parseFlexibleTime(input.newStartsAt, found.tour.config, ctx.now(), contextDay);
-  if (!resolved.ok) throw new SetupInputError("TIME_UNCLEAR", resolved.ask);
+  if (!resolved.ok) {
+    if (/already passed/.test(resolved.ask)) throw new SetupInputError("SLOT_PAST", SLOT_ALREADY_PASSED);
+    throw new SetupInputError("TIME_UNCLEAR", resolved.ask);
+  }
+  if (resolved.start.getTime() <= ctx.now().getTime()) throw new SetupInputError("SLOT_PAST", SLOT_ALREADY_PASSED);
   try {
     await session.proposeAlternative(found.request.id, resolved.start.toISOString());
   } catch (err) {
@@ -421,8 +424,11 @@ export async function scheduleOneOffTour(
   }
   const unit = requireUnit(config, input.unit);
   const resolved = parseFlexibleTime(input.startsAt, config, ctx.now());
-  if (!resolved.ok) throw new SetupInputError("TIME_UNCLEAR", resolved.ask);
-  if (resolved.start.getTime() <= ctx.now().getTime()) throw new SetupInputError("SLOT_PAST", "That time has already passed.");
+  if (!resolved.ok) {
+    if (/already passed/.test(resolved.ask)) throw new SetupInputError("SLOT_PAST", SLOT_ALREADY_PASSED);
+    throw new SetupInputError("TIME_UNCLEAR", resolved.ask);
+  }
+  if (resolved.start.getTime() <= ctx.now().getTime()) throw new SetupInputError("SLOT_PAST", SLOT_ALREADY_PASSED);
   const wanted = tourInterval(config, resolved.start);
   for (const tour of await tourSnapshots(ctx.services, { propertyId })) {
     const reservation = currentReservation(tour);

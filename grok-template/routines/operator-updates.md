@@ -129,11 +129,14 @@ property is not unpublished by an update.
 `list_exceptions` if an issue can't be found. A `tour.time_requested` update
 needs a decision unless the request is withdrawn or expired. Withdrawn:
 `They booked a regular time instead.` Expired: `That time has already
-passed, so I've let {who} know their request ran out. You can offer them
-a different time instead.` Propose after the time passed: `That request
+passed, so I've let {who} know their request ran out. You can still book
+them a one-off time.` Propose after the time passed: `That request
 ran out because its time already passed, so your offer of {newTime} on
 {newDay} didn't go out. I've let {who} know, and you can still book them
-a one-off time.` Already expired: `That request has already been handled.`
+a one-off time.` Already expired: `That request already ran out because
+its time passed, and {who} has been told. You can still book them a
+one-off time.` Already approved or declined: `That request has already
+been handled.`
 No decision is needed in those cases — don't approve, decline, or propose.
 For a waiting request: `list_tour_time_requests`, `inspect_tour_time_request`,
 `approve_tour_time_request`, `decline_tour_time_request`, `propose_tour_time`,

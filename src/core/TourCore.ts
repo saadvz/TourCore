@@ -130,15 +130,37 @@ export function pendingCustomTimeLine(time: string, day: string, options?: { off
 /** Operator-facing reason when a visitor books a regular slot instead of waiting. */
 export const WITHDRAWN_FOR_REGULAR_BOOKING = "They booked a regular time instead.";
 
-/** Repeat approve/decline/propose after the request is no longer pending. */
+/** Repeat approve/decline/propose after the request was already approved or declined. */
 export const REQUEST_ALREADY_HANDLED = "That request has already been handled.";
 
-/** Proposed alternative time is itself in the past. */
-export const SLOT_ALREADY_PASSED = "That time has already passed.";
+/** Operator-facing refusal when the offered time itself is in the past. */
+export const SLOT_ALREADY_PASSED = "That time has already passed. Pick a later time to offer them.";
 
-/** Operator-facing refusal when approve or decline comes in after the requested time has passed. */
+/** Visitor-facing refusal when the time they named is in the past. */
+export const VISITOR_TIME_PASSED = "That time has already passed. What later time works for you?";
+
+/** Operator-facing refusal when approve or decline expires a request whose time just passed. */
 export function requestTimePassedLine(who: string): string {
-  return `That time has already passed, so I've let ${who} know their request ran out. You can offer them a different time instead.`;
+  return `That time has already passed, so I've let ${who} know their request ran out. You can still book them a one-off time.`;
+}
+
+/** Operator-facing refusal when they act on a request that already expired. */
+export function requestAlreadyExpiredLine(who: string): string {
+  return `That request already ran out because its time passed, and ${who} has been told. You can still book them a one-off time.`;
+}
+
+/** Visitor copy when a regular slot is taken. Current booking is named only when they have one. */
+export function takenSlotLine(time: string, day: string, current?: { time: string; day: string }): string {
+  return current
+    ? `Sorry, ${time} on ${day} is already taken. You're still booked for ${current.time} on ${current.day}.`
+    : `Sorry, ${time} on ${day} is already taken.`;
+}
+
+export const TAKEN_SLOT_OTHER_DAY = "If you'd like another time, just reply with a day.";
+
+/** Repeat custom-time ask for the same time. */
+export function alreadyAskedLine(time: string, day: string): string {
+  return `I've already asked the property team about ${time} on ${day}.`;
 }
 
 /** Operator-facing refusal when propose comes in after the requested time has passed. */

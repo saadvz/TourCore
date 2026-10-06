@@ -33,6 +33,8 @@ import type { VerificationLinks } from "./verificationLinks";
 type Transport = MessagingAdapter & { noteChannel?: (number: string, channel: InboundMessage["channel"]) => void };
 
 export const RESTORE_TROUBLE = "I'm having trouble restoring your tour. I've alerted the property team.";
+export const HANDLER_SNAG_ALERTED = "Sorry, I hit a snag with that. I've let the property team know, and they'll reply here as soon as they can.";
+export const HANDLER_SNAG_RETRY = "Sorry, I hit a snag with that. Could you text me again in a few minutes?";
 
 /** Live sessions and saved bundles share each tour's real effective end, including extensions. */
 export function occupiedWindowsFromRecords(
@@ -221,7 +223,18 @@ export class MessagingConversations {
         await transport.send({ to: phone, audience: "PROSPECT", body: "I couldn't save that, so nothing was booked or changed. Please try again in a little while." }).catch(() => undefined);
         return { correlationId: session.id };
       }
-      throw err;
+      this.deps.log?.(`Handler error for visitor ${phone}: ${err instanceof Error ? err.message : "unknown error"}`);
+      let alertSent = false;
+      try {
+        const res = await session.reservation();
+        await session.core.alertOperator(res?.id ?? "", `Tour Core error processing text from ${phone}: ${err instanceof Error ? err.message : "error"}`);
+        alertSent = true;
+      } catch {
+        alertSent = false;
+      }
+      const fallback = alertSent ? HANDLER_SNAG_ALERTED : HANDLER_SNAG_RETRY;
+      await transport.send({ to: phone, audience: "PROSPECT", body: fallback }).catch(() => undefined);
+      return { correlationId: session.id };
     }
     if (session.optedOut !== wasOptedOut) this.setOptOut(propertyId, phone, session.optedOut);
     await this.save(session);

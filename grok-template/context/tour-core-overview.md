@@ -38,7 +38,10 @@ passed, the request expires and the visitor is texted once:
 then `You're still booked for {time} on {day}.` or
 `If you'd like another time, just reply with a day.` Approve and decline
 tell the operator `That time has already passed, so I've let {who} know
-their request ran out. You can offer them a different time instead.`
+their request ran out. You can still book them a one-off time.`
+Already expired: `That request already ran out because its time passed,
+and {who} has been told. You can still book them a one-off time.`
+Already approved or declined: `That request has already been handled.`
 Propose tells the operator `That request ran out because its time already
 passed, so your offer of {newTime} on {newDay} didn't go out. I've let
 {who} know, and you can still book them a one-off time.` and does not

@@ -6,17 +6,17 @@ import { pausedPropertyVisitorText, pausedUnitVisitorText, removedPropertyVisito
 import { normalizePhone } from "../core/phone";
 import { orList } from "../core/questions";
 import { operatorConfirmBy } from "../core/customSlot";
-import { formatDay, formatLocalDate, formatTime, formatWeekday } from "../core/timezone";
+import { formatDay, formatLocalDate, formatTime, formatWeekday, localDateOf } from "../core/timezone";
 import type { SpokenTime } from "../core/spokenTime";
 import { bookingRefusal, isEffectivelyPaused, isRemoved, openUnits, operatorPausedBookingRefuse } from "../setup/availability";
 import type { PropertyState } from "../setup/workspace";
-import { entryReply } from "./entry";
+import { entryReply, timeMenu } from "./entry";
 import { operatorUnitName, visitorTourOf } from "./identity";
 import { ONE_OFF_REPLACED_DETAIL } from "./oneOffGate";
 import { offerDate } from "./unavailableDay";
-import { bookedForLine, CONSENT_TEXT, customTimeAskedLine, isLiveHelpReservation, pendingCustomTimeLine, TourCore, TourCoreError, VISITOR_CANCEL_DONE, visitorCancelConfirmFor, type AccessOutcome, type InboundMeta } from "../core/TourCore";
+import { alreadyAskedLine, bookedForLine, CONSENT_TEXT, customTimeAskedLine, isLiveHelpReservation, pendingCustomTimeLine, TAKEN_SLOT_OTHER_DAY, takenSlotLine, TourCore, TourCoreError, VISITOR_CANCEL_DONE, visitorCancelConfirmFor, type AccessOutcome, type InboundMeta } from "../core/TourCore";
 import { isCancelableReservation } from "../domain/stateMachine";
-import { parseIsoDate, type TourSlot } from "../core/schedule";
+import { isoDate, parseIsoDate, type TourSlot } from "../core/schedule";
 import { createDurin, createStore, createVerificationProvider } from "../createTourCore";
 import type { TourCoreStore } from "../storage/Store";
 import { UNNAMED_VISITOR, type Reservation, type TourTimeRequest } from "../domain/model";
@@ -652,12 +652,36 @@ export class VisitorDemoSession {
         await this.sameSlotBookedReply(reservation);
         return true;
       }
+      if (err instanceof TourCoreError && err.code === "SLOT_UNAVAILABLE") {
+        await this.replyTakenSlot(slotStart, reservation);
+        return true;
+      }
       if (err instanceof TourCoreError && err.code === "ALREADY_BOOKED") return false;
       throw err;
     }
     this.pendingCustomRequestId = undefined;
     await this.syncReplies();
     return true;
+  }
+
+  /** Taken regular slot: keep the current booking, never file a custom-time request. */
+  private async replyTakenSlot(slotStart: string, current?: Reservation): Promise<void> {
+    const tz = this.config.property.timezone;
+    const start = new Date(slotStart);
+    const time = formatTime(start, tz);
+    const day = formatDay(start, tz);
+    const curStart = current?.slotStart ? new Date(current.slotStart) : undefined;
+    await this.reply(takenSlotLine(time, day, curStart ? { time: formatTime(curStart, tz), day: formatDay(curStart, tz) } : undefined));
+    const openSlots = await this.core.availableSlots(localDateOf(start, tz));
+    if (openSlots.length) {
+      this.offeredSlots = openSlots;
+      this.selectedDate = isoDate(localDateOf(start, tz));
+      this.markTimesShown();
+      const menu = timeMenu(day, openSlots.map((slot) => slot.label));
+      await this.reply(menu.body, menu.prompt);
+    } else {
+      await this.reply(TAKEN_SLOT_OTHER_DAY);
+    }
   }
 
   private async sameSlotBookedReply(reservation: Reservation): Promise<void> {
@@ -704,7 +728,7 @@ export class VisitorDemoSession {
     const newDay = formatDay(start, tz);
     const target = requestReservationId === held?.id ? held : reservation;
     if (!created) {
-      await this.reply(`I've already asked the property team about ${label}. I'll let you know when they respond.`);
+      await this.reply(alreadyAskedLine(label, newDay));
     } else if (target.slotStart && (running || target.id === reservation.id)) {
       const currentStart = new Date(target.slotStart);
       await this.reply(customTimeAskedLine(label, newDay, formatTime(currentStart, tz), formatDay(currentStart, tz)));
@@ -978,6 +1002,11 @@ export class VisitorDemoSession {
             await this.reply(err.message);
             return;
           }
+          if (err instanceof TourCoreError && err.code === "SLOT_UNCHANGED") return;
+          if (err instanceof TourCoreError && err.code === "SLOT_UNAVAILABLE") {
+            await this.replyTakenSlot(String(input.slotStart), r);
+            return;
+          }
           throw err;
         }
         return;
@@ -1085,6 +1114,10 @@ export class VisitorDemoSession {
           else await this.reply(CONSENT_TEXT, { kind: "yes-no" });
           return;
         }
+        if (err instanceof TourCoreError && err.code === "SLOT_UNAVAILABLE") {
+          await this.replyTakenSlot(slotStart, held);
+          return;
+        }
         throw err;
       }
       this.pendingCustomRequestId = undefined;
@@ -1106,6 +1139,10 @@ export class VisitorDemoSession {
       this.reservationId = booked.id;
     } catch (err) {
       if (keepActive && oldId) this.reservationId = oldId;
+      if (err instanceof TourCoreError && err.code === "SLOT_UNAVAILABLE") {
+        await this.replyTakenSlot(slotStart, current);
+        return;
+      }
       throw err;
     }
     this.pendingRebook = false;

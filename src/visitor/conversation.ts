@@ -115,27 +115,80 @@ export const SCHEDULE_CHANGED_LEAD = "Tour times just changed. Here's what's ope
 const WHICH_DAY = "Which day works for you?";
 const DAY_MENU = `I have tours available. ${WHICH_DAY}`;
 const MENU_NUMBER = /^\s*(?:#|number |option )?(\d{1,2})\s*[.!]?\s*$/i;
-const EXPLICIT_CHANGE_PHRASE = /\b(instead|switch|change to|move it|reschedule|can i do|can we do|another time|another day)\b/;
-const NO_CHANGE = /\bno change\b/;
+const EXPLICIT_CHANGE_PHRASE = /\b(instead|switch|change to|move it|reschedule|another time|another day|different day)\b/;
+const NO_CHANGE = /\b(no change|no need to reschedule|will not need to switch)\b/;
 const WEEKDAY_OR_DAY = /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow)\b/;
+const WEEKDAY_CODE: Record<string, string> = {
+  monday: "MON",
+  tuesday: "TUE",
+  wednesday: "WED",
+  thursday: "THU",
+  friday: "FRI",
+  saturday: "SAT",
+  sunday: "SUN",
+};
 
 function namesDayOrTime(text: string): boolean {
   const n = normalize(text);
   return WEEKDAY_OR_DAY.test(n) || spokenTimes(n).length > 0;
 }
 
-/** Change only with an explicit phrase, or a hedge plus a named day/time. rather/different alone never count. */
+function isScheduleChangeRemainder(text: string): boolean {
+  const n = normalize(text);
+  if (/\b(different day|another day|another time|make it later|make it earlier|earlier if possible|later if possible)\b/.test(n)) return true;
+  if (/\b(instead|switch|change to|move it|reschedule)\b/.test(n)) return true;
+  if (namesDayOrTime(n)) return true;
+  if (/\b(later|earlier)\b/.test(n) && !/\b(a little late|min late|minutes late)\b/.test(n)) return true;
+  return false;
+}
+
+/** Days the visitor ruled out ("not monday", "tomorrow I am busy"). Never pick these. */
+function excludedDays(text: string): Set<string> {
+  const n = normalize(text);
+  const excluded = new Set<string>();
+  for (const [word, code] of Object.entries(WEEKDAY_CODE)) {
+    if (new RegExp(`\\bnot ${word}\\b`).test(n) || new RegExp(`\\b${word} i am busy\\b`).test(n)) excluded.add(code);
+  }
+  if (/\bnot today\b/.test(n) || /\btoday i am busy\b/.test(n)) excluded.add("today");
+  if (/\bnot tomorrow\b/.test(n) || /\btomorrow i am busy\b/.test(n)) excluded.add("tomorrow");
+  return excluded;
+}
+
+function sameLocalDay(a: LocalDate, b: LocalDate): boolean {
+  return a.year === b.year && a.month === b.month && a.day === b.day;
+}
+
+function dayAskExcluded(ask: DayReference, text: string, today: LocalDate): boolean {
+  const excluded = excludedDays(text);
+  if (ask.relative === "today" && excluded.has("today")) return true;
+  if (ask.relative === "tomorrow" && excluded.has("tomorrow")) return true;
+  if (ask.weekday && excluded.has(ask.weekday)) return true;
+  if (ask.date) {
+    const wd = weekdayOf(ask.date);
+    if (excluded.has(wd)) return true;
+    if (excluded.has("today") && sameLocalDay(ask.date, today)) return true;
+    if (excluded.has("tomorrow") && sameLocalDay(ask.date, addDays(today, 1))) return true;
+  }
+  return false;
+}
+
+/** Change only with an explicit phrase, a later/earlier/different-day ask, or a hedge plus a named day/time. */
 function hasExplicitChangeAsk(text: string): boolean {
   const n = stripFiller(normalize(text));
   if (NO_CHANGE.test(n)) return false;
+  if (leftoverAfterConsent(text)) return false;
   if (EXPLICIT_CHANGE_PHRASE.test(n)) return true;
+  if (/\b(make it later|make it earlier|earlier if possible|later if possible)\b/.test(n)) return true;
+  if (/\b(later|earlier)\b/.test(n) && !/\b(a little late|min late|minutes late)\b/.test(n)) return true;
+  if (/\brather\b/.test(n) && namesDayOrTime(n)) return true;
   return /\b(but|instead)\b/.test(n) && namesDayOrTime(n);
 }
 
 function leftoverAfterConsent(text: string): string | undefined {
   const stripped = text.replace(/^\s*(yes|yeah|yep|yup|ok|okay|sure)[,!.]?\s+/i, "").replace(/^but\s+/i, "").trim();
   if (!stripped) return undefined;
-  if (/\?/.test(stripped) || /\b(park|parking|entrance)\b/i.test(stripped)) return stripped;
+  if (isScheduleChangeRemainder(stripped)) return undefined;
+  if (/\?/.test(stripped) || /\b(park|parking|entrance|prepare)\b/i.test(stripped)) return stripped;
   return undefined;
 }
 
@@ -834,6 +887,11 @@ function dayOnOrAfter(start: LocalDate, weekday: NonNullable<DayReference["weekd
 
 async function showAskedDay(turn: Turn, ask: DayReference, alreadyRecorded = false): Promise<void> {
   const { session } = turn;
+  const today = localDateOf(session.clock.now(), session.config.property.timezone);
+  if (dayAskExcluded(ask, turn.said.text ?? "", today)) {
+    await offerOpenDays(turn, excludedDays(turn.said.text ?? ""));
+    return;
+  }
   const dates = session.offeredDates;
   const dateMenu = { kind: "choose" as const, options: dates.map((day) => day.label), what: "a day" };
   if (ask.date) {
@@ -870,11 +928,36 @@ async function showAskedDay(turn: Turn, ask: DayReference, alreadyRecorded = fal
     await session.reply(lead, { kind: "choose", options, what: "a day" });
     return;
   }
-  const tz = session.config.property.timezone;
-  const today = localDateOf(session.clock.now(), tz);
   const start = ask.relative === "today" ? today : ask.relative === "tomorrow" || ask.nextWeek ? addDays(today, 1) : today;
   const day = ask.weekday ? dayOnOrAfter(start, ask.weekday) : start;
   await presentDay(turn, isoDate(day), alreadyRecorded);
+}
+
+/** Offer remaining regular days, skipping any the visitor ruled out. */
+async function offerOpenDays(turn: Turn, excluded: Set<string>): Promise<void> {
+  const { session } = turn;
+  await session.refreshOfferedSchedule();
+  const tz = session.config.property.timezone;
+  const today = localDateOf(session.clock.now(), tz);
+  const dates = session.offeredDates.filter((day) => {
+    const local = parseIsoDate(day.date);
+    if (!local) return true;
+    const wd = weekdayOf(local);
+    if (excluded.has(wd)) return false;
+    if (excluded.has("today") && sameLocalDay(local, today)) return false;
+    if (excluded.has("tomorrow") && sameLocalDay(local, addDays(today, 1))) return false;
+    return true;
+  });
+  session.offeredDates = dates;
+  session.selectedDate = undefined;
+  session.offeredSlots = [];
+  session.markDatesShown();
+  const labels = dates.map((day) => day.label);
+  if (!labels.length) {
+    await turn.respond(VisitorDenialCopy.noOpenTimes(session.config.operator.name));
+    return;
+  }
+  await turn.respond(DAY_MENU, { kind: "choose", options: labels, what: "a day" });
 }
 
 /** START_INQUIRY during booking: keep the unit, offer days again from the current schedule. */
@@ -926,6 +1009,8 @@ async function tryRegularSlotFromConsent(turn: Turn): Promise<boolean> {
   const interpretation = await rulesOnly.interpret(await contextFor(session, text, step));
   const intent = interpretation.intent;
   if (intent.type === "SELECT_DATE" && (intent.date || intent.weekday || intent.relative)) {
+    const today = localDateOf(session.clock.now(), session.config.property.timezone);
+    if (dayAskExcluded(intent, text, today)) return false;
     await showAskedDay(turn, intent);
     return true;
   }
@@ -1104,7 +1189,13 @@ async function byStage(turn: Turn): Promise<void> {
       const pending = await session.unapprovedCustomTimeRequest();
       const allowSlot = changeAsk || !!pending?.pendingNoticeSentAt || (await session.hasLiveRegularTour());
       if (allowSlot && (await tryRegularSlotFromConsent(turn))) return;
-      if (changeAsk && intent.type === "REQUEST_CUSTOM_TIME" && turn.confident) return fileCustomTime(turn, asSpoken(intent));
+      if (changeAsk) {
+        const spoken = spokenTimes(normalize(text));
+        if (spoken.length === 1) return fileCustomTime(turn, spoken[0]!);
+        if (intent.type === "REQUEST_CUSTOM_TIME" && turn.confident) return fileCustomTime(turn, asSpoken(intent));
+        await offerOpenDays(turn, excludedDays(text));
+        return;
+      }
       if (intent.type === "REQUEST_HELP") return session.help(turn.said);
       if (session.heldBookingTakenOver && (await session.activeNeedsConsent())) {
         await session.announceHeldBookingConsent();

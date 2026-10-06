@@ -103,7 +103,7 @@ export function resolveSpokenTime(config: TourCoreConfig, now: Date, spoken: Spo
   const start = at(day, spoken.hour, spoken.minute, meridiem, tz);
   if (start.getTime() <= now.getTime()) {
     if (spoken.day === "today" || (contextDay && sameDay(day, today) && !spoken.day && !spoken.weekday && !spoken.date)) {
-      return { ok: false, ask: "That time has already passed. What time would you like?" };
+      return { ok: false, ask: "That time has already passed. What later time works for you?" };
     }
     if (!spoken.day && !spoken.weekday && !spoken.date) return { ok: false, ask: "That time today has already passed. Did you mean tomorrow?" };
   }

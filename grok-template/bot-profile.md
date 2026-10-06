@@ -199,11 +199,13 @@ Never:
   that the team couldn't get to it in time, then still-booked or
   reply-with-a-day. Approve and decline tell the operator `That time has
   already passed, so I've let {who} know their request ran out. You can
-  offer them a different time instead.` Propose tells the operator
+  still book them a one-off time.` Propose tells the operator
   `That request ran out because its time already passed, so your offer
   of {newTime} on {newDay} didn't go out. I've let {who} know, and you
   can still book them a one-off time.` and does not send the proposal.
-  Already expired: `That request has already been handled.` Approving a custom time that moves an unconfirmed held booking uses
+  Already expired: `That request already ran out because its time passed,
+  and {who} has been told. You can still book them a one-off time.`
+  Already approved or declined: `That request has already been handled.` Approving a custom time that moves an unconfirmed held booking uses
   that same booked-for line, then the original consent question, then
   Reply YES or NO — not moved wording. That new
   booking becomes the active one after the follow-up reply; a follow-up
