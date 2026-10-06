@@ -567,7 +567,7 @@ async function lastProspectOutbound(
 
 async function sendOnlyMissedVisitor(session: { store: { list: (kind: "messages") => Promise<Array<{ audience: string; direction: string; body: string; deliveryStatus?: string }>> } }, body: string): Promise<boolean> {
   const last = await lastProspectOutbound(session, body);
-  return !last || !last.deliveryStatus || MISSED_SEND.has(last.deliveryStatus);
+  return !last || last.body !== body || !last.deliveryStatus || MISSED_SEND.has(last.deliveryStatus);
 }
 
 /**
@@ -670,15 +670,20 @@ export async function answerFlaggedQuestion(
   let sendMissed: "opted-out" | "unreachable" | undefined;
   const visitorMessage = visitorAnswerText(exception.question!, fact);
   if (tour?.live) {
-    await tour.live.reply(visitorMessage);
-    // Then back to where the visitor is now: the same menu, times or confirmation they were on.
-    await resumeStep(tour.live);
-    await persistSession(services, tour.live);
-    if (await sendOnlyMissedVisitor(tour.live, visitorMessage)) {
-      const last = await lastProspectOutbound(tour.live, visitorMessage);
-      sendMissed = last?.deliveryStatus === "SUPPRESSED" || tour.live.optedOut ? "opted-out" : "unreachable";
+    const prospects = await tour.live.store.list("prospects");
+    const optedOut = tour.live.optedOut || tour.live.smsConsent === "opted_out" || prospects.some((prospect) => prospect.messagingOptedOut);
+    if (optedOut) {
+      sendMissed = "opted-out";
     } else {
-      visitorAnswered = true;
+      await tour.live.reply(visitorMessage);
+      await resumeStep(tour.live);
+      await persistSession(services, tour.live);
+      if (await sendOnlyMissedVisitor(tour.live, visitorMessage)) {
+        const last = await lastProspectOutbound(tour.live, visitorMessage);
+        sendMissed = last?.deliveryStatus === "SUPPRESSED" ? "opted-out" : "unreachable";
+      } else {
+        visitorAnswered = true;
+      }
     }
   }
   if (!sendMissed) {

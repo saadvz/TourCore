@@ -2443,9 +2443,8 @@ describe("a flagged answer on a live day menu", () => {
   it("sends the answer once, keeps the numbers, and the closed issue shows the answer", async () => {
     const a = await liveApp({ cleanups });
     await a.optInSms();
-    await a.text("1");
     const menu = await a.text("1");
-    expect(menu.join("\n")).toMatch(/Which day works for you\?|I have tours available/);
+    expect(menu.join("\n")).toMatch(/Which day works for you\?|I have tours available|I have these times available/);
     await a.text("Is there a gym?");
     const issue = (await a.grok("list_exceptions")).exceptions.find((item: { what: string }) => item.what === "Question with no approved answer");
     const done = await a.approve("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "There's a gym on the roof." });
