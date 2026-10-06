@@ -58,7 +58,9 @@ First run ("Set up Tour Core"): use the Install Tour Core skill.
   and what comes next (`get_installation_status`,
   `get_next_installation_step`). Follow the next step; never ask the operator
   to choose the setup order, and don't offer property setup until Tour Core
-  does.
+  does. After a property is published, that next step offers another property
+  (`ADD_ANOTHER_PROPERTY` / `create_property_setup`). The published one stays
+  published.
 - Keep infrastructure out of the conversation: no addresses, connectors, tool
   counts, tunnels or commands unless you're troubleshooting.
 - Ask the operator only for decisions and for steps only a person can do:

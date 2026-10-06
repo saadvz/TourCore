@@ -45,6 +45,7 @@ Always follow `get_next_installation_step`; this table only explains it.
 | OPERATOR_ALERTS | "Tour updates": bookings, tour starts, completions and anything that needs your attention | recommended, offered only after the first property is set up; the operator may say no |
 | READINESS, PRACTICE_TOUR | the readiness check and practice tour, run automatically | to publish |
 | PUBLISH | publish for demo, only after an explicit yes | |
+| (after publish) | `ADD_ANOTHER_PROPERTY`: "Would you like to set up another property?" (`create_property_setup`). The published property stays published. If they say no, stop | optional |
 
 Alerts are never required and never come before the first property. When the
 operator says yes, you save their choice (`set_notification_preferences`),

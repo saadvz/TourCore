@@ -6,10 +6,11 @@ import { TourCoreConfigShape, type TourCoreConfig } from "./tourCoreConfig";
  *
  * APPROVED CONTENT is what visitors are told: property facts, unit
  * descriptions, unit facts, the unit profile (bedrooms, bathrooms, rent,
- * availability, square footage, amenities, ...), and route directions/stop
- * wording. Changing it is audited and takes effect immediately, including on
- * active tours, and never invalidates readiness, the practice tour or
- * publication.
+ * availability, square footage, amenities, ...), route directions/stop
+ * wording, and the optional visitor help number (the number stuck visitors
+ * call, or an explicit skip). Changing it is audited and takes effect
+ * immediately, including on active tours, and never invalidates readiness,
+ * the practice tour or publication.
  *
  * Everything else is STRUCTURAL: doors, which doors a route passes through,
  * entrances, units themselves, tour hours, verification, messaging, storage,
@@ -25,10 +26,25 @@ export function structuralView(config: TourCoreConfig): unknown {
   const c = TourCoreConfigShape.parse(config);
   return {
     ...c,
+    operator: { name: c.operator.name, contact: c.operator.contact },
     property: { ...c.property, facts: undefined, entryInstructionsDecided: undefined },
     units: c.units.map((u) => ({ ...u, summary: undefined, facts: undefined, profile: undefined, entryInstructions: undefined })),
     routes: c.routes.map((r) => ({ ...r, directions: undefined, stops: r.stops.map((s) => ({ doorId: s.doorId })) })),
   };
+}
+
+/**
+ * Safety fingerprint from when the visitor help number was still structural.
+ * Used only to retarget readiness and practice-tour fingerprints on load.
+ */
+export function legacyVisitorHelpSafetyHash(config: TourCoreConfig): string {
+  const c = TourCoreConfigShape.parse(config);
+  return shortHash({
+    ...c,
+    property: { ...c.property, facts: undefined, entryInstructionsDecided: undefined },
+    units: c.units.map((u) => ({ ...u, summary: undefined, facts: undefined, profile: undefined, entryInstructions: undefined })),
+    routes: c.routes.map((r) => ({ ...r, directions: undefined, stops: r.stops.map((s) => ({ doorId: s.doorId })) })),
+  });
 }
 
 const shortHash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
@@ -49,7 +65,14 @@ export function fullHash(config: TourCoreConfig): string {
 export function legacySendblueFingerprints(config: TourCoreConfig): { full: string; safety: string } {
   const parsed = TourCoreConfigShape.parse(config);
   const legacy = { ...parsed, messagingMode: "sendblue" as never };
-  const view = { ...(structuralView(parsed) as Record<string, unknown>), messagingMode: "sendblue" };
+  // The sendblue-era safety hash still included the visitor help number.
+  const view = {
+    ...parsed,
+    messagingMode: "sendblue" as never,
+    property: { ...parsed.property, facts: undefined, entryInstructionsDecided: undefined },
+    units: parsed.units.map((u) => ({ ...u, summary: undefined, facts: undefined, profile: undefined, entryInstructions: undefined })),
+    routes: parsed.routes.map((r) => ({ ...r, directions: undefined, stops: r.stops.map((s) => ({ doorId: s.doorId })) })),
+  };
   return { full: shortHash(legacy), safety: shortHash(view) };
 }
 
@@ -63,6 +86,9 @@ export function describeContentChanges(before: TourCoreConfig, after: TourCoreCo
   const out: string[] = [];
   const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
   if (!same(before.property.facts, after.property.facts)) out.push(`${after.property.name}: approved facts`);
+  if ((before.operator.visitorContact ?? "") !== (after.operator.visitorContact ?? "") || before.operator.visitorHelpDecided !== after.operator.visitorHelpDecided) {
+    out.push("visitor help number");
+  }
   for (const u of after.units) {
     const old = before.units.find((x) => x.id === u.id);
     if (!old) continue;

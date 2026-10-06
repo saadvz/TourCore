@@ -192,8 +192,12 @@ describe("Tour Core owns the onboarding order", () => {
     const done = await h.status();
     expect(done.phase).toBe("OPERATE");
     expect(done.nextStep).toMatchObject({
-      action: "DONE",
-      operatorMessage: "Your property is published. Visitor texting is live. Door access is still in demo mode, so no physical locks will open. I'll keep you updated on your tours and let you know when something needs your attention.",
+      action: "ADD_ANOTHER_PROPERTY",
+      phase: "OPERATE",
+      performedBy: "OPERATOR_DECISION",
+      tool: "create_property_setup",
+      skill: "setup-property",
+      operatorMessage: `${OPERATOR_MESSAGES.operate} ${OPERATOR_MESSAGES.anotherProperty}`,
     });
     expect(done.summary).toBe("Your property is published.");
     expect(JSON.stringify(done.nextStep)).not.toMatch(/everything (runs|is) in demo/i);
@@ -205,7 +209,7 @@ describe("Tour Core owns the onboarding order", () => {
     expect(h.workspace.load("prop_100_alfred_way").state.publishedAt).toBe(publishedAt);
     expect(h.workspace.load("prop_100_alfred_way").state.status).toBe("PUBLISHED_FOR_DEMO");
     const after = await next(h);
-    expect(after.action).toBe("DONE");
+    expect(after.action).toBe("ADD_ANOTHER_PROPERTY");
     expect(after.operatorMessage).not.toMatch(/Would you like me to publish|still needs a yes/i);
     expect([done.summary, after.operatorMessage, after.summary].join(" ")).not.toMatch(/connect|install|setup|secure/i);
   });
@@ -218,7 +222,33 @@ describe("Tour Core owns the onboarding order", () => {
     await h.ok("run_readiness_check");
     await h.ok("run_dry_tour");
     await h.approve("publish_demo_property", {});
-    expect((await next(h)).operatorMessage).toBe(OPERATOR_MESSAGES.operateWithoutAlerts);
+    expect((await next(h)).operatorMessage).toBe(`${OPERATOR_MESSAGES.operateWithoutAlerts} ${OPERATOR_MESSAGES.anotherProperty}`);
+  });
+
+  it("with one property already published, the next step starts another property and leaves the first published", async () => {
+    const h = harness();
+    infraReady(h);
+    await h.setUpAlfredWay();
+    alertsReady(h);
+    await h.ok("run_readiness_check");
+    await h.ok("run_dry_tour");
+    await h.approve("publish_demo_property", {});
+    const step = await next(h);
+    expect((await h.status()).phase).toBe("OPERATE");
+    expect(step).toMatchObject({
+      action: "ADD_ANOTHER_PROPERTY",
+      phase: "OPERATE",
+      tool: "create_property_setup",
+      skill: "setup-property",
+      operatorMessage: `${OPERATOR_MESSAGES.operate} ${OPERATOR_MESSAGES.anotherProperty}`,
+    });
+    const started = await h.ok("create_property_setup", { address: "145 Tenafly Road, Tenafly, NJ 07670", name: "145 Tenafly Road" });
+    expect(started.status).toBe("created");
+    const follow = await next(h);
+    expect(follow.action).toBe("FINISH_PROPERTY_SETUP");
+    expect(follow.component).toBe("PROPERTY");
+    expect(follow.operatorMessage).toMatch(/145 Tenafly Road/);
+    expect(h.workspace.load("prop_100_alfred_way").state.status).toBe("PUBLISHED_FOR_DEMO");
   });
 });
 

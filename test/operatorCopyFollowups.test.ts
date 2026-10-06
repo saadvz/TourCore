@@ -370,7 +370,7 @@ describe("local test-mode surfaces reuse the test-mode sentences", () => {
     expect((await h.ok("run_dry_tour", { property: id })).passed).toBe(true);
     await h.approve("publish_demo_property", { property: id });
     const step = await h.ok("get_next_installation_step");
-    expect(step.action).toBe("DONE");
+    expect(step.action).toBe("ADD_ANOTHER_PROPERTY");
     expect(step.operatorMessage).toContain(LOCAL_TEST_TEXTING);
     expect(step.operatorMessage).not.toContain("Visitor texts are practice only");
     const publish = (await h.status()).components.find((c) => c.component === "PUBLISH");

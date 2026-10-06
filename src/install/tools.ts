@@ -79,7 +79,7 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
     title: "Next installation step",
     kind: "read",
     description:
-      "The one next step Tour Core decided: component, action, phase, who does it (GROK, OPERATOR, OPERATOR_IN_SECURE_SETUP or OPERATOR_DECISION), the tool or skill to use, what to tell the operator (operatorMessage), and what you need to do it (grokInstructions, for you only). Follow it; call it again after each step.",
+      "The one next step Tour Core decided: component, action, phase, who does it (GROK, OPERATOR, OPERATOR_IN_SECURE_SETUP or OPERATOR_DECISION), the tool or skill to use, what to tell the operator (operatorMessage), and what you need to do it (grokInstructions, for you only). Follow it; call it again after each step. When a property is already published, the next step is ADD_ANOTHER_PROPERTY (create_property_setup) so another property can be set up. The published property stays published. If the operator doesn't want another, stop.",
     input: z.strictObject({}),
     run: async (ctx) => {
       const s = getInstallationStatus(installation(ctx), ctx.services);

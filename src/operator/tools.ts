@@ -425,7 +425,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Start a property setup",
     kind: "change",
     description:
-      "Starts a new property from its street address. The address is what visitors hear unless the operator gives a public property name themselves: never suggest or invent one. A US address needs a street, city, state and ZIP. If the ZIP is missing, ask nextQuestion (\"What ZIP code should I use?\") and save it with update_property_details postalCode. Then ask them to confirm the read-back before property type. Never guess the type from the address. The time zone is guessed from the address: confirm it. Visitor texting is connected automatically when this Tour Core has it. If a property with that address already exists, it's returned instead of creating a second one.",
+      "Starts a new property from its street address. The address is what visitors hear unless the operator gives a public property name themselves: never suggest or invent one. A US address needs a street, city, state and ZIP. If the ZIP is missing, ask nextQuestion (\"What ZIP code should I use?\") and save it with update_property_details postalCode. Then ask them to confirm the read-back before property type. Never guess the type from the address. The time zone is guessed from the address: confirm it. Visitor texting is connected automatically when this Tour Core has it. A new property starts with tour hours Monday–Friday, 9:00 AM–5:00 PM, 45-minute tours, a new tour every hour, and 10 minutes early, until the operator changes them with set_tour_hours. If a property with that address already exists, it's returned instead of creating a second one. Also the tool for the installation step that offers another property after one is already published.",
     input: z.strictObject({
       address: z.string().min(1).max(200).describe("The property's street address, as the operator confirmed it."),
       name: z.string().max(120).optional().describe("Only a property or building name the operator said themselves. Leave out otherwise; the address is used."),
@@ -457,7 +457,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Update property details",
     kind: "change",
     description:
-      "Changes the property's type, address, ZIP, public name, time zone, approved property facts, apartment or condo building-door control, or optional entry instructions. The name is only one the operator said (an empty name goes back to using the address). A ZIP code does not invent the rest of the address. confirmAddress is true only after they agree to the read-back. Facts must be the operator's own words. For an apartment or condo, buildingAccess is BUILDING_AND_UNIT or UNIT_ONLY from \"Do you control the building entrance, or only the unit door?\"; entryInstructions is how visitors get in and find the unit, sent only after identity verification. If they skip that, pass skipEntryInstructions true and store nothing. Returns nextQuestion when something still has to be asked, and that question comes before property type until the address is confirmed. After the rest of the setup is saveable, nextQuestion is \"What number can stuck visitors call? Pick one someone answers during tour hours.\" visitorContact is that optional number visitors see and call; it is never the team's private alert line. If they skip it, pass skipVisitorHelp true so the question is not asked again.",
+      "Changes the property's type, address, ZIP, public name, time zone, approved property facts, apartment or condo building-door control, or optional entry instructions. The name is only one the operator said (an empty name goes back to using the address). A ZIP code does not invent the rest of the address. confirmAddress is true only after they agree to the read-back. Facts must be the operator's own words. For an apartment or condo, buildingAccess is BUILDING_AND_UNIT or UNIT_ONLY from \"Do you control the building entrance, or only the unit door?\"; entryInstructions is how visitors get in and find the unit, sent only after identity verification. If they skip that, pass skipEntryInstructions true and store nothing. Returns nextQuestion when something still has to be asked, and that question comes before property type until the address is confirmed. After the rest of the setup is saveable, nextQuestion is \"What number can stuck visitors call? Pick one someone answers during tour hours.\" visitorContact is that optional number visitors see and call; it is never the team's private alert line. Saving, changing, or clearing it keeps a published property published and does not require a new readiness check or practice tour. If they skip it, pass skipVisitorHelp true so the question is not asked again.",
     input: z.strictObject({
       property: Property,
       propertyType: z.enum(PROPERTY_TYPES).optional().describe("From the operator's answer to \"What type of property is this?\" Use APARTMENT_OR_CONDO for one apartment or condo unit, not a whole building."),
@@ -800,7 +800,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "get_tour_hours",
     title: "Get tour hours",
     kind: "read",
-    description: "When people can tour: days, hours, tour length, how often tours start, and how early visitors can get in.",
+    description: "When people can tour: days, hours, tour length, how often tours start, and how early visitors can get in. A new property starts at Monday–Friday, 9:00 AM–5:00 PM until the operator changes it.",
     input: z.strictObject({ property: Property }),
     run: async (ctx, i) => {
       const id = resolvePropertyId(ctx.services.workspace, i.property);
@@ -813,7 +813,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Set tour hours",
     kind: "change",
     description:
-      'Sets tour hours from everyday words: days ("weekdays", "Mon-Sat"), start/end ("9am", "5 PM"), tour length, how often a new tour starts, early arrival ("10 minutes"). Only pass what the operator said; defaults stay visible. Hours are structural: a published property goes back to draft until readiness, a practice tour, and publish. After those hours are published, open visitor conversations use them on the next inbound text.',
+      'Sets tour hours from everyday words: days ("weekdays", "Mon-Sat", "every day"), start/end ("9am", "5 PM"), tour length, how often a new tour starts, early arrival ("10 minutes"). Only pass what the operator said; defaults stay visible. A new property starts at Monday–Friday, 9:00 AM–5:00 PM, 45-minute tours, hourly starts, and 10 minutes early. Hours are structural: a published property goes back to draft until readiness, a practice tour, and publish. After those hours are published, open visitor conversations use them on the next inbound text.',
     input: z.strictObject({
       property: Property,
       days: z.union([z.string().max(80), z.array(z.string().max(20)).max(7)]).optional(),
@@ -967,7 +967,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Run a practice tour",
     kind: "change",
     description:
-      "Runs one complete practice tour through the real engine (no one is texted, no real door opens) and returns the proof points: booking, verification, early denial, entrance (kept for a single-family home, even when that door is also the unit door), the unit door on a unit-door-only apartment or condo, later unit doors, off-route denial, duplicate, the T-15 questions text, the T-5 extra-time offer, a one-time 10-minute extension, completion, follow-up, and a second path through tour-end, the +5 leave check-in, and the +15 close. Uses a deterministic simulated clock. A 15-minute tour skips T-15 with a reason (it would be the start). The last slot of the day still runs; extra time or the second path is skipped with a reason if it cannot apply. Nobody waits.",
+      "Runs one complete practice tour through the real engine (no one is texted, no real door opens) and returns the proof points: booking, verification, early denial, entrance (kept for a single-family home, even when that door is also the unit door), the unit door on a unit-door-only apartment or condo, later unit doors, off-route denial, duplicate, the T-15 questions text, the T-5 extra-time offer, a one-time 10-minute extension, completion, follow-up, and a second path through tour-end, the +5 leave check-in, and the +15 close. The +15 close names the visitor help number when one is set. Uses a deterministic simulated clock. A 15-minute tour skips T-15 with a reason (it would be the start). The last slot of the day still runs; extra time or the second path is skipped with a reason if it cannot apply. Nobody waits.",
     input: z.strictObject({ property: Property, unit: Unit.optional() }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);

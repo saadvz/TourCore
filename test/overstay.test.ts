@@ -49,6 +49,7 @@ import type { OccupiedWindow } from "../src/core/customSlot";
 import { AFTER_CLOSE_ALERT_MS, VISITOR_SEND_ATTEMPTS } from "../src/visitor/overstayScheduler";
 import { MemoryRuntimeStore } from "../src/storage/runtimeStore";
 import { handleVisitorText, mentionsAfterCloseDistress } from "../src/visitor/conversation";
+import { parsePhone } from "../src/core/phone";
 import { visitorSubject } from "../src/visitor/identity";
 import { OverstayScheduler } from "../src/visitor/overstayScheduler";
 import { VisitorDemoRegistry, VisitorDemoSession } from "../src/visitor/session";
@@ -641,6 +642,23 @@ describe("QA review blocking items", () => {
     expect(last.passed).toBe(true);
     expect(last.checks.every((c) => c.ok)).toBe(true);
     expect(last.failure).toBeUndefined();
+  });
+
+  it("practice tour T+15 close names a visitor help number and still passes", async () => {
+    const base = loadConfig();
+    const helpNumber = parsePhone("(973) 842-1983")!;
+    const withHelp: TourCoreConfig = {
+      ...base,
+      operator: { ...base.operator, visitorContact: helpNumber, visitorHelpDecided: true },
+    };
+    const result = await runDryTour(withHelp, { now: zonedTimeToUtc({ ...TOUR_DAY, hour: 7, minute: 0 }, TZ) });
+    expect(result.passed).toBe(true);
+    expect(result.failure).toBeUndefined();
+    expect(result.checks.find((c) => c.id === "overstay_closed")).toMatchObject({ ok: true });
+    expect(result.checks.find((c) => c.id === "overstay_closed")?.skipped).toBeFalsy();
+    const place = visitorSubject(withHelp.property, withHelp.units[0]!.name);
+    expect((result.messages ?? []).some((m) => m.audience === "PROSPECT" && m.body === plus15Closed(place, helpNumber))).toBe(true);
+    expect(plus15Closed(place, helpNumber)).toContain("(973) 842-1983");
   });
 
   it("no thanks to a T-5 offer then a later yes does not grant", async () => {

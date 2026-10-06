@@ -344,7 +344,7 @@ describe("Install Tour Core skill", () => {
     const said: string[] = [];
     const performed: string[] = [];
     let step = first.nextStep;
-    for (let i = 0; i < 25 && step.action !== "DONE"; i++) {
+    for (let i = 0; i < 25 && step.action !== "ADD_ANOTHER_PROPERTY" && step.action !== "DONE"; i++) {
       performed.push(`${step.action}:${step.performedBy}`);
       said.push(step.operatorMessage);
       switch (step.action) {
@@ -409,8 +409,11 @@ describe("Install Tour Core skill", () => {
     expect(said).toContain("Everything needed to start is connected and tested. Would you like to add your first property?");
     // The property used the installed texting on its own: nobody was asked how to text people.
     expect(h.workspace.load("prop_100_alfred_way").config.messagingMode).toBe("live");
+    expect(step.action).toBe("ADD_ANOTHER_PROPERTY");
+    expect(step.phase).toBe("OPERATE");
+    expect(step.tool).toBe("create_property_setup");
     expect(step.operatorMessage).toBe(
-      "Your property is published. Visitor texting is live. Door access is still in demo mode, so no physical locks will open. I'll keep you updated on your tours and let you know when something needs your attention.",
+      "Your property is published. Visitor texting is live. Door access is still in demo mode, so no physical locks will open. I'll keep you updated on your tours and let you know when something needs your attention. Would you like to set up another property?",
     );
     const seen = JSON.stringify(await tool("get_installation_status")) + JSON.stringify(first);
     for (const secret of [SB_KEY, SB_SECRET, ROUTINE_URL, ROUTINE_KEY]) expect(seen).not.toContain(secret);
