@@ -559,6 +559,18 @@ export class VisitorDemoSession {
     );
   }
 
+  /** After a finished tour, distress texts the visitor and alerts the landlord like a +15 close. */
+  async alertDistress(said: Said): Promise<void> {
+    const reservation = await this.reservation();
+    if (!reservation) {
+      await this.help(said);
+      return;
+    }
+    await this.recordText(said);
+    await this.core.alertVisitorDistress(reservation.id, said.text ?? "I'm locked in");
+    await this.syncReplies();
+  }
+
   /**
    * Answers a property question from approved facts wherever the visitor is:
    * the unit they named or chose (if any) and the property. Nothing about the
@@ -622,15 +634,14 @@ export class VisitorDemoSession {
     return { changed };
   }
 
-  /** Books one of the regular offered times without recording another visitor line. */
-  async bookOffered(slotStart: string): Promise<void> {
+  /** Books one of the regular offered times without recording another visitor line. False when the slot could not be taken (hold, already booked). */
+  async bookOffered(slotStart: string): Promise<boolean> {
     const reservation = await this.reservation();
     if (!reservation) throw new SetupInputError("NO_TOUR", "Choose a unit before choosing a time.");
-    if (await this.refuseIfPaused(reservation.unitId)) return;
+    if (await this.refuseIfPaused(reservation.unitId)) return true;
     if (reservation.slotStart === slotStart && reservation.status !== "INQUIRY") {
-      if (await this.activeNeedsConsent()) await this.announceHeldBookingConsent(reservation.id);
-      else await this.reply(CONSENT_TEXT, { kind: "yes-no" });
-      return;
+      await this.sameSlotBookedReply(reservation);
+      return true;
     }
     try {
       const booked = await this.core.reserveSlot(reservation.id, slotStart, reservation.slotStart ? { replace: true } : {});
@@ -638,14 +649,26 @@ export class VisitorDemoSession {
       if (this.reservationId === reservation.id) this.reservationId = booked.id;
     } catch (err) {
       if (err instanceof TourCoreError && err.code === "SLOT_UNCHANGED") {
-        if (await this.activeNeedsConsent()) await this.announceHeldBookingConsent(reservation.id);
-        else await this.reply(CONSENT_TEXT, { kind: "yes-no" });
-        return;
+        await this.sameSlotBookedReply(reservation);
+        return true;
       }
+      if (err instanceof TourCoreError && err.code === "ALREADY_BOOKED") return false;
       throw err;
     }
     this.pendingCustomRequestId = undefined;
     await this.syncReplies();
+    return true;
+  }
+
+  private async sameSlotBookedReply(reservation: Reservation): Promise<void> {
+    if (reservation.consentId && reservation.slotStart) {
+      const tz = this.config.property.timezone;
+      const start = new Date(reservation.slotStart);
+      await this.reply(bookedForLine(formatTime(start, tz), formatDay(start, tz)));
+      return;
+    }
+    if (await this.activeNeedsConsent()) await this.announceHeldBookingConsent(reservation.id);
+    else await this.reply(CONSENT_TEXT, { kind: "yes-no" });
   }
 
   /** Asks the property team about a one-off time. An existing booking stays as it is. A request during a running tour is secondary, like a rebook. */
@@ -1150,6 +1173,7 @@ export class VisitorDemoSession {
 
   /** After a tour ends, tell the visitor their custom-time request is still with the team. Once per request. */
   async announceUnapprovedCustomTime(): Promise<boolean> {
+    await this.core.expirePassedTourTimeRequests();
     const request = await this.unapprovedCustomTimeRequest();
     if (!request || request.pendingNoticeSentAt) return false;
     const start = new Date(request.requestedStartsAt);

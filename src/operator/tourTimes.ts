@@ -1,6 +1,6 @@
 import { isLiveMessaging } from "../config/tourCoreConfig";
 import { intervalsOverlap, parseFlexibleTime, placementOf, relativeWhen, tourInterval, touringHoursLabel } from "../core/customSlot";
-import { isUnconfirmedHold, REQUEST_ALREADY_HANDLED, REQUEST_TIME_PASSED, TourCoreError, WITHDRAWN_FOR_REGULAR_BOOKING } from "../core/TourCore";
+import { isUnconfirmedHold, REQUEST_ALREADY_HANDLED, requestProposePassedLine, requestTimePassedLine, TourCoreError, WITHDRAWN_FOR_REGULAR_BOOKING } from "../core/TourCore";
 import { formatConfirmStamp, formatDay, formatTime, formatWeekday, localDateOf } from "../core/timezone";
 import { formatPhone, parsePhone } from "../core/phone";
 import type { TourTimeRequest } from "../domain/model";
@@ -69,14 +69,44 @@ function operatorDeclineSummary(name: string, reservation: { slotStart?: string;
     : `Declined. ${name}'s ${time} tour on ${day} is still confirmed.`;
 }
 
-function expiredResult(request: TourTimeRequest) {
+function alreadyHandledResult(request: TourTimeRequest) {
   return {
-    summary: REQUEST_TIME_PASSED,
+    summary: REQUEST_ALREADY_HANDLED,
     expired: true,
     status: "expired" as const,
-    reason: REQUEST_TIME_PASSED,
+    reason: REQUEST_ALREADY_HANDLED,
     tourTimeRequestId: request.id,
   };
+}
+
+function expiredResult(visitorWho: string, request: TourTimeRequest) {
+  const summary = requestTimePassedLine(visitorWho);
+  return {
+    summary,
+    expired: true,
+    status: "expired" as const,
+    reason: summary,
+    tourTimeRequestId: request.id,
+  };
+}
+
+function proposePassedResult(visitorWho: string, newTime: string, newDay: string, request: TourTimeRequest) {
+  const summary = requestProposePassedLine(visitorWho, newTime, newDay);
+  return {
+    summary,
+    expired: true,
+    status: "expired" as const,
+    reason: summary,
+    tourTimeRequestId: request.id,
+  };
+}
+
+async function expirePassedOnLiveTours(services: OperatorServices): Promise<void> {
+  for (const session of services.visitors?.all() ?? []) {
+    if (session.kind !== "messaging") continue;
+    const expired = await session.core.expirePassedTourTimeRequests();
+    if (expired.length) await persistSession(services, session);
+  }
 }
 
 function moveConfirmQuestion(input: { who: string; from?: Date; to: Date; now: Date; tz: string; outside: boolean; confirm: boolean }): string {
@@ -105,7 +135,7 @@ function requestView(tour: TourSnapshot, request: TourTimeRequest, now: Date) {
     outsideHours: placement === "OUTSIDE_HOURS",
     regularTime: placement === "ON_GRID",
     ...(request.status === "WITHDRAWN" ? { reason: WITHDRAWN_FOR_REGULAR_BOOKING } : {}),
-    ...(request.status === "EXPIRED" ? { reason: REQUEST_TIME_PASSED } : {}),
+    ...(request.status === "EXPIRED" ? { reason: requestTimePassedLine(who(tour)) } : {}),
   };
 }
 
@@ -131,6 +161,7 @@ function refuseIfPaused(ctx: Ctx, propertyId: string, unitId?: string): void {
 }
 
 export async function listTourTimeRequests(ctx: Ctx, input: { property?: string; includeHandled?: boolean; status?: string }) {
+  await expirePassedOnLiveTours(ctx.services);
   const propertyId = input.property ? resolvePropertyId(ctx.services.workspace, input.property) : undefined;
   const filter = input.status?.trim().toLowerCase();
   const includeAll = filter === "all" || !!input.includeHandled;
@@ -154,6 +185,7 @@ export async function listTourTimeRequests(ctx: Ctx, input: { property?: string;
 }
 
 export async function inspectTourTimeRequest(ctx: Ctx, tourTimeRequestId: string) {
+  await expirePassedOnLiveTours(ctx.services);
   const found = await findTimeRequest(ctx.services, tourTimeRequestId);
   if (!found) throw new SetupInputError("REQUEST_NOT_FOUND", "I couldn't find that time request.");
   const view = requestView(found.tour, found.request, ctx.now());
@@ -166,11 +198,12 @@ export async function inspectTourTimeRequest(ctx: Ctx, tourTimeRequestId: string
     };
   }
   if (found.request.status === "EXPIRED") {
+    const passed = requestTimePassedLine(who(found.tour));
     return {
-      summary: `${view.visitorName} — ${view.requestedTime}. ${REQUEST_TIME_PASSED}`,
+      summary: `${view.visitorName} — ${view.requestedTime}. ${passed}`,
       ...view,
-      note: REQUEST_TIME_PASSED,
-      reason: REQUEST_TIME_PASSED,
+      note: passed,
+      reason: passed,
     };
   }
   const note = view.outsideHours
@@ -185,7 +218,7 @@ export async function approveTourTimeRequest(ctx: Ctx, input: { tourTimeRequestI
   const found = await findTimeRequest(ctx.services, input.tourTimeRequestId);
   if (!found) throw new SetupInputError("REQUEST_NOT_FOUND", "I couldn't find that time request.");
   if (found.request.status === "WITHDRAWN") return withdrawnResult(found.request);
-  if (found.request.status === "EXPIRED") return expiredResult(found.request);
+  if (found.request.status === "EXPIRED") return alreadyHandledResult(found.request);
   if (found.request.status !== "PENDING") throw new SetupInputError("REQUEST_CLOSED", REQUEST_ALREADY_HANDLED);
   refuseIfPaused(
     ctx,
@@ -205,7 +238,7 @@ export async function approveTourTimeRequest(ctx: Ctx, input: { tourTimeRequestI
     } catch (err) {
       if (err instanceof TourCoreError && err.code === "REQUEST_EXPIRED") {
         await persistSession(ctx.services, session);
-        return expiredResult(found.request);
+        return expiredResult(name, found.request);
       }
       throw err;
     }
@@ -232,7 +265,7 @@ export async function approveTourTimeRequest(ctx: Ctx, input: { tourTimeRequestI
     if (err instanceof TourCoreError && err.code === "REQUEST_WITHDRAWN") return withdrawnResult(found.request);
     if (err instanceof TourCoreError && err.code === "REQUEST_EXPIRED") {
       await persistSession(ctx.services, session);
-      return expiredResult(found.request);
+      return expiredResult(name, found.request);
     }
     throw err;
   }
@@ -248,7 +281,7 @@ export async function declineTourTimeRequest(ctx: Ctx, input: { tourTimeRequestI
   const found = await findTimeRequest(ctx.services, input.tourTimeRequestId);
   if (!found) throw new SetupInputError("REQUEST_NOT_FOUND", "I couldn't find that time request.");
   if (found.request.status === "WITHDRAWN") return withdrawnResult(found.request);
-  if (found.request.status === "EXPIRED") return expiredResult(found.request);
+  if (found.request.status === "EXPIRED") return alreadyHandledResult(found.request);
   if (found.request.status !== "PENDING") throw new SetupInputError("REQUEST_CLOSED", REQUEST_ALREADY_HANDLED);
   const session = requireLive(found.tour);
   try {
@@ -257,7 +290,7 @@ export async function declineTourTimeRequest(ctx: Ctx, input: { tourTimeRequestI
     if (err instanceof TourCoreError && err.code === "REQUEST_WITHDRAWN") return withdrawnResult(found.request);
     if (err instanceof TourCoreError && err.code === "REQUEST_EXPIRED") {
       await persistSession(ctx.services, session);
-      return expiredResult(found.request);
+      return expiredResult(who(found.tour), found.request);
     }
     throw err;
   }
@@ -270,7 +303,7 @@ export async function proposeTourTime(ctx: Ctx, input: { tourTimeRequestId: stri
   const found = await findTimeRequest(ctx.services, input.tourTimeRequestId);
   if (!found) throw new SetupInputError("REQUEST_NOT_FOUND", "I couldn't find that time request.");
   if (found.request.status === "WITHDRAWN") return withdrawnResult(found.request);
-  if (found.request.status === "EXPIRED") return expiredResult(found.request);
+  if (found.request.status === "EXPIRED") return alreadyHandledResult(found.request);
   if (found.request.status !== "PENDING") throw new SetupInputError("REQUEST_CLOSED", REQUEST_ALREADY_HANDLED);
   const session = requireLive(found.tour);
   const tz = found.tour.config.property.timezone;
@@ -284,7 +317,7 @@ export async function proposeTourTime(ctx: Ctx, input: { tourTimeRequestId: stri
     if (err instanceof TourCoreError && err.code === "REQUEST_WITHDRAWN") return withdrawnResult(found.request);
     if (err instanceof TourCoreError && err.code === "REQUEST_EXPIRED") {
       await persistSession(ctx.services, session);
-      return expiredResult(found.request);
+      return proposePassedResult(who(found.tour), formatTime(resolved.start, tz), formatDay(resolved.start, tz), found.request);
     }
     throw err;
   }

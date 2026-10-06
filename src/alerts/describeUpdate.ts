@@ -1,5 +1,5 @@
 import { placementOf, touringHoursLabel } from "../core/customSlot";
-import { REQUEST_TIME_PASSED, WITHDRAWN_FOR_REGULAR_BOOKING } from "../core/TourCore";
+import { requestTimePassedLine, WITHDRAWN_FOR_REGULAR_BOOKING } from "../core/TourCore";
 import { addDays, formatDay, formatTime, localDateOf } from "../core/timezone";
 import { UNNAMED_VISITOR } from "../domain/model";
 import { inspectException } from "../operator/exceptions";
@@ -114,7 +114,7 @@ async function describeTimeRequest(services: OperatorServices, event: OperatorEv
   if (request.status === "EXPIRED") {
     return {
       eventType: event.eventType,
-      summary: `${who} — ${requested}. ${REQUEST_TIME_PASSED}`,
+      summary: `${who} — ${requested}. ${requestTimePassedLine(who)}`,
       request: {
         tourTimeRequestId: request.id,
         tourRef: tourRef(tour.propertyId, tour.tourId),
@@ -124,7 +124,7 @@ async function describeTimeRequest(services: OperatorServices, event: OperatorEv
         ...(currentAt ? { currentTime: when(currentAt, now, tz) } : {}),
         status: "expired",
       },
-      instructions: `${REQUEST_TIME_PASSED} No decision is needed.`,
+      instructions: `${requestTimePassedLine(who)} No decision is needed.`,
     };
   }
   return {

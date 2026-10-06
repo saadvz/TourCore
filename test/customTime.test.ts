@@ -9,10 +9,12 @@ import {
   customTimeAskedLine,
   PENDING_CUSTOM_TIME_REGULAR_OPTION,
   pendingCustomTimeLine,
+  proposeVisitorLine,
   replacesTourLine,
   REQUEST_ALREADY_HANDLED,
-  REQUEST_TIME_PASSED,
   requestExpiredLine,
+  requestProposePassedLine,
+  requestTimePassedLine,
   WITHDRAWN_FOR_REGULAR_BOOKING,
 } from "../src/core/TourCore";
 import { createTourCore } from "../src/createTourCore";
@@ -151,6 +153,17 @@ describe("the landlord decides", () => {
     const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
     expect((await a.grok("propose_tour_time", { tourTimeRequestId: id, newStartsAt: "3:30 PM" })).summary).toBe(
       "I asked Testy about 3:30 PM. Their current booking stays until they say yes.",
+    );
+    const proposed = a.fake.sent.filter((message) => message.number === PHONE).at(-1)!.content;
+    expect(proposed).toBe(
+      proposeVisitorLine({
+        requestedTime: "3:15 PM",
+        requestedDay: "Monday, Sep 28",
+        proposedTime: "3:30 PM",
+        proposedDay: "Monday, Sep 28",
+        time: "2:00 PM",
+        day: "Monday, Sep 28",
+      }),
     );
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
     expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.slotStart).toBe(atTime(14).toISOString());
@@ -434,15 +447,16 @@ describe("a pending custom-time request does not block regular booking", () => {
     expect(reservation.status).toBe("AWAITING_CONSENT");
   });
 
-  it("I'm locked in after the pending line gets HELP with no operator alert", async () => {
+  it("I'm locked in after the pending line alerts the landlord like a +15 close", async () => {
     const a = await liveApp({ cleanups });
     const later = zonedTimeToUtc({ year: 2026, month: 10, day: 1, hour: 15, minute: 15 }, TZ);
     await tourThenCustomTime(a, later);
-    const beforeAlerts = a.fake.sent.filter((message) => message.number !== PHONE).length;
     const replies = await a.text("I'm locked in");
-    expect(replies.join("\n")).toMatch(/HELP|help/i);
+    expect(replies.join("\n")).toContain("Thanks, I've let the property team know");
     expect(replies.join("\n")).not.toContain("still with the property team");
-    expect(a.fake.sent.filter((message) => message.number !== PHONE).length).toBe(beforeAlerts);
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    const bundle = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle;
+    expect(bundle.auditEvents.some((event) => event.type === "OPERATOR_NOTIFIED" && /locked in/i.test(event.detail ?? ""))).toBe(true);
   });
 
   it("a day name before the pending line has gone out books normally", async () => {
@@ -879,7 +893,7 @@ describe("a request whose time has passed expires", () => {
     a.clock.t = at(15, 20);
     const before = a.fake.sent.filter((message) => message.number === PHONE).length;
     const result = await a.grok("approve_tour_time_request", { tourTimeRequestId: id });
-    expect(result.summary).toBe(REQUEST_TIME_PASSED);
+    expect(result.summary).toBe(requestTimePassedLine("Testy"));
     expect(result.status).toBe("expired");
     const after = a.fake.sent.filter((message) => message.number === PHONE).map((message) => message.content).slice(before);
     expect(after.join("\n")).toContain(requestExpiredLine("3:15 PM", "Monday, Sep 28", { time: "2:00 PM", day: "Monday, Sep 28" }));
@@ -887,7 +901,7 @@ describe("a request whose time has passed expires", () => {
     expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.tourTimeRequests[0]!.status).toBe("EXPIRED");
   });
 
-  it("proposing after the requested time has passed expires and texts the visitor they are still booked", async () => {
+  it("proposing after the requested time has passed expires, does not send the proposal, and uses the propose-only operator line", async () => {
     const a = await liveApp({ cleanups });
     await a.book();
     await a.text("Can I change it to 3:15?");
@@ -895,12 +909,30 @@ describe("a request whose time has passed expires", () => {
     a.clock.t = at(15, 20);
     const before = a.fake.sent.filter((message) => message.number === PHONE).length;
     const result = await a.grok("propose_tour_time", { tourTimeRequestId: id, newStartsAt: "3:30 PM" });
-    expect(result.summary).toBe(REQUEST_TIME_PASSED);
+    expect(result.summary).toBe(requestProposePassedLine("Testy", "3:30 PM", "Monday, Sep 28"));
     expect(result.status).toBe("expired");
     const after = a.fake.sent.filter((message) => message.number === PHONE).map((message) => message.content).slice(before);
     expect(after.join("\n")).toContain(requestExpiredLine("3:15 PM", "Monday, Sep 28", { time: "2:00 PM", day: "Monday, Sep 28" }));
+    expect(after.join("\n")).not.toContain("The property team can't do");
+    expect(after.join("\n")).not.toContain("Reply YES to switch");
+    expect(after.filter((line) => line.includes("couldn't get to your request")).length).toBe(1);
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
     expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.tourTimeRequests[0]!.status).toBe("EXPIRED");
+  });
+
+  it("declining after the requested time has passed expires with the ran-out line, not a decline", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    await a.text("Can I change it to 3:15?");
+    const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
+    a.clock.t = at(15, 20);
+    const before = a.fake.sent.filter((message) => message.number === PHONE).length;
+    const result = await a.grok("decline_tour_time_request", { tourTimeRequestId: id });
+    expect(result.summary).toBe(requestTimePassedLine("Testy"));
+    expect(result.status).toBe("expired");
+    const after = a.fake.sent.filter((message) => message.number === PHONE).map((message) => message.content).slice(before);
+    expect(after.join("\n")).toContain(requestExpiredLine("3:15 PM", "Monday, Sep 28", { time: "2:00 PM", day: "Monday, Sep 28" }));
+    expect(after.join("\n")).not.toContain("couldn't approve");
   });
 
   it("expiring a request with no held booking offers another time", async () => {
@@ -911,10 +943,66 @@ describe("a request whose time has passed expires", () => {
     a.clock.t = at(15, 20);
     const before = a.fake.sent.filter((message) => message.number === PHONE).length;
     const result = await a.grok("approve_tour_time_request", { tourTimeRequestId: id });
-    expect(result.summary).toBe(REQUEST_TIME_PASSED);
+    expect(result.summary).toBe(requestTimePassedLine("Testy"));
     const after = a.fake.sent.filter((message) => message.number === PHONE).map((message) => message.content).slice(before);
     expect(after.join("\n")).toContain(requestExpiredLine("3:15 PM", "Monday, Sep 28"));
     expect(after.join("\n")).toContain("If you'd like another time, just reply with a day.");
+  });
+
+  it("already-expired approve, propose, and decline return already handled and do not text again", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    await a.text("Can I change it to 3:15?");
+    const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
+    a.clock.t = at(15, 20);
+    await a.server.tourCore.tickOverstay();
+    const before = a.fake.sent.filter((message) => message.number === PHONE).length;
+    for (const result of [
+      await a.grok("approve_tour_time_request", { tourTimeRequestId: id }),
+      await a.grok("propose_tour_time", { tourTimeRequestId: id, newStartsAt: "3:30 PM" }),
+      await a.grok("decline_tour_time_request", { tourTimeRequestId: id }),
+    ]) {
+      expect(result.summary).toBe(REQUEST_ALREADY_HANDLED);
+    }
+    expect(a.fake.sent.filter((message) => message.number === PHONE).length).toBe(before);
+  });
+
+  it("the reminder scheduler expires a nobody-touches request once", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    await a.text("Can I change it to 3:15?");
+    a.clock.t = at(15, 20);
+    const before = a.fake.sent.filter((message) => message.number === PHONE).length;
+    await a.server.tourCore.tickOverstay();
+    const afterTick = a.fake.sent.filter((message) => message.number === PHONE).map((message) => message.content).slice(before);
+    expect(afterTick.join("\n")).toContain(requestExpiredLine("3:15 PM", "Monday, Sep 28", { time: "2:00 PM", day: "Monday, Sep 28" }));
+    expect(afterTick.filter((line) => line.includes("couldn't get to your request")).length).toBe(1);
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.tourTimeRequests[0]!.status).toBe("EXPIRED");
+    await a.server.tourCore.tickOverstay();
+    const thanks = await a.text("thanks");
+    expect(thanks.join("\n")).not.toContain("couldn't get to your request");
+    expect(thanks.join("\n")).not.toContain("still with the property team");
+    const all = a.fake.sent.filter((message) => message.number === PHONE && message.content.includes("couldn't get to your request"));
+    expect(all).toHaveLength(1);
+  });
+
+  it("list and inspect expire a past request and drop it from waiting", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    await a.text("Can I change it to 3:15?");
+    const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
+    a.clock.t = at(15, 20);
+    const before = a.fake.sent.filter((message) => message.number === PHONE).length;
+    const listed = await a.grok("list_tour_time_requests");
+    expect(listed.requests).toHaveLength(0);
+    const expiredList = await a.grok("list_tour_time_requests", { status: "expired" });
+    expect(expiredList.requests[0].status).toBe("expired");
+    const inspected = await a.grok("inspect_tour_time_request", { tourTimeRequestId: id });
+    expect(inspected.status).toBe("expired");
+    expect(inspected.reason).toBe(requestTimePassedLine("Testy"));
+    const after = a.fake.sent.filter((message) => message.number === PHONE).map((message) => message.content).slice(before);
+    expect(after.filter((line) => line.includes("couldn't get to your request")).length).toBe(1);
   });
 });
 
@@ -975,5 +1063,115 @@ describe("custom-time nits", () => {
     const approved = await approveP;
     expect(approved.summary).toBe(WITHDRAWN_FOR_REGULAR_BOOKING);
     expect(approved.status).toBe("withdrawn");
+  });
+});
+
+describe("a proposed time names both days", () => {
+  it("the no-booking proposal keeps looking instead of naming a current tour", async () => {
+    const a = await liveApp({ cleanups });
+    await chooseUnit(a);
+    await a.text("Can I tour at 3:15?");
+    const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
+    await a.grok("propose_tour_time", { tourTimeRequestId: id, newStartsAt: "3:30 PM" });
+    const last = a.fake.sent.filter((message) => message.number === PHONE).at(-1)!.content;
+    expect(last).toBe(
+      proposeVisitorLine({
+        requestedTime: "3:15 PM",
+        requestedDay: "Monday, Sep 28",
+        proposedTime: "3:30 PM",
+        proposedDay: "Monday, Sep 28",
+      }),
+    );
+    expect(last).toBe(
+      "The property team can't do 3:15 PM on Monday, Sep 28, but 3:30 PM on Monday, Sep 28 works. Reply YES to switch, or NO to keep looking.",
+    );
+  });
+});
+
+describe("yes plus extra words stays consent unless it is a real change", () => {
+  it.each([
+    "yes but I might be 5 min late",
+    "yes, no change needed",
+    "yes, I'd rather not wait",
+    "ok but I'll be a little late",
+    "yes but I'm bringing my partner",
+  ])("%s records consent", async (phrase) => {
+    const a = await liveApp({ cleanups });
+    await firstBookingConsent(a);
+    await a.text(phrase);
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeTruthy();
+  });
+
+  it("yes but where do I park? records consent and answers parking", async () => {
+    const a = await liveApp({ cleanups });
+    await firstBookingConsent(a);
+    const replies = await a.text("yes but where do I park?");
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeTruthy();
+    expect(replies.join("\n")).toMatch(/parking/i);
+    expect(replies.join("\n")).not.toContain("Sorry, I didn't catch that");
+  });
+
+  it("Yes, different entrance? records consent and answers the question", async () => {
+    const a = await liveApp({ cleanups });
+    await firstBookingConsent(a);
+    const replies = await a.text("Yes, different entrance?");
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeTruthy();
+    expect(replies.join("\n")).not.toContain("Sorry, I didn't catch that");
+  });
+
+  it("yes, switch to wednesday is a change and is not recorded as consent", async () => {
+    const a = await liveApp({ cleanups });
+    await firstBookingConsent(a);
+    const replies = await a.text("yes, switch to wednesday");
+    expect(replies.join("\n")).toMatch(/Which time|2:00 PM|3:30 PM/);
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeFalsy();
+  });
+});
+
+describe("a held booking still gets a reply when they ask for another time", () => {
+  it("Can I come Tuesday at 2:00? on an operator hold files a request and is never silent", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    const [tour] = (await a.grok("list_active_tours")).tours;
+    await a.approve("place_operator_hold", { tourRef: tour.tourRef, reason: "Checking the lobby" });
+    const replies = await a.text("Can I come Tuesday at 2:00?");
+    expect(replies.length).toBeGreaterThan(0);
+    expect(replies.join("\n")).toMatch(/asked the property team|Tuesday|2:00/);
+    const record = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    const bundle = a.ws.loadTour("prop_100_alfred_way", record.tourId)!.bundle;
+    expect(bundle.tourTimeRequests.some((request) => request.status === "PENDING")).toBe(true);
+    expect(bundle.tourTimeRequests[0]!.requestedStartsAt).toBe(zonedTimeToUtc({ year: 2026, month: 9, day: 29, hour: 14, minute: 0 }, TZ).toISOString());
+  });
+});
+
+describe("a named day on a move is kept", () => {
+  it("Can I move it to Tuesday at 2:00? replaces with Tuesday and does not re-ask consent", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    const replies = await a.text("Can I move it to Tuesday at 2:00?");
+    expect(replies.join("\n")).toContain(bookedForLine("2:00 PM", "Tuesday, Sep 29"));
+    expect(replies.join("\n")).toContain(replacesTourLine("2:00 PM", "Monday, Sep 28"));
+    expect(replies.join("\n")).not.toContain(CONSENT_TEXT);
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    const reservation = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations.find((item) => item.slotStart && item.status !== "CANCELLED")!;
+    expect(reservation.slotStart).toBe(zonedTimeToUtc({ year: 2026, month: 9, day: 29, hour: 14, minute: 0 }, TZ).toISOString());
+    expect(reservation.consentId).toBeTruthy();
+  });
+
+  it("Can I move it to Tuesday at 3:15? files Tuesday custom and does not re-ask consent", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    const replies = await a.text("Can I move it to Tuesday at 3:15?");
+    expect(replies.join("\n")).toContain(customTimeAskedLine("3:15 PM", "Tuesday, Sep 29", "2:00 PM", "Monday, Sep 28"));
+    expect(replies.join("\n")).not.toContain(CONSENT_TEXT);
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.tourTimeRequests[0]!.requestedStartsAt).toBe(
+      zonedTimeToUtc({ year: 2026, month: 9, day: 29, hour: 15, minute: 15 }, TZ).toISOString(),
+    );
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeTruthy();
   });
 });

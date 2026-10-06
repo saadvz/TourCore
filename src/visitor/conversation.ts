@@ -1,7 +1,7 @@
 import { resolveSpokenTime } from "../core/customSlot";
 import { orList, resolveQuestion, unitsNamedIn } from "../core/questions";
 import { isoDate, parseIsoDate } from "../core/schedule";
-import { dayReference, type DayReference, type SpokenTime } from "../core/spokenTime";
+import { dayReference, spokenTimes, type DayReference, type SpokenTime } from "../core/spokenTime";
 import { addDays, formatDay, formatTime, localDateOf, weekdayOf, zonedParts, type LocalDate } from "../core/timezone";
 import {
   CONSENT_TEXT,
@@ -115,10 +115,38 @@ export const SCHEDULE_CHANGED_LEAD = "Tour times just changed. Here's what's ope
 const WHICH_DAY = "Which day works for you?";
 const DAY_MENU = `I have tours available. ${WHICH_DAY}`;
 const MENU_NUMBER = /^\s*(?:#|number |option )?(\d{1,2})\s*[.!]?\s*$/i;
-const CONSENT_CHANGE_MARKERS = /\b(but|instead|can i do|can we do|rather|change|switch|different)\b/;
+const EXPLICIT_CHANGE_PHRASE = /\b(instead|switch|change to|move it|reschedule|can i do|can we do|another time|another day)\b/;
+const NO_CHANGE = /\bno change\b/;
+const WEEKDAY_OR_DAY = /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow)\b/;
 
+function namesDayOrTime(text: string): boolean {
+  const n = normalize(text);
+  return WEEKDAY_OR_DAY.test(n) || spokenTimes(n).length > 0;
+}
+
+/** Change only with an explicit phrase, or a hedge plus a named day/time. rather/different alone never count. */
 function hasExplicitChangeAsk(text: string): boolean {
-  return CONSENT_CHANGE_MARKERS.test(stripFiller(normalize(text)));
+  const n = stripFiller(normalize(text));
+  if (NO_CHANGE.test(n)) return false;
+  if (EXPLICIT_CHANGE_PHRASE.test(n)) return true;
+  return /\b(but|instead)\b/.test(n) && namesDayOrTime(n);
+}
+
+function leftoverAfterConsent(text: string): string | undefined {
+  const stripped = text.replace(/^\s*(yes|yeah|yep|yup|ok|okay|sure)[,!.]?\s+/i, "").replace(/^but\s+/i, "").trim();
+  if (!stripped) return undefined;
+  if (/\?/.test(stripped) || /\b(park|parking|entrance)\b/i.test(stripped)) return stripped;
+  return undefined;
+}
+
+async function answerLeftoverAfterConsent(turn: Turn, text: string): Promise<void> {
+  const leftover = leftoverAfterConsent(text);
+  if (!leftover) return;
+  await turn.session.askQuestion(leftover, {
+    meta: turn.said.meta,
+    alreadyRecorded: true,
+    unknownReply: unknownReplyFor(turn),
+  });
 }
 
 /** A clear YES/NO, including yes/ok plus extra words. Change markers are not consent. */
@@ -291,6 +319,12 @@ export async function handleVisitorText(
   }
 
   // SMS campaign consent comes before any property or booking content.
+  if (!silent && keyword !== "stop" && session.core) {
+    await session.core.expirePassedTourTimeRequests();
+  }
+
+  const outboundBefore = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").length;
+
   if (session.kind === "messaging" && session.smsConsentMode !== "disabled" && session.smsConsent !== "opted_in") {
     await photoAck.send();
     await handleSmsGate(session, said, text);
@@ -364,6 +398,10 @@ export async function handleVisitorText(
     else await session.greet(said);
   }   else await byStage(turn);
   if (session.overstay) await session.overstay.tickSession(session);
+  if (keyword !== "stop" && !silent && typed) {
+    const outboundAfter = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").length;
+    if (outboundAfter === outboundBefore) await session.reply(SORRY);
+  }
   return interpretation;
 }
 
@@ -611,7 +649,8 @@ async function fileCustomTime(turn: Turn, spoken: SpokenTime, alreadyRecorded = 
     }
     if (reservation) {
       if (!alreadyRecorded) await session.recordText(turn.said);
-      return session.bookOffered(resolved.start.toISOString());
+      if (await session.bookOffered(resolved.start.toISOString())) return;
+      alreadyRecorded = true;
     }
   }
   if (!reservation) {
@@ -1046,7 +1085,9 @@ async function byStage(turn: Turn): Promise<void> {
       const changeAsk = hasExplicitChangeAsk(text);
       const answer = clearConsentAnswer(text);
       if (answer && !changeAsk) {
-        return turn.act("consent", { agree: answer === "yes" });
+        await turn.act("consent", { agree: answer === "yes" });
+        await answerLeftoverAfterConsent(turn, text);
+        return;
       }
       if (isBareMenuNumber(text)) {
         const current = await session.reservation();
@@ -1096,6 +1137,10 @@ async function byStage(turn: Turn): Promise<void> {
       if (await session.isPaused()) {
         if (intent.type === "REQUEST_HELP") return session.help(turn.said);
         return turn.respond(VisitorDenialCopy.operatorHold(session.config.operator.name, session.config.operator.visitorContact));
+      }
+      if (mentionsAfterCloseDistress(turn.said.text ?? "")) {
+        await session.alertDistress(turn.said);
+        return;
       }
       if (intent.type === "ASK_PROPERTY_QUESTION") return handleEndedQuestion(turn);
       return turn.respond(TOUR_ENDED_REPLY);
@@ -1291,6 +1336,7 @@ async function handlePendingBookingReply(turn: Turn): Promise<boolean> {
     const answer = clearConsentAnswer(text);
     if (answer === "yes") {
       await session.answerPendingConsent(true, turn.said);
+      await answerLeftoverAfterConsent(turn, text);
       return true;
     }
     if (answer === "no") {

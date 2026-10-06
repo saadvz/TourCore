@@ -229,6 +229,7 @@ export class OverstayScheduler {
   }
 
   private async pass(core: TourCore, ctx: { session?: VisitorDemoSession; propertyId?: string; tourId?: string }): Promise<void> {
+    await core.expirePassedTourTimeRequests();
     const reservations = await core.store.list("reservations");
     for (const reservation of reservations) {
       if (!reservation.windowEnd) continue;

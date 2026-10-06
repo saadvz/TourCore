@@ -133,8 +133,32 @@ export const WITHDRAWN_FOR_REGULAR_BOOKING = "They booked a regular time instead
 /** Repeat approve/decline/propose after the request is no longer pending. */
 export const REQUEST_ALREADY_HANDLED = "That request has already been handled.";
 
-/** Operator-facing refusal when the requested time is already in the past. */
-export const REQUEST_TIME_PASSED = "That time has already passed, so I can't book it. You can offer them a different time instead.";
+/** Proposed alternative time is itself in the past. */
+export const SLOT_ALREADY_PASSED = "That time has already passed.";
+
+/** Operator-facing refusal when approve or decline comes in after the requested time has passed. */
+export function requestTimePassedLine(who: string): string {
+  return `That time has already passed, so I've let ${who} know their request ran out. You can offer them a different time instead.`;
+}
+
+/** Operator-facing refusal when propose comes in after the requested time has passed. */
+export function requestProposePassedLine(who: string, newTime: string, newDay: string): string {
+  return `That request ran out because its time already passed, so your offer of ${newTime} on ${newDay} didn't go out. I've let ${who} know, and you can still book them a one-off time.`;
+}
+
+export function proposeVisitorLine(input: {
+  requestedTime: string;
+  requestedDay: string;
+  proposedTime: string;
+  proposedDay: string;
+  time?: string;
+  day?: string;
+}): string {
+  const lead = `The property team can't do ${input.requestedTime} on ${input.requestedDay}, but ${input.proposedTime} on ${input.proposedDay} works.`;
+  return input.time && input.day
+    ? `${lead} Reply YES to switch, or NO to keep your ${input.time} tour on ${input.day}.`
+    : `${lead} Reply YES to switch, or NO to keep looking.`;
+}
 
 /** Visitor confirmation when a regular pick replaces a held or booked future tour. */
 export function replacesTourLine(time: string, day: string): string {
@@ -929,7 +953,7 @@ export class TourCore {
 
   private assertPendingTimeRequest(request: TourTimeRequest): void {
     if (request.status === "WITHDRAWN") throw new TourCoreError("REQUEST_WITHDRAWN", WITHDRAWN_FOR_REGULAR_BOOKING);
-    if (request.status === "EXPIRED") throw new TourCoreError("REQUEST_EXPIRED", REQUEST_TIME_PASSED);
+    if (request.status === "EXPIRED") throw new TourCoreError("REQUEST_CLOSED", REQUEST_ALREADY_HANDLED);
     if (request.status !== "PENDING") throw new TourCoreError("REQUEST_CLOSED", REQUEST_ALREADY_HANDLED);
   }
 
@@ -944,13 +968,13 @@ export class TourCore {
       status: "EXPIRED",
       resolvedAt: this.nowIso(),
       resolvedBy: "OPERATOR",
-      operatorNote: REQUEST_TIME_PASSED,
+      operatorNote: "requested time had already passed",
     };
     await this.deps.store.put("tourTimeRequests", next);
     await this.record("TOUR_TIME_REQUEST_EXPIRED", {
       reservationId: request.reservationId,
       prospectId: request.prospectId,
-      detail: REQUEST_TIME_PASSED,
+      detail: "requested time had already passed",
     });
     const asked = new Date(request.requestedStartsAt);
     const reservation = request.reservationId ? await this.deps.store.get("reservations", request.reservationId) : undefined;
@@ -958,14 +982,27 @@ export class TourCore {
       ? { time: this.time(new Date(reservation.slotStart)), day: this.day(new Date(reservation.slotStart)) }
       : undefined;
     const prospect = await this.mustGetProspect(request.prospectId);
-    await this.textProspect(prospect, request.reservationId, requestExpiredLine(this.time(asked), this.day(asked), current));
+    const body = requestExpiredLine(this.time(asked), this.day(asked), current);
+    if (!(await this.visitorAlreadyReceived(request.reservationId ?? "", body))) {
+      await this.textProspect(prospect, request.reservationId, body);
+    }
     return next;
   }
 
   private async refuseIfRequestPassed(request: TourTimeRequest): Promise<void> {
     if (!this.requestHasPassed(request.requestedStartsAt)) return;
     await this.expireTourTimeRequest(request);
-    throw new TourCoreError("REQUEST_EXPIRED", REQUEST_TIME_PASSED);
+    throw new TourCoreError("REQUEST_EXPIRED", "requested time had already passed");
+  }
+
+  /** Marks pending requests whose time has passed as EXPIRED and texts the visitor once. */
+  async expirePassedTourTimeRequests(): Promise<TourTimeRequest[]> {
+    const expired: TourTimeRequest[] = [];
+    for (const request of await this.deps.store.list("tourTimeRequests")) {
+      if (request.status !== "PENDING" || !this.requestHasPassed(request.requestedStartsAt)) continue;
+      expired.push(await this.expireTourTimeRequest(request));
+    }
+    return expired;
   }
 
   async approveTourTimeRequest(requestId: string, options: { outsideTourHours?: boolean } = {}): Promise<{ request: TourTimeRequest; reservation: Reservation; needsConsentAsk?: boolean }> {
@@ -1004,6 +1041,7 @@ export class TourCore {
       await this.deps.slotLockBarrier?.("decline");
       const request = await this.mustGetTimeRequest(requestId);
       this.assertPendingTimeRequest(request);
+      await this.refuseIfRequestPassed(request);
       const declined = await this.resolveRequest(request, "DECLINED", "OPERATOR", note);
       const reservation = request.reservationId ? await this.deps.store.get("reservations", request.reservationId) : undefined;
       const prospect = await this.mustGetProspect(request.prospectId);
@@ -1033,17 +1071,24 @@ export class TourCore {
       await this.refuseIfRequestPassed(request);
       const start = new Date(alternativeStartsAt);
       if (Number.isNaN(start.getTime())) throw new TourCoreError("INVALID_SLOT", "That tour time isn't valid.");
-      if (start.getTime() <= this.deps.clock.now().getTime()) throw new TourCoreError("SLOT_PAST", REQUEST_TIME_PASSED);
+      if (start.getTime() <= this.deps.clock.now().getTime()) throw new TourCoreError("SLOT_PAST", SLOT_ALREADY_PASSED);
       if (request.reservationId) await this.assertNoConflict(start, request.reservationId);
       const next: TourTimeRequest = { ...request, proposedAlternativeAt: start.toISOString(), operatorNote: `offered ${this.time(start)}` };
       await this.deps.store.put("tourTimeRequests", next);
       const prospect = await this.mustGetProspect(request.prospectId);
       const reservation = request.reservationId ? await this.deps.store.get("reservations", request.reservationId) : undefined;
-      const keep = reservation?.slotStart ? ` or NO to keep your ${this.time(new Date(reservation.slotStart))} time` : " or NO to keep looking";
+      const asked = new Date(request.requestedStartsAt);
+      const current = reservation?.slotStart ? { time: this.time(new Date(reservation.slotStart)), day: this.day(new Date(reservation.slotStart)) } : undefined;
       await this.textProspect(
         prospect,
         request.reservationId,
-        `The property team can't do ${this.time(new Date(request.requestedStartsAt))}, but ${this.time(start)} works. Reply YES to switch to ${this.time(start)}${keep}.`,
+        proposeVisitorLine({
+          requestedTime: this.time(asked),
+          requestedDay: this.day(asked),
+          proposedTime: this.time(start),
+          proposedDay: this.day(start),
+          ...current,
+        }),
       );
       await this.record("TOUR_TIME_ALTERNATIVE_PROPOSED", { reservationId: request.reservationId, prospectId: request.prospectId, detail: `offered ${this.whenPhrase(start)}` });
       return next;
@@ -1550,6 +1595,12 @@ export class TourCore {
     const reservation = await this.mustGetReservation(reservationId);
     if (reservation.status !== "EXPIRED") return;
     if (await this.hasConfirmedLeftAfterClose(reservationId)) return;
+    await this.alertVisitorDistress(reservationId, message);
+  }
+
+  /** Landlord alert plus visitor ack for distress after a tour has finished (DONE or +15 close). */
+  async alertVisitorDistress(reservationId: string, message: string): Promise<void> {
+    const reservation = await this.mustGetReservation(reservationId);
     const prospect = await this.mustGetProspect(reservation.prospectId);
     const place = visitorSubject(this.deps.config.property, this.unitFor(reservation).name);
     const said = message.trim().slice(0, 300);

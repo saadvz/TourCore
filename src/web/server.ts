@@ -111,6 +111,7 @@ export interface TourCoreServer extends Server {
     /** Resolves once every alert scan and delivery started so far has finished. */
     settled(): Promise<void>;
     storageReady: Promise<{ ok: boolean; summary: string }>;
+    tickOverstay(): Promise<void>;
   };
 }
 
@@ -565,6 +566,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         } while (seen !== alertWork);
       },
       storageReady,
+      tickOverstay: () => conversations.tickOverstay(),
     },
   });
 }

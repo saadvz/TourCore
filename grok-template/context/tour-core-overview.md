@@ -32,10 +32,17 @@ booking flow. Booking a regular slot withdraws that request so a later
 approve cannot double-book; replacing a held or booked future tour also
 sends `That replaces your {time} tour on {day}.` Operators see
 `They booked a regular time instead.` If the requested time has already
-passed, approve or propose expires it and texts the visitor once:
+passed, the request expires and the visitor is texted once:
 `The property team couldn't get to your request for {newTime} on {newDay} in time.`
 then `You're still booked for {time} on {day}.` or
-`If you'd like another time, just reply with a day.` Approving a custom time that
+`If you'd like another time, just reply with a day.` Approve and decline
+tell the operator `That time has already passed, so I've let {who} know
+their request ran out. You can offer them a different time instead.`
+Propose tells the operator `That request ran out because its time already
+passed, so your offer of {newTime} on {newDay} didn't go out. I've let
+{who} know, and you can still book them a one-off time.` and does not
+send the proposal. Already expired: `That request has already been
+handled.` Approving a custom time that
 moves an unconfirmed held booking uses that same booked-for line, then
 the original consent question, then Reply YES or NO — not moved wording. While the leaving
 issue is open after the close, stuck-inside texts and greetings stay
