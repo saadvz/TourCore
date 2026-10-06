@@ -5,8 +5,8 @@ number, books a time, agrees to texts and tour records, confirms who they are,
 and tours one unit on their own. The text thread stays live through the tour:
 Tour Core guides them door by door. After the tour has started they get a
 15-minutes-left questions text, then a 5-minute warning. One extra 10 minutes
-is offered when the next time is free; an ask before that warning is deferred
-unless early asks are turned on. After the end, doors never open. A +5 text
+is granted when they ask and the next time is free, including before that
+warning; a bare yes to the questions text never grants time. After the end, doors never open. A +5 text
 asks if they've left; at +15 the tour closes and the team gets one issue.
 DONE, "I'm out", or "leaving" ends the tour with the usual goodbye. STOP
 stops visitor texts; team alerts still go out. Afterwards it sends a recap and

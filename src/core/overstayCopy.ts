@@ -57,10 +57,6 @@ export function extensionAlreadyUsed(end: string): string {
 export const EXTENSION_AFTER_T =
   "Your tour time has ended, so I can't add more time now. Please head out the way you came in and text DONE once you're outside.";
 
-/** Default (T-5-only): an ask before the offering warning. Does not use up the extension. */
-export const EXTENSION_ASK_DEFERRED =
-  "I can add up to 10 more minutes near the end of your tour if the time's free. I'll check and let you know then.";
-
 export function tourEnded(place: string, name?: string): string {
   return name
     ? `Your tour of ${place} just ended, ${name}. I can't open any more doors for this tour, so please head out the way you came in and text DONE once you're outside.`

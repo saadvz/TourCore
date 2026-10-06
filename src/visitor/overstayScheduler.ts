@@ -6,11 +6,9 @@ import {
   EXTENSION_MS,
   type Occupant,
 } from "../core/extensionAvailability";
-import { earlyExtensionAskDecision } from "../core/extensionPolicy";
 import {
   DOOR_AFTER_T,
   EXTENSION_AFTER_T,
-  EXTENSION_ASK_DEFERRED,
   extensionAlreadyUsed,
   extensionGranted,
   extensionUnavailable,
@@ -103,7 +101,7 @@ export class OverstayScheduler {
 
   constructor(
     private readonly runtime: RuntimeStore,
-    private readonly options: { clock?: Clock; earlyAskGrants?: boolean; now?: () => Date } = {},
+    private readonly options: { clock?: Clock; now?: () => Date } = {},
   ) {}
 
   private now(): Date {
@@ -232,8 +230,7 @@ export class OverstayScheduler {
     }
 
     if (step === "t5") {
-      if (claimed.extensionGranted) return;
-      const available = await this.available(core, reservation);
+      const available = !claimed.extensionGranted && (await this.available(core, reservation));
       const body = available ? t5Offering(place, end, name) : t5NoOffer(place, end, name);
       await core.messageVisitor(reservationId, body);
       const kind = available ? "offering" : "no-offer";
@@ -300,16 +297,9 @@ export class OverstayScheduler {
     if (record.extensionGranted || reservation.extensionGrantedAt) return extensionAlreadyUsed(end);
 
     const offering = record.t5Kind === "offering" || record.prompt === "t5-offer";
-    const decision = earlyExtensionAskDecision({
-      offeringT5Sent: offering,
-      nowMs,
-      windowEndMs: Date.parse(reservation.windowEnd),
-      earlyAskGrants: this.options.earlyAskGrants,
-    });
-    if (decision === "after-t") return EXTENSION_AFTER_T;
-    if (decision === "defer") return EXTENSION_ASK_DEFERRED;
     // A bare yes/sure/please only takes the extension after an offering T-5.
-    if (kind === "bare-yes" && !offering) return EXTENSION_ASK_DEFERRED;
+    // T-15 asked about questions, not time; an explicit ask uses kind "natural".
+    if (kind === "bare-yes" && !offering) return T15_BARE_YES;
 
     const available = await this.available(core, reservation);
     if (!available) return extensionUnavailable(end);
@@ -318,13 +308,16 @@ export class OverstayScheduler {
     const newEnd = formatTime(new Date(extended.windowEnd!), core.config.property.timezone);
     const prospect = await core.getProspect(extended.prospectId);
     const place = visitorSubject(core.config.property, core.unitName(extended));
+    const fired = this.get(reservationId)!.fired;
     this.put({
       ...this.get(reservationId)!,
       windowEnd: extended.windowEnd!,
       originalWindowEnd: record.originalWindowEnd || record.windowEnd,
       extensionGranted: true,
       prompt: "none",
-      fired: { ...this.get(reservationId)!.fired, t15: this.get(reservationId)!.fired.t15 ?? this.now().toISOString(), t5: this.get(reservationId)!.fired.t5 ?? this.now().toISOString() },
+      // Keep T-15 from resending. Leave T-5 unfired so the warning still goes
+      // out against the new end, as the no-offer wording.
+      fired: { ...fired, t15: fired.t15 ?? this.now().toISOString() },
     });
     await core.alertOperator(reservationId, landlordExtensionGranted(landlordWho(prospect?.name), place, newEnd));
     return extensionGranted(newEnd);

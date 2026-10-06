@@ -189,7 +189,7 @@ On the phone, the visitor:
    - "Skip ahead to my tour time" is a demo control that moves the demo clock forward.
 5. is guided along the route ("I'm at Unit 101");
 6. can ask questions, which are answered only from facts you entered and flagged for you when there's no answer;
-7. gets a 15-minutes-left "any questions?" text after the tour has started, then a 5-minute warning that offers one extra 10 minutes when the next time is free (an ask before that warning is deferred unless `EARLY_EXTENSION_ASK_GRANTS` is on);
+7. gets a 15-minutes-left "any questions?" text after the tour has started, then a 5-minute warning that offers one extra 10 minutes when the next time is free (an explicit ask for more time before that warning is granted when the slot is free; a bare yes to the questions text never grants time);
 8. can text DONE / I'm out / leaving at any point, or stay through the end: doors never open after the tour end, a +5 check-in asks if they've left, and at +15 the tour closes;
 9. finishes the tour and answers the follow-up question.
 
@@ -246,7 +246,7 @@ in their normal Messages app:
 - door access through Durin demo mode;
 - questions answered from approved facts only;
 - HELP and STOP;
-- a 15-minutes-left questions text and a 5-minute warning (one extra 10 minutes when that time is free; an ask before the warning is deferred by default);
+- a 15-minutes-left questions text and a 5-minute warning (one extra 10 minutes when that time is free; asking for more time before the warning is granted when the slot is free);
 - DONE / I'm out to end, or tour-end / +5 / +15 texts if they stay;
 - the follow-up question.
 

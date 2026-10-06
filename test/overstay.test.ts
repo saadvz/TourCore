@@ -1,15 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { loadConfig, type TourCoreConfig } from "../src/config/tourCoreConfig";
 import { SimulatedClock } from "../src/core/clock";
-import {
-  EARLY_EXTENSION_ASK_GRANTS,
-  earlyExtensionAskDecision,
-} from "../src/core/extensionPolicy";
 import { extensionAvailability, occupantFromReservation } from "../src/core/extensionAvailability";
 import {
   DOOR_AFTER_T,
   EXTENSION_AFTER_T,
-  EXTENSION_ASK_DEFERRED,
   extensionAlreadyUsed,
   extensionGranted,
   extensionUnavailable,
@@ -89,12 +84,13 @@ function busyReservation(ctx: ReturnType<typeof setup>, input: { start: Date; un
 }
 
 describe("extension policy", () => {
-  it("defaults to T-5-only", () => {
-    expect(EARLY_EXTENSION_ASK_GRANTS).toBe(false);
-    expect(earlyExtensionAskDecision({ offeringT5Sent: false, nowMs: 1, windowEndMs: 10 })).toBe("defer");
-    expect(earlyExtensionAskDecision({ offeringT5Sent: true, nowMs: 1, windowEndMs: 10 })).toBe("consider");
-    expect(earlyExtensionAskDecision({ offeringT5Sent: false, nowMs: 1, windowEndMs: 10, earlyAskGrants: true })).toBe("consider");
-    expect(earlyExtensionAskDecision({ offeringT5Sent: false, nowMs: 10, windowEndMs: 10 })).toBe("after-t");
+  it("a T-15 bare yes never grants time; only an explicit more-time ask does", async () => {
+    const ctx = setup();
+    const started = await startTour(ctx);
+    ctx.clock.set(minutesFrom(new Date(started.reservation.windowEnd!), -15));
+    await started.overstay.tickCore(ctx.core, { propertyId: ctx.config.property.id });
+    expect(await started.overstay.replyToVisitor(ctx.core, started.reservation.id, "yes")).toBe(T15_BARE_YES);
+    expect((await ctx.core.getReservation(started.reservation.id))!.extensionGrantedAt).toBeUndefined();
   });
 });
 
@@ -165,8 +161,8 @@ describe("overstay timeline", () => {
     const a = await startTour(ask);
     ask.clock.set(minutesFrom(new Date(a.reservation.windowEnd!), -15));
     await a.overstay.tickCore(ask.core, { propertyId: ask.config.property.id });
-    expect(await a.overstay.replyToVisitor(ask.core, a.reservation.id, "can I have more time?")).toBe(EXTENSION_ASK_DEFERRED);
-    expect((await ask.core.getReservation(a.reservation.id))!.extensionGrantedAt).toBeUndefined();
+    expect(await a.overstay.replyToVisitor(ask.core, a.reservation.id, "can I have more time?")).toBe(extensionGranted(await a.endLabel()));
+    expect((await ask.core.getReservation(a.reservation.id))!.extensionGrantedAt).toBeDefined();
   });
 
   it("T-5 offers extra time when the slot is free, and the no-offer copy when it is not", async () => {
@@ -243,16 +239,32 @@ describe("overstay timeline", () => {
     expect(extensionAvailability({ config: tightHours, reservation: oneOffSelf, occupants: [] }).available).toBe(true);
   });
 
-  it("a natural ask before T-5 is deferred by default and does not use the extension", async () => {
+  it("an explicit ask before T-5 grants when the slot is free and counts as the one extension", async () => {
     const ctx = setup();
     const started = await startTour(ctx);
     ctx.clock.set(minutesFrom(new Date(started.reservation.windowEnd!), -12));
-    expect(await started.overstay.handleAsk(ctx.core, started.reservation.id, "natural")).toBe(EXTENSION_ASK_DEFERRED);
-    expect((await ctx.core.getReservation(started.reservation.id))!.extensionGrantedAt).toBeUndefined();
-    ctx.clock.set(minutesFrom(new Date(started.reservation.windowEnd!), -5));
-    await started.overstay.tickCore(ctx.core, { propertyId: ctx.config.property.id });
-    const granted = await started.overstay.handleAsk(ctx.core, started.reservation.id, "bare-yes");
+    const granted = await started.overstay.handleAsk(ctx.core, started.reservation.id, "natural");
     expect(granted).toBe(extensionGranted(await started.endLabel()));
+    expect((await ctx.core.getReservation(started.reservation.id))!.extensionGrantedAt).toBeDefined();
+    expect(await started.overstay.handleAsk(ctx.core, started.reservation.id, "natural")).toBe(extensionAlreadyUsed(await started.endLabel()));
+  });
+
+  it("after an early extension, T-5 against the new end uses the no-offer wording", async () => {
+    const ctx = setup();
+    const started = await startTour(ctx);
+    const originalEnd = new Date(started.reservation.windowEnd!);
+    ctx.clock.set(minutesFrom(originalEnd, -12));
+    expect(await started.overstay.handleAsk(ctx.core, started.reservation.id, "natural")).toBe(extensionGranted(await started.endLabel()));
+    const newEnd = new Date((await ctx.core.getReservation(started.reservation.id))!.windowEnd!);
+    expect(newEnd.getTime() - originalEnd.getTime()).toBe(10 * 60_000);
+    ctx.clock.set(minutesFrom(newEnd, -5));
+    await started.overstay.tickCore(ctx.core, { propertyId: ctx.config.property.id });
+    const texts = await outbound(ctx, started.reservation.id);
+    expect(texts).toContain(t5NoOffer(PLACE, await started.endLabel(), "Jane"));
+    expect(texts.some((b) => b.includes("Want 10 more minutes?"))).toBe(false);
+    expect(texts.filter((b) => b.includes("15 minutes left"))).toHaveLength(0);
+    expect(await started.overstay.replyToVisitor(ctx.core, started.reservation.id, "yes")).toBe(T5_NO_OFFER_BARE_YES);
+    expect((await ctx.core.auditTrail()).filter((e) => e.type === "TOUR_EXTENDED" && e.reservationId === started.reservation.id)).toHaveLength(1);
   });
 
   it("after an offering T-5, a natural ask or a bare yes grants when the slot is still free", async () => {
@@ -292,30 +304,25 @@ describe("overstay timeline", () => {
     expect(await c.overstay.handleAsk(late.core, c.reservation.id, "natural")).toBe(EXTENSION_AFTER_T);
   });
 
-  it("with early asks on, an early ask grants, uses the locked texts, and plus a T-5 yes is still only one extension", async () => {
+  it("an early ask uses granted / no-time / already-used, and a later T-5 yes never adds a second extension", async () => {
     const granted = setup();
     const g = await startTour(granted);
-    const early = new OverstayScheduler(g.runtime, { clock: granted.clock, earlyAskGrants: true });
-    early.ensure((await granted.core.getReservation(g.reservation.id))!, granted.config.property.id);
     granted.clock.set(minutesFrom(new Date(g.reservation.windowEnd!), -12));
-    const first = await early.handleAsk(granted.core, g.reservation.id, "natural");
-    expect(first).toBe(extensionGranted(await g.endLabel()));
+    expect(await g.overstay.handleAsk(granted.core, g.reservation.id, "natural")).toBe(extensionGranted(await g.endLabel()));
     granted.clock.set(minutesFrom(new Date((await granted.core.getReservation(g.reservation.id))!.windowEnd!), -5));
-    await early.tickCore(granted.core, { propertyId: granted.config.property.id });
-    expect(await early.handleAsk(granted.core, g.reservation.id, "bare-yes")).toBe(extensionAlreadyUsed(await g.endLabel()));
+    await g.overstay.tickCore(granted.core, { propertyId: granted.config.property.id });
+    expect(await g.overstay.handleAsk(granted.core, g.reservation.id, "bare-yes")).toBe(extensionAlreadyUsed(await g.endLabel()));
     expect((await granted.core.auditTrail()).filter((e) => e.type === "TOUR_EXTENDED" && e.reservationId === g.reservation.id)).toHaveLength(1);
 
     const taken = setup();
     const t = await startTour(taken);
-    const earlyTaken = new OverstayScheduler(t.runtime, { clock: taken.clock, earlyAskGrants: true });
-    earlyTaken.ensure((await taken.core.getReservation(t.reservation.id))!, taken.config.property.id);
     await taken.store.put("reservations", busyReservation(taken, { start: new Date(t.reservation.windowEnd!) }));
     taken.clock.set(minutesFrom(new Date(t.reservation.windowEnd!), -12));
-    expect(await earlyTaken.handleAsk(taken.core, t.reservation.id, "natural")).toBe(extensionUnavailable(await t.endLabel()));
+    expect(await t.overstay.handleAsk(taken.core, t.reservation.id, "natural")).toBe(extensionUnavailable(await t.endLabel()));
     expect((await taken.core.getReservation(t.reservation.id))!.extensionGrantedAt).toBeUndefined();
     taken.clock.set(minutesFrom(new Date(t.reservation.windowEnd!), -5));
-    await earlyTaken.tickCore(taken.core, { propertyId: taken.config.property.id });
-    expect(await earlyTaken.handleAsk(taken.core, t.reservation.id, "natural")).toBe(extensionUnavailable(await t.endLabel()));
+    await t.overstay.tickCore(taken.core, { propertyId: taken.config.property.id });
+    expect(await t.overstay.handleAsk(taken.core, t.reservation.id, "natural")).toBe(extensionUnavailable(await t.endLabel()));
     expect((await taken.core.auditTrail()).filter((e) => e.type === "TOUR_EXTENDED" && e.reservationId === t.reservation.id)).toHaveLength(0);
   });
 
