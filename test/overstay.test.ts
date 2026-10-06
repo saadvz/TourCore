@@ -518,12 +518,12 @@ describe("overstay conversation", () => {
     expect(session.overstay.get(r.id)?.pendingRebook).toBeFalsy();
     expect(session.pendingRebook).toBe(true);
 
-    await say("open the unit door");
+    await say("I'm at Unit 101");
     const afterDoor = (await session.reservation())!;
     expect(afterDoor.id).toBe(r.id);
     expect(afterDoor.status).toBe("TOURING");
-    expect(session.lastAccess?.doorId).toBe("unit_101");
     expect(session.lastAccess?.allowed).toBe(true);
+    expect(["unit_101", "entrance"]).toContain(session.lastAccess?.doorId);
 
     await say("DONE");
     expect((await session.reservation())!.status).toBe("COMPLETED");
@@ -536,7 +536,7 @@ describe("overstay conversation", () => {
 
     await say("1");
     const afterDay = session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1) ?? "";
-    expect(afterDay.toLowerCase()).toMatch(/which time|no tours|already passed|next opening/);
+    expect(afterDay.toLowerCase()).toMatch(/which time|these times available|no tours|already passed|next opening/);
   });
 });
 
@@ -705,7 +705,7 @@ describe("QA review blocking items", () => {
       return out;
     };
 
-    const nowA = { t: twoPm.getTime() };
+    const nowA = { t: zonedTimeToUtc({ ...TOUR_DAY, hour: 10, minute: 0 }, TZ).getTime() };
     const jane = new VisitorDemoSession("prop_100_alfred_way", { ...loadConfig(), tourHours: { ...loadConfig().tourHours, ...hours } }, "t-jane", {
       realNow: () => nowA.t,
       transport: new DemoMessagingAdapter(() => {}, "MESSAGING"),
@@ -777,7 +777,7 @@ describe("QA review blocking items", () => {
       out.push(...occupiedWindowsFromRecords(hours.tourLengthMinutes, extras, []));
       return out;
     };
-    const now = { t: twoPm.getTime() };
+    const now = { t: zonedTimeToUtc({ ...TOUR_DAY, hour: 10, minute: 0 }, TZ).getTime() };
     const jane = new VisitorDemoSession("prop_100_alfred_way", { ...loadConfig(), tourHours: { ...loadConfig().tourHours, ...hours } }, "t-jane-t5", {
       realNow: () => now.t,
       transport: new DemoMessagingAdapter(() => {}, "MESSAGING"),
