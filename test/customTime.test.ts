@@ -1560,6 +1560,22 @@ describe("yes-but change vs consent", () => {
     expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeTruthy();
   });
 
+  it("yes, can we do it sooner? on an existing booking offers earlier times that day", async () => {
+    const a = await liveApp({ cleanups });
+    await a.optInSms();
+    await a.text("1");
+    await a.text("1");
+    const booked = await a.text("2");
+    expect(booked.join("\n")).toContain(bookedForLine("3:30 PM", "Monday, Sep 28"));
+    const replies = await a.text("yes, can we do it sooner?");
+    expect(replies.join("\n")).toContain("I have these times available Monday, Sep 28:");
+    expect(replies.join("\n")).toContain("2:00 PM");
+    expect(replies.join("\n")).not.toMatch(/Which day works for you\?|I have tours available/);
+    expect(replies.join("\n")).not.toContain(bookedForLine("2:00 PM", "Monday, Sep 28"));
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.consentId).toBeFalsy();
+  });
+
   it("yes but earlier if possible offers earlier open times that day", async () => {
     const a = await liveApp({ cleanups });
     await a.optInSms();
@@ -2484,6 +2500,23 @@ describe("operator copy for book, propose, and activity", () => {
     expect(result.summary).not.toContain("Their current booking stays until they say yes.");
   });
 
+  it("a visitor move is {time} on {day} and You're all set only when nothing is pending", async () => {
+    const pending = await liveApp({ cleanups });
+    await firstBookingConsent(pending);
+    const [held] = (await pending.grok("list_active_tours")).tours;
+    await pending.approve("reschedule_tour", { tourRef: held.tourRef, newStartsAt: "3:30 PM" });
+    const heldMove = pending.fake.sent.filter((item) => item.number === PHONE && item.content.includes("has been moved to"));
+    expect(heldMove.at(-1)!.content).toContain("moved to 3:30 PM on Monday, Sep 28.");
+    expect(heldMove.at(-1)!.content).not.toContain("You're all set.");
+
+    const ready = await liveApp({ cleanups });
+    await ready.book();
+    const [tour] = (await ready.grok("list_active_tours")).tours;
+    await ready.approve("reschedule_tour", { tourRef: tour.tourRef, newStartsAt: "3:30 PM" });
+    const readyMove = ready.fake.sent.filter((item) => item.number === PHONE && item.content.includes("has been moved to"));
+    expect(readyMove.at(-1)!.content).toContain("moved to 3:30 PM on Monday, Sep 28. You're all set.");
+  });
+
   it("a visitor-accepted proposal logs accepted, never approved", async () => {
     const a = await liveApp({ cleanups });
     await a.book();
@@ -2524,8 +2557,8 @@ describe("an off-grid slot is released after move, cancel, or revoke", () => {
     const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
     await a.grok("propose_tour_time", { tourTimeRequestId: id, newStartsAt: "3:30 PM" });
     await a.text("yes");
-    const [tour] = (await a.grok("list_active_tours")).tours;
-    await a.approve("revoke_tour_access", { tourRef: tour.tourRef, reason: "Cancelled" });
+    await a.text("cancel");
+    await a.text("yes");
     await a.textFrom(OTHER, "TOUR");
     await a.textFrom(OTHER, "YES");
     await a.textFrom(OTHER, "1");

@@ -556,6 +556,11 @@ Terminal wizard ─────────────────────�
   A handler-failed reply asks `Send "{reply}" to {who}?` then after yes returns `Sent to {who}.`
   A repeat answer or resolve on a handler-failed issue returns `That's already been handled.`
   A repeat answer on a flagged question returns `That question has already been handled.`
+  After yes, STOP / opt-out still saves the fact and returns
+  `Saved "{answer}" for future questions. {who} has turned off texts from us, so I didn't send it and this is still open. If you can reach them another way, do that, then mark it handled.`
+  Any other send failure returns
+  `Saved "{answer}" for future questions, but I couldn't text {who}, so nothing was sent and this is still open. If you can reach them another way, do that, then mark it handled.`
+  The issue stays open. The visitor is not sent a second copy of a live day or time menu; a closed issue shows `Asked "{q}". Sent "{fact}".`
 - **No door tool.** Nothing opens, unlocks, grants or mints access, changes the door-access mode or touches raw
   files. Doors open only through a visitor's own tour and Tour Core's policy.
 - **Explicit approval** for publish, pause or resume of tours at a property or unit, remove, pause/resume/call off of one visitor tour, new approved facts, approving or moving a tour time,
