@@ -954,7 +954,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Run the readiness check",
     kind: "change",
     description:
-      'Runs Tour Core\'s real readiness checks (property, hours, routes, verification, messaging, records, tour progress, door access, audit/export). A shared texting number names the other property by its street line ("This texting number is already used for 12 Scratch Lane."), never a property id and never "Main Home". Report the result as-is, including any advisory lines; never claim a check passed if it didn\'t. Never name Durin; say door access.',
+      "Runs Tour Core's real readiness checks (property, hours, routes, verification, messaging, records, tour progress, door access, audit/export). One touring number covers every property on this Tour Core; a second property is not blocked for sharing it. Report the result as-is, including any advisory lines; never claim a check passed if it didn't. Never name Durin; say door access.",
     input: z.strictObject({ property: Property }),
     run: async (ctx, i) => {
       const id = resolvePropertyId(ctx.services.workspace, i.property);
@@ -1055,6 +1055,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       property: Property,
       id: z.string().max(80).optional().describe("Optional inbound id for de-duplication. Leave out to mint one."),
       hasMedia: z.boolean().optional().describe("True when the inbound includes a photo or other attachment. Tour Core does not forward the file. A photo alone is told it can't take photos yet; a photo plus a question it can't answer is one combined text and is flagged."),
+      listingProperty: z.string().max(200).optional().describe("Listing deep link: the place this first text is for (street, public name, or property id). Leave out when the text itself should choose."),
     }),
     run: (ctx, i) => injectLocalSms(ctx, i),
   }),

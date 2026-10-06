@@ -21,6 +21,11 @@ export interface InboundMessage {
   receivedAt: string;
   /** Non-secret delivery hints. Not the provider's original payload. */
   metadata?: { status?: string };
+  /**
+   * Listing deep link: the property this first text is for, when the listing
+   * already chose it. A street, public name, or property id. Not a tracking number.
+   */
+  listingProperty?: string;
 }
 
 /** True when the inbound included a photo or other attachment. Presence only; Tour Core does not download or forward files. */

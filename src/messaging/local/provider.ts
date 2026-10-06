@@ -155,7 +155,7 @@ export class LocalMessagingProvider implements MessagingProvider {
   }
 
   parseInbound(rawBody: Buffer, now = new Date()) {
-    let body: { id?: unknown; from?: unknown; to?: unknown; text?: unknown; media?: unknown; hasMedia?: unknown };
+    let body: { id?: unknown; from?: unknown; to?: unknown; text?: unknown; media?: unknown; hasMedia?: unknown; listingProperty?: unknown };
     try {
       body = JSON.parse(rawBody.toString("utf8") || "{}") as typeof body;
     } catch {
@@ -167,6 +167,7 @@ export class LocalMessagingProvider implements MessagingProvider {
     const to = typeof body.to === "string" ? toE164(body.to) : undefined;
     const id = typeof body.id === "string" && body.id.trim() ? body.id.trim() : randomUUID();
     const media = localInboundMedia(body);
+    const listingProperty = typeof body.listingProperty === "string" ? body.listingProperty.trim() : "";
     return {
       message: {
         provider: "local",
@@ -177,6 +178,7 @@ export class LocalMessagingProvider implements MessagingProvider {
         ...(media ? { media } : {}),
         channel: "SMS" as const,
         receivedAt: now.toISOString(),
+        ...(listingProperty ? { listingProperty } : {}),
       },
     };
   }

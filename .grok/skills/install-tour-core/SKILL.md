@@ -294,8 +294,8 @@ whether to skip them:
 
 > Prospects can text your touring number to ask questions, choose a day and
 > time, verify their details, and complete the self-guided tour in the same
-> conversation. I'll run a readiness check and a practice tour before we turn
-> it on.
+> conversation. That one number covers every property. I'll run a readiness
+> check and a practice tour before we turn it on.
 
 Use Run Readiness Check, then Simulate Tour. If something fails, say what in
 plain words and fix it with the operator.

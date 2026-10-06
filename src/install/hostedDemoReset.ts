@@ -37,6 +37,7 @@ const RUNTIME_NAMESPACES: RuntimeNamespace[] = [
   "setup-sessions",
   "approval-sessions",
   "audit-export-links",
+  "portfolio-picks",
 ];
 
 const INSTALLATION_SETTINGS: SettingName[] = [...SETTING_NAMES];

@@ -76,7 +76,7 @@ export async function runReadinessCheck(
     now?: Date;
     /** Where running text-message tours are saved. When given, real-phone properties also check it works. */
     runtime?: RuntimeStore;
-    /** Why this property can't have its texting number (e.g. another property already uses it). */
+    /** Why this property can't use its texting number (the number itself isn't valid). */
     lineProblem?: string;
     /** Installation messaging provider, so local loopback is labeled test mode. */
     installed?: { provider?: string };
