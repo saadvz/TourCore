@@ -245,7 +245,8 @@ export async function runDryTour(input: TourCoreConfig, options: DryTourOptions 
     await at("5 minutes left");
     await overstay.tickCore(core, { propertyId: config.property.id });
     await flush();
-    const offered = messages.some((m) => m.audience === "PROSPECT" && m.body === t5Offering(place, await endLabel(), "Pat"));
+    const t5End = await endLabel();
+    const offered = messages.some((m) => m.audience === "PROSPECT" && m.body === t5Offering(place, t5End, "Pat"));
     await check({ id: "t5_warning", group: "wrapup", label: "T-5 extra-time offer", outcome: "Offered 10 more minutes" }, offered);
 
     await at('Visitor asks for 10 more minutes');

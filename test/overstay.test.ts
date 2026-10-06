@@ -267,7 +267,8 @@ describe("overstay timeline", () => {
     expect(Date.parse(updated.windowEnd!) - before).toBe(10 * 60_000);
     expect(ctx.durin.calls.requestAccess.some((c) => c.idempotencyKey.includes(":ext:"))).toBe(true);
     const alerts = await operatorAlerts(ctx, started.reservation.id);
-    expect(alerts.filter((a) => a === landlordExtensionGranted("Jane", PLACE, await started.endLabel()))).toHaveLength(1);
+    const newEnd = await started.endLabel();
+    expect(alerts.filter((a) => a === landlordExtensionGranted("Jane", PLACE, newEnd))).toHaveLength(1);
   });
 
   it("rechecks availability at ask time, one extension max, and ask after T", async () => {
