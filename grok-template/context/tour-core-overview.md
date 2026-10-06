@@ -114,7 +114,8 @@ contacted. Say "door access" to the operator; never name Durin.
    automatically when it's installed.
 2. **Check readiness**: real checks against the pieces the setup uses.
 3. **Run a practice tour**: a full pretend tour with safety checks. Nobody is
-   texted and no real door opens.
+   texted and no real door opens. A single-family home keeps the entrance proof
+   line; a unit-door-only apartment or condo shows the unit-door proof instead.
 4. **Publish for demo**: only after both pass, and only after the operator's yes.
 5. **Watch active tours** and **work exceptions**: unanswered questions, help
    requests, door problems, paused tours, tours that couldn't be restored.
