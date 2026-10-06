@@ -47,7 +47,7 @@ export async function describeOperatorUpdate(services: OperatorServices, event: 
         x.kind === "unanswered-question"
           ? "Ask the operator for the answer itself (not a yes/no). When they give it, use answer_flagged_question; its question is the only confirmation."
           : x.kind === "handler-failed"
-            ? "Ask the operator what to tell the visitor. When they give it, use answer_flagged_question; it texts them from this number and does not save an approved fact. Its confirmation is the only one to ask."
+            ? "Ask the operator what to tell the visitor. When they give it, use answer_flagged_question; it texts them from this number and does not save an approved fact. Ask Send \"{reply}\" to {who}? then after yes it returns Sent to {who}."
             : "Tell the operator what happened. Change nothing unless they ask, through the Work Exception skill.",
     };
   }

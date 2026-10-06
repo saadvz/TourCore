@@ -651,6 +651,7 @@ export class VisitorDemoSession {
     const paused = operatorPausedBookingRefuse(this.pauseState(), this.config, reservation?.unitId);
     if (paused) throw new SetupInputError("TOURS_PAUSED", paused);
     const { changed } = await this.core.rescheduleReservation({ reservationId: this.reservationId, newStartsAt, ...options });
+    this.clearShownMenus();
     await this.syncReplies();
     return { changed };
   }
@@ -825,6 +826,7 @@ export class VisitorDemoSession {
     });
     this.expect("intro", { kind: "confirm-operator-tour", confirmBy: confirmBy.toISOString() });
     this.noteSmsConsent("pending", "YES");
+    this.clearShownMenus();
     await this.reply(operatorScheduledFirstText(this.config, input.start), undefined, { deliverDespiteOptOut: true });
     return reservation;
   }
@@ -867,6 +869,7 @@ export class VisitorDemoSession {
     const paused = operatorPausedBookingRefuse(this.pauseState(), this.config, reservation?.unitId);
     if (paused) throw new SetupInputError("TOURS_PAUSED", paused);
     const result = await this.core.approveTourTimeRequest(requestId, options);
+    this.clearShownMenus();
     await this.syncReplies();
     if (result.needsConsentAsk) await this.announceHeldBookingConsent(result.reservation.id);
     return result;
@@ -889,6 +892,7 @@ export class VisitorDemoSession {
     const reservation = await this.reservation();
     if (await this.refuseIfPaused(reservation?.unitId)) return;
     const result = await this.core.acceptProposedTime(requestId);
+    this.clearShownMenus();
     await this.syncReplies();
     if (result.needsConsentAsk) await this.announceHeldBookingConsent(result.reservation.id);
     return result;
@@ -918,6 +922,7 @@ export class VisitorDemoSession {
         throw new SetupInputError("NOT_CANCELABLE", "This tour can't be cancelled from here.");
       }
       await this.core.cancelTourByVisitor(reservation.id);
+      this.clearShownMenus();
       await this.reply(VISITOR_CANCEL_DONE);
       return "cancelled";
     } catch {
@@ -953,6 +958,7 @@ export class VisitorDemoSession {
   async operatorChange<T>(run: (core: TourCore, reservationId: string) => Promise<T>): Promise<T> {
     if (!this.reservationId) throw new SetupInputError("NO_TOUR", "This visitor hasn't booked a tour yet.");
     const result = await run(this.core, this.reservationId);
+    this.clearShownMenus();
     await this.syncReplies();
     return result;
   }

@@ -36,14 +36,17 @@ for {curTime} on {curDay}.` only when they have a held or future booking
 (never the tour already in progress), then the remaining times that day
 or `If you'd like another time, just reply with a day.` A numbered reply
 from that menu books the pick only when the menu was shown after the
-current booking. On hold, send the taken line and no menu. Farewells and
+current booking, including after the operator moves it. On hold, send
+the taken line and no menu. Farewells and
 arrival remarks at consent (`yes, see you later`, `yes, I'll arrive
-earlier`, `yes, no need to switch`) record consent; `later`/`earlier` is
-a change only when it modifies the tour time (`make it later`, `earlier
+earlier`, `yes, no need to switch`, `yes, the sooner the better`) record
+consent; `later`/`earlier`/`sooner` is
+a change only when it is an actual ask (`make it later`, `earlier
 if possible`, `later in the week`, `can we do it later`, `anything later`,
-`sooner would be better`). A named day (`tuesday works better`) shows
-that day's times. A leftover number, time, or bare later/earlier does
-not move a booking. If a visitor text cannot be handled, they are told
+`sooner would be better`, `can we do it sooner`). A named day (`tuesday
+works better`) shows
+that day's times. A leftover number, time, or bare later/earlier/sooner
+does not move a booking. If a visitor text cannot be handled, they are told
 `Sorry, I hit a snag with that. I've let the property team know, and
 they'll reply here as soon as they can.` when a landlord record was
 created, or `Sorry, I hit a snag with that. Could you text me again in a
@@ -52,10 +55,15 @@ flagged question. The team sees `{who} texted "{their message}" and I
 couldn't handle it, so they're waiting on you. I told them you'd reply
 as soon as you can.` After a partial reply: `{who} texted "{their
 message}" and I couldn't finish handling it. They got part of a reply,
-so they may still be waiting on you.` Empty text: `{who} sent a text I
-couldn't handle, so they're waiting on you. I told them you'd reply as
-soon as you can.` `answer_flagged_question` on that issue texts the
-visitor and does not save a fact; the confirmation is `Sent to {who}.`
+so they may still be waiting on you.` Partial reply plus empty text:
+`{who} sent a text I couldn't finish handling. They got part of a reply,
+so they may still be waiting on you.` Empty text with no reply: `{who}
+sent a text I couldn't handle, so they're waiting on you. I told them
+you'd reply as soon as you can.` `answer_flagged_question` on that issue texts the
+visitor and does not save a fact. First call: `Send "{reply}" to {who}?`
+After yes: `Sent to {who}.` If they cannot be texted: `I couldn't text
+{who}, so nothing was sent and this is still open. If you can reach them
+another way, do that, then mark it handled.`
 Booking a regular slot withdraws that request so a later
 approve cannot double-book; replacing a held or booked future tour also
 sends `That replaces your {time} tour on {day}.` Operators see
@@ -73,8 +81,9 @@ Already approved or declined: `That request has already been handled.`
 Propose tells the operator `That request ran out because its time already
 passed, so your offer of {newTime} on {newDay} didn't go out. I've let
 {who} know, and you can still book them a one-off time.` and does not
-send the proposal. Already expired: `That request has already been
-handled.` Approving a custom time that
+send the proposal. Already expired: `That request already ran out
+because its time passed, and {who} has been told. You can still book
+them a one-off time.` Approving a custom time that
 moves an unconfirmed held booking uses that same booked-for line, then
 the original consent question, then Reply YES or NO — not moved wording. While the leaving
 issue is open after the close, stuck-inside texts and greetings stay

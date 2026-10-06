@@ -198,14 +198,17 @@ Never:
   only for a held or future booking, never the tour in progress) and
   offers the remaining times that day or `If you'd like another time,
   just reply with a day.` A numbered pick from that menu books it only
-  when the menu was shown after the current booking. A leftover number,
-  time, or bare later/earlier does not move a booking. On hold, a taken
-  slot gets the taken line and no menu. Farewells and arrival remarks
+  when the menu was shown after the current booking, including after the
+  operator moves it. A leftover number, time, or bare later/earlier/sooner
+  does not move a booking. On hold, a taken slot gets the taken line and
+  no menu. Farewells and arrival remarks
   (`yes, see you later`, `yes, I'll arrive
-  earlier`, `yes, no need to switch`) record consent; later/earlier is a
-  change only when it modifies the tour time (`make it later`, `later in
+  earlier`, `yes, no need to switch`, `yes, the sooner the better`)
+  record consent; later/earlier/sooner is a
+  change only when it is an actual ask (`make it later`, `later in
   the week`, `can we do it later`, `anything later`, `sooner would be
-  better`). A named day (`tuesday works better`) shows that day's times.
+  better`, `can we do it sooner`). A named day (`tuesday works better`)
+  shows that day's times.
   A visitor text that cannot be handled opens a handler-failed issue
   (not a flagged question) and tells them the team will reply here when
   a landlord record exists (`Sorry, I hit a snag with that. I've let the
@@ -215,11 +218,16 @@ Never:
   "{their message}" and I couldn't handle it, so they're waiting on you.
   I told them you'd reply as soon as you can.` After a partial reply:
   `{who} texted "{their message}" and I couldn't finish handling it.
+  They got part of a reply, so they may still be waiting on you.` Partial
+  reply plus empty text: `{who} sent a text I couldn't finish handling.
   They got part of a reply, so they may still be waiting on you.` Empty
-  text: `{who} sent a text I couldn't handle, so they're waiting on you.
-  I told them you'd reply as soon as you can.` For that issue,
-  `answer_flagged_question` texts the visitor and does not save a fact;
-  the confirmation is `Sent to {who}.` Booking a regular slot withdraws that request
+  text with no reply: `{who} sent a text I couldn't handle, so they're
+  waiting on you. I told them you'd reply as soon as you can.` For that issue,
+  `answer_flagged_question` texts the visitor and does not save a fact.
+  Ask `Send "{reply}" to {who}?` then after yes it returns `Sent to {who}.`
+  If they cannot be texted: `I couldn't text {who}, so nothing was sent
+  and this is still open. If you can reach them another way, do that,
+  then mark it handled.` Booking a regular slot withdraws that request
   (`They booked a regular time instead.`). Replacing a held or booked
   future tour also sends `That replaces your {time} tour on {day}.`
   If the requested time has already passed, the visitor is texted once

@@ -169,11 +169,14 @@ export const HANDLER_FAILED_NEXT_STEP = "Tell me what to say and I'll text them,
 /** Landlord alert when a visitor text could not be handled. Raw errors stay in server logs. */
 export function handlerFailureAlertLine(who: string, message: string, options?: { alreadyReplied?: boolean }): string {
   const said = message.trim();
+  if (options?.alreadyReplied) {
+    if (!said) {
+      return `${who} sent a text I couldn't finish handling. They got part of a reply, so they may still be waiting on you.`;
+    }
+    return `${who} texted "${said}" and I couldn't finish handling it. They got part of a reply, so they may still be waiting on you.`;
+  }
   if (!said) {
     return `${who} sent a text I couldn't handle, so they're waiting on you. I told them you'd reply as soon as you can.`;
-  }
-  if (options?.alreadyReplied) {
-    return `${who} texted "${said}" and I couldn't finish handling it. They got part of a reply, so they may still be waiting on you.`;
   }
   return `${who} texted "${said}" and I couldn't handle it, so they're waiting on you. I told them you'd reply as soon as you can.`;
 }

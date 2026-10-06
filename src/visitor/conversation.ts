@@ -127,7 +127,10 @@ const WEEKDAY_WORD: Record<string, string> = {
   SUN: "sunday",
 };
 const TIME_SHIFT_ASK =
-  /\b((?:make|move|switch|change)(?: it| the tour| that)? (?:later|earlier)|(?:a |an )?(?:later|earlier) (?:time|slot|opening)|(?:later|earlier) if possible|can we do (?:it )?(?:later|earlier)|later in the week|(?:is there )?anything (?:later|earlier)|sooner(?: would be better)?|(?:later|earlier) would be better)\b/;
+  /\b((?:make|move|switch|change)(?: it| the tour| that)? (?:later|earlier)|(?:a |an )?(?:later|earlier) (?:time|slot|opening)|(?:later|earlier) if possible|can we do (?:it )?(?:later|earlier)|later in the week|(?:is there )?anything (?:later|earlier)|(?:later|earlier) would be better)\b/;
+/** "sooner" is a change only as an ask, not in consent idioms like "the sooner the better". */
+const SOONER_CHANGE_ASK =
+  /\b(sooner would be better|can we do (?:it )?sooner|(?:is there )?anything sooner|something sooner)\b/;
 const NEGATED_CHANGE = /\b(no need to|do not need to|will not need to|would not need to|no reason to|not going to)\b.{0,40}\b(switch|reschedule|change|move|cancel)\b|\bno change\b/;
 const ARRIVAL_REMARK =
   /\b(be there|arrive|get there|show up|come by|get in)\b.{0,40}\b(earlier|later|early|late)\b|\b(might be|may be|could be|will be)\b.{0,30}\b(\d+\s*(min|minutes?) )?(early|late|earlier|later)\b|\b(\d+\s*(min|minutes?) )(early|late)\b/;
@@ -155,12 +158,19 @@ function isArrivalRemark(text: string): boolean {
   return ARRIVAL_REMARK.test(text);
 }
 
+function isSoonerChangeAsk(text: string): boolean {
+  const n = stripFiller(normalize(text));
+  if (SOONER_CHANGE_ASK.test(n)) return true;
+  return /\bsooner\b/.test(n) && namesDayOrTime(n);
+}
+
 function laterOrEarlierShift(text: string): "later" | "earlier" | "later-in-week" | undefined {
   const n = stripFiller(normalize(text));
   if (isArrivalRemark(n) || isNegatedChange(n)) return undefined;
   if (/\blater in the week\b/.test(n)) return "later-in-week";
+  if (isSoonerChangeAsk(n)) return "earlier";
   if (
-    /\b(make it earlier|move it earlier|an earlier time|earlier time|earlier slot|earlier if possible|can we do (?:it )?earlier|anything earlier|is there anything earlier|earlier would be better|sooner(?: would be better)?)\b/.test(n)
+    /\b(make it earlier|move it earlier|an earlier time|earlier time|earlier slot|earlier if possible|can we do (?:it )?earlier|anything earlier|is there anything earlier|earlier would be better)\b/.test(n)
   ) {
     return "earlier";
   }
@@ -238,6 +248,7 @@ function hasExplicitChangeAsk(text: string): boolean {
   if (leftoverAfterConsent(text)) return false;
   if (EXPLICIT_CHANGE_PHRASE.test(n)) return true;
   if (TIME_SHIFT_ASK.test(n)) return true;
+  if (isSoonerChangeAsk(n)) return true;
   if (/\brather\b/.test(n) && namesDayOrTime(n)) return true;
   return /\b(but|instead)\b/.test(n) && namesDayOrTime(n);
 }
@@ -1220,7 +1231,15 @@ async function byStage(turn: Turn): Promise<void> {
     if (named) return showAskedDay(turn, named);
     return fileCustomTime(turn, asSpoken(intent));
   }
-  if (intent.type === "ASK_PROPERTY_QUESTION" && turn.stage !== "stopped" && turn.stage !== "done" && turn.stage !== "intro") return ask(turn, intent.question);
+  if (
+    intent.type === "ASK_PROPERTY_QUESTION" &&
+    !hasExplicitChangeAsk(turn.said.text ?? "") &&
+    turn.stage !== "stopped" &&
+    turn.stage !== "done" &&
+    turn.stage !== "intro"
+  ) {
+    return ask(turn, intent.question);
+  }
 
   switch (turn.stage) {
     case "intro":

@@ -1134,7 +1134,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Answer a flagged question with a new approved fact",
     kind: "consequential",
     description:
-      "Only when the OPERATOR supplied the answer or the reply. For an unanswered question: as soon as they give it (e.g. \"2 bedrooms\"), call this without a code. Tour Core works out how it will be saved and returns ONE question: Send \"{answer}\" to {name}? Future visitors who ask the same thing will get it too. Save it? — never Continue?. After a clear yes, call again with confirmationCode. For a handler-failed issue, this texts the visitor from the Tour Core number and does not save an approved fact; the confirmation is exactly Sent to {who}. Never make up or reword the answer.",
+      "Only when the OPERATOR supplied the answer or the reply. For an unanswered question: as soon as they give it (e.g. \"2 bedrooms\"), call this without a code. Tour Core works out how it will be saved and returns ONE question: Send \"{answer}\" to {name}? Future visitors who ask the same thing will get it too. Save it? — never Continue?. After a clear yes, call again with confirmationCode. For a handler-failed issue, this texts the visitor from the Tour Core number and does not save an approved fact. The first call returns Send \"{reply}\" to {who}? with the landlord's exact reply and no future-visitors line. After yes, when the text is in the outbox and the issue is closed, it returns exactly Sent to {who}. If the visitor can't be texted, it returns I couldn't text {who}, so nothing was sent and this is still open. If you can reach them another way, do that, then mark it handled. Never make up or reword the answer.",
     input: z.strictObject({
       exceptionId: ExceptionId,
       approvedFact: z.string().min(1).max(300).describe("The operator's own words, e.g. \"2 bedrooms\" or \"Parking is included.\""),
@@ -1145,10 +1145,11 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const plan = await planFlaggedAnswer(ctx.services, { exceptionId: i.exceptionId, approvedFact: i.approvedFact, appliesTo: i.appliesTo }, ctx.now());
       const x = plan.exception;
       const first = x.visitorName.split(/\s+/)[0];
+      const who = plan.sendOnly ? plan.who : first;
       const fingerprint = `${x.exceptionId}|${plan.appliesTo}|${plan.field ?? ""}|${plan.fact}|${plan.sendOnly ? "send" : "save"}`;
       if (!i.confirmationCode) {
         if (plan.sendOnly) {
-          return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, `Sent to ${first}.`, { savedToSetup: false });
+          return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, `Send "${plan.fact}" to ${who}?`, { savedToSetup: false });
         }
         return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, `Send "${plan.fact.replace(/\.$/, "")}" to ${first}? Future visitors who ask the same thing will get it too. Save it?`, {
           visitorWillReceive: visitorAnswerText(x.question!, plan.fact),
@@ -1157,10 +1158,10 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       ctx.confirmations.redeem(i.confirmationCode, "answer", x.exceptionId, fingerprint);
       const out = await answerFlaggedQuestion(ctx.services, { exceptionId: x.exceptionId, approvedFact: i.approvedFact, appliesTo: i.appliesTo }, ctx.now());
       if (plan.sendOnly) {
-        return { summary: `Sent to ${first}.`, ...out };
+        return { summary: `Sent to ${who}.`, ...out };
       }
       return {
-        summary: `Saved "${out.approvedFact.replace(/\.$/, "")}"${out.visitorAnswered ? ` and sent it to ${first}` : "; their tour isn't running, so they weren't texted"}.${out.needsRecheck ? " The setup changed, so run the readiness check and a practice tour again before publishing." : ""}`,
+        summary: `Saved "${out.approvedFact!.replace(/\.$/, "")}"${out.visitorAnswered ? ` and sent it to ${first}` : "; their tour isn't running, so they weren't texted"}.${out.needsRecheck ? " The setup changed, so run the readiness check and a practice tour again before publishing." : ""}`,
         ...out,
       };
     },

@@ -81,7 +81,10 @@ delivery with the same `eventId`, so treat a repeat as the same update.
    For a text Tour Core could not handle, show the landlord alert line.
    Next step: `Tell me what to say and I'll text them, or book or change
    their tour yourself.` `answer_flagged_question` texts them and does not
-   save an approved fact; confirm with `Sent to {who}.`
+   save an approved fact. Ask `Send "{reply}" to {who}?` then after yes
+   it returns `Sent to {who}.` If they cannot be texted:
+   `I couldn't text {who}, so nothing was sent and this is still open.
+   If you can reach them another way, do that, then mark it handled.`
 5. Don't act on tours or issues. Answering with a new approved fact, pausing,
    resuming or calling off a tour happen only when the operator replies, via
    the Work Exception skill and its confirmation questions.

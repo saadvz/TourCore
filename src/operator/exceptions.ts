@@ -2,10 +2,11 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { HANDLER_FAILED_NEXT_STEP } from "../core/TourCore";
+import { formatPhone } from "../core/phone";
 import { formatShortDateTime } from "../core/timezone";
 import { profileFacts, questionTopic, structuredAnswer, type ProfileField, type UnitProfile } from "../config/unitProfile";
 import { MAX_FACT_LENGTH } from "../config/validateConfig";
-import type { AuditEvent, Reservation, ReservationStatus } from "../domain/model";
+import { UNNAMED_VISITOR, type AuditEvent, type Reservation, type ReservationStatus } from "../domain/model";
 import { applySetupCommand } from "../setup/commands";
 import { SetupInputError } from "../setup/setupActions";
 import { statusLabel } from "../setup/workspace";
@@ -508,6 +509,21 @@ export interface FlaggedAnswerPlan {
   where: string;
   /** Handler-failure reply: text the visitor, never save an approved fact. */
   sendOnly?: boolean;
+  /** First name, or the phone label when they have no name. Never "A". */
+  who: string;
+}
+
+/** Operator-facing visitor label: first name, or the phone-based alert label. Never an id, never "A". */
+export function operatorWhoLabel(visitorName: string | undefined, phone?: string): string {
+  const name = visitorName?.trim();
+  if (name && name !== UNNAMED_VISITOR && !/^A visitor\b/i.test(name)) {
+    return name.split(/\s+/)[0]!;
+  }
+  return phone ? formatPhone(phone) : "the visitor";
+}
+
+export function sendOnlyUnreachableLine(who: string): string {
+  return `I couldn't text ${who}, so nothing was sent and this is still open. If you can reach them another way, do that, then mark it handled.`;
 }
 
 /**
@@ -520,13 +536,15 @@ export interface FlaggedAnswerPlan {
 export async function planFlaggedAnswer(services: OperatorServices, input: { exceptionId: string; approvedFact: string; appliesTo?: "property" | "unit" }, now: Date): Promise<FlaggedAnswerPlan> {
   const exception = await findException(services, input.exceptionId);
   if (exception.status === "resolved") throw new SetupInputError("ALREADY_RESOLVED", "That question has already been handled.");
+  const tourForWho = exception.tourRef ? await findTour(services, exception.tourRef) : undefined;
+  const who = operatorWhoLabel(exception.visitorName, tourForWho?.visitorPhone);
   if (exception.kind === "handler-failed") {
     const words = cleanFact(input.approvedFact);
-    return { exception, appliesTo: "property", fact: words, where: exception.property, sendOnly: true };
+    return { exception, appliesTo: "property", fact: words, where: exception.property, sendOnly: true, who };
   }
   if (exception.kind !== "unanswered-question" || !exception.question) throw new SetupInputError("NOT_A_QUESTION", "That issue isn't an unanswered question.");
   const words = cleanFact(input.approvedFact);
-  const tour = exception.tourRef ? await findTour(services, exception.tourRef) : undefined;
+  const tour = tourForWho;
   const unitId = exception.questionUnitId ?? (tour ? reservationOn(tour, exception.reservationId)?.unitId : undefined);
   const { draft } = services.workspace.openDraft(exception.propertyId);
   const unit = draft.units.find((u) => u.id === unitId);
@@ -535,14 +553,14 @@ export async function planFlaggedAnswer(services: OperatorServices, input: { exc
     const value = structuredAnswer(topic, words, now);
     if (value) {
       const fact = profileFacts({ name: visitorSubject(draft.property, unit.name), profile: { [topic]: value } }).find((f) => f.field === topic)!.text;
-      return { exception, appliesTo: "unit", unitId: unit.id, field: topic, value, fact, where: visitorSubject(draft.property, unit.name) };
+      return { exception, appliesTo: "unit", unitId: unit.id, field: topic, value, fact, where: visitorSubject(draft.property, unit.name), who };
     }
   }
   const unitTopic = !!topic && ["bedrooms", "bathrooms", "monthlyRent", "availability", "squareFeet", "floor", "furnished", "features"].includes(topic);
   const appliesTo = input.appliesTo ?? (unit && unitTopic ? "unit" : "property");
   if (appliesTo === "unit" && !unit) throw new SetupInputError("UNIT_NOT_FOUND", "I couldn't tell which unit that question was about. Add it as a property fact instead.");
   const fact = /[.!?]$/.test(words) ? words : `${words}.`;
-  return { exception, appliesTo, unitId: unit?.id, fact: fact.charAt(0).toUpperCase() + fact.slice(1), where: appliesTo === "unit" ? visitorSubject(draft.property, unit!.name) : exception.property };
+  return { exception, appliesTo, unitId: unit?.id, fact: fact.charAt(0).toUpperCase() + fact.slice(1), where: appliesTo === "unit" ? visitorSubject(draft.property, unit!.name) : exception.property, who };
 }
 
 /**
@@ -563,25 +581,22 @@ export async function answerFlaggedQuestion(
   const wasPublished = ws.has(exception.propertyId) && ws.load(exception.propertyId).state.status === "PUBLISHED_FOR_DEMO";
 
   if (plan.sendOnly) {
-    let visitorAnswered = false;
-    if (tour?.live) {
-      await tour.live.reply(fact);
-      await persistSession(services, tour.live);
-      visitorAnswered = true;
+    if (!tour?.live) {
+      throw new SetupInputError("VISITOR_UNREACHABLE", sendOnlyUnreachableLine(plan.who));
     }
+    await tour.live.reply(fact);
+    await persistSession(services, tour.live);
     appendResolution(services, exception.propertyId, {
       exceptionId: exception.exceptionId,
       resolvedAt: now.toISOString(),
-      note: visitorAnswered ? "Sent a reply." : "The visitor's tour wasn't running, so they weren't texted.",
+      note: "Sent a reply.",
       action: "answered",
     });
     const after = ws.has(exception.propertyId) ? ws.load(exception.propertyId) : undefined;
     return {
-      approvedFact: fact,
-      addedTo: plan.where,
       savedToSetup: false,
-      visitorAnswered,
-      visitorMessage: visitorAnswered ? fact : undefined,
+      visitorAnswered: true,
+      visitorMessage: fact,
       setupStatus: after ? statusLabel(after) : "Setup in progress",
       stillPublished: wasPublished && after?.state.status === "PUBLISHED_FOR_DEMO",
       needsRecheck: false,

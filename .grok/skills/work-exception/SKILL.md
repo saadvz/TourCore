@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Tour updates, exception queue, monitoring, holds and approved answers
-  version: "0.3.16"
+  version: "0.3.17"
 ---
 
 # Work Exception
@@ -113,10 +113,17 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   landlord alert line as the detail. Next step:
   `Tell me what to say and I'll text them, or book or change their tour yourself.`
   When the operator gives the reply, call `answer_flagged_question` with
-  their words. Confirm with exactly `Sent to {who}.` After yes, it texts
-  the visitor from the Tour Core number, does not save an approved fact
-  (`savedToSetup` is false), and never says future visitors will get it
-  too. `resolve_exception` also closes it.
+  their words. The first call returns exactly `Send "{reply}" to {who}?`
+  with the landlord's exact reply and no future-visitors line. After yes,
+  when the text is in the outbox and the issue is closed, it returns
+  exactly `Sent to {who}.` It texts the visitor from the Tour Core number,
+  does not save an approved fact (`savedToSetup` is false), and never
+  says future visitors will get it too. If the visitor cannot be texted,
+  it returns `I couldn't text {who}, so nothing was sent and this is
+  still open. If you can reach them another way, do that, then mark it
+  handled.` and leaves the issue open. {who} is their first name, or the
+  phone-based label when they have no name — never "A". `resolve_exception`
+  also closes it.
 - **Mark handled.** `resolve_exception` with a short note in the operator's
   words. It changes nothing else. For "Visitor hasn't confirmed leaving",
   marking it handled also ends the after-close visitor alerts (alerts also
@@ -158,22 +165,29 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   a held or future booking, never the tour in progress) and offers the
   remaining times that day or `If you'd like another time, just reply
   with a day.`   A numbered pick from that menu books it only when the menu was shown
-  after the current booking; a leftover number, time, or bare later/earlier
-  does not move it. On hold, a taken slot gets the taken line and no menu.
+  after the current booking, including after the operator moves it
+  (`reschedule_tour`, approving a time request, accepting a proposed
+  time, a one-off, cancel, or revoke). A leftover number, time, or bare
+  later/earlier/sooner does not move it. On hold, a taken slot gets the
+  taken line and no menu.
   Farewells and
-  arrival remarks at consent record consent; later/earlier is a change
-  only when it modifies the tour time (`make it later`, `later in the week`,
-  `can we do it later`, `anything later`, `sooner would be better`). A
+  arrival remarks at consent record consent; later/earlier/sooner is a
+  change only when it is an actual ask (`make it later`, `later in the week`,
+  `can we do it later`, `anything later`, `sooner would be better`,
+  `can we do it sooner`, `anything sooner`). Idioms such as `yes, the
+  sooner the better` record consent. A
   named day (`tuesday works better`) shows that day's times. A visitor
   text that cannot be handled opens a handler-failed issue (not a flagged
   question) and tells them the team will reply here, or asks them to text
   again if no landlord record could be created. The team is told
   `{who} texted "{their message}" and I couldn't handle it, so they're
-  waiting on you. I told them you'd reply as soon as you can.` After a
+  waiting on you. I told them you'd reply as soon as you can.`   After a
   partial reply: `{who} texted "{their message}" and I couldn't finish
   handling it. They got part of a reply, so they may still be waiting on
-  you.` Empty text: `{who} sent a text I couldn't handle, so they're
-  waiting on you. I told them you'd reply as soon as you can.`
+  you.` Partial reply plus empty text: `{who} sent a text I couldn't
+  finish handling. They got part of a reply, so they may still be waiting
+  on you.` Empty text with no reply: `{who} sent a text I couldn't handle,
+  so they're waiting on you. I told them you'd reply as soon as you can.`
   Approve and decline return `That time has already
   passed, so I've let {who} know their request ran out. You can still
   book them a one-off time.` Then use `schedule_one_off_tour` or
