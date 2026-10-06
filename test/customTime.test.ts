@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config/tourCoreConfig";
 import { slotsOn } from "../src/core/schedule";
 import { SimulatedClock } from "../src/core/clock";
-import { zonedTimeToUtc } from "../src/core/timezone";
+import { formatDay, formatTime, zonedTimeToUtc } from "../src/core/timezone";
+import { pendingCustomTimeLine, WITHDRAWN_FOR_REGULAR_BOOKING } from "../src/core/TourCore";
 import { createTourCore } from "../src/createTourCore";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
 import { at, liveApp, PHONE, type LiveApp } from "./liveApp";
@@ -261,5 +262,106 @@ describe("the request is durable, audited, and wakes the landlord", () => {
     expect(bundle.reservations[0]!.slotStart).toBe(atTime(15, 15).toISOString());
     expect(bundle.auditEvents.map((event) => event.type)).toEqual(expect.arrayContaining(["TOUR_TIME_REQUESTED", "TOUR_TIME_REQUEST_APPROVED", "TOUR_RESCHEDULED"]));
     expect((await c.grok("list_tour_time_requests")).requests).toHaveLength(0);
+  });
+});
+
+const TZ = "America/New_York";
+
+async function tourThenCustomTime(a: LiveApp, start: Date) {
+  await a.book();
+  a.clock.t = at(13, 58);
+  await a.text("I'm here");
+  await a.text("at unit 1A");
+  await a.text(`Can I come Thursday at ${formatTime(start, TZ)}?`);
+  const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+  expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.tourTimeRequests.some((request) => request.status === "PENDING")).toBe(true);
+  await a.text("I'm done");
+  return a.text("no");
+}
+
+describe("a pending custom-time request does not block regular booking", () => {
+  it("sends the pending line once after DONE and follow-up; a second hi does not repeat it", async () => {
+    const a = await liveApp({ cleanups });
+    const later = zonedTimeToUtc({ year: 2026, month: 10, day: 1, hour: 15, minute: 15 }, TZ);
+    const follow = await tourThenCustomTime(a, later);
+    const expected = pendingCustomTimeLine(formatTime(later, TZ), formatDay(later, TZ));
+    expect(expected).toContain("If you'd rather pick one of the regular times instead, just reply with a day.");
+    expect(follow.at(-1)).toBe(expected);
+    expect(follow.filter((line) => line === expected)).toHaveLength(1);
+
+    const hi = await a.text("hi");
+    expect(hi.join("\n")).not.toContain("still with the property team");
+    expect(hi.join("\n")).toMatch(/Which day works for you\?|I have tours available/);
+    expect(hi.some((line) => line === expected)).toBe(false);
+  });
+
+  it("a day reply or 2 after the pending line shows or books regular slots", async () => {
+    const a = await liveApp({ cleanups });
+    const later = zonedTimeToUtc({ year: 2026, month: 10, day: 1, hour: 15, minute: 15 }, TZ);
+    const follow = await tourThenCustomTime(a, later);
+    expect(follow.at(-1)).toBe(pendingCustomTimeLine(formatTime(later, TZ), formatDay(later, TZ)));
+
+    const day = await a.text("Tuesday");
+    expect(day.join("\n")).toMatch(/2:00 PM|3:30 PM|Which time/);
+    expect(day.join("\n")).not.toContain("still with the property team");
+
+    const b = await liveApp({ cleanups });
+    await tourThenCustomTime(b, later);
+    const numbered = await b.text("2");
+    expect(numbered.join("\n")).toMatch(/2:00 PM|3:30 PM|Which time|you're booked/);
+    expect(numbered.join("\n")).not.toContain("still with the property team");
+  });
+
+  it("booking a regular slot withdraws the request; list, inspect, approve, and decline show They booked a regular time instead.", async () => {
+    const a = await liveApp({ cleanups });
+    const later = zonedTimeToUtc({ year: 2026, month: 10, day: 1, hour: 15, minute: 15 }, TZ);
+    await tourThenCustomTime(a, later);
+    const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
+    expect(id).toBeTruthy();
+
+    await a.text("Tuesday");
+    const beforeVisitor = a.fake.sent.filter((message) => message.number === PHONE).length;
+    const booked = await a.text("1");
+    expect(booked.join("\n")).toContain("Great, you're booked for 2:00 PM");
+    expect(booked.join("\n")).toMatch(/Tuesday/);
+    expect(booked.join("\n")).not.toContain(WITHDRAWN_FOR_REGULAR_BOOKING);
+    expect(booked.join("\n")).not.toContain("still with the property team");
+    expect(a.fake.sent.filter((message) => message.number === PHONE).length).toBe(beforeVisitor + booked.length);
+
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    const bundle = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle;
+    const request = bundle.tourTimeRequests.find((item) => item.id === id)!;
+    expect(request.status).toBe("WITHDRAWN");
+    expect(request.operatorNote).toBe(WITHDRAWN_FOR_REGULAR_BOOKING);
+    expect(bundle.reservations.some((item) => item.slotStart === later.toISOString())).toBe(false);
+    expect(bundle.reservations.some((item) => item.slotStart === zonedTimeToUtc({ year: 2026, month: 9, day: 29, hour: 14 }, TZ).toISOString())).toBe(true);
+
+    const listed = await a.grok("list_tour_time_requests");
+    const listedRequest = listed.requests.find((item: { tourTimeRequestId: string }) => item.tourTimeRequestId === id);
+    expect(listedRequest.status).toBe("withdrawn");
+    expect(listedRequest.reason).toBe(WITHDRAWN_FOR_REGULAR_BOOKING);
+    expect(JSON.stringify(listed)).toContain(WITHDRAWN_FOR_REGULAR_BOOKING);
+
+    const inspected = await a.grok("inspect_tour_time_request", { tourTimeRequestId: id });
+    expect(inspected.status).toBe("withdrawn");
+    expect(inspected.reason).toBe(WITHDRAWN_FOR_REGULAR_BOOKING);
+    expect(inspected.summary).toContain(WITHDRAWN_FOR_REGULAR_BOOKING);
+    expect(inspected.note).toBe(WITHDRAWN_FOR_REGULAR_BOOKING);
+
+    const afterBookVisitor = a.fake.sent.filter((message) => message.number === PHONE).length;
+    const approved = await a.grok("approve_tour_time_request", { tourTimeRequestId: id });
+    expect(approved.summary).toBe(WITHDRAWN_FOR_REGULAR_BOOKING);
+    expect(approved.status).toBe("withdrawn");
+    expect(approved.reason).toBe(WITHDRAWN_FOR_REGULAR_BOOKING);
+    expect(approved.withdrawn).toBe(true);
+    const declined = await a.grok("decline_tour_time_request", { tourTimeRequestId: id });
+    expect(declined.summary).toBe(WITHDRAWN_FOR_REGULAR_BOOKING);
+    expect(declined.status).toBe("withdrawn");
+    expect(declined.reason).toBe(WITHDRAWN_FOR_REGULAR_BOOKING);
+    expect(a.fake.sent.filter((message) => message.number === PHONE).length).toBe(afterBookVisitor);
+
+    const after = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle;
+    expect(after.reservations.filter((item) => item.slotStart === later.toISOString())).toHaveLength(0);
+    expect(after.tourTimeRequests.find((item) => item.id === id)!.status).toBe("WITHDRAWN");
   });
 });

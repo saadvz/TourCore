@@ -1,5 +1,6 @@
 import { isLiveMessaging } from "../config/tourCoreConfig";
 import { intervalsOverlap, parseFlexibleTime, placementOf, relativeWhen, tourInterval, touringHoursLabel } from "../core/customSlot";
+import { WITHDRAWN_FOR_REGULAR_BOOKING } from "../core/TourCore";
 import { addDays, formatConfirmStamp, formatDay, formatTime, formatWeekday, localDateOf } from "../core/timezone";
 import { formatPhone, parsePhone } from "../core/phone";
 import type { TourTimeRequest } from "../domain/model";
@@ -102,6 +103,17 @@ function requestView(tour: TourSnapshot, request: TourTimeRequest, now: Date) {
     status: request.status === "PENDING" ? "waiting" : request.status.toLowerCase(),
     outsideHours: placement === "OUTSIDE_HOURS",
     regularTime: placement === "ON_GRID",
+    ...(request.status === "WITHDRAWN" ? { reason: WITHDRAWN_FOR_REGULAR_BOOKING } : {}),
+  };
+}
+
+function withdrawnResult(request: TourTimeRequest) {
+  return {
+    summary: WITHDRAWN_FOR_REGULAR_BOOKING,
+    withdrawn: true,
+    status: "withdrawn" as const,
+    reason: WITHDRAWN_FOR_REGULAR_BOOKING,
+    tourTimeRequestId: request.id,
   };
 }
 
@@ -121,7 +133,7 @@ export async function listTourTimeRequests(ctx: Ctx, input: { property?: string;
   const requests = [];
   for (const tour of await tourSnapshots(ctx.services, { propertyId })) {
     for (const request of tour.bundle.tourTimeRequests) {
-      if (!input.includeHandled && request.status !== "PENDING") continue;
+      if (!input.includeHandled && request.status !== "PENDING" && request.status !== "WITHDRAWN") continue;
       requests.push(requestView(tour, request, ctx.now()));
     }
   }
@@ -136,6 +148,14 @@ export async function inspectTourTimeRequest(ctx: Ctx, tourTimeRequestId: string
   const found = await findTimeRequest(ctx.services, tourTimeRequestId);
   if (!found) throw new SetupInputError("REQUEST_NOT_FOUND", "I couldn't find that time request.");
   const view = requestView(found.tour, found.request, ctx.now());
+  if (found.request.status === "WITHDRAWN") {
+    return {
+      summary: `${view.visitorName} — ${view.requestedTime}. ${WITHDRAWN_FOR_REGULAR_BOOKING}`,
+      ...view,
+      note: WITHDRAWN_FOR_REGULAR_BOOKING,
+      reason: WITHDRAWN_FOR_REGULAR_BOOKING,
+    };
+  }
   const note = view.outsideHours
     ? `${formatTime(new Date(found.request.requestedStartsAt), found.tour.config.property.timezone)} is outside the property's normal ${touringHoursLabel(found.tour.config)} touring hours.`
     : view.regularTime
@@ -147,6 +167,7 @@ export async function inspectTourTimeRequest(ctx: Ctx, tourTimeRequestId: string
 export async function approveTourTimeRequest(ctx: Ctx, input: { tourTimeRequestId: string; confirmationCode?: string; acknowledgeOutsideHours?: boolean }) {
   const found = await findTimeRequest(ctx.services, input.tourTimeRequestId);
   if (!found) throw new SetupInputError("REQUEST_NOT_FOUND", "I couldn't find that time request.");
+  if (found.request.status === "WITHDRAWN") return withdrawnResult(found.request);
   if (found.request.status !== "PENDING") throw new SetupInputError("REQUEST_CLOSED", "That request has already been handled.");
   refuseIfPaused(
     ctx,
@@ -188,6 +209,7 @@ export async function approveTourTimeRequest(ctx: Ctx, input: { tourTimeRequestI
 export async function declineTourTimeRequest(ctx: Ctx, input: { tourTimeRequestId: string; note?: string }) {
   const found = await findTimeRequest(ctx.services, input.tourTimeRequestId);
   if (!found) throw new SetupInputError("REQUEST_NOT_FOUND", "I couldn't find that time request.");
+  if (found.request.status === "WITHDRAWN") return withdrawnResult(found.request);
   const session = requireLive(found.tour);
   await session.declineTimeRequest(found.request.id, input.note);
   await persistSession(ctx.services, session);

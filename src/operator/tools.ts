@@ -1250,10 +1250,10 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "List custom time requests",
     kind: "read",
     description:
-      "Who is waiting on a tour time that isn't a regular slot, or on moving a tour. Say this when the operator asks who wants a different time or to show custom-time requests. Pending only, unless includeHandled is set. No schedule jargon.",
+      "Who is waiting on a tour time that isn't a regular slot, or on moving a tour. Say this when the operator asks who wants a different time or to show custom-time requests. Pending and withdrawn (visitor booked a regular time instead) by default. Set includeHandled for approved, declined, or replaced requests. A withdrawn request includes the reason They booked a regular time instead. No schedule jargon.",
     input: z.strictObject({
       property: Property,
-      includeHandled: z.boolean().optional().describe("Include requests that were already approved, declined or replaced."),
+      includeHandled: z.boolean().optional().describe("Include requests that were already approved, declined or replaced. Withdrawn requests already appear without this."),
     }),
     run: (ctx, i) => listTourTimeRequests(ctx, i),
   }),
@@ -1261,7 +1261,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "inspect_tour_time_request",
     title: "Inspect a custom time request",
     kind: "read",
-    description: "One custom-time request in plain language: who, which unit, the time they want, their current booking if they have one, and whether that time is outside normal touring hours.",
+    description: "One custom-time request in plain language: who, which unit, the time they want, their current booking if they have one, and whether that time is outside normal touring hours. A withdrawn request (the visitor booked a regular time instead) is shown as withdrawn with They booked a regular time instead.",
     input: z.strictObject({
       tourTimeRequestId: z.string().min(3).max(40).describe("The tourTimeRequestId from list_tour_time_requests or a tour update. Never show it to the operator."),
     }),
@@ -1272,7 +1272,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Approve a custom time",
     kind: "consequential",
     description:
-      "Approves a visitor's requested tour time as a one-off. Does not change the property's regular hours or which times are offered. First call returns one yes/no question that names the action and ends Move it? or Book it? — never Continue?. A move inside hours includes the old and new times. \"This is a one-off. Your regular tour hours stay the same\" only when the time is outside tour hours. Call again with confirmationCode only after an explicit yes. If the result says outsideHours, the question is the stronger outside-hours confirmation: call again with confirmationCode and acknowledgeOutsideHours true only after they agree to that. Refused when tours at that property or unit are paused (Tours at {property} are paused. Resume them first.) — tell the operator that, no visitor text.",
+      "Approves a visitor's requested tour time as a one-off. Does not change the property's regular hours or which times are offered. First call returns one yes/no question that names the action and ends Move it? or Book it? — never Continue?. A move inside hours includes the old and new times. \"This is a one-off. Your regular tour hours stay the same\" only when the time is outside tour hours. Call again with confirmationCode only after an explicit yes. If the result says outsideHours, the question is the stronger outside-hours confirmation: call again with confirmationCode and acknowledgeOutsideHours true only after they agree to that. If the visitor already booked a regular time, the request is withdrawn: return They booked a regular time instead. Do not approve and do not text the visitor. Refused when tours at that property or unit are paused (Tours at {property} are paused. Resume them first.) — tell the operator that, no visitor text.",
     input: z.strictObject({
       tourTimeRequestId: z.string().min(3).max(40).describe("The tourTimeRequestId. Never show it to the operator."),
       confirmationCode: Code,
@@ -1284,7 +1284,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "decline_tour_time_request",
     title: "Decline a custom time",
     kind: "change",
-    description: "Declines a requested time and tells the visitor. Their current booking, if they have one, stays confirmed. Use this for \"decline\" or \"keep the current booking\".",
+    description: "Declines a requested time and tells the visitor. Their current booking, if they have one, stays confirmed. Use this for \"decline\" or \"keep the current booking\". If the visitor already booked a regular time, the request is withdrawn: return They booked a regular time instead. Do not decline again and do not text the visitor.",
     input: z.strictObject({
       tourTimeRequestId: z.string().min(3).max(40).describe("The tourTimeRequestId. Never show it to the operator."),
       note: z.string().max(300).optional().describe("A short note in the operator's words. Optional."),

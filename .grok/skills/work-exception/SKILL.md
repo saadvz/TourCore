@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Tour updates, exception queue, monitoring, holds and approved answers
-  version: "0.3.14"
+  version: "0.3.15"
 ---
 
 # Work Exception
@@ -119,9 +119,14 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   booking can take over. A rebook held from during the tour continues after the
   follow-up reply: if its consent is still unanswered, they get the
   booked-for line for the new time, then the original consent
-  question. An unapproved custom-time request is told it is still with
-  the property team instead of the day menu. A follow-up yes does not
-  record that consent.
+  question. An unapproved custom-time request is told once that it is
+  still with the property team (`Your request for {time} on {day} is
+  still with the property team. I'll text you as soon as they respond.
+  If you'd rather pick one of the regular times instead, just reply
+  with a day.`). Later texts use the normal booking flow. Booking a
+  regular slot withdraws that request; list, inspect, and approve or
+  decline then show `They booked a regular time instead.` A follow-up
+  yes does not record that consent.
 - **After a closed tour.** Other visitor texts before that window ends
   alert the team once per message. DONE after the close uses the usual
   thanks and follow-up question; a yes is the same follow-up as a normal
@@ -170,12 +175,12 @@ not change.
    It names the visitor, the time they want, and whether that time is outside
    normal touring hours.
 2. The landlord can say it naturally:
-   - "Approve 3:15" → `approve_tour_time_request`. Ask the question it returns, once. After a clear yes, call it again with `confirmationCode`. If the property is paused, it refuses (`Tours at {property} are paused. Resume them first.`) — say that, don't approve.
+   - "Approve 3:15" → `approve_tour_time_request`. Ask the question it returns, once. After a clear yes, call it again with `confirmationCode`. If the property is paused, it refuses (`Tours at {property} are paused. Resume them first.`) — say that, don't approve. If they already booked a regular time, the request is withdrawn (`They booked a regular time instead.`) — say that, don't approve, and don't text the visitor.
    - "Offer them 3:30" → `propose_tour_time`. The current booking stays until the visitor agrees.
-   - "Decline" or "Keep the 4 PM booking" → `decline_tour_time_request`.
+   - "Decline" or "Keep the 4 PM booking" → `decline_tour_time_request`. If the request is withdrawn, Tour Core returns `They booked a regular time instead.` — say that and don't text the visitor.
    - "Move Testa to 3:15" → `reschedule_tour` with their name and the time. Ask the one question it returns, then call again after yes. If the property is paused, it refuses the same way.
    - "Set up a tour for Dana at 1A on Monday at 3:15" → `schedule_one_off_tour` with their phone, the unit and the time. Ask the one question it returns (it ends `Book it?`), then call again after yes. Only if they asked for this tour. A leftover day or time menu with nothing booked does not block — the one-off replaces it. If they already have a booked tour, say Tour Core's refusal word for word (`They already have a booked tour. I can move it or call it off.`), then use `reschedule_tour` to move it or `revoke_tour_access` to call it off. A pending one-off (`They already have a tour waiting for them to reply YES or NO. I can call it off, or we can wait for them to answer.` → `revoke_tour_access` or wait), an open tour window (`They're on a tour right now. I can call it off.` → `revoke_tour_access`), or a hold (`Their tour is on hold. I can resume it or call it off.` → `clear_operator_hold` or `revoke_tour_access`) is also refused. STOP / opt-out still refuses.
-   - "Who's waiting for a different time?" → `list_tour_time_requests`.
+   - "Who's waiting for a different time?" → `list_tour_time_requests`. Withdrawn requests (visitor booked a regular time instead) stay on the list as withdrawn with `They booked a regular time instead.` — they are not pending.
 3. A time outside normal touring hours returns a stronger question. Call again
    with `confirmationCode` and `acknowledgeOutsideHours` true only after they
    agree to that one-time exception.

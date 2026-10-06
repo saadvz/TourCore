@@ -184,7 +184,10 @@ Never:
   free. After the no-time line, yes books another look without taking
   over the tour that is still running. A custom-time request during a
   tour is also secondary. After the follow-up reply, an unapproved
-  request is told it is still with the property team. That new booking
+  request is told once that it is still with the property team and they
+  can reply with a day for a regular time. Later texts use the normal
+  booking flow. Booking a regular slot withdraws that request
+  (`They booked a regular time instead.`). That new booking
   becomes the active one after the follow-up reply; a follow-up yes does
   not record consent. Unanswered consent is then the booked-for line for
   the new time, then the original consent question. If the T-5 text

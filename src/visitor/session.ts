@@ -1075,13 +1075,16 @@ export class VisitorDemoSession {
     return requests.find((request) => request.status === "PENDING" && request.reservationId && ids.has(request.reservationId));
   }
 
-  /** After a tour ends, tell the visitor their custom-time request is still with the team. */
+  /** After a tour ends, tell the visitor their custom-time request is still with the team. Once per request. */
   async announceUnapprovedCustomTime(): Promise<boolean> {
     const request = await this.unapprovedCustomTimeRequest();
-    if (!request) return false;
+    if (!request || request.pendingNoticeSentAt) return false;
     const start = new Date(request.requestedStartsAt);
     const tz = this.config.property.timezone;
+    await this.refreshOfferedSchedule();
+    this.markDatesShown();
     await this.reply(pendingCustomTimeLine(formatTime(start, tz), formatDay(start, tz)));
+    await this.core.markPendingCustomTimeNotice(request.id);
     return true;
   }
 

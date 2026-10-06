@@ -1365,6 +1365,16 @@ describe("QA review blocking items", () => {
     expect(replies.at(-1)).not.toContain("moving your tour");
   });
 
+  it("after-close distress still wins over a pending custom-time request", async () => {
+    const path = await smsClosedTour("sms-distress-pending-custom", { customTime: true });
+    expect((await path.session.unapprovedCustomTimeRequest())?.status).toBe("PENDING");
+    await path.text("I'm stuck");
+    expect(path.lastVisitor()).toBe(visitorRepliedAfterClose());
+    expect(path.lastVisitor()).not.toContain("still with the property team");
+    expect(path.lastVisitor()).not.toMatch(/Which day works|I have tours available|Welcome|self-guided/);
+    expect((await path.session.store.list("tourTimeRequests")).some((request) => request.status === "PENDING")).toBe(true);
+  });
+
   it("after DONE and follow-up, an unapproved custom-time request stays with the team instead of the day menu", async () => {
     const ctx = await touringSession("t-custom-after-done");
     const later = zonedTimeToUtc({ year: 2026, month: 9, day: 29, hour: 15, minute: 15 }, TZ);
@@ -1720,7 +1730,7 @@ describe("overstay SMS router", () => {
   });
 });
 
-async function smsClosedTour(label: string, options: { rebook?: boolean } = {}) {
+async function smsClosedTour(label: string, options: { rebook?: boolean; customTime?: boolean } = {}) {
   const clock = { t: zonedTimeToUtc({ ...TOUR_DAY, hour: 13, minute: 58 }, TZ).getTime() };
   const root = mkdtempSync(join(tmpdir(), `tourcore-sms-${label}-`));
   smsRoots.push(root);
@@ -1779,6 +1789,11 @@ async function smsClosedTour(label: string, options: { rebook?: boolean } = {}) 
     expect(slot).toBeTruthy();
     await text(slot!.label);
     expect(session().pendingBookingId).toBeTruthy();
+  }
+  if (options.customTime) {
+    const later = zonedTimeToUtc({ year: 2026, month: 9, day: 29, hour: 15, minute: 15 }, TZ);
+    const filed = await session().requestCustomTime(later);
+    expect(filed.created).toBe(true);
   }
   clock.t = Date.parse(touring.windowEnd!) + 15 * 60_000;
   await router.tickOverstay();

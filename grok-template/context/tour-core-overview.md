@@ -23,8 +23,11 @@ outside, does not start booking. Help booking does not hide those
 other words. A rebook or custom-time
 request during a tour stays secondary until that tour ends, then
 unfinished consent or identity checks continue. After the follow-up
-reply, an unapproved custom-time request is told it is still with the
-property team instead of the day menu. While the leaving
+reply, an unapproved custom-time request is told once that it is still
+with the property team and they can reply with a day for a regular
+time. Later texts use the normal booking flow. Booking a regular slot
+withdraws that request so a later approve cannot double-book; operators
+see `They booked a regular time instead.` While the leaving
 issue is open after the close, stuck-inside texts and greetings stay
 on after-close handling. After the follow-up reply, unanswered consent is the
 booked-for line for the new time, then the original consent question.

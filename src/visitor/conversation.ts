@@ -891,7 +891,8 @@ async function byStage(turn: Turn): Promise<void> {
     }
 
     case "choose-date": {
-      if (await session.unapprovedCustomTimeRequest()) {
+      const pendingDateRequest = await session.unapprovedCustomTimeRequest();
+      if (pendingDateRequest && !pendingDateRequest.pendingNoticeSentAt) {
         await session.recordText(turn.said);
         await session.announceUnapprovedCustomTime();
         return;
@@ -921,7 +922,8 @@ async function byStage(turn: Turn): Promise<void> {
     }
 
     case "choose-time": {
-      if (await session.unapprovedCustomTimeRequest()) {
+      const pendingTimeRequest = await session.unapprovedCustomTimeRequest();
+      if (pendingTimeRequest && !pendingTimeRequest.pendingNoticeSentAt) {
         await session.recordText(turn.said);
         await session.announceUnapprovedCustomTime();
         return;

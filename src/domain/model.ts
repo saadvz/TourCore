@@ -216,11 +216,13 @@ export const TourTimeRequestSchema = z.object({
   requestedStartsAt: IsoDate,
   requestedEndsAt: IsoDate,
   requestSource: z.enum(["VISITOR", "OPERATOR"]),
-  status: z.enum(["PENDING", "APPROVED", "DECLINED", "SUPERSEDED"]),
+  status: z.enum(["PENDING", "APPROVED", "DECLINED", "SUPERSEDED", "WITHDRAWN"]),
   createdAt: IsoDate,
   resolvedAt: IsoDate.optional(),
   resolvedBy: z.enum(["OPERATOR", "VISITOR"]).optional(),
   operatorNote: z.string().optional(),
+  /** First time the visitor was told this request is still with the team. */
+  pendingNoticeSentAt: IsoDate.optional(),
   /** A time the property team offered instead. The booking stays put until the visitor accepts. */
   proposedAlternativeAt: IsoDate.optional(),
   /** The provider's message id, so a retried text cannot open a second request. */

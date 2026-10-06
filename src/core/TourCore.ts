@@ -111,9 +111,15 @@ export function bookedForLine(time: string, day: string): string {
 }
 
 /** After a tour ends, an unapproved custom-time request stays with the team. */
+export const PENDING_CUSTOM_TIME_REGULAR_OPTION =
+  "If you'd rather pick one of the regular times instead, just reply with a day.";
+
 export function pendingCustomTimeLine(time: string, day: string): string {
-  return `Your request for ${time} on ${day} is still with the property team. I'll text you as soon as they respond.`;
+  return `Your request for ${time} on ${day} is still with the property team. I'll text you as soon as they respond. ${PENDING_CUSTOM_TIME_REGULAR_OPTION}`;
 }
+
+/** Operator-facing reason when a visitor books a regular slot instead of waiting. */
+export const WITHDRAWN_FOR_REGULAR_BOOKING = "They booked a regular time instead.";
 
 /** Repeat help on the same reservation re-alerts the team at most once per this window. */
 export const HELP_ALERT_WINDOW_MS = 5 * 60_000;
@@ -397,6 +403,7 @@ export class TourCore {
       reservation = await this.move(reservation, "AWAITING_CONSENT", "CONSENT_REQUESTED", { detail: "asked permission to text and keep tour records" });
 
       const prospect = await this.mustGetProspect(reservation.prospectId);
+      await this.withdrawPendingCustomTimeRequests(prospect.id, reservation.id);
       await this.textProspect(prospect, reservation.id, `${bookedForLine(this.time(start), this.day(start))}\n${CONSENT_TEXT}`, { kind: "yes-no" });
       return reservation;
     });
@@ -826,6 +833,34 @@ export class TourCore {
       detail: `asked for ${this.whenPhrase(start)}`,
     });
     return { request, created: true };
+  }
+
+  /** First pending-line text for this request. A later text must not send it again. */
+  async markPendingCustomTimeNotice(requestId: string): Promise<TourTimeRequest> {
+    const request = await this.mustGetTimeRequest(requestId);
+    if (request.pendingNoticeSentAt) return request;
+    const next = { ...request, pendingNoticeSentAt: this.nowIso() };
+    await this.deps.store.put("tourTimeRequests", next);
+    return next;
+  }
+
+  /** Visitor booked a regular slot: the pending custom-time request cannot later approve into a second booking. */
+  async withdrawPendingCustomTimeRequests(prospectId: string, reservationId?: string): Promise<TourTimeRequest[]> {
+    const withdrawn: TourTimeRequest[] = [];
+    for (const request of await this.deps.store.list("tourTimeRequests")) {
+      if (request.status !== "PENDING") continue;
+      if (request.prospectId !== prospectId && request.reservationId !== reservationId) continue;
+      const next: TourTimeRequest = {
+        ...request,
+        status: "WITHDRAWN",
+        resolvedAt: this.nowIso(),
+        resolvedBy: "VISITOR",
+        operatorNote: WITHDRAWN_FOR_REGULAR_BOOKING,
+      };
+      await this.deps.store.put("tourTimeRequests", next);
+      withdrawn.push(next);
+    }
+    return withdrawn;
   }
 
   async approveTourTimeRequest(requestId: string, options: { outsideTourHours?: boolean } = {}): Promise<{ request: TourTimeRequest; reservation: Reservation }> {
