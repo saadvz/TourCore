@@ -281,9 +281,15 @@ describe("readiness, practice tour and publish", () => {
       "\u2713 A repeated request didn't create a second access grant",
       "\u2713 Unit 101 access was allowed",
       "\u2713 Unit 102 Door (not on the route) was denied before Durin was contacted",
+      "\u2713 The 15-minutes-left questions text was sent",
+      "\u2713 The 5-minute extra-time offer was sent",
+      "\u2713 A one-time 10-minute extension was granted",
       "\u2713 Tour completed",
       "\u2713 Every door was locked again afterwards",
       "\u2713 Follow-up worked",
+      "\u2713 The tour-end text was sent when extra time was not taken",
+      "\u2713 The 5-minutes-after check-in was sent",
+      "\u2713 The tour was closed 15 minutes after the end",
       "\u2713 Tour records were saved",
     ]);
   });

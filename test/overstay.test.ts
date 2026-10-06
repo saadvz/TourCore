@@ -421,20 +421,11 @@ describe("overstay timeline", () => {
 
   it("unnamed visitors drop the name fragment, and copy never says Main Home", async () => {
     const ctx = setup();
-    const { prospect, reservation } = await ctx.core.startInquiry({ name: UNNAMED_VISITOR, phone: "(555) 010-9999", unitId: "apt_101" });
-    const slot = (await ctx.core.availableSlots(TOUR_DAY))[0]!;
-    await ctx.core.reserveSlot(reservation.id, slot.start.toISOString());
-    let current = await ctx.core.recordConsent(reservation.id, true);
-    current = await ctx.core.submitVerification(current.id, { ...basicForm("(555) 010-9999"), answers: { governmentFirstName: "", governmentLastName: "", email: "x@example.com", phone: "(555) 010-9999" } });
-    await ctx.store.put("prospects", { ...(await ctx.store.get("prospects", prospect.id))!, name: UNNAMED_VISITOR });
-    ctx.clock.set(slot.start);
-    await ctx.core.requestAccess({ reservationId: current.id, prospectId: prospect.id, doorId: "entrance" });
-    const live = (await ctx.core.getReservation(current.id))!;
-    const overstay = new OverstayScheduler(new MemoryRuntimeStore(), { clock: ctx.clock });
-    overstay.ensure(live, ctx.config.property.id);
-    ctx.clock.set(new Date(live.windowEnd!));
-    await overstay.tickCore(ctx.core, { propertyId: ctx.config.property.id });
-    const texts = await outbound(ctx, live.id);
+    const started = await startTour(ctx);
+    await ctx.store.put("prospects", { ...(await ctx.store.get("prospects", started.tour.prospect.id))!, name: UNNAMED_VISITOR });
+    ctx.clock.set(new Date(started.reservation.windowEnd!));
+    await started.overstay.tickCore(ctx.core, { propertyId: ctx.config.property.id });
+    const texts = await outbound(ctx, started.reservation.id);
     expect(texts).toContain(tourEnded(PLACE));
     expect(texts.join("\n")).not.toMatch(/, Visitor/);
     expect(texts.join("\n")).not.toContain("Main Home");
@@ -467,7 +458,7 @@ describe("overstay conversation", () => {
     session.clock.jumpTo(new Date(now.t));
     await session.overstay.tickSession(session);
     await say("is there a gym?");
-    expect(session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1)).toContain("I don't have that information");
+    expect(session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1)).toContain("I'll let the property team know about your question.");
     await say("I'm out");
     expect((await session.reservation())!.status).toBe("COMPLETED");
   });
