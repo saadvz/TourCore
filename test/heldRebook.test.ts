@@ -85,7 +85,7 @@ async function holdNextSlot(session: VisitorDemoSession, slotStart: Date) {
   return pending;
 }
 
-async function touringWithRebook(label: string) {
+async function touringWithRebook(label: string, later = zonedTimeToUtc({ year: 2026, month: 10, day: 2, hour: 14, minute: 0 }, TZ)) {
   const now = { t: zonedTimeToUtc({ ...TOUR_DAY, hour: 13, minute: 58 }, TZ).getTime() };
   const session = new VisitorDemoSession(PROPERTY, loadConfig(), label, {
     realNow: () => now.t,
@@ -107,7 +107,6 @@ async function touringWithRebook(label: string) {
   session.clock.jumpTo(new Date(now.t));
   await say("I'm here");
   session.overstay.ensure((await session.reservation())!, session.propertyId, session.tourId);
-  const later = zonedTimeToUtc({ year: 2026, month: 10, day: 2, hour: 14, minute: 0 }, TZ);
   const pending = await holdNextSlot(session, later);
   return { session, say, now, runningId: booked.id, pending, later };
 }
@@ -139,6 +138,23 @@ describe("defect 1: bare yes answers the latest question", () => {
     expect(booked.consentId).toBeTruthy();
     expect(["AWAITING_VERIFICATION", "READY"]).toContain(booked.status);
   });
+
+  it.each(["yes, no need to switch", "yes, no change needed", "yes, I won't need to reschedule", "yes but I might be 5 min late"])(
+    "%s records consent for the held Thursday booking",
+    async (phrase) => {
+      const thursday = zonedTimeToUtc({ year: 2026, month: 10, day: 1, hour: 14, minute: 0 }, TZ);
+      const ctx = await touringWithRebook(`farewell-${phrase.length}`, thursday);
+      expect(await ctx.session.pendingBookingNeedsConsent()).toBe(true);
+      await ctx.say(phrase);
+      expect((await ctx.session.reservation())!.id).toBe(ctx.runningId);
+      expect((await ctx.session.reservation())!.status).toBe("TOURING");
+      const booked = (await ctx.session.store.get("reservations", ctx.pending.id))!;
+      expect(booked.consentId).toBeTruthy();
+      expect(booked.status).not.toBe("AWAITING_CONSENT");
+      expect(lastFrom(ctx.session)).toMatch(/^You're all set for your tour on Thursday, Oct 1 at 2:00 PM!/);
+      expect(lastFrom(ctx.session)).not.toContain("Sorry, I didn't catch that");
+    },
+  );
 });
 
 describe("defect 2: operator tools target the running tour", () => {

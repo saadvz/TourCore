@@ -1668,13 +1668,13 @@ async function handlePendingBookingReply(turn: Turn): Promise<boolean> {
     return true;
   }
   if (await session.pendingBookingNeedsConsent()) {
-    const yn = yesNo(stripFiller(normalize(text)));
-    if (yn.answer === "yes" && yn.confidence >= 0.75) {
+    const answer = clearConsentAnswer(text);
+    if (answer === "yes") {
       await session.answerPendingConsent(true, turn.said);
       await answerLeftoverAfterConsent(turn, text);
       return true;
     }
-    if (yn.answer === "no" && yn.confidence >= 0.75) {
+    if (answer === "no") {
       await session.answerPendingConsent(false, turn.said);
       return true;
     }
