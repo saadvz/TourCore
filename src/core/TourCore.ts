@@ -326,8 +326,9 @@ export class VisitorDenialCopy {
     return `Your tour is on hold, and your tour time keeps running while the ${team} sorts this out. ${this.atDoor(team, visitorContact, { teamJustNamed: true })}`;
   }
 
-  static calledOff(team: string, visitorContact?: string): string {
-    return `Your tour has been called off, so the doors won't open for it. ${this.remote(team, visitorContact)}`;
+  static calledOff(team: string, visitorContact?: string, when?: { time: string; day: string }): string {
+    const named = when ? ` at ${when.time} on ${when.day}` : "";
+    return `Your tour${named} has been called off, so the doors won't open for it. ${this.remote(team, visitorContact)}`;
   }
 
   static tooEarly(opensAt?: string, relative?: string): string {
@@ -1351,10 +1352,14 @@ export class TourCore {
 
   async revokeReservation(reservationId: string, reason: string): Promise<Reservation> {
     let reservation = await this.mustGetReservation(reservationId);
+    const running = reservation.status === "TOURING" || reservation.status === "OPERATOR_HOLD" || reservation.status === "PROVIDER_FAILURE";
+    const slotStart = reservation.slotStart;
     await this.revokeGrants(reservation, reason);
     reservation = await this.move(reservation, "REVOKED", "RESERVATION_REVOKED", { detail: reason });
     const prospect = await this.mustGetProspect(reservation.prospectId);
-    await this.textProspect(prospect, reservation.id, VisitorDenialCopy.calledOff(this.teamName(), this.visitorHelpNumber()));
+    const when =
+      !running && slotStart ? { time: this.time(new Date(slotStart)), day: this.day(new Date(slotStart)) } : undefined;
+    await this.textProspect(prospect, reservation.id, VisitorDenialCopy.calledOff(this.teamName(), this.visitorHelpNumber(), when));
     return reservation;
   }
 
@@ -1405,14 +1410,20 @@ export class TourCore {
    */
   async cancelBookedTour(reservationId: string, options: { reason: string; propertyWide: boolean; removed?: boolean }): Promise<Reservation> {
     let reservation = await this.mustGetReservation(reservationId);
-    if (reservation.status === "TOURING") return reservation;
+    if (reservation.status === "TOURING" || reservation.status === "OPERATOR_HOLD" || reservation.status === "PROVIDER_FAILURE") {
+      return reservation;
+    }
     if (!reservation.slotStart || TERMINAL.includes(reservation.status)) return reservation;
     const slotStart = reservation.slotStart;
     await this.revokeGrants(reservation, options.reason);
     reservation = await this.move(reservation, "CANCELLED", "RESERVATION_CANCELLED", { detail: options.reason });
     const prospect = await this.mustGetProspect(reservation.prospectId);
     const start = new Date(slotStart);
-    const touringNow = (await this.deps.store.list("reservations")).some((item) => item.id !== reservation.id && item.status === "TOURING");
+    const touringNow = (await this.deps.store.list("reservations")).some(
+      (item) =>
+        item.id !== reservation.id &&
+        (item.status === "TOURING" || item.status === "OPERATOR_HOLD" || item.status === "PROVIDER_FAILURE"),
+    );
     await this.textProspect(
       prospect,
       reservation.id,

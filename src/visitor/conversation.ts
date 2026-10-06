@@ -13,7 +13,8 @@ import {
   visitorCancelKeptFor,
   type InboundMeta,
 } from "../core/TourCore";
-import { laterCancelConfirm } from "../core/availabilityCopy";
+import { cannotCancelRunningOfferLater, laterCancelConfirm } from "../core/availabilityCopy";
+import { namedCancelFocus } from "./cancelTarget";
 import { awaitingLatestYesNo, doorAskSupersedesCancel } from "./latestQuestion";
 import { isLeavingTour, T5_NO_OFFER_BARE_YES } from "../core/overstayCopy";
 import { afterCloseAlertOpen } from "./overstayScheduler";
@@ -543,6 +544,13 @@ export async function handleVisitorText(
     else if (intent.type === "ASK_PROPERTY_QUESTION") await ask(turn, intent.question, () => session.welcome());
     else await session.greet(said);
   }   else await byStage(turn);
+  if (
+    awaiting?.kind === "confirm-cancel-tour" &&
+    doorAskSupersedesCancel(intent) &&
+    !session.pendingClarification
+  ) {
+    session.expect(stage, awaiting);
+  }
   if (session.overstay) await session.overstay.tickSession(session);
   if (keyword !== "stop" && !silent && typed) {
     const outboundAfter = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").length;
@@ -872,7 +880,11 @@ function stepPrompt(session: VisitorDemoSession, stage: VisitorStage, awaiting?:
       return { body: "Are you finished with your tour?", prompt: yesNo, awaiting };
     case "confirm-cancel-tour":
       return {
-        body: awaiting.laterWhileTouring ? laterCancelConfirm(awaiting.time, awaiting.day) : visitorCancelConfirm(awaiting.day, awaiting.time),
+        body: awaiting.namedRunning
+          ? cannotCancelRunningOfferLater(awaiting.time, awaiting.day)
+          : awaiting.laterWhileTouring
+            ? laterCancelConfirm(awaiting.time, awaiting.day)
+            : visitorCancelConfirm(awaiting.day, awaiting.time),
         awaiting,
       };
   }
@@ -913,11 +925,23 @@ async function offerCancelConfirm(turn: Turn): Promise<void> {
   }
   const start = new Date(target.reservation.slotStart);
   const tz = turn.session.config.property.timezone;
-  await turn.clarify(line, undefined, {
+  const day = formatDay(start, tz);
+  const time = formatTime(start, tz);
+  const namedRunning =
+    target.laterWhileTouring &&
+    namedCancelFocus({
+      text: turn.said.text ?? "",
+      current: await turn.session.reservation(),
+      later: await turn.session.pendingBooking(),
+      timeZone: tz,
+      now: turn.session.clock.now(),
+    }) === "running";
+  await turn.clarify(namedRunning ? cannotCancelRunningOfferLater(time, day) : line, undefined, {
     kind: "confirm-cancel-tour",
-    day: formatDay(start, tz),
-    time: formatTime(start, tz),
+    day,
+    time,
     ...(target.laterWhileTouring ? { laterWhileTouring: true } : {}),
+    ...(namedRunning ? { namedRunning: true } : {}),
   });
 }
 
@@ -1628,15 +1652,19 @@ async function handlePendingBookingReply(turn: Turn): Promise<boolean> {
     return true;
   }
   if (await session.pendingBookingNeedsConsent()) {
-    const answer = clearConsentAnswer(text);
-    if (answer === "yes") {
-      await session.answerPendingConsent(true, turn.said);
-      await answerLeftoverAfterConsent(turn, text);
-      return true;
-    }
-    if (answer === "no") {
-      await session.answerPendingConsent(false, turn.said);
-      return true;
+    const last = session.conversation.filter((item) => item.from === "tourcore").at(-1)?.text ?? "";
+    const consentLatest = last === CONSENT_TEXT || last.endsWith(CONSENT_TEXT);
+    if (consentLatest) {
+      const yn = yesNo(stripFiller(normalize(text)));
+      if (yn.answer === "yes" && yn.confidence >= 0.75) {
+        await session.answerPendingConsent(true, turn.said);
+        await answerLeftoverAfterConsent(turn, text);
+        return true;
+      }
+      if (yn.answer === "no" && yn.confidence >= 0.75) {
+        await session.answerPendingConsent(false, turn.said);
+        return true;
+      }
     }
   }
   if ((await session.pendingBookingNeedsVerification()) && /\b(form|link|identity|verify|verification)\b/.test(stripFiller(normalize(text)))) {

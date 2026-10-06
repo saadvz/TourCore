@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { cannotCancelRunningOfferLater, laterCancelConfirm } from "../core/availabilityCopy";
 import { isoDate, parseIsoDate } from "../core/schedule";
 import { formatDay, formatTime } from "../core/timezone";
 import { HelpProblemSchema, type StepAwaiting, type ConversationStep, type IntentInterpretation, type IntentInterpreter, type InterpretContext, type TourIntent } from "./model";
@@ -92,8 +93,9 @@ function lastAsked(step: ConversationStep, awaiting?: StepAwaiting, timezone?: s
     return `Reply yes for ${weekday} at ${formatTime(start, timezone ?? "UTC")}, or pick a day.`;
   }
   if (awaiting?.kind === "confirm-cancel-tour") {
+    if (awaiting.namedRunning) return cannotCancelRunningOfferLater(awaiting.time, awaiting.day);
     return awaiting.laterWhileTouring
-      ? `Cancel your later tour at ${awaiting.time} on ${awaiting.day}? Your tour right now isn't affected. Reply YES or NO.`
+      ? laterCancelConfirm(awaiting.time, awaiting.day)
       : `Cancel your tour on ${awaiting.day} at ${awaiting.time}? Reply YES or NO.`;
   }
   switch (step) {

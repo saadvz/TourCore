@@ -234,6 +234,19 @@ describe("the landlord decides", () => {
     expect(open.join("\n")).toContain("Entrance is open");
   });
 
+  it("I'm here at 1:58 after a move to 3:15 is still early, and 3:10 opens", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    const asked = await a.grok("reschedule_tour", { visitor: "Testy", newStartsAt: "3:15 PM today" });
+    await a.grok("reschedule_tour", { visitor: "Testy", newStartsAt: "3:15 PM today", confirmationCode: asked.confirmation.code });
+    a.clock.t = at(13, 58);
+    const early = await a.text("I'm here at 1:58");
+    expect(early.join("\n")).toContain("3:05 PM");
+    a.clock.t = at(15, 10);
+    const open = await a.text("I'm here at 1:58");
+    expect(open.join("\n")).toContain("Entrance is open");
+  });
+
   it("a time outside touring hours needs an explicit override and does not change the hours", async () => {
     const a = await liveApp({ cleanups });
     const before = hoursOf(a);

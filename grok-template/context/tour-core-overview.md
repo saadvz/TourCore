@@ -38,7 +38,10 @@ the running tour and every future or held booking. `reschedule_tour`
 will not move a tour in progress (`{who} is touring right now, so I can't
 move this tour. Once it ends, you can book them another time.`); if they
 have a later booking it asks `Want me to move their {oldTime} on {oldDay}
-booking to {newTime} on {newDay} instead?` and a yes is `Moved {who}'s
+booking to {newTime} on {newDay} instead?` (outside hours: `{who} is
+touring right now, so I can't move this tour. Their later booking is
+{oldTime} on {oldDay}, and {newTime} on {newDay} is outside your tour
+hours. Want me to move it there anyway?`) and a yes is `Moved {who}'s
 later booking to {time} on {day}.`. Calling off describes the tour that was called off;
 the later booking is `nextBooking`. After the follow-up
 reply, an unapproved custom-time request is told once that it is still
@@ -176,7 +179,10 @@ stays on {day} at {time}.` While they are touring and the cancel targets a
 later booking: `Cancel your later tour at {time} on {day}? Your tour right
 now isn't affected. Reply YES or NO.` YES: `Done, I've cancelled your later
 tour at {time} on {day}. Your tour right now isn't affected.` NO: `Okay,
-your later tour at {time} on {day} stays booked.` A reply that isn't a clear yes or no is flagged:
+your later tour at {time} on {day} stays booked.` If they name the tour
+they are on: `You can't cancel the tour you're on, but you're free to wrap
+up whenever you like. Your later tour at {time} on {day} is still booked.
+Want me to cancel that one instead? Reply YES or NO.` A reply that isn't a clear yes or no is flagged:
 `I'll check with the {team} and get back to you.` STOP still opts out. If
 cancel cannot finish, they get
 `I can't cancel it from here. I've asked the leasing team to call it off and

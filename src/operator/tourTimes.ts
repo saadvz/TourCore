@@ -1,5 +1,5 @@
 import { isLiveMessaging } from "../config/tourCoreConfig";
-import { moveLaterBookingInstead, movedLaterBookingSummary, tourInProgressCannotMove } from "../core/availabilityCopy";
+import { moveLaterBookingInstead, moveLaterBookingOutsideHours, movedLaterBookingSummary, tourInProgressCannotMove } from "../core/availabilityCopy";
 import { intervalsOverlap, parseFlexibleTime, placementOf, relativeWhen, tourInterval, touringHoursLabel } from "../core/customSlot";
 import { isUnconfirmedHold, REQUEST_ALREADY_HANDLED, requestAlreadyExpiredLine, requestProposePassedLine, requestTimePassedLine, SLOT_ALREADY_PASSED, TourCoreError, WITHDRAWN_FOR_REGULAR_BOOKING } from "../core/TourCore";
 import { formatConfirmStamp, formatDay, formatTime, formatWeekday, localDateOf } from "../core/timezone";
@@ -370,27 +370,35 @@ export async function rescheduleTour(
   if (!reservation?.slotStart) throw new SetupInputError("NO_TOUR", `${who(tour)} doesn't have a tour time to move yet.`);
   const tz = tour.config.property.timezone;
   const name = who(tour);
-  if (reservation.status === "TOURING") {
-    const later = nextReservation(tour, ctx.now());
-    if (!later?.slotStart) throw new SetupInputError("TOUR_IN_PROGRESS", tourInProgressCannotMove(name));
+  const issued = input.confirmationCode ? ctx.confirmations.peek(input.confirmationCode) : undefined;
+  const laterMoveConfirm = issued?.fingerprint.endsWith("|later");
+  if (reservation.status === "TOURING" || laterMoveConfirm) {
+    const later =
+      reservation.status === "TOURING"
+        ? nextReservation(tour, ctx.now())
+        : tour.bundle.reservations.find((item) => item.id === issued?.target);
+    if (reservation.status === "TOURING" && !later?.slotStart) throw new SetupInputError("TOUR_IN_PROGRESS", tourInProgressCannotMove(name));
+    if (!later?.slotStart) throw new SetupInputError("NO_TOUR", `${name} doesn't have a later booking to move.`);
     const laterStart = new Date(later.slotStart);
     const resolved = parseFlexibleTime(input.newStartsAt, tour.config, ctx.now(), localDateOf(laterStart, tz));
     if (!resolved.ok) throw new SetupInputError("TIME_UNCLEAR", resolved.ask);
     const outside = resolved.placement === "OUTSIDE_HOURS";
-    const fingerprint = `${later.id}|${later.updatedAt}|${resolved.start.toISOString()}|${outside}`;
-    const extra = outside ? " That's outside your tour hours." : "";
-    const offer = `${moveLaterBookingInstead(name, formatTime(laterStart, tz), formatDay(laterStart, tz), formatTime(resolved.start, tz), formatDay(resolved.start, tz))}${extra}`;
+    const fingerprint = `${later.id}|${later.updatedAt}|${resolved.start.toISOString()}|${outside}|later`;
+    const oldTime = formatTime(laterStart, tz);
+    const oldDay = formatDay(laterStart, tz);
+    const newTime = formatTime(resolved.start, tz);
+    const newDay = formatDay(resolved.start, tz);
+    const offer = outside
+      ? moveLaterBookingOutsideHours(name, oldTime, oldDay, newTime, newDay)
+      : moveLaterBookingInstead(name, oldTime, oldDay, newTime, newDay);
     if (!input.confirmationCode) {
       return ask(ctx, "reschedule-tour", later.id, fingerprint, offer, outside ? { outsideHours: true } : {});
-    }
-    if (outside && !input.acknowledgeOutsideHours) {
-      throw new SetupInputError("OUTSIDE_HOURS", "Moving a tour outside normal touring hours needs a clear yes to that specifically.");
     }
     redeem(ctx, input.confirmationCode, "reschedule-tour", later.id, fingerprint);
     await session.reschedule(resolved.start.toISOString(), { customTime: true, outsideTourHours: outside, notice: "moved", reservationId: later.id });
     await persistSession(ctx.services, session);
     return {
-      summary: movedLaterBookingSummary(name, formatTime(resolved.start, tz), formatDay(resolved.start, tz)),
+      summary: movedLaterBookingSummary(name, newTime, newDay),
       rescheduled: true,
       tourRef: tourRef(tour.propertyId, tour.tourId),
     };

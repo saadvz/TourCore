@@ -67,17 +67,23 @@ Tour Core sends only an `eventId` and an event type; never names or details.
 - Pause, resume, or call off that running tour. After it ends for any reason
   (done, closed, called off, cancelled), the later booking takes over and can
   be called off or cancelled by text. If nothing is held, HI starts a new
-  conversation.   `pause_tours` with cancel cancels every real future booking,
+  conversation. `pause_tours` with cancel cancels every real future booking,
   including a held rebook, and counts only tours actually cancelled.
   If they are still touring, the cancel text says their tour right now
   isn't affected. A one-off overlap check sees the running tour and
   every future or held booking. `reschedule_tour` will not move a tour
   in progress; it can offer to move the later booking instead
   (`Want me to move their {oldTime} on {oldDay} booking to {newTime} on
-  {newDay} instead?`; yes: `Moved {who}'s later booking to {time} on
+  {newDay} instead?`; outside hours: `{who} is touring right now, so I
+  can't move this tour. Their later booking is {oldTime} on {oldDay}, and
+  {newTime} on {newDay} is outside your tour hours. Want me to move it
+  there anyway?`; yes: `Moved {who}'s later booking to {time} on
   {day}.`). A visitor cancel by text while touring targets that later
   booking (`Cancel your later tour at {time} on {day}? Your tour right now
-  isn't affected. Reply YES or NO.`). Calling
+  isn't affected. Reply YES or NO.`). If they name the tour they are on:
+  `You can't cancel the tour you're on, but you're free to wrap up whenever
+  you like. Your later tour at {time} on {day} is still booked. Want me to
+  cancel that one instead? Reply YES or NO.` Calling
   off describes the tour that was called off; the later booking is
   `nextBooking`.
 - QA on the local loopback: `inject_local_sms` then `read_local_outbox` (separate
@@ -282,7 +288,7 @@ do not approve it — use `schedule_one_off_tour` or `reschedule_tour`.
    - "Approve 3:15" → `approve_tour_time_request`. Ask the question it returns, once. After a clear yes, call it again with `confirmationCode`. If the property is paused, it refuses (`Tours at {property} are paused. Resume them first.`) — say that, don't approve. If they already booked a regular time, the request is withdrawn (`They booked a regular time instead.`) — say that, don't approve, and don't text the visitor. If the request expired, return the ran-out line and use `schedule_one_off_tour` or `reschedule_tour`.
    - "Offer them 3:30" → `propose_tour_time`. The current booking stays until the visitor agrees.
    - "Decline" or "Keep the 4 PM booking" → `decline_tour_time_request`. If the request is withdrawn, Tour Core returns `They booked a regular time instead.` — say that and don't text the visitor.
-   - "Move Testa to 3:15" → `reschedule_tour` with their name and the time. Ask the one question it returns, then call again after yes. If they are touring right now, it refuses (`{who} is touring right now, so I can't move this tour. Once it ends, you can book them another time.`); if they have a later booking, that refusal asks `Want me to move their {oldTime} on {oldDay} booking to {newTime} on {newDay} instead?` (outside hours appends ` That's outside your tour hours.`) and a yes moves that booking (`Moved {who}'s later booking to {time} on {day}.`). If the property is paused, it refuses the same way.
+   - "Move Testa to 3:15" → `reschedule_tour` with their name and the time. Ask the one question it returns, then call again after yes. If they are touring right now, it refuses (`{who} is touring right now, so I can't move this tour. Once it ends, you can book them another time.`); if they have a later booking, that refusal asks `Want me to move their {oldTime} on {oldDay} booking to {newTime} on {newDay} instead?` (outside hours: `{who} is touring right now, so I can't move this tour. Their later booking is {oldTime} on {oldDay}, and {newTime} on {newDay} is outside your tour hours. Want me to move it there anyway?` — a plain yes is enough) and a yes moves that booking (`Moved {who}'s later booking to {time} on {day}.`). If the property is paused, it refuses the same way.
    - "Set up a tour for Dana at 1A on Monday at 3:15" → `schedule_one_off_tour` with their phone, the unit and the time. Ask the one question it returns (it ends `Book it?`), then call again after yes. Only if they asked for this tour. A leftover day or time menu with nothing booked does not block — the one-off replaces it. If they already have a booked tour, say Tour Core's refusal word for word (`They already have a booked tour. I can move it or call it off.`), then use `reschedule_tour` to move it or `revoke_tour_access` to call it off. A pending one-off (`They already have a tour waiting for them to reply YES or NO. I can call it off, or we can wait for them to answer.` → `revoke_tour_access` or wait), an open tour window (`They're on a tour right now. I can call it off.` → `revoke_tour_access`), or a hold (`Their tour is on hold. I can resume it or call it off.` → `clear_operator_hold` or `revoke_tour_access`) is also refused. STOP / opt-out still refuses.
    - "Who's waiting for a different time?" → `list_tour_time_requests`. Pending only by default. Withdrawn requests (visitor booked a regular time instead) are hidden unless you ask for withdrawn or all; they show `They booked a regular time instead.` — they are not pending.
 3. A time outside normal touring hours returns a stronger question. Call again
@@ -360,7 +366,10 @@ right now").
   confirm `Cancel your later tour at {time} on {day}? Your tour right now
   isn't affected. Reply YES or NO.`; YES `Done, I've cancelled your later
   tour at {time} on {day}. Your tour right now isn't affected.`; NO `Okay,
-  your later tour at {time} on {day} stays booked.` A reply that isn't a
+  your later tour at {time} on {day} stays booked.` If they name the tour
+  they are on: `You can't cancel the tour you're on, but you're free to
+  wrap up whenever you like. Your later tour at {time} on {day} is still
+  booked. Want me to cancel that one instead? Reply YES or NO.` A reply that isn't a
   clear yes or no on that confirm is
   flagged (`I'll check with the {team} and get back to you.`). That should
   not appear as a flagged question unless they were unclear on the confirm,

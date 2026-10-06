@@ -408,7 +408,11 @@ visitor text ─► interpreter ─► typed intent (ARRIVAL, AT_UNIT "Unit 101"
   targets that later booking (never the running tour). Confirm:
   `Cancel your later tour at {time} on {day}? Your tour right now isn't affected. Reply YES or NO.`
   YES: `Done, I've cancelled your later tour at {time} on {day}. Your tour right now isn't affected.`
-  NO: `Okay, your later tour at {time} on {day} stays booked.` A reply that isn't a clear yes or no on that confirm is flagged:
+  NO: `Okay, your later tour at {time} on {day} stays booked.` If they name the tour they are on
+  (`cancel my monday tour`, `cancel today's tour`, `cancel my 2pm tour`, `cancel this tour`,
+  `cancel my current tour`):
+  `You can't cancel the tour you're on, but you're free to wrap up whenever you like. Your later tour at {time} on {day} is still booked. Want me to cancel that one instead? Reply YES or NO.`
+  YES and NO still use the later Done and stays-booked lines. A reply that isn't a clear yes or no on that confirm is flagged:
   `I'll check with the {team} and get back to you.` STOP / opt-out is unchanged. If cancel cannot finish, they get
   `I can't cancel it from here. I've asked the leasing team to call it off and get back to you.` and the team is
   flagged — never the unanswered-question fallback for a clear cancel ask. Real questions still flag
@@ -536,8 +540,10 @@ Terminal wizard ─────────────────────�
   `Move it?`, `Book it?`, or `Save it?` — never `Continue?`. A move inside hours includes the old time
   (`Move Testy's tour from 2:00 PM on Monday, Sep 28 to 3:15 PM on Monday, Sep 28?`). A tour in progress cannot be moved
   (`{who} is touring right now, so I can't move this tour. Once it ends, you can book them another time.`); if they have a later booking, that refusal asks
-  `Want me to move their {oldTime} on {oldDay} booking to {newTime} on {newDay} instead?` (outside hours appends
-  ` That's outside your tour hours.`) and a yes moves the later booking (`Moved {who}'s later booking to {time} on {day}.`). The visitor is told
+  `Want me to move their {oldTime} on {oldDay} booking to {newTime} on {newDay} instead?`
+  Outside hours:
+  `{who} is touring right now, so I can't move this tour. Their later booking is {oldTime} on {oldDay}, and {newTime} on {newDay} is outside your tour hours. Want me to move it there anyway?`
+  A plain yes with the confirmation code moves it. A yes moves the later booking (`Moved {who}'s later booking to {time} on {day}.`). The visitor is told
   `Your tour of {unit} has been moved to {time} on {day}.` READY keeps ` You're all set.` AWAITING_CONSENT does not; then the existing consent question.
   `This is a one-off. Your regular tour hours stay the same`
   only for times outside tour hours. Flagged answers ask

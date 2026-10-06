@@ -155,12 +155,14 @@ Always:
   then no further texts. Regular hours stay the same. `This is a one-off…`
   only when the time is outside tour hours. A time that overlaps a running
   tour or any future or held booking is refused before asking (`That time
-  overlaps another tour.`).   `reschedule_tour` will not move a tour in
+  overlaps another tour.`). `reschedule_tour` will not move a tour in
   progress (`{who} is touring right now, so I can't move this tour. Once it
   ends, you can book them another time.`); if they have a later booking it
   asks `Want me to move their {oldTime} on {oldDay} booking to {newTime} on
-  {newDay} instead?` and a yes is `Moved {who}'s later booking to {time} on
-  {day}.`. If they already have a booked tour, say Tour Core's
+  {newDay} instead?` (outside hours: `{who} is touring right now, so I can't
+  move this tour. Their later booking is {oldTime} on {oldDay}, and {newTime}
+  on {newDay} is outside your tour hours. Want me to move it there anyway?`)
+  and a yes is `Moved {who}'s later booking to {time} on {day}.`. If they already have a booked tour, say Tour Core's
   refusal word for word (`They already have a booked tour. I can move it or
   call it off.`), then use `reschedule_tour` to move it or `revoke_tour_access`
   to call it off. A pending one-off, open tour window, or hold uses that
@@ -192,7 +194,7 @@ Never:
   DONE after the close uses the usual thanks and follow-up. STOP during
   a tour stops visitor texts only; the tour is not ended. One extra 10
   minutes may be added any time before the tour ends when that time is
-  free.   After the no-time line, yes books another look without taking
+  free. After the no-time line, yes books another look without taking
   over the tour that is still running. A custom-time request during a
   tour is also secondary. A bare yes or no answers the latest question
   asked. While they are touring, operator tools act on the running tour;
@@ -200,7 +202,10 @@ Never:
   the running tour and every future or held booking. `reschedule_tour`
   will not move a tour in progress; it can offer to move the later
   booking (`Want me to move their {oldTime} on {oldDay} booking to
-  {newTime} on {newDay} instead?`; yes: `Moved {who}'s later booking to
+  {newTime} on {newDay} instead?`; outside hours: `{who} is touring right
+  now, so I can't move this tour. Their later booking is {oldTime} on
+  {oldDay}, and {newTime} on {newDay} is outside your tour hours. Want me
+  to move it there anyway?`; yes: `Moved {who}'s later booking to
   {time} on {day}.`). Calling off describes the tour that was called off;
   the later booking is `nextBooking`. Cancelling a later booking while
   they are touring tells them their tour right now isn't affected. After the running tour ends
@@ -283,7 +288,10 @@ Never:
   booking: confirm `Cancel your later tour at {time} on {day}? Your tour
   right now isn't affected. Reply YES or NO.`; YES `Done, I've cancelled
   your later tour at {time} on {day}. Your tour right now isn't affected.`;
-  NO `Okay, your later tour at {time} on {day} stays booked.` A reply that isn't a clear yes or no is flagged
+  NO `Okay, your later tour at {time} on {day} stays booked.` If they name
+  the tour they are on: `You can't cancel the tour you're on, but you're
+  free to wrap up whenever you like. Your later tour at {time} on {day} is
+  still booked. Want me to cancel that one instead? Reply YES or NO.` A reply that isn't a clear yes or no is flagged
   (`I'll check with the {team} and get back to you.`). That is not an
   unanswered property question.
 - Invent, guess or reword property facts, descriptions or answers. Only the

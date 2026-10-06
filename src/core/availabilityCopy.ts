@@ -48,6 +48,11 @@ export function moveLaterBookingInstead(who: string, oldTime: string, oldDay: st
   return `${who} is touring right now, so I can't move this tour. Want me to move their ${oldTime} on ${oldDay} booking to ${newTime} on ${newDay} instead?`;
 }
 
+/** Mid-tour later offer when the destination is outside tour hours. Fingerprint already includes outside; a plain yes is enough. */
+export function moveLaterBookingOutsideHours(who: string, oldTime: string, oldDay: string, newTime: string, newDay: string): string {
+  return `${who} is touring right now, so I can't move this tour. Their later booking is ${oldTime} on ${oldDay}, and ${newTime} on ${newDay} is outside your tour hours. Want me to move it there anyway?`;
+}
+
 /** Operator summary after a yes on that later-booking offer. */
 export function movedLaterBookingSummary(who: string, time: string, day: string): string {
   return `Moved ${who}'s later booking to ${time} on ${day}.`;
@@ -69,6 +74,11 @@ export function laterCancelDone(time: string, day: string): string {
 
 export function laterCancelKept(time: string, day: string): string {
   return `Okay, your later tour at ${time} on ${day} stays booked.`;
+}
+
+/** Visitor named the running tour while a later booking is held. YES/NO still use laterCancelDone / laterCancelKept. */
+export function cannotCancelRunningOfferLater(time: string, day: string): string {
+  return `You can't cancel the tour you're on, but you're free to wrap up whenever you like. Your later tour at ${time} on ${day} is still booked. Want me to cancel that one instead? Reply YES or NO.`;
 }
 
 /** Call-off confirm. Optional when-clause is time first: "at {time} on {day}". */
