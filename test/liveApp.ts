@@ -73,18 +73,18 @@ export async function liveApp(
 
   let n = 0;
   /** One text from the visitor; returns every reply Tour Core sent back, in order. `handle` repeats a delivery. */
-  const textFrom = async (phone: string, content: string, handle?: string) => {
+  const textFrom = async (phone: string, content: string, handle?: string, extra?: Record<string, unknown>) => {
     const before = fake.sent.length;
     const res = await fetch(`http://127.0.0.1:${port}/webhooks/sendblue`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "sb-signing-secret": SECRET },
-      body: JSON.stringify(inbound(phone, content, handle ?? `in_${phone.slice(-4)}_${root.slice(-6)}_${++n}_${clock.t}`)),
+      body: JSON.stringify({ ...inbound(phone, content, handle ?? `in_${phone.slice(-4)}_${root.slice(-6)}_${++n}_${clock.t}`), ...extra }),
     });
     expect(res.status).toBe(200);
     await server.tourCore.settled();
     return fake.sent.slice(before).filter((s) => s.number === phone).map((s) => s.content);
   };
-  const text = async (content: string, handle?: string) => textFrom(PHONE, content, handle);
+  const text = async (content: string, handle?: string, extra?: Record<string, unknown>) => textFrom(PHONE, content, handle, extra);
   let rpc = 0;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const grok = async (name: string, args: Record<string, unknown> = {}): Promise<any> => {

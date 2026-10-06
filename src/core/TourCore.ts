@@ -73,6 +73,8 @@ export interface InboundMeta {
   providerMessageId?: string;
   deliveryChannel?: Message["deliveryChannel"];
   correlationId?: string;
+  /** True when the inbound included a photo or other attachment. The file is not stored or forwarded. */
+  hasMedia?: boolean;
 }
 
 export interface AccessRequest {

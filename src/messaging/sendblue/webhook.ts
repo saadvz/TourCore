@@ -62,6 +62,7 @@ export const SendblueInboundSchema = z
     message_type: z.string().nullish(),
     group_id: z.string().nullish(),
     date_sent: z.string().nullish(),
+    media_url: z.string().nullish(),
   })
   .passthrough();
 
@@ -75,6 +76,7 @@ export function parseSendblueInbound(payload: unknown, now = new Date()): { mess
   const from = toE164(p.from_number);
   if (!from) return { ignored: "unreadable sender" };
   const line = toE164(p.sendblue_number ?? p.to_number ?? "");
+  const mediaUrl = (p.media_url ?? "").trim();
   return {
     message: {
       provider: "sendblue",
@@ -82,6 +84,7 @@ export function parseSendblueInbound(payload: unknown, now = new Date()): { mess
       from,
       ...(line ? { to: line } : {}),
       text: (p.content ?? "").trim(),
+      ...(mediaUrl ? { media: [{ url: mediaUrl }] } : {}),
       channel: channelFromService(p.service),
       receivedAt: p.date_sent && !Number.isNaN(Date.parse(p.date_sent)) ? new Date(p.date_sent).toISOString() : now.toISOString(),
     },

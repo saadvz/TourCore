@@ -34,6 +34,14 @@ have that information for this property. I've flagged it for the property
 team so they can get back to you.", plus an issue and an operator update. When
 the operator answers, the visitor gets the answer and the step they were on.
 
+Photos are not forwarded yet. A photo alone gets one plain reply:
+`I can't take photos yet. Text your question and I'll pass it along.`
+A photo with any text (a question or a booking reply such as `1` or `YES`)
+gets only `I can't take photos yet.`; the text is handled as usual
+(answered from approved facts, flagged for the team, or used as the booking
+reply). Do not append “Text your question…”. The same inbound is not
+answered twice. Do not say "MMS" to a visitor.
+
 A visitor with a booked (or held) tour can cancel by text in their own words —
 "Can we cancel the tour?", "I want to cancel the booked tour", "cancel",
 "please cancel my tour", "call off the tour", "I can't make it", "I need to
@@ -149,7 +157,7 @@ contacted. Say "door access" to the operator; never name Durin.
 - Tour Core runs on the Bot's cloud computer (a demo deployment) or at a
   stable self-hosted address.
 - Visitor messaging: the provider the operator chooses (Sendblue, Twilio, Photon, or local QA loopback). Do not assume Sendblue.
-- QA without a carrier: put that building on local test texts (`choose_messaging_provider` with `local` and the property, or `set_services` with `messaging: local`), then `inject_local_sms` and `read_local_outbox`. Replies are separate bubbles. Those tools refuse unless that building is on local. Other published buildings stay on the installation's live texting. Switching the installation's provider keeps saved carrier credentials.
+- QA without a carrier: put that building on local test texts (`choose_messaging_provider` with `local` and the property, or `set_services` with `messaging: local`), then `inject_local_sms` and `read_local_outbox`. Replies are separate bubbles. `hasMedia` injects a photo inbound (the visitor is told photos can't come through yet; the file is not forwarded). Those tools refuse unless that building is on local. Other published buildings stay on the installation's live texting. Switching the installation's provider keeps saved carrier credentials.
 - Operator updates: the Tour Core Operator Updates Grok Routine.
 - Tour records: on the hosted product, stored by hosted Tour Core. Google Drive keeps portable backups and exports through Grok's connector. Optional direct Drive remains a separate mode.
 - Door access: Durin demo mode. No physical door is controlled.

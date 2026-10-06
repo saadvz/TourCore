@@ -1001,13 +1001,14 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Inject a local visitor text",
     kind: "change",
     description:
-      "QA only. Sends a visitor SMS into Tour Core as if it arrived on the local loopback (same path as POST /webhooks/local → handleProviderWebhook → conversations.receive). Refuses unless that property is on local test texts — either this building opted in, or the installation is on local. Never against a building that uses the installation's live texting or practice texts. No real text is sent.",
+      "QA only. Sends a visitor SMS into Tour Core as if it arrived on the local loopback (same path as POST /webhooks/local → handleProviderWebhook → conversations.receive). Set hasMedia when the inbound is a photo; Tour Core replies that it can't take photos yet and does not forward the file. Refuses unless that property is on local test texts — either this building opted in, or the installation is on local. Never against a building that uses the installation's live texting or practice texts. No real text is sent.",
     input: z.strictObject({
       from: z.string().min(7).max(30).describe("The visitor's phone number."),
-      text: z.string().min(1).max(1600).describe("The visitor's text, one message."),
+      text: z.string().max(1600).optional().describe("The visitor's text, one message. Leave empty when they only sent a photo."),
       to: z.string().min(7).max(30).optional().describe("The property's local touring number. Leave out to use the property's attached line."),
       property: Property,
       id: z.string().max(80).optional().describe("Optional inbound id for de-duplication. Leave out to mint one."),
+      hasMedia: z.boolean().optional().describe("True when the inbound includes a photo or other attachment. Tour Core tells the visitor it can't take photos yet and does not forward the file."),
     }),
     run: (ctx, i) => injectLocalSms(ctx, i),
   }),

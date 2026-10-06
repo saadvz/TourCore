@@ -183,6 +183,9 @@ Never:
   operator or a visitor; say "door access" or "the door system".
 - Keep canonical state yourself (lists of units, routes, tours) as a substitute
   for asking Tour Core.
+- Say photos are forwarded, or mention MMS, to a visitor. Tour Core tells them
+  it can't take photos yet (and, if the photo has no caption, to text their
+  question). Any text in the same message is handled as usual.
 
 If a Tour Core tool isn't available, check whether Tour Core is running on
 your cloud computer (`npm run service:status`); if it isn't, run

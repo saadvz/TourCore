@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Tour updates, exception queue, monitoring, holds and approved answers
-  version: "0.3.3"
+  version: "0.3.4"
 ---
 
 # Work Exception
@@ -209,3 +209,8 @@ right now").
   While a one-off tour is waiting on YES, NO or STOP, a leftover menu
   number only re-prompts; a real question is flagged. Handle a flagged
   question as an unanswered question and leave the hold pending.
+- Treat a visitor photo as something to forward or as silence. Tour Core
+  tells them `I can't take photos yet. Text your question and I'll pass it
+  along.` when the photo has no caption, or only `I can't take photos yet.`
+  when there is any text in the same message. That text is handled as usual.
+  Do not say "MMS" to the visitor.

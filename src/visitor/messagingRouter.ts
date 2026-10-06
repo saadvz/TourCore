@@ -4,7 +4,7 @@ import { removedPropertyVisitorText } from "../core/availabilityCopy";
 import { normalizePhone } from "../core/phone";
 import { keywordOf, type IntentInterpreter } from "../intent";
 import { MessagingEndpoints } from "../messaging/endpoints";
-import type { InboundMessage } from "../messaging/inbound";
+import { hasInboundMedia, type InboundMessage } from "../messaging/inbound";
 import type { MessagingAdapter } from "../messaging/Messenger";
 import { TERMINAL } from "../domain/stateMachine";
 import { SetupInputError } from "../setup/setupActions";
@@ -114,7 +114,12 @@ export class MessagingConversations {
     }
     const transport = this.deps.transport(propertyId);
     transport.noteChannel?.(message.from, message.channel);
-    const meta = { provider: message.provider, providerMessageId: message.providerMessageId, deliveryChannel: message.channel };
+    const meta = {
+      provider: message.provider,
+      providerMessageId: message.providerMessageId,
+      deliveryChannel: message.channel,
+      ...(hasInboundMedia(message) ? { hasMedia: true } : {}),
+    };
     const phone = normalizePhone(message.from);
 
     const trouble = this.broken.get(`${propertyId}:${phone}`);
