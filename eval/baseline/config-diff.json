@@ -1,0 +1,784 @@
+{
+  "runs": 10,
+  "runIds": [
+    "canonical",
+    "lowercase-reverse",
+    "st-abbreviation",
+    "state-name",
+    "uppercase",
+    "st-no-period",
+    "no-comma-before-state",
+    "nj-periods",
+    "eastern-timezone",
+    "trimmed-names"
+  ],
+  "differingFieldCount": 34,
+  "fields": [
+    {
+      "path": "doors[0].kind",
+      "distinct": [
+        "\"ENTRANCE\"",
+        "\"UNIT\""
+      ],
+      "byRun": {
+        "canonical": "\"UNIT\"",
+        "lowercase-reverse": "\"ENTRANCE\"",
+        "st-abbreviation": "\"UNIT\"",
+        "state-name": "\"UNIT\"",
+        "uppercase": "\"UNIT\"",
+        "st-no-period": "\"ENTRANCE\"",
+        "no-comma-before-state": "\"UNIT\"",
+        "nj-periods": "\"UNIT\"",
+        "eastern-timezone": "\"UNIT\"",
+        "trimmed-names": "\"ENTRANCE\""
+      }
+    },
+    {
+      "path": "doors[0].name",
+      "distinct": [
+        "\"A's door\"",
+        "\"B Door\"",
+        "\"Front entrance\"",
+        "\"Suite A door\"",
+        "\"UNIT A Door\"",
+        "\"Unit A Door\"",
+        "\"Unit B Door\"",
+        "\"front door\"",
+        "\"the Front Door\""
+      ],
+      "byRun": {
+        "canonical": "\"Unit A Door\"",
+        "lowercase-reverse": "\"front door\"",
+        "st-abbreviation": "\"Suite A door\"",
+        "state-name": "\"B Door\"",
+        "uppercase": "\"UNIT A Door\"",
+        "st-no-period": "\"Front entrance\"",
+        "no-comma-before-state": "\"Unit B Door\"",
+        "nj-periods": "\"A's door\"",
+        "eastern-timezone": "\"Unit A Door\"",
+        "trimmed-names": "\"the Front Door\""
+      }
+    },
+    {
+      "path": "doors[1].name",
+      "distinct": [
+        "\"A Door\"",
+        "\"B's door\"",
+        "\"Suite B door\"",
+        "\"UNIT B Door\"",
+        "\"Unit A Door\"",
+        "\"Unit B Door\"",
+        "\"Unit a Door\"",
+        "\"unit A Door\"",
+        "\"unit b Door\""
+      ],
+      "byRun": {
+        "canonical": "\"Unit B Door\"",
+        "lowercase-reverse": "\"unit b Door\"",
+        "st-abbreviation": "\"Suite B door\"",
+        "state-name": "\"A Door\"",
+        "uppercase": "\"UNIT B Door\"",
+        "st-no-period": "\"Unit a Door\"",
+        "no-comma-before-state": "\"Unit A Door\"",
+        "nj-periods": "\"B's door\"",
+        "eastern-timezone": "\"Unit B Door\"",
+        "trimmed-names": "\"unit A Door\""
+      }
+    },
+    {
+      "path": "doors[2].kind",
+      "distinct": [
+        "\"ENTRANCE\"",
+        "\"UNIT\""
+      ],
+      "byRun": {
+        "canonical": "\"ENTRANCE\"",
+        "lowercase-reverse": "\"UNIT\"",
+        "st-abbreviation": "\"ENTRANCE\"",
+        "state-name": "\"ENTRANCE\"",
+        "uppercase": "\"ENTRANCE\"",
+        "st-no-period": "\"UNIT\"",
+        "no-comma-before-state": "\"ENTRANCE\"",
+        "nj-periods": "\"ENTRANCE\"",
+        "eastern-timezone": "\"ENTRANCE\"",
+        "trimmed-names": "\"UNIT\""
+      }
+    },
+    {
+      "path": "doors[2].name",
+      "distinct": [
+        "\"BUILDING ENTRANCE\"",
+        "\"Front Door\"",
+        "\"Main Entrance\"",
+        "\"Shared front door\"",
+        "\"The front door\"",
+        "\"Unit b Door\"",
+        "\"unit B Door\"",
+        "\"unit a Door\""
+      ],
+      "byRun": {
+        "canonical": "\"Front Door\"",
+        "lowercase-reverse": "\"unit a Door\"",
+        "st-abbreviation": "\"Main Entrance\"",
+        "state-name": "\"The front door\"",
+        "uppercase": "\"BUILDING ENTRANCE\"",
+        "st-no-period": "\"Unit b Door\"",
+        "no-comma-before-state": "\"Shared front door\"",
+        "nj-periods": "\"Front Door\"",
+        "eastern-timezone": "\"Front Door\"",
+        "trimmed-names": "\"unit B Door\""
+      }
+    },
+    {
+      "path": "property.address",
+      "distinct": [
+        "\"18 MAPLE STREET, TEANECK, NJ 07666\"",
+        "\"18 Maple St, Teaneck, NJ 07666\"",
+        "\"18 Maple St., Teaneck, NJ 07666\"",
+        "\"18 Maple Street, Teaneck, NJ 07666\"",
+        "\"18 Maple Street, teaneck, NJ 07666\"",
+        "\"18 maple st, teaneck, NJ 07666\"",
+        "\"18 maple street, teaneck, NJ 07666\""
+      ],
+      "byRun": {
+        "canonical": "\"18 Maple Street, Teaneck, NJ 07666\"",
+        "lowercase-reverse": "\"18 maple street, teaneck, NJ 07666\"",
+        "st-abbreviation": "\"18 Maple St., Teaneck, NJ 07666\"",
+        "state-name": "\"18 Maple Street, Teaneck, NJ 07666\"",
+        "uppercase": "\"18 MAPLE STREET, TEANECK, NJ 07666\"",
+        "st-no-period": "\"18 Maple St, Teaneck, NJ 07666\"",
+        "no-comma-before-state": "\"18 Maple Street, Teaneck, NJ 07666\"",
+        "nj-periods": "\"18 Maple Street, Teaneck, NJ 07666\"",
+        "eastern-timezone": "\"18 Maple Street, teaneck, NJ 07666\"",
+        "trimmed-names": "\"18 maple st, teaneck, NJ 07666\""
+      }
+    },
+    {
+      "path": "property.canonicalAddress.city",
+      "distinct": [
+        "\"TEANECK\"",
+        "\"Teaneck\"",
+        "\"teaneck\""
+      ],
+      "byRun": {
+        "canonical": "\"Teaneck\"",
+        "lowercase-reverse": "\"teaneck\"",
+        "st-abbreviation": "\"Teaneck\"",
+        "state-name": "\"Teaneck\"",
+        "uppercase": "\"TEANECK\"",
+        "st-no-period": "\"Teaneck\"",
+        "no-comma-before-state": "\"Teaneck\"",
+        "nj-periods": "\"Teaneck\"",
+        "eastern-timezone": "\"teaneck\"",
+        "trimmed-names": "\"teaneck\""
+      }
+    },
+    {
+      "path": "property.canonicalAddress.formatted",
+      "distinct": [
+        "\"18 MAPLE STREET, TEANECK, NJ 07666\"",
+        "\"18 Maple St, Teaneck, NJ 07666\"",
+        "\"18 Maple St., Teaneck, NJ 07666\"",
+        "\"18 Maple Street, Teaneck, NJ 07666\"",
+        "\"18 Maple Street, teaneck, NJ 07666\"",
+        "\"18 maple st, teaneck, NJ 07666\"",
+        "\"18 maple street, teaneck, NJ 07666\""
+      ],
+      "byRun": {
+        "canonical": "\"18 Maple Street, Teaneck, NJ 07666\"",
+        "lowercase-reverse": "\"18 maple street, teaneck, NJ 07666\"",
+        "st-abbreviation": "\"18 Maple St., Teaneck, NJ 07666\"",
+        "state-name": "\"18 Maple Street, Teaneck, NJ 07666\"",
+        "uppercase": "\"18 MAPLE STREET, TEANECK, NJ 07666\"",
+        "st-no-period": "\"18 Maple St, Teaneck, NJ 07666\"",
+        "no-comma-before-state": "\"18 Maple Street, Teaneck, NJ 07666\"",
+        "nj-periods": "\"18 Maple Street, Teaneck, NJ 07666\"",
+        "eastern-timezone": "\"18 Maple Street, teaneck, NJ 07666\"",
+        "trimmed-names": "\"18 maple st, teaneck, NJ 07666\""
+      }
+    },
+    {
+      "path": "property.canonicalAddress.street",
+      "distinct": [
+        "\"18 MAPLE STREET\"",
+        "\"18 Maple St\"",
+        "\"18 Maple St.\"",
+        "\"18 Maple Street\"",
+        "\"18 maple st\"",
+        "\"18 maple street\""
+      ],
+      "byRun": {
+        "canonical": "\"18 Maple Street\"",
+        "lowercase-reverse": "\"18 maple street\"",
+        "st-abbreviation": "\"18 Maple St.\"",
+        "state-name": "\"18 Maple Street\"",
+        "uppercase": "\"18 MAPLE STREET\"",
+        "st-no-period": "\"18 Maple St\"",
+        "no-comma-before-state": "\"18 Maple Street\"",
+        "nj-periods": "\"18 Maple Street\"",
+        "eastern-timezone": "\"18 Maple Street\"",
+        "trimmed-names": "\"18 maple st\""
+      }
+    },
+    {
+      "path": "property.name",
+      "distinct": [
+        "\"18 MAPLE STREET, TEANECK, NJ 07666\"",
+        "\"18 Maple St, Teaneck, NJ 07666\"",
+        "\"18 Maple St., Teaneck, NJ 07666\"",
+        "\"18 Maple Street, Teaneck, NJ 07666\"",
+        "\"18 Maple Street, teaneck, NJ 07666\"",
+        "\"18 maple st, teaneck, NJ 07666\"",
+        "\"18 maple street, teaneck, NJ 07666\""
+      ],
+      "byRun": {
+        "canonical": "\"18 Maple Street, Teaneck, NJ 07666\"",
+        "lowercase-reverse": "\"18 maple street, teaneck, NJ 07666\"",
+        "st-abbreviation": "\"18 Maple St., Teaneck, NJ 07666\"",
+        "state-name": "\"18 Maple Street, Teaneck, NJ 07666\"",
+        "uppercase": "\"18 MAPLE STREET, TEANECK, NJ 07666\"",
+        "st-no-period": "\"18 Maple St, Teaneck, NJ 07666\"",
+        "no-comma-before-state": "\"18 Maple Street, Teaneck, NJ 07666\"",
+        "nj-periods": "\"18 Maple Street, Teaneck, NJ 07666\"",
+        "eastern-timezone": "\"18 Maple Street, teaneck, NJ 07666\"",
+        "trimmed-names": "\"18 maple st, teaneck, NJ 07666\""
+      }
+    },
+    {
+      "path": "routes[0].stops[0].doorId",
+      "distinct": [
+        "\"BUILDING ENTRANCE\"",
+        "\"Front Door\"",
+        "\"Front entrance\"",
+        "\"Main Entrance\"",
+        "\"Shared front door\"",
+        "\"The front door\"",
+        "\"front door\"",
+        "\"the Front Door\""
+      ],
+      "byRun": {
+        "canonical": "\"Front Door\"",
+        "lowercase-reverse": "\"front door\"",
+        "st-abbreviation": "\"Main Entrance\"",
+        "state-name": "\"The front door\"",
+        "uppercase": "\"BUILDING ENTRANCE\"",
+        "st-no-period": "\"Front entrance\"",
+        "no-comma-before-state": "\"Shared front door\"",
+        "nj-periods": "\"Front Door\"",
+        "eastern-timezone": "\"Front Door\"",
+        "trimmed-names": "\"the Front Door\""
+      }
+    },
+    {
+      "path": "routes[0].stops[0].guidance",
+      "distinct": [
+        "\"Come on in. Head to B.\"",
+        "\"Come on in. Head to UNIT A.\"",
+        "\"Come on in. Head to Unit A.\"",
+        "\"Come on in. Head to Unit B.\"",
+        "\"Come on in. Head to Unit a.\"",
+        "\"Come on in. Head to unit A.\"",
+        "\"Come on in. Head to unit b.\""
+      ],
+      "byRun": {
+        "canonical": "\"Come on in. Head to Unit A.\"",
+        "lowercase-reverse": "\"Come on in. Head to unit b.\"",
+        "st-abbreviation": "\"Come on in. Head to Unit A.\"",
+        "state-name": "\"Come on in. Head to B.\"",
+        "uppercase": "\"Come on in. Head to UNIT A.\"",
+        "st-no-period": "\"Come on in. Head to Unit a.\"",
+        "no-comma-before-state": "\"Come on in. Head to Unit B.\"",
+        "nj-periods": "\"Come on in. Head to Unit A.\"",
+        "eastern-timezone": "\"Come on in. Head to Unit A.\"",
+        "trimmed-names": "\"Come on in. Head to unit A.\""
+      }
+    },
+    {
+      "path": "routes[0].stops[1].doorId",
+      "distinct": [
+        "\"A's door\"",
+        "\"B Door\"",
+        "\"Suite A door\"",
+        "\"UNIT A Door\"",
+        "\"Unit A Door\"",
+        "\"Unit B Door\"",
+        "\"Unit a Door\"",
+        "\"unit A Door\"",
+        "\"unit b Door\""
+      ],
+      "byRun": {
+        "canonical": "\"Unit A Door\"",
+        "lowercase-reverse": "\"unit b Door\"",
+        "st-abbreviation": "\"Suite A door\"",
+        "state-name": "\"B Door\"",
+        "uppercase": "\"UNIT A Door\"",
+        "st-no-period": "\"Unit a Door\"",
+        "no-comma-before-state": "\"Unit B Door\"",
+        "nj-periods": "\"A's door\"",
+        "eastern-timezone": "\"Unit A Door\"",
+        "trimmed-names": "\"unit A Door\""
+      }
+    },
+    {
+      "path": "routes[0].stops[1].guidance",
+      "distinct": [
+        "\"Welcome to B! Take your time, and text me any questions.\"",
+        "\"Welcome to UNIT A! Take your time, and text me any questions.\"",
+        "\"Welcome to Unit A! Take your time, and text me any questions.\"",
+        "\"Welcome to Unit B! Take your time, and text me any questions.\"",
+        "\"Welcome to Unit a! Take your time, and text me any questions.\"",
+        "\"Welcome to unit A! Take your time, and text me any questions.\"",
+        "\"Welcome to unit b! Take your time, and text me any questions.\""
+      ],
+      "byRun": {
+        "canonical": "\"Welcome to Unit A! Take your time, and text me any questions.\"",
+        "lowercase-reverse": "\"Welcome to unit b! Take your time, and text me any questions.\"",
+        "st-abbreviation": "\"Welcome to Unit A! Take your time, and text me any questions.\"",
+        "state-name": "\"Welcome to B! Take your time, and text me any questions.\"",
+        "uppercase": "\"Welcome to UNIT A! Take your time, and text me any questions.\"",
+        "st-no-period": "\"Welcome to Unit a! Take your time, and text me any questions.\"",
+        "no-comma-before-state": "\"Welcome to Unit B! Take your time, and text me any questions.\"",
+        "nj-periods": "\"Welcome to Unit A! Take your time, and text me any questions.\"",
+        "eastern-timezone": "\"Welcome to Unit A! Take your time, and text me any questions.\"",
+        "trimmed-names": "\"Welcome to unit A! Take your time, and text me any questions.\""
+      }
+    },
+    {
+      "path": "routes[0].unitId",
+      "distinct": [
+        "\"B\"",
+        "\"UNIT A\"",
+        "\"Unit A\"",
+        "\"Unit B\"",
+        "\"Unit a\"",
+        "\"unit A\"",
+        "\"unit b\""
+      ],
+      "byRun": {
+        "canonical": "\"Unit A\"",
+        "lowercase-reverse": "\"unit b\"",
+        "st-abbreviation": "\"Unit A\"",
+        "state-name": "\"B\"",
+        "uppercase": "\"UNIT A\"",
+        "st-no-period": "\"Unit a\"",
+        "no-comma-before-state": "\"Unit B\"",
+        "nj-periods": "\"Unit A\"",
+        "eastern-timezone": "\"Unit A\"",
+        "trimmed-names": "\"unit A\""
+      }
+    },
+    {
+      "path": "routes[1].stops[0].doorId",
+      "distinct": [
+        "\"BUILDING ENTRANCE\"",
+        "\"Front Door\"",
+        "\"Front entrance\"",
+        "\"Main Entrance\"",
+        "\"Shared front door\"",
+        "\"The front door\"",
+        "\"front door\"",
+        "\"the Front Door\""
+      ],
+      "byRun": {
+        "canonical": "\"Front Door\"",
+        "lowercase-reverse": "\"front door\"",
+        "st-abbreviation": "\"Main Entrance\"",
+        "state-name": "\"The front door\"",
+        "uppercase": "\"BUILDING ENTRANCE\"",
+        "st-no-period": "\"Front entrance\"",
+        "no-comma-before-state": "\"Shared front door\"",
+        "nj-periods": "\"Front Door\"",
+        "eastern-timezone": "\"Front Door\"",
+        "trimmed-names": "\"the Front Door\""
+      }
+    },
+    {
+      "path": "routes[1].stops[0].guidance",
+      "distinct": [
+        "\"Come on in. Head to A.\"",
+        "\"Come on in. Head to UNIT B.\"",
+        "\"Come on in. Head to Unit A.\"",
+        "\"Come on in. Head to Unit B.\"",
+        "\"Come on in. Head to Unit b.\"",
+        "\"Come on in. Head to unit B.\"",
+        "\"Come on in. Head to unit a.\""
+      ],
+      "byRun": {
+        "canonical": "\"Come on in. Head to Unit B.\"",
+        "lowercase-reverse": "\"Come on in. Head to unit a.\"",
+        "st-abbreviation": "\"Come on in. Head to Unit B.\"",
+        "state-name": "\"Come on in. Head to A.\"",
+        "uppercase": "\"Come on in. Head to UNIT B.\"",
+        "st-no-period": "\"Come on in. Head to Unit b.\"",
+        "no-comma-before-state": "\"Come on in. Head to Unit A.\"",
+        "nj-periods": "\"Come on in. Head to Unit B.\"",
+        "eastern-timezone": "\"Come on in. Head to Unit B.\"",
+        "trimmed-names": "\"Come on in. Head to unit B.\""
+      }
+    },
+    {
+      "path": "routes[1].stops[1].doorId",
+      "distinct": [
+        "\"A Door\"",
+        "\"B's door\"",
+        "\"Suite B door\"",
+        "\"UNIT B Door\"",
+        "\"Unit A Door\"",
+        "\"Unit B Door\"",
+        "\"Unit b Door\"",
+        "\"unit B Door\"",
+        "\"unit a Door\""
+      ],
+      "byRun": {
+        "canonical": "\"Unit B Door\"",
+        "lowercase-reverse": "\"unit a Door\"",
+        "st-abbreviation": "\"Suite B door\"",
+        "state-name": "\"A Door\"",
+        "uppercase": "\"UNIT B Door\"",
+        "st-no-period": "\"Unit b Door\"",
+        "no-comma-before-state": "\"Unit A Door\"",
+        "nj-periods": "\"B's door\"",
+        "eastern-timezone": "\"Unit B Door\"",
+        "trimmed-names": "\"unit B Door\""
+      }
+    },
+    {
+      "path": "routes[1].stops[1].guidance",
+      "distinct": [
+        "\"Welcome to A! Take your time, and text me any questions.\"",
+        "\"Welcome to UNIT B! Take your time, and text me any questions.\"",
+        "\"Welcome to Unit A! Take your time, and text me any questions.\"",
+        "\"Welcome to Unit B! Take your time, and text me any questions.\"",
+        "\"Welcome to Unit b! Take your time, and text me any questions.\"",
+        "\"Welcome to unit B! Take your time, and text me any questions.\"",
+        "\"Welcome to unit a! Take your time, and text me any questions.\""
+      ],
+      "byRun": {
+        "canonical": "\"Welcome to Unit B! Take your time, and text me any questions.\"",
+        "lowercase-reverse": "\"Welcome to unit a! Take your time, and text me any questions.\"",
+        "st-abbreviation": "\"Welcome to Unit B! Take your time, and text me any questions.\"",
+        "state-name": "\"Welcome to A! Take your time, and text me any questions.\"",
+        "uppercase": "\"Welcome to UNIT B! Take your time, and text me any questions.\"",
+        "st-no-period": "\"Welcome to Unit b! Take your time, and text me any questions.\"",
+        "no-comma-before-state": "\"Welcome to Unit A! Take your time, and text me any questions.\"",
+        "nj-periods": "\"Welcome to Unit B! Take your time, and text me any questions.\"",
+        "eastern-timezone": "\"Welcome to Unit B! Take your time, and text me any questions.\"",
+        "trimmed-names": "\"Welcome to unit B! Take your time, and text me any questions.\""
+      }
+    },
+    {
+      "path": "routes[1].unitId",
+      "distinct": [
+        "\"A\"",
+        "\"UNIT B\"",
+        "\"Unit A\"",
+        "\"Unit B\"",
+        "\"Unit b\"",
+        "\"unit B\"",
+        "\"unit a\""
+      ],
+      "byRun": {
+        "canonical": "\"Unit B\"",
+        "lowercase-reverse": "\"unit a\"",
+        "st-abbreviation": "\"Unit B\"",
+        "state-name": "\"A\"",
+        "uppercase": "\"UNIT B\"",
+        "st-no-period": "\"Unit b\"",
+        "no-comma-before-state": "\"Unit A\"",
+        "nj-periods": "\"Unit B\"",
+        "eastern-timezone": "\"Unit B\"",
+        "trimmed-names": "\"unit B\""
+      }
+    },
+    {
+      "path": "units[0].doorId",
+      "distinct": [
+        "\"A's door\"",
+        "\"B Door\"",
+        "\"Suite A door\"",
+        "\"UNIT A Door\"",
+        "\"Unit A Door\"",
+        "\"Unit B Door\"",
+        "\"Unit a Door\"",
+        "\"unit A Door\"",
+        "\"unit b Door\""
+      ],
+      "byRun": {
+        "canonical": "\"Unit A Door\"",
+        "lowercase-reverse": "\"unit b Door\"",
+        "st-abbreviation": "\"Suite A door\"",
+        "state-name": "\"B Door\"",
+        "uppercase": "\"UNIT A Door\"",
+        "st-no-period": "\"Unit a Door\"",
+        "no-comma-before-state": "\"Unit B Door\"",
+        "nj-periods": "\"A's door\"",
+        "eastern-timezone": "\"Unit A Door\"",
+        "trimmed-names": "\"unit A Door\""
+      }
+    },
+    {
+      "path": "units[0].name",
+      "distinct": [
+        "\"B\"",
+        "\"UNIT A\"",
+        "\"Unit A\"",
+        "\"Unit B\"",
+        "\"Unit a\"",
+        "\"unit A\"",
+        "\"unit b\""
+      ],
+      "byRun": {
+        "canonical": "\"Unit A\"",
+        "lowercase-reverse": "\"unit b\"",
+        "st-abbreviation": "\"Unit A\"",
+        "state-name": "\"B\"",
+        "uppercase": "\"UNIT A\"",
+        "st-no-period": "\"Unit a\"",
+        "no-comma-before-state": "\"Unit B\"",
+        "nj-periods": "\"Unit A\"",
+        "eastern-timezone": "\"Unit A\"",
+        "trimmed-names": "\"unit A\""
+      }
+    },
+    {
+      "path": "units[0].profile.availability.value.date",
+      "distinct": [
+        "\"2026-10-15\"",
+        "null"
+      ],
+      "byRun": {
+        "canonical": null,
+        "lowercase-reverse": "\"2026-10-15\"",
+        "st-abbreviation": null,
+        "state-name": "\"2026-10-15\"",
+        "uppercase": null,
+        "st-no-period": null,
+        "no-comma-before-state": "\"2026-10-15\"",
+        "nj-periods": null,
+        "eastern-timezone": null,
+        "trimmed-names": null
+      }
+    },
+    {
+      "path": "units[0].profile.availability.value.now",
+      "distinct": [
+        "null",
+        "true"
+      ],
+      "byRun": {
+        "canonical": "true",
+        "lowercase-reverse": null,
+        "st-abbreviation": "true",
+        "state-name": null,
+        "uppercase": "true",
+        "st-no-period": "true",
+        "no-comma-before-state": null,
+        "nj-periods": "true",
+        "eastern-timezone": "true",
+        "trimmed-names": "true"
+      }
+    },
+    {
+      "path": "units[0].profile.availability.value.text",
+      "distinct": [
+        "\"October 15\"",
+        "\"now\""
+      ],
+      "byRun": {
+        "canonical": "\"now\"",
+        "lowercase-reverse": "\"October 15\"",
+        "st-abbreviation": "\"now\"",
+        "state-name": "\"October 15\"",
+        "uppercase": "\"now\"",
+        "st-no-period": "\"now\"",
+        "no-comma-before-state": "\"October 15\"",
+        "nj-periods": "\"now\"",
+        "eastern-timezone": "\"now\"",
+        "trimmed-names": "\"now\""
+      }
+    },
+    {
+      "path": "units[0].profile.bedrooms.value",
+      "distinct": [
+        "1",
+        "2"
+      ],
+      "byRun": {
+        "canonical": "2",
+        "lowercase-reverse": "1",
+        "st-abbreviation": "2",
+        "state-name": "1",
+        "uppercase": "2",
+        "st-no-period": "2",
+        "no-comma-before-state": "1",
+        "nj-periods": "2",
+        "eastern-timezone": "2",
+        "trimmed-names": "2"
+      }
+    },
+    {
+      "path": "units[0].profile.monthlyRent.value.amount",
+      "distinct": [
+        "1950",
+        "2200"
+      ],
+      "byRun": {
+        "canonical": "2200",
+        "lowercase-reverse": "1950",
+        "st-abbreviation": "2200",
+        "state-name": "1950",
+        "uppercase": "2200",
+        "st-no-period": "2200",
+        "no-comma-before-state": "1950",
+        "nj-periods": "2200",
+        "eastern-timezone": "2200",
+        "trimmed-names": "2200"
+      }
+    },
+    {
+      "path": "units[1].doorId",
+      "distinct": [
+        "\"A Door\"",
+        "\"B's door\"",
+        "\"Suite B door\"",
+        "\"UNIT B Door\"",
+        "\"Unit A Door\"",
+        "\"Unit B Door\"",
+        "\"Unit b Door\"",
+        "\"unit B Door\"",
+        "\"unit a Door\""
+      ],
+      "byRun": {
+        "canonical": "\"Unit B Door\"",
+        "lowercase-reverse": "\"unit a Door\"",
+        "st-abbreviation": "\"Suite B door\"",
+        "state-name": "\"A Door\"",
+        "uppercase": "\"UNIT B Door\"",
+        "st-no-period": "\"Unit b Door\"",
+        "no-comma-before-state": "\"Unit A Door\"",
+        "nj-periods": "\"B's door\"",
+        "eastern-timezone": "\"Unit B Door\"",
+        "trimmed-names": "\"unit B Door\""
+      }
+    },
+    {
+      "path": "units[1].name",
+      "distinct": [
+        "\"A\"",
+        "\"UNIT B\"",
+        "\"Unit A\"",
+        "\"Unit B\"",
+        "\"Unit b\"",
+        "\"unit B\"",
+        "\"unit a\""
+      ],
+      "byRun": {
+        "canonical": "\"Unit B\"",
+        "lowercase-reverse": "\"unit a\"",
+        "st-abbreviation": "\"Unit B\"",
+        "state-name": "\"A\"",
+        "uppercase": "\"UNIT B\"",
+        "st-no-period": "\"Unit b\"",
+        "no-comma-before-state": "\"Unit A\"",
+        "nj-periods": "\"Unit B\"",
+        "eastern-timezone": "\"Unit B\"",
+        "trimmed-names": "\"unit B\""
+      }
+    },
+    {
+      "path": "units[1].profile.availability.value.date",
+      "distinct": [
+        "\"2026-10-15\"",
+        "null"
+      ],
+      "byRun": {
+        "canonical": "\"2026-10-15\"",
+        "lowercase-reverse": null,
+        "st-abbreviation": "\"2026-10-15\"",
+        "state-name": null,
+        "uppercase": "\"2026-10-15\"",
+        "st-no-period": "\"2026-10-15\"",
+        "no-comma-before-state": null,
+        "nj-periods": "\"2026-10-15\"",
+        "eastern-timezone": "\"2026-10-15\"",
+        "trimmed-names": "\"2026-10-15\""
+      }
+    },
+    {
+      "path": "units[1].profile.availability.value.now",
+      "distinct": [
+        "null",
+        "true"
+      ],
+      "byRun": {
+        "canonical": null,
+        "lowercase-reverse": "true",
+        "st-abbreviation": null,
+        "state-name": "true",
+        "uppercase": null,
+        "st-no-period": null,
+        "no-comma-before-state": "true",
+        "nj-periods": null,
+        "eastern-timezone": null,
+        "trimmed-names": null
+      }
+    },
+    {
+      "path": "units[1].profile.availability.value.text",
+      "distinct": [
+        "\"October 15\"",
+        "\"now\""
+      ],
+      "byRun": {
+        "canonical": "\"October 15\"",
+        "lowercase-reverse": "\"now\"",
+        "st-abbreviation": "\"October 15\"",
+        "state-name": "\"now\"",
+        "uppercase": "\"October 15\"",
+        "st-no-period": "\"October 15\"",
+        "no-comma-before-state": "\"now\"",
+        "nj-periods": "\"October 15\"",
+        "eastern-timezone": "\"October 15\"",
+        "trimmed-names": "\"October 15\""
+      }
+    },
+    {
+      "path": "units[1].profile.bedrooms.value",
+      "distinct": [
+        "1",
+        "2"
+      ],
+      "byRun": {
+        "canonical": "1",
+        "lowercase-reverse": "2",
+        "st-abbreviation": "1",
+        "state-name": "2",
+        "uppercase": "1",
+        "st-no-period": "1",
+        "no-comma-before-state": "2",
+        "nj-periods": "1",
+        "eastern-timezone": "1",
+        "trimmed-names": "1"
+      }
+    },
+    {
+      "path": "units[1].profile.monthlyRent.value.amount",
+      "distinct": [
+        "1950",
+        "2200"
+      ],
+      "byRun": {
+        "canonical": "1950",
+        "lowercase-reverse": "2200",
+        "st-abbreviation": "1950",
+        "state-name": "2200",
+        "uppercase": "1950",
+        "st-no-period": "1950",
+        "no-comma-before-state": "2200",
+        "nj-periods": "1950",
+        "eastern-timezone": "1950",
+        "trimmed-names": "1950"
+      }
+    }
+  ]
+}

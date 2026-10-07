@@ -1,0 +1,27 @@
+[
+  {
+    "id": "full-setup",
+    "title": "Full setup to publish",
+    "prompt": "Set up the duplex at 18 Maple Street, Teaneck, NJ 07666. Two units, A and B. Visitors use the front door then each unit door. Weekdays 9 to 5. Local test texting, skip backups and alerts, publish for demo."
+  },
+  {
+    "id": "one-off",
+    "title": "Book a one-off tour",
+    "prompt": "Dana at (555) 010-2000 asked to tour Unit A today at 3:15 PM. Book that one-off."
+  },
+  {
+    "id": "flagged-question",
+    "title": "Answer a flagged question",
+    "prompt": "A visitor asked if there's a gym. Tell them there's no gym and save that for next time."
+  },
+  {
+    "id": "pause-unit",
+    "title": "Pause a unit",
+    "prompt": "Pause tours for Unit B. Nobody is booked."
+  },
+  {
+    "id": "export-audit",
+    "title": "Export a day's audit",
+    "prompt": "Export today's audit."
+  }
+]

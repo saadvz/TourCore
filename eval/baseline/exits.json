@@ -1,0 +1,51 @@
+[
+  {
+    "task": "full setup to publish",
+    "what": "Texting secure setup (API key)",
+    "label": "key",
+    "taken": false,
+    "source": "sendblue probe (not the baseline path)"
+  },
+  {
+    "task": "full setup to publish",
+    "what": "Google Drive backup sign-in",
+    "label": "not key",
+    "taken": false,
+    "source": "CONFIRM_BACKUP_DESTINATION"
+  },
+  {
+    "task": "full setup to publish",
+    "what": "Tour-update secure setup (routine address and key)",
+    "label": "key",
+    "taken": false,
+    "source": "OFFER_OPERATOR_ALERTS"
+  },
+  {
+    "task": "book a one-off tour",
+    "what": "none",
+    "label": "not key",
+    "taken": false,
+    "source": "no out-of-chat step"
+  },
+  {
+    "task": "answer a flagged question",
+    "what": "none",
+    "label": "not key",
+    "taken": false,
+    "source": "no out-of-chat step"
+  },
+  {
+    "task": "pause a unit",
+    "what": "none",
+    "label": "not key",
+    "taken": false,
+    "source": "no out-of-chat step"
+  },
+  {
+    "task": "export a day's audit",
+    "what": "none",
+    "label": "not key",
+    "taken": false,
+    "source": "summary stays in chat; a download link is not a sign-in"
+  }
+]
