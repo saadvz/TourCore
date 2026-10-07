@@ -2,7 +2,7 @@
 name: install-tour-core
 description: Connect an operator to Tour Core and take them from a blank setup to a published property by following Tour Core's own next steps, asking only for approvals, logins, credentials through a secure handoff, property information and decisions.
 when-to-use: "set up Tour Core", "install Tour Core", "what's left to set up", "check my Tour Core installation", "is Tour Core running", "restart Tour Core", "test alerts", "connect texting", "turn on alerts", "tour updates", "change my notifications", "reset Tour Core", "fresh demo", "fresh onboarding test"
-allowed-tools: get_installation_status get_next_installation_step get_installation_component skip_optional_setup check_runtime_health check_public_endpoint choose_messaging_provider choose_messaging_line test_visitor_messaging get_notification_preferences set_notification_preferences get_operator_update test_operator_alerts test_storage test_access get_secure_setup_url get_storage_status get_storage_location begin_google_drive_connect finish_google_drive_setup use_local_demo_storage prepare_storage_migration migrate_storage_to_google_drive verify_storage_migration activate_google_drive_storage discover_storage takeover_storage_writer disconnect_google_drive_storage confirm_backup_destination decline_portable_backup get_backup_status create_portable_backup confirm_backup_stored reset_hosted_demo
+allowed-tools: get_state get_installation_status get_next_installation_step get_installation_component skip_optional_setup check_runtime_health check_public_endpoint choose_messaging_provider choose_messaging_line test_visitor_messaging get_notification_preferences set_notification_preferences get_operator_update test_operator_alerts test_storage test_access get_secure_setup_url get_storage_status get_storage_location begin_google_drive_connect finish_google_drive_setup use_local_demo_storage prepare_storage_migration migrate_storage_to_google_drive verify_storage_migration activate_google_drive_storage discover_storage takeover_storage_writer disconnect_google_drive_storage confirm_backup_destination decline_portable_backup get_backup_status create_portable_backup confirm_backup_stored reset_hosted_demo
 argument-hint: "[what to check or connect]"
 user-invocable: true
 metadata:
@@ -13,8 +13,9 @@ metadata:
 
 # Install Tour Core
 
-Tour Core decides the order and tells you, one step at a time, through
-`get_next_installation_step`. The operator only approves, signs in, gives
+Call `get_state` first and follow its next step. Tour Core decides the order
+and tells you, one step at a time, through `get_next_installation_step` as
+well. The operator only approves, signs in, gives
 credentials through a secure handoff, gives property information and makes
 decisions.
 

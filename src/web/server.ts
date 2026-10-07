@@ -20,6 +20,7 @@ import { publicBaseUrl } from "../messaging/publicUrl";
 import { createIntentInterpreter, intentModelFromEnv, type IntentInterpreter } from "../intent";
 import { mcpAuthModeFromEnv, type McpAuthMode } from "../mcp/authMode";
 import { authorized, handleMcpMessage, MCP_PATH } from "../mcp/mcpBridge";
+import { reportedClientFromInitialize, type ReportedClient } from "../playbooks/select";
 import { endpointsFor, isOAuthLocalPath, isOAuthPublicPath, McpOAuth } from "../mcp/oauth";
 import { grokLegacyCompatFromEnv, hostedCompatStartupLine, redirectPolicyFor } from "../mcp/oauth/clients";
 import { AuditExportLinks } from "../operator/auditExportLinks";
@@ -330,6 +331,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         })
       : undefined;
   const confirmations = new ConfirmationBook();
+  let reportedClient: ReportedClient | undefined;
   const tools: ToolContext = {
     services: api,
     confirmations,
@@ -470,7 +472,9 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         } catch {
           return send(400, json, JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "That request couldn't be read." } }));
         }
-        const reply = await handleMcpMessage(caller ? { ...tools, caller } : tools, message);
+        const seen = reportedClientFromInitialize(message);
+        if (seen) reportedClient = seen;
+        const reply = await handleMcpMessage({ ...tools, ...(caller ? { caller } : {}), ...(reportedClient ? { client: reportedClient } : {}) }, message);
         if (reply.body === undefined) {
           res.writeHead(reply.status, { "Cache-Control": "no-store" });
           return res.end();

@@ -506,9 +506,10 @@ Browser app ─► /api ──────────────────�
 Terminal wizard ─────────────────────────────────────────────►  same setup actions
 ```
 
-- **Installation tools** (`src/install/tools.ts`): 10 more tools report and test the installation
-  (`get_installation_status`, `get_next_installation_step`, ...) and a secure setup form Grok fills. None takes or
-  returns a credential or runs a command. See [`docs/deployment.md`](docs/deployment.md).
+- **Installation tools** (`src/install/tools.ts`): report and test the installation
+  (`get_state`, `get_installation_status`, `get_next_installation_step`, ...) and a secure setup form Grok fills.
+  `get_state` is the read-only picture to call first. It does not change anything. The older status tools still work
+  and still follow Tour Core's order. None takes or returns a credential or runs a command. See [`docs/deployment.md`](docs/deployment.md).
 - **Tool contract** (`src/operator/tools.ts`): typed, provider-neutral operator tools over the existing actions:
   property setup, units, doors, routes (`preview_route` resolves the operator's words to doors on file; `set_route`
   saves exact names only), tour hours in everyday words, verification, messaging, review, `run_readiness_check`,

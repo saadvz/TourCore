@@ -13,6 +13,7 @@ import { HOSTED_SETUP_SESSION_MINUTES, HOSTED_SETUP_WRITES, DEFAULT_SETUP_SESSIO
 import { STORAGE_TOOLS } from "./storageTools";
 import { BACKUP_TOOLS } from "../backup/tools";
 import { getInstallationStatus, INSTALLATION_COMPONENTS, OPTIONAL_COMPONENTS, type ComponentStatus, type InstallationComponent } from "./status";
+import { readState } from "./stateView";
 import { ensureMessagingSelection } from "../messaging/registry";
 import { LOCAL_TEST_TEXTING } from "../setup/setupActions";
 
@@ -53,6 +54,17 @@ const TECHNICAL_NOTE = "For your own actions and troubleshooting only. Never sho
 const SecureStep = z.enum(["visitor-messaging", "operator-alerts"]);
 
 export const INSTALLATION_TOOLS: OperatorTool[] = [
+  tool({
+    name: "get_state",
+    title: "Current setup",
+    kind: "read",
+    description:
+      "A read-only picture of this install, or of one property when propertyId is set. Returns setup, units, doors, routes, hours, verification, texting, alerts, a one-line health summary, a one-line storage summary, milestones, the next step, and this client's playbook. It does not change anything. Call it first and follow its next step. The older status tools still work.",
+    input: z.strictObject({
+      propertyId: z.string().optional().describe("One property. Leave it out to read the whole install."),
+    }),
+    run: async (ctx, i) => readState({ installation: ctx.installation, services: ctx.services, client: ctx.client }, i.propertyId),
+  }),
   tool({
     name: "get_installation_status",
     title: "Installation status",

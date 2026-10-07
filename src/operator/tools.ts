@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Installation } from "../install/installation";
 import { secretValues } from "../install/settings";
 import { HOSTED_ADMIN_TOOLS } from "../install/hostedAdminTools";
+import type { ReportedClient } from "../playbooks/select";
 import { INSTALLATION_TOOLS } from "../install/tools";
 import { installedMessaging } from "../install/status";
 import { addressReadback } from "../setup/address";
@@ -79,6 +80,8 @@ export interface ToolContext {
   resetMessaging?: () => void;
   /** The OAuth client calling this tool, when the request was authenticated that way. */
   caller?: { clientId?: string };
+  /** Who called MCP initialize. Picks a playbook only. Never changes a gate. */
+  client?: ReportedClient;
   /** Drops process memory (sessions, ledger, pending OAuth) after a hosted demo reset. */
   forgetLiveState?: () => void;
   /** Shared inbound/outbound de-duplication for this process, including local SMS inject. */

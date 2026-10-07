@@ -31,7 +31,7 @@ Setup is not zero-click. Be clear about which steps need the operator.
 
 ## Components, in the order Tour Core works through them
 
-Always follow `get_next_installation_step`; this table only explains it.
+Call `get_state` first and follow its next step. `get_next_installation_step` still works; this table only explains it.
 
 | Component | Operator words | Required? |
 | --- | --- | --- |

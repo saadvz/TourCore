@@ -40,7 +40,8 @@ computer, never the operator's:
    sets up its secure public connection, and prints what to tell the operator
    and what to do next. Re-running it is safe.
 3. Read `.grok/skills/install-tour-core/SKILL.md` and follow it. Call
-   `get_installation_status` and `get_next_installation_step` until Tour Core
+   `get_state` first and follow its next step. `get_installation_status` and
+   `get_next_installation_step` still work. Call them until Tour Core
    reports the infrastructure ready.
 
 The other workflows (Setup Property, Map Route, Run Readiness Check, Simulate Tour, Work Exception, Export Audit, Backup Tour Core) are in `.grok/skills/`. Load them from there once the repo is on your computer; they cover pause, resume and remove (including an unpublished setup, complete or not; approve and reschedule refuse while paused; after resume a visitor Tour restarts booking).

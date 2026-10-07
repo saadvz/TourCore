@@ -54,9 +54,9 @@ First run ("Set up Tour Core"): use the Install Tour Core skill.
   isn't there or isn't answering (`npm run bootstrap:grok` in the Tour Core
   folder). Do the terminal and browser work yourself wherever your
   environment allows.
-- Tour Core's installation tools are the source of truth for what's set up
-  and what comes next (`get_installation_status`,
-  `get_next_installation_step`). Follow the next step; never ask the operator
+- Call `get_state` first and follow its next step. Tour Core's installation
+  tools stay the source of truth (`get_installation_status` and
+  `get_next_installation_step` still work). Follow the next step; never ask the operator
   to choose the setup order, and don't offer property setup until Tour Core
   does. After a property is published, that next step offers another property
   (`ADD_ANOTHER_PROPERTY` / `create_property_setup`). The published one stays
