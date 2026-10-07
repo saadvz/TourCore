@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { EvalGuardError, assertLiveCall, guardedCall, liveSkipReason, newGuardState, noteLiveResult } from "../../src/eval/guard";
+import { EvalGuardError, LIVE_INSTALL_READS, assertLiveCall, guardedCall, liveSkipReason, newGuardState, noteLiveResult } from "../../src/eval/guard";
+import { admitSweepRemovals, selectEvalSweepIds } from "../../src/eval/sweep";
 
 function ownedState() {
   const state = newGuardState("run1");
@@ -68,6 +69,58 @@ describe("live eval guard", () => {
     expect(liveSkipReason({})).toMatch(/skipped/i);
     expect(liveSkipReason({ TOURCORE_OPERATOR_TOKEN: "tok" })).toMatch(/skipped/i);
     expect(liveSkipReason({ TOURCORE_MCP_URL: "https://example.test/mcp" })).toMatch(/skipped/i);
+    expect(liveSkipReason({ TOURCORE_MCP_URL: "https://example.test/mcp", TOURCORE_OPERATOR_TOKEN: "dev-static" })).toMatch(/TOURCORE_MCP_TOKEN/);
     expect(liveSkipReason({ TOURCORE_MCP_URL: "https://example.test/mcp", TOURCORE_MCP_TOKEN: "tok" })).toBeUndefined();
+  });
+
+  it("refuses get_next_installation_step because it can rewrite the texting choice", () => {
+    expect(LIVE_INSTALL_READS).not.toContain("get_next_installation_step");
+    const inner = vi.fn();
+    expect(() => assertLiveCall(ownedState(), "get_next_installation_step", {})).toThrow(/texting-provider choice/);
+    return guardedCall(ownedState(), inner, "get_next_installation_step", {}).then(
+      () => {
+        throw new Error("expected the guard to refuse");
+      },
+      () => {
+        expect(inner).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  it("never selects a non-eval property for the cleanup sweep", () => {
+    const listed = [
+      { propertyId: "prop_145_tenafly_road", name: "145 Tenafly Road", address: "145 Tenafly Road, Tenafly, NJ 07670" },
+      { propertyId: "prop_914b", name: "914B", address: "914B Summit Street, Fort Lee, NJ 07024" },
+      { propertyId: "prop_18_maple", name: "18 Maple Street", address: "18 Maple Street, Teaneck, NJ 07666" },
+      { propertyId: "prop_eval_inside_name", name: "Maple eval-r1234abcd Court", address: "18 Maple Street, Teaneck, NJ 07666" },
+      { propertyId: "prop_eval_r1234abcd", name: "eval-r1234abcd", address: "100 Eval r1234abcd Lane, Teaneck, NJ 07666" },
+    ];
+    const selected = selectEvalSweepIds(listed);
+    expect(selected).toEqual(["prop_eval_r1234abcd"]);
+    for (const id of ["prop_145_tenafly_road", "prop_914b", "prop_18_maple", "prop_eval_inside_name"]) {
+      expect(selected).not.toContain(id);
+    }
+
+    const state = newGuardState("r1234abcd");
+    expect(admitSweepRemovals(state, { properties: listed })).toEqual(["prop_eval_r1234abcd"]);
+    expect([...state.sweepPropertyIds]).toEqual(["prop_eval_r1234abcd"]);
+    expect(() => assertLiveCall(state, "remove_property", { property: "prop_145_tenafly_road" })).toThrow(/not one this run created/);
+    expect(() => assertLiveCall(state, "remove_property", { property: "prop_914b" })).toThrow(/not one this run created/);
+    expect(() => assertLiveCall(state, "add_unit", { property: "prop_eval_r1234abcd", name: "Unit A" })).toThrow(/not one this run created/);
+    expect(() => assertLiveCall(state, "remove_property", { property: "prop_eval_r1234abcd" })).not.toThrow();
+  });
+
+  it("aborts the sweep instead of touching an ambiguous eval-like name", () => {
+    const listed = [
+      { propertyId: "prop_145_tenafly_road", name: "145 Tenafly Road", address: "145 Tenafly Road, Tenafly, NJ 07670" },
+      { propertyId: "prop_eval_r1234abcd", name: "eval-r1234abcd", address: "100 Eval r1234abcd Lane, Teaneck, NJ 07666" },
+      { propertyId: "prop_ambiguous", name: "eval-office", address: "9 Office Way, Teaneck, NJ 07666" },
+    ];
+    expect(() => selectEvalSweepIds(listed)).toThrow(/Aborting the eval cleanup sweep/);
+    const state = newGuardState("r1234abcd");
+    expect(() => admitSweepRemovals(state, { properties: listed })).toThrow(/Aborting the eval cleanup sweep/);
+    expect(state.sweepPropertyIds.size).toBe(0);
+    expect(() => assertLiveCall(state, "remove_property", { property: "prop_145_tenafly_road" })).toThrow(/not one this run created/);
+    expect(() => assertLiveCall(state, "remove_property", { property: "prop_eval_r1234abcd" })).toThrow(/not one this run created/);
   });
 });

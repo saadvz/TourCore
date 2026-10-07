@@ -21,6 +21,8 @@ export interface GuardState {
   observedTourRefs: Set<string>;
   observedReservationIds: Set<string>;
   observedTourTimeRequestIds: Set<string>;
+  /** Ids a prefix sweep may remove, and no other tool may use. */
+  sweepPropertyIds: Set<string>;
 }
 
 export function newGuardState(runId: string): GuardState {
@@ -32,6 +34,7 @@ export function newGuardState(runId: string): GuardState {
     observedTourRefs: new Set(),
     observedReservationIds: new Set(),
     observedTourTimeRequestIds: new Set(),
+    sweepPropertyIds: new Set(),
   };
 }
 
@@ -68,16 +71,21 @@ export const INSTALL_WIDE_WRITES = [
 
 const INSTALL_WIDE = new Set<string>(INSTALL_WIDE_WRITES);
 
-/** Reads that do not take a property. Allowed so the script can see install status without changing it. */
-const INSTALL_READS = new Set([
+/**
+ * Reads that do not take a property.
+ * `get_next_installation_step` is absent on purpose: reading the next step
+ * persists the messaging selection and can rewrite the saved texting-provider choice.
+ */
+export const LIVE_INSTALL_READS = [
   "get_installation_status",
-  "get_next_installation_step",
   "get_installation_component",
   "list_properties",
   "get_backup_status",
   "check_runtime_health",
   "get_notification_preferences",
-]);
+] as const;
+
+const INSTALL_READS = new Set<string>(LIVE_INSTALL_READS);
 
 const PROPERTY_SCOPED = new Set([
   "update_property_details",
@@ -169,6 +177,10 @@ export function assertLiveCall(state: GuardState, name: string, args: Record<str
   const forbidden = forbiddenHit(args);
   if (forbidden) refuse(`Refusing ${name}: arguments mention a protected property (145 Tenafly Road or 914B).`);
 
+  if (name === "get_next_installation_step") {
+    refuse("Refusing get_next_installation_step: it can rewrite the saved texting-provider choice.");
+  }
+
   if (INSTALL_WIDE.has(name)) {
     refuse(`Refusing ${name}: that changes the whole installation, not a property this run created.`);
   }
@@ -222,6 +234,10 @@ export function assertLiveCall(state: GuardState, name: string, args: Record<str
     else if (tour !== undefined) observed(state, "tourRef", tour, name);
     else refuse("Refusing reschedule_tour: it needs a reservation or tour this run observed on a property it created.");
     if (args.property !== undefined) ownedProperty(state, args.property, name);
+    return;
+  }
+
+  if (name === "remove_property" && typeof args.property === "string" && state.sweepPropertyIds.has(args.property)) {
     return;
   }
 
@@ -288,6 +304,7 @@ export function noteLiveResult(state: GuardState, name: string, args: Record<str
     if ((body.status === "removed" || body.removed === true) && typeof args.property === "string") {
       state.ownedPropertyIds.delete(args.property);
       state.localTexting.delete(args.property);
+      state.sweepPropertyIds.delete(args.property);
     }
   }
   if (scopedToOwned(state, args)) harvest(state, result);
@@ -306,12 +323,16 @@ export async function guardedCall<T>(
   return result;
 }
 
-/** Why the live script should exit without calling Scratch. A token alone is not enough. */
+/**
+ * Why the live script should exit without calling Scratch.
+ * Hosted Scratch needs the one-hour sign-in access token. The dev static
+ * operator token is not that credential.
+ */
 export function liveSkipReason(env: NodeJS.ProcessEnv): string | undefined {
   const url = env.TOURCORE_MCP_URL?.trim();
-  const token = env.TOURCORE_MCP_TOKEN?.trim() || env.TOURCORE_OPERATOR_TOKEN?.trim();
+  const token = env.TOURCORE_MCP_TOKEN?.trim();
   if (!url || !token) {
-    return "Live Scratch eval skipped: set TOURCORE_MCP_URL and TOURCORE_MCP_TOKEN (or TOURCORE_OPERATOR_TOKEN) to run it. Nothing was called.";
+    return "Live Scratch eval skipped: set TOURCORE_MCP_URL and TOURCORE_MCP_TOKEN (the one-hour Tour Core sign-in access token from the owner's Allow click). TOURCORE_OPERATOR_TOKEN is only for dev static-token mode. Nothing was called.";
   }
   return undefined;
 }

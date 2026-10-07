@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { DUPLEX_VARIANTS, type DuplexVariant } from "./duplex";
-import { evalNamePrefix, guardedCall, liveSkipReason, newGuardState } from "./guard";
+import { evalNamePrefix, guardedCall, liveSkipReason, newGuardState, type GuardState } from "./guard";
+import { admitSweepRemovals } from "./sweep";
 
 export interface LiveReport {
   ok: boolean;
@@ -34,7 +35,7 @@ export async function runLive(env: NodeJS.ProcessEnv = process.env): Promise<Liv
   if (reason) return { ok: true, skipped: true, reason, created: [], removed: [], skippedSteps: [], failures: [] };
 
   const url = env.TOURCORE_MCP_URL!.trim();
-  const token = (env.TOURCORE_MCP_TOKEN?.trim() || env.TOURCORE_OPERATOR_TOKEN?.trim())!;
+  const token = env.TOURCORE_MCP_TOKEN!.trim();
   const runId = `r${randomBytes(4).toString("hex")}`;
   const state = newGuardState(runId);
   const raw = liveRpc(url, token);
@@ -43,7 +44,15 @@ export async function runLive(env: NodeJS.ProcessEnv = process.env): Promise<Liv
   const removed: string[] = [];
   const failures: string[] = [];
 
-  for (const [index, variant] of DUPLEX_VARIANTS.entries()) {
+  let sweepBlocked = false;
+  try {
+    removed.push(...(await sweepEvalLeftovers(call, state)));
+  } catch (err) {
+    failures.push(`sweep: ${err instanceof Error ? err.message : String(err)}`);
+    sweepBlocked = true;
+  }
+
+  if (!sweepBlocked) for (const [index, variant] of DUPLEX_VARIANTS.entries()) {
     const before = new Set(state.ownedPropertyIds);
     let propertyId: string | undefined;
     try {
@@ -77,6 +86,14 @@ export async function runLive(env: NodeJS.ProcessEnv = process.env): Promise<Liv
         failures.push(`remove ${id}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
+  }
+
+  try {
+    for (const id of await sweepEvalLeftovers(call, state)) {
+      if (!removed.includes(id)) removed.push(id);
+    }
+  } catch (err) {
+    failures.push(`sweep: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   return {
@@ -183,6 +200,18 @@ async function runLiveDuplex(call: RawCall, variant: DuplexVariant): Promise<str
   const published = await call("publish_demo_property", { property: propertyId, confirmationCode: code });
   if (published.published !== true) throw new Error(`publish: ${String(published.summary)}`);
   return propertyId;
+}
+
+/** Removes every currently listed property whose name is an exact harness `eval-` name. */
+async function sweepEvalLeftovers(call: RawCall, state: GuardState): Promise<string[]> {
+  const listed = await call("list_properties", {});
+  const ids = admitSweepRemovals(state, listed);
+  const removed: string[] = [];
+  for (const id of ids) {
+    await removeOwned(call, id);
+    removed.push(id);
+  }
+  return removed;
 }
 
 async function removeOwned(call: RawCall, propertyId: string): Promise<void> {
