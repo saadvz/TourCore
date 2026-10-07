@@ -29,6 +29,7 @@ const SKIPPED_STEPS = [
  * Point the same duplex flow at a live Scratch MCP server.
  * Skips cleanly when the URL or token is absent. Never selects the live line,
  * never calls an install-wide write, and removes every property it created.
+ * The end sweep removes only this run's own `eval-` name.
  */
 export async function runLive(env: NodeJS.ProcessEnv = process.env): Promise<LiveReport> {
   const reason = liveSkipReason(env);
@@ -44,15 +45,7 @@ export async function runLive(env: NodeJS.ProcessEnv = process.env): Promise<Liv
   const removed: string[] = [];
   const failures: string[] = [];
 
-  let sweepBlocked = false;
-  try {
-    removed.push(...(await sweepEvalLeftovers(call, state)));
-  } catch (err) {
-    failures.push(`sweep: ${err instanceof Error ? err.message : String(err)}`);
-    sweepBlocked = true;
-  }
-
-  if (!sweepBlocked) for (const [index, variant] of DUPLEX_VARIANTS.entries()) {
+  for (const [index, variant] of DUPLEX_VARIANTS.entries()) {
     const before = new Set(state.ownedPropertyIds);
     let propertyId: string | undefined;
     try {
@@ -202,7 +195,10 @@ async function runLiveDuplex(call: RawCall, variant: DuplexVariant): Promise<str
   return propertyId;
 }
 
-/** Removes every currently listed property whose name is an exact harness `eval-` name. */
+/**
+ * End-of-run cleanup. Removes listed properties whose name is exactly
+ * `eval-` plus this run's id. Another run's `eval-r` name is left in place.
+ */
 async function sweepEvalLeftovers(call: RawCall, state: GuardState): Promise<string[]> {
   const listed = await call("list_properties", {});
   const ids = admitSweepRemovals(state, listed);

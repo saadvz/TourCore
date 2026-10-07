@@ -858,7 +858,7 @@ phone). It does not prove identity.
 
 ## Baseline eval
 
-`npm run test:eval` reruns today's duplex setup, golden landlord tasks, and demo click path against the checked-in snapshot in `eval/baseline/`. `npm run eval:rebaseline` records a new snapshot when that behavior is meant to change. `npm run eval:live` points the same flow at hosted Scratch. It needs `TOURCORE_MCP_URL` and `TOURCORE_MCP_TOKEN` (the one-hour sign-in access token after the owner's Allow click). It keeps the properties it creates on local test texting, and it only removes properties whose names are the harness `eval-` prefix. See [docs/eval.md](docs/eval.md).
+`npm run test:eval` reruns today's duplex setup, golden landlord tasks, and demo click path against the checked-in snapshot in `eval/baseline/`. `npm run eval:rebaseline` records a new snapshot when that behavior is meant to change. `npm run eval:live` points the same flow at hosted Scratch. Run one live eval at a time. It needs `TOURCORE_MCP_URL` and `TOURCORE_MCP_TOKEN` (the one-hour sign-in access token from `POST /token` after the owner's Allow click). It keeps the properties it creates on local test texting, and its end-of-run sweep removes only the property named with this run's `eval-` id. See [docs/eval.md](docs/eval.md).
 
 ## Contributing
 

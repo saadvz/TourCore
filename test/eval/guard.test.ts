@@ -95,7 +95,7 @@ describe("live eval guard", () => {
       { propertyId: "prop_eval_inside_name", name: "Maple eval-r1234abcd Court", address: "18 Maple Street, Teaneck, NJ 07666" },
       { propertyId: "prop_eval_r1234abcd", name: "eval-r1234abcd", address: "100 Eval r1234abcd Lane, Teaneck, NJ 07666" },
     ];
-    const selected = selectEvalSweepIds(listed);
+    const selected = selectEvalSweepIds(listed, "r1234abcd");
     expect(selected).toEqual(["prop_eval_r1234abcd"]);
     for (const id of ["prop_145_tenafly_road", "prop_914b", "prop_18_maple", "prop_eval_inside_name"]) {
       expect(selected).not.toContain(id);
@@ -116,11 +116,69 @@ describe("live eval guard", () => {
       { propertyId: "prop_eval_r1234abcd", name: "eval-r1234abcd", address: "100 Eval r1234abcd Lane, Teaneck, NJ 07666" },
       { propertyId: "prop_ambiguous", name: "eval-office", address: "9 Office Way, Teaneck, NJ 07666" },
     ];
-    expect(() => selectEvalSweepIds(listed)).toThrow(/Aborting the eval cleanup sweep/);
+    expect(() => selectEvalSweepIds(listed, "r1234abcd")).toThrow(/Aborting the eval cleanup sweep/);
     const state = newGuardState("r1234abcd");
     expect(() => admitSweepRemovals(state, { properties: listed })).toThrow(/Aborting the eval cleanup sweep/);
     expect(state.sweepPropertyIds.size).toBe(0);
     expect(() => assertLiveCall(state, "remove_property", { property: "prop_145_tenafly_road" })).toThrow(/not one this run created/);
     expect(() => assertLiveCall(state, "remove_property", { property: "prop_eval_r1234abcd" })).toThrow(/not one this run created/);
+  });
+
+  it("aborts the sweep on a differently cased eval name", () => {
+    const listed = [
+      { propertyId: "prop_eval_r1234abcd", name: "EVAL-r1234abcd", address: "100 Eval r1234abcd Lane, Teaneck, NJ 07666" },
+      { propertyId: "prop_145_tenafly_road", name: "145 Tenafly Road", address: "145 Tenafly Road, Tenafly, NJ 07670" },
+    ];
+    expect(() => selectEvalSweepIds(listed, "r1234abcd")).toThrow(/Aborting the eval cleanup sweep/);
+    const state = newGuardState("r1234abcd");
+    expect(() => admitSweepRemovals(state, { properties: listed })).toThrow(/Aborting the eval cleanup sweep/);
+    expect(state.sweepPropertyIds.size).toBe(0);
+    expect(() => assertLiveCall(state, "remove_property", { property: "prop_145_tenafly_road" })).toThrow(/not one this run created/);
+    expect(() => assertLiveCall(state, "remove_property", { property: "prop_eval_r1234abcd" })).toThrow(/not one this run created/);
+  });
+
+  it("aborts the sweep when a harness-shaped name is on 145 Tenafly Road", () => {
+    const listed = [
+      { propertyId: "prop_145_tenafly_road", name: "eval-r1234abcd", address: "145 Tenafly Road, Tenafly, NJ 07670" },
+      { propertyId: "prop_eval_own", name: "eval-r1234abcd", address: "100 Eval r1234abcd Lane, Teaneck, NJ 07666" },
+    ];
+    expect(() => selectEvalSweepIds(listed, "r1234abcd")).toThrow(/Aborting the eval cleanup sweep/);
+    const state = newGuardState("r1234abcd");
+    expect(() => admitSweepRemovals(state, { properties: listed })).toThrow(/Aborting the eval cleanup sweep/);
+    expect(state.sweepPropertyIds.size).toBe(0);
+    expect(() => assertLiveCall(state, "remove_property", { property: "prop_145_tenafly_road" })).toThrow(/not one this run created/);
+    expect(() => assertLiveCall(state, "remove_property", { property: "prop_eval_own" })).toThrow(/not one this run created/);
+  });
+
+  it("aborts the sweep on a malformed property id", () => {
+    const listed = [
+      { propertyId: "prop_eval_r1234abcd!", name: "eval-r1234abcd", address: "100 Eval r1234abcd Lane, Teaneck, NJ 07666" },
+    ];
+    expect(() => selectEvalSweepIds(listed, "r1234abcd")).toThrow(/Aborting the eval cleanup sweep/);
+    const state = newGuardState("r1234abcd");
+    expect(() => admitSweepRemovals(state, { properties: listed })).toThrow(/Aborting the eval cleanup sweep/);
+    expect(state.sweepPropertyIds.size).toBe(0);
+    expect(() => assertLiveCall(state, "remove_property", { property: "prop_eval_r1234abcd!" })).toThrow(/not one this run created/);
+  });
+
+  it("end-of-run sweep ignores another run's eval property", () => {
+    const listed = [
+      { propertyId: "prop_145_tenafly_road", name: "145 Tenafly Road", address: "145 Tenafly Road, Tenafly, NJ 07670" },
+      { propertyId: "prop_914b", name: "914B", address: "914B Summit Street, Fort Lee, NJ 07024" },
+      { propertyId: "prop_other_run", name: "eval-rdeadbeef", address: "101 Eval rdeadbeef Lane, Teaneck, NJ 07666" },
+      { propertyId: "prop_eval_r1234abcd", name: "eval-r1234abcd", address: "100 Eval r1234abcd Lane, Teaneck, NJ 07666" },
+    ];
+    const selected = selectEvalSweepIds(listed, "r1234abcd");
+    expect(selected).toEqual(["prop_eval_r1234abcd"]);
+    expect(selected).not.toContain("prop_other_run");
+    expect(selected).not.toContain("prop_145_tenafly_road");
+    expect(selected).not.toContain("prop_914b");
+    const state = newGuardState("r1234abcd");
+    expect(admitSweepRemovals(state, { properties: listed })).toEqual(["prop_eval_r1234abcd"]);
+    expect([...state.sweepPropertyIds]).toEqual(["prop_eval_r1234abcd"]);
+    expect(() => assertLiveCall(state, "remove_property", { property: "prop_other_run" })).toThrow(/not one this run created/);
+    expect(() => assertLiveCall(state, "remove_property", { property: "prop_145_tenafly_road" })).toThrow(/not one this run created/);
+    expect(() => assertLiveCall(state, "remove_property", { property: "prop_914b" })).toThrow(/not one this run created/);
+    expect(() => assertLiveCall(state, "remove_property", { property: "prop_eval_r1234abcd" })).not.toThrow();
   });
 });

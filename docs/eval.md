@@ -40,12 +40,25 @@ That rewrites `eval/baseline/`. Review the diff before committing it.
 npm run eval:live
 ```
 
+Run one live eval at a time. Two overlapping runs are not safe: each run's end sweep only removes its own name, and a leftover from a run that stopped early is not cleaned up automatically.
+
 Hosted `eval:live` needs two environment variables:
 
-- `TOURCORE_MCP_URL` — the hosted Tour Core MCP address.
-- `TOURCORE_MCP_TOKEN` — the one-hour Tour Core sign-in access token. That token is issued only after the owner's Allow click.
+- `TOURCORE_MCP_URL` — the hosted MCP address, the public origin plus `/mcp`.
+- `TOURCORE_MCP_TOKEN` — the one-hour access token from the hosted OAuth sign-in. The live script does not perform that sign-in. It sends the token as `Authorization: Bearer`.
 
 `TOURCORE_OPERATOR_TOKEN` is the dev static-token mode credential. It does not sign in to the hosted install, and the live script does not accept it in place of `TOURCORE_MCP_TOKEN`. If the URL or the sign-in token is missing, the script prints a skip message and exits 0. Nothing is called.
+
+### Getting the one-hour token
+
+Hosted Tour Core (`HOSTED_RAILWAY_P0`) issues that token only through its OAuth flow. The Allow page does not show the token. The client that finishes the flow receives it from `POST /token`. These are the steps that flow actually takes:
+
+1. A call to `/mcp` with no `Authorization` header returns `401`. The `WWW-Authenticate` header points at `/.well-known/oauth-protected-resource/mcp` and names the scope `tourcore.operator`.
+2. That document's `authorization_servers` is this Tour Core's origin. `/.well-known/oauth-authorization-server` lists `/register`, `/authorize`, `/token`, and `/revoke`. The code challenge is S256. The only scope granted is `tourcore.operator`.
+3. The client registers with `POST /register` (or presents a client-id metadata document). A redirect URI has to be https on an allowed host (`grok.com`, `x.ai`, `x.com`, plus any host in `TOURCORE_OAUTH_REDIRECT_HOSTS`). An `http` loopback address (`localhost`, `127.0.0.1`, or `[::1]`) is allowed unless the client registered `application_type` `web`. On the hosted demo the two exact Grok legacy callbacks are also accepted unless `TOURCORE_GROK_LEGACY_OAUTH_COMPAT=false`: `cursor://anysphere.cursor-mcp/oauth/callback` and `https://www.cursor.com/agents/mcp/oauth/callback`.
+4. The client sends the owner to `/authorize` with a 43-character S256 `code_challenge`. Tour Core answers with the consent page titled "Connect to Tour Core". It names the client, lists what the client can and cannot do, and shows a six-digit match code. On the hosted demo that page has an **Allow** button. The first Allow on an unclaimed demo makes that client the owner. A second, different client is refused.
+5. Allow posts the match code to `POST /oauth/requests/<id>/approve` with no `Authorization` header. A bearer token on that request is refused. **Deny** posts to `POST /oauth/requests/<id>/deny`. After Allow, the page loads `GET /oauth/requests/<id>/continue`, which redirects once to the client's redirect URI with a single-use `code` and `iss`.
+6. The client posts that code and the PKCE verifier to `POST /token`. The JSON includes `access_token` (it starts with `tca_`), `token_type` `Bearer`, `expires_in` `3600`, and `scope` `tourcore.operator`. A refresh token is included only when the client registered the `refresh_token` grant. Put `access_token` in `TOURCORE_MCP_TOKEN`. It lasts one hour (`ACCESS_TOKEN_SECONDS`).
 
 The hosted install also has real properties on the real texting line, including 145 Tenafly Road and 914B. The live script is built so a run cannot touch them:
 
@@ -53,7 +66,7 @@ The hosted install also has real properties on the real texting line, including 
 2. It keeps those properties on local test texting. It never selects the live line.
 3. It removes every property it created when the run finishes, including when a step fails (`try/finally`).
 4. A guard wraps every tool call and hard-stops, before the call, if the target property id is not one this run created.
-5. If a create reply is lost, that property would otherwise stay untracked. At the start and end of the run, a cleanup sweep lists properties and removes leftovers whose name is an exact harness `eval-` name. Anything else is ignored. A name that only resembles that prefix (different casing, a shorter name, or a protected address on an eval-like row) aborts the sweep, and nothing is removed.
+5. If a create reply is lost, that property would otherwise stay untracked. At the end of the run, a cleanup sweep lists properties and removes only those whose name is exactly `eval-` plus this run's id. Another run's `eval-r` name is ignored. There is no start-of-run sweep: a leftover from an earlier run might belong to a run that is still going, so it is left in place. When no live eval is running, that leftover can be removed with `remove_property` only if its listed name is exactly `eval-` plus `r` and 8 hex characters. A name that only resembles that prefix (different casing such as `EVAL-r…`, a shorter name, a malformed property id, or a harness-shaped name on 145 Tenafly Road) aborts the sweep, and nothing is removed.
 
 Removing a property hides it from the operator's list. The record stays in storage. One live run can leave about 10 of those hidden `eval-` properties, one for each duplex.
 
@@ -61,4 +74,4 @@ The live allowlist does not include `get_next_installation_step`. That read pers
 
 It does not call install-wide writes. That includes texting provider or line changes, `reset_hosted_demo`, `set_services` with live texting, backup and storage changes, and tour-update preference changes. The in-process demo path uses some of those (choose local texting for the empty install, decline backups, skip alerts). Live mode skips them and lists the skips in its report. The live run is not the source of the checked-in baseline: its addresses are namespaced so they do not collide with 18 Maple Street.
 
-`test/eval/guard.test.ts` checks that a foreign property id is refused before the tool runs, and that the cleanup sweep's filter never selects a non-eval property.
+`test/eval/guard.test.ts` checks that a foreign property id is refused before the tool runs, that the cleanup sweep's filter never selects a non-eval property, and that the end-of-run sweep ignores another run's `eval-` name.
