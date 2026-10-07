@@ -32,6 +32,11 @@
     "build": "node scripts/build.mjs",
     "start": "node dist/server.js",
     "test": "vitest run",
+    "test:eval": "vitest run --config vitest.eval.config.ts",
+    "test:all": "vitest run && vitest run --config vitest.eval.config.ts",
+    "eval:baseline": "tsx src/eval/cli.ts",
+    "eval:rebaseline": "tsx src/eval/cli.ts rebaseline",
+    "eval:live": "tsx src/eval/cli.ts live",
     "typecheck": "tsc --noEmit",
     "check:storage": "tsx src/install/checkStorageCli.ts"
   },

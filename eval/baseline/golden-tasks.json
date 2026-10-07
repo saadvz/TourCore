@@ -1,0 +1,99 @@
+[
+  {
+    "id": "full-setup",
+    "title": "Full setup to publish",
+    "prompt": "Set up the duplex at 18 Maple Street, Teaneck, NJ 07666. Two units, A and B. Visitors use the front door then each unit door. Weekdays 9 to 5. Local test texting, skip backups and alerts, publish for demo.",
+    "tools": [
+      "get_next_installation_step",
+      "choose_messaging_provider",
+      "get_next_installation_step",
+      "test_visitor_messaging",
+      "get_next_installation_step",
+      "decline_portable_backup",
+      "get_next_installation_step",
+      "create_property_setup",
+      "get_next_installation_step",
+      "update_property_details",
+      "get_next_installation_step",
+      "update_property_details",
+      "get_next_installation_step",
+      "add_unit",
+      "add_unit",
+      "set_unit_details",
+      "add_door",
+      "preview_route",
+      "set_route",
+      "preview_route",
+      "set_route",
+      "set_tour_hours",
+      "set_verification_policy",
+      "update_property_details",
+      "review_property_setup",
+      "get_next_installation_step",
+      "skip_optional_setup",
+      "get_next_installation_step",
+      "run_readiness_check",
+      "get_next_installation_step",
+      "run_dry_tour",
+      "get_next_installation_step",
+      "publish_demo_property",
+      "publish_demo_property",
+      "get_installation_status"
+    ],
+    "calls": 35,
+    "passed": true,
+    "detail": "published, 2 units, routes, weekdays 09:00–17:00"
+  },
+  {
+    "id": "one-off",
+    "title": "Book a one-off tour",
+    "prompt": "Dana at (555) 010-2000 asked to tour Unit A today at 3:15 PM. Book that one-off.",
+    "tools": [
+      "schedule_one_off_tour",
+      "schedule_one_off_tour"
+    ],
+    "calls": 2,
+    "passed": true,
+    "detail": "scheduled, with a messaging tour record"
+  },
+  {
+    "id": "flagged-question",
+    "title": "Answer a flagged question",
+    "prompt": "A visitor asked if there's a gym. Tell them there's no gym and save that for next time.",
+    "tools": [
+      "inject_local_sms",
+      "inject_local_sms",
+      "inject_local_sms",
+      "list_exceptions",
+      "answer_flagged_question",
+      "answer_flagged_question",
+      "list_exceptions"
+    ],
+    "calls": 7,
+    "passed": true,
+    "detail": "saved There's no gym. and the question is no longer open"
+  },
+  {
+    "id": "pause-unit",
+    "title": "Pause a unit",
+    "prompt": "Pause tours for Unit B. Nobody is booked.",
+    "tools": [
+      "pause_tours",
+      "pause_tours"
+    ],
+    "calls": 2,
+    "passed": true,
+    "detail": "Unit B is paused"
+  },
+  {
+    "id": "export-audit",
+    "title": "Export a day's audit",
+    "prompt": "Export today's audit.",
+    "tools": [
+      "export_audit"
+    ],
+    "calls": 1,
+    "passed": true,
+    "detail": "Monday, Sep 28: 1 practice tour"
+  }
+]

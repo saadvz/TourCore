@@ -1,0 +1,490 @@
+[
+  {
+    "tool": "get_next_installation_step",
+    "args": {},
+    "outcome": {
+      "summary": "How would you like prospects to text Tour Core?",
+      "phase": "INFRASTRUCTURE",
+      "infrastructureReady": false
+    },
+    "next": {
+      "action": "CHOOSE_MESSAGING_PROVIDER",
+      "component": "VISITOR_MESSAGING",
+      "phase": "INFRASTRUCTURE",
+      "performedBy": "OPERATOR_DECISION",
+      "tool": "choose_messaging_provider",
+      "operatorMessage": "How would you like prospects to text Tour Core?",
+      "infrastructureReady": false
+    }
+  },
+  {
+    "tool": "choose_messaging_provider",
+    "args": {
+      "provider": "local"
+    },
+    "outcome": {
+      "summary": "Visitor texting will use the local loopback. No real texts are sent.",
+      "scope": "installation",
+      "provider": "local"
+    },
+    "next": {
+      "action": "TEST_VISITOR_MESSAGING",
+      "component": "VISITOR_MESSAGING",
+      "phase": "INFRASTRUCTURE",
+      "performedBy": "GROK",
+      "tool": "test_visitor_messaging",
+      "operatorMessage": "I'm testing visitor texting."
+    }
+  },
+  {
+    "tool": "get_next_installation_step",
+    "args": {},
+    "outcome": {
+      "summary": "I'm testing visitor texting.",
+      "phase": "INFRASTRUCTURE",
+      "infrastructureReady": false
+    },
+    "next": {
+      "action": "TEST_VISITOR_MESSAGING",
+      "component": "VISITOR_MESSAGING",
+      "phase": "INFRASTRUCTURE",
+      "performedBy": "GROK",
+      "tool": "test_visitor_messaging",
+      "operatorMessage": "I'm testing visitor texting.",
+      "infrastructureReady": false
+    }
+  },
+  {
+    "tool": "test_visitor_messaging",
+    "args": {},
+    "outcome": {
+      "ok": true,
+      "summary": "Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on."
+    }
+  },
+  {
+    "tool": "get_next_installation_step",
+    "args": {},
+    "outcome": {
+      "summary": "Visitor texting is connected. Next I recommend Google Drive so I can keep portable backups and exports of your Tour Core records there.",
+      "phase": "INFRASTRUCTURE",
+      "infrastructureReady": false
+    },
+    "next": {
+      "action": "CONFIRM_BACKUP_DESTINATION",
+      "component": "STORAGE",
+      "phase": "INFRASTRUCTURE",
+      "performedBy": "OPERATOR_DECISION",
+      "tool": "confirm_backup_destination",
+      "operatorMessage": "Visitor texting is connected. Next I recommend Google Drive so I can keep portable backups and exports of your Tour Core records there.",
+      "infrastructureReady": false
+    }
+  },
+  {
+    "tool": "decline_portable_backup",
+    "args": {},
+    "outcome": {
+      "summary": "Operational records stay with hosted Tour Core. Portable backups are off until you connect Google Drive."
+    }
+  },
+  {
+    "tool": "get_next_installation_step",
+    "args": {},
+    "outcome": {
+      "summary": "Everything needed to start is connected and tested. Would you like to add your first property?",
+      "phase": "PROPERTY",
+      "infrastructureReady": true
+    },
+    "next": {
+      "action": "SET_UP_PROPERTY",
+      "component": "PROPERTY",
+      "phase": "PROPERTY",
+      "performedBy": "OPERATOR_DECISION",
+      "operatorMessage": "Everything needed to start is connected and tested. Would you like to add your first property?",
+      "infrastructureReady": true
+    }
+  },
+  {
+    "tool": "create_property_setup",
+    "args": {
+      "address": "18 Maple Street, Teaneck, NJ 07666"
+    },
+    "outcome": {
+      "status": "created",
+      "summary": "Started 18 Maple Street, Teaneck, NJ 07666. I guessed Eastern Time for the time zone; please confirm."
+    }
+  },
+  {
+    "tool": "get_next_installation_step",
+    "args": {},
+    "outcome": {
+      "summary": "Let's finish setting up 18 Maple Street, Teaneck, NJ 07666.",
+      "phase": "PROPERTY",
+      "infrastructureReady": true
+    },
+    "next": {
+      "action": "FINISH_PROPERTY_SETUP",
+      "component": "PROPERTY",
+      "phase": "PROPERTY",
+      "performedBy": "OPERATOR_DECISION",
+      "tool": "review_property_setup",
+      "operatorMessage": "Let's finish setting up 18 Maple Street, Teaneck, NJ 07666.",
+      "infrastructureReady": true
+    }
+  },
+  {
+    "tool": "update_property_details",
+    "args": {
+      "property": "prop_18_maple_street_teaneck_nj_07666",
+      "confirmAddress": true
+    },
+    "outcome": {
+      "summary": "Updated 18 Maple Street. Changes kept as a draft until 3 problems are fixed."
+    }
+  },
+  {
+    "tool": "get_next_installation_step",
+    "args": {},
+    "outcome": {
+      "summary": "Let's finish setting up 18 Maple Street, Teaneck, NJ 07666.",
+      "phase": "PROPERTY",
+      "infrastructureReady": true
+    },
+    "next": {
+      "action": "FINISH_PROPERTY_SETUP",
+      "component": "PROPERTY",
+      "phase": "PROPERTY",
+      "performedBy": "OPERATOR_DECISION",
+      "tool": "review_property_setup",
+      "operatorMessage": "Let's finish setting up 18 Maple Street, Teaneck, NJ 07666.",
+      "infrastructureReady": true
+    }
+  },
+  {
+    "tool": "update_property_details",
+    "args": {
+      "property": "prop_18_maple_street_teaneck_nj_07666",
+      "propertyType": "MULTIFAMILY_HOME"
+    },
+    "outcome": {
+      "summary": "Updated 18 Maple Street. Changes kept as a draft until 2 problems are fixed."
+    }
+  },
+  {
+    "tool": "get_next_installation_step",
+    "args": {},
+    "outcome": {
+      "summary": "Let's finish setting up 18 Maple Street, Teaneck, NJ 07666.",
+      "phase": "PROPERTY",
+      "infrastructureReady": true
+    },
+    "next": {
+      "action": "FINISH_PROPERTY_SETUP",
+      "component": "PROPERTY",
+      "phase": "PROPERTY",
+      "performedBy": "OPERATOR_DECISION",
+      "tool": "review_property_setup",
+      "operatorMessage": "Let's finish setting up 18 Maple Street, Teaneck, NJ 07666.",
+      "infrastructureReady": true
+    }
+  },
+  {
+    "tool": "add_unit",
+    "args": {
+      "property": "prop_18_maple_street_teaneck_nj_07666",
+      "name": "Unit A"
+    },
+    "outcome": {
+      "status": "Setup in progress",
+      "summary": "Added Unit A with Unit A Door."
+    }
+  },
+  {
+    "tool": "add_unit",
+    "args": {
+      "property": "prop_18_maple_street_teaneck_nj_07666",
+      "name": "Unit B"
+    },
+    "outcome": {
+      "status": "Setup in progress",
+      "summary": "Added Unit B with Unit B Door."
+    }
+  },
+  {
+    "tool": "set_unit_details",
+    "args": {
+      "property": "prop_18_maple_street_teaneck_nj_07666",
+      "details": "Unit A is 2 bed 1 bath for $2,200, available now. Unit B is 1 bed 1 bath for $1,950, available October 15."
+    },
+    "outcome": {
+      "status": "Setup in progress",
+      "summary": "Unit A — 2 bed · 1 bath · $2,200/month · available now\nUnit B — 1 bed · 1 bath · $1,950/month · available October 15\n\nDoes that look right?"
+    }
+  },
+  {
+    "tool": "add_door",
+    "args": {
+      "property": "prop_18_maple_street_teaneck_nj_07666",
+      "name": "Front Door",
+      "kind": "entrance"
+    },
+    "outcome": {
+      "status": "Setup in progress",
+      "summary": "Added Front Door."
+    }
+  },
+  {
+    "tool": "preview_route",
+    "args": {
+      "property": "prop_18_maple_street_teaneck_nj_07666",
+      "unit": "Unit A",
+      "doors": [
+        "Front Door",
+        "Unit A Door"
+      ]
+    },
+    "outcome": {
+      "status": "ok",
+      "summary": "I have: Front Door → Unit A Door. Is that right?"
+    }
+  },
+  {
+    "tool": "set_route",
+    "args": {
+      "property": "prop_18_maple_street_teaneck_nj_07666",
+      "unit": "Unit A",
+      "doors": [
+        "Front Door",
+        "Unit A Door"
+      ]
+    },
+    "outcome": {
+      "status": "Setup in progress",
+      "summary": "Saved Unit A: Front Door → Unit A Door."
+    }
+  },
+  {
+    "tool": "preview_route",
+    "args": {
+      "property": "prop_18_maple_street_teaneck_nj_07666",
+      "unit": "Unit B",
+      "doors": [
+        "Front Door",
+        "Unit B Door"
+      ]
+    },
+    "outcome": {
+      "status": "ok",
+      "summary": "I have: Front Door → Unit B Door. Is that right?"
+    }
+  },
+  {
+    "tool": "set_route",
+    "args": {
+      "property": "prop_18_maple_street_teaneck_nj_07666",
+      "unit": "Unit B",
+      "doors": [
+        "Front Door",
+        "Unit B Door"
+      ]
+    },
+    "outcome": {
+      "status": "Draft",
+      "summary": "Saved Unit B: Front Door → Unit B Door."
+    }
+  },
+  {
+    "tool": "set_tour_hours",
+    "args": {
+      "property": "prop_18_maple_street_teaneck_nj_07666",
+      "days": "weekdays",
+      "start": "9am",
+      "end": "5pm"
+    },
+    "outcome": {
+      "status": "Draft",
+      "summary": "Monday-Friday, 9:00 AM-5:00 PM. That's up to 8 tours a day."
+    }
+  },
+  {
+    "tool": "set_verification_policy",
+    "args": {
+      "property": "prop_18_maple_street_teaneck_nj_07666",
+      "level": "basic-form"
+    },
+    "outcome": {
+      "status": "Draft",
+      "summary": "Basic identity form. A check can be reused for 30 days"
+    }
+  },
+  {
+    "tool": "update_property_details",
+    "args": {
+      "property": "prop_18_maple_street_teaneck_nj_07666",
+      "skipVisitorHelp": true
+    },
+    "outcome": {
+      "summary": "Updated 18 Maple Street. All changes saved."
+    }
+  },
+  {
+    "tool": "review_property_setup",
+    "args": {
+      "property": "prop_18_maple_street_teaneck_nj_07666"
+    },
+    "outcome": {
+      "status": "Draft",
+      "summary": "Setup looks complete."
+    }
+  },
+  {
+    "tool": "get_next_installation_step",
+    "args": {},
+    "outcome": {
+      "summary": "Your property is configured. Would you like me to keep you updated when someone books, starts or finishes a tour, and alert you if something needs your input?",
+      "phase": "PROPERTY",
+      "infrastructureReady": true
+    },
+    "next": {
+      "action": "OFFER_OPERATOR_ALERTS",
+      "component": "OPERATOR_ALERTS",
+      "phase": "PROPERTY",
+      "performedBy": "OPERATOR_DECISION",
+      "tool": "set_notification_preferences",
+      "operatorMessage": "Your property is configured. Would you like me to keep you updated when someone books, starts or finishes a tour, and alert you if something needs your input?",
+      "infrastructureReady": true
+    }
+  },
+  {
+    "tool": "skip_optional_setup",
+    "args": {
+      "component": "OPERATOR_ALERTS"
+    },
+    "outcome": {
+      "summary": "No problem, that's off for now. You can turn it on any time."
+    },
+    "next": {
+      "action": "RUN_READINESS",
+      "component": "READINESS",
+      "phase": "VALIDATE",
+      "performedBy": "GROK",
+      "tool": "run_readiness_check",
+      "operatorMessage": "Prospects can text your touring number to ask questions, choose a day and time, verify their details, and complete the self-guided tour in the same conversation. I'll run a readiness check and a practice tour before we turn it on."
+    }
+  },
+  {
+    "tool": "get_next_installation_step",
+    "args": {},
+    "outcome": {
+      "summary": "Prospects can text your touring number to ask questions, choose a day and time, verify their details, and complete the self-guided tour in the same conversation. I'll run a readiness check and a practice tour before we turn it on.",
+      "phase": "VALIDATE",
+      "infrastructureReady": true
+    },
+    "next": {
+      "action": "RUN_READINESS",
+      "component": "READINESS",
+      "phase": "VALIDATE",
+      "performedBy": "GROK",
+      "tool": "run_readiness_check",
+      "operatorMessage": "Prospects can text your touring number to ask questions, choose a day and time, verify their details, and complete the self-guided tour in the same conversation. I'll run a readiness check and a practice tour before we turn it on.",
+      "infrastructureReady": true
+    }
+  },
+  {
+    "tool": "run_readiness_check",
+    "args": {
+      "property": "prop_18_maple_street_teaneck_nj_07666"
+    },
+    "outcome": {
+      "passed": true,
+      "summary": "Everything's ready."
+    }
+  },
+  {
+    "tool": "get_next_installation_step",
+    "args": {},
+    "outcome": {
+      "summary": "I'm running a practice tour of 18 Maple Street, Teaneck, NJ 07666. Nobody is texted and no real door opens.",
+      "phase": "VALIDATE",
+      "infrastructureReady": true
+    },
+    "next": {
+      "action": "RUN_PRACTICE_TOUR",
+      "component": "PRACTICE_TOUR",
+      "phase": "VALIDATE",
+      "performedBy": "GROK",
+      "tool": "run_dry_tour",
+      "operatorMessage": "I'm running a practice tour of 18 Maple Street, Teaneck, NJ 07666. Nobody is texted and no real door opens.",
+      "infrastructureReady": true
+    }
+  },
+  {
+    "tool": "run_dry_tour",
+    "args": {
+      "property": "prop_18_maple_street_teaneck_nj_07666"
+    },
+    "outcome": {
+      "passed": true,
+      "status": "Ready to publish for demo",
+      "summary": "Practice tour passed."
+    }
+  },
+  {
+    "tool": "get_next_installation_step",
+    "args": {},
+    "outcome": {
+      "summary": "Everything passed. Would you like me to publish 18 Maple Street, Teaneck, NJ 07666 for demo?",
+      "phase": "PUBLISH",
+      "infrastructureReady": true
+    },
+    "next": {
+      "action": "PUBLISH",
+      "component": "PUBLISH",
+      "phase": "PUBLISH",
+      "performedBy": "OPERATOR_DECISION",
+      "tool": "publish_demo_property",
+      "operatorMessage": "Everything passed. Would you like me to publish 18 Maple Street, Teaneck, NJ 07666 for demo?",
+      "infrastructureReady": true
+    }
+  },
+  {
+    "tool": "publish_demo_property",
+    "args": {
+      "property": "prop_18_maple_street_teaneck_nj_07666"
+    },
+    "outcome": {
+      "status": "needs-confirmation",
+      "summary": "Everything passed. Do you want me to publish 18 Maple Street, Teaneck, NJ 07666 for demo?"
+    }
+  },
+  {
+    "tool": "publish_demo_property",
+    "args": {
+      "property": "prop_18_maple_street_teaneck_nj_07666",
+      "confirmationCode": "<confirmation>"
+    },
+    "outcome": {
+      "published": true,
+      "status": "published",
+      "summary": "18 Maple Street, Teaneck, NJ 07666 is published for demo. Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on. Door access is still in demo mode, so no physical locks will open."
+    }
+  },
+  {
+    "tool": "get_installation_status",
+    "args": {},
+    "outcome": {
+      "summary": "Your property is published.",
+      "phase": "OPERATE",
+      "infrastructureReady": true
+    },
+    "next": {
+      "action": "ADD_ANOTHER_PROPERTY",
+      "component": "PROPERTY",
+      "phase": "OPERATE",
+      "performedBy": "OPERATOR_DECISION",
+      "tool": "create_property_setup",
+      "operatorMessage": "Your property is published. Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on. Door access is still in demo mode, so no physical locks will open. Ask me any time to show active tours or what needs your attention. Would you like to set up another property?",
+      "infrastructureReady": true
+    }
+  }
+]

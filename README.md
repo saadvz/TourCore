@@ -822,6 +822,7 @@ src/operator/      operator actions shared by every surface: readiness/practice/
 src/mcp/           thin MCP bridge (transport only) over the operator tools, mounted at /mcp
 src/install/       deployment modes, installation manifest, SecretStore, settings layer, installation status and
                    tools, secure setup API, public endpoint providers, service manager, bootstrap
+src/eval/          phase 0 baseline harness (config diff, golden tasks, click path). See docs/eval.md
 src/alerts/        operator events, notification sinks (Grok Routine), durable outbox, exception scanner
 scripts/           bootstrap-grok.mjs (dependency-installing entry point for npm run bootstrap:grok)
 .grok/skills/      Install Tour Core plus the six Grok operator skills (SKILL.md)
@@ -854,6 +855,10 @@ vs live mode. Tour Core never controls locks; it requests scoped access through 
 
 Tour Core never stores government ID images. The basic form records claimed identity only (legal name, email,
 phone). It does not prove identity.
+
+## Baseline eval
+
+`npm run test:eval` reruns today's duplex setup, golden landlord tasks, and demo click path against the checked-in snapshot in `eval/baseline/`. `npm run eval:rebaseline` records a new snapshot when that behavior is meant to change. `npm run eval:live` points the same flow at hosted Scratch. Run one live eval at a time. It needs `TOURCORE_MCP_URL` and `TOURCORE_MCP_TOKEN` (the one-hour sign-in access token from `POST /token` after the owner's Allow click). It keeps the properties it creates on local test texting, and its end-of-run sweep removes only the property named with this run's `eval-` id. See [docs/eval.md](docs/eval.md).
 
 ## Contributing
 
