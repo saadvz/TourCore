@@ -3,7 +3,7 @@ import { CHATGPT_FLAGGED, CHATGPT_KEYS, CHATGPT_TOOLS } from "./chatgpt";
 import { CLAUDE_FLAGGED, CLAUDE_FULL, CLAUDE_KEYS, CLAUDE_TOOLS } from "./claude";
 import { GROK_ALERTS, GROK_ALERTS_SAY, GROK_BACKUPS_FULL, GROK_BACKUPS_TOOLS, GROK_FLAGGED, GROK_FULL, GROK_KEYS_FULL, GROK_KEYS_TOOLS, GROK_TOOLS, GROK_WAKE } from "./grok";
 import { selectPlaybook, type PlaybookSelection, type ReportedClient } from "./select";
-import { SHARED_AFTER_PUBLISH, SHARED_FLAGGED_RULES, SHARED_IRREVERSIBLE, SHARED_STEPS, SHARED_VOICE, STEP_TITLES, type StepId } from "./shared";
+import { SHARED_AFTER_PUBLISH, SHARED_FLAGGED_RULES, SHARED_IRREVERSIBLE, SHARED_STEPS, SHARED_VOICE, STEP_TITLES, stepAside, type StepId } from "./shared";
 
 export interface PlaybookText {
   id: PlaybookSelection["id"];
@@ -43,18 +43,26 @@ function profileFlagged(selection: PlaybookSelection): string {
   return BASELINE_FLAGGED;
 }
 
+/** The one line that can be said out loud for this step. Empty when there is no fixed question. */
+export function spokenAsk(client: ReportedClient | undefined, step: StepId): string {
+  const selection = selectPlaybook(client);
+  if (selection.id === "grok" && step === "alerts") return GROK_ALERTS_SAY;
+  return SHARED_STEPS[step].ask;
+}
+
 export function renderPlaybook(client: ReportedClient | undefined, step: StepId): PlaybookText {
   const selection = selectPlaybook(client);
   const copy = SHARED_STEPS[step];
   const extra = profileStep(selection, step);
-  const ask = selection.id === "grok" && step === "alerts" ? GROK_ALERTS_SAY : copy.ask;
+  const ask = spokenAsk(client, step);
   const text = [
     SHARED_VOICE,
     SHARED_IRREVERSIBLE,
     profileIntro(selection),
     `${STEP_TITLES[step]}. Ask one thing.`,
     step === "another" ? SHARED_AFTER_PUBLISH : undefined,
-    `Ask only this: ${ask}`,
+    ask ? `Ask only this: ${ask}` : undefined,
+    stepAside(step),
     `Done looks like: ${copy.done}`,
     `If it fails: ${copy.ifItFails}`,
     extra,

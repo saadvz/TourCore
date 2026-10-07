@@ -1158,7 +1158,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const fingerprint = `${x.exceptionId}|${plan.appliesTo}|${plan.field ?? ""}|${plan.fact}|${plan.sendOnly ? "send" : "save"}`;
       if (!i.confirmationCode) {
         if (plan.sendOnly) {
-          return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, `Send "${plan.fact}" to ${who}?`, { savedToSetup: false });
+          return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, `Send "${plan.fact}" to ${who}?`, { savedToSetup: false, visitorWillReceive: plan.fact });
         }
         return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, `Send "${plan.fact.replace(/\.$/, "")}" to ${who}? Future visitors who ask the same thing will get it too. Save it?`, {
           visitorWillReceive: visitorAnswerText(x.question!, plan.fact),

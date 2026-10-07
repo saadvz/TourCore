@@ -5,8 +5,9 @@ import { HOSTED_ADMIN_TOOLS } from "../src/install/hostedAdminTools";
 import { ANNOTATION_DECISIONS_FOR_SAAD, annotationsFor } from "../src/mcp/annotations";
 import { handleMcpMessage, mcpToolList } from "../src/mcp/mcpBridge";
 import { MCP_INSTRUCTIONS } from "../src/playbooks/instructions";
-import { renderPlaybook } from "../src/playbooks/compose";
+import { renderPlaybook, spokenAsk } from "../src/playbooks/compose";
 import { selectPlaybook } from "../src/playbooks/select";
+import { SHARED_HUMAN_HELP, SHARED_STEPS } from "../src/playbooks/shared";
 import { OPERATOR_TOOLS } from "../src/operator/tools";
 import { installHarness } from "./installHarness";
 
@@ -145,11 +146,12 @@ describe("decision 11 wake copy", () => {
   it("is in the Grok playbook only, with one spoken offer and a yes before any action", () => {
     const full = renderPlaybook({ name: "grok", capabilities: { prompts: {}, resources: {} } }, "alerts");
     const tools = renderPlaybook({ name: "grok" }, "alerts");
-    const offer = "Want me to ping you the moment something needs you?";
-    const question = "{name} asked for {time} on {day}. I can approve that time, offer another time, or decline it. Nothing goes to the visitor until you pick.";
+    const offer = "Want me to text you when someone books, starts, or finishes a tour, and ping you the moment something needs you?";
+    const question = "{name} asked to tour {place} at {time} on {day}. I can approve that time, offer another time, or decline it. Nothing goes to the visitor until you pick.";
     for (const text of [full.text, tools.text]) {
       expect(text).toContain(`Ask only this: ${offer}`);
       expect(text).toContain(question);
+      expect(text).toContain("Fill {name} from the visitor's name on that read, {place} from the place on that read");
       expect(text).toContain("Only after a clear yes");
       expect(text).toContain("You never text a visitor.");
     }
@@ -161,5 +163,22 @@ describe("decision 11 wake copy", () => {
       expect(other).not.toContain("approve_tour_time_request");
       expect(other).toContain("Want me to tell you when someone books, starts, or finishes a tour");
     }
+  });
+
+  it("says you in the spoken asks, and every failure line uses the shared human path", () => {
+    expect(spokenAsk(undefined, "units-home")).toBe("People will tour the whole home. What should I call it? The street is fine if you don't have a nickname.");
+    expect(spokenAsk(undefined, "hours")).toContain("You can keep that.");
+    expect(spokenAsk(undefined, "hours-help")).toContain("You can skip this.");
+    expect(spokenAsk(undefined, "property-confirm")).toBe("Did I get that right? {address}");
+    expect(spokenAsk(undefined, "backups")).toContain("Skipping is fine.");
+    expect(spokenAsk(undefined, "units-details")).toBe("");
+    const details = renderPlaybook(undefined, "units-details").text;
+    expect(details).not.toContain("Ask only this:");
+    expect(details).toContain("For you, not out loud: ask the one detail that's still missing, in plain words.");
+    for (const step of Object.values(SHARED_STEPS)) {
+      expect(step.ifItFails.toLowerCase()).toContain(SHARED_HUMAN_HELP.toLowerCase());
+    }
+    expect(SHARED_STEPS.alerts.ifItFails).toContain("private link");
+    expect(SHARED_STEPS.alerts.ifItFails).not.toContain("private way");
   });
 });

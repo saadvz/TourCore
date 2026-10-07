@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { timeRequestedEvent } from "../src/alerts/operatorEvents";
 import { installHarness } from "./installHarness";
+import { liveApp } from "./liveApp";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => cleanups.splice(0).forEach((c) => c()));
@@ -23,5 +24,15 @@ describe("decision 11 alert destination", () => {
     expect(body.eventType).toBe("tour.time_requested");
     expect(posts[0]!.headers?.Authorization).toBe("Bearer new-key-12345678");
     expect(posts[0]!.body).not.toMatch(/visitor|phone|\+1|message|name/i);
+  });
+
+  it("inspect_tour_time_request includes the place name for the spoken question", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    await a.text("Can I change it to 3:15?");
+    const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
+    const inspected = await a.grok("inspect_tour_time_request", { tourTimeRequestId: id });
+    expect(inspected.place).toBe("Unit 1A");
+    expect(JSON.stringify(inspected)).not.toContain("Main Home");
   });
 });

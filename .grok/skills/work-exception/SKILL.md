@@ -134,6 +134,9 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   > will get it too. Save it?
 
   Ask exactly that, once. Don't ask a separate "want me to add it?" first.
+  Before the yes, also read `visitorWillReceive` in full. That is the exact
+  text that goes out, including any closing line. What they approve is that
+  full text.
   After a clear yes, call again with `confirmationCode`, then say what Pat was
   sent. If they turned off texts (STOP), it still saves the answer and
   returns exactly `Saved "{answer}" for future questions. {who} has turned
@@ -412,8 +415,8 @@ right now").
 - Treat a visitor photo as something to forward or as silence. Tour Core
   tells them `I can't take photos yet. Text your question and I'll pass it
   along.` when the photo has no caption. A photo plus a question it can't
-  answer is one text: `I can't take photos yet, but I'll let the property
-  team know about your question.` (flagged; after an ended tour that line
+  answer is one text: `I can't take photos yet, but I'll pass your question
+  to the property team, and they'll reply here as soon as they can.` (flagged; after an ended tour that line
   adds `If you'd like to tour again, just text HI.`). Handleable text with
   a photo still gets only `I can't take photos yet.` and is handled as
   usual. Do not say "MMS" to the visitor.
@@ -424,8 +427,8 @@ right now").
   as `Which unit do you mean: {A} or {B}?` with no HI line; after they
   pick a unit, the approved answer gets the HI line, or the locked ended
   flag text if that unit has no approved answer. It flags only when there
-  is no approved answer (`I'll let the property team know about your
-  question. If you'd like to tour again, just text HI.`; with a photo,
+  is no approved answer (`I'll pass your question to the property team, and
+  they'll reply here as soon as they can. If you'd like to tour again, just text HI.`; with a photo,
   the combined photo line). A photo plus an answerable ended question
   gets `I can't take photos yet.` once, then the answer with the HI line.
   A non-question keeps `This tour has ended. Text HI any time to start a

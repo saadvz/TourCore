@@ -1,8 +1,8 @@
 import { PROPERTY_TYPE_LABELS, validateConfig } from "../config/tourCoreConfig";
 import { nextProfileQuestion } from "../config/unitProfile";
-import { renderPlaybook } from "../playbooks/compose";
+import { renderPlaybook, spokenAsk } from "../playbooks/compose";
 import type { ReportedClient } from "../playbooks/select";
-import { SHARED_STEPS, type StepId } from "../playbooks/shared";
+import { SHARED_STEPS, sharedHumanHelp, type StepId } from "../playbooks/shared";
 import { visitorTexting } from "../operator/setupFlow";
 import type { OperatorServices } from "../operator/services";
 import { draftView } from "../setup/presenters";
@@ -194,9 +194,9 @@ function focusStep(milestones: ReturnType<typeof milestonesFor>, action: string,
 }
 
 function healthLine(inst: Installation, status: InstallationStatus): string {
-  if (component(status, "RUNTIME")?.state !== "READY") return "Tour Core isn't running right now. I'll try again. Someone who runs this Tour Core helps if it stays down.";
+  if (component(status, "RUNTIME")?.state !== "READY") return `Tour Core isn't running right now. I'll try again. ${sharedHumanHelp(true)} helps if it stays down.`;
   if (isHostedRailway(status.deploymentMode) && storageVolumeHealth(inst.options.root).persistentVolume === false) {
-    return "Tour Core is running, but records need a lasting disk or they can disappear on the next update. Someone who runs this Tour Core has to attach that disk.";
+    return `Tour Core is running, but records need a lasting disk or they can disappear on the next update. ${sharedHumanHelp(true)} has to attach that disk.`;
   }
   return "Tour Core is running.";
 }
@@ -215,7 +215,7 @@ function storageLine(inst: Installation): string {
     case "LOCAL_DEMO":
       return "Records stay on this computer.";
     case "ERROR":
-      return "Records couldn't be checked just now. I'll look again. Someone who runs this Tour Core helps if it keeps failing.";
+      return `Records couldn't be checked just now. I'll look again. ${sharedHumanHelp(true)} helps if it keeps failing.`;
     default:
       return "A place for records isn't set up yet.";
   }
@@ -311,7 +311,7 @@ export function readState(input: StateReadInput, propertyId?: string): Record<st
     storage: { summary: storageLine(inst) },
     milestones,
     currentMilestone: current?.id ?? null,
-    nextStep: { action: next.action, component: next.component, say: copy.ask, doneLooksLike: copy.done },
+    nextStep: { action: next.action, component: next.component, say: spokenAsk(input.client, step), doneLooksLike: copy.done },
     playbook: { id: playbook.id, version: playbook.version, mode: playbook.mode, step: playbook.step, text: playbook.text },
   };
 }

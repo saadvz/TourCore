@@ -142,8 +142,8 @@ mean: 1A, 1B or 2A?".
 
 After the answer, Tour Core puts the interrupted step back in front of them
 (the same unit menu, the same offered times, the same identity-form reminder or
-pending confirmation). A question it can't answer gets one text, "I'll let
-the property team know about your question.", plus an issue and an operator
+pending confirmation). A question it can't answer gets one text, "I'll pass
+your question to the property team, and they'll reply here as soon as they can.", plus an issue and an operator
 update. When the operator answers, the visitor gets the answer and the step
 they were on. After a tour has ended, an approved-fact question is answered
 and that answer gets ` If you'd like to tour again, just text HI.` (a period
@@ -152,14 +152,14 @@ more than one unit is asked back as `Which unit do you mean: {A} or {B}?`
 with no HI line; after the visitor picks a unit, the approved answer gets
 the HI line, or the locked ended flag text if that unit has no approved
 answer. A question with no approved answer is flagged:
-`I'll let the property team know about your question. If you'd like to tour
+`I'll pass your question to the property team, and they'll reply here as soon as they can. If you'd like to tour
 again, just text HI.` A non-question keeps the ended-tour line and is not
 flagged.
 
 Photos are not forwarded yet. A photo alone gets one plain reply:
 `I can't take photos yet. Text your question and I'll pass it along.`
 A photo plus a question Tour Core can't answer gets one text:
-`I can't take photos yet, but I'll let the property team know about your question.`
+`I can't take photos yet, but I'll pass your question to the property team, and they'll reply here as soon as they can.`
 (and is flagged). After an ended tour, that line adds
 `If you'd like to tour again, just text HI.` A photo plus an answerable
 ended question gets `I can't take photos yet.` once, then the answer with

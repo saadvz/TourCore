@@ -489,7 +489,7 @@ describe("overstay conversation", () => {
     session.clock.jumpTo(new Date(now.t));
     await session.overstay.tickSession(session);
     await say("is there a gym?");
-    expect(session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1)).toContain("I'll let the property team know about your question.");
+    expect(session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).at(-1)).toContain("I'll pass your question to the property team, and they'll reply here as soon as they can.");
     await say("I'm out");
     expect((await session.reservation())!.status).toBe("COMPLETED");
   });

@@ -47,7 +47,7 @@ Webhook code produces this and nothing provider-shaped goes further:
 }
 ```
 
-Photos and other attachments are detected so the visitor can be told they can't send photos yet. Tour Core does not download or forward them. A photo alone gets the longer honesty reply. A photo plus a question Tour Core can't answer gets one combined text (`I can't take photos yet, but I'll let the property team know about your question.`) and is flagged. A photo with handleable text gets only `I can't take photos yet.` and the text is handled as a normal message.
+Photos and other attachments are detected so the visitor can be told they can't send photos yet. Tour Core does not download or forward them. A photo alone gets the longer honesty reply. A photo plus a question Tour Core can't answer gets one combined text (`I can't take photos yet, but I'll pass your question to the property team, and they'll reply here as soon as they can.`) and is flagged. A photo with handleable text gets only `I can't take photos yet.` and the text is handled as a normal message.
 
 `src/messaging/pipeline.ts` de-duplicates with `provider:providerMessageId` (`twilio:SMxxx`, `photon:spc-msg-...`). Sendblue keeps the existing ledger key `sendblue:in:...` so retries from before this split stay duplicates. A retry must not book twice, reply twice, or record consent twice.
 

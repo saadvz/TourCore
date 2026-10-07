@@ -26,7 +26,7 @@ export const GROK_BACKUPS_TOOLS =
   "For you, not out loud: this connection cannot use your Drive card. Offer the portable copy, and if they say yes, send them to confirm the folder. If they decline, record the skip. Do not start a separate sign-in page.";
 
 /** Spoken on the tour-updates step. No webhook, routine, event id, or secure link. */
-export const GROK_ALERTS_SAY = "Want me to ping you the moment something needs you?";
+export const GROK_ALERTS_SAY = "Want me to text you when someone books, starts, or finishes a tour, and ping you the moment something needs you?";
 
 export const GROK_ALERTS = [
   "For you, not out loud: this is today's tour-updates step, plus the wake. Do not ask a second question.",
@@ -39,14 +39,15 @@ export const GROK_WAKE = [
   "When a ping wakes you, for you, not out loud:",
   "The ping carries an event id and no visitor name, number, or message. Take that event id and look the details up with the existing reads: get_operator_update for the event, list_exceptions or inspect_exception for a flagged question, inspect_tour_time_request for a custom time. Do not put the visitor's message into the ping to save a call.",
   "Prepare the fix and ask the landlord one plain question. Nothing changes until they say yes. You never text a visitor.",
-  'A custom tour time, say this: "{name} asked for {time} on {day}. I can approve that time, offer another time, or decline it. Nothing goes to the visitor until you pick."',
+  'A custom tour time, say this: "{name} asked to tour {place} at {time} on {day}. I can approve that time, offer another time, or decline it. Nothing goes to the visitor until you pick."',
+  "Fill {name} from the visitor's name on that read, {place} from the place on that read, and say the time as {time} on {day}.",
   "Only after a clear yes, call the matching tool: approve_tour_time_request, propose_tour_time, or decline_tour_time_request. Do not say those names out loud.",
   "You do not add a quiet rule. Time requests always wake you and cannot be filtered out.",
 ].join(" ");
 
 export const GROK_FLAGGED = [
   "Flagged visitor question, for you:",
-  "Draft an answer only from the listing, the unit details, and earlier answers the landlord approved. Show that draft and wait for a clear yes.",
+  "Draft an answer only from the listing, the unit details, and earlier answers the landlord approved. Show the full text the visitor will get, including any closing line, and wait for a clear yes.",
   "Only after that yes, call answer_flagged_question. That sends it and saves the fact. Do not say that name out loud. Do not create a new tool.",
   "If the listing and earlier answers do not cover it, ask the landlord. Do not guess.",
   "If they say no, or they change the words, do not send the old draft. Show the new words and wait for a new yes.",
