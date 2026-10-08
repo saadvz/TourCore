@@ -92,6 +92,7 @@ export const PropertySchema = z.object({
       street: z.string(),
       city: z.string(),
       state: z.string(),
+      unit: z.string().optional(),
       postalCode: z.string().optional(),
       formatted: z.string(),
     })

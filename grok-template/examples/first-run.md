@@ -71,12 +71,9 @@ operator didn't give one) → nextQuestion "What ZIP code should I use?"]
 
 **Operator:** 07666.
 
-[`update_property_details` postalCode "07666" → read the address back]
+[`update_property_details` postalCode "07666" → read the address back on one line]
 
-**Tour Core:** I have:
-144 Hillside Ave
-Teaneck, NJ 07666
-Is that the address?
+**Tour Core:** Did I get that right: 144 Hillside Avenue, Teaneck, NJ 07666?
 
 **Operator:** Yes.
 

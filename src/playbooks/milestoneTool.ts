@@ -1,6 +1,6 @@
 import type { StepId } from "./shared";
 
-/** The milestone tool for this step. Backups stay on today's tools. */
+/** The milestone tool for this step. Day-to-day work and backups use the Phase 4 tools. */
 export function milestoneToolFor(step: StepId): string {
   switch (step) {
     case "texting-choose":
@@ -9,7 +9,10 @@ export function milestoneToolFor(step: StepId): string {
     case "texting-test":
       return "set_up_texting";
     case "backups":
-      return "confirm_backup_destination";
+      return "backup_records";
+    case "operate":
+    case "another":
+      return "get_inbox";
     case "property-address":
     case "property-confirm":
     case "property-type":

@@ -2,7 +2,7 @@
 name: export-audit
 description: Export a day's tour records for a property as a validated, provider-neutral audit (JSON plus CSV) and summarize it in plain language.
 when-to-use: "export today's audit", "export the audit", "tour history for today", "give me the records", "audit for Sep 28"
-allowed-tools: list_properties export_audit
+allowed-tools: list_properties export_audit export_records
 argument-hint: "[property] [today | YYYY-MM-DD]"
 user-invocable: true
 metadata:
@@ -19,7 +19,9 @@ and practice tours), every audit event, and the team's exception resolutions.
 
 ## When to use
 
-The operator asks for the audit, history or records for a day.
+The operator asks for the audit, history or records for a day. Prefer
+`export_records` (a day, or kind readable). `export_audit` still writes the
+day's audit.
 
 ## Required inputs and access
 

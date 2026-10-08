@@ -71,7 +71,7 @@ The other workflows (Setup Property, Map Route, Run Readiness Check, Simulate To
 
 ## Order
 
-Hosted product: approval, choose visitor texting, Google Drive backups through Grok (recommended; they can decline), property, alerts (recommended), readiness, practice, publish, then one portable backup. No second Google approval. `get_state` names the milestone write for the current step. The older tools still work.
+Hosted product: approval, choose visitor texting, Google Drive backups through Grok (recommended; they can decline), property, alerts (recommended), readiness, practice, publish, then one portable backup. No second Google approval. `get_state` names the milestone write for the current step. Backups on that picture use `backup_records` (declining stays possible). After publish, day-to-day work uses `get_inbox` and the other day-to-day tools. The older tools still work.
 
 Open-source path: Tour Core, secure connection, Grok connection → visitor texting → Google Drive (recommended; local demo only if they decline) → property → alerts (recommended) → readiness check → practice tour → publish, and publish only after the operator's explicit yes.
 

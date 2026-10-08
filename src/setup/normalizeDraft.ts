@@ -1,6 +1,6 @@
 import type { Door, PropertyType, TourCoreConfig, Unit } from "../config/tourCoreConfig";
 import { isSingleTourPlace, unitLabel, visitorSubject } from "../visitor/identity";
-import { canonicalizeStreet, parseUsAddress, titleCasePlace } from "./address";
+import { canonicalizeStreet, formatCanonical, parseUsAddress, titleCasePlace } from "./address";
 
 /**
  * Shared write normalizer. PropertyWorkspace.save and saveDraft are the only
@@ -104,11 +104,13 @@ function canonicalizeAddress(draft: TourCoreConfig): void {
   const city = titleCasePlace(parsed.address.city);
   const state = parsed.address.state;
   const postalCode = parsed.address.postalCode ?? property.canonicalAddress?.postalCode;
-  const formatted = street && city && state ? `${street}, ${city}, ${state}${postalCode ? ` ${postalCode}` : ""}` : property.address;
+  const unit = parsed.address.unit?.trim();
+  const formatted = street && city && state ? formatCanonical({ street, city, state, ...(postalCode ? { postalCode } : {}), ...(unit ? { unit } : {}) }) : property.address;
   property.canonicalAddress = {
     street,
     city,
     state,
+    ...(unit ? { unit } : {}),
     ...(postalCode ? { postalCode } : {}),
     formatted,
   };

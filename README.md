@@ -516,8 +516,9 @@ Terminal wizard ─────────────────────�
   same normalizer as the older tools, so equivalent wording stores one config. Every setup write goes through that
   save layer. The identity choices are the basic identity form (the default) and no form. No form is saved only after
   the landlord agrees. Older setups stored as `mock` or `document-check` are read as the basic identity form: reading
-  does not rewrite them, drop publication, or stale the readiness check. Backups still
-  use today's backup tools, and declining stays possible. `get_next_installation_step`
+  does not rewrite them, drop publication, or stale the readiness check. Day-to-day
+  backups use `backup_records`, and declining stays possible. `get_state`'s next
+  step on backups is `backup_records`. `get_next_installation_step`
   still names the older tools. The older status tools still work and still follow Tour Core's order. None takes or
   returns a credential or runs a command. See [`docs/deployment.md`](docs/deployment.md).
 - **Tool contract** (`src/operator/tools.ts`): typed, provider-neutral operator tools over the existing actions:
@@ -529,7 +530,8 @@ Terminal wizard ─────────────────────�
   `Tours at {property} are paused. Resume them first.`), `pause_tours` / `resume_tours` (property or unit;
   resume texts waiting visitors that tours are back; a later `Tour` / `Hi` / `book` restarts booking the same way
   as a first text — a home gets the welcome and day list, not a leftover unit picker), `remove_property` (finds any property `list_properties` shows, including an unpublished setup; published records are kept, including a property sent back to draft when it still has `publishedAt`, visitor tour or reservation records, or a publish event in its audit — a practice tour alone does not count; an unpublished setup is removed completely, whether or not it is complete; unpublished confirmation says it isn't published yet so no visitors are affected, but everything entered will be deleted for good; published with no bookings says no one is booked, so no cancel texts go out; one booked visitor is singular; names the operator-given name, or street plus unit when there is exactly one unit, otherwise the street line, never Main Home; booked cancel text does
-  not promise tours will be back; a later text gets a goodbye and cannot book), and `export_audit`. Every input is validated (unexpected fields are
+  not promise tours will be back; a later text gets a goodbye and cannot book), and `export_audit`.
+  Day-to-day work also has `get_tours`, `schedule_tour`, `cancel_tour`, `hold_tour`, `pause_tours` with `paused`, `get_inbox`, `reply_to_time_request`, `resolve_issue`, `export_records`, `backup_records`, and `restore_records`. Those writes answer done, blocked, or next. `cancel_tour` and `restore_records` are destructive, with `remove_property`. `resolve_issue` refuses a fair-housing item with no draft the same way `answer_flagged_question` does. The older day-to-day tools still work. Every input is validated (unexpected fields are
   refused); every result is plain language. `npm run grok:tools` lists them.
 - **One-off tour** (`schedule_one_off_tour`): use it when the operator wants to set up a tour for a visitor who
   asked — including someone who hasn't texted in yet. The first call returns one yes/no question (ends `Book it?`);
@@ -602,7 +604,7 @@ Terminal wizard ─────────────────────�
 - **Playbooks** (`src/playbooks/`): `initialize` returns a short instructions pointer (`src/playbooks/instructions.ts`). `get_state` returns the playbook for the current step. The client name picks wording only. A name containing `grok`, or Cursor's MCP client (`Cursor`, `cursor-vscode`), gets the full Grok playbook even when the client sends no capabilities. The names this repo already uses are `Grok`, `grok`, `grok-bot`, `grok-sim`, `Grok (SDK test)`, and `Cursor`. `prompts` and `resources` are server capabilities and are ignored. Claude is full when the client reports `elicitation`, `sampling`, or `roots`, and tools-only otherwise. ChatGPT and an unknown name stay tools-only. After a restart, a signed-in caller is recognized from the stored OAuth client name. A baseline or nameless entry never overrides a name that selects a playbook. A missing registration name is read from the stored client name, or from the redirect URIs, the next time that client presents a token. The name never changes a tool, a gate, or a permission.
 - **Flagged answers:** the needs-confirmation result of `answer_flagged_question` includes `visitorWillReceive`, the exact text the visitor will get, including any closing line. Read that to the landlord before the yes. The first call does not send.
 - **Grok tour updates:** the Grok playbook asks only "Want me to text you when someone books, starts, or finishes a tour, and ping you the moment something needs you?" One alert address is saved per install. A new save replaces the old one. The custom-time wake is in the Grok playbook only.
-- **Tool annotations** (`src/mcp/annotations.ts`) are hints. They do not change what a tool does. Five tools are marked destructive: `revoke_tour_access`, `remove_property`, `import_portable_backup`, `disconnect_google_drive_storage`, and `takeover_storage_writer`. `reset_hosted_demo` is hidden from the normal list and is also marked destructive.
+- **Tool annotations** (`src/mcp/annotations.ts`) are hints. They do not change what a tool does. Seven tools are marked destructive: `revoke_tour_access`, `remove_property`, `import_portable_backup`, `disconnect_google_drive_storage`, `takeover_storage_writer`, `cancel_tour`, and `restore_records`. `reset_hosted_demo` is hidden from the normal list and is also marked destructive.
 - **Setup help:** a stuck landlord is pointed at [`docs/setup-help.md`](docs/setup-help.md). The link lives in one constant, `SETUP_HELP_URL` in `src/playbooks/setupHelp.ts`. Give it as one plain link. Never put it in a visitor text. The repository is public, so that GitHub page opens the day this file is on `master`.
 - **OAuth for `/mcp`** (`src/mcp/oauth/`): the MCP authorization spec's flow. There's protected-resource and
   authorization-server metadata, Dynamic Client Registration and Client ID Metadata Documents, authorization code +
@@ -641,7 +643,7 @@ npm run check:storage         # hosted volume verdict for TOURCORE_HOME; does no
 ### Property identity and type
 
 The street address is the property's identity and what visitors hear ("Welcome to the self-guided tour for 144
-Hillside Ave! ..."). A property or building name is used only if the operator gives one; Grok never invents one.
+Hillside Ave! ..."). Setup reads that address back on one line: street, then ", Unit X" when the address has a unit, then ", City, ST ZIP" ("Did I get that right: 300 Main Street, Unit 4B, Hackensack, NJ 07601?"). A missing city is asked ("What city should I use?") before that read-back, and a read-back is never shown with a blank city. A property or building name is used only if the operator gives one; Grok never invents one.
 Right after the address, Grok asks "What type of property is this?" (single-family home; multifamily — a duplex
 or small building you own; apartment or condo — one unit). Whole-building apartment ownership is out of scope.
 The next questions follow the type: a single-family home is one space, "Main Home" by default, with its front

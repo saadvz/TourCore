@@ -6,7 +6,12 @@ import type { ToolKind } from "../operator/tools";
  * write sets destructiveHint explicitly.
  */
 
-const DESTRUCTIVE = new Set(["revoke_tour_access", "remove_property", "import_portable_backup"]);
+/**
+ * Phase 4 destructive tools are cancel_tour and restore_records, plus the
+ * existing remove_property. revoke_tour_access and import_portable_backup
+ * stay destructive so those older tools keep the hint they already had.
+ */
+const DESTRUCTIVE = new Set(["cancel_tour", "restore_records", "remove_property", "revoke_tour_access", "import_portable_backup"]);
 
 /**
  * The plan didn't cover these. Keep today's hint instead of flipping them.

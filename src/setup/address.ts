@@ -7,8 +7,13 @@ export interface CanonicalAddress {
   street: string;
   city: string;
   state: string;
+  /**
+   * A unit clause the landlord put in the address, such as "Unit 4B".
+   * Absent when the address has none, so a unit-free line stays the same.
+   */
+  unit?: string;
   postalCode?: string;
-  /** One line: "144 Hillside Ave, Teaneck, NJ 07666". */
+  /** One line: "144 Hillside Ave, Teaneck, NJ 07666", or with a unit "300 Main Street, Unit 4B, Hackensack, NJ 07601". */
   formatted: string;
 }
 
@@ -30,15 +35,28 @@ export function savedFullAddress(property: { address: string; canonicalAddress?:
   return property.address;
 }
 
-export function formatCanonical(parts: { street: string; city: string; state: string; postalCode?: string }): string {
+export function formatCanonical(parts: { street: string; city: string; state: string; postalCode?: string; unit?: string }): string {
   const place = parts.postalCode ? `${parts.city}, ${parts.state} ${parts.postalCode}` : `${parts.city}, ${parts.state}`;
-  return `${parts.street}, ${place}`;
+  const unit = parts.unit?.trim();
+  return unit ? `${parts.street}, ${unit}, ${place}` : `${parts.street}, ${place}`;
 }
 
-/** Two lines for reading back: street, then "City, ST ZIP". */
-export function addressReadback(parts: { street: string; city: string; state: string; postalCode?: string }): string {
-  const place = parts.postalCode ? `${parts.city}, ${parts.state} ${parts.postalCode}` : `${parts.city}, ${parts.state}`;
-  return `${parts.street}\n${place}`;
+/**
+ * One line for reading back: street, then ", Unit X" when there is a unit,
+ * then ", City, ST ZIP". Empty when the city or state is blank, so a
+ * read-back is never printed with a blank city.
+ */
+export function addressReadback(parts: { street: string; city: string; state: string; postalCode?: string; unit?: string }): string {
+  if (!parts.street.trim() || !parts.city.trim() || !parts.state.trim()) return "";
+  return formatCanonical(parts);
+}
+
+/** The landlord question. Undefined until street, city, state and ZIP are all saved. */
+export function addressConfirmQuestion(parts: { street: string; city: string; state: string; postalCode?: string; unit?: string } | undefined): string | undefined {
+  if (!parts?.postalCode?.trim()) return undefined;
+  const line = addressReadback(parts);
+  if (!line) return undefined;
+  return `Did I get that right: ${line}?`;
 }
 
 function stateOf(text: string): string | undefined {
@@ -60,22 +78,31 @@ export function parseUsAddress(raw: string): { address: CanonicalAddress; missin
   let street = "";
   let city = "";
   let state = "";
+  let unit = "";
   const parts = text.split(",").map((part) => part.trim()).filter(Boolean);
   if (parts.length >= 3) {
     street = parts[0]!;
-    city = parts[1]!;
-    state = stateOf(parts.slice(2).join(" ")) ?? "";
+    let rest = parts.slice(1);
+    if (rest[0] && isUnitPart(rest[0])) {
+      unit = rest[0];
+      rest = rest.slice(1);
+    }
+    if (rest.length >= 2) {
+      state = stateOf(rest.slice(1).join(" ")) ?? "";
+      city = rest[0]!;
+    } else if (rest.length === 1) {
+      const place = placeOf(rest[0]!);
+      city = place.city;
+      state = place.state;
+    }
+  } else if (parts.length === 2 && isUnitPart(parts[1]!)) {
+    street = parts[0]!;
+    unit = parts[1]!;
   } else if (parts.length === 2) {
     street = parts[0]!;
-    const rest = parts[1]!.split(" ");
-    const found = stateOf(rest[rest.length - 1] ?? "") ?? stateOf(rest.slice(-2).join(" "));
-    if (found && stateOf(rest.slice(-2).join(" ")) === found && rest.length >= 3) {
-      state = found;
-      city = rest.slice(0, -2).join(" ");
-    } else if (found) {
-      state = found;
-      city = rest.slice(0, -1).join(" ");
-    }
+    const place = placeOf(parts[1]!);
+    city = place.city;
+    state = place.state;
   } else {
     const tokens = text.split(" ").filter(Boolean);
     const last = tokens[tokens.length - 1] ?? "";
@@ -98,6 +125,7 @@ export function parseUsAddress(raw: string): { address: CanonicalAddress; missin
 
   street = canonicalizeStreet(street.replace(/,\s*$/, "").trim());
   city = titleCasePlace(city.replace(/,\s*$/, "").trim());
+  unit = titleCasePlace(unit.replace(/,\s*$/, "").trim());
   const missing: AddressPart[] = [];
   if (!street) missing.push("street");
   if (!city) missing.push("city");
@@ -108,10 +136,29 @@ export function parseUsAddress(raw: string): { address: CanonicalAddress; missin
     street,
     city,
     state,
+    ...(unit ? { unit } : {}),
     ...(postalCode ? { postalCode } : {}),
-    formatted: street && city && state ? formatCanonical({ street, city, state, ...(postalCode ? { postalCode } : {}) }) : raw.trim(),
+    formatted: street && city && state ? formatCanonical({ street, city, state, ...(postalCode ? { postalCode } : {}), ...(unit ? { unit } : {}) }) : raw.trim(),
   };
   return { address, missing };
+}
+
+/** "City ST" or "City New Jersey" from the last comma piece. A bare state leaves the city blank. */
+function placeOf(text: string): { city: string; state: string } {
+  const rest = text.split(" ").filter(Boolean);
+  const found = stateOf(rest[rest.length - 1] ?? "") ?? stateOf(rest.slice(-2).join(" "));
+  if (found && stateOf(rest.slice(-2).join(" ")) === found && rest.length >= 3) {
+    return { state: found, city: rest.slice(0, -2).join(" ") };
+  }
+  if (found && rest.length >= 2) return { state: found, city: rest.slice(0, -1).join(" ") };
+  if (found) return { state: found, city: "" };
+  return { city: "", state: "" };
+}
+
+/** "Unit 4B", "Apt 2", "Suite 3", or "#4" is a unit, not a city. */
+function isUnitPart(part: string): boolean {
+  const first = part.trim().split(/\s+/).filter(Boolean)[0] ?? "";
+  return isUnitClause(first);
 }
 
 const STREET_SUFFIX: Record<string, string> = {

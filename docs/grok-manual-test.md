@@ -285,7 +285,7 @@ with no ZIP. Single-family internal space: Main Home. No public property name.
 | # | Do | Expect |
 | --- | --- | --- |
 | F1 | Give the address without a ZIP | Grok asks "What ZIP code should I use?" and does not save a made-up ZIP |
-| F2 | Say the ZIP, then yes to the read-back | The address shown back is 144 Hillside Ave, Teaneck, NJ, plus that ZIP, before property type |
+| F2 | Say the ZIP, then yes to the read-back | The address shown back is one line, "Did I get that right: 144 Hillside Avenue, Teaneck, NJ 07666?", before property type. A condo address with a unit includes it: "Did I get that right: 300 Main Street, Unit 4B, Hackensack, NJ 07601?". If the city is missing, Grok asks "What city should I use?" and does not read the address back until the city is saved |
 | F3 | A visitor texts "Hi" | One opening message naming 144 Hillside Ave, not "Main Home". Then several upcoming tour days, not every time for one day |
 | F4 | "What availability do you have?" | The same kind of short date list |
 | F5 | "What about Thursday?" | Thursday's times. No exception for the property team |

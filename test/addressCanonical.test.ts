@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonicalizeStreet, parseUsAddress } from "../src/setup/address";
+import { addressConfirmQuestion, canonicalizeStreet, parseUsAddress } from "../src/setup/address";
 
 describe("address canonicalization", () => {
   it("expands only the final street type and keeps the landlord's casing", () => {
@@ -28,5 +28,26 @@ describe("address canonicalization", () => {
       "18 Maple Street, Teaneck, NJ 07666",
       "18 Maple Street, Teaneck, NJ 07666",
     ]);
+    expect(parseUsAddress("18 Maple Street, Teaneck, NJ 07666")?.address).not.toHaveProperty("unit");
+  });
+
+  it("reads a condo unit back between the street and the city", () => {
+    const parsed = parseUsAddress("300 Main Street, Unit 4B, Hackensack, NJ 07601");
+    expect(parsed?.address).toEqual({
+      street: "300 Main Street",
+      unit: "Unit 4B",
+      city: "Hackensack",
+      state: "NJ",
+      postalCode: "07601",
+      formatted: "300 Main Street, Unit 4B, Hackensack, NJ 07601",
+    });
+    expect(addressConfirmQuestion(parsed?.address)).toBe("Did I get that right: 300 Main Street, Unit 4B, Hackensack, NJ 07601?");
+  });
+
+  it("does not read an address back when the city is blank", () => {
+    const parsed = parseUsAddress("300 Main Street, Unit 4B, NJ 07601");
+    expect(parsed?.address).toMatchObject({ street: "300 Main Street", unit: "Unit 4B", city: "", state: "NJ", postalCode: "07601" });
+    expect(parsed?.missing).toContain("city");
+    expect(addressConfirmQuestion(parsed?.address)).toBeUndefined();
   });
 });
