@@ -498,7 +498,7 @@ describe("natural texts drive the real tour", () => {
     await p.say("what about laundry?");
     expect(p.lastReply()).toContain("Shared laundry room in the basement.");
     await p.say("is there a gym?");
-    expect(p.lastReply()).toBe("I'll let the property team know about your question.");
+    expect(p.lastReply()).toBe("I'll pass your question to the property team, and they'll reply here as soon as they can.");
     expect((await p.audit("QUESTION_UNANSWERED")).map((e) => e.detail)).toEqual(["is there a gym?"]);
   });
 

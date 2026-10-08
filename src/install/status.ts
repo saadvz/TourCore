@@ -1,4 +1,6 @@
 import { nextProfileQuestion } from "../config/unitProfile";
+import { spokenAsk } from "../playbooks/compose";
+import type { ReportedClient } from "../playbooks/select";
 import { visitorHelpQuestion } from "../setup/setupActions";
 import { mcpAuthModeFromEnv } from "../mcp/authMode";
 import { MCP_PATH } from "../mcp/paths";
@@ -10,7 +12,7 @@ import { isCurrent, type PropertyWorkspace } from "../setup/workspace";
 import { probeRuntimeStore } from "../storage/runtimeStore";
 import { DEPLOYMENT_MODE_LABELS, type DeploymentMode } from "./deployment";
 import type { Installation } from "./installation";
-import { activeFromNumber, createMessagingProvider, ensureMessagingSelection, MESSAGING_PROVIDER_CATALOG } from "../messaging/registry";
+import { activeFromNumber, createMessagingProvider, ensureMessagingSelection, MESSAGING_PROVIDER_CATALOG, selectionFromInstallation } from "../messaging/registry";
 
 /**
  * Where this installation stands, component by component, in one
@@ -208,6 +210,13 @@ export interface InstallationStatus {
 export interface StatusOptions {
   /** From outside the process (bootstrap): whether the runtime answered. Inside the server it's running by definition. */
   runtime?: { running: boolean; message?: string };
+  /**
+   * Skip every write this read would otherwise do: persisting an inferred
+   * texting choice, and the disk probe. Existing tools leave this unset.
+   */
+  readOnly?: boolean;
+  /** When set, the alerts offer uses that client's spoken question. With no client, the pinned offer stays. */
+  client?: ReportedClient;
 }
 
 const BOOTSTRAP = "npm run bootstrap:grok";
@@ -363,8 +372,8 @@ function credentialStep(provider: { id: string; configFields: () => { label: str
   });
 }
 
-function messagingStatus(inst: Installation): ComponentStatus {
-  const selection = ensureMessagingSelection(inst);
+function messagingStatus(inst: Installation, readOnly = false): ComponentStatus {
+  const selection = readOnly ? selectionFromInstallation(inst) : ensureMessagingSelection(inst);
   const choose = step("VISITOR_MESSAGING", "CHOOSE_MESSAGING_PROVIDER", "OPERATOR_DECISION", "How would you like prospects to text Tour Core?", {
     tool: "choose_messaging_provider",
     choices: MESSAGING_PROVIDER_CATALOG.map((p) => ({ id: p.id, label: p.displayName, description: p.description })),
@@ -453,12 +462,13 @@ function messagingStatus(inst: Installation): ComponentStatus {
  * The installation's primary provider stays here. A property may opt into
  * local test texts without changing this.
  */
-export function installedMessaging(inst: Installation): InstalledMessaging | undefined {
-  const selection = ensureMessagingSelection(inst);
+export function installedMessaging(inst: Installation, options?: { readOnly?: boolean }): InstalledMessaging | undefined {
+  const readOnly = options?.readOnly === true;
+  const selection = readOnly ? selectionFromInstallation(inst) : ensureMessagingSelection(inst);
   if (!selection.provider) return undefined;
   const provider = createMessagingProvider(selection.provider, { env: () => inst.env(), sendblue: () => inst.sendblueEnv() });
   if (!provider.validateConfiguration().ok) return undefined;
-  return { mode: "live", provider: selection.provider, ready: messagingStatus(inst).state === "READY", requiredForPublish: inst.deploymentMode() === "GROK_MANAGED_P0" };
+  return { mode: "live", provider: selection.provider, ready: messagingStatus(inst, readOnly).state === "READY", requiredForPublish: inst.deploymentMode() === "GROK_MANAGED_P0" };
 }
 
 const DRIVE_INSTRUCTIONS =
@@ -472,12 +482,14 @@ const HOSTED_BACKUP_INSTRUCTIONS =
   "Then call confirm_backup_destination with provider google_drive and folderName Tour Core. accountLabel may be a short display name. Do not pass tokens. " +
   "If the operator declines, call decline_portable_backup. Operational records stay on hosted Tour Core either way. After the first property is published, call create_portable_backup and upload that file to Tour Core/Backups, then confirm_backup_stored.";
 
-function storageStatus(inst: Installation, messagingReady: boolean): ComponentStatus {
+function storageStatus(inst: Installation, messagingReady: boolean, readOnly = false): ComponentStatus {
   let writable = true;
-  try {
-    probeRuntimeStore(inst.runtime, new Date(inst.now()));
-  } catch {
-    writable = false;
+  if (!readOnly) {
+    try {
+      probeRuntimeStore(inst.runtime, new Date(inst.now()));
+    } catch {
+      writable = false;
+    }
   }
   const provider = inst.records.provider();
   const summary = inst.records.summary();
@@ -644,14 +656,15 @@ function propertyStatus(services: OperatorServices, installed: InstalledMessagin
   return { ready: true, name, status: component("PROPERTY", "READY", `${name} is set up.`) };
 }
 
-function alertsStatus(inst: Installation, propertyReady: boolean): ComponentStatus {
+function alertsStatus(inst: Installation, propertyReady: boolean, client?: ReportedClient): ComponentStatus {
   const env = inst.env();
   const configured = !!env.TOURCORE_GROK_ROUTINE_URL?.trim() && !!env.TOURCORE_GROK_ROUTINE_KEY?.trim();
   const state = inst.files.state();
   const skipped = state.skipped?.OPERATOR_ALERTS;
   const connect = (operatorMessage: string, action: InstallationAction = "CONNECT_OPERATOR_ALERTS", performedBy: PerformedBy = "OPERATOR_IN_SECURE_SETUP") =>
     step("OPERATOR_ALERTS", action, performedBy, operatorMessage, { tool: "get_secure_setup_url", secureSetupStep: "operator-alerts", grokInstructions: ROUTINE_SETUP });
-  const offer = step("OPERATOR_ALERTS", "OFFER_OPERATOR_ALERTS", "OPERATOR_DECISION", OPERATOR_MESSAGES.offerAlerts, {
+  const offerMessage = client ? spokenAsk(client, "alerts") : OPERATOR_MESSAGES.offerAlerts;
+  const offer = step("OPERATOR_ALERTS", "OFFER_OPERATOR_ALERTS", "OPERATOR_DECISION", offerMessage, {
     tool: "set_notification_preferences",
     secureSetupStep: "operator-alerts",
     grokInstructions:
@@ -756,17 +769,18 @@ function validationStatuses(services: OperatorServices, propertyReady: boolean, 
 export function getInstallationStatus(inst: Installation, services: OperatorServices, options: StatusOptions = {}): InstallationStatus {
   const deployment = inst.deployment();
   const mode = deployment.mode;
-  const messaging = messagingStatus(inst);
-  const infra = [runtimeStatus(options), endpointStatus(inst, mode), grokStatus(inst), messaging, storageStatus(inst, messaging.state === "READY"), accessStatus()];
+  const readOnly = options.readOnly === true;
+  const messaging = messagingStatus(inst, readOnly);
+  const infra = [runtimeStatus(options), endpointStatus(inst, mode), grokStatus(inst), messaging, storageStatus(inst, messaging.state === "READY", readOnly), accessStatus()];
   if (deployment.invalid) infra[0]!.technical = [...(infra[0]!.technical ?? []), `TOURCORE_DEPLOYMENT_MODE "${deployment.invalid}" isn't recognized; using ${mode}.`];
   const infrastructureReady = infra.every((c) => c.state === "READY");
-  const installed = installedMessaging(inst);
+  const installed = installedMessaging(inst, { readOnly });
   const property = propertyStatus(services, installed);
   const components: ComponentStatus[] = [
     ...infra,
     // Nothing on the property path is offered until the infrastructure is ready.
     infrastructureReady ? property.status : component("PROPERTY", property.ready ? "READY" : "NOT_CONFIGURED", property.ready ? property.status.summary : "Set up once Tour Core is connected and tested."),
-    alertsStatus(inst, infrastructureReady && property.ready),
+    alertsStatus(inst, infrastructureReady && property.ready, options.client),
     ...validationStatuses(services, infrastructureReady && property.ready, installed),
   ];
   const alertsOn = components.find((c) => c.component === "OPERATOR_ALERTS")!.state === "READY";

@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Installation } from "../install/installation";
 import { secretValues } from "../install/settings";
 import { HOSTED_ADMIN_TOOLS } from "../install/hostedAdminTools";
+import type { ReportedClient } from "../playbooks/select";
 import { INSTALLATION_TOOLS } from "../install/tools";
 import { installedMessaging } from "../install/status";
 import { addressReadback } from "../setup/address";
@@ -79,6 +80,8 @@ export interface ToolContext {
   resetMessaging?: () => void;
   /** The OAuth client calling this tool, when the request was authenticated that way. */
   caller?: { clientId?: string };
+  /** Who called MCP initialize. Picks a playbook only. Never changes a gate. */
+  client?: ReportedClient;
   /** Drops process memory (sessions, ledger, pending OAuth) after a hosted demo reset. */
   forgetLiveState?: () => void;
   /** Shared inbound/outbound de-duplication for this process, including local SMS inject. */
@@ -1155,7 +1158,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const fingerprint = `${x.exceptionId}|${plan.appliesTo}|${plan.field ?? ""}|${plan.fact}|${plan.sendOnly ? "send" : "save"}`;
       if (!i.confirmationCode) {
         if (plan.sendOnly) {
-          return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, `Send "${plan.fact}" to ${who}?`, { savedToSetup: false });
+          return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, `Send "${plan.fact}" to ${who}?`, { savedToSetup: false, visitorWillReceive: plan.fact });
         }
         return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, `Send "${plan.fact.replace(/\.$/, "")}" to ${who}? Future visitors who ask the same thing will get it too. Save it?`, {
           visitorWillReceive: visitorAnswerText(x.question!, plan.fact),
@@ -1309,7 +1312,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "inspect_tour_time_request",
     title: "Inspect a custom time request",
     kind: "read",
-    description: "One custom-time request in plain language: who, which unit, the time they want, their current booking if they have one, and whether that time is outside normal touring hours. A withdrawn request is shown as withdrawn with They booked a regular time instead. An expired request is shown with That time has already passed, so I've let {who} know their request ran out. You can still book them a one-off time. After that, book them with schedule_one_off_tour or move them with reschedule_tour. Inspecting expires a request whose time has already passed and texts the visitor once.",
+    description: "One custom-time request in plain language: who, which unit, the time they want, their current booking if they have one, and whether that time is outside normal touring hours. Includes place when there is a place they asked to tour: that place's name, never Main Home. A withdrawn request is shown as withdrawn with They booked a regular time instead. An expired request is shown with That time has already passed, so I've let {who} know their request ran out. You can still book them a one-off time. After that, book them with schedule_one_off_tour or move them with reschedule_tour. Inspecting expires a request whose time has already passed and texts the visitor once.",
     input: z.strictObject({
       tourTimeRequestId: z.string().min(3).max(40).describe("The tourTimeRequestId from list_tour_time_requests or a tour update. Never show it to the operator."),
     }),

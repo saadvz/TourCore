@@ -13,7 +13,7 @@ import { SmsConsentDirectory } from "../visitor/smsConsent";
 import type { ConfirmationBook } from "./confirmations";
 import { requireUnit, resolvePropertyId } from "./resolve";
 import { persistSession, type OperatorServices } from "./services";
-import { visitorSubject } from "../visitor/identity";
+import { operatorUnitName, streetLine, visitorSubject } from "../visitor/identity";
 import { operatorWhoLabel } from "./exceptions";
 import { currentReservation, findTour, midSentence, nextReservation, tourRef, tourSnapshots, unitNameOf, visitorNameOf, type TourSnapshot } from "./tours";
 
@@ -120,15 +120,31 @@ function moveConfirmQuestion(input: { who: string; from?: Date; to: Date; now: D
   return `${lead}${extra} ${visitorTextNote(input.who, input.confirm, input.outside)} ${verb}`;
 }
 
+/** Landlord-facing place for the wake question. Never "Main Home". */
+function placeOf(tour: TourSnapshot, request: TourTimeRequest): string | undefined {
+  const reservation = tour.bundle.reservations.find((item) => item.id === request.reservationId);
+  const unitId = request.unitId ?? reservation?.unitId;
+  const unit = unitId ? tour.config.units.find((item) => item.id === unitId) : undefined;
+  if (!unit) return undefined;
+  const named = operatorUnitName(tour.config.property, unit.name).trim();
+  if (!named || /^main home$/i.test(named)) {
+    const street = streetLine(tour.config.property).trim();
+    return street && !/^main home$/i.test(street) ? street : undefined;
+  }
+  return named;
+}
+
 function requestView(tour: TourSnapshot, request: TourTimeRequest, now: Date) {
   const tz = tour.config.property.timezone;
   const reservation = tour.bundle.reservations.find((item) => item.id === request.reservationId);
   const placement = placementOf(tour.config, new Date(request.requestedStartsAt));
+  const place = placeOf(tour, request);
   return {
     tourTimeRequestId: request.id,
     tourRef: tourRef(tour.propertyId, tour.tourId),
     visitorName: visitorNameOf(tour),
     unitName: unitNameOf(tour),
+    ...(place ? { place } : {}),
     requestedTime: relativeWhen(new Date(request.requestedStartsAt), now, tz),
     ...(reservation?.slotStart ? { currentTime: relativeWhen(new Date(reservation.slotStart), now, tz) } : {}),
     ...(request.proposedAlternativeAt ? { offeredTime: relativeWhen(new Date(request.proposedAlternativeAt), now, tz) } : {}),

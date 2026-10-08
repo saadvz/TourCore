@@ -18,7 +18,7 @@ npm run eval:baseline
 - **Config diff** (`eval/baseline/config-diff.md`). Ten equivalent duplex setups (2 units, a shared front door, each unit's own door, weekday hours). Inputs vary the way a landlord might: order, casing, `9-5` versus `9am to 5pm`, door wording. Ids and timestamps are removed. Array order is kept. Today's diffs are expected. Phase 2's done-bar is zero fields differing.
 - **Golden tasks** (`eval/baseline/golden-tasks.md`). Full setup to publish, book a one-off, answer a flagged question, pause a unit, export a day. Each row is the tools, the call count, and pass/fail on the end state. `eval/fixtures/golden-prompts.json` is the same five tasks in plain language for a later model-driven run. This harness does not call a model.
 - **Out-of-chat exits** (`eval/baseline/exits.md`). Each place a task sends the landlord out of the chat. `key` means entering an API key or similar secret. A Google sign-in or an Allow click is `not key`. The checked-in path chooses local test texting, declines backups, and skips alerts, so those exits are not taken. A separate in-process Sendblue probe records the texting secure-setup exit without storing the link.
-- **Demo click path** (`eval/baseline/click-path.md`). Ordered tool calls from texting setup through publish, with the milestone each `get_next_installation_step` returns.
+- **Demo click path** (`eval/baseline/click-path.md`). Ordered tool calls from texting setup through publish, with the milestone each `get_next_installation_step` returns. `get_state` is not on this path. Playbook selection is covered by `test/eval/getState.test.ts`.
 
 Upper/Lower is a different duplex shape and is not mixed into the A/B runs.
 

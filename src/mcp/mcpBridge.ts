@@ -1,6 +1,9 @@
 import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { hostedResetToolVisible, HOSTED_ADMIN_TOOLS } from "../install/hostedAdminTools";
+import { annotationsFor } from "./annotations";
+import { MCP_INSTRUCTIONS } from "../playbooks/instructions";
+import { reportedClientFromInitialize } from "../playbooks/select";
 import { callOperatorTool, OPERATOR_TOOLS, UnknownToolError, type ToolContext } from "../operator/tools";
 
 /**
@@ -14,12 +17,6 @@ import { callOperatorTool, OPERATOR_TOOLS, UnknownToolError, type ToolContext } 
 export { MCP_PATH } from "./paths";
 export const SUPPORTED_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const SERVER_INFO = { name: "tour-core", title: "Tour Core", version: "0.2.0" };
-
-const INSTRUCTIONS =
-  "Tour Core is the system of record and policy authority for self-guided tours. Use these tools to set up a property, map routes, run the readiness check and a practice tour, publish for demo (only after an explicit yes), watch active tours, work exceptions and export the audit. " +
-  "For installation, get_installation_status and get_next_installation_step are the source of truth. If visitor texting is not configured, the next step is to ask which provider to use. Do not assume Sendblue. " +
-  "Collect API credentials with Grok's secure secret-input control, then fill and submit Tour Core's setup form yourself. Never ask for secrets in ordinary chat and never tell the operator to open a setup page unless that secure input is unavailable. The operator leaves the conversation only for a human authorization such as OAuth, login, or MFA. " +
-  "Speak to the operator in plain, everyday words. Never show ids, handles or codes. Never invent property facts. Never name Durin or the Durin Access Platform to the operator; say door access. There is no tool to open a door: Tour Core is built on the Durin Access Platform, and access is decided by Tour Core's policy on each visitor request and carried out by Durin.";
 
 type JsonRpcId = string | number | null;
 interface Reply {
@@ -37,17 +34,11 @@ const Request = z.object({
 const rpcError = (id: JsonRpcId, code: number, message: string): Reply => ({ status: 200, body: { jsonrpc: "2.0", id, error: { code, message } } });
 const rpcResult = (id: JsonRpcId, result: unknown): Reply => ({ status: 200, body: { jsonrpc: "2.0", id, result } });
 
-const ANNOTATIONS = {
-  read: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  change: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-  consequential: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
-} as const;
-
 export function mcpToolList(ctx?: ToolContext) {
   const tools = hostedResetToolVisible(ctx) ? [...OPERATOR_TOOLS, ...HOSTED_ADMIN_TOOLS] : OPERATOR_TOOLS;
   return tools.map((t) => {
     const { $schema: _s, ...inputSchema } = z.toJSONSchema(t.input) as Record<string, unknown>;
-    return { name: t.name, title: t.title, description: t.description, inputSchema, annotations: { title: t.title, ...ANNOTATIONS[t.kind] } };
+    return { name: t.name, title: t.title, description: t.description, inputSchema, annotations: { title: t.title, ...annotationsFor(t) } };
   });
 }
 
@@ -57,13 +48,15 @@ export async function handleMcpMessage(ctx: ToolContext, message: unknown): Prom
   const parsed = Request.safeParse(message);
   if (!parsed.success) return rpcError(null, -32600, "That isn't a valid JSON-RPC request.");
   const { id, method, params } = parsed.data;
+  const reported = reportedClientFromInitialize(message);
+  if (reported) ctx.client = reported;
   if (id === undefined) return { status: 202 };
 
   switch (method) {
     case "initialize": {
       const asked = typeof params?.protocolVersion === "string" ? params.protocolVersion : undefined;
       const protocolVersion = asked && SUPPORTED_PROTOCOL_VERSIONS.includes(asked) ? asked : SUPPORTED_PROTOCOL_VERSIONS[0];
-      return rpcResult(id, { protocolVersion, capabilities: { tools: { listChanged: false } }, serverInfo: SERVER_INFO, instructions: INSTRUCTIONS });
+      return rpcResult(id, { protocolVersion, capabilities: { tools: { listChanged: false } }, serverInfo: SERVER_INFO, instructions: MCP_INSTRUCTIONS });
     }
     case "ping":
       return rpcResult(id, {});

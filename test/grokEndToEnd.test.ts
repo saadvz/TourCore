@@ -93,7 +93,7 @@ describe("P0 operator demo through Grok tools, with a real-phone visitor", () =>
     expect(tour).toMatchObject({ visitorName: "Pat Smith", unitName: "Unit 101", status: "Touring", source: "Real phone", currentStep: "At Unit 101" });
 
     // Visitor asks something the approved facts don't cover.
-    expect(await demo.text("is there a gym?")).toContain("I'll let the property team know about your question.");
+    expect(await demo.text("is there a gym?")).toContain("I'll pass your question to the property team, and they'll reply here as soon as they can.");
     // Operator: "What needs attention?" -> "Open Pat's issue. Yes, there's a gym on the roof." -> "Yes."
     const [issue] = (await demo.grok("list_exceptions")).exceptions;
     expect(issue).toMatchObject({ visitorName: "Pat Smith", summary: 'Asked "is there a gym?". There\'s no approved answer yet.' });

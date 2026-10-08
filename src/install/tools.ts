@@ -13,7 +13,9 @@ import { HOSTED_SETUP_SESSION_MINUTES, HOSTED_SETUP_WRITES, DEFAULT_SETUP_SESSIO
 import { STORAGE_TOOLS } from "./storageTools";
 import { BACKUP_TOOLS } from "../backup/tools";
 import { getInstallationStatus, INSTALLATION_COMPONENTS, OPTIONAL_COMPONENTS, type ComponentStatus, type InstallationComponent } from "./status";
+import { readState } from "./stateView";
 import { ensureMessagingSelection } from "../messaging/registry";
+import { SHARED_STEPS } from "../playbooks/shared";
 import { LOCAL_TEST_TEXTING } from "../setup/setupActions";
 
 /**
@@ -54,6 +56,17 @@ const SecureStep = z.enum(["visitor-messaging", "operator-alerts"]);
 
 export const INSTALLATION_TOOLS: OperatorTool[] = [
   tool({
+    name: "get_state",
+    title: "Current setup",
+    kind: "read",
+    description:
+      "A read-only picture of this install, or of one property when propertyId is set. Returns setup, units, doors, routes, hours, verification, texting, alerts, a one-line health summary, a one-line storage summary, milestones, the next step, and this client's playbook. It does not change anything. Call it first and follow its next step. The older status tools still work.",
+    input: z.strictObject({
+      propertyId: z.string().optional().describe("One property. Leave it out to read the whole install."),
+    }),
+    run: async (ctx, i) => readState({ installation: ctx.installation, services: ctx.services, client: ctx.client }, i.propertyId),
+  }),
+  tool({
     name: "get_installation_status",
     title: "Installation status",
     kind: "read",
@@ -61,7 +74,7 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
       "Where this Tour Core installation stands, component by component, in the order Tour Core sets them up, with the onboarding phase and the next step. The source of truth for \"What's left to set up?\". summary and lines are safe to say to the operator; technical is for you only. Never contains credentials.",
     input: z.strictObject({}),
     run: async (ctx) => {
-      const s = getInstallationStatus(installation(ctx), ctx.services);
+      const s = getInstallationStatus(installation(ctx), ctx.services, { client: ctx.client });
       return {
         summary: s.summary,
         phase: s.phase,
@@ -82,7 +95,7 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
       "The one next step Tour Core decided: component, action, phase, who does it (GROK, OPERATOR, OPERATOR_IN_SECURE_SETUP or OPERATOR_DECISION), the tool or skill to use, what to tell the operator (operatorMessage), and what you need to do it (grokInstructions, for you only). Follow it; call it again after each step. When a property is already published, the next step is ADD_ANOTHER_PROPERTY (create_property_setup) so another property can be set up. The published property stays published. If the operator doesn't want another, stop.",
     input: z.strictObject({}),
     run: async (ctx) => {
-      const s = getInstallationStatus(installation(ctx), ctx.services);
+      const s = getInstallationStatus(installation(ctx), ctx.services, { client: ctx.client });
       return { summary: s.nextStep.operatorMessage, ...s.nextStep, infrastructureReady: s.infrastructureReady, rule: SEQUENCE_RULE };
     },
   }),
@@ -225,7 +238,7 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
     title: "Choose tour updates",
     kind: "change",
     description:
-      'Saves which tour updates the operator wants, after they answered "Would you like me to keep you updated when someone books, starts or finishes a tour, and alert you if something needs your input?". preset "recommended" = bookings, tour starts, completions and anything that needs attention; "problems-only" = only what needs their input. Or pass the exact updates they asked for. Things that happened before a kind was turned on are never announced late.',
+      `Saves which tour updates the operator wants, after they answered "${SHARED_STEPS.alerts.ask}". preset "recommended" = bookings, tour starts, completions and anything that needs attention; "problems-only" = only what needs their input. Or pass the exact updates they asked for. Things that happened before a kind was turned on are never announced late.`,
     input: z.strictObject({
       preset: z.enum(["recommended", "problems-only"]).optional(),
       updates: z.array(z.enum(UPDATE_KINDS)).max(UPDATE_KINDS.length).optional().describe("Only when the operator picked specific updates."),

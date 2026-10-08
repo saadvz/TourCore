@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
@@ -20,6 +21,7 @@ import { publicBaseUrl } from "../messaging/publicUrl";
 import { createIntentInterpreter, intentModelFromEnv, type IntentInterpreter } from "../intent";
 import { mcpAuthModeFromEnv, type McpAuthMode } from "../mcp/authMode";
 import { authorized, handleMcpMessage, MCP_PATH } from "../mcp/mcpBridge";
+import { reportedClientFromInitialize, type ReportedClient } from "../playbooks/select";
 import { endpointsFor, isOAuthLocalPath, isOAuthPublicPath, McpOAuth } from "../mcp/oauth";
 import { grokLegacyCompatFromEnv, hostedCompatStartupLine, redirectPolicyFor } from "../mcp/oauth/clients";
 import { AuditExportLinks } from "../operator/auditExportLinks";
@@ -50,6 +52,9 @@ import { handleApi } from "./api";
 import { buildComplianceConfig, isPublicCompliancePath, matchCompliancePath } from "./compliance/config";
 import { renderCompliancePage } from "./compliance/pages";
 import { loadLocalEnv } from "./env";
+
+/** In-memory playbook clients. Past this, the least recently read session is dropped. */
+export const PLAYBOOK_CLIENT_CAP = 1000;
 
 const PUBLIC_DIR = new URL("./public/", import.meta.url);
 const JS = "text/javascript; charset=utf-8";
@@ -101,6 +106,8 @@ export interface SetupServerOptions {
   alertRetryMs?: number;
   /** Test hook: pause inside the property slot lock. */
   slotLockBarrier?: import("../core/TourCore").TourCoreDeps["slotLockBarrier"];
+  /** Tests only: cap on the in-memory playbook client list. Default is PLAYBOOK_CLIENT_CAP. */
+  playbookClientCap?: number;
 }
 
 /** The server plus a handle tests use to wait for background operator alerts. */
@@ -330,6 +337,60 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         })
       : undefined;
   const confirmations = new ConfirmationBook();
+  /**
+   * Playbook client, keyed by MCP session id, signed-in caller, or the one static token.
+   * Kept in memory only. After a restart the signed-in caller's stored OAuth clientName
+   * is read from the grant store and run through the same playbook selection. That name
+   * only picks wording. A static token has no stored name, so a stale id gets baseline.
+   */
+  const playbookClients = new Map<string, ReportedClient>();
+  const playbookClientCap = Math.max(1, options.playbookClientCap ?? PLAYBOOK_CLIENT_CAP);
+  /** The one static token. Kept so a follow-up that omits the session id still finds a client. It is not a session, so it does not count toward the cap. */
+  const staticFallbackKey = "static";
+  const countsTowardCap = (key: string) => key !== staticFallbackKey;
+  const cappedPlaybookClients = () => {
+    let count = 0;
+    for (const key of playbookClients.keys()) if (countsTowardCap(key)) count += 1;
+    return count;
+  };
+  const oldestCappedPlaybookClient = () => {
+    for (const key of playbookClients.keys()) if (countsTowardCap(key)) return key;
+    return undefined;
+  };
+  /** Delete and re-set so this entry is the newest. Then drop the least recently read session past the cap. */
+  const rememberPlaybookClient = (key: string, client: ReportedClient) => {
+    if (playbookClients.has(key)) playbookClients.delete(key);
+    playbookClients.set(key, client);
+    while (cappedPlaybookClients() > playbookClientCap) {
+      const oldest = oldestCappedPlaybookClient();
+      if (oldest === undefined) break;
+      playbookClients.delete(oldest);
+    }
+  };
+  /** A read refreshes the entry. The Map's order is least-recently-read first. */
+  const touchPlaybookClient = (key: string): ReportedClient | undefined => {
+    const client = playbookClients.get(key);
+    if (!client) return undefined;
+    playbookClients.delete(key);
+    playbookClients.set(key, client);
+    return client;
+  };
+  const clientFromStoredOAuth = (clientId: string | undefined): ReportedClient | undefined => {
+    if (!clientId || !oauth) return undefined;
+    const name = oauth.store.clientName(clientId);
+    return name ? { name } : undefined;
+  };
+  const sessionHeader = (req: IncomingMessage) => {
+    const raw = req.headers["mcp-session-id"];
+    const value = (Array.isArray(raw) ? raw[0] : raw)?.trim();
+    return value || undefined;
+  };
+  const fallbackKey = (caller?: { clientId?: string }) => (caller?.clientId ? `caller:${caller.clientId}` : "static");
+  const sessionKey = (id: string) => `session:${id}`;
+  const isInitialize = (message: unknown): boolean => {
+    if (Array.isArray(message)) return message.some((item) => isInitialize(item));
+    return !!message && typeof message === "object" && (message as { method?: unknown }).method === "initialize";
+  };
   const tools: ToolContext = {
     services: api,
     confirmations,
@@ -470,12 +531,45 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         } catch {
           return send(400, json, JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "That request couldn't be read." } }));
         }
-        const reply = await handleMcpMessage(caller ? { ...tools, caller } : tools, message);
+        const seen = reportedClientFromInitialize(message);
+        const incomingSession = sessionHeader(req);
+        const initializing = isInitialize(message);
+        const knownSession = !!(incomingSession && playbookClients.has(sessionKey(incomingSession)));
+        // A session id is optional. Initialize hands one out. A later request that
+        // omits it, or sends one this process has never seen (a redeploy), uses the
+        // signed-in caller or the static token. An unknown id is never an error.
+        let responseSession: string | undefined;
+        let key: string;
+        if (initializing) {
+          responseSession = incomingSession ?? randomUUID();
+          key = sessionKey(responseSession);
+        } else if (knownSession && incomingSession) {
+          responseSession = incomingSession;
+          key = sessionKey(incomingSession);
+        } else {
+          key = fallbackKey(caller);
+          if (incomingSession) responseSession = incomingSession;
+        }
+        if (seen) {
+          rememberPlaybookClient(key, seen);
+          if (initializing) rememberPlaybookClient(fallbackKey(caller), seen);
+        }
+        let reportedClient = seen ?? touchPlaybookClient(key);
+        if (!reportedClient) {
+          const recovered = clientFromStoredOAuth(caller?.clientId);
+          if (recovered) {
+            reportedClient = recovered;
+            rememberPlaybookClient(key, recovered);
+          }
+        }
+        if (!initializing && incomingSession && !knownSession && reportedClient) rememberPlaybookClient(sessionKey(incomingSession), reportedClient);
+        const reply = await handleMcpMessage({ ...tools, ...(caller ? { caller } : {}), ...(reportedClient ? { client: reportedClient } : {}) }, message);
+        const sessionHeaders: Record<string, string> = responseSession ? { "Mcp-Session-Id": responseSession } : {};
         if (reply.body === undefined) {
-          res.writeHead(reply.status, { "Cache-Control": "no-store" });
+          res.writeHead(reply.status, { "Cache-Control": "no-store", ...sessionHeaders });
           return res.end();
         }
-        return send(reply.status, json, JSON.stringify(reply.body));
+        return send(reply.status, json, JSON.stringify(reply.body), sessionHeaders);
       }
       if (method === "POST" && (url.pathname === SENDBLUE_WEBHOOK_PATH || url.pathname === TWILIO_WEBHOOK_PATH || url.pathname === PHOTON_WEBHOOK_PATH || url.pathname === LOCAL_WEBHOOK_PATH)) {
         const rawBody = await readRaw(req);

@@ -40,7 +40,8 @@ computer, never the operator's:
    sets up its secure public connection, and prints what to tell the operator
    and what to do next. Re-running it is safe.
 3. Read `.grok/skills/install-tour-core/SKILL.md` and follow it. Call
-   `get_installation_status` and `get_next_installation_step` until Tour Core
+   `get_state` first and follow its next step. `get_installation_status` and
+   `get_next_installation_step` still work. Call them until Tour Core
    reports the infrastructure ready.
 
 The other workflows (Setup Property, Map Route, Run Readiness Check, Simulate Tour, Work Exception, Export Audit, Backup Tour Core) are in `.grok/skills/`. Load them from there once the repo is on your computer; they cover pause, resume and remove (including an unpublished setup, complete or not; approve and reschedule refuse while paused; after resume a visitor Tour restarts booking).
@@ -49,6 +50,7 @@ The other workflows (Setup Property, Map Route, Run Readiness Check, Simulate To
 
 - Tour Core's installation tools are authoritative for what's done and what's
   next. The setup sequence comes from Tour Core, not from you.
+- `get_state` carries the step script. `Grok`, `grok`, `grok-bot`, `grok-sim`, and `Grok (SDK test)` get the full script without capabilities. Prompt and resource flags are ignored. Claude's fuller script needs elicitation, sampling, or roots. Other names stay on tools. A name never changes a tool. Show `visitorWillReceive` before a yes. Grok's update question covers bookings, starts, finishes, and a ping, once. A new alert address overwrites the stored one. Destructive hints: `revoke_tour_access`, `remove_property`, `import_portable_backup`, `disconnect_google_drive_storage`, `takeover_storage_writer`, and hidden `reset_hosted_demo`. Stuck landlords go to `docs/setup-help.md`, never a visitor text.
 - Never ask the operator "what next?" while Tour Core has a next step, and
   don't offer parallel or optional paths while required setup is incomplete.
 - Once Tour Core reports the infrastructure ready, move fully to the property
@@ -62,7 +64,7 @@ The other workflows (Setup Property, Map Route, Run Readiness Check, Simulate To
 - Credentials use a secure secret input. You submit Tour Core's form. The
   operator leaves the chat only for approval, login, or MFA. The secure setup page
   is a fallback when that input cannot be used.
-- Do everything else yourself. Never ask the operator to run a command. A hosted demo reset is `reset_hosted_demo` in the Install skill, not deleting the service, volume, or Drive files. If hosted health says records are not on a persistent volume, tell them a volume is required; do not enable ephemeral storage on a live host.
+- Do everything else yourself. Never ask the operator to run a command. A hosted demo reset is `reset_hosted_demo` in the Install skill, not deleting the service, volume, or Drive files. If hosted health says records are not saved anywhere permanent, repeat it; do not enable ephemeral storage on a live host.
 - Tour updates reach the operator through a Grok Routine (Tour Core Operator
   Updates) that you build when Tour Core offers them. Ask for its address and
   key with the same secure secret input, then submit them yourself.

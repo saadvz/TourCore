@@ -31,7 +31,17 @@ Setup is not zero-click. Be clear about which steps need the operator.
 
 ## Components, in the order Tour Core works through them
 
-Always follow `get_next_installation_step`; this table only explains it.
+Call `get_state` first and follow its next step. `get_next_installation_step` still works; this table only explains it.
+
+`initialize` returns a short instructions pointer. `get_state` returns the playbook. The client name picks wording only. A name containing `grok` (`Grok`, `grok`, `grok-bot`, `grok-sim`, `Grok (SDK test)`) gets the full Grok playbook, including when no capabilities are sent. `prompts` and `resources` are server capabilities and are ignored. Claude is full when it reports `elicitation`, `sampling`, or `roots`, otherwise tools-only. ChatGPT and an unknown name are tools-only. The name never changes a tool or a gate. The name is stored per MCP session or signed-in caller.
+
+Before a yes on a flagged answer, read `visitorWillReceive`. It is the exact visitor text, including any closing line. The first call does not send.
+
+Grok's tour-updates ask is only: "Want me to text you when someone books, starts, or finishes a tour, and ping you the moment something needs you?" One alert address per install. A new save replaces the old one. The custom-time wake is Grok-only and uses `place` from `inspect_tour_time_request` when that field is present.
+
+Tool annotations are hints. Five tools are destructive: `revoke_tour_access`, `remove_property`, `import_portable_backup`, `disconnect_google_drive_storage`, and `takeover_storage_writer`. `reset_hosted_demo` is hidden and also marked destructive.
+
+If a step keeps failing, give the landlord the setup help link (`docs/setup-help.md`) as one plain link. Never put it in a visitor text.
 
 | Component | Operator words | Required? |
 | --- | --- | --- |
@@ -39,7 +49,7 @@ Always follow `get_next_installation_step`; this table only explains it.
 | PUBLIC_ENDPOINT | "Tour Core has a secure public connection" | before the first property |
 | GROK_OPERATOR | "Grok connection" | before the first property |
 | VISITOR_MESSAGING | "Visitor texting" | before the first property |
-| STORAGE | Hosted: "Operational records: Stored by hosted Tour Core" and "Portable backup: Google Drive connected" or "not connected". Open-source: "Tour records: Stored locally" or "Tour records: Google Drive connected" when optional direct Drive is on | before the first property. On the hosted product, Drive is a recommended backup, not a second Google approval. Declining it does not stop property setup. If `check_runtime_health` shows `persistentVolume` false on the hosted product, records are on disposable disk: tell the operator a volume must be attached. Never set the ephemeral-storage escape hatch on a live service |
+| STORAGE | Hosted: "Operational records: Stored by hosted Tour Core" and "Portable backup: Google Drive connected" or "not connected". Open-source: "Tour records: Stored locally" or "Tour records: Google Drive connected" when optional direct Drive is on | before the first property. On the hosted product, Drive is a recommended backup, not a second Google approval. Declining it does not stop property setup. If `check_runtime_health` shows `persistentVolume` false on the hosted product, records aren't saved anywhere permanent yet, so the next update could erase them. Whoever set up your Tour Core hosting needs to attach permanent storage. Until then, hold off on updating Tour Core. Never set the ephemeral-storage escape hatch on a live service |
 | ACCESS | "Access system: Demo" (later "Access system: Connected"); never name the lock provider | nothing to do |
 | PROPERTY | the first property: its address, property type, and each unit's bedrooms, bathrooms, rent and availability; it uses the installed visitor texting automatically | to publish |
 | OPERATOR_ALERTS | "Tour updates": bookings, tour starts, completions and anything that needs your attention | recommended, offered only after the first property is set up; the operator may say no |

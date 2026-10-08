@@ -2,7 +2,7 @@
 name: install-tour-core
 description: Connect an operator to Tour Core and take them from a blank setup to a published property by following Tour Core's own next steps, asking only for approvals, logins, credentials through a secure handoff, property information and decisions.
 when-to-use: "set up Tour Core", "install Tour Core", "what's left to set up", "check my Tour Core installation", "is Tour Core running", "restart Tour Core", "test alerts", "connect texting", "turn on alerts", "tour updates", "change my notifications", "reset Tour Core", "fresh demo", "fresh onboarding test"
-allowed-tools: get_installation_status get_next_installation_step get_installation_component skip_optional_setup check_runtime_health check_public_endpoint choose_messaging_provider choose_messaging_line test_visitor_messaging get_notification_preferences set_notification_preferences get_operator_update test_operator_alerts test_storage test_access get_secure_setup_url get_storage_status get_storage_location begin_google_drive_connect finish_google_drive_setup use_local_demo_storage prepare_storage_migration migrate_storage_to_google_drive verify_storage_migration activate_google_drive_storage discover_storage takeover_storage_writer disconnect_google_drive_storage confirm_backup_destination decline_portable_backup get_backup_status create_portable_backup confirm_backup_stored reset_hosted_demo
+allowed-tools: get_state get_installation_status get_next_installation_step get_installation_component skip_optional_setup check_runtime_health check_public_endpoint choose_messaging_provider choose_messaging_line test_visitor_messaging get_notification_preferences set_notification_preferences get_operator_update test_operator_alerts test_storage test_access get_secure_setup_url get_storage_status get_storage_location begin_google_drive_connect finish_google_drive_setup use_local_demo_storage prepare_storage_migration migrate_storage_to_google_drive verify_storage_migration activate_google_drive_storage discover_storage takeover_storage_writer disconnect_google_drive_storage confirm_backup_destination decline_portable_backup get_backup_status create_portable_backup confirm_backup_stored reset_hosted_demo
 argument-hint: "[what to check or connect]"
 user-invocable: true
 metadata:
@@ -13,10 +13,37 @@ metadata:
 
 # Install Tour Core
 
-Tour Core decides the order and tells you, one step at a time, through
-`get_next_installation_step`. The operator only approves, signs in, gives
+Call `get_state` first and follow its next step. Tour Core decides the order
+and tells you, one step at a time, through `get_next_installation_step` as
+well. The operator only approves, signs in, gives
 credentials through a secure handoff, gives property information and makes
 decisions.
+
+## Playbook
+
+`initialize` returns a short instructions pointer. `get_state` returns the
+playbook for this step. A client name containing `grok` gets the full Grok
+playbook, including the masked card, even when no capabilities are sent.
+`prompts` and `resources` do not pick the playbook. Those two are server
+capabilities, so a real client does not report them. Claude is full only with
+`elicitation`, `sampling`, or `roots`. ChatGPT and any other name are
+tools-only. The name never changes a tool or a gate. Tour Core remembers it
+per session or signed-in caller. Matched Grok names already used here are
+`Grok`, `grok`, `grok-bot`, `grok-sim`, and `Grok (SDK test)`.
+
+Before a flagged answer is sent, read `visitorWillReceive` and wait for a
+clear yes. That is the exact visitor text, including any closing line.
+
+Tour updates: ask only "Want me to text you when someone books, starts, or
+finishes a tour, and ping you the moment something needs you?" One alert
+address per install. A new save replaces the old one.
+
+Tool annotations are hints. Five tools are marked destructive: revoke a tour,
+remove a property, import a backup, disconnect Drive storage, and take over
+the storage writer. The hidden hosted reset is also marked destructive.
+
+If a step keeps failing, give the landlord the setup help link as one plain
+link. Never put that link in a text to a visitor.
 
 Deployment is fixed. Read `hostedTourCoreUrl` in `grok-template/template.json`
 before any start command. If that value is non-empty https and the operator
@@ -244,18 +271,12 @@ Don't ask how to text people. From here on, don't talk about infrastructure
 unless something breaks.
 
 Once the property is saved (with its unit details), Tour Core offers tour
-updates (recommended, not required):
+updates (recommended, not required). Ask only this, and do not ask a second
+question:
 
-> Your property is configured. Would you like me to keep you updated when
-> someone books, starts or finishes a tour, and alert you if something needs
-> your input?
+> Want me to text you when someone books, starts, or finishes a tour, and ping you the moment something needs you?
 
-- **Yes.** If it helps, confirm the defaults:
-
-  > I recommend alerts for bookings, tour starts, completions and anything
-  > that needs your attention. Want to use those defaults?
-
-  Call `set_notification_preferences` (`preset: recommended`, `problems-only`
+- **Yes.** Call `set_notification_preferences` (`preset: recommended`, `problems-only`
   if they only want problems, or the exact `updates` they asked for). Then:
 
   > I'm setting up your tour updates.
@@ -370,13 +391,14 @@ There is no separate owner-reset step after this.
 - If a test fails, say so plainly and follow Tour Core's next step. Don't
   improvise workarounds.
 - On the hosted product, if `check_runtime_health` (or `/healthz`) shows
-  `persistentVolume` false, live records sit on disposable disk and will be
-  lost on the next deploy. Tell the operator a volume must be attached so
-  records last. Never set, recommend, or ask anyone to set
-  `TOURCORE_ALLOW_EPHEMERAL_STORAGE` on a live service. Do not mention that
-  variable, or any other environment variable, to the operator. Say:
+  `persistentVolume` false, say Tour Core's health line as it is.
+  Whoever set up your Tour Core hosting needs to attach permanent storage. Until then, hold off on updating Tour Core.
+  Never set, recommend, or ask
+  anyone to set `TOURCORE_ALLOW_EPHEMERAL_STORAGE` on a live service. Do not
+  mention that variable, or any other environment variable, to the operator.
+  Say:
 
-  > Tour Core's records aren't on a lasting disk yet. They need a volume attached so they survive a restart.
+  > Tour Core is running, but your records aren't saved anywhere permanent yet, so the next update could erase them.
 
 ## Return
 

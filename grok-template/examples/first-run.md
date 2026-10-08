@@ -186,16 +186,9 @@ Does that look right?
 
 [`get_next_installation_step` → OFFER_OPERATOR_ALERTS]
 
-**Tour Core:** Your property is configured. Would you like me to keep you
-updated when someone books, starts or finishes a tour, and alert you if
-something needs your input?
+**Tour Core:** Want me to text you when someone books, starts, or finishes a tour, and ping you the moment something needs you?
 
 **Operator:** Sure.
-
-**Tour Core:** I recommend alerts for bookings, tour starts, completions and
-anything that needs your attention. Want to use those defaults?
-
-**Operator:** Yes.
 
 [`set_notification_preferences` preset recommended]
 
@@ -279,8 +272,8 @@ calls `get_operator_update`.]
 
 **Tour Core:** Testy's Unit 1A tour has started.
 
-[Inside, Testy texts "Is there a pool?". Tour Core replies "I'll let the
-property team know about your question." and sends `exception.created`. The
+[Inside, Testy texts "Is there a pool?". Tour Core replies "I'll pass your
+question to the property team, and they'll reply here as soon as they can." and sends `exception.created`. The
 routine calls `get_operator_update`.]
 
 **Tour Core:** Testy, touring Unit 1A, asked whether the property has a pool.

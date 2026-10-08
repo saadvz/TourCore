@@ -118,6 +118,20 @@ export class EvalSession {
     return session;
   }
 
+  /** Remembers who is connected so a later get_state picks a playbook. Not part of the click path. */
+  async initialize(input: { name?: string; capabilities?: Record<string, unknown>; omitClientInfo?: boolean } = {}): Promise<ToolResult> {
+    const params: Record<string, unknown> = { protocolVersion: "2025-06-18", capabilities: input.capabilities ?? {} };
+    if (!input.omitClientInfo) params.clientInfo = { name: input.name ?? "eval", version: "0" };
+    const res = await fetch(`http://127.0.0.1:${this.port}/mcp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ jsonrpc: "2.0", id: ++this.rpcId, method: "initialize", params }),
+    });
+    const body = (await res.json()) as { error?: { message?: string }; result?: ToolResult };
+    if (!res.ok || body.error) throw new Error(body.error?.message ?? `initialize failed (${res.status})`);
+    return body.result ?? {};
+  }
+
   async call(name: string, args: Record<string, unknown> = {}, record = this.recording): Promise<ToolResult> {
     const result = await this.rpc(name, args);
     if (record) {
