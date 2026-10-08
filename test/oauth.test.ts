@@ -166,6 +166,30 @@ async function oauthApp(options: { mcpAuth?: McpAuthMode; operatorToken?: () => 
   };
 }
 
+describe("signed-in playbook without a session id", () => {
+  it("two callers keep their own playbook when later calls omit the session id", async () => {
+    const app = await oauthApp();
+    const grok = await app.connect();
+    const other = await app.connect({ client_name: "Example" });
+    const init = async (token: string, name: string) => {
+      const res = await app.mcp(token, "initialize", {
+        protocolVersion: "2025-06-18",
+        capabilities: { elicitation: { form: {} }, sampling: {}, roots: { listChanged: true } },
+        clientInfo: { name, version: "1" },
+      });
+      expect(res.status).toBe(200);
+      expect(res.headers.get("mcp-session-id")).toBeTruthy();
+      await res.text();
+    };
+    await init(grok.tokens.access_token, "Grok");
+    await init(other.tokens.access_token, "example-client");
+    const grokState = await app.tool(grok.tokens.access_token, "get_state");
+    const otherState = await app.tool(other.tokens.access_token, "get_state");
+    expect(grokState.playbook.id).toBe("grok");
+    expect(otherState.playbook.id).toBe("baseline");
+  });
+});
+
 describe("OAuth discovery", () => {
   it("answers an unauthenticated /mcp with 401 and the protected-resource metadata address", async () => {
     const app = await oauthApp();

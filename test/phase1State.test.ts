@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { HOSTED_ADMIN_TOOLS } from "../src/install/hostedAdminTools";
-import { TEXTING_ERROR, TEXTING_KEYS_NEEDED, TEXTING_NEEDS_LINE, TEXTING_NOT_CHOSEN, TEXTING_TESTING, TEXTING_WORKING, textingSummary } from "../src/install/stateView";
+import { DISK_NOT_SAVED, TEXTING_ERROR, TEXTING_KEYS_NEEDED, TEXTING_NEEDS_LINE, TEXTING_NOT_CHOSEN, TEXTING_TEST_MODE, TEXTING_TESTING, TEXTING_WORKING, textingSummary } from "../src/install/stateView";
 import { ANNOTATION_DECISIONS_FOR_SAAD, annotationsFor } from "../src/mcp/annotations";
 import { handleMcpMessage, mcpToolList } from "../src/mcp/mcpBridge";
 import { MCP_INSTRUCTIONS } from "../src/playbooks/instructions";
@@ -125,7 +125,7 @@ describe("MCP instructions", () => {
 });
 
 describe("MCP annotations", () => {
-  it("marks reads, the three destructive tools, and explicit non-destructive writes", () => {
+  it("marks reads, the five destructive tools, and explicit non-destructive writes", () => {
     expect(OPERATOR_TOOLS).toHaveLength(84);
     expect(OPERATOR_TOOLS.some((tool) => tool.name === "get_state")).toBe(true);
     const listed = mcpToolList();
@@ -282,30 +282,58 @@ describe("realistic initialize messages", () => {
 });
 
 describe("playbook client is per session", () => {
-  it("two sessions, Grok and unknown, each get their own playbook", async () => {
-    const h = installHarness();
-    cleanups.push(h.cleanup);
-    const token = "test-operator-token-123456";
-    const server = createSetupServer({ workspace: new PropertyWorkspace(h.root), operatorToken: () => token, log: () => {} });
+  const token = "test-operator-token-123456";
+  const listen = async (root: string) => {
+    const server = createSetupServer({ workspace: new PropertyWorkspace(root), operatorToken: () => token, log: () => {} });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     cleanups.push(() => server.close());
-    const port = (server.address() as { port: number }).port;
-    const call = async (session: string, id: number, method: string, params: unknown) => {
-      const res = await fetch(`http://127.0.0.1:${port}/mcp`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "Mcp-Session-Id": session },
-        body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
-      });
-      return res.json() as Promise<{ result: { playbook?: { id: string }; structuredContent?: { playbook: { id: string; text: string } } } }>;
-    };
-    await call("session-grok", 1, "initialize", realisticInitialize("Grok", grokClientCaps).params);
-    await call("session-other", 1, "initialize", realisticInitialize("example-client", grokClientCaps).params);
-    const grok = await call("session-grok", 2, "tools/call", { name: "get_state", arguments: {} });
-    const other = await call("session-other", 3, "tools/call", { name: "get_state", arguments: {} });
-    expect(grok.result.structuredContent?.playbook.id).toBe("grok");
-    expect(grok.result.structuredContent?.playbook.text).toContain(GROK_WAKE_WITH_PLACE);
-    expect(other.result.structuredContent?.playbook.id).toBe("baseline");
-    expect(other.result.structuredContent?.playbook.text).not.toContain(GROK_WAKE_WITH_PLACE);
+    return { server, port: (server.address() as { port: number }).port };
+  };
+  const post = async (port: number, id: number, method: string, params: unknown, session?: string) => {
+    const res = await fetch(`http://127.0.0.1:${port}/mcp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(session ? { "Mcp-Session-Id": session } : {}) },
+      body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
+    });
+    const body = (await res.json()) as { error?: { code: number }; result: { structuredContent?: { playbook: { id: string; text: string } } } };
+    return { status: res.status, session: res.headers.get("mcp-session-id"), body };
+  };
+
+  it("two sessions echo the server-issued id, and each gets their own playbook", async () => {
+    const h = installHarness();
+    cleanups.push(h.cleanup);
+    const { port } = await listen(h.root);
+    const grokInit = await post(port, 1, "initialize", realisticInitialize("Grok", grokClientCaps).params);
+    const otherInit = await post(port, 1, "initialize", realisticInitialize("example-client", grokClientCaps).params);
+    expect(grokInit.status).toBe(200);
+    expect(otherInit.status).toBe(200);
+    expect(grokInit.session).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(otherInit.session).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(otherInit.session).not.toBe(grokInit.session);
+    const grok = await post(port, 2, "tools/call", { name: "get_state", arguments: {} }, grokInit.session!);
+    const other = await post(port, 3, "tools/call", { name: "get_state", arguments: {} }, otherInit.session!);
+    expect(grok.status).toBe(200);
+    expect(grok.body.result.structuredContent?.playbook.id).toBe("grok");
+    expect(grok.body.result.structuredContent?.playbook.text).toContain(GROK_WAKE_WITH_PLACE);
+    expect(other.body.result.structuredContent?.playbook.id).toBe("baseline");
+    expect(other.body.result.structuredContent?.playbook.text).not.toContain(GROK_WAKE_WITH_PLACE);
+  });
+
+  it("a stale session id after a restart still returns a playbook", async () => {
+    const h = installHarness();
+    cleanups.push(h.cleanup);
+    const first = await listen(h.root);
+    const init = await post(first.port, 1, "initialize", realisticInitialize("Grok", grokClientCaps).params);
+    expect(init.status).toBe(200);
+    expect(init.session).toBeTruthy();
+    first.server.close();
+    const second = await listen(h.root);
+    const call = await post(second.port, 2, "tools/call", { name: "get_state", arguments: {} }, init.session!);
+    expect(call.status).toBe(200);
+    expect(call.body.error).toBeUndefined();
+    expect(call.body.result.structuredContent?.playbook.id).toBeTruthy();
+    expect(call.body.result.structuredContent?.playbook.text.length).toBeGreaterThan(0);
+    expect(call.session).toBe(init.session);
   });
 });
 
@@ -319,6 +347,8 @@ describe("texting summaries", () => {
     expect(textingSummary({ state: "ACTION_REQUIRED", next: { action: "TEST_VISITOR_MESSAGING" } })).toBe(TEXTING_TESTING);
     expect(textingSummary({ state: "ACTION_REQUIRED", next: { action: "RECONNECT_VISITOR_MESSAGING" } })).toBe(TEXTING_TESTING);
     expect(textingSummary({ state: "READY", next: undefined })).toBe(TEXTING_WORKING);
+    expect(textingSummary({ state: "READY", provider: "local" })).toBe(TEXTING_TEST_MODE);
+    expect(textingSummary({ state: "READY", provider: "sendblue" })).toBe(TEXTING_WORKING);
     expect(textingSummary({ state: "ERROR" })).toBe(TEXTING_ERROR);
     const joined = [TEXTING_NOT_CHOSEN, TEXTING_KEYS_NEEDED, TEXTING_NEEDS_LINE, TEXTING_TESTING, TEXTING_WORKING, TEXTING_ERROR].join("\n");
     expect(joined).not.toMatch(/sendblue|twilio|photon/i);
@@ -330,12 +360,47 @@ describe("texting summaries", () => {
     const state = await h.ok("get_state");
     expect(state.texting.summary).toBe(TEXTING_NOT_CHOSEN);
   });
+
+  it("a local test install says texts won't reach real phones", async () => {
+    const h = installHarness();
+    cleanups.push(h.cleanup);
+    h.inst.files.ensure({ deploymentMode: "GROK_MANAGED_P0" });
+    h.inst.files.setPublicBaseUrl("https://example.test", "MANUAL");
+    await h.ok("choose_messaging_provider", { provider: "local" });
+    await h.ok("test_visitor_messaging");
+    const state = await h.ok("get_state");
+    expect(state.texting.summary).toBe(TEXTING_TEST_MODE);
+    expect(state.texting.summary).not.toBe("Texting is working.");
+  });
 });
 
 describe("setup help", () => {
   it("matches the public page, ends with the contact placeholder, and stays out of visitor copy", () => {
     const page = readFileSync(join("docs", "setup-help.md"), "utf8");
     expect(page).toBe(SETUP_HELP_PAGE);
+    expect(page.startsWith("# Setup help\n\n")).toBe(true);
+    const lines = page.split("\n");
+    const headings = lines.filter((line) => line.startsWith("## "));
+    expect(headings).toHaveLength(20);
+    expect(headings).toContain("## Your records aren't saved anywhere permanent yet");
+    for (let i = 0; i < lines.length; i++) {
+      if (!lines[i]?.startsWith("## ")) continue;
+      expect(lines[i + 1]).toBe("");
+      expect(lines[i + 2]?.length).toBeGreaterThan(0);
+      expect(lines[i + 3]).toBe("");
+      expect(lines[i + 4]?.length).toBeGreaterThan(0);
+    }
+    expect(page).toContain(DISK_NOT_SAVED);
+    expect(page).toContain("This one needs the person who runs your Tour Core. Reach them using the contact at the bottom of this page.");
+    expect(page).toContain("Nothing went live, so it's safe to say yes again.");
+    expect(page).toContain("Pick again from the list you are shown. If there's nothing to pick from, reach a person below.");
+    expect(page).not.toMatch(/lasting disk/);
+    expect(SETUP_HELP_ENDING.endsWith(SETUP_HELP_URL)).toBe(true);
+    expect(SETUP_HELP_ENDING.endsWith(".")).toBe(false);
+    for (const step of Object.values(SHARED_STEPS)) {
+      expect(step.ifItFails.endsWith(SETUP_HELP_URL)).toBe(true);
+      expect(step.ifItFails.includes(`${SETUP_HELP_URL}.`)).toBe(false);
+    }
     expect(page.trimEnd().split("\n").at(-1)).toBe(SETUP_HELP_CONTACT);
     expect(page).not.toMatch(/sendblue|twilio|photon|durin|main home/i);
     expect(SETUP_HELP_URL).toBe("https://github.com/saadvz/TourCore/blob/master/docs/setup-help.md");
@@ -365,6 +430,10 @@ describe("setup help", () => {
     }
     expect(readFileSync("README.md", "utf8")).toContain("revoke_tour_access");
     expect(readFileSync("GROK_BOOTSTRAP.md", "utf8")).toContain("revoke_tour_access");
+    const prefs = OPERATOR_TOOLS.find((tool) => tool.name === "set_notification_preferences");
+    expect(prefs?.description).toContain(SHARED_STEPS.alerts.ask);
+    expect(prefs?.description).not.toContain(GROK_ALERTS_SAY);
+    expect(prefs?.description).not.toContain("Would you like me to keep you updated");
     const inspect = OPERATOR_TOOLS.find((tool) => tool.name === "inspect_tour_time_request");
     expect(inspect?.description).toContain("place");
     expect(inspect?.description).toContain("never Main Home");

@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { OPERATOR_MESSAGES } from "../src/install/status";
+import { getInstallationStatus, OPERATOR_MESSAGES } from "../src/install/status";
+import { GROK_ALERTS_SAY } from "../src/playbooks/grok";
+import { SHARED_STEPS } from "../src/playbooks/shared";
 import { installHarness, ROUTINE_KEY, ROUTINE_URL, SB_KEY, SB_SECRET, type InstallHarness } from "./installHarness";
 
 /**
@@ -158,6 +160,20 @@ describe("Tour Core owns the onboarding order", () => {
     expect(offer.grokInstructions).toMatch(/Prefer Grok's secure secret input/);
     expect(offer.grokInstructions).toMatch(/Hand the browser to the operator only when secure fill isn't available/);
     expect((await h.component("OPERATOR_ALERTS")).requirement).toBe("RECOMMENDED");
+  });
+
+  it("uses the client's spoken alerts question, and keeps the pinned line when no client is known", async () => {
+    const h = harness();
+    infraReady(h);
+    await h.setUpAlfredWay();
+    const grok = getInstallationStatus(h.inst, h.services, { client: { name: "Grok" } });
+    expect(grok.nextStep.operatorMessage).toBe(GROK_ALERTS_SAY);
+    const claude = getInstallationStatus(h.inst, h.services, { client: { name: "claude-ai", capabilities: { sampling: {} } } });
+    expect(claude.nextStep.operatorMessage).toBe(SHARED_STEPS.alerts.ask);
+    const chatgpt = getInstallationStatus(h.inst, h.services, { client: { name: "ChatGPT" } });
+    expect(chatgpt.nextStep.operatorMessage).toBe(SHARED_STEPS.alerts.ask);
+    const none = getInstallationStatus(h.inst, h.services);
+    expect(none.nextStep.operatorMessage).toBe(OPERATOR_MESSAGES.offerAlerts);
   });
 
   it("declining alerts moves straight on to the automatic readiness check; required components can't be skipped", async () => {

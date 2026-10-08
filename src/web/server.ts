@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
@@ -338,10 +339,11 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
     const value = (Array.isArray(raw) ? raw[0] : raw)?.trim();
     return value || undefined;
   };
-  const playbookKey = (sessionId: string | undefined, caller?: { clientId?: string }) => {
-    if (sessionId) return `session:${sessionId}`;
-    if (caller?.clientId) return `caller:${caller.clientId}`;
-    return "static";
+  const fallbackKey = (caller?: { clientId?: string }) => (caller?.clientId ? `caller:${caller.clientId}` : "static");
+  const sessionKey = (id: string) => `session:${id}`;
+  const isInitialize = (message: unknown): boolean => {
+    if (Array.isArray(message)) return message.some((item) => isInitialize(item));
+    return !!message && typeof message === "object" && (message as { method?: unknown }).method === "initialize";
   };
   const tools: ToolContext = {
     services: api,
@@ -485,11 +487,31 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         }
         const seen = reportedClientFromInitialize(message);
         const incomingSession = sessionHeader(req);
-        const key = playbookKey(incomingSession, caller);
-        if (seen) playbookClients.set(key, seen);
+        const initializing = isInitialize(message);
+        const knownSession = !!(incomingSession && playbookClients.has(sessionKey(incomingSession)));
+        // A session id is optional. Initialize hands one out. A later request that
+        // omits it, or sends one this process has never seen (a redeploy), uses the
+        // signed-in caller or the static token. An unknown id is never an error.
+        let responseSession: string | undefined;
+        let key: string;
+        if (initializing) {
+          responseSession = incomingSession ?? randomUUID();
+          key = sessionKey(responseSession);
+        } else if (knownSession && incomingSession) {
+          responseSession = incomingSession;
+          key = sessionKey(incomingSession);
+        } else {
+          key = fallbackKey(caller);
+          if (incomingSession) responseSession = incomingSession;
+        }
+        if (seen) {
+          playbookClients.set(key, seen);
+          if (initializing) playbookClients.set(fallbackKey(caller), seen);
+        }
         const reportedClient = seen ?? playbookClients.get(key);
+        if (!initializing && incomingSession && !knownSession && reportedClient) playbookClients.set(sessionKey(incomingSession), reportedClient);
         const reply = await handleMcpMessage({ ...tools, ...(caller ? { caller } : {}), ...(reportedClient ? { client: reportedClient } : {}) }, message);
-        const sessionHeaders: Record<string, string> = incomingSession ? { "Mcp-Session-Id": incomingSession } : {};
+        const sessionHeaders: Record<string, string> = responseSession ? { "Mcp-Session-Id": responseSession } : {};
         if (reply.body === undefined) {
           res.writeHead(reply.status, { "Cache-Control": "no-store", ...sessionHeaders });
           return res.end();

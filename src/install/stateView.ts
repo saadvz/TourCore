@@ -194,11 +194,12 @@ function focusStep(milestones: ReturnType<typeof milestonesFor>, action: string,
   return "publish";
 }
 
+/** Landlord status when hosted records are not on a lasting volume. No help-page ending. */
+export const DISK_NOT_SAVED = "Tour Core is running, but your records aren't saved anywhere permanent yet, so the next update could erase them.";
+
 function healthLine(inst: Installation, status: InstallationStatus): string {
   if (component(status, "RUNTIME")?.state !== "READY") return `Tour Core isn't running right now. I'll try again. ${SETUP_HELP_ENDING}`;
-  if (isHostedRailway(status.deploymentMode) && storageVolumeHealth(inst.options.root).persistentVolume === false) {
-    return `Tour Core is running, but records need a lasting disk or they can disappear on the next update. ${SETUP_HELP_ENDING}`;
-  }
+  if (isHostedRailway(status.deploymentMode) && storageVolumeHealth(inst.options.root).persistentVolume === false) return DISK_NOT_SAVED;
   return "Tour Core is running.";
 }
 
@@ -227,16 +228,18 @@ function alertsLine(status: InstallationStatus): string {
   return /webhook|routine|grok|http/i.test(summary) ? "Tour updates aren't turned on yet." : summary;
 }
 
-export const TEXTING_NOT_CHOSEN = "Texting isn't chosen yet.";
+export const TEXTING_NOT_CHOSEN = "Texting isn't set up yet.";
 export const TEXTING_KEYS_NEEDED = "Texting needs a login before it can connect.";
 export const TEXTING_NEEDS_LINE = "Texting is connected. Choose the number people should text.";
 export const TEXTING_TESTING = "A number is saved. Texting still needs a check.";
 export const TEXTING_WORKING = "Texting is working.";
-export const TEXTING_ERROR = "Texting isn't working yet.";
+export const TEXTING_TEST_MODE = "Texting is in test mode, so texts won't reach real phones yet.";
+export const TEXTING_ERROR = "Texting isn't working right now.";
 
 /** Plain texting line for the landlord. Ignores provider names in the raw summary. */
-export function textingSummary(part: { state?: string; next?: { action?: string } } | undefined): string {
+export function textingSummary(part: { state?: string; provider?: string; next?: { action?: string } } | undefined): string {
   if (!part) return TEXTING_NOT_CHOSEN;
+  if (part.state === "READY" && part.provider === "local") return TEXTING_TEST_MODE;
   if (part.state === "READY") return TEXTING_WORKING;
   if (part.state === "ERROR") return TEXTING_ERROR;
   const action = part.next?.action;

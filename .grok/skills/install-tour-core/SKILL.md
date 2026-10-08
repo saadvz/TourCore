@@ -391,13 +391,13 @@ There is no separate owner-reset step after this.
 - If a test fails, say so plainly and follow Tour Core's next step. Don't
   improvise workarounds.
 - On the hosted product, if `check_runtime_health` (or `/healthz`) shows
-  `persistentVolume` false, live records sit on disposable disk and will be
-  lost on the next deploy. Tell the operator a volume must be attached so
-  records last. Never set, recommend, or ask anyone to set
-  `TOURCORE_ALLOW_EPHEMERAL_STORAGE` on a live service. Do not mention that
-  variable, or any other environment variable, to the operator. Say:
+  `persistentVolume` false, say Tour Core's health line as it is. This one
+  needs the person who runs your Tour Core. Never set, recommend, or ask
+  anyone to set `TOURCORE_ALLOW_EPHEMERAL_STORAGE` on a live service. Do not
+  mention that variable, or any other environment variable, to the operator.
+  Say:
 
-  > Tour Core's records aren't on a lasting disk yet. They need a volume attached so they survive a restart.
+  > Tour Core is running, but your records aren't saved anywhere permanent yet, so the next update could erase them.
 
 ## Return
 

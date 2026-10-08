@@ -1,4 +1,6 @@
 import { nextProfileQuestion } from "../config/unitProfile";
+import { spokenAsk } from "../playbooks/compose";
+import type { ReportedClient } from "../playbooks/select";
 import { visitorHelpQuestion } from "../setup/setupActions";
 import { mcpAuthModeFromEnv } from "../mcp/authMode";
 import { MCP_PATH } from "../mcp/paths";
@@ -213,6 +215,8 @@ export interface StatusOptions {
    * texting choice, and the disk probe. Existing tools leave this unset.
    */
   readOnly?: boolean;
+  /** When set, the alerts offer uses that client's spoken question. With no client, the pinned offer stays. */
+  client?: ReportedClient;
 }
 
 const BOOTSTRAP = "npm run bootstrap:grok";
@@ -652,14 +656,15 @@ function propertyStatus(services: OperatorServices, installed: InstalledMessagin
   return { ready: true, name, status: component("PROPERTY", "READY", `${name} is set up.`) };
 }
 
-function alertsStatus(inst: Installation, propertyReady: boolean): ComponentStatus {
+function alertsStatus(inst: Installation, propertyReady: boolean, client?: ReportedClient): ComponentStatus {
   const env = inst.env();
   const configured = !!env.TOURCORE_GROK_ROUTINE_URL?.trim() && !!env.TOURCORE_GROK_ROUTINE_KEY?.trim();
   const state = inst.files.state();
   const skipped = state.skipped?.OPERATOR_ALERTS;
   const connect = (operatorMessage: string, action: InstallationAction = "CONNECT_OPERATOR_ALERTS", performedBy: PerformedBy = "OPERATOR_IN_SECURE_SETUP") =>
     step("OPERATOR_ALERTS", action, performedBy, operatorMessage, { tool: "get_secure_setup_url", secureSetupStep: "operator-alerts", grokInstructions: ROUTINE_SETUP });
-  const offer = step("OPERATOR_ALERTS", "OFFER_OPERATOR_ALERTS", "OPERATOR_DECISION", OPERATOR_MESSAGES.offerAlerts, {
+  const offerMessage = client ? spokenAsk(client, "alerts") : OPERATOR_MESSAGES.offerAlerts;
+  const offer = step("OPERATOR_ALERTS", "OFFER_OPERATOR_ALERTS", "OPERATOR_DECISION", offerMessage, {
     tool: "set_notification_preferences",
     secureSetupStep: "operator-alerts",
     grokInstructions:
@@ -775,7 +780,7 @@ export function getInstallationStatus(inst: Installation, services: OperatorServ
     ...infra,
     // Nothing on the property path is offered until the infrastructure is ready.
     infrastructureReady ? property.status : component("PROPERTY", property.ready ? "READY" : "NOT_CONFIGURED", property.ready ? property.status.summary : "Set up once Tour Core is connected and tested."),
-    alertsStatus(inst, infrastructureReady && property.ready),
+    alertsStatus(inst, infrastructureReady && property.ready, options.client),
     ...validationStatuses(services, infrastructureReady && property.ready, installed),
   ];
   const alertsOn = components.find((c) => c.component === "OPERATOR_ALERTS")!.state === "READY";
