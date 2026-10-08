@@ -39,7 +39,7 @@ Before a yes on a flagged answer, read `visitorWillReceive`. It is the exact vis
 
 Grok's tour-updates ask is only: "Want me to text you when someone books, starts, or finishes a tour, and ping you the moment something needs you?" One alert address per install. A new save replaces the old one. The custom-time wake is Grok-only and uses `place` from `inspect_tour_time_request` when that field is present.
 
-Tool annotations are hints. Five tools are destructive: `revoke_tour_access`, `remove_property`, `import_portable_backup`, `disconnect_google_drive_storage`, and `takeover_storage_writer`. `reset_hosted_demo` is hidden and also marked destructive. Day-to-day writes marked destructive are `cancel_tour` and `restore_records`, plus the existing `remove_property`. `revoke_tour_access` and `import_portable_backup` stay destructive.
+Tool annotations are hints. Seven tools are destructive: `revoke_tour_access`, `remove_property`, `import_portable_backup`, `disconnect_google_drive_storage`, `takeover_storage_writer`, `cancel_tour`, and `restore_records`. `reset_hosted_demo` is hidden and also marked destructive. Day-to-day writes marked destructive are `cancel_tour` and `restore_records`, plus the existing `remove_property`. `revoke_tour_access` and `import_portable_backup` stay destructive.
 
 If a step keeps failing, give the landlord the setup help link (`docs/setup-help.md`) as one plain link. Never put it in a visitor text.
 

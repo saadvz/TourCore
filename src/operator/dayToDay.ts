@@ -68,7 +68,7 @@ function blockedOf(err: unknown): { message: string; code: string } | undefined 
   if (err instanceof PortableBackupError) return { message: err.message, code: "BACKUP_FAILED" };
   if (err instanceof UnavailableModeError) return { message: err.message, code: "UNAVAILABLE" };
   if (err instanceof InvalidTransitionError) {
-    return { message: "That tour can't make that change from where it is now. Nothing was changed.", code: "INVALID_TRANSITION" };
+    return { message: "I can't make that change to this tour right now. Nothing was changed.", code: "INVALID_TRANSITION" };
   }
   return undefined;
 }
@@ -201,9 +201,9 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
       const propertyId = propertyIdOf(ctx, i.property);
       return attemptWrite(ctx, propertyId, async () => {
         const moving = !!(i.tourRef || i.reservationId || i.visitor);
-        if (i.phone && moving) throw new SetupInputError("TOUR_UNCLEAR", "Say whether to book a new tour or move one they already have.");
+        if (i.phone && moving) throw new SetupInputError("TOUR_UNCLEAR", "Should I book a new tour, or move one they already have?");
         if (i.phone) {
-          if (!i.unit || !i.startsAt) throw new SetupInputError("TOUR_UNCLEAR", "A new tour needs their phone, the unit, and the time.");
+          if (!i.unit || !i.startsAt) throw new SetupInputError("TOUR_UNCLEAR", "To book a new tour, I need their phone number, the unit, and the time.");
           return scheduleOneOffTour(ctx, {
             property: i.property,
             phone: i.phone,
@@ -215,7 +215,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
           });
         }
         const when = i.newStartsAt ?? i.startsAt;
-        if (!moving || !when) throw new SetupInputError("TOUR_UNCLEAR", "Say who the tour is for, or which tour to move.");
+        if (!moving || !when) throw new SetupInputError("TOUR_UNCLEAR", "Who's the tour for, or which tour should I move?");
         return rescheduleTour(ctx, {
           tourRef: i.tourRef,
           reservationId: i.reservationId,
@@ -280,7 +280,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
         const target = await describeChangeTarget(ctx.services, i.tourRef, change);
         const fingerprint = reservationFingerprint(target.reservation);
         const action = i.hold === "on" ? "hold" : "resume";
-        if (i.hold === "on" && !i.reason) throw new SetupInputError("REASON_MISSING", "Say why this tour should be on hold.");
+        if (i.hold === "on" && !i.reason) throw new SetupInputError("REASON_MISSING", "Why should I put this tour on hold?");
         if (!i.confirmationCode) {
           const question =
             i.hold === "on"
@@ -366,7 +366,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
           });
         }
         if (i.action === "decline") return declineTourTimeRequest(ctx, { tourTimeRequestId: i.tourTimeRequestId, note: i.note });
-        if (!i.newStartsAt) throw new SetupInputError("TIME_UNCLEAR", "Say the time to offer.");
+        if (!i.newStartsAt) throw new SetupInputError("TIME_UNCLEAR", "What time should I offer them?");
         return proposeTourTime(ctx, { tourTimeRequestId: i.tourTimeRequestId, newStartsAt: i.newStartsAt });
       }),
   }),
@@ -424,7 +424,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
   tool({
     name: "export_records",
     title: "Export records",
-    kind: "read",
+    kind: "change",
     description:
       'A day\'s audit export, or a readable export when kind is readable. Day is "today" (default) or YYYY-MM-DD. Every landlord can export. A readable export is for people to read. It is not a backup.',
     input: z.strictObject({
@@ -436,7 +436,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
       if (i.kind === "readable") return installationOf(ctx).backups.createExport();
       const id = resolvePropertyId(ctx.services.workspace, i.property);
       const day = !i.day || i.day.trim().toLowerCase() === "today" ? undefined : parseLocalDate(i.day);
-      if (i.day && i.day.trim().toLowerCase() !== "today" && !day) throw new SetupInputError("DAY_UNREADABLE", 'Use "today" or a date like 2026-09-28.');
+      if (i.day && i.day.trim().toLowerCase() !== "today" && !day) throw new SetupInputError("DAY_UNREADABLE", "Which day? Say today or a date like Sept 28.");
       const out = await exportAudit(ctx.services, id, { day, now: ctx.now() });
       const s = out.summary;
       return {
@@ -471,7 +471,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
         if (i.action === "decline") return backups.decline();
         if (i.action === "create") return backups.create(i.reason);
         if (i.action === "confirm_destination") {
-          if (!i.provider || !i.folderName) throw new SetupInputError("DESTINATION_MISSING", "Name the Tour Core folder in Google Drive.");
+          if (!i.provider || !i.folderName) throw new SetupInputError("DESTINATION_MISSING", "What should the backup folder be called?");
           return backups.confirmDestination({ provider: i.provider, folderName: i.folderName, accountLabel: i.accountLabel });
         }
         if (!i.fileName || !i.checksum) throw new SetupInputError("BACKUP_MISMATCH", "That doesn't match the backup Tour Core created. Nothing was marked as stored.");
@@ -494,7 +494,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
       attemptWrite(ctx, undefined, async () => {
         const backups = installationOf(ctx).backups;
         if (i.action === "upload") return backups.beginRestore();
-        if (!i.uploadId) throw new SetupInputError("UPLOAD_MISSING", "Start an upload first, then preview that file.");
+        if (!i.uploadId) throw new SetupInputError("UPLOAD_MISSING", "Upload the backup file first, then I can show you what's in it.");
         if (i.action === "preview") return backups.preview(i.uploadId);
         const preview = backups.preview(i.uploadId);
         if (preview.replaceRequired && i.recovery !== "replace") {

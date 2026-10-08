@@ -41,6 +41,19 @@ export const OLD_DAY_TO_DAY_TOOLS = [
 const FORBIDDEN = new Set<string>(OLD_DAY_TO_DAY_TOOLS);
 const TODAY = formatLocalDate({ year: 2026, month: 9, day: 28 }, "America/New_York");
 
+/** The golden-task wrapper. An older day-to-day tool throws before the session runs. */
+export function goldenDayToDayCall(
+  session: Pick<EvalSession, "call">,
+  calls: Array<{ tool: string; args: Record<string, unknown> }>,
+): (name: string, args?: Record<string, unknown>) => Promise<ToolResult> {
+  return async (name, args = {}) => {
+    if (FORBIDDEN.has(name)) throw new Error(`old day-to-day tool ${name} is forbidden`);
+    const result = await session.call(name, args, false);
+    calls.push({ tool: name, args });
+    return result;
+  };
+}
+
 export interface DayToDayTaskTrace {
   id: string;
   tools: string[];
@@ -61,12 +74,7 @@ export async function runDayToDayGolden(session: EvalSession): Promise<{ tasks: 
     const prompt = prompts.find((item) => item.id === id);
     if (!prompt) throw new Error(`missing golden prompt ${id}`);
     const calls: Array<{ tool: string; args: Record<string, unknown> }> = [];
-    const call = async (name: string, args: Record<string, unknown> = {}) => {
-      if (FORBIDDEN.has(name)) throw new Error(`old day-to-day tool ${name} is forbidden`);
-      const result = await session.call(name, args, false);
-      calls.push({ tool: name, args });
-      return result;
-    };
+    const call = goldenDayToDayCall(session, calls);
     try {
       const detail = await body(call);
       traces.push({ id, tools: calls.map((item) => item.tool), calls });

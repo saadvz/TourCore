@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { OLD_DAY_TO_DAY_TOOLS, runDayToDayGolden } from "../../src/eval/dayToDayGolden";
+import { OLD_DAY_TO_DAY_TOOLS, goldenDayToDayCall, runDayToDayGolden } from "../../src/eval/dayToDayGolden";
 import { EvalSession } from "../../src/eval/session";
 
 describe("day-to-day golden tasks", () => {
@@ -24,4 +24,18 @@ describe("day-to-day golden tasks", () => {
       await session.close();
     }
   }, 120_000);
+
+  it("throws when the golden wrapper is asked to call an old day-to-day tool", async () => {
+    const session = {
+      call: async () => {
+        throw new Error("session should not run");
+      },
+    };
+    for (const name of OLD_DAY_TO_DAY_TOOLS) {
+      const calls: Array<{ tool: string; args: Record<string, unknown> }> = [];
+      const call = goldenDayToDayCall(session, calls);
+      await expect(call(name)).rejects.toThrow(`old day-to-day tool ${name} is forbidden`);
+      expect(calls).toEqual([]);
+    }
+  });
 });

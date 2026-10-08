@@ -247,7 +247,7 @@ export function setPropertyDetails(
     const city = titleCasePlace(input.city);
     if (!city) throw new SetupInputError("CITY_MISSING", "What city should I use?");
     const current = next.property.canonicalAddress ?? parseUsAddress(next.property.address)?.address;
-    if (!current?.street || !current.state) throw new SetupInputError("ADDRESS_INCOMPLETE", "I still need the street and state before a city.");
+    if (!current?.street || !current.state) throw new SetupInputError("ADDRESS_INCOMPLETE", "I need the street and state first. What's the full address?");
     const canonicalAddress = {
       ...current,
       city,
