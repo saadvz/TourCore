@@ -21,12 +21,19 @@ interface HandoffRecord {
   bodyFile?: boolean;
   bytes?: number;
   consumed?: boolean;
+  /** Set once an upload link has expired, so a later preview still explains it. */
+  expired?: boolean;
+  /** Keep the expired explanation this long, then drop the record. */
+  tombstoneUntil?: number;
 }
+
+/** How long an expired upload keeps the timed-out explanation. */
+const TOMBSTONE_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Preview or import was asked before the backup file was stored. */
 export const UPLOAD_BACKUP_FIRST = "Upload the backup file first, then I can show you what's in it.";
 
-/** The upload link expired before a file arrived. */
+/** Every expired upload, including a second look and a file that arrived before the link expired. */
 export const UPLOAD_TIMED_OUT = "That upload timed out. Send me the backup file again and I'll check it.";
 
 export class HandoffError extends Error {
@@ -74,9 +81,24 @@ export class HandoffStore {
       if (!name.endsWith(".json")) continue;
       try {
         const record = JSON.parse(readFileSync(join(dir, name), "utf8")) as HandoffRecord;
-        if (record.expiresAt <= now || record.consumed) {
+        if (record.consumed) {
           rmSync(join(dir, name), { force: true });
           rmSync(join(dir, `${name.slice(0, -".json".length)}.body`), { force: true });
+          continue;
+        }
+        if (record.expired) {
+          if ((record.tombstoneUntil ?? 0) <= now) {
+            rmSync(join(dir, name), { force: true });
+            rmSync(join(dir, `${name.slice(0, -".json".length)}.body`), { force: true });
+          }
+          continue;
+        }
+        if (record.expiresAt <= now) {
+          if (record.kind === "upload") this.writeTombstone(join(dir, name), record);
+          else {
+            rmSync(join(dir, name), { force: true });
+            rmSync(join(dir, `${name.slice(0, -".json".length)}.body`), { force: true });
+          }
         }
       } catch {
         rmSync(join(dir, name), { force: true });
@@ -166,12 +188,12 @@ export class HandoffStore {
   }
 
   readUpload(id: string): string {
-    const peeked = this.read(id);
-    const expiredBeforeFile = peeked?.kind === "upload" && !peeked.consumed && peeked.expiresAt <= this.now() && !peeked.body && !peeked.bodyFile;
     this.sweep();
-    if (expiredBeforeFile) throw new HandoffError(UPLOAD_TIMED_OUT);
     const record = this.read(id);
-    if (!record || record.kind !== "upload" || record.expiresAt <= this.now() || (!record.body && !record.bodyFile)) {
+    if (record?.kind === "upload" && (record.expired || record.expiresAt <= this.now())) {
+      throw new HandoffError(UPLOAD_TIMED_OUT);
+    }
+    if (!record || record.kind !== "upload" || (!record.body && !record.bodyFile)) {
       throw new HandoffError(UPLOAD_BACKUP_FIRST);
     }
     if (record.bodyFile) {
@@ -184,6 +206,22 @@ export class HandoffStore {
 
   consumeUpload(id: string): void {
     this.discard(id);
+  }
+
+  /** Drops the file and keeps a small expired record so the timed-out line still shows. */
+  private writeTombstone(path: string, record: HandoffRecord): void {
+    const id = path.slice(path.lastIndexOf("/") + 1, -".json".length);
+    rmSync(this.bodyPath(id), { force: true });
+    const now = this.now();
+    writeJsonAtomic(path, {
+      schemaVersion: 1 as const,
+      kind: "upload" as const,
+      tokenHash: record.tokenHash,
+      expiresAt: record.expiresAt,
+      createdAt: record.createdAt,
+      expired: true,
+      tombstoneUntil: now + TOMBSTONE_MS,
+    });
   }
 
   private bodyPath(id: string): string {

@@ -49,7 +49,7 @@ capability download. Grok uploads that file to `Tour Core/Backups` and then
 calls `confirm_backup_stored`. Until that call, Tour Core does not say the
 file is in Drive.
 
-On an installation whose records live in Google Drive (`GOOGLE_DRIVE_READY`), `export_records` day exports are written with the records and copied into Drive automatically by the save step. On a hosted installation (`HOSTED_VOLUME`, Drive used only for backups), day exports stay on the server as download links. Only readable exports and backups come back as one-time links for the assistant to save into the Tour Core folder in Drive. A readable export is not a backup.
+On an installation whose records live in Google Drive (`GOOGLE_DRIVE_READY`), the day's `audit-export.json` is written with the records and copied into Drive by the save step. The CSV stays on the Tour Core computer. On a hosted installation (`HOSTED_VOLUME`, Drive used only for backups), day exports stay on the server as 30-minute download links that can be used until they expire. Only readable exports and backups come back as one-time links for the assistant to save into the Tour Core folder in Drive. A readable export is not a backup. Door access in a day export is only what was issued or used that day.
 
 ## Portable snapshot
 
@@ -86,10 +86,9 @@ reconnected after a restore.
 ## Restore
 
 Grok downloads the latest backup and uploads it through a short-lived
-capability (`POST` to the restore handoff, not a page). Tour Core accepts a
-backup up to 50 MB (`TOURCORE_RESTORE_UPLOAD_MAX_BYTES`). The bytes are written
+capability (`POST` to the restore handoff, not a page). A backup up to 50 MB is accepted. The bytes are written
 to a file as they arrive. An upload over that cap returns 413 with a plain
-message that states the cap, which Grok can relay. Tour Core validates the
+message that states the cap, which Grok can relay. An older ID check is named in the import summary: it now uses the basic identity form, and the landlord can ask for no form. Tour Core validates the
 file, shows a plain preview, and waits for an explicit yes. Receiving the file
 does not change live records.
 

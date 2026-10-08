@@ -298,113 +298,43 @@ function dayMenuWeekday(): RegExp {
 }
 
 /**
- * Words that can sit beside a weekday when the visitor is actually choosing
- * that day ("Friday", "friday please", "how about Friday?", "can I do Friday").
- * Times, numbers, ordinals, months, and dates are removed before this check.
- * A leftover word such as "sale", "busy", or "parking" means the day word is
- * only mentioned.
+ * A weekday message is a day pick unless it is a question about something
+ * else (parking, pets, a sale). Availability phrasing opens that day even
+ * when the extra words are not a fixed list.
  */
-const DAY_PICK_WORDS = new Set([
+const NON_SCHEDULING_TOPIC =
+  /\b(parking|park|garage|laundry|washer|dryer|pets?|dogs?|cats?|gym|pool|rent|price|cost|deposit|utilities|wifi|internet|ac|heat|heating|bedrooms?|bathrooms?|beds?|baths?|sq ?ft|square feet|size|storage|elevator|floor|lease|move in|amenities|appliances|dishwasher|balcony|view|furnished|sale|nearby|busy)\b/;
+
+const SCHEDULING_ASK =
+  /\b(open|opens|opening|openings|free|available|availability|full|slots?|spots?|come|coming|tour|tours|visit|visits|showing|work|works|afternoon|morning|evening|possible|possibility|chance|doable|fit|option|options|happen|swing|hoping|trying|looking|window|good|book|booked)\b|\bget in\b|\ba go\b|\banything left\b/;
+
+/** Words that can sit beside a day without turning it into another topic. */
+const FUNCTION_WORDS = new Set([
   "a",
   "about",
-  "after",
-  "afternoon",
-  "am",
   "an",
   "and",
-  "any",
-  "anything",
-  "are",
   "at",
-  "availability",
-  "available",
-  "before",
-  "book",
-  "booked",
-  "but",
   "can",
-  "change",
-  "come",
-  "coming",
   "could",
-  "day",
-  "days",
-  "did",
   "do",
-  "does",
-  "else",
-  "evening",
-  "fine",
   "for",
-  "free",
-  "full",
-  "good",
-  "got",
-  "great",
-  "has",
-  "have",
-  "hmm",
   "how",
   "i",
-  "instead",
   "is",
   "it",
-  "left",
-  "let",
-  "like",
-  "make",
   "me",
-  "morning",
-  "move",
   "my",
-  "next",
-  "night",
-  "noon",
-  "not",
   "of",
+  "on",
   "ok",
   "okay",
-  "on",
-  "one",
-  "open",
-  "opening",
-  "openings",
-  "or",
-  "our",
-  "perfect",
   "please",
-  "reschedule",
-  "schedule",
-  "see",
-  "showing",
-  "slot",
-  "slots",
-  "sounds",
-  "spot",
-  "spots",
-  "still",
-  "sure",
-  "thanks",
-  "thank",
   "the",
-  "there",
   "this",
-  "time",
-  "times",
   "to",
-  "tour",
-  "uh",
-  "um",
-  "us",
-  "visit",
-  "want",
   "we",
-  "week",
   "what",
-  "which",
-  "will",
-  "work",
-  "works",
   "would",
   "yeah",
   "yep",
@@ -412,7 +342,33 @@ const DAY_PICK_WORDS = new Set([
   "you",
   "your",
   "yup",
+  "just",
+  "maybe",
+  "uh",
+  "um",
+  "hmm",
+  "next",
 ]);
+
+const WEEKDAY_TOKEN: Record<string, "SUN" | "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT"> = {
+  sunday: "SUN",
+  sun: "SUN",
+  monday: "MON",
+  mon: "MON",
+  tuesday: "TUE",
+  tues: "TUE",
+  tue: "TUE",
+  wednesday: "WED",
+  wed: "WED",
+  thursday: "THU",
+  thurs: "THU",
+  thur: "THU",
+  thu: "THU",
+  friday: "FRI",
+  fri: "FRI",
+  saturday: "SAT",
+  sat: "SAT",
+};
 
 /** A clock, month, ordinal, or number beside a weekday ("Friday at 2", "Fri 3:30", "Friday Oct 2", "the 2nd"). */
 function stripScheduleTokens(t: string): string {
@@ -428,26 +384,32 @@ function dayPickRest(t: string): string[] {
   return stripScheduleTokens(t).split(/\s+/).filter(Boolean);
 }
 
-/** True when the weekday is the pick, not a word inside some other message. A clock alone is not a day. */
-function isDayPickPhrase(t: string): boolean {
-  if (!dayMenuWeekday().test(t)) return false;
-  return dayPickRest(t).every((word) => DAY_PICK_WORDS.has(word));
-}
-
 /**
- * At the day menu, a weekday match that is a question — or clearly not a day
- * pick — stays a question. "Black Friday sale nearby?" and "is Friday busy?"
- * are questions. "Friday", "Fri?", and "can I do Friday" are still that day.
- * A clock on the day ("Friday at 2") is handled before this, as a custom time.
+ * At the day menu, a weekday inside a non-scheduling question stays a
+ * question. "Black Friday sale nearby?", "is Friday busy?", and "what about
+ * Sunday parking?" are questions. Availability phrasing and a bare day are
+ * still that day. A clock on the day ("Friday at 2") is handled before this.
  */
 function questionInsteadOfDayPick(raw: string, t: string, today?: InterpretContext["today"]): boolean {
   const asked = dayReference(t, today);
   if (!asked || asked === "menu" || asked.unclear || asked.date || asked.relative || !asked.weekday) return false;
-  if (isDayPickPhrase(t)) return false;
-  const question = /\?\s*$/.test(raw.trim()) || QUESTION_START.test(t) || WANTS_TO_KNOW.test(t) || TOPIC.test(t);
+  if (NON_SCHEDULING_TOPIC.test(t)) return true;
+  if (SCHEDULING_ASK.test(t) || /\b(can|could)\s+(i|we)\b/.test(t)) return false;
+  if (dayPickRest(t).every((word) => FUNCTION_WORDS.has(word))) return false;
+  const question = /\?\s*$/.test(raw.trim()) || QUESTION_START.test(t) || WANTS_TO_KNOW.test(t);
   if (question) return true;
-  const extra = dayPickRest(t).filter((word) => !DAY_PICK_WORDS.has(word));
-  return extra.length >= 2;
+  return false;
+}
+
+/** A weekday plus availability language that the short day parser did not already accept. */
+function availabilityDayPick(t: string): TourIntent | undefined {
+  if (NON_SCHEDULING_TOPIC.test(t)) return undefined;
+  if (!SCHEDULING_ASK.test(t) && !/\b(can|could)\s+(i|we)\b/.test(t)) return undefined;
+  const named = /\b(next\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday|thurs|thur|tues|mon|tue|wed|thu|fri|sat|sun)\b/.exec(t);
+  if (!named) return undefined;
+  const day = WEEKDAY_TOKEN[named[2]!];
+  if (!day) return undefined;
+  return { type: "SELECT_DATE", weekday: day, ...(named[1] ? { nextWeek: true } : {}) };
 }
 
 function answerScheduling(
@@ -582,6 +544,8 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
       if (questionInsteadOfDayPick(raw, t, ctx.today)) return question(0.9);
       const picked = dateIntent(raw, t, result, ctx.today);
       if (picked) return picked;
+      const availability = availabilityDayPick(t);
+      if (availability) return result(availability, 0.9);
       const h = help();
       if (h) return h;
       const info = informational();

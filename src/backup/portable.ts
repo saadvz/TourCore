@@ -4,6 +4,7 @@ import { join, relative } from "node:path";
 import { z } from "zod";
 import { fullHash, safetyHash } from "../config/changeKinds";
 import { TourCoreConfigShape, type TourCoreConfig } from "../config/tourCoreConfig";
+import { operatorFacingPropertyName } from "../setup/setupActions";
 import { isLegacyVerification, presentVerification } from "../setup/verification";
 import { writeJsonAtomic } from "../storage/atomicWrite";
 import { collectCanonical, looksLikeSecret, type CanonicalFile } from "../storage/canonical";
@@ -278,6 +279,10 @@ export function applyPortableBackup(root: string, backup: PortableBackup, replac
       const record = body as { verificationMode?: string };
       if (isLegacyVerification(record.verificationMode)) {
         const parsed = TourCoreConfigShape.safeParse(body);
+        if (record.verificationMode === "mock" && parsed.success) {
+          const spoken = operatorFacingPropertyName(parsed.data);
+          notes.push(`${spoken} had an older ID check setting, so it now uses the basic identity form. Tell me if you'd rather have no form.`);
+        }
         body = { ...record, verificationMode: "basic-form" };
         if (parsed.success) coerced.push({ id: parsed.data.property.id, before: parsed.data, after: presentVerification(parsed.data) });
       }

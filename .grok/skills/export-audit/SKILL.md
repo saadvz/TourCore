@@ -17,7 +17,7 @@ Tour Core writes the export on its own computer, validated against the same
 schema as every single-tour download: all tours active that day (visitor tours
 and practice tours), every audit event, and the team's exception resolutions.
 
-On an installation whose records live in Google Drive (GOOGLE_DRIVE_READY), `export_records` day exports are written with the records and copied into Drive automatically by the save step. On a hosted installation (HOSTED_VOLUME, Drive used only for backups), day exports stay on the server as download links. Only readable exports and backups come back as one-time links for the assistant to save into the Tour Core folder in Drive.
+On an installation whose records live in Google Drive (GOOGLE_DRIVE_READY), the day's audit-export.json is written with the records and copied into Drive by the save step. The CSV stays on the Tour Core computer. On a hosted installation (HOSTED_VOLUME, Drive used only for backups), day exports stay on the server as 30-minute download links that can be used until they expire. Only readable exports and backups come back as one-time links for the assistant to save into the Tour Core folder in Drive. Door access in a day export is only what was issued or used that day. A grant that is still open after midnight belongs to the day it was issued, unless a door was used after midnight.
 
 ## When to use
 

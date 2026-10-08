@@ -2,7 +2,7 @@ import type { TourCoreConfig } from "../config/tourCoreConfig";
 import { normalize } from "../intent/normalize";
 import { slotsOn } from "./schedule";
 import { spokenTimes, type SpokenTime } from "./spokenTime";
-import { addDays, formatClockTime, formatDay, formatTime, formatWeekday, localDateOf, weekdayOf, zonedParts, zonedTimeToUtc, type LocalDate } from "./timezone";
+import { addDays, formatClockTime, formatDay, formatTime, formatWeekday, localDateOf, spokenClockTime, weekdayOf, zonedParts, zonedTimeToUtc, type LocalDate } from "./timezone";
 
 /** Where a start sits relative to the recurring schedule. The schedule itself is never edited. */
 export type SlotPlacement = "ON_GRID" | "INSIDE_HOURS" | "OUTSIDE_HOURS";
@@ -47,7 +47,9 @@ export function placementOf(config: TourCoreConfig, start: Date): SlotPlacement 
 }
 
 export function touringHoursLabel(config: TourCoreConfig): string {
-  return `${formatClockTime(config.tourHours.start)}–${formatClockTime(config.tourHours.end)}`;
+  const { start, end } = config.tourHours;
+  if (start === "23:59" || end === "23:59") return `${spokenClockTime(start)} to ${spokenClockTime(end)}`;
+  return `${formatClockTime(start)}–${formatClockTime(end)}`;
 }
 
 function hour24(hour: number, meridiem: "AM" | "PM"): number {

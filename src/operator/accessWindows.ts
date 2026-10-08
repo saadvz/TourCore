@@ -44,6 +44,12 @@ export interface AccessDenialTimes {
   unitName?: string;
 }
 
+/** Inclusive start, exclusive end, both ISO instants in any offset. */
+export interface AccessDayWindow {
+  from: string;
+  to: string;
+}
+
 export class AccessWindows {
   static doorName(config: TourCoreConfig, doorId: string | undefined): string {
     if (!doorId) return "a door";
@@ -59,20 +65,23 @@ export class AccessWindows {
     return open.at(-1) ?? reservations.at(-1);
   }
 
-  static grants(tour: AccessWindowSource, reservationId = AccessWindows.currentReservation(tour)?.id): AccessGrantTimes[] {
+  static grants(tour: AccessWindowSource, reservationId = AccessWindows.currentReservation(tour)?.id, window?: AccessDayWindow): AccessGrantTimes[] {
     if (!reservationId) return [];
     const tz = tour.config.property.timezone;
     const grants = tour.bundle.accessGrants.filter((g) => g.reservationId === reservationId);
     const allowed = tour.bundle.auditEvents.filter((e) => e.type === "ACCESS_ALLOWED" && e.reservationId === reservationId && !e.detail.startsWith("duplicate"));
     const revoked = tour.bundle.auditEvents.filter((e) => e.type === "ACCESS_REVOKED" && e.reservationId === reservationId);
-    return grants.map((grant) => AccessWindows.fromGrant(grant, allowed, revoked, tour, tz));
+    return grants.flatMap((grant) => {
+      if (!AccessWindows.grantOnDay(grant, allowed, window)) return [];
+      return [AccessWindows.fromGrant(grant, allowed, revoked, tour, tz)];
+    });
   }
 
-  static denials(tour: AccessWindowSource, reservationId = AccessWindows.currentReservation(tour)?.id): AccessDenialTimes[] {
+  static denials(tour: AccessWindowSource, reservationId = AccessWindows.currentReservation(tour)?.id, window?: AccessDayWindow): AccessDenialTimes[] {
     if (!reservationId) return [];
     const tz = tour.config.property.timezone;
     return tour.bundle.auditEvents
-      .filter((e) => e.type === "ACCESS_DENIED" && e.reservationId === reservationId)
+      .filter((e) => e.type === "ACCESS_DENIED" && e.reservationId === reservationId && AccessWindows.onDay(e.at, window))
       .map((e) => ({
         doorName: AccessWindows.doorName(tour.config, e.doorId),
         ...AccessWindows.when(e.at, tz, "time"),
@@ -81,16 +90,34 @@ export class AccessWindows {
       }));
   }
 
-  static fromTours(tours: AccessWindowSource[]): { accessGrants: AccessGrantTimes[]; accessDenials: AccessDenialTimes[] } {
+  static fromTours(tours: AccessWindowSource[], window?: AccessDayWindow): { accessGrants: AccessGrantTimes[]; accessDenials: AccessDenialTimes[] } {
     const accessGrants: AccessGrantTimes[] = [];
     const accessDenials: AccessDenialTimes[] = [];
     for (const tour of tours) {
       for (const reservation of tour.bundle.reservations) {
-        accessGrants.push(...AccessWindows.grants(tour, reservation.id));
-        accessDenials.push(...AccessWindows.denials(tour, reservation.id));
+        accessGrants.push(...AccessWindows.grants(tour, reservation.id, window));
+        accessDenials.push(...AccessWindows.denials(tour, reservation.id, window));
       }
     }
     return { accessGrants, accessDenials };
+  }
+
+  /**
+   * A grant belongs to the day it was issued (createdAt, or validFrom when
+   * createdAt is missing). A use that day (ACCESS_ALLOWED) also counts.
+   * A window that merely stays open past midnight does not.
+   */
+  private static grantOnDay(grant: AccessGrant, allowed: AuditEvent[], window?: AccessDayWindow): boolean {
+    if (!window) return true;
+    const issued = grant.createdAt || grant.validFrom;
+    if (AccessWindows.onDay(issued, window)) return true;
+    return allowed.some((event) => event.doorId === grant.doorId && AccessWindows.onDay(event.at, window));
+  }
+
+  private static onDay(at: string, window?: AccessDayWindow): boolean {
+    if (!window) return true;
+    const time = new Date(at).getTime();
+    return time >= new Date(window.from).getTime() && time < new Date(window.to).getTime();
   }
 
   private static fromGrant(grant: AccessGrant, allowed: AuditEvent[], revoked: AuditEvent[], tour: AccessWindowSource, tz: string): AccessGrantTimes {

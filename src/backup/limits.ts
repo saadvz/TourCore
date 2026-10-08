@@ -1,8 +1,9 @@
 /**
  * Restore upload cap. A real installation backup is about 10 MB; 50 MB
  * leaves room for that file and for the backup to grow.
+ * Override with TOURCORE_RESTORE_UPLOAD_MAX_BYTES.
  */
-export const RESTORE_UPLOAD_MAX_BYTES = 50 * 1024 * 1024;
+export const RESTORE_UPLOAD_MAX_BYTES = 50_000_000;
 
 const ENV = "TOURCORE_RESTORE_UPLOAD_MAX_BYTES";
 
@@ -14,12 +15,13 @@ export function restoreUploadMaxBytes(env: NodeJS.ProcessEnv = process.env): num
   return Number.isSafeInteger(n) ? n : RESTORE_UPLOAD_MAX_BYTES;
 }
 
-/** Plain size for the assistant to relay, such as "50 MB" or "1 MB". */
+/**
+ * Plain size for the assistant to relay. Decimal megabytes, rounded down:
+ * 50_000_000 is "50 MB" and 1_000_000 is "1 MB".
+ */
 export function restoreUploadLimitLabel(bytes: number): string {
-  const mib = bytes / (1024 * 1024);
-  if (Number.isInteger(mib)) return `${mib} MB`;
-  const mb = bytes / 1_000_000;
-  if (Number.isInteger(mb)) return `${mb} MB`;
+  const mb = Math.floor(bytes / 1_000_000);
+  if (mb > 0) return `${mb} MB`;
   return `${bytes} bytes`;
 }
 

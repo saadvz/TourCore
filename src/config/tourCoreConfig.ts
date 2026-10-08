@@ -122,6 +122,40 @@ export const PropertySchema = z.object({
    * A published property keeps its zone even when this is absent.
    */
   timezoneConfirmed: z.boolean().optional(),
+  /**
+   * An unanswered "should I switch" question. A string is an older offer:
+   * just the IANA zone, with no held fields. The object form names that zone
+   * and may hold address fields that arrived while the question was open.
+   * Absent once the operator answers. A ZIP is not an answer.
+   */
+  zoneSwitchOffer: z
+    .union([
+      z.string(),
+      z.object({
+        zone: z.string(),
+        held: z
+          .object({
+            name: z.string().optional(),
+            address: z.string().optional(),
+            propertyType: z.string().optional(),
+            street: z.string().optional(),
+            city: z.string().optional(),
+            state: z.string().optional(),
+            postalCode: z.string().optional(),
+            confirmAddress: z.boolean().optional(),
+            facts: z.array(z.string()).optional(),
+            buildingAccess: z.string().optional(),
+            entryInstructions: z.string().optional(),
+            skipEntryInstructions: z.boolean().optional(),
+            alertName: z.string().optional(),
+            alertContact: z.string().optional(),
+            visitorContact: z.string().optional(),
+            skipVisitorHelp: z.boolean().optional(),
+          })
+          .optional(),
+      }),
+    ])
+    .optional(),
   facts: ApprovedFacts,
 });
 

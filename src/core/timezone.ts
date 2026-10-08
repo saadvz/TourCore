@@ -160,6 +160,15 @@ export function formatClockTime(hhmm: string): string {
   return `${hour12}:${String(m).padStart(2, "0")} ${suffix}`;
 }
 
+/**
+ * Clock for a spoken read-back. 23:59 is the end of the touring day, so it
+ * is said as "midnight". The stored hour stays 23:59.
+ */
+export function spokenClockTime(hhmm: string): string {
+  if (hhmm === "23:59") return "midnight";
+  return formatClockTime(hhmm).replace(":00", "");
+}
+
 /** "Eastern Time" style name for a zone, falling back to the zone id. */
 export function friendlyTimeZone(timeZone: string): string {
   try {
@@ -172,7 +181,40 @@ export function friendlyTimeZone(timeZone: string): string {
   }
 }
 
+/**
+ * Plain zone word. US zones are fixed so Phoenix stays "Mountain" (not
+ * "Mountain Standard") and Honolulu stays "Hawaii" (not "Hawaii-Aleutian
+ * Standard") no matter which ICU the host ships.
+ */
+const PLAIN_ZONE: Record<string, string> = {
+  "America/New_York": "Eastern",
+  "America/Detroit": "Eastern",
+  "America/Indiana/Indianapolis": "Eastern",
+  "America/Chicago": "Central",
+  "America/Denver": "Mountain",
+  "America/Boise": "Mountain",
+  "America/Phoenix": "Mountain",
+  "America/Los_Angeles": "Pacific",
+  "America/Anchorage": "Alaska",
+  "America/Juneau": "Alaska",
+  "America/Sitka": "Alaska",
+  "America/Metlakatla": "Alaska",
+  "America/Nome": "Alaska",
+  "America/Yakutat": "Alaska",
+  "America/Adak": "Hawaii",
+  "Pacific/Honolulu": "Hawaii",
+};
+
 /** Plain zone word from {@link friendlyTimeZone}: "Eastern Time" becomes "Eastern". */
 export function spokenTimeZone(timeZone: string): string {
-  return friendlyTimeZone(timeZone).replace(/ Time$/i, "");
+  const canonical = canonicalTimeZone(timeZone) ?? timeZone;
+  const mapped = PLAIN_ZONE[canonical];
+  if (mapped) return mapped;
+  return friendlyTimeZone(timeZone)
+    .replace(/\s*\([^)]*\)/g, "")
+    .replace(/\b(Standard|Daylight)\b/gi, "")
+    .replace(/-Aleutian/gi, "")
+    .replace(/\s+Time$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }

@@ -15,7 +15,7 @@
     "status": "done",
     "milestone": "Units, doors, and routes",
     "next": "save_units",
-    "message": "Saved 18 Maple Street, Teaneck, NJ 07666."
+    "message": "Saved 18 Maple Street, Teaneck, NJ 07666. I'm using Eastern time for tours. Want a different one?"
   },
   {
     "tool": "save_settings",

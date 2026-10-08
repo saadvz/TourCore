@@ -22,10 +22,29 @@ function declaredLength(req: IncomingMessage): number | undefined {
   return Number.isSafeInteger(n) ? n : undefined;
 }
 
-/** Discard the body without storing it. Destroying the socket here becomes a bare 502. */
-function drain(req: IncomingMessage): void {
+/** A rejected body is read only this far, then the socket is destroyed. */
+const REJECTED_BODY_MAX = 1024 * 1024;
+
+/**
+ * Reads a rejected body up to {@link REJECTED_BODY_MAX}, then cuts the
+ * connection. A short body is finished so the refusal can still be sent.
+ * Returns true when the socket was destroyed.
+ */
+async function drainRejected(req: IncomingMessage): Promise<boolean> {
+  let read = 0;
   req.on("error", () => {});
-  req.resume();
+  try {
+    for await (const chunk of req) {
+      read += typeof chunk === "string" ? Buffer.byteLength(chunk) : chunk.length;
+      if (read >= REJECTED_BODY_MAX) {
+        req.destroy();
+        return true;
+      }
+    }
+  } catch {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -89,7 +108,7 @@ export async function handlePortableRequest(
   method: string,
   pathname: string,
   req: IncomingMessage,
-): Promise<{ status: number; type: string; body: string } | undefined> {
+): Promise<{ status: number; type: string; body: string; close?: boolean } | undefined> {
   const artifact = ARTIFACT.exec(pathname);
   const upload = UPLOAD.exec(pathname);
   if (!artifact && !upload) return undefined;
@@ -111,13 +130,15 @@ export async function handlePortableRequest(
       try {
         backups.handoff.assertUploadAvailable(upload[1]!, cap);
       } catch {
-        drain(req);
-        return missing;
+        const closed = await drainRejected(req);
+        return closed ? { ...missing, close: true } : missing;
       }
       const declared = declaredLength(req);
       if (declared !== undefined && declared > max) {
-        drain(req);
-        return tooLarge(max);
+        // Answer before the rest of a declared body arrives. Close so it is not read as the next request.
+        req.on("error", () => {});
+        req.resume();
+        return { ...tooLarge(max), close: true };
       }
       temp = backups.handoff.incomingPath();
       const outcome = await spoolUpload(req, max, temp);

@@ -9,7 +9,7 @@ Hosted demo order for the duplex at 18 Maple Street, from texting through publis
 5. `get_next_installation_step` {} → CONFIRM_BACKUP_DESTINATION — Visitor texting is connected. Next I recommend Google Drive so I can keep portable backups and exports of your Tour Core records there.
 6. `decline_portable_backup` {} — Operational records stay with hosted Tour Core. Portable backups are off until you connect Google Drive.
 7. `get_next_installation_step` {} → SET_UP_PROPERTY — Everything needed to start is connected and tested. Would you like to add your first property?
-8. `create_property_setup` {"address":"18 Maple Street, Teaneck, NJ 07666"} — Started 18 Maple Street, Teaneck, NJ 07666. I guessed Eastern Time for the time zone; please confirm.
+8. `create_property_setup` {"address":"18 Maple Street, Teaneck, NJ 07666"} — Started 18 Maple Street, Teaneck, NJ 07666. I'm using Eastern time for tours. You can change that anytime. Did I get that right: 18 Maple Street, Teaneck, NJ 07666?
 9. `get_next_installation_step` {} → FINISH_PROPERTY_SETUP — Let's finish setting up 18 Maple Street, Teaneck, NJ 07666.
 10. `update_property_details` {"property":"prop_18_maple_street_teaneck_nj_07666","confirmAddress":true} — Updated 18 Maple Street. Changes kept as a draft until 3 problems are fixed.
 11. `get_next_installation_step` {} → FINISH_PROPERTY_SETUP — Let's finish setting up 18 Maple Street, Teaneck, NJ 07666.
