@@ -3,7 +3,7 @@ import { describeOperatorUpdate } from "../alerts/describeUpdate";
 import { PortableBackupError } from "../backup/portable";
 import { revokeConfirmQuestion } from "../core/availabilityCopy";
 import { TourCoreError } from "../core/TourCore";
-import { formatDay, formatTime } from "../core/timezone";
+import { addDays, formatDay, formatTime, localDateOf, type LocalDate } from "../core/timezone";
 import { UnavailableModeError } from "../createTourCore";
 import { InvalidTransitionError } from "../domain/stateMachine";
 import { AuditExportLinks } from "./auditExportLinks";
@@ -142,6 +142,66 @@ function exceptionItem(item: OperatorException) {
 function installationOf(ctx: ToolContext) {
   if (!ctx.installation) throw new SetupInputError("INSTALLATION_UNAVAILABLE", "Installation tools aren't available on this Tour Core.");
   return ctx.installation;
+}
+
+const MONTH_INDEX: Record<string, number> = {
+  january: 1,
+  jan: 1,
+  february: 2,
+  feb: 2,
+  march: 3,
+  mar: 3,
+  april: 4,
+  apr: 4,
+  may: 5,
+  june: 6,
+  jun: 6,
+  july: 7,
+  jul: 7,
+  august: 8,
+  aug: 8,
+  september: 9,
+  sept: 9,
+  sep: 9,
+  october: 10,
+  oct: 10,
+  november: 11,
+  nov: 11,
+  december: 12,
+  dec: 12,
+};
+
+const MONTH_AND_DAY =
+  /^(january|february|march|april|june|july|august|september|october|november|december|sept|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec|may)\.?\s+(\d{1,2})$/i;
+
+function realCalendarDay(date: LocalDate): boolean {
+  if (date.month < 1 || date.month > 12 || date.day < 1) return false;
+  const utc = new Date(Date.UTC(date.year, date.month - 1, date.day));
+  return utc.getUTCFullYear() === date.year && utc.getUTCMonth() === date.month - 1 && utc.getUTCDate() === date.day;
+}
+
+/**
+ * Day input for export_records only. YYYY-MM-DD goes through parseLocalDate
+ * with no year change. A month and day, or M/D, with no year is the most
+ * recent past one in the property's zone. Booking does not use this.
+ */
+export function parseExportDay(input: string, today: LocalDate): { ok: true; day?: LocalDate } | { ok: false } {
+  const text = input.trim();
+  const word = text.toLowerCase();
+  if (word === "today") return { ok: true };
+  if (word === "yesterday") return { ok: true, day: addDays(today, -1) };
+  const iso = parseLocalDate(text);
+  if (iso) return realCalendarDay(iso) ? { ok: true, day: iso } : { ok: false };
+  const named = MONTH_AND_DAY.exec(text);
+  const numeric = named ? undefined : /^(\d{1,2})\/(\d{1,2})$/.exec(text);
+  const month = named ? MONTH_INDEX[named[1]!.toLowerCase()] : numeric ? Number(numeric[1]) : undefined;
+  const day = named ? Number(named[2]) : numeric ? Number(numeric[2]) : undefined;
+  if (!month || !day) return { ok: false };
+  const thisYear = { year: today.year, month, day };
+  if (!realCalendarDay(thisYear)) return { ok: false };
+  if (thisYear.month < today.month || (thisYear.month === today.month && thisYear.day <= today.day)) return { ok: true, day: thisYear };
+  const lastYear = { year: today.year - 1, month, day };
+  return realCalendarDay(lastYear) ? { ok: true, day: lastYear } : { ok: false };
 }
 
 export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
@@ -426,7 +486,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
     title: "Export records",
     kind: "change",
     description:
-      'A day\'s audit export, or a readable export when kind is readable. Day is "today" (default) or YYYY-MM-DD. Every landlord can export. A readable export is for people to read. It is not a backup.',
+      "A day's audit export, or a readable export when kind is readable. Day is today (default), yesterday, YYYY-MM-DD, a month and day like Sept 28, or M/D. A month and day with no year means the most recent past one. Every landlord can export. A readable export is for people to read. It is not a backup.",
     input: z.strictObject({
       kind: z.enum(["day", "readable"]).optional(),
       property: Property,
@@ -435,9 +495,10 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
     run: async (ctx, i) => {
       if (i.kind === "readable") return installationOf(ctx).backups.createExport();
       const id = resolvePropertyId(ctx.services.workspace, i.property);
-      const day = !i.day || i.day.trim().toLowerCase() === "today" ? undefined : parseLocalDate(i.day);
-      if (i.day && i.day.trim().toLowerCase() !== "today" && !day) throw new SetupInputError("DAY_UNREADABLE", "Which day? Say today or a date like Sept 28.");
-      const out = await exportAudit(ctx.services, id, { day, now: ctx.now() });
+      const { config } = ctx.services.workspace.load(id);
+      const parsed = parseExportDay(i.day ?? "today", localDateOf(ctx.now(), config.property.timezone));
+      if (!parsed.ok) throw new SetupInputError("DAY_UNREADABLE", "I couldn't read that date. Which day? Say today or a date like Sept 28.");
+      const out = await exportAudit(ctx.services, id, { day: parsed.day, now: ctx.now() });
       const s = out.summary;
       return {
         summary: `${s.day}: ${s.tours} visitor tour${s.tours === 1 ? "" : "s"} (${s.completed} completed, ${s.active} active, ${s.stopped} stopped), ${s.accessDenials} access denial${s.accessDenials === 1 ? "" : "s"}, ${s.questionsNeedingAttention} question${s.questionsNeedingAttention === 1 ? "" : "s"} needing attention, plus ${s.practiceTours} practice tour${s.practiceTours === 1 ? "" : "s"}.`,

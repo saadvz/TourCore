@@ -85,8 +85,8 @@ First run ("Set up Tour Core"): use the Install Tour Core skill.
   `inspect_tour_time_request` when that read has one.
 - Tool annotations are hints, not extra gates. Seven tools are marked
   destructive: revoke a tour, remove a property, import a backup, disconnect
-  Drive storage, take over the storage writer, cancel_tour, and
-  restore_records. The hidden hosted reset is also marked destructive.
+  Drive storage, take over the storage writer, cancel a tour, and restore a
+  backup. The hidden hosted reset is also marked destructive.
 - If a step keeps failing, give the setup help link as one plain link. Never
   put it in a visitor text.
 - Keep infrastructure out of the conversation: no addresses, connectors, tool

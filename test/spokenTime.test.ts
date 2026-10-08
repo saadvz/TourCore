@@ -3,7 +3,7 @@ import { loadConfig } from "../src/config/tourCoreConfig";
 import { parseFlexibleTime } from "../src/core/customSlot";
 import { dayReference, spokenTimes } from "../src/core/spokenTime";
 import { normalize } from "../src/intent/normalize";
-import { zonedTimeToUtc, type LocalDate } from "../src/core/timezone";
+import { localDateOf, zonedTimeToUtc, type LocalDate } from "../src/core/timezone";
 
 const oct4: LocalDate = { year: 2026, month: 10, day: 4 };
 const dec15: LocalDate = { year: 2026, month: 12, day: 15 };
@@ -112,5 +112,17 @@ describe("named days stay on could/would/can I do custom times", () => {
       const day = resolved.start.toLocaleDateString("en-US", { weekday: "long", timeZone: "America/New_York" });
       expect(day.startsWith(expected.weekday === "THU" ? "Thursday" : "Wednesday")).toBe(true);
     }
+  });
+});
+
+describe("a future YYYY-MM-DD instant stays on that date", () => {
+  it("reads 2027-03-15T19:00:00.000Z as March 15, 2027 when today is Sep 28, 2026", () => {
+    const config = loadConfig();
+    const now = zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour: 7, minute: 0 }, "America/New_York");
+    const resolved = parseFlexibleTime("2027-03-15T19:00:00.000Z", config, now);
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) return;
+    expect(resolved.start.toISOString()).toBe("2027-03-15T19:00:00.000Z");
+    expect(localDateOf(resolved.start, "America/New_York")).toEqual({ year: 2027, month: 3, day: 15 });
   });
 });
