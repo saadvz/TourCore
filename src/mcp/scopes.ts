@@ -86,7 +86,9 @@ export function legacyToolsEnabled(env?: { TOURCORE_LEGACY_TOOLS?: string }): bo
 }
 
 export function connectorRefusal(scope: ConnectorScope): string {
-  if (scope === "landlord") return "I can't do that from this chat.";
+  if (scope === "landlord") {
+    return "That's no longer something I can do from this chat. Disconnect and reconnect Tour Core so I'm working from the current list, then ask me again.";
+  }
   if (scope === "ops") return "The ops connector can't run that tool.";
   return "The QA connector can't run that tool.";
 }

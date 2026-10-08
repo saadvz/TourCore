@@ -19,6 +19,7 @@ import { namedCancelFocus } from "./cancelTarget";
 import { awaitingLatestYesNo, doorAskSupersedesCancel } from "./latestQuestion";
 import { isLeavingTour, T5_NO_OFFER_BARE_YES } from "../core/overstayCopy";
 import { afterCloseAlertOpen } from "./overstayScheduler";
+import { isBareTodayOrTonight } from "../intent/tourHoursAsk";
 import { isFlexibleYes, yesNo } from "../intent/yesNo";
 import { isRunningReservation, TERMINAL } from "../domain/stateMachine";
 import { stripFiller } from "../intent/normalize";
@@ -40,6 +41,7 @@ import {
 import type { ReplyPrompt } from "../messaging/presentation";
 import { timeMenu } from "./entry";
 import { OPERATOR_SCHEDULE_CONFIRM_PROMPT, type InterpretationNote, type Said, type VisitorDemoSession, type VisitorStage } from "./session";
+import { savedTourHours } from "./tourHoursQuestion";
 import { acceptsOfferedOpening, nextOpeningFollowUp, offerDate, takeOfferedOpening } from "./unavailableDay";
 import { SMS_GATE_REMINDER, SMS_KEYWORD_PROMPT, smsDisclosure, smsOptInConfirmation } from "./smsConsent";
 
@@ -550,7 +552,9 @@ export async function handleVisitorText(
   } else if (await resumeClearedScheduling(turn)) {
     /* the text after an unbooked cancel starts scheduling again */
   } else if (firstMessage) {
-    if (intent.type === "SELECT_UNIT" && turn.confident) await chooseUnit(turn);
+    if (await openBareTodayOrTonight(turn)) {
+      /* today's remaining times, from the hours that are saved */
+    } else if (intent.type === "SELECT_UNIT" && turn.confident) await chooseUnit(turn);
     else if (intent.type === "REQUEST_CUSTOM_TIME" && turn.confident) await openWithCustomTime(turn);
     else if (intent.type === "ASK_PROPERTY_QUESTION") await ask(turn, intent.question, () => session.welcome());
     else await session.greet(said);
@@ -735,6 +739,7 @@ async function flagSilentOptedOutQuestion(
  * confirmation. Nothing about the booking changes.
  */
 async function ask(turn: Turn, question: string, resume?: () => Promise<void>): Promise<void> {
+  if (await openBareTodayOrTonight(turn)) return;
   const { session } = turn;
   await session.recordText(turn.said);
   const out = await session.askQuestion(question, {
@@ -1404,9 +1409,18 @@ async function presentDay(turn: Turn, date: string, alreadyRecorded = false): Pr
   await offerDate(session, date);
 }
 
+/** Bare today or tonight, with hours saved, opens today's times and is not sent to the team. */
+async function openBareTodayOrTonight(turn: Turn): Promise<boolean> {
+  if (!isBareTodayOrTonight(turn.said.text ?? "")) return false;
+  if (!savedTourHours(turn.session.config.tourHours)) return false;
+  await showAskedDay(turn, { relative: "today" });
+  return true;
+}
+
 async function byStage(turn: Turn): Promise<void> {
   const { session, intent } = turn;
   const yesNo: ReplyPrompt = { kind: "yes-no" };
+  if (await openBareTodayOrTonight(turn)) return;
   if (turn.awaiting?.kind === "confirm-custom-time" && turn.interpretation.clarificationQuestion === "No problem.") {
     await turn.respond("No problem.");
     await resumeStep(session, turn.stage);

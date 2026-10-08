@@ -20,6 +20,8 @@ Kinds: **read** changes nothing; **change** edits setup or records through Tour 
 
 Set `TOURCORE_LEGACY_TOOLS=1` during the switch-over so the landlord connector also keeps the older tools, the QA test tools, and the ops tools. Unset it once the QA connector is confirmed. Planned removal: October 15, 2026. The older tools stay out of the tables below.
 
+A tool that isn't on this connector is refused. On the landlord connector that line is "That's no longer something I can do from this chat. Disconnect and reconnect Tour Core so I'm working from the current list, then ask me again." The ops and QA connectors say "The ops connector can't run that tool." and "The QA connector can't run that tool." Each connector advertises `tools.listChanged` and sends `notifications/tools/list_changed` on the SSE stream after `notifications/initialized`, so a connector that still shows the old list can re-fetch. `get_installation_status` on the QA connector includes `technical.commit` (the full deploy SHA, or `unknown`). The landlord connector does not.
+
 ## Landlord connector
 
 | Tool | Kind | What it does |
@@ -88,7 +90,7 @@ Needs `TOURCORE_QA_TOKEN`. A landlord token cannot list or call these. Startup i
 | `resume_tours` | consequential | Resumes bookings. On the landlord connector, pass paused false | `pause_tours` |
 | `revoke_tour_access` | consequential | Calls off one tour after a yes. Destructive hint | `cancel_tour` |
 | `run_dry_tour` | change | Runs a practice tour | Stays on QA |
-| `get_installation_status` | read | What is set up, component by component. Call this first on this connector | Stays on QA |
+| `get_installation_status` | read | What is set up, component by component. Call this first on this connector. On this connector, technical.commit is the full deploy SHA, or unknown | Stays on QA |
 
 There is intentionally no tool to open, unlock or grant a door, mint access,
 change the door-access mode, or read or write raw files. There is also no

@@ -860,7 +860,7 @@ Which day works for you?
 ### tour-hours-which-day
 
 ```
-Tours run {days}, {hours}. Which day works for you?
+Tours run {days}, {hours}. Which day works for you? Just reply with a day, like {examples}.
 ```
 
 ### next-opening-want

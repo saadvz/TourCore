@@ -35,7 +35,7 @@ function use(h: GrokHarness = grokHarness()): GrokHarness {
 }
 
 const ZIP_CA = "That ZIP doesn't look like it's in California. Which one should I fix, the ZIP or the state?";
-const HOURS_REPLY = "Tours run every day, 8 AM to midnight. Which day works for you?";
+const HOURS_REPLY = "Tours run every day, 8 AM to midnight. Which day works for you? Just reply with a day, like today, tomorrow, or Saturday.";
 const FRIDAY_TIMES = "I have these times available Friday, Oct 2:\nReply 1 for 2:00 PM or 2 for 3:30 PM.";
 const PRACTICE_SIX = "No visitors were turned away. 6 practice-tour denials.";
 const PRACTICE_ONE = "No visitors were turned away. 1 practice-tour denial.";

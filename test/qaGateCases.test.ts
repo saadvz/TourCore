@@ -129,8 +129,8 @@ describe("QA gate cases", () => {
 
     const qaCall = await post(port, "/mcp", callRpc("inject_local_sms", { from: "+15555550100", text: "Hi" }), LANDLORD);
     const opsCall = await post(port, "/mcp", callRpc("discover_storage"), LANDLORD);
-    expect(qaCall.json).toMatchObject({ error: { code: -32602, message: "I can't do that from this chat." } });
-    expect(opsCall.json).toMatchObject({ error: { code: -32602, message: "I can't do that from this chat." } });
+    expect(qaCall.json).toMatchObject({ error: { code: -32602, message: "That's no longer something I can do from this chat. Disconnect and reconnect Tour Core so I'm working from the current list, then ask me again." } });
+    expect(opsCall.json).toMatchObject({ error: { code: -32602, message: "That's no longer something I can do from this chat. Disconnect and reconnect Tour Core so I'm working from the current list, then ask me again." } });
 
     const ownerRoot = mkdtempSync(join(tmpdir(), "tourcore-gate1-owner-"));
     cleanups.push(() => rmSync(ownerRoot, { recursive: true, force: true }));

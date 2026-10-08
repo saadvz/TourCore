@@ -8,6 +8,12 @@ const NAMED_DAY = /\b(?:today|tomorrow|tonight)\b/;
  * A general ask for when tours run, with no weekday and no specific day.
  * "is Friday open?" stays on the day-menu rules and is not this.
  */
+/** The whole message is today or tonight, so it means today's remaining times. */
+export function isBareTodayOrTonight(raw: string): boolean {
+  const t = stripFiller(normalize(raw));
+  return t === "today" || t === "tonight";
+}
+
 export function isGeneralTourHoursQuestion(raw: string): boolean {
   const t = stripFiller(normalize(raw));
   if (!t || WEEKDAY.test(t) || NAMED_DAY.test(t)) return false;

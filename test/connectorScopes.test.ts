@@ -99,8 +99,8 @@ describe("connector scopes", () => {
 
     const qaCall = await post(port, "/mcp", callRpc("inject_local_sms", { from: "+15555550100", text: "Hi" }), LANDLORD);
     const opsCall = await post(port, "/mcp", callRpc("discover_storage"), LANDLORD);
-    expect(qaCall.json).toMatchObject({ error: { code: -32602, message: "I can't do that from this chat." } });
-    expect(opsCall.json).toMatchObject({ error: { code: -32602, message: "I can't do that from this chat." } });
+    expect(qaCall.json).toMatchObject({ error: { code: -32602, message: "That's no longer something I can do from this chat. Disconnect and reconnect Tour Core so I'm working from the current list, then ask me again." } });
+    expect(opsCall.json).toMatchObject({ error: { code: -32602, message: "That's no longer something I can do from this chat. Disconnect and reconnect Tour Core so I'm working from the current list, then ask me again." } });
     expect(namesFrom(listed.json)).not.toContain("inject_local_sms");
     expect(namesFrom(listed.json)).not.toContain("discover_storage");
 
@@ -186,7 +186,7 @@ describe("connector scopes", () => {
     const off = await legacySession(undefined);
     expect(off.names).toEqual([...LANDLORD_CORE_TOOLS]);
     const refused = await post(off.port, "/mcp", callRpc("inject_local_sms", { from: "+15555550100", text: "Hi" }), LANDLORD);
-    expect(refused.json).toMatchObject({ error: { code: -32602, message: "I can't do that from this chat." } });
+    expect(refused.json).toMatchObject({ error: { code: -32602, message: "That's no longer something I can do from this chat. Disconnect and reconnect Tour Core so I'm working from the current list, then ask me again." } });
 
     const on = await legacySession("1");
     expect(on.names[0]).toBe("list_properties");
@@ -221,7 +221,7 @@ describe("connector scopes", () => {
       expect(JSON.stringify(called.json)).not.toContain("The QA connector can't run that tool.");
     }
     const refused = await post(session.port, "/mcp", callRpc("run_dry_tour"), LANDLORD);
-    expect(refused.json).toMatchObject({ error: { code: -32602, message: "I can't do that from this chat." } });
+    expect(refused.json).toMatchObject({ error: { code: -32602, message: "That's no longer something I can do from this chat. Disconnect and reconnect Tour Core so I'm working from the current list, then ask me again." } });
 
     const toolsDoc = readFileSync(new URL("../grok-template/integrations/tour-core-tools.md", import.meta.url), "utf8");
     const qaTable = toolsDoc.slice(toolsDoc.indexOf("## QA connector"));

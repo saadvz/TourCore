@@ -37,7 +37,7 @@ import { withPropertySlotLock } from "./slotLock";
 import { BOOKING_HORIZON_DAYS, isoDate, nextTourDay, slotsOn, tourWindow, type TourSlot } from "./schedule";
 import { bookedTourCalledOffText, laterCancelConfirm, laterCancelDone, laterCancelKept, tourMovedToText } from "./availabilityCopy";
 import { propertyDirectionsUrl, tourDirectionsText } from "./mapsLink";
-import { addDays, formatDay as formatDayIn, formatTime as formatTimeIn, localDateOf, type LocalDate } from "./timezone";
+import { addDays, formatDay as formatDayIn, formatTime as formatTimeIn, isValidTimeZone, localDateOf, UnsetTimeZoneError, type LocalDate } from "./timezone";
 import { claimVisitorSms, renderSms, visitorTeamName } from "../sms/templates";
 import { isGeneralTourHoursQuestion, savedTourHours, tourHoursVisitorReply } from "../visitor/tourHoursQuestion";
 
@@ -492,6 +492,7 @@ export class TourCore {
   // ---------------------------------------------------------------- journey
 
   async startInquiry(input: { name: string; phone: string; unitId: string }, options: { announce?: boolean } = {}): Promise<{ prospect: Prospect; reservation: Reservation }> {
+    if (!isValidTimeZone(this.deps.config.property.timezone)) throw new UnsetTimeZoneError();
     const { config, store } = this.deps;
     this.assertBookingAllowed(input.unitId);
     const phone = normalizePhone(input.phone);
@@ -576,6 +577,7 @@ export class TourCore {
   }
 
   async reserveSlot(reservationId: string, slotStartIso: string, options: { replace?: boolean } = {}): Promise<Reservation> {
+    if (!isValidTimeZone(this.deps.config.property.timezone)) throw new UnsetTimeZoneError();
     return this.withSlotLock(async () => {
       await this.deps.slotLockBarrier?.("reserve");
       let reservation = await this.mustGetReservation(reservationId);
@@ -2000,6 +2002,9 @@ export class TourCore {
       await this.record("ACCESS_ALLOWED", { ...base, code: decision.code, detail: `duplicate request; reused grant ${existing.durinGrantRef}, Durin not called again` });
       return { decision, durinCalled: false, grant: existing, reusedGrant: true };
     }
+
+    // A door already opened stays open. A new grant would use a zone that is no longer set.
+    if (!isValidTimeZone(config.property.timezone)) throw new UnsetTimeZoneError();
 
     try {
       await this.deps.beforeAccess?.();
