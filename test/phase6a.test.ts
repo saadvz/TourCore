@@ -186,7 +186,7 @@ describe("missing time zone field", () => {
 });
 
 describe("published zone cleared during a tour", () => {
-  it("keeps the open grant, blocks the next door and a new tour, and flags the inbox until a zone is set", async () => {
+  it("lets an in-progress tour open its remaining doors, blocks a new tour, and flags the inbox until a zone is set", async () => {
     const h = installHarness();
     cleanups.push(h.cleanup);
     const id = await h.publish();
@@ -224,9 +224,12 @@ describe("published zone cleared during a tour", () => {
 
     await v.act("atStop", { doorId: "unit_101_door" });
     const after = (await v.session.store.list("accessGrants")).filter((grant) => grant.status === "ACTIVE");
-    expect(after).toHaveLength(1);
-    expect(after[0]!.doorId).toBe(before[0]!.doorId);
-    expect(v.session.conversation.map((item) => item.text).join("\n")).toContain(toursUnavailableText(loaded.config.property.name, loaded.config.operator.name));
+    expect(after).toHaveLength(2);
+    const unit = after.find((grant) => grant.doorId === "unit_101_door");
+    expect(unit?.status).toBe("ACTIVE");
+    const spoken = v.session.conversation.map((item) => item.text).join("\n");
+    expect(spoken).toContain("is open for you now");
+    expect(spoken).not.toContain(toursUnavailableText(loaded.config.property.name, loaded.config.operator.name));
 
     const fresh = h.visitors.add(
       new VisitorDemoSession(id, h.workspace.load(id).config, h.workspace.newVisitorTourId(id, new Date(h.now())), { realNow: () => h.now() }),

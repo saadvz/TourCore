@@ -2003,8 +2003,8 @@ export class TourCore {
       return { decision, durinCalled: false, grant: existing, reusedGrant: true };
     }
 
-    // A door already opened stays open. A new grant would use a zone that is no longer set.
-    if (!isValidTimeZone(config.property.timezone)) throw new UnsetTimeZoneError();
+    // A tour already inside its booked window finishes on that window. Anything else needs a zone.
+    if (!isValidTimeZone(config.property.timezone) && !tourAlreadyUnderway(approved, now)) throw new UnsetTimeZoneError();
 
     try {
       await this.deps.beforeAccess?.();
@@ -2068,7 +2068,8 @@ export class TourCore {
       }
       throw err;
     }
-    await this.record("ACCESS_ALLOWED", { ...base, code: decision.code, detail: `Durin grant ${result.grantRef} until ${this.time(new Date(grant.validUntil))}` });
+    const until = isValidTimeZone(config.property.timezone) ? this.time(new Date(grant.validUntil)) : grant.validUntil;
+    await this.record("ACCESS_ALLOWED", { ...base, code: decision.code, detail: `Durin grant ${result.grantRef} until ${until}` });
 
     if (approved.status === "READY") {
       await this.move(approved, "TOURING", "TOUR_STARTED", { detail: `entered via ${door?.name ?? request.doorId}` });
@@ -2589,6 +2590,15 @@ export class TourCore {
   private day(d: Date): string {
     return formatDayIn(d, this.deps.config.property.timezone);
   }
+}
+
+/** Arrived, and still inside the absolute window booked while a zone was set. */
+function tourAlreadyUnderway(reservation: Reservation, now: Date): boolean {
+  if (reservation.status !== "TOURING") return false;
+  const start = Date.parse(reservation.windowStart ?? "");
+  const end = Date.parse(reservation.windowEnd ?? "");
+  const at = now.getTime();
+  return Number.isFinite(start) && Number.isFinite(end) && at >= start && at < end;
 }
 
 function firstName(name: string): string {
