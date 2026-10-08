@@ -572,7 +572,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
     title: "Restore records",
     kind: "change",
     description:
-      "upload opens a short-lived upload. preview checks the file and changes nothing. import restores it only after confirmationCode from a clear yes. If this Tour Core already has records, pass recovery replace only after they explicitly choose replacement. Logins are not in the backup. A backup is accepted, 50 MB by default (TOURCORE_RESTORE_UPLOAD_MAX_BYTES). An upload over that cap is refused with a message that states the cap. Every expired upload says to send the file again, including a second look and a file that arrived before the link expired. Upload the backup file first is only for a live link with no file. An older mock verification setting restores as basic-form. Start a new upload with begin_restore_upload.",
+      "upload opens a short-lived upload. preview checks the file and changes nothing. import restores it only after confirmationCode from a clear yes. If this Tour Core already has records, pass recovery replace only after they explicitly choose replacement. Logins are not in the backup. A backup up to 50 MB is accepted. An upload over that cap is refused with a message that states the cap. Every expired upload says to send the file again, including a second look and a file that arrived before the link expired. Upload the backup file first is only for a live link with no file. An older ID check is named in the import summary: it now uses the basic identity form, and the landlord can ask for no form. Start a new upload with begin_restore_upload.",
     input: z.strictObject({
       action: z.enum(["upload", "preview", "import"]),
       uploadId: z.string().regex(/^art_[A-Za-z0-9_-]{20,80}$/).optional(),

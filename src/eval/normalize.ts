@@ -30,7 +30,7 @@ function rewrite(node: unknown, doorNames: Map<string, string>, unitNames: Map<s
   for (const key of Object.keys(record)) {
     const value = record[key];
     // timezoneConfirmed records who set the zone. It is not a landlord answer, so duplex runs stay comparable.
-    if (key === "id" || key === "updatedAt" || key === "timezoneConfirmed") {
+    if (key === "id" || key === "updatedAt" || key === "timezoneConfirmed" || key === "zoneSwitchOffer") {
       delete record[key];
       continue;
     }

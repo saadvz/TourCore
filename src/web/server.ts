@@ -478,7 +478,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         const page = `<!doctype html><meta name="referrer" content="no-referrer"><title>Tour Core</title><p>${result.ok ? "Google Drive is connected to Tour Core. You can return to the chat." : "Google Drive wasn't connected. Return to the chat and try again."}</p>`;
         return send(result.ok ? 200 : 400, "text/html; charset=utf-8", page, { "Referrer-Policy": "no-referrer" });
       }
-      // Restore uploads are capped inside handlePortableRequest (50 MB by default (TOURCORE_RESTORE_UPLOAD_MAX_BYTES)).
+      // Restore uploads are capped inside handlePortableRequest. A backup up to 50 MB is accepted.
       // MAX_BODY_BYTES stays on the other routes and does not apply here.
       const portable = await handlePortableRequest(installation.backups, method, url.pathname, req);
       if (portable) {

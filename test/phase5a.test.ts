@@ -2,6 +2,7 @@ import { request } from "node:http";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { applyPortableBackup, buildPortableBackup } from "../src/backup/portable";
 import { safetyHash } from "../src/config/changeKinds";
 import { touringHoursLabel } from "../src/core/customSlot";
 import { spokenTimeZone } from "../src/core/timezone";
@@ -30,6 +31,20 @@ function use(h: GrokHarness = grokHarness()): GrokHarness {
 const TIMED_OUT = "That upload timed out. Send me the backup file again and I'll check it.";
 const UPLOAD_FIRST = "Upload the backup file first, then I can show you what's in it.";
 const ZIP_CA = "That ZIP doesn't look like it's in California. Which one should I fix, the ZIP or the state?";
+const ZONE_STATEMENT = "I'm using Eastern time for tours. You can change that anytime.";
+const SWITCH_PACIFIC = "Tours still run on Eastern time. Should I switch to Pacific time?";
+const TYPE_QUESTION = "Is this a single-family home, a multifamily home, or one apartment or condo?";
+const ZIP_QUESTION = "What ZIP code should I use?";
+const MAPLE = "18 Maple Street, Teaneck, NJ 07666";
+const MAPLE_CONFIRM = `Did I get that right: ${MAPLE}?`;
+
+function questions(text: string): number {
+  return text.match(/\?/g)?.length ?? 0;
+}
+
+function oneQuestion(text: string): void {
+  expect(questions(text)).toBeLessThanOrEqual(1);
+}
 
 const DAY_MENU = {
   message: "",
@@ -145,10 +160,12 @@ describe("zone copy", () => {
     expect(street.timezoneGuess).toBeUndefined();
 
     const eastern = await h.ok("create_property_setup", { address: "18 Maple Street, Teaneck, NJ 07666" });
-    expect(eastern.summary).toBe("Started 18 Maple Street, Teaneck, NJ 07666. I'm using Eastern time for tours. Want a different one?");
+    expect(eastern.summary).toBe(`Started ${MAPLE}. ${ZONE_STATEMENT} ${MAPLE_CONFIRM}`);
+    oneQuestion(eastern.summary);
 
     const phoenix = await h.ok("create_property_setup", { address: "1 Central Avenue, Phoenix, AZ 85004" });
-    expect(phoenix.summary).toContain("I'm using Mountain time for tours. Want a different one?");
+    expect(phoenix.summary).toBe("Started 1 Central Avenue, Phoenix, AZ 85004. I'm using Mountain time for tours. You can change that anytime. Did I get that right: 1 Central Avenue, Phoenix, AZ 85004?");
+    oneQuestion(phoenix.summary);
     expect(phoenix.summary).not.toMatch(/Standard|GMT|UTC/);
     expect(spokenTimeZone("America/Phoenix")).toBe("Mountain");
     expect(spokenTimeZone("Pacific/Honolulu")).toBe("Hawaii");
@@ -163,7 +180,9 @@ describe("zone copy", () => {
     expect(JSON.stringify(same)).not.toContain("I'm using");
 
     const changed = await h.ok("save_property", { property: id, state: "CA" });
-    expect(changed.message).toContain("Tours still run on Eastern time. Should I switch to Pacific time?");
+    expect(changed.message).toBe(SWITCH_PACIFIC);
+    oneQuestion(changed.message);
+    expect(changed.message).not.toContain("Did I get that right");
     expect(h.workspace.load(id).config.property.timezone).toBe("America/New_York");
 
     const switched = await h.ok("update_property_details", { property: id, timezone: "Pacific" });
@@ -175,7 +194,177 @@ describe("zone copy", () => {
     expect(h.workspace.load(id).state.status).toBe("DRAFT");
     expect(h.workspace.load(id).state.publishedAt).toBeTruthy();
     const again = await h.ok("save_property", { property: id, state: "NY" });
-    expect(again.message).toContain("Tours still run on Pacific time. Should I switch to Eastern time?");
+    expect(again.message).toBe("Tours still run on Pacific time. Should I switch to Eastern time?");
+    oneQuestion(again.message);
+  });
+});
+
+describe("one question in a zone reply", () => {
+  it("states a guessed zone, then the one next address, confirm, or type question", async () => {
+    const zip = await use().ok("save_property", { address: "12 Main Street, Teaneck, NJ" });
+    expect(zip.message).toBe(`${ZONE_STATEMENT} ${ZIP_QUESTION}`);
+    oneQuestion(zip.message);
+
+    const confirm = await use().ok("save_property", { address: MAPLE });
+    expect(confirm.message).toBe(`${ZONE_STATEMENT} ${MAPLE_CONFIRM}`);
+    oneQuestion(confirm.message);
+
+    const type = await use().ok("save_property", { address: MAPLE, confirmAddress: true });
+    expect(type.message).toBe(`${ZONE_STATEMENT} ${TYPE_QUESTION}`);
+    oneQuestion(type.message);
+
+    const alone = await use().ok("save_property", { address: MAPLE, confirmAddress: true, propertyType: "MULTIFAMILY_HOME" });
+    expect(alone.message).toBe(`Saved ${MAPLE}. I'm using Eastern time for tours. Want a different one?`);
+    oneQuestion(alone.message);
+
+    const started = await use().ok("create_property_setup", { address: "12 Main Street, Teaneck, NJ" });
+    expect(started.summary).toBe(`Started 12 Main Street, Teaneck, NJ. ${ZONE_STATEMENT} ${ZIP_QUESTION}`);
+    oneQuestion(started.summary);
+
+    const detailsHarness = use();
+    const street = await detailsHarness.ok("save_property", { address: "14 Main Street" });
+    const details = await detailsHarness.ok("update_property_details", {
+      property: street.propertyId,
+      city: "Teaneck",
+      state: "NJ",
+      postalCode: "07666",
+      confirmAddress: true,
+    });
+    expect(details.summary).toBe(`Updated 14 Main Street. ${ZONE_STATEMENT} What type of property is this?`);
+    oneQuestion(details.summary);
+    expect(details.summary).not.toContain("Want a different one?");
+
+    const readbackHarness = use();
+    const bare = await readbackHarness.ok("save_property", { address: "16 Main Street, Teaneck" });
+    const readback = await readbackHarness.ok("update_property_details", { property: bare.propertyId, state: "NJ", postalCode: "07666" });
+    expect(readback.summary).toBe(`Updated 16 Main Street. ${ZONE_STATEMENT} Did I get that right: 16 Main Street, Teaneck, NJ 07666?`);
+    oneQuestion(readback.summary);
+  });
+
+  it("asks the switch question alone, then the next setup question only after yes, and a ZIP is not yes", async () => {
+    const h = use();
+    const opened = await h.ok("save_property", { address: MAPLE, confirmAddress: true });
+    const id = opened.propertyId as string;
+    expect(h.workspace.openDraft(id).draft.property.timezoneConfirmed).toBe(true);
+
+    const asked = await h.ok("save_property", { property: id, state: "CA", postalCode: "90210", confirmAddress: true });
+    expect(asked.message).toBe(SWITCH_PACIFIC);
+    oneQuestion(asked.message);
+    expect(asked.message).not.toContain(TYPE_QUESTION);
+    expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/New_York");
+    expect(h.workspace.openDraft(id).draft.property.zoneSwitchOffer).toBe("America/Los_Angeles");
+    expect(h.workspace.openDraft(id).draft.property.canonicalAddress?.postalCode).toBe("90210");
+
+    const asTimezone = await h.ok("save_property", { property: id, timezone: "90210" });
+    expect(asTimezone.message).toBe(SWITCH_PACIFIC);
+    oneQuestion(asTimezone.message);
+    expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/New_York");
+    expect(h.workspace.openDraft(id).draft.property.zoneSwitchOffer).toBe("America/Los_Angeles");
+
+    const asZip = await h.ok("save_property", { property: id, postalCode: "94105" });
+    expect(asZip.message).toBe(SWITCH_PACIFIC);
+    oneQuestion(asZip.message);
+    expect(h.workspace.openDraft(id).draft.property.canonicalAddress?.postalCode).toBe("90210");
+    expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/New_York");
+
+    const yes = await h.ok("save_property", { property: id, timezone: "yes" });
+    expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/Los_Angeles");
+    expect(h.workspace.openDraft(id).draft.property.zoneSwitchOffer).toBeUndefined();
+    expect(yes.message).toBe(TYPE_QUESTION);
+    oneQuestion(yes.message);
+
+    const other = await h.ok("create_property_setup", { address: "20 Oak Street, Teaneck, NJ 07666" });
+    const otherId = other.setup.propertyId as string;
+    await h.ok("update_property_details", { property: otherId, confirmAddress: true });
+    const moved = await h.ok("update_property_details", { property: otherId, state: "CA", postalCode: "90210", confirmAddress: true });
+    expect(moved.summary).toBe(`Updated 20 Oak Street. ${SWITCH_PACIFIC}`);
+    oneQuestion(moved.summary);
+    expect(moved.summary).not.toContain(TYPE_QUESTION);
+    expect(moved.nextQuestion).toBeUndefined();
+    expect(h.workspace.openDraft(otherId).draft.property.timezone).toBe("America/New_York");
+
+    const zipAgain = await h.ok("update_property_details", { property: otherId, postalCode: "94105" });
+    expect(zipAgain.summary).toBe(SWITCH_PACIFIC);
+    oneQuestion(zipAgain.summary);
+    expect(h.workspace.openDraft(otherId).draft.property.timezone).toBe("America/New_York");
+    expect(h.workspace.openDraft(otherId).draft.property.canonicalAddress?.postalCode).toBe("90210");
+
+    const accepted = await h.ok("update_property_details", { property: otherId, timezone: "yes" });
+    expect(h.workspace.openDraft(otherId).draft.property.timezone).toBe("America/Los_Angeles");
+    expect(accepted.nextQuestion).toBe("What type of property is this?");
+    oneQuestion(accepted.summary);
+    expect(accepted.summary).not.toContain("Should I switch");
+    expect(accepted.summary).not.toContain(TYPE_QUESTION);
+  });
+
+  it("names each property whose older ID check became the basic form", async () => {
+    const source = use();
+    const id = await source.publish();
+    const configPath = join(source.root, "properties", id, "tourcore.config.json");
+    const config = JSON.parse(readFileSync(configPath, "utf8")) as { verificationMode?: string; property: { id: string; name: string; displayName?: string } };
+    config.verificationMode = "mock";
+    writeFileSync(configPath, JSON.stringify(config));
+    const backup = buildPortableBackup({
+      root: source.root,
+      installationId: "inst_phase5a",
+      createdAt: "2026-10-08T12:00:00.000Z",
+      tourCoreVersion: "test",
+      secretValues: [],
+    });
+    const packed = backup.contents.files.find((file) => file.path.endsWith("/tourcore.config.json"));
+    const second = structuredClone(packed!);
+    const body = second.body as { verificationMode?: string; property: { id: string; name: string; displayName?: string } };
+    body.property.id = "prop_oak_house";
+    body.property.displayName = "Oak House";
+    body.property.name = "Oak House";
+    body.verificationMode = "mock";
+    second.path = "properties/prop_oak_house/tourcore.config.json";
+    backup.contents.files.push(second);
+    const restored = use();
+    const applied = applyPortableBackup(restored.root, backup, false);
+    const alfred = "100 Alfred Way had an older ID check setting, so it now uses the basic identity form. Tell me if you'd rather have no form.";
+    const oak = "Oak House had an older ID check setting, so it now uses the basic identity form. Tell me if you'd rather have no form.";
+    expect(applied.notes).toEqual([alfred, oak]);
+
+    const document = use();
+    const documentId = await document.publish();
+    const documentPath = join(document.root, "properties", documentId, "tourcore.config.json");
+    const documentConfig = JSON.parse(readFileSync(documentPath, "utf8")) as { verificationMode?: string };
+    documentConfig.verificationMode = "document-check";
+    writeFileSync(documentPath, JSON.stringify(documentConfig));
+    const documentBackup = buildPortableBackup({
+      root: document.root,
+      installationId: "inst_phase5a_document",
+      createdAt: "2026-10-08T12:00:00.000Z",
+      tourCoreVersion: "test",
+      secretValues: [],
+    });
+    const quiet = applyPortableBackup(use().root, documentBackup, false);
+    expect(quiet.notes).toEqual([]);
+  });
+
+  it("says that line in the import summary", async () => {
+    const origin = installHarness();
+    cleanups.push(origin.cleanup);
+    const id = await origin.publish();
+    const configPath = join(origin.root, "properties", id, "tourcore.config.json");
+    const config = JSON.parse(readFileSync(configPath, "utf8")) as { verificationMode?: string };
+    config.verificationMode = "mock";
+    writeFileSync(configPath, JSON.stringify(config));
+    const created = await origin.ok("create_portable_backup");
+    const artifactId = String(created.handoff.path).split("/").pop()!;
+    const downloaded = origin.inst.backups.handoff.takeDownload(artifactId, created.handoff.capability).body;
+    const clean = installHarness();
+    cleanups.push(clean.cleanup);
+    const upload = await clean.ok("begin_restore_upload");
+    const uploadId = String(upload.handoff.path).split("/").pop()!;
+    clean.inst.backups.receive(uploadId, upload.handoff.capability, downloaded);
+    const asked = await clean.ok("import_portable_backup", { uploadId });
+    const restored = await clean.ok("import_portable_backup", { uploadId, confirmationCode: asked.confirmationCode });
+    const line = "100 Alfred Way had an older ID check setting, so it now uses the basic identity form. Tell me if you'd rather have no form.";
+    expect(restored.lines).toContain(line);
+    expect(restored.summary).toContain(line);
+    expect(restored.lines.filter((item: string) => item === line)).toHaveLength(1);
   });
 });
 

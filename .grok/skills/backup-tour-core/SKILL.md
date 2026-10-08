@@ -75,10 +75,10 @@ On an installation whose records live in Google Drive (GOOGLE_DRIVE_READY), the 
 1. Find the latest file in Tour Core/Backups with the Google Drive connector.
 2. `begin_restore_upload`, then upload that file to the handoff. Do not paste
    the JSON into chat. The upload note tells you to upload the file to that
-   address. A backup is accepted, 50 MB by default (TOURCORE_RESTORE_UPLOAD_MAX_BYTES). If the upload is refused, say
+   address. A backup up to 50 MB is accepted. If the upload is refused, say
    the limit from the message (413). Do not describe that refusal as a lost
    connection. Every expired upload, including a second look and a file that arrived before the link expired, says to send the file again. Start a new
-   upload with `begin_restore_upload`. "Upload the backup file first, then I can show you what's in it." is only for a live link with no file. An older "mock" verification setting restores as basic-form.
+   upload with `begin_restore_upload`. "Upload the backup file first, then I can show you what's in it." is only for a live link with no file. An older ID check is named in the import summary: it now uses the basic identity form, and the landlord can ask for no form.
 3. `preview_portable_restore` and read the preview aloud:
 
 > Backup contains:

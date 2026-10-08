@@ -16,7 +16,7 @@ afterEach(() => {
 });
 
 const RESTORE_NOTE =
-  "For you only. Do not show this link or capability to the operator. Upload the backup file once to this address. Then ask Tour Core to check it before anything changes. The link expires and is not a public restore address. Every expired upload says to send the file again. Start a new upload with begin_restore_upload.";
+  "For you only. Do not show this link or capability to the operator. Upload the backup file once to this address. Then ask Tour Core to check it before anything changes. The link expires and is not a public restore address. A backup up to 50 MB is accepted. Every expired upload says to send the file again. Start a new upload with begin_restore_upload.";
 
 function hosted(): InstallHarness {
   const h = installHarness({

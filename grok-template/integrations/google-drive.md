@@ -38,7 +38,7 @@ hosted Tour Core.
 - Saving a portable backup into `Tour Core/Backups` (`create_portable_backup`, then `confirm_backup_stored` only after the file is there).
 - Saving a readable export into `Tour Core/Exports`. An export is not a backup. On an installation whose records live in Google Drive (`GOOGLE_DRIVE_READY`), the day's `audit-export.json` is written with the records and copied into Drive by the save step. The CSV stays on the Tour Core computer. On a hosted installation (`HOSTED_VOLUME`, Drive used only for backups), day exports stay on the server as 30-minute download links that can be used until they expire. Only readable exports and backups come back as one-time links for the assistant to save into the Tour Core folder in Drive. Door access in a day export is only what was issued or used that day.
 - "Open my Tour Core backup." Open the file with the Drive connector. Bookings and access still come from Tour Core tools.
-- Restoring a lost installation: download the latest backup, upload it through Tour Core's restore handoff (50 MB by default (TOURCORE_RESTORE_UPLOAD_MAX_BYTES); a larger file is refused with 413 and the cap stated in the message), read the preview, and import only after an explicit yes. An older "mock" verification setting restores as basic-form.
+- Restoring a lost installation: download the latest backup, upload it through Tour Core's restore handoff (a backup up to 50 MB is accepted; a larger file is refused with 413 and the cap stated in the message), read the preview, and import only after an explicit yes. An older ID check is named in the import summary: it now uses the basic identity form, and the landlord can ask for no form.
 
 Do not say "Tour Core needs its own Google Drive permission."
 

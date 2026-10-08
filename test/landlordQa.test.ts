@@ -241,7 +241,16 @@ describe("guessed time zone follows the state", () => {
     const id = created.setup.propertyId as string;
     expect(h.workspace.openDraft(id).draft.property.timezoneConfirmed).toBe(true);
     await h.ok("update_property_details", { city: "Tenafly" });
-    await h.ok("update_property_details", { state: "NJ" });
+    const state = await h.ok("update_property_details", { state: "NJ" });
+    expect(state.summary).toBe("Updated 144 Hillside Avenue. Tours still run on Central time. Should I switch to Eastern time?");
+    expect((state.summary.match(/\?/g) ?? []).length).toBe(1);
+    expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/Chicago");
+    const zipDuringSwitch = await h.ok("update_property_details", { postalCode: "07670" });
+    expect(zipDuringSwitch.summary).toBe("Tours still run on Central time. Should I switch to Eastern time?");
+    expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/Chicago");
+    expect(h.workspace.openDraft(id).draft.property.canonicalAddress?.postalCode).toBeUndefined();
+    await h.ok("update_property_details", { timezone: "no" });
+    expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/Chicago");
     const zip = await h.ok("update_property_details", { postalCode: "07670" });
     expect(zip.nextQuestion).toBe("Did I get that right: 144 Hillside Avenue, Tenafly, NJ 07670?");
     expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/Chicago");
@@ -335,7 +344,8 @@ describe("time zone lock and the switch question", () => {
       property.canonicalAddress = { ...property.canonicalAddress!, state: "NJ", formatted: "100 Alfred Way, Brooklyn, NJ" };
     });
     const changed = await h.ok("update_property_details", { property: id, state: "CA" });
-    expect(changed.summary).toBe("Updated 100 Alfred Way. All changes saved. Tours still run on Eastern time. Should I switch to Pacific time?");
+    expect(changed.summary).toBe("Updated 100 Alfred Way. Tours still run on Eastern time. Should I switch to Pacific time?");
+    expect(changed.summary.match(/\?/g) ?? []).toHaveLength(1);
     expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/New_York");
     expect(JSON.stringify(changed)).not.toContain("America/Los_Angeles");
   });

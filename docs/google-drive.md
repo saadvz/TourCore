@@ -86,10 +86,9 @@ reconnected after a restore.
 ## Restore
 
 Grok downloads the latest backup and uploads it through a short-lived
-capability (`POST` to the restore handoff, not a page). Tour Core accepts a
-backup, 50 MB by default (TOURCORE_RESTORE_UPLOAD_MAX_BYTES). The bytes are written
+capability (`POST` to the restore handoff, not a page). A backup up to 50 MB is accepted. The bytes are written
 to a file as they arrive. An upload over that cap returns 413 with a plain
-message that states the cap, which Grok can relay. An older "mock" verification setting restores as basic-form. Tour Core validates the
+message that states the cap, which Grok can relay. An older ID check is named in the import summary: it now uses the basic identity form, and the landlord can ask for no form. Tour Core validates the
 file, shows a plain preview, and waits for an explicit yes. Receiving the file
 does not change live records.
 

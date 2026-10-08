@@ -122,6 +122,11 @@ export const PropertySchema = z.object({
    * A published property keeps its zone even when this is absent.
    */
   timezoneConfirmed: z.boolean().optional(),
+  /**
+   * IANA zone offered by an unanswered "should I switch" question.
+   * Absent once the operator answers. A ZIP is not an answer.
+   */
+  zoneSwitchOffer: z.string().optional(),
   facts: ApprovedFacts,
 });
 
