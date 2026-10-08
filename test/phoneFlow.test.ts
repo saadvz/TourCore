@@ -151,19 +151,19 @@ describe("a real phone over Sendblue", () => {
     expect((await app.text("at unit 101")).replies[0]).toContain("Unit 101 Door is open for you now.");
     const wrongDoor = await app.text("at unit 102");
     expect(wrongDoor.replies[0]).toContain("That door isn't part of your tour");
-    expect(wrongDoor.replies[0]).toContain("I've let the leasing team know");
+    expect(wrongDoor.replies[0]).toContain("I've let the property team know");
     // Structured unit details are the canonical answer for their topic.
     expect((await app.text("how many bedrooms?")).replies).toEqual(["Unit 101 has 2 bedrooms."]);
     expect((await app.text("how much is it?")).replies).toEqual(["Unit 101 rents for $2,300 a month."]);
     expect((await app.text("is there a gym?")).replies[0]).toBe("I'll pass your question to the property team, and they'll reply here as soon as they can.");
     const help = await app.text("help");
-    expect(help.replies).toEqual([VisitorDenialCopy.helpAck("leasing team")]);
+    expect(help.replies).toEqual([VisitorDenialCopy.helpAck("property team")]);
     expect(help.replies.join("\n")).not.toContain("Tour Core:");
     expect(help.replies.join("\n")).not.toContain("Khanex");
 
     const finish = await app.text("finish");
     expect(finish.replies[0]).toContain("Would you like someone from the property team to follow up?\nReply YES or NO.");
-    expect((await app.text("yes")).replies[0]).toContain("Someone from the leasing team will be in touch soon.");
+    expect((await app.text("yes")).replies[0]).toContain("Someone from the property team will be in touch soon.");
 
     // The operator sees it in the normal history, with provider details kept for developers.
     const tours = (await app.local("GET", `/api/properties/${app.id}/tours`)).body.tours;

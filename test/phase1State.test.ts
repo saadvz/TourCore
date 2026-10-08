@@ -476,6 +476,11 @@ describe("playbook client is per session", () => {
     expect(onFresh.body.result?.structuredContent?.playbook).toMatchObject({ id: "claude", mode: "full" });
     const stillSame = await postSignedIn(port, access, 5, "tools/call", { name: "get_state", arguments: {} }, same);
     expect(stillSame.body.result?.structuredContent?.playbook).toMatchObject({ id: "claude", mode: "full" });
+    const madeUp = "33333333-3333-4333-8333-333333333333";
+    const onMadeUp = await postSignedIn(port, access, 6, "tools/call", { name: "get_state", arguments: {} }, madeUp);
+    const onNone = await postSignedIn(port, access, 7, "tools/call", { name: "get_state", arguments: {} });
+    expect(onMadeUp.body.result?.structuredContent?.playbook).toMatchObject({ id: "claude", mode: "full" });
+    expect(onNone.body.result?.structuredContent?.playbook).toMatchObject({ id: "claude", mode: "full" });
   });
 
   it("a static token follows the latest initialize, so a later unnamed client is baseline", async () => {

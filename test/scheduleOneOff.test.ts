@@ -51,7 +51,7 @@ describe("operators can set up a one-time tour", () => {
 
     const first = a.fake.sent.filter((message) => message.number === PHONE).at(-1)!.content;
     expect(first).toBe(operatorScheduledFirstText(a.ws.load(PROPERTY).config, new Date("2026-09-28T19:15:00.000Z")));
-    expect(first).toBe("Hi, this is the leasing team at 100 Alfred Way. We set up a tour for you on Monday at 3:15 PM. Reply YES to confirm, NO to cancel, or STOP to opt out.");
+    expect(first).toBe("Hi, this is the property team at 100 Alfred Way. We set up a tour for you on Monday at 3:15 PM. Reply YES to confirm, NO to cancel, or STOP to opt out.");
 
     const yes = await a.text("YES");
     expect(yes.join("\n")).toContain("Great, you're booked for 3:15 PM");
@@ -144,7 +144,7 @@ describe("operators can set up a one-time tour", () => {
     const visitor = a.fake.sent.filter((message) => message.number === PHONE);
     expect(visitor.length).toBe(beforeVisitor + 1);
     expect(visitor.at(-1)!.content).toBe(
-      "Hi, this is the leasing team at 100 Alfred Way. We set up a tour for you on Monday at 3:15 PM. Reply YES to confirm, NO to cancel, or STOP to opt out.",
+      "Hi, this is the property team at 100 Alfred Way. We set up a tour for you on Monday at 3:15 PM. Reply YES to confirm, NO to cancel, or STOP to opt out.",
     );
 
     const tours = a.ws.listTours(PROPERTY).filter((item) => item.kind === "messaging" && item.visitorPhone === PHONE);
@@ -181,7 +181,7 @@ describe("operators can set up a one-time tour", () => {
 
     const reply = await a.text("1");
     expect(reply).toEqual(["Reply YES to confirm, NO to cancel, or STOP to opt out."]);
-    expect(reply.join("\n")).not.toContain("I'll check with the leasing team");
+    expect(reply.join("\n")).not.toContain("I'll check with the property team");
     expect(reply.join("\n")).not.toContain("Great, you're booked");
     expect(reply.join("\n")).not.toContain("2:00 PM");
     expect(reply.join("\n")).not.toContain("Which day");
@@ -218,7 +218,7 @@ describe("operators can set up a one-time tour", () => {
     expect(a.routineEvents().filter((event) => event.eventType === "exception.created")).toHaveLength(exceptionsBefore);
 
     const who = await a.text("Who is this?");
-    expect(who).toEqual(["I'll check with the leasing team and get back to you."]);
+    expect(who).toEqual(["I'll check with the property team and get back to you."]);
     bundle = a.ws.loadTour(PROPERTY, tour.tourId)!.bundle;
     expect(bundle.reservations[0]).toMatchObject({ status: "RESERVED", awaitingVisitorConfirm: { kind: "OPERATOR_SCHEDULED" } });
     expect(bundle.auditEvents.some((event) => event.type === "QUESTION_UNANSWERED" && event.detail === "Who is this?")).toBe(true);
@@ -275,10 +275,10 @@ describe("operators can set up a one-time tour", () => {
     await publish(a);
     await a.approve("schedule_one_off_tour", { phone: PHONE, visitorName: "Dana", unit: "1A", startsAt: "2:00 PM today" });
     const asked = await a.text("Which unit?");
-    expect(asked).toEqual(["I'll check with the leasing team and get back to you."]);
+    expect(asked).toEqual(["I'll check with the property team and get back to you."]);
     expect(asked.join("\n")).not.toContain("Reply YES");
     const who = await a.text("Who is this?");
-    expect(who).toEqual(["I'll check with the leasing team and get back to you."]);
+    expect(who).toEqual(["I'll check with the property team and get back to you."]);
 
     const tour = a.ws.listTours(PROPERTY).find((item) => item.kind === "messaging")!;
     const bundle = a.ws.loadTour(PROPERTY, tour.tourId)!.bundle;

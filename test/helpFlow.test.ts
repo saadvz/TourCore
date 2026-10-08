@@ -11,7 +11,7 @@ import { bookTour, minutesFrom, setup } from "./helpers";
 
 const at = (hour: number, minute = 0) => zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour, minute }, "America/New_York").getTime();
 const PHONE = "+15550102000";
-const TEAM = "leasing team";
+const TEAM = "property team";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => cleanups.splice(0).forEach((c) => c()));
@@ -78,7 +78,7 @@ describe("help flow: one visitor reply, one open exception", () => {
     const added = (await prospectOutbound(p.session)).slice(before.length);
     expect(added.map((m) => m.body)).toEqual([VisitorDenialCopy.helpAck(TEAM)]);
     expect(added[0]!.body).toContain("They'll reply as soon as they can");
-    expect(added[0]!.body).not.toContain("The leasing team will reply");
+    expect(added[0]!.body).not.toContain("The property team will reply");
     expect(added.join("\n")).not.toContain("Tour Core:");
     expect(added.join("\n")).not.toContain("Reply STOP to opt out.");
     expect(await p.session.store.listAudit()).toEqual(expect.arrayContaining([expect.objectContaining({ type: "HELP_REQUESTED" })]));
@@ -93,7 +93,7 @@ describe("help flow: one visitor reply, one open exception", () => {
     const added = (await prospectOutbound(p.session)).slice(before.length);
     expect(added.map((m) => m.body)).toEqual([VisitorDenialCopy.helpAckRemote(TEAM)]);
     expect(added[0]!.body).toContain("They'll reply here as soon as they can");
-    expect(added[0]!.body).not.toContain("The leasing team will reply");
+    expect(added[0]!.body).not.toContain("The property team will reply");
     expect(added[0]!.body).not.toContain("Stay where you are");
     expect(added.join("\n")).not.toContain("Tour Core:");
     expect((await p.session.store.listAudit()).some((e) => e.type === "HELP_REQUESTED")).toBe(true);
@@ -246,7 +246,7 @@ describe("help flow: one visitor reply, one open exception", () => {
     expect(added.map((m) => m.body)).toEqual([VisitorDenialCopy.helpAck(TEAM), VisitorDenialCopy.helpRepeatAck(TEAM)]);
     expect(added[1]!.body).toContain("Stay where you are");
     expect(added[1]!.body).toContain("They'll reply as soon as they can");
-    expect(added[1]!.body).not.toContain("The leasing team will reply");
+    expect(added[1]!.body).not.toContain("The property team will reply");
     expect(added.join("\n")).not.toContain("Tour Core:");
     expect((await p.session.store.listAudit()).filter((e) => e.type === "HELP_REQUESTED")).toHaveLength(2);
     expect((await p.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(1);

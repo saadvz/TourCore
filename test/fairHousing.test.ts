@@ -52,6 +52,30 @@ describe("fair-housing detection", () => {
     "Is there a minimum age?",
     "Do you have age limits?",
     "Do you discriminate?",
+    "Can I bring my service dog?",
+    "Do you allow service dogs?",
+    "Is a guide dog ok?",
+    "My support dog comes with me, ok?",
+    "Can I bring my emotional support bird?",
+    "Do you allow a seeing-eye dog?",
+    "Can I bring an assistance cat?",
+    "SERVICE DOG",
+    "Is this 55+?",
+    "Is this 55 and over?",
+    "Is this a senior community?",
+    "Do you have age restrictions?",
+    "Do you accept housing assistance?",
+    "Do you take a housing voucher?",
+    "Do you accept HUD?",
+    "Are undocumented applicants allowed?",
+    "What is your policy on sexual orientation?",
+    "Do you ask about gender identity?",
+    "Do you rent to gay tenants?",
+    "Do you rent to lesbians?",
+    "Is this LGBTQ friendly?",
+    "Do you rent to a same-sex couple?",
+    "Do you rent to transgender people?",
+    "What religion are most neighbors?",
   ])("matches %s", (text) => {
     expect(isFairHousingQuestion(text)).toBe(true);
   });
@@ -61,6 +85,8 @@ describe("fair-housing detection", () => {
     "Is rent due monthly?",
     "What color are the walls?",
     "Do you allow pets?",
+    "Do you allow dogs?",
+    "Is there a dog park?",
     "Can I take a tour?",
     "Is there a minimum lease?",
   ])("does not match %s", (text) => {
@@ -171,6 +197,28 @@ describe("fair-housing questions on a live tour", () => {
       "Is there a minimum age?",
       "Do you have age limits?",
       "Do you discriminate?",
+      "Can I bring my service dog?",
+      "Is a guide dog ok?",
+      "My support dog comes with me, ok?",
+      "Can I bring my emotional support bird?",
+      "Do you allow a seeing-eye dog?",
+      "Is this 55+?",
+      "Is this 55 and over?",
+      "Is this a senior community?",
+      "Do you have age restrictions?",
+      "Do you accept housing assistance?",
+      "Do you take a housing voucher?",
+      "Do you accept HUD?",
+      "Do you take Section 8?",
+      "Are undocumented applicants allowed?",
+      "What is your policy on sexual orientation?",
+      "Do you ask about gender identity?",
+      "Do you rent to gay tenants?",
+      "Do you rent to lesbians?",
+      "Is this LGBTQ friendly?",
+      "Do you rent to a same-sex couple?",
+      "Do you rent to transgender people?",
+      "What religion are most neighbors?",
     ] as const;
     const sent: string[] = [];
     for (const text of flagged) {
@@ -194,7 +242,11 @@ describe("fair-housing questions on a live tour", () => {
     expect(sent).toEqual(flagged.map(() => UNKNOWN_ANSWER));
 
     const pets = await a.text("Do you allow pets?");
+    const dogs = await a.text("Do you allow dogs?");
+    const park = await a.text("Is there a dog park?");
     expect(pets.join("\n")).toBe("Here's what the property team shared: No pets allowed.");
+    expect(dogs.join("\n")).toBe("Here's what the property team shared: No pets allowed.");
+    expect(park.join("\n")).toBe("Here's what the property team shared: No pets allowed.");
     const rent = await a.text("How much is rent?");
     const monthly = await a.text("Is rent due monthly?");
     expect(rent.join("\n")).toContain(RENT);
@@ -213,7 +265,7 @@ describe("fair-housing questions on a live tour", () => {
     const leaseFlag = after.find((item) => item.summary.includes("Is there a minimum lease?"));
     expect(leaseFlag).toBeTruthy();
     expect(leaseFlag!.proposeDraft).toBeUndefined();
-    for (const text of ["Do you allow pets?", "How much is rent?", "Is rent due monthly?"]) {
+    for (const text of ["Do you allow pets?", "Do you allow dogs?", "Is there a dog park?", "How much is rent?", "Is rent due monthly?"]) {
       expect(after.some((item) => item.summary.includes(text))).toBe(false);
     }
   });

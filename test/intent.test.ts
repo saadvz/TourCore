@@ -446,7 +446,7 @@ describe("natural texts drive the real tour", () => {
     await p.say("I'm all done");
     expect(p.lastReply()).toContain("Would you like someone from the property team to follow up?");
     await p.say("yeah have someone reach out");
-    expect(p.lastReply()).toContain("Someone from the leasing team will be in touch soon.");
+    expect(p.lastReply()).toContain("Someone from the property team will be in touch soon.");
     expect((await p.audit("FOLLOW_UP_RESPONSE"))[0]?.detail).toBe("yes");
     expect(await p.session.stage()).toBe("done");
   });
@@ -509,7 +509,7 @@ describe("natural texts drive the real tour", () => {
     const outboundBefore = (await p.session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").length;
     await p.say(text);
     expect(await p.audit("HELP_REQUESTED")).toHaveLength(1);
-    expect(p.lastReply()).toBe(VisitorDenialCopy.helpAck("leasing team"));
+    expect(p.lastReply()).toBe(VisitorDenialCopy.helpAck("property team"));
     expect(p.lastReply()).not.toContain("Tour Core:");
     expect(p.lastReply()).not.toContain("Khanex");
     const outbound = (await p.session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND");

@@ -30,16 +30,25 @@ const HOUSING_SUBSIDY = /\b(?:section\s*8|vouchers?)\b/;
 const SUBSIDY_TAKE = /\b(?:take|takes|taking|consider|considers|considering)\b/;
 
 /**
- * Fair housing even with no eligibility verb. "support" or "minimum" alone
- * is not enough, so an ordinary pets question and a minimum lease stay put.
+ * Fair housing even with no eligibility verb. A bare "pets", "dogs", or
+ * "minimum" is not enough, so an ordinary pets question, a dog park, and a
+ * minimum lease stay put. Assistance animals include dog, cat, and pet, and
+ * emotional support is any following word. Matching is on the lowercased text.
  */
+const ASSISTANCE_ANIMAL =
+  /\b(?:(?:service|assistance|support|guide|seeing eye) (?:dogs?|animals?|cats?|pets?)|emotional support \w+|esas?)\b/;
+
 const STANDALONE =
-  /\b(?:service animals?|assistance animals?|support animals?|emotional support (?:animals?|dogs?|cats?)|esas?|pregnant|pregnancy|newborns?|baby(?:s)? on the way|adults only|immigrants?|immigration status|minimum age|age limits?|discriminat(?:e|es|ed|ing|ion))\b/;
+  /\b(?:pregnant|pregnancy|newborns?|baby(?:s)? on the way|adults only|immigrants?|immigration status|minimum age|age limits?|age restrictions?|55 and over|senior community|housing assistance|housing vouchers?|section\s*8|hud|undocumented|sexual orientation|gender identity|gays?|lesbians?|lgbtq?|same sex couples?|transgender|religions?|religious|discriminat(?:e|es|ed|ing|ion))\b/;
+
+/** "55+" loses the plus when punctuation is stripped, so it is checked on the raw text. */
+const FIFTY_FIVE_PLUS = /55\s*\+/;
 
 export function isFairHousingQuestion(text: string): boolean {
+  if (FIFTY_FIVE_PLUS.test(text.toLowerCase())) return true;
   const t = norm(text);
   if (!t) return false;
-  if (STANDALONE.test(t)) return true;
+  if (ASSISTANCE_ANIMAL.test(t) || STANDALONE.test(t)) return true;
   if (!PROTECTED_CLASS.test(t)) return false;
   if (ELIGIBILITY.test(t)) return true;
   return HOUSING_SUBSIDY.test(t) && SUBSIDY_TAKE.test(t);

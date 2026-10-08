@@ -774,7 +774,7 @@ describe("nit: one-off overlap uses the extended window end", () => {
 
 describe("blocker: bare cancel on hold or door failure is cancel, not STOP", () => {
   const HOLD_LATER =
-    "You can't cancel the tour you're on, but you're free to wrap up whenever you like. The leasing team is still working on the problem and will text you here. Your later tour at 2:00 PM on Friday, Oct 2 is still booked. Want me to cancel that one instead? Reply YES or NO.";
+    "You can't cancel the tour you're on, but you're free to wrap up whenever you like. The property team is still working on the problem and will text you here. Your later tour at 2:00 PM on Friday, Oct 2 is still booked. Want me to cancel that one instead? Reply YES or NO.";
 
   it("bare cancel on hold with a later booking asks the later-cancel line", async () => {
     const ctx = await touringWithRebook("cancel-hold-later");
@@ -795,7 +795,7 @@ describe("blocker: bare cancel on hold or door failure is cancel, not STOP", () 
     await ctx.session.operatorChange((core, id) => core.placeOperatorHold(id, "checking something"));
     await ctx.say("cancel this tour");
     expect(lastFrom(ctx.session)).toBe(HOLD_LATER);
-    expect(lastFrom(ctx.session)).toBe(cannotCancelRunningOfferLater("2:00 PM", "Friday, Oct 2", "leasing team"));
+    expect(lastFrom(ctx.session)).toBe(cannotCancelRunningOfferLater("2:00 PM", "Friday, Oct 2", "property team"));
     expect((await ctx.session.reservation())!.status).toBe("OPERATOR_HOLD");
     expect((await ctx.session.store.get("reservations", ctx.pending.id))!.status).toBe("READY");
     expect(ctx.session.optedOut).toBe(false);

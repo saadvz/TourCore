@@ -18,7 +18,7 @@ const at = (hour: number, minute = 0) => zonedTimeToUtc({ year: 2026, month: 9, 
 const PHONE = "+15550102000";
 const CONFIRM = visitorCancelConfirm("Monday, Sep 28", "2:00 PM");
 const KEPT = visitorCancelKept("Monday, Sep 28", "2:00 PM");
-const CHECK_BACK = "I'll check with the leasing team and get back to you.";
+const CHECK_BACK = "I'll check with the property team and get back to you.";
 
 function phone() {
   const transport = new DemoMessagingAdapter(() => {}, "MESSAGING");
@@ -295,7 +295,7 @@ describe("visitor cancel-by-text", () => {
   });
 
   const HOLD_REFUSE =
-    "You can't cancel the tour you're on, but you're free to wrap up whenever you like. The leasing team is still working on the problem and will text you here. Text me anytime if you want to book another tour.";
+    "You can't cancel the tour you're on, but you're free to wrap up whenever you like. The property team is still working on the problem and will text you here. Text me anytime if you want to book another tour.";
 
   async function arrive(p: ReturnType<typeof phone>) {
     await bookedAndReady(p);
@@ -310,7 +310,7 @@ describe("visitor cancel-by-text", () => {
     expect((await p.session.reservation())?.status).toBe("OPERATOR_HOLD");
     await p.say("cancel");
     expect(p.lastReply()).toBe(HOLD_REFUSE);
-    expect(p.lastReply()).toBe(cannotCancelRunningTour("leasing team"));
+    expect(p.lastReply()).toBe(cannotCancelRunningTour("property team"));
     expect((await p.session.reservation())?.status).toBe("OPERATOR_HOLD");
     expect(p.session.optedOut).toBe(false);
     await p.say("hi");
@@ -326,7 +326,7 @@ describe("visitor cancel-by-text", () => {
     expect((await p.session.reservation())?.status).toBe("PROVIDER_FAILURE");
     await p.say("cancel");
     expect(p.lastReply()).toBe(HOLD_REFUSE);
-    expect(p.lastReply()).toBe(cannotCancelRunningTour("leasing team"));
+    expect(p.lastReply()).toBe(cannotCancelRunningTour("property team"));
     expect((await p.session.reservation())?.status).toBe("PROVIDER_FAILURE");
     expect(p.session.optedOut).toBe(false);
     await p.say("hi");
