@@ -174,7 +174,7 @@ the operator correct it.
     > Route: Main Entrance → Unit 1B Door
     >
     > Tours: Monday-Friday, 9:00 AM-5:00 PM
-    > Verification: Basic identity form
+    > Verification: Basic identity form (recommended)
     > Visitor texting: Connected
     > Door access: Demo
     > Visitors can call: not set
