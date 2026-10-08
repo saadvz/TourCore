@@ -24,7 +24,8 @@ export function restoreUploadLimitLabel(bytes: number): string {
 }
 
 export function restoreUploadTooLargeMessage(bytes: number = restoreUploadMaxBytes()): string {
-  return `That backup is too large to restore. The limit is ${restoreUploadLimitLabel(bytes)}.`;
+  const cap = restoreUploadLimitLabel(bytes);
+  return `That file is too big to restore. Backups can be up to ${cap}, so check that it's the Tour Core backup file and try again.`;
 }
 
 export class RestoreUploadTooLargeError extends Error {

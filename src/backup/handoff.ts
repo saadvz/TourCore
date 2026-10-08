@@ -23,6 +23,9 @@ interface HandoffRecord {
   consumed?: boolean;
 }
 
+/** Preview or import was asked before the backup file was stored. */
+export const UPLOAD_BACKUP_FIRST = "Upload the backup file first, then I can show you what's in it.";
+
 export class HandoffError extends Error {
   constructor(message: string) {
     super(message);
@@ -155,7 +158,7 @@ export class HandoffStore {
     }
     if (record.bodyFile) {
       const path = this.bodyPath(id);
-      if (!existsSync(path)) throw new HandoffError("Upload the backup before asking Tour Core to check it.");
+      if (!existsSync(path)) throw new HandoffError(UPLOAD_BACKUP_FIRST);
       return readFileSync(path, "utf8");
     }
     return record.body!;

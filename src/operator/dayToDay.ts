@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { describeOperatorUpdate } from "../alerts/describeUpdate";
+import { UPLOAD_BACKUP_FIRST } from "../backup/handoff";
 import { PortableBackupError } from "../backup/portable";
 import { revokeConfirmQuestion } from "../core/availabilityCopy";
 import { TourCoreError } from "../core/TourCore";
@@ -582,7 +583,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
       attemptWrite(ctx, undefined, async () => {
         const backups = installationOf(ctx).backups;
         if (i.action === "upload") return backups.beginRestore();
-        if (!i.uploadId) throw new SetupInputError("UPLOAD_MISSING", "Upload the backup file first, then I can show you what's in it.");
+        if (!i.uploadId) throw new SetupInputError("UPLOAD_MISSING", UPLOAD_BACKUP_FIRST);
         if (i.action === "preview") return backups.preview(i.uploadId);
         const preview = backups.preview(i.uploadId);
         if (preview.replaceRequired && i.recovery !== "replace") {

@@ -189,7 +189,7 @@ describe("restore upload limit", () => {
     const posted = await postChunked(app.port, String(streamed.handoff.path), String(streamed.handoff.capability), RESTORE_UPLOAD_MAX_BYTES + 1);
     expect(posted.status).toBe(413);
     expect(posted.status).not.toBe(502);
-    expect(posted.body).toBe("That backup is too large to restore. The limit is 50 MB.");
+    expect(posted.body).toBe("That file is too big to restore. Backups can be up to 50 MB, so check that it's the Tour Core backup file and try again.");
     expect(await h.fails("preview_portable_restore", { uploadId })).toMatch(/Upload the backup/);
 
     const declared = await h.ok("begin_restore_upload");
@@ -214,7 +214,7 @@ describe("restore upload limit", () => {
     const posted = await postChunked(app.port, String(upload.handoff.path), String(upload.handoff.capability), 1_000_001);
     expect(posted.status).toBe(413);
     expect(posted.status).not.toBe(502);
-    expect(posted.body).toBe("That backup is too large to restore. The limit is 1 MB.");
+    expect(posted.body).toBe("That file is too big to restore. Backups can be up to 1 MB, so check that it's the Tour Core backup file and try again.");
     expect(await h.fails("preview_portable_restore", { uploadId })).toMatch(/Upload the backup/);
   });
 });
