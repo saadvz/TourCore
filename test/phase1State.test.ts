@@ -22,7 +22,7 @@ import { installHarness } from "./installHarness";
 const cleanups: Array<() => void> = [];
 afterEach(() => cleanups.splice(0).forEach((c) => c()));
 
-const DESTRUCTIVE = new Set(["revoke_tour_access", "remove_property", "import_portable_backup"]);
+const DESTRUCTIVE = new Set(["cancel_tour", "restore_records", "remove_property", "revoke_tour_access", "import_portable_backup"]);
 const SIDE_EFFECT_READS = new Set(["get_next_installation_step", "get_installation_status", "get_installation_component", "check_runtime_health", "verify_storage_migration"]);
 const KEPT = new Set(["reset_hosted_demo", "disconnect_google_drive_storage", "takeover_storage_writer", "migrate_storage_to_google_drive"]);
 
@@ -138,10 +138,10 @@ describe("MCP instructions", () => {
 
 describe("MCP annotations", () => {
   it("marks reads, the five destructive tools, and explicit non-destructive writes", () => {
-    expect(OPERATOR_TOOLS).toHaveLength(92);
+    expect(OPERATOR_TOOLS).toHaveLength(102);
     expect(OPERATOR_TOOLS.some((tool) => tool.name === "get_state")).toBe(true);
     const listed = mcpToolList();
-    expect(listed).toHaveLength(92);
+    expect(listed).toHaveLength(102);
     for (const tool of [...OPERATOR_TOOLS, ...HOSTED_ADMIN_TOOLS]) {
       const hints = annotationsFor(tool);
       expect(hints.openWorldHint).toBe(false);
@@ -159,7 +159,7 @@ describe("MCP annotations", () => {
         expect(hints).toMatchObject({ readOnlyHint: false, destructiveHint: false });
       }
     }
-    for (const name of ["schedule_one_off_tour", "reschedule_tour", "approve_tour_time_request", "activate_google_drive_storage"]) {
+    for (const name of ["schedule_one_off_tour", "reschedule_tour", "approve_tour_time_request", "activate_google_drive_storage", "schedule_tour", "hold_tour", "backup_records"]) {
       expect(annotationsFor({ name, kind: "consequential" }).destructiveHint).toBe(false);
     }
     expect(annotationsFor({ name: "get_next_installation_step", kind: "read" }).readOnlyHint).toBe(false);
@@ -289,7 +289,7 @@ describe("realistic initialize messages", () => {
     }
     expect(new Set(pictures.map((item) => JSON.stringify(item))).size).toBe(1);
     expect(new Set(lists.map((item) => JSON.stringify(item))).size).toBe(1);
-    expect(lists[0]).toHaveLength(92);
+    expect(lists[0]).toHaveLength(102);
   });
 });
 

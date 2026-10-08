@@ -49,7 +49,7 @@ function servicesOf(ctx: ToolContext): OperatorServices {
   return { ...ctx.services, installedMessaging: () => installedMessaging(ctx.installation!) };
 }
 
-function envelope(
+export function envelope(
   ctx: ToolContext,
   propertyId: string | undefined,
   status: "done" | "blocked" | "next",

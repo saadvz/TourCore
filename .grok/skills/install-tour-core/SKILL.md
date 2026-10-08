@@ -2,7 +2,7 @@
 name: install-tour-core
 description: Connect an operator to Tour Core and take them from a blank setup to a published property by following Tour Core's own next steps, asking only for approvals, logins, credentials through a secure handoff, property information and decisions.
 when-to-use: "set up Tour Core", "install Tour Core", "what's left to set up", "check my Tour Core installation", "is Tour Core running", "restart Tour Core", "test alerts", "connect texting", "turn on alerts", "tour updates", "change my notifications", "reset Tour Core", "fresh demo", "fresh onboarding test"
-allowed-tools: get_state get_installation_status get_next_installation_step get_installation_component skip_optional_setup check_runtime_health check_public_endpoint choose_messaging_provider choose_messaging_line test_visitor_messaging set_up_texting get_notification_preferences set_notification_preferences get_operator_update test_operator_alerts test_storage test_access get_secure_setup_url get_storage_status get_storage_location begin_google_drive_connect finish_google_drive_setup use_local_demo_storage prepare_storage_migration migrate_storage_to_google_drive verify_storage_migration activate_google_drive_storage discover_storage takeover_storage_writer disconnect_google_drive_storage confirm_backup_destination decline_portable_backup get_backup_status create_portable_backup confirm_backup_stored reset_hosted_demo
+allowed-tools: get_state get_installation_status get_next_installation_step get_installation_component skip_optional_setup check_runtime_health check_public_endpoint choose_messaging_provider choose_messaging_line test_visitor_messaging set_up_texting get_notification_preferences set_notification_preferences get_operator_update test_operator_alerts test_storage test_access get_secure_setup_url get_storage_status get_storage_location begin_google_drive_connect finish_google_drive_setup use_local_demo_storage prepare_storage_migration migrate_storage_to_google_drive verify_storage_migration activate_google_drive_storage discover_storage takeover_storage_writer disconnect_google_drive_storage confirm_backup_destination decline_portable_backup get_backup_status create_portable_backup confirm_backup_stored reset_hosted_demo backup_records get_inbox
 argument-hint: "[what to check or connect]"
 user-invocable: true
 metadata:
@@ -15,7 +15,9 @@ metadata:
 
 Call `get_state` first and follow its next step. Tour Core decides the order
 and tells you, one step at a time, through `get_next_installation_step` as
-well. The operator only approves, signs in, gives
+well. The backups step on `get_state` is `backup_records`, and declining stays
+possible. `get_next_installation_step` still names `confirm_backup_destination`.
+After publish, day-to-day work starts at `get_inbox`. The operator only approves, signs in, gives
 credentials through a secure handoff, gives property information and makes
 decisions.
 
@@ -50,9 +52,10 @@ Tour updates: ask only "Want me to text you when someone books, starts, or
 finishes a tour, and ping you the moment something needs you?" One alert
 address per install. A new save replaces the old one.
 
-Tool annotations are hints. Five tools are marked destructive: revoke a tour,
-remove a property, import a backup, disconnect Drive storage, and take over
-the storage writer. The hidden hosted reset is also marked destructive.
+Tool annotations are hints. `cancel_tour`, `restore_records`, and removing a
+property are destructive. The older revoke-a-tour and import-a-backup tools
+stay destructive, along with disconnecting Drive storage and taking over the
+storage writer. The hidden hosted reset is also marked destructive.
 
 If a step keeps failing, give the landlord the setup help link as one plain
 link. Never put that link in a text to a visitor.

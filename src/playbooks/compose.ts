@@ -46,10 +46,13 @@ function profileFlagged(selection: PlaybookSelection): string {
 
 /** Agent-only. Names the milestone tool for this step. Not something to say out loud. */
 function milestoneHint(step: StepId): string | undefined {
-  const tool = milestoneToolFor(step);
   if (step === "backups") {
-    return "For you, not out loud: backups still use today's tools. Declining stays possible. Call confirm_backup_destination or decline_portable_backup. Do not say those names out loud.";
+    return "For you, not out loud: call backup_records for this step. Declining stays possible. Do not say that name out loud.";
   }
+  if (step === "operate" || step === "another") {
+    return "For you, not out loud: day-to-day work uses get_tours, schedule_tour, cancel_tour, hold_tour, pause_tours, get_inbox, reply_to_time_request, resolve_issue, export_records, backup_records, and restore_records. Do not say those names out loud.";
+  }
+  const tool = milestoneToolFor(step);
   if (tool === "get_state") return undefined;
   return `For you, not out loud: call ${tool} for this step. Do not say that name out loud.`;
 }

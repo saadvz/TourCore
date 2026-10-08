@@ -59,6 +59,8 @@ export const INSTALL_WIDE_WRITES = [
   "import_portable_backup",
   "begin_restore_upload",
   "preview_portable_restore",
+  "backup_records",
+  "restore_records",
   "set_notification_preferences",
   "skip_optional_setup",
   "test_operator_alerts",
@@ -135,6 +137,10 @@ const ID_TOOLS: Record<string, "exceptionId" | "tourRef" | "tourTimeRequestId"> 
   approve_tour_time_request: "tourTimeRequestId",
   decline_tour_time_request: "tourTimeRequestId",
   propose_tour_time: "tourTimeRequestId",
+  cancel_tour: "tourRef",
+  hold_tour: "tourRef",
+  resolve_issue: "exceptionId",
+  reply_to_time_request: "tourTimeRequestId",
 };
 
 export function evalNamePrefix(runId: string): string {
@@ -223,6 +229,49 @@ export function assertLiveCall(state: GuardState, name: string, args: Record<str
   const idField = ID_TOOLS[name];
   if (idField) {
     observed(state, idField, args[idField], name);
+    if (args.property !== undefined) ownedProperty(state, args.property, name);
+    return;
+  }
+
+  if (name === "get_tours") {
+    if (typeof args.tourRef === "string") {
+      observed(state, "tourRef", args.tourRef, name);
+      return;
+    }
+    ownedProperty(state, args.property, name);
+    return;
+  }
+
+  if (name === "get_inbox") {
+    if (typeof args.exceptionId === "string") {
+      observed(state, "exceptionId", args.exceptionId, name);
+      return;
+    }
+    if (typeof args.tourTimeRequestId === "string") {
+      observed(state, "tourTimeRequestId", args.tourTimeRequestId, name);
+      return;
+    }
+    ownedProperty(state, args.property, name);
+    return;
+  }
+
+  if (name === "export_records") {
+    if (args.kind === "readable") refuse("Refusing export_records: a readable export covers the whole installation.");
+    ownedProperty(state, args.property, name);
+    return;
+  }
+
+  if (name === "schedule_tour") {
+    if (typeof args.phone === "string") {
+      const property = ownedProperty(state, args.property, name);
+      if (!state.localTexting.has(property)) {
+        refuse("Refusing schedule_tour: local test texting is not set on this property yet.");
+      }
+      return;
+    }
+    if (args.reservationId !== undefined) observed(state, "reservationId", args.reservationId, name);
+    else if (args.tourRef !== undefined) observed(state, "tourRef", args.tourRef, name);
+    else refuse("Refusing schedule_tour: it needs a reservation or tour this run observed on a property it created.");
     if (args.property !== undefined) ownedProperty(state, args.property, name);
     return;
   }

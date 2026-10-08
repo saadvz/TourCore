@@ -314,6 +314,8 @@ operator; never name Durin.
    time. `This is a one-off…` only outside tour hours.
 6. **Export the audit**: a validated, provider-neutral record of the day.
 
+Day-to-day work uses `get_tours`, `schedule_tour`, `cancel_tour`, `hold_tour`, `pause_tours`, `get_inbox`, `reply_to_time_request`, `resolve_issue`, `export_records`, `backup_records`, and `restore_records`. `get_state` points at `get_inbox` once a property is published, and at `backup_records` on the backups step. The older tour, inbox, backup, and export tools still work and still enforce the same gates.
+
 ## Current P0 demo configuration
 
 - Tour Core runs on the Bot's cloud computer (a demo deployment) or at a

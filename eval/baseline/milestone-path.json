@@ -3,7 +3,7 @@
     "tool": "set_up_texting",
     "status": "done",
     "milestone": "Backups",
-    "next": "confirm_backup_destination",
+    "next": "backup_records",
     "message": "Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on."
   },
   {
@@ -78,7 +78,7 @@
     "tool": "publish",
     "status": "done",
     "milestone": "Setup",
-    "next": "get_state",
+    "next": "get_inbox",
     "message": "18 Maple Street, Teaneck, NJ 07666 is published for demo. Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on. Door access is still in demo mode, so no physical locks will open."
   }
 ]

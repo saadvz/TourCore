@@ -2,7 +2,7 @@
 name: work-exception
 description: Show what needs the team's attention on live and recent tours (unanswered questions, a visitor text Tour Core could not handle, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored, visitors who didn't confirm leaving), open one, and resolve it using only Tour Core's actions and the operator's own facts.
 when-to-use: "what needs attention", "show exceptions", "any problems", "open Pat's issue", "what's happening with Pat's tour", "show active tours", "pause the tour", "call off the tour", a Tour Core Operator Updates routine run
-allowed-tools: get_operator_update list_active_tours inspect_tour list_exceptions inspect_exception resolve_exception answer_flagged_question place_operator_hold clear_operator_hold revoke_tour_access pause_tours resume_tours remove_property list_tour_time_requests inspect_tour_time_request approve_tour_time_request decline_tour_time_request propose_tour_time reschedule_tour schedule_one_off_tour inject_local_sms read_local_outbox
+allowed-tools: get_operator_update list_active_tours inspect_tour list_exceptions inspect_exception resolve_exception answer_flagged_question place_operator_hold clear_operator_hold revoke_tour_access pause_tours resume_tours remove_property list_tour_time_requests inspect_tour_time_request approve_tour_time_request decline_tour_time_request propose_tour_time reschedule_tour schedule_one_off_tour inject_local_sms read_local_outbox get_tours schedule_tour cancel_tour hold_tour get_inbox reply_to_time_request resolve_issue
 argument-hint: "[visitor or issue]"
 user-invocable: true
 metadata:
@@ -16,6 +16,11 @@ metadata:
 Tour Core finds exceptions in the tour records; the team decides what to do.
 You never decide access and never answer a visitor's question from your own
 knowledge.
+
+Day-to-day work uses `get_tours`, `schedule_tour`, `cancel_tour`, `hold_tour`,
+`pause_tours` (`paused` true or false), `get_inbox`, `reply_to_time_request`,
+and `resolve_issue`. An alert event id is looked up with `get_inbox`. The
+older tools in the steps below still work.
 
 `get_state` carries the playbook. Your name picks wording only and never a
 gate. A grok or Cursor name gets the full Grok playbook. After a restart

@@ -24,6 +24,10 @@ npm run eval:baseline
 
 Upper/Lower is a different duplex shape and is not mixed into the A/B runs.
 
+## Day-to-day golden variant
+
+`test/eval/dayToDayGolden.test.ts` runs the same five landlord tasks (setup, book a one-off, answer a flagged question, pause a unit, export a day) through `get_state`, the milestone writes, and the Phase 4 tools (`backup_records`, `schedule_tour`, `get_inbox`, `resolve_issue`, `pause_tours` with `paused`, `export_records`). The older day-to-day tools are refused. The Phase 0 golden path in `src/eval/golden.ts` still calls those older tools, so `golden-tasks` does not move.
+
 ## Re-baseline
 
 When today's behavior is supposed to change:

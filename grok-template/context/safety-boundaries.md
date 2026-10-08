@@ -69,7 +69,8 @@ the readiness check and a practice tour passed for that exact setup.
   slip through.
 - Operator updates carry only an event id, its type and a tour or issue
   reference: no names, phone numbers or message text. The Bot reads the
-  details from Tour Core with `get_operator_update`.
+  details from Tour Core with `get_inbox` (pass that event id). `get_operator_update` still reads the same event.
+- Day-to-day writes (`schedule_tour`, `cancel_tour`, `hold_tour`, `pause_tours` when `paused` is set, `reply_to_time_request`, `resolve_issue`, `backup_records`, `restore_records`) answer done, blocked, or next. `cancel_tour` and `restore_records` are destructive. A fair-housing item with no draft is refused by `resolve_issue` before any visitor text.
 - Canonical state stays in Tour Core. The Bot re-reads it with tools instead of
   relying on memory, so a new conversation or a restarted Tour Core picks up
   exactly where things are.

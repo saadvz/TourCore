@@ -58,6 +58,7 @@ import { defaultMessagingMode, type OperatorServices } from "./services";
 import { publishGuards, publishProperty, readinessForProperty, runPracticeTour, visitorTexting } from "./setupFlow";
 import { findTour, inspectTourSummary, inspectTourView, listActiveTours, midSentence } from "./tours";
 import { approveTourTimeRequest, declineTourTimeRequest, inspectTourTimeRequest, listTourTimeRequests, proposeTourTime, rescheduleTour, scheduleOneOffTour } from "./tourTimes";
+import { attemptWrite, DAY_TO_DAY_TOOLS } from "./dayToDay";
 import { injectLocalSms, readLocalOutbox } from "./localSms";
 
 /**
@@ -1286,14 +1287,19 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Pause tours",
     kind: "consequential",
     description:
-      "Pauses new bookings at a property or one unit. Already-booked tours can be kept or cancelled with a text, including a later booking held while someone is still touring; a tour in progress always finishes. Cancelling a later booking while they are touring texts that the later tour is cancelled and their tour right now isn't affected. The cancelled count is only tours actually cancelled, never one that already ended. First call returns a yes/no question; if tours are already booked, say keep or cancel (bookedTours) and call again with confirmationCode only after an explicit yes. Resume with resume_tours. This is not an operator hold on one visitor.",
+      "Pauses new bookings at a property or one unit. Already-booked tours can be kept or cancelled with a text, including a later booking held while someone is still touring; a tour in progress always finishes. Cancelling a later booking while they are touring texts that the later tour is cancelled and their tour right now isn't affected. The cancelled count is only tours actually cancelled, never one that already ended. First call returns a yes/no question; if tours are already booked, say keep or cancel (bookedTours) and call again with confirmationCode only after an explicit yes. Leave paused out, or pass paused true, to pause. Pass paused false to resume bookings. Omitting paused keeps today's result. Passing paused returns done, blocked, or next. resume_tours still resumes. This is not an operator hold on one visitor.",
     input: z.strictObject({
       property: Property,
       unit: z.string().max(100).optional().describe("One unit to pause. Leave out to pause the whole property."),
       bookedTours: z.enum(["keep", "cancel"]).optional().describe("When tours are already booked: keep them, or cancel them with a text."),
+      paused: z.boolean().optional().describe("True pauses bookings. False resumes them. Leave it out to pause, the same as before."),
       confirmationCode: Code,
     }),
-    run: (ctx, i) => pauseTours(ctx, i),
+    run: (ctx, i) => {
+      if (i.paused === undefined) return pauseTours(ctx, i);
+      const propertyId = i.property ? resolvePropertyId(ctx.services.workspace, i.property) : undefined;
+      return attemptWrite(ctx, propertyId, async () => (await (i.paused === false ? resumeTours(ctx, i) : pauseTours(ctx, i))) as Record<string, unknown>);
+    },
   }),
   tool({
     name: "resume_tours",
@@ -1435,6 +1441,9 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     }),
     run: (ctx, i) => scheduleOneOffTour(ctx, i),
   }),
+
+  // ------------------------------------------------------ day to day
+  ...DAY_TO_DAY_TOOLS,
 
   // ------------------------------------------------------ installation
   ...INSTALLATION_TOOLS,
