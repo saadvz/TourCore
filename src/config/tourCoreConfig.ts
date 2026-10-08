@@ -154,9 +154,14 @@ export const TourCoreConfigShape = z.object({
   units: z.array(UnitSchema),
   routes: z.array(RouteSchema),
   tourHours: TourHoursSchema,
-  verificationMode: z.enum(["basic-form", "mock", "document-check"]),
+  /**
+   * `basic-form` and `none` are the choices a setup can save.
+   * `mock` and `document-check` remain so older files still parse; readers
+   * treat both as `basic-form` and writers do not store them again.
+   */
+  verificationMode: z.enum(["basic-form", "none", "mock", "document-check"]),
   verificationFormUrl: z.url().optional(),
-  /** How long a passed check can be reused for repeat tours. */
+  /** How many days before a visitor who already filled out the form is asked again. No form does not expire. */
   verificationValidForDays: z.number().int(),
   /**
    * "demo" prints messages. "live" texts real phones through the installation's

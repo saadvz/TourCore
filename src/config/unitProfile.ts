@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { localDateOf } from "../core/timezone";
 
 /**
  * The minimum leasing information for each tourable unit, as approved facts.
@@ -144,7 +145,18 @@ function parseMoney(raw: string): number | undefined {
 
 const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
 
-function parseAvailability(raw: string, now: Date): z.infer<typeof AvailabilitySchema> | undefined {
+function calendarDay(now: Date, timeZone?: string): { year: number; month: number; day: number } {
+  if (timeZone) {
+    try {
+      return localDateOf(now, timeZone);
+    } catch {
+      // An unreadable zone falls back to the UTC calendar. The property zone is checked when it is saved.
+    }
+  }
+  return { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1, day: now.getUTCDate() };
+}
+
+function parseAvailability(raw: string, now: Date, timeZone?: string): z.infer<typeof AvailabilitySchema> | undefined {
   const text = raw.trim().replace(/^available\s+/i, "").replace(/[.]$/, "");
   if (!text) return undefined;
   if (/^(now|immediately|right away|today|asap)$/i.test(text)) return { text: "now", now: true };
@@ -154,8 +166,11 @@ function parseAvailability(raw: string, now: Date): z.infer<typeof AvailabilityS
   const month = md ? MONTHS.findIndex((m) => m.startsWith(md[1]!.toLowerCase().slice(0, 3))) : -1;
   if (md && month >= 0) {
     const day = Number(md[2]);
-    let year = md[3] ? Number(md[3]) : now.getUTCFullYear();
-    if (!md[3] && new Date(Date.UTC(year, month, day)) < new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))) year++;
+    const today = calendarDay(now, timeZone);
+    let year = md[3] ? Number(md[3]) : today.year;
+    const candidate = Date.UTC(year, month, day);
+    const todayUtc = Date.UTC(today.year, today.month - 1, today.day);
+    if (!md[3] && candidate < todayUtc) year++;
     return { text: `${MONTHS[month]![0]!.toUpperCase()}${MONTHS[month]!.slice(1)} ${day}`, date: `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}` };
   }
   return text.length <= 80 ? { text } : undefined;
@@ -166,7 +181,7 @@ function parseAvailability(raw: string, now: Date): z.infer<typeof AvailabilityS
  * available yet", "don't list the price" become an explicit NOT_PROVIDED.
  * Anything unreadable is refused rather than guessed.
  */
-export function parseProfileValue(f: ProfileField, raw: string | number | boolean, now = new Date()): NonNullable<UnitProfile[ProfileField]> {
+export function parseProfileValue(f: ProfileField, raw: string | number | boolean, now = new Date(), timeZone?: string): NonNullable<UnitProfile[ProfileField]> {
   const updatedAt = now.toISOString();
   if (typeof raw === "string" && NOT_PROVIDED_WORDS.test(raw.trim())) return { status: "NOT_PROVIDED", note: raw.trim().slice(0, 120), updatedAt };
   const bad = (hint: string): never => {
@@ -190,7 +205,7 @@ export function parseProfileValue(f: ProfileField, raw: string | number | boolea
       return { status: "PROVIDED", value: { amount: n!, currency: "USD" as const }, updatedAt };
     }
     case "availability": {
-      const v = parseAvailability(text, now);
+      const v = parseAvailability(text, now, timeZone);
       if (!v) bad('Try "now", "October 15" or "not sure yet".');
       return { status: "PROVIDED", value: v!, updatedAt };
     }

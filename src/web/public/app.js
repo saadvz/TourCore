@@ -847,6 +847,18 @@ function verificationStep(data) {
   const { view, summary } = data;
   const id = summary.id;
   let mode = view.verification.mode;
+  const days = el("input", { type: "number", min: "1", max: "365", value: String(view.verification.reuseForDays) });
+  const errors = errorBox();
+  const daysCard = el(
+    "div",
+    { class: "card", hidden: mode === "none" },
+    field(
+      "How many days before a visitor fills out the form again?",
+      days,
+      "A visitor who already filled out the form can book another tour within this many days without filling it out again.",
+    ),
+  );
+  const confirmCard = el("div", { class: "card", hidden: true });
   const choices = view.verification.options.map((o) => {
     const radio = el("input", { type: "radio", name: "verification", value: o.mode, checked: o.mode === mode });
     const node = el(
@@ -857,13 +869,36 @@ function verificationStep(data) {
     );
     radio.addEventListener("change", () => {
       mode = o.mode;
+      daysCard.hidden = mode === "none";
+      confirmCard.hidden = true;
       document.querySelectorAll(".choice").forEach((c) => c.classList.toggle("selected", c === node));
     });
     return node;
   });
-  const days = el("input", { type: "number", min: "1", max: "365", value: String(view.verification.reuseForDays) });
-  const errors = errorBox();
+  const saveNone = action(async () => {
+    await command(id, "setVerificationPolicy", { mode: "none", confirm: true });
+    go(nextHref(id, "verification"));
+  }, errors);
+  const keepForm = () => {
+    mode = "basic-form";
+    confirmCard.hidden = true;
+    daysCard.hidden = false;
+    document.querySelectorAll('input[name="verification"]').forEach((radio) => {
+      const on = radio.value === "basic-form";
+      radio.checked = on;
+      radio.closest(".choice")?.classList.toggle("selected", on);
+    });
+  };
+  set(
+    confirmCard,
+    el("p", {}, "Without a form, anyone who texts can book a tour and get in without telling you who they are. Want to go ahead with no form?"),
+    el("div", { class: "actions" }, btn("Yes, no form", saveNone), btn("Keep the form", keepForm)),
+  );
   const save = action(async () => {
+    if (mode === "none") {
+      confirmCard.hidden = false;
+      return;
+    }
     await command(id, "setVerificationPolicy", { mode, reuseForDays: Number(days.value) });
     go(nextHref(id, "verification"));
   }, errors);
@@ -873,11 +908,13 @@ function verificationStep(data) {
     el(
       "div",
       {},
-      el("h1", {}, "How carefully do you want to check visitors?"),
-      el("p", { class: "lead" }, "Every visitor is checked before any door opens for them."),
+      el("h1", {}, "Should visitors fill out a short identity form before their tour?"),
+      el("p", { class: "lead" }, "We recommend it, so you know who's coming in."),
       issueList(view.issues.filter((i) => i.fix?.step === "verification"), id, "verification"),
       choices,
-      el("div", { class: "card" }, field("How many days can a check be reused?", days, "A visitor who was already checked can book another tour within this many days without being checked again."), errors.node),
+      daysCard,
+      confirmCard,
+      errors.node,
     ),
     save,
   );

@@ -358,7 +358,7 @@ a tour is booked / starts / finishes / is cancelled, or a visitor needs judgment
 - Preferences (`src/alerts/preferences.ts`, `set_notification_preferences`):
   the recommended default is everything except cancellations; before the
   operator chooses, only the three problem kinds are sent. "Booked" means a
-  time was chosen, consent given and the identity check passed. Only real
+  time was chosen and consent is on file (and the identity form, when this place uses one). Only real
   text-message tours produce updates (not practice tours or the browser
   demo), and something that happened before its kind was turned on is never
   sent late. No-shows aren't detected yet.

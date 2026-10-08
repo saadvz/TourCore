@@ -3,7 +3,7 @@
  * Shared steps live in shared.ts.
  */
 
-export const BASELINE_VERSION = "baseline@2026-10-07.tools";
+export const BASELINE_VERSION = "baseline@2026-10-08.tools";
 
 export const BASELINE_TOOLS = [
   "You only have tools. Nothing here is filled in for you.",

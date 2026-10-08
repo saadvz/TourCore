@@ -7,7 +7,10 @@ import { ExportBundleSchema, type ExportBundle } from "../export/exportBundle";
 import { writeFileAtomic, writeFolderAtomic, writeJsonAtomic } from "../storage/atomicWrite";
 import type { DryTourCheck, DryTourResult } from "./dryTour";
 import { runReadinessCheck, type ReadinessResult } from "./readiness";
+import { canonicalAddressKey } from "./address";
+import { normalizeStoredDraft } from "./normalizeDraft";
 import { SetupInputError } from "./setupActions";
+import { presentVerification } from "./verification";
 
 /**
  * PUBLISHED_FOR_DEMO is NOT a production launch. It only means the setup is
@@ -58,6 +61,10 @@ function retargetFingerprint<T extends { configHash: string; safetyHash?: string
     ...(record.configHash === old.full ? { configHash: next.full } : {}),
     ...(record.safetyHash === old.safety ? { safetyHash: next.safety } : {}),
   };
+}
+
+function retargetFrom<T extends { configHash: string; safetyHash?: string }>(record: T, sources: { full: string; safety: string }[], next: { full: string; safety: string }): T {
+  return sources.reduce((current, old) => retargetFingerprint(current, old, next), record);
 }
 
 export function isCurrent(record: { configHash: string; safetyHash?: string } | undefined, state: PropertyState): boolean {
@@ -135,7 +142,36 @@ const TOUR_ID = /^[A-Za-z0-9_-]+$/;
  *   <root>/properties/<propertyId>/practice-tours/<tourId>/{record.json,tour-export.json,audit.csv}
  */
 export class PropertyWorkspace {
+  private installedProvider?: () => string | undefined;
+
   constructor(readonly root: string = defaultWorkspaceRoot()) {}
+
+  /** Live installation provider, read at save time. Does not write a messaging choice. */
+  useInstalledMessaging(read: () => { provider?: string } | undefined): void {
+    this.installedProvider = () => read()?.provider;
+  }
+
+  /**
+   * The saved property whose address is the same place, including a pre-normalization
+   * spelling ("Oak Ave" and "Oak Avenue"). Removed properties are not matches.
+   */
+  findByAddress(address: string): string | undefined {
+    const key = canonicalAddressKey(address) ?? address.trim().toLowerCase();
+    if (!key) return undefined;
+    for (const id of this.propertyIds()) {
+      if (this.has(id) && this.load(id).state.removedAt) continue;
+      const property = this.openDraft(id).draft.property;
+      const candidates = [property.address, property.canonicalAddress?.formatted].filter((value): value is string => !!value);
+      const keys = candidates.map((value) => canonicalAddressKey(value) ?? value.trim().toLowerCase());
+      if (keys.includes(key)) return id;
+    }
+    return undefined;
+  }
+
+  private installedSnapshot(): { provider?: string } | undefined {
+    const provider = this.installedProvider?.();
+    return provider ? { provider } : undefined;
+  }
 
   list(): SavedProperty[] {
     return this.propertyIds()
@@ -160,18 +196,27 @@ export class PropertyWorkspace {
   load(propertyId: string): SavedProperty {
     if (!this.has(propertyId)) throw new SetupInputError("PROPERTY_NOT_FOUND", "I couldn't find that property.");
     const raw = JSON.parse(readFileSync(this.configPath(propertyId), "utf8")) as { messagingMode?: string };
-    const config = TourCoreConfigShape.parse(raw);
-    const hash = configHash(config);
+    const parsed = TourCoreConfigShape.parse(raw);
     const statePath = this.statePath(propertyId);
     let stored: PropertyState | undefined = existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : undefined;
-    if (raw.messagingMode === "sendblue") stored = this.migrateLiveMessaging(propertyId, config, stored);
-    stored = this.migrateVisitorHelpFingerprint(config, stored);
+    if (raw.messagingMode === "sendblue") stored = this.migrateLiveMessaging(propertyId, parsed, stored);
+    stored = this.migrateVisitorHelpFingerprint(parsed, stored);
+    const config = presentVerification(parsed);
+    const rawFull = configHash(parsed);
+    const viewedFull = configHash(config);
+    const rawSafety = safetyHash(parsed);
+    const viewedSafety = safetyHash(config);
     // If a save was interrupted between the config and status files, fail closed: treat it as an unchecked draft.
+    // An older file whose check was `mock` or `document-check` still matches the fingerprint it was published with.
     const state: PropertyState =
-      stored && stored.configHash === hash
+      stored && (stored.configHash === rawFull || stored.configHash === viewedFull)
         ? stored
-        : { ...(stored ?? {}), propertyId, status: "DRAFT", configHash: hash, savedAt: stored?.savedAt ?? new Date().toISOString(), publishedAt: undefined };
-    return { config, state: { ...state, safetyHash: safetyHash(config) } };
+        : { ...(stored ?? {}), propertyId, status: "DRAFT", configHash: viewedFull, savedAt: stored?.savedAt ?? new Date().toISOString(), publishedAt: undefined };
+    const legacyHeld =
+      parsed.verificationMode !== config.verificationMode &&
+      !!stored &&
+      (stored.configHash === rawFull || stored.safetyHash === rawSafety || stored.readiness?.safetyHash === rawSafety || stored.dryTour?.safetyHash === rawSafety);
+    return { config, state: { ...state, safetyHash: legacyHeld ? rawSafety : viewedSafety } };
   }
 
   /**
@@ -228,21 +273,32 @@ export class PropertyWorkspace {
    * checks and publication, and is recorded in the content log.
    */
   save(draft: TourCoreConfig, now = new Date()): SavedProperty & { change: "new" | "none" | "content" | "structural" } {
-    const parsed = TourCoreConfigSchema.safeParse(draft);
+    const parsed = TourCoreConfigSchema.safeParse(normalizeStoredDraft(draft));
     if (!parsed.success) {
       const error = new SetupInputError("CONFIG_INVALID", "Some answers still need attention before this can be saved.");
       Object.assign(error, { issues: validateConfig(draft) });
       throw error;
     }
-    const config = parsed.data;
+    const config = presentVerification(parsed.data);
     const id = config.property.id;
-    const hash = configHash(config);
     const before = this.has(id) ? this.load(id) : undefined;
+    const hash = configHash(config);
     const previous = before?.state;
     const change = before ? classifyChange(before.config, config) : "new";
     let state: PropertyState;
     if (previous && (change === "none" || change === "content")) {
-      state = { ...previous, configHash: hash, safetyHash: safetyHash(config), savedAt: now.toISOString() };
+      const presented = { full: configHash(before!.config), safety: safetyHash(before!.config) };
+      const recorded = { full: previous.configHash, safety: previous.safetyHash ?? presented.safety };
+      const next = { full: hash, safety: safetyHash(config) };
+      const spellingOnly = presented.safety !== next.safety || recorded.safety !== next.safety;
+      state = {
+        ...previous,
+        configHash: hash,
+        safetyHash: next.safety,
+        savedAt: now.toISOString(),
+        ...(spellingOnly && previous.readiness ? { readiness: retargetFrom(previous.readiness, [recorded, presented], next) } : {}),
+        ...(spellingOnly && previous.dryTour ? { dryTour: retargetFrom(previous.dryTour, [recorded, presented], next) } : {}),
+      };
       if (change === "content") this.appendContentChange(id, { at: now.toISOString(), changes: describeContentChanges(before!.config, config) });
     } else {
       // Earlier check results stay for history, but their fingerprint no longer matches, so they no longer count.
@@ -281,12 +337,13 @@ export class PropertyWorkspace {
     const path = this.draftPath(propertyId);
     if (!existsSync(path)) return undefined;
     const parsed = TourCoreConfigShape.safeParse(JSON.parse(readFileSync(path, "utf8")));
-    return parsed.success ? parsed.data : undefined;
+    return parsed.success ? presentVerification(parsed.data) : undefined;
   }
 
   /** Unfinished setups may be invalid; they're kept apart from the saved setup until they pass validation. */
   saveDraft(draft: TourCoreConfig): void {
-    writeJsonAtomic(this.draftPath(draft.property.id), draft);
+    const normalized = presentVerification(normalizeStoredDraft(draft));
+    writeJsonAtomic(this.draftPath(normalized.property.id), normalized);
   }
 
   /**
@@ -462,11 +519,14 @@ export class PropertyWorkspace {
 
     if (validateConfig(config).length) blockers.push({ code: "CONFIG_INVALID", message: "Some setup answers still need attention." });
 
+    const installed = this.installedSnapshot();
+    const liveCheck = await runReadinessCheck(config, { now, installed });
+
     const r = state.readiness;
     if (!r) blockers.push({ code: "READINESS_NOT_RUN", message: "Run the readiness check first." });
     else if (!isCurrent(r, state)) blockers.push({ code: "READINESS_OUT_OF_DATE", message: "The setup changed after the last readiness check. Please check again." });
     else if (!r.passed) blockers.push({ code: "READINESS_FAILED", message: "The last readiness check found problems. Fix them and check again." });
-    else if (!(await runReadinessCheck(config, { now })).passed) {
+    else if (!liveCheck.passed) {
       blockers.push({ code: "READINESS_FAILED_NOW", message: "Something isn't ready anymore. Please run the readiness check again." });
     }
 

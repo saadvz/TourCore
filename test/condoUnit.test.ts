@@ -132,29 +132,29 @@ describe("apartment or condo identity", () => {
     expect(visitorSubject({ ...property, propertyType: "SINGLE_FAMILY" }, "Main Home")).not.toMatch(/Unit /);
     const coded = addTourableSpace(createPropertySetup({ address: "145 Main St, Hoboken, NJ 07030", propertyType: "APARTMENT_OR_CONDO" }), { name: "4b" });
     expect(coded.units[0]!.name).toBe("Unit 4B");
-    expect(coded.property.name).toBe("145 Main St, Unit 4B");
+    expect(coded.property.name).toBe("145 Main Street, Unit 4B");
     const named = addTourableSpace(createPropertySetup({ address: "145 Main St, Hoboken, NJ 07030", propertyType: "APARTMENT_OR_CONDO" }), { name: "garden" });
     expect(named.units[0]!.name).toBe("Unit Garden");
-    expect(named.property.name).toBe("145 Main St, Unit Garden");
+    expect(named.property.name).toBe("145 Main Street, Unit Garden");
   });
 
   it("applies the same casing when renaming a unit and refreshes the door and nickname", () => {
     let draft = addTourableSpace(createPropertySetup({ address: "145 Main St, Hoboken, NJ 07030", propertyType: "APARTMENT_OR_CONDO" }), { name: "Garden" });
     expect(draft.units[0]!.name).toBe("Unit Garden");
     expect(draft.doors.find((d) => d.id === draft.units[0]!.doorId)?.name).toBe("Unit Garden Door");
-    expect(draft.property.name).toBe("145 Main St, Unit Garden");
+    expect(draft.property.name).toBe("145 Main Street, Unit Garden");
 
     draft = renameUnit(draft, draft.units[0]!.id, "loft");
     expect(draft.units[0]!.name).toBe("Unit Loft");
     expect(draft.doors.find((d) => d.id === draft.units[0]!.doorId)?.name).toBe("Unit Loft Door");
-    expect(draft.property.name).toBe("145 Main St, Unit Loft");
+    expect(draft.property.name).toBe("145 Main Street, Unit Loft");
     expect(draft.units[0]!.name).not.toBe("loft");
     expect(draft.doors.some((d) => d.name === "loft Door")).toBe(false);
 
     draft = renameUnit(draft, draft.units[0]!.id, "4b");
     expect(draft.units[0]!.name).toBe("Unit 4B");
     expect(draft.doors.find((d) => d.id === draft.units[0]!.doorId)?.name).toBe("Unit 4B Door");
-    expect(draft.property.name).toBe("145 Main St, Unit 4B");
+    expect(draft.property.name).toBe("145 Main Street, Unit 4B");
   });
 
   it("does not treat a street line stored as the name as a public building name", () => {
@@ -205,7 +205,7 @@ describe("apartment or condo setup", () => {
   it("builds a building-entrance + unit-door route and opens both on a practice tour", async () => {
     const draft = condoDraft("BUILDING_AND_UNIT", "Buzz 4B at the lobby desk");
     expect(validateConfig(draft)).toEqual([]);
-    expect(draft.property.name).toBe("145 Main St, Unit 4B");
+    expect(draft.property.name).toBe("145 Main Street, Unit 4B");
     expect(draft.units).toHaveLength(1);
     expect(draft.units[0]).toMatchObject({ name: "Unit 4B", entryInstructions: "Buzz 4B at the lobby desk" });
     expect(draft.routes[0]!.stops.map((s) => draft.doors.find((d) => d.id === s.doorId)?.name)).toEqual(["Lobby Entrance", "Unit 4B Door"]);
@@ -259,7 +259,7 @@ describe("apartment or condo setup", () => {
     expect(added.unit).toMatchObject({ name: "Unit 4B", door: "Unit 4B Door" });
     expect(added.nextQuestion).toBe(BUILDING_ACCESS_QUESTION);
     const id = h.workspace.propertyIds()[0]!;
-    expect(h.workspace.openDraft(id).draft.property.name).toBe("145 Main St, Unit 4B");
+    expect(h.workspace.openDraft(id).draft.property.name).toBe("145 Main Street, Unit 4B");
 
     const access = await h.ok("update_property_details", { buildingAccess: "BUILDING_AND_UNIT" });
     expect(access.nextQuestion).toBe("What's the building entrance called?");
@@ -288,7 +288,7 @@ describe("apartment or condo setup", () => {
     expect(renamed.summary).not.toMatch(/Updated loft\./i);
     expect(renamed.unit).toMatchObject({ name: "Unit Loft", door: "Unit Loft Door" });
     const id = h.workspace.propertyIds()[0]!;
-    expect(h.workspace.openDraft(id).draft.property.name).toBe("145 Main St, Unit Loft");
+    expect(h.workspace.openDraft(id).draft.property.name).toBe("145 Main Street, Unit Loft");
     expect(h.workspace.openDraft(id).draft.units[0]!.name).toBe("Unit Loft");
 
     const recased = await h.ok("update_unit", { unit: "Unit Loft", newName: "4b" });
@@ -338,7 +338,7 @@ describe("apartment or condo visitor and landlord copy", () => {
   it("welcome uses street + unit and never sends entry instructions", async () => {
     const draft = condoDraft("UNIT_ONLY", "Code 4455 then elevator to 4");
     const welcome = await welcomeOf(draft);
-    expect(welcome).toContain("Hi! Welcome to the self-guided tour for 145 Main St, Unit 4B.");
+    expect(welcome).toContain("Hi! Welcome to the self-guided tour for 145 Main Street, Unit 4B.");
     expect(welcome).toContain("questions about the unit");
     expect(welcome).toContain("Which day works for you?");
     expect(welcome).not.toContain("Which unit");
@@ -423,7 +423,7 @@ describe("apartment or condo visitor and landlord copy", () => {
   it("landlord alerts name the street and unit, never Main Home", () => {
     const draft = condoDraft("UNIT_ONLY");
     const tour = { config: draft, bundle: { reservations: [{ unitId: draft.units[0]!.id }] } };
-    expect(unitNameOf(tour as never)).toBe("145 Main St, Unit 4B");
+    expect(unitNameOf(tour as never)).toBe("145 Main Street, Unit 4B");
     expect(unitNameOf(tour as never)).not.toContain("Main Home");
   });
 
@@ -449,16 +449,16 @@ describe("apartment or condo visitor and landlord copy", () => {
     await named.request(janeDraft.units[0]!.doorId);
     await named.core.completeTour(named.ready.id);
     const jane = (await named.outbound()).find((t) => t.startsWith("Thanks for touring"));
-    expect(jane).toContain("Thanks for touring 145 Main St, Unit 4B, Jane!");
+    expect(jane).toContain("Thanks for touring 145 Main Street, Unit 4B, Jane!");
     expect(jane).not.toContain(", Visitor");
 
-    const draft = { ...condoDraft("UNIT_ONLY"), verificationMode: "mock" as const };
+    const draft = { ...condoDraft("UNIT_ONLY"), verificationMode: "none" as const };
     const unnamed = await bookCondo(draft, { name: UNNAMED_VISITOR, phone: "(555) 010-1234" });
     unnamed.clock.set(new Date(unnamed.ready.slotStart!));
     await unnamed.request(draft.units[0]!.doorId);
     await unnamed.core.completeTour(unnamed.ready.id);
     const thanks = (await unnamed.outbound()).find((t) => t.startsWith("Thanks for touring"));
-    expect(thanks).toContain("Thanks for touring 145 Main St, Unit 4B!");
+    expect(thanks).toContain("Thanks for touring 145 Main Street, Unit 4B!");
     expect(thanks).not.toContain("Visitor");
   });
 

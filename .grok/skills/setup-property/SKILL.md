@@ -2,7 +2,7 @@
 name: setup-property
 description: Set up a self-guided touring property in Tour Core through a friendly, one-question-at-a-time conversation, then check it and run a practice tour before offering to publish. Use when the operator wants to add, set up, import or change a building.
 when-to-use: "set up a property", "set up my building", "add a property", "I have a new building", "change the tour hours", "add a unit"
-allowed-tools: list_properties get_property_setup create_property_setup update_property_details list_units add_unit update_unit set_unit_details get_unit_details list_doors add_door preview_route set_route get_tour_hours set_tour_hours get_verification_policy set_verification_policy get_services set_services review_property_setup run_readiness_check run_dry_tour publish_demo_property pause_tours resume_tours remove_property
+allowed-tools: list_properties get_property_setup create_property_setup update_property_details save_property list_units add_unit update_unit save_units set_unit_details get_unit_details list_doors add_door preview_route set_route get_tour_hours set_tour_hours save_hours get_verification_policy set_verification_policy save_settings get_services set_services review_property_setup run_readiness_check run_dry_tour publish_demo_property publish pause_tours resume_tours remove_property
 argument-hint: "[address]"
 user-invocable: true
 metadata:
@@ -131,10 +131,15 @@ the operator correct it.
    Monday–Friday, 9:00 AM–5:00 PM. Mention the other visible defaults once
    (45-minute tours, a new tour every hour, 10 minutes early) and change any
    they want.
-9. Ask **"How carefully do you want to verify visitors?"** Offer "Basic
-   identity form (free, recommended)" or "Practice verification (everyone
-   passes; for trying things out)". `set_verification_policy`. Full ID checks
-   aren't available yet; say so if asked.
+9. Ask **"Should visitors fill out a short identity form before their tour? I recommend it, so you know who's coming in."**
+   Options: "Basic identity form (recommended)" and "No form". The basic form is the default.
+   If they pick no form, ask **"Without a form, anyone who texts can book a tour and get in without telling you who they are. Want to go ahead with no form?"**
+   Call `set_verification_policy` with `level: none` only after they say yes, and pass the confirmation code it returns.
+   Do not ask how many days the form lasts, and do not mention reuse. Read it back as **"Verification: No identity form."**
+   If they say no, leave the basic identity form.
+   If they keep the basic form, the reuse question is **"How many days before a visitor fills out the form again?"**
+   Help: **"A visitor who already filled out the form can book another tour within this many days without filling it out again."**
+   The default is 30. Read the basic form back as **"Verification: Basic identity form (recommended)".**
 10. Texting is automatic: when this Tour Core has visitor texting installed,
     a new property uses it on its own. One touring number covers every property.
     Don't ask "How do you want to text people?" and don't ask for a separate
@@ -173,7 +178,7 @@ the operator correct it.
     > Route: Main Entrance → Unit 1B Door
     >
     > Tours: Monday-Friday, 9:00 AM-5:00 PM
-    > Verification: Basic identity form
+    > Verification: Basic identity form (recommended)
     > Visitor texting: Connected
     > Door access: Demo
     > Visitors can call: not set

@@ -104,11 +104,13 @@ function evaluate({ reservation, prospect, consent, verification, doorId, reques
   const now = requestedAt.getTime();
   const windowStart = reservation.windowStart ? Date.parse(reservation.windowStart) : NaN;
   const windowEnd = reservation.windowEnd ? Date.parse(reservation.windowEnd) : NaN;
-  const verifiedUntil = Date.parse(verification.validUntil);
+  // No form has no identity expiry. The booked window and route still decide access.
+  const identityExpires = verification.method !== "none";
+  const verifiedUntil = identityExpires ? Date.parse(verification.validUntil) : now;
   if ([now, windowStart, windowEnd, verifiedUntil].some(Number.isNaN)) {
     return deny("DENY_UNKNOWN", "reservation time window is missing or invalid");
   }
-  if (now >= verifiedUntil) return deny("DENY_VERIFICATION_STALE", "identity verification has lapsed");
+  if (identityExpires && now >= verifiedUntil) return deny("DENY_VERIFICATION_STALE", "identity verification has lapsed");
   if (now < windowStart) return deny("DENY_TOO_EARLY", "tour window has not opened yet");
   if (now >= windowEnd) return deny("DENY_EXPIRED", "tour window has closed");
 

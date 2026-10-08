@@ -22,14 +22,14 @@ function home(): TourCoreConfig {
     property: {
       ...config.property,
       propertyType: "SINGLE_FAMILY",
-      name: "144 Hillside Ave, Teaneck, NJ 07666",
-      address: "144 Hillside Ave, Teaneck, NJ 07666",
+      name: "144 Hillside Avenue, Teaneck, NJ 07666",
+      address: "144 Hillside Avenue, Teaneck, NJ 07666",
       canonicalAddress: {
-        street: "144 Hillside Ave",
+        street: "144 Hillside Avenue",
         city: "Teaneck",
         state: "NJ",
         postalCode: "07666",
-        formatted: "144 Hillside Ave, Teaneck, NJ 07666",
+        formatted: "144 Hillside Avenue, Teaneck, NJ 07666",
       },
       addressConfirmed: true,
       facts: [],
@@ -40,7 +40,7 @@ function home(): TourCoreConfig {
       {
         id: "route_home",
         unitId: unit.id,
-        stops: [{ doorId: entrance.id, guidance: "Welcome to 144 Hillside Ave! Take your time, and text me any questions." }],
+        stops: [{ doorId: entrance.id, guidance: "Welcome to 144 Hillside Avenue! Take your time, and text me any questions." }],
       },
     ],
   };
@@ -119,7 +119,7 @@ describe("single-family visitor language", () => {
   it("names the home by its address, not the internal space label", async () => {
     const a = await liveApp({ cleanups, config: home() });
     const hi = (await a.optInSms()).join("\n");
-    expect(hi).toContain("Hi! Welcome to the self-guided tour for 144 Hillside Ave, Teaneck, NJ 07666.");
+    expect(hi).toContain("Hi! Welcome to the self-guided tour for 144 Hillside Avenue, Teaneck, NJ 07666.");
     expect(hi).toContain("questions about the home");
     expect(hi).toContain("Which day works for you?");
     expect(hi).not.toContain("Main Home");
@@ -127,7 +127,7 @@ describe("single-family visitor language", () => {
 
     await a.text("Thursday");
     const rent = (await a.text("How much is the rent for this home?")).join("\n");
-    expect(rent).toContain("144 Hillside Ave rents for $2,300 a month.");
+    expect(rent).toContain("144 Hillside Avenue rents for $2,300 a month.");
     expect(rent).not.toContain("Main Home");
     expect(rent).not.toMatch(/\bunit\b/i);
     expect(rent).not.toContain("I have these times available");
@@ -141,10 +141,10 @@ describe("single-family visitor language", () => {
     config.property.name = "Teaneck Home";
     const a = await liveApp({ cleanups, config });
     const hi = (await a.optInSms()).join("\n");
-    expect(hi).toContain("Teaneck Home at 144 Hillside Ave, Teaneck, NJ 07666");
+    expect(hi).toContain("Teaneck Home at 144 Hillside Avenue, Teaneck, NJ 07666");
     expect(hi).not.toContain("Main Home");
     const rent = (await a.text("How much is rent?")).join("\n");
-    expect(rent).toContain("Teaneck Home at 144 Hillside Ave, Teaneck, NJ 07666 rents for $2,300 a month.");
+    expect(rent).toContain("Teaneck Home at 144 Hillside Avenue, Teaneck, NJ 07666 rents for $2,300 a month.");
     expect(rent).not.toContain("Main Home");
   });
 });

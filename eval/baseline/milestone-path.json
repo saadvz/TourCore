@@ -1,0 +1,84 @@
+[
+  {
+    "tool": "set_up_texting",
+    "status": "done",
+    "milestone": "Backups",
+    "next": "confirm_backup_destination",
+    "message": "Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on."
+  },
+  {
+    "tool": "decline_portable_backup",
+    "message": "Operational records stay with hosted Tour Core. Portable backups are off until you connect Google Drive."
+  },
+  {
+    "tool": "save_property",
+    "status": "done",
+    "milestone": "Units, doors, and routes",
+    "next": "save_units",
+    "message": "Saved 18 Maple Street, Teaneck, NJ 07666."
+  },
+  {
+    "tool": "save_settings",
+    "status": "done",
+    "milestone": "Units, doors, and routes",
+    "next": "save_units",
+    "message": "Visitors will fill out a basic identity form, and tour updates are off for now."
+  },
+  {
+    "tool": "save_units",
+    "status": "done",
+    "milestone": "Units, doors, and routes",
+    "next": "save_doors_and_routes",
+    "message": "Saved Unit A and Unit B."
+  },
+  {
+    "tool": "run_checks",
+    "status": "blocked",
+    "milestone": "Units, doors, and routes",
+    "next": "save_doors_and_routes",
+    "message": "This place doesn't have a walking route yet, so the practice tour can't run.",
+    "code": "ROUTES_MISSING"
+  },
+  {
+    "tool": "save_doors_and_routes",
+    "status": "next",
+    "milestone": "Units, doors, and routes",
+    "next": "save_doors_and_routes",
+    "message": "I have: Unit A: Front Door, then Unit A Door. Unit B: Front Door, then Unit B Door. Nothing was saved."
+  },
+  {
+    "tool": "save_doors_and_routes",
+    "status": "done",
+    "milestone": "Practice tour",
+    "next": "run_checks",
+    "message": "Unit A: Front Door, then Unit A Door. Unit B: Front Door, then Unit B Door"
+  },
+  {
+    "tool": "save_hours",
+    "status": "done",
+    "milestone": "Practice tour",
+    "next": "run_checks",
+    "message": "Tours run Monday to Friday, 9 AM to 5 PM."
+  },
+  {
+    "tool": "run_checks",
+    "status": "done",
+    "milestone": "Publish",
+    "next": "publish",
+    "message": "The check passed, and the practice tour passed."
+  },
+  {
+    "tool": "publish",
+    "status": "next",
+    "milestone": "Publish",
+    "next": "publish",
+    "message": "Everything passed. Do you want me to publish 18 Maple Street, Teaneck, NJ 07666 for demo?"
+  },
+  {
+    "tool": "publish",
+    "status": "done",
+    "milestone": "Setup",
+    "next": "get_state",
+    "message": "18 Maple Street, Teaneck, NJ 07666 is published for demo. Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on. Door access is still in demo mode, so no physical locks will open."
+  }
+]

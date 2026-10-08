@@ -108,7 +108,7 @@ describe("setup through the tools", () => {
         "Unit 101",
         "  1 bed \u00b7 1 bath \u00b7 $1,950/month \u00b7 available now",
         "  Route: Lobby Entrance \u2192 Unit 101 Door",
-        "Verification: Basic identity form",
+        "Verification: Basic identity form (recommended)",
         "Visitor texting: Practice only (nobody is texted)",
         "Door access: Demo",
         "Visitors can call: not set",
@@ -198,7 +198,7 @@ describe("setup through the tools", () => {
     expect(inferred).toMatchObject({ status: "ok", route: ["Lobby Entrance", "Unit 101 Door"], summary: "I have: Lobby Entrance \u2192 Unit 101 Door. Is that right?" });
 
     const ambiguous = await h.ok("preview_route", { unit: "Unit 101", doors: ["entrance", "unit door"] });
-    expect(ambiguous).toMatchObject({ status: "needs-clarification", summary: '"entrance" could be Lobby Entrance or Garden Entrance. Which one?' });
+    expect(ambiguous).toMatchObject({ status: "needs-clarification", summary: '"entrance" could be Garden Entrance or Lobby Entrance. Which one?' });
 
     const unknown = await h.ok("preview_route", { unit: "Unit 101", doors: ["side door", "unit door"] });
     expect(unknown.status).toBe("unknown-doors");

@@ -247,12 +247,13 @@ export class PortableBackups {
     if (live && recovery !== "replace") {
       throw new PortableBackupError("This Tour Core already has records. Restoring would replace them, and that needs an explicit recovery choice. Nothing was changed.");
     }
-    applyPortableBackup(this.inst.root, backup, live);
+    const restored = applyPortableBackup(this.inst.root, backup, live);
     this.handoff.consumeUpload(uploadId);
     const lines = reconnectLines({
       texting: !!this.inst.secrets.get("SENDBLUE_API_API_KEY"),
       updates: !!this.inst.secrets.get("TOURCORE_GROK_ROUTINE_KEY"),
     });
+    lines.push(...restored.notes);
     return { summary: lines.join(" "), lines };
   }
 

@@ -152,10 +152,9 @@ change any of that?
 
 **Operator:** No, that's fine.
 
-**Tour Core:** How would you like visitors to verify who they are? I'd suggest
-the basic identity form (free): they give their legal name, email and phone
-before the tour. Or practice verification, where everyone passes, just for
-trying things out.
+**Tour Core:** Should visitors fill out a short identity form before their tour?
+I recommend it, so you know who's coming in. Basic identity form (recommended),
+or no form.
 
 **Operator:** Basic form.
 
@@ -176,7 +175,7 @@ Unit 1B
 Route: Main Entrance → Unit 1B Door
 
 Tours: Monday-Friday, 9:00 AM-5:00 PM
-Verification: Basic identity form
+Verification: Basic identity form (recommended)
 Visitor texting: Connected
 Door access: Demo
 

@@ -61,7 +61,7 @@ describe("review_property_setup unit headings", () => {
     await h.ok("add_unit", {});
     await h.ok("set_unit_details", { units: [{ unit: "Main Home", bedrooms: "3", bathrooms: "2", monthlyRent: "$3,400", availability: "now" }] });
     const review = await h.ok("review_property_setup");
-    expect(review.lines).toContain("910 QA Gate Rd");
+    expect(review.lines).toContain("910 QA Gate Road");
     expect(review.lines).not.toContain("Main Home");
     expect(h.workspace.openDraft(h.workspace.propertyIds()[0]!).draft.units[0]!.name).toBe("Main Home");
   });
@@ -70,7 +70,7 @@ describe("review_property_setup unit headings", () => {
     const multi = app();
     await multi.ok("create_property_setup", { address: "144 Hillside Ave, Teaneck, NJ 07666", propertyType: "MULTIFAMILY_HOME" });
     await multi.ok("add_unit", { name: "1A" });
-    expect((await multi.ok("review_property_setup")).lines).toContain("1A");
+    expect((await multi.ok("review_property_setup")).lines).toContain("Unit 1A");
 
     const condo = app();
     await condo.ok("create_property_setup", { address: "145 Main St, Hoboken, NJ 07030", propertyType: "APARTMENT_OR_CONDO" });
@@ -169,7 +169,7 @@ describe("set_unit_details single-family auto-select", () => {
     await details.ok("add_unit", {});
     const byDetails = await details.ok("set_unit_details", { details: "3 bed 2 bath for $3,400, available now" });
     expect(byDetails.complete).toBe(true);
-    expect(byDetails.lines).toEqual(["910 QA Gate Rd — 3 bed · 2 bath · $3,400/month · available now"]);
+    expect(byDetails.lines).toEqual(["910 QA Gate Road — 3 bed · 2 bath · $3,400/month · available now"]);
 
     const fields = app();
     await fields.ok("create_property_setup", { address: "12 Scratch Lane, Teaneck, NJ 07666", propertyType: "SINGLE_FAMILY" });
@@ -187,7 +187,7 @@ describe("set_unit_details single-family auto-select", () => {
     expect(await h.fails("set_unit_details", { details: "2 bed 1 bath for $2,200, available now" })).toMatch(/couldn't match those details to a unit/);
     expect(await h.fails("set_unit_details", { units: [{ bedrooms: "2", bathrooms: "1", monthlyRent: "$2,200", availability: "now" }] })).toMatch(/couldn't match those details to a unit/);
     const named = await h.ok("set_unit_details", { units: [{ unit: "1A", bedrooms: "2", bathrooms: "1", monthlyRent: "$2,200", availability: "now" }] });
-    expect(named.lines[0]).toMatch(/^1A —/);
+    expect(named.lines[0]).toMatch(/^Unit 1A —/);
   });
 
   it("treats in-unit laundry as an amenity, not a unit, and still auto-picks the single-family home", async () => {
@@ -201,7 +201,7 @@ describe("set_unit_details single-family auto-select", () => {
     await h.ok("add_unit", {});
     const saved = await h.ok("set_unit_details", { details: phrase });
     expect(saved.complete).toBe(true);
-    expect(saved.lines).toEqual(["910 QA Gate Rd — 3 bed · 2 bath · $3,400/month · available now"]);
+    expect(saved.lines).toEqual(["910 QA Gate Road — 3 bed · 2 bath · $3,400/month · available now"]);
     expect(saved.notOnFile).toBeUndefined();
   });
 
@@ -240,7 +240,7 @@ describe("set_unit_details single-family auto-select", () => {
     await h.ok("add_unit", { name: "W" });
     await h.ok("add_unit", { name: "Laundry Suite" });
     const saved = await h.ok("set_unit_details", { details: "1A has W/D, 3 bed 2 bath $3,400" });
-    expect(saved.lines[0]).toMatch(/^1A — 3 bed · 2 bath · \$3,400\/month/);
+    expect(saved.lines.join("\n")).toMatch(/Unit 1A — 3 bed · 2 bath · \$3,400\/month/);
     expect(saved.lines.join("\n")).not.toMatch(/^W — 3 bed/m);
     expect(saved.notOnFile).toBeUndefined();
   });

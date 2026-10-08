@@ -200,6 +200,12 @@ async function notifyWaiters(services: OperatorServices, propertyId: string, uni
   return sent;
 }
 
+/** "Unit 1A" stays "Unit 1A". A bare code such as "1A" is "unit 1A". */
+export function unitScopeDetail(label: string): string {
+  const name = label.trim();
+  return /^unit\b/i.test(name) ? name : `unit ${name}`;
+}
+
 function pauseTarget(ctx: Ctx, property: string | undefined, unit?: string): { propertyId: string; unitId?: string; label: string; state: PropertyState } {
   const propertyId = resolvePropertyId(ctx.services.workspace, property);
   const { config, state } = ctx.services.workspace.load(propertyId);
@@ -241,7 +247,7 @@ export async function pauseTours(
     cancelled = await cancelBooked(ctx.services, booked, propertyWide, "tours paused");
   }
 
-  const scope = target.unitId ? `unit ${target.label}` : labelOf(ctx.services, target.propertyId);
+  const scope = target.unitId ? unitScopeDetail(target.label) : labelOf(ctx.services, target.propertyId);
   appendAvailabilityEvent(ctx.services.workspace.root, target.propertyId, "TOURS_PAUSED", `${scope}; ${input.bookedTours === "cancel" ? "cancelled booked tours" : "kept booked tours"}`, ctx.now().toISOString(), {
     ...(target.unitId ? { unitId: target.unitId } : {}),
   });
@@ -278,7 +284,7 @@ export async function resumeTours(ctx: Ctx, input: { property?: string; unit?: s
   }
 
   const notified = await notifyWaiters(ctx.services, target.propertyId, target.unitId, ctx.now());
-  appendAvailabilityEvent(ctx.services.workspace.root, target.propertyId, "TOURS_RESUMED", target.unitId ? `unit ${target.label}` : labelOf(ctx.services, target.propertyId), ctx.now().toISOString(), {
+  appendAvailabilityEvent(ctx.services.workspace.root, target.propertyId, "TOURS_RESUMED", target.unitId ? unitScopeDetail(target.label) : labelOf(ctx.services, target.propertyId), ctx.now().toISOString(), {
     ...(target.unitId ? { unitId: target.unitId } : {}),
   });
 

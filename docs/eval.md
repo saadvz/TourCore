@@ -1,6 +1,6 @@
 # Baseline eval
 
-This is the phase 0 snapshot of today's landlord connector. Later phases diff against it. It does not change tools, visitor copy, or the demo flow.
+This is the checked-in snapshot of the landlord connector. The demo order is unchanged. Phase 2 adds milestone writes that store the same config as the older tools.
 
 The harness calls the real MCP tool handlers in-process, on a throwaway hosted install, with local test texting. Nothing here texts a real phone.
 
@@ -15,7 +15,9 @@ npm run eval:baseline
 
 ## What it records
 
-- **Config diff** (`eval/baseline/config-diff.md`). Ten equivalent duplex setups (2 units, a shared front door, each unit's own door, weekday hours). Inputs vary the way a landlord might: order, casing, `9-5` versus `9am to 5pm`, door wording. Ids and timestamps are removed. Array order is kept. Today's diffs are expected. Phase 2's done-bar is zero fields differing.
+- **Config diff** (`eval/baseline/config-diff.md`). Ten equivalent duplex setups (2 units, a shared front door, each unit's own door, weekday hours) through the older tools. Inputs vary the way a landlord might: order, casing, `9-5` versus `9am to 5pm`, door wording. Ids and timestamps are removed. Stored order is deterministic. The done-bar is zero fields differing.
+- **Milestone config diff** (`eval/baseline/config-diff-milestones.md`). The same ten duplexes through `set_up_texting`, `save_property`, `save_units`, `save_doors_and_routes`, `save_hours`, `save_settings`, `run_checks`, and `publish`. That report is also zero, and each run matches the older-tool canonical config. CI fails if either report is non-zero.
+- **Milestone path** (`eval/baseline/milestone-path.md`). One duplex walked in demo order through those tools, including a blocked practice check before any route and the recovery.
 - **Golden tasks** (`eval/baseline/golden-tasks.md`). Full setup to publish, book a one-off, answer a flagged question, pause a unit, export a day. Each row is the tools, the call count, and pass/fail on the end state. `eval/fixtures/golden-prompts.json` is the same five tasks in plain language for a later model-driven run. This harness does not call a model.
 - **Out-of-chat exits** (`eval/baseline/exits.md`). Each place a task sends the landlord out of the chat. `key` means entering an API key or similar secret. A Google sign-in or an Allow click is `not key`. The checked-in path chooses local test texting, declines backups, and skips alerts, so those exits are not taken. A separate in-process Sendblue probe records the texting secure-setup exit without storing the link.
 - **Demo click path** (`eval/baseline/click-path.md`). Ordered tool calls from texting setup through publish, with the milestone each `get_next_installation_step` returns. `get_state` is not on this path. Playbook selection is covered by `test/eval/getState.test.ts`.

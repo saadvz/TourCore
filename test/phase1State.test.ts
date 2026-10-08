@@ -79,16 +79,16 @@ function realisticInitialize(name: string, capabilities: Record<string, unknown>
 describe("playbook selection", () => {
   it("picks a playbook from the client name and real client capabilities, and never a gate", () => {
     for (const name of GROK_CLIENT_NAMES) {
-      expect(selectPlaybook({ name, capabilities: {} })).toEqual({ id: "grok", mode: "full", version: "grok@2026-10-07" });
+      expect(selectPlaybook({ name, capabilities: {} })).toEqual({ id: "grok", mode: "full", version: "grok@2026-10-08" });
       expect(selectPlaybook({ name: name.toUpperCase(), capabilities: { prompts: {}, resources: {} } })).toMatchObject({ id: "grok", mode: "full" });
     }
-    expect(selectPlaybook({ name: "Grok", capabilities: grokClientCaps })).toEqual({ id: "grok", mode: "full", version: "grok@2026-10-07" });
-    expect(selectPlaybook({ name: "ChatGPT", capabilities: grokClientCaps })).toMatchObject({ id: "chatgpt", mode: "tools", version: "chatgpt@2026-10-07.tools" });
+    expect(selectPlaybook({ name: "Grok", capabilities: grokClientCaps })).toEqual({ id: "grok", mode: "full", version: "grok@2026-10-08" });
+    expect(selectPlaybook({ name: "ChatGPT", capabilities: grokClientCaps })).toMatchObject({ id: "chatgpt", mode: "tools", version: "chatgpt@2026-10-08.tools" });
     expect(selectPlaybook({ name: "OpenAI", capabilities: { prompts: {}, resources: {} } })).toMatchObject({ id: "chatgpt", mode: "tools" });
-    expect(selectPlaybook({ name: "claude-ai", capabilities: grokClientCaps })).toMatchObject({ id: "claude", mode: "full", version: "claude@2026-10-07" });
-    expect(selectPlaybook({ name: "Claude", capabilities: { prompts: {}, resources: {} } })).toMatchObject({ id: "claude", mode: "tools", version: "claude@2026-10-07.tools" });
+    expect(selectPlaybook({ name: "claude-ai", capabilities: grokClientCaps })).toMatchObject({ id: "claude", mode: "full", version: "claude@2026-10-08" });
+    expect(selectPlaybook({ name: "Claude", capabilities: { prompts: {}, resources: {} } })).toMatchObject({ id: "claude", mode: "tools", version: "claude@2026-10-08.tools" });
     expect(selectPlaybook({ name: "Anthropic", capabilities: { sampling: {} } })).toMatchObject({ id: "claude", mode: "full" });
-    expect(selectPlaybook({ name: "cursor-vscode" })).toMatchObject({ id: "grok", mode: "full", version: "grok@2026-10-07" });
+    expect(selectPlaybook({ name: "cursor-vscode" })).toMatchObject({ id: "grok", mode: "full", version: "grok@2026-10-08" });
     expect(selectPlaybook({ name: "Cursor" })).toMatchObject({ id: "grok", mode: "full" });
     expect(selectPlaybook(preferPlaybookClient({}, { name: "Cursor" }))).toMatchObject({ id: "grok", mode: "full" });
     expect(selectPlaybook(preferPlaybookClient({ name: "example-client" }, { name: "Cursor" }, { name: "example-client" }))).toMatchObject({ id: "grok", mode: "full" });
@@ -97,7 +97,7 @@ describe("playbook selection", () => {
     expect(selectPlaybook(preferPlaybookClient(claudeFull, { name: "Cursor" }))).toMatchObject({ id: "claude", mode: "full" });
     expect(selectPlaybook(preferPlaybookClient(undefined, { name: "Cursor" }))).toMatchObject({ id: "grok", mode: "full" });
     expect(preferPlaybookClient(undefined, undefined, {})).toBeUndefined();
-    expect(selectPlaybook({ name: "mystery-client", capabilities: grokClientCaps })).toMatchObject({ id: "baseline", mode: "tools", version: "baseline@2026-10-07.tools" });
+    expect(selectPlaybook({ name: "mystery-client", capabilities: grokClientCaps })).toMatchObject({ id: "baseline", mode: "tools", version: "baseline@2026-10-08.tools" });
     expect(selectPlaybook(undefined)).toMatchObject({ id: "baseline", mode: "tools" });
     expect(selectPlaybook({})).toMatchObject({ id: "baseline", mode: "tools" });
   });
@@ -115,8 +115,8 @@ describe("playbook selection", () => {
     expect(grok.health).toEqual(baseline.health);
     expect(grok.storage).toEqual(baseline.storage);
     expect(grok.currentMilestone).toBe(baseline.currentMilestone);
-    expect(grok.playbook).toMatchObject({ id: "grok", version: "grok@2026-10-07", mode: "full" });
-    expect(baseline.playbook).toMatchObject({ id: "baseline", version: "baseline@2026-10-07.tools", mode: "tools" });
+    expect(grok.playbook).toMatchObject({ id: "grok", version: "grok@2026-10-08", mode: "full" });
+    expect(baseline.playbook).toMatchObject({ id: "baseline", version: "baseline@2026-10-08.tools", mode: "tools" });
     expect(grok.playbook.text).not.toBe(baseline.playbook.text);
     expect(JSON.stringify({ setup: grok.setup, units: grok.units, properties: grok.properties })).not.toMatch(/Main Home/);
   });
@@ -138,10 +138,10 @@ describe("MCP instructions", () => {
 
 describe("MCP annotations", () => {
   it("marks reads, the five destructive tools, and explicit non-destructive writes", () => {
-    expect(OPERATOR_TOOLS).toHaveLength(84);
+    expect(OPERATOR_TOOLS).toHaveLength(92);
     expect(OPERATOR_TOOLS.some((tool) => tool.name === "get_state")).toBe(true);
     const listed = mcpToolList();
-    expect(listed).toHaveLength(84);
+    expect(listed).toHaveLength(92);
     for (const tool of [...OPERATOR_TOOLS, ...HOSTED_ADMIN_TOOLS]) {
       const hints = annotationsFor(tool);
       expect(hints.openWorldHint).toBe(false);
@@ -237,7 +237,7 @@ describe("realistic initialize messages", () => {
     expect(init.body).toMatchObject({ result: { instructions: MCP_INSTRUCTIONS, capabilities: { tools: { listChanged: false } } } });
     expect(reportedClientFromInitialize(messages.grok)).toMatchObject({ name: "Grok", capabilities: grokClientCaps });
     const state = await h.ok("get_state");
-    expect(state.playbook).toMatchObject({ id: "grok", mode: "full", version: "grok@2026-10-07" });
+    expect(state.playbook).toMatchObject({ id: "grok", mode: "full", version: "grok@2026-10-08" });
     expect(state.playbook.text).toContain(GROK_WAKE_WITH_PLACE);
     expect(state.playbook.text).toContain(GROK_WAKE_NO_PLACE);
     expect(renderPlaybook({ name: "Grok", capabilities: grokClientCaps }, "alerts").text).toContain(GROK_ALERTS_SAY);
@@ -250,7 +250,7 @@ describe("realistic initialize messages", () => {
     cleanups.push(h.cleanup);
     await handleMcpMessage(h.ctx, messages.claude);
     const state = await h.ok("get_state");
-    expect(state.playbook).toMatchObject({ id: "claude", mode: "full", version: "claude@2026-10-07" });
+    expect(state.playbook).toMatchObject({ id: "claude", mode: "full", version: "claude@2026-10-08" });
     expect(state.playbook.text).toContain("You can keep this playbook in a project");
     expect(state.playbook.text).not.toContain(GROK_WAKE_WITH_PLACE);
   });
@@ -260,7 +260,7 @@ describe("realistic initialize messages", () => {
     cleanups.push(h.cleanup);
     await handleMcpMessage(h.ctx, messages.chatgpt);
     const state = await h.ok("get_state");
-    expect(state.playbook).toMatchObject({ id: "chatgpt", mode: "tools", version: "chatgpt@2026-10-07.tools" });
+    expect(state.playbook).toMatchObject({ id: "chatgpt", mode: "tools", version: "chatgpt@2026-10-08.tools" });
     expect(state.playbook.text).toContain("You only have tools. There is no saved prompt beyond this text.");
     expect(state.playbook.text).not.toContain(GROK_WAKE_WITH_PLACE);
   });
@@ -270,7 +270,7 @@ describe("realistic initialize messages", () => {
     cleanups.push(h.cleanup);
     await handleMcpMessage(h.ctx, messages.unknown);
     const state = await h.ok("get_state");
-    expect(state.playbook).toMatchObject({ id: "baseline", mode: "tools", version: "baseline@2026-10-07.tools" });
+    expect(state.playbook).toMatchObject({ id: "baseline", mode: "tools", version: "baseline@2026-10-08.tools" });
     expect(state.playbook.text).toContain("You only have tools. Nothing here is filled in for you.");
   });
 
@@ -289,7 +289,7 @@ describe("realistic initialize messages", () => {
     }
     expect(new Set(pictures.map((item) => JSON.stringify(item))).size).toBe(1);
     expect(new Set(lists.map((item) => JSON.stringify(item))).size).toBe(1);
-    expect(lists[0]).toHaveLength(84);
+    expect(lists[0]).toHaveLength(92);
   });
 });
 

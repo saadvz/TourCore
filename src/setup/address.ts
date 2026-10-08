@@ -84,8 +84,8 @@ export function parseUsAddress(raw: string): { address: CanonicalAddress; missin
     }
   }
 
-  street = street.replace(/,\s*$/, "").trim();
-  city = city.replace(/,\s*$/, "").trim();
+  street = canonicalizeStreet(street.replace(/,\s*$/, "").trim());
+  city = titleCasePlace(city.replace(/,\s*$/, "").trim());
   const missing: AddressPart[] = [];
   if (!street) missing.push("street");
   if (!city) missing.push("city");
@@ -100,4 +100,131 @@ export function parseUsAddress(raw: string): { address: CanonicalAddress; missin
     formatted: street && city && state ? formatCanonical({ street, city, state, ...(postalCode ? { postalCode } : {}) }) : raw.trim(),
   };
   return { address, missing };
+}
+
+const STREET_SUFFIX: Record<string, string> = {
+  st: "Street",
+  street: "Street",
+  ave: "Avenue",
+  av: "Avenue",
+  avenue: "Avenue",
+  rd: "Road",
+  road: "Road",
+  ln: "Lane",
+  lane: "Lane",
+  dr: "Drive",
+  drive: "Drive",
+  blvd: "Boulevard",
+  boulevard: "Boulevard",
+  way: "Way",
+  ct: "Court",
+  court: "Court",
+  pl: "Place",
+  place: "Place",
+  ter: "Terrace",
+  terr: "Terrace",
+  terrace: "Terrace",
+  cir: "Circle",
+  circle: "Circle",
+  pkwy: "Parkway",
+  parkway: "Parkway",
+};
+
+/**
+ * One stored spelling for a token.
+ * An all-lowercase token is title-cased. A token the landlord already
+ * capitalized is kept: mixed case (McArthur, O'Neil, Dr, 2nd) and short
+ * all-caps (QA, NE, SW). A longer all-caps word is the same word shouted,
+ * so it stores as title case and matches the lowercase and title-case
+ * spellings. Ordinals keep a lowercase ending (1st, 2nd).
+ */
+function canonicalToken(token: string): string {
+  const trailingPeriod = token.endsWith(".");
+  const cleaned = token.replace(/\./g, "");
+  if (!cleaned) return token;
+  const ordinal = /^(\d+)(st|nd|rd|th)$/i.exec(cleaned);
+  if (ordinal) return `${ordinal[1]}${ordinal[2]!.toLowerCase()}`;
+  const letters = cleaned.replace(/[^A-Za-z]/g, "");
+  const stored = !letters
+    ? cleaned
+    : letters === letters.toLowerCase() || (letters === letters.toUpperCase() && letters.length > 2)
+      ? titleCaseToken(cleaned)
+      : cleaned;
+  return trailingPeriod ? `${stored}.` : stored;
+}
+
+function titleCaseToken(token: string): string {
+  const lower = token.toLowerCase();
+  if (!/[a-z]/.test(lower.charAt(0))) return lower;
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
+}
+
+/** Spacing collapses. Only an all-lowercase word is title-cased. */
+export function titleCasePlace(value: string): string {
+  return value
+    .trim()
+    .replace(/\s+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map(canonicalToken)
+    .join(" ");
+}
+
+const DIRECTIONAL = new Set(["n", "s", "e", "w", "ne", "nw", "se", "sw", "north", "south", "east", "west"]);
+
+function bareWord(word: string): string {
+  return word.replace(/\./g, "").toLowerCase();
+}
+
+function expandSuffix(word: string): string | undefined {
+  return STREET_SUFFIX[bareWord(word)];
+}
+
+/** "Apt 2" and "#2" (no space before the number) start a unit clause. */
+function isUnitClause(word: string): boolean {
+  const bare = bareWord(word);
+  if (/^(apt|apartment|suite|unit|#)$/.test(bare)) return true;
+  return /^#\d/.test(word.replace(/\./g, ""));
+}
+
+/**
+ * One street line. Spacing collapses. The street type expands when it is the
+ * last word of the street ("Rd" → "Road"), or the word before a trailing
+ * direction ("Ave S" → "Avenue S", "St NW" → "Street NW"). A unit clause
+ * ("Apt 2", "#2") stays after that type and does not hide it. An earlier
+ * "St" or "Dr" stays, and a non-final "St." keeps its period, so
+ * "St. Marks Place" never becomes "Street Marks". The first word is a suffix
+ * only when a direction follows it. A direction's own trailing period is
+ * dropped ("Ave. S." → "Avenue S"). Casing follows canonicalToken.
+ */
+export function canonicalizeStreet(street: string): string {
+  const words = street.trim().replace(/\s+/g, " ").split(" ").filter(Boolean);
+  const unitAt = words.findIndex((word, index) => index > 0 && isUnitClause(word));
+  const head = unitAt > 0 ? words.slice(0, unitAt) : words;
+  const tail = unitAt > 0 ? words.slice(unitAt) : [];
+  const last = head.length - 1;
+  let suffixAt = -1;
+  if (last >= 0 && isTrailingDirection(head, last)) suffixAt = last - 1;
+  else if (last > 0) suffixAt = last;
+  const stored = head.map((word, index) => {
+    if (index === suffixAt) return expandSuffix(word) ?? canonicalToken(word);
+    if (index === last && suffixAt === last - 1) return canonicalToken(word.replace(/\.+$/, ""));
+    return canonicalToken(word);
+  });
+  return [...stored, ...tail.map(canonicalToken)].join(" ");
+}
+
+function isTrailingDirection(head: string[], last: number): boolean {
+  return last > 0 && DIRECTIONAL.has(bareWord(head[last]!)) && expandSuffix(head[last - 1]!) !== undefined;
+}
+
+/**
+ * One identity for "Oak Ave" and "Oak Avenue", and for "St." and "St".
+ * The stored display line keeps the period the landlord typed. This key
+ * ignores that period so the two spellings are the same place.
+ */
+export function canonicalAddressKey(address: string): string | undefined {
+  const formatted = parseUsAddress(address)?.address.formatted?.trim();
+  if (!formatted) return undefined;
+  return formatted.toLowerCase().replace(/\./g, "").replace(/\s+/g, " ").trim();
 }

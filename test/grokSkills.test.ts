@@ -101,10 +101,10 @@ describe("Grok skill scenarios", () => {
     await h.ok("add_unit", { name: "Unit 201" });
 
     // "Unit 201 uses the entrance, then the hallway, then the unit door."
-    expect((await tool("list_doors")).doors.map((d: { name: string }) => d.name)).toEqual(["Lobby Entrance", "Garden Entrance", "Second Floor Hallway", "Unit 201 Door"]);
+    expect((await tool("list_doors")).doors.map((d: { name: string }) => d.name)).toEqual(["Garden Entrance", "Lobby Entrance", "Second Floor Hallway", "Unit 201 Door"]);
     const first = await tool("preview_route", { unit: "201", doors: ["the entrance", "hallway", "unit door"] });
     expect(first.status).toBe("needs-clarification");
-    expect(first.summary).toBe('"the entrance" could be Lobby Entrance or Garden Entrance. Which one?');
+    expect(first.summary).toBe('"the entrance" could be Garden Entrance or Lobby Entrance. Which one?');
     expect((await tool("get_route", { unit: "201" })).route).toBeUndefined();
 
     // "The garden one."

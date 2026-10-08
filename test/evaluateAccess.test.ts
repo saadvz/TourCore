@@ -93,6 +93,15 @@ describe("evaluateAccess", () => {
     });
   });
 
+  it("does not expire a no-form verification; the window and route still apply", () => {
+    const none = { ...verification, method: "none" as const, validUntil: iso(13, 0) };
+    expect(evaluateAccess(input({ verification: none }))).toMatchObject({ allowed: true, code: "ALLOW" });
+    expect(evaluateAccess(input({ verification: { ...none, validUntil: "not-a-date" } }))).toMatchObject({ allowed: true, code: "ALLOW" });
+    expect(evaluateAccess(input({ verification: none, requestedAt: at(13, 49) }))).toMatchObject({ code: "DENY_TOO_EARLY" });
+    expect(evaluateAccess(input({ verification: none, requestedAt: at(14, 45) }))).toMatchObject({ code: "DENY_EXPIRED" });
+    expect(evaluateAccess(input({ verification: none, doorId: "unit_102" }))).toMatchObject({ code: "DENY_WRONG_ROUTE" });
+  });
+
   it("denies under an operator hold", () => {
     expect(evaluateAccess(input({ reservation: { ...reservation, status: "OPERATOR_HOLD" } }))).toMatchObject({ allowed: false, code: "DENY_OPERATOR_HOLD" });
   });

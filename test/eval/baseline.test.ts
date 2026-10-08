@@ -5,7 +5,12 @@ describe("phase 0 baseline", () => {
   it("matches the checked-in duplex baseline", async () => {
     const report = await buildBaseline();
     expect(report.configDiff.runs).toBe(10);
-    expect(report.configDiff.differingFieldCount).toBeGreaterThan(0);
+    expect(report.configDiff.differingFieldCount).toBe(0);
+    expect(report.milestoneDiff.runs).toBe(10);
+    expect(report.milestoneDiff.differingFieldCount).toBe(0);
+    expect(report.milestoneMatchesOld).toBe(true);
+    expect(report.milestonePath.some((step) => step.tool === "run_checks" && step.status === "blocked" && step.code === "ROUTES_MISSING")).toBe(true);
+    expect(report.milestonePath.some((step) => step.tool === "publish" && step.status === "done")).toBe(true);
     expect(report.golden).toHaveLength(5);
     expect(report.golden.every((task) => task.passed)).toBe(true);
     expect(report.clickPath[0]?.tool).toBe("get_next_installation_step");

@@ -2,6 +2,9 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { z } from "zod";
+import { fullHash, safetyHash } from "../config/changeKinds";
+import { TourCoreConfigShape, type TourCoreConfig } from "../config/tourCoreConfig";
+import { isLegacyVerification, presentVerification } from "../setup/verification";
 import { writeJsonAtomic } from "../storage/atomicWrite";
 import { collectCanonical, looksLikeSecret, type CanonicalFile } from "../storage/canonical";
 import { sha256Json } from "../storage/documentStore";
@@ -257,21 +260,58 @@ export function hasLiveBusinessState(root: string): boolean {
 const RESTORE_RUNTIME = ["sessions", "verification", "endpoints", "messaging-ledger", "operator-events"];
 
 /** Writes business records from a validated backup. Never writes secrets. */
-export function applyPortableBackup(root: string, backup: PortableBackup, replace: boolean): { files: number } {
+export function applyPortableBackup(root: string, backup: PortableBackup, replace: boolean): { files: number; notes: string[] } {
   if (!replace && hasLiveBusinessState(root)) {
     throw new PortableBackupError("This Tour Core already has records. Restoring would replace them, and that needs an explicit recovery choice. Nothing was changed.");
   }
   if (replace) clearBusinessFiles(root);
   let files = 0;
+  const notes: string[] = [];
+  const coerced: { id: string; before: TourCoreConfig; after: TourCoreConfig }[] = [];
   for (const file of backup.contents.files) {
     if (!safePath(file.path)) continue;
     const target = join(root, ...file.path.split("/"));
     const rel = relative(root, target);
     if (rel.startsWith("..")) continue;
-    writeJsonAtomic(target, file.body);
+    let body = file.body;
+    if (file.path.endsWith("/tourcore.config.json") && body && typeof body === "object") {
+      const record = body as { verificationMode?: string };
+      if (isLegacyVerification(record.verificationMode)) {
+        const parsed = TourCoreConfigShape.safeParse(body);
+        body = { ...record, verificationMode: "basic-form" };
+        if (parsed.success) coerced.push({ id: parsed.data.property.id, before: parsed.data, after: presentVerification(parsed.data) });
+      }
+    }
+    writeJsonAtomic(target, body);
     files += 1;
   }
-  return { files };
+  for (const item of coerced) retargetRestoredVerification(root, item);
+  return { files, notes };
+}
+
+function retargetRestoredVerification(root: string, item: { id: string; before: TourCoreConfig; after: TourCoreConfig }): void {
+  const statePath = join(root, "properties", item.id, "status.json");
+  if (!existsSync(statePath)) return;
+  const state = JSON.parse(readFileSync(statePath, "utf8")) as {
+    configHash?: string;
+    safetyHash?: string;
+    readiness?: { configHash: string; safetyHash?: string };
+    dryTour?: { configHash: string; safetyHash?: string };
+  };
+  const old = { full: fullHash(item.before), safety: safetyHash(item.before) };
+  const next = { full: fullHash(item.after), safety: safetyHash(item.after) };
+  const move = <T extends { configHash: string; safetyHash?: string }>(record: T): T => ({
+    ...record,
+    ...(record.configHash === old.full ? { configHash: next.full } : {}),
+    ...(record.safetyHash === old.safety ? { safetyHash: next.safety } : {}),
+  });
+  writeJsonAtomic(statePath, {
+    ...state,
+    ...(state.configHash === old.full ? { configHash: next.full } : {}),
+    ...(state.safetyHash === old.safety ? { safetyHash: next.safety } : {}),
+    ...(state.readiness ? { readiness: move(state.readiness) } : {}),
+    ...(state.dryTour ? { dryTour: move(state.dryTour) } : {}),
+  });
 }
 
 function clearBusinessFiles(root: string): void {

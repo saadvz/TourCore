@@ -17,8 +17,10 @@ import type { ConfigIssue, ConfigSection } from "../config/validateConfig";
 import { formatPhone, parsePhone } from "../core/phone";
 import { formatClockTime, friendlyTimeZone, WEEKDAYS, type Weekday } from "../core/timezone";
 import { isApartmentOrCondo, isSingleTourPlace, streetAndUnit, streetLine, unitLabel, visitorSubject } from "../visitor/identity";
-import { inferTimeZone, resolveTimeZone, slugify } from "./parse";
+import { inferTimeZone, resolveTimeZone, SAME_DAY_HOURS, slugify, tourHoursEndSameDay } from "./parse";
+import { isLegacyVerification, verificationSummaryRows } from "./verification";
 import { formatCanonical, parseUsAddress } from "./address";
+import { canonicalDoor, canonicalUnitName } from "./normalizeDraft";
 
 /**
  * Setup actions. Each takes the current draft and returns a new one; nothing
@@ -63,9 +65,8 @@ export const SETUP_DEFAULTS = {
 /** What the operator sees instead of mode ids. */
 export const CHOICE_LABELS = {
   verification: {
-    "basic-form": "Basic identity form",
-    mock: "Practice verification (everyone passes)",
-    "document-check": "Full ID check",
+    "basic-form": "Basic identity form (recommended)",
+    none: "No form",
   },
   messaging: { demo: "Demo messaging (texts show on screen)", live: "Real texts to visitors' phones" },
   storage: { memory: "Demo records (kept on this computer)", "google-drive": "Google Drive" },
@@ -427,31 +428,44 @@ export function setAlertContact(
 // ------------------------------------------------------------- doors, units
 
 export function addDoor(draft: SetupDraft, input: { name: string; kind: Door["kind"]; unitId?: string }): { draft: SetupDraft; door: Door } {
-  const name = requireName(input.name, "DOOR_NAME_MISSING", "Please give the door a name.");
+  const requested = requireName(input.name, "DOOR_NAME_MISSING", "Please give the door a name.");
+  const unit = input.unitId ? draft.units.find((item) => item.id === input.unitId) : undefined;
+  const named = canonicalDoor({ name: requested, kind: input.kind, unitName: unit?.name, propertyType: draft.property.propertyType });
+  const name = named.name;
+  const kind = named.kind;
   if (draft.doors.some((d) => d.name.toLowerCase() === name.toLowerCase())) {
     throw new SetupInputError("DOOR_NAME_TAKEN", `There's already a door called "${name}".`);
   }
   const next = clone(draft);
-  const door: Door = { id: uniqueId(slugify(name), next.doors.map((d) => d.id), "door"), name, kind: input.kind };
+  const door: Door = { id: uniqueId(slugify(name), next.doors.map((d) => d.id), "door"), name, kind };
   next.doors.push(door);
   if (input.unitId) {
     const unit = next.units.find((u) => u.id === input.unitId);
     if (!unit) throw new SetupInputError("UNIT_NOT_FOUND", "That unit isn't part of this property.");
     unit.doorId = door.id;
   }
-  const routed = input.kind === "ENTRANCE" && isApartmentOrCondo(next.property) ? applyCondoRoute(next) : next;
+  const routed = kind === "ENTRANCE" && isApartmentOrCondo(next.property) ? applyCondoRoute(next) : next;
   return { draft: routed, door };
 }
 
 export function renameDoor(draft: SetupDraft, doorId: string, name: string): SetupDraft {
-  const clean = requireName(name, "DOOR_NAME_MISSING", "Please give the door a name.");
-  if (draft.doors.some((d) => d.id !== doorId && d.name.toLowerCase() === clean.toLowerCase())) {
-    throw new SetupInputError("DOOR_NAME_TAKEN", `There's already a door called "${clean}".`);
+  const current = draft.doors.find((d) => d.id === doorId);
+  const unit = draft.units.find((item) => item.doorId === doorId);
+  const requested = requireName(name, "DOOR_NAME_MISSING", "Please give the door a name.");
+  const named = canonicalDoor({
+    name: requested,
+    kind: current?.kind ?? "COMMON",
+    unitName: unit?.name,
+    propertyType: draft.property.propertyType,
+  });
+  if (draft.doors.some((d) => d.id !== doorId && d.name.toLowerCase() === named.name.toLowerCase())) {
+    throw new SetupInputError("DOOR_NAME_TAKEN", `There's already a door called "${named.name}".`);
   }
   const next = clone(draft);
   const door = next.doors.find((d) => d.id === doorId);
   if (!door) throw new SetupInputError("DOOR_NOT_FOUND", "That door isn't part of this property.");
-  door.name = clean;
+  door.name = named.name;
+  door.kind = named.kind;
   return next;
 }
 
@@ -467,7 +481,7 @@ export function addUnit(
   draft: SetupDraft,
   input: { name: string; summary?: string; facts?: string[] },
 ): { draft: SetupDraft; unit: Unit } {
-  const name = requireName(input.name, "UNIT_NAME_MISSING", "Please give the unit a name.");
+  const name = canonicalUnitName(requireName(input.name, "UNIT_NAME_MISSING", "Please give the unit a name."), draft.property.propertyType);
   if (draft.units.some((u) => u.name.toLowerCase() === name.toLowerCase())) {
     throw new SetupInputError("UNIT_NAME_TAKEN", `There's already a unit called "${name}".`);
   }
@@ -499,7 +513,7 @@ export function doorFollowsUnitName(draft: SetupDraft, unitId: string): boolean 
  */
 export function renameUnit(draft: SetupDraft, unitId: string, name: string, options: { alsoRenameDoor?: boolean } = {}): SetupDraft {
   const requested = requireName(name, "UNIT_NAME_MISSING", "Please give the unit a name.");
-  const clean = isApartmentOrCondo(draft.property) ? unitLabel(requested) : requested;
+  const clean = canonicalUnitName(isApartmentOrCondo(draft.property) ? unitLabel(requested) : requested, draft.property.propertyType);
   if (draft.units.some((u) => u.id !== unitId && u.name.toLowerCase() === clean.toLowerCase())) {
     throw new SetupInputError("UNIT_NAME_TAKEN", `There's already a unit called "${clean}".`);
   }
@@ -542,7 +556,7 @@ export function setUnitProfile(draft: SetupDraft, unitId: string, values: Partia
     if (raw === undefined || (typeof raw === "string" && !raw.trim())) continue;
     let parsed;
     try {
-      parsed = parseProfileValue(key, raw, now);
+      parsed = parseProfileValue(key, raw, now, next.property.timezone);
     } catch (err) {
       if (err instanceof ProfileValueError) throw new SetupInputError("UNIT_DETAIL_UNREADABLE", `${unit.name}: ${err.message}`);
       throw err;
@@ -665,6 +679,9 @@ export function setTourHours(draft: SetupDraft, input: Partial<TourHours>): Setu
     if (!Number.isInteger(value)) throw new SetupInputError("TOUR_MINUTES_UNREADABLE", "Please use a whole number of minutes.");
     next.tourHours[key] = value;
   }
+  if (!tourHoursEndSameDay(next.tourHours.start, next.tourHours.end)) {
+    throw new SetupInputError("TOUR_HOURS_BACKWARDS", SAME_DAY_HOURS);
+  }
   return next;
 }
 
@@ -673,7 +690,12 @@ export function setVerificationPolicy(
   input: { mode?: SetupDraft["verificationMode"]; reuseForDays?: number },
 ): SetupDraft {
   const next = clone(draft);
-  if (input.mode !== undefined) next.verificationMode = input.mode;
+  if (input.mode !== undefined) {
+    if (isLegacyVerification(input.mode)) {
+      throw new SetupInputError("INPUT_INVALID", "Some of that information is missing or doesn't look right.");
+    }
+    next.verificationMode = input.mode;
+  }
   if (input.reuseForDays !== undefined) {
     if (!Number.isInteger(input.reuseForDays)) throw new SetupInputError("VERIFICATION_REUSE_UNREADABLE", "Please use a whole number of days.");
     next.verificationValidForDays = input.reuseForDays;
@@ -760,10 +782,7 @@ export function reviewSetup(draft: SetupDraft): SetupReview {
     {
       editSection: "verification",
       title: "VERIFICATION",
-      lines: [
-        CHOICE_LABELS.verification[draft.verificationMode],
-        `Checked visitors can book again for ${draft.verificationValidForDays} days without re-checking`,
-      ],
+      lines: verificationSummaryRows(draft.verificationMode, draft.verificationValidForDays),
     },
     {
       editSection: "services",

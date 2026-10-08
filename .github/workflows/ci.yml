@@ -23,3 +23,7 @@ jobs:
       - run: npm test
       - name: Baseline eval
         run: npm run test:eval
+      - name: SETUP_PROMPT unchanged
+        run: |
+          git fetch origin master --depth=1
+          git diff --exit-code origin/master -- grok-template/SETUP_PROMPT.md

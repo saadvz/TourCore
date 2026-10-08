@@ -592,14 +592,16 @@ export class TourCore {
       await this.record("VERIFICATION_REUSED", {
         reservationId: reservation.id,
         prospectId: prospect.id,
-        detail: `prior check ${reusable.id} valid until ${reusable.validUntil.slice(0, 10)}`,
+        detail: `${reusable.method} ${reusable.id} valid until ${reusable.validUntil.slice(0, 10)}`,
       });
       return this.markReady(reservation, prospect);
     }
 
     reservation = await this.move(reservation, "AWAITING_VERIFICATION", "VERIFICATION_REQUESTED", { detail: `method ${this.deps.verification.method}` });
     const ask = this.deps.verification.request(prospect);
-    await this.textProspect(prospect, reservation.id, ask.body, ask.form ? { kind: "form", link: await this.verificationFormLink(reservation, prospect) } : undefined);
+    if (ask.body) {
+      await this.textProspect(prospect, reservation.id, ask.body, ask.form ? { kind: "form", link: await this.verificationFormLink(reservation, prospect) } : undefined);
+    }
     if (this.deps.verification.automatic) return this.submitVerification(reservation.id, {});
     return reservation;
   }
@@ -646,7 +648,10 @@ export class TourCore {
     await this.record("VERIFICATION_COMPLETED", {
       reservationId: reservation.id,
       prospectId: prospect.id,
-      detail: `basic form ${outcome.reference}: ${outcome.claimed.firstName} ${outcome.claimed.lastName} (claimed identity, not document-checked)`,
+      detail:
+        this.deps.verification.method === "none"
+          ? `no form ${outcome.reference}`
+          : `basic form ${outcome.reference}: ${outcome.claimed.firstName} ${outcome.claimed.lastName} (claimed identity, not document-checked)`,
     });
     // A visitor who started by text is named by the form they just filled in.
     if (prospect.name === UNNAMED_VISITOR) {
@@ -1968,9 +1973,16 @@ export class TourCore {
       const unit = this.unitFor(reservation);
       if (code === "DENY_CONSENT_MISSING") {
         await this.textProspect(prospect, reservation.id, VisitorDenialCopy.missingConsent());
+      } else if (this.deps.verification.method === "none" && (code === "DENY_VERIFICATION_STALE" || code === "DENY_VERIFICATION_INCOMPLETE")) {
+        // No identity step exists, so these denials are not something the visitor can finish.
       } else if (code === "DENY_VERIFICATION_STALE" || code === "DENY_VERIFICATION_INCOMPLETE") {
-        const ask = code === "DENY_VERIFICATION_STALE" ? { body: VisitorDenialCopy.staleVerification(), form: true } : this.deps.verification.request(prospect);
-        await this.textProspect(prospect, reservation.id, ask.body, ask.form ? { kind: "form", link: await this.verificationFormLink(reservation, prospect) } : undefined);
+        const form = this.deps.verification.request(prospect);
+        if (!form.form) {
+          await this.textProspect(prospect, reservation.id, "We're not quite ready to open doors yet. Finish the steps I sent earlier and you'll be all set.");
+        } else {
+          const ask = code === "DENY_VERIFICATION_STALE" ? { body: VisitorDenialCopy.staleVerification(), form: true } : form;
+          await this.textProspect(prospect, reservation.id, ask.body, ask.form ? { kind: "form", link: await this.verificationFormLink(reservation, prospect) } : undefined);
+        }
       } else {
         const text: Partial<Record<AccessDecisionCode, string>> = {
           DENY_TOO_EARLY: reservation.windowStart

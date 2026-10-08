@@ -24,27 +24,46 @@ export function parseDays(input: string): Weekday[] | undefined {
   if (/^week ?days$/.test(text)) return WEEK.slice(0, 5);
   if (/^week ?ends$/.test(text)) return WEEK.slice(5);
 
+  const tokens = text.split(/[\s,;&+]+/).filter((token) => token && token !== "and" && token !== "plus");
   const days = new Set<Weekday>();
-  for (const part of text.split(/\s*,\s*|\s+and\s+|\s*&\s*/)) {
-    if (!part) continue;
-    const range = part.split(/\s*[-\u2013]\s*|\s+(?:to|through|thru)\s+/);
-    if (range.length === 1) {
-      const day = DAY_NAMES[part];
-      if (!day) return undefined;
-      days.add(day);
-    } else if (range.length === 2) {
-      const from = DAY_NAMES[range[0]!];
-      const to = DAY_NAMES[range[1]!];
-      if (!from || !to) return undefined;
-      for (let i = WEEK.indexOf(from); ; i = (i + 1) % 7) {
-        days.add(WEEK[i]!);
-        if (WEEK[i] === to) break;
-      }
-    } else {
-      return undefined;
+  const addRange = (from: Weekday, to: Weekday) => {
+    for (let i = WEEK.indexOf(from); ; i = (i + 1) % 7) {
+      days.add(WEEK[i]!);
+      if (WEEK[i] === to) break;
     }
+  };
+  let last: Weekday | undefined;
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i]!;
+    if (token === "to" || token === "through" || token === "thru" || token === "-" || token === "\u2013") {
+      const end = DAY_NAMES[tokens[++i] ?? ""];
+      if (!last || !end) return undefined;
+      addRange(last, end);
+      last = end;
+      continue;
+    }
+    const hyphen = token.split(/[-\u2013]/);
+    if (hyphen.length === 2) {
+      const from = DAY_NAMES[hyphen[0]!];
+      const to = DAY_NAMES[hyphen[1]!];
+      if (!from || !to) return undefined;
+      addRange(from, to);
+      last = to;
+      continue;
+    }
+    const day = DAY_NAMES[token];
+    if (!day) return undefined;
+    days.add(day);
+    last = day;
   }
   return days.size ? WEEK.filter((d) => days.has(d)) : undefined;
+}
+
+export const SAME_DAY_HOURS = "Tour hours have to end later the same day. What time should tours end?";
+
+/** True when the end clock is later on the same day. An earlier end is overnight. */
+export function tourHoursEndSameDay(start: string, end: string): boolean {
+  return end > start;
 }
 
 /** "9am" | "9:30 PM" | "17:00" | "noon" -> "HH:MM". Bare 1-7 is read as afternoon. */

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -54,7 +55,15 @@ describe("Grok skills", () => {
   });
 });
 
+/** SHA-256 of grok-template/SETUP_PROMPT.md at master 1bab450c5e330fd9dd2ff0a65426c97b3e14a6bd. */
+const SETUP_PROMPT_SHA256 = "47def95ba56823cb821b631c974f765fc3a59cfecd62e86d6c0dfdcf86a55b48";
+
 describe("Grok template package", () => {
+  it("keeps SETUP_PROMPT.md byte-identical to master", () => {
+    const current = readFileSync(join(TEMPLATE, "SETUP_PROMPT.md"));
+    expect(createHash("sha256").update(current).digest("hex")).toBe(SETUP_PROMPT_SHA256);
+  });
+
   it("lists every tool exactly once in the integration notes", () => {
     const doc = readFileSync(join(TEMPLATE, "integrations", "tour-core-tools.md"), "utf8");
     const listed = [...doc.matchAll(/^\| `([a-z_]+)` \|/gm)].map((m) => m[1]);

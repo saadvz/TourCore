@@ -153,7 +153,7 @@ export function semanticIssues(cfg: TourCoreConfig): ConfigIssue[] {
 
   // Verification
   if (!within(cfg.verificationValidForDays, POLICY_LIMITS.verificationValidForDays)) {
-    add("verification", "VERIFICATION_REUSE_INVALID", "A visitor check should stay good for between 1 and 365 days.");
+    add("verification", "VERIFICATION_REUSE_INVALID", "Pick a number of days from 1 to 365.");
   }
 
   return issues;

@@ -314,7 +314,7 @@
     },
     "outcome": {
       "status": "Draft",
-      "summary": "Basic identity form. A check can be reused for 30 days"
+      "summary": "Basic identity form (recommended). Visitors who filled out the form won't be asked again for 30 days."
     }
   },
   {

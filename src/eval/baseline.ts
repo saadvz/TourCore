@@ -7,6 +7,7 @@ import { publishDuplex } from "./duplex";
 import { runClickPath } from "./clickPath";
 import { exitsFromClickPath, followOnExits, probeTextingExit, type ExitRecord } from "./exits";
 import { runFollowOnTasks, setupTaskFromSteps, type GoldenTaskResult } from "./golden";
+import { milestonePathMarkdown, publishMilestoneDuplex, runMilestoneTranscript, type MilestoneStep } from "./milestonePath";
 import { normalizeStoredConfig } from "./normalize";
 import { EvalSession, type ClickStep } from "./session";
 
@@ -15,9 +16,12 @@ export const baselineDir = join(repoRoot, "eval/baseline");
 
 export interface BaselineReport {
   configDiff: ConfigDiff;
+  milestoneDiff: ConfigDiff;
+  milestoneMatchesOld: boolean;
   clickPath: ClickStep[];
   golden: GoldenTaskResult[];
   exits: ExitRecord[];
+  milestonePath: MilestoneStep[];
 }
 
 export async function buildBaseline(): Promise<BaselineReport> {
@@ -69,13 +73,42 @@ export async function buildBaseline(): Promise<BaselineReport> {
     await probe.close();
   }
 
-  return { configDiff: diffNormalized(runIds, normalized), clickPath, golden, exits };
+  const milestoneNormalized: unknown[] = [];
+  for (const variant of DUPLEX_VARIANTS) {
+    const session = await EvalSession.open();
+    try {
+      const setup = await publishMilestoneDuplex(session, variant);
+      milestoneNormalized.push(normalizeStoredConfig(session.workspace.load(setup.propertyId).config));
+    } finally {
+      await session.close();
+    }
+  }
+
+  let milestonePath: MilestoneStep[] = [];
+  const transcript = await EvalSession.open();
+  try {
+    milestonePath = await runMilestoneTranscript(transcript);
+  } finally {
+    await transcript.close();
+  }
+
+  const configDiff = diffNormalized(runIds, normalized);
+  const milestoneDiff = diffNormalized(runIds, milestoneNormalized);
+  const milestoneMatchesOld = milestoneNormalized.every((config, index) => JSON.stringify(config) === JSON.stringify(normalized[index]));
+  return { configDiff, milestoneDiff, milestoneMatchesOld, clickPath, golden, exits, milestonePath };
 }
 
 export function saveBaseline(report: BaselineReport): void {
   mkdirSync(baselineDir, { recursive: true });
   writeJson("config-diff.json", report.configDiff);
-  writeFileSync(join(baselineDir, "config-diff.md"), configDiffMarkdown(report.configDiff));
+  writeFileSync(join(baselineDir, "config-diff.md"), configDiffMarkdown(report.configDiff, "Old tools. Ids and timestamps were normalized away. Stored order is deterministic. Equivalent duplex inputs must not differ."));
+  writeJson("config-diff-milestones.json", { diff: report.milestoneDiff, matchesOldTools: report.milestoneMatchesOld });
+  writeFileSync(
+    join(baselineDir, "config-diff-milestones.md"),
+    configDiffMarkdown(report.milestoneDiff, "Milestone tools, same ten duplexes. This must be zero, and each run must match the old-tool canonical config."),
+  );
+  writeJson("milestone-path.json", report.milestonePath);
+  writeFileSync(join(baselineDir, "milestone-path.md"), milestonePathMarkdown(report.milestonePath));
   writeJson("click-path.json", report.clickPath);
   writeFileSync(join(baselineDir, "click-path.md"), clickPathMarkdown(report.clickPath));
   writeJson("golden-tasks.json", report.golden);
@@ -85,17 +118,23 @@ export function saveBaseline(report: BaselineReport): void {
 }
 
 export function loadBaseline(): BaselineReport {
+  const milestones = readJson<{ diff: ConfigDiff; matchesOldTools: boolean }>("config-diff-milestones.json");
   return {
     configDiff: readJson("config-diff.json"),
+    milestoneDiff: milestones.diff,
+    milestoneMatchesOld: milestones.matchesOldTools,
     clickPath: readJson("click-path.json"),
     golden: readJson("golden-tasks.json"),
     exits: readJson("exits.json"),
+    milestonePath: readJson("milestone-path.json"),
   };
 }
 
 export function baselineDrift(actual: BaselineReport, saved: BaselineReport): string | undefined {
   const parts: string[] = [];
   if (JSON.stringify(actual.configDiff) !== JSON.stringify(saved.configDiff)) parts.push("config-diff");
+  if (JSON.stringify(actual.milestoneDiff) !== JSON.stringify(saved.milestoneDiff) || actual.milestoneMatchesOld !== saved.milestoneMatchesOld) parts.push("config-diff-milestones");
+  if (JSON.stringify(actual.milestonePath) !== JSON.stringify(saved.milestonePath)) parts.push("milestone-path");
   if (JSON.stringify(actual.clickPath) !== JSON.stringify(saved.clickPath)) parts.push("click-path");
   if (JSON.stringify(actual.golden) !== JSON.stringify(saved.golden)) parts.push("golden-tasks");
   if (JSON.stringify(actual.exits) !== JSON.stringify(saved.exits)) parts.push("exits");
@@ -103,13 +142,13 @@ export function baselineDrift(actual: BaselineReport, saved: BaselineReport): st
   return `Baseline drift in ${parts.join(", ")}. Re-run with EVAL_REBASELINE=1 or npm run eval:baseline -- rebaseline after you mean to accept today's behavior.`;
 }
 
-export function configDiffMarkdown(diff: ConfigDiff): string {
+export function configDiffMarkdown(diff: ConfigDiff, note: string): string {
   const lines = [
     `# Config diff`,
     ``,
     `${diff.differingFieldCount} fields differ across ${diff.runs} runs.`,
     ``,
-    `Ids and timestamps were normalized away. Array order was kept. These diffs are the phase 0 baseline. Phase 2's done-bar is zero fields differing across equivalent duplex inputs.`,
+    note,
     ``,
     `| Field | Distinct values |`,
     `| --- | --- |`,

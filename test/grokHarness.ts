@@ -49,6 +49,7 @@ export function grokHarness(root = mkdtempSync(join(tmpdir(), "tourcore-grok-"))
   visitors.useAvailability((id) => (workspace.has(id) ? workspace.load(id).state : undefined));
   visitors.usePauseWaiters((id, waiter) => rememberWaiter(workspace.root, id, waiter));
   const services: OperatorServices = { workspace, visitors, now: () => new Date(clock) };
+  workspace.useInstalledMessaging(() => services.installedMessaging?.());
   const ctx: ToolContext = { services, confirmations: new ConfirmationBook(10 * 60_000, () => clock), now: () => new Date(clock), localUrl: () => "http://localhost:4321" };
 
   const call = (name: string, args: unknown = {}) => callOperatorTool(ctx, name, args);

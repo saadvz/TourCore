@@ -1,6 +1,7 @@
 import { PROPERTY_TYPE_LABELS, validateConfig } from "../config/tourCoreConfig";
 import { nextProfileQuestion } from "../config/unitProfile";
 import { renderPlaybook, spokenAsk } from "../playbooks/compose";
+import { milestoneToolFor } from "../playbooks/milestoneTool";
 import type { ReportedClient } from "../playbooks/select";
 import { SETUP_HELP_ENDING } from "../playbooks/setupHelp";
 import { SHARED_STEPS, type StepId } from "../playbooks/shared";
@@ -333,7 +334,7 @@ export function readState(input: StateReadInput, propertyId?: string): Record<st
     storage: { summary: storageLine(inst) },
     milestones,
     currentMilestone: current?.id ?? null,
-    nextStep: { action: next.action, component: next.component, say: spokenAsk(input.client, step), doneLooksLike: copy.done },
+    nextStep: { action: next.action, component: next.component, tool: milestoneToolFor(step), say: spokenAsk(input.client, step), doneLooksLike: copy.done },
     playbook: { id: playbook.id, version: playbook.version, mode: playbook.mode, step: playbook.step, text: playbook.text },
   };
 }

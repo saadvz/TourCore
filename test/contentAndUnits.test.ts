@@ -280,7 +280,7 @@ describe("approved content changes keep the property published", () => {
     const hours = clone();
     hours.tourHours.end = "18:00";
     const verification = clone();
-    verification.verificationMode = "mock";
+    verification.verificationMode = "none";
     const route = clone();
     route.routes[0].stops.reverse();
     const help = clone();
@@ -373,24 +373,24 @@ describe("minimum unit information", () => {
     for (const n of ["1A", "1B", "2A", "2B"]) await h.ok("add_unit", { name: n });
     const out = await h.ok("set_unit_details", { details: "1A and 1B are 2 bed 1 bath for $2,200. 2A is 3 bed 2 bath for $2,800 and 2B is 2 bed 2 bath for $2,500." });
     expect(out.lines).toEqual([
-      "1A — 2 bed · 1 bath · $2,200/month · availability not given yet",
-      "1B — 2 bed · 1 bath · $2,200/month · availability not given yet",
-      "2A — 3 bed · 2 bath · $2,800/month · availability not given yet",
-      "2B — 2 bed · 2 bath · $2,500/month · availability not given yet",
+      "Unit 1A — 2 bed · 1 bath · $2,200/month · availability not given yet",
+      "Unit 1B — 2 bed · 1 bath · $2,200/month · availability not given yet",
+      "Unit 2A — 3 bed · 2 bath · $2,800/month · availability not given yet",
+      "Unit 2B — 2 bed · 2 bath · $2,500/month · availability not given yet",
     ]);
     expect(out.nextQuestion).toBe("When are these units available?");
     expect(out.missing).toEqual([
-      { unit: "1A", missing: ["availability"] },
-      { unit: "1B", missing: ["availability"] },
-      { unit: "2A", missing: ["availability"] },
-      { unit: "2B", missing: ["availability"] },
+      { unit: "Unit 1A", missing: ["availability"] },
+      { unit: "Unit 1B", missing: ["availability"] },
+      { unit: "Unit 2A", missing: ["availability"] },
+      { unit: "Unit 2B", missing: ["availability"] },
     ]);
     const partly = await h.ok("set_unit_details", { units: [{ unit: "1A", availability: "now" }, { unit: "1B", availability: "not available yet" }] });
-    expect(partly.nextQuestion).toBe("When are 2A, 2B available?");
+    expect(partly.nextQuestion).toBe("When are Unit 2A, Unit 2B available?");
     const done = await h.ok("set_unit_details", { details: "2A is available October 15 and 2B is available now" });
     expect(done.complete).toBe(true);
     expect(done.summary).toMatch(/Does that look right\?$/);
-    expect(done.lines[1]).toBe("1B — 2 bed · 1 bath · $2,200/month · availability not listed");
+    expect(done.lines[1]).toBe("Unit 1B — 2 bed · 1 bath · $2,200/month · availability not listed");
   });
 
   it("a unit can't silently skip its basic information: readiness names what's missing; NOT_PROVIDED counts as answered", async () => {

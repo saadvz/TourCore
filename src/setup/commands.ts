@@ -18,6 +18,7 @@ import {
   SetupInputError,
   type SetupDraft,
 } from "./setupActions";
+import { NO_FORM_QUESTION } from "./verification";
 import type { ProfileField } from "../config/unitProfile";
 
 /**
@@ -89,8 +90,15 @@ export const SETUP_COMMANDS = {
   }),
   setTourHours: command(TourHoursSchema.partial(), (d, i) => setTourHours(d, i)),
   setVerificationPolicy: command(
-    z.object({ mode: z.enum(["basic-form", "mock", "document-check"]).optional(), reuseForDays: z.number().int().optional() }),
-    (d, i) => setVerificationPolicy(d, i),
+    z.object({
+      mode: z.enum(["basic-form", "none"]).optional(),
+      reuseForDays: z.number().int().optional(),
+      confirm: z.boolean().optional(),
+    }),
+    (d, i) => {
+      if (i.mode === "none" && i.confirm !== true) throw new SetupInputError("NO_FORM_UNCONFIRMED", NO_FORM_QUESTION);
+      return setVerificationPolicy(d, { mode: i.mode, reuseForDays: i.reuseForDays });
+    },
   ),
   setServices: command(
     z.object({

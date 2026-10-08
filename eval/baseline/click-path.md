@@ -27,7 +27,7 @@ Does that look right?
 20. `preview_route` {"property":"prop_18_maple_street_teaneck_nj_07666","unit":"Unit B","doors":["Front Door","Unit B Door"]} — I have: Front Door → Unit B Door. Is that right?
 21. `set_route` {"property":"prop_18_maple_street_teaneck_nj_07666","unit":"Unit B","doors":["Front Door","Unit B Door"]} — Saved Unit B: Front Door → Unit B Door.
 22. `set_tour_hours` {"property":"prop_18_maple_street_teaneck_nj_07666","days":"weekdays","start":"9am","end":"5pm"} — Monday-Friday, 9:00 AM-5:00 PM. That's up to 8 tours a day.
-23. `set_verification_policy` {"property":"prop_18_maple_street_teaneck_nj_07666","level":"basic-form"} — Basic identity form. A check can be reused for 30 days
+23. `set_verification_policy` {"property":"prop_18_maple_street_teaneck_nj_07666","level":"basic-form"} — Basic identity form (recommended). Visitors who filled out the form won't be asked again for 30 days.
 24. `update_property_details` {"property":"prop_18_maple_street_teaneck_nj_07666","skipVisitorHelp":true} — Updated 18 Maple Street. All changes saved.
 25. `review_property_setup` {"property":"prop_18_maple_street_teaneck_nj_07666"} — Setup looks complete.
 26. `get_next_installation_step` {} → OFFER_OPERATOR_ALERTS — Your property is configured. Would you like me to keep you updated when someone books, starts or finishes a tour, and alert you if something needs your input?

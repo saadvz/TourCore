@@ -156,7 +156,7 @@ In the browser you:
 3. **Doors**: the main entrance, each unit's door, and any hallway doors or extra entrances.
 4. **Routes**: for each unit, the doors in order (Lobby Entrance ↓ Unit 101 Door). A suggested route is filled in.
 5. **Tour hours**: days, first start, last finish, tour length, spacing, and the early-arrival allowance.
-6. **Verification**: basic identity form (recommended) or practice verification.
+6. **Verification**: basic identity form (recommended) or no form. No form asks first, because anyone who texts can book a tour and get in without saying who they are.
 7. **Records and messages**: demo records, demo messaging and Durin demo mode, plus who gets alerts.
 8. **Review**: everything on one page, with Edit beside each section.
 9. **Readiness check**: eight real checks, each failure with a button that takes you straight to the fix.
@@ -508,8 +508,16 @@ Terminal wizard ─────────────────────�
 
 - **Installation tools** (`src/install/tools.ts`): report and test the installation
   (`get_state`, `get_installation_status`, `get_next_installation_step`, ...) and a secure setup form Grok fills.
-  `get_state` is the read-only picture to call first. It does not change anything. The older status tools still work
-  and still follow Tour Core's order. None takes or returns a credential or runs a command. See [`docs/deployment.md`](docs/deployment.md).
+  `get_state` is the read-only picture to call first. It does not change anything. Its next step names the milestone
+  write for that step (`set_up_texting`, `save_property`, `save_units`, `save_doors_and_routes`, `save_hours`,
+  `save_settings`, `run_checks`, `publish`). Each of those answers done, blocked, or next, and they write through the
+  same normalizer as the older tools, so equivalent wording stores one config. Every setup write goes through that
+  save layer. The identity choices are the basic identity form (the default) and no form. No form is saved only after
+  the landlord agrees. Older setups stored as `mock` or `document-check` are read as the basic identity form: reading
+  does not rewrite them, drop publication, or stale the readiness check. Backups still
+  use today's backup tools, and declining stays possible. `get_next_installation_step`
+  still names the older tools. The older status tools still work and still follow Tour Core's order. None takes or
+  returns a credential or runs a command. See [`docs/deployment.md`](docs/deployment.md).
 - **Tool contract** (`src/operator/tools.ts`): typed, provider-neutral operator tools over the existing actions:
   property setup, units, doors, routes (`preview_route` resolves the operator's words to doors on file; `set_route`
   saves exact names only), tour hours in everyday words, verification, messaging, review, `run_readiness_check`,
@@ -720,8 +728,8 @@ The actions:
 | `addUnit` / `renameUnit` / `setUnitDetails` / `removeUnit` | Tourable units, their description and approved facts. A rename can also rename the unit's door, but only if it still has the suggested name. For an apartment or condo, rename applies the same unit casing as add (`4b` → `Unit 4B`, `loft` → `Unit Loft`) and refreshes the street-plus-unit nickname and matching unit door. `update_unit` confirms with that stored name (`Updated Unit Loft.`), not the raw input |
 | `addDoor` / `renameDoor` / `removeDoor` | Entrances, unit doors, and hallway or shared doors (ids are generated and can't collide) |
 | `setRoute` | Ordered doors for one unit, plus optional directions |
-| `setTourHours` | Days, hours, tour length, spacing, early-arrival allowance |
-| `setVerificationPolicy` | Basic identity form or practice verification, plus the reuse window |
+| `setTourHours` | Days, hours, tour length, spacing, early-arrival allowance. Tours have to end later the same day |
+| `setVerificationPolicy` | Basic identity form (recommended) or no form. In chat, no form asks first and saves only after yes. Older stored values are read as the basic form |
 | `setServices` / `setAlertContact` | Records, messages, door access, and who gets alerts |
 | `reviewSetup` | Readable summary plus every problem, in plain language |
 | `runReadinessCheck` | Eight checks against the real adapters the setup selects |
@@ -755,7 +763,7 @@ The config holds the property (including its **IANA time zone**, e.g. `America/N
 doors, units, routes, and tour hours: days, start, end, `slotEveryMinutes`, `tourLengthMinutes` and
 `earlyArrivalMinutes`. It also holds `verificationMode`, `verificationValidForDays`, `messagingMode` (`demo` or `live`), optional `messagingProvider` (`local` opts this building into the QA loopback), `storageMode` and
 `accessMode`. The installation still has one primary live provider (Sendblue, Twilio, or Photon). A property may override that with `messagingProvider: "local"` so QA can inject texts without flipping the installation or drafting other published buildings. Full per-property live credentials are a later slice. Older property files that say `messagingMode: "sendblue"` are read as `live` and rewritten in place; that rename does not by itself require a new readiness check or a republish. Policy values live only in config. A new property starts at Monday–Friday, 9:00 AM–5:00 PM. Setup shows the other defaults (45-minute tours, hourly, 10 minutes early,
-checks reusable for 30 days) and lets the operator change them. Changing those starting hours is a product choice; the tools keep this default and say so.
+visitors who filled out the form won't be asked again for 30 days) and lets the operator change them. Changing those starting hours is a product choice; the tools keep this default and say so.
 
 **Approved facts.** `property.facts`, `unit.summary` and `unit.facts` hold only what the operator wrote.
 `approvedFacts(config, unitId)` (`src/core/facts.ts`) and `TourCore.approvedFacts(reservationId)` return them as
@@ -821,7 +829,7 @@ src/domain/        entities, reservation state machine
 src/policy/        evaluateAccess
 src/durin/         Durin contract + demo mode
 src/messaging/     Messenger contract + demo messaging
-src/verification/  basic identity form + practice verification
+src/verification/  basic identity form, or no form
 src/storage/       store contract + in-memory store; runtime store (sessions, links, lines, ledger) + atomic writes
 src/audit/, src/export/   audit formatting/CSV, validated export bundle
 src/createTourCore.ts     the only place config modes map to adapters
@@ -855,7 +863,7 @@ src/demo/          scripted demo (npm run demo)
 | --- | --- | --- |
 | Messaging | Sendblue for real phones, or demo messaging | Other providers behind the same `Messenger` contract |
 | Storage | On this computer (in-memory, plus JSON/CSV files) | Google Drive behind `TourCoreStore` |
-| Verification | Simulated form response, or practice verification | Real Google Form mapped to `BasicFormResponseSchema` |
+| Verification | Basic identity form, or no form | Real Google Form mapped to `BasicFormResponseSchema` when a form is used |
 | Access | Durin demo mode (no live doors) | Live Durin Access Platform credentials/mode — same integration; demo vs live is the mode |
 
 Tour Core is already built on the Durin Access Platform. Demo uses Durin's demo path so no physical doors
@@ -867,7 +875,7 @@ phone). It does not prove identity.
 
 ## Baseline eval
 
-`npm run test:eval` reruns today's duplex setup, golden landlord tasks, and demo click path against the checked-in snapshot in `eval/baseline/`. `npm run eval:rebaseline` records a new snapshot when that behavior is meant to change. `npm run eval:live` points the same flow at hosted Scratch. Run one live eval at a time. It needs `TOURCORE_MCP_URL` and `TOURCORE_MCP_TOKEN` (the one-hour sign-in access token from `POST /token` after the owner's Allow click). It keeps the properties it creates on local test texting, and its end-of-run sweep removes only the property named with this run's `eval-` id. See [docs/eval.md](docs/eval.md).
+`npm run test:eval` reruns today's duplex setup, the same ten duplexes through the milestone tools, golden landlord tasks, and the demo click path against the checked-in snapshot in `eval/baseline/`. Both config-diff reports must show zero fields differing. `npm run eval:rebaseline` records a new snapshot when that behavior is meant to change. `npm run eval:live` points the same flow at hosted Scratch. Run one live eval at a time. It needs `TOURCORE_MCP_URL` and `TOURCORE_MCP_TOKEN` (the one-hour sign-in access token from `POST /token` after the owner's Allow click). It keeps the properties it creates on local test texting, and its end-of-run sweep removes only the property named with this run's `eval-` id. See [docs/eval.md](docs/eval.md).
 
 ## Contributing
 

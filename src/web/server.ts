@@ -174,6 +174,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
   const log = options.log ?? ((line: string) => console.log(`  ${line}`));
   const runtime = options.installation?.runtime ?? new FileRuntimeStore(join(workspace.root, "runtime"));
   const installation = options.installation ?? new Installation({ root: workspace.root, runtime, log });
+  workspace.useInstalledMessaging(() => ({ provider: selectionFromInstallation(installation).provider }));
   // Adapters read credentials through the settings layer; this installation's secure-setup values join the environment's.
   const restoreSettings = useSettingsSource(installation.settingsSource());
   const restoreMessaging = bindMessagingInstallation(() => ({

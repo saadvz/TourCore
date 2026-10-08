@@ -4,6 +4,7 @@ import { secretValues } from "../install/settings";
 import { HOSTED_ADMIN_TOOLS } from "../install/hostedAdminTools";
 import type { ReportedClient } from "../playbooks/select";
 import { INSTALLATION_TOOLS } from "../install/tools";
+import { MILESTONE_TOOLS, settingsSentence } from "./milestones";
 import { installedMessaging } from "../install/status";
 import { addressReadback } from "../setup/address";
 import { PROPERTY_TYPE_LABELS, PROPERTY_TYPES, SETUP_PROPERTY_TYPES, validateConfig } from "../config/tourCoreConfig";
@@ -18,10 +19,11 @@ import { checkMessaging, UnavailableModeError } from "../createTourCore";
 import type { MessagingLedger } from "../messaging/ledger";
 import { applySetupCommand } from "../setup/commands";
 import { draftView, readinessView, saveStateView } from "../setup/presenters";
-import { parseDays, parseMinutes, parseTimeOfDay } from "../setup/parse";
+import { parseDays, parseMinutes, parseTimeOfDay, SAME_DAY_HOURS, tourHoursEndSameDay } from "../setup/parse";
 import type { DryTourCheck, DryTourResult } from "../setup/dryTour";
 import type { ReadinessResult } from "../setup/readiness";
 import { condoNextQuestion, createPropertySetup, localTestModeSentence, modeSentence, operatorFacingPropertyName, OperatorTeamCopy, SetupInputError, tourableSpacesQuestion, visitorHelpLines, visitorHelpQuestion, type SetupDraft } from "../setup/setupActions";
+import { NO_FORM_QUESTION } from "../setup/verification";
 import { usesLocalMessaging } from "../messaging/propertyScope";
 import { operatorUnitName } from "../visitor/identity";
 import { isHostedRailway } from "../install/deployment";
@@ -292,7 +294,7 @@ const PROOF: Record<string, (c: DryTourCheck) => string | undefined> = {
   inquiry: () => undefined,
   reserved: () => "Booking worked",
   consent: () => "Consent to texts and tour records was recorded",
-  identity: (c) => (c.label.includes("skipped") ? "Verification was skipped (practice verification)" : "Verification worked"),
+  identity: (c) => (c.label === "No identity form" ? "No identity form" : "Verification worked"),
   ready: () => undefined,
   early_arrival: () => "Early arrival was denied",
   entrance: () => "Entrance access was allowed at the right time",
@@ -439,10 +441,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     }),
     run: async (ctx, i) => {
       const ws = ctx.services.workspace;
-      const existing = ws.propertyIds().find((id) => {
-        if (ws.has(id) && ws.load(id).state.removedAt) return false;
-        return ws.openDraft(id).draft.property.address.trim().toLowerCase() === i.address.trim().toLowerCase();
-      });
+      const existing = ws.findByAddress(i.address);
       if (existing) return { status: "already-exists", summary: `${i.address} is already set up. I'll keep working on that one.`, setup: setupSnapshot(ctx, existing) };
       const messagingMode = defaultMessagingMode(servicesOf(ctx).installedMessaging?.());
       const draft = createPropertySetup({ address: i.address, name: i.name, propertyType: i.propertyType, timezone: i.timezone, existingPropertyIds: ws.propertyIds(), messagingMode });
@@ -698,7 +697,13 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const { id, draft } = openDraft(ctx, i.property);
       const state = edit(ctx, id, draft, "addDoor", { name: i.name, kind: i.kind === "entrance" ? "ENTRANCE" : "COMMON" });
       const after = ctx.services.workspace.openDraft(id).draft;
-      return { summary: `Added ${i.name.trim()}.`, ...state, ...propertyNextQuestion(after) };
+      const added = after.doors.find((door) => !draft.doors.some((previous) => previous.id === door.id));
+      return {
+        summary: `Added ${added?.name ?? i.name.trim()}.`,
+        ...(added ? { door: { name: added.name, kind: added.kind } } : {}),
+        ...state,
+        ...propertyNextQuestion(after),
+      };
     },
   }),
 
@@ -818,7 +823,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Set tour hours",
     kind: "change",
     description:
-      'Sets tour hours from everyday words: days ("weekdays", "Mon-Sat", "every day"), start/end ("9am", "5 PM"), tour length, how often a new tour starts, early arrival ("10 minutes"). Only pass what the operator said; defaults stay visible. A new property starts at Monday–Friday, 9:00 AM–5:00 PM, 45-minute tours, hourly starts, and 10 minutes early. Hours are structural: a published property goes back to draft until readiness, a practice tour, and publish. After those hours are published, open visitor conversations use them on the next inbound text.',
+      'Sets tour hours from everyday words: days ("weekdays", "Mon-Sat", "every day"), start/end ("9am", "5 PM"), tour length, how often a new tour starts, early arrival ("10 minutes"). Only pass what the operator said; defaults stay visible. A new property starts at Monday–Friday, 9:00 AM–5:00 PM, 45-minute tours, hourly starts, and 10 minutes early. Tours have to end later the same day. Hours are structural: a published property goes back to draft until readiness, a practice tour, and publish. After those hours are published, open visitor conversations use them on the next inbound text.',
     input: z.strictObject({
       property: Property,
       days: z.union([z.string().max(80), z.array(z.string().max(20)).max(7)]).optional(),
@@ -830,7 +835,11 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
-      const state = edit(ctx, id, draft, "setTourHours", parseHours(i));
+      const parsed = parseHours(i);
+      const start = typeof parsed.start === "string" ? parsed.start : draft.tourHours.start;
+      const end = typeof parsed.end === "string" ? parsed.end : draft.tourHours.end;
+      if (!tourHoursEndSameDay(start, end)) return { summary: SAME_DAY_HOURS, status: "blocked" };
+      const state = edit(ctx, id, draft, "setTourHours", parsed);
       const s = setupSnapshot(ctx, id);
       return { summary: s.tourHours, tourLength: s.tourLength, newTourEvery: s.newTourEvery, earlyArrival: s.earlyArrival, ...state };
     },
@@ -839,20 +848,22 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "get_verification_policy",
     title: "Get visitor verification",
     kind: "read",
-    description: "How visitors confirm who they are before any door opens, and how long a check can be reused.",
+    description: "How visitors confirm who they are before any door opens. The basic identity form includes how many days before a visitor fills it out again. No form reads back as No identity form.",
     input: z.strictObject({ property: Property }),
     run: async (ctx, i) => {
       const { draft } = openDraft(ctx, i.property);
       const view = draftView(draft);
+      const none = draft.verificationMode === "none";
       return {
         summary: view.reviewCards.find((c) => c.step === "verification")!.rows.join(". "),
-        current: draft.verificationMode === "mock" ? "practice" : draft.verificationMode,
-        reuseForDays: draft.verificationValidForDays,
-        choices: [
-          { choice: "basic-form", label: "Basic identity form (free)", recommended: true, explanation: view.verification.options[0]!.explanation },
-          { choice: "practice", label: "Practice verification", recommended: false, explanation: view.verification.options[1]!.explanation },
-          { choice: "document-check", label: "Full ID check", available: false, explanation: "Not available yet." },
-        ],
+        current: none ? "none" : "basic-form",
+        ...(none ? {} : { reuseForDays: draft.verificationValidForDays }),
+        choices: view.verification.options.map((option) => ({
+          choice: option.mode,
+          label: option.title,
+          recommended: option.recommended,
+          explanation: option.explanation,
+        })),
       };
     },
   }),
@@ -860,11 +871,25 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "set_verification_policy",
     title: "Set visitor verification",
     kind: "change",
-    description: "Chooses how visitors confirm who they are: the basic identity form (recommended) or practice verification. Optionally how many days a check can be reused.",
-    input: z.strictObject({ property: Property, level: z.enum(["basic-form", "practice"]).optional(), reuseForDays: z.number().int().optional() }),
+    description: "Chooses a basic identity form (recommended) or no form. No form asks first, because anyone who texts could book and get in without saying who they are. Optionally how many days before a visitor fills out the form again.",
+    input: z.strictObject({
+      property: Property,
+      level: z.enum(["basic-form", "none"]).optional(),
+      reuseForDays: z.number().int().optional(),
+      confirmationCode: Code,
+    }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
-      const state = edit(ctx, id, draft, "setVerificationPolicy", { mode: i.level === "practice" ? "mock" : i.level, reuseForDays: i.reuseForDays });
+      if (i.level === "none" && draft.verificationMode !== "none") {
+        const fingerprint = `none|${draft.verificationMode}`;
+        if (!i.confirmationCode) return needsConfirmation(ctx, "no-form", id, fingerprint, NO_FORM_QUESTION);
+        ctx.confirmations.redeem(i.confirmationCode, "no-form", id, fingerprint);
+      }
+      const state = edit(ctx, id, draft, "setVerificationPolicy", {
+        mode: i.level,
+        reuseForDays: i.reuseForDays,
+        ...(i.level === "none" ? { confirm: true } : {}),
+      });
       return { summary: setupSnapshot(ctx, id).verification.join(". "), ...state };
     },
   }),
@@ -942,6 +967,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         `Verification: ${view.reviewCards.find((c) => c.step === "verification")!.rows[0]}`,
         ...modes.lines,
         ...visitorHelpLines(draft.operator),
+        settingsSentence(draft.verificationMode, !!ctx.installation?.files.state().skipped?.OPERATOR_ALERTS),
       ];
       return {
         summary: view.canSave ? "Setup looks complete." : `${view.issues.length} thing${view.issues.length === 1 ? "" : "s"} still need${view.issues.length === 1 ? "s" : ""} an answer.`,
@@ -1378,7 +1404,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Set up a one-time tour",
     kind: "consequential",
     description:
-      "Sets up a tour for a visitor who asked for it, including someone who hasn't texted in yet. Use this only when the operator is booking a time they asked for. Pass their phone, the unit, and the time in everyday words. Optional name. Does not change the property's regular hours or which times are offered. First call returns one yes/no question that names the visitor, unit, day and time, says only say yes if they asked, and ends Book it? — never Continue?. \"This is a one-off. Your regular tour hours stay the same\" only when the time is outside tour hours; inside hours still says they get a text to confirm. Call again with confirmationCode only after that explicit yes. A time outside normal touring hours returns a stronger question; call again with confirmationCode and acknowledgeOutsideHours true only after they agree. Tour Core texts first: Reply YES to confirm, NO to cancel, or STOP to opt out. YES continues to the booking confirmation and the identity form. STOP opts out and sends only the standard opt-out confirmation. NO cancels and tells the team. A leftover menu number (digits only, such as 1 or 2) only re-prompts Reply YES to confirm, NO to cancel, or STOP to opt out — no team issue, no alert. A real question before they confirm is flagged for the team (the hold stays pending). If they never reply in time, the slot is released; unless they opted out they get exactly one text that the time was released, then no further texts. A leftover conversation still choosing a day or time, with nothing booked, does not block — the one-off replaces it; later replies (including a leftover menu number) go to the new confirmation, not the old menu. Refused if the property isn't published with live visitor texting, the number already said STOP, the time is in the past, it overlaps another tour (the running tour and every future or held booking, checked before asking and before booking; a failed book does not leave a leftover choosing-a-time entry), or they already have a tour in progress (TOUR_EXISTS: a booked or held reservation, a pending one-off waiting for YES or NO, an active access window, or a paused tour). Tell the operator the refusal word for word — no tool names. Booked or held: They already have a booked tour. I can move it or call it off. Then use reschedule_tour to move it or revoke_tour_access to call it off. Pending one-off: They already have a tour waiting for them to reply YES or NO. I can call it off, or we can wait for them to answer. Then use revoke_tour_access to call it off, or wait. Open tour window: They're on a tour right now. I can call it off. Then use revoke_tour_access. On hold: Their tour is on hold. I can resume it or call it off. Then use clear_operator_hold to resume it or revoke_tour_access to call it off. Keep the STOP / opt-out refusal.",
+      "Sets up a tour for a visitor who asked for it, including someone who hasn't texted in yet. Use this only when the operator is booking a time they asked for. Pass their phone, the unit, and the time in everyday words. Optional name. Does not change the property's regular hours or which times are offered. First call returns one yes/no question that names the visitor, unit, day and time, says only say yes if they asked, and ends Book it? — never Continue?. \"This is a one-off. Your regular tour hours stay the same\" only when the time is outside tour hours; inside hours still says they get a text to confirm. Call again with confirmationCode only after that explicit yes. A time outside normal touring hours returns a stronger question; call again with confirmationCode and acknowledgeOutsideHours true only after they agree. Tour Core texts first: Reply YES to confirm, NO to cancel, or STOP to opt out. YES continues to the booking confirmation, then the identity form when this place uses one. STOP opts out and sends only the standard opt-out confirmation. NO cancels and tells the team. A leftover menu number (digits only, such as 1 or 2) only re-prompts Reply YES to confirm, NO to cancel, or STOP to opt out — no team issue, no alert. A real question before they confirm is flagged for the team (the hold stays pending). If they never reply in time, the slot is released; unless they opted out they get exactly one text that the time was released, then no further texts. A leftover conversation still choosing a day or time, with nothing booked, does not block — the one-off replaces it; later replies (including a leftover menu number) go to the new confirmation, not the old menu. Refused if the property isn't published with live visitor texting, the number already said STOP, the time is in the past, it overlaps another tour (the running tour and every future or held booking, checked before asking and before booking; a failed book does not leave a leftover choosing-a-time entry), or they already have a tour in progress (TOUR_EXISTS: a booked or held reservation, a pending one-off waiting for YES or NO, an active access window, or a paused tour). Tell the operator the refusal word for word — no tool names. Booked or held: They already have a booked tour. I can move it or call it off. Then use reschedule_tour to move it or revoke_tour_access to call it off. Pending one-off: They already have a tour waiting for them to reply YES or NO. I can call it off, or we can wait for them to answer. Then use revoke_tour_access to call it off, or wait. Open tour window: They're on a tour right now. I can call it off. Then use revoke_tour_access. On hold: Their tour is on hold. I can resume it or call it off. Then use clear_operator_hold to resume it or revoke_tour_access to call it off. Keep the STOP / opt-out refusal.",
     input: z.strictObject({
       property: Property,
       phone: z.string().min(7).max(30).describe("The visitor's phone number."),
@@ -1393,6 +1419,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
 
   // ------------------------------------------------------ installation
   ...INSTALLATION_TOOLS,
+  ...MILESTONE_TOOLS,
 ];
 
 export const OPERATOR_TOOL_NAMES = [...OPERATOR_TOOLS, ...HOSTED_ADMIN_TOOLS].map((t) => t.name);

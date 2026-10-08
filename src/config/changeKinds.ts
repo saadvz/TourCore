@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { normalizeStoredDraft } from "../setup/normalizeDraft";
 import { TourCoreConfigShape, type TourCoreConfig } from "./tourCoreConfig";
 
 /**
@@ -76,13 +77,24 @@ export function legacySendblueFingerprints(config: TourCoreConfig): { full: stri
   return { full: shortHash(legacy), safety: shortHash(view) };
 }
 
+/** Compare the stored spelling of both sides, so a write that only canonicalizes is not a structural change. */
+function asStored(config: TourCoreConfig): TourCoreConfig {
+  return TourCoreConfigShape.parse(normalizeStoredDraft(config));
+}
+
 export function classifyChange(before: TourCoreConfig, after: TourCoreConfig): ChangeKind {
-  if (fullHash(before) === fullHash(after)) return "none";
-  return safetyHash(before) === safetyHash(after) ? "content" : "structural";
+  const left = asStored(before);
+  const right = asStored(after);
+  if (fullHash(left) === fullHash(right)) return "none";
+  return safetyHash(left) === safetyHash(right) ? "content" : "structural";
 }
 
 /** Plain descriptions of what approved content changed, for the audit log. */
 export function describeContentChanges(before: TourCoreConfig, after: TourCoreConfig): string[] {
+  const left = asStored(before);
+  const right = asStored(after);
+  before = left;
+  after = right;
   const out: string[] = [];
   const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
   if (!same(before.property.facts, after.property.facts)) out.push(`${after.property.name}: approved facts`);

@@ -133,7 +133,10 @@ function mentionsUnit(t: string, unitName: string): boolean {
   // Short numbers ("1") are menu choices, so only longer ones stand in for a unit ("101").
   if (digits && digits.length >= 2 && new RegExp(`(^|[\\s#])${digits}\\b`).test(t)) return true;
   const suffix = name.replace(/^(unit|apt|apartment|suite)\s+/, "");
-  return suffix !== name && new RegExp(`\\b(unit|apt|apartment|suite|number|#)\\s*${esc(suffix)}\\b`).test(t);
+  if (suffix !== name && new RegExp(`\\b(unit|apt|apartment|suite|number|#)\\s*${esc(suffix)}\\b`).test(t)) return true;
+  // "1A" and "Unit 1A" are the same label. A bare "1" stays a menu choice.
+  const distinctive = /\d/.test(suffix) && (/[a-z]/.test(suffix) || suffix.length >= 2);
+  return distinctive && suffix !== name && new RegExp(`\\b#?${esc(suffix)}\\b`).test(t);
 }
 
 function mentionsDoor(t: string, door: StopRef): boolean {
