@@ -776,7 +776,8 @@ async function startTwoLocalProperties() {
     visitorMessaging: { ok: true, at: now.toISOString(), message: "ok", problems: [], publicBaseUrl: PUBLIC, provider: "local" },
   });
   installation.files.update({ messagingProvider: "LOCAL" });
-  const server = createSetupServer({ workspace: ws, installation, now: () => now, realNow: () => clock, operatorToken: () => "test-operator-token-abcdef", log: () => {} });
+  const server = createSetupServer({
+    toolSurface: "all", workspace: ws, installation, now: () => now, realNow: () => clock, operatorToken: () => "test-operator-token-abcdef", log: () => {} });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   cleanups.push(() => server.close());
   const port = (server.address() as { port: number }).port;

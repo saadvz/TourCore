@@ -52,7 +52,8 @@ async function durableApp(options: { line?: string } = {}) {
   const logs: string[] = [];
   const start = async () => {
     visitors = new VisitorDemoRegistry();
-    server = createSetupServer({ workspace: new PropertyWorkspace(root), now: () => new Date(clock), realNow: () => clock, dev: true, visitors, log: (l) => logs.push(l) });
+    server = createSetupServer({
+    toolSurface: "all", workspace: new PropertyWorkspace(root), now: () => new Date(clock), realNow: () => clock, dev: true, visitors, log: (l) => logs.push(l) });
     await new Promise<void>((r) => server!.listen(0, "127.0.0.1", r));
     port = (server.address() as { port: number }).port;
   };

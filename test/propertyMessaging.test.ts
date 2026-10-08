@@ -92,7 +92,8 @@ async function startMixedApp() {
     visitorMessaging: { ok: true, at: now.toISOString(), message: "ok", problems: [], publicBaseUrl: PUBLIC, provider: "sendblue" },
   });
   installation.files.update({ messagingProvider: "SENDBLUE" });
-  const server = createSetupServer({ workspace: ws, installation, now: () => new Date(clock), realNow: () => clock, operatorToken: () => TOKEN, log: () => {} });
+  const server = createSetupServer({
+    toolSurface: "all", workspace: ws, installation, now: () => new Date(clock), realNow: () => clock, operatorToken: () => TOKEN, log: () => {} });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   cleanups.push(() => server.close());
   const tenaflyId = await publish(ws, tenaflyConfig(), now);

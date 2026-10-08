@@ -5,13 +5,15 @@ import { annotationsFor } from "./annotations";
 import { MCP_INSTRUCTIONS } from "../playbooks/instructions";
 import { reportedClientFromInitialize } from "../playbooks/select";
 import { callOperatorTool, OPERATOR_TOOLS, UnknownToolError, type ToolContext } from "../operator/tools";
+import { connectorRefusal, knownOperatorTool, toolsForConnector } from "./scopes";
 
 /**
  * A thin MCP bridge (Streamable HTTP, stateless, JSON responses) over Tour
  * Core's operator tool contract, for agent hosts such as Grok Bot that
  * connect to tools through a remote MCP server. Transport only: it lists the
- * tools, validates JSON-RPC, and hands every call to callOperatorTool. There
- * is no business or policy logic here.
+ * tools, validates JSON-RPC, and hands every call to callOperatorTool.
+ * When the request names a connector, the list and the call stay inside that
+ * connector. An unset connector is the full engine catalog.
  */
 
 export { MCP_PATH } from "./paths";
@@ -35,7 +37,11 @@ const rpcError = (id: JsonRpcId, code: number, message: string): Reply => ({ sta
 const rpcResult = (id: JsonRpcId, result: unknown): Reply => ({ status: 200, body: { jsonrpc: "2.0", id, result } });
 
 export function mcpToolList(ctx?: ToolContext) {
-  const tools = hostedResetToolVisible(ctx) ? [...OPERATOR_TOOLS, ...HOSTED_ADMIN_TOOLS] : OPERATOR_TOOLS;
+  const tools = ctx?.connector
+    ? toolsForConnector(ctx.connector, ctx, !!ctx.legacyTools)
+    : hostedResetToolVisible(ctx)
+      ? [...OPERATOR_TOOLS, ...HOSTED_ADMIN_TOOLS]
+      : OPERATOR_TOOLS;
   return tools.map((t) => {
     const { $schema: _s, ...inputSchema } = z.toJSONSchema(t.input) as Record<string, unknown>;
     return { name: t.name, title: t.title, description: t.description, inputSchema, annotations: { title: t.title, ...annotationsFor(t) } };
@@ -64,6 +70,12 @@ export async function handleMcpMessage(ctx: ToolContext, message: unknown): Prom
       return rpcResult(id, { tools: mcpToolList(ctx) });
     case "tools/call": {
       const name = typeof params?.name === "string" ? params.name : "";
+      if (ctx.connector) {
+        const allowed = new Set(toolsForConnector(ctx.connector, ctx, !!ctx.legacyTools).map((tool) => tool.name));
+        if (!allowed.has(name)) {
+          if (knownOperatorTool(name)) return rpcError(id, -32602, connectorRefusal(ctx.connector));
+        }
+      }
       try {
         const outcome = await callOperatorTool(ctx, name, params?.arguments ?? {});
         if (!outcome.ok) return rpcResult(id, { content: [{ type: "text", text: outcome.error }], isError: true });

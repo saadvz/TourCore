@@ -538,7 +538,8 @@ describe("Twilio visitor pipeline", () => {
     installation.files.setPublicBaseUrl(PUBLIC, "MANUAL");
     installation.files.writeState({ ...installation.files.state(), messagingProviderChoice: "twilio" });
     installation.secrets.set({ TOURCORE_TWILIO_ACCOUNT_SID: TWILIO_SID, TOURCORE_TWILIO_AUTH_TOKEN: TWILIO_TOKEN, TOURCORE_TWILIO_PHONE_NUMBER: TWILIO_NUMBER });
-    const server = createSetupServer({ workspace: ws, installation, operatorToken: () => "test-operator-token-abcdef", log: () => {} });
+    const server = createSetupServer({
+    toolSurface: "all", workspace: ws, installation, operatorToken: () => "test-operator-token-abcdef", log: () => {} });
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
     cleanups.push(() => server.close());
     const port = (server.address() as { port: number }).port;

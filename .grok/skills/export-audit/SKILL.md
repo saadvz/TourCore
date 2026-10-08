@@ -2,7 +2,7 @@
 name: export-audit
 description: Export a day's tour records for a property as a validated, provider-neutral audit (JSON plus CSV) and summarize it in plain language.
 when-to-use: "export today's audit", "export the audit", "tour history for today", "give me the records", "audit for Sep 28"
-allowed-tools: list_properties export_audit export_records
+allowed-tools: export_records
 argument-hint: "[property] [today | YYYY-MM-DD]"
 user-invocable: true
 metadata:
@@ -12,6 +12,8 @@ metadata:
 ---
 
 # Export Audit
+
+Call only `export_records`.
 
 Tour Core writes the export on its own computer, validated against the same
 schema as every single-tour download: all tours active that day (visitor tours

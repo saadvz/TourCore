@@ -24,11 +24,22 @@ If you use Grok Bot, paste this prompt into your bot. Do not change a word.
 Set up Tour Core, my AI landlord, using the open-source repository at https://github.com/saadvz/TourCore.
 Use your cloud computer to clone the repository only so you can read its setup instructions and skills. Read GROK_BOOTSTRAP.md and follow it as the authoritative setup instructions. If the repository specifies an official hosted Tour Core service, use that service instead of starting Tour Core locally on your computer.
 Do as much of the installation and configuration yourself as possible. Never ask me to paste API keys, passwords, tokens, or provider secrets into chat. When a login, MFA step, credential entry, OAuth approval, or other human-only action is required, use Tour Core's secure setup flow or the provider's own page and ask me only to complete that step.
-After you're connected to Tour Core, use its installation-status tools to determine what remains, test each connected component, and then offer to configure my first property.
+After you're connected to Tour Core, call get_state and follow its next step until the property is ready to publish, then offer to configure my first property if that step has not already started.
 Start now.
 ```
 
-The same prompt is in [`grok-template/SETUP_PROMPT.md`](grok-template/SETUP_PROMPT.md).
+[`grok-template/SETUP_PROMPT.md`](grok-template/SETUP_PROMPT.md) stays the pinned prompt. This README prompt is the one to paste. It no longer matches that file word for word.
+
+### Ops and QA connectors
+
+The landlord connector is `PUBLIC_BASE_URL/mcp` and keeps the saved OAuth token or `TOURCORE_OPERATOR_TOKEN`. It does not need a new secret.
+
+Add these only where that work should be possible. Each is off until its secret is set, and a landlord token cannot open them.
+
+- Ops: `PUBLIC_BASE_URL/mcp/ops` with bearer `TOURCORE_OPS_TOKEN` (storage recovery and runtime health).
+- QA: `PUBLIC_BASE_URL/mcp/qa` with bearer `TOURCORE_QA_TOKEN` (local test texts and demo storage).
+
+Older landlord tools stay hidden unless `TOURCORE_LEGACY_TOOLS=1`. Planned removal: October 15, 2026.
 
 For a manual setup or another agent, clone this repository and follow [`GROK_BOOTSTRAP.md`](GROK_BOOTSTRAP.md).
 
@@ -604,7 +615,7 @@ Terminal wizard ─────────────────────�
 - **Restore upload** (`src/backup/http.ts`) accepts one portable backup, 50 MB by default (`TOURCORE_RESTORE_UPLOAD_MAX_BYTES`). The body is written to a file as it arrives. An upload over the cap returns 413 and states the cap (50 MB for that default). A rejected body is read only up to 1 MB and then the connection is cut. Every expired upload says `That upload timed out. Send me the backup file again and I'll check it.`, including a second look and a file that arrived before the link expired. `Upload the backup file first, then I can show you what's in it.` is only for a live link with no file. An older ID check is named in the import summary: it now uses the basic identity form, and the landlord can ask for no form. The other request routes keep their own 1 MB limit and do not cap this upload. There is no restore upload page and no proxy body limit in this repo.
   An operator alert in history always reads `The property team was alerted: {detail}`, even when a team name is stored. A new property starts with the team name `property team`. The setup hint still offers `leasing team` as an example name.
 - **MCP bridge** (`src/mcp/mcpBridge.ts`): Streamable HTTP JSON-RPC (`initialize`, `tools/list`,
-  `tools/call`) on the existing server at `/mcp`. Transport only, no policy. Which playbook to use is remembered per MCP session id, or per signed-in caller when there is no session id. It is not one value for the whole server.
+  `tools/call`) at `/mcp` (landlord), `/mcp/ops`, and `/mcp/qa`. The landlord list is the 21 day-to-day tools, plus `reset_hosted_demo` for the hosted owner. Ops and QA tools are not on that list, and a landlord token cannot call them. Which playbook to use is remembered per MCP session id, or per signed-in caller when there is no session id. It is not one value for the whole server. Older tools stay hidden unless `TOURCORE_LEGACY_TOOLS=1`, with planned removal on October 15, 2026.
 - **Playbooks** (`src/playbooks/`): `initialize` returns a short instructions pointer (`src/playbooks/instructions.ts`). `get_state` returns the playbook for the current step. The client name picks wording only. A name containing `grok`, or Cursor's MCP client (`Cursor`, `cursor-vscode`), gets the full Grok playbook even when the client sends no capabilities. The names this repo already uses are `Grok`, `grok`, `grok-bot`, `grok-sim`, `Grok (SDK test)`, and `Cursor`. `prompts` and `resources` are server capabilities and are ignored. Claude is full when the client reports `elicitation`, `sampling`, or `roots`, and tools-only otherwise. ChatGPT and an unknown name stay tools-only. After a restart, a signed-in caller is recognized from the stored OAuth client name. A baseline or nameless entry never overrides a name that selects a playbook. A missing registration name is read from the stored client name, or from the redirect URIs, the next time that client presents a token. The name never changes a tool, a gate, or a permission.
 - **Flagged answers:** the needs-confirmation result of `answer_flagged_question` includes `visitorWillReceive`, the exact text the visitor will get, including any closing line. Read that to the landlord before the yes. The first call does not send.
 - **Grok tour updates:** the Grok playbook asks only "Want me to text you when someone books, starts, or finishes a tour, and ping you the moment something needs you?" One alert address is saved per install. A new save replaces the old one. The custom-time wake is in the Grok playbook only.
@@ -629,7 +640,7 @@ Terminal wizard ─────────────────────�
 npm run grok:connect                       # the URL to add in Grok (OAuth; nothing to paste)
 npm run grok:status                        # mode, URL, what's connected (no token values)
 npm run grok:disconnect                    # revoke Grok's access; nothing else changes
-npm run grok:tools                         # the tools Grok Bot sees
+npm run grok:tools                         # the landlord tools, plus the ops and QA connector URLs
 npm run grok:connect -- --static [--rotate] # development only: static bearer token mode
 ```
 

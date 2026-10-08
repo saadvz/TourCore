@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { OLD_DAY_TO_DAY_TOOLS, goldenDayToDayCall, runDayToDayGolden } from "../../src/eval/dayToDayGolden";
+import { LANDLORD_CORE_TOOLS } from "../../src/mcp/scopes";
 import { EvalSession } from "../../src/eval/session";
 
 describe("day-to-day golden tasks", () => {
@@ -10,7 +11,10 @@ describe("day-to-day golden tasks", () => {
       expect(report.tasks.map((task) => task.id)).toEqual(["full-setup", "one-off", "flagged-question", "pause-unit", "export-audit"]);
       for (const task of report.tasks) {
         expect(task.passed, `${task.title}: ${task.detail}`).toBe(true);
-        for (const tool of task.tools) expect(OLD_DAY_TO_DAY_TOOLS).not.toContain(tool);
+        for (const tool of task.tools) {
+          expect(OLD_DAY_TO_DAY_TOOLS).not.toContain(tool);
+          if (tool !== "inject_local_sms") expect(LANDLORD_CORE_TOOLS).toContain(tool);
+        }
       }
       expect(report.traces.find((trace) => trace.id === "one-off")?.tools).toEqual(["schedule_tour", "schedule_tour"]);
       expect(report.traces.find((trace) => trace.id === "pause-unit")?.tools).toEqual(["pause_tours", "pause_tours"]);

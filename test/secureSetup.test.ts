@@ -47,7 +47,8 @@ async function startApp() {
   const installation = new Installation({ root, runtime, now: () => clock, fetch: net.fetch as never });
   installation.files.ensure({ deploymentMode: "GROK_MANAGED_P0" });
   installation.files.setPublicBaseUrl(PUBLIC, "MANUAL");
-  const server = createSetupServer({ workspace: new PropertyWorkspace(root), installation, now: () => new Date(clock), realNow: () => clock, operatorToken: () => TOKEN, log: () => {} });
+  const server = createSetupServer({
+    toolSurface: "all", workspace: new PropertyWorkspace(root), installation, now: () => new Date(clock), realNow: () => clock, operatorToken: () => TOKEN, log: () => {} });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   const port = (server.address() as { port: number }).port;
   cleanups.push(() => {

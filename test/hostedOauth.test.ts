@@ -81,6 +81,7 @@ async function hostedApp(options: { env?: NodeJS.ProcessEnv; now?: () => number;
   const logs: string[] = [];
   cleanups.push(setSendblueRuntime({ env: () => readSendblueEnv(effectiveEnv(env, inst.settingsSource())) }));
   const { server } = await startSetupServer({
+    toolSurface: "all",
     installation: inst,
     workspace,
     host: "127.0.0.1",
@@ -242,7 +243,7 @@ describe("hosted first approved connection owns the demo", () => {
     const listed = await app.http("/mcp", {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${access}` },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "list_properties", arguments: {} } }),
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "get_state", arguments: {} } }),
     });
     expect(await listed.text()).toContain("100 Alfred Way");
     expect(app.logs.join("\n")).not.toContain(verifier);
@@ -250,7 +251,8 @@ describe("hosted first approved connection owns the demo", () => {
 
     const restarted = installation(app.root, app.env);
     expect(restarted.files.state().hostedTenant?.clientId).toBe(client.client_id);
-    const { server } = await startSetupServer({ installation: restarted, workspace: new PropertyWorkspace(app.root), host: "127.0.0.1", port: 0, open: false, oauthRateLimit: false });
+    const { server } = await startSetupServer({
+    toolSurface: "all", installation: restarted, workspace: new PropertyWorkspace(app.root), host: "127.0.0.1", port: 0, open: false, oauthRateLimit: false });
     cleanups.push(() => server.close());
     const http = hostedFetch((server.address() as { port: number }).port);
     const reconnect = pkce();

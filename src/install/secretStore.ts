@@ -44,7 +44,7 @@ export const SETTING_NAMES = Object.keys(SETTINGS) as SettingName[];
 export const SECRET_SETTING_NAMES = SETTING_NAMES.filter((n) => SETTINGS[n].secret);
 
 /** Environment-only secrets that also must never leave Tour Core. */
-export const OTHER_SECRET_ENV = ["TOURCORE_OPERATOR_TOKEN", "TOURCORE_INTENT_MODEL_KEY", "TOURCORE_HOSTED_OWNER_BOOTSTRAP_SECRET"] as const;
+export const OTHER_SECRET_ENV = ["TOURCORE_OPERATOR_TOKEN", "TOURCORE_OPS_TOKEN", "TOURCORE_QA_TOKEN", "TOURCORE_INTENT_MODEL_KEY", "TOURCORE_HOSTED_OWNER_BOOTSTRAP_SECRET"] as const;
 
 /**
  * Hosted owner claim and session. Only hashes are stored. This is not a

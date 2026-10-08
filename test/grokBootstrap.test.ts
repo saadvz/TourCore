@@ -127,7 +127,7 @@ describe("hosted URL wins over a clone request", () => {
     expect(hostedSkill).toMatch(/Do not run\s+`npm run bootstrap:grok`/);
     expect(hostedSkill).toMatch(/Never start cloudflared/);
     expect(hostedSkill).toMatch(/Quick Tunnel/);
-    expect(hostedSkill).toMatch(/confirm_backup_destination/);
+    expect(hostedSkill).toMatch(/backup_records/);
     expect(hostedSkill).toMatch(/built-in\s+connector for portable backups/);
     expect(hostedSkill).toMatch(/Do not say\s+Tour Core's Google app is not configured/);
     expect(hostedSkill).toMatch(/do not offer to keep records\s+on your computer/);
@@ -142,7 +142,8 @@ describe("hosted URL wins over a clone request", () => {
     expect(localSkill).toMatch(/npm run bootstrap:grok/);
     expect(localSkill).toMatch(/cloudflared/);
     expect(skill).toMatch(/open-source path, when the next step is Google Drive's own approval/);
-    expect(skill).toMatch(/begin_google_drive_connect/);
+    expect(skill).toMatch(/ops connector/);
+    expect(skill).not.toMatch(/begin_google_drive_connect/);
   });
 });
 

@@ -2,7 +2,7 @@
 name: simulate-tour
 description: Run one complete practice tour through the real Tour Core engine (nobody is texted, no real door opens) and summarize the proof points that matter.
 when-to-use: "run a practice tour", "run a dry tour", "test the tour", "simulate a visitor", "local SMS", "inject a visitor text"
-allowed-tools: list_properties run_dry_tour run_readiness_check inject_local_sms read_local_outbox
+allowed-tools: inject_local_sms read_local_outbox use_local_demo_storage
 argument-hint: "[property] [unit]"
 user-invocable: true
 metadata:
@@ -12,6 +12,8 @@ metadata:
 ---
 
 # Simulate Tour
+
+These tools are on the QA connector (`TOURCORE_QA_TOKEN`, URL ending in `/mcp/qa`). Leave property out of `inject_local_sms` to use the shared line.
 
 The practice tour books a pretend visitor, records consent, verifies them,
 tries an early arrival, opens the first door on the route at the right time

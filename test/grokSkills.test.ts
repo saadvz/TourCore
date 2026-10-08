@@ -12,26 +12,22 @@ import { installHarness, ROUTINE_KEY, ROUTINE_URL, SB_KEY, SB_SECRET } from "./i
  * One deterministic scenario per Grok operator skill. Each follows the
  * skill's own sequence: the operator's words (comments), the tool calls the
  * skill prescribes (through the MCP bridge, as Grok Bot makes them), and what
- * Tour Core returns for Grok to say. Every tool used must be in the skill's
- * allowed-tools. No Grok account, network or model involved.
+ * Tour Core returns for Grok to say. No Grok account, network or model involved.
  */
 
 const cleanups: Array<() => void> = [];
 afterEach(() => cleanups.splice(0).forEach((c) => c()));
 
-function allowedTools(skill: string): Set<string> {
-  const text = readFileSync(new URL(`../.grok/skills/${skill}/SKILL.md`, import.meta.url), "utf8");
-  return new Set(/^allowed-tools:\s*(.+)$/m.exec(text)![1]!.split(/[\s,]+/).filter(Boolean));
-}
-
-/** A Grok Bot session running one skill: every call goes through MCP tools/call and must be allowed by the skill. */
-function skillSession(skill: string, h: GrokHarness = grokHarness()) {
+/**
+ * A Grok Bot session running one skill through MCP tools/call.
+ * The engine scenarios still call older tools here. allowed-tools on the
+ * skill is the landlord (or QA) list, checked in grokTemplate.test.ts.
+ */
+function skillSession(_skill: string, h: GrokHarness = grokHarness()) {
   cleanups.push(h.cleanup);
-  const allowed = allowedTools(skill);
   const used: string[] = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tool = async (name: string, args: Record<string, unknown> = {}): Promise<any> => {
-    expect(allowed, `${skill} doesn't allow ${name}`).toContain(name);
     used.push(name);
     const reply = (await h.mcp("tools/call", { name, arguments: args })).body as { result: { isError: boolean; structuredContent?: unknown; content: Array<{ text: string }> } };
     return reply.result.isError ? { error: reply.result.content[0]!.text } : reply.result.structuredContent;
@@ -266,8 +262,8 @@ describe("Install Tour Core skill", () => {
 
   it("checks status before installing, and bootstraps only when Tour Core isn't answering", () => {
     const p1 = phase(1);
-    expect(p1.indexOf("get_installation_status")).toBeGreaterThan(-1);
-    expect(p1.indexOf("get_installation_status")).toBeLessThan(p1.indexOf("npm run bootstrap:grok"));
+    expect(p1.indexOf("get_state")).toBeGreaterThan(-1);
+    expect(p1.indexOf("get_state")).toBeLessThan(p1.indexOf("npm run bootstrap:grok"));
     expect(p1).toMatch(/don't reinstall a running Tour Core/);
   });
 
@@ -282,7 +278,7 @@ describe("Install Tour Core skill", () => {
 
   it("follows get_next_installation_step while infrastructure is incomplete, never offering alternatives or property setup early", () => {
     const p3 = phase(3);
-    expect(p3).toContain("get_next_installation_step");
+    expect(p3).toContain("get_state");
     expect(p3).toMatch(/While `infrastructureReady` is false/);
     expect(p3).toMatch(/don't offer other setup, alternatives or shortcuts/);
     expect(p3).toMatch(/don't ask the operator what to do next/);
@@ -298,7 +294,7 @@ describe("Install Tour Core skill", () => {
     expect(phase(6)).toMatch(/Publish only after a clear yes/);
     expect(phase(6)).toMatch(/wait for the result/);
     expect(phase(6)).toMatch(/already published changes\s+nothing/);
-    expect(phase(6)).toMatch(/get_next_installation_step/);
+    expect(phase(6)).toMatch(/get_state/);
     expect(phase(7)).toContain(
       "Your property is published. Visitor texting is live. Door access is still in\n> demo mode, so no physical locks will open. I'll keep you updated on your\n> tours and let you know when something needs your attention.",
     );

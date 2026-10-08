@@ -11,7 +11,8 @@ afterEach(() => cleanup.splice(0).forEach((fn) => fn()));
 
 async function startApp(dev = false) {
   const root = mkdtempSync(join(tmpdir(), "tourcore-web-"));
-  const server: Server = createSetupServer({ workspace: new PropertyWorkspace(root), dev });
+  const server: Server = createSetupServer({
+    toolSurface: "all", workspace: new PropertyWorkspace(root), dev });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   const port = (server.address() as { port: number }).port;
   cleanup.push(() => {

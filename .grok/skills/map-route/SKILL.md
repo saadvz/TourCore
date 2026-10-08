@@ -2,7 +2,7 @@
 name: map-route
 description: Map the doors a visitor walks through to reach one unit, from the operator's own description, using only doors Tour Core has on file. Shows the inferred route and saves it only after the operator confirms.
 when-to-use: "map the route", "Unit 101 uses the lobby entrance", "how do people get to 102", "change the route", "fix the route"
-allowed-tools: list_units list_doors add_door get_route preview_route set_route save_doors_and_routes
+allowed-tools: get_state save_doors_and_routes
 argument-hint: "[unit]"
 user-invocable: true
 metadata:
@@ -12,6 +12,8 @@ metadata:
 ---
 
 # Map Route
+
+Call only `get_state` and `save_doors_and_routes`.
 
 A route is the exact, ordered list of doors Tour Core will allow for a visitor
 to one unit. Tour Core refuses any door that isn't on it, before any door is

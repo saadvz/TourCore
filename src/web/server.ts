@@ -21,6 +21,8 @@ import { publicBaseUrl } from "../messaging/publicUrl";
 import { createIntentInterpreter, intentModelFromEnv, type IntentInterpreter } from "../intent";
 import { mcpAuthModeFromEnv, type McpAuthMode } from "../mcp/authMode";
 import { authorized, handleMcpMessage, MCP_PATH } from "../mcp/mcpBridge";
+import { MCP_OPS_PATH, MCP_QA_PATH } from "../mcp/paths";
+import { legacyToolsEnabled, type ConnectorScope } from "../mcp/scopes";
 import { preferPlaybookClient, reportedClientFromInitialize, selectPlaybook, type ReportedClient } from "../playbooks/select";
 import { endpointsFor, isOAuthLocalPath, isOAuthPublicPath, McpOAuth } from "../mcp/oauth";
 import { grokLegacyCompatFromEnv, hostedCompatStartupLine, redirectPolicyFor } from "../mcp/oauth/clients";
@@ -100,6 +102,16 @@ export interface SetupServerOptions {
   onApprovalRequest?: (approvalPageUrl: string) => void;
   /** Tests only: turn off the OAuth endpoints' rate limits. */
   oauthRateLimit?: false;
+  /**
+   * `landlord` (default) scopes POST /mcp to the landlord tools.
+   * `all` leaves that path unscoped so the eval harness and older HTTP tests can still call hidden tools.
+   * Ops and QA paths stay scoped either way.
+   */
+  toolSurface?: "landlord" | "all";
+  /** Ops connector bearer. Unset means POST /mcp/ops is off. */
+  opsToken?: () => string | undefined;
+  /** QA connector bearer. Unset means POST /mcp/qa is off. */
+  qaToken?: () => string | undefined;
   /** This installation (manifest, provider settings, alert outbox). Defaults to one in the workspace's folder. */
   installation?: Installation;
   /** How often pending operator alerts are retried. */
@@ -133,7 +145,7 @@ export const operatorTokenFromEnv = () => process.env.TOURCORE_OPERATOR_TOKEN?.t
  * page where the owner approves a connection.
  */
 function publicRouteAllowed(method: string, path: string, oauth: boolean, hosted: boolean): boolean {
-  if (path === MCP_PATH) return true;
+  if (path === MCP_PATH || path === MCP_OPS_PATH || path === MCP_QA_PATH) return true;
   if (method === "GET" && path === HEALTH_PATH) return true;
   if (method === "GET" && path === "/google/oauth/callback") return true;
   if (/^\/portable\/(?:artifacts|uploads)\/art_[A-Za-z0-9_-]{20,80}$/.test(path)) {
@@ -284,6 +296,9 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
   const alerts = new OperatorUpdates({ services: api, outbox: installation.outbox, preferences: () => installation.files.state().operatorUpdates, log });
   installation.setRelevanceCheck((event) => alerts.stillRelevant(event));
   const operatorToken = options.operatorToken ?? operatorTokenFromEnv;
+  const opsToken = options.opsToken ?? (() => installation.env().TOURCORE_OPS_TOKEN?.trim() || undefined);
+  const qaToken = options.qaToken ?? (() => installation.env().TOURCORE_QA_TOKEN?.trim() || undefined);
+  const toolSurface = options.toolSurface ?? "landlord";
   const authMode = options.mcpAuth ?? (options.operatorToken ? "static" : mcpAuthModeFromEnv());
   let server: Server;
   const approvalPage = () => `${tools.localUrl?.() ?? "http://localhost:4321"}/grok`;
@@ -518,13 +533,24 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         if (oauth) return await oauth.handleLocal(req, res);
         return send(200, "application/json; charset=utf-8", JSON.stringify({ mode: typeof authMode === "string" ? authMode : "off" }));
       }
-      if (url.pathname === MCP_PATH) {
+      const connectorPath: ConnectorScope | undefined =
+        url.pathname === MCP_PATH ? "landlord" : url.pathname === MCP_OPS_PATH ? "ops" : url.pathname === MCP_QA_PATH ? "qa" : undefined;
+      if (connectorPath) {
         const json = "application/json; charset=utf-8";
-        if (typeof authMode !== "string") {
-          return send(503, json, JSON.stringify({ error: { message: "The Tour Core connector is off: TOURCORE_MCP_AUTH_MODE must be oauth or static." } }));
-        }
         let caller: { clientId?: string } | undefined;
-        if (oauth) {
+        if (connectorPath === "ops" || connectorPath === "qa") {
+          const token = (connectorPath === "ops" ? opsToken : qaToken)();
+          const label = connectorPath === "ops" ? "ops" : "QA";
+          const realm = connectorPath === "ops" ? "tour-core-ops" : "tour-core-qa";
+          if (!token) return send(503, json, JSON.stringify({ error: { message: `The Tour Core ${label} connector is off.` } }));
+          if (!authorized(req.headers.authorization, token)) {
+            return send(401, json, JSON.stringify({ error: { message: `Missing or wrong Tour Core ${label} connector token.` } }), {
+              "WWW-Authenticate": `Bearer realm="${realm}"`,
+            });
+          }
+        } else if (typeof authMode !== "string") {
+          return send(503, json, JSON.stringify({ error: { message: "The Tour Core connector is off: TOURCORE_MCP_AUTH_MODE must be oauth or static." } }));
+        } else if (oauth) {
           // Token checked before the body is read; failures have already been answered (401/403).
           const auth = await oauth.authenticate(req, res);
           if (!auth) return;
@@ -589,7 +615,16 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           if (knownPlaybook(reportedClient) || !knownPlaybook(playbookClients.get(callerKey)) || latestStaticInitialize) remember(callerKey, reportedClient);
         }
         if (!initializing && incomingSession && !knownSession && reportedClient) remember(sessionKey(incomingSession), reportedClient);
-        const reply = await handleMcpMessage({ ...tools, ...(caller ? { caller } : {}), ...(reportedClient ? { client: reportedClient } : {}) }, message);
+        const scoped = connectorPath !== "landlord" || toolSurface !== "all";
+        const reply = await handleMcpMessage(
+          {
+            ...tools,
+            ...(caller ? { caller } : {}),
+            ...(reportedClient ? { client: reportedClient } : {}),
+            ...(scoped ? { connector: connectorPath, legacyTools: connectorPath === "landlord" && legacyToolsEnabled(installation.env()) } : {}),
+          },
+          message,
+        );
         const sessionHeaders: Record<string, string> = responseSession ? { "Mcp-Session-Id": responseSession } : {};
         if (reply.body === undefined) {
           res.writeHead(reply.status, { "Cache-Control": "no-store", ...sessionHeaders });
@@ -849,6 +884,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.log(`  Reading texts:        built-in rules${model ? ` + language model ${model.name}` : " only"}\n`);
   }
   const mcpUrl = base ? `${new URL(base).origin}${MCP_PATH}` : "(set PUBLIC_BASE_URL so Grok Bot can reach it)";
+  const origin = base ? new URL(base).origin : undefined;
   const mode = mcpAuthModeFromEnv();
   if (mode === "oauth") {
     console.log(hosted ? `  Grok connects at ${mcpUrl}. The first Allow on the authorization page claims this demo.\n` : `  Grok Bot connector:   ${mcpUrl} (OAuth: approve connections at ${url}grok)\n`);
@@ -864,6 +900,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   } else {
     console.log(`  Grok Bot connector:   off (TOURCORE_MCP_AUTH_MODE="${mode.invalid}" isn't oauth or static)\n`);
   }
+  if (origin && process.env.TOURCORE_OPS_TOKEN?.trim()) console.log(`  Ops connector:        ${origin}${MCP_OPS_PATH}\n`);
+  if (origin && process.env.TOURCORE_QA_TOKEN?.trim()) console.log(`  QA connector:         ${origin}${MCP_QA_PATH}\n`);
   if (dev) console.log(`  Developer mode is on. Records folder: ${workspace.root}\n  Static files: ${fileURLToPath(PUBLIC_DIR)}\n`);
   const stop = () => {
     console.log("\n  Tour Core setup stopped. Your work is saved.");
