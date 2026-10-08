@@ -61,7 +61,7 @@ describe("review_property_setup unit headings", () => {
     await h.ok("add_unit", {});
     await h.ok("set_unit_details", { units: [{ unit: "Main Home", bedrooms: "3", bathrooms: "2", monthlyRent: "$3,400", availability: "now" }] });
     const review = await h.ok("review_property_setup");
-    expect(review.lines).toContain("910 Qa Gate Road");
+    expect(review.lines).toContain("910 QA Gate Road");
     expect(review.lines).not.toContain("Main Home");
     expect(h.workspace.openDraft(h.workspace.propertyIds()[0]!).draft.units[0]!.name).toBe("Main Home");
   });
@@ -169,7 +169,7 @@ describe("set_unit_details single-family auto-select", () => {
     await details.ok("add_unit", {});
     const byDetails = await details.ok("set_unit_details", { details: "3 bed 2 bath for $3,400, available now" });
     expect(byDetails.complete).toBe(true);
-    expect(byDetails.lines).toEqual(["910 Qa Gate Road — 3 bed · 2 bath · $3,400/month · available now"]);
+    expect(byDetails.lines).toEqual(["910 QA Gate Road — 3 bed · 2 bath · $3,400/month · available now"]);
 
     const fields = app();
     await fields.ok("create_property_setup", { address: "12 Scratch Lane, Teaneck, NJ 07666", propertyType: "SINGLE_FAMILY" });
@@ -201,7 +201,7 @@ describe("set_unit_details single-family auto-select", () => {
     await h.ok("add_unit", {});
     const saved = await h.ok("set_unit_details", { details: phrase });
     expect(saved.complete).toBe(true);
-    expect(saved.lines).toEqual(["910 Qa Gate Road — 3 bed · 2 bath · $3,400/month · available now"]);
+    expect(saved.lines).toEqual(["910 QA Gate Road — 3 bed · 2 bath · $3,400/month · available now"]);
     expect(saved.notOnFile).toBeUndefined();
   });
 

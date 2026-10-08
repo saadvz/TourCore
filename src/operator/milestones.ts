@@ -12,6 +12,7 @@ import { chooseMessagingProvider } from "../messaging/switchProvider";
 import { LOCAL_TEST_TEXTING, SetupInputError, createPropertySetup, localTestModeSentence, modeSentence } from "../setup/setupActions";
 import { applySetupCommand } from "../setup/commands";
 import { canonicalDoor, canonicalUnitName } from "../setup/normalizeDraft";
+import { formatClockTime, type Weekday } from "../core/timezone";
 import { parseDays, parseMinutes, parseTimeOfDay } from "../setup/parse";
 import { PRACTICE_REFUSED, VERIFICATION_BELOW_FLOOR, verificationAllowed, verificationFloor, type VerificationLevel } from "../setup/verificationFloor";
 import { publishGuards, publishProperty, readinessForProperty, runPracticeTour, visitorTexting } from "./setupFlow";
@@ -120,7 +121,7 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
     }),
     run: async (ctx, i) => {
       const inst = ctx.installation;
-      if (!inst) return envelope(ctx, undefined, "blocked", "Texting can't be set up from here.", {}, "INSTALLATION_UNAVAILABLE");
+      if (!inst) return envelope(ctx, undefined, "blocked", TEXTING_NOT_HERE, {}, "INSTALLATION_UNAVAILABLE");
       const propertyId = i.property ? propertyIdOf(ctx, i.property) : undefined;
       if (i.provider) {
         const chosen = await chooseMessagingProvider(inst, i.provider, { workspace: ctx.services.workspace, propertyId });
@@ -130,7 +131,7 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
         const wanted = toE164(i.line);
         const known = (inst.files.state().messagingLines ?? []).map((line) => toE164(line.address) ?? line.address);
         if (!wanted || !known.includes(wanted)) {
-          return envelope(ctx, propertyId, "blocked", "Choose one of the lines Tour Core listed.", {}, "LINE_NOT_LISTED");
+          return envelope(ctx, propertyId, "blocked", "Pick one of the numbers I listed.", {}, "LINE_NOT_LISTED");
         }
         inst.secrets.set({ TOURCORE_PHOTON_PHONE_NUMBER: wanted }, new Date(inst.now()));
         ctx.resetMessaging?.();
@@ -161,7 +162,7 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       if (nextAction === "TEST_VISITOR_MESSAGING" || nextAction === "RECONNECT_VISITOR_MESSAGING") {
         return envelope(ctx, propertyId, "next", "I'm checking that texting works. I won't text anyone.");
       }
-      return envelope(ctx, propertyId, "blocked", "Texting isn't working right now.", {}, "TEXTING_NOT_READY");
+      return envelope(ctx, propertyId, "blocked", "Texting isn't working right now. Ask me to check it again, and that check does not text anyone.", {}, "TEXTING_NOT_READY");
     },
   }),
   tool({
@@ -231,7 +232,7 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       const missingZip = !!saved.property.canonicalAddress && !saved.property.canonicalAddress.postalCode;
       if (missingZip) return envelope(ctx, id, "next", "What ZIP code should I use?", { propertyId: id });
       if (saved.property.canonicalAddress?.postalCode && saved.property.addressConfirmed === false) {
-        return envelope(ctx, id, "next", "Did I get that right?", { propertyId: id, address: saved.property.address });
+        return envelope(ctx, id, "next", `Did I get that right: ${saved.property.address}?`, { propertyId: id, address: saved.property.address });
       }
       if (!saved.property.propertyType) return envelope(ctx, id, "next", "Is this a single-family home, a multifamily home, or one apartment or condo?", { propertyId: id });
       return envelope(ctx, id, "done", `Saved ${saved.property.name}.`, { propertyId: id });
@@ -292,7 +293,7 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       }
       ctx.services.workspace.persistEdit(next, ctx.now());
       const saved = ctx.services.workspace.openDraft(id).draft;
-      return envelope(ctx, id, "done", saved.units.map((unit) => unit.name).join(", ") || "Saved the places people can tour.", { propertyId: id });
+      return envelope(ctx, id, "done", savedPlaces(saved.units.map((unit) => unit.name)), { propertyId: id });
     },
   }),
   tool({
@@ -347,13 +348,13 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
         }
       }
       if (i.preview) {
-        const line = matched.map((route) => `${route.unit}: ${route.doors.join(" → ")}`).join(". ");
+        const line = matched.map((route) => `${route.unit}: ${routeThrough(route.doors)}`).join(". ");
         return envelope(ctx, id, "next", line ? `I have: ${line}. Nothing was saved.` : "Nothing was saved.", { propertyId: id, preview: true, routes: matched });
       }
       if (i.doors?.length || i.routes?.length) ctx.services.workspace.persistEdit(scratch, ctx.now());
       const saved = ctx.services.workspace.openDraft(id).draft;
       if (!saved.routes.length) return envelope(ctx, id, "next", "How does someone walk in, from the front door to the door they tour?", { propertyId: id, routes: matched });
-      return envelope(ctx, id, "done", matched.map((route) => `${route.unit}: ${route.doors.join(" → ")}`).join(". ") || "Saved the doors and the way through.", {
+      return envelope(ctx, id, "done", matched.map((route) => `${route.unit}: ${routeThrough(route.doors)}`).join(". ") || "Saved the doors and the walking route.", {
         propertyId: id,
         routes: matched,
       });
@@ -380,7 +381,7 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       const next = applySetupCommand(draft, "setTourHours", parsed);
       ctx.services.workspace.persistEdit(next, ctx.now());
       const hours = ctx.services.workspace.openDraft(id).draft.tourHours;
-      return envelope(ctx, id, "done", `Tours are ${hours.days.join(", ")} from ${hours.start} to ${hours.end}.`, { propertyId: id });
+      return envelope(ctx, id, "done", `Tours run ${describeTourDays(hours.days)}, ${spokenClock(hours.start)} to ${spokenClock(hours.end)}.`, { propertyId: id });
     },
   }),
   tool({
@@ -423,7 +424,7 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       }
       const inst = ctx.installation;
       if (i.skipAlerts) {
-        if (!inst) return envelope(ctx, opened?.id, "blocked", "Tour updates can't be changed from here.", {}, "INSTALLATION_UNAVAILABLE");
+        if (!inst) return envelope(ctx, opened?.id, "blocked", TOUR_UPDATES_NOT_HERE, {}, "INSTALLATION_UNAVAILABLE");
         const state = inst.files.state();
         inst.files.writeState({ ...state, skipped: { ...state.skipped, OPERATOR_ALERTS: new Date(inst.now()).toISOString() } });
       }
@@ -434,15 +435,13 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
         inst.files.writeState({ ...state, operatorUpdates: prefs });
       }
       if (i.connectAlerts) {
-        if (!inst) return envelope(ctx, opened?.id, "blocked", "Tour updates can't be changed from here.", {}, "INSTALLATION_UNAVAILABLE");
+        if (!inst) return envelope(ctx, opened?.id, "blocked", TOUR_UPDATES_NOT_HERE, {}, "INSTALLATION_UNAVAILABLE");
         return envelope(ctx, opened?.id, "next", "Want me to tell you when someone books, starts, or finishes a tour, and when something needs you?", {
           secureSetup: secureSetupLink(inst, ctx.localUrl?.(), "operator-alerts"),
         });
       }
       const mode = opened ? ctx.services.workspace.openDraft(opened.id).draft.verificationMode : undefined;
-      const label = mode === "mock" ? "Practice verification" : mode === "document-check" ? "Full ID check" : "Basic identity form";
-      const alerts = i.skipAlerts ? "Tour updates are off for now." : "Tour updates stay as they are.";
-      return envelope(ctx, opened?.id, "done", `Settings: ${label}. ${alerts}`, { propertyId: opened?.id });
+      return envelope(ctx, opened?.id, "done", settingsSentence(mode, !!i.skipAlerts), { propertyId: opened?.id });
     },
   }),
   tool({
@@ -454,7 +453,7 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
     run: async (ctx, i) => {
       const { id, draft } = open(ctx, i.property);
       if (!draft.units.length || !draft.routes.some((route) => route.stops.length > 0)) {
-        return envelope(ctx, id, "blocked", "This place doesn't have a way through yet, so the practice tour can't run.", { propertyId: id }, "ROUTES_MISSING");
+        return envelope(ctx, id, "blocked", "This place doesn't have a walking route yet, so the practice tour can't run.", { propertyId: id }, "ROUTES_MISSING");
       }
       const services = servicesOf(ctx);
       const selfTest: Record<string, unknown> = {};
@@ -465,8 +464,8 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
         selfTest.endpoint = { ok: endpoint.ok, message: endpoint.message };
         selfTest.access = { ok: access.ok, message: access.message };
         selfTest.alerts = { ok: alerts.ok, message: alerts.message };
-        if (!endpoint.ok) return envelope(ctx, id, "blocked", "The connection isn't ready yet.", { propertyId: id, selfTest }, "ENDPOINT_NOT_READY");
-        if (!access.ok) return envelope(ctx, id, "blocked", "Door access isn't answering.", { propertyId: id, selfTest }, "ACCESS_NOT_READY");
+        if (!endpoint.ok) return envelope(ctx, id, "blocked", "The connection isn't ready yet. I'll check Tour Core's public connection again.", { propertyId: id, selfTest }, "ENDPOINT_NOT_READY");
+        if (!access.ok) return envelope(ctx, id, "blocked", "Door access isn't answering. I'll check the demo access system again, and no real door opens.", { propertyId: id, selfTest }, "ACCESS_NOT_READY");
       }
       const readiness = await readinessForProperty(services, id, ctx.now());
       if (!readiness.result.passed) {
@@ -536,6 +535,60 @@ function resolveRouteDoor(draft: TourCoreConfig, ref: string, unit: Unit): { doo
     return { question: `"${ref}" could be ${found.candidates.map((door) => door.name).join(" or ")}. Which one?` };
   }
   return {};
+}
+
+const TEXTING_NOT_HERE = "Texting can't be set up from here. Whoever set up your Tour Core hosting can add a texting service on the installation.";
+const TOUR_UPDATES_NOT_HERE = "Tour updates can't be changed from here. Turn them on or skip them on the Tour Core installation, where the login goes on the private setup page.";
+
+const TOUR_DAY_ORDER: Weekday[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+
+const DAY_NAME: Record<Weekday, string> = {
+  MON: "Monday",
+  TUE: "Tuesday",
+  WED: "Wednesday",
+  THU: "Thursday",
+  FRI: "Friday",
+  SAT: "Saturday",
+  SUN: "Sunday",
+};
+
+/** "Monday to Friday", "Monday, Wednesday and Friday", "Monday to Friday and Sunday". */
+export function describeTourDays(days: readonly Weekday[]): string {
+  const ordered = TOUR_DAY_ORDER.filter((day) => days.includes(day));
+  const groups: Weekday[][] = [];
+  for (const day of ordered) {
+    const last = groups[groups.length - 1];
+    const prev = last?.[last.length - 1];
+    if (last && prev && TOUR_DAY_ORDER.indexOf(day) === TOUR_DAY_ORDER.indexOf(prev) + 1) last.push(day);
+    else groups.push([day]);
+  }
+  const parts = groups.map((group) => (group.length === 1 ? DAY_NAME[group[0]!] : `${DAY_NAME[group[0]!]} to ${DAY_NAME[group[group.length - 1]!]}`));
+  return joinList(parts);
+}
+
+function spokenClock(hhmm: string): string {
+  return formatClockTime(hhmm).replace(":00", "");
+}
+
+function joinList(parts: string[]): string {
+  if (parts.length <= 1) return parts[0] ?? "";
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
+function routeThrough(doors: string[]): string {
+  return doors.join(", then ");
+}
+
+function savedPlaces(names: string[]): string {
+  if (!names.length) return "Saved the places people can tour.";
+  return `Saved ${joinList(names)}.`;
+}
+
+export function settingsSentence(mode: string | undefined, updatesOff: boolean): string {
+  const check = mode === "mock" ? "Visitors will pass the identity check automatically" : mode === "document-check" ? "Visitors will complete a full ID check" : "Visitors will fill out a basic identity form";
+  const updates = updatesOff ? "tour updates are off for now" : "tour updates stay as they are";
+  return `${check}, and ${updates}.`;
 }
 
 function profileValues(entry: Record<string, unknown>): Record<string, string | number | boolean> {

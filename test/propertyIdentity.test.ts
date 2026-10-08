@@ -178,7 +178,7 @@ describe("real visitor texting can't be missed", () => {
       "Visitor texting: Connected",
       "Door access: Demo",
       "Visitors can call: not set",
-      "Settings: Basic identity form.",
+      "Visitors will fill out a basic identity form, and tour updates stay as they are.",
     ]);
     expect(review.lines.join("\n")).not.toMatch(/https?:|trycloudflare|\/mcp|\+1555/);
     const services = await h.ok("get_services");

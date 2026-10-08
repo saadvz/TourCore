@@ -130,34 +130,62 @@ const STREET_SUFFIX: Record<string, string> = {
   parkway: "Parkway",
 };
 
-function titleWord(word: string): string {
-  const lower = word.toLowerCase();
-  return lower ? lower.charAt(0).toUpperCase() + lower.slice(1) : word;
+/**
+ * One stored spelling for a token.
+ * An all-lowercase token is title-cased. A token the landlord already
+ * capitalized is kept: mixed case (McArthur, O'Neil, Dr, 2nd) and short
+ * all-caps (QA, NE, SW). A longer all-caps word is the same word shouted,
+ * so it stores as title case and matches the lowercase and title-case
+ * spellings. Ordinals keep a lowercase ending (1st, 2nd).
+ */
+function canonicalToken(token: string): string {
+  const cleaned = token.replace(/\./g, "");
+  if (!cleaned) return token;
+  const ordinal = /^(\d+)(st|nd|rd|th)$/i.exec(cleaned);
+  if (ordinal) return `${ordinal[1]}${ordinal[2]!.toLowerCase()}`;
+  const letters = cleaned.replace(/[^A-Za-z]/g, "");
+  if (!letters) return cleaned;
+  const allLower = letters === letters.toLowerCase();
+  const allUpper = letters === letters.toUpperCase();
+  if (allLower) return titleCaseToken(cleaned);
+  if (allUpper && letters.length > 2) return titleCaseToken(cleaned);
+  return cleaned;
 }
 
-/** "teaneck" / "TEANECK" / "new york" → "Teaneck" / "New York". */
+function titleCaseToken(token: string): string {
+  const lower = token.toLowerCase();
+  if (!/[a-z]/.test(lower.charAt(0))) return lower;
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
+}
+
+/** Spacing collapses. Only an all-lowercase word is title-cased. */
 export function titleCasePlace(value: string): string {
   return value
     .trim()
     .replace(/\s+/g, " ")
     .split(" ")
     .filter(Boolean)
-    .map(titleWord)
+    .map(canonicalToken)
     .join(" ");
 }
 
 /**
- * One street line: suffix abbreviations expand ("St." / "st" → "Street"),
- * spacing collapses, and each word is title-cased. The first word is never
- * treated as a suffix, so a street named "Court" can still start with it.
+ * One street line. Spacing collapses, and only the final word expands when
+ * it is a street type ("Rd" → "Road", "Blvd" → "Boulevard"). An earlier
+ * "St" or "Dr" stays, so "St. Marks Place" never becomes "Street Marks".
+ * The first word is never a suffix. Casing follows canonicalToken.
  */
 export function canonicalizeStreet(street: string): string {
   const words = street.trim().replace(/\s+/g, " ").split(" ").filter(Boolean);
   return words
     .map((word, index) => {
-      const bare = word.replace(/\./g, "");
-      const suffix = index > 0 ? STREET_SUFFIX[bare.toLowerCase()] : undefined;
-      return suffix ?? titleWord(bare);
+      const last = index === words.length - 1 && index > 0;
+      if (last) {
+        const bare = word.replace(/\./g, "");
+        const suffix = STREET_SUFFIX[bare.toLowerCase()];
+        if (suffix) return suffix;
+      }
+      return canonicalToken(word);
     })
     .join(" ");
 }

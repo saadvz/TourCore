@@ -558,11 +558,11 @@ describe("pause and remove", () => {
       ],
     });
     expect(h.workspace.has(id)).toBe(false);
-    expect(operatorFacingPropertyName(h.workspace.openDraft(id).draft)).toBe("500 Qa Condo Avenue");
+    expect(operatorFacingPropertyName(h.workspace.openDraft(id).draft)).toBe("500 QA Condo Avenue");
     const { asked, done } = await h.approve("remove_property", { property: id });
-    expect(asked.summary).toBe(removeSetupConfirmQuestion("500 Qa Condo Avenue"));
+    expect(asked.summary).toBe(removeSetupConfirmQuestion("500 QA Condo Avenue"));
     expect(asked.summary).not.toMatch(/Loft|4B/);
-    expect(done.summary).toBe(removedSetupSummary("500 Qa Condo Avenue"));
+    expect(done.summary).toBe(removedSetupSummary("500 QA Condo Avenue"));
     expect(done.summary).not.toMatch(/Loft|4B/);
   });
 

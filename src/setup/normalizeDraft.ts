@@ -3,8 +3,12 @@ import { isSingleTourPlace, unitLabel, visitorSubject } from "../visitor/identit
 import { canonicalizeStreet, parseUsAddress, titleCasePlace } from "./address";
 
 /**
- * Shared write normalizer. Old tools and milestone tools both persist through
- * it, so equivalent landlord wording lands as one stored config.
+ * Shared write normalizer. PropertyWorkspace.save and saveDraft are the only
+ * callers, so a property already on disk is not rewritten on read or deploy.
+ * Old tools and milestone tools both persist through it, so equivalent
+ * landlord wording lands as one stored config. Address identity is
+ * case-insensitive; the stored line is the one form canonicalizeStreet and
+ * titleCasePlace produce.
  *
  * Equivalent shared-entrance wording (the duplex variants) collapses to
  * "Front Door" / ENTRANCE: front door, the front door, front entrance, main

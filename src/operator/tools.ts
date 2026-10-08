@@ -4,7 +4,7 @@ import { secretValues } from "../install/settings";
 import { HOSTED_ADMIN_TOOLS } from "../install/hostedAdminTools";
 import type { ReportedClient } from "../playbooks/select";
 import { INSTALLATION_TOOLS } from "../install/tools";
-import { MILESTONE_TOOLS } from "./milestones";
+import { MILESTONE_TOOLS, settingsSentence } from "./milestones";
 import { installedMessaging } from "../install/status";
 import { addressReadback, parseUsAddress } from "../setup/address";
 import { PROPERTY_TYPE_LABELS, PROPERTY_TYPES, SETUP_PROPERTY_TYPES, validateConfig } from "../config/tourCoreConfig";
@@ -963,7 +963,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         `Verification: ${view.reviewCards.find((c) => c.step === "verification")!.rows[0]}`,
         ...modes.lines,
         ...visitorHelpLines(draft.operator),
-        `Settings: ${view.reviewCards.find((c) => c.step === "verification")!.rows[0]}.`,
+        settingsSentence(draft.verificationMode, !!ctx.installation?.files.state().skipped?.OPERATOR_ALERTS),
       ];
       return {
         summary: view.canSave ? "Setup looks complete." : `${view.issues.length} thing${view.issues.length === 1 ? "" : "s"} still need${view.issues.length === 1 ? "s" : ""} an answer.`,
