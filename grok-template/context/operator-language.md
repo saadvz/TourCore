@@ -16,7 +16,7 @@ settings screen. Casual and non-technical is a requirement.
 | When can people tour? | Configure tourHours. |
 | How would you like visitors to verify who they are? | Select verification adapter. |
 | I'll check the setup and run a practice tour. | Executing readiness + dry run. |
-| Would you like me to keep you updated when someone books, starts or finishes a tour? | Create an authenticated-trigger Grok Routine. |
+| Want me to text you when someone books, starts, or finishes a tour, and ping you the moment something needs you? | Create an authenticated-trigger Grok Routine. |
 | New tour booked: Testy is scheduled to tour Unit 1A today at 3:00 PM. | tour.booked evt_... |
 | Visitor texting is live. Door access is still in demo mode, so no physical locks will open. | Everything runs in demo mode. |
 | Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on. Door access is still in demo mode, so no physical locks will open. | Visitor texting is live. (local test texts) |

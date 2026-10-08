@@ -1,7 +1,7 @@
 import { BASELINE_VERSION } from "./baseline";
 import { CHATGPT_VERSION } from "./chatgpt";
 import { CLAUDE_TOOLS_VERSION, CLAUDE_VERSION } from "./claude";
-import { GROK_TOOLS_VERSION, GROK_VERSION } from "./grok";
+import { GROK_VERSION } from "./grok";
 
 export type PlaybookId = "grok" | "chatgpt" | "claude" | "baseline";
 export type PlaybookMode = "full" | "tools";
@@ -16,6 +16,19 @@ export interface PlaybookSelection {
   mode: PlaybookMode;
   version: string;
 }
+
+/**
+ * clientInfo.name values this repository already uses for Grok.
+ * Matching is case-insensitive and succeeds when the name contains "grok",
+ * so each of these is included: "Grok" (OAuth client_name), "grok" (MCP
+ * initialize in the connector test), "grok-bot" (the bridge test), "grok-sim"
+ * (the official MCP SDK client in the connector test), and "Grok (SDK test)".
+ * prompts and resources are server capabilities. They never pick a playbook.
+ */
+export const GROK_CLIENT_NAMES = ["Grok", "grok", "grok-bot", "grok-sim", "Grok (SDK test)"] as const;
+
+/** Client capabilities from the MCP spec. Not prompts or resources. */
+const FULL_CLIENT_CAPABILITIES = ["elicitation", "sampling", "roots"] as const;
 
 function named(client: ReportedClient | undefined): PlaybookId | undefined {
   const raw = client?.name?.trim().toLowerCase() ?? "";
@@ -32,18 +45,25 @@ function capabilityOn(caps: Record<string, unknown> | undefined, key: string): b
   return value !== undefined && value !== false;
 }
 
+/** True when the client reports elicitation, sampling, or roots. */
+export function clientOffersFullPlaybook(caps: Record<string, unknown> | undefined): boolean {
+  return FULL_CLIENT_CAPABILITIES.some((key) => capabilityOn(caps, key));
+}
+
 /**
  * The client name only picks a playbook. It never changes a gate.
  * Unknown names and a missing client get the baseline tools-only playbook.
- * URL elicitation is noted on the capability object and is not implemented in Phase 1.
+ * Grok defaults to the full playbook, including when no capabilities are sent.
+ * Claude is full only when it reports elicitation, sampling, or roots.
+ * ChatGPT stays tools-only. URL elicitation is not implemented in Phase 1.
  */
 export function selectPlaybook(client?: ReportedClient): PlaybookSelection {
   const id = named(client);
   if (!id) return { id: "baseline", mode: "tools", version: BASELINE_VERSION };
   if (id === "chatgpt") return { id, mode: "tools", version: CHATGPT_VERSION };
-  const full = capabilityOn(client?.capabilities, "prompts") && capabilityOn(client?.capabilities, "resources");
-  if (id === "grok") return full ? { id, mode: "full", version: GROK_VERSION } : { id, mode: "tools", version: GROK_TOOLS_VERSION };
-  return full ? { id, mode: "full", version: CLAUDE_VERSION } : { id, mode: "tools", version: CLAUDE_TOOLS_VERSION };
+  if (id === "grok") return { id, mode: "full", version: GROK_VERSION };
+  if (clientOffersFullPlaybook(client?.capabilities)) return { id, mode: "full", version: CLAUDE_VERSION };
+  return { id, mode: "tools", version: CLAUDE_TOOLS_VERSION };
 }
 
 export function reportedClientFromInitialize(message: unknown): ReportedClient | undefined {

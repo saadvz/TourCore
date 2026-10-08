@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { timeRequestedEvent } from "../src/alerts/operatorEvents";
+import { GROK_WAKE_NO_PLACE, GROK_WAKE_WITH_PLACE } from "../src/playbooks/grok";
+import { renderPlaybook } from "../src/playbooks/compose";
 import { installHarness } from "./installHarness";
 import { liveApp } from "./liveApp";
 
@@ -34,5 +36,8 @@ describe("decision 11 alert destination", () => {
     const inspected = await a.grok("inspect_tour_time_request", { tourTimeRequestId: id });
     expect(inspected.place).toBe("Unit 1A");
     expect(JSON.stringify(inspected)).not.toContain("Main Home");
+    const wake = renderPlaybook({ name: "Grok", capabilities: { elicitation: {}, sampling: {} } }, "alerts").text;
+    expect(wake).toContain(GROK_WAKE_WITH_PLACE);
+    expect(wake).toContain(`If that read has no place, say this instead: "${GROK_WAKE_NO_PLACE}"`);
   });
 });

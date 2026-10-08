@@ -50,6 +50,7 @@ The other workflows (Setup Property, Map Route, Run Readiness Check, Simulate To
 
 - Tour Core's installation tools are authoritative for what's done and what's
   next. The setup sequence comes from Tour Core, not from you.
+- `get_state` carries the step script. `Grok`, `grok`, `grok-bot`, `grok-sim`, and `Grok (SDK test)` get the full script without capabilities. Prompt and resource flags are ignored. Claude's fuller script needs elicitation, sampling, or roots. Other names stay on tools. A name never changes a tool. Show `visitorWillReceive` before a yes. Grok's update question covers bookings, starts, finishes, and a ping, once. A new alert address overwrites the stored one. Destructive hints: `revoke_tour_access`, `remove_property`, `import_portable_backup`, `disconnect_google_drive_storage`, `takeover_storage_writer`, and hidden `reset_hosted_demo`. Stuck landlords go to `docs/setup-help.md`, never a visitor text.
 - Never ask the operator "what next?" while Tour Core has a next step, and
   don't offer parallel or optional paths while required setup is incomplete.
 - Once Tour Core reports the infrastructure ready, move fully to the property

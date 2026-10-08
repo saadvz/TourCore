@@ -2,13 +2,18 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { HOSTED_ADMIN_TOOLS } from "../src/install/hostedAdminTools";
+import { TEXTING_ERROR, TEXTING_KEYS_NEEDED, TEXTING_NEEDS_LINE, TEXTING_NOT_CHOSEN, TEXTING_TESTING, TEXTING_WORKING, textingSummary } from "../src/install/stateView";
 import { ANNOTATION_DECISIONS_FOR_SAAD, annotationsFor } from "../src/mcp/annotations";
 import { handleMcpMessage, mcpToolList } from "../src/mcp/mcpBridge";
 import { MCP_INSTRUCTIONS } from "../src/playbooks/instructions";
 import { renderPlaybook, spokenAsk } from "../src/playbooks/compose";
-import { selectPlaybook } from "../src/playbooks/select";
-import { SHARED_HUMAN_HELP, SHARED_STEPS } from "../src/playbooks/shared";
+import { GROK_ALERTS_SAY, GROK_WAKE_NO_PLACE, GROK_WAKE_WITH_PLACE } from "../src/playbooks/grok";
+import { GROK_CLIENT_NAMES, reportedClientFromInitialize, selectPlaybook } from "../src/playbooks/select";
+import { SETUP_HELP_CONTACT, SETUP_HELP_ENDING, SETUP_HELP_PAGE, SETUP_HELP_URL } from "../src/playbooks/setupHelp";
+import { SHARED_STEPS } from "../src/playbooks/shared";
 import { OPERATOR_TOOLS } from "../src/operator/tools";
+import { PropertyWorkspace } from "../src/setup";
+import { createSetupServer } from "../src/web/server";
 import { installHarness } from "./installHarness";
 
 const cleanups: Array<() => void> = [];
@@ -57,15 +62,30 @@ describe("get_state does not write", () => {
   });
 });
 
+const grokClientCaps = { elicitation: { form: {} }, sampling: {}, roots: { listChanged: true } };
+
+function realisticInitialize(name: string, capabilities: Record<string, unknown>) {
+  return {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "initialize",
+    params: { protocolVersion: "2025-06-18", capabilities, clientInfo: { name, version: "1.0.0" } },
+  };
+}
+
 describe("playbook selection", () => {
-  it("picks a playbook from the client name and capabilities, and never a gate", () => {
-    expect(selectPlaybook({ name: "Grok", capabilities: { prompts: {}, resources: {} } })).toEqual({ id: "grok", mode: "full", version: "grok@2026-10-07" });
-    expect(selectPlaybook({ name: "grok-bot", capabilities: { prompts: {} } })).toMatchObject({ id: "grok", mode: "tools", version: "grok@2026-10-07.tools" });
-    expect(selectPlaybook({ name: "ChatGPT", capabilities: { prompts: {}, resources: {} } })).toMatchObject({ id: "chatgpt", mode: "tools", version: "chatgpt@2026-10-07.tools" });
+  it("picks a playbook from the client name and real client capabilities, and never a gate", () => {
+    for (const name of GROK_CLIENT_NAMES) {
+      expect(selectPlaybook({ name, capabilities: {} })).toEqual({ id: "grok", mode: "full", version: "grok@2026-10-07" });
+      expect(selectPlaybook({ name: name.toUpperCase(), capabilities: { prompts: {}, resources: {} } })).toMatchObject({ id: "grok", mode: "full" });
+    }
+    expect(selectPlaybook({ name: "Grok", capabilities: grokClientCaps })).toEqual({ id: "grok", mode: "full", version: "grok@2026-10-07" });
+    expect(selectPlaybook({ name: "ChatGPT", capabilities: grokClientCaps })).toMatchObject({ id: "chatgpt", mode: "tools", version: "chatgpt@2026-10-07.tools" });
     expect(selectPlaybook({ name: "OpenAI", capabilities: { prompts: {}, resources: {} } })).toMatchObject({ id: "chatgpt", mode: "tools" });
-    expect(selectPlaybook({ name: "Claude", capabilities: { prompts: {}, resources: {} } })).toMatchObject({ id: "claude", mode: "full", version: "claude@2026-10-07" });
-    expect(selectPlaybook({ name: "Anthropic", capabilities: { resources: {} } })).toMatchObject({ id: "claude", mode: "tools", version: "claude@2026-10-07.tools" });
-    expect(selectPlaybook({ name: "mystery-client", capabilities: { prompts: {}, resources: {} } })).toMatchObject({ id: "baseline", mode: "tools", version: "baseline@2026-10-07.tools" });
+    expect(selectPlaybook({ name: "claude-ai", capabilities: grokClientCaps })).toMatchObject({ id: "claude", mode: "full", version: "claude@2026-10-07" });
+    expect(selectPlaybook({ name: "Claude", capabilities: { prompts: {}, resources: {} } })).toMatchObject({ id: "claude", mode: "tools", version: "claude@2026-10-07.tools" });
+    expect(selectPlaybook({ name: "Anthropic", capabilities: { sampling: {} } })).toMatchObject({ id: "claude", mode: "full" });
+    expect(selectPlaybook({ name: "mystery-client", capabilities: grokClientCaps })).toMatchObject({ id: "baseline", mode: "tools", version: "baseline@2026-10-07.tools" });
     expect(selectPlaybook(undefined)).toMatchObject({ id: "baseline", mode: "tools" });
     expect(selectPlaybook({})).toMatchObject({ id: "baseline", mode: "tools" });
   });
@@ -73,7 +93,7 @@ describe("playbook selection", () => {
   it("same install, different clients: identical milestones and gates, different playbook text", async () => {
     const h = installHarness();
     cleanups.push(h.cleanup);
-    h.ctx.client = { name: "grok", capabilities: { prompts: {}, resources: {} } };
+    h.ctx.client = { name: "Grok", capabilities: grokClientCaps };
     const grok = await h.ok("get_state");
     h.ctx.client = { name: "someone-else" };
     const baseline = await h.ok("get_state");
@@ -144,16 +164,19 @@ describe("MCP annotations", () => {
 
 describe("decision 11 wake copy", () => {
   it("is in the Grok playbook only, with one spoken offer and a yes before any action", () => {
-    const full = renderPlaybook({ name: "grok", capabilities: { prompts: {}, resources: {} } }, "alerts");
-    const tools = renderPlaybook({ name: "grok" }, "alerts");
-    const offer = "Want me to text you when someone books, starts, or finishes a tour, and ping you the moment something needs you?";
-    const question = "{name} asked to tour {place} at {time} on {day}. I can approve that time, offer another time, or decline it. Nothing goes to the visitor until you pick.";
-    for (const text of [full.text, tools.text]) {
+    const full = renderPlaybook({ name: "Grok", capabilities: grokClientCaps }, "alerts");
+    const bare = renderPlaybook({ name: "grok" }, "alerts");
+    const offer = GROK_ALERTS_SAY;
+    for (const text of [full.text, bare.text]) {
       expect(text).toContain(`Ask only this: ${offer}`);
-      expect(text).toContain(question);
+      expect(text).toContain(GROK_WAKE_WITH_PLACE);
+      expect(text).toContain(GROK_WAKE_NO_PLACE);
       expect(text).toContain("Fill {name} from the visitor's name on that read, {place} from the place on that read");
+      expect(text).toContain("If that read has no place, say this instead");
       expect(text).toContain("Only after a clear yes");
       expect(text).toContain("You never text a visitor.");
+      expect(full.mode).toBe("full");
+      expect(bare.mode).toBe("full");
     }
     const spoken = full.text.split("For you, not out loud:")[0] ?? "";
     expect(spoken).not.toMatch(/webhook|routine|event id|secure link/i);
@@ -165,7 +188,7 @@ describe("decision 11 wake copy", () => {
     }
   });
 
-  it("says you in the spoken asks, and every failure line uses the shared human path", () => {
+  it("says you in the spoken asks, and every failure line ends with the setup help link", () => {
     expect(spokenAsk(undefined, "units-home")).toBe("People will tour the whole home. What should I call it? The street is fine if you don't have a nickname.");
     expect(spokenAsk(undefined, "hours")).toContain("You can keep that.");
     expect(spokenAsk(undefined, "hours-help")).toContain("You can skip this.");
@@ -175,10 +198,176 @@ describe("decision 11 wake copy", () => {
     const details = renderPlaybook(undefined, "units-details").text;
     expect(details).not.toContain("Ask only this:");
     expect(details).toContain("For you, not out loud: ask the one detail that's still missing, in plain words.");
+    expect(details).toContain("one plain link");
+    expect(details).toContain("Never put that link in a text to a visitor.");
     for (const step of Object.values(SHARED_STEPS)) {
-      expect(step.ifItFails.toLowerCase()).toContain(SHARED_HUMAN_HELP.toLowerCase());
+      expect(step.ifItFails.endsWith(SETUP_HELP_ENDING)).toBe(true);
     }
     expect(SHARED_STEPS.alerts.ifItFails).toContain("private link");
-    expect(SHARED_STEPS.alerts.ifItFails).not.toContain("private way");
+    expect(SHARED_STEPS["texting-keys"].ifItFails).toContain("If the private link won't open");
+    expect(SHARED_STEPS["texting-keys"].ifItFails).not.toContain("private way");
+    expect(renderPlaybook(undefined, "connect").text).not.toContain("Someone who runs this Tour Core");
+  });
+});
+
+describe("realistic initialize messages", () => {
+  const messages = {
+    grok: realisticInitialize("Grok", grokClientCaps),
+    claude: realisticInitialize("claude-ai", { roots: { listChanged: true }, sampling: {} }),
+    chatgpt: realisticInitialize("ChatGPT", { roots: { listChanged: true } }),
+    unknown: realisticInitialize("example-client", { roots: { listChanged: true }, sampling: {}, elicitation: {} }),
+  };
+
+  it("realistic initialize: Grok gets the full Grok playbook and the wake", async () => {
+    const h = installHarness();
+    cleanups.push(h.cleanup);
+    const init = await handleMcpMessage(h.ctx, messages.grok);
+    expect(init.body).toMatchObject({ result: { instructions: MCP_INSTRUCTIONS, capabilities: { tools: { listChanged: false } } } });
+    expect(reportedClientFromInitialize(messages.grok)).toMatchObject({ name: "Grok", capabilities: grokClientCaps });
+    const state = await h.ok("get_state");
+    expect(state.playbook).toMatchObject({ id: "grok", mode: "full", version: "grok@2026-10-07" });
+    expect(state.playbook.text).toContain(GROK_WAKE_WITH_PLACE);
+    expect(state.playbook.text).toContain(GROK_WAKE_NO_PLACE);
+    expect(renderPlaybook({ name: "Grok", capabilities: grokClientCaps }, "alerts").text).toContain(GROK_ALERTS_SAY);
+    expect(state.playbook.text).toContain("You can keep notes");
+    expect(state.playbook.text).not.toContain("You do not have a masked card");
+  });
+
+  it("realistic initialize: Claude gets the Claude playbook", async () => {
+    const h = installHarness();
+    cleanups.push(h.cleanup);
+    await handleMcpMessage(h.ctx, messages.claude);
+    const state = await h.ok("get_state");
+    expect(state.playbook).toMatchObject({ id: "claude", mode: "full", version: "claude@2026-10-07" });
+    expect(state.playbook.text).toContain("You can keep this playbook in a project");
+    expect(state.playbook.text).not.toContain(GROK_WAKE_WITH_PLACE);
+  });
+
+  it("realistic initialize: ChatGPT gets the ChatGPT tools playbook", async () => {
+    const h = installHarness();
+    cleanups.push(h.cleanup);
+    await handleMcpMessage(h.ctx, messages.chatgpt);
+    const state = await h.ok("get_state");
+    expect(state.playbook).toMatchObject({ id: "chatgpt", mode: "tools", version: "chatgpt@2026-10-07.tools" });
+    expect(state.playbook.text).toContain("You only have tools. There is no saved prompt beyond this text.");
+    expect(state.playbook.text).not.toContain(GROK_WAKE_WITH_PLACE);
+  });
+
+  it("realistic initialize: an unknown client gets the baseline playbook", async () => {
+    const h = installHarness();
+    cleanups.push(h.cleanup);
+    await handleMcpMessage(h.ctx, messages.unknown);
+    const state = await h.ok("get_state");
+    expect(state.playbook).toMatchObject({ id: "baseline", mode: "tools", version: "baseline@2026-10-07.tools" });
+    expect(state.playbook.text).toContain("You only have tools. Nothing here is filled in for you.");
+  });
+
+  it("realistic initialize: gates are identical for Grok, Claude, ChatGPT, and unknown", async () => {
+    const h = installHarness();
+    cleanups.push(h.cleanup);
+    const pictures = [];
+    const lists = [];
+    for (const message of Object.values(messages)) {
+      await handleMcpMessage(h.ctx, message);
+      const state = await h.ok("get_state");
+      pictures.push({ milestones: state.milestones, action: state.nextStep.action, component: state.nextStep.component });
+      const list = await handleMcpMessage(h.ctx, { jsonrpc: "2.0", id: 2, method: "tools/list" });
+      const tools = (list.body as { result: { tools: Array<{ name: string; annotations: unknown }> } }).result.tools;
+      lists.push(tools.map((tool) => ({ name: tool.name, annotations: tool.annotations })));
+    }
+    expect(new Set(pictures.map((item) => JSON.stringify(item))).size).toBe(1);
+    expect(new Set(lists.map((item) => JSON.stringify(item))).size).toBe(1);
+    expect(lists[0]).toHaveLength(84);
+  });
+});
+
+describe("playbook client is per session", () => {
+  it("two sessions, Grok and unknown, each get their own playbook", async () => {
+    const h = installHarness();
+    cleanups.push(h.cleanup);
+    const token = "test-operator-token-123456";
+    const server = createSetupServer({ workspace: new PropertyWorkspace(h.root), operatorToken: () => token, log: () => {} });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    cleanups.push(() => server.close());
+    const port = (server.address() as { port: number }).port;
+    const call = async (session: string, id: number, method: string, params: unknown) => {
+      const res = await fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "Mcp-Session-Id": session },
+        body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
+      });
+      return res.json() as Promise<{ result: { playbook?: { id: string }; structuredContent?: { playbook: { id: string; text: string } } } }>;
+    };
+    await call("session-grok", 1, "initialize", realisticInitialize("Grok", grokClientCaps).params);
+    await call("session-other", 1, "initialize", realisticInitialize("example-client", grokClientCaps).params);
+    const grok = await call("session-grok", 2, "tools/call", { name: "get_state", arguments: {} });
+    const other = await call("session-other", 3, "tools/call", { name: "get_state", arguments: {} });
+    expect(grok.result.structuredContent?.playbook.id).toBe("grok");
+    expect(grok.result.structuredContent?.playbook.text).toContain(GROK_WAKE_WITH_PLACE);
+    expect(other.result.structuredContent?.playbook.id).toBe("baseline");
+    expect(other.result.structuredContent?.playbook.text).not.toContain(GROK_WAKE_WITH_PLACE);
+  });
+});
+
+describe("texting summaries", () => {
+  it("gives each texting state its own plain line, with no provider name", () => {
+    expect(textingSummary(undefined)).toBe(TEXTING_NOT_CHOSEN);
+    expect(textingSummary({ state: "NOT_CONFIGURED", next: { action: "CHOOSE_MESSAGING_PROVIDER" } })).toBe(TEXTING_NOT_CHOSEN);
+    expect(textingSummary({ state: "ACTION_REQUIRED", next: { action: "CONNECT_VISITOR_MESSAGING" } })).toBe(TEXTING_KEYS_NEEDED);
+    expect(textingSummary({ state: "ACTION_REQUIRED", next: { action: "FIX_VISITOR_MESSAGING" } })).toBe(TEXTING_KEYS_NEEDED);
+    expect(textingSummary({ state: "ACTION_REQUIRED", next: { action: "CHOOSE_MESSAGING_LINE" } })).toBe(TEXTING_NEEDS_LINE);
+    expect(textingSummary({ state: "ACTION_REQUIRED", next: { action: "TEST_VISITOR_MESSAGING" } })).toBe(TEXTING_TESTING);
+    expect(textingSummary({ state: "ACTION_REQUIRED", next: { action: "RECONNECT_VISITOR_MESSAGING" } })).toBe(TEXTING_TESTING);
+    expect(textingSummary({ state: "READY", next: undefined })).toBe(TEXTING_WORKING);
+    expect(textingSummary({ state: "ERROR" })).toBe(TEXTING_ERROR);
+    const joined = [TEXTING_NOT_CHOSEN, TEXTING_KEYS_NEEDED, TEXTING_NEEDS_LINE, TEXTING_TESTING, TEXTING_WORKING, TEXTING_ERROR].join("\n");
+    expect(joined).not.toMatch(/sendblue|twilio|photon/i);
+  });
+
+  it("a fresh install reads as texting not chosen", async () => {
+    const h = installHarness();
+    cleanups.push(h.cleanup);
+    const state = await h.ok("get_state");
+    expect(state.texting.summary).toBe(TEXTING_NOT_CHOSEN);
+  });
+});
+
+describe("setup help", () => {
+  it("matches the public page, ends with the contact placeholder, and stays out of visitor copy", () => {
+    const page = readFileSync(join("docs", "setup-help.md"), "utf8");
+    expect(page).toBe(SETUP_HELP_PAGE);
+    expect(page.trimEnd().split("\n").at(-1)).toBe(SETUP_HELP_CONTACT);
+    expect(page).not.toMatch(/sendblue|twilio|photon|durin|main home/i);
+    expect(SETUP_HELP_URL).toBe("https://github.com/saadvz/TourCore/blob/master/docs/setup-help.md");
+    const roots = ["src/visitor", "src/core"];
+    const files: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) walk(path);
+        else if (entry.name.endsWith(".ts")) files.push(path);
+      }
+    };
+    for (const root of roots) walk(root);
+    for (const file of files) expect(readFileSync(file, "utf8")).not.toContain(SETUP_HELP_URL);
+    expect(renderPlaybook(undefined, "connect").text).toContain(SETUP_HELP_URL);
+    const install = readFileSync(".grok/skills/install-tour-core/SKILL.md", "utf8");
+    const work = readFileSync(".grok/skills/work-exception/SKILL.md", "utf8");
+    expect(install).toContain(GROK_ALERTS_SAY);
+    expect(install).not.toContain("Want to use those defaults?");
+    expect(work).toContain(GROK_WAKE_WITH_PLACE);
+    expect(work).toContain(GROK_WAKE_NO_PLACE);
+    for (const path of ["README.md", "GROK_BOOTSTRAP.md", "grok-template/bot-profile.md", "grok-template/context/installation.md"]) {
+      const doc = readFileSync(path, "utf8");
+      expect(doc).toContain("visitorWillReceive");
+      expect(doc).toMatch(/destructive/i);
+      expect(doc).toMatch(/setup-help|setup help/i);
+    }
+    expect(readFileSync("README.md", "utf8")).toContain("revoke_tour_access");
+    expect(readFileSync("GROK_BOOTSTRAP.md", "utf8")).toContain("revoke_tour_access");
+    const inspect = OPERATOR_TOOLS.find((tool) => tool.name === "inspect_tour_time_request");
+    expect(inspect?.description).toContain("place");
+    expect(inspect?.description).toContain("never Main Home");
+    expect(readFileSync("grok-template/integrations/tour-core-tools.md", "utf8")).toContain("`place`");
   });
 });

@@ -179,7 +179,20 @@ async function appFor(provider: Provider, config?: TourCoreConfig): Promise<Ques
 }
 
 const PARKING = "Here's what the property team shared: Street parking only.";
-const photoMentions = (replies: string[]) => (replies.join("\n").match(/can't take photos/gi) ?? []).length;
+const photoMentions = (replies: string[]) => (replies.join("\n").match(/can't (?:take|open) photos/gi) ?? []).length;
+
+const GSM7_BASIC = new Set(
+  "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà".split(""),
+);
+
+function gsm7Septets(value: string): number {
+  let count = 0;
+  for (const char of value) {
+    if (!GSM7_BASIC.has(char)) throw new Error(`not GSM-7: ${JSON.stringify(char)}`);
+    count += 1;
+  }
+  return count;
+}
 
 describe("unknownAnswerReply", () => {
   it("picks the locked visitor line for each case", () => {
@@ -187,6 +200,13 @@ describe("unknownAnswerReply", () => {
     expect(unknownAnswerReply({ hasMedia: true })).toBe(UNKNOWN_ANSWER_WITH_PHOTO);
     expect(unknownAnswerReply({ ended: true })).toBe(UNKNOWN_ANSWER_ENDED);
     expect(unknownAnswerReply({ hasMedia: true, ended: true })).toBe(UNKNOWN_ANSWER_ENDED_WITH_PHOTO);
+  });
+
+  it("keeps both photo holding replies within one GSM-7 text", () => {
+    expect(UNKNOWN_ANSWER_WITH_PHOTO).toBe("I can't open photos yet. I'll pass your question to the property team, and they'll reply here as soon as they can.");
+    expect(UNKNOWN_ANSWER_ENDED_WITH_PHOTO).toBe(`${UNKNOWN_ANSWER_WITH_PHOTO}${TOUR_AGAIN_SUFFIX}`);
+    expect(gsm7Septets(UNKNOWN_ANSWER_WITH_PHOTO)).toBeLessThanOrEqual(160);
+    expect(gsm7Septets(UNKNOWN_ANSWER_ENDED_WITH_PHOTO)).toBeLessThanOrEqual(160);
   });
 });
 

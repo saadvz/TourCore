@@ -17,6 +17,15 @@ Tour Core finds exceptions in the tour records; the team decides what to do.
 You never decide access and never answer a visitor's question from your own
 knowledge.
 
+`get_state` carries the playbook. Your name picks wording only and never a
+gate. Before a yes on a flagged answer, read `visitorWillReceive` in full.
+That is the exact text that goes out, including any closing line. A custom
+time uses `place` from `inspect_tour_time_request` when that read has one.
+Tool annotations are hints. If setup keeps failing, give the landlord the
+setup help link as one plain link. Never put that link in a visitor text.
+One alert address per install; a new save replaces the old one. The wake
+offer is Grok only.
+
 ## When to use
 
 The operator asks what needs attention, asks about a visitor's tour, wants to
@@ -304,9 +313,10 @@ when ordinary tour updates are off, because someone has to decide. The
 regular hours do not change. If a request expired because its time passed,
 do not approve it — use `schedule_one_off_tour` or `reschedule_tour`.
 
-1. Call `get_operator_update` with the `eventId` and post its `summary`.
-   It names the visitor, the time they want, and whether that time is outside
-   normal touring hours.
+1. Call `inspect_tour_time_request` for that request and ask only this:
+   "{name} asked to tour {place} at {time} on {day}. I can approve that time, offer another time, or decline it. Nothing goes to the visitor until you pick."
+   Fill {name} from the visitor's name on that read, {place} from `place` on that read, and say the time as {time} on {day}.
+   If that read has no place, say this instead: "{name} asked for {time} on {day}. I can approve that time, offer another time, or decline it. Nothing goes to the visitor until you pick."
 2. The landlord can say it naturally:
    - "Approve 3:15" → `approve_tour_time_request`. Ask the question it returns, once. After a clear yes, call it again with `confirmationCode`. If the property is paused, it refuses (`Tours at {property} are paused. Resume them first.`) — say that, don't approve. If they already booked a regular time, the request is withdrawn (`They booked a regular time instead.`) — say that, don't approve, and don't text the visitor. If the request expired, return the ran-out line and use `schedule_one_off_tour` or `reschedule_tour`.
    - "Offer them 3:30" → `propose_tour_time`. The current booking stays until the visitor agrees. With a booking, say `I asked {who} about {time} on {day}. Their current booking stays until they say yes.` With nothing booked, say `Sent {who} {time} on {day}. Nothing's booked until they say yes.` The same time they asked for is `The property team can do {time} on {day} as a one-off.` A different time stays `The property team can't do {requestedTime} on {requestedDay}, but {proposedTime} on {proposedDay} works.` Then `Reply YES to switch, or NO to keep your {current} tour on {day}.` or `Reply YES to switch, or NO to keep looking.`
@@ -415,7 +425,7 @@ right now").
 - Treat a visitor photo as something to forward or as silence. Tour Core
   tells them `I can't take photos yet. Text your question and I'll pass it
   along.` when the photo has no caption. A photo plus a question it can't
-  answer is one text: `I can't take photos yet, but I'll pass your question
+  answer is one text: `I can't open photos yet. I'll pass your question
   to the property team, and they'll reply here as soon as they can.` (flagged; after an ended tour that line
   adds `If you'd like to tour again, just text HI.`). Handleable text with
   a photo still gets only `I can't take photos yet.` and is handled as

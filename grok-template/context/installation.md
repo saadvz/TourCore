@@ -33,6 +33,16 @@ Setup is not zero-click. Be clear about which steps need the operator.
 
 Call `get_state` first and follow its next step. `get_next_installation_step` still works; this table only explains it.
 
+`initialize` returns a short instructions pointer. `get_state` returns the playbook. The client name picks wording only. A name containing `grok` (`Grok`, `grok`, `grok-bot`, `grok-sim`, `Grok (SDK test)`) gets the full Grok playbook, including when no capabilities are sent. `prompts` and `resources` are server capabilities and are ignored. Claude is full when it reports `elicitation`, `sampling`, or `roots`, otherwise tools-only. ChatGPT and an unknown name are tools-only. The name never changes a tool or a gate. The name is stored per MCP session or signed-in caller.
+
+Before a yes on a flagged answer, read `visitorWillReceive`. It is the exact visitor text, including any closing line. The first call does not send.
+
+Grok's tour-updates ask is only: "Want me to text you when someone books, starts, or finishes a tour, and ping you the moment something needs you?" One alert address per install. A new save replaces the old one. The custom-time wake is Grok-only and uses `place` from `inspect_tour_time_request` when that field is present.
+
+Tool annotations are hints. Five tools are destructive: `revoke_tour_access`, `remove_property`, `import_portable_backup`, `disconnect_google_drive_storage`, and `takeover_storage_writer`. `reset_hosted_demo` is hidden and also marked destructive.
+
+If a step keeps failing, give the landlord the setup help link (`docs/setup-help.md`) as one plain link. Never put it in a visitor text.
+
 | Component | Operator words | Required? |
 | --- | --- | --- |
 | RUNTIME | "Tour Core is running" | before the first property |

@@ -331,7 +331,18 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         })
       : undefined;
   const confirmations = new ConfirmationBook();
-  let reportedClient: ReportedClient | undefined;
+  /** Playbook client, keyed by MCP session id, signed-in caller, or the one static token. */
+  const playbookClients = new Map<string, ReportedClient>();
+  const sessionHeader = (req: IncomingMessage) => {
+    const raw = req.headers["mcp-session-id"];
+    const value = (Array.isArray(raw) ? raw[0] : raw)?.trim();
+    return value || undefined;
+  };
+  const playbookKey = (sessionId: string | undefined, caller?: { clientId?: string }) => {
+    if (sessionId) return `session:${sessionId}`;
+    if (caller?.clientId) return `caller:${caller.clientId}`;
+    return "static";
+  };
   const tools: ToolContext = {
     services: api,
     confirmations,
@@ -473,13 +484,17 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           return send(400, json, JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "That request couldn't be read." } }));
         }
         const seen = reportedClientFromInitialize(message);
-        if (seen) reportedClient = seen;
+        const incomingSession = sessionHeader(req);
+        const key = playbookKey(incomingSession, caller);
+        if (seen) playbookClients.set(key, seen);
+        const reportedClient = seen ?? playbookClients.get(key);
         const reply = await handleMcpMessage({ ...tools, ...(caller ? { caller } : {}), ...(reportedClient ? { client: reportedClient } : {}) }, message);
+        const sessionHeaders: Record<string, string> = incomingSession ? { "Mcp-Session-Id": incomingSession } : {};
         if (reply.body === undefined) {
-          res.writeHead(reply.status, { "Cache-Control": "no-store" });
+          res.writeHead(reply.status, { "Cache-Control": "no-store", ...sessionHeaders });
           return res.end();
         }
-        return send(reply.status, json, JSON.stringify(reply.body));
+        return send(reply.status, json, JSON.stringify(reply.body), sessionHeaders);
       }
       if (method === "POST" && (url.pathname === SENDBLUE_WEBHOOK_PATH || url.pathname === TWILIO_WEBHOOK_PATH || url.pathname === PHOTON_WEBHOOK_PATH || url.pathname === LOCAL_WEBHOOK_PATH)) {
         const rawBody = await readRaw(req);

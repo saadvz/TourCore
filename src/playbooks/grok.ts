@@ -35,12 +35,16 @@ export const GROK_ALERTS = [
   "Do not say webhook, routine, event id, or secure link out loud.",
 ].join(" ");
 
+export const GROK_WAKE_WITH_PLACE = "{name} asked to tour {place} at {time} on {day}. I can approve that time, offer another time, or decline it. Nothing goes to the visitor until you pick.";
+export const GROK_WAKE_NO_PLACE = "{name} asked for {time} on {day}. I can approve that time, offer another time, or decline it. Nothing goes to the visitor until you pick.";
+
 export const GROK_WAKE = [
   "When a ping wakes you, for you, not out loud:",
   "The ping carries an event id and no visitor name, number, or message. Take that event id and look the details up with the existing reads: get_operator_update for the event, list_exceptions or inspect_exception for a flagged question, inspect_tour_time_request for a custom time. Do not put the visitor's message into the ping to save a call.",
   "Prepare the fix and ask the landlord one plain question. Nothing changes until they say yes. You never text a visitor.",
-  'A custom tour time, say this: "{name} asked to tour {place} at {time} on {day}. I can approve that time, offer another time, or decline it. Nothing goes to the visitor until you pick."',
+  `A custom tour time, say this: "${GROK_WAKE_WITH_PLACE}"`,
   "Fill {name} from the visitor's name on that read, {place} from the place on that read, and say the time as {time} on {day}.",
+  `If that read has no place, say this instead: "${GROK_WAKE_NO_PLACE}"`,
   "Only after a clear yes, call the matching tool: approve_tour_time_request, propose_tour_time, or decline_tour_time_request. Do not say those names out loud.",
   "You do not add a quiet rule. Time requests always wake you and cannot be filtered out.",
 ].join(" ");

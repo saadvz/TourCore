@@ -186,16 +186,9 @@ Does that look right?
 
 [`get_next_installation_step` → OFFER_OPERATOR_ALERTS]
 
-**Tour Core:** Your property is configured. Would you like me to keep you
-updated when someone books, starts or finishes a tour, and alert you if
-something needs your input?
+**Tour Core:** Want me to text you when someone books, starts, or finishes a tour, and ping you the moment something needs you?
 
 **Operator:** Sure.
-
-**Tour Core:** I recommend alerts for bookings, tour starts, completions and
-anything that needs your attention. Want to use those defaults?
-
-**Operator:** Yes.
 
 [`set_notification_preferences` preset recommended]
 

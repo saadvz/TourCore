@@ -70,7 +70,7 @@ Text the property number from the phone. Record every reply.
 
 Repeat the first inbound text once, immediately, if you can provoke a webhook retry. The second delivery must not send a second reply or create a second booking.
 
-Send a photo alone. The visitor must get exactly one reply: `I can't take photos yet. Text your question and I'll pass it along.` The photo is not forwarded. Send a photo with a question Tour Core can't answer: exactly `I can't take photos yet, but I'll pass your question to the property team, and they'll reply here as soon as they can.` once, and the question is flagged. Do not also send `I can't take photos yet.` Send a photo with an approved-fact question or a booking reply (`1`, `YES`): exactly `I can't take photos yet.` once, then the text is handled as usual. Do not also send “Text your question…”. A retried photo webhook must not send a second copy of that reply.
+Send a photo alone. The visitor must get exactly one reply: `I can't take photos yet. Text your question and I'll pass it along.` The photo is not forwarded. Send a photo with a question Tour Core can't answer: exactly `I can't open photos yet. I'll pass your question to the property team, and they'll reply here as soon as they can.` once, and the question is flagged. Do not also send `I can't take photos yet.` Send a photo with an approved-fact question or a booking reply (`1`, `YES`): exactly `I can't take photos yet.` once, then the text is handled as usual. Do not also send “Text your question…”. A retried photo webhook must not send a second copy of that reply.
 
 ## Sendblue
 

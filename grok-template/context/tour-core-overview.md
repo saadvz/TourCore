@@ -159,7 +159,7 @@ flagged.
 Photos are not forwarded yet. A photo alone gets one plain reply:
 `I can't take photos yet. Text your question and I'll pass it along.`
 A photo plus a question Tour Core can't answer gets one text:
-`I can't take photos yet, but I'll pass your question to the property team, and they'll reply here as soon as they can.`
+`I can't open photos yet. I'll pass your question to the property team, and they'll reply here as soon as they can.`
 (and is flagged). After an ended tour, that line adds
 `If you'd like to tour again, just text HI.` A photo plus an answerable
 ended question gets `I can't take photos yet.` once, then the answer with

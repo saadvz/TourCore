@@ -61,6 +61,26 @@ First run ("Set up Tour Core"): use the Install Tour Core skill.
   does. After a property is published, that next step offers another property
   (`ADD_ANOTHER_PROPERTY` / `create_property_setup`). The published one stays
   published.
+- `initialize` carries a short instructions pointer. `get_state` carries the
+  playbook. Your name picks wording only: a name containing `grok` gets the
+  full Grok playbook (masked card and the tour-update wake), even with no
+  capabilities. `prompts` and `resources` do not pick it. Claude is full only
+  with `elicitation`, `sampling`, or `roots`. ChatGPT and other names stay
+  tools-only. The name never changes a tool or a gate. Tour Core remembers
+  the name per session or signed-in caller.
+- Before a flagged answer is sent, read `visitorWillReceive` aloud and wait
+  for a clear yes. That is the exact visitor text, including any closing line.
+- Tour updates, this bot only: ask "Want me to text you when someone books,
+  starts, or finishes a tour, and ping you the moment something needs you?"
+  Do not ask a second question. One alert address per install; a new save
+  replaces the old one. A custom time uses `place` from
+  `inspect_tour_time_request` when that read has one.
+- Tool annotations are hints, not extra gates. Five tools are marked
+  destructive: revoke a tour, remove a property, import a backup, disconnect
+  Drive storage, and take over the storage writer. The hidden hosted reset
+  is also marked destructive.
+- If a step keeps failing, give the setup help link as one plain link. Never
+  put it in a visitor text.
 - Keep infrastructure out of the conversation: no addresses, connectors, tool
   counts, tunnels or commands unless you're troubleshooting.
 - Ask the operator only for decisions and for steps only a person can do:

@@ -19,6 +19,32 @@ well. The operator only approves, signs in, gives
 credentials through a secure handoff, gives property information and makes
 decisions.
 
+## Playbook
+
+`initialize` returns a short instructions pointer. `get_state` returns the
+playbook for this step. A client name containing `grok` gets the full Grok
+playbook, including the masked card, even when no capabilities are sent.
+`prompts` and `resources` do not pick the playbook. Those two are server
+capabilities, so a real client does not report them. Claude is full only with
+`elicitation`, `sampling`, or `roots`. ChatGPT and any other name are
+tools-only. The name never changes a tool or a gate. Tour Core remembers it
+per session or signed-in caller. Matched Grok names already used here are
+`Grok`, `grok`, `grok-bot`, `grok-sim`, and `Grok (SDK test)`.
+
+Before a flagged answer is sent, read `visitorWillReceive` and wait for a
+clear yes. That is the exact visitor text, including any closing line.
+
+Tour updates: ask only "Want me to text you when someone books, starts, or
+finishes a tour, and ping you the moment something needs you?" One alert
+address per install. A new save replaces the old one.
+
+Tool annotations are hints. Five tools are marked destructive: revoke a tour,
+remove a property, import a backup, disconnect Drive storage, and take over
+the storage writer. The hidden hosted reset is also marked destructive.
+
+If a step keeps failing, give the landlord the setup help link as one plain
+link. Never put that link in a text to a visitor.
+
 Deployment is fixed. Read `hostedTourCoreUrl` in `grok-template/template.json`
 before any start command. If that value is non-empty https and the operator
 did not explicitly request a local demo, self-hosting, or an open-source local
@@ -245,18 +271,12 @@ Don't ask how to text people. From here on, don't talk about infrastructure
 unless something breaks.
 
 Once the property is saved (with its unit details), Tour Core offers tour
-updates (recommended, not required):
+updates (recommended, not required). Ask only this, and do not ask a second
+question:
 
-> Your property is configured. Would you like me to keep you updated when
-> someone books, starts or finishes a tour, and alert you if something needs
-> your input?
+> Want me to text you when someone books, starts, or finishes a tour, and ping you the moment something needs you?
 
-- **Yes.** If it helps, confirm the defaults:
-
-  > I recommend alerts for bookings, tour starts, completions and anything
-  > that needs your attention. Want to use those defaults?
-
-  Call `set_notification_preferences` (`preset: recommended`, `problems-only`
+- **Yes.** Call `set_notification_preferences` (`preset: recommended`, `problems-only`
   if they only want problems, or the exact `updates` they asked for). Then:
 
   > I'm setting up your tour updates.

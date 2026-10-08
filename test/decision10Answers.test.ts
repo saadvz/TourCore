@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { UNKNOWN_ANSWER } from "../src/core/TourCore";
-import { liveApp } from "./liveApp";
+import { liveApp, PHONE } from "./liveApp";
 
 /**
  * Decision 10 checks against today's engine. No fair-housing detector is added.
@@ -85,5 +85,27 @@ describe("decision 10 flagged answers", () => {
       'Asked "Are families with children allowed to live here?". There\'s no approved answer yet.',
       'Asked "Is there a gym?". There\'s no approved answer yet.',
     ]);
+  });
+
+  it("send-only preview equals the text that is sent, byte for byte", async () => {
+    const a = await app();
+    await a.book();
+    const session = a.visitors.latestForPhone("prop_100_alfred_way", PHONE, "messaging")!;
+    session.bookOffered = async () => {
+      throw new Error("No reservation res_preview");
+    };
+    await a.text("Can I move it to 3:30?");
+    const issue = (await a.grok("list_exceptions")).exceptions.find((item: { what: string }) => item.what === "Couldn't handle their text");
+    const fact = "The lobby door is on the left.";
+    const before = a.fake.sent.length;
+    const asked = await a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: fact });
+    expect(asked.status).toBe("needs-confirmation");
+    expect(asked.visitorWillReceive).toBe(fact);
+    expect(a.fake.sent).toHaveLength(before);
+    const done = await a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: fact, confirmationCode: asked.confirmation.code });
+    const sent = a.fake.sent.slice(before).map((item) => item.content);
+    expect(sent).toEqual([asked.visitorWillReceive]);
+    expect(done.visitorMessage).toBe(asked.visitorWillReceive);
+    expect(Buffer.from(asked.visitorWillReceive, "utf8").equals(Buffer.from(sent[0]!, "utf8"))).toBe(true);
   });
 });

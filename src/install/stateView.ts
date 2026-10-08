@@ -2,7 +2,8 @@ import { PROPERTY_TYPE_LABELS, validateConfig } from "../config/tourCoreConfig";
 import { nextProfileQuestion } from "../config/unitProfile";
 import { renderPlaybook, spokenAsk } from "../playbooks/compose";
 import type { ReportedClient } from "../playbooks/select";
-import { SHARED_STEPS, sharedHumanHelp, type StepId } from "../playbooks/shared";
+import { SETUP_HELP_ENDING } from "../playbooks/setupHelp";
+import { SHARED_STEPS, type StepId } from "../playbooks/shared";
 import { visitorTexting } from "../operator/setupFlow";
 import type { OperatorServices } from "../operator/services";
 import { draftView } from "../setup/presenters";
@@ -194,9 +195,9 @@ function focusStep(milestones: ReturnType<typeof milestonesFor>, action: string,
 }
 
 function healthLine(inst: Installation, status: InstallationStatus): string {
-  if (component(status, "RUNTIME")?.state !== "READY") return `Tour Core isn't running right now. I'll try again. ${sharedHumanHelp(true)} helps if it stays down.`;
+  if (component(status, "RUNTIME")?.state !== "READY") return `Tour Core isn't running right now. I'll try again. ${SETUP_HELP_ENDING}`;
   if (isHostedRailway(status.deploymentMode) && storageVolumeHealth(inst.options.root).persistentVolume === false) {
-    return `Tour Core is running, but records need a lasting disk or they can disappear on the next update. ${sharedHumanHelp(true)} has to attach that disk.`;
+    return `Tour Core is running, but records need a lasting disk or they can disappear on the next update. ${SETUP_HELP_ENDING}`;
   }
   return "Tour Core is running.";
 }
@@ -215,7 +216,7 @@ function storageLine(inst: Installation): string {
     case "LOCAL_DEMO":
       return "Records stay on this computer.";
     case "ERROR":
-      return `Records couldn't be checked just now. I'll look again. ${sharedHumanHelp(true)} helps if it keeps failing.`;
+      return `Records couldn't be checked just now. I'll look again. ${SETUP_HELP_ENDING}`;
     default:
       return "A place for records isn't set up yet.";
   }
@@ -226,9 +227,27 @@ function alertsLine(status: InstallationStatus): string {
   return /webhook|routine|grok|http/i.test(summary) ? "Tour updates aren't turned on yet." : summary;
 }
 
+export const TEXTING_NOT_CHOSEN = "Texting isn't chosen yet.";
+export const TEXTING_KEYS_NEEDED = "Texting needs a login before it can connect.";
+export const TEXTING_NEEDS_LINE = "Texting is connected. Choose the number people should text.";
+export const TEXTING_TESTING = "A number is saved. Texting still needs a check.";
+export const TEXTING_WORKING = "Texting is working.";
+export const TEXTING_ERROR = "Texting isn't working yet.";
+
+/** Plain texting line for the landlord. Ignores provider names in the raw summary. */
+export function textingSummary(part: { state?: string; next?: { action?: string } } | undefined): string {
+  if (!part) return TEXTING_NOT_CHOSEN;
+  if (part.state === "READY") return TEXTING_WORKING;
+  if (part.state === "ERROR") return TEXTING_ERROR;
+  const action = part.next?.action;
+  if (action === "CHOOSE_MESSAGING_LINE") return TEXTING_NEEDS_LINE;
+  if (action === "CONNECT_VISITOR_MESSAGING" || action === "FIX_VISITOR_MESSAGING") return TEXTING_KEYS_NEEDED;
+  if (action === "TEST_VISITOR_MESSAGING" || action === "RECONNECT_VISITOR_MESSAGING") return TEXTING_TESTING;
+  return TEXTING_NOT_CHOSEN;
+}
+
 function textingLine(status: InstallationStatus): string {
-  const summary = component(status, "VISITOR_MESSAGING")?.summary ?? "Texting isn't set up yet.";
-  return /sendblue|twilio|photon/i.test(summary) ? "Texting isn't set up yet." : summary;
+  return textingSummary(component(status, "VISITOR_MESSAGING"));
 }
 
 function setupOf(services: OperatorServices, inst: Installation, picture: Picture, status: InstallationStatus) {

@@ -265,7 +265,7 @@ export function isLiveHelpReservation(reservation: Reservation, now: Date): bool
  * constants. Do not mention tools, providers, or MMS.
  */
 export const UNKNOWN_ANSWER = "I'll pass your question to the property team, and they'll reply here as soon as they can.";
-export const UNKNOWN_ANSWER_WITH_PHOTO = "I can't take photos yet, but I'll pass your question to the property team, and they'll reply here as soon as they can.";
+export const UNKNOWN_ANSWER_WITH_PHOTO = "I can't open photos yet. I'll pass your question to the property team, and they'll reply here as soon as they can.";
 /** Appended to an approved-fact answer after a tour has ended. Also used in the locked ended unknown lines. */
 export const TOUR_AGAIN_SUFFIX = " If you'd like to tour again, just text HI.";
 export const UNKNOWN_ANSWER_ENDED = `${UNKNOWN_ANSWER}${TOUR_AGAIN_SUFFIX}`;
