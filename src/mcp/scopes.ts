@@ -56,9 +56,11 @@ export const OPS_TOOL_NAMES = [
 ] as const;
 
 /**
- * Local and demo exercising, plus the live checks that left the landlord list.
- * The landlord connector keeps the 21 tools. The same check there is the tool
- * named in the QA table's mapping column.
+ * Local and demo exercising, plus checks that stay on the QA connector.
+ * The landlord connector keeps the 21 tools. Nine of these map to a landlord
+ * tool. test_operator_alerts, run_dry_tour, and get_installation_status stay
+ * on QA. run_checks stops when the connection isn't ready, so it cannot stand
+ * in for those two, and get_state is not the installation status tool.
  */
 export const QA_TOOL_NAMES = [
   "inject_local_sms",

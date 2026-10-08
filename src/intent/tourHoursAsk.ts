@@ -14,5 +14,7 @@ export function isGeneralTourHoursQuestion(raw: string): boolean {
   if (/\bwhen can (i|we) tour\b/.test(t)) return true;
   if (/\bwhat (are|is) (your|the) tour times\b/.test(t)) return true;
   if (/\bwhat hours do you do tours\b/.test(t)) return true;
+  if (/\btour hours\b/.test(t)) return true;
+  if (/\bwhat (are|is) (your|the) (tour )?hours\b/.test(t)) return true;
   return false;
 }

@@ -11,7 +11,8 @@ import { addressConfirmQuestion, nextAddressPartQuestion, savedFullAddress } fro
 import { PROPERTY_TYPE_LABELS, PROPERTY_TYPES, SETUP_PROPERTY_TYPES, validateConfig } from "../config/tourCoreConfig";
 import { extractValues, FIELD_WORDS, missingProfileFields, nextProfileQuestion, parseBulkUnitDetails, profileSummaryLine } from "../config/unitProfile";
 import { formatPhone } from "../core/phone";
-import { formatDay, formatTime, spokenTimeZone } from "../core/timezone";
+import { formatDay, formatTime, spokenTimeZone, UnsetTimeZoneError } from "../core/timezone";
+import { UNSET_ZONE_LINE } from "../setup/storedTimeZone";
 import { applyZoneSwitchAnswer, commitZoneAnswer, fieldsToHold, guessedZoneName, heldZoneFields, holdZoneSwitchFields, mergedZoneDetails, rememberZoneSwitch, switchHoldReply, switchQuestionForOffer, zoneReply, zoneSwitchAnswer, zoneSwitchQuestion } from "./zoneCopy";
 import { revokeConfirmQuestion } from "../core/availabilityCopy";
 import { TourCoreError } from "../core/TourCore";
@@ -1560,6 +1561,7 @@ export async function callOperatorTool(ctx: ToolContext, name: string, args: unk
     }
     return { ok: true, result };
   } catch (err) {
+    if (err instanceof UnsetTimeZoneError) return { ok: false, error: UNSET_ZONE_LINE };
     if (err instanceof SetupInputError || err instanceof TourCoreError || err instanceof UnavailableModeError || err instanceof PortableBackupError || err instanceof StorageUnavailableError) return { ok: false, error: err.message };
     if (err instanceof InvalidTransitionError) return { ok: false, error: "That tour can't make that change from where it is now. Nothing was changed." };
     return { ok: false, error: "Something went wrong in Tour Core. Nothing else was changed." };

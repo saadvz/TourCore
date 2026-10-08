@@ -6,6 +6,10 @@
 
 const COMPUTER_OFFSET_ZONES = new Set(["GMT+00:00", "+00:00", "GMT", "UTC", "Etc/UTC", "Etc/GMT", "Etc/GMT+0"]);
 
+/** Said to the landlord while a published property has no usable zone. Guessing one would open doors hours off. */
+export const UNSET_ZONE_LINE =
+  "This property doesn't have a time zone set yet, so tours can't run. What time zone should tours use, like Eastern or Pacific?";
+
 export function presentStoredTimeZone<T extends { property: { timezone: string; timezoneConfirmed?: boolean; canonicalAddress?: { state?: string } } }>(config: T): T {
   const state = config.property.canonicalAddress?.state?.trim() ?? "";
   if (state || config.property.timezoneConfirmed === true) return config;

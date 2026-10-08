@@ -21,6 +21,11 @@ export function visitorTeamName(name: string | undefined | null): string {
   return /\bteam$/i.test(trimmed) ? trimmed : "property team";
 }
 
+/** The human-path reply when tours cannot run, including a published property with no time zone. */
+export function toursUnavailableText(name: string, team?: string): string {
+  return `Thanks for reaching out to ${name}. Self-guided tours by text aren't available right now. Please contact the ${visitorTeamName(team)}.`;
+}
+
 export class UntemplatedVisitorSms extends Error {
   readonly body: string;
   constructor(body: string) {

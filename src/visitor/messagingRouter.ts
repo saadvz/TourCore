@@ -23,7 +23,8 @@ import { effectiveEnv } from "../install/settings";
 import type { ResolvedConsentMode } from "../messaging/consentPolicy";
 import { isLeavingTour } from "../core/overstayCopy";
 import { normalize, stripFiller } from "../intent/normalize";
-import { claimVisitorSms, visitorTeamName } from "../sms/templates";
+import { isValidTimeZone, UnsetTimeZoneError } from "../core/timezone";
+import { claimVisitorSms, toursUnavailableText, visitorTeamName } from "../sms/templates";
 import { handleVisitorText, isGreeting, startsNewBookingAfterClose } from "./conversation";
 import { pickerMiss, placeAliases, propertyPickerText, propertyShortName, resolveNamedPlace, STREET_MISS, menuChoice, type PlaceCandidate } from "./portfolioPick";
 import { OverstayScheduler } from "./overstayScheduler";
@@ -407,8 +408,8 @@ export class MessagingConversations {
     if (!session) {
       const { config, state } = ws.load(propertyId);
       const ready = state.readiness?.passed && isCurrent(state.readiness, state);
-      if (!ready) {
-        await transport.send(prospectText(phone, `Thanks for reaching out to ${config.property.name}. Self-guided tours by text aren't available right now. Please contact the ${visitorTeamName(config.operator.name)}.`)).catch(() => undefined);
+      if (!ready || !isValidTimeZone(config.property.timezone)) {
+        await transport.send(prospectText(phone, toursUnavailableText(config.property.name, config.operator.name))).catch(() => undefined);
         return {};
       }
       const tourId = ws.newVisitorTourId(propertyId, this.deps.now?.() ?? new Date(), "text");
@@ -444,6 +445,10 @@ export class MessagingConversations {
     try {
       await handleVisitorText(session, phone, message.text, meta, this.deps.interpreter);
     } catch (err) {
+      if (err instanceof UnsetTimeZoneError) {
+        await transport.send(prospectText(phone, toursUnavailableText(session.config.property.name, session.config.operator.name))).catch(() => undefined);
+        return { correlationId: session.id };
+      }
       if (err instanceof StorageUnavailableError) {
         await transport.send(prospectText(phone, "I couldn't save that, so nothing was booked or changed. Please try again in a little while.")).catch(() => undefined);
         return { correlationId: session.id };

@@ -41,16 +41,17 @@ Add these only where that work should be possible. Each is off until its secret 
 
 Set `TOURCORE_LEGACY_TOOLS=1` during the switch-over. While that flag is on, `/mcp` keeps the older landlord tools and also the QA test tools (`inject_local_sms`, including the shared-line option that leaves the property out, `read_local_outbox`, and local/demo mode via `use_local_demo_storage`) and the ops tools. Unset the flag once the QA connector is confirmed. With the flag off, `/mcp` shows the 21 tools, plus `reset_hosted_demo` for the hosted owner, and refuses QA and ops tools. `/mcp/qa` and `/mcp/ops` behave the same either way. Planned removal of the older tools: October 15, 2026.
 
-With the flag off, these checks stay callable on the QA connector. The landlord connector uses the tool after the dash for the same check. `run_checks` also runs readiness, so it is wider than `test_operator_alerts` or `run_dry_tour` alone. `get_state` is wider than `get_installation_status`.
+With the flag off, these checks stay callable on the QA connector. The landlord connector uses the tool after the dash for the same check. `test_operator_alerts`, `run_dry_tour`, and `get_installation_status` stay on the QA connector. `run_checks` stops when the connection isn't ready, so it cannot stand in for an alert test or a practice tour on its own.
 
 - `list_exceptions` and `inspect_exception` — `get_inbox`
 - `resolve_exception` — `resolve_issue`
-- `test_operator_alerts` and `run_dry_tour` — `run_checks`
+- `test_operator_alerts` — stays on QA
 - `begin_restore_upload`, `preview_portable_restore`, and `import_portable_backup` — `restore_records`
 - `schedule_one_off_tour` — `schedule_tour`
 - `resume_tours` — `pause_tours` with paused false
 - `revoke_tour_access` — `cancel_tour`
-- `get_installation_status` — `get_state`
+- `run_dry_tour` — stays on QA
+- `get_installation_status` — stays on QA
 
 For a manual setup or another agent, clone this repository and follow [`GROK_BOOTSTRAP.md`](GROK_BOOTSTRAP.md).
 
@@ -267,7 +268,7 @@ in their normal Messages app:
 - arrival, where early and on-time answers come from the real policy;
 - door access through Durin demo mode;
 - questions answered from approved facts only;
-- a general ask for tour times ("what are your tour times?", "when can I tour?", "what hours do you do tours") is answered from the saved hours, for example "Tours run every day, 8 AM to midnight. Which day works for you?". It is passed to the property team only when no hours are saved. A weekday inside a question still follows the day-menu rules;
+- a general ask for tour times ("what are your tour times?", "when can I tour?", "what hours do you do tours", "tour hours?", "what are your hours") is answered from the saved hours, for example "Tours run every day, 8 AM to midnight. Which day works for you?". It is passed to the property team only when no hours are saved. A weekday, or today, tomorrow, or tonight, still follows the day-menu rules;
 - HELP and STOP;
 - a 15-minutes-left questions text and a 5-minute warning (one extra 10 minutes when that time is free; asking for more time any time before the tour ends is granted when the slot is free; after the no-time line, yes books another look);
 - DONE / I'm out to end, or tour-end / +5 / +15 texts if they stay;

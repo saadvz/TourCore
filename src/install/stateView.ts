@@ -1,4 +1,7 @@
 import { PROPERTY_TYPE_LABELS, validateConfig } from "../config/tourCoreConfig";
+import { isValidTimeZone } from "../core/timezone";
+import { UNSET_ZONE_LINE } from "../setup/storedTimeZone";
+import type { PropertyWorkspace } from "../setup/workspace";
 import { nextProfileQuestion } from "../config/unitProfile";
 import { hoursStepSay } from "../operator/milestones";
 import { addressConfirmQuestion, nextAddressPartQuestion } from "../setup/address";
@@ -384,6 +387,16 @@ function sayFor(client: ReportedClient | undefined, step: StepId, draft: SetupDr
   return say;
 }
 
+/** A published property whose zone is blank or not a real place. Tours stay off until one is set. */
+function publishedMissingZone(workspace: PropertyWorkspace, onlyId?: string): boolean {
+  const ids = onlyId ? [onlyId] : workspace.propertyIds();
+  return ids.some((propertyId) => {
+    if (!workspace.has(propertyId)) return false;
+    const saved = workspace.load(propertyId);
+    return saved.state.status === "PUBLISHED_FOR_DEMO" && !saved.state.removedAt && !isValidTimeZone(saved.config.property.timezone);
+  });
+}
+
 /** One read-only picture. Does not persist texting choices or probe the disk. */
 export function readState(input: StateReadInput, propertyId?: string): Record<string, unknown> {
   const inst = input.installation;
@@ -406,12 +419,13 @@ export function readState(input: StateReadInput, propertyId?: string): Record<st
   const current = milestones.find((milestone) => milestone.status === "next") ?? null;
   const next = presentNext(status);
   const step = focusStep(milestones, next.action, picture);
-  const say = (inst && step === "backups" && driveNotSetUpLine(inst)) || sayFor(input.client, step, picture.draft);
+  const zoneBlock = publishedMissingZone(input.services.workspace, requested);
+  const say = zoneBlock ? UNSET_ZONE_LINE : (inst && step === "backups" && driveNotSetUpLine(inst)) || sayFor(input.client, step, picture.draft);
   const playbook = renderPlaybook(input.client, step, say);
   const copy = SHARED_STEPS[step];
   const setup = setupOf(input.services, inst, picture, status);
   return {
-    summary: current ? `${current.title} is next.` : status.phase === "OPERATE" ? "Your property is published." : "Nothing is waiting on you.",
+    summary: zoneBlock ? UNSET_ZONE_LINE : current ? `${current.title} is next.` : status.phase === "OPERATE" ? "Your property is published." : "Nothing is waiting on you.",
     scope: requested ? "property" : "install",
     ...(requested ? {} : { properties: propertyList(input.services) }),
     ...(setup ? { setup } : {}),
@@ -426,7 +440,7 @@ export function readState(input: StateReadInput, propertyId?: string): Record<st
     storage: { summary: storageLine(inst) },
     milestones,
     currentMilestone: current?.id ?? null,
-    nextStep: { action: next.action, component: next.component, tool: toolFor(step, picture.draft), say, doneLooksLike: copy.done },
+    nextStep: { action: next.action, component: next.component, tool: zoneBlock ? "save_property" : toolFor(step, picture.draft), say, doneLooksLike: copy.done },
     playbook: { id: playbook.id, version: playbook.version, mode: playbook.mode, step: playbook.step, text: playbook.text },
   };
 }

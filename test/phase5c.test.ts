@@ -5,10 +5,16 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { AccessWindows } from "../src/operator/accessWindows";
 import { formatAuditDaySummary } from "../src/operator/auditExport";
+import { safetyHash } from "../src/config/changeKinds";
 import { TourCoreConfigShape, validateConfig } from "../src/config/tourCoreConfig";
-import { presentStoredTimeZone } from "../src/setup/storedTimeZone";
+import { isGeneralTourHoursQuestion } from "../src/intent/tourHoursAsk";
+import { MessagingEndpoints } from "../src/messaging/endpoints";
+import { presentStoredTimeZone, UNSET_ZONE_LINE } from "../src/setup/storedTimeZone";
 import { UNKNOWN_ANSWER } from "../src/core/TourCore";
-import { configHash, PropertyWorkspace } from "../src/setup/workspace";
+import { toursUnavailableText } from "../src/sms/templates";
+import { configHash, PropertyWorkspace, statusLabel } from "../src/setup/workspace";
+import { MessagingConversations } from "../src/visitor/messagingRouter";
+import { VerificationLinks } from "../src/visitor/verificationLinks";
 import { writeJsonAtomic } from "../src/storage/atomicWrite";
 import { handlePortableRequest } from "../src/backup/http";
 import { createSetupServer } from "../src/web/server";
@@ -197,11 +203,20 @@ describe("tour time questions", () => {
     const a = await liveApp({ cleanups, config: everyDayHours() });
     const phone = "+15550104001";
     await openDayMenu(a, phone);
-    for (const phrase of ["what are your tour times?", "when can I tour?", "what hours do you do tours"]) {
+    for (const phrase of ["what are your tour times?", "when can I tour?", "what hours do you do tours", "tour hours?", "what are your hours"]) {
       const replies = await a.textFrom(phone, phrase);
       expect(replies, phrase).toEqual([HOURS_REPLY]);
     }
     expect((await a.grok("list_exceptions")).exceptions).toEqual([]);
+  });
+
+  it("keeps a weekday or today, tomorrow, and tonight off the saved-hours reply", () => {
+    expect(isGeneralTourHoursQuestion("tour hours?")).toBe(true);
+    expect(isGeneralTourHoursQuestion("what are your hours")).toBe(true);
+    expect(isGeneralTourHoursQuestion("tour hours on Friday")).toBe(false);
+    expect(isGeneralTourHoursQuestion("what are your hours today")).toBe(false);
+    expect(isGeneralTourHoursQuestion("what are your hours tomorrow")).toBe(false);
+    expect(isGeneralTourHoursQuestion("what are your hours tonight")).toBe(false);
   });
 
   it("still opens Friday from is Friday open?", async () => {
@@ -300,6 +315,109 @@ describe("unset time zone", () => {
     const invalidIssue = validateConfig(invalid).find((issue) => issue.code === "TIMEZONE_INVALID");
     expect(invalidIssue?.message).toBe(`I don't recognize the time zone "Mars/Olympus". Try something like Eastern or Pacific.`);
     expect(invalidIssue?.message).not.toContain("America/New_York");
+  });
+
+  it("blocks a published GMT+00:00 property with no state, then runs tours after Eastern is set", async () => {
+    const h = installHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const path = join(h.root, "properties", id, "tourcore.config.json");
+    const raw = JSON.parse(readFileSync(path, "utf8")) as {
+      property: { name: string; timezone: string; timezoneConfirmed?: boolean; canonicalAddress?: { state?: string } };
+    };
+    raw.property.timezone = "GMT+00:00";
+    raw.property.canonicalAddress = { ...raw.property.canonicalAddress, state: "" };
+    delete raw.property.timezoneConfirmed;
+    writeJsonAtomic(path, raw);
+    const parsed = TourCoreConfigShape.parse(raw);
+    const presented = presentStoredTimeZone(parsed);
+    const viewedSafety = safetyHash(presented);
+    const statusPath = join(h.root, "properties", id, "status.json");
+    const status = JSON.parse(readFileSync(statusPath, "utf8")) as {
+      configHash: string;
+      status: string;
+      readiness?: { safetyHash?: string };
+      dryTour?: { safetyHash?: string };
+    };
+    status.status = "PUBLISHED_FOR_DEMO";
+    status.configHash = configHash(parsed);
+    if (status.readiness) status.readiness.safetyHash = viewedSafety;
+    if (status.dryTour) status.dryTour.safetyHash = viewedSafety;
+    writeJsonAtomic(statusPath, status);
+
+    const loaded = h.workspace.load(id);
+    expect(loaded.config.property.timezone).toBe("");
+    expect(loaded.state.status).toBe("PUBLISHED_FOR_DEMO");
+    expect(statusLabel(loaded)).toBe("Published for demo · needs attention");
+    expect(JSON.parse(readFileSync(path, "utf8")).property.timezone).toBe("GMT+00:00");
+    const human = toursUnavailableText(loaded.config.property.name, loaded.config.operator.name);
+
+    const line = "+15550001111";
+    const endpoints = new MessagingEndpoints(h.runtime);
+    endpoints.attach({ address: line, provider: "demo", propertyId: id });
+    const sent: string[] = [];
+    const router = new MessagingConversations({
+      workspace: h.workspace,
+      registry: h.visitors,
+      runtime: h.runtime,
+      endpoints,
+      transport: () => ({
+        provider: "demo",
+        presentation: "MESSAGING",
+        send: async (message) => {
+          sent.push(message.body);
+          return { provider: "demo", channel: "DEMO", status: "SENT", sentAt: new Date(h.now()).toISOString() };
+        },
+      }),
+      links: new VerificationLinks({ baseUrl: () => undefined }),
+      realNow: () => h.now(),
+      now: () => new Date(h.now()),
+      defaultLine: () => line,
+      consentMode: () => "disabled",
+    });
+    const text = async (phone: string, body: string) => {
+      sent.length = 0;
+      await router.receive({
+        provider: "test",
+        providerMessageId: `m_${phone}_${sent.length}_${body.length}`,
+        from: phone,
+        to: line,
+        text: body,
+        channel: "SMS",
+        receivedAt: new Date(h.now()).toISOString(),
+      });
+      return [...sent];
+    };
+
+    const firstPhone = "+15550104111";
+    await expect(text(firstPhone, "Hi")).resolves.toEqual([human]);
+    expect(h.visitors.latestForPhone(id, firstPhone, "messaging")).toBeUndefined();
+    const browser = await h.visitor(id, { phone: "5550104112" });
+    expect(browser.session.conversation.filter((item) => item.from === "tourcore").map((item) => item.text).join("\n")).toContain(human);
+    expect(await browser.session.reservation()).toBeUndefined();
+
+    const picture = await h.ok("get_state", { propertyId: id });
+    expect(picture.summary).toBe(UNSET_ZONE_LINE);
+    expect(picture.nextStep.say).toBe(UNSET_ZONE_LINE);
+    expect(picture.playbook.text).toContain(UNSET_ZONE_LINE);
+    expect(picture.setup.status).toBe("Published for demo · needs attention");
+
+    await h.ok("save_property", { property: id, timezone: "Eastern" });
+    const restored = h.workspace.load(id);
+    expect(restored.config.property.timezone).toBe("America/New_York");
+    expect(restored.state.status).toBe("PUBLISHED_FOR_DEMO");
+    expect(statusLabel(restored)).toBe("Published for demo");
+    const after = await h.ok("get_state", { propertyId: id });
+    expect(after.summary).not.toBe(UNSET_ZONE_LINE);
+    expect(after.nextStep.say).not.toBe(UNSET_ZONE_LINE);
+
+    const second = await text("+15550104113", "Hi");
+    expect(second.join("\n")).toContain("Which unit would you like to see?");
+    expect(second.join("\n")).not.toContain("aren't available right now");
+    const touring = await h.visitor(id, { phone: "5550104114" });
+    expect(touring.session.offeredDates.length).toBeGreaterThan(0);
+    expect(touring.slot()).toBeInstanceOf(Date);
+    expect(touring.session.conversation.map((item) => item.text).join("\n")).not.toContain("aren't available right now");
   });
 });
 

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isValidTimeZone } from "../core/timezone";
 import { normalizeStoredDraft } from "../setup/normalizeDraft";
 import { TourCoreConfigShape, type TourCoreConfig } from "./tourCoreConfig";
 
@@ -80,6 +81,18 @@ export function legacySendblueFingerprints(config: TourCoreConfig): { full: stri
 /** Compare the stored spelling of both sides, so a write that only canonicalizes is not a structural change. */
 function asStored(config: TourCoreConfig): TourCoreConfig {
   return TourCoreConfigShape.parse(normalizeStoredDraft(config));
+}
+
+/**
+ * The only structural change is writing a real zone over a blank or unrecognized one.
+ * A change from one real zone to another stays structural: GMT times would open doors hours off.
+ */
+export function fillingUnsetTimeZone(before: TourCoreConfig, after: TourCoreConfig): boolean {
+  const left = asStored(before);
+  const right = asStored(after);
+  if (isValidTimeZone(left.property.timezone) || !isValidTimeZone(right.property.timezone)) return false;
+  const filled = { ...left, property: { ...left.property, timezone: right.property.timezone } };
+  return safetyHash(filled) === safetyHash(right);
 }
 
 export function classifyChange(before: TourCoreConfig, after: TourCoreConfig): ChangeKind {
