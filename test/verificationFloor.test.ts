@@ -37,7 +37,7 @@ describe("identity-check floor", () => {
     try {
       const saved = await h.ok("save_settings", { property: propertyId, verification: "document-check" });
       expect(saved.status).toBe("done");
-      expect(saved.message).toBe("A full ID check isn't available yet, so visitors will keep filling out a basic identity form.");
+      expect(saved.message).toBe("A full ID check isn't available yet, so visitors will fill out a basic identity form instead.");
       expect(h.workspace.openDraft(propertyId).draft.verificationMode).toBe("basic-form");
     } finally {
       h.cleanup();
@@ -51,7 +51,7 @@ describe("identity-check floor", () => {
       const propertyId = created.setup.propertyId as string;
       const saved = await h.ok("save_settings", { property: propertyId, verification: "document-check" });
       expect(saved.status).toBe("done");
-      expect(saved.message).toBe("A full ID check isn't available yet, so visitors will keep filling out a basic identity form.");
+      expect(saved.message).toBe("A full ID check isn't available yet, so visitors will fill out a basic identity form instead.");
       expect(h.workspace.openDraft(propertyId).draft.verificationMode).toBe("basic-form");
     } finally {
       h.cleanup();

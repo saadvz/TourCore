@@ -16,7 +16,7 @@ export const PRACTICE_REFUSED =
 export const LIVE_TEXTING_IDENTITY = "Live texting is on, so visitors will now fill out a basic identity form.";
 
 export const DOCUMENT_CHECK_UNAVAILABLE =
-  "A full ID check isn't available yet, so visitors will keep filling out a basic identity form.";
+  "A full ID check isn't available yet, so visitors will fill out a basic identity form instead.";
 
 export const PRACTICE_ON_LIVE =
   "This place is still on the practice ID check, which only works while texting is in test mode. Want me to switch it to the basic identity form?";
