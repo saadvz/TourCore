@@ -464,8 +464,8 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
         selfTest.endpoint = { ok: endpoint.ok, message: endpoint.message };
         selfTest.access = { ok: access.ok, message: access.message };
         selfTest.alerts = { ok: alerts.ok, message: alerts.message };
-        if (!endpoint.ok) return envelope(ctx, id, "blocked", "The connection isn't ready yet. I'll check Tour Core's public connection again.", { propertyId: id, selfTest }, "ENDPOINT_NOT_READY");
-        if (!access.ok) return envelope(ctx, id, "blocked", "Door access isn't answering. I'll check the demo access system again, and no real door opens.", { propertyId: id, selfTest }, "ACCESS_NOT_READY");
+        if (!endpoint.ok) return envelope(ctx, id, "blocked", "The connection isn't ready yet. Ask me to run the checks again in a minute.", { propertyId: id, selfTest }, "ENDPOINT_NOT_READY");
+        if (!access.ok) return envelope(ctx, id, "blocked", "Door access isn't answering. Ask me to run the checks again.", { propertyId: id, selfTest }, "ACCESS_NOT_READY");
       }
       const readiness = await readinessForProperty(services, id, ctx.now());
       if (!readiness.result.passed) {
@@ -537,8 +537,8 @@ function resolveRouteDoor(draft: TourCoreConfig, ref: string, unit: Unit): { doo
   return {};
 }
 
-const TEXTING_NOT_HERE = "Texting can't be set up from here. Whoever set up your Tour Core hosting can add a texting service on the installation.";
-const TOUR_UPDATES_NOT_HERE = "Tour updates can't be changed from here. Turn them on or skip them on the Tour Core installation, where the login goes on the private setup page.";
+const TEXTING_NOT_HERE = "I can't set up texting from this chat. Whoever set up Tour Core for you can add it, then ask me to check it.";
+const TOUR_UPDATES_NOT_HERE = "I can't change tour updates from this chat. Whoever set up Tour Core for you can turn them on or off on the private setup page.";
 
 const TOUR_DAY_ORDER: Weekday[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
@@ -555,6 +555,7 @@ const DAY_NAME: Record<Weekday, string> = {
 /** "Monday to Friday", "Monday, Wednesday and Friday", "Monday to Friday and Sunday". */
 export function describeTourDays(days: readonly Weekday[]): string {
   const ordered = TOUR_DAY_ORDER.filter((day) => days.includes(day));
+  if (ordered.length === TOUR_DAY_ORDER.length) return "every day";
   const groups: Weekday[][] = [];
   for (const day of ordered) {
     const last = groups[groups.length - 1];
