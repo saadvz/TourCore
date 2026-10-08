@@ -18,7 +18,7 @@ Every tool validates its input and calls the same Tour Core actions as the brows
 Kinds: **read** changes nothing; **change** edits setup or records through Tour Core's normal rules;
 **consequential** returns a yes/no question first and acts only when called again with the code after the operator's yes.
 
-Older tools stay in the product for one week and are hidden on the landlord connector unless `TOURCORE_LEGACY_TOOLS=1`. Planned removal: October 15, 2026. They are not listed here.
+Set `TOURCORE_LEGACY_TOOLS=1` during the switch-over so the landlord connector also keeps the older tools, the QA test tools, and the ops tools. Unset it once the QA connector is confirmed. Planned removal: October 15, 2026. The older tools stay out of the tables below.
 
 ## Landlord connector
 

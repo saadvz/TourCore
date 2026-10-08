@@ -52,7 +52,11 @@ const listRpc = { jsonrpc: "2.0", id: 1, method: "tools/list" };
 const callRpc = (name: string, args: Record<string, unknown> = {}) => ({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name, arguments: args } });
 
 function namesFrom(json: unknown): string[] {
-  return ((json as { result: { tools: Array<{ name: string }> } }).result.tools).map((tool) => tool.name);
+  return toolsFrom(json).map((tool) => tool.name);
+}
+
+function toolsFrom(json: unknown): Array<{ name: string; description?: string }> {
+  return (json as { result: { tools: Array<{ name: string; description?: string }> } }).result.tools;
 }
 
 describe("connector scopes", () => {
@@ -159,16 +163,31 @@ describe("connector scopes", () => {
     expect(JSON.stringify(state.json)).not.toMatch(/can't run that tool/);
   });
 
-  it("hides legacy tools unless TOURCORE_LEGACY_TOOLS=1, and still hides ops and QA tools", async () => {
-    const off = await legacyList(undefined);
-    const on = await legacyList("1");
-    expect(off).toEqual([...LANDLORD_CORE_TOOLS]);
-    expect(on).toContain("list_properties");
-    expect(on).toContain("get_installation_status");
-    expect(on).not.toContain("inject_local_sms");
-    expect(on).not.toContain("discover_storage");
-    expect(on).not.toContain("use_local_demo_storage");
-    expect(on).not.toContain("check_runtime_health");
+  it("with TOURCORE_LEGACY_TOOLS=1, /mcp lists and calls inject_local_sms; with the flag off, that call is refused", async () => {
+    const off = await legacySession(undefined);
+    expect(off.names).toEqual([...LANDLORD_CORE_TOOLS]);
+    const refused = await post(off.port, "/mcp", callRpc("inject_local_sms", { from: "+15555550100", text: "Hi" }), LANDLORD);
+    expect(refused.json).toMatchObject({ error: { code: -32602, message: "The landlord connector can't run that tool." } });
+
+    const on = await legacySession("1");
+    expect(on.names.slice(0, LANDLORD_CORE_TOOLS.length)).toEqual([...LANDLORD_CORE_TOOLS]);
+    expect(on.names).toContain("list_properties");
+    expect(on.names).toContain("get_installation_status");
+    for (const name of QA_TOOL_NAMES) expect(on.names).toContain(name);
+    for (const name of OPS_TOOL_NAMES) expect(on.names).toContain(name);
+    const inject = on.tools.find((tool) => tool.name === "inject_local_sms");
+    expect(inject?.description).toContain("Leave property out");
+    const called = await post(on.port, "/mcp", callRpc("inject_local_sms", { from: "+15555550100", text: "Hi" }), LANDLORD);
+    expect(called.status).toBe(200);
+    const body = called.json as { error?: { message: string }; result?: { isError?: boolean; content?: Array<{ text: string }> } };
+    expect(body.error).toBeUndefined();
+    expect(body.result?.isError).toBe(true);
+    expect(body.result?.content?.[0]?.text).toBe("There aren't any properties set up yet.");
+
+    expect(namesFrom((await post(on.port, "/mcp/qa", listRpc, QA)).json)).toEqual([...QA_TOOL_NAMES]);
+    expect(namesFrom((await post(on.port, "/mcp/ops", listRpc, OPS)).json)).toEqual([...OPS_TOOL_NAMES]);
+    expect(namesFrom((await post(off.port, "/mcp/qa", listRpc, QA)).json)).toEqual([...QA_TOOL_NAMES]);
+    expect(namesFrom((await post(off.port, "/mcp/ops", listRpc, OPS)).json)).toEqual([...OPS_TOOL_NAMES]);
   });
 
   it("shared-line inject omits the property: a picker for two places, and a skip for one", async () => {
@@ -190,7 +209,7 @@ describe("connector scopes", () => {
   }, 120_000);
 });
 
-async function legacyList(flag: string | undefined): Promise<string[]> {
+async function legacySession(flag: string | undefined): Promise<{ port: number; names: string[]; tools: Array<{ name: string; description?: string }> }> {
   const root = mkdtempSync(join(tmpdir(), "tourcore-scope-legacy-"));
   cleanups.push(() => rmSync(root, { recursive: true, force: true }));
   const env: NodeJS.ProcessEnv = flag ? { TOURCORE_LEGACY_TOOLS: flag } : {};
@@ -201,11 +220,14 @@ async function legacyList(flag: string | undefined): Promise<string[]> {
     installation,
     mcpAuth: "static",
     operatorToken: () => LANDLORD,
+    opsToken: () => OPS,
+    qaToken: () => QA,
     log: () => {},
   });
   cleanups.push(() => server.close());
   const port = await listen(server);
-  return namesFrom((await post(port, "/mcp", listRpc, LANDLORD)).json);
+  const tools = toolsFrom((await post(port, "/mcp", listRpc, LANDLORD)).json);
+  return { port, names: tools.map((tool) => tool.name), tools };
 }
 
 async function sharedInject(addresses: string[], options: { nameFirst?: string }) {

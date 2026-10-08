@@ -98,7 +98,7 @@ export interface ToolContext {
    * (browser, in-process tests, eval harness).
    */
   connector?: ConnectorScope;
-  /** Landlord connector only. TOURCORE_LEGACY_TOOLS=1. Ops and QA tools stay off this list. */
+  /** Landlord connector when TOURCORE_LEGACY_TOOLS=1. That flag also keeps QA and ops tools on /mcp during the switch-over. */
   legacyTools?: boolean;
 }
 

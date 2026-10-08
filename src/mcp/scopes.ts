@@ -58,8 +58,6 @@ export const OPS_TOOL_NAMES = [
 /** Local and demo exercising. Provider choice stays on set_up_texting. */
 export const QA_TOOL_NAMES = ["inject_local_sms", "read_local_outbox", "use_local_demo_storage"] as const;
 
-const MOVED = new Set<string>([...LANDLORD_CORE_TOOLS, HOSTED_OWNER_TOOL, ...OPS_TOOL_NAMES, ...QA_TOOL_NAMES]);
-
 export function legacyToolsEnabled(env?: { TOURCORE_LEGACY_TOOLS?: string }): boolean {
   const raw = (env?.TOURCORE_LEGACY_TOOLS ?? "").trim().toLowerCase();
   return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
@@ -95,8 +93,10 @@ export function toolsForConnector(connector: ConnectorScope, ctx: ScopeContext, 
   const names: string[] = [...LANDLORD_CORE_TOOLS];
   if (hostedResetToolVisible(ctx)) names.push(HOSTED_OWNER_TOOL);
   if (legacy) {
+    // Switch-over bridge: /mcp/qa cannot be confirmed until this deploy is live,
+    // so the landlord connector also keeps the QA and ops tools while the flag is on.
     for (const tool of all) {
-      if (!MOVED.has(tool.name) && !names.includes(tool.name)) names.push(tool.name);
+      if (!names.includes(tool.name)) names.push(tool.name);
     }
   }
   return pick(names);

@@ -120,7 +120,7 @@ function tools(): void {
   say(`QA connector (POST ${MCP_QA_PATH}, TOURCORE_QA_TOKEN):`);
   for (const name of QA_TOOL_NAMES) say(name);
   say("");
-  say("Older tools stay hidden unless TOURCORE_LEGACY_TOOLS=1. Planned removal: October 15, 2026.");
+  say("Set TOURCORE_LEGACY_TOOLS=1 during the switch-over so /mcp also keeps the older tools, the QA test tools, and the ops tools. Unset it once the QA connector is confirmed. Planned removal: October 15, 2026.");
 }
 
 loadLocalEnv();
