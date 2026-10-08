@@ -20,11 +20,12 @@ import { LOCAL_TEST_TEXTING } from "../setup/setupActions";
 
 export const HEALTH_PATH = "/healthz";
 
-/** Railway first, then other hosts that inject a full commit SHA. */
-const COMMIT_ENV_VARS = [
-  "RAILWAY_GIT_COMMIT_SHA",
-  "TOURCORE_COMMIT_SHA",
-  "GIT_COMMIT_SHA",
+/** Public health and runtime health. GitHub Actions always sets GITHUB_SHA, which is not this deploy. */
+const HEALTH_COMMIT_ENV_VARS = ["RAILWAY_GIT_COMMIT_SHA", "TOURCORE_COMMIT_SHA", "GIT_COMMIT_SHA"] as const;
+
+/** Same order, then other hosts, for the QA installation status only. */
+const QA_COMMIT_ENV_VARS = [
+  ...HEALTH_COMMIT_ENV_VARS,
   "GITHUB_SHA",
   "SOURCE_VERSION",
   "VERCEL_GIT_COMMIT_SHA",
@@ -32,18 +33,22 @@ const COMMIT_ENV_VARS = [
   "CF_PAGES_COMMIT_SHA",
 ] as const;
 
-/** Railway injects this on GitHub deploys. Self-hosted can set the Tour Core or generic override. */
-function deployedCommitSha(env: NodeJS.ProcessEnv): string | null {
-  for (const name of COMMIT_ENV_VARS) {
+function firstSet(env: NodeJS.ProcessEnv, names: readonly string[]): string | null {
+  for (const name of names) {
     const value = env[name]?.trim();
     if (value) return value;
   }
   return null;
 }
 
+/** Railway injects this on GitHub deploys. Self-hosted can set the Tour Core or generic override. */
+function deployedCommitSha(env: NodeJS.ProcessEnv): string | null {
+  return firstSet(env, HEALTH_COMMIT_ENV_VARS);
+}
+
 /** Full deploy SHA for the QA connector, or "unknown" when the host didn't set one. */
 export function deployedCommitLabel(env: NodeJS.ProcessEnv): string {
-  return deployedCommitSha(env) ?? "unknown";
+  return firstSet(env, QA_COMMIT_ENV_VARS) ?? "unknown";
 }
 
 /** Identifies this installation on the public health page without revealing its id. */

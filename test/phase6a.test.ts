@@ -326,6 +326,9 @@ describe("connector list refresh and the deployed commit", () => {
     expect((legacy.json.result?.structuredContent?.technical as { commit?: string } | undefined)?.commit).toBeUndefined();
 
     delete env.RAILWAY_GIT_COMMIT_SHA;
+    env.GITHUB_SHA = "githubsha0123456789abcdef0123456789abcd";
+    const fromGithub = await call("/mcp/qa", QA, "get_installation_status");
+    expect((fromGithub.json.result?.structuredContent?.technical as { commit?: string }).commit).toBe("githubsha0123456789abcdef0123456789abcd");
     delete env.GITHUB_SHA;
     env.VERCEL_GIT_COMMIT_SHA = "vercelsha0123456789abcdef0123456789abcd";
     const other = await call("/mcp/qa", QA, "get_installation_status");
