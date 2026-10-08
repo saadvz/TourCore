@@ -1,4 +1,5 @@
 import { UNNAMED_VISITOR } from "../domain/model";
+import { visitorTeamName } from "../sms/templates";
 import { formatPhone } from "./phone";
 
 /**
@@ -94,14 +95,15 @@ export function landlordRepliedAfterClose(who: string, place: string, message: s
   return `${who} replied after their tour of ${place} closed: "${message}"`;
 }
 
-export function visitorRepliedAfterClose(helpNumber?: string): string {
-  if (helpNumber) return `Thanks, I've let the property team know. If you're still inside or need a hand right away, call ${formatPhone(helpNumber)}.`;
-  return `Thanks, I've let the property team know, and someone will reach out soon.`;
+export function visitorRepliedAfterClose(helpNumber?: string, team?: string): string {
+  const name = visitorTeamName(team);
+  if (helpNumber) return `Thanks, I've let the ${name} know. If you're still inside or need a hand right away, call ${formatPhone(helpNumber)}.`;
+  return `Thanks, I've let the ${name} know, and someone will reach out soon.`;
 }
 
-export function tourFinishedFollowUp(place: string, name?: string, recap?: string): string {
+export function tourFinishedFollowUp(place: string, name?: string, recap?: string, team?: string): string {
   const thanks = name ? `Thanks for touring ${place}, ${name}!` : `Thanks for touring ${place}!`;
-  return `${thanks}${recap ? ` Quick recap: ${recap.replace(/\.$/, "")}.` : ""} The doors are locked again behind you.\nWould you like someone from the property team to follow up?`;
+  return `${thanks}${recap ? ` Quick recap: ${recap.replace(/\.$/, "")}.` : ""} The doors are locked again behind you.\nWould you like someone from the ${visitorTeamName(team)} to follow up?`;
 }
 
 const REBOOK =

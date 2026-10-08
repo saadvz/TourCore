@@ -50,7 +50,7 @@ function lineFor(ctx: ToolContext, propertyId: string, to?: string): string {
 }
 
 function bubblesView(bubbles: LocalOutboxBubble[]) {
-  return bubbles.map((b) => ({ body: b.body, sentAt: b.sentAt }));
+  return bubbles.map((b) => ({ body: b.body, sentAt: b.sentAt, ...(b.templateId ? { templateId: b.templateId } : {}) }));
 }
 
 export async function injectLocalSms(

@@ -4,7 +4,7 @@ Every outbound visitor text uses one of these ids. `{slot}` is filled before sen
 
 Text from the landlord or from a model reaches a visitor only as `approved-answer` or `approved-answer-closing`, and only after they approve a flagged question (`answer_flagged_question`, later `resolve_issue`). A no-draft flag never gets a draft. `approved-profile-fact` repeats a fact they already saved.
 
-180 message templates. 7 channel prompts.
+194 message templates. 7 channel prompts.
 
 ## Messages
 
@@ -47,25 +47,25 @@ Every door on your tour is already open for you. Text HELP if one isn't working.
 ### unknown-answer
 
 ```
-I'll pass your question to the property team, and they'll reply here as soon as they can.
+I'll pass your question to the {team}, and they'll reply here as soon as they can.
 ```
 
 ### unknown-answer-photo
 
 ```
-I can't open photos yet. I'll pass your question to the property team, and they'll reply here as soon as they can.
+I can't open photos yet. I'll pass your question to the {team}, and they'll reply here as soon as they can.
 ```
 
 ### unknown-answer-ended
 
 ```
-I'll pass your question to the property team, and they'll reply here as soon as they can. If you'd like to tour again, just text HI.
+I'll pass your question to the {team}, and they'll reply here as soon as they can. If you'd like to tour again, just text HI.
 ```
 
 ### unknown-answer-ended-photo
 
 ```
-I can't open photos yet. I'll pass your question to the property team, and they'll reply here as soon as they can. If you'd like to tour again, just text HI.
+I can't open photos yet. I'll pass your question to the {team}, and they'll reply here as soon as they can. If you'd like to tour again, just text HI.
 ```
 
 ### tour-ended-reply
@@ -83,7 +83,7 @@ I can't check that right now. Please try again in a little while.
 ### shared-fact
 
 ```
-Here's what the property team shared: {fact}
+Here's what the {team} shared: {fact}
 ```
 
 ### approved-profile-fact
@@ -125,7 +125,7 @@ No problem, nothing's booked yet, so I'll stop here. Text me anytime if you want
 ### cancel-failed
 
 ```
-I can't cancel it from here. I've asked the property team to call it off and get back to you.
+I can't cancel it from here. I've asked the {team} to call it off and get back to you.
 ```
 
 ### cancel-confirm
@@ -323,49 +323,49 @@ That replaces your {time} tour on {day}.
 ### custom-time-asked
 
 ```
-I've asked the property team about {newTime} on {newDay} instead. Your {time} tour on {day} stays booked unless they approve the change.
+I've asked the {team} about {newTime} on {newDay} instead. Your {time} tour on {day} stays booked unless they approve the change.
 ```
 
 ### decline-request
 
 ```
-The property team couldn't approve {newTime} on {newDay}. {rest}
+The {team} couldn't approve {newTime} on {newDay}. {rest}
 ```
 
 ### decline-still-confirmed
 
 ```
-The property team couldn't approve {newTime} on {newDay}. Your {time} tour on {day} is still confirmed.
+The {team} couldn't approve {newTime} on {newDay}. Your {time} tour on {day} is still confirmed.
 ```
 
 ### decline-still-booked
 
 ```
-The property team couldn't approve {newTime} on {newDay}. You're still booked for {time} on {day}.
+The {team} couldn't approve {newTime} on {newDay}. You're still booked for {time} on {day}.
 ```
 
 ### decline-no-booking
 
 ```
-The property team couldn't approve {newTime} on {newDay}. If you'd like another time, just reply with a day.
+The {team} couldn't approve {newTime} on {newDay}. If you'd like another time, just reply with a day.
 ```
 
 ### request-expired
 
 ```
-The property team couldn't get to your request for {newTime} on {newDay} in time. {rest}
+The {team} couldn't get to your request for {newTime} on {newDay} in time. {rest}
 ```
 
 ### propose-one-off
 
 ```
-The property team can do {time} on {day} as a one-off. {rest}
+The {team} can do {time} on {day} as a one-off. {rest}
 ```
 
 ### propose-instead
 
 ```
-The property team can't do {requestedTime} on {requestedDay}, but {proposedTime} on {proposedDay} works. {rest}
+The {team} can't do {requestedTime} on {requestedDay}, but {proposedTime} on {proposedDay} works. {rest}
 ```
 
 ### decline-proposed-confirmed
@@ -389,7 +389,7 @@ No problem. If you'd like another time, just reply with a day.
 ### pending-custom
 
 ```
-Your request for {time} on {day} is still with the property team. I'll text you as soon as they respond.{rest?}
+Your request for {time} on {day} is still with the {team}. I'll text you as soon as they respond.{rest?}
 ```
 
 ### taken-slot
@@ -407,7 +407,7 @@ If you'd like another time, just reply with a day.
 ### already-asked
 
 ```
-I've already asked the property team about {time} on {day}.
+I've already asked the {team} about {time} on {day}.
 ```
 
 ### time-passed
@@ -560,7 +560,7 @@ Sorry, I didn't catch that. You can ask me a question about the property.
 ### sorry-touring
 
 ```
-Sorry, I didn't catch that. You can ask me a question{hint?}, or text "finish" when you're done.
+Sorry, I didn't catch that. You can ask me a question{hint?}, or text DONE when you're finished.
 ```
 
 ### which-unit
@@ -626,7 +626,7 @@ Your identity form is in my earlier message. Once it's filled out, I'll confirm 
 ### follow-up-question
 
 ```
-Would you like someone from the property team to follow up?
+Would you like someone from the {team} to follow up?
 ```
 
 ### follow-up-clarify
@@ -680,19 +680,19 @@ I can only help with your own tour. Doors open only for the stops on it, during 
 ### custom-time-which-unit
 
 ```
-{time} isn't one of the regular tour times. Which unit should I ask the property team about?
+{time} isn't one of the regular tour times. Which unit should I ask the {team} about?
 ```
 
 ### custom-time-yes
 
 ```
-If you'd like {time}, reply YES and I'll ask the property team.
+If you'd like {time}, reply YES and I'll ask the {team}.
 ```
 
 ### custom-time-ask
 
 ```
-{time} isn't one of the regular tour times, but I can ask the property team. I'll let you know once they respond.
+{time} isn't one of the regular tour times, but I can ask the {team}. I'll let you know once they respond.
 ```
 
 ### awaiting-team
@@ -827,6 +827,90 @@ Reply yes for {time} on {day}, or pick a day.
 Someone just grabbed that time. {rest}
 ```
 
+### still-confirmed
+
+```
+Your {time} tour on {day} is still confirmed.
+```
+
+### still-booked
+
+```
+You're still booked for {time} on {day}.
+```
+
+### switch-keep
+
+```
+Reply YES to switch, or NO to keep your {time} tour on {day}.
+```
+
+### switch-keep-looking
+
+```
+Reply YES to switch, or NO to keep looking.
+```
+
+### which-day
+
+```
+Which day works for you?
+```
+
+### next-opening-want
+
+```
+The next {noun} is {when}. Want that, or another day?
+```
+
+### next-opening-menu
+
+```
+The next {noun} is {when}. Reply yes to take it, or pick a day:
+```
+
+### heres-whats-left
+
+```
+Here's what's left:
+```
+
+### tours-back-soon
+
+```
+They'll text you when tours are back.
+```
+
+### text-anytime-another
+
+```
+Text me anytime to book another.
+```
+
+### questions-call
+
+```
+Questions? Call {phone}.
+```
+
+### pending-regular
+
+```
+If you'd rather pick one of the regular times instead, just reply with a day.
+```
+
+### at-stop-hint
+
+```
+Text me when you're at {stop}.
+```
+
+### done-hint
+
+```
+Text DONE when you're finished.
+```
+
 ### operator-scheduled
 
 ```
@@ -936,7 +1020,7 @@ Text TOUR to ask questions or schedule a self-guided tour. Reply HELP for help o
 ### property-not-ready
 
 ```
-Thanks for reaching out to {name}. Self-guided tours by text aren't available right now. Please contact the property team.
+Thanks for reaching out to {name}. Self-guided tours by text aren't available right now. Please contact the {team}.
 ```
 
 ### storage-save-failed
@@ -948,7 +1032,7 @@ I couldn't save that, so nothing was booked or changed. Please try again in a li
 ### handler-snag-alerted
 
 ```
-Sorry, I hit a snag with that. I've let the property team know, and they'll reply here as soon as they can.
+Sorry, I hit a snag with that. I've let the {team} know, and they'll reply here as soon as they can.
 ```
 
 ### handler-snag-retry
@@ -960,13 +1044,13 @@ Sorry, I hit a snag with that. Could you text me again in a few minutes?
 ### restore-trouble
 
 ```
-I'm having trouble restoring your tour. I've alerted the property team.
+I'm having trouble restoring your tour. I've alerted the {team}.
 ```
 
 ### restore-trouble-restart
 
 ```
-I'm having trouble restoring your tour. I've alerted the property team. Text HI to start a new tour.
+I'm having trouble restoring your tour. I've alerted the {team}. Text HI to start a new tour.
 ```
 
 ### portfolio-picker
@@ -1099,20 +1183,20 @@ Your tour of {place} is now closed. If you're still inside or need a hand, reply
 ### after-close-phone
 
 ```
-Thanks, I've let the property team know. If you're still inside or need a hand right away, call {phone}.
+Thanks, I've let the {team} know. If you're still inside or need a hand right away, call {phone}.
 ```
 
 ### after-close
 
 ```
-Thanks, I've let the property team know, and someone will reach out soon.
+Thanks, I've let the {team} know, and someone will reach out soon.
 ```
 
 ### tour-finished
 
 ```
 Thanks for touring {place}{name?}!{recap?} The doors are locked again behind you.
-Would you like someone from the property team to follow up?
+Would you like someone from the {team} to follow up?
 ```
 
 ## Channel prompts
@@ -1150,7 +1234,7 @@ Explicit id only. Not matched automatically.
 ### prompt-form-pending
 
 ```
-The property team will send you the form link shortly.
+The {team} will send you the form link shortly.
 ```
 
 ### prompt-web-choose

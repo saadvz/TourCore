@@ -161,7 +161,12 @@ describe("visitor template registry", () => {
   it("round-trips every fixed template and refuses an unlisted visitor text", () => {
     for (const template of listVisitorTemplates()) {
       if (template.explicitOnly || template.suffix) continue;
-      const slots = Object.fromEntries([...template.text.matchAll(/\{([A-Za-z][A-Za-z0-9]*)\??\}/g)].map((match) => [match[1]!, `«${match[1]}»`]));
+      const slots = Object.fromEntries(
+        [...template.text.matchAll(/\{([A-Za-z][A-Za-z0-9]*)\??\}/g)].map((match) => [
+          match[1]!,
+          match[1] === "rest" ? "Text me anytime to book another." : `«${match[1]}»`,
+        ]),
+      );
       const rendered = renderSms(template.id, slots);
       expect(rendered.body).not.toMatch(RAW_SLOT);
       expect(matchVisitorTemplate(rendered.body), template.id).toBe(template.id);
@@ -375,7 +380,9 @@ describe("dead-end visitor lines", () => {
     }, bundle);
     const issues = await listExceptions({ workspace: ws, now: () => ctx.clock.now() });
     const missed = issues.filter((issue) => issue.kind === "message-failed");
-    expect(missed.map((issue) => ({ title: issue.title, summary: issue.summary }))).toEqual([{ title: notice, summary: notice }]);
+    expect(missed.map((issue) => ({ title: issue.title, summary: issue.summary }))).toEqual([
+      { title: "A text to you didn't go out", summary: notice },
+    ]);
     expect(JSON.stringify(missed)).not.toMatch(/Sendblue|SENDBLUE|rejected/);
   });
 
@@ -569,6 +576,10 @@ describe("setup step guidance", () => {
         { unit: "Unit B", doors: ["Front Door", "Unit B Door"] },
       ],
     });
+    await h.ok("set_unit_details", {
+      property: id,
+      details: "Unit A is 2 bed 1 bath for $2,200, available now. Unit B is 1 bed 1 bath for $1,950, available now.",
+    });
     const saved = await h.ok("save_hours", { property: id, days: "every day", start: "4 AM", end: "11 PM" });
     expect(saved.message).toContain("Tours run every day, 4 AM to 11 PM.");
     // An out-of-range reuse day is not a unit issue, so the hours step stays next. The sentence still describes the hours that were saved.
@@ -577,6 +588,49 @@ describe("setup step guidance", () => {
     expect(state.nextStep.tool).toBe("save_hours");
     expect(state.nextStep.say).toBe("Tours run every day, 4 AM to 11 PM. Want to change that?");
     expect(state.nextStep.say).not.toContain("Weekdays from 9:00 AM to 5:00 PM are already saved.");
+  });
+
+  it("offers the saved hours after routes instead of skipping to checks", async () => {
+    const h = hostedInstall();
+    await h.ok("choose_messaging_provider", { provider: "local" });
+    await h.ok("test_visitor_messaging");
+    await h.ok("use_local_demo_storage");
+    const created = await h.ok("create_property_setup", { address: "20 Oak Avenue, Teaneck, NJ 07666", propertyType: "MULTIFAMILY_HOME" });
+    const id = created.setup.propertyId as string;
+    await h.ok("save_property", { property: id, confirmAddress: true, skipVisitorHelp: true });
+    await h.ok("save_units", { property: id, units: [{ name: "Unit A" }] });
+    await h.ok("save_doors_and_routes", {
+      property: id,
+      doors: [{ name: "Front Door", kind: "entrance" }],
+      routes: [{ unit: "Unit A", doors: ["Front Door", "Unit A Door"] }],
+    });
+    const profile = await h.ok("get_state", { propertyId: id });
+    expect(profile.nextStep.tool).toBe("set_unit_details");
+    expect(profile.nextStep.say).toBe("How many bedrooms does Unit A have?");
+    await h.ok("set_unit_details", { property: id, details: "Unit A is 1 bed 1 bath for $1,800, available now." });
+    const hours = await h.ok("get_state", { propertyId: id });
+    expect(hours.nextStep.tool).toBe("save_hours");
+    expect(hours.nextStep.say).toBe("Tours run Monday to Friday, 9 AM to 5 PM. Want to change that?");
+    expect(hours.currentMilestone).toBe("hours");
+    await h.ok("save_hours", { property: id, days: "weekdays", start: "9am", end: "5pm" });
+    const afterHours = await h.ok("get_state", { propertyId: id });
+    expect(afterHours.currentMilestone).not.toBe("hours");
+    expect(afterHours.nextStep.tool).not.toBe("save_hours");
+  });
+
+  it("refuses a 5 minute tour length and 5 minute spacing without saving", async () => {
+    const h = harness();
+    const created = await h.ok("create_property_setup", { address: "22 Oak Avenue, Teaneck, NJ 07666", propertyType: "SINGLE_FAMILY" });
+    const id = created.setup.propertyId as string;
+    const before = { ...h.workspace.openDraft(id).draft.tourHours };
+    const length = await h.ok("save_hours", { property: id, tourLength: "5 minutes" });
+    expect(length.status).toBe("blocked");
+    expect(length.message).toBe("Each tour should last between 15 minutes and 4 hours. How long should each tour be?");
+    expect(h.workspace.openDraft(id).draft.tourHours).toMatchObject(before);
+    const spacing = await h.ok("set_tour_hours", { property: id, newTourEvery: "5 minutes" });
+    expect(spacing.status).toBe("blocked");
+    expect(spacing.summary).toBe("New tours should start between 15 minutes and 8 hours apart. How often should a new tour start?");
+    expect(h.workspace.openDraft(id).draft.tourHours).toMatchObject(before);
   });
 
   it("refuses tour spacing at save_hours and saves nothing", async () => {

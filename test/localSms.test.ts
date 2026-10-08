@@ -165,6 +165,7 @@ describe("inject_local_sms and read_local_outbox", () => {
 
     const outbox = await app.grok("read_local_outbox", { from: VISITOR, property: app.id });
     expect(outbox.bubbles.length).toBeGreaterThan(yes.bubbles.length);
+    expect(outbox.bubbles.every((b: { templateId?: string }) => typeof b.templateId === "string" && b.templateId.length > 0)).toBe(true);
     expect(outbox.bubbles.map((b: { body: string }) => b.body).join("\0")).not.toEqual(outbox.bubbles.map((b: { body: string }) => b.body).join(""));
     expect(outbox.bubbles.some((b: { body: string }) => b.body.includes("Which unit"))).toBe(true);
 

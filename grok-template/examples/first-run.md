@@ -272,7 +272,7 @@ calls `get_operator_update`.]
 **Tour Core:** Testy's Unit 1A tour has started.
 
 [Inside, Testy texts "Is there a pool?". Tour Core replies "I'll pass your
-question to the property team, and they'll reply here as soon as they can." and sends `exception.created`. The
+question to the {team}, and they'll reply here as soon as they can." and sends `exception.created`. The
 routine calls `get_operator_update`.]
 
 **Tour Core:** Testy, touring Unit 1A, asked whether the property has a pool.

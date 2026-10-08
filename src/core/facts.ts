@@ -1,5 +1,6 @@
 import type { TourCoreConfig } from "../config/tourCoreConfig";
 import { profileFacts, type ProfileField } from "../config/unitProfile";
+import { visitorTeamName } from "../sms/templates";
 import { visitorSubject } from "../visitor/identity";
 
 /** A statement the operator wrote and approved. Tour guidance may only repeat these. */
@@ -86,7 +87,7 @@ export function approvedFacts(config: TourCoreConfig, unitId?: string): Approved
 }
 
 /** How an approved answer reads to the visitor: generated unit details are complete sentences on their own. */
-export function approvedAnswerText(facts: ApprovedFact[]): string {
+export function approvedAnswerText(facts: ApprovedFact[], team?: string): string {
   const text = facts.map((f) => f.text).join(" ");
-  return facts.every((f) => f.profileField) ? text : `Here's what the property team shared: ${text}`;
+  return facts.every((f) => f.profileField) ? text : `Here's what the ${visitorTeamName(team)} shared: ${text}`;
 }

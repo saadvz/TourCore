@@ -11,7 +11,7 @@ export type ReplyPrompt =
   | { kind: "say"; phrase: string; purpose: string }
   | { kind: "form"; link?: string };
 
-export function withPrompt(body: string, prompt: ReplyPrompt | undefined, channel: MessageChannel): string {
+export function withPrompt(body: string, prompt: ReplyPrompt | undefined, channel: MessageChannel, team = "property team"): string {
   if (!prompt) return body;
   if (channel === "WEB") {
     switch (prompt.kind) {
@@ -31,7 +31,7 @@ export function withPrompt(body: string, prompt: ReplyPrompt | undefined, channe
     case "say":
       return `${body}\nText "${prompt.phrase}" ${prompt.purpose}.`;
     case "form":
-      return prompt.link ? `${body}\n${prompt.link}` : `${body}\nThe property team will send you the form link shortly.`;
+      return prompt.link ? `${body}\n${prompt.link}` : `${body}\nThe ${team} will send you the form link shortly.`;
   }
 }
 

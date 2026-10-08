@@ -111,7 +111,7 @@ function lastAsked(step: ConversationStep, awaiting?: StepAwaiting, timezone?: s
     case "ready":
       return "Text me when you arrive at the property.";
     case "touring":
-      return "Text me when you reach your next stop, ask any questions, or tell me when you're done.";
+      return "Text me when you reach your next stop, ask any questions, or text DONE when you're finished.";
     case "follow-up":
       return "Would you like someone from the property team to follow up?";
     default:

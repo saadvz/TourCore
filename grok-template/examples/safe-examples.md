@@ -157,7 +157,7 @@ say yes if they asked for this tour. Dana gets a text to confirm. Book it?
 
 **Tour Core:** I texted Dana to confirm. The regular tour times are unchanged.
 
-Dana gets: "Hi, this is the property team at 100 Alfred Way. We set up a tour
+Dana gets: "Hi, this is the {team} at 100 Alfred Way. We set up a tour
 for you on Monday at 3:15 PM. Reply YES to confirm, NO to cancel, or STOP to
 opt out."
 
@@ -167,7 +167,7 @@ opt out."
 - A leftover menu number such as "1" → only "Reply YES to confirm, NO to
   cancel, or STOP to opt out." No team issue.
 - A real question such as "Who is this?" → flagged for the team; Dana gets
-  "I'll check with the property team and get back to you." The hold stays
+  "I'll check with the {team} and get back to you." The hold stays
   pending.
 - No reply in time → the time is released. Dana gets one text: "I didn't hear
   back, so I released your Monday at 3:15 PM tour. Text me anytime to book

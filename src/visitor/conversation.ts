@@ -509,7 +509,7 @@ export async function handleVisitorText(
         meta,
         unitId: unit.id,
         alreadyRecorded: true,
-        unknownReply: unknownAnswerReply({ hasMedia: photo && resolved.kind === "unknown", ended: endedPick }),
+        unknownReply: unknownAnswerReply({ hasMedia: photo && resolved.kind === "unknown", ended: endedPick, team: session.config.operator.name }),
         ...(endedPick ? { answerSuffix: TOUR_AGAIN_SUFFIX } : {}),
       });
       if (out.outcome !== "which-unit" && !endedPick) await resumeStep(session, stage, pending.resume);
@@ -660,7 +660,7 @@ function unitFromReply(session: VisitorDemoSession, text: string, offered: strin
 }
 
 function unknownReplyFor(turn: Turn, ended = false): string {
-  return unknownAnswerReply({ hasMedia: !!turn.said.meta?.hasMedia && !turn.photoLineSent, ended });
+  return unknownAnswerReply({ hasMedia: !!turn.said.meta?.hasMedia && !turn.photoLineSent, ended, team: turn.session.config.operator.name });
 }
 
 /** True when this turn will send a combined unknown-question text instead of the short photo line. */
@@ -721,7 +721,7 @@ async function flagSilentOptedOutQuestion(
   const r = await session.reservation();
   const resolved = resolveQuestion(session.config, interpretation.intent.question, { selectedUnitId: r?.unitId });
   if (resolved.kind === "unknown") {
-    await session.flagUnknownQuestion(said, { reply: unknownAnswerReply({ hasMedia: photo, ended }) });
+    await session.flagUnknownQuestion(said, { reply: unknownAnswerReply({ hasMedia: photo, ended, team: session.config.operator.name }) });
     return;
   }
   await session.recordText(said);
@@ -830,7 +830,7 @@ async function fileCustomTime(turn: Turn, spoken: SpokenTime, alreadyRecorded = 
   if (!reservation) {
     session.holdTime(spoken);
     const menu: ReplyPrompt = { kind: "choose", options: session.offerableUnits().map((unit) => unit.name), what: "a unit" };
-    const body = `${resolved.label} isn't one of the regular tour times. Which unit should I ask the property team about?`;
+    const body = `${resolved.label} isn't one of the regular tour times. Which unit should I ask the ${visitorTeamName(session.config.operator.name)} about?`;
     if (alreadyRecorded) {
       turn.markClarification();
       await session.reply(body, menu);
@@ -856,7 +856,7 @@ async function confirmMentionedTime(turn: Turn, spoken: SpokenTime): Promise<voi
     meridiem: meridiemOf(session, resolved.start),
     ...(spoken.day ? { day: spoken.day } : {}),
   });
-  await session.reply(`If you'd like ${resolved.label}, reply YES and I'll ask the property team.`, { kind: "yes-no" });
+  await session.reply(`If you'd like ${resolved.label}, reply YES and I'll ask the ${visitorTeamName(session.config.operator.name)}.`, { kind: "yes-no" });
 }
 
 async function openWithCustomTime(turn: Turn): Promise<void> {
@@ -929,13 +929,15 @@ function stepPrompt(session: VisitorDemoSession, stage: VisitorStage, awaiting?:
     case "identity":
       return { body: "Your identity form is in my earlier message. Once it's filled out, I'll confirm your tour." };
     case "follow-up":
-      return { body: FOLLOW_UP_QUESTION, prompt: yesNo };
+      return { body: followUpQuestion(session), prompt: yesNo };
     default:
       return undefined;
   }
 }
 
-const FOLLOW_UP_QUESTION = "Would you like someone from the property team to follow up?";
+function followUpQuestion(session: VisitorDemoSession): string {
+  return `Would you like someone from the ${visitorTeamName(session.config.operator.name)} to follow up?`;
+}
 
 /** Pause-cancel team label, only on hold or a door-system problem. */
 function runningCancelTeam(session: VisitorDemoSession, status?: string): string | undefined {
@@ -1534,7 +1536,7 @@ async function byStage(turn: Turn): Promise<void> {
       return onTour(turn);
 
     case "follow-up": {
-      const question = FOLLOW_UP_QUESTION;
+      const question = followUpQuestion(session);
       if (intent.type === "FOLLOW_UP_YES" || intent.type === "FOLLOW_UP_NO") {
         if (turn.confident) return turn.act("followUp", { wantsContact: intent.type === "FOLLOW_UP_YES" });
         return turn.clarify(`Just to check: ${question.charAt(0).toLowerCase()}${question.slice(1)}`, yesNo);
@@ -1819,7 +1821,7 @@ async function onTour(turn: Turn): Promise<void> {
   const remaining = await session.remainingStops();
   const next = remaining[0];
   const yesNo: ReplyPrompt = { kind: "yes-no" };
-  const nextHint = next ? ` Text me when you're at ${session.stopLabel(next)}.` : ' Text "finish" when you\'re done.';
+  const nextHint = next ? ` Text me when you're at ${session.stopLabel(next)}.` : " Text DONE when you're finished.";
 
   switch (intent.type) {
     case "FINISH_TOUR":
@@ -1842,7 +1844,7 @@ async function onTour(turn: Turn): Promise<void> {
           const time = formatVisitorClock(new Date(reservation!.windowEnd!), session.config.property.timezone);
           return turn.respond(`Your tour time ended at ${time}, so the doors are locked now. Want to come back another time? Just reply with a day that works.`);
         }
-        return turn.clarify("Every door on your tour is already open for you. Text HELP if one isn't working.", { kind: "say", phrase: "finish", purpose: "when you're done" });
+        return turn.clarify("Every door on your tour is already open for you. Text HELP if one isn't working.", { kind: "say", phrase: "DONE", purpose: "when you're finished" });
       }
       if ("unknownName" in target) return turn.fallback(`${SORRY}${nextHint}`);
       if (turn.confident) return turn.act("atStop", { doorId: target.doorId });
@@ -1855,7 +1857,7 @@ async function onTour(turn: Turn): Promise<void> {
     default:
       if (session.slotMenuLive && (await tryShownSlotPick(turn, (slotStart) => session.confirmRebook(slotStart)))) return;
       return turn.fallback(
-        `${SORRY} You can ask me a question${next ? `, text "at ${session.stopLabel(next)}" when you get there,` : ","} or text "finish" when you're done.`,
+        `${SORRY} You can ask me a question${next ? `, text "at ${session.stopLabel(next)}" when you get there,` : ","} or text DONE when you're finished.`,
         undefined,
         nextHint,
       );

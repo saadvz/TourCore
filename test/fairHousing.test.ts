@@ -150,6 +150,10 @@ describe("fair-housing detection", () => {
     "is the building quiet?",
     "are the walls white? lots of light?",
     "lots of color in the kitchen?",
+    "any Asian restaurants nearby?",
+    "white picket fence in the neighborhood?",
+    "what color are the doors in the building?",
+    "Black Friday sale nearby?",
   ])("does not match %s", (text) => {
     expect(isFairHousingQuestion(text)).toBe(false);
   });

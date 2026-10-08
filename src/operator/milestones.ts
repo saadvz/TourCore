@@ -13,7 +13,7 @@ import { LOCAL_TEST_TEXTING, SetupInputError, createPropertySetup, localTestMode
 import { applySetupCommand } from "../setup/commands";
 import { canonicalDoor, canonicalUnitName } from "../setup/normalizeDraft";
 import { formatClockTime, type Weekday } from "../core/timezone";
-import { reuseDaysRefusal, tourSpacingRefusal } from "../config/validateConfig";
+import { hoursRangeRefusal, reuseDaysRefusal, tourSpacingRefusal } from "../config/validateConfig";
 import { savedFullAddress } from "../setup/address";
 import { parseDays, parseMinutes, parseTimeOfDay, SAME_DAY_HOURS, tourHoursEndSameDay } from "../setup/parse";
 import { NO_FORM_QUESTION } from "../setup/verification";
@@ -387,6 +387,11 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       const start = typeof parsed.start === "string" ? parsed.start : draft.tourHours.start;
       const end = typeof parsed.end === "string" ? parsed.end : draft.tourHours.end;
       if (!tourHoursEndSameDay(start, end)) return envelope(ctx, id, "blocked", SAME_DAY_HOURS, { propertyId: id });
+      const range = hoursRangeRefusal({
+        tourLengthMinutes: typeof parsed.tourLengthMinutes === "number" ? parsed.tourLengthMinutes : undefined,
+        slotEveryMinutes: typeof parsed.slotEveryMinutes === "number" ? parsed.slotEveryMinutes : undefined,
+      });
+      if (range) return envelope(ctx, id, "blocked", range, { propertyId: id });
       const spacing = tourSpacingRefusal({
         ...draft.tourHours,
         ...(typeof parsed.slotEveryMinutes === "number" ? { slotEveryMinutes: parsed.slotEveryMinutes } : {}),
@@ -396,6 +401,7 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       if (spacing) return envelope(ctx, id, "blocked", spacing, { propertyId: id });
       const next = applySetupCommand(draft, "setTourHours", parsed);
       ctx.services.workspace.persistEdit(next, ctx.now());
+      ctx.services.workspace.noteTourHoursConfirmed(id, ctx.now().toISOString());
       const hours = ctx.services.workspace.openDraft(id).draft.tourHours;
       return envelope(ctx, id, "done", `Tours run ${describeTourDays(hours.days)}, ${spokenClock(hours.start)} to ${spokenClock(hours.end)}.`, { propertyId: id });
     },

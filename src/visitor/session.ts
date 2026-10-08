@@ -795,15 +795,15 @@ export class VisitorDemoSession {
     const newDay = formatDay(start, tz);
     const target = requestReservationId === held?.id ? held : reservation;
     if (!created) {
-      await this.reply(alreadyAskedLine(label, newDay));
+      await this.reply(alreadyAskedLine(label, newDay, this.config.operator.name));
     } else if (target.slotStart && (running || target.id === reservation.id)) {
       const currentStart = new Date(target.slotStart);
-      await this.reply(customTimeAskedLine(label, newDay, formatTime(currentStart, tz), formatDay(currentStart, tz)));
+      await this.reply(customTimeAskedLine(label, newDay, formatTime(currentStart, tz), formatDay(currentStart, tz), this.config.operator.name));
     } else if (running || !reservation.slotStart) {
-      await this.reply(`${label} isn't one of the regular tour times, but I can ask the property team. I'll let you know once they respond.`);
+      await this.reply(`${label} isn't one of the regular tour times, but I can ask the ${visitorTeamName(this.config.operator.name)}. I'll let you know once they respond.`);
     } else {
       const currentStart = new Date(reservation.slotStart);
-      await this.reply(customTimeAskedLine(label, newDay, formatTime(currentStart, tz), formatDay(currentStart, tz)));
+      await this.reply(customTimeAskedLine(label, newDay, formatTime(currentStart, tz), formatDay(currentStart, tz), this.config.operator.name));
     }
     return { created, request };
   }
@@ -1351,7 +1351,7 @@ export class VisitorDemoSession {
     const start = new Date(request.requestedStartsAt);
     const tz = this.config.property.timezone;
     const offerRegularTimes = !(await this.hasLiveRegularTour());
-    await this.reply(pendingCustomTimeLine(formatTime(start, tz), formatDay(start, tz), { offerRegularTimes }));
+    await this.reply(pendingCustomTimeLine(formatTime(start, tz), formatDay(start, tz), { offerRegularTimes, team: this.config.operator.name }));
     await this.core.markPendingCustomTimeNotice(request.id);
     this.clearShownMenus();
     return true;
@@ -1503,7 +1503,7 @@ export class VisitorDemoSession {
   async welcome(): Promise<void> {
     if (await this.refuseIfPaused()) return;
     const open = this.offerableUnits();
-    const only = open.length === 1 && (this.config.property.propertyType === "SINGLE_FAMILY" || this.config.property.propertyType === "APARTMENT_OR_CONDO") ? open[0] : undefined;
+    const only = this.config.units.length === 1 ? open.find((unit) => unit.id === this.config.units[0]!.id) : undefined;
     if (only && !this.reservationId) await this.inquire(only.id, { announce: false });
     const { body, prompt } = entryReply(this.config, this.offeredDates, open);
     await this.reply(body, prompt);

@@ -52,20 +52,20 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "tour-window-ended", text: "Your tour time ended at {time}, so the doors are locked now. Want to come back another time? Just reply with a day that works.", note: "{time} drops :00, for example 3 PM or 3:30 PM. No door opens." },
   { id: "all-doors-open", text: "Every door on your tour is already open for you. Text HELP if one isn't working." },
 
-  { id: "unknown-answer", text: "I'll pass your question to the property team, and they'll reply here as soon as they can." },
-  { id: "unknown-answer-photo", text: "I can't open photos yet. I'll pass your question to the property team, and they'll reply here as soon as they can." },
-  { id: "unknown-answer-ended", text: "I'll pass your question to the property team, and they'll reply here as soon as they can. If you'd like to tour again, just text HI." },
-  { id: "unknown-answer-ended-photo", text: "I can't open photos yet. I'll pass your question to the property team, and they'll reply here as soon as they can. If you'd like to tour again, just text HI." },
+  { id: "unknown-answer", text: "I'll pass your question to the {team}, and they'll reply here as soon as they can." },
+  { id: "unknown-answer-photo", text: "I can't open photos yet. I'll pass your question to the {team}, and they'll reply here as soon as they can." },
+  { id: "unknown-answer-ended", text: "I'll pass your question to the {team}, and they'll reply here as soon as they can. If you'd like to tour again, just text HI." },
+  { id: "unknown-answer-ended-photo", text: "I can't open photos yet. I'll pass your question to the {team}, and they'll reply here as soon as they can. If you'd like to tour again, just text HI." },
   { id: "tour-ended-reply", text: "This tour has ended. Text HI any time to start a new one." },
   { id: "storage-unavailable", text: "I can't check that right now. Please try again in a little while." },
-  { id: "shared-fact", text: "Here's what the property team shared: {fact}" },
+  { id: "shared-fact", text: "Here's what the {team} shared: {fact}" },
   { id: "approved-profile-fact", text: "{answer}", explicitOnly: true, note: "A profile fact the landlord already saved. Not a draft." },
   { id: "approved-answer", text: "{answer}", explicitOnly: true, note: "Landlord reply from answer_flagged_question only. No-draft items never use this." },
   { id: "approved-answer-closing", text: "{answer} Let me know if you have any other questions.", explicitOnly: true, note: "Approved fact plus the closing line, from answer_flagged_question only." },
 
   { id: "cancel-done", text: "You're cancelled. Text me anytime if you want to book again." },
   { id: "nothing-booked-cancel", text: "No problem, nothing's booked yet, so I'll stop here. Text me anytime if you want to pick a time." },
-  { id: "cancel-failed", text: "I can't cancel it from here. I've asked the property team to call it off and get back to you." },
+  { id: "cancel-failed", text: "I can't cancel it from here. I've asked the {team} to call it off and get back to you." },
   { id: "cancel-confirm", text: "Cancel your {time} tour on {day}? Reply YES or NO." },
   { id: "cancel-kept", text: "Okay, your {time} tour on {day} stays booked." },
   { id: "later-cancel-confirm", text: "Cancel your later tour at {time} on {day}? Your tour right now isn't affected. Reply YES or NO." },
@@ -100,21 +100,21 @@ const TEMPLATES: VisitorTemplate[] = [
 
   { id: "booked-for", text: "Great, you're booked for {time} on {day}." },
   { id: "replaces-tour", text: "That replaces your {time} tour on {day}." },
-  { id: "custom-time-asked", text: "I've asked the property team about {newTime} on {newDay} instead. Your {time} tour on {day} stays booked unless they approve the change." },
-  { id: "decline-request", text: "The property team couldn't approve {newTime} on {newDay}. {rest}" },
-  { id: "decline-still-confirmed", text: "The property team couldn't approve {newTime} on {newDay}. Your {time} tour on {day} is still confirmed." },
-  { id: "decline-still-booked", text: "The property team couldn't approve {newTime} on {newDay}. You're still booked for {time} on {day}." },
-  { id: "decline-no-booking", text: "The property team couldn't approve {newTime} on {newDay}. If you'd like another time, just reply with a day." },
-  { id: "request-expired", text: "The property team couldn't get to your request for {newTime} on {newDay} in time. {rest}" },
-  { id: "propose-one-off", text: "The property team can do {time} on {day} as a one-off. {rest}" },
-  { id: "propose-instead", text: "The property team can't do {requestedTime} on {requestedDay}, but {proposedTime} on {proposedDay} works. {rest}" },
+  { id: "custom-time-asked", text: "I've asked the {team} about {newTime} on {newDay} instead. Your {time} tour on {day} stays booked unless they approve the change." },
+  { id: "decline-request", text: "The {team} couldn't approve {newTime} on {newDay}. {rest}" },
+  { id: "decline-still-confirmed", text: "The {team} couldn't approve {newTime} on {newDay}. Your {time} tour on {day} is still confirmed." },
+  { id: "decline-still-booked", text: "The {team} couldn't approve {newTime} on {newDay}. You're still booked for {time} on {day}." },
+  { id: "decline-no-booking", text: "The {team} couldn't approve {newTime} on {newDay}. If you'd like another time, just reply with a day." },
+  { id: "request-expired", text: "The {team} couldn't get to your request for {newTime} on {newDay} in time. {rest}" },
+  { id: "propose-one-off", text: "The {team} can do {time} on {day} as a one-off. {rest}" },
+  { id: "propose-instead", text: "The {team} can't do {requestedTime} on {requestedDay}, but {proposedTime} on {proposedDay} works. {rest}" },
   { id: "decline-proposed-confirmed", text: "No problem. Your {time} tour on {day} is still confirmed." },
   { id: "decline-proposed-booked", text: "No problem. You're still booked for {time} on {day}." },
   { id: "decline-proposed-none", text: "No problem. If you'd like another time, just reply with a day." },
-  { id: "pending-custom", text: "Your request for {time} on {day} is still with the property team. I'll text you as soon as they respond.{rest?}" },
+  { id: "pending-custom", text: "Your request for {time} on {day} is still with the {team}. I'll text you as soon as they respond.{rest?}" },
   { id: "taken-slot", text: "Sorry, {time} on {day} is already taken.{rest?}" },
   { id: "taken-other-day", text: "If you'd like another time, just reply with a day." },
-  { id: "already-asked", text: "I've already asked the property team about {time} on {day}." },
+  { id: "already-asked", text: "I've already asked the {team} about {time} on {day}." },
   { id: "time-passed", text: "That time has already passed. What later time works for you?" },
   { id: "time-passed-today", text: "That time today has already passed. Did you mean tomorrow?" },
   { id: "time-invalid", text: "That time doesn't work. What time would you like?" },
@@ -140,7 +140,7 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "sorry", text: "Sorry, I didn't catch that." },
   { id: "sorry-rest", text: "Sorry, I didn't catch that. {rest}" },
   { id: "sorry-ready", text: "Sorry, I didn't catch that. You can ask me a question about the property." },
-  { id: "sorry-touring", text: "Sorry, I didn't catch that. You can ask me a question{hint?}, or text \"finish\" when you're done." },
+  { id: "sorry-touring", text: "Sorry, I didn't catch that. You can ask me a question{hint?}, or text DONE when you're finished." },
   { id: "which-unit", text: "Which unit do you mean: {units}?" },
   { id: "which-unit-plain", text: "Which unit would you like to see?" },
   { id: "unit-two", text: "Sure — did you mean {a} or {b}?" },
@@ -151,7 +151,7 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "choose-stop", text: "Which door are you at: {stops}?" },
   { id: "confirm-finish", text: "Are you finished with your tour?" },
   { id: "identity-waiting", text: "Your identity form is in my earlier message. Once it's filled out, I'll confirm your tour." },
-  { id: "follow-up-question", text: "Would you like someone from the property team to follow up?" },
+  { id: "follow-up-question", text: "Would you like someone from the {team} to follow up?" },
   { id: "follow-up-clarify", text: "Just to check: {question}" },
   { id: "tour-not-started", text: "Your tour hasn't started yet." },
   { id: "start-at-first", text: "Let's start at {stop}. Are you there now?" },
@@ -160,9 +160,9 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "which-time-sure", text: "Sure — which time works for you?" },
   { id: "which-time-rule", text: "{lead} Which time works for you?" },
   { id: "manipulation", text: "I can only help with your own tour. Doors open only for the stops on it, during your tour time.{hint?}" },
-  { id: "custom-time-which-unit", text: "{time} isn't one of the regular tour times. Which unit should I ask the property team about?" },
-  { id: "custom-time-yes", text: "If you'd like {time}, reply YES and I'll ask the property team." },
-  { id: "custom-time-ask", text: "{time} isn't one of the regular tour times, but I can ask the property team. I'll let you know once they respond." },
+  { id: "custom-time-which-unit", text: "{time} isn't one of the regular tour times. Which unit should I ask the {team} about?" },
+  { id: "custom-time-yes", text: "If you'd like {time}, reply YES and I'll ask the {team}." },
+  { id: "custom-time-ask", text: "{time} isn't one of the regular tour times, but I can ask the {team}. I'll let you know once they respond." },
   { id: "awaiting-team", text: "I'll check with the {team} and get back to you." },
   { id: "clarify-which-time", text: "Which time did you mean?" },
   { id: "clarify-what-time", text: "What time would you like?" },
@@ -186,6 +186,20 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "day-passed", text: "That day has already passed. {rest}" },
   { id: "next-opening-follow", text: "Reply yes for {time} on {day}, or pick a day." },
   { id: "slot-grabbed", text: "Someone just grabbed that time. {rest}" },
+  { id: "still-confirmed", text: "Your {time} tour on {day} is still confirmed." },
+  { id: "still-booked", text: "You're still booked for {time} on {day}." },
+  { id: "switch-keep", text: "Reply YES to switch, or NO to keep your {time} tour on {day}." },
+  { id: "switch-keep-looking", text: "Reply YES to switch, or NO to keep looking." },
+  { id: "which-day", text: "Which day works for you?" },
+  { id: "next-opening-want", text: "The next {noun} is {when}. Want that, or another day?" },
+  { id: "next-opening-menu", text: "The next {noun} is {when}. Reply yes to take it, or pick a day:" },
+  { id: "heres-whats-left", text: "Here's what's left:" },
+  { id: "tours-back-soon", text: "They'll text you when tours are back." },
+  { id: "text-anytime-another", text: "Text me anytime to book another." },
+  { id: "questions-call", text: "Questions? Call {phone}." },
+  { id: "pending-regular", text: "If you'd rather pick one of the regular times instead, just reply with a day." },
+  { id: "at-stop-hint", text: "Text me when you're at {stop}." },
+  { id: "done-hint", text: "Text DONE when you're finished." },
 
   { id: "operator-scheduled", text: "Hi, this is the {team} at {address}. We set up a tour for you at {time} on {day}. Reply YES to confirm, NO to cancel, or STOP to opt out." },
   { id: "operator-schedule-nudge", text: "Reply YES to confirm, NO to cancel, or STOP to opt out." },
@@ -205,12 +219,12 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "sms-stop", text: "{brand}: You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help." },
   { id: "sms-help", text: "{brand}: {help} Message and data rates may apply. Reply STOP to opt out." },
 
-  { id: "property-not-ready", text: "Thanks for reaching out to {name}. Self-guided tours by text aren't available right now. Please contact the property team." },
+  { id: "property-not-ready", text: "Thanks for reaching out to {name}. Self-guided tours by text aren't available right now. Please contact the {team}." },
   { id: "storage-save-failed", text: "I couldn't save that, so nothing was booked or changed. Please try again in a little while." },
-  { id: "handler-snag-alerted", text: "Sorry, I hit a snag with that. I've let the property team know, and they'll reply here as soon as they can." },
+  { id: "handler-snag-alerted", text: "Sorry, I hit a snag with that. I've let the {team} know, and they'll reply here as soon as they can." },
   { id: "handler-snag-retry", text: "Sorry, I hit a snag with that. Could you text me again in a few minutes?" },
-  { id: "restore-trouble", text: "I'm having trouble restoring your tour. I've alerted the property team." },
-  { id: "restore-trouble-restart", text: "I'm having trouble restoring your tour. I've alerted the property team. Text HI to start a new tour." },
+  { id: "restore-trouble", text: "I'm having trouble restoring your tour. I've alerted the {team}." },
+  { id: "restore-trouble-restart", text: "I'm having trouble restoring your tour. I've alerted the {team}. Text HI to start a new tour." },
   { id: "portfolio-picker", text: "Which place are you touring?\n{choices}" },
   { id: "portfolio-miss-1", text: "I didn't catch that. Reply 1 for which place." },
   { id: "portfolio-miss-2", text: "I didn't catch that. Reply 1 or 2 for which place." },
@@ -233,15 +247,15 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "plus5", text: "Just checking in. Have you left {place}? Text DONE once you're outside." },
   { id: "plus15-phone", text: "Your tour of {place} is now closed. If you're still inside or need a hand, call {phone}." },
   { id: "plus15", text: "Your tour of {place} is now closed. If you're still inside or need a hand, reply here and I'll get someone to help." },
-  { id: "after-close-phone", text: "Thanks, I've let the property team know. If you're still inside or need a hand right away, call {phone}." },
-  { id: "after-close", text: "Thanks, I've let the property team know, and someone will reach out soon." },
-  { id: "tour-finished", text: "Thanks for touring {place}{name?}!{recap?} The doors are locked again behind you.\nWould you like someone from the property team to follow up?" },
+  { id: "after-close-phone", text: "Thanks, I've let the {team} know. If you're still inside or need a hand right away, call {phone}." },
+  { id: "after-close", text: "Thanks, I've let the {team} know, and someone will reach out soon." },
+  { id: "tour-finished", text: "Thanks for touring {place}{name?}!{recap?} The doors are locked again behind you.\nWould you like someone from the {team} to follow up?" },
 
   { id: "prompt-yes-no", text: "Reply YES or NO.", suffix: true },
   { id: "prompt-say", text: "Text \"{phrase}\" {purpose}.", suffix: true },
   { id: "prompt-choose", text: "{menu}", suffix: true, explicitOnly: true },
   { id: "prompt-form-link", text: "{link}", suffix: true, explicitOnly: true },
-  { id: "prompt-form-pending", text: "The property team will send you the form link shortly.", suffix: true },
+  { id: "prompt-form-pending", text: "The {team} will send you the form link shortly.", suffix: true },
   { id: "prompt-web-choose", text: "Pick {what} below.", suffix: true },
   { id: "prompt-web-form", text: "The form is just below.", suffix: true },
 ];
@@ -295,12 +309,44 @@ export function renderSms(id: string, slots: Record<string, string | number | un
   return { templateId: id, body };
 }
 
-/** The registry id for this exact visitor body, before any channel prompt. */
-export function matchVisitorTemplate(body: string): string | undefined {
+function slotSpecs(text: string): Array<{ name: string; optional: boolean }> {
+  return [...text.matchAll(/\{([A-Za-z][A-Za-z0-9]*)(\?)?\}/g)].map((match) => ({
+    name: match[1]!,
+    optional: !!match[2],
+  }));
+}
+
+/**
+ * `{rest}` has to be another registered visitor template (its own `{rest}`
+ * included). An optional empty rest is fine. Anything else is not a match.
+ */
+function restsCovered(matcher: Compiled, found: RegExpExecArray, stack: readonly string[]): boolean {
+  const specs = slotSpecs(matcher.template.text);
+  for (let i = 0; i < specs.length; i++) {
+    if (specs[i]!.name !== "rest") continue;
+    const value = (found[i + 1] ?? "").trim();
+    if (!value) {
+      if (!specs[i]!.optional) return false;
+      continue;
+    }
+    if (stack.includes(value)) return false;
+    if (!matchCompiled(value, [...stack, value])) return false;
+  }
+  return true;
+}
+
+function matchCompiled(body: string, stack: readonly string[]): Compiled | undefined {
   for (const matcher of MATCHERS) {
-    if (matcher.re.test(body)) return matcher.template.id;
+    const found = matcher.re.exec(body);
+    if (!found) continue;
+    if (restsCovered(matcher, found, stack)) return matcher;
   }
   return undefined;
+}
+
+/** The registry id for this exact visitor body, before any channel prompt. */
+export function matchVisitorTemplate(body: string): string | undefined {
+  return matchCompiled(body, [])?.template.id;
 }
 
 /**
@@ -313,7 +359,9 @@ export function claimVisitorSms(body: string, explicitId?: string): string {
     if (!template) throw new UntemplatedVisitorSms(body);
     if (template.explicitOnly || template.suffix) return explicitId;
     if (matchVisitorTemplate(body) === explicitId || template.text === body) return explicitId;
-    if (compile(template).re.test(body)) return explicitId;
+    const compiled = compile(template);
+    const found = compiled.re.exec(body);
+    if (found && restsCovered(compiled, found, [])) return explicitId;
     throw new UntemplatedVisitorSms(body);
   }
   const id = matchVisitorTemplate(body);
