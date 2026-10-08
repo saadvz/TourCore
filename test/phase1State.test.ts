@@ -406,6 +406,22 @@ describe("playbook client is per session", () => {
     expect(call.session).toBe(init.session);
   });
 
+  it("a static token follows the latest initialize, so a later unnamed client is baseline", async () => {
+    const h = installHarness();
+    cleanups.push(h.cleanup);
+    const { port } = await listen(h.root);
+    const grokInit = await post(port, 1, "initialize", realisticInitialize("grok", { prompts: {}, resources: {} }).params);
+    expect(grokInit.status).toBe(200);
+    const named = await post(port, 2, "tools/call", { name: "get_state", arguments: {} });
+    expect(named.body.result.structuredContent?.playbook.id).toBe("grok");
+    const unnamed = await post(port, 3, "initialize", { protocolVersion: "2025-06-18", capabilities: {} });
+    expect(unnamed.status).toBe(200);
+    const after = await post(port, 4, "tools/call", { name: "get_state", arguments: {} });
+    expect(after.body.result.structuredContent?.playbook).toMatchObject({ id: "baseline", mode: "tools" });
+    const stillNamed = await post(port, 5, "tools/call", { name: "get_state", arguments: {} }, grokInit.session!);
+    expect(stillNamed.body.result.structuredContent?.playbook.id).toBe("grok");
+  });
+
   it("a static-token caller with a stale session id gets the baseline playbook", async () => {
     const h = installHarness();
     cleanups.push(h.cleanup);
