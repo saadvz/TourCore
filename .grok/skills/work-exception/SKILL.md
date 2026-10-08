@@ -24,7 +24,7 @@ Before a yes on a flagged answer, read `visitorWillReceive` in full.
 A save asks `Send this to {name} and save it for anyone who asks the same thing later? "{visitorWillReceive}"`.
 That quoted text is exactly what goes out, including any closing line.
 A handler-failed reply saves nothing, so it stays `Send this to {who}? "{reply}"`.
-A fair-housing flag has `proposeDraft` false. The refusal is
+A question about a service animal, assistance animal, support animal, emotional support animal, dog, or cat, ESA, pregnancy, a newborn, a baby on the way, adults only, immigrants, immigration status, a minimum age, age limits, or discrimination is fair housing even when a pets answer is saved. `Do you allow pets?` and `Is there a minimum lease?` are not. A fair-housing flag has `proposeDraft` false. The refusal is
 `This one touches on fair housing, so I won't draft an answer. Reply to them yourself, then mark it handled.`
 The visitor still gets the ordinary holding reply. A custom
 time uses `place` from `inspect_tour_time_request` when that read has one.

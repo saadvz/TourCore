@@ -929,7 +929,7 @@ describe("Grok legacy OAuth compatibility (TOURCORE_GROK_LEGACY_OAUTH_COMPAT)", 
       await app.restart();
       expect(await playbook(session!)).toMatchObject({ id: "grok", mode: "full" });
       const filled = JSON.parse(readFileSync(path, "utf8")) as { grants: Array<{ clientName?: string }> };
-      expect(filled.grants.map((grant) => grant.clientName)).toEqual(["Cursor"]);
+      expect(filled.grants.map((grant) => grant.clientName)).toEqual(["An MCP client"]);
     });
 
     it("stops honouring the legacy callback as soon as the flag is turned off", async () => {

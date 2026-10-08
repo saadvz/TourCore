@@ -67,9 +67,12 @@ First run ("Set up Tour Core"): use the Install Tour Core skill.
   the tour-update wake), even with no capabilities. `prompts` and `resources`
   do not pick it. Claude is full only with `elicitation`, `sampling`, or
   `roots`. ChatGPT and other names stay tools-only. The name never changes a
-  tool or a gate. Tour Core remembers the name per session or signed-in
-  caller. After a restart it uses the stored OAuth name. A baseline entry
-  cannot override a name that selects a playbook.
+  tool or a gate. Tour Core remembers the initialize per session or signed-in
+  caller. On a later call, that cached initialize wins when it selects a
+  playbook, capabilities included. The stored OAuth name is used only when
+  the cache is missing, nameless, or baseline. After a restart, with no new
+  initialize, that stored name still applies. A baseline entry cannot
+  override a name that selects a playbook.
 - Before a flagged answer is sent, read `visitorWillReceive` aloud and wait
   for a clear yes. A save asks `Send this to {name} and save it for anyone who asks the same thing later? "{visitorWillReceive}"`.
   The quoted text is that exact visitor text, closing line included. A

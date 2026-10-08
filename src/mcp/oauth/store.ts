@@ -94,9 +94,10 @@ export class OAuthGrantStore {
    * clientName, otherwise the name the client registered with, otherwise a
    * name read from the registration's software id or redirect URIs.
    * Placeholders ("An MCP client", "unnamed") count as missing. A name
-   * found that way is written onto the grant the next time this caller
-   * presents a token. Nothing here is a token or a secret. The name only
-   * picks playbook wording.
+   * recovered that way is used in memory for this request and is not written
+   * back. Other grant writes already rewrite the whole file with no shared
+   * lock, so a write from the request path could clobber one of them.
+   * Nothing here is a token or a secret. The name only picks playbook wording.
    */
   clientName(clientId: string): string | undefined {
     if (!clientId) return undefined;
@@ -110,21 +111,7 @@ export class OAuthGrantStore {
       if (name) return name;
     }
     const info = doc.clients[clientId]?.info;
-    const recovered = usableClientName(info?.client_name) ?? wordingFromRegistration(info);
-    if (recovered) this.backfillClientName(clientId, recovered);
-    return recovered;
-  }
-
-  /** Writes a recovered display name onto grants that never stored one. */
-  private backfillClientName(clientId: string, name: string): void {
-    const doc = this.read();
-    let changed = false;
-    for (const grant of doc.grants) {
-      if (grant.clientId !== clientId || usableClientName(grant.clientName)) continue;
-      grant.clientName = name;
-      changed = true;
-    }
-    if (changed) this.write(doc);
+    return usableClientName(info?.client_name) ?? wordingFromRegistration(info);
   }
 
   /** Registration is open (RFC 7591), so only the most recent clients are kept; ones with a live approval always stay. */

@@ -45,8 +45,7 @@ function named(client: ReportedClient | undefined): PlaybookId | undefined {
 
 /**
  * The first client whose name selects a playbook. A nameless or baseline
- * entry never hides a later known name (a stored OAuth name, or a name on
- * a later call).
+ * entry never hides a later known name.
  */
 export function preferPlaybookClient(...candidates: Array<ReportedClient | undefined>): ReportedClient | undefined {
   const namedClients = candidates.filter((client): client is ReportedClient => !!client?.name?.trim());

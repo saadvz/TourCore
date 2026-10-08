@@ -92,6 +92,10 @@ describe("playbook selection", () => {
     expect(selectPlaybook({ name: "Cursor" })).toMatchObject({ id: "grok", mode: "full" });
     expect(selectPlaybook(preferPlaybookClient({}, { name: "Cursor" }))).toMatchObject({ id: "grok", mode: "full" });
     expect(selectPlaybook(preferPlaybookClient({ name: "example-client" }, { name: "Cursor" }, { name: "example-client" }))).toMatchObject({ id: "grok", mode: "full" });
+    const claudeFull = { name: "claude-ai", capabilities: { roots: { listChanged: true }, elicitation: { form: {} } } };
+    expect(selectPlaybook(preferPlaybookClient(claudeFull, { name: "Claude" }))).toMatchObject({ id: "claude", mode: "full" });
+    expect(selectPlaybook(preferPlaybookClient(claudeFull, { name: "Cursor" }))).toMatchObject({ id: "claude", mode: "full" });
+    expect(selectPlaybook(preferPlaybookClient(undefined, { name: "Cursor" }))).toMatchObject({ id: "grok", mode: "full" });
     expect(preferPlaybookClient(undefined, undefined, {})).toBeUndefined();
     expect(selectPlaybook({ name: "mystery-client", capabilities: grokClientCaps })).toMatchObject({ id: "baseline", mode: "tools", version: "baseline@2026-10-07.tools" });
     expect(selectPlaybook(undefined)).toMatchObject({ id: "baseline", mode: "tools" });
@@ -313,7 +317,7 @@ describe("playbook client is per session", () => {
   };
   const postSignedIn = async (port: number, access: string, id: number, method: string, params: unknown, session?: string) => {
     const payload = Buffer.from(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
-    return new Promise<{ status: number; session: string | null; body: { error?: { code: number }; result?: { structuredContent?: { playbook: { id: string } } } } }>((resolve, reject) => {
+    return new Promise<{ status: number; session: string | null; body: { error?: { code: number }; result?: { structuredContent?: { playbook: { id: string; mode: string } } } } }>((resolve, reject) => {
       const req = httpRequest(
         {
           host: "127.0.0.1",
@@ -336,7 +340,7 @@ describe("playbook client is per session", () => {
             resolve({
               status: res.statusCode ?? 0,
               session: res.headers["mcp-session-id"] ? String(res.headers["mcp-session-id"]) : null,
-              body: raw ? (JSON.parse(raw) as { error?: { code: number }; result?: { structuredContent?: { playbook: { id: string } } } }) : {},
+              body: raw ? (JSON.parse(raw) as { error?: { code: number }; result?: { structuredContent?: { playbook: { id: string; mode: string } } } }) : {},
             });
           });
         },
@@ -404,6 +408,74 @@ describe("playbook client is per session", () => {
     expect(call.body.error).toBeUndefined();
     expect(call.body.result?.structuredContent?.playbook.id).toBe("grok");
     expect(call.session).toBe(init.session);
+  });
+
+  const claudeCaps = { roots: { listChanged: true }, elicitation: { form: {} } };
+
+  it("claude-ai with roots and elicitation stays claude/full when the grant is stored as Claude", async () => {
+    const h = installHarness({ env: { PUBLIC_BASE_URL: "https://tour.example" } });
+    cleanups.push(h.cleanup);
+    const access = "tca_signed-in-claude-access-token";
+    const origin = new URL(h.inst.publicBaseUrl()!).origin;
+    const now = Date.now();
+    new OAuthGrantStore(h.runtime, () => now).addGrant({
+      clientId: "claude-client",
+      clientName: "Claude",
+      issuer: origin,
+      resource: `${origin}/mcp`,
+      scopes: [OPERATOR_SCOPE],
+      createdAt: now,
+      expiresAt: now + 30 * 86_400_000,
+      accessHash: hashSecret(access),
+      accessExpiresAt: now + 3_600_000,
+    });
+    const server = createSetupServer({ workspace: new PropertyWorkspace(h.root), installation: h.inst, mcpAuth: "oauth", authNow: () => now, log: () => {} });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    cleanups.push(() => server.close());
+    const port = (server.address() as { port: number }).port;
+    const init = await postSignedIn(port, access, 1, "initialize", realisticInitialize("claude-ai", claudeCaps).params);
+    expect(init.status).toBe(200);
+    expect(init.session).toBeTruthy();
+    const afterInit = await postSignedIn(port, access, 2, "tools/call", { name: "get_state", arguments: {} }, init.session!);
+    const next = await postSignedIn(port, access, 3, "tools/call", { name: "get_state", arguments: {} }, init.session!);
+    expect(afterInit.body.result?.structuredContent?.playbook).toMatchObject({ id: "claude", mode: "full" });
+    expect(next.body.result?.structuredContent?.playbook).toMatchObject({ id: "claude", mode: "full" });
+  });
+
+  it("initializing as claude-ai overrides a grant stored as Cursor, on this session and a new one", async () => {
+    const h = installHarness({ env: { PUBLIC_BASE_URL: "https://tour.example" } });
+    cleanups.push(h.cleanup);
+    const access = "tca_signed-in-cursor-then-claude";
+    const origin = new URL(h.inst.publicBaseUrl()!).origin;
+    const now = Date.now();
+    new OAuthGrantStore(h.runtime, () => now).addGrant({
+      clientId: "cursor-client",
+      clientName: "Cursor",
+      issuer: origin,
+      resource: `${origin}/mcp`,
+      scopes: [OPERATOR_SCOPE],
+      createdAt: now,
+      expiresAt: now + 30 * 86_400_000,
+      accessHash: hashSecret(access),
+      accessExpiresAt: now + 3_600_000,
+    });
+    const server = createSetupServer({ workspace: new PropertyWorkspace(h.root), installation: h.inst, mcpAuth: "oauth", authNow: () => now, log: () => {} });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    cleanups.push(() => server.close());
+    const port = (server.address() as { port: number }).port;
+    const same = "11111111-1111-4111-8111-111111111111";
+    const fresh = "22222222-2222-4222-8222-222222222222";
+    const initSame = await postSignedIn(port, access, 1, "initialize", realisticInitialize("claude-ai", claudeCaps).params, same);
+    expect(initSame.status).toBe(200);
+    expect(initSame.session).toBe(same);
+    const onSame = await postSignedIn(port, access, 2, "tools/call", { name: "get_state", arguments: {} }, same);
+    expect(onSame.body.result?.structuredContent?.playbook).toMatchObject({ id: "claude", mode: "full" });
+    const initFresh = await postSignedIn(port, access, 3, "initialize", realisticInitialize("claude-ai", claudeCaps).params, fresh);
+    expect(initFresh.session).toBe(fresh);
+    const onFresh = await postSignedIn(port, access, 4, "tools/call", { name: "get_state", arguments: {} }, fresh);
+    expect(onFresh.body.result?.structuredContent?.playbook).toMatchObject({ id: "claude", mode: "full" });
+    const stillSame = await postSignedIn(port, access, 5, "tools/call", { name: "get_state", arguments: {} }, same);
+    expect(stillSame.body.result?.structuredContent?.playbook).toMatchObject({ id: "claude", mode: "full" });
   });
 
   it("a static token follows the latest initialize, so a later unnamed client is baseline", async () => {

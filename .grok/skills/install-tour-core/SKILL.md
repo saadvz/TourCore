@@ -28,9 +28,12 @@ masked card, even when no capabilities are sent. `prompts` and `resources`
 do not pick the playbook. Those two are server capabilities, so a real
 client does not report them. Claude is full only with `elicitation`,
 `sampling`, or `roots`. ChatGPT and any other name are tools-only. The name
-never changes a tool or a gate. Tour Core remembers it per session or
-signed-in caller. After a restart it uses the stored OAuth name, and a
-baseline entry cannot override a name that selects a playbook. Matched
+never changes a tool or a gate. Tour Core remembers the initialize per session
+or signed-in caller. On a call after initialize, that cached initialize wins
+when its name selects a playbook, capabilities included. The stored OAuth
+name is used only when the cache is missing, nameless, or baseline. After a
+restart, with no new initialize, that stored name still applies, and a
+baseline entry cannot override it. Matched
 names already used here are `Grok`, `grok`, `grok-bot`, `grok-sim`,
 `Grok (SDK test)`, and `Cursor`.
 
