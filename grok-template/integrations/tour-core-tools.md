@@ -70,13 +70,25 @@ Needs `TOURCORE_OPS_TOKEN`. A landlord token cannot list or call these.
 
 ## QA connector
 
-Needs `TOURCORE_QA_TOKEN`. A landlord token cannot list or call these.
+Needs `TOURCORE_QA_TOKEN`. A landlord token cannot list or call these. Startup instructions on this connector call `get_installation_status` first. The landlord connector's same check is in the last column. `run_checks` also runs readiness, so it is wider than `test_operator_alerts` or `run_dry_tour` alone. `get_state` is wider than `get_installation_status`.
 
-| Tool | Kind | What it does |
-| --- | --- | --- |
-| `inject_local_sms` | change | Sends a visitor text on the local loopback. Leave `property` out to use the shared line and not name a place |
-| `read_local_outbox` | read | Outbound local replies as separate bubbles |
-| `use_local_demo_storage` | change | Keeps records on this computer for a demo |
+| Tool | Kind | What it does | Landlord tool for the same check |
+| --- | --- | --- | --- |
+| `inject_local_sms` | change | Sends a visitor text on the local loopback. Leave `property` out to use the shared line and not name a place | Stays on QA |
+| `read_local_outbox` | read | Outbound local replies as separate bubbles | Stays on QA |
+| `use_local_demo_storage` | change | Keeps records on this computer for a demo | Stays on QA |
+| `list_exceptions` | read | The issue queue | `get_inbox` |
+| `inspect_exception` | read | One issue, when you pass its id | `get_inbox` |
+| `resolve_exception` | change | Closes one issue | `resolve_issue` |
+| `test_operator_alerts` | change | Sends one tour-update self-test | `run_checks` |
+| `begin_restore_upload` | change | Opens a short-lived restore upload | `restore_records` |
+| `preview_portable_restore` | read | Checks an uploaded backup and changes nothing | `restore_records` |
+| `import_portable_backup` | consequential | Restores a previewed backup after a yes. Destructive hint | `restore_records` |
+| `schedule_one_off_tour` | consequential | Books a one-off tour after a yes | `schedule_tour` |
+| `resume_tours` | consequential | Resumes bookings. On the landlord connector, pass paused false | `pause_tours` |
+| `revoke_tour_access` | consequential | Calls off one tour after a yes. Destructive hint | `cancel_tour` |
+| `run_dry_tour` | change | Runs a practice tour | `run_checks` |
+| `get_installation_status` | read | What is set up, component by component. Call this first on this connector | `get_state` |
 
 There is intentionally no tool to open, unlock or grant a door, mint access,
 change the door-access mode, or read or write raw files. There is also no

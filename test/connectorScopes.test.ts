@@ -1,11 +1,13 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import type { Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { Installation } from "../src/install/installation";
 import { resetLocalSmsOutbox } from "../src/messaging/local/outbox";
-import { LANDLORD_CORE_TOOLS, OPS_TOOL_NAMES, QA_TOOL_NAMES } from "../src/mcp/scopes";
+import { LANDLORD_CORE_TOOLS, OPS_TOOL_NAMES, QA_TOOL_NAMES, toolsForConnector, type ConnectorScope } from "../src/mcp/scopes";
+import { mcpInstructions } from "../src/playbooks/instructions";
+import { OPERATOR_TOOLS } from "../src/operator/tools";
 import { OPERATOR_SCOPE } from "../src/mcp/oauth/provider";
 import { hashSecret, OAuthGrantStore } from "../src/mcp/oauth/store";
 import { PropertyWorkspace } from "../src/setup";
@@ -49,6 +51,23 @@ async function post(port: number, path: string, body: unknown, token?: string) {
 }
 
 const listRpc = { jsonrpc: "2.0", id: 1, method: "tools/list" };
+const initRpc = { jsonrpc: "2.0", id: 3, method: "initialize", params: { protocolVersion: "2025-11-25" } };
+
+/** Live checks that left the landlord list. The second name is the landlord tool for the same check. */
+const QA_LIVE_CHECK_MAP = [
+  ["list_exceptions", "get_inbox"],
+  ["inspect_exception", "get_inbox"],
+  ["resolve_exception", "resolve_issue"],
+  ["test_operator_alerts", "run_checks"],
+  ["begin_restore_upload", "restore_records"],
+  ["preview_portable_restore", "restore_records"],
+  ["import_portable_backup", "restore_records"],
+  ["schedule_one_off_tour", "schedule_tour"],
+  ["resume_tours", "pause_tours"],
+  ["revoke_tour_access", "cancel_tour"],
+  ["run_dry_tour", "run_checks"],
+  ["get_installation_status", "get_state"],
+] as const;
 const callRpc = (name: string, args: Record<string, unknown> = {}) => ({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name, arguments: args } });
 
 function namesFrom(json: unknown): string[] {
@@ -189,6 +208,55 @@ describe("connector scopes", () => {
     expect(namesFrom((await post(on.port, "/mcp/ops", listRpc, OPS)).json)).toEqual([...OPS_TOOL_NAMES]);
     expect(namesFrom((await post(off.port, "/mcp/qa", listRpc, QA)).json)).toEqual([...QA_TOOL_NAMES]);
     expect(namesFrom((await post(off.port, "/mcp/ops", listRpc, OPS)).json)).toEqual([...OPS_TOOL_NAMES]);
+  });
+
+  it("with the flag off, each former live-check tool is callable on /mcp/qa and mapped in the docs", async () => {
+    const session = await legacySession(undefined);
+    expect(session.names).toEqual([...LANDLORD_CORE_TOOLS]);
+    const qa = await post(session.port, "/mcp/qa", listRpc, QA);
+    expect(namesFrom(qa.json)).toEqual([...QA_TOOL_NAMES]);
+    for (const [name] of QA_LIVE_CHECK_MAP) {
+      expect(namesFrom(qa.json)).toContain(name);
+      const called = await post(session.port, "/mcp/qa", callRpc(name), QA);
+      expect(JSON.stringify(called.json)).not.toContain("The QA connector can't run that tool.");
+    }
+    const refused = await post(session.port, "/mcp", callRpc("run_dry_tour"), LANDLORD);
+    expect(refused.json).toMatchObject({ error: { code: -32602, message: "I can't do that from this chat." } });
+
+    const toolsDoc = readFileSync(new URL("../grok-template/integrations/tour-core-tools.md", import.meta.url), "utf8");
+    const qaTable = toolsDoc.slice(toolsDoc.indexOf("## QA connector"));
+    const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+    const connectorSection = readme.slice(readme.indexOf("### Ops and QA connectors"), readme.indexOf("## Getting started"));
+    for (const [qaTool, landlordTool] of QA_LIVE_CHECK_MAP) {
+      const row = qaTable.split("\n").find((line) => line.startsWith(`| \`${qaTool}\` |`));
+      expect(row, qaTool).toContain(`\`${landlordTool}\``);
+      expect(connectorSection).toContain(`\`${qaTool}\``);
+      expect(connectorSection).toContain(`\`${landlordTool}\``);
+    }
+  });
+
+  it("names only tools that connector lists in its startup instructions", async () => {
+    const session = await legacySession(undefined);
+    const catalog = [...OPERATOR_TOOLS.map((tool) => tool.name), "reset_hosted_demo"];
+    const named = (text: string) => catalog.filter((name) => new RegExp(`\\b${name}\\b`).test(text));
+    const connectors: Array<[string, ConnectorScope, string]> = [
+      ["/mcp", "landlord", LANDLORD],
+      ["/mcp/ops", "ops", OPS],
+      ["/mcp/qa", "qa", QA],
+    ];
+    for (const [path, scope, token] of connectors) {
+      const res = await post(session.port, path, initRpc, token);
+      const instructions = (res.json as { result: { instructions: string } }).result.instructions;
+      expect(instructions).toBe(mcpInstructions(scope));
+      const allowed = new Set(toolsForConnector(scope, undefined, false).map((tool) => tool.name));
+      const hits = named(instructions);
+      expect(hits.length).toBeGreaterThan(0);
+      for (const name of hits) expect(allowed, `${scope} instructions name ${name}`).toContain(name);
+    }
+    expect(mcpInstructions("landlord").startsWith("Call get_state first")).toBe(true);
+    expect(mcpInstructions("qa")).not.toMatch(/\bget_state\b/);
+    expect(mcpInstructions("ops")).not.toMatch(/\bget_state\b/);
+    expect(mcpInstructions("qa")).toMatch(/\bget_installation_status\b/);
   });
 
   it("shared-line inject omits the property: a picker for two places, and a skip for one", async () => {

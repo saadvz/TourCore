@@ -55,8 +55,28 @@ export const OPS_TOOL_NAMES = [
   "check_public_endpoint",
 ] as const;
 
-/** Local and demo exercising. Provider choice stays on set_up_texting. */
-export const QA_TOOL_NAMES = ["inject_local_sms", "read_local_outbox", "use_local_demo_storage"] as const;
+/**
+ * Local and demo exercising, plus the live checks that left the landlord list.
+ * The landlord connector keeps the 21 tools. The same check there is the tool
+ * named in the QA table's mapping column.
+ */
+export const QA_TOOL_NAMES = [
+  "inject_local_sms",
+  "read_local_outbox",
+  "use_local_demo_storage",
+  "list_exceptions",
+  "inspect_exception",
+  "resolve_exception",
+  "test_operator_alerts",
+  "begin_restore_upload",
+  "preview_portable_restore",
+  "import_portable_backup",
+  "schedule_one_off_tour",
+  "resume_tours",
+  "revoke_tour_access",
+  "run_dry_tour",
+  "get_installation_status",
+] as const;
 
 export function legacyToolsEnabled(env?: { TOURCORE_LEGACY_TOOLS?: string }): boolean {
   const raw = (env?.TOURCORE_LEGACY_TOOLS ?? "").trim().toLowerCase();
