@@ -90,8 +90,9 @@ published; an approved fact doesn't need another readiness check.
 
 [`create_property_setup` address "12 Maple St, Springfield", name "Maple House"
 (the operator said it). A US address still needs a ZIP before it is confirmed.
-Missing ZIP → "What ZIP code should I use?", then a read-back, then property
-type. Never invent the ZIP.]
+A missing city is "What city should I use?" before any read-back. Missing ZIP
+→ "What ZIP code should I use?", then a one-line read-back ("Did I get that
+right: ...?"), then property type. Never invent the city or the ZIP.]
 
 **Tour Core:** What ZIP code should I use?
 

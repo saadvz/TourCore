@@ -96,7 +96,7 @@ describe("property type", () => {
     expect(created.nextQuestion).toBe("What ZIP code should I use?");
     expect(created.choices).toBeUndefined();
     const zipped = await h.ok("update_property_details", { postalCode: "07666" });
-    expect(zipped.nextQuestion).toBe("I have:\n144 Hillside Avenue\nTeaneck, NJ 07666\nIs that the address?");
+    expect(zipped.nextQuestion).toBe("Did I get that right: 144 Hillside Avenue, Teaneck, NJ 07666?");
     const confirmed = await h.ok("update_property_details", { confirmAddress: true });
     expect(confirmed).toMatchObject({ nextQuestion: "What type of property is this?" });
     expect(confirmed.choices.map((c: { label: string }) => c.label)).toEqual([
@@ -107,9 +107,43 @@ describe("property type", () => {
     const draft = h.workspace.openDraft(created.setup.propertyId).draft;
     expect(draft.property.propertyType).toBeUndefined();
     expect(draft.property.canonicalAddress).toMatchObject({ street: "144 Hillside Avenue", city: "Teaneck", state: "NJ", postalCode: "07666" });
+    expect(draft.property.canonicalAddress).not.toHaveProperty("unit");
     expect(draft.property.addressConfirmed).toBe(true);
     expect(validateConfig(draft).map((i) => i.code)).toContain("PROPERTY_TYPE_MISSING");
     expect(await h.fails("update_property_details", { propertyType: "CASTLE" })).toContain("doesn't fit update_property_details");
+  });
+
+  it("reads a condo address with a unit and a city back on one line", async () => {
+    const h = harness();
+    const created = await h.ok("create_property_setup", { address: "300 Main Street, Unit 4B, Hackensack, NJ 07601" });
+    expect(created.nextQuestion).toBe("Did I get that right: 300 Main Street, Unit 4B, Hackensack, NJ 07601?");
+    expect(created.nextQuestion).not.toContain("\n");
+    const milestone = await h.ok("save_property", { address: "300 Main Street, Unit 4B, Hackensack, NJ 07601" });
+    expect(milestone.message).toBe("Did I get that right: 300 Main Street, Unit 4B, Hackensack, NJ 07601?");
+    const draft = h.workspace.openDraft(created.setup.propertyId).draft;
+    expect(draft.property.canonicalAddress).toEqual({
+      street: "300 Main Street",
+      unit: "Unit 4B",
+      city: "Hackensack",
+      state: "NJ",
+      postalCode: "07601",
+      formatted: "300 Main Street, Unit 4B, Hackensack, NJ 07601",
+    });
+    expect(draft.property.address).toBe("300 Main Street, Unit 4B, Hackensack, NJ 07601");
+  });
+
+  it("asks for the city before any read-back when a condo address has no city", async () => {
+    const h = harness();
+    const created = await h.ok("create_property_setup", { address: "300 Main Street, Unit 4B, NJ 07601" });
+    expect(created.nextQuestion).toBe("What city should I use?");
+    expect(JSON.stringify(created)).not.toContain("Did I get that right");
+    const milestone = await h.ok("save_property", { address: "300 Main Street, Unit 4B, NJ 07601" });
+    expect(milestone.message).toBe("What city should I use?");
+    expect(JSON.stringify(milestone)).not.toContain("Did I get that right");
+    expect(await h.fails("update_property_details", { confirmAddress: true })).toContain("I still need the city before that address can be confirmed.");
+    const saved = await h.ok("update_property_details", { city: "Hackensack" });
+    expect(saved.nextQuestion).toBe("Did I get that right: 300 Main Street, Unit 4B, Hackensack, NJ 07601?");
+    expect(saved.nextQuestion).not.toMatch(/, {2,}/);
   });
 
   it("apartment buildings and multifamily homes ask for units, and a unit needs the operator's own name", async () => {

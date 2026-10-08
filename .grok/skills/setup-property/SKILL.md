@@ -49,10 +49,15 @@ the operator correct it.
    that property.
 2. Ask **"What's the property address?"** Then `create_property_setup` with the
    address. A US address needs a street, city, state and ZIP. If `nextQuestion`
-   is "What ZIP code should I use?", ask that and save the answer with
-   `update_property_details` `postalCode`. Do not invent a ZIP. Then read the
-   address back exactly as Tour Core shows it and wait for yes. Only after
-   `confirmAddress: true` ask property type. Pass `name` only if the operator
+   is "What city should I use?", ask that and save the answer with
+   `update_property_details` `city` before any read-back. Do not invent a city.
+   If `nextQuestion` is "What ZIP code should I use?", ask that and save the
+   answer with `update_property_details` `postalCode`. Do not invent a ZIP.
+   Then read the address back on one line, exactly as Tour Core shows it
+   ("Did I get that right: 300 Main Street, Unit 4B, Hackensack, NJ 07601?"
+   when the address has a unit, and the same line without the unit when it
+   does not) and wait for yes. Never read an address back with a blank city.
+   Only after `confirmAddress: true` ask property type. Pass `name` only if the operator
    said a public property or building name themselves; never suggest one, and
    never treat an internal space name such as "Main Home" as the property name.
 3. Ask Tour Core's `nextQuestion`, **"What type of property is this?"**, with

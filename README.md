@@ -643,7 +643,7 @@ npm run check:storage         # hosted volume verdict for TOURCORE_HOME; does no
 ### Property identity and type
 
 The street address is the property's identity and what visitors hear ("Welcome to the self-guided tour for 144
-Hillside Ave! ..."). A property or building name is used only if the operator gives one; Grok never invents one.
+Hillside Ave! ..."). Setup reads that address back on one line: street, then ", Unit X" when the address has a unit, then ", City, ST ZIP" ("Did I get that right: 300 Main Street, Unit 4B, Hackensack, NJ 07601?"). A missing city is asked ("What city should I use?") before that read-back, and a read-back is never shown with a blank city. A property or building name is used only if the operator gives one; Grok never invents one.
 Right after the address, Grok asks "What type of property is this?" (single-family home; multifamily — a duplex
 or small building you own; apartment or condo — one unit). Whole-building apartment ownership is out of scope.
 The next questions follow the type: a single-family home is one space, "Main Home" by default, with its front

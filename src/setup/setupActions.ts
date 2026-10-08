@@ -19,7 +19,7 @@ import { formatClockTime, friendlyTimeZone, WEEKDAYS, type Weekday } from "../co
 import { isApartmentOrCondo, isSingleTourPlace, streetAndUnit, streetLine, unitLabel, visitorSubject } from "../visitor/identity";
 import { inferTimeZone, resolveTimeZone, SAME_DAY_HOURS, slugify, tourHoursEndSameDay } from "./parse";
 import { isLegacyVerification, verificationSummaryRows } from "./verification";
-import { formatCanonical, parseUsAddress } from "./address";
+import { formatCanonical, parseUsAddress, titleCasePlace } from "./address";
 import { canonicalDoor, canonicalUnitName } from "./normalizeDraft";
 
 /**
@@ -225,6 +225,7 @@ export function setPropertyDetails(
     propertyType?: string;
     timezone?: string;
     facts?: string[];
+    city?: string;
     postalCode?: string;
     confirmAddress?: boolean;
     buildingAccess?: string;
@@ -242,6 +243,20 @@ export function setPropertyDetails(
     if (parsed) next.property.canonicalAddress = parsed.address;
     next.property.addressConfirmed = false;
   }
+  if (input.city !== undefined) {
+    const city = titleCasePlace(input.city);
+    if (!city) throw new SetupInputError("CITY_MISSING", "What city should I use?");
+    const current = next.property.canonicalAddress ?? parseUsAddress(next.property.address)?.address;
+    if (!current?.street || !current.state) throw new SetupInputError("ADDRESS_INCOMPLETE", "I still need the street and state before a city.");
+    const canonicalAddress = {
+      ...current,
+      city,
+      formatted: formatCanonical({ ...current, city }),
+    };
+    next.property.canonicalAddress = canonicalAddress;
+    next.property.address = canonicalAddress.formatted;
+    next.property.addressConfirmed = false;
+  }
   if (input.postalCode !== undefined) {
     const zip = input.postalCode.trim();
     if (!/^\d{5}(?:-\d{4})?$/.test(zip)) throw new SetupInputError("ZIP_INVALID", "A ZIP code is five digits, like 07666.");
@@ -253,6 +268,7 @@ export function setPropertyDetails(
     next.property.addressConfirmed = false;
   }
   if (input.confirmAddress) {
+    if (!next.property.canonicalAddress?.city?.trim()) throw new SetupInputError("ADDRESS_INCOMPLETE", "I still need the city before that address can be confirmed.");
     if (!next.property.canonicalAddress?.postalCode) throw new SetupInputError("ADDRESS_INCOMPLETE", "I still need the ZIP code before that address can be confirmed.");
     next.property.addressConfirmed = true;
   }

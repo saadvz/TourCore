@@ -6,7 +6,7 @@ import type { ReportedClient } from "../playbooks/select";
 import { INSTALLATION_TOOLS } from "../install/tools";
 import { MILESTONE_TOOLS, settingsSentence } from "./milestones";
 import { installedMessaging } from "../install/status";
-import { addressReadback, savedFullAddress } from "../setup/address";
+import { addressConfirmQuestion, savedFullAddress } from "../setup/address";
 import { PROPERTY_TYPE_LABELS, PROPERTY_TYPES, SETUP_PROPERTY_TYPES, validateConfig } from "../config/tourCoreConfig";
 import { extractValues, FIELD_WORDS, missingProfileFields, nextProfileQuestion, parseBulkUnitDetails, profileSummaryLine } from "../config/unitProfile";
 import { formatPhone } from "../core/phone";
@@ -140,9 +140,11 @@ const PROPERTY_TYPE_CHOICES = SETUP_PROPERTY_TYPES.map((t) => ({ choice: t, labe
 /** The next property question Tour Core wants asked, so the setup order depends on the property type. */
 function propertyNextQuestion(draft: SetupDraft): { nextQuestion: string; choices?: { choice: string; label: string }[]; suggestedName?: string; confirmAddress?: boolean } | undefined {
   const canonical = draft.property.canonicalAddress;
+  if (canonical && !canonical.city?.trim()) return { nextQuestion: "What city should I use?" };
   if (canonical && !canonical.postalCode) return { nextQuestion: "What ZIP code should I use?" };
   if (canonical?.postalCode && !draft.property.addressConfirmed) {
-    return { nextQuestion: `I have:\n${addressReadback(canonical)}\nIs that the address?`, confirmAddress: true };
+    const nextQuestion = addressConfirmQuestion(canonical);
+    if (nextQuestion) return { nextQuestion, confirmAddress: true };
   }
   if (!draft.property.propertyType) return { nextQuestion: "What type of property is this?", choices: [...PROPERTY_TYPE_CHOICES] };
   const condo = condoNextQuestion(draft);
@@ -434,7 +436,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Start a property setup",
     kind: "change",
     description:
-      "Starts a new property from its street address. The address is what visitors hear unless the operator gives a public property name themselves: never suggest or invent one. A US address needs a street, city, state and ZIP. If the ZIP is missing, ask nextQuestion (\"What ZIP code should I use?\") and save it with update_property_details postalCode. Then ask them to confirm the read-back before property type. Never guess the type from the address. The time zone is guessed from the address: confirm it. Visitor texting is connected automatically when this Tour Core has it. A new property starts with tour hours Monday–Friday, 9:00 AM–5:00 PM, 45-minute tours, a new tour every hour, and 10 minutes early, until the operator changes them with set_tour_hours. If a property with that address already exists, it's returned instead of creating a second one. Also the tool for the installation step that offers another property after one is already published.",
+      "Starts a new property from its street address. The address is what visitors hear unless the operator gives a public property name themselves: never suggest or invent one. A US address needs a street, city, state and ZIP. If the city is missing, ask nextQuestion (\"What city should I use?\") and save it with update_property_details city before any read-back. If the ZIP is missing, ask nextQuestion (\"What ZIP code should I use?\") and save it with update_property_details postalCode. Then ask them to confirm the one-line read-back (\"Did I get that right: ...?\") before property type. A unit in the address is read back between the street and the city. Never guess the type from the address. The time zone is guessed from the address: confirm it. Visitor texting is connected automatically when this Tour Core has it. A new property starts with tour hours Monday–Friday, 9:00 AM–5:00 PM, 45-minute tours, a new tour every hour, and 10 minutes early, until the operator changes them with set_tour_hours. If a property with that address already exists, it's returned instead of creating a second one. Also the tool for the installation step that offers another property after one is already published.",
     input: z.strictObject({
       address: z.string().min(1).max(200).describe("The property's street address, as the operator confirmed it."),
       name: z.string().max(120).optional().describe("Only a property or building name the operator said themselves. Leave out otherwise; the address is used."),
@@ -466,12 +468,13 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Update property details",
     kind: "change",
     description:
-      "Changes the property's type, address, ZIP, public name, time zone, approved property facts, apartment or condo building-door control, or optional entry instructions. The name is only one the operator said (an empty name goes back to using the address). A ZIP code does not invent the rest of the address. confirmAddress is true only after they agree to the read-back. Facts must be the operator's own words. For an apartment or condo, buildingAccess is BUILDING_AND_UNIT or UNIT_ONLY from \"Do you control the building entrance, or only the unit door?\"; entryInstructions is how visitors get in and find the unit, sent only after identity verification. If they skip that, pass skipEntryInstructions true and store nothing. Returns nextQuestion when something still has to be asked, and that question comes before property type until the address is confirmed. After the rest of the setup is saveable, nextQuestion is \"What number can stuck visitors call? Pick one someone answers during tour hours.\" visitorContact is that optional number visitors see and call; it is never the team's private alert line. Saving, changing, or clearing it keeps a published property published and does not require a new readiness check or practice tour. If they skip it, pass skipVisitorHelp true so the question is not asked again.",
+      "Changes the property's type, address, city, ZIP, public name, time zone, approved property facts, apartment or condo building-door control, or optional entry instructions. The name is only one the operator said (an empty name goes back to using the address). A city or ZIP does not invent the rest of the address. If the city is missing, ask \"What city should I use?\" and save it with city before any read-back. confirmAddress is true only after they agree to the one-line read-back. Facts must be the operator's own words. For an apartment or condo, buildingAccess is BUILDING_AND_UNIT or UNIT_ONLY from \"Do you control the building entrance, or only the unit door?\"; entryInstructions is how visitors get in and find the unit, sent only after identity verification. If they skip that, pass skipEntryInstructions true and store nothing. Returns nextQuestion when something still has to be asked, and that question comes before property type until the address is confirmed. After the rest of the setup is saveable, nextQuestion is \"What number can stuck visitors call? Pick one someone answers during tour hours.\" visitorContact is that optional number visitors see and call; it is never the team's private alert line. Saving, changing, or clearing it keeps a published property published and does not require a new readiness check or practice tour. If they skip it, pass skipVisitorHelp true so the question is not asked again.",
     input: z.strictObject({
       property: Property,
       propertyType: z.enum(PROPERTY_TYPES).optional().describe("From the operator's answer to \"What type of property is this?\" Use APARTMENT_OR_CONDO for one apartment or condo unit, not a whole building."),
       name: z.string().max(120).optional().describe("Only a property or building name the operator said. Empty removes it."),
       address: z.string().max(200).optional(),
+      city: z.string().max(80).optional().describe("The city the operator gave. Don't invent one."),
       postalCode: z.string().max(10).optional().describe("The ZIP code the operator gave. Five digits. Don't invent one."),
       confirmAddress: z.boolean().optional().describe("True only after the operator agreed the read-back address is right."),
       timezone: z.string().max(60).optional(),
@@ -509,6 +512,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         propertyType: i.propertyType,
         timezone: i.timezone,
         facts: i.facts,
+        city: i.city,
         postalCode: i.postalCode,
         confirmAddress: i.confirmAddress,
         buildingAccess: i.buildingAccess,

@@ -14,7 +14,7 @@ import { applySetupCommand } from "../setup/commands";
 import { canonicalDoor, canonicalUnitName } from "../setup/normalizeDraft";
 import { formatClockTime, type Weekday } from "../core/timezone";
 import { hoursRangeRefusal, reuseDaysRefusal, tourSpacingRefusal } from "../config/validateConfig";
-import { savedFullAddress } from "../setup/address";
+import { addressConfirmQuestion, savedFullAddress } from "../setup/address";
 import { parseDays, parseMinutes, parseTimeOfDay, SAME_DAY_HOURS, tourHoursEndSameDay } from "../setup/parse";
 import { NO_FORM_QUESTION } from "../setup/verification";
 import { publishGuards, publishProperty, readinessForProperty, runPracticeTour, visitorTexting } from "./setupFlow";
@@ -179,6 +179,7 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       propertyType: z.enum(PROPERTY_TYPES).optional(),
       timezone: z.string().max(60).optional(),
       facts: Facts.optional(),
+      city: z.string().max(80).optional(),
       postalCode: z.string().max(10).optional(),
       confirmAddress: z.boolean().optional(),
       alertName: z.string().max(120).optional(),
@@ -212,13 +213,14 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
         id = draft.property.id;
       }
       let next = ws.openDraft(id).draft;
-      if (i.address || i.name !== undefined || i.propertyType || i.timezone || i.facts || i.postalCode || i.confirmAddress || i.buildingAccess || i.entryInstructions !== undefined || i.skipEntryInstructions) {
+      if (i.address || i.name !== undefined || i.propertyType || i.timezone || i.facts || i.city || i.postalCode || i.confirmAddress || i.buildingAccess || i.entryInstructions !== undefined || i.skipEntryInstructions) {
         next = applySetupCommand(next, "setPropertyDetails", {
           name: i.name,
           address: i.address,
           propertyType: i.propertyType,
           timezone: i.timezone,
           facts: i.facts,
+          city: i.city,
           postalCode: i.postalCode,
           confirmAddress: i.confirmAddress,
           buildingAccess: i.buildingAccess,
@@ -236,11 +238,12 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       }
       ws.persistEdit(next, ctx.now());
       const saved = ws.openDraft(id).draft;
-      const missingZip = !!saved.property.canonicalAddress && !saved.property.canonicalAddress.postalCode;
+      const canonical = saved.property.canonicalAddress;
+      if (canonical && !canonical.city?.trim()) return envelope(ctx, id, "next", "What city should I use?", { propertyId: id });
+      const missingZip = !!canonical && !canonical.postalCode;
       if (missingZip) return envelope(ctx, id, "next", "What ZIP code should I use?", { propertyId: id });
-      if (saved.property.canonicalAddress?.postalCode && saved.property.addressConfirmed === false) {
-        return envelope(ctx, id, "next", `Did I get that right: ${savedFullAddress(saved.property)}?`, { propertyId: id, address: savedFullAddress(saved.property) });
-      }
+      const question = canonical && saved.property.addressConfirmed === false ? addressConfirmQuestion(canonical) : undefined;
+      if (question) return envelope(ctx, id, "next", question, { propertyId: id, address: savedFullAddress(saved.property) });
       if (!saved.property.propertyType) return envelope(ctx, id, "next", "Is this a single-family home, a multifamily home, or one apartment or condo?", { propertyId: id });
       return envelope(ctx, id, "done", `Saved ${saved.property.name}.`, { propertyId: id });
     },
