@@ -246,7 +246,7 @@ If they say yes:
 
    > Google Drive is connected to me. For Tour Core to save its records there directly, whoever runs your Tour Core computer has to finish one more approval. Until then, your records stay on this computer.
 
-3. After they approve, call `get_state`.
+3. Then call `get_state`. Records stay on this computer until that approval is done.
 4. If Google Drive is not configured, say:
 
    > Google Drive isn't set up for Tour Core yet, so I'll keep your records on this computer for now.
