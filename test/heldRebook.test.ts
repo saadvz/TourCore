@@ -343,7 +343,7 @@ describe("defect 4: pause_tours cancel actually cancels the held rebook", () => 
       touringNow: true,
     });
     expect(expected).toBe(
-      "Sorry, the leasing team had to cancel your later tour at 10:00 AM on Monday, Sep 28. Your tour right now isn't affected. They'll text you when tours are back.",
+      "Sorry, the property team had to cancel your later tour at 10:00 AM on Monday, Sep 28. Your tour right now isn't affected. They'll text you when tours are back.",
     );
     const sent = v.session.conversation.filter((c) => c.from === "tourcore").slice(beforeTexts);
     expect(sent.filter((c) => c.text === expected)).toHaveLength(1);

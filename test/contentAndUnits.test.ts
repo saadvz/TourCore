@@ -200,7 +200,7 @@ describe("approved content changes keep the property published", () => {
     const asked = await h.ok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "2 bedrooms" });
     expect(asked).toMatchObject({
       status: "needs-confirmation",
-      summary: 'Send this to Testy? "Unit 101 has 2 bedrooms. Let me know if you have any other questions."',
+      summary: 'Send this to Testy and save it for anyone who asks the same thing later? "Unit 101 has 2 bedrooms. Let me know if you have any other questions."',
       visitorWillReceive: "Unit 101 has 2 bedrooms. Let me know if you have any other questions.",
     });
     expect(String(asked.summary).slice(String(asked.summary).indexOf('"') + 1, String(asked.summary).lastIndexOf('"'))).toBe(asked.visitorWillReceive);

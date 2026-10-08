@@ -218,7 +218,7 @@ function nextStepsFor(kind: ExceptionKind, tour: TourSnapshot | undefined, still
   const canChange = !!tour?.live;
   switch (kind) {
     case "unanswered-question":
-      if (fairHousing) return ["Leave this with the property team. Don't draft an answer.", "Mark it handled once they've replied."];
+      if (fairHousing) return [...FAIR_HOUSING_STEPS];
       return [
         "If you know the answer, tell me and I can add it to the approved facts and text the visitor (with your OK).",
         "Or mark it handled if you've already answered them another way.",
@@ -521,9 +521,21 @@ export function visitorAnswerText(_question: string, fact: string): string {
   return `${fact} Let me know if you have any other questions.`;
 }
 
-/** The landlord's approve question. The quoted text equals `visitorWillReceive` byte for byte. */
-export function sendThisQuestion(who: string, visitorWillReceive: string): string {
-  return `Send this to ${who}? "${visitorWillReceive}"`;
+/** Landlord-facing refusal. The visitor never sees this, and never hears "fair housing". */
+export const FAIR_HOUSING_REFUSAL = "This one touches on fair housing, so I won't draft an answer. Reply to them yourself, then mark it handled.";
+
+export const FAIR_HOUSING_STEPS = [
+  "This one touches on fair housing, so I won't draft an answer. Reply to them yourself.",
+  "Mark it handled once you've replied.",
+] as const;
+
+/**
+ * The landlord's approve question. The quoted text equals `visitorWillReceive` byte for byte.
+ * A save also says the answer will be kept. A send-only reply does not.
+ */
+export function sendThisQuestion(who: string, visitorWillReceive: string, options?: { save?: boolean }): string {
+  const lead = options?.save ? `Send this to ${who} and save it for anyone who asks the same thing later?` : `Send this to ${who}?`;
+  return `${lead} "${visitorWillReceive}"`;
 }
 
 /** An operator's answer to a flagged question, as Tour Core will save it. */
@@ -603,7 +615,7 @@ export async function planFlaggedAnswer(services: OperatorServices, input: { exc
   const tourForWho = exception.tourRef ? await findTour(services, exception.tourRef) : undefined;
   const who = operatorWhoLabel(exception.visitorName, tourForWho?.visitorPhone);
   if (exception.proposeDraft === false) {
-    throw new SetupInputError("NO_DRAFT", "Leave this with the property team. Don't draft an answer.");
+    throw new SetupInputError("NO_DRAFT", FAIR_HOUSING_REFUSAL);
   }
   if (exception.kind === "handler-failed") {
     const words = cleanFact(input.approvedFact);

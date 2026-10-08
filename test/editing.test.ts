@@ -187,8 +187,8 @@ describe("operator-facing presenters", () => {
   it("uses the property team in history when no team name is stored", () => {
     const event = { id: "e1", seq: 1, type: "OPERATOR_NOTIFIED" as const, at: "2026-09-28T14:00:00.000Z", detail: "Pat asked for help." };
     const blank = describeHistory([event], { doors: [], units: [], prospects: [], reservations: [] }, "America/New_York");
-    expect(blank[0]!.text).toBe("the property team was alerted: Pat asked for help.");
+    expect(blank[0]!.text).toBe("The property team was alerted: Pat asked for help.");
     const named = describeHistory([event], { doors: [], units: [], prospects: [], reservations: [], operatorName: "leasing team" }, "America/New_York");
-    expect(named[0]!.text).toBe("leasing team was alerted: Pat asked for help.");
+    expect(named[0]!.text).toBe("The property team was alerted: Pat asked for help.");
   });
 });

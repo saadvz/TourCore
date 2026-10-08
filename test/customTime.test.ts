@@ -72,6 +72,12 @@ describe("cleared visitor lines", () => {
   it("quotes the exact text the visitor will get", () => {
     const receive = "Yes, there's a dishwasher. Let me know if you have any other questions.";
     expect(sendThisQuestion("(555) 555-0121", receive)).toBe(`Send this to (555) 555-0121? "${receive}"`);
+    const saved = "Parking is included. Let me know if you have any other questions.";
+    const question = sendThisQuestion("Pat", saved, { save: true });
+    expect(question).toBe(`Send this to Pat and save it for anyone who asks the same thing later? "${saved}"`);
+    const quoted = question.slice(question.indexOf('"') + 1, question.lastIndexOf('"'));
+    expect(quoted).toBe(saved);
+    expect(Buffer.from(quoted, "utf8").equals(Buffer.from(saved, "utf8"))).toBe(true);
   });
 
   it("offers another day when a decline has no booking, and keeps the booked ending", () => {
@@ -2118,7 +2124,7 @@ describe("a Sendblue handler throw raises a real landlord alert", () => {
     expect(opened.issue.visitorName).toBe(who);
     const asked = await a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "No pool" });
     expect(asked.visitorWillReceive).toBe("No pool. Let me know if you have any other questions.");
-    expect(asked.summary).toBe(`Send this to ${who}? "${asked.visitorWillReceive}"`);
+    expect(asked.summary).toBe(`Send this to ${who} and save it for anyone who asks the same thing later? "${asked.visitorWillReceive}"`);
     expect(asked.confirmation.question).toBe(asked.summary);
     expect(asked.summary).not.toMatch(/\bA\b/);
     const done = await a.grok("answer_flagged_question", {
@@ -2165,7 +2171,7 @@ describe("a Sendblue handler throw raises a real landlord alert", () => {
     expect(issue.what).toBe("Question with no approved answer");
     const asked = await a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "There's a gym on the roof." });
     expect(asked.visitorWillReceive).toBe("There's a gym on the roof. Let me know if you have any other questions.");
-    expect(asked.summary).toBe(`Send this to Testy? "${asked.visitorWillReceive}"`);
+    expect(asked.summary).toBe(`Send this to Testy and save it for anyone who asks the same thing later? "${asked.visitorWillReceive}"`);
     const done = await a.approve("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "There's a gym on the roof." });
     expect(done.savedToSetup).toBe(true);
   });

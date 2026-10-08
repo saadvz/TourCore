@@ -36,6 +36,13 @@ names already used here are `Grok`, `grok`, `grok-bot`, `grok-sim`,
 
 Before a flagged answer is sent, read `visitorWillReceive` and wait for a
 clear yes. That is the exact visitor text, including any closing line.
+Saving asks `Send this to {name} and save it for anyone who asks the same thing later? "{visitorWillReceive}"`.
+The quoted half equals that text byte for byte. A handler-failed reply saves
+nothing, so it stays `Send this to {who}? "{reply}"`. A fair-housing flag has
+`proposeDraft` false. The refusal is `This one touches on fair housing, so I won't draft an answer. Reply to them yourself, then mark it handled.`
+Next steps are `This one touches on fair housing, so I won't draft an answer. Reply to them yourself.`
+and `Mark it handled once you've replied.` The visitor still gets the ordinary
+holding reply and never hears fair housing.
 
 Tour updates: ask only "Want me to text you when someone books, starts, or
 finishes a tour, and ping you the moment something needs you?" One alert

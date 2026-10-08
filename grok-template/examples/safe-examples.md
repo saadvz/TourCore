@@ -66,7 +66,7 @@ you. No doors were refused.
 
 [`inspect_exception`; `answer_flagged_question` approvedFact "Parking is included." → question]
 
-**Tour Core:** Send this to Pat? "Parking is included. Let me know if you have any other questions."
+**Tour Core:** Send this to Pat and save it for anyone who asks the same thing later? "Parking is included. Let me know if you have any other questions."
 
 **Operator:** Yes.
 

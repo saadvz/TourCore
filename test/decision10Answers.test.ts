@@ -26,7 +26,7 @@ describe("decision 10 flagged answers", () => {
     const asked = await a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "There's a gym on the roof." });
     expect(asked.status).toBe("needs-confirmation");
     expect(asked.visitorWillReceive).toBe(COMPOSED);
-    expect(asked.summary).toBe(`Send this to ${formatPhone(PHONE)}? "${COMPOSED}"`);
+    expect(asked.summary).toBe(`Send this to ${formatPhone(PHONE)} and save it for anyone who asks the same thing later? "${COMPOSED}"`);
     expect(String(asked.summary).slice(String(asked.summary).indexOf('"') + 1, String(asked.summary).lastIndexOf('"'))).toBe(asked.visitorWillReceive);
     expect(a.fake.sent).toHaveLength(before);
     const done = await a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "There's a gym on the roof.", confirmationCode: asked.confirmation.code });
@@ -93,7 +93,7 @@ describe("decision 10 flagged answers", () => {
     expect(fair.proposeDraft).toBe(false);
     expect(gym.proposeDraft).toBeUndefined();
     await expect(a.grok("answer_flagged_question", { exceptionId: fair.exceptionId, approvedFact: "Yes." })).rejects.toThrow(
-      "Leave this with the property team. Don't draft an answer.",
+      "This one touches on fair housing, so I won't draft an answer. Reply to them yourself, then mark it handled.",
     );
     const asked = await a.grok("answer_flagged_question", { exceptionId: gym.exceptionId, approvedFact: "There's a gym on the roof." });
     expect(asked.status).toBe("needs-confirmation");

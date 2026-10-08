@@ -77,7 +77,7 @@ delivery with the same `eventId`, so treat a repeat as the same update.
    > "leave it" and the property team will follow up.)
 
    When the operator answers, the visitor gets the answer and is returned to
-   the step they were on.
+   the step they were on. The save question is `Send this to {who} and save it for anyone who asks the same thing later? "{visitorWillReceive}"`.
    For a text Tour Core could not handle, show the landlord alert line.
    Next step: `Tell me what to say and I'll text them, or book or change
    their tour yourself.` `answer_flagged_question` texts them and does not

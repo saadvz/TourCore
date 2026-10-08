@@ -21,9 +21,12 @@ knowledge.
 gate. A grok or Cursor name gets the full Grok playbook. After a restart
 the stored OAuth name is used, and a baseline entry cannot override it.
 Before a yes on a flagged answer, read `visitorWillReceive` in full.
-The question is `Send this to {name}? "{visitorWillReceive}"`. That quoted
-text is exactly what goes out, including any closing line. A fair-housing
-flag has `proposeDraft` false: do not draft an answer. A custom
+A save asks `Send this to {name} and save it for anyone who asks the same thing later? "{visitorWillReceive}"`.
+That quoted text is exactly what goes out, including any closing line.
+A handler-failed reply saves nothing, so it stays `Send this to {who}? "{reply}"`.
+A fair-housing flag has `proposeDraft` false. The refusal is
+`This one touches on fair housing, so I won't draft an answer. Reply to them yourself, then mark it handled.`
+The visitor still gets the ordinary holding reply. A custom
 time uses `place` from `inspect_tour_time_request` when that read has one.
 Tool annotations are hints. If setup keeps failing, give the landlord the
 setup help link as one plain link. Never put that link in a visitor text.
@@ -143,7 +146,7 @@ Tour Core sends only an `eventId` and an event type; never names or details.
   them?"), not a yes/no. As soon as the operator gives it ("2 bedrooms"), call
   `answer_flagged_question` with their words as `approvedFact`, before saying
   anything else. It returns the one confirmation question, such as:
-  > Send this to Pat? "Parking is included. Let me know if you have any other questions."
+  > Send this to Pat and save it for anyone who asks the same thing later? "Parking is included. Let me know if you have any other questions."
 
   Ask exactly that, once. Don't ask a separate "want me to add it?" first.
   Before the yes, also read `visitorWillReceive` in full. That is the exact

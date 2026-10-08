@@ -285,7 +285,7 @@ them?
 [`answer_flagged_question` approvedFact "There's no pool, but there's a gym on
 the roof." → returns a question]
 
-**Tour Core:** Send this to Testy? "There's no pool, but there's a gym on the roof. Let me know if you have any other questions."
+**Tour Core:** Send this to Testy and save it for anyone who asks the same thing later? "There's no pool, but there's a gym on the roof. Let me know if you have any other questions."
 
 **Operator:** Yes.
 

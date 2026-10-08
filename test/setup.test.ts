@@ -87,7 +87,7 @@ describe("guided setup actions", () => {
     expect(section("ROUTE: UNIT 102")).toEqual(["Lobby Entrance", "Unit 102 Door"]);
     expect(section("VERIFICATION")?.[0]).toBe("Basic identity form");
     expect(section("ALERTS")).toEqual([
-      "If a visitor needs help: leasing team",
+      "If a visitor needs help: property team",
       "Visitors can call: not set",
     ]);
   });
@@ -102,7 +102,7 @@ describe("guided setup actions", () => {
     expect(withNumber.operator.contact).toBe("Shown on screen (demo)");
     expect(withNumber.operator.visitorHelpDecided).toBe(true);
     expect(reviewSetup(withNumber).sections.find((s) => s.title === "ALERTS")?.lines).toEqual([
-      "If a visitor needs help: leasing team",
+      "If a visitor needs help: property team",
       "Visitors can call: (555) 010-8888",
     ]);
 
@@ -134,7 +134,7 @@ describe("guided setup actions", () => {
     expect(skipped.operator.visitorContact).toBeUndefined();
     expect(skipped.operator.visitorHelpDecided).toBe(true);
     expect(reviewSetup(skipped).sections.find((s) => s.title === "ALERTS")?.lines).toEqual([
-      "If a visitor needs help: leasing team",
+      "If a visitor needs help: property team",
       "Visitors can call: not set",
     ]);
 

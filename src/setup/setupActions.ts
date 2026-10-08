@@ -42,7 +42,7 @@ export class OperatorTeamCopy {
 
 /** Visible, overridable defaults. Policy values live in config, never in code paths. */
 export const SETUP_DEFAULTS = {
-  operatorName: "leasing team",
+  operatorName: "property team",
   operatorContact: "Shown on screen (demo)",
   entranceName: "Main Entrance",
   tourHours: {

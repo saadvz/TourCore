@@ -71,10 +71,10 @@ First run ("Set up Tour Core"): use the Install Tour Core skill.
   caller. After a restart it uses the stored OAuth name. A baseline entry
   cannot override a name that selects a playbook.
 - Before a flagged answer is sent, read `visitorWillReceive` aloud and wait
-  for a clear yes. The question is `Send this to {name}? "{visitorWillReceive}"`.
+  for a clear yes. A save asks `Send this to {name} and save it for anyone who asks the same thing later? "{visitorWillReceive}"`.
   The quoted text is that exact visitor text, closing line included. A
-  fair-housing flag has `proposeDraft` false: do not draft an answer, and
-  leave it with the property team.
+  fair-housing flag has `proposeDraft` false. The refusal is `This one touches on fair housing, so I won't draft an answer. Reply to them yourself, then mark it handled.`
+  The visitor still gets the ordinary holding reply.
 - Tour updates, this bot only: ask "Want me to text you when someone books,
   starts, or finishes a tour, and ping you the moment something needs you?"
   Do not ask a second question. One alert address per install; a new save

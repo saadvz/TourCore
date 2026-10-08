@@ -74,11 +74,15 @@ describe("fair-housing questions on a live tour", () => {
       const flag = flags.find((item) => item.summary.includes(text));
       expect(flag, text).toBeTruthy();
       expect(flag!.proposeDraft).toBe(false);
-      expect(flag!.nextSteps).toEqual(["Leave this with the property team. Don't draft an answer.", "Mark it handled once they've replied."]);
+      expect(flag!.nextSteps).toEqual([
+        "This one touches on fair housing, so I won't draft an answer. Reply to them yourself.",
+        "Mark it handled once you've replied.",
+      ]);
+      expect(sent.join("\n")).not.toMatch(/fair housing/i);
       expect(flag!.summary).toContain("There's no approved answer yet.");
       const before = a.fake.sent.length;
       await expect(a.grok("answer_flagged_question", { exceptionId: flag!.exceptionId, approvedFact: "Yes, that's fine." })).rejects.toThrow(
-        "Leave this with the property team. Don't draft an answer.",
+        "This one touches on fair housing, so I won't draft an answer. Reply to them yourself, then mark it handled.",
       );
       expect(a.fake.sent).toHaveLength(before);
     }
@@ -104,7 +108,7 @@ describe("fair-housing questions on a live tour", () => {
     expect(issue!.proposeDraft).toBeUndefined();
     const asked = await a.grok("answer_flagged_question", { exceptionId: issue!.exceptionId, approvedFact: "Yes, there's a dishwasher." });
     const receive = "Yes, there's a dishwasher. Let me know if you have any other questions.";
-    const question = `Send this to ${formatPhone(PHONE)}? "${receive}"`;
+    const question = `Send this to ${formatPhone(PHONE)} and save it for anyone who asks the same thing later? "${receive}"`;
     expect(asked.visitorWillReceive).toBe(receive);
     expect(asked.summary).toBe(question);
     expect(asked.confirmation.question).toBe(question);
