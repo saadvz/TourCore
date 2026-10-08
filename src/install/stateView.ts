@@ -22,6 +22,8 @@ import {
 } from "../setup/setupActions";
 import { isCurrent, statusLabel } from "../setup/workspace";
 import { operatorUnitName } from "../visitor/identity";
+import { googleClientConfig } from "../storage/googleOAuth";
+import type { SettingName } from "./secretStore";
 import { isHostedRailway } from "./deployment";
 import type { Installation } from "./installation";
 import { storageVolumeHealth } from "./persistentVolume";
@@ -350,6 +352,16 @@ function toolFor(step: StepId, draft: SetupDraft | undefined): string {
 }
 
 const RAW_SLOT = /\{[A-Za-z][A-Za-z0-9]*\}/;
+export const DRIVE_NOT_SET_UP_LINE = "Google Drive isn't set up for Tour Core yet, so I'll keep your records on this computer for now.";
+
+/** Open-source install with no Tour Core Google app yet. The landlord keeps records on this computer. */
+function driveNotSetUpLine(inst: Installation): string | undefined {
+  if (isHostedRailway(inst.deploymentMode())) return undefined;
+  if (inst.records.provider() !== "NOT_CONFIGURED") return undefined;
+  const google = googleClientConfig(inst.env(), (name) => inst.secrets.get(name as SettingName));
+  if (google.clientId && google.clientSecret) return undefined;
+  return DRIVE_NOT_SET_UP_LINE;
+}
 
 /** The line for this step, with saved details filled in. Never leaves a raw slot. */
 function sayFor(client: ReportedClient | undefined, step: StepId, draft: SetupDraft | undefined): string {
@@ -394,7 +406,7 @@ export function readState(input: StateReadInput, propertyId?: string): Record<st
   const current = milestones.find((milestone) => milestone.status === "next") ?? null;
   const next = presentNext(status);
   const step = focusStep(milestones, next.action, picture);
-  const say = sayFor(input.client, step, picture.draft);
+  const say = (inst && step === "backups" && driveNotSetUpLine(inst)) || sayFor(input.client, step, picture.draft);
   const playbook = renderPlaybook(input.client, step, say);
   const copy = SHARED_STEPS[step];
   const setup = setupOf(input.services, inst, picture, status);

@@ -24,7 +24,7 @@ click Allow.
 
 **Tour Core:** Connected. I'm checking the rest of the setup now.
 
-[`get_next_installation_step` → CHOOSE_MESSAGING_PROVIDER]
+[`get_state` → CHOOSE_MESSAGING_PROVIDER]
 
 **Tour Core:** How would you like prospects to text Tour Core?
 
@@ -39,7 +39,7 @@ support. Available capabilities depend on the provisioned Photon line/account.
 
 **Operator:** Sendblue.
 
-[`choose_messaging_provider` sendblue → CONNECT_VISITOR_MESSAGING]
+[`set_up_texting` sendblue → CONNECT_VISITOR_MESSAGING]
 
 **Tour Core:** Sendblue needs your API key, API secret, and messaging number.
 I'll ask for them securely; they won't be shown to me in chat.
@@ -47,7 +47,7 @@ I'll ask for them securely; they won't be shown to me in chat.
 [Grok secure secret input. Grok fills and submits Tour Core's form. The
 operator does not open a page.]
 
-[`get_next_installation_step` → TEST_VISITOR_MESSAGING → `test_visitor_messaging`
+[`get_state` → TEST_VISITOR_MESSAGING → `set_up_texting`
 → continue]
 
 **Tour Core:** Visitor texting is connected and working. Everything needed to
@@ -60,11 +60,11 @@ start is connected and tested. Would you like to add your first property?
 **Operator:** Yes.
 
 **Tour Core:** What's the property address?
-[`list_properties`]
+[`get_state`]
 
 **Operator:** 144 Hillside Ave, Teaneck NJ.
 
-[`create_property_setup` address "144 Hillside Ave, Teaneck NJ" (no name: the
+[`save_property` address "144 Hillside Ave, Teaneck NJ" (no name: the
 operator didn't give one) → nextQuestion "What ZIP code should I use?" because
 the street, city, and state are already there. A missing street is "What's the
 street address?". A missing state is "What state is it in?" before any city
@@ -76,13 +76,13 @@ are saved.]
 
 **Operator:** 07666.
 
-[`update_property_details` postalCode "07666" → read the address back on one line]
+[`save_property` postalCode "07666" → read the address back on one line]
 
 **Tour Core:** Did I get that right: 144 Hillside Avenue, Teaneck, NJ 07666?
 
 **Operator:** Yes.
 
-[`update_property_details` confirmAddress true → "What type of property is this?"]
+[`save_property` confirmAddress true → "What type of property is this?"]
 
 **Tour Core:** What type of property is this: a single-family home, a
 multifamily home (duplex or small building you own), or an apartment or
@@ -90,28 +90,28 @@ condo (one unit)?
 
 **Operator:** A multifamily — I own the small building.
 
-[`update_property_details` propertyType MULTIFAMILY_HOME → nextQuestion
+[`save_property` propertyType MULTIFAMILY_HOME → nextQuestion
 "Which units can people tour?"]
 
 **Tour Core:** Which units can people tour?
 
 **Operator:** 1A and 1B.
 
-[`add_unit` "Unit 1A"; `add_unit` "Unit 1B"]
+[`save_units` "Unit 1A"; `save_units` "Unit 1B"]
 
 **Tour Core:** Added Unit 1A and Unit 1B, each with its own door. How many
 bedrooms and bathrooms does each have, and what's the rent?
 
 **Operator:** 1A is 2 bed 1 bath for $2,300. 1B is 1 bed 1 bath for $1,950.
 
-[`set_unit_details` details "1A is 2 bed 1 bath for $2,300. 1B is 1 bed 1 bath
+[`save_units` details "1A is 2 bed 1 bath for $2,300. 1B is 1 bed 1 bath
 for $1,950." → nextQuestion "When are these units available?"]
 
 **Tour Core:** When are these units available?
 
 **Operator:** 1A now, 1B October 15.
 
-[`set_unit_details` units 1A availability "now", 1B availability "October 15"]
+[`save_units` units 1A availability "now", 1B availability "October 15"]
 
 **Tour Core:** Here's what I have:
 Unit 1A — 2 bed · 1 bath · $2,300/month · available now
@@ -124,14 +124,14 @@ Does that look right?
 
 **Operator:** The main entrance.
 
-[`add_door` "Main Entrance", entrance]
+[`save_doors_and_routes` "Main Entrance", entrance]
 
 **Tour Core:** Any hallway or inside doors between the main entrance and the
 units?
 
 **Operator:** No, the units are right off the lobby.
 
-[`preview_route` Unit 1A: "main entrance", "unit door"; same for Unit 1B]
+[`save_doors_and_routes` Unit 1A: "main entrance", "unit door"; same for Unit 1B]
 
 **Tour Core:** I have:
 Unit 1A: Main Entrance → Unit 1A Door
@@ -140,13 +140,13 @@ Is that right?
 
 **Operator:** Yep.
 
-[`set_route` for each unit with the exact door names]
+[`save_doors_and_routes` for each unit with the exact door names]
 
 **Tour Core:** When can people tour?
 
 **Operator:** Weekdays, 9 to 5.
 
-[`set_tour_hours` days "weekdays", start "9", end "5"]
+[`save_hours` days "weekdays", start "9", end "5"]
 
 **Tour Core:** Done: weekdays, 9 AM–5 PM. Tours last 45 minutes, a new one can
 start every hour, and visitors can get in up to 10 minutes early. Want to
@@ -160,9 +160,9 @@ or no form.
 
 **Operator:** Basic form.
 
-[`set_verification_policy` basic-form. Texting isn't asked about: the property
+[`save_settings` basic-form. Texting isn't asked about: the property
 already uses the installed touring number, which covers every property.
-`review_property_setup`]
+`get_state`]
 
 **Tour Core:** Here's what I have:
 144 Hillside Ave, Teaneck NJ
@@ -185,17 +185,17 @@ Does that look right?
 
 **Operator:** Yes.
 
-[`get_next_installation_step` → OFFER_OPERATOR_ALERTS]
+[`get_state` → OFFER_OPERATOR_ALERTS]
 
 **Tour Core:** Want me to text you when someone books, starts, or finishes a tour, and ping you the moment something needs you?
 
 **Operator:** Sure.
 
-[`set_notification_preferences` preset recommended]
+[`save_settings` preset recommended]
 
 **Tour Core:** I'm setting up your tour updates.
 
-[Creates the Tour Core Operator Updates routine; `get_secure_setup_url` step
+[Creates the Tour Core Operator Updates routine; `get_state` step
 operator-alerts, opened next to the routine's trigger panel. The panel shows
 the address on screen, so Grok doesn't move it and hands the browser over.]
 
@@ -208,19 +208,19 @@ collection could not be used.]
 
 **Operator:** Done.
 
-[`get_next_installation_step` → TEST_OPERATOR_ALERTS → `test_operator_alerts`.
+[`get_state` → TEST_OPERATOR_ALERTS → `get_state`.
 The routine wakes with `installation.test` and posts:]
 
 **Tour Core:** Tour updates are connected. I'll let you know about your tours
 here.
 
-[`get_next_installation_step` → RUN_READINESS]
+[`get_state` → RUN_READINESS]
 
 **Tour Core:** Prospects can text your touring number to ask questions, choose
 a unit and time, verify their details, and complete the self-guided tour in
 the same conversation. I'll run a readiness check and a practice tour before
 we turn it on.
-[`run_readiness_check`]
+[`run_checks`]
 
 ✓ Property details
 ✓ Tour hours
@@ -232,7 +232,7 @@ we turn it on.
 ✓ Door access
 ✓ Audit/export
 
-[`run_dry_tour`]
+[`run_checks`]
 
 Practice tour passed:
 ✓ Booking worked
@@ -245,14 +245,14 @@ Practice tour passed:
 ✓ Tour completed
 ✓ Follow-up worked
 
-[`publish_demo_property` → returns a question]
+[`publish` → returns a question]
 
 **Tour Core:** Everything passed. Would you like me to publish 144 Hillside Ave
 for demo?
 
 **Operator:** Yes.
 
-[`publish_demo_property` with confirmationCode]
+[`publish` with confirmationCode]
 
 **Tour Core:** Your property is published. Visitor texting is live. Door
 access is still in demo mode, so no physical locks will open. I'll keep you
@@ -264,7 +264,7 @@ updated on your tours and let you know when something needs your attention.
 
 [A visitor, Testy, books Unit 1A by text. Tour Core wakes the Tour Core
 Operator Updates routine with only an event id and `tour.booked`. The routine
-calls `get_operator_update`.]
+calls `get_inbox`.]
 
 **Tour Core:** New tour booked: Testy is scheduled to tour Unit 1A today at
 3:00 PM.
@@ -275,7 +275,7 @@ calls `get_operator_update`.]
 
 [Inside, Testy texts "Is there a pool?". Tour Core replies "I'll pass your
 question to the {team}, and they'll reply here as soon as they can." and sends `exception.created`. The
-routine calls `get_operator_update`.]
+routine calls `get_inbox`.]
 
 **Tour Core:** Testy, touring Unit 1A, asked whether the property has a pool.
 Tour Core doesn't have that yet. The tour is still active. What should I tell
@@ -283,14 +283,14 @@ them?
 
 **Operator:** No pool, but there's a gym on the roof.
 
-[`answer_flagged_question` approvedFact "There's no pool, but there's a gym on
+[`resolve_issue` approvedFact "There's no pool, but there's a gym on
 the roof." → returns a question]
 
 **Tour Core:** Send this to Testy and save it for anyone who asks the same thing later? "There's no pool, but there's a gym on the roof. Let me know if you have any other questions."
 
 **Operator:** Yes.
 
-[`answer_flagged_question` with confirmationCode. Testy gets the answer, then
+[`resolve_issue` with confirmationCode. Testy gets the answer, then
 Tour Core puts their tour step back in front of them.]
 
 [Later: `tour.completed`.]
@@ -304,14 +304,14 @@ Tour Core puts their tour step back in front of them.]
 **Operator:** Dana asked for a tour of 1A on Monday at 3:15. Her number is
 555-010-2000. Set that up.
 
-[`schedule_one_off_tour` → question]
+[`schedule_tour` → question]
 
 **Tour Core:** Set up a tour for Dana at Unit 1A on Monday at 3:15 PM? Only
 say yes if they asked for this tour. Dana gets a text to confirm. Book it?
 
 **Operator:** Yes.
 
-[`schedule_one_off_tour` with confirmationCode]
+[`schedule_tour` with confirmationCode]
 
 **Tour Core:** I texted Dana to confirm a tour of Unit 1A on Monday at
 3:15 PM. The regular tour times are unchanged.
@@ -325,4 +325,4 @@ yet. Want me to set it up the same as Unit 1A (Main Entrance → Unit 1B Door)?
 
 **Operator:** Yes.
 
-[`preview_route` → show → `set_route` → `run_readiness_check` again]
+[`save_doors_and_routes` → show → `save_doors_and_routes` → `run_checks` again]

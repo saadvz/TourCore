@@ -62,7 +62,8 @@ async function startLocalApp() {
     visitorMessaging: { ok: true, at: new Date(clock).toISOString(), message: "ok", problems: [], publicBaseUrl: PUBLIC, provider: "local" },
   });
   installation.files.update({ messagingProvider: "LOCAL" });
-  const server = createSetupServer({ workspace: ws, installation, now: () => new Date(clock), realNow: () => clock, operatorToken: () => TOKEN, log: () => {} });
+  const server = createSetupServer({
+    toolSurface: "all", workspace: ws, installation, now: () => new Date(clock), realNow: () => clock, operatorToken: () => TOKEN, log: () => {} });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   cleanups.push(() => server.close());
   const port = (server.address() as { port: number }).port;

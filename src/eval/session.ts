@@ -103,6 +103,7 @@ export class EvalSession {
       now: () => new Date(EVAL_CLOCK),
       realNow: () => EVAL_CLOCK,
       operatorToken: () => TOKEN,
+      toolSurface: "all",
       log: () => {},
       alertRetryMs: 3_600_000,
     });

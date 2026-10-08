@@ -2,7 +2,7 @@
 name: install-tour-core
 description: Connect an operator to Tour Core and take them from a blank setup to a published property by following Tour Core's own next steps, asking only for approvals, logins, credentials through a secure handoff, property information and decisions.
 when-to-use: "set up Tour Core", "install Tour Core", "what's left to set up", "check my Tour Core installation", "is Tour Core running", "restart Tour Core", "test alerts", "connect texting", "turn on alerts", "tour updates", "change my notifications", "reset Tour Core", "fresh demo", "fresh onboarding test"
-allowed-tools: get_state get_installation_status get_next_installation_step get_installation_component skip_optional_setup check_runtime_health check_public_endpoint choose_messaging_provider choose_messaging_line test_visitor_messaging set_up_texting get_notification_preferences set_notification_preferences get_operator_update test_operator_alerts test_storage test_access get_secure_setup_url get_storage_status get_storage_location begin_google_drive_connect finish_google_drive_setup use_local_demo_storage prepare_storage_migration migrate_storage_to_google_drive verify_storage_migration activate_google_drive_storage discover_storage takeover_storage_writer disconnect_google_drive_storage confirm_backup_destination decline_portable_backup get_backup_status create_portable_backup confirm_backup_stored reset_hosted_demo backup_records get_inbox
+allowed-tools: get_state set_up_texting save_property save_units save_doors_and_routes save_hours save_settings run_checks publish backup_records restore_records reset_hosted_demo get_inbox remove_property pause_tours get_tours schedule_tour cancel_tour hold_tour reply_to_time_request resolve_issue export_records
 argument-hint: "[what to check or connect]"
 user-invocable: true
 metadata:
@@ -13,10 +13,12 @@ metadata:
 
 # Install Tour Core
 
+Call only the landlord tools in allowed-tools. `reset_hosted_demo` is for the hosted owner.
+
 Call `get_state` first and follow its next step. Tour Core decides the order
-and tells you, one step at a time, through `get_next_installation_step` as
+and tells you, one step at a time, through `get_state` as
 well. The backups step on `get_state` is `backup_records`, and declining stays
-possible. `get_next_installation_step` still names `confirm_backup_destination`.
+possible. `get_state` names `backup_records` for that step.
 After publish, day-to-day work starts at `get_inbox`. The operator only approves, signs in, gives
 credentials through a secure handoff, gives property information and makes
 decisions.
@@ -125,7 +127,7 @@ Seven phases, always forward. Go back only when Tour Core's status changes
 
 ### Phase 1: Bootstrap (you, alone)
 
-If Tour Core's tools already answer, call `get_installation_status` and go to
+If Tour Core's tools already answer, call `get_state` and go to
 the phase it reports: don't reinstall a running Tour Core.
 
 When the deployment is HOSTED, say:
@@ -138,7 +140,7 @@ address. Do not store operational records on your computer. Skip cloning a runti
 operator that Tour Core only works while your computer is on. Do not say
 Tour Core's Google app is not configured, and do not offer to keep records
 on your computer. Google Drive, when recommended, is Grok's built-in
-connector for portable backups (`confirm_backup_destination`), not a second
+connector for portable backups (`backup_records`), not a second
 Google approval. Then go to Phase 2.
 
 Otherwise the operator explicitly chose local or self-hosting, or
@@ -172,12 +174,12 @@ As soon as it's approved, without waiting to be asked:
 
 > Connected. I'm checking the rest of the setup now.
 
-and call `get_installation_status`. An old Tour Core connection left over from
+and call `get_state`. An old Tour Core connection left over from
 before is an exception: remove it and connect again the same way.
 
 ### Phase 3: Infrastructure (follow Tour Core's order)
 
-Call `get_next_installation_step` and do exactly that step. Repeat after each
+Call `get_state` and do exactly that step. Repeat after each
 one. While `infrastructureReady` is false:
 
 - follow the step Tour Core gives you, even if something else seems possible;
@@ -191,9 +193,9 @@ By `performedBy`:
   then say briefly what happened ("Visitor texting is connected and working.").
 - **OPERATOR_IN_SECURE_SETUP**: Prefer Grok's secure secret input. Say `operatorMessage`. For messaging credentials that sentence is "I'll ask for them securely; they won't be shown to me in chat." Collect only `credentialFields`. The values
   are not shown in chat and are not tool arguments. Call
-  `get_secure_setup_url` with `secureSetupStep`, fill the form, and submit it
+  `get_state` for the secure setup step, fill the form, and submit it
   yourself. Do not show the link. Do not tell the operator to open a page.
-  When it is saved, call `get_next_installation_step` and continue. Do not ask
+  When it is saved, call `get_state` and continue. Do not ask
   what to do next. The same secure fill applies to a routine webhook address
   and key. Hand the browser to the operator only when secure fill isn't
   available; say that the normal secure collection could not be used.
@@ -205,14 +207,11 @@ Visitor texting is part of this phase: it's connected and tested before any
 property. If the next step is choosing a provider, ask `operatorMessage` and
 offer only the returned choices. Do not assume Sendblue. Do not give legal or
 compliance advice beyond each choice's description. After they pick, call
-`choose_messaging_provider`, then follow the next step. If they switch back to a
+`set_up_texting`, then follow the next step. If they switch back to a
 provider that already has saved account details, follow that next step (usually
 a connection test) and do not ask them to re-enter those credentials. If Photon
-lists more than one line, ask which one and call `choose_messaging_line`. QA may
-choose `local` for a fresh install (no real texts; later `inject_local_sms` / `read_local_outbox`),
-or put one scratch building on local test texts while the installation stays
-on live visitor texting (`choose_messaging_provider` with `local` and that
-property, or `set_services` with `messaging: local`). Do not switch the
+lists more than one line, ask which one and call `set_up_texting`. QA local texts
+are on the QA connector, not this chat. Do not switch the
 whole installation to local when another building is already published and
 receiving real texts. Switching to `local` does not clear carrier secrets. Then Tour Core
 recommends Google Drive, before the first property.
@@ -228,12 +227,12 @@ If they say yes, use your built-in Google Drive connector. If it is already
 connected, reuse it. Do not ask for a Google password, client id, client
 secret, or API key. Create or find a private folder named Tour Core, with
 Backups, Exports, and Properties inside. Do not make a public sharing link.
-Then call `confirm_backup_destination` (`provider` google_drive, `folderName`
+Then call `backup_records` (`provider` google_drive, `folderName`
 Tour Core). Say:
 
 > Google Drive is connected. I've prepared your Tour Core folder.
 
-If they say no, call `decline_portable_backup`. Operational records stay with
+If they say no, call `backup_records` to decline. Operational records stay with
 hosted Tour Core, and property setup continues.
 
 On the open-source path, when the next step is Google Drive's own approval, say:
@@ -243,19 +242,22 @@ On the open-source path, when the next step is Google Drive's own approval, say:
 If they say yes:
 
 1. If your built-in Google Drive connector is not connected, connect it the normal way and let them approve Google. Do not ask for a Google password, API key, or client secret.
-2. Call `begin_google_drive_connect`. If your connector is already connected, still do this: Tour Core saves records itself, including when you are not in the chat.
-3. Say:
+2. Self-hosted Google Drive setup is on the ops connector, not this landlord chat. Say:
 
-   > Google Drive is connected to me. Tour Core also needs permission to save its records there directly so tours keep working even when I'm not in this chat. I'll open Google's approval screen for that now.
+   > Google Drive is connected to me. For Tour Core to save its records there directly, whoever runs your Tour Core computer has to finish one more approval. Until then, your records stay on this computer.
 
-4. Open `authorizationUrl`. After they approve, call `get_next_installation_step` and finish with the tool it names (`finish_google_drive_setup`).
-5. If `begin_google_drive_connect` says the Google app is not configured, say its summary. Do not ask them to create a Google Cloud project. Offer to keep records on this computer.
+3. Then call `get_state`. Records stay on this computer until that approval is done.
+4. If Google Drive is not configured, say:
 
-If they say no, call `use_local_demo_storage` and say:
+   > Google Drive isn't set up for Tour Core yet, so I'll keep your records on this computer for now.
+
+   Do not ask them to create a Google Cloud project.
+
+If they say no, keep records on this computer for the demo and say:
 
 > Your records are stored with this demo installation and won't be portable if this Tour Core computer is replaced.
 
-Questions like "Where are my Tour Core records?" use `get_storage_status` and `get_storage_location`. Open or browse the folder with your Google Drive connector. Don't reconstruct bookings from the files when a Tour Core tool can answer.
+Questions like "Where are my Tour Core records?" are answered from `get_state`. Open or browse the folder with your Google Drive connector. Don't reconstruct bookings from the files when a Tour Core tool can answer.
 
 ### Phase 4: Property
 
@@ -291,8 +293,7 @@ question:
 
 > Want me to text you when someone books, starts, or finishes a tour, and ping you the moment something needs you?
 
-- **Yes.** Call `set_notification_preferences` (`preset: recommended`, `problems-only`
-  if they only want problems, or the exact `updates` they asked for). Then:
+- **Yes.** Call `save_settings` with the tour-update choice they asked for. Then:
 
   > I'm setting up your tour updates.
 
@@ -300,7 +301,7 @@ question:
 
   1. Create the Tour Core Operator Updates routine yourself (authenticated
      webhook trigger; instructions in `grok-template/routines/operator-updates.md`).
-  2. Call `get_secure_setup_url` with step `operator-alerts`.
+  2. Call `get_state` and use the secure setup step it names for operator alerts.
   3. Ask for the routine address and key through secure secret input and fill
      Tour Core's form yourself. They stay out of chat and out of tool
      arguments. If secure fill isn't available and the values stay hidden
@@ -309,15 +310,14 @@ question:
      operator instead of moving it.
   4. Never put the address or key in chat, tool arguments, files or commands.
 
-  Then call `get_next_installation_step`: Tour Core has you send a test update
-  (`test_operator_alerts`), and the routine posts "Tour updates are connected."
+  Then call `get_state`: Tour Core has you send a test update
+  and the routine posts "Tour updates are connected."
   If preferences are saved but the connection isn't finished, the next step is
   `CONNECT_OPERATOR_ALERTS`: pick up at step 2.
-- **No.** Call `skip_optional_setup` with `OPERATOR_ALERTS` and continue. They
+- **No.** Call `get_state` and continue. They
   can turn updates on any time later.
 
-To see or change what they get later, use `get_notification_preferences` and
-`set_notification_preferences`. Missed tours (no-shows) aren't detected yet;
+To see or change what they get later, use `get_state` and `save_settings`. Missed tours (no-shows) aren't detected yet;
 don't promise them.
 
 Never decide yourself whether a component is required: Tour Core marks each
@@ -342,12 +342,12 @@ plain words and fix it with the operator.
 
 Publish only after a clear yes, through the publish tool's own confirmation
 question. Ask that question once. When the operator says yes, call the tool
-with the code, wait for the result, then call `get_installation_status`. Say
+with the code, wait for the result, then call `get_state`. Say
 the property is published only when that status says so. Do not repeat the
 pre-publish question, and do not say publishing still needs a yes, after the
 tool has published it. A later call that finds it already published changes
 nothing. If a tour update arrives while you are installing, ignore your
-memory of the previous step and call `get_next_installation_step` again.
+memory of the previous step and call `get_state` again.
 Tour Core's status wins. If publishing is refused because visitor texting is
 connected but the property isn't using it yet, fix it yourself (switch the
 property to real texts, run the readiness check and practice tour again, then
@@ -359,26 +359,26 @@ ask the publish question again). Don't ask the operator how to text people.
 > demo mode, so no physical locks will open. I'll keep you updated on your
 > tours and let you know when something needs your attention.
 
-Then follow `get_next_installation_step`. When a property is already in
+Then follow `get_state`. When a property is already in
 operation, that step is `ADD_ANOTHER_PROPERTY`: ask its question, and if they
-want one more building call `create_property_setup` with the address they
+want one more building call `save_property` with the address they
 give (Setup Property skill). The building already published is not sent back
 to draft. If they don't want another, stop.
 
 On the hosted product, after the first publish, create a portable backup
-(`create_portable_backup`), save the file in Tour Core/Backups with the
+(`backup_records`), save the file in Tour Core/Backups with the
 Google Drive connector, confirm the file is there, then call
-`confirm_backup_stored`. Say:
+`backup_records` to confirm it was stored. Say:
 
 > I've also saved a portable backup of this setup to your Google Drive.
 
 A backup that fails does not unpublish the property or stop a tour. Later
 backups use the Backup Tour Core skill. Do not say a backup is saved until
-`confirm_backup_stored` succeeds.
+`backup_records` succeeds.
 
 Describe each part as it is (texting live, door access demo); never say
 "everything runs in demo mode". From here, when the Tour Core Operator Updates
-routine wakes you, call `get_operator_update` with its `eventId` and post the
+routine wakes you, call `get_inbox` with its `eventId` and post the
 `summary` (Work Exception covers issues). Work exceptions when the operator
 asks.
 
@@ -405,7 +405,7 @@ There is no separate owner-reset step after this.
   Never say something is connected or working unless Tour Core says READY.
 - If a test fails, say so plainly and follow Tour Core's next step. Don't
   improvise workarounds.
-- On the hosted product, if `check_runtime_health` (or `/healthz`) shows
+- On the hosted product, if the ops connector (or `/healthz`) shows
   `persistentVolume` false, say Tour Core's health line as it is.
   Whoever set up your Tour Core hosting needs to attach permanent storage. Until then, hold off on updating Tour Core.
   Never set, recommend, or ask

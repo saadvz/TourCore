@@ -130,7 +130,8 @@ describe("HOSTED_RAILWAY_P0 runtime", () => {
     inst.files.ensure({ deploymentMode: "HOSTED_RAILWAY_P0" });
     inst.secrets.set({ SENDBLUE_API_API_KEY: SECRET });
     cleanups.push(setSendblueRuntime({ env: () => readSendblueEnv(effectiveEnv(env, inst.settingsSource())) }));
-    const { server } = await startSetupServer({ installation: inst, workspace: new PropertyWorkspace(root), host: "0.0.0.0", port: 0, open: false });
+    const { server } = await startSetupServer({
+    toolSurface: "all", installation: inst, workspace: new PropertyWorkspace(root), host: "0.0.0.0", port: 0, open: false });
     cleanups.push(() => server.close());
     const address = server.address();
     expect(typeof address === "object" && address ? address.address : "").not.toBe("127.0.0.1");
@@ -179,7 +180,8 @@ describe("HOSTED_RAILWAY_P0 runtime", () => {
     expect(publicHealth(installation(root, hostedEnv(root, { GIT_COMMIT_SHA: sha }))).commit).toBe(sha);
     expect(publicHealth(installation(root, hostedEnv(root, { RAILWAY_GIT_COMMIT_SHA: "  ", TOURCORE_COMMIT_SHA: sha }))).commit).toBe(sha);
 
-    const { server } = await startSetupServer({ installation: inst, workspace: new PropertyWorkspace(root), host: "0.0.0.0", port: 0, open: false });
+    const { server } = await startSetupServer({
+    toolSurface: "all", installation: inst, workspace: new PropertyWorkspace(root), host: "0.0.0.0", port: 0, open: false });
     cleanups.push(() => server.close());
     const port = (server.address() as { port: number }).port;
     const body = await (await hostedFetch(port)("/healthz")).json();
@@ -195,7 +197,8 @@ describe("hosted security", () => {
     const inst = installation(root, env);
     inst.files.ensure({ deploymentMode: "HOSTED_RAILWAY_P0" });
     cleanups.push(setSendblueRuntime({ env: () => readSendblueEnv(effectiveEnv(env, inst.settingsSource())) }));
-    const { server } = await startSetupServer({ installation: inst, workspace: new PropertyWorkspace(root), host: "127.0.0.1", port: 0, open: false });
+    const { server } = await startSetupServer({
+    toolSurface: "all", installation: inst, workspace: new PropertyWorkspace(root), host: "127.0.0.1", port: 0, open: false });
     cleanups.push(() => server.close());
     const port = (server.address() as { port: number }).port;
     return { inst, http: hostedFetch(port), port };
@@ -367,7 +370,8 @@ describe("hosted storage, secrets, and one demo tenant", () => {
     const inst = installation(root, env);
     inst.files.ensure({ deploymentMode: "HOSTED_RAILWAY_P0" });
     cleanups.push(setSendblueRuntime({ env: () => readSendblueEnv(effectiveEnv(env, inst.settingsSource())) }));
-    const { server: listening } = await startSetupServer({ installation: inst, workspace: new PropertyWorkspace(root), host: "127.0.0.1", port: 0, open: false });
+    const { server: listening } = await startSetupServer({
+    toolSurface: "all", installation: inst, workspace: new PropertyWorkspace(root), host: "127.0.0.1", port: 0, open: false });
     cleanups.push(() => listening.close());
     const http = hostedFetch((listening.address() as { port: number }).port);
     const register = (name: string) =>
@@ -436,7 +440,8 @@ describe("hosted audit export download", () => {
 
     const id = await h.publish();
     await h.touringVisitor(id);
-    const { server } = await startSetupServer({ installation: h.inst, workspace: h.workspace, host: "127.0.0.1", port: 0, open: false, now: () => new Date(h.now()) });
+    const { server } = await startSetupServer({
+    toolSurface: "all", installation: h.inst, workspace: h.workspace, host: "127.0.0.1", port: 0, open: false, now: () => new Date(h.now()) });
     cleanups.push(() => server.close());
     const port = (server.address() as { port: number }).port;
     const http = hostedFetch(port);

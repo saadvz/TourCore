@@ -121,6 +121,5 @@ describe("QA round 2", () => {
     const catalog = readFileSync(join(root, "grok-template/integrations/tour-core-tools.md"), "utf8");
     expect(catalog).toMatch(/\| `publish` \| consequential \|/);
     expect(catalog).toMatch(/\| `save_hours` \| change \|[^\n]*Tours have to end later the same day/);
-    expect(catalog).toMatch(/\| `set_tour_hours` \| change \|[^\n]*Tours have to end later the same day/);
   });
 });

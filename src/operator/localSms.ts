@@ -53,21 +53,47 @@ function bubblesView(bubbles: LocalOutboxBubble[]) {
   return bubbles.map((b) => ({ body: b.body, sentAt: b.sentAt, ...(b.templateId ? { templateId: b.templateId } : {}) }));
 }
 
+function openPropertyIds(ctx: ToolContext): string[] {
+  const ws = ctx.services.workspace;
+  return ws.propertyIds().filter((id) => {
+    if (!ws.has(id) && !ws.loadDraft(id)) return false;
+    return !ws.has(id) || !ws.load(id).state.removedAt;
+  });
+}
+
 export async function injectLocalSms(
   ctx: ToolContext,
   input: { from: string; text?: string; to?: string; property?: string; id?: string; hasMedia?: boolean; listingProperty?: string },
 ): Promise<Record<string, unknown>> {
-  const propertyId = resolvePropertyId(ctx.services.workspace, input.property);
-  requireLocalMessagingProperty(ctx, propertyId);
   const from = toE164(input.from);
   if (!from) throw new SetupInputError("PHONE_INVALID", "That visitor phone number isn't a valid phone number.");
-  const to = lineFor(ctx, propertyId, input.to);
-  if (ctx.services.endpoints) {
-    try {
-      ctx.services.endpoints.attach({ address: to, provider: "local", propertyId }, ctx.now());
-    } catch (err) {
-      if (err instanceof SetupInputError) throw err;
-      throw err;
+  const text = input.text ?? "";
+  if (!text.trim() && !input.hasMedia) {
+    throw new SetupInputError("TEXT_REQUIRED", "Enter the visitor's text, or mark this inbound as a photo.");
+  }
+  const shared = !input.property?.trim();
+  let propertyId: string | undefined;
+  let to: string;
+  if (shared) {
+    const ids = openPropertyIds(ctx);
+    if (!ids.length) throw new SetupInputError("NO_PROPERTIES", "There aren't any properties set up yet.");
+    const localIds = ids.filter((id) => isLocalMessagingProperty(ctx, id));
+    if (!localIds.length) throw new SetupInputError("LOCAL_PROVIDER_REQUIRED", LOCAL_PROVIDER_REQUIRED);
+    to = input.to ? lineFor(ctx, localIds[0]!, input.to) : localLoopbackNumber(ctx.installation?.env());
+    if (ctx.services.endpoints) {
+      for (const id of localIds) ctx.services.endpoints.attach({ address: to, provider: "local", propertyId: id }, ctx.now());
+    }
+  } else {
+    propertyId = resolvePropertyId(ctx.services.workspace, input.property);
+    requireLocalMessagingProperty(ctx, propertyId);
+    to = lineFor(ctx, propertyId, input.to);
+    if (ctx.services.endpoints) {
+      try {
+        ctx.services.endpoints.attach({ address: to, provider: "local", propertyId }, ctx.now());
+      } catch (err) {
+        if (err instanceof SetupInputError) throw err;
+        throw err;
+      }
     }
   }
   const receive = ctx.services.receiveInbound;
@@ -78,14 +104,24 @@ export async function injectLocalSms(
   const provider = ctx.installation
     ? createMessagingProvider("local", { env: () => ctx.installation!.env(), ledger: ctx.messagingLedger, now: ctx.now })
     : new LocalMessagingProvider({ now: ctx.now, ledger: ctx.messagingLedger });
-  const text = input.text ?? "";
-  if (!text.trim() && !input.hasMedia) {
-    throw new SetupInputError("TEXT_REQUIRED", "Enter the visitor's text, or mark this inbound as a photo.");
-  }
   const id = input.id?.trim() || randomUUID();
   const result = await handleProviderWebhook(
     provider,
-    { rawBody: Buffer.from(JSON.stringify({ id, from, to, text, ...(input.hasMedia ? { hasMedia: true } : {}), ...(input.listingProperty ? { listingProperty: input.listingProperty } : {}), ...(input.property ? { property: propertyId } : {}) }), "utf8"), headers: { "content-type": "application/json" } },
+    {
+      rawBody: Buffer.from(
+        JSON.stringify({
+          id,
+          from,
+          to,
+          text,
+          ...(input.hasMedia ? { hasMedia: true } : {}),
+          ...(input.listingProperty ? { listingProperty: input.listingProperty } : {}),
+          ...(propertyId ? { property: propertyId } : {}),
+        }),
+        "utf8",
+      ),
+      headers: { "content-type": "application/json" },
+    },
     { ledger: ctx.messagingLedger ?? new MessagingLedger(), receive, now: ctx.now },
   );
   if (result.status !== 200 || result.body.ok === false) {
@@ -93,11 +129,12 @@ export async function injectLocalSms(
   }
   const bubbles = localSmsOutbox().forVisitor(from).slice(before);
   return {
-    summary: result.body.duplicate ? "That visitor text was already delivered." : "Delivered the visitor text.",
+    summary: result.body.duplicate ? "That visitor text was already delivered." : shared ? "Delivered the visitor text on the shared line." : "Delivered the visitor text.",
     from,
     to,
     text,
     bubbles: bubblesView(bubbles),
+    ...(shared ? { sharedLine: true } : {}),
     ...(result.body.duplicate ? { duplicate: true } : {}),
   };
 }

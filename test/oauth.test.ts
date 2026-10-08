@@ -84,6 +84,7 @@ async function oauthApp(options: { mcpAuth?: McpAuthMode; operatorToken?: () => 
   const ws = new PropertyWorkspace(root);
   if (options.seed) ws.save(loadConfig());
   const serverOptions = {
+    toolSurface: "all" as const,
     workspace: ws,
     mcpAuth: options.mcpAuth ?? (options.operatorToken ? undefined : "oauth"),
     operatorToken: options.operatorToken,
@@ -647,7 +648,8 @@ describe("auth modes", () => {
     process.env.TOURCORE_MCP_AUTH_MODE = "none";
     cleanups.push(() => delete process.env.TOURCORE_MCP_AUTH_MODE);
     const app = await oauthApp({ mcpAuth: undefined as never });
-    const server = createSetupServer({ workspace: app.ws, log: () => {} });
+    const server = createSetupServer({
+    toolSurface: "all", workspace: app.ws, log: () => {} });
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
     cleanups.push(() => server.close());
     const res = await tunnelFetch((server.address() as { port: number }).port)(`${PUBLIC}/mcp`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer anything" }, body: "{}" });

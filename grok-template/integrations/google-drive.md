@@ -15,7 +15,7 @@ or refresh token. Do not start a second Google approval for Tour Core.
 
 Create or find a private folder named `Tour Core`, with `Backups`, `Exports`,
 and `Properties`. Do not create a public sharing link. Then call
-`confirm_backup_destination`. Tour Core records the destination. It does not
+`backup_records` with confirm_destination. Tour Core records the destination. It does not
 receive your Google token.
 
 ## What you say
@@ -30,12 +30,12 @@ After the first publish, save a portable backup and say:
 
 > I've also saved a portable backup of this setup to your Google Drive.
 
-If they decline, call `decline_portable_backup`. Operational records stay with
+If they decline, call `backup_records` with decline. Operational records stay with
 hosted Tour Core.
 
 ## What you use it for
 
-- Saving a portable backup into `Tour Core/Backups` (`create_portable_backup`, then `confirm_backup_stored` only after the file is there).
+- Saving a portable backup into `Tour Core/Backups` (`backup_records` with create, then `backup_records` with confirm_stored only after the file is there).
 - Saving a readable export into `Tour Core/Exports`. An export is not a backup. On an installation whose records live in Google Drive (`GOOGLE_DRIVE_READY`), the day's `audit-export.json` is written with the records and copied into Drive by the save step. The CSV stays on the Tour Core computer. On a hosted installation (`HOSTED_VOLUME`, Drive used only for backups), day exports stay on the server as 30-minute download links that can be used until they expire. Only readable exports and backups come back as one-time links for the assistant to save into the Tour Core folder in Drive. Door access in a day export is only what was issued or used that day.
 - "Open my Tour Core backup." Open the file with the Drive connector. Bookings and access still come from Tour Core tools.
 - Restoring a lost installation: download the latest backup, upload it through Tour Core's restore handoff (a backup up to 50 MB is accepted; a larger file is refused with 413 and the cap stated in the message), read the preview, and import only after an explicit yes. An older ID check is named in the import summary: it now uses the basic identity form, and the landlord can ask for no form.
@@ -44,4 +44,4 @@ Do not say "Tour Core needs its own Google Drive permission."
 
 ## Optional direct Drive
 
-Self-hosted and experimental installs may set `TOURCORE_STORAGE_MODEL=DIRECT_GOOGLE_DRIVE`. That mode uses Tour Core's own Google approval and is not the hosted product path. Follow `begin_google_drive_connect` only when Tour Core's next step names it.
+Self-hosted and experimental installs may set `TOURCORE_STORAGE_MODEL=DIRECT_GOOGLE_DRIVE`. That mode uses Tour Core's own Google approval and is not the hosted product path. Follow `begin_google_drive_connect` on the ops connector only when Tour Core's next step names it.

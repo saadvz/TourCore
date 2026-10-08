@@ -3,6 +3,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { mcpAuthModeFromEnv } from "../mcp/authMode";
 import { MCP_PATH } from "../mcp/mcpBridge";
+import { MCP_OPS_PATH, MCP_QA_PATH } from "../mcp/paths";
+import { LANDLORD_CORE_TOOLS, OPS_TOOL_NAMES, QA_TOOL_NAMES } from "../mcp/scopes";
 import { OAuthGrantStore } from "../mcp/oauth";
 import { grokLegacyCompatEnabled } from "../mcp/oauth/clients";
 import { resolveDeploymentMode } from "../install/deployment";
@@ -89,7 +91,12 @@ function status(): void {
     const connections = grants().connections();
     say(`  Connected ...... ${connections.length ? connections.map((c) => `${c.clientName} since ${new Date(c.connectedAt).toLocaleString()}`).join("; ") : "nothing"}`);
   }
-  say(`  Tools .......... ${OPERATOR_TOOLS.length}`);
+  say(`  Landlord tools . ${LANDLORD_CORE_TOOLS.length} (hosted owner also sees reset_hosted_demo)`);
+  const base = connectorUrl();
+  const opsSet = !!process.env.TOURCORE_OPS_TOKEN?.trim();
+  const qaSet = !!process.env.TOURCORE_QA_TOKEN?.trim();
+  say(`  Ops connector .. ${base ? base.replace(/\/mcp$/, MCP_OPS_PATH) : MCP_OPS_PATH} (${opsSet ? "token set" : "off until TOURCORE_OPS_TOKEN is set"})`);
+  say(`  QA connector ... ${base ? base.replace(/\/mcp$/, MCP_QA_PATH) : MCP_QA_PATH} (${qaSet ? "token set" : "off until TOURCORE_QA_TOKEN is set"})`);
 }
 
 function disconnect(): void {
@@ -100,7 +107,20 @@ function disconnect(): void {
 }
 
 function tools(): void {
-  for (const t of OPERATOR_TOOLS) say(`${t.name.padEnd(26)} ${t.kind.padEnd(14)} ${t.title}`);
+  say("Landlord connector (POST /mcp):");
+  for (const name of LANDLORD_CORE_TOOLS) {
+    const tool = OPERATOR_TOOLS.find((item) => item.name === name);
+    if (tool) say(`${tool.name.padEnd(26)} ${tool.kind.padEnd(14)} ${tool.title}`);
+  }
+  say("Hosted owner also sees reset_hosted_demo.");
+  say("");
+  say(`Ops connector (POST ${MCP_OPS_PATH}, TOURCORE_OPS_TOKEN):`);
+  for (const name of OPS_TOOL_NAMES) say(name);
+  say("");
+  say(`QA connector (POST ${MCP_QA_PATH}, TOURCORE_QA_TOKEN):`);
+  for (const name of QA_TOOL_NAMES) say(name);
+  say("");
+  say("Set TOURCORE_LEGACY_TOOLS=1 during the switch-over so /mcp also keeps the older tools, the QA test tools, and the ops tools. Unset it once the QA connector is confirmed. Planned removal: October 15, 2026.");
 }
 
 loadLocalEnv();

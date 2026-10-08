@@ -59,10 +59,10 @@ describe("routine secrets stay outside MCP and the template", () => {
     const root = new URL("../grok-template/", import.meta.url);
     const manifest = JSON.parse(readFileSync(new URL("template.json", root), "utf8"));
     expect(manifest.routines).toEqual([expect.objectContaining({ name: "Tour Core Operator Updates", doc: "routines/operator-updates.md", credentialsTravelWithTemplate: false })]);
-    expect(manifest.routines[0].allowedTools).toContain("get_operator_update");
+    expect(manifest.routines[0].allowedTools).toContain("get_inbox");
     expect(existsSync(new URL("routines/exception-alert.md", root))).toBe(false);
     const doc = readFileSync(new URL("routines/operator-updates.md", root), "utf8");
-    for (const type of ["tour.booked", "tour.started", "tour.completed", "exception.created", "get_operator_update"]) expect(doc).toContain(type);
+    for (const type of ["tour.booked", "tour.started", "tour.completed", "exception.created", "get_inbox"]) expect(doc).toContain(type);
     expect(doc).not.toMatch(/routines\.example|Bearer [A-Za-z0-9_-]{12,}/);
   });
 

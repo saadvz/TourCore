@@ -29,7 +29,8 @@ function hosted(): InstallHarness {
 }
 
 async function listen(h: InstallHarness): Promise<{ port: number; close: () => Promise<void> }> {
-  const server = createSetupServer({ workspace: new PropertyWorkspace(h.root), installation: h.inst, log: () => {} });
+  const server = createSetupServer({
+    toolSurface: "all", workspace: new PropertyWorkspace(h.root), installation: h.inst, log: () => {} });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
   const address = server.address();
   const port = typeof address === "object" && address ? address.port : 0;

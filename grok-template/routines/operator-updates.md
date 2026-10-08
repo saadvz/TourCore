@@ -61,7 +61,7 @@ delivery with the same `eventId`, so treat a repeat as the same update.
 
 1. If `eventType` is `installation.test`, post: "Tour updates are connected.
    I'll let you know about your tours here." and stop.
-2. Otherwise call `get_operator_update` with the `eventId`. Tour Core is the
+2. Otherwise call `get_inbox` with the `eventId`. Tour Core is the
    source of truth; don't rely on anything in the webhook beyond the ids.
 3. Post its `summary` in plain words, for example:
    > New tour booked: Testy is scheduled to tour Unit 1A today at 3:00 PM.
@@ -132,8 +132,8 @@ property is not unpublished by an update.
 
 ## Allowed tools
 
-`get_operator_update`, `inspect_exception`, `inspect_tour`, and
-`list_exceptions` if an issue can't be found. A `tour.time_requested` update
+`get_inbox`, `get_tours`, `reply_to_time_request`, `resolve_issue`, and
+`schedule_tour`. A `tour.time_requested` update
 needs a decision unless the request is withdrawn or expired. Withdrawn:
 `They booked a regular time instead.` Expired: `That time has already
 passed, so I've let {who} know their request ran out. You can still book

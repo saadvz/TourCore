@@ -29,7 +29,8 @@ afterEach(() => cleanup.splice(0).forEach((fn) => fn()));
 
 function startApp() {
   const root = mkdtempSync(join(tmpdir(), "tourcore-compliance-"));
-  const server: Server = createSetupServer({ workspace: new PropertyWorkspace(root), log: () => {} });
+  const server: Server = createSetupServer({
+    toolSurface: "all", workspace: new PropertyWorkspace(root), log: () => {} });
   return new Promise<{ port: number; close: () => void }>((resolve) => {
     server.listen(0, "127.0.0.1", () => {
       const port = (server.address() as { port: number }).port;

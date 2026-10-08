@@ -9,6 +9,9 @@ import { UnavailableModeError } from "../createTourCore";
 import { InvalidTransitionError, isRunningReservation } from "../domain/stateMachine";
 import { AuditExportLinks } from "./auditExportLinks";
 import { isHostedRailway } from "../install/deployment";
+import { DRIVE_NOT_SET_UP_LINE } from "../install/stateView";
+import type { SettingName } from "../install/secretStore";
+import { googleClientConfig } from "../storage/googleOAuth";
 import { envelope } from "./milestones";
 import { exportAudit, parseLocalDate } from "./auditExport";
 import {
@@ -557,7 +560,16 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
       attemptWrite(ctx, undefined, async () => {
         const backups = installationOf(ctx).backups;
         if (i.action === "status") return backups.status();
-        if (i.action === "decline") return backups.decline();
+        if (i.action === "decline") {
+          const declined = backups.decline();
+          const inst = installationOf(ctx);
+          if (inst.records.model() !== "HOSTED_P0_VOLUME" && inst.records.provider() === "NOT_CONFIGURED") {
+            inst.records.useLocalDemo();
+            const google = googleClientConfig(inst.env(), (name) => inst.secrets.get(name as SettingName));
+            if (!google.clientId || !google.clientSecret) return { summary: DRIVE_NOT_SET_UP_LINE };
+          }
+          return declined;
+        }
         if (i.action === "create") return backups.create(i.reason);
         if (i.action === "confirm_destination") {
           if (!i.provider || !i.folderName) throw new SetupInputError("DESTINATION_MISSING", "What should the backup folder be called?");

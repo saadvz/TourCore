@@ -479,7 +479,8 @@ async function startPhoneApp(mode: "basic-form" | "none", verificationValidForDa
   const ws = new PropertyWorkspace(root);
   const { config } = ws.save(phoneProperty(mode, verificationValidForDays));
   ws.recordReadiness(config.property.id, await runReadinessCheck(config, { now: new Date(clock) }));
-  const server: Server = createSetupServer({ workspace: ws, now: () => new Date(clock), realNow: () => clock, log: () => {} });
+  const server: Server = createSetupServer({
+    toolSurface: "all", workspace: ws, now: () => new Date(clock), realNow: () => clock, log: () => {} });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const port = (server.address() as { port: number }).port;
   cleanups.push(() => {

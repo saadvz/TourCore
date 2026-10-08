@@ -45,7 +45,8 @@ async function alertApp(options: { root?: string; clock?: { t: number }; net?: R
   const runtime = new FileRuntimeStore(join(root, "runtime"));
   const installation = new Installation({ root, runtime, secrets: new LocalSecretStore(join(root, "install", "secrets.json"), () => clock.t), now: () => clock.t, fetch: net.fetch as never, outbox: { baseDelayMs: 1000 } });
   if (fresh) installation.secrets.set({ TOURCORE_GROK_ROUTINE_URL: ROUTINE_URL, TOURCORE_GROK_ROUTINE_KEY: ROUTINE_KEY });
-  const server: TourCoreServer = createSetupServer({ workspace: ws, installation, now: () => new Date(clock.t), realNow: () => clock.t, operatorToken: () => TOKEN, log: () => {}, alertRetryMs: 3_600_000 });
+  const server: TourCoreServer = createSetupServer({
+    toolSurface: "all", workspace: ws, installation, now: () => new Date(clock.t), realNow: () => clock.t, operatorToken: () => TOKEN, log: () => {}, alertRetryMs: 3_600_000 });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   const port = (server.address() as { port: number }).port;
   let closed = false;

@@ -297,6 +297,7 @@ describe("playbook client is per session", () => {
   const token = "test-operator-token-123456";
   const listen = async (root: string, playbookClientCap?: number) => {
     const server = createSetupServer({
+    toolSurface: "all",
       workspace: new PropertyWorkspace(root),
       operatorToken: () => token,
       log: () => {},
@@ -390,7 +391,8 @@ describe("playbook client is per session", () => {
       accessExpiresAt: now + 3_600_000,
     });
     const listenOauth = async () => {
-      const server = createSetupServer({ workspace: new PropertyWorkspace(h.root), installation: h.inst, mcpAuth: "oauth", authNow: () => now, log: () => {} });
+      const server = createSetupServer({
+    toolSurface: "all", workspace: new PropertyWorkspace(h.root), installation: h.inst, mcpAuth: "oauth", authNow: () => now, log: () => {} });
       await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
       cleanups.push(() => server.close());
       return { server, port: (server.address() as { port: number }).port };
@@ -429,7 +431,8 @@ describe("playbook client is per session", () => {
       accessHash: hashSecret(access),
       accessExpiresAt: now + 3_600_000,
     });
-    const server = createSetupServer({ workspace: new PropertyWorkspace(h.root), installation: h.inst, mcpAuth: "oauth", authNow: () => now, log: () => {} });
+    const server = createSetupServer({
+    toolSurface: "all", workspace: new PropertyWorkspace(h.root), installation: h.inst, mcpAuth: "oauth", authNow: () => now, log: () => {} });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     cleanups.push(() => server.close());
     const port = (server.address() as { port: number }).port;
@@ -459,7 +462,8 @@ describe("playbook client is per session", () => {
       accessHash: hashSecret(access),
       accessExpiresAt: now + 3_600_000,
     });
-    const server = createSetupServer({ workspace: new PropertyWorkspace(h.root), installation: h.inst, mcpAuth: "oauth", authNow: () => now, log: () => {} });
+    const server = createSetupServer({
+    toolSurface: "all", workspace: new PropertyWorkspace(h.root), installation: h.inst, mcpAuth: "oauth", authNow: () => now, log: () => {} });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     cleanups.push(() => server.close());
     const port = (server.address() as { port: number }).port;
@@ -659,7 +663,7 @@ describe("setup help", () => {
       expect(doc).toMatch(/setup-help|setup help/i);
     }
     expect(readFileSync("README.md", "utf8")).toContain("revoke_tour_access");
-    expect(readFileSync("GROK_BOOTSTRAP.md", "utf8")).toContain("revoke_tour_access");
+    expect(readFileSync("GROK_BOOTSTRAP.md", "utf8")).toContain("cancel_tour");
     const prefs = OPERATOR_TOOLS.find((tool) => tool.name === "set_notification_preferences");
     expect(prefs?.description).toContain(SHARED_STEPS.alerts.ask);
     expect(prefs?.description).not.toContain(GROK_ALERTS_SAY);

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { OPERATOR_TOOL_NAMES } from "../src/operator/tools";
+import { LANDLORD_CORE_TOOLS, QA_TOOL_NAMES } from "../src/mcp/scopes";
 
 /** The Grok template and skills are code: versioned, consistent with the tool contract, and free of secrets. */
 
@@ -42,16 +43,22 @@ describe("Grok skills", () => {
     }
   });
 
-  it("only name tools that exist, and every tool is used by some skill", () => {
+  it("name only landlord tools, and together they cover those 21", () => {
+    const landlord = new Set<string>([...LANDLORD_CORE_TOOLS, "reset_hosted_demo"]);
     const used = new Set<string>();
     for (const name of SKILL_NAMES) {
       const tools = frontmatter(readFileSync(join(SKILLS, name, "SKILL.md"), "utf8"))["allowed-tools"]!.split(/\s+/);
+      if (name === "simulate-tour") {
+        expect(tools.sort()).toEqual([...QA_TOOL_NAMES].sort());
+        continue;
+      }
       for (const t of tools) {
-        expect(OPERATOR_TOOL_NAMES, `${name} lists unknown tool ${t}`).toContain(t);
+        expect(landlord, `${name} lists ${t}`).toContain(t);
+        expect(OPERATOR_TOOL_NAMES).toContain(t);
         used.add(t);
       }
     }
-    expect([...used].sort()).toEqual([...OPERATOR_TOOL_NAMES].sort());
+    for (const tool of LANDLORD_CORE_TOOLS) expect(used, tool).toContain(tool);
   });
 });
 
@@ -64,10 +71,15 @@ describe("Grok template package", () => {
     expect(createHash("sha256").update(current).digest("hex")).toBe(SETUP_PROMPT_SHA256);
   });
 
-  it("lists every tool exactly once in the integration notes", () => {
+  it("lists the landlord, ops, and QA tools once each in the integration notes", () => {
     const doc = readFileSync(join(TEMPLATE, "integrations", "tour-core-tools.md"), "utf8");
     const listed = [...doc.matchAll(/^\| `([a-z_]+)` \|/gm)].map((m) => m[1]);
-    expect(listed.sort()).toEqual([...OPERATOR_TOOL_NAMES].sort());
+    const landlord = listed.slice(0, LANDLORD_CORE_TOOLS.length);
+    expect(landlord).toEqual([...LANDLORD_CORE_TOOLS]);
+    expect(new Set(listed).size).toBe(listed.length);
+    expect(listed).toContain("inject_local_sms");
+    expect(listed).toContain("discover_storage");
+    expect(listed).not.toContain("list_properties");
   });
 
   it("has a manifest whose files exist, with the operator-updates routine and the PRD's starting prompts", () => {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Installation } from "../install/installation";
+import type { ConnectorScope } from "../mcp/scopes";
 import { secretValues } from "../install/settings";
 import { HOSTED_ADMIN_TOOLS } from "../install/hostedAdminTools";
 import type { ReportedClient } from "../playbooks/select";
@@ -92,6 +93,13 @@ export interface ToolContext {
   forgetLiveState?: () => void;
   /** Shared inbound/outbound de-duplication for this process, including local SMS inject. */
   messagingLedger?: MessagingLedger;
+  /**
+   * Set only by an HTTP connector. Unset keeps the full engine catalog
+   * (browser, in-process tests, eval harness).
+   */
+  connector?: ConnectorScope;
+  /** Landlord connector when TOURCORE_LEGACY_TOOLS=1. That flag also keeps QA and ops tools on /mcp during the switch-over. */
+  legacyTools?: boolean;
 }
 
 export type ToolKind = "read" | "change" | "consequential";
@@ -399,6 +407,20 @@ function parseHours(input: { days?: string | string[]; start?: string; end?: str
   if (early !== undefined) out.earlyArrivalMinutes = early;
   return out;
 }
+
+/**
+ * Master 8a69f5d input for inject_local_sms. Legacy /mcp advertises this schema.
+ * The QA connector keeps the shared-line schema on the live tool.
+ */
+export const legacyInjectLocalSmsInput = z.strictObject({
+  from: z.string().min(7).max(30).describe("The visitor's phone number."),
+  text: z.string().max(1600).optional().describe("The visitor's text, one message. Leave empty when they only sent a photo."),
+  to: z.string().min(7).max(30).optional().describe("The property's local touring number. Leave out to use the property's attached line."),
+  property: Property,
+  id: z.string().max(80).optional().describe("Optional inbound id for de-duplication. Leave out to mint one."),
+  hasMedia: z.boolean().optional().describe("True when the inbound includes a photo or other attachment. Tour Core does not forward the file. A photo alone is told it can't take photos yet; a photo plus a question it can't answer is one combined text and is flagged."),
+  listingProperty: z.string().max(200).optional().describe("Listing deep link: the place this first text is for (street, public name, or property id). Leave out when the text itself should choose."),
+});
 
 // ------------------------------------------------------------------- tools
 
@@ -1152,12 +1174,12 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Inject a local visitor text",
     kind: "change",
     description:
-      "QA only. Sends a visitor SMS into Tour Core as if it arrived on the local loopback (same path as POST /webhooks/local → handleProviderWebhook → conversations.receive). Set hasMedia when the inbound is a photo; Tour Core does not forward the file. A photo alone is told it can't take photos yet; a photo plus a question it can't answer is one combined text and is flagged. Refuses unless that property is on local test texts — either this building opted in, or the installation is on local. Never against a building that uses the installation's live texting or practice texts. No real text is sent.",
+      "QA only. Sends a visitor SMS into Tour Core as if it arrived on the local loopback (same path as POST /webhooks/local → handleProviderWebhook → conversations.receive). Leave property out to deliver on the shared touring line without naming a place: two or more published places are asked which place, and one published place skips that question. Set hasMedia when the inbound is a photo; Tour Core does not forward the file. A photo alone is told it can't take photos yet; a photo plus a question it can't answer is one combined text and is flagged. Refuses unless a property on that send is on local test texts. Never against a building that uses the installation's live texting or practice texts. No real text is sent.",
     input: z.strictObject({
       from: z.string().min(7).max(30).describe("The visitor's phone number."),
       text: z.string().max(1600).optional().describe("The visitor's text, one message. Leave empty when they only sent a photo."),
-      to: z.string().min(7).max(30).optional().describe("The property's local touring number. Leave out to use the property's attached line."),
-      property: Property,
+      to: z.string().min(7).max(30).optional().describe("The property's local touring number. Leave out to use the property's attached line, or the shared loopback when property is left out."),
+      property: z.string().max(200).optional().describe("Which property: its name, address or propertyId. Leave out to send on the shared touring line without naming a place."),
       id: z.string().max(80).optional().describe("Optional inbound id for de-duplication. Leave out to mint one."),
       hasMedia: z.boolean().optional().describe("True when the inbound includes a photo or other attachment. Tour Core does not forward the file. A photo alone is told it can't take photos yet; a photo plus a question it can't answer is one combined text and is flagged."),
       listingProperty: z.string().max(200).optional().describe("Listing deep link: the place this first text is for (street, public name, or property id). Leave out when the text itself should choose."),

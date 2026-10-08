@@ -2,7 +2,7 @@
 name: backup-tour-core
 description: Save a portable Tour Core backup or a readable export to the operator's Google Drive, or restore a backup onto a clean Tour Core, using Tour Core's tools and Grok's Google Drive connector.
 when-to-use: "back up Tour Core", "save a backup", "restore Tour Core", "open my Tour Core backup", "export my tours", "is a backup due"
-allowed-tools: get_backup_status create_portable_backup confirm_backup_stored confirm_backup_destination create_readable_export begin_restore_upload preview_portable_restore import_portable_backup get_installation_status export_audit backup_records restore_records
+allowed-tools: backup_records restore_records export_records
 argument-hint: "[backup | export | restore]"
 user-invocable: true
 metadata:
@@ -12,6 +12,8 @@ metadata:
 ---
 
 # Backup Tour Core
+
+Call only `backup_records`, `restore_records`, and `export_records`.
 
 Tour Core keeps live records itself. Google Drive, through your built-in
 connector, is where portable backups and readable exports are saved. You do

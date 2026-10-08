@@ -36,7 +36,8 @@ async function startPhoneApp(options: { sendError?: () => Error | undefined } = 
   const { config } = ws.save(sendblueProperty());
   ws.recordReadiness(config.property.id, await runReadinessCheck(config, { now: new Date(clock) }));
 
-  const server: Server = createSetupServer({ workspace: ws, now: () => new Date(clock), realNow: () => clock, log: () => {} });
+  const server: Server = createSetupServer({
+    toolSurface: "all", workspace: ws, now: () => new Date(clock), realNow: () => clock, log: () => {} });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   const port = (server.address() as { port: number }).port;
   cleanups.push(() => {

@@ -2,6 +2,7 @@ import type { ToolKind } from "../operator/tools";
 
 /**
  * MCP hints only. They do not change tool behavior or confirmation checks.
+ * Connector scope does not change these hints. A hidden tool keeps the hint it already had.
  * A non-read-only tool defaults to destructive in the MCP spec, so every
  * write sets destructiveHint explicitly.
  */
