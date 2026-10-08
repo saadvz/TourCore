@@ -154,7 +154,7 @@ export class HandoffStore {
     this.sweep();
     const record = this.read(id);
     if (!record || record.kind !== "upload" || record.expiresAt <= this.now() || (!record.body && !record.bodyFile)) {
-      throw new HandoffError("Upload the backup before asking Tour Core to check it.");
+      throw new HandoffError(UPLOAD_BACKUP_FIRST);
     }
     if (record.bodyFile) {
       const path = this.bodyPath(id);
