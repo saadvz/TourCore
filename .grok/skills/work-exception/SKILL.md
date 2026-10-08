@@ -355,8 +355,8 @@ do not approve it — use `schedule_one_off_tour` or `reschedule_tour`.
    "1") is a reply to that confirmation, not a booking from the old menu.
    If they never reply in time, the time is released; unless they opted out
    they get exactly one text that it was released, then no further texts.
-7. Confirmation questions name the action and end with the verb: `Move it?`,
-   `Book it?`, or `Save it?`. Never "Continue?". A move inside hours includes
+7. Tour-time confirmation questions name the action and end with the verb:
+   `Move it?` or `Book it?`. Never "Continue?". A move inside hours includes
    the old time. `This is a one-off. Your regular tour hours stay the same`
    only when the time is outside tour hours.
 

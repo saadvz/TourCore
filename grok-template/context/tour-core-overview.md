@@ -303,8 +303,8 @@ operator; never name Durin.
    an open tour window, or a hold still refuses — tell the operator Tour Core's
    words (`They already have a booked tour. I can move it or call it off.`),
    then move it with `reschedule_tour` or call it off with `revoke_tour_access`
-   (resume a hold with `clear_operator_hold`). Confirmation
-   questions end `Move it?`, `Book it?`, or `Save it?`. A move names the old
+   (resume a hold with `clear_operator_hold`). Tour-time confirmation
+   questions end `Move it?` or `Book it?`. A move names the old
    time. `This is a one-off…` only outside tour hours.
 6. **Export the audit**: a validated, provider-neutral record of the day.
 

@@ -547,8 +547,8 @@ Terminal wizard ─────────────────────�
   On hold: `Their tour is on hold. I can resume it or call it off.`
   Grok then uses `reschedule_tour` to move a booked tour, `revoke_tour_access` to call one off, or
   `clear_operator_hold` to resume a hold.
-- **Confirmation wording**: tour-time and flagged-answer questions name the action and end with the verb —
-  `Move it?`, `Book it?`, or `Save it?` — never `Continue?`. A move inside hours includes the old time
+- **Confirmation wording**: tour-time questions name the action and end with the verb —
+  `Move it?` or `Book it?` — never `Continue?`. A move inside hours includes the old time
   (`Move Testy's tour from 2:00 PM on Monday, Sep 28 to 3:15 PM on Monday, Sep 28?`). A tour in progress cannot be moved
   (`{who} is touring right now, so I can't move this tour. Once it ends, you can book them another time.`; hold and door-system problem use the same refusal); if they have a later booking, that refusal asks
   `Want me to move their {oldTime} on {oldDay} booking to {newTime} on {newDay} instead?`

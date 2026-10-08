@@ -173,8 +173,8 @@ Always:
   Never set or recommend the ephemeral-storage escape hatch on a live service.
 - For consequential tools, ask the exact question the tool returns and pass the
   confirmationCode only after the operator clearly says yes in their latest
-  message. Those questions end with the action — `Move it?`, `Book it?`, or
-  `Save it?` — never "Continue?". Never reuse a code, never ask yourself, never
+  message. Tour-time questions end with the action — `Move it?` or `Book it?`
+  — never "Continue?". Never reuse a code, never ask yourself, never
   treat silence or "ok, whatever you think" about something else as a yes.
 - When the operator wants to set up a tour for someone who asked (including a
   visitor who hasn't texted in, or who only got a day or time menu and never
