@@ -162,13 +162,16 @@ describe("QA round 2", () => {
   });
 
   it("speaks wrapped tour days the way Critiquito specified", () => {
+    expect(describeTourDays(parseDays("Tue, Wed, Fri, Sat")!)).toBe("Tuesday, Wednesday, Friday and Saturday");
+    expect(describeTourDays(parseDays("Mon-Wed plus Fri, Sat")!)).toBe("Monday to Wednesday, Friday and Saturday");
+    expect(describeTourDays(parseDays("Sat, Sun")!)).toBe("Saturday and Sunday");
+    expect(describeTourDays(parseDays("Sun, Mon")!)).toBe("Sunday and Monday");
     expect(describeTourDays(parseDays("Sat Sun Mon")!)).toBe("Saturday to Monday");
     expect(describeTourDays(parseDays("Fri-Mon")!)).toBe("Friday to Monday");
-    expect(describeTourDays(parseDays("Fri through Mon plus Wed")!)).toBe("Friday to Monday and Wednesday");
-    expect(describeTourDays(parseDays("Sun+Mon")!)).toBe("Sunday and Monday");
-    expect(describeTourDays(parseDays("Monday, Wednesday and Friday")!)).toBe("Monday, Wednesday and Friday");
-    expect(describeTourDays(parseDays("Saturday and Sunday")!)).toBe("Saturday and Sunday");
-    expect(describeTourDays(parseDays("Monday to Friday")!)).toBe("Monday to Friday");
+    expect(describeTourDays(parseDays("Fri-Mon plus Wed")!)).toBe("Friday to Monday and Wednesday");
+    expect(describeTourDays(parseDays("Mon-Fri")!)).toBe("Monday to Friday");
+    expect(describeTourDays(parseDays("Mon-Fri plus Sun")!)).toBe("Sunday to Friday");
+    expect(describeTourDays(parseDays("Mon, Wed, Fri")!)).toBe("Monday, Wednesday and Friday");
     expect(`Tours run ${describeTourDays(parseDays("every day")!)}, 9 AM to 5 PM.`).toBe("Tours run every day, 9 AM to 5 PM.");
   });
 

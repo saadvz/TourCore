@@ -571,9 +571,9 @@ const DAY_NAME: Record<Weekday, string> = {
 
 /**
  * "Monday to Friday", "Saturday and Sunday", "Saturday to Monday".
- * Sunday sits next to Monday, so a run can wrap the week. Two days use
- * "and" when they are the whole list. A longer run uses "to". Several
- * runs use commas and one "and" before the last run.
+ * Sunday sits next to Monday, so a run can wrap the week. "to" is only
+ * for a run of three or more days. One or two days are listed one by one.
+ * The list uses commas and one "and" before the last part.
  */
 export function describeTourDays(days: readonly Weekday[]): string {
   const ordered = TOUR_DAY_ORDER.filter((day) => days.includes(day));
@@ -590,16 +590,10 @@ export function describeTourDays(days: readonly Weekday[]): string {
     const mondaySide = groups.shift()!;
     groups.unshift([...sundaySide, ...mondaySide]);
   }
-  const alone = groups.length === 1;
-  return joinList(groups.map((group) => describeDayGroup(group, alone)));
-}
-
-function describeDayGroup(group: Weekday[], alone: boolean): string {
-  const first = DAY_NAME[group[0]!];
-  const last = DAY_NAME[group[group.length - 1]!];
-  if (group.length === 1) return first;
-  if (group.length === 2) return alone ? `${first} and ${last}` : `${first}, ${last}`;
-  return `${first} to ${last}`;
+  return joinList(groups.flatMap((group) => {
+    if (group.length >= 3) return [`${DAY_NAME[group[0]!]} to ${DAY_NAME[group[group.length - 1]!]}`];
+    return group.map((day) => DAY_NAME[day]);
+  }));
 }
 
 function spokenClock(hhmm: string): string {
