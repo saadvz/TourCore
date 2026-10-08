@@ -45,6 +45,12 @@ describe("channel-aware wording", () => {
       }, "WEB"),
     ).toBe("Tour times just changed. Here's what's open now:\nWhich day works for you?\nPick a day below.");
     expect(withPrompt("Fill this in.", { kind: "form", link: "https://x/verify/abc" }, "MESSAGING")).toBe("Fill this in.\nhttps://x/verify/abc");
+    expect(withPrompt("Every door on your tour is already open for you.", { kind: "say", phrase: "DONE", purpose: "when you're finished" }, "MESSAGING")).toBe(
+      "Every door on your tour is already open for you.\nText DONE when you're finished.",
+    );
+    expect(withPrompt("You're all set.", { kind: "say", phrase: "I'm here", purpose: "when you arrive" }, "MESSAGING")).toBe(
+      'You\'re all set.\nText "I\'m here" when you arrive.',
+    );
   });
 
   it("the browser phone gets button wording from the same engine step", async () => {

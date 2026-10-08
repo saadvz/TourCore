@@ -1063,7 +1063,7 @@ Which place are you touring?
 ### portfolio-miss-1
 
 ```
-I didn't catch that. Reply 1 for which place.
+I didn't catch that. Which place are you touring?
 ```
 
 ### portfolio-miss-2
@@ -1211,8 +1211,10 @@ Reply YES or NO.
 
 ### prompt-say
 
+DONE is sent with no quotes: Text DONE when you're finished. Other phrases stay quoted, as in Text "I'm here" when you arrive.
+
 ```
-Text "{phrase}" {purpose}.
+Text {phrase} {purpose}.
 ```
 
 ### prompt-choose

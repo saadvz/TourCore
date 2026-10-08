@@ -131,7 +131,7 @@ says "home" and offers tour days instead of a unit menu. An apartment or condo
 Home", and also skips the unit menu. Any property with exactly one unit skips
 the unit question and offers days. A building that still has another unit
 keeps the unit question when one unit is paused. One published place on a
-shared number skips the place question, including `Reply 1 for which place.` Entry instructions are not in the
+shared number skips the place question. A one-place miss is `I didn't catch that. Which place are you touring?` Entry instructions are not in the
 welcome; they arrive only on the you're-all-set text, after the identity
 form when this place uses one.
 

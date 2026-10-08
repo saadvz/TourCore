@@ -226,7 +226,7 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "restore-trouble", text: "I'm having trouble restoring your tour. I've alerted the {team}." },
   { id: "restore-trouble-restart", text: "I'm having trouble restoring your tour. I've alerted the {team}. Text HI to start a new tour." },
   { id: "portfolio-picker", text: "Which place are you touring?\n{choices}" },
-  { id: "portfolio-miss-1", text: "I didn't catch that. Reply 1 for which place." },
+  { id: "portfolio-miss-1", text: "I didn't catch that. Which place are you touring?" },
   { id: "portfolio-miss-2", text: "I didn't catch that. Reply 1 or 2 for which place." },
   { id: "portfolio-miss-3", text: "I didn't catch that. Reply 1, 2, or 3 for which place." },
   { id: "portfolio-street-miss", text: "I couldn't find that one. Reply 1, 2, or 3, or text the street name." },
@@ -252,7 +252,7 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "tour-finished", text: "Thanks for touring {place}{name?}!{recap?} The doors are locked again behind you.\nWould you like someone from the {team} to follow up?" },
 
   { id: "prompt-yes-no", text: "Reply YES or NO.", suffix: true },
-  { id: "prompt-say", text: "Text \"{phrase}\" {purpose}.", suffix: true },
+  { id: "prompt-say", text: "Text {phrase} {purpose}.", suffix: true, note: "DONE is sent with no quotes: Text DONE when you're finished. Other phrases stay quoted, as in Text \"I'm here\" when you arrive." },
   { id: "prompt-choose", text: "{menu}", suffix: true, explicitOnly: true },
   { id: "prompt-form-link", text: "{link}", suffix: true, explicitOnly: true },
   { id: "prompt-form-pending", text: "The {team} will send you the form link shortly.", suffix: true },

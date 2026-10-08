@@ -28,8 +28,10 @@ export function withPrompt(body: string, prompt: ReplyPrompt | undefined, channe
       return `${body}\nReply YES or NO.`;
     case "choose":
       return `${body}\n${numbered(prompt.options, prompt.after)}`;
-    case "say":
-      return `${body}\nText "${prompt.phrase}" ${prompt.purpose}.`;
+    case "say": {
+      const phrase = prompt.phrase === "DONE" ? "DONE" : `"${prompt.phrase}"`;
+      return `${body}\nText ${phrase} ${prompt.purpose}.`;
+    }
     case "form":
       return prompt.link ? `${body}\n${prompt.link}` : `${body}\nThe ${team} will send you the form link shortly.`;
   }

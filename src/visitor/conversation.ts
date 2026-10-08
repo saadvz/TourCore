@@ -14,7 +14,7 @@ import {
   type InboundMeta,
 } from "../core/TourCore";
 import { cannotCancelRunningOfferLater, cannotCancelRunningTour, laterCancelConfirm } from "../core/availabilityCopy";
-import { visitorTeamName } from "../sms/templates";
+import { renderSms, visitorTeamName } from "../sms/templates";
 import { namedCancelFocus } from "./cancelTarget";
 import { awaitingLatestYesNo, doorAskSupersedesCancel } from "./latestQuestion";
 import { isLeavingTour, T5_NO_OFFER_BARE_YES } from "../core/overstayCopy";
@@ -336,6 +336,7 @@ async function contextFor(session: VisitorDemoSession, message: string, step: Vi
     timeChoices: step === "choose-date" ? session.offeredDates.map((day) => day.label) : session.offeredSlots.map((s) => s.label),
     today: localDateOf(session.clock.now(), session.config.property.timezone),
     timezone: session.config.property.timezone,
+    teamName: session.config.operator.name,
     ...(r ? { reservedUnit: session.config.units.find((u) => u.id === r.unitId)?.name } : {}),
     remainingStops: remaining.map((id) => stopRef(session, id)),
     doors: session.config.doors.map((d) => stopRef(session, d.id)),
@@ -936,7 +937,7 @@ function stepPrompt(session: VisitorDemoSession, stage: VisitorStage, awaiting?:
 }
 
 function followUpQuestion(session: VisitorDemoSession): string {
-  return `Would you like someone from the ${visitorTeamName(session.config.operator.name)} to follow up?`;
+  return renderSms("follow-up-question", { team: visitorTeamName(session.config.operator.name) }).body;
 }
 
 /** Pause-cancel team label, only on hold or a door-system problem. */

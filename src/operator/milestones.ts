@@ -370,7 +370,7 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
     name: "save_hours",
     title: "Save touring hours",
     kind: "change",
-    description: "Saves touring days and hours from everyday words. Tours have to end later the same day.",
+    description: "Saves touring days and hours from everyday words. Tours have to end later the same day. Tours must last 15 minutes to 4 hours, and starts must be 15 minutes to 8 hours apart.",
     input: z.strictObject({
       property: Property,
       days: z.union([z.string().max(80), z.array(z.string().max(20)).max(7)]).optional(),

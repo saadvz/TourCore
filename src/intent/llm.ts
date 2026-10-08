@@ -3,6 +3,7 @@ import { cannotCancelRunningOfferLater, laterCancelConfirm } from "../core/avail
 import { isoDate, parseIsoDate } from "../core/schedule";
 import { formatDay, formatTime } from "../core/timezone";
 import { addInboundModelMs, intentModelTimeoutMs } from "../messaging/inboundTiming";
+import { renderSms, visitorTeamName } from "../sms/templates";
 import { HelpProblemSchema, type StepAwaiting, type ConversationStep, type IntentInterpretation, type IntentInterpreter, type InterpretContext, type TourIntent } from "./model";
 
 /**
@@ -74,7 +75,7 @@ Intents:
 - REQUEST_HELP: has a problem (door won't open, lost, can't find the unit) or wants a person.
 - FINISH_TOUR: says they are done touring, or that they have left (DONE, I'm out, leaving, I left).
 - ASK_MORE_TIME: asks for more time or 10 more minutes on the current tour.
-- FOLLOW_UP_YES / FOLLOW_UP_NO: answers whether the property team should follow up.
+- FOLLOW_UP_YES / FOLLOW_UP_NO: answers the follow-up question in lastAsked.
 - CANCEL_TOUR: wants to cancel a booked tour. "Can we cancel the tour?", "I want to cancel", "cancel", "I can't make it", "call off the tour" are CANCEL_TOUR, not a property question. A cancellation-policy question stays ASK_PROPERTY_QUESTION.
 - START_INQUIRY: a greeting, or wants to start booking.
 - UNKNOWN: anything else, or when unsure.
@@ -83,7 +84,7 @@ Use the conversation step and "lastAsked" to read short replies: "sure" answers 
 Use low confidence when the message is vague. Use UNKNOWN when the visitor is only on the way or nearby, or when you cannot tell where they are.
 Never name a unit, door or time the visitor did not clearly refer to.`;
 
-function lastAsked(step: ConversationStep, awaiting?: StepAwaiting, timezone?: string): string {
+function lastAsked(step: ConversationStep, awaiting?: StepAwaiting, timezone?: string, teamName?: string): string {
   if (awaiting?.kind === "confirm-arrival") return "Are you at the property now?";
   if (awaiting?.kind === "confirm-stop") return `Are you at ${awaiting.stop.label} now?`;
   if (awaiting?.kind === "choose-stop") return `Which door are you at: ${awaiting.stops.map((s) => s.label).join(" or ")}?`;
@@ -113,7 +114,7 @@ function lastAsked(step: ConversationStep, awaiting?: StepAwaiting, timezone?: s
     case "touring":
       return "Text me when you reach your next stop, ask any questions, or text DONE when you're finished.";
     case "follow-up":
-      return "Would you like someone from the property team to follow up?";
+      return renderSms("follow-up-question", { team: visitorTeamName(teamName) }).body;
     default:
       return "";
   }
@@ -190,7 +191,7 @@ export class LLMIntentInterpreter implements IntentInterpreter {
     const rejected: IntentInterpretation = { intent: { type: "UNKNOWN" }, confidence: 0, interpreter: "semantic", clarificationNeeded: false };
     const user = JSON.stringify({
       step: ctx.step,
-      lastAsked: lastAsked(ctx.step, ctx.awaiting, ctx.timezone),
+      lastAsked: lastAsked(ctx.step, ctx.awaiting, ctx.timezone, ctx.teamName),
       units: ctx.units.map((u) => ({ name: u.name, ...(u.summary ? { summary: u.summary } : {}) })),
       timeChoices: ctx.timeChoices,
       reservedUnit: ctx.reservedUnit,

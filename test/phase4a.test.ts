@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { loadConfig } from "../src/config/tourCoreConfig";
 import { isFairHousingQuestion } from "../src/core/fairHousing";
 import { dayReference } from "../src/core/spokenTime";
 import { UNKNOWN_ANSWER, unknownAnswerReply } from "../src/core/TourCore";
 import { claimVisitorSms, listVisitorTemplates, renderSms, visitorTeamName } from "../src/sms/templates";
+import { handleVisitorText } from "../src/visitor/conversation";
 import { entryReply } from "../src/visitor/entry";
 import { pickerMiss } from "../src/visitor/portfolioPick";
-import { hillsideConfig, liveApp } from "./liveApp";
+import { VisitorDemoSession, visitorView } from "../src/visitor";
+import { at, hillsideConfig, liveApp } from "./liveApp";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -83,9 +86,36 @@ describe("phase 4a visitor copy", () => {
     expect(reply.body).not.toContain("Which unit");
     const pausedSibling = entryReply(config, days, [unit]);
     expect(pausedSibling.body).toContain("Which unit would you like to see?");
-    expect(pickerMiss(1)).toBe("I didn't catch that.");
+    expect(pickerMiss(1)).toBe("I didn't catch that. Which place are you touring?");
+    expect(claimVisitorSms(pickerMiss(1))).toBe("portfolio-miss-1");
     expect(pickerMiss(1)).not.toContain("Reply 1");
     expect(pickerMiss(2)).toContain("Reply 1 or 2");
+  });
+
+  it("keeps leasing team on the tour-finished text and the follow-up re-ask", async () => {
+    const config = loadConfig();
+    config.operator = { ...config.operator, name: "leasing team" };
+    const session = new VisitorDemoSession(config.property.id, config, "leasing_followup", { realNow: () => at(7) });
+    await session.act("begin", { name: "Pat Smith", phone: "(555) 010-2000" });
+    await session.act("chooseUnit", { unitId: "apt_101" });
+    const day = (await visitorView(session)).choices[0]!;
+    await session.act(day.action, day.input);
+    const slot = (await visitorView(session)).choices[0]!;
+    await session.act(slot.action, slot.input);
+    await session.act("consent", { agree: true });
+    await session.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: "555-010-2000" });
+    await session.act("demoSkipAhead", {});
+    await session.act("arrive", {});
+    await session.act("atStop", { doorId: "unit_101" });
+    await session.act("finish", {});
+    const finished = [...session.conversation].reverse().find((item) => item.from === "tourcore")!.text;
+    expect(finished).toContain("Would you like someone from the leasing team to follow up?");
+    expect(finished).not.toContain("property team");
+    await handleVisitorText(session, "+15550102000", "huh");
+    const again = [...session.conversation].reverse().find((item) => item.from === "tourcore")!.text;
+    expect(again).toContain("Would you like someone from the leasing team to follow up?");
+    expect(again).not.toContain("property team");
+    expect(claimVisitorSms(again.split("\n")[0]!)).toBe("sorry-rest");
   });
 
   it("never mixes property team and leasing team in one conversation", async () => {

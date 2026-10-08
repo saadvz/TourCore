@@ -165,6 +165,8 @@ export interface InterpretContext {
   today?: LocalDate;
   /** Property timezone, so last-asked copy can name a weekday and time. */
   timezone?: string;
+  /** Stored operator name. Visitor copy uses it only when it ends in "team". */
+  teamName?: string;
   /** A booked (or held) tour the visitor can cancel by text. */
   hasCancelableTour?: boolean;
   /** On-site now: touring, operator hold, or door-system problem. */

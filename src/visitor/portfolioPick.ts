@@ -40,7 +40,7 @@ export function propertyPickerText(names: string[], streetPrompt: boolean): stri
 }
 
 export function pickerMiss(count: number): string {
-  if (count <= 1) return "I didn't catch that.";
+  if (count <= 1) return "I didn't catch that. Which place are you touring?";
   if (count === 2) return "I didn't catch that. Reply 1 or 2 for which place.";
   return "I didn't catch that. Reply 1, 2, or 3 for which place.";
 }
