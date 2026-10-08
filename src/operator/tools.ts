@@ -6,7 +6,7 @@ import type { ReportedClient } from "../playbooks/select";
 import { INSTALLATION_TOOLS } from "../install/tools";
 import { MILESTONE_TOOLS, settingsSentence } from "./milestones";
 import { installedMessaging } from "../install/status";
-import { addressReadback, parseUsAddress } from "../setup/address";
+import { addressReadback } from "../setup/address";
 import { PROPERTY_TYPE_LABELS, PROPERTY_TYPES, SETUP_PROPERTY_TYPES, validateConfig } from "../config/tourCoreConfig";
 import { extractValues, FIELD_WORDS, missingProfileFields, nextProfileQuestion, parseBulkUnitDetails, profileSummaryLine } from "../config/unitProfile";
 import { formatPhone } from "../core/phone";
@@ -19,11 +19,11 @@ import { checkMessaging, UnavailableModeError } from "../createTourCore";
 import type { MessagingLedger } from "../messaging/ledger";
 import { applySetupCommand } from "../setup/commands";
 import { draftView, readinessView, saveStateView } from "../setup/presenters";
-import { parseDays, parseMinutes, parseTimeOfDay } from "../setup/parse";
+import { parseDays, parseMinutes, parseTimeOfDay, SAME_DAY_HOURS, tourHoursEndSameDay } from "../setup/parse";
 import type { DryTourCheck, DryTourResult } from "../setup/dryTour";
 import type { ReadinessResult } from "../setup/readiness";
 import { condoNextQuestion, createPropertySetup, localTestModeSentence, modeSentence, operatorFacingPropertyName, OperatorTeamCopy, SetupInputError, tourableSpacesQuestion, visitorHelpLines, visitorHelpQuestion, type SetupDraft } from "../setup/setupActions";
-import { PRACTICE_REFUSED, VERIFICATION_BELOW_FLOOR, verificationAllowed, verificationFloor } from "../setup/verificationFloor";
+import { leadBlockers, PRACTICE_REFUSED, VERIFICATION_BELOW_FLOOR, verificationAllowed, verificationFloor } from "../setup/verificationFloor";
 import { usesLocalMessaging } from "../messaging/propertyScope";
 import { operatorUnitName } from "../visitor/identity";
 import { isHostedRailway } from "../install/deployment";
@@ -441,11 +441,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     }),
     run: async (ctx, i) => {
       const ws = ctx.services.workspace;
-      const wanted = (parseUsAddress(i.address)?.address.formatted ?? i.address).trim().toLowerCase();
-      const existing = ws.propertyIds().find((id) => {
-        if (ws.has(id) && ws.load(id).state.removedAt) return false;
-        return ws.openDraft(id).draft.property.address.trim().toLowerCase() === wanted;
-      });
+      const existing = ws.findByAddress(i.address);
       if (existing) return { status: "already-exists", summary: `${i.address} is already set up. I'll keep working on that one.`, setup: setupSnapshot(ctx, existing) };
       const messagingMode = defaultMessagingMode(servicesOf(ctx).installedMessaging?.());
       const draft = createPropertySetup({ address: i.address, name: i.name, propertyType: i.propertyType, timezone: i.timezone, existingPropertyIds: ws.propertyIds(), messagingMode });
@@ -839,7 +835,11 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
-      const state = edit(ctx, id, draft, "setTourHours", parseHours(i));
+      const parsed = parseHours(i);
+      const start = typeof parsed.start === "string" ? parsed.start : draft.tourHours.start;
+      const end = typeof parsed.end === "string" ? parsed.end : draft.tourHours.end;
+      if (!tourHoursEndSameDay(start, end)) return { summary: SAME_DAY_HOURS, status: "blocked" };
+      const state = edit(ctx, id, draft, "setTourHours", parsed);
       const s = setupSnapshot(ctx, id);
       return { summary: s.tourHours, tourLength: s.tourLength, newTourEvery: s.newTourEvery, earlyArrival: s.earlyArrival, ...state };
     },
@@ -932,6 +932,8 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const messagingMode = i.messaging === "sendblue" ? "live" : i.messaging === "local" ? "live" : i.messaging;
       const messagingProvider = i.messaging === "local" ? "local" : undefined;
       const state = edit(ctx, id, draft, "setServices", { messagingMode, ...(messagingProvider ? { messagingProvider } : {}) });
+      const notice = ctx.services.workspace.takeVerificationNotice(id);
+      if (notice) return { summary: notice, ...state };
       return { summary: subsystemLines(ctx, id, ctx.services.workspace.openDraft(id).draft).sentence, ...state };
     },
   }),
@@ -1020,13 +1022,15 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const services = servicesOf(ctx);
       const id = resolvePropertyId(ws, i.property);
       const blocked = (list: PublishBlocker[]) => {
+        const verification = list.find((b) => b.code === "VERIFICATION_BELOW_FLOOR");
         const texting = list.find((b) => b.code.startsWith("TEXTING_"));
         return {
           published: false,
           status: "blocked",
-          summary: texting ? texting.message : "It can't be published yet.",
+          summary: verification ? verification.message : texting ? texting.message : "It can't be published yet.",
+          ...(verification ? { code: verification.code } : {}),
           blockers: list.map((b) => b.message),
-          ...(texting
+          ...(texting && !verification
             ? {
                 remediation:
                   texting.code === "TEXTING_NOT_CONNECTED"
@@ -1037,9 +1041,11 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         };
       };
       const saved = ws.has(id) ? ws.load(id) : undefined;
-      const blockers = saved
-        ? [...publishGuards(services, id, saved.config.messagingMode), ...(await ws.publishBlockers(id, ctx.now()))]
-        : [{ code: "NOT_SAVED", message: "Finish the setup answers first." }];
+      const blockers = leadBlockers(
+        saved
+          ? [...publishGuards(services, id, saved.config.messagingMode), ...(await ws.publishBlockers(id, ctx.now()))]
+          : [{ code: "NOT_SAVED", message: "Finish the setup answers first." }],
+      );
       if (blockers.length) return blocked(blockers);
       const { config, state } = saved!;
       const modes = subsystemLines(ctx, id, config);

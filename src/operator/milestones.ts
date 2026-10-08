@@ -13,8 +13,8 @@ import { LOCAL_TEST_TEXTING, SetupInputError, createPropertySetup, localTestMode
 import { applySetupCommand } from "../setup/commands";
 import { canonicalDoor, canonicalUnitName } from "../setup/normalizeDraft";
 import { formatClockTime, type Weekday } from "../core/timezone";
-import { parseDays, parseMinutes, parseTimeOfDay } from "../setup/parse";
-import { PRACTICE_REFUSED, VERIFICATION_BELOW_FLOOR, verificationAllowed, verificationFloor, type VerificationLevel } from "../setup/verificationFloor";
+import { parseDays, parseMinutes, parseTimeOfDay, SAME_DAY_HOURS, tourHoursEndSameDay } from "../setup/parse";
+import { leadBlockers, PRACTICE_REFUSED, VERIFICATION_BELOW_FLOOR, verificationAllowed, verificationFloor, type VerificationLevel } from "../setup/verificationFloor";
 import { publishGuards, publishProperty, readinessForProperty, runPracticeTour, visitorTexting } from "./setupFlow";
 import { matchDoor, requireUnit, resolvePropertyId } from "./resolve";
 import { defaultMessagingMode, type OperatorServices } from "./services";
@@ -126,6 +126,9 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       if (i.provider) {
         const chosen = await chooseMessagingProvider(inst, i.provider, { workspace: ctx.services.workspace, propertyId });
         if (chosen.scope === "installation") ctx.resetMessaging?.();
+        const noticeFor = propertyId ?? (chosen.scope === "property" ? ctx.services.workspace.propertyIds()[0] : undefined);
+        const notice = noticeFor ? ctx.services.workspace.takeVerificationNotice(noticeFor) : undefined;
+        if (notice) return envelope(ctx, noticeFor, "done", notice);
       }
       if (i.line) {
         const wanted = toE164(i.line);
@@ -192,6 +195,10 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       let id = i.property ? propertyIdOf(ctx, i.property) : ws.propertyIds().length === 1 ? ws.propertyIds()[0] : undefined;
       if (!id) {
         if (!i.address) return envelope(ctx, undefined, "next", "What's the street address?");
+        const existing = ws.findByAddress(i.address);
+        if (existing) {
+          return { ...envelope(ctx, existing, "done", `${i.address} is already set up. I'll keep working on that one.`), status: "already-exists" };
+        }
         const messagingMode = defaultMessagingMode(servicesOf(ctx).installedMessaging?.());
         const draft = createPropertySetup({
           address: i.address,
@@ -293,7 +300,7 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       }
       ctx.services.workspace.persistEdit(next, ctx.now());
       const saved = ctx.services.workspace.openDraft(id).draft;
-      return envelope(ctx, id, "done", savedPlaces(saved.units.map((unit) => unit.name)), { propertyId: id });
+      return envelope(ctx, id, "done", savedPlaces(saved.units.map((unit) => unit.name), saved.property.propertyType), { propertyId: id });
     },
   }),
   tool({
@@ -341,7 +348,7 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
           if (!found.door) return envelope(ctx, id, "next", `I don't have "${ref}" on file yet.`, { propertyId: id }, "UNKNOWN_DOORS");
           names.push(found.door.name);
         }
-        matched.push({ unit: unit.name, doors: names });
+        matched.push({ unit: landlordPlace(unit.name, scratch.property.propertyType), doors: names });
         if (!i.preview) {
           const ids = names.map((name) => scratch.doors.find((door) => door.name === name)!.id);
           scratch = applySetupCommand(scratch, "setRoute", { unitId: unit.id, doorIds: ids, directions: route.directions, onlyIfValid: true });
@@ -378,6 +385,9 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       const { id, draft } = open(ctx, i.property);
       const parsed = parseHours(i);
       if (!Object.keys(parsed).length) return envelope(ctx, id, "next", "What days and times can people tour?");
+      const start = typeof parsed.start === "string" ? parsed.start : draft.tourHours.start;
+      const end = typeof parsed.end === "string" ? parsed.end : draft.tourHours.end;
+      if (!tourHoursEndSameDay(start, end)) return envelope(ctx, id, "blocked", SAME_DAY_HOURS, { propertyId: id });
       const next = applySetupCommand(draft, "setTourHours", parsed);
       ctx.services.workspace.persistEdit(next, ctx.now());
       const hours = ctx.services.workspace.openDraft(id).draft.tourHours;
@@ -421,6 +431,8 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
           reuseForDays: i.reuseForDays,
         });
         ctx.services.workspace.persistEdit(next, ctx.now());
+        const notice = ctx.services.workspace.takeVerificationNotice(opened.id);
+        if (notice) return envelope(ctx, opened.id, "done", notice, { propertyId: opened.id });
       }
       const inst = ctx.installation;
       if (i.skipAlerts) {
@@ -469,8 +481,12 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       }
       const readiness = await readinessForProperty(services, id, ctx.now());
       if (!readiness.result.passed) {
-        const reason = readiness.result.checks.flatMap((check) => check.problems)[0] ?? "The check found something to fix.";
-        return envelope(ctx, id, "blocked", reason, { propertyId: id, selfTest }, "READINESS_FAILED");
+        const failed = readiness.result.checks.flatMap((check) =>
+          check.codes.map((code, index) => ({ code, message: check.problems[index] ?? "The check found something to fix." })),
+        );
+        const verification = failed.find((item) => item.code === VERIFICATION_BELOW_FLOOR);
+        const reason = verification?.message ?? failed[0]?.message ?? "The check found something to fix.";
+        return envelope(ctx, id, "blocked", reason, { propertyId: id, selfTest }, verification ? VERIFICATION_BELOW_FLOOR : "READINESS_FAILED");
       }
       const unitId = i.unit ? requireUnit(draft, i.unit).id : undefined;
       const outcome = await runPracticeTour(services, id, { unitId, now: ctx.now() });
@@ -484,7 +500,7 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
   tool({
     name: "publish",
     title: "Publish for demo",
-    kind: "change",
+    kind: "consequential",
     description: "Publishes the property for demo after a yes to the confirmation it returns.",
     input: z.strictObject({
       property: Property,
@@ -495,9 +511,11 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       const services = servicesOf(ctx);
       const id = propertyIdOf(ctx, i.property);
       const saved = ws.has(id) ? ws.load(id) : undefined;
-      const blockers = saved
-        ? [...publishGuards(services, id, saved.config.messagingMode), ...(await ws.publishBlockers(id, ctx.now()))]
-        : [{ code: "NOT_SAVED", message: "Finish the setup answers first." }];
+      const blockers = leadBlockers(
+        saved
+          ? [...publishGuards(services, id, saved.config.messagingMode), ...(await ws.publishBlockers(id, ctx.now()))]
+          : [{ code: "NOT_SAVED", message: "Finish the setup answers first." }],
+      );
       if (blockers.length) {
         return envelope(ctx, id, "blocked", blockers[0]!.message, { propertyId: id, blockers: blockers.map((item) => item.message) }, blockers[0]!.code);
       }
@@ -563,7 +581,11 @@ export function describeTourDays(days: readonly Weekday[]): string {
     if (last && prev && TOUR_DAY_ORDER.indexOf(day) === TOUR_DAY_ORDER.indexOf(prev) + 1) last.push(day);
     else groups.push([day]);
   }
-  const parts = groups.map((group) => (group.length === 1 ? DAY_NAME[group[0]!] : `${DAY_NAME[group[0]!]} to ${DAY_NAME[group[group.length - 1]!]}`));
+  const parts = groups.map((group) => {
+    if (group.length === 1) return DAY_NAME[group[0]!];
+    if (group.length === 2) return `${DAY_NAME[group[0]!]} and ${DAY_NAME[group[1]!]}`;
+    return `${DAY_NAME[group[0]!]} to ${DAY_NAME[group[group.length - 1]!]}`;
+  });
   return joinList(parts);
 }
 
@@ -581,9 +603,15 @@ function routeThrough(doors: string[]): string {
   return doors.join(", then ");
 }
 
-function savedPlaces(names: string[]): string {
-  if (!names.length) return "Saved the places people can tour.";
-  return `Saved ${joinList(names)}.`;
+function landlordPlace(name: string, propertyType: string | undefined): string {
+  if (propertyType === "SINGLE_FAMILY" && name.trim().toLowerCase() === "main home") return "the home";
+  return name;
+}
+
+function savedPlaces(names: string[], propertyType: string | undefined): string {
+  const shown = names.map((name) => landlordPlace(name, propertyType));
+  if (!shown.length) return "Saved the places people can tour.";
+  return `Saved ${joinList(shown)}.`;
 }
 
 export function settingsSentence(mode: string | undefined, updatesOff: boolean): string {

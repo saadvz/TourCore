@@ -4,7 +4,9 @@ import { canonicalizeStreet, parseUsAddress, titleCasePlace } from "./address";
 
 /**
  * Shared write normalizer. PropertyWorkspace.save and saveDraft are the only
- * callers, so a property already on disk is not rewritten on read or deploy.
+ * writers. classifyChange normalizes copies of both sides so a spelling-only
+ * difference is not treated as a new setup. A property already on disk is not
+ * rewritten on read or deploy.
  * Old tools and milestone tools both persist through it, so equivalent
  * landlord wording lands as one stored config. Address identity is
  * case-insensitive; the stored line is the one form canonicalizeStreet and
@@ -140,14 +142,22 @@ function canonicalizeUnitsAndDoors(draft: TourCoreConfig): void {
   }
 }
 
-function refreshGuidance(draft: TourCoreConfig): void {
+function refreshGuidance(draft: TourCoreConfig, previous: TourCoreConfig): void {
   for (const route of draft.routes) {
     const unit = draft.units.find((item) => item.id === route.unitId);
     if (!unit) continue;
-    route.stops = route.stops.map((stop, index) => ({
-      doorId: stop.doorId,
-      guidance: guidanceFor(draft, unit, stop.doorId, index === route.stops.length - 1, route.directions),
-    }));
+    const oldUnit = previous.units.find((item) => item.id === route.unitId);
+    const oldRoute = previous.routes.find((item) => item.id === route.id);
+    route.stops = route.stops.map((stop, index) => {
+      const generated = guidanceFor(draft, unit, stop.doorId, index === route.stops.length - 1, route.directions);
+      const oldStop = oldRoute?.stops[index];
+      const oldGenerated =
+        oldUnit && oldRoute && oldStop
+          ? guidanceFor(previous, oldUnit, oldStop.doorId, index === oldRoute.stops.length - 1, oldRoute.directions)
+          : undefined;
+      const custom = oldStop !== undefined && oldGenerated !== undefined && oldStop.guidance !== oldGenerated;
+      return { doorId: stop.doorId, guidance: custom ? oldStop.guidance : generated };
+    });
   }
 }
 
@@ -172,9 +182,10 @@ function sortDraft(draft: TourCoreConfig): void {
 /** Returns a new draft. Idempotent. Does not change property, unit, or door ids. */
 export function normalizeStoredDraft(draft: TourCoreConfig): TourCoreConfig {
   const next = structuredClone(draft);
+  const previous = structuredClone(draft);
   canonicalizeAddress(next);
   canonicalizeUnitsAndDoors(next);
-  refreshGuidance(next);
+  refreshGuidance(next, previous);
   sortDraft(next);
   return next;
 }

@@ -32,9 +32,23 @@ describe("identity-check floor", () => {
     }
   });
 
-  it("stores document-check when it is stricter than the live floor", async () => {
+  it("keeps the basic identity form when a live property asks for a full ID check", async () => {
     const { h, propertyId } = await liveProperty();
     try {
+      const saved = await h.ok("save_settings", { property: propertyId, verification: "document-check" });
+      expect(saved.status).toBe("done");
+      expect(saved.message).toBe("A full ID check isn't available yet, so visitors will keep filling out a basic identity form.");
+      expect(h.workspace.openDraft(propertyId).draft.verificationMode).toBe("basic-form");
+    } finally {
+      h.cleanup();
+    }
+  });
+
+  it("stores a full ID check while texting is still in demo", async () => {
+    const h = grokHarness();
+    try {
+      const created = await h.ok("create_property_setup", { address: "18 Maple Street, Teaneck, NJ 07666", propertyType: "MULTIFAMILY_HOME" });
+      const propertyId = created.setup.propertyId as string;
       const saved = await h.ok("save_settings", { property: propertyId, verification: "document-check" });
       expect(saved.status).toBe("done");
       expect(h.workspace.openDraft(propertyId).draft.verificationMode).toBe("document-check");

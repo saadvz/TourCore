@@ -511,8 +511,12 @@ Terminal wizard ─────────────────────�
   `get_state` is the read-only picture to call first. It does not change anything. Its next step names the milestone
   write for that step (`set_up_texting`, `save_property`, `save_units`, `save_doors_and_routes`, `save_hours`,
   `save_settings`, `run_checks`, `publish`). Each of those answers done, blocked, or next, and they write through the
-  same normalizer as the older tools, so equivalent wording stores one config. A live property cannot drop to practice
-  verification. Backups still use today's backup tools, and declining stays possible. `get_next_installation_step`
+  same normalizer as the older tools, so equivalent wording stores one config. Every setup write goes through that
+  save layer. Switching a property to live texting raises practice verification to the basic identity form and says
+  so. Asking for practice on a live line is refused, and that refusal does not change the saved check. A full ID
+  check is not stored on a live line. A property already stored as live texting plus the practice check fails
+  readiness and publish until it is switched. Reading or deploying does not rewrite a stored check. Backups still
+  use today's backup tools, and declining stays possible. `get_next_installation_step`
   still names the older tools. The older status tools still work and still follow Tour Core's order. None takes or
   returns a credential or runs a command. See [`docs/deployment.md`](docs/deployment.md).
 - **Tool contract** (`src/operator/tools.ts`): typed, provider-neutral operator tools over the existing actions:
@@ -726,7 +730,7 @@ The actions:
 | `addDoor` / `renameDoor` / `removeDoor` | Entrances, unit doors, and hallway or shared doors (ids are generated and can't collide) |
 | `setRoute` | Ordered doors for one unit, plus optional directions |
 | `setTourHours` | Days, hours, tour length, spacing, early-arrival allowance |
-| `setVerificationPolicy` | Basic identity form or practice verification, plus the reuse window |
+| `setVerificationPolicy` | Basic identity form, or practice verification while texting is in test mode. Practice is refused on a live line, and a full ID check is not stored on a live line. Switching to live texting raises practice to the basic form |
 | `setServices` / `setAlertContact` | Records, messages, door access, and who gets alerts |
 | `reviewSetup` | Readable summary plus every problem, in plain language |
 | `runReadinessCheck` | Eight checks against the real adapters the setup selects |

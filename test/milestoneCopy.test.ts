@@ -4,6 +4,7 @@ import { describeTourDays, settingsSentence } from "../src/operator/milestones";
 
 describe("milestone landlord copy", () => {
   it("groups touring days and speaks the clock", () => {
+    expect(describeTourDays(["SAT", "SUN"])).toBe("Saturday and Sunday");
     expect(describeTourDays(["MON", "TUE", "WED", "THU", "FRI"])).toBe("Monday to Friday");
     expect(describeTourDays(["MON", "WED", "FRI"])).toBe("Monday, Wednesday and Friday");
     expect(describeTourDays(["MON", "TUE", "WED", "THU", "FRI", "SUN"])).toBe("Monday to Friday and Sunday");

@@ -214,6 +214,8 @@ describe("guided setup actions", () => {
     expect(parseDays("Mon-Fri")).toEqual(["MON", "TUE", "WED", "THU", "FRI"]);
     expect(parseDays("weekends")).toEqual(["SAT", "SUN"]);
     expect(parseDays("Mon, Wed and Sat")).toEqual(["MON", "WED", "SAT"]);
+    expect(parseDays("Sat Sun Mon")).toEqual(["MON", "SAT", "SUN"]);
+    expect(parseDays("sat to mon")).toEqual(["MON", "SAT", "SUN"]);
     expect(parseDays("someday")).toBeUndefined();
     expect(parseTimeOfDay("9am")).toBe("09:00");
     expect(parseTimeOfDay("5")).toBe("17:00");

@@ -3,7 +3,7 @@ import { canonicalizeStreet, parseUsAddress } from "../src/setup/address";
 
 describe("address canonicalization", () => {
   it("expands only the final street type and keeps the landlord's casing", () => {
-    expect(canonicalizeStreet("12 St. Marks Place")).toBe("12 St Marks Place");
+    expect(canonicalizeStreet("12 St. Marks Place")).toBe("12 St. Marks Place");
     expect(canonicalizeStreet("12 St. Marks Place")).not.toContain("Street Marks");
     expect(canonicalizeStreet("400 Dr Martin Luther King Jr Blvd")).toBe("400 Dr Martin Luther King Jr Boulevard");
     expect(canonicalizeStreet("1 Rue St Louis")).toBe("1 Rue St Louis");
@@ -14,6 +14,9 @@ describe("address canonicalization", () => {
     expect(canonicalizeStreet("5 McDonald Ave")).toBe("5 McDonald Avenue");
     expect(canonicalizeStreet("18 maple st.")).toBe("18 Maple Street");
     expect(canonicalizeStreet("8 O'Neil Ct")).toBe("8 O'Neil Court");
+    expect(canonicalizeStreet("12 Oak Ave Apt 2")).toBe("12 Oak Avenue Apt 2");
+    expect(canonicalizeStreet("Ave S")).toBe("Avenue S");
+    expect(canonicalizeStreet("St NW")).toBe("Street NW");
   });
 
   it("stores one form for the same address said in different case", () => {

@@ -7,8 +7,10 @@ import { ExportBundleSchema, type ExportBundle } from "../export/exportBundle";
 import { writeFileAtomic, writeFolderAtomic, writeJsonAtomic } from "../storage/atomicWrite";
 import type { DryTourCheck, DryTourResult } from "./dryTour";
 import { runReadinessCheck, type ReadinessResult } from "./readiness";
+import { canonicalAddressKey } from "./address";
 import { normalizeStoredDraft } from "./normalizeDraft";
 import { SetupInputError } from "./setupActions";
+import { enforceVerificationWrite, VERIFICATION_BELOW_FLOOR } from "./verificationFloor";
 
 /**
  * PUBLISHED_FOR_DEMO is NOT a production launch. It only means the setup is
@@ -136,7 +138,49 @@ const TOUR_ID = /^[A-Za-z0-9_-]+$/;
  *   <root>/properties/<propertyId>/practice-tours/<tourId>/{record.json,tour-export.json,audit.csv}
  */
 export class PropertyWorkspace {
+  private installedProvider?: () => string | undefined;
+  private verificationNotices = new Map<string, string>();
+
   constructor(readonly root: string = defaultWorkspaceRoot()) {}
+
+  /** Live installation provider, read at save time. Does not write a messaging choice. */
+  useInstalledMessaging(read: () => { provider?: string } | undefined): void {
+    this.installedProvider = () => read()?.provider;
+  }
+
+  /** The sentence from the last save that raised or held the identity check, if the caller has not read it yet. */
+  takeVerificationNotice(propertyId: string): string | undefined {
+    const notice = this.verificationNotices.get(propertyId);
+    this.verificationNotices.delete(propertyId);
+    return notice;
+  }
+
+  /**
+   * The saved property whose address is the same place, including a pre-normalization
+   * spelling ("Oak Ave" and "Oak Avenue"). Removed properties are not matches.
+   */
+  findByAddress(address: string): string | undefined {
+    const key = canonicalAddressKey(address) ?? address.trim().toLowerCase();
+    if (!key) return undefined;
+    for (const id of this.propertyIds()) {
+      if (this.has(id) && this.load(id).state.removedAt) continue;
+      const property = this.openDraft(id).draft.property;
+      const candidates = [property.address, property.canonicalAddress?.formatted].filter((value): value is string => !!value);
+      const keys = candidates.map((value) => canonicalAddressKey(value) ?? value.trim().toLowerCase());
+      if (keys.includes(key)) return id;
+    }
+    return undefined;
+  }
+
+  private installedSnapshot(): { provider?: string } | undefined {
+    const provider = this.installedProvider?.();
+    return provider ? { provider } : undefined;
+  }
+
+  private rememberNotice(propertyId: string, notice: string | undefined): void {
+    if (notice) this.verificationNotices.set(propertyId, notice);
+    else this.verificationNotices.delete(propertyId);
+  }
 
   list(): SavedProperty[] {
     return this.propertyIds()
@@ -235,15 +279,28 @@ export class PropertyWorkspace {
       Object.assign(error, { issues: validateConfig(draft) });
       throw error;
     }
-    const config = parsed.data;
-    const id = config.property.id;
-    const hash = configHash(config);
+    const id = parsed.data.property.id;
     const before = this.has(id) ? this.load(id) : undefined;
+    const enforced = enforceVerificationWrite(before?.config, parsed.data, this.installedSnapshot());
+    if (enforced.refused) throw new SetupInputError(enforced.refused.code, enforced.refused.message);
+    const config = enforced.config === parsed.data ? parsed.data : TourCoreConfigSchema.parse(enforced.config);
+    this.rememberNotice(id, enforced.notice);
+    const hash = configHash(config);
     const previous = before?.state;
     const change = before ? classifyChange(before.config, config) : "new";
     let state: PropertyState;
     if (previous && (change === "none" || change === "content")) {
-      state = { ...previous, configHash: hash, safetyHash: safetyHash(config), savedAt: now.toISOString() };
+      const old = { full: configHash(before!.config), safety: safetyHash(before!.config) };
+      const next = { full: hash, safety: safetyHash(config) };
+      const spellingOnly = old.safety !== next.safety;
+      state = {
+        ...previous,
+        configHash: hash,
+        safetyHash: next.safety,
+        savedAt: now.toISOString(),
+        ...(spellingOnly && previous.readiness ? { readiness: retargetFingerprint(previous.readiness, old, next) } : {}),
+        ...(spellingOnly && previous.dryTour ? { dryTour: retargetFingerprint(previous.dryTour, old, next) } : {}),
+      };
       if (change === "content") this.appendContentChange(id, { at: now.toISOString(), changes: describeContentChanges(before!.config, config) });
     } else {
       // Earlier check results stay for history, but their fingerprint no longer matches, so they no longer count.
@@ -288,7 +345,12 @@ export class PropertyWorkspace {
   /** Unfinished setups may be invalid; they're kept apart from the saved setup until they pass validation. */
   saveDraft(draft: TourCoreConfig): void {
     const normalized = normalizeStoredDraft(draft);
-    writeJsonAtomic(this.draftPath(normalized.property.id), normalized);
+    const id = normalized.property.id;
+    const before = this.has(id) ? this.load(id).config : this.loadDraft(id);
+    const enforced = enforceVerificationWrite(before, normalized, this.installedSnapshot());
+    if (enforced.refused) throw new SetupInputError(enforced.refused.code, enforced.refused.message);
+    this.rememberNotice(id, enforced.notice);
+    writeJsonAtomic(this.draftPath(id), enforced.config);
   }
 
   /**
@@ -464,11 +526,15 @@ export class PropertyWorkspace {
 
     if (validateConfig(config).length) blockers.push({ code: "CONFIG_INVALID", message: "Some setup answers still need attention." });
 
+    const installed = this.installedSnapshot();
+    const liveCheck = await runReadinessCheck(config, { now, installed });
+    const floorProblem = liveCheck.checks.flatMap((check) => check.details).find((problem) => problem.code === VERIFICATION_BELOW_FLOOR);
+
     const r = state.readiness;
     if (!r) blockers.push({ code: "READINESS_NOT_RUN", message: "Run the readiness check first." });
     else if (!isCurrent(r, state)) blockers.push({ code: "READINESS_OUT_OF_DATE", message: "The setup changed after the last readiness check. Please check again." });
     else if (!r.passed) blockers.push({ code: "READINESS_FAILED", message: "The last readiness check found problems. Fix them and check again." });
-    else if (!(await runReadinessCheck(config, { now })).passed) {
+    else if (!liveCheck.passed) {
       blockers.push({ code: "READINESS_FAILED_NOW", message: "Something isn't ready anymore. Please run the readiness check again." });
     }
 
@@ -477,6 +543,7 @@ export class PropertyWorkspace {
     else if (!isCurrent(d, state)) blockers.push({ code: "DRY_TOUR_OUT_OF_DATE", message: "The setup changed after the last practice tour. Please run it again." });
     else if (!d.passed) blockers.push({ code: "DRY_TOUR_FAILED", message: "The last practice tour didn't finish cleanly. Fix the problem and run it again." });
 
+    if (floorProblem) blockers.unshift({ code: floorProblem.code, message: floorProblem.message });
     return blockers;
   }
 

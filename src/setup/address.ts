@@ -139,17 +139,18 @@ const STREET_SUFFIX: Record<string, string> = {
  * spellings. Ordinals keep a lowercase ending (1st, 2nd).
  */
 function canonicalToken(token: string): string {
+  const trailingPeriod = token.endsWith(".");
   const cleaned = token.replace(/\./g, "");
   if (!cleaned) return token;
   const ordinal = /^(\d+)(st|nd|rd|th)$/i.exec(cleaned);
   if (ordinal) return `${ordinal[1]}${ordinal[2]!.toLowerCase()}`;
   const letters = cleaned.replace(/[^A-Za-z]/g, "");
-  if (!letters) return cleaned;
-  const allLower = letters === letters.toLowerCase();
-  const allUpper = letters === letters.toUpperCase();
-  if (allLower) return titleCaseToken(cleaned);
-  if (allUpper && letters.length > 2) return titleCaseToken(cleaned);
-  return cleaned;
+  const stored = !letters
+    ? cleaned
+    : letters === letters.toLowerCase() || (letters === letters.toUpperCase() && letters.length > 2)
+      ? titleCaseToken(cleaned)
+      : cleaned;
+  return trailingPeriod ? `${stored}.` : stored;
 }
 
 function titleCaseToken(token: string): string {
@@ -169,23 +170,44 @@ export function titleCasePlace(value: string): string {
     .join(" ");
 }
 
+const DIRECTIONAL = new Set(["n", "s", "e", "w", "ne", "nw", "se", "sw", "north", "south", "east", "west"]);
+
+function bareWord(word: string): string {
+  return word.replace(/\./g, "").toLowerCase();
+}
+
+function expandSuffix(word: string): string | undefined {
+  return STREET_SUFFIX[bareWord(word)];
+}
+
 /**
- * One street line. Spacing collapses, and only the final word expands when
- * it is a street type ("Rd" → "Road", "Blvd" → "Boulevard"). An earlier
- * "St" or "Dr" stays, so "St. Marks Place" never becomes "Street Marks".
- * The first word is never a suffix. Casing follows canonicalToken.
+ * One street line. Spacing collapses. The street type expands when it is the
+ * last word of the street ("Rd" → "Road"), or the word before a trailing
+ * direction ("Ave S" → "Avenue S", "St NW" → "Street NW"). A unit clause
+ * ("Apt 2") stays after that type and does not hide it. An earlier "St" or
+ * "Dr" stays, and a non-final "St." keeps its period, so "St. Marks Place"
+ * never becomes "Street Marks". The first word is a suffix only when a
+ * direction follows it. Casing follows canonicalToken.
  */
 export function canonicalizeStreet(street: string): string {
   const words = street.trim().replace(/\s+/g, " ").split(" ").filter(Boolean);
-  return words
-    .map((word, index) => {
-      const last = index === words.length - 1 && index > 0;
-      if (last) {
-        const bare = word.replace(/\./g, "");
-        const suffix = STREET_SUFFIX[bare.toLowerCase()];
-        if (suffix) return suffix;
-      }
-      return canonicalToken(word);
-    })
-    .join(" ");
+  const unitAt = words.findIndex((word, index) => index > 0 && /^(apt|apartment|suite|unit|#)$/.test(bareWord(word)));
+  const head = unitAt > 0 ? words.slice(0, unitAt) : words;
+  const tail = unitAt > 0 ? words.slice(unitAt) : [];
+  const last = head.length - 1;
+  let suffixAt = -1;
+  if (last >= 0 && isTrailingDirection(head, last)) suffixAt = last - 1;
+  else if (last > 0) suffixAt = last;
+  const stored = head.map((word, index) => (index === suffixAt ? (expandSuffix(word) ?? canonicalToken(word)) : canonicalToken(word)));
+  return [...stored, ...tail.map(canonicalToken)].join(" ");
+}
+
+function isTrailingDirection(head: string[], last: number): boolean {
+  return last > 0 && DIRECTIONAL.has(bareWord(head[last]!)) && expandSuffix(head[last - 1]!) !== undefined;
+}
+
+/** One identity for "Oak Ave" and "Oak Avenue": the stored formatted address, compared case-insensitively. */
+export function canonicalAddressKey(address: string): string | undefined {
+  const formatted = parseUsAddress(address)?.address.formatted?.trim();
+  return formatted ? formatted.toLowerCase() : undefined;
 }

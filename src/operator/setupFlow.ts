@@ -4,6 +4,7 @@ import { isRemoved } from "../setup/availability";
 import { runDryTour, type DryTourResult } from "../setup/dryTour";
 import { runReadinessCheck, type ReadinessResult } from "../setup/readiness";
 import { SetupInputError } from "../setup/setupActions";
+import { leadBlockers } from "../setup/verificationFloor";
 import { isCurrent, type PropertyState, type PublishBlocker, type PublishResult } from "../setup/workspace";
 import type { InstalledMessaging, OperatorServices } from "./services";
 
@@ -107,7 +108,7 @@ export function publishGuards(services: OperatorServices, propertyId: string, me
 export async function publishProperty(services: OperatorServices, propertyId: string, now: Date): Promise<PublishResult> {
   const ws = services.workspace;
   const guards = ws.has(propertyId) ? publishGuards(services, propertyId, ws.load(propertyId).config.messagingMode) : [];
-  const blockers = [...guards, ...(await ws.publishBlockers(propertyId, now))];
+  const blockers = leadBlockers([...guards, ...(await ws.publishBlockers(propertyId, now))]);
   if (blockers.length) return { published: false, blockers };
   return ws.publishDemoProperty(propertyId, now);
 }
