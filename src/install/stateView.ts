@@ -1,5 +1,6 @@
 import { PROPERTY_TYPE_LABELS, validateConfig } from "../config/tourCoreConfig";
 import { hoursStepSay } from "../operator/milestones";
+import { savedFullAddress } from "../setup/address";
 import { renderPlaybook, spokenAsk } from "../playbooks/compose";
 import { milestoneToolFor } from "../playbooks/milestoneTool";
 import type { ReportedClient } from "../playbooks/select";
@@ -298,7 +299,7 @@ const RAW_SLOT = /\{[A-Za-z][A-Za-z0-9]*\}/;
 function sayFor(client: ReportedClient | undefined, step: StepId, draft: SetupDraft | undefined): string {
   let say = spokenAsk(client, step);
   if (step === "hours" && draft) say = hoursStepSay(draft.tourHours);
-  if (step === "property-confirm" && draft?.property.address.trim()) say = `Did I get that right: ${draft.property.address}?`;
+  if (step === "property-confirm" && draft?.property.address.trim()) say = `Did I get that right: ${savedFullAddress(draft.property)}?`;
   if (RAW_SLOT.test(say) && draft) say = say.replaceAll("{address}", draft.property.address);
   if (RAW_SLOT.test(say)) throw new SetupInputError("UNFILLED_SLOT", "That line still has a blank.");
   return say;

@@ -104,6 +104,12 @@ describe("fair-housing detection", () => {
     "When is the HUD inspection?",
     "Is there a service dog area?",
     "Is the building 55+ years old?",
+    "are there many families with kids nearby?",
+    "what kind of people live in the building?",
+    "is the neighborhood safe?",
+    "are there a lot of Hispanic families around here?",
+    "who lives nearby?",
+    "what's the crime rate like?",
   ])("matches %s", (text) => {
     expect(isFairHousingQuestion(text)).toBe(true);
   });
@@ -128,8 +134,23 @@ describe("fair-housing detection", () => {
     "What are the customer service hours?",
     "Is there a service elevator?",
     "Do you offer assistance with moving?",
+    "is there room for my kids' bikes?",
+    "is there a playground nearby?",
+    "is there parking nearby?",
+    "how many units are in the building?",
+    "how many bedrooms?",
+    "is the building quiet?",
   ])("does not match %s", (text) => {
     expect(isFairHousingQuestion(text)).toBe(false);
+  });
+});
+
+describe("neighborhood composition", () => {
+  it("uses race words only together with a composition phrase", () => {
+    for (const word of ["hispanic", "latino", "latina", "asian", "black", "white", "arab"]) {
+      expect(isFairHousingQuestion(word)).toBe(false);
+      expect(isFairHousingQuestion(`are there ${word} residents nearby?`)).toBe(true);
+    }
   });
 });
 

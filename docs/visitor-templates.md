@@ -131,13 +131,13 @@ I can't cancel it from here. I've asked the property team to call it off and get
 ### cancel-confirm
 
 ```
-Cancel your tour on {day} at {time}? Reply YES or NO.
+Cancel your {time} tour on {day}? Reply YES or NO.
 ```
 
 ### cancel-kept
 
 ```
-Okay, your tour stays on {day} at {time}.
+Okay, your {time} tour on {day} stays booked.
 ```
 
 ### later-cancel-confirm
@@ -281,7 +281,7 @@ I couldn't confirm your details, so your tour has ended. Please head out the way
 ### stale-verification
 
 ```
-Your ID check has expired, so I need a quick re-check before I can open doors.
+It's been a while since you filled out the identity form, so I'll need you to fill it out again before I can open doors.
 ```
 
 ### missing-consent
@@ -425,7 +425,7 @@ That time today has already passed. Did you mean tomorrow?
 ### time-invalid
 
 ```
-That time isn't valid.
+That time doesn't work. What time would you like?
 ```
 
 ### consent-declined
@@ -487,7 +487,7 @@ No problem.
 ### mark-ready
 
 ```
-You're all set for your tour on {day} at {time}!
+You're all set for your {time} tour on {day}!
 Doors will work for you from {start} to {end}.{entry?}
 ```
 
@@ -536,7 +536,7 @@ I have tours available. Which day works for you?
 ### no-weekend
 
 ```
-I don't have weekend tours. I have tours available. Which day works for you?
+I don't have weekend tours, but weekdays are open. Which day works for you?
 ```
 
 ### sorry
@@ -818,7 +818,7 @@ That day has already passed. {rest}
 ### next-opening-follow
 
 ```
-Reply yes for {day} at {time}, or pick a day.
+Reply yes for {time} on {day}, or pick a day.
 ```
 
 ### slot-grabbed
@@ -830,7 +830,7 @@ Someone just grabbed that time. {rest}
 ### operator-scheduled
 
 ```
-Hi, this is the {team} at {address}. We set up a tour for you on {day} at {time}. Reply YES to confirm, NO to cancel, or STOP to opt out.
+Hi, this is the {team} at {address}. We set up a tour for you at {time} on {day}. Reply YES to confirm, NO to cancel, or STOP to opt out.
 ```
 
 ### operator-schedule-nudge
@@ -872,7 +872,7 @@ Tours at {address} are paused right now. The {team} will text you when they're b
 ### called-off-lead
 
 ```
-Sorry, the {team} had to cancel your {day} at {time} tour at {address}. {rest}
+Sorry, the {team} had to cancel your {time} tour on {day} at {address}. {rest}
 ```
 
 ### called-off-later

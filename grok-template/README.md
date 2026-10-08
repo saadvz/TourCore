@@ -84,7 +84,7 @@ what never does.
   they left off once it's answered. A booked-tour cancel by text (any natural
   phrasing) is handled by Tour Core: it confirms, then YES cancels (`You're
   cancelled. Text me anytime if you want to book again.`) or NO keeps the
-  booking (`Okay, your tour stays on {day} at {time}.`). While they are
+  booking (`Okay, your {time} tour on {day} stays booked.`). While they are
   touring and the cancel targets a later booking: `Cancel your later tour at
   {time} on {day}? Your tour right now isn't affected. Reply YES or NO.`;
   YES `Done, I've cancelled your later tour at {time} on {day}. Your tour

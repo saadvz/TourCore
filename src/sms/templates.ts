@@ -11,6 +11,16 @@
  * saved. It is not a new draft.
  */
 
+/**
+ * Visitor-facing team label. A stored name is used only when it already ends
+ * in "team" (for example "leasing team"). A company name or a blank becomes
+ * "property team", so the sentence stays grammatical.
+ */
+export function visitorTeamName(name: string | undefined | null): string {
+  const trimmed = (name ?? "").trim();
+  return /\bteam$/i.test(trimmed) ? trimmed : "property team";
+}
+
 export class UntemplatedVisitorSms extends Error {
   readonly body: string;
   constructor(body: string) {
@@ -56,8 +66,8 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "cancel-done", text: "You're cancelled. Text me anytime if you want to book again." },
   { id: "nothing-booked-cancel", text: "No problem, nothing's booked yet, so I'll stop here. Text me anytime if you want to pick a time." },
   { id: "cancel-failed", text: "I can't cancel it from here. I've asked the property team to call it off and get back to you." },
-  { id: "cancel-confirm", text: "Cancel your tour on {day} at {time}? Reply YES or NO." },
-  { id: "cancel-kept", text: "Okay, your tour stays on {day} at {time}." },
+  { id: "cancel-confirm", text: "Cancel your {time} tour on {day}? Reply YES or NO." },
+  { id: "cancel-kept", text: "Okay, your {time} tour on {day} stays booked." },
   { id: "later-cancel-confirm", text: "Cancel your later tour at {time} on {day}? Your tour right now isn't affected. Reply YES or NO." },
   { id: "later-cancel-done", text: "Done, I've cancelled your later tour at {time} on {day}. Your tour right now isn't affected." },
   { id: "later-cancel-kept", text: "Okay, your later tour at {time} on {day} stays booked." },
@@ -82,7 +92,7 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "failed-id-door", text: "I couldn't confirm your details, so I can't open doors for this tour. {rest}" },
   { id: "failed-id-booking", text: "Thanks for filling that out. {rest}" },
   { id: "failed-id-ended", text: "I couldn't confirm your details, so your tour has ended. Please head out the way you came in. {rest}" },
-  { id: "stale-verification", text: "Your ID check has expired, so I need a quick re-check before I can open doors." },
+  { id: "stale-verification", text: "It's been a while since you filled out the identity form, so I'll need you to fill it out again before I can open doors." },
   { id: "missing-consent", text: "Before I can open doors, text me back and I'll finish setting up your tour." },
   { id: "wrong-route", text: "That door isn't part of your tour, so I can't open it. You're here to see {place}. I've let the {team} know in case you need a hand." },
   { id: "tour-completed-doors", text: "Your tour is finished, so the doors are locked again. Want to book another visit?" },
@@ -107,7 +117,7 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "already-asked", text: "I've already asked the property team about {time} on {day}." },
   { id: "time-passed", text: "That time has already passed. What later time works for you?" },
   { id: "time-passed-today", text: "That time today has already passed. Did you mean tomorrow?" },
-  { id: "time-invalid", text: "That time isn't valid." },
+  { id: "time-invalid", text: "That time doesn't work. What time would you like?" },
   { id: "consent-declined", text: "No problem, I won't text you again about this tour. Reach out anytime if you change your mind." },
   { id: "inquiry", text: "{greeting} Happy to set up a self-guided tour of {place}.{summary?}\n{next}" },
   { id: "tour-moved-window", text: "Your tour has moved to {when}.\nDoors will work for you from {start} to {end}." },
@@ -117,7 +127,7 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "operator-schedule-expired", text: "I didn't hear back, so I released your {when} tour. Text me anytime to book another." },
   { id: "follow-up-no", text: "No problem. Thanks again for visiting!" },
   { id: "no-problem", text: "No problem." },
-  { id: "mark-ready", text: "You're all set for your tour on {day} at {time}!\nDoors will work for you from {start} to {end}.{entry?}" },
+  { id: "mark-ready", text: "You're all set for your {time} tour on {day}!\nDoors will work for you from {start} to {end}.{entry?}" },
   { id: "tour-directions", text: "Here's how to get there: {url}" },
   { id: "door-open", text: "{door} is open for you now.{tail?}" },
   { id: "identity-form", text: "Thanks! One last step before your tour: please fill out this short form with your legal name, email and phone." },
@@ -126,7 +136,7 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "photo-with-text", text: "I can't take photos yet." },
   { id: "schedule-changed", text: "Tour times just changed. Here's what's open now:" },
   { id: "day-menu", text: "I have tours available. Which day works for you?" },
-  { id: "no-weekend", text: "I don't have weekend tours. I have tours available. Which day works for you?" },
+  { id: "no-weekend", text: "I don't have weekend tours, but weekdays are open. Which day works for you?" },
   { id: "sorry", text: "Sorry, I didn't catch that." },
   { id: "sorry-rest", text: "Sorry, I didn't catch that. {rest}" },
   { id: "sorry-ready", text: "Sorry, I didn't catch that. You can ask me a question about the property." },
@@ -174,17 +184,17 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "no-more-today", text: "There are no more tours today.{rest?}" },
   { id: "day-full", text: "{day} is fully booked.{rest?}" },
   { id: "day-passed", text: "That day has already passed. {rest}" },
-  { id: "next-opening-follow", text: "Reply yes for {day} at {time}, or pick a day." },
+  { id: "next-opening-follow", text: "Reply yes for {time} on {day}, or pick a day." },
   { id: "slot-grabbed", text: "Someone just grabbed that time. {rest}" },
 
-  { id: "operator-scheduled", text: "Hi, this is the {team} at {address}. We set up a tour for you on {day} at {time}. Reply YES to confirm, NO to cancel, or STOP to opt out." },
+  { id: "operator-scheduled", text: "Hi, this is the {team} at {address}. We set up a tour for you at {time} on {day}. Reply YES to confirm, NO to cancel, or STOP to opt out." },
   { id: "operator-schedule-nudge", text: "Reply YES to confirm, NO to cancel, or STOP to opt out." },
   { id: "opt-in-again", text: "You'll get messages from {place} again. Text HI any time to start a tour." },
   { id: "identity-resend", text: "Here's your identity form link again. The earlier link no longer works." },
   { id: "paused-property", text: "Tours at {address} are paused right now. The {team} will text you when they're back{call?}." },
   { id: "paused-unit", text: "{unit} isn't open for tours right now.{rest?}" },
   { id: "removed-property", text: "{address} isn't offering tours anymore.{rest?}" },
-  { id: "called-off-lead", text: "Sorry, the {team} had to cancel your {day} at {time} tour at {address}. {rest}" },
+  { id: "called-off-lead", text: "Sorry, the {team} had to cancel your {time} tour on {day} at {address}. {rest}" },
   { id: "called-off-later", text: "Sorry, the {team} had to cancel your later tour at {time} on {day}. Your tour right now isn't affected. {rest}" },
   { id: "tours-are-back", text: "Tours at {address} are back. Text me anytime to book." },
 

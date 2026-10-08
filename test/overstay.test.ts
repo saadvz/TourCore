@@ -1369,7 +1369,7 @@ describe("QA review blocking items", () => {
     await ctx.say("yes");
     const replies = ctx.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text);
     expect(replies.join("\n")).not.toContain("Is it OK if I text you");
-    expect(replies.some((b) => b.startsWith("You're all set for your tour") || /identity|form|verify/i.test(b))).toBe(true);
+    expect(replies.some((b) => b.startsWith("You're all set for your") || /identity|form|verify/i.test(b))).toBe(true);
     const booked = (await ctx.session.store.get("reservations", pendingId))!;
     expect(booked.consentId).toBeTruthy();
     expect(["AWAITING_VERIFICATION", "READY"]).toContain(booked.status);

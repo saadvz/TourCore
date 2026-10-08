@@ -17,7 +17,7 @@ import type { MessagingAdapter, OutgoingMessage } from "../src/messaging/Messeng
 import { bindMessagingInstallation } from "../src/messaging/registry";
 import { sendblueRuntime } from "../src/messaging/sendblue/runtime";
 import { localSmsOutbox, resetLocalSmsOutbox } from "../src/messaging/local/outbox";
-import { claimVisitorSms, listVisitorTemplates, matchVisitorTemplate, renderSms, visitorTemplatesMarkdown } from "../src/sms/templates";
+import { claimVisitorSms, listVisitorTemplates, matchVisitorTemplate, renderSms, visitorTeamName, visitorTemplatesMarkdown } from "../src/sms/templates";
 import { setTourHours, setVerificationPolicy } from "../src/setup/setupActions";
 import { PropertyWorkspace, runReadinessCheck } from "../src/setup";
 import { InMemoryStore } from "../src/storage/Store";
@@ -140,11 +140,29 @@ describe("visitor template registry", () => {
     expect(claimVisitorSms("The landlord wrote this.", "approved-answer")).toBe("approved-answer");
     expect(claimVisitorSms("Unit 1A has 2 bedrooms.", "approved-profile-fact")).toBe("approved-profile-fact");
   });
+
+  it("uses a team name in visitor texts only when it ends in team", () => {
+    expect(visitorTeamName("Acme Realty")).toBe("property team");
+    expect(visitorTeamName("leasing team")).toBe("leasing team");
+    expect(visitorTeamName("")).toBe("property team");
+    expect(visitorTeamName("   ")).toBe("property team");
+    const acme = visitorTeamName("Acme Realty");
+    const leasing = visitorTeamName("leasing team");
+    const blank = visitorTeamName("");
+    expect(renderSms("fair-housing-held", { team: acme }).body).toBe("Good question for the property team. I've passed it along, and they'll text you back here.");
+    expect(renderSms("door-stuck-no-steps", { team: blank }).body).toBe("I can't open the doors for you right now. I've let the property team know, and they'll text you here shortly.");
+    expect(renderSms("operator-scheduled", { team: leasing, address: "144 Hillside Avenue", time: "3:15 PM", day: "Monday" }).body).toBe(
+      "Hi, this is the leasing team at 144 Hillside Avenue. We set up a tour for you at 3:15 PM on Monday. Reply YES to confirm, NO to cancel, or STOP to opt out.",
+    );
+    for (const day of ["today", "tomorrow", "Friday, Oct 9"]) {
+      expect(renderSms("cancel-confirm", { time: "3 PM", day }).body).toBe(`Cancel your 3 PM tour on ${day}? Reply YES or NO.`);
+    }
+  });
 });
 
 describe("fair-housing safe reply", () => {
-  it("does not treat the two named phrases as detector matches", () => {
-    expect(isFairHousingQuestion("are there many families with kids nearby?")).toBe(false);
+  it("matches neighborhood composition and leaves an innocent kids question alone", () => {
+    expect(isFairHousingQuestion("are there many families with kids nearby?")).toBe(true);
     expect(isFairHousingQuestion("is there room for my kids' bikes?")).toBe(false);
     expect(isFairHousingQuestion("Do you rent to families with kids?")).toBe(true);
   });
@@ -163,18 +181,30 @@ describe("fair-housing safe reply", () => {
     await expect(a.grok("answer_flagged_question", { exceptionId: flags[0]!.exceptionId, approvedFact: "Yes, families are welcome." })).rejects.toThrow(FAIR_HOUSING_REFUSAL);
   });
 
-  it("keeps an ordinary flag for families nearby, which the frozen detector does not match", async () => {
+  it("sends the held reply for each neighborhood-composition question, one no-draft flag each", async () => {
+    const phrases = [
+      "are there many families with kids nearby?",
+      "what kind of people live in the building?",
+      "is the neighborhood safe?",
+      "are there a lot of Hispanic families around here?",
+      "who lives nearby?",
+      "what's the crime rate like?",
+    ];
     const a = await liveApp({ cleanups });
     await a.optInSms();
     await a.text("1");
-    const replies = await a.text("are there many families with kids nearby?");
-    expect(replies[0]).toBe(UNKNOWN_ANSWER);
-    expect(replies.join("\n")).not.toBe(HELD);
-    expect(replies.join("\n")).not.toMatch(/fair housing/i);
+    for (const phrase of phrases) {
+      const replies = await a.text(phrase);
+      expect(replies, phrase).toEqual([HELD]);
+      expect(replies.join("\n")).not.toMatch(/fair housing|Fair Housing|discriminat/i);
+    }
     const flags = (await a.grok("list_exceptions")).exceptions as Array<{ summary: string; proposeDraft?: boolean }>;
-    expect(flags).toHaveLength(1);
-    expect(flags[0]!.proposeDraft).toBeUndefined();
-    expect(flags[0]!.summary).toContain("are there many families with kids nearby?");
+    expect(flags).toHaveLength(phrases.length);
+    for (const phrase of phrases) {
+      const flag = flags.find((item) => item.summary.includes(phrase));
+      expect(flag, phrase).toBeTruthy();
+      expect(flag!.proposeDraft).toBe(false);
+    }
   });
 
   it("keeps an ordinary flag for kids' bikes", async () => {
@@ -277,6 +307,22 @@ describe("dead-end visitor lines", () => {
     expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.accessGrants).toHaveLength(open);
     const stored = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.messages.filter((message) => message.audience === "PROSPECT" && message.direction === "OUTBOUND");
     expect(stored.some((message) => message.templateId === "tour-window-ended" && message.body.startsWith("Your tour time ended at"))).toBe(true);
+  });
+
+  it("alerts the team when HELP follows the all-doors-open line", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    a.clock.t = at(13, 58);
+    await a.text("I'm here");
+    await a.text("at unit 1a");
+    a.clock.t = at(14, 0);
+    const open = await a.text("I'm here");
+    expect(open.join("\n")).toContain("Every door on your tour is already open for you.");
+    const help = await a.text("HELP");
+    expect(help.join("\n")).toContain("I've let the property team know");
+    expect(help.join("\n")).not.toContain("Reply STOP");
+    const flagged = (await a.grok("list_exceptions")).exceptions as Array<{ what?: string; summary: string }>;
+    expect(flagged.some((item) => /help/i.test(`${item.what ?? ""} ${item.summary}`))).toBe(true);
   });
 
   it("says still booked, not still confirmed, while the identity form is pending", async () => {
@@ -391,10 +437,11 @@ describe("setup step guidance", () => {
     await h.ok("choose_messaging_provider", { provider: "local" });
     await h.ok("test_visitor_messaging");
     await h.ok("use_local_demo_storage");
-    const created = await h.ok("create_property_setup", { address: "144 Hillside Avenue, Teaneck, NJ 07666" });
+    const created = await h.ok("create_property_setup", { address: "144 hillside ave, Teaneck, NJ 07666" });
     const id = created.setup.propertyId as string;
     const state = await h.ok("get_state", { propertyId: id });
     expect(state.nextStep.say).toBe("Did I get that right: 144 Hillside Avenue, Teaneck, NJ 07666?");
+    expect(String(state.nextStep.say)).not.toMatch(/hillside ave\b/i);
     expect(String(state.nextStep.say)).not.toMatch(RAW_SLOT);
     expect(String(state.playbook.text)).not.toContain("{address}");
   });

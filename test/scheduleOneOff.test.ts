@@ -51,7 +51,7 @@ describe("operators can set up a one-time tour", () => {
 
     const first = a.fake.sent.filter((message) => message.number === PHONE).at(-1)!.content;
     expect(first).toBe(operatorScheduledFirstText(a.ws.load(PROPERTY).config, new Date("2026-09-28T19:15:00.000Z")));
-    expect(first).toBe("Hi, this is the property team at 100 Alfred Way. We set up a tour for you on Monday at 3:15 PM. Reply YES to confirm, NO to cancel, or STOP to opt out.");
+    expect(first).toBe("Hi, this is the property team at 100 Alfred Way. We set up a tour for you at 3:15 PM on Monday. Reply YES to confirm, NO to cancel, or STOP to opt out.");
 
     const yes = await a.text("YES");
     expect(yes.join("\n")).toContain("Great, you're booked for 3:15 PM");
@@ -144,7 +144,7 @@ describe("operators can set up a one-time tour", () => {
     const visitor = a.fake.sent.filter((message) => message.number === PHONE);
     expect(visitor.length).toBe(beforeVisitor + 1);
     expect(visitor.at(-1)!.content).toBe(
-      "Hi, this is the property team at 100 Alfred Way. We set up a tour for you on Monday at 3:15 PM. Reply YES to confirm, NO to cancel, or STOP to opt out.",
+      "Hi, this is the property team at 100 Alfred Way. We set up a tour for you at 3:15 PM on Monday. Reply YES to confirm, NO to cancel, or STOP to opt out.",
     );
 
     const tours = a.ws.listTours(PROPERTY).filter((item) => item.kind === "messaging" && item.visitorPhone === PHONE);

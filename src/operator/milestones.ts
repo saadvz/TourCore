@@ -239,7 +239,7 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       const missingZip = !!saved.property.canonicalAddress && !saved.property.canonicalAddress.postalCode;
       if (missingZip) return envelope(ctx, id, "next", "What ZIP code should I use?", { propertyId: id });
       if (saved.property.canonicalAddress?.postalCode && saved.property.addressConfirmed === false) {
-        return envelope(ctx, id, "next", `Did I get that right: ${saved.property.address}?`, { propertyId: id, address: saved.property.address });
+        return envelope(ctx, id, "next", `Did I get that right: ${savedFullAddress(saved.property)}?`, { propertyId: id, address: savedFullAddress(saved.property) });
       }
       if (!saved.property.propertyType) return envelope(ctx, id, "next", "Is this a single-family home, a multifamily home, or one apartment or condo?", { propertyId: id });
       return envelope(ctx, id, "done", `Saved ${saved.property.name}.`, { propertyId: id });

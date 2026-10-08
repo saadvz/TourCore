@@ -38,7 +38,7 @@ import { BOOKING_HORIZON_DAYS, isoDate, nextTourDay, slotsOn, tourWindow, type T
 import { bookedTourCalledOffText, laterCancelConfirm, laterCancelDone, laterCancelKept, tourMovedToText } from "./availabilityCopy";
 import { propertyDirectionsUrl, tourDirectionsText } from "./mapsLink";
 import { addDays, formatDay as formatDayIn, formatTime as formatTimeIn, localDateOf, type LocalDate } from "./timezone";
-import { claimVisitorSms, renderSms } from "../sms/templates";
+import { claimVisitorSms, renderSms, visitorTeamName } from "../sms/templates";
 
 export interface TourCoreDeps {
   config: TourCoreConfig;
@@ -313,11 +313,11 @@ export const NOTHING_BOOKED_CANCEL =
 export const VISITOR_CANCEL_FAILED = "I can't cancel it from here. I've asked the property team to call it off and get back to you.";
 
 export function visitorCancelConfirm(day: string, time: string): string {
-  return `Cancel your tour on ${day} at ${time}? Reply YES or NO.`;
+  return `Cancel your ${time} tour on ${day}? Reply YES or NO.`;
 }
 
 export function visitorCancelKept(day: string, time: string): string {
-  return `Okay, your tour stays on ${day} at ${time}.`;
+  return `Okay, your ${time} tour on ${day} stays booked.`;
 }
 
 export function visitorCancelConfirmFor(reservation: Reservation, timeZone: string, laterWhileTouring = false): string | undefined {
@@ -342,19 +342,22 @@ export function visitorCancelDoneFor(day: string, time: string, laterWhileTourin
  */
 export class VisitorDenialCopy {
   static atDoor(team: string, visitorContact?: string, options?: { teamJustNamed?: boolean }): string {
-    const who = options?.teamJustNamed ? "They'll" : `The ${team} will`;
+    const name = visitorTeamName(team);
+    const who = options?.teamJustNamed ? "They'll" : `The ${name} will`;
     if (visitorContact) return `Stay where you are. ${who} reply as soon as they can, or call ${formatPhone(visitorContact)}.`;
     return `Stay where you are and reply here. ${who} reply as soon as they can.`;
   }
 
   static remote(team: string, visitorContact?: string, options?: { teamJustNamed?: boolean }): string {
-    const who = options?.teamJustNamed ? "They'll" : `The ${team} will`;
+    const name = visitorTeamName(team);
+    const who = options?.teamJustNamed ? "They'll" : `The ${name} will`;
     if (visitorContact) return `${who} reply here as soon as they can, or call ${formatPhone(visitorContact)}.`;
     return `${who} reply here as soon as they can.`;
   }
 
   static operatorHold(team: string, visitorContact?: string): string {
-    return `Your tour is on hold, and your tour time keeps running while the ${team} sorts this out. ${this.atDoor(team, visitorContact, { teamJustNamed: true })}`;
+    const name = visitorTeamName(team);
+    return `Your tour is on hold, and your tour time keeps running while the ${name} sorts this out. ${this.atDoor(name, visitorContact, { teamJustNamed: true })}`;
   }
 
   static calledOff(team: string, visitorContact?: string, when?: { time: string; day: string }): string {
@@ -371,36 +374,42 @@ export class VisitorDenialCopy {
   }
 
   static followUpYes(team: string): string {
-    return `Great. Someone from the ${team} will be in touch soon.`;
+    return `Great. Someone from the ${visitorTeamName(team)} will be in touch soon.`;
   }
 
   static helpAck(team: string, visitorContact?: string): string {
-    return `I've let the ${team} know. ${this.atDoor(team, visitorContact, { teamJustNamed: true })}`;
+    const name = visitorTeamName(team);
+    return `I've let the ${name} know. ${this.atDoor(name, visitorContact, { teamJustNamed: true })}`;
   }
 
   static helpRepeatAck(team: string, visitorContact?: string): string {
-    return `The ${team} already knows and is on it. ${this.atDoor(team, visitorContact, { teamJustNamed: true })}`;
+    const name = visitorTeamName(team);
+    return `The ${name} already knows and is on it. ${this.atDoor(name, visitorContact, { teamJustNamed: true })}`;
   }
 
   static helpAckRemote(team: string, visitorContact?: string): string {
-    return `I've let the ${team} know. ${this.remote(team, visitorContact, { teamJustNamed: true })}`;
+    const name = visitorTeamName(team);
+    return `I've let the ${name} know. ${this.remote(name, visitorContact, { teamJustNamed: true })}`;
   }
 
   static helpRepeatAckRemote(team: string, visitorContact?: string): string {
-    return `The ${team} already knows and is on it. ${this.remote(team, visitorContact, { teamJustNamed: true })}`;
+    const name = visitorTeamName(team);
+    return `The ${name} already knows and is on it. ${this.remote(name, visitorContact, { teamJustNamed: true })}`;
   }
 
   static noOpenTimes(team: string): string {
-    return `There are no open tour times right now. The ${team} will reach out.`;
+    return `There are no open tour times right now. The ${visitorTeamName(team)} will reach out.`;
   }
 
   static doorsNotResponding(team: string, visitorContact?: string): string {
-    return `Sorry, the doors aren't responding right now. I've let the ${team} know. ${this.atDoor(team, visitorContact, { teamJustNamed: true })}`;
+    const name = visitorTeamName(team);
+    return `Sorry, the doors aren't responding right now. I've let the ${name} know. ${this.atDoor(name, visitorContact, { teamJustNamed: true })}`;
   }
 
   static followUp(team: string, visitorContact?: string): string {
-    if (visitorContact) return `The ${team} will follow up here, or call ${formatPhone(visitorContact)}.`;
-    return `The ${team} will follow up here.`;
+    const name = visitorTeamName(team);
+    if (visitorContact) return `The ${name} will follow up here, or call ${formatPhone(visitorContact)}.`;
+    return `The ${name} will follow up here.`;
   }
 
   static failedIdAtDoor(team: string, visitorContact?: string): string {
@@ -416,7 +425,7 @@ export class VisitorDenialCopy {
   }
 
   static staleVerification(): string {
-    return "Your ID check has expired, so I need a quick re-check before I can open doors.";
+    return "It's been a while since you filled out the identity form, so I'll need you to fill it out again before I can open doors.";
   }
 
   static missingConsent(): string {
@@ -1994,7 +2003,7 @@ export class TourCore {
     await this.textProspect(
       prospect,
       ready.id,
-      `You're all set for your tour on ${this.day(start)} at ${this.time(start)}!\n` +
+      `You're all set for your ${this.time(start)} tour on ${this.day(start)}!\n` +
         `Doors will work for you from ${this.time(new Date(ready.windowStart!))} to ${this.time(new Date(ready.windowEnd!))}.` +
         (fragment ? `\n${fragment}` : ""),
       { kind: "say", phrase: "I'm here", purpose: this.arrivalPurpose(ready) },
@@ -2163,7 +2172,7 @@ export class TourCore {
   }
 
   private teamName(): string {
-    return this.deps.config.operator.name;
+    return visitorTeamName(this.deps.config.operator.name);
   }
 
   private isStalePassedCheck(verification: Verification | undefined): boolean {

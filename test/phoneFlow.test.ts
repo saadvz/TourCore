@@ -88,7 +88,7 @@ describe("a real phone over Sendblue", () => {
     const booked = await app.text("1");
     expect(booked.replies.join("\n")).toContain("you're booked for");
     const cancelAsk = await app.text("Actually cancel that");
-    expect(cancelAsk.replies.join("\n")).toContain("Cancel your tour");
+    expect(cancelAsk.replies.join("\n")).toContain("Cancel your 2:00 PM tour on");
     expect(cancelAsk.replies.join("\n")).not.toContain("Sorry, I didn't catch that");
     expect(cancelAsk.replies.join("\n")).not.toContain("Is it OK if I text you");
     const cancelled = await app.text("YES");
@@ -137,7 +137,7 @@ describe("a real phone over Sendblue", () => {
     const before = app.fake.sent.length;
     const verified = await app.local("POST", `/api/verify/${token}`, { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: "(555) 010-2000" });
     expect(verified.body).toMatchObject({ ok: true });
-    expect(app.fake.sent.slice(before).map((s) => s.content)[0]).toContain("You're all set for your tour on Monday, Sep 28 at 2:00 PM!");
+    expect(app.fake.sent.slice(before).map((s) => s.content)[0]).toContain("You're all set for your 2:00 PM tour on Monday, Sep 28!");
     expect((await app.local("POST", `/api/verify/${token}`, { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: PHONE })).status).toBe(410);
 
     const early = await app.text("I'm here");

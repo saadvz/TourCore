@@ -1,10 +1,12 @@
 /**
- * Fair-housing questions are detected here, from a fixed list, before any
- * rent sentence, keyword match, or saved answer. The list is not a playbook.
- * A match is eligibility language plus a protected class, a housing subsidy,
- * or a phrase that is fair housing on its own. "How much is rent?" has
- * neither a class nor an eligibility phrase, so it stays a rent question.
- * "Do you allow pets?" and "Is there a minimum lease?" do not match.
+ * Fair-housing questions are detected here, before any rent sentence, keyword
+ * match, or saved answer. The list is not a playbook. A match is eligibility
+ * language plus a protected class, a housing subsidy, a phrase that is fair
+ * housing on its own, or neighborhood composition / steering. "How much is
+ * rent?" has neither a class nor an eligibility phrase, so it stays a rent
+ * question. "Do you allow pets?" and "Is there a minimum lease?" do not match.
+ * A church, parking, or a playground nearby, room for kids' bikes, how many
+ * bedrooms, and whether the building is quiet do not match either.
  */
 
 const norm = (s: string) =>
@@ -55,11 +57,52 @@ const STANDALONE =
 /** "55+" loses the plus when punctuation is stripped, so it is checked on the raw text. */
 const FIFTY_FIVE_PLUS = /55\s*\+/;
 
+/**
+ * Race and ethnicity words used only for neighborhood composition. They do
+ * not, on their own, make a question fair housing.
+ */
+const COMPOSITION_PEOPLE =
+  /\b(?:hispanic|latino|latina|asian|black|white|arab|people|residents|neighbors|tenants)\b/;
+
+/** Area or makeup language. The same word cannot also serve as the class. */
+const AREA_OR_COMPOSITION =
+  /\b(?:nearby|around here|in the area|neighborhood|neighbors|in the building|on the block|lives? around|many|a lot of|lots of|mostly|any other)\b/;
+
+/** Steering even with no class word beside it. */
+const STEERING =
+  /\b(?:what kind of people|what type of people|who lives (?:there|here|in the building|nearby)|is the (?:neighborhood|area) safe|safe neighborhood|safe area|crime rate|good neighborhood|bad neighborhood)\b/;
+
+function spans(re: RegExp, text: string): Array<{ start: number; end: number }> {
+  const flags = re.flags.includes("g") ? re.flags : `${re.flags}g`;
+  return [...text.matchAll(new RegExp(re.source, flags))].map((match) => ({
+    start: match.index ?? 0,
+    end: (match.index ?? 0) + match[0].length,
+  }));
+}
+
+function overlaps(a: { start: number; end: number }, b: { start: number; end: number }): boolean {
+  return a.start < b.end && b.start < a.end;
+}
+
+/**
+ * Neighborhood composition or steering. A class word (the existing protected
+ * class or faith lists, or people / residents / neighbors / tenants, plus the
+ * race words above) together with an area or makeup phrase. Standalone
+ * steering phrases match on their own.
+ */
+function neighborhoodSteering(text: string): boolean {
+  if (STEERING.test(text)) return true;
+  const classes = [...spans(PROTECTED_CLASS, text), ...spans(FAITH, text), ...spans(COMPOSITION_PEOPLE, text)];
+  const areas = spans(AREA_OR_COMPOSITION, text);
+  return classes.some((word) => areas.some((area) => !overlaps(word, area)));
+}
+
 export function isFairHousingQuestion(text: string): boolean {
   if (FIFTY_FIVE_PLUS.test(text.toLowerCase())) return true;
   const t = norm(text);
   if (!t) return false;
   if (ASSISTANCE_ANIMAL.test(t) || FAITH.test(t) || SSN.test(t) || STANDALONE.test(t)) return true;
+  if (neighborhoodSteering(t)) return true;
   if (!PROTECTED_CLASS.test(t)) return false;
   if (ELIGIBILITY.test(t)) return true;
   return HOUSING_SUBSIDY.test(t) && SUBSIDY_TAKE.test(t);

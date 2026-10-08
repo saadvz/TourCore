@@ -193,7 +193,7 @@ describe("typed day questions use the shared copy", () => {
       await p.say(text);
       expect(p.recent(), text).toContain("Great, you're booked for 8:15 AM on Monday, Oct 5.");
       expect(p.lastReply(), text).not.toContain("Sorry, I didn't catch that. Which day works for you?");
-      expect(p.lastReply(), text).not.toContain("Reply yes for Monday at 8:15 AM, or pick a day.");
+      expect(p.lastReply(), text).not.toContain("Reply yes for 8:15 AM on Monday, or pick a day.");
       expect(p.lastReply(), text).not.toContain("I have these times available");
       expect(await p.session.stage(), text).toBe("identity");
       expect((await p.session.reservation())?.slotStart).toBe(at(2026, 10, 5, 8, 15).toISOString());
@@ -205,7 +205,7 @@ describe("typed day questions use the shared copy", () => {
     await toChooseDate(p);
     await p.say("Can I come Dec 1?");
     await p.say("hmm");
-    expect(p.lastReply()).toContain("Reply yes for Monday at 8:15 AM, or pick a day.");
+    expect(p.lastReply()).toContain("Reply yes for 8:15 AM on Monday, or pick a day.");
     expect(p.lastReply()).toContain("1) Monday, Oct 5");
     expect(p.lastReply()).not.toContain("Sorry, I didn't catch that. Which day works for you?");
     expect(p.lastReply()).not.toContain("I have tours available");

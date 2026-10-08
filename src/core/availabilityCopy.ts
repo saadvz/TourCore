@@ -1,4 +1,5 @@
 import { formatPhone } from "./phone";
+import { visitorTeamName } from "../sms/templates";
 
 /**
  * Critiquito-approved visitor and operator copy for pausing or removing
@@ -6,10 +7,11 @@ import { formatPhone } from "./phone";
  */
 
 export function pausedPropertyVisitorText(address: string, team: string, visitorContact?: string): string {
+  const name = visitorTeamName(team);
   if (visitorContact) {
-    return `Tours at ${address} are paused right now. The ${team} will text you when they're back, or call ${formatPhone(visitorContact)}.`;
+    return `Tours at ${address} are paused right now. The ${name} will text you when they're back, or call ${formatPhone(visitorContact)}.`;
   }
-  return `Tours at ${address} are paused right now. The ${team} will text you when they're back.`;
+  return `Tours at ${address} are paused right now. The ${name} will text you when they're back.`;
 }
 
 export function pausedUnitVisitorText(unitName: string): string {
@@ -18,7 +20,7 @@ export function pausedUnitVisitorText(unitName: string): string {
 
 /** Mid-tour cancel of a later booking. One place so wording is a one-line change. */
 export function laterTourCalledOffWhileTouringLead(team: string, time: string, day: string): string {
-  return `Sorry, the ${team} had to cancel your later tour at ${time} on ${day}. Your tour right now isn't affected.`;
+  return `Sorry, the ${visitorTeamName(team)} had to cancel your later tour at ${time} on ${day}. Your tour right now isn't affected.`;
 }
 
 export function bookedTourCalledOffText(input: {
@@ -33,7 +35,7 @@ export function bookedTourCalledOffText(input: {
 }): string {
   const lead = input.touringNow
     ? laterTourCalledOffWhileTouringLead(input.team, input.time, input.day)
-    : `Sorry, the ${input.team} had to cancel your ${input.day} at ${input.time} tour at ${input.address}.`;
+    : `Sorry, the ${visitorTeamName(input.team)} had to cancel your ${input.time} tour on ${input.day} at ${input.address}.`;
   if (input.removed) return `${lead} ${input.address} isn't offering tours anymore.`;
   return input.propertyWide ? `${lead} They'll text you when tours are back.` : `${lead} Text me anytime to book another.`;
 }

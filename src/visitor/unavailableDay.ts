@@ -78,7 +78,7 @@ export function acceptsOfferedOpening(text: string, today?: LocalDate): boolean 
 /** Follow-up when the offer is still pending and the reply was not an accept or a day. */
 export function nextOpeningFollowUp(start: Date, tz: string): string {
   const weekday = formatDay(start, tz).split(",")[0]!;
-  return `Reply yes for ${weekday} at ${formatTime(start, tz)}, or pick a day.`;
+  return `Reply yes for ${formatTime(start, tz)} on ${weekday}, or pick a day.`;
 }
 
 function datePrompt(session: VisitorDemoSession): ReplyPrompt | undefined {

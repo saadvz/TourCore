@@ -14,6 +14,7 @@ import {
   type InboundMeta,
 } from "../core/TourCore";
 import { cannotCancelRunningOfferLater, cannotCancelRunningTour, laterCancelConfirm } from "../core/availabilityCopy";
+import { visitorTeamName } from "../sms/templates";
 import { namedCancelFocus } from "./cancelTarget";
 import { awaitingLatestYesNo, doorAskSupersedesCancel } from "./latestQuestion";
 import { isLeavingTour, T5_NO_OFFER_BARE_YES } from "../core/overstayCopy";
@@ -938,7 +939,7 @@ const FOLLOW_UP_QUESTION = "Would you like someone from the property team to fol
 
 /** Pause-cancel team label, only on hold or a door-system problem. */
 function runningCancelTeam(session: VisitorDemoSession, status?: string): string | undefined {
-  return status === "OPERATOR_HOLD" || status === "PROVIDER_FAILURE" ? session.config.operator.name : undefined;
+  return status === "OPERATOR_HOLD" || status === "PROVIDER_FAILURE" ? visitorTeamName(session.config.operator.name) : undefined;
 }
 
 async function offerCancelConfirm(turn: Turn): Promise<void> {
@@ -1095,7 +1096,7 @@ async function showAskedDay(turn: Turn, ask: DayReference, alreadyRecorded = fal
     if (!alreadyRecorded) await session.recordText(turn.said);
     if (weekend.length === 1) return presentDay(turn, weekend[0]!.date, true);
     const options = (weekend.length ? weekend : dates).map((day) => day.label);
-    const lead = weekend.length ? DAY_MENU : "I don't have weekend tours. I have tours available. Which day works for you?";
+    const lead = weekend.length ? DAY_MENU : "I don't have weekend tours, but weekdays are open. Which day works for you?";
     session.markDatesShown();
     await session.reply(lead, { kind: "choose", options, what: "a day" });
     return;

@@ -137,7 +137,7 @@ export function parseFlexibleTime(text: string, config: TourCoreConfig, now: Dat
   const trimmed = text.trim();
   if (/^\d{4}-\d{2}-\d{2}T/.test(trimmed)) {
     const start = new Date(trimmed);
-    if (Number.isNaN(start.getTime())) return { ok: false, ask: "That time isn't valid." };
+    if (Number.isNaN(start.getTime())) return { ok: false, ask: "That time doesn't work. What time would you like?" };
     return { ok: true, start, placement: placementOf(config, start), label: formatTime(start, config.property.timezone) };
   }
   const times = spokenTimes(normalize(trimmed), localDateOf(now, config.property.timezone));

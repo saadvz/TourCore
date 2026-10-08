@@ -91,13 +91,13 @@ function lastAsked(step: ConversationStep, awaiting?: StepAwaiting, timezone?: s
   if (awaiting?.kind === "accept-next-opening") {
     const start = new Date(awaiting.slotStart);
     const weekday = formatDay(start, timezone ?? "UTC").split(",")[0]!;
-    return `Reply yes for ${weekday} at ${formatTime(start, timezone ?? "UTC")}, or pick a day.`;
+    return `Reply yes for ${formatTime(start, timezone ?? "UTC")} on ${weekday}, or pick a day.`;
   }
   if (awaiting?.kind === "confirm-cancel-tour") {
     if (awaiting.namedRunning) return cannotCancelRunningOfferLater(awaiting.time, awaiting.day, awaiting.team);
     return awaiting.laterWhileTouring
       ? laterCancelConfirm(awaiting.time, awaiting.day)
-      : `Cancel your tour on ${awaiting.day} at ${awaiting.time}? Reply YES or NO.`;
+      : `Cancel your ${awaiting.time} tour on ${awaiting.day}? Reply YES or NO.`;
   }
   switch (step) {
     case "choose-unit":

@@ -28,7 +28,7 @@ const NO_FORM_SAVED_LIVE = "Visitors won't fill out an identity form, and tour u
 const FORM_SENTENCE = "please fill out this short form with your legal name, email and phone";
 const IDENTITY_WORDING = /identity form|ID check|ID step|identity check|fill out this short form/i;
 const NOT_READY = "We're not quite ready to open doors yet. Finish the steps I sent earlier and you'll be all set.";
-const ID_EXPIRED = "Your ID check has expired, so I need a quick re-check before I can open doors.";
+const ID_EXPIRED = "It's been a while since you filled out the identity form, so I'll need you to fill it out again before I can open doors.";
 const WRITABLE = ["basic-form", "none"];
 
 const cleanups: Array<() => void> = [];
@@ -312,12 +312,12 @@ describe("verification choices", () => {
     await say("1");
     const noneBooked = await say("1");
     expect(noneBooked.replies.join("\n")).toContain("Great, you're booked for 2:00 PM on Monday, Sep 28.");
-    expect(noneBooked.replies.join("\n")).toContain("You're all set for your tour");
+    expect(noneBooked.replies.join("\n")).toContain("You're all set for your");
     await say("HELP");
     await say("where's the form");
     await say("Actually cancel that");
     const kept = await say("NO");
-    expect(kept.replies.join("\n")).toContain("Okay, your tour stays on Monday, Sep 28 at 2:00 PM.");
+    expect(kept.replies.join("\n")).toContain("Okay, your 2:00 PM tour on Monday, Sep 28 stays booked.");
     const early = await say("I'm here");
     expect(early.replies.join("\n")).toContain("You're a little early");
     none.setClock(at(13, 50));
@@ -325,9 +325,9 @@ describe("verification choices", () => {
     expect(arrived.replies[0]).toContain("open for you now");
     const transcript = replies.join("\n");
     expect(transcript).not.toMatch(IDENTITY_WORDING);
-    expect(transcript).toContain("You're all set for your tour");
+    expect(transcript).toContain("You're all set for your");
     expect(transcript).toContain("Great, you're booked");
-    expect(transcript).toContain("Okay, your tour stays on Monday, Sep 28 at 2:00 PM.");
+    expect(transcript).toContain("Okay, your 2:00 PM tour on Monday, Sep 28 stays booked.");
   });
 
   it("reads the form reuse sentence, and no form as one line with no reuse wording", () => {

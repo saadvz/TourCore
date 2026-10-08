@@ -315,8 +315,7 @@ Never:
   unanswered question and leave the hold pending. A visitor with a booked
   tour who texts to cancel (any natural phrasing) is handled by Tour Core:
   it confirms, then YES cancels (`You're cancelled. Text me anytime if you
-  want to book again.`) or NO keeps the booking (`Okay, your tour stays on
-  {day} at {time}.`). While they are touring and the cancel targets a later
+  want to book again.`) or NO keeps the booking (`Okay, your {time} tour on {day} stays booked.`). While they are touring and the cancel targets a later
   booking: confirm `Cancel your later tour at {time} on {day}? Your tour
   right now isn't affected. Reply YES or NO.`; YES `Done, I've cancelled
   your later tour at {time} on {day}. Your tour right now isn't affected.`;

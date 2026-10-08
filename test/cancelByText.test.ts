@@ -131,7 +131,7 @@ describe("visitor cancel-by-text", () => {
     const p = phone();
     await bookedAndReady(p);
     await p.say("Can we cancel the tour?");
-    expect(p.lastReply()).toBe("Cancel your tour on Monday, Sep 28 at 2:00 PM? Reply YES or NO.");
+    expect(p.lastReply()).toBe("Cancel your 2:00 PM tour on Monday, Sep 28? Reply YES or NO.");
     expect(p.lastReply()).toBe(CONFIRM);
     expect(p.lastReply()).not.toBe(UNKNOWN_ANSWER);
     expect(p.lastReply()).not.toContain("I don't have that information");
@@ -187,7 +187,7 @@ describe("visitor cancel-by-text", () => {
     await p.say("please cancel my tour");
     expect(p.lastReply()).toBe(CONFIRM);
     await p.say("NO");
-    expect(p.lastReply()).toBe("Okay, your tour stays on Monday, Sep 28 at 2:00 PM.");
+    expect(p.lastReply()).toBe("Okay, your 2:00 PM tour on Monday, Sep 28 stays booked.");
     expect(p.lastReply()).toBe(KEPT);
     expect((await p.session.reservation())?.status).toBe("READY");
     expect(await p.audit("RESERVATION_CANCELLED")).toHaveLength(0);

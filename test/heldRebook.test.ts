@@ -154,7 +154,7 @@ describe("defect 1: bare yes answers the latest question", () => {
       expect(booked.consentId).toBeTruthy();
       expect(booked.status).toBe("READY");
       const thread = ctx.session.conversation.filter((c) => c.from === "tourcore").map((c) => c.text).join("\n");
-      expect(thread).toContain("You're all set for your tour on Thursday, Oct 1 at 2:00 PM!");
+      expect(thread).toContain("You're all set for your 2:00 PM tour on Thursday, Oct 1!");
       expect(thread).not.toContain("Is it OK if I text you");
     },
   );
@@ -215,7 +215,7 @@ describe("defect 3: ended running tour hands conversation to the held rebook", (
     await ctx.say("please cancel my Saturday tour");
     expect((await ctx.session.reservation())!.id).toBe(ctx.pending.id);
     expect(lastFrom(ctx.session)).toBe(
-      `Cancel your tour on ${formatDay(ctx.later, TZ)} at ${formatTime(ctx.later, TZ)}? Reply YES or NO.`,
+      `Cancel your ${formatTime(ctx.later, TZ)} tour on ${formatDay(ctx.later, TZ)}? Reply YES or NO.`,
     );
     await ctx.say("yes");
     expect(lastFrom(ctx.session)).toBe(VISITOR_CANCEL_DONE);
