@@ -14,7 +14,8 @@ import { applySetupCommand } from "../setup/commands";
 import { canonicalDoor, canonicalUnitName } from "../setup/normalizeDraft";
 import { formatClockTime, type Weekday } from "../core/timezone";
 import { hoursRangeRefusal, reuseDaysRefusal, tourSpacingRefusal } from "../config/validateConfig";
-import { addressConfirmQuestion, savedFullAddress } from "../setup/address";
+import { addressConfirmQuestion, nextAddressPartQuestion, savedFullAddress } from "../setup/address";
+import { parseTourRef } from "./tours";
 import { parseDays, parseMinutes, parseTimeOfDay, SAME_DAY_HOURS, tourHoursEndSameDay } from "../setup/parse";
 import { NO_FORM_QUESTION } from "../setup/verification";
 import { publishGuards, publishProperty, readinessForProperty, runPracticeTour, visitorTexting } from "./setupFlow";
@@ -49,6 +50,32 @@ function servicesOf(ctx: ToolContext): OperatorServices {
   return { ...ctx.services, installedMessaging: () => installedMessaging(ctx.installation!) };
 }
 
+/** Setup questions belong to one property. An unscoped call must not repeat another property's. */
+const PROPERTY_SETUP_STEPS = new Set([
+  "property-address",
+  "property-confirm",
+  "property-type",
+  "units-which",
+  "units-home",
+  "units-details",
+  "units-route",
+  "hours",
+  "hours-help",
+  "readiness",
+  "practice",
+  "publish",
+]);
+
+function propertyIdFrom(extra: Record<string, unknown>): string | undefined {
+  if (typeof extra.propertyId === "string" && extra.propertyId.trim()) return extra.propertyId.trim();
+  if (typeof extra.tourRef === "string") return parseTourRef(extra.tourRef)?.propertyId;
+  const tour = extra.tour;
+  if (tour && typeof tour === "object" && "tourRef" in tour && typeof (tour as { tourRef?: unknown }).tourRef === "string") {
+    return parseTourRef((tour as { tourRef: string }).tourRef)?.propertyId;
+  }
+  return undefined;
+}
+
 export function envelope(
   ctx: ToolContext,
   propertyId: string | undefined,
@@ -57,10 +84,11 @@ export function envelope(
   extra: Record<string, unknown> = {},
   code?: string,
 ): Record<string, unknown> {
+  const about = propertyId ?? propertyIdFrom(extra);
   let picture: Record<string, unknown> | undefined;
   if (ctx.installation) {
     try {
-      picture = readState({ installation: ctx.installation, services: servicesOf(ctx), client: ctx.client }, propertyId);
+      picture = readState({ installation: ctx.installation, services: servicesOf(ctx), client: ctx.client }, about);
     } catch {
       picture = undefined;
     }
@@ -68,7 +96,10 @@ export function envelope(
   const milestones = (picture?.milestones as Array<{ status: string; title: string; id: string }> | undefined) ?? [];
   const current = milestones.find((item) => item.status === "next");
   const step = picture?.nextStep as { tool?: string; say?: string } | undefined;
-  const next = step?.tool ?? "get_state";
+  const playbookStep = (picture?.playbook as { step?: string } | undefined)?.step;
+  const pictureProperty = (picture?.setup as { propertyId?: string } | undefined)?.propertyId;
+  const foreignSetup = !!playbookStep && PROPERTY_SETUP_STEPS.has(playbookStep) && (!about || (!!pictureProperty && about !== pictureProperty));
+  const next = foreignSetup ? "get_state" : (step?.tool ?? "get_state");
   return {
     status,
     milestone: current?.title ?? "Setup",
@@ -76,7 +107,7 @@ export function envelope(
     next,
     message,
     ...(status === "blocked" ? { reason: message, code: code ?? "BLOCKED" } : {}),
-    nextStep: { tool: next, say: step?.say, milestone: current?.id ?? null },
+    nextStep: { tool: next, ...(foreignSetup ? {} : { say: step?.say }), milestone: current?.id ?? null },
     ...extra,
   };
 }
@@ -179,7 +210,9 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       propertyType: z.enum(PROPERTY_TYPES).optional(),
       timezone: z.string().max(60).optional(),
       facts: Facts.optional(),
+      street: z.string().max(120).optional(),
       city: z.string().max(80).optional(),
+      state: z.string().max(40).optional(),
       postalCode: z.string().max(10).optional(),
       confirmAddress: z.boolean().optional(),
       alertName: z.string().max(120).optional(),
@@ -213,14 +246,16 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
         id = draft.property.id;
       }
       let next = ws.openDraft(id).draft;
-      if (i.address || i.name !== undefined || i.propertyType || i.timezone || i.facts || i.city || i.postalCode || i.confirmAddress || i.buildingAccess || i.entryInstructions !== undefined || i.skipEntryInstructions) {
+      if (i.address || i.name !== undefined || i.propertyType || i.timezone || i.facts || i.street !== undefined || i.city !== undefined || i.state !== undefined || i.postalCode !== undefined || i.confirmAddress || i.buildingAccess || i.entryInstructions !== undefined || i.skipEntryInstructions) {
         next = applySetupCommand(next, "setPropertyDetails", {
           name: i.name,
           address: i.address,
           propertyType: i.propertyType,
           timezone: i.timezone,
           facts: i.facts,
+          street: i.street,
           city: i.city,
+          state: i.state,
           postalCode: i.postalCode,
           confirmAddress: i.confirmAddress,
           buildingAccess: i.buildingAccess,
@@ -239,9 +274,8 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       ws.persistEdit(next, ctx.now());
       const saved = ws.openDraft(id).draft;
       const canonical = saved.property.canonicalAddress;
-      if (canonical && !canonical.city?.trim()) return envelope(ctx, id, "next", "What city should I use?", { propertyId: id });
-      const missingZip = !!canonical && !canonical.postalCode;
-      if (missingZip) return envelope(ctx, id, "next", "What ZIP code should I use?", { propertyId: id });
+      const part = nextAddressPartQuestion(canonical, { cityJustSaved: i.city !== undefined });
+      if (part) return envelope(ctx, id, "next", part, { propertyId: id });
       const question = canonical && saved.property.addressConfirmed === false ? addressConfirmQuestion(canonical) : undefined;
       if (question) return envelope(ctx, id, "next", question, { propertyId: id, address: savedFullAddress(saved.property) });
       if (!saved.property.propertyType) return envelope(ctx, id, "next", "Is this a single-family home, a multifamily home, or one apartment or condo?", { propertyId: id });

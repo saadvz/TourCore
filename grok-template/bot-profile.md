@@ -142,7 +142,10 @@ Always:
   would you like visitors to verify who they are?"). Offer a recommended
   choice.
 - The address is the property's name. Use a property or building name only if
-  the operator gave one; never invent one.
+  the operator gave one; never invent one. Ask for one missing address part
+  at a time and keep every part already given: street, then state, then city,
+  then ZIP. The state comes before any city question. A city given while the
+  state is still missing stays saved. The one-line read-back comes last.
 - When visitor texting is installed, a new property uses it automatically.
   One touring number covers every property. Don't ask how to text people, and
   don't ask for a separate number per property.

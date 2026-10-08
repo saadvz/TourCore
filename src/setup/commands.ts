@@ -44,6 +44,8 @@ export const SETUP_COMMANDS = {
       timezone: Text.optional(),
       facts: Facts.optional(),
       city: Text.optional(),
+      state: Text.optional(),
+      street: Text.optional(),
       postalCode: Text.optional(),
       confirmAddress: z.boolean().optional(),
       buildingAccess: Text.optional(),

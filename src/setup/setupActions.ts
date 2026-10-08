@@ -19,7 +19,18 @@ import { formatClockTime, friendlyTimeZone, WEEKDAYS, type Weekday } from "../co
 import { isApartmentOrCondo, isSingleTourPlace, streetAndUnit, streetLine, unitLabel, visitorSubject } from "../visitor/identity";
 import { inferTimeZone, resolveTimeZone, SAME_DAY_HOURS, slugify, tourHoursEndSameDay } from "./parse";
 import { isLegacyVerification, verificationSummaryRows } from "./verification";
-import { formatCanonical, parseUsAddress, titleCasePlace } from "./address";
+import {
+  CITY_QUESTION,
+  STREET_QUESTION,
+  STATE_QUESTION,
+  STATE_UNREADABLE_QUESTION,
+  canonicalizeStreet,
+  fillAddress,
+  normalizeUsState,
+  parseUsAddress,
+  titleCasePlace,
+  type CanonicalAddress,
+} from "./address";
 import { canonicalDoor, canonicalUnitName } from "./normalizeDraft";
 
 /**
@@ -162,6 +173,22 @@ function withLabel(property: SetupDraft["property"]): SetupDraft["property"] {
   return { ...rest, ...(displayName ? { displayName } : {}), name: displayName || property.address.trim() };
 }
 
+function addressSoFar(draft: SetupDraft): CanonicalAddress | undefined {
+  return draft.property.canonicalAddress ?? parseUsAddress(draft.property.address)?.address;
+}
+
+/**
+ * Saves the parts. The public address line becomes the one-line form only
+ * when street, city and state are all there, so a read-back is never a
+ * blank city. `display` is the line to show until then.
+ */
+function storeAddress(draft: SetupDraft, parts: CanonicalAddress, display?: string): void {
+  draft.property.canonicalAddress = parts;
+  if (parts.street.trim() && parts.city.trim() && parts.state.trim()) draft.property.address = parts.formatted;
+  else if (display?.trim()) draft.property.address = display.trim();
+  draft.property.addressConfirmed = false;
+}
+
 function requirePropertyType(input: string): PropertyType {
   const parsed = PropertyTypeSchema.safeParse(input);
   if (!parsed.success) throw new SetupInputError("PROPERTY_TYPE_UNKNOWN", "Choose a single-family home, a multifamily home, or an apartment or condo.");
@@ -226,6 +253,8 @@ export function setPropertyDetails(
     timezone?: string;
     facts?: string[];
     city?: string;
+    state?: string;
+    street?: string;
     postalCode?: string;
     confirmAddress?: boolean;
     buildingAccess?: string;
@@ -239,37 +268,56 @@ export function setPropertyDetails(
   if (input.name !== undefined) next.property.displayName = input.name.trim() || undefined;
   if (input.address !== undefined) {
     const parsed = parseUsAddress(input.address);
-    next.property.address = parsed?.address.formatted || requireName(input.address, "ADDRESS_MISSING", "Please enter the property's address.");
-    if (parsed) next.property.canonicalAddress = parsed.address;
-    next.property.addressConfirmed = false;
+    if (!parsed) {
+      next.property.address = requireName(input.address, "ADDRESS_MISSING", "Please enter the property's address.");
+      next.property.addressConfirmed = false;
+    } else {
+      const previous = next.property.canonicalAddress;
+      const parts = fillAddress(
+        previous,
+        {
+          street: parsed.address.street || previous?.street || "",
+          city: parsed.address.city || previous?.city || "",
+          state: parsed.address.state || previous?.state || "",
+          unit: parsed.address.unit ?? (parsed.address.street ? null : undefined),
+          postalCode: parsed.address.postalCode || previous?.postalCode,
+        },
+        parsed.address.formatted || input.address.trim(),
+      );
+      const showing = parts.street.trim() && parts.city.trim() && parts.state.trim() ? undefined : parsed.address.formatted || input.address.trim();
+      storeAddress(next, parts, showing);
+    }
+  }
+  if (input.street !== undefined) {
+    const street = canonicalizeStreet(input.street);
+    if (!street) throw new SetupInputError("STREET_MISSING", STREET_QUESTION);
+    const current = addressSoFar(next);
+    storeAddress(next, fillAddress(current, { street }, current?.formatted || next.property.address));
   }
   if (input.city !== undefined) {
     const city = titleCasePlace(input.city);
-    if (!city) throw new SetupInputError("CITY_MISSING", "What city should I use?");
-    const current = next.property.canonicalAddress ?? parseUsAddress(next.property.address)?.address;
-    if (!current?.street || !current.state) throw new SetupInputError("ADDRESS_INCOMPLETE", "I need the street and state first. What's the full address?");
-    const canonicalAddress = {
-      ...current,
-      city,
-      formatted: formatCanonical({ ...current, city }),
-    };
-    next.property.canonicalAddress = canonicalAddress;
-    next.property.address = canonicalAddress.formatted;
-    next.property.addressConfirmed = false;
+    if (!city) throw new SetupInputError("CITY_MISSING", CITY_QUESTION);
+    const current = addressSoFar(next);
+    storeAddress(next, fillAddress(current, { city }, current?.formatted || next.property.address));
+  }
+  if (input.state !== undefined) {
+    const state = normalizeUsState(input.state);
+    if (!state) throw new SetupInputError("STATE_UNREADABLE", STATE_UNREADABLE_QUESTION);
+    const current = addressSoFar(next);
+    storeAddress(next, fillAddress(current, { state }, current?.formatted || next.property.address));
   }
   if (input.postalCode !== undefined) {
     const zip = input.postalCode.trim();
     if (!/^\d{5}(?:-\d{4})?$/.test(zip)) throw new SetupInputError("ZIP_INVALID", "A ZIP code is five digits, like 07666.");
-    const current = next.property.canonicalAddress ?? parseUsAddress(next.property.address)?.address;
-    if (!current?.street || !current.city || !current.state) throw new SetupInputError("ADDRESS_INCOMPLETE", "I still need the street, city and state before a ZIP code.");
-    const canonicalAddress = { ...current, postalCode: zip.slice(0, 5), formatted: formatCanonical({ ...current, postalCode: zip.slice(0, 5) }) };
-    next.property.canonicalAddress = canonicalAddress;
-    next.property.address = canonicalAddress.formatted;
-    next.property.addressConfirmed = false;
+    const current = addressSoFar(next);
+    storeAddress(next, fillAddress(current, { postalCode: zip.slice(0, 5) }, current?.formatted || next.property.address));
   }
   if (input.confirmAddress) {
-    if (!next.property.canonicalAddress?.city?.trim()) throw new SetupInputError("ADDRESS_INCOMPLETE", "I still need the city before that address can be confirmed.");
-    if (!next.property.canonicalAddress?.postalCode) throw new SetupInputError("ADDRESS_INCOMPLETE", "I still need the ZIP code before that address can be confirmed.");
+    const parts = next.property.canonicalAddress;
+    if (!parts?.street?.trim()) throw new SetupInputError("ADDRESS_INCOMPLETE", STREET_QUESTION);
+    if (!parts.state?.trim()) throw new SetupInputError("ADDRESS_INCOMPLETE", STATE_QUESTION);
+    if (!parts.city?.trim()) throw new SetupInputError("ADDRESS_INCOMPLETE", "I still need the city before that address can be confirmed.");
+    if (!parts.postalCode) throw new SetupInputError("ADDRESS_INCOMPLETE", "I still need the ZIP code before that address can be confirmed.");
     next.property.addressConfirmed = true;
   }
   if (input.propertyType !== undefined) next.property.propertyType = requirePropertyType(input.propertyType);

@@ -48,12 +48,18 @@ the operator correct it.
 1. `list_properties`. If the address already exists, say so and continue with
    that property.
 2. Ask **"What's the property address?"** Then `create_property_setup` with the
-   address. A US address needs a street, city, state and ZIP. If `nextQuestion`
-   is "What city should I use?", ask that and save the answer with
-   `update_property_details` `city` before any read-back. Do not invent a city.
-   If `nextQuestion` is "What ZIP code should I use?", ask that and save the
-   answer with `update_property_details` `postalCode`. Do not invent a ZIP.
-   Then read the address back on one line, exactly as Tour Core shows it
+   address. A US address needs a street, city, state and ZIP. Ask for one
+   missing part at a time and keep every part already given. If `nextQuestion`
+   is "What's the street address?", ask that and save it with
+   `update_property_details` `street`. If it is "What state is it in?", ask
+   that before any city question and save it with `state`. A city given while
+   the state is still missing is kept; the reply is "Got it. What state is
+   that in?". Ask "What city should I use?" only once the street and state
+   are saved, and save the answer with `update_property_details` `city`. Do
+   not invent a city or a state. If `nextQuestion` is "What ZIP code should I
+   use?", ask that and save the answer with `update_property_details`
+   `postalCode`. Do not invent a ZIP. Then read the address back on one line,
+   exactly as Tour Core shows it
    ("Did I get that right: 300 Main Street, Unit 4B, Hackensack, NJ 07601?"
    when the address has a unit, and the same line without the unit when it
    does not) and wait for yes. Never read an address back with a blank city.

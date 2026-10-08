@@ -3,9 +3,9 @@ import { describeOperatorUpdate } from "../alerts/describeUpdate";
 import { PortableBackupError } from "../backup/portable";
 import { revokeConfirmQuestion } from "../core/availabilityCopy";
 import { TourCoreError } from "../core/TourCore";
-import { addDays, formatDay, formatTime, localDateOf, type LocalDate } from "../core/timezone";
+import { addDays, formatDay, formatTime, localDateOf, timeOnDay, type LocalDate } from "../core/timezone";
 import { UnavailableModeError } from "../createTourCore";
-import { InvalidTransitionError } from "../domain/stateMachine";
+import { InvalidTransitionError, isRunningReservation } from "../domain/stateMachine";
 import { AuditExportLinks } from "./auditExportLinks";
 import { isHostedRailway } from "../install/deployment";
 import { envelope } from "./milestones";
@@ -38,7 +38,7 @@ import {
   rescheduleTour,
   scheduleOneOffTour,
 } from "./tourTimes";
-import { findTour, inspectTourSummary, inspectTourView, isFutureBooking, listActiveTours, midSentence, tourRef, tourSnapshots, tourSummary } from "./tours";
+import { currentReservation, findTour, inspectTourSummary, inspectTourView, isFutureBooking, midSentence, tourSnapshots, tourSummary, visitorNameOf } from "./tours";
 import type { OperatorTool, ToolContext, ToolKind } from "./tools";
 
 /**
@@ -204,13 +204,29 @@ export function parseExportDay(input: string, today: LocalDate): { ok: true; day
   return realCalendarDay(lastYear) ? { ok: true, day: lastYear } : { ok: false };
 }
 
+function joinNames(parts: string[]): string {
+  if (parts.length <= 1) return parts[0] ?? "";
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
+/** Landlord line for get_tours. Texting with no booking is not a tour. */
+export function tourListSummary(happening: string[], coming: string[]): string {
+  const nowLine =
+    happening.length === 0 ? "" : happening.length === 1 ? `1 tour happening now: ${happening[0]}.` : `${happening.length} tours happening now: ${joinNames(happening)}.`;
+  const laterLine =
+    coming.length === 0 ? "" : coming.length === 1 ? `1 tour coming up: ${coming[0]}.` : `${coming.length} tours coming up: ${joinNames(coming)}.`;
+  if (!nowLine && !laterLine) return "No tours right now.";
+  return [nowLine, laterLine].filter(Boolean).join(" ");
+}
+
 export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
   tool({
     name: "get_tours",
     title: "Show tours",
     kind: "read",
     description:
-      "Active and upcoming tours, or one tour in detail when tourRef is set. Active tours are happening now. Upcoming tours are later bookings that are not already on that active list. When someone is touring and also has a later booking, the active row is the running tour and the later booking is their next booking. Never show tourRef to the landlord.",
+      "Tours in progress and bookings for later, or one tour in detail when tourRef is set. Only a tour actually in progress counts as happening now. A booking for later counts as coming up. A visitor who is only texting, with no booked tour, is not a tour and is not counted. None reads \"No tours right now.\" One future booking reads \"1 tour coming up: {name} at {time} on {day}.\" When someone is touring and also has a later booking, the active row is the running tour and the later booking is their next booking, not a second tour. Never show tourRef to the landlord.",
     input: z.strictObject({ property: Property, tourRef: TourRef.optional() }),
     run: async (ctx, i) => {
       if (i.tourRef) {
@@ -220,21 +236,32 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
         return { summary: inspectTourSummary(view), tour: view, needsAttention: attention };
       }
       const propertyId = propertyIdOf(ctx, i.property);
-      const active = await listActiveTours(ctx.services, propertyId);
-      const seen = new Set(active.map((item) => item.tourRef));
       const now = ctx.now();
-      const upcoming = [];
+      const active = [];
+      const happeningNames: string[] = [];
+      const later: { at: number; line: string; view: Record<string, unknown> }[] = [];
       for (const tour of await tourSnapshots(ctx.services, { propertyId })) {
-        const ref = tourRef(tour.propertyId, tour.tourId);
-        if (seen.has(ref)) continue;
-        if (!tour.bundle.reservations.some((reservation) => isFutureBooking(reservation, now))) continue;
-        upcoming.push({ ...tourSummary(tour), upcoming: true });
+        const current = currentReservation(tour);
+        if (current && isRunningReservation(current.status)) {
+          active.push(tourSummary(tour));
+          happeningNames.push(visitorNameOf(tour));
+          continue;
+        }
+        const future = tour.bundle.reservations
+          .filter((reservation) => isFutureBooking(reservation, now) && reservation.slotStart)
+          .sort((a, b) => Date.parse(a.slotStart!) - Date.parse(b.slotStart!))[0];
+        if (!future?.slotStart) continue;
+        later.push({
+          at: Date.parse(future.slotStart),
+          line: `${visitorNameOf(tour)} at ${timeOnDay(new Date(future.slotStart), tour.config.property.timezone)}`,
+          view: { ...tourSummary(tour), upcoming: true },
+        });
       }
-      const count = active.length + upcoming.length;
+      later.sort((a, b) => a.at - b.at || a.line.localeCompare(b.line));
       return {
-        summary: count ? `${count} tour${count === 1 ? "" : "s"}: ${active.length} happening now, ${upcoming.length} upcoming.` : "No tours are coming up.",
+        summary: tourListSummary(happeningNames, later.map((item) => item.line)),
         active,
-        upcoming,
+        upcoming: later.map((item) => item.view),
       };
     },
   }),

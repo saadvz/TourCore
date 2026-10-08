@@ -19,7 +19,10 @@ knowledge.
 
 Day-to-day work uses `get_tours`, `schedule_tour`, `cancel_tour`, `hold_tour`,
 `pause_tours` (`paused` true or false), `get_inbox`, `reply_to_time_request`,
-and `resolve_issue`. An alert event id is looked up with `get_inbox`. The
+and `resolve_issue`. `get_tours` counts a tour in progress as happening now
+and a later booking as coming up (`1 tour coming up: {name} at {time} on {day}.`).
+Someone who is only texting, with no booked tour, is not a tour and is not
+counted. None reads `No tours right now.` An alert event id is looked up with `get_inbox`. The
 older tools in the steps below still work.
 
 `get_state` carries the playbook. Your name picks wording only and never a
