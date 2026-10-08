@@ -64,15 +64,20 @@ and any tour in progress stay as they are.
 
 Exports are for people to read. They are not backups.
 
-1. `create_readable_export`, or `export_audit` for one day.
+1. For a readable export, `create_readable_export` or `export_records` with kind `readable`.
 2. Upload that file to Tour Core/Exports with the Google Drive connector.
 3. Say you saved the export. Do not describe it as the live booking record.
+
+On an installation whose records live in Google Drive (GOOGLE_DRIVE_READY), `export_records` day exports are written with the records and copied into Drive automatically by the save step. On a hosted installation (HOSTED_VOLUME, Drive used only for backups), day exports stay on the server as download links. Only readable exports and backups come back as one-time links for the assistant to save into the Tour Core folder in Drive.
 
 ### Restore
 
 1. Find the latest file in Tour Core/Backups with the Google Drive connector.
 2. `begin_restore_upload`, then upload that file to the handoff. Do not paste
-   the JSON into chat.
+   the JSON into chat. The upload note tells you to upload the file to that
+   address. A backup up to 50 MB is accepted. If the upload is refused, say
+   the limit from the message (413). Do not describe that refusal as a lost
+   connection.
 3. `preview_portable_restore` and read the preview aloud:
 
 > Backup contains:

@@ -600,6 +600,8 @@ Terminal wizard ─────────────────────�
   the visitor it's paused (not ended), and "HI" doesn't start a second tour while it's paused.
 - **Audit export** (`src/operator/auditExport.ts`) writes a day's validated bundles, resolutions and one CSV to
   `properties/<id>/audit-exports/<day>_<time>/`, downloadable at `/api/properties/<id>/audit-exports/...` locally.
+  On an installation whose records live in Google Drive (`GOOGLE_DRIVE_READY`), `export_records` day exports are written with the records and copied into Drive automatically by the save step. On a hosted installation (`HOSTED_VOLUME`, Drive used only for backups), day exports stay on the server as download links. Only readable exports and backups come back as one-time links for the assistant to save into the Tour Core folder in Drive.
+- **Restore upload** (`src/backup/http.ts`) accepts one portable backup up to 50 MB (`TOURCORE_RESTORE_UPLOAD_MAX_BYTES`, default `RESTORE_UPLOAD_MAX_BYTES`). The body is written to a file as it arrives. An upload over the cap returns 413 with `That backup is too large to restore. The limit is 50 MB.` The other request routes keep their own 1 MB limit and do not cap this upload. There is no restore upload page and no proxy body limit in this repo.
   An operator alert in history always reads `The property team was alerted: {detail}`, even when a team name is stored. A new property starts with the team name `property team`. The setup hint still offers `leasing team` as an example name.
 - **MCP bridge** (`src/mcp/mcpBridge.ts`): Streamable HTTP JSON-RPC (`initialize`, `tools/list`,
   `tools/call`) on the existing server at `/mcp`. Transport only, no policy. Which playbook to use is remembered per MCP session id, or per signed-in caller when there is no session id. It is not one value for the whole server.
@@ -796,6 +798,7 @@ credentials on Tour Core's secure setup page instead. Hosted Railway sets the fi
 | --- | --- | --- |
 | `TOURCORE_DEPLOYMENT_MODE` | All. Default `LOCAL_DEVELOPER` | `LOCAL_DEVELOPER`, `GROK_MANAGED_P0`, `SELF_HOSTED`, or `HOSTED_RAILWAY_P0`. The last is set on our Railway service, not in a landlord's `.env`. |
 | `TOURCORE_HOME` | All. Required on hosted | Records folder. Local default is `./tourcore-data`. On Railway this must be the volume, usually `/data`. |
+| `TOURCORE_RESTORE_UPLOAD_MAX_BYTES` | Restore upload | Maximum portable-backup upload in bytes. Default is 50 MB (52428800). A larger upload returns 413 and states this cap. An invalid value keeps the default. |
 | `RAILWAY_VOLUME_MOUNT_PATH` | Railway injects it | The volume mount (usually `/data`). When present, `TOURCORE_HOME` must be inside it. Do not set this in a local `.env`. |
 | `TOURCORE_ALLOW_EPHEMERAL_STORAGE` | Hosted demos only | Set to `1` to start even if `TOURCORE_HOME` is not on a persistent volume. Data is lost on the next deploy. **Never set this on a live service.** Local `npm run setup` ignores it. |
 | `PUBLIC_BASE_URL` | Self-hosted and local tunnels | Public https origin that reaches this process. Railway derives it from `RAILWAY_PUBLIC_DOMAIN`. |
