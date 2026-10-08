@@ -110,6 +110,8 @@ describe("fair-housing detection", () => {
     "are there a lot of Hispanic families around here?",
     "who lives nearby?",
     "what's the crime rate like?",
+    "How many people can live in the unit?",
+    "do many tenants have cars?",
   ])("matches %s", (text) => {
     expect(isFairHousingQuestion(text)).toBe(true);
   });
@@ -140,6 +142,8 @@ describe("fair-housing detection", () => {
     "how many units are in the building?",
     "how many bedrooms?",
     "is the building quiet?",
+    "are the walls white? lots of light?",
+    "lots of color in the kitchen?",
   ])("does not match %s", (text) => {
     expect(isFairHousingQuestion(text)).toBe(false);
   });

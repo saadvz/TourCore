@@ -255,17 +255,20 @@ export const HELP_ALERT_WINDOW_MS = 5 * 60_000;
 export type HelpContext = "in-window" | "upcoming";
 
 /**
- * HELP alerts the team only for a booked tour that is upcoming (window not
- * started) or still inside its tour window. Finished, canceled, revoked,
- * failed-ID, expired, past-window, or not-yet-booked reservations do not.
+ * HELP alerts the team for a booked tour that is upcoming, still inside its
+ * window, or past the window while the tour is still in progress (the visitor
+ * may still be inside). Finished, canceled, revoked, failed-ID, expired, or
+ * not-yet-booked reservations do not.
  */
 export function helpContext(reservation: Reservation, now: Date): HelpContext | null {
   if (TERMINAL.includes(reservation.status)) return null;
   if (!reservation.windowStart || !reservation.windowEnd) return null;
   const start = Date.parse(reservation.windowStart);
   const end = Date.parse(reservation.windowEnd);
-  if (Number.isNaN(start) || Number.isNaN(end) || end <= now.getTime()) return null;
-  return now.getTime() < start ? "upcoming" : "in-window";
+  if (Number.isNaN(start) || Number.isNaN(end)) return null;
+  if (now.getTime() < start) return "upcoming";
+  if (now.getTime() < end || reservation.status === "TOURING") return "in-window";
+  return null;
 }
 
 export function isLiveHelpReservation(reservation: Reservation, now: Date): boolean {
@@ -303,6 +306,16 @@ export function withAnswerSuffix(answer: string, suffix = ""): string {
   if (extra && body.endsWith(extra)) body = body.slice(0, body.length - extra.length).replace(/\s+$/u, "");
   if (body && !/[.!?]$/.test(body)) body += ".";
   return body + suffix;
+}
+
+/** Team text when a fair-housing question could not be saved. */
+export function questionNotSavedAlert(who: string): string {
+  return `${who} asked a question, but I couldn't save it for you to answer. Please text them back. They're waiting.`;
+}
+
+/** Team text when a door stayed locked and the visitor has no step left. */
+export function doorStuckAlert(who: string, door: string): string {
+  return `${who} is at ${door}, and I couldn't open it for them. Please text them or let them in.`;
 }
 
 /** Visitor cancel-by-text: Critiquito-locked confirm, done, and keep-booked lines. */
@@ -1375,7 +1388,8 @@ export class TourCore {
   /**
    * Fair-housing questions are forwarded first, as a no-draft flag, and only
    * then get the held reply. The engine never answers them. If the flag cannot
-   * be saved, the visitor gets the no-steps line and the team is alerted.
+   * be saved, the team is texted first. The no-steps line goes out only when
+   * that text did.
    * Landlord or model prose is not used here.
    */
   private async replyFairHousing(input: {
@@ -1389,16 +1403,12 @@ export class TourCore {
   }): Promise<void> {
     const forwarded = await this.forwardFlaggedQuestion(input);
     if (!forwarded) {
-      await this.sendConversationText({
+      await this.alertTeamThenStuck({
         phone: input.phone,
-        body: renderSms("door-stuck-no-steps", { team: this.teamName() }).body,
+        reservation: input.reservation,
         reservationId: input.reservationId,
+        alert: questionNotSavedAlert(input.who),
       });
-      try {
-        await this.notifyOperator(input.reservation, `${input.who} asked a question and I couldn't pass it along. They're waiting on you.`);
-      } catch (err) {
-        console.error(`Visitor question was not forwarded: ${err instanceof Error ? err.message : "unknown error"}`);
-      }
       return;
     }
     await this.sendConversationText({
@@ -1881,7 +1891,7 @@ export class TourCore {
     const now = clock.now();
     const door = config.doors.find((d) => d.id === request.doorId);
     const base = { reservationId: request.reservationId, prospectId: request.prospectId, doorId: request.doorId };
-    await this.record("ACCESS_REQUESTED", { ...base, detail: door?.name ?? "unknown door" });
+    await this.recordBestEffort("ACCESS_REQUESTED", { ...base, detail: door?.name ?? "unknown door" }, "Access request was not recorded");
 
     const reservation = await store.get("reservations", request.reservationId);
     const prospect = await store.get("prospects", request.prospectId);
@@ -1891,7 +1901,7 @@ export class TourCore {
 
     const decision = evaluateAccess({ reservation, prospect, consent, verification, doorId: request.doorId, requestedAt: now, durinHealth });
     if (!decision.allowed) {
-      await this.record("ACCESS_DENIED", { ...base, code: decision.code, detail: decision.reason });
+      await this.recordBestEffort("ACCESS_DENIED", { ...base, code: decision.code, detail: decision.reason }, "Access denial was not recorded");
       await this.explainDenial(decision.code, reservation, prospect, request.doorId);
       return { decision, durinCalled: false };
     }
@@ -2120,13 +2130,68 @@ export class TourCore {
     }
   }
 
-  /** No step left. The visitor hears the stuck line and the team is always alerted. */
+  /** No step left. The team is texted first. The stuck line goes out only after that text does. */
   private async tellDoorStuck(prospect: Prospect, reservation: Reservation, doorId: string): Promise<void> {
-    const team = this.teamName();
     const door = this.deps.config.doors.find((d) => d.id === doorId)?.name ?? "the door";
     const who = prospect.name && prospect.name !== UNNAMED_VISITOR ? prospect.name : "A visitor";
-    await this.textProspect(prospect, reservation.id, renderSms("door-stuck-no-steps", { team }).body);
-    await this.notifyOperator(reservation, `${who} is at ${door} and the door stayed locked. They don't have a step left to finish.`);
+    await this.alertTeamThenStuck({
+      phone: prospect.phone,
+      prospect,
+      reservation,
+      reservationId: reservation.id,
+      alert: doorStuckAlert(who, door),
+    });
+  }
+
+  /**
+   * Texts the team before the visitor. The stuck line is sent only when that
+   * text went out. Otherwise the visitor gets the snag retry. The audit write
+   * comes after, and a failed write is logged.
+   */
+  private async alertTeamThenStuck(input: {
+    phone: string;
+    prospect?: Prospect;
+    reservation?: Reservation;
+    reservationId?: string;
+    alert: string;
+  }): Promise<void> {
+    const alerted = await this.textOperatorFirst(input.reservation, input.alert);
+    const body = alerted ? renderSms("door-stuck-no-steps", { team: this.teamName() }).body : renderSms("handler-snag-retry").body;
+    if (input.prospect) await this.textProspect(input.prospect, input.reservationId, body);
+    else await this.sendConversationText({ phone: input.phone, body, reservationId: input.reservationId });
+    if (!alerted) return;
+    await this.recordBestEffort(
+      "OPERATOR_NOTIFIED",
+      { reservationId: input.reservation?.id, prospectId: input.reservation?.prospectId ?? input.prospect?.id, detail: input.alert },
+      "Team alert was not recorded",
+    );
+  }
+
+  /** Operator text with no audit write. A failed send returns false. */
+  private async textOperatorFirst(reservation: Reservation | undefined, body: string): Promise<boolean> {
+    const { operator } = this.deps.config;
+    try {
+      return await this.deliver({
+        audience: "OPERATOR",
+        to: operator.contact,
+        toName: operator.name,
+        body,
+        prospectId: reservation?.prospectId,
+        reservationId: reservation?.id,
+        recordFailure: false,
+      });
+    } catch (err) {
+      console.error(`Team alert was not sent: ${err instanceof Error ? err.message : "unknown error"}`);
+      return false;
+    }
+  }
+
+  private async recordBestEffort(type: AuditEventType, input: AuditInput, label: string): Promise<void> {
+    try {
+      await this.record(type, input);
+    } catch (err) {
+      console.error(`${label}: ${err instanceof Error ? err.message : "unknown error"}`);
+    }
   }
 
   /**

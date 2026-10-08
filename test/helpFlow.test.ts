@@ -61,6 +61,7 @@ describe("helpContext", () => {
     expect(helpContext(reservation("TOURING", { start, end }), nowIn)).toBe("in-window");
     expect(helpContext(reservation("READY", { start, end }), nowBefore)).toBe("upcoming");
     expect(helpContext(reservation("READY", { start, end }), nowAfter)).toBeNull();
+    expect(helpContext(reservation("TOURING", { start, end }), nowAfter)).toBe("in-window");
     expect(helpContext(reservation("COMPLETED", { start, end }), nowIn)).toBeNull();
     expect(helpContext(reservation("CANCELLED", { start, end }), nowIn)).toBeNull();
     expect(helpContext(reservation("REVOKED", { start, end }), nowIn)).toBeNull();
@@ -224,16 +225,18 @@ describe("help flow: one visitor reply, one open exception", () => {
     expect((await p.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(0);
   });
 
-  it("HELP after the tour window has ended sends only the carrier keyword reply", async () => {
+  it("HELP after the tour window has ended sends the help reply and alerts the team", async () => {
     const p = phone();
     await bookAndArrive(p);
     p.session.clock.jumpTo(new Date(at(16)));
+    expect((await p.session.reservation())?.status).toBe("TOURING");
     const before = await prospectOutbound(p.session);
     await p.say("HELP");
     const added = (await prospectOutbound(p.session)).slice(before.length);
-    expect(added.map((m) => m.body)).toEqual([smsHelpBody()]);
-    expect((await p.session.store.listAudit()).filter((e) => e.type === "HELP_REQUESTED")).toHaveLength(0);
-    expect((await p.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(0);
+    expect(added.map((m) => m.body)).toEqual([VisitorDenialCopy.helpAck(TEAM)]);
+    expect(added.join("\n")).not.toContain("Reply STOP to opt out.");
+    expect((await p.session.store.listAudit()).filter((e) => e.type === "HELP_REQUESTED")).toHaveLength(1);
+    expect((await p.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(1);
   });
 
   it("a second in-window help says the team already knows, with the at-door next step", async () => {

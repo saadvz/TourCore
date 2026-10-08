@@ -34,6 +34,12 @@ settings screen. Casual and non-technical is a requirement.
 | Tours at 100 Alfred Way are back. Text me anytime to book. | Resume text to waiting visitors. |
 | 100 Alfred Way isn't offering tours anymore. | A text to a removed property. Never say archive. |
 | Sorry, the property team had to cancel your 9:00 AM tour on Monday, Sep 28 at 100 Alfred Way. 100 Alfred Way isn't offering tours anymore. | Cancel text when the property is removed. Never "They'll text you when tours are back." |
+| {who} asked a question, but I couldn't save it for you to answer. Please text them back. They're waiting. | A question that was not saved. The team is texted before the visitor hears that the team knows. |
+| {who} is at {door}, and I couldn't open it for them. Please text them or let them in. | A door that stayed locked and the visitor has no step left. Same order: team text first. |
+| Your tour time ended at {time}, so the doors are locked now. Want to come back another time? Just reply with a day that works. | After the tour window. No door opens. |
+| It's been a while since you filled out the identity form, so I'll need you to fill it out again before I can open doors. | A stale identity form when they can fill it out again. |
+| I've let the property team know. | HELP after every door is already open, and HELP after the window while the tour is still in progress. Both use the usual help reply and open a flagged help item. |
+| property team | Use the operator name only when it ends in "team" (leasing team). Otherwise say property team. |
 | I'll remove 100 Alfred Way. Its records are kept. | The property was archived internally; say remove, never archive. |
 
 ## Habits

@@ -22,7 +22,7 @@ const norm = (s: string) =>
 export const FAIR_HOUSING_CODE = "FAIR_HOUSING";
 
 const PROTECTED_CLASS =
-  /\b(?:families|family|familial status|kids?|children|child|section\s*8|vouchers?|single (?:moms?|mothers?|dads?|fathers?|parents?)|race|racial|people of color|color|religion|religious|national origin|nationality|country of origin|sex|gender|disabilities|disability|disabled|handicapped|handicap|ages?|elderly|seniors?|pregnant|pregnancy|newborns?|immigrants?)\b/;
+  /\b(?:families|family|familial status|kids?|children|child|section\s*8|vouchers?|single (?:moms?|mothers?|dads?|fathers?|parents?)|race|racial|people of color|religion|religious|national origin|nationality|country of origin|sex|gender|disabilities|disability|disabled|handicapped|handicap|ages?|elderly|seniors?|pregnant|pregnancy|newborns?|immigrants?)\b/;
 
 /** Eligibility phrasing. A bare "rent" or "monthly" is not enough. */
 const ELIGIBILITY =
@@ -58,11 +58,15 @@ const STANDALONE =
 const FIFTY_FIVE_PLUS = /55\s*\+/;
 
 /**
- * Race and ethnicity words used only for neighborhood composition. They do
- * not, on their own, make a question fair housing.
+ * People words that can pair with an area phrase. Race plurals count as
+ * people. A singular race word or "color" does not, unless it sits beside
+ * one of these.
  */
-const COMPOSITION_PEOPLE =
-  /\b(?:hispanic|latino|latina|asian|black|white|arab|people|residents|neighbors|tenants)\b/;
+const PEOPLE_BESIDE =
+  /\b(?:people|families|family|folks|residents|neighbors|tenants|kids|children|child|hispanics|latinos|latinas|asians|blacks|whites|arabs)\b/;
+
+/** Race, ethnicity, or color. Counts only beside a people word. */
+const RACE_OR_COLOR = /\b(?:hispanic|latino|latina|asian|black|white|arab|color)\b/;
 
 /** Area or makeup language. The same word cannot also serve as the class. */
 const AREA_OR_COMPOSITION =
@@ -84,15 +88,26 @@ function overlaps(a: { start: number; end: number }, b: { start: number; end: nu
   return a.start < b.end && b.start < a.end;
 }
 
+/** True when the two words have only whitespace between them. */
+function beside(text: string, a: { start: number; end: number }, b: { start: number; end: number }): boolean {
+  const left = a.end <= b.start ? a : b;
+  const right = left === a ? b : a;
+  if (left.end > right.start) return false;
+  return /^\s*$/.test(text.slice(left.end, right.start));
+}
+
 /**
- * Neighborhood composition or steering. A class word (the existing protected
- * class or faith lists, or people / residents / neighbors / tenants, plus the
- * race words above) together with an area or makeup phrase. Standalone
- * steering phrases match on their own.
+ * Neighborhood composition or steering. A protected class, a faith, or a
+ * people word together with an area or makeup phrase. A singular race or
+ * ethnicity word, or "color", counts only when it sits beside a people word,
+ * so wall color and "lots of light" stay ordinary. Standalone steering
+ * phrases match on their own.
  */
 function neighborhoodSteering(text: string): boolean {
   if (STEERING.test(text)) return true;
-  const classes = [...spans(PROTECTED_CLASS, text), ...spans(FAITH, text), ...spans(COMPOSITION_PEOPLE, text)];
+  const people = spans(PEOPLE_BESIDE, text);
+  const race = spans(RACE_OR_COLOR, text).filter((word) => people.some((person) => beside(text, word, person)));
+  const classes = [...spans(PROTECTED_CLASS, text), ...spans(FAITH, text), ...people, ...race];
   const areas = spans(AREA_OR_COMPOSITION, text);
   return classes.some((word) => areas.some((area) => !overlaps(word, area)));
 }

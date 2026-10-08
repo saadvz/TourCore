@@ -39,6 +39,9 @@ import { basicForm, TOUR_DAY } from "./helpers";
 
 const HELD = "Good question for the property team. I've passed it along, and they'll text you back here.";
 const DOOR_STUCK = "I can't open the doors for you right now. I've let the property team know, and they'll text you here shortly.";
+const SNAG = "Sorry, I hit a snag with that. Could you text me again in a few minutes?";
+const NOT_SAVED = "(555) 010-1234 asked a question, but I couldn't save it for you to answer. Please text them back. They're waiting.";
+const DOOR_ALERT = "Jane Smith is at Entrance, and I couldn't open it for them. Please text them or let them in.";
 const FINISH_STEPS = "We're not quite ready to open doors yet. Finish the steps I sent earlier and you'll be all set.";
 const SPACING = "Tours every 15 minutes don't leave room for 40-minute visits. Should tours start every 40 minutes, or should visits be shorter?";
 const REUSE = "Pick a number of days from 1 to 365.";
@@ -94,7 +97,7 @@ function engine(mode: "basic-form" | "none") {
     now: () => clock.now(),
   });
   const core = createTourCore(config, { clock, store, messenger: tape.messenger, durin, verification: createVerificationProvider(config) });
-  return { config, clock, store, core, sent: tape.sent };
+  return { config, clock, store, core, sent: tape.sent, messenger: tape.messenger };
 }
 
 async function bookJane(ctx: ReturnType<typeof engine>) {
@@ -112,6 +115,32 @@ function prospectTexts(sent: OutgoingMessage[]): OutgoingMessage[] {
 
 function operatorTexts(sent: OutgoingMessage[]): string[] {
   return sent.filter((message) => message.audience === "OPERATOR").map((message) => message.body);
+}
+
+function failEveryAudit(store: InMemoryStore): void {
+  store.appendAudit = async () => {
+    throw new Error("disk full");
+  };
+}
+
+function failOperatorSend(ctx: ReturnType<typeof engine>): void {
+  ctx.messenger.send = async (message) => {
+    ctx.sent.push(message);
+    return {
+      provider: "demo",
+      channel: "DEMO",
+      status: message.audience === "OPERATOR" ? "FAILED" : "SENT",
+      sentAt: new Date().toISOString(),
+    };
+  };
+}
+
+function captureErrors(): string[] {
+  const errors: string[] = [];
+  vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+    errors.push(args.map(String).join(" "));
+  });
+  return errors;
 }
 
 describe("visitor template registry", () => {
@@ -236,9 +265,35 @@ describe("fair-housing safe reply", () => {
     expect(visitors).toEqual([DOOR_STUCK]);
     expect(visitors.join("\n")).not.toContain(HELD);
     expect(prospectTexts(ctx.sent)[0]!.templateId).toBe("door-stuck-no-steps");
-    expect(operatorTexts(ctx.sent).join("\n")).toContain("asked a question and I couldn't pass it along");
+    expect(operatorTexts(ctx.sent)).toEqual([NOT_SAVED]);
+    expect(ctx.sent.findIndex((message) => message.audience === "OPERATOR")).toBeLessThan(ctx.sent.findIndex((message) => message.body === DOOR_STUCK));
     expect(errors.join("\n")).toContain("Visitor question was not forwarded");
     expect((await ctx.store.listAudit()).some((event) => event.code === "FAIR_HOUSING")).toBe(false);
+  });
+
+  it("still texts the team and the stuck line when every audit write fails", async () => {
+    const errors = captureErrors();
+    const ctx = engine("basic-form");
+    failEveryAudit(ctx.store);
+    await ctx.core.answerPropertyQuestion({ phone: "5550101234", question: "Do you rent to families with kids?" });
+    expect(operatorTexts(ctx.sent)).toEqual([NOT_SAVED]);
+    expect(prospectTexts(ctx.sent).map((message) => message.body)).toEqual([DOOR_STUCK]);
+    expect(ctx.sent.findIndex((message) => message.audience === "OPERATOR")).toBeLessThan(ctx.sent.findIndex((message) => message.body === DOOR_STUCK));
+    expect(errors.join("\n")).toContain("Visitor question was not forwarded");
+    expect(errors.join("\n")).toContain("Team alert was not recorded");
+    expect((await ctx.store.listAudit()).some((event) => event.type === "OPERATOR_NOTIFIED")).toBe(false);
+  });
+
+  it("sends the snag line when the team text also fails", async () => {
+    captureErrors();
+    const ctx = engine("basic-form");
+    failEveryAudit(ctx.store);
+    failOperatorSend(ctx);
+    await ctx.core.answerPropertyQuestion({ phone: "5550101234", question: "Do you rent to families with kids?" });
+    expect(prospectTexts(ctx.sent).map((message) => message.body)).toEqual([SNAG]);
+    expect(prospectTexts(ctx.sent)[0]!.templateId).toBe("handler-snag-retry");
+    expect(ctx.sent.map((message) => message.body).join("\n")).not.toContain(DOOR_STUCK);
+    expect(operatorTexts(ctx.sent)).toEqual([NOT_SAVED]);
   });
 });
 
@@ -266,8 +321,38 @@ describe("dead-end visitor lines", () => {
     await ctx.core.requestAccess({ reservationId: booked.reservation.id, prospectId: booked.prospect.id, doorId: "entrance" });
     expect(prospectTexts(ctx.sent).map((message) => message.body)).toEqual([DOOR_STUCK]);
     expect(prospectTexts(ctx.sent)[0]!.templateId).toBe("door-stuck-no-steps");
-    expect(operatorTexts(ctx.sent).join("\n")).toContain("Jane Smith is at");
-    expect(operatorTexts(ctx.sent).join("\n")).toContain("the door stayed locked. They don't have a step left to finish.");
+    expect(operatorTexts(ctx.sent)).toEqual([DOOR_ALERT]);
+    expect(ctx.sent.findIndex((message) => message.audience === "OPERATOR")).toBeLessThan(ctx.sent.findIndex((message) => message.body === DOOR_STUCK));
+  });
+
+  it("texts the team and the stuck line for no step left when every audit write fails", async () => {
+    const errors = captureErrors();
+    const ctx = engine("none");
+    const booked = await bookJane(ctx);
+    const stored = await ctx.store.get("reservations", booked.reservation.id);
+    await ctx.store.put("reservations", { ...stored!, status: "AWAITING_VERIFICATION" });
+    ctx.sent.length = 0;
+    failEveryAudit(ctx.store);
+    await ctx.core.requestAccess({ reservationId: booked.reservation.id, prospectId: booked.prospect.id, doorId: "entrance" });
+    expect(operatorTexts(ctx.sent)).toEqual([DOOR_ALERT]);
+    expect(prospectTexts(ctx.sent).map((message) => message.body)).toEqual([DOOR_STUCK]);
+    expect(errors.join("\n")).toContain("Team alert was not recorded");
+    expect((await ctx.store.listAudit()).some((event) => event.type === "OPERATOR_NOTIFIED" && event.detail === DOOR_ALERT)).toBe(false);
+  });
+
+  it("sends the snag line for no step left when the team text also fails", async () => {
+    captureErrors();
+    const ctx = engine("none");
+    const booked = await bookJane(ctx);
+    const stored = await ctx.store.get("reservations", booked.reservation.id);
+    await ctx.store.put("reservations", { ...stored!, status: "AWAITING_VERIFICATION" });
+    ctx.sent.length = 0;
+    failEveryAudit(ctx.store);
+    failOperatorSend(ctx);
+    await ctx.core.requestAccess({ reservationId: booked.reservation.id, prospectId: booked.prospect.id, doorId: "entrance" });
+    expect(prospectTexts(ctx.sent).map((message) => message.body)).toEqual([SNAG]);
+    expect(ctx.sent.map((message) => message.body).join("\n")).not.toContain(DOOR_STUCK);
+    expect(operatorTexts(ctx.sent)).toEqual([DOOR_ALERT]);
   });
 
   it("sends the stuck line for a stale denial on a no-form property", async () => {
@@ -283,7 +368,42 @@ describe("dead-end visitor lines", () => {
     await ctx.core.requestAccess({ reservationId: booked.reservation.id, prospectId: booked.prospect.id, doorId: "entrance" });
     expect(prospectTexts(ctx.sent).map((message) => message.body)).toEqual([DOOR_STUCK]);
     expect(prospectTexts(ctx.sent)[0]!.templateId).toBe("door-stuck-no-steps");
-    expect(operatorTexts(ctx.sent).join("\n")).toContain("don't have a step left to finish.");
+    expect(operatorTexts(ctx.sent)).toEqual([DOOR_ALERT]);
+  });
+
+  it("texts the team and the stuck line for a stale no-form denial when every audit write fails", async () => {
+    captureErrors();
+    const ctx = engine("none");
+    const booked = await bookJane(ctx);
+    const verification = await ctx.store.get("verifications", booked.reservation.verificationId!);
+    await ctx.store.put("verifications", {
+      ...verification!,
+      method: "basic-form",
+      validUntil: new Date(ctx.clock.now().getTime() - 60_000).toISOString(),
+    });
+    ctx.sent.length = 0;
+    failEveryAudit(ctx.store);
+    await ctx.core.requestAccess({ reservationId: booked.reservation.id, prospectId: booked.prospect.id, doorId: "entrance" });
+    expect(operatorTexts(ctx.sent)).toEqual([DOOR_ALERT]);
+    expect(prospectTexts(ctx.sent).map((message) => message.body)).toEqual([DOOR_STUCK]);
+  });
+
+  it("sends the snag line for a stale no-form denial when the team text also fails", async () => {
+    captureErrors();
+    const ctx = engine("none");
+    const booked = await bookJane(ctx);
+    const verification = await ctx.store.get("verifications", booked.reservation.verificationId!);
+    await ctx.store.put("verifications", {
+      ...verification!,
+      method: "basic-form",
+      validUntil: new Date(ctx.clock.now().getTime() - 60_000).toISOString(),
+    });
+    ctx.sent.length = 0;
+    failEveryAudit(ctx.store);
+    failOperatorSend(ctx);
+    await ctx.core.requestAccess({ reservationId: booked.reservation.id, prospectId: booked.prospect.id, doorId: "entrance" });
+    expect(prospectTexts(ctx.sent).map((message) => message.body)).toEqual([SNAG]);
+    expect(ctx.sent.map((message) => message.body).join("\n")).not.toContain(DOOR_STUCK);
   });
 
   it("replaces the already-open line after the window ends and does not open a door", async () => {
@@ -318,6 +438,22 @@ describe("dead-end visitor lines", () => {
     a.clock.t = at(14, 0);
     const open = await a.text("I'm here");
     expect(open.join("\n")).toContain("Every door on your tour is already open for you.");
+    const help = await a.text("HELP");
+    expect(help.join("\n")).toContain("I've let the property team know");
+    expect(help.join("\n")).not.toContain("Reply STOP");
+    const flagged = (await a.grok("list_exceptions")).exceptions as Array<{ what?: string; summary: string }>;
+    expect(flagged.some((item) => /help/i.test(`${item.what ?? ""} ${item.summary}`))).toBe(true);
+  });
+
+  it("alerts the team when HELP follows a tour window that has ended", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    a.clock.t = at(13, 58);
+    await a.text("I'm here");
+    await a.text("at unit 1a");
+    a.clock.t = at(14, 46);
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.status).toBe("TOURING");
     const help = await a.text("HELP");
     expect(help.join("\n")).toContain("I've let the property team know");
     expect(help.join("\n")).not.toContain("Reply STOP");
