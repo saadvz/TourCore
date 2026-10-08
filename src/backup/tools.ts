@@ -44,7 +44,8 @@ export const BACKUP_TOOLS: OperatorTool[] = [
     name: "decline_portable_backup",
     title: "Skip portable backups",
     kind: "change",
-    description: "Records that the operator declined Google Drive backups for now. Operational records stay on hosted Tour Core.",
+    description:
+      "Records that the operator declined Google Drive backups for now. On a hosted install, say \"Operational records stay with hosted Tour Core. Portable backups are off until you connect Google Drive.\" When records are already on this computer, or Google Drive is still waiting for approval, say \"Your records stay on this computer. Portable backups stay off until Google Drive is connected.\"",
     input: z.strictObject({}),
     run: async (ctx) => installation(ctx).backups.decline(),
   }),

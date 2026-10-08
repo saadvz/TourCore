@@ -232,8 +232,14 @@ Tour Core). Say:
 
 > Google Drive is connected. I've prepared your Tour Core folder.
 
-If they say no, call `backup_records` to decline. Operational records stay with
-hosted Tour Core, and property setup continues.
+If they say no, call `backup_records` to decline. Say:
+
+> Operational records stay with hosted Tour Core. Portable backups are off until you connect Google Drive.
+
+Property setup continues. When records are already on this computer, or Google
+Drive is still waiting for approval, the same decline says:
+
+> Your records stay on this computer. Portable backups stay off until Google Drive is connected.
 
 On the open-source path, when the next step is Google Drive's own approval, say:
 

@@ -64,11 +64,12 @@ export async function exportAudit(services: OperatorServices, propertyId: string
   const to = zonedTimeToUtc({ ...addDays(day, 1), hour: 0, minute: 0 }, tz).toISOString();
 
   const tours = (await tourSnapshots(services, { propertyId, includePractice: true })).filter((t) => t.startedAt < to && t.updatedAt >= from);
+  const dayWindow = { from, to };
   const bundles: Array<{ tourId: string; kind: string; outcome: string; bundle: ExportBundle }> = tours.map((t) => ({
     tourId: t.tourId,
     kind: t.kind,
     outcome: outcomeOf(t),
-    bundle: ExportBundleSchema.parse(t.bundle),
+    bundle: AccessWindows.trimToDay(ExportBundleSchema.parse(t.bundle), dayWindow),
   }));
   const propertyEvents = readAvailabilityEvents(ws.root, propertyId).filter((e) => e.at >= from && e.at < to);
   const events = [
@@ -78,6 +79,9 @@ export async function exportAudit(services: OperatorServices, propertyId: string
 
   const exceptions = (await listExceptions(services, { propertyId, includeClosed: true })).filter((x) => x.happenedAt >= from && x.happenedAt < to);
   const resolutions = readResolutions(services, propertyId).filter((r) => r.resolvedAt >= from && r.resolvedAt < to);
+  const windows = AccessWindows.fromTours(tours, dayWindow);
+  const practiceRefs = new Set(tours.filter((tour) => tour.kind === "practice").map((tour) => `${tour.propertyId}~${tour.tourId}`));
+  const practiceAccessDenials = windows.accessDenials.filter((denial) => denial.tourRef !== undefined && practiceRefs.has(denial.tourRef)).length;
   const visitorTours = bundles.filter((b) => b.kind !== "practice");
   const summary = {
     day: formatLocalDate(day, tz),
@@ -86,7 +90,8 @@ export async function exportAudit(services: OperatorServices, propertyId: string
     completed: visitorTours.filter((b) => b.outcome === "completed").length,
     active: visitorTours.filter((b) => b.outcome === "active").length,
     stopped: visitorTours.filter((b) => b.outcome === "stopped").length,
-    accessDenials: events.filter((e) => e.kind !== "practice" && e.event.type === "ACCESS_DENIED").length,
+    accessDenials: windows.accessDenials.length - practiceAccessDenials,
+    practiceAccessDenials,
     questionsNeedingAttention: exceptions.filter((x) => x.kind === "unanswered-question" || x.kind === "needs-help").length,
     openIssues: exceptions.filter((x) => x.status === "open").length,
     resolvedIssues: exceptions.filter((x) => x.status === "resolved").length,
@@ -115,8 +120,35 @@ export async function exportAudit(services: OperatorServices, propertyId: string
     "audit-export.json": JSON.stringify(document, null, 2) + "\n",
     "audit.csv": combinedCsv(events),
   });
-  const windows = AccessWindows.fromTours(tours, { from, to });
   return { exportId: finalId, summary, files: [...AUDIT_EXPORT_FILES], folder, accessGrants: windows.accessGrants, denials: windows.accessDenials };
+}
+
+/** The operator sentence for one day's export. Practice denials are counted apart from visitors who were turned away. */
+export function formatAuditDaySummary(
+  s: {
+    day: string;
+    tours: number;
+    completed: number;
+    active: number;
+    stopped: number;
+    accessDenials: number;
+    questionsNeedingAttention: number;
+    practiceTours: number;
+    practiceAccessDenials?: number;
+  },
+): string {
+  const tours = `${s.tours} visitor tour${s.tours === 1 ? "" : "s"}`;
+  const questions = `${s.questionsNeedingAttention} question${s.questionsNeedingAttention === 1 ? "" : "s"} needing attention`;
+  const practice = `plus ${s.practiceTours} practice tour${s.practiceTours === 1 ? "" : "s"}.`;
+  const head = `${s.day}: ${tours} (${s.completed} completed, ${s.active} active, ${s.stopped} stopped)`;
+  const practiceDenials = s.practiceAccessDenials ?? 0;
+  const practiceLine = practiceDenials === 0 ? "" : `${practiceDenials} practice-tour denial${practiceDenials === 1 ? "" : "s"}.`;
+  if (s.accessDenials === 0 && practiceDenials > 0) {
+    return `${head}, ${questions}, ${practice} No visitors were turned away. ${practiceLine}`;
+  }
+  const real = `${s.accessDenials} access denial${s.accessDenials === 1 ? "" : "s"}`;
+  const base = `${head}, ${real}, ${questions}, ${practice}`;
+  return practiceLine ? `${base} ${practiceLine}` : base;
 }
 
 /** One file of an earlier audit export, for download. */

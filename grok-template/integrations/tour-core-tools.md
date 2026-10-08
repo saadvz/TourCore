@@ -25,7 +25,7 @@ Set `TOURCORE_LEGACY_TOOLS=1` during the switch-over so the landlord connector a
 | Tool | Kind | What it does |
 | --- | --- | --- |
 | `get_state` | read | What is done, what is stuck, and the one next step. Call this first |
-| `save_property` | change | Saves the property address, type, time zone, name, facts, help number, alert contact, building access, and entry instructions |
+| `save_property` | change | Saves the property address, type, time zone, name, facts, help number, alert contact, building access, and entry instructions. A street with no state or ZIP leaves the time zone unset. Changing only the state still checks a ZIP already saved. A mismatch asks which to fix and saves nothing |
 | `save_units` | change | Adds, renames, or updates units and their leasing details. Say the `place`, never Main Home |
 | `save_doors_and_routes` | change | Saves doors and walking routes, or with preview true only shows the matched route |
 | `save_hours` | change | Saves touring days and hours from everyday words. Tours have to end later the same day. Tours must last 15 minutes to 4 hours, and starts must be 15 minutes to 8 hours apart |
@@ -42,9 +42,9 @@ Set `TOURCORE_LEGACY_TOOLS=1` during the switch-over so the landlord connector a
 | `get_inbox` | read | What needs the landlord, including a tour-update event id |
 | `reply_to_time_request` | consequential | Answers a requested tour time after a yes |
 | `resolve_issue` | consequential | Handles an open issue. Show `visitorWillReceive` before a yes |
-| `export_records` | read | A day's tour records as a validated export |
-| `backup_records` | change | Portable backup: create, confirm the destination, confirm it was stored, status, or decline |
-| `restore_records` | consequential | Upload, preview, or import a backup. Import asks first. Destructive hint |
+| `export_records` | read | A day's tour records as a validated export. Each embedded tour keeps only that day's events and grants. Practice-tour denials are counted apart from visitors who were turned away |
+| `backup_records` | change | Portable backup: create, confirm the destination, confirm it was stored, status, or decline. On a hosted install, a decline says operational records stay with hosted Tour Core. When records are already on this computer, or Google Drive is still waiting for approval, it says your records stay on this computer and portable backups stay off until Google Drive is connected |
+| `restore_records` | consequential | Upload, preview, or import a backup. Import asks first. Destructive hint. An upload whose declared size is over the cap is refused and the connection is cut after at most 1 MB |
 
 `reset_hosted_demo` is added for the current hosted owner only. It is not offered on a self-hosted or local Tour Core. It does not take a file path and it does not run a shell command.
 

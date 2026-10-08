@@ -303,7 +303,7 @@ function setupOf(services: OperatorServices, inst: Installation, picture: Pictur
     name: operatorFacingPropertyName(draft),
     address: view.property.address,
     propertyType: draft.property.propertyType ? PROPERTY_TYPE_LABELS[draft.property.propertyType] : "Not chosen yet",
-    timezone: view.property.timezoneLabel,
+    ...(view.property.timezone ? { timezone: view.property.timezoneLabel } : {}),
     status: saved ? statusLabel(saved) : "Setup in progress",
     units: view.units.map((unit) => ({
       name: operatorUnitName(draft.property, unit.name),

@@ -17,7 +17,7 @@ import { type ConfigIssue, type ConfigSection } from "../config/validateConfig";
 import { formatPhone, parsePhone } from "../core/phone";
 import { formatClockTime, friendlyTimeZone, WEEKDAYS, type Weekday } from "../core/timezone";
 import { isApartmentOrCondo, isSingleTourPlace, streetAndUnit, streetLine, unitLabel, visitorSubject } from "../visitor/identity";
-import { inferTimeZone, resolveTimeZone, SAME_DAY_HOURS, slugify, tourHoursEndSameDay } from "./parse";
+import { resolveTimeZone, SAME_DAY_HOURS, slugify, tourHoursEndSameDay, zoneForState } from "./parse";
 import { isLegacyVerification, verificationSummaryRows } from "./verification";
 import {
   CITY_QUESTION,
@@ -31,7 +31,7 @@ import {
   titleCasePlace,
   type CanonicalAddress,
 } from "./address";
-import { zipStateMismatchQuestion } from "./zipState";
+import { stateForZip, zipStateMismatchQuestion } from "./zipState";
 import { canonicalDoor, canonicalUnitName } from "./normalizeDraft";
 
 /**
@@ -178,19 +178,14 @@ function addressSoFar(draft: SetupDraft): CanonicalAddress | undefined {
   return draft.property.canonicalAddress ?? parseUsAddress(draft.property.address)?.address;
 }
 
-/** A line inferTimeZone can read, even when the public address is still only the street. */
-function zoneLine(parts: CanonicalAddress | undefined): string {
-  const state = parts?.state.trim() ?? "";
-  if (!state) return "";
-  const zip = parts?.postalCode?.trim();
-  const region = [state, zip].filter(Boolean).join(" ");
-  const head = [parts?.street.trim(), parts?.city.trim()].filter(Boolean).join(", ");
-  return head ? `${head}, ${region}` : region;
-}
-
-/** The zone the address's state would use. Basis "address" only when a state was read. */
+/** The zone the address's state would use, or the ZIP's state when no state is saved. Basis "address" only then. */
 export function addressTimeZoneGuess(parts: CanonicalAddress | undefined): { timezone: string; basis: "address" | "computer" } {
-  return inferTimeZone(zoneLine(parts));
+  const fromState = parts?.state.trim() ? zoneForState(parts.state) : undefined;
+  if (fromState) return { timezone: fromState, basis: "address" };
+  const zip = parts?.postalCode?.trim().slice(0, 5) ?? "";
+  const fromZip = zip ? zoneForState(stateForZip(zip) ?? "") : undefined;
+  if (fromZip) return { timezone: fromZip, basis: "address" };
+  return { timezone: "", basis: "computer" };
 }
 
 /** Replaces a guessed zone from the state now on the address. A locked zone is left alone. */
@@ -240,7 +235,8 @@ export function createPropertySetup(input: {
   const address = parsed?.address.formatted || requireName(input.address, "ADDRESS_MISSING", "Please enter the property's address.");
   const displayName = input.name?.trim() || undefined;
   const explicitZone = input.timezone ? requireTimeZone(input.timezone) : undefined;
-  const timezone = explicitZone ?? inferTimeZone(address).timezone;
+  const guessed = addressTimeZoneGuess(parsed?.address);
+  const timezone = explicitZone ?? (guessed.basis === "address" ? guessed.timezone : "");
   const propertyType = input.propertyType ? requirePropertyType(input.propertyType) : undefined;
   const zip = parsed?.address.postalCode;
   const confirmed = !!zip && !!propertyType && !parsed!.missing.some((part) => part !== "postalCode");
@@ -368,16 +364,20 @@ export function setPropertyDetails(
   if (input.timezone !== undefined) {
     next.property.timezone = requireTimeZone(input.timezone);
     next.property.timezoneConfirmed = true;
-  } else if (!zoneLocked) {
+  } else if (!zoneLocked || !next.property.timezone.trim()) {
     const stateAfter = next.property.canonicalAddress?.state.trim() ?? "";
-    if (stateAfter && stateAfter !== stateBefore) applyGuessedTimeZone(next.property);
+    const stateChanged = !!stateAfter && stateAfter !== stateBefore;
+    const zipTouched = input.postalCode !== undefined || (input.address !== undefined && !!parseUsAddress(input.address)?.address.postalCode);
+    if (stateChanged || (!next.property.timezone.trim() && zipTouched)) applyGuessedTimeZone(next.property);
   } else if (addressWasConfirmed && addressEdited && next.property.timezoneConfirmed !== true) {
     next.property.timezoneConfirmed = true;
   }
+  const stateAfter = next.property.canonicalAddress?.state.trim() ?? "";
+  const stateChanged = !!stateAfter && stateAfter !== stateBefore;
   const enteredZip =
     input.postalCode !== undefined || (input.address !== undefined && !!parseUsAddress(input.address)?.address.postalCode);
   const enteredStateAndZip = input.state !== undefined && input.postalCode !== undefined;
-  if (enteredZip || enteredStateAndZip) {
+  if (enteredZip || enteredStateAndZip || stateChanged) {
     rejectMismatchedZip(next.property.canonicalAddress?.state, next.property.canonicalAddress?.postalCode);
   }
   if (input.facts !== undefined) next.property.facts = cleanFacts(input.facts);
@@ -881,7 +881,9 @@ export function reviewSetup(draft: SetupDraft): SetupReview {
         ...(draft.units[0]?.entryInstructions ? [`Entry instructions: ${draft.units[0].entryInstructions}`] : []),
       ],
     },
-    { editSection: "property", title: "TIMEZONE", lines: [`${draft.property.timezone} (${friendlyTimeZone(draft.property.timezone)})`] },
+    ...(draft.property.timezone.trim()
+      ? [{ editSection: "property" as const, title: "TIMEZONE", lines: [`${draft.property.timezone} (${friendlyTimeZone(draft.property.timezone)})`] }]
+      : []),
     {
       editSection: "hours",
       title: "TOUR HOURS",

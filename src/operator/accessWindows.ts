@@ -103,11 +103,35 @@ export class AccessWindows {
   }
 
   /**
+   * The embedded tour for one day: that day's audit events, and grants that
+   * belong to that day. A grant's "used that day" check reads the full event
+   * list, so a later trim cannot hide a use after midnight.
+   */
+  static trimToDay<
+    T extends {
+      accessGrants: Array<Pick<AccessGrant, "doorId" | "reservationId" | "validFrom"> & { createdAt?: string }>;
+      auditEvents: Array<{ type: string; at: string; doorId?: string; reservationId?: string; detail: string }>;
+    },
+  >(
+    bundle: T,
+    window: AccessDayWindow,
+  ): T {
+    const accessGrants = bundle.accessGrants.filter((grant) => {
+      const allowed = bundle.auditEvents.filter(
+        (event) => event.type === "ACCESS_ALLOWED" && event.reservationId === grant.reservationId && !event.detail.startsWith("duplicate"),
+      );
+      return AccessWindows.grantOnDay(grant, allowed, window);
+    });
+    const auditEvents = bundle.auditEvents.filter((event) => AccessWindows.onDay(event.at, window));
+    return { ...bundle, accessGrants, auditEvents };
+  }
+
+  /**
    * A grant belongs to the day it was issued (createdAt, or validFrom when
    * createdAt is missing). A use that day (ACCESS_ALLOWED) also counts.
    * A window that merely stays open past midnight does not.
    */
-  private static grantOnDay(grant: AccessGrant, allowed: AuditEvent[], window?: AccessDayWindow): boolean {
+  private static grantOnDay(grant: Pick<AccessGrant, "doorId" | "validFrom"> & { createdAt?: string }, allowed: Array<Pick<AuditEvent, "doorId" | "at">>, window?: AccessDayWindow): boolean {
     if (!window) return true;
     const issued = grant.createdAt || grant.validFrom;
     if (AccessWindows.onDay(issued, window)) return true;

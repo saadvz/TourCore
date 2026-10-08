@@ -10,6 +10,7 @@ import { runReadinessCheck, type ReadinessResult } from "./readiness";
 import { canonicalAddressKey } from "./address";
 import { normalizeStoredDraft } from "./normalizeDraft";
 import { SetupInputError } from "./setupActions";
+import { presentStoredTimeZone } from "./storedTimeZone";
 import { presentVerification } from "./verification";
 
 /**
@@ -215,8 +216,8 @@ export class PropertyWorkspace {
     let stored: PropertyState | undefined = existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : undefined;
     if (raw.messagingMode === "sendblue") stored = this.migrateLiveMessaging(propertyId, parsed, stored);
     stored = this.migrateVisitorHelpFingerprint(parsed, stored);
-    const config = presentVerification(parsed);
     const rawFull = configHash(parsed);
+    const config = presentStoredTimeZone(presentVerification(parsed));
     const viewedFull = configHash(config);
     const rawSafety = safetyHash(parsed);
     const viewedSafety = safetyHash(config);
@@ -351,7 +352,7 @@ export class PropertyWorkspace {
     const path = this.draftPath(propertyId);
     if (!existsSync(path)) return undefined;
     const parsed = TourCoreConfigShape.safeParse(JSON.parse(readFileSync(path, "utf8")));
-    return parsed.success ? presentVerification(parsed.data) : undefined;
+    return parsed.success ? presentStoredTimeZone(presentVerification(parsed.data)) : undefined;
   }
 
   /** Unfinished setups may be invalid; they're kept apart from the saved setup until they pass validation. */

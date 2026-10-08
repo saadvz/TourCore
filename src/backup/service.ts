@@ -24,6 +24,9 @@ export interface BackupDestinationInput {
   accountLabel?: string;
 }
 
+const HOSTED_DECLINE = "Operational records stay with hosted Tour Core. Portable backups are off until you connect Google Drive.";
+const SELF_HOST_DECLINE = "Your records stay on this computer. Portable backups stay off until Google Drive is connected.";
+
 const GROK_NOTE = "For you only. Do not show this link or capability to the operator. Download it once, save it with the Google Drive connector, then tell Tour Core it was stored. The link expires and is not a public backup address.";
 const RESTORE_NOTE = "For you only. Do not show this link or capability to the operator. Upload the backup file once to this address. Then ask Tour Core to check it before anything changes. The link expires and is not a public restore address. A backup up to 50 MB is accepted. Every expired upload says to send the file again. Start a new upload with begin_restore_upload.";
 
@@ -37,6 +40,8 @@ export interface BackupHost {
   env(): NodeJS.ProcessEnv;
   files: InstallationFiles;
   secrets: SecretStore;
+  /** Present on a running installation. Absent only for a narrow test double. */
+  records?: { provider(): string };
 }
 
 export class PortableBackups {
@@ -86,7 +91,14 @@ export class PortableBackups {
     if (state.portableBackup?.destination) return { summary: "Google Drive backups are already connected." };
     const now = new Date(this.inst.now()).toISOString();
     this.inst.files.writeState({ ...state, portableBackup: { ...state.portableBackup, declinedAt: now } });
-    return { summary: "Operational records stay with hosted Tour Core. Portable backups are off until you connect Google Drive." };
+    return { summary: this.declineSummary() };
+  }
+
+  /** Hosted installs keep the hosted line. Local records, or a Drive approval still open, stay on this computer. */
+  private declineSummary(): string {
+    const provider = this.inst.records?.provider();
+    if (provider === "LOCAL_DEMO" || provider === "GOOGLE_DRIVE_CONNECTING") return SELF_HOST_DECLINE;
+    return HOSTED_DECLINE;
   }
 
   create(reason?: string): Record<string, unknown> {

@@ -334,20 +334,20 @@ describe("one question in a zone reply", () => {
     const h = use();
     const opened = await h.ok("save_property", { address: MAPLE, confirmAddress: true });
     const id = opened.propertyId as string;
-    await h.ok("update_property_details", { property: id, state: "CA" });
-    expect(h.workspace.openDraft(id).draft.property.canonicalAddress?.postalCode).toBe("07666");
+    await h.ok("update_property_details", { property: id, state: "CA", postalCode: "90210" });
+    expect(h.workspace.openDraft(id).draft.property.canonicalAddress?.postalCode).toBe("90210");
     const held = await h.ok("update_property_details", { property: id, postalCode: "07670" });
     expect(held.summary).toBe(HOLD_PACIFIC);
     expect((held.summary.match(/\?/g) ?? []).length).toBe(1);
     expect(held.nextQuestion).toBeUndefined();
-    expect(h.workspace.openDraft(id).draft.property.canonicalAddress?.postalCode).toBe("07666");
+    expect(h.workspace.openDraft(id).draft.property.canonicalAddress?.postalCode).toBe("90210");
 
     const error = await h.fails("update_property_details", { property: id, timezone: "yes" });
     expect(error).toBe(ZIP_CA);
     expect((error.match(/\?/g) ?? []).length).toBe(1);
     const property = h.workspace.openDraft(id).draft.property;
     expect(property.timezone).toBe("America/Los_Angeles");
-    expect(property.canonicalAddress?.postalCode).toBe("07666");
+    expect(property.canonicalAddress?.postalCode).toBe("90210");
     expect(property.zoneSwitchOffer).toBeUndefined();
   });
 
@@ -355,7 +355,7 @@ describe("one question in a zone reply", () => {
     const pacific = use();
     const pacificOpened = await pacific.ok("save_property", { address: MAPLE, confirmAddress: true });
     const pacificId = pacificOpened.propertyId as string;
-    await pacific.ok("update_property_details", { property: pacificId, state: "CA" });
+    await pacific.ok("update_property_details", { property: pacificId, state: "CA", postalCode: "90210" });
     await pacific.ok("update_property_details", { property: pacificId, postalCode: "94105" });
     const named = await pacific.ok("update_property_details", { property: pacificId, timezone: "Pacific" });
     expect(pacific.workspace.openDraft(pacificId).draft.property.timezone).toBe("America/Los_Angeles");
@@ -367,7 +367,7 @@ describe("one question in a zone reply", () => {
     const eastern = use();
     const easternOpened = await eastern.ok("save_property", { address: MAPLE, confirmAddress: true });
     const easternId = easternOpened.propertyId as string;
-    await eastern.ok("save_property", { property: easternId, state: "CA" });
+    await eastern.ok("save_property", { property: easternId, state: "CA", postalCode: "90210" });
     await eastern.ok("save_property", { property: easternId, postalCode: "94105" });
     const kept = await eastern.ok("save_property", { property: easternId, timezone: "keep Eastern" });
     const property = eastern.workspace.openDraft(easternId).draft.property;
@@ -382,11 +382,11 @@ describe("one question in a zone reply", () => {
     const h = use();
     const opened = await h.ok("save_property", { address: MAPLE, confirmAddress: true });
     const id = opened.propertyId as string;
-    await h.ok("update_property_details", { property: id, state: "CA" });
+    await h.ok("update_property_details", { property: id, state: "CA", postalCode: "90210" });
     await h.ok("update_property_details", { property: id, city: "Beverly Hills", postalCode: "90210" });
     const latest = await h.ok("update_property_details", { property: id, postalCode: "94105" });
     expect(latest.summary).toBe(HOLD_PACIFIC);
-    expect(h.workspace.openDraft(id).draft.property.canonicalAddress).toMatchObject({ city: "Teaneck", postalCode: "07666" });
+    expect(h.workspace.openDraft(id).draft.property.canonicalAddress).toMatchObject({ city: "Teaneck", postalCode: "90210" });
     expect(h.workspace.openDraft(id).draft.property.zoneSwitchOffer).toEqual({
       zone: "America/Los_Angeles",
       held: { city: "Beverly Hills", postalCode: "94105" },
@@ -401,7 +401,7 @@ describe("one question in a zone reply", () => {
     const h = use();
     const opened = await h.ok("save_property", { address: MAPLE, confirmAddress: true });
     const id = opened.propertyId as string;
-    await h.ok("update_property_details", { property: id, state: "CA" });
+    await h.ok("update_property_details", { property: id, state: "CA", postalCode: "90210" });
     await h.ok("update_property_details", { property: id, postalCode: "94105" });
     expect(h.workspace.openDraft(id).draft.property.zoneSwitchOffer).toEqual({ zone: "America/Los_Angeles", held: { postalCode: "94105" } });
 
@@ -415,7 +415,7 @@ describe("one question in a zone reply", () => {
     expect(h.workspace.openDraft(otherId).draft.property.canonicalAddress?.postalCode).toBe("07666");
     expect(h.workspace.openDraft(otherId).draft.property.timezone).toBe("America/New_York");
     expect(h.workspace.openDraft(id).draft.property.zoneSwitchOffer).toEqual({ zone: "America/Los_Angeles", held: { postalCode: "94105" } });
-    expect(h.workspace.openDraft(id).draft.property.canonicalAddress?.postalCode).toBe("07666");
+    expect(h.workspace.openDraft(id).draft.property.canonicalAddress?.postalCode).toBe("90210");
     expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/New_York");
 
     await h.ok("update_property_details", { property: id, timezone: "yes" });

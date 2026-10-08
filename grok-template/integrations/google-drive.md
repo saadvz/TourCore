@@ -30,13 +30,12 @@ After the first publish, save a portable backup and say:
 
 > I've also saved a portable backup of this setup to your Google Drive.
 
-If they decline, call `backup_records` with decline. Operational records stay with
-hosted Tour Core.
+If they decline, call `backup_records` with decline. On a hosted install, say operational records stay with hosted Tour Core and portable backups are off until Google Drive is connected. When records are already on this computer, or Google Drive is still waiting for approval, say your records stay on this computer and portable backups stay off until Google Drive is connected.
 
 ## What you use it for
 
 - Saving a portable backup into `Tour Core/Backups` (`backup_records` with create, then `backup_records` with confirm_stored only after the file is there).
-- Saving a readable export into `Tour Core/Exports`. An export is not a backup. On an installation whose records live in Google Drive (`GOOGLE_DRIVE_READY`), the day's `audit-export.json` is written with the records and copied into Drive by the save step. The CSV stays on the Tour Core computer. On a hosted installation (`HOSTED_VOLUME`, Drive used only for backups), day exports stay on the server as 30-minute download links that can be used until they expire. Only readable exports and backups come back as one-time links for the assistant to save into the Tour Core folder in Drive. Door access in a day export is only what was issued or used that day.
+- Saving a readable export into `Tour Core/Exports`. An export is not a backup. On an installation whose records live in Google Drive (`GOOGLE_DRIVE_READY`), the day's `audit-export.json` is written with the records and copied into Drive by the save step. The CSV stays on the Tour Core computer. On a hosted installation (`HOSTED_VOLUME`, Drive used only for backups), day exports stay on the server as 30-minute download links that can be used until they expire. Only readable exports and backups come back as one-time links for the assistant to save into the Tour Core folder in Drive. Door access in a day export is only what was issued or used that day. Each embedded tour in that JSON is trimmed to that day's events and grants.
 - "Open my Tour Core backup." Open the file with the Drive connector. Bookings and access still come from Tour Core tools.
 - Restoring a lost installation: download the latest backup, upload it through Tour Core's restore handoff (a backup up to 50 MB is accepted; a larger file is refused with 413 and the cap stated in the message), read the preview, and import only after an explicit yes. An older ID check is named in the import summary: it now uses the basic identity form, and the landlord can ask for no form.
 

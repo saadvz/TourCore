@@ -50,7 +50,10 @@ export function semanticIssues(cfg: TourCoreConfig): ConfigIssue[] {
   if (apartmentOrCondo && cfg.units.length === 1 && !cfg.property.buildingAccess) {
     add("units", "BUILDING_ACCESS_MISSING", "Say whether you control the building entrance, or only the unit door.");
   }
-  if (!isValidTimeZone(cfg.property.timezone)) {
+  const stateKnown = !!cfg.property.canonicalAddress?.state?.trim() || !!cfg.property.canonicalAddress?.postalCode?.trim();
+  if (!cfg.property.timezone.trim()) {
+    if (stateKnown) add("property", "TIMEZONE_INVALID", "We don't recognize the time zone. Try something like America/New_York.");
+  } else if (!isValidTimeZone(cfg.property.timezone)) {
     add("property", "TIMEZONE_INVALID", `We don't recognize the time zone "${cfg.property.timezone}". Try something like America/New_York.`);
   }
   if (!cfg.operator.name.trim()) add("property", "OPERATOR_MISSING", "Tell us who should get alerts if a visitor needs help.");

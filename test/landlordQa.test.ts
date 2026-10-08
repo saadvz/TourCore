@@ -100,7 +100,8 @@ describe("address parts, one at a time", () => {
   it("asks for the street when that is the missing part and keeps the state and ZIP", async () => {
     const h = use(grokHarness());
     const created = await h.ok("create_property_setup", { address: "NJ 07601" });
-    expect(created.nextQuestion).toBe("What's the street address?");
+    expect(created.summary).toBe("Started NJ 07601. I'm using Eastern time for tours. You can change that anytime. What's the street address?");
+    expect(created.nextQuestion).toBeUndefined();
     const id = created.setup.propertyId as string;
     expect(h.workspace.openDraft(id).draft.property.canonicalAddress).toMatchObject({ state: "NJ", postalCode: "07601" });
     const street = await h.ok("update_property_details", { street: "302 Main Street" });
@@ -238,7 +239,7 @@ describe("guessed time zone follows the state", () => {
     const created = await h.ok("create_property_setup", { address: "144 Hillside Avenue, Tenafly, NJ 07670" });
     const id = created.setup.propertyId as string;
     expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/New_York");
-    await h.ok("update_property_details", { state: "CA" });
+    await h.ok("update_property_details", { state: "CA", postalCode: "90210" });
     expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/Los_Angeles");
   });
 
@@ -263,7 +264,7 @@ describe("guessed time zone follows the state", () => {
     expect(zip.nextQuestion).toBe("Did I get that right: 144 Hillside Avenue, Tenafly, NJ 07670?");
     expect(zip.summary).not.toContain("Did I get that right");
     expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/Chicago");
-    await h.ok("update_property_details", { state: "CA", timezone: "America/Denver" });
+    await h.ok("update_property_details", { state: "CA", postalCode: "90210", timezone: "America/Denver" });
     expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/Denver");
   });
 });
@@ -329,7 +330,7 @@ describe("time zone lock and the switch question", () => {
     const h = use(grokHarness());
     const created = await h.ok("create_property_setup", { address: "144 Hillside Avenue, Tenafly, NJ 07670" });
     const id = created.setup.propertyId as string;
-    const moved = await h.ok("update_property_details", { state: "CA" });
+    const moved = await h.ok("update_property_details", { state: "CA", postalCode: "90210" });
     expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/Los_Angeles");
     expect(moved.summary).not.toContain("Tours still run");
     expect(moved.summary).not.toContain("Should I switch");
@@ -338,7 +339,7 @@ describe("time zone lock and the switch question", () => {
     const confirmedId = again.setup.propertyId as string;
     await h.ok("update_property_details", { property: confirmedId, confirmAddress: true });
     expect(h.workspace.openDraft(confirmedId).draft.property.timezoneConfirmed).toBe(true);
-    const after = await h.ok("update_property_details", { property: confirmedId, state: "CA" });
+    const after = await h.ok("update_property_details", { property: confirmedId, state: "CA", postalCode: "90210" });
     expect(h.workspace.openDraft(confirmedId).draft.property.timezone).toBe("America/New_York");
     expect(after.summary).toContain("Tours still run on Eastern time. Should I switch to Pacific time?");
   });
