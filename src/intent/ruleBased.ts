@@ -300,6 +300,7 @@ function dayMenuWeekday(): RegExp {
 /**
  * Words that can sit beside a weekday when the visitor is actually choosing
  * that day ("Friday", "friday please", "how about Friday?", "can I do Friday").
+ * Times, numbers, ordinals, months, and dates are removed before this check.
  * A leftover word such as "sale", "busy", or "parking" means the day word is
  * only mentioned.
  */
@@ -391,16 +392,35 @@ const DAY_PICK_WORDS = new Set([
   "yup",
 ]);
 
-/** True when the weekday is the pick, not a word inside some other message. */
+/** A clock, month, ordinal, or number beside a weekday ("Friday at 2", "Fri 3:30", "Friday Oct 2", "the 2nd"). */
+function stripScheduleTokens(t: string): string {
+  const clock =
+    /(?:^|\s)(?:(?:at|around|about|for|by)\s+)?(?<!\d)\d{1,2}(?::\d{2})?(?:\s*(?:am|pm|a m|p m|o'?clock|oclock))?(?!\d)(?=\s|$)/g;
+  const month =
+    /\b(?:january|february|march|april|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec)\b/g;
+  const ordinal = /\b(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|\d{1,2}(?:st|nd|rd|th))\b/g;
+  return t.replace(dayMenuWeekday(), " ").replace(clock, " ").replace(month, " ").replace(ordinal, " ").replace(/\b\d{1,4}\b/g, " ");
+}
+
+function dayPickRest(t: string): string[] {
+  return stripScheduleTokens(t).split(/\s+/).filter(Boolean);
+}
+
+/** True when the weekday is the pick, not a word inside some other message. A clock alone is not a day. */
 function isDayPickPhrase(t: string): boolean {
-  const rest = t.replace(dayMenuWeekday(), " ").split(/\s+/).filter(Boolean);
-  return rest.every((word) => DAY_PICK_WORDS.has(word));
+  if (!dayMenuWeekday().test(t)) return false;
+  return dayPickRest(t).every((word) => DAY_PICK_WORDS.has(word));
+}
+
+/** "Can I come Friday at 2:00" asks for that clock. "Friday at 2" is still the day. */
+function explicitCustomTimeAsk(t: string): boolean {
+  return /\b(can i|could i|can we|could we|how about|what about|instead|move|change|reschedule|switch|come at|tour at|book|make it)\b/.test(t);
 }
 
 /**
  * At the day menu, a weekday match that is a question — or clearly not a day
  * pick — stays a question. "Black Friday sale nearby?" and "is Friday busy?"
- * are questions. "Friday", "Fri?", "how about Friday?", and "can I do Friday"
+ * are questions. "Friday", "Friday at 2", "Fri?", and "can I do Friday"
  * are still that day.
  */
 function questionInsteadOfDayPick(raw: string, t: string, today?: InterpretContext["today"]): boolean {
@@ -409,7 +429,7 @@ function questionInsteadOfDayPick(raw: string, t: string, today?: InterpretConte
   if (isDayPickPhrase(t)) return false;
   const question = /\?\s*$/.test(raw.trim()) || QUESTION_START.test(t) || WANTS_TO_KNOW.test(t) || TOPIC.test(t);
   if (question) return true;
-  const extra = t.replace(dayMenuWeekday(), " ").split(/\s+/).filter((word) => word && !DAY_PICK_WORDS.has(word));
+  const extra = dayPickRest(t).filter((word) => !DAY_PICK_WORDS.has(word));
   return extra.length >= 2;
 }
 
@@ -540,7 +560,9 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
         return result({ type: "SELECT_DATE" }, 1, {});
       }
       const customDate = schedulingIntent(raw, t, true, result, unknown, ctx.today);
-      if (customDate) return customDate;
+      // "Friday at 2" names the day. "Can I come Friday at 2:00" still asks for that time.
+      const dayPickWithClock = customDate?.intent.type === "REQUEST_CUSTOM_TIME" && isDayPickPhrase(t) && !explicitCustomTimeAsk(t);
+      if (customDate && !dayPickWithClock) return customDate;
       // A weekday inside a question, or in a message that is not a day pick, is not that day.
       if (questionInsteadOfDayPick(raw, t, ctx.today)) return question(0.9);
       const picked = dateIntent(raw, t, result, ctx.today);

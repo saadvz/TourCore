@@ -43,7 +43,7 @@ describe("a weekday inside a question at the open day menu", () => {
     expect(stillOnDays.join("\n")).not.toContain("you're booked");
   });
 
-  it("treats is Friday busy? and what about Sunday parking? as questions", async () => {
+  it("treats is Friday busy? and is Friday parking free? as questions", async () => {
     const a = await liveApp({ cleanups });
     const phone = "+15550103002";
     await openDayMenu(a, phone);
@@ -52,9 +52,8 @@ describe("a weekday inside a question at the open day menu", () => {
     expect(busy).toEqual([UNKNOWN_ANSWER]);
     expect(busy.join("\n")).not.toContain("I have these times available");
 
-    const parking = await a.textFrom(phone, "what about Sunday parking?");
+    const parking = await a.textFrom(phone, "is Friday parking free?");
     expect(parking).toEqual([PARKING]);
-    expect(parking.join("\n")).not.toContain("Tours don't run");
     expect(parking.join("\n")).not.toContain("I have these times available");
 
     const issues = (await a.grok("list_exceptions")).exceptions as Array<{ exceptionId: string; summary: string }>;
@@ -64,9 +63,46 @@ describe("a weekday inside a question at the open day menu", () => {
     expect(woken.map((event) => event.exceptionId)).toContain(issues[0]!.exceptionId);
   });
 
+  it("answers a day-word parking question with the same texts as the question without the day", async () => {
+    const a = await liveApp({ cleanups });
+    const withDayPhone = "+15550103003";
+    const plainPhone = "+15550103004";
+    await openDayMenu(a, withDayPhone);
+    await openDayMenu(a, plainPhone);
+
+    const withDay = await a.textFrom(withDayPhone, "what about Sunday parking?");
+    const plain = await a.textFrom(plainPhone, "where do I park?");
+
+    expect(withDay).toEqual(plain);
+    expect(withDay).toEqual([PARKING]);
+    expect((await a.grok("list_exceptions")).exceptions).toEqual([]);
+  });
+
   it("still opens the named day's times for a real pick", async () => {
     const a = await liveApp({ cleanups });
-    const picks = ["Friday", "friday please", "fri", "Fri?", "how about Friday?", "can I do Friday", "Friday works", "5", "Oct 2", "10/2"];
+    const picks = [
+      "Friday",
+      "friday please",
+      "fri",
+      "Fri?",
+      "how about Friday?",
+      "can I do Friday",
+      "Friday works",
+      "5",
+      "Oct 2",
+      "10/2",
+      "Friday at 2",
+      "Friday 2pm",
+      "Fri 3:30",
+      "Friday afternoon",
+      "Friday Oct 2",
+      "Friday the 2nd",
+      "Friday!",
+      "Friday is good",
+      "Friday works for me",
+      "this Friday",
+      "yes Friday",
+    ];
     for (const [i, text] of picks.entries()) {
       const phone = `+155501031${String(i).padStart(2, "0")}`;
       await openDayMenu(a, phone);
