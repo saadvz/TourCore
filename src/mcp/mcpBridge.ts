@@ -4,7 +4,7 @@ import { hostedResetToolVisible, HOSTED_ADMIN_TOOLS } from "../install/hostedAdm
 import { annotationsFor } from "./annotations";
 import { MCP_INSTRUCTIONS } from "../playbooks/instructions";
 import { reportedClientFromInitialize } from "../playbooks/select";
-import { callOperatorTool, OPERATOR_TOOLS, UnknownToolError, type ToolContext } from "../operator/tools";
+import { callOperatorTool, legacyInjectLocalSmsInput, OPERATOR_TOOLS, UnknownToolError, type ToolContext } from "../operator/tools";
 import { connectorRefusal, knownOperatorTool, toolsForConnector } from "./scopes";
 
 /**
@@ -42,8 +42,10 @@ export function mcpToolList(ctx?: ToolContext) {
     : hostedResetToolVisible(ctx)
       ? [...OPERATOR_TOOLS, ...HOSTED_ADMIN_TOOLS]
       : OPERATOR_TOOLS;
+  const legacyLandlord = ctx?.connector === "landlord" && !!ctx.legacyTools;
   return tools.map((t) => {
-    const { $schema: _s, ...inputSchema } = z.toJSONSchema(t.input) as Record<string, unknown>;
+    const input = legacyLandlord && t.name === "inject_local_sms" ? legacyInjectLocalSmsInput : t.input;
+    const { $schema: _s, ...inputSchema } = z.toJSONSchema(input) as Record<string, unknown>;
     return { name: t.name, title: t.title, description: t.description, inputSchema, annotations: { title: t.title, ...annotationsFor(t) } };
   });
 }

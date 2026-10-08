@@ -24,11 +24,11 @@ If you use Grok Bot, paste this prompt into your bot. Do not change a word.
 Set up Tour Core, my AI landlord, using the open-source repository at https://github.com/saadvz/TourCore.
 Use your cloud computer to clone the repository only so you can read its setup instructions and skills. Read GROK_BOOTSTRAP.md and follow it as the authoritative setup instructions. If the repository specifies an official hosted Tour Core service, use that service instead of starting Tour Core locally on your computer.
 Do as much of the installation and configuration yourself as possible. Never ask me to paste API keys, passwords, tokens, or provider secrets into chat. When a login, MFA step, credential entry, OAuth approval, or other human-only action is required, use Tour Core's secure setup flow or the provider's own page and ask me only to complete that step.
-After you're connected to Tour Core, call get_state and follow its next step until the property is ready to publish, then offer to configure my first property if that step has not already started.
+After you're connected to Tour Core, ask it what's left and walk me through one step at a time, including my first property, until it's ready to publish.
 Start now.
 ```
 
-[`grok-template/SETUP_PROMPT.md`](grok-template/SETUP_PROMPT.md) stays the pinned prompt. This README prompt is the one to paste. It no longer matches that file word for word.
+This is the prompt to paste. `grok-template/SETUP_PROMPT.md` is an older copy, so it reads a little differently.
 
 ### Ops and QA connectors
 

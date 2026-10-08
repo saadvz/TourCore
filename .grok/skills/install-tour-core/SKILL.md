@@ -244,10 +244,14 @@ If they say yes:
 1. If your built-in Google Drive connector is not connected, connect it the normal way and let them approve Google. Do not ask for a Google password, API key, or client secret.
 2. Self-hosted Google Drive setup is on the ops connector, not this landlord chat. Say:
 
-   > Google Drive is connected to me. Tour Core also needs permission to save its records there directly so tours keep working even when I'm not in this chat. I'll open Google's approval screen for that now.
+   > Google Drive is connected to me. For Tour Core to save its records there directly, whoever runs your Tour Core computer has to finish one more approval. Until then, your records stay on this computer.
 
 3. After they approve, call `get_state`.
-4. If Google Drive is not configured, say so in everyday words. Do not ask them to create a Google Cloud project. Offer to keep records on this computer.
+4. If Google Drive is not configured, say:
+
+   > Google Drive isn't set up for Tour Core yet, so I'll keep your records on this computer for now.
+
+   Do not ask them to create a Google Cloud project.
 
 If they say no, keep records on this computer for the demo and say:
 

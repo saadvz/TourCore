@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "deploymentMode": "SELF_HOSTED",
+  "installationId": "inst_pre_split_drive01",
+  "publicBaseUrl": "https://records.example",
+  "publicEndpointProvider": "MANUAL",
+  "messagingProvider": "LOCAL",
+  "storageProvider": "GOOGLE_DRIVE",
+  "accessProvider": "DURIN_DEMO",
+  "operatorNotificationProvider": "NONE",
+  "installedAt": "2026-09-01T15:00:00.000Z",
+  "updatedAt": "2026-09-01T15:00:00.000Z"
+}

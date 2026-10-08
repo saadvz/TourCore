@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "publicBaseUrlHistory": [{ "url": "https://records.example", "since": "2026-09-01T15:00:00.000Z" }],
+  "storage": {
+    "mode": "GOOGLE_DRIVE",
+    "phase": "READY",
+    "folderName": "Tour Core",
+    "folderId": "folder_presplit",
+    "storeId": "store_presplit01",
+    "hostId": "host_presplit01",
+    "chosenAt": "2026-09-01T15:00:00.000Z",
+    "cacheValidatedAt": "2026-09-01T15:00:00.000Z"
+  },
+  "portableBackup": {
+    "destination": {
+      "provider": "google_drive",
+      "folderName": "Tour Core",
+      "configuredAt": "2026-09-01T15:00:00.000Z"
+    }
+  }
+}

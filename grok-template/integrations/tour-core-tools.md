@@ -65,7 +65,7 @@ Needs `TOURCORE_OPS_TOKEN`. A landlord token cannot list or call these.
 | `get_storage_location` | read | The folder those records use |
 | `begin_google_drive_connect` | change | Starts Google's approval so Tour Core can save records there |
 | `finish_google_drive_setup` | change | Finishes that approval |
-| `check_runtime_health` | read | Whether this Tour Core is healthy. Whoever set up your Tour Core hosting needs to attach permanent storage. Until then, hold off on updating Tour Core. |
+| `check_runtime_health` | read | When records aren't on permanent storage: Whether this Tour Core is healthy. Whoever set up your Tour Core hosting needs to attach permanent storage. Until then, hold off on updating Tour Core. |
 | `check_public_endpoint` | read | Whether the public address reaches this installation |
 
 ## QA connector

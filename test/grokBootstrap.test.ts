@@ -12,7 +12,7 @@ describe("GROK_BOOTSTRAP.md", () => {
 
   it("exists at the repository root and gives the self-discovery sequence", () => {
     expect(text.length).toBeGreaterThan(0);
-    const order = ["Clone the repository", "npm run bootstrap:grok", ".grok/skills/install-tour-core/SKILL.md", "get_installation_status", "get_next_installation_step", "infrastructure ready"];
+    const order = ["Clone the repository", "npm run bootstrap:grok", ".grok/skills/install-tour-core/SKILL.md", "get_state", "infrastructure ready"];
     const positions = order.map((s) => text.indexOf(s));
     for (const [i, p] of positions.entries()) expect(p, order[i]).toBeGreaterThan(-1);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);

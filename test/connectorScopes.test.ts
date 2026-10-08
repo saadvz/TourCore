@@ -80,8 +80,8 @@ describe("connector scopes", () => {
 
     const qaCall = await post(port, "/mcp", callRpc("inject_local_sms", { from: "+15555550100", text: "Hi" }), LANDLORD);
     const opsCall = await post(port, "/mcp", callRpc("discover_storage"), LANDLORD);
-    expect(qaCall.json).toMatchObject({ error: { code: -32602, message: "The landlord connector can't run that tool." } });
-    expect(opsCall.json).toMatchObject({ error: { code: -32602, message: "The landlord connector can't run that tool." } });
+    expect(qaCall.json).toMatchObject({ error: { code: -32602, message: "I can't do that from this chat." } });
+    expect(opsCall.json).toMatchObject({ error: { code: -32602, message: "I can't do that from this chat." } });
     expect(namesFrom(listed.json)).not.toContain("inject_local_sms");
     expect(namesFrom(listed.json)).not.toContain("discover_storage");
 
@@ -167,10 +167,11 @@ describe("connector scopes", () => {
     const off = await legacySession(undefined);
     expect(off.names).toEqual([...LANDLORD_CORE_TOOLS]);
     const refused = await post(off.port, "/mcp", callRpc("inject_local_sms", { from: "+15555550100", text: "Hi" }), LANDLORD);
-    expect(refused.json).toMatchObject({ error: { code: -32602, message: "The landlord connector can't run that tool." } });
+    expect(refused.json).toMatchObject({ error: { code: -32602, message: "I can't do that from this chat." } });
 
     const on = await legacySession("1");
-    expect(on.names.slice(0, LANDLORD_CORE_TOOLS.length)).toEqual([...LANDLORD_CORE_TOOLS]);
+    expect(on.names[0]).toBe("list_properties");
+    expect(on.names).toContain("get_state");
     expect(on.names).toContain("list_properties");
     expect(on.names).toContain("get_installation_status");
     for (const name of QA_TOOL_NAMES) expect(on.names).toContain(name);

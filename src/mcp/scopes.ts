@@ -64,7 +64,7 @@ export function legacyToolsEnabled(env?: { TOURCORE_LEGACY_TOOLS?: string }): bo
 }
 
 export function connectorRefusal(scope: ConnectorScope): string {
-  if (scope === "landlord") return "The landlord connector can't run that tool.";
+  if (scope === "landlord") return "I can't do that from this chat.";
   if (scope === "ops") return "The ops connector can't run that tool.";
   return "The QA connector can't run that tool.";
 }
@@ -90,14 +90,11 @@ export function toolsForConnector(connector: ConnectorScope, ctx: ScopeContext, 
   });
   if (connector === "ops") return pick(OPS_TOOL_NAMES);
   if (connector === "qa") return pick(QA_TOOL_NAMES);
+  if (legacy) {
+    // Switch-over: /mcp lists the same catalog master listed, including QA and ops tools.
+    return all;
+  }
   const names: string[] = [...LANDLORD_CORE_TOOLS];
   if (hostedResetToolVisible(ctx)) names.push(HOSTED_OWNER_TOOL);
-  if (legacy) {
-    // Switch-over bridge: /mcp/qa cannot be confirmed until this deploy is live,
-    // so the landlord connector also keeps the QA and ops tools while the flag is on.
-    for (const tool of all) {
-      if (!names.includes(tool.name)) names.push(tool.name);
-    }
-  }
   return pick(names);
 }
