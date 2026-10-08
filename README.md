@@ -373,6 +373,7 @@ follow-up is "Reply yes for {time} on {Weekday}, or pick a day." A natural yes â
 okay, "Yes I'll take it", "Yes 1 works", "I'll take it", and similar accepts â€” books that exact start after a
 recheck; if it was taken, they hear "Someone just grabbed that time." A reply that is neither an accept nor a
 day keeps the offer and repeats the follow-up. Bare numbers and day names still pick from the day menu. A
+weekday inside a question at the day menu now goes to the property team instead of being read as a pick. A
 sentence that names another day or time ("Can I come oct 6 at 12 pm?") is a fresh date request for that day,
 not an accept of the pending opening.
 

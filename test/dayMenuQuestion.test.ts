@@ -100,6 +100,17 @@ describe("a weekday inside a question at the open day menu", () => {
       "Friday works for me",
       "this Friday",
       "yes Friday",
+      "is Friday open?",
+      "is Friday free?",
+      "Friday open?",
+      "anything open Friday?",
+      "is there availability Friday?",
+      "are you open Friday?",
+      "is Friday still open?",
+      "any slots Friday?",
+      "any openings Friday?",
+      "is Friday full?",
+      "anything left Friday?",
     ];
     for (const [i, text] of picks.entries()) {
       const phone = `+155501031${String(i).padStart(2, "0")}`;
