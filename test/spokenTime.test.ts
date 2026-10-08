@@ -58,6 +58,38 @@ describe("calendar dates in visitor text", () => {
   });
 });
 
+describe("a named weekday is that day, not today, unless today is that day and the time is still ahead", () => {
+  const config = loadConfig();
+  const mondayAfternoon = new Date(zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour: 15, minute: 0 }, "America/New_York"));
+  const saturdayMorning = new Date(zonedTimeToUtc({ year: 2026, month: 10, day: 3, hour: 10, minute: 0 }, "America/New_York"));
+  const saturdayAfternoon = new Date(zonedTimeToUtc({ year: 2026, month: 10, day: 3, hour: 16, minute: 0 }, "America/New_York"));
+  const saturday = (day: number) => zonedTimeToUtc({ year: 2026, month: 10, day, hour: 14, minute: 45 }, "America/New_York");
+
+  it("reads Is Saturday at 2:45 PM possible? as the coming Saturday", () => {
+    const phrase = "Is Saturday at 2:45 PM possible?";
+    const spoken = spokenTimes(normalize(phrase), { year: 2026, month: 9, day: 28 });
+    expect(spoken).toHaveLength(1);
+    expect(spoken[0]).toMatchObject({ hour: 2, minute: 45, meridiem: "PM", weekday: "SAT" });
+    const resolved = parseFlexibleTime(phrase, config, mondayAfternoon);
+    expect(resolved.ok).toBe(true);
+    if (resolved.ok) expect(resolved.start.toISOString()).toBe(saturday(3).toISOString());
+    expect(JSON.stringify(resolved)).not.toContain("already passed");
+  });
+
+  it("keeps Saturday when today is Saturday and 2:45 PM is still ahead", () => {
+    const resolved = parseFlexibleTime("Is Saturday at 2:45 PM possible?", config, saturdayMorning);
+    expect(resolved.ok).toBe(true);
+    if (resolved.ok) expect(resolved.start.toISOString()).toBe(saturday(3).toISOString());
+  });
+
+  it("rolls to next Saturday when today is Saturday and 2:45 PM has passed", () => {
+    const resolved = parseFlexibleTime("Saturday at 2:45 PM", config, saturdayAfternoon);
+    expect(resolved.ok).toBe(true);
+    if (resolved.ok) expect(resolved.start.toISOString()).toBe(saturday(10).toISOString());
+    expect(JSON.stringify(resolved)).not.toContain("already passed");
+  });
+});
+
 describe("named days stay on could/would/can I do custom times", () => {
   const monday = new Date(zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour: 10, minute: 0 }, "America/New_York"));
   const config = loadConfig();

@@ -474,7 +474,11 @@ describe("live tours and exceptions", () => {
     const [issue] = (await h.ok("list_exceptions")).exceptions;
 
     const asked = await h.ok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "Parking is included." });
-    expect(asked.summary).toBe('Send "Parking is included" to Pat? Future visitors who ask the same thing will get it too. Save it?');
+    expect(asked.visitorWillReceive).toBe("Parking is included. Let me know if you have any other questions.");
+    expect(asked.summary).toBe('Send this to Pat? "Parking is included. Let me know if you have any other questions."');
+    expect(asked.confirmation.question).toBe(asked.summary);
+    const quoted = String(asked.summary).slice(String(asked.summary).indexOf('"') + 1, String(asked.summary).lastIndexOf('"'));
+    expect(Buffer.from(quoted, "utf8").equals(Buffer.from(asked.visitorWillReceive, "utf8"))).toBe(true);
     expect(h.workspace.load(id).config.property.facts).toEqual([]);
     const threadBefore = v.session.conversation.length;
 

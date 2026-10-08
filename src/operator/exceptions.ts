@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { FAIR_HOUSING_CODE } from "../core/fairHousing";
 import { HANDLER_FAILED_NEXT_STEP } from "../core/TourCore";
 import { formatPhone } from "../core/phone";
 import { formatShortDateTime } from "../core/timezone";
@@ -104,6 +105,8 @@ export interface OperatorException {
   resolution?: ExceptionResolution;
   /** What the team can do next, in plain language. */
   nextSteps: string[];
+  /** False on a fair-housing flag: no draft answer is proposed. Omitted otherwise. */
+  proposeDraft?: false;
 }
 
 // -------------------------------------------------------------------- ledger
@@ -211,10 +214,11 @@ function summaryFor(kind: ExceptionKind, e: AuditEvent, tour: TourSnapshot): str
   }
 }
 
-function nextStepsFor(kind: ExceptionKind, tour: TourSnapshot | undefined, stillPaused: boolean): string[] {
+function nextStepsFor(kind: ExceptionKind, tour: TourSnapshot | undefined, stillPaused: boolean, fairHousing = false): string[] {
   const canChange = !!tour?.live;
   switch (kind) {
     case "unanswered-question":
+      if (fairHousing) return ["Leave this with the property team. Don't draft an answer.", "Mark it handled once they've replied."];
       return [
         "If you know the answer, tell me and I can add it to the approved facts and text the visitor (with your OK).",
         "Or mark it handled if you've already answered them another way.",
@@ -278,6 +282,7 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
       : [];
   const extra = replies.map((later) => later.detail).join(" ");
   const asked = kind === "unanswered-question" && e.detail ? e.detail : undefined;
+  const fairHousing = kind === "unanswered-question" && e.code === FAIR_HOUSING_CODE;
   const sent = resolution?.approvedFact?.replace(/\.$/, "");
   const main = asked && sent ? `Asked "${asked}". Sent "${sent}".` : summaryFor(kind, e, tour);
   return {
@@ -297,7 +302,8 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
     ...(e.reservationId ? { reservationId: e.reservationId } : {}),
     status,
     ...(resolution ? { resolution } : {}),
-    nextSteps: status === "open" ? nextStepsFor(kind, tour, paused) : [],
+    nextSteps: status === "open" ? nextStepsFor(kind, tour, paused, fairHousing) : [],
+    ...(fairHousing ? { proposeDraft: false as const } : {}),
   };
 }
 
@@ -515,6 +521,11 @@ export function visitorAnswerText(_question: string, fact: string): string {
   return `${fact} Let me know if you have any other questions.`;
 }
 
+/** The landlord's approve question. The quoted text equals `visitorWillReceive` byte for byte. */
+export function sendThisQuestion(who: string, visitorWillReceive: string): string {
+  return `Send this to ${who}? "${visitorWillReceive}"`;
+}
+
 /** An operator's answer to a flagged question, as Tour Core will save it. */
 export interface FlaggedAnswerPlan {
   exception: OperatorException;
@@ -591,6 +602,9 @@ export async function planFlaggedAnswer(services: OperatorServices, input: { exc
   }
   const tourForWho = exception.tourRef ? await findTour(services, exception.tourRef) : undefined;
   const who = operatorWhoLabel(exception.visitorName, tourForWho?.visitorPhone);
+  if (exception.proposeDraft === false) {
+    throw new SetupInputError("NO_DRAFT", "Leave this with the property team. Don't draft an answer.");
+  }
   if (exception.kind === "handler-failed") {
     const words = cleanFact(input.approvedFact);
     return { exception, appliesTo: "property", fact: words, where: exception.property, sendOnly: true, who };

@@ -38,15 +38,18 @@ export function spokenTimes(normalized: string, today?: LocalDate): SpokenTime[]
     const meridiem = suffix && !suffix.startsWith("o") ? (suffix.startsWith("a") ? "AM" : "PM") : undefined;
     const asked = dayReference(normalized, today);
     const named = asked && asked !== "menu" ? asked : undefined;
-    const key = `${hour}:${minute}:${meridiem ?? ""}:${day ?? ""}:${named?.weekday ?? ""}:${named?.date ? `${named.date.year}-${named.date.month}-${named.date.day}` : ""}`;
+    const fromWord = !named?.weekday && !named?.date && !day ? weekdayOfText(normalized) : undefined;
+    const weekday = named?.weekday ?? fromWord?.day;
+    const nextWeek = named?.nextWeek || fromWord?.next || undefined;
+    const key = `${hour}:${minute}:${meridiem ?? ""}:${day ?? ""}:${weekday ?? ""}:${named?.date ? `${named.date.year}-${named.date.month}-${named.date.day}` : ""}`;
     if (found.some((item) => `${item.hour}:${item.minute}:${item.meridiem ?? ""}:${item.day ?? ""}:${item.weekday ?? ""}:${item.date ? `${item.date.year}-${item.date.month}-${item.date.day}` : ""}` === key)) continue;
     found.push({
       hour,
       minute,
       ...(meridiem ? { meridiem } : {}),
       ...(day ? { day } : {}),
-      ...(named?.weekday ? { weekday: named.weekday } : {}),
-      ...(named?.nextWeek ? { nextWeek: true } : {}),
+      ...(weekday ? { weekday } : {}),
+      ...(nextWeek ? { nextWeek: true } : {}),
       ...(named?.date ? { date: named.date } : {}),
     });
   }

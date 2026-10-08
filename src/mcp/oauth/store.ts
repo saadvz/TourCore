@@ -50,6 +50,22 @@ interface Doc {
 const KEY = "grok-access";
 const MAX_RETIRED = 50;
 const MAX_IDLE_CLIENTS = 50;
+const PLACEHOLDER_NAMES = new Set(["an mcp client", "unnamed"]);
+
+function usableClientName(name: string | undefined): string | undefined {
+  const trimmed = name?.trim();
+  if (!trimmed || PLACEHOLDER_NAMES.has(trimmed.toLowerCase())) return undefined;
+  return trimmed;
+}
+
+/** A wording name when the registration never stored client_name. Cursor's callbacks and Grok's hosts select Grok wording only. */
+function wordingFromRegistration(info: { software_id?: string; redirect_uris?: string[] } | undefined): string | undefined {
+  if (!info) return undefined;
+  const blob = `${info.software_id ?? ""} ${(info.redirect_uris ?? []).join(" ")}`.toLowerCase();
+  if (/\bgrok\b|grok\.com|\bx\.ai\b|\bx\.com\b/.test(blob)) return "Grok";
+  if (blob.includes("cursor")) return "Cursor";
+  return undefined;
+}
 
 export class OAuthGrantStore {
   constructor(
@@ -75,8 +91,12 @@ export class OAuthGrantStore {
 
   /**
    * The name stored for this signed-in caller: the newest live grant's
-   * clientName, otherwise the name the client registered with. Nothing
-   * here is a token or a secret. The name only picks playbook wording.
+   * clientName, otherwise the name the client registered with, otherwise a
+   * name read from the registration's software id or redirect URIs.
+   * Placeholders ("An MCP client", "unnamed") count as missing. A name
+   * found that way is written onto the grant the next time this caller
+   * presents a token. Nothing here is a token or a secret. The name only
+   * picks playbook wording.
    */
   clientName(clientId: string): string | undefined {
     if (!clientId) return undefined;
@@ -86,11 +106,25 @@ export class OAuthGrantStore {
       .filter((g) => g.clientId === clientId && g.expiresAt > t && (g.accessExpiresAt > t || (g.refreshExpiresAt ?? 0) > t))
       .sort((a, b) => (b.refreshedAt ?? b.createdAt) - (a.refreshedAt ?? a.createdAt));
     for (const grant of live) {
-      const name = grant.clientName?.trim();
+      const name = usableClientName(grant.clientName);
       if (name) return name;
     }
-    const registered = doc.clients[clientId]?.info.client_name?.trim();
-    return registered || undefined;
+    const info = doc.clients[clientId]?.info;
+    const recovered = usableClientName(info?.client_name) ?? wordingFromRegistration(info);
+    if (recovered) this.backfillClientName(clientId, recovered);
+    return recovered;
+  }
+
+  /** Writes a recovered display name onto grants that never stored one. */
+  private backfillClientName(clientId: string, name: string): void {
+    const doc = this.read();
+    let changed = false;
+    for (const grant of doc.grants) {
+      if (grant.clientId !== clientId || usableClientName(grant.clientName)) continue;
+      grant.clientName = name;
+      changed = true;
+    }
+    if (changed) this.write(doc);
   }
 
   /** Registration is open (RFC 7591), so only the most recent clients are kept; ones with a live approval always stay. */

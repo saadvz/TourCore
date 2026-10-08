@@ -22,14 +22,17 @@ decisions.
 ## Playbook
 
 `initialize` returns a short instructions pointer. `get_state` returns the
-playbook for this step. A client name containing `grok` gets the full Grok
-playbook, including the masked card, even when no capabilities are sent.
-`prompts` and `resources` do not pick the playbook. Those two are server
-capabilities, so a real client does not report them. Claude is full only with
-`elicitation`, `sampling`, or `roots`. ChatGPT and any other name are
-tools-only. The name never changes a tool or a gate. Tour Core remembers it
-per session or signed-in caller. Matched Grok names already used here are
-`Grok`, `grok`, `grok-bot`, `grok-sim`, and `Grok (SDK test)`.
+playbook for this step. A client name containing `grok`, or Cursor
+(`Cursor`, `cursor-vscode`), gets the full Grok playbook, including the
+masked card, even when no capabilities are sent. `prompts` and `resources`
+do not pick the playbook. Those two are server capabilities, so a real
+client does not report them. Claude is full only with `elicitation`,
+`sampling`, or `roots`. ChatGPT and any other name are tools-only. The name
+never changes a tool or a gate. Tour Core remembers it per session or
+signed-in caller. After a restart it uses the stored OAuth name, and a
+baseline entry cannot override a name that selects a playbook. Matched
+names already used here are `Grok`, `grok`, `grok-bot`, `grok-sim`,
+`Grok (SDK test)`, and `Cursor`.
 
 Before a flagged answer is sent, read `visitorWillReceive` and wait for a
 clear yes. That is the exact visitor text, including any closing line.

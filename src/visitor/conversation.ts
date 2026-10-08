@@ -1740,6 +1740,8 @@ async function handleProposedTimeReply(turn: Turn): Promise<boolean> {
     return true;
   }
   if (answer === "no") {
+    const named = spokenTimes(normalize(text), localDateOf(session.clock.now(), session.config.property.timezone));
+    if (named.length === 1 || turn.intent.type === "REQUEST_CUSTOM_TIME") return false;
     await session.recordText(turn.said);
     await session.declineAlternative(request.id);
     return true;

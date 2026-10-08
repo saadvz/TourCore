@@ -84,7 +84,7 @@ so they may still be waiting on you.` Partial reply plus empty text:
 so they may still be waiting on you.` Empty text with no reply: `{who}
 sent a text I couldn't handle, so they're waiting on you. I told them
 you'd reply as soon as you can.` `answer_flagged_question` on that issue texts the
-visitor and does not save a fact. First call: `Send "{reply}" to {who}?`
+visitor and does not save a fact. First call: `Send this to {who}? "{reply}"`
 After yes: `Sent to {who}.` If they cannot be texted: `I couldn't text
 {who}, so nothing was sent and this is still open. If you can reach them
 another way, do that, then mark it handled.` A repeat answer or resolve
@@ -193,7 +193,7 @@ refusal lines insert `The {team} is still working on the problem and will
 text you here.` after the first sentence. A reply that isn't a clear yes or no is flagged:
 `I'll check with the {team} and get back to you.` STOP still opts out. If
 cancel cannot finish, they get
-`I can't cancel it from here. I've asked the leasing team to call it off and
+`I can't cancel it from here. I've asked the property team to call it off and
 get back to you.` and the team is flagged. Never use the unanswered-question fallback for a clear cancel ask.
 When nothing is booked yet, that same cancel phrasing at the day menu, the time menu, or the property picker (`Actually cancel that`, `cancel that`, `cancel please`, `nevermind`; a bare `cancel` is still STOP) clears the step and replies `No problem, nothing's booked yet, so I'll stop here. Text me anytime if you want to pick a time.` It does not ask YES or NO and it does not say the tour is cancelled. The next text from someone already opted in starts scheduling again, with no TOUR keyword. A named day is used. At the property picker, that next text asks which place again.
 
@@ -202,7 +202,7 @@ date ("Dec 1", "December 1st", "1 Dec", "12/1", "Tuesday Oct 6"). Without a
 year, Tour Core uses the next date on or after today in the property's time
 zone. If that this-year date has already passed and next year is beyond the
 21-day horizon, it stays that past date — "That day has already passed" —
-instead of rolling forward and calling it too far ahead. A date or booking ask is handled as booking, not as a flagged question. If
+instead of rolling forward and calling it too far ahead. A named weekday is that day: the next one, or today only when today is that weekday and the time is still ahead. `Is Saturday at 2:45 PM possible?` is Saturday, not today. A no that names a time (`No, Saturday at 2:45 PM`) starts a request for that time. A bare no with nothing booked is `No problem. If you'd like another time, just reply with a day.` When a tour is booked, that no keeps the current booking. Declining a request with nothing booked is `The property team couldn't approve {time} on {day}. If you'd like another time, just reply with a day.` A booked tour keeps the still-booked or still-confirmed ending. A fair-housing question is detected before rent, keywords, or a saved answer. The visitor gets the ordinary holding reply, and the flag has `proposeDraft` false so no draft is proposed. `How much is rent?` and `Is rent due monthly?` stay rent answers. A date or booking ask is handled as booking, not as a flagged question. If
 the day can't be resolved ("the 45th", "sometime next month"), Tour Core
 asks which day they meant and shows the day menu; it does not flag the team.
 While a one-off tour is waiting on YES, NO, or STOP, a leftover menu

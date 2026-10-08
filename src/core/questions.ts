@@ -1,6 +1,7 @@
 import type { TourCoreConfig, Unit } from "../config/tourCoreConfig";
 import { profileFacts, questionTopic, type ProfileField } from "../config/unitProfile";
 import { visitorSubject } from "../visitor/identity";
+import { isFairHousingQuestion } from "./fairHousing";
 import { approvedFacts, findApprovedAnswer, type ApprovedFact } from "./facts";
 
 /**
@@ -17,7 +18,7 @@ import { approvedFacts, findApprovedAnswer, type ApprovedFact } from "./facts";
 export type QuestionResolution =
   | { kind: "answer"; facts: ApprovedFact[]; unitId?: string }
   | { kind: "which-unit"; units: string[] }
-  | { kind: "unknown"; unitId?: string };
+  | { kind: "unknown"; unitId?: string; fairHousing?: boolean };
 
 /** Details that belong to one unit; the description is never read for these once the unit has structured details. */
 const UNIT_FIELDS: ProfileField[] = ["bedrooms", "bathrooms", "monthlyRent", "availability", "squareFeet", "floor", "furnished", "features"];
@@ -75,6 +76,9 @@ function withoutUnitNames(question: string, units: Pick<Unit, "name">[]): string
 }
 
 export function resolveQuestion(config: TourCoreConfig, asked: string, context: { selectedUnitId?: string; pickedUnitId?: string } = {}): QuestionResolution {
+  // Before rent, keywords, saved answers, and "which unit?". A fair-housing
+  // question is never auto-answered, even when a saved fact would match.
+  if (isFairHousingQuestion(asked)) return { kind: "unknown", fairHousing: true };
   const named = unitsNamedIn(asked, config.units);
   const question = withoutUnitNames(asked, config.units);
   const picked = context.pickedUnitId && config.units.some((u) => u.id === context.pickedUnitId) ? context.pickedUnitId : undefined;

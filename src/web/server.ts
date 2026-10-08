@@ -21,7 +21,7 @@ import { publicBaseUrl } from "../messaging/publicUrl";
 import { createIntentInterpreter, intentModelFromEnv, type IntentInterpreter } from "../intent";
 import { mcpAuthModeFromEnv, type McpAuthMode } from "../mcp/authMode";
 import { authorized, handleMcpMessage, MCP_PATH } from "../mcp/mcpBridge";
-import { reportedClientFromInitialize, type ReportedClient } from "../playbooks/select";
+import { preferPlaybookClient, reportedClientFromInitialize, selectPlaybook, type ReportedClient } from "../playbooks/select";
 import { endpointsFor, isOAuthLocalPath, isOAuthPublicPath, McpOAuth } from "../mcp/oauth";
 import { grokLegacyCompatFromEnv, hostedCompatStartupLine, redirectPolicyFor } from "../mcp/oauth/clients";
 import { AuditExportLinks } from "../operator/auditExportLinks";
@@ -342,6 +342,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
    * Kept in memory only. After a restart the signed-in caller's stored OAuth clientName
    * is read from the grant store and run through the same playbook selection. That name
    * only picks wording. A static token has no stored name, so a stale id gets baseline.
+   * A baseline or nameless entry is never cached over a name that selects a playbook.
    */
   const playbookClients = new Map<string, ReportedClient>();
   const playbookClientCap = Math.max(1, options.playbookClientCap ?? PLAYBOOK_CLIENT_CAP);
@@ -550,16 +551,16 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           key = fallbackKey(caller);
           if (incomingSession) responseSession = incomingSession;
         }
-        if (seen) {
-          rememberPlaybookClient(key, seen);
-          if (initializing) rememberPlaybookClient(fallbackKey(caller), seen);
-        }
-        let reportedClient = seen ?? touchPlaybookClient(key);
-        if (!reportedClient) {
-          const recovered = clientFromStoredOAuth(caller?.clientId);
-          if (recovered) {
-            reportedClient = recovered;
-            rememberPlaybookClient(key, recovered);
+        const cached = playbookClients.get(key);
+        const storedClient = clientFromStoredOAuth(caller?.clientId);
+        const reportedClient = preferPlaybookClient(seen, storedClient, cached);
+        const knownPlaybook = (client?: ReportedClient) => !!client?.name?.trim() && selectPlaybook(client).id !== "baseline";
+        if (reportedClient && (knownPlaybook(reportedClient) || !knownPlaybook(cached))) {
+          if (playbookClients.get(key) === reportedClient) touchPlaybookClient(key);
+          else rememberPlaybookClient(key, reportedClient);
+          const callerKey = fallbackKey(caller);
+          if (knownPlaybook(reportedClient) || (initializing && !knownPlaybook(playbookClients.get(callerKey)))) {
+            if (playbookClients.get(callerKey) !== reportedClient) rememberPlaybookClient(callerKey, reportedClient);
           }
         }
         if (!initializing && incomingSession && !knownSession && reportedClient) rememberPlaybookClient(sessionKey(incomingSession), reportedClient);

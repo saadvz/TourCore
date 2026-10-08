@@ -245,7 +245,15 @@ function schedulingIntent(
   const spoken = times[0];
   if (spoken && (TOPIC.test(t) || WANTS_TO_KNOW.test(t))) {
     return result({ type: "ASK_PROPERTY_QUESTION", question: raw.trim().slice(0, 300) }, 0.9, {
-      mentionedTime: { hour: spoken.hour, minute: spoken.minute, ...(spoken.meridiem ? { meridiem: spoken.meridiem } : {}), ...(spoken.day ? { day: spoken.day } : {}) },
+      mentionedTime: {
+        hour: spoken.hour,
+        minute: spoken.minute,
+        ...(spoken.meridiem ? { meridiem: spoken.meridiem } : {}),
+        ...(spoken.day ? { day: spoken.day } : {}),
+        ...(spoken.weekday ? { weekday: spoken.weekday } : {}),
+        ...(spoken.nextWeek ? { nextWeek: true } : {}),
+        ...(spoken.date ? { date: spoken.date } : {}),
+      },
     });
   }
   const asking = /\b(can i|could i|can we|could we|how about|what about|instead|move|change|reschedule|switch|come at|tour at|book|make it)\b/.test(t);
@@ -285,17 +293,23 @@ function answerScheduling(
   awaiting: Extract<StepAwaiting, { kind: "confirm-custom-time" | "confirm-alternative" }>,
   t: string,
   result: (intent: TourIntent, confidence: number, extra?: Partial<IntentInterpretation>) => IntentInterpretation,
+  today?: InterpretContext["today"],
 ): IntentInterpretation | undefined {
+  const namedClock = spokenTimes(t, today);
+  const clock = namedClock.length === 1 ? namedClock[0] : undefined;
   if (awaiting.kind === "confirm-alternative") {
     const yn = yesNo(t);
     if (yn.answer === "yes" && yn.confidence >= 0.75) return result({ type: "ACCEPT_PROPOSED_TIME" }, yn.confidence);
-    if (yn.answer === "no" && yn.confidence >= 0.75) return result({ type: "DECLINE_PROPOSED_TIME" }, yn.confidence);
+    if (yn.answer === "no" && yn.confidence >= 0.75) return clock ? result(clockIntent(clock), yn.confidence) : result({ type: "DECLINE_PROPOSED_TIME" }, yn.confidence);
     return undefined;
   }
   const meridiemWord = /^(am|pm|a m|p m)$/.exec(t)?.[1];
   if (meridiemWord) return result(clockIntent({ hour: awaiting.hour, minute: awaiting.minute, meridiem: meridiemWord.startsWith("a") ? "AM" : "PM", ...(awaiting.day ? { day: awaiting.day } : {}) }), 0.95);
   const yn = yesNo(t);
-  if (yn.answer === "no" && yn.confidence >= 0.75) return result({ type: "UNKNOWN" }, 0, { clarificationNeeded: true, clarificationQuestion: "No problem." });
+  if (yn.answer === "no" && yn.confidence >= 0.75) {
+    if (clock) return result(clockIntent(clock), 0.9);
+    return result({ type: "UNKNOWN" }, 0, { clarificationNeeded: true, clarificationQuestion: "No problem." });
+  }
   if (yn.answer === "yes" && yn.confidence >= 0.75 && awaiting.meridiem) return result(clockIntent(awaiting), yn.confidence);
   if (yn.answer === "yes" && !awaiting.meridiem) {
     const label = `${awaiting.hour}:${String(awaiting.minute).padStart(2, "0")}`;
@@ -348,7 +362,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
   if ((ctx.hasCancelableTour || ctx.hasRunningTour) && isCancelTourAsk(raw)) return result({ type: "CANCEL_TOUR" }, 0.95);
 
   if (ctx.awaiting?.kind === "confirm-custom-time" || ctx.awaiting?.kind === "confirm-alternative") {
-    const answered = answerScheduling(ctx.awaiting, t, result);
+    const answered = answerScheduling(ctx.awaiting, t, result, ctx.today);
     if (answered) return answered;
   }
 

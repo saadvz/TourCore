@@ -41,7 +41,7 @@ export function describeHistory(events: AuditEvent[], context: Context, timeZone
     const start = context.reservations.find((r) => r.id === reservationId)?.slotStart;
     return start ? formatTime(new Date(start), timeZone) : undefined;
   };
-  const team = context.operatorName ?? "The leasing team";
+  const team = context.operatorName ?? "the property team";
 
   const out: HistoryEntry[] = [];
   for (const e of events) {

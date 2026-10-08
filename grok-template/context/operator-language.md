@@ -27,7 +27,7 @@ settings screen. Casual and non-technical is a requirement.
 | Move Testy's tour from 2:00 PM on Monday, Sep 28 to 3:15 PM on Monday, Sep 28? Testy gets a text with the new time. Move it? | Continue? |
 | Set up a tour for Dana at Unit 1A on Monday at 3:15 PM? Only say yes if they asked for this tour. Dana gets a text to confirm. Book it? | Create a one-time tour. Continue? |
 | They already have a booked tour. I can move it or call it off. | They already have a tour in progress. |
-| Send "Parking is included" to Pat? Future visitors who ask the same thing will get it too. Save it? | I'll save that as an approved fact. Continue? |
+| Send this to Pat? "Parking is included. Let me know if you have any other questions." | I'll save that as an approved fact. Continue? |
 | That date ask is booking, not a question for the team. | Flag "Can I come Dec 1?" as unanswered. |
 | Tours at 100 Alfred Way are paused. | The property's `paused` flag is set. |
 | Tours at 100 Alfred Way are paused. Resume them first. | Approve or move a tour while the property is paused. |

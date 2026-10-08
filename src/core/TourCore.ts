@@ -27,6 +27,7 @@ import type { VerificationProvider } from "../verification/basicForm";
 import { AuditLog, type AuditInput } from "../audit/audit";
 import { buildExport, type ExportBundle } from "../export/exportBundle";
 import type { Clock } from "./clock";
+import { FAIR_HOUSING_CODE, isFairHousingQuestion } from "./fairHousing";
 import { approvedAnswerText, approvedFacts, type ApprovedFact } from "./facts";
 import { formatPhone, normalizePhone } from "./phone";
 import { resolveQuestion } from "./questions";
@@ -223,7 +224,7 @@ export function customTimeAskedLine(newTime: string, newDay: string, time: strin
 
 export function declineVisitorLine(input: { newTime: string; newDay: string; time?: string; day?: string; confirmed: boolean }): string {
   const lead = `The property team couldn't approve ${input.newTime} on ${input.newDay}.`;
-  if (!input.time || !input.day) return lead;
+  if (!input.time || !input.day) return `${lead} If you'd like another time, just reply with a day.`;
   return input.confirmed ? `${lead} Your ${input.time} tour on ${input.day} is still confirmed.` : `${lead} You're still booked for ${input.time} on ${input.day}.`;
 }
 
@@ -293,7 +294,7 @@ export const VISITOR_CANCEL_DONE = "You're cancelled. Text me anytime if you wan
 /** Nothing is booked. The menu is cleared. The next text starts scheduling again. */
 export const NOTHING_BOOKED_CANCEL =
   "No problem, nothing's booked yet, so I'll stop here. Text me anytime if you want to pick a time.";
-export const VISITOR_CANCEL_FAILED = "I can't cancel it from here. I've asked the leasing team to call it off and get back to you.";
+export const VISITOR_CANCEL_FAILED = "I can't cancel it from here. I've asked the property team to call it off and get back to you.";
 
 export function visitorCancelConfirm(day: string, time: string): string {
   return `Cancel your tour on ${day} at ${time}? Reply YES or NO.`;
@@ -1203,12 +1204,12 @@ export class TourCore {
       const declined = await this.resolveRequest(request, "DECLINED", "VISITOR", "visitor kept their current time");
       const reservation = request.reservationId ? await this.deps.store.get("reservations", request.reservationId) : undefined;
       const prospect = await this.mustGetProspect(request.prospectId);
-      const current = reservation?.slotStart
+      const booked = reservation?.slotStart
         ? isUnconfirmedHold(reservation)
-          ? ` You're still booked for ${this.time(new Date(reservation.slotStart))} on ${this.day(new Date(reservation.slotStart))}.`
-          : ` Your ${this.time(new Date(reservation.slotStart))} tour on ${this.day(new Date(reservation.slotStart))} is still confirmed.`
-        : " Your tour time is unchanged.";
-      await this.textProspect(prospect, request.reservationId, `No problem.${current}`);
+          ? `No problem. You're still booked for ${this.time(new Date(reservation.slotStart))} on ${this.day(new Date(reservation.slotStart))}.`
+          : `No problem. Your ${this.time(new Date(reservation.slotStart))} tour on ${this.day(new Date(reservation.slotStart))} is still confirmed.`
+        : "No problem. If you'd like another time, just reply with a day.";
+      await this.textProspect(prospect, request.reservationId, booked);
       await this.record("TOUR_TIME_REQUEST_DECLINED", { reservationId: request.reservationId, prospectId: request.prospectId, detail: "visitor kept the current time" });
       return declined;
     });
@@ -1294,7 +1295,7 @@ export class TourCore {
       await this.sendConversationText({ phone, body: withAnswerSuffix(approvedAnswerText(resolved.facts), input.answerSuffix), reservationId: reservation?.id });
       return { outcome: "answered", facts: resolved.facts, ...(resolved.unitId ? { unitId: resolved.unitId } : {}) };
     }
-    await this.record("QUESTION_UNANSWERED", { ...base, detail: asked });
+    await this.record("QUESTION_UNANSWERED", { ...base, detail: asked, ...(resolved.kind === "unknown" && resolved.fairHousing ? { code: FAIR_HOUSING_CODE } : {}) });
     await this.sendConversationText({ phone, body: input.unknownReply ?? UNKNOWN_ANSWER, reservationId: reservation?.id });
     const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : formatPhone(phone);
     const named = resolved.unitId ? this.deps.config.units.find((u) => u.id === resolved.unitId) : undefined;
@@ -1315,7 +1316,12 @@ export class TourCore {
     const asked = input.question.trim().slice(0, 300);
     if (!asked) throw new TourCoreError("EMPTY_QUESTION", "Please type a question");
     if (input.recordInbound !== false) await this.recordIncoming({ phone, body: asked, prospectId: prospect?.id, reservationId: reservation?.id, meta: input.meta });
-    await this.record("QUESTION_UNANSWERED", { reservationId: reservation?.id, prospectId: prospect?.id, detail: asked });
+    await this.record("QUESTION_UNANSWERED", {
+      reservationId: reservation?.id,
+      prospectId: prospect?.id,
+      detail: asked,
+      ...(isFairHousingQuestion(asked) ? { code: FAIR_HOUSING_CODE } : {}),
+    });
     if (!input.silent) await this.sendConversationText({ phone, body: input.reply, reservationId: reservation?.id });
     const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : formatPhone(phone);
     await this.notifyOperator(reservation, `${who} asked "${asked}", and there's no approved answer yet.`);

@@ -46,6 +46,7 @@ import {
   revokeTour,
   saveSendOptedOutLine,
   saveSendUnreachableLine,
+  sendThisQuestion,
   visitorAnswerText,
   type OperatorException,
 } from "./exceptions";
@@ -333,6 +334,7 @@ function exceptionLine(x: OperatorException) {
     accessBlocked: x.accessBlocked,
     when: x.when,
     status: x.status,
+    ...(x.proposeDraft === false ? { proposeDraft: false as const } : {}),
     ...(x.resolution ? { resolution: x.resolution.note, ...(x.resolution.approvedFact ? { approvedFact: x.resolution.approvedFact } : {}) } : {}),
     nextSteps: x.nextSteps,
   };
@@ -1107,7 +1109,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "list_exceptions",
     title: "Show what needs attention",
     kind: "read",
-    description: "The queue of issues that need the team: unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored, and a visitor text Tour Core could not handle (handler-failed: the visitor was told the team will reply here; next step is to tell you what to say so you can text them, or to book or change their tour). A grant that couldn't be saved after unlock is \"Tour Core couldn't save the visit record, so the tour was paused.\" A records check that fails before unlock keeps the door locked and does not open an issue. \"Visitor hasn't confirmed leaving\" stays open until they text DONE or the operator marks it handled; after-close alerts stop at 24 hours.",
+    description: "The queue of issues that need the team: unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored, and a visitor text Tour Core could not handle (handler-failed: the visitor was told the team will reply here; next step is to tell you what to say so you can text them, or to book or change their tour). A fair-housing question is flagged with proposeDraft false: do not draft an answer, and leave it with the property team. A grant that couldn't be saved after unlock is \"Tour Core couldn't save the visit record, so the tour was paused.\" A records check that fails before unlock keeps the door locked and does not open an issue. \"Visitor hasn't confirmed leaving\" stays open until they text DONE or the operator marks it handled; after-close alerts stop at 24 hours.",
     input: z.strictObject({ property: Property, includeHandled: z.boolean().optional() }),
     run: async (ctx, i) => {
       const id = i.property ? resolvePropertyId(ctx.services.workspace, i.property) : undefined;
@@ -1144,7 +1146,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Answer a flagged question with a new approved fact",
     kind: "consequential",
     description:
-      "Only when the OPERATOR supplied the answer or the reply. For an unanswered question: as soon as they give it (e.g. \"2 bedrooms\"), call this without a code. Tour Core works out how it will be saved and returns ONE question: Send \"{answer}\" to {name}? Future visitors who ask the same thing will get it too. Save it? — never Continue?. After a clear yes, call again with confirmationCode. After yes, if they opted out: Saved \"{answer}\" for future questions. {who} has turned off texts from us, so I didn't send it and this is still open. If you can reach them another way, do that, then mark it handled. If the send fails for any other reason: Saved \"{answer}\" for future questions, but I couldn't text {who}, so nothing was sent and this is still open. If you can reach them another way, do that, then mark it handled. A repeat on an unanswered question returns exactly That question has already been handled. For a handler-failed issue, this texts the visitor from the Tour Core number and does not save an approved fact. The first call returns Send \"{reply}\" to {who}? with the landlord's exact reply and no future-visitors line. After yes, when the text is in the outbox and the issue is closed, it returns exactly Sent to {who}. If the visitor can't be texted, it returns I couldn't text {who}, so nothing was sent and this is still open. If you can reach them another way, do that, then mark it handled. A repeat on a handler-failed issue returns exactly That's already been handled. Never make up or reword the answer.",
+      "Only when the OPERATOR supplied the answer or the reply. A fair-housing flag has proposeDraft false: do not draft an answer, and this tool refuses. For an unanswered question: as soon as they give it (e.g. \"2 bedrooms\"), call this without a code. Tour Core works out how it will be saved and returns ONE question: Send this to {name}? \"{visitorWillReceive}\" — the quoted text is exactly what the visitor will get, closing line included, never Continue?. After a clear yes, call again with confirmationCode. After yes, if they opted out: Saved \"{answer}\" for future questions. {who} has turned off texts from us, so I didn't send it and this is still open. If you can reach them another way, do that, then mark it handled. If the send fails for any other reason: Saved \"{answer}\" for future questions, but I couldn't text {who}, so nothing was sent and this is still open. If you can reach them another way, do that, then mark it handled. A repeat on an unanswered question returns exactly That question has already been handled. For a handler-failed issue, this texts the visitor from the Tour Core number and does not save an approved fact. The first call returns Send this to {who}? \"{reply}\" and the quoted text equals visitorWillReceive. After yes, when the text is in the outbox and the issue is closed, it returns exactly Sent to {who}. If the visitor can't be texted, it returns I couldn't text {who}, so nothing was sent and this is still open. If you can reach them another way, do that, then mark it handled. A repeat on a handler-failed issue returns exactly That's already been handled. Never make up or reword the answer.",
     input: z.strictObject({
       exceptionId: ExceptionId,
       approvedFact: z.string().min(1).max(300).describe("The operator's own words, e.g. \"2 bedrooms\" or \"Parking is included.\""),
@@ -1158,10 +1160,11 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const fingerprint = `${x.exceptionId}|${plan.appliesTo}|${plan.field ?? ""}|${plan.fact}|${plan.sendOnly ? "send" : "save"}`;
       if (!i.confirmationCode) {
         if (plan.sendOnly) {
-          return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, `Send "${plan.fact}" to ${who}?`, { savedToSetup: false, visitorWillReceive: plan.fact });
+          return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, sendThisQuestion(who, plan.fact), { savedToSetup: false, visitorWillReceive: plan.fact });
         }
-        return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, `Send "${plan.fact.replace(/\.$/, "")}" to ${who}? Future visitors who ask the same thing will get it too. Save it?`, {
-          visitorWillReceive: visitorAnswerText(x.question!, plan.fact),
+        const visitorWillReceive = visitorAnswerText(x.question!, plan.fact);
+        return needsConfirmation(ctx, "answer", x.exceptionId, fingerprint, sendThisQuestion(who, visitorWillReceive), {
+          visitorWillReceive,
         });
       }
       ctx.confirmations.redeem(i.confirmationCode, "answer", x.exceptionId, fingerprint);

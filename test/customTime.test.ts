@@ -12,7 +12,7 @@ import { HANDLER_SNAG_ALERTED, HANDLER_SNAG_RETRY, MessagingConversations } from
 import { VisitorDemoRegistry } from "../src/visitor/session";
 import { VerificationLinks } from "../src/visitor/verificationLinks";
 import { formatPhone } from "../src/core/phone";
-import { ISSUE_ALREADY_HANDLED, operatorWhoLabel, QUESTION_ALREADY_HANDLED, saveSendOptedOutLine, saveSendUnreachableLine, sendOnlyUnreachableLine } from "../src/operator/exceptions";
+import { ISSUE_ALREADY_HANDLED, operatorWhoLabel, QUESTION_ALREADY_HANDLED, saveSendOptedOutLine, saveSendUnreachableLine, sendOnlyUnreachableLine, sendThisQuestion } from "../src/operator/exceptions";
 import { apiError, fakeSendblue } from "./fakeSendblue";
 import {
   alreadyAskedLine,
@@ -33,8 +33,10 @@ import {
   SLOT_ALREADY_PASSED,
   TAKEN_SLOT_OTHER_DAY,
   takenSlotLine,
+  VISITOR_CANCEL_FAILED,
   VISITOR_TIME_PASSED,
   WITHDRAWN_FOR_REGULAR_BOOKING,
+  declineVisitorLine,
 } from "../src/core/TourCore";
 import { createTourCore } from "../src/createTourCore";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
@@ -65,6 +67,29 @@ async function ask(a: LiveApp, message: string) {
 function hoursOf(a: LiveApp) {
   return structuredClone(a.ws.load("prop_100_alfred_way").config.tourHours);
 }
+
+describe("cleared visitor lines", () => {
+  it("quotes the exact text the visitor will get", () => {
+    const receive = "Yes, there's a dishwasher. Let me know if you have any other questions.";
+    expect(sendThisQuestion("(555) 555-0121", receive)).toBe(`Send this to (555) 555-0121? "${receive}"`);
+  });
+
+  it("offers another day when a decline has no booking, and keeps the booked ending", () => {
+    expect(declineVisitorLine({ newTime: "7:30 AM", newDay: "Friday, Oct 9", confirmed: false })).toBe(
+      "The property team couldn't approve 7:30 AM on Friday, Oct 9. If you'd like another time, just reply with a day.",
+    );
+    expect(declineVisitorLine({ newTime: "7:30 AM", newDay: "Friday, Oct 9", time: "2:00 PM", day: "Monday, Sep 28", confirmed: true })).toBe(
+      "The property team couldn't approve 7:30 AM on Friday, Oct 9. Your 2:00 PM tour on Monday, Sep 28 is still confirmed.",
+    );
+    expect(declineVisitorLine({ newTime: "7:30 AM", newDay: "Friday, Oct 9", time: "2:00 PM", day: "Monday, Sep 28", confirmed: false })).toBe(
+      "The property team couldn't approve 7:30 AM on Friday, Oct 9. You're still booked for 2:00 PM on Monday, Sep 28.",
+    );
+  });
+
+  it("asks the property team to call off a cancel that could not finish", () => {
+    expect(VISITOR_CANCEL_FAILED).toBe("I can't cancel it from here. I've asked the property team to call it off and get back to you.");
+  });
+});
 
 describe("a visitor can ask for a time that isn't a regular slot", () => {
   it("before a booking, an off-grid time becomes a pending request and does not confirm a tour", async () => {
@@ -149,6 +174,87 @@ describe("the landlord decides", () => {
     expect(a.fake.sent.filter((message) => message.number === PHONE).at(-1)!.content).toContain("moved to 3:15 PM on Monday, Sep 28");
     expect(hoursOf(a)).toEqual(before);
     expect(slotsOn(a.ws.load("prop_100_alfred_way").config, { year: 2026, month: 9, day: 28 }).map((slot) => slot.label)).toEqual(["2:00 PM", "3:30 PM"]);
+  });
+
+  it("declines a request when nothing is booked by offering another day", async () => {
+    const a = await liveApp({ cleanups });
+    await chooseUnit(a);
+    await a.text("Can I tour at 3:15?");
+    const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
+    const before = a.fake.sent.filter((message) => message.number === PHONE).length;
+    expect((await a.grok("decline_tour_time_request", { tourTimeRequestId: id })).summary).toBe("Declined.");
+    const last = a.fake.sent.filter((message) => message.number === PHONE).map((message) => message.content).slice(before);
+    expect(last.join("\n")).toBe("The property team couldn't approve 3:15 PM on Monday, Sep 28. If you'd like another time, just reply with a day.");
+  });
+
+  it("a no with nothing booked offers another day, and a no that names a time starts that request", async () => {
+    const a = await liveApp({ cleanups });
+    await chooseUnit(a);
+    await a.text("Can I tour at 3:15?");
+    const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
+    await a.grok("propose_tour_time", { tourTimeRequestId: id, newStartsAt: "3:30 PM" });
+    const refused = await a.text("no");
+    expect(refused.join("\n")).toBe("No problem. If you'd like another time, just reply with a day.");
+    expect(refused.join("\n")).not.toContain("unchanged");
+    expect(refused.join("\n")).not.toContain("still confirmed");
+  });
+
+  it("no plus a named time files that time instead of stopping at no problem", async () => {
+    const a = await liveApp({ cleanups });
+    await chooseUnit(a);
+    await a.text("Does it have laundry, and could I come at 3:15?");
+    expect((await a.grok("list_tour_time_requests")).requests).toHaveLength(0);
+    const bare = await a.text("no");
+    expect(bare).toEqual(["No problem."]);
+    expect((await a.grok("list_tour_time_requests")).requests).toHaveLength(0);
+
+    const b = await liveApp({ cleanups });
+    await chooseUnit(b);
+    await b.text("Does it have laundry, and could I come at 3:15?");
+    const named = await b.text("No, Saturday at 2:45 PM");
+    expect(named.join("\n")).not.toBe("No problem.");
+    expect(named.join("\n")).toContain("2:45 PM");
+    expect(named.join("\n")).toContain("ask the property team");
+    const saturday = zonedTimeToUtc({ year: 2026, month: 10, day: 3, hour: 14, minute: 45 }, "America/New_York").toISOString();
+    const requests = (await b.grok("list_tour_time_requests")).requests as Array<{ status: string; requestedStartsAt: string }>;
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.status).toBe("waiting");
+    const tour = b.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    const pending = b.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.tourTimeRequests.filter((request) => request.status === "PENDING");
+    expect(pending).toHaveLength(1);
+    expect(pending[0]!.requestedStartsAt).toBe(saturday);
+  });
+
+  it("no plus Saturday while a proposal is open starts a Saturday request and keeps the booking", async () => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    await a.text("Can I change it to 3:15?");
+    const id = (await a.grok("list_tour_time_requests")).requests[0].tourTimeRequestId as string;
+    await a.grok("propose_tour_time", { tourTimeRequestId: id, newStartsAt: "3:30 PM" });
+    const named = await a.text("No, Saturday at 2:45 PM");
+    expect(named.join("\n")).toContain("I've asked the property team about 2:45 PM on Saturday, Oct 3 instead.");
+    expect(named.join("\n")).toContain("Your 2:00 PM tour on Monday, Sep 28 stays booked unless they approve the change.");
+    expect(named.join("\n")).not.toContain("is still confirmed");
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    const bundle = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle;
+    expect(bundle.reservations[0]!.slotStart).toBe(atTime(14).toISOString());
+    const saturday = zonedTimeToUtc({ year: 2026, month: 10, day: 3, hour: 14, minute: 45 }, "America/New_York").toISOString();
+    expect(bundle.tourTimeRequests.find((request) => request.requestedStartsAt === saturday)?.status).toBe("PENDING");
+    expect(bundle.tourTimeRequests.find((request) => request.id === id)?.status).toBe("SUPERSEDED");
+  });
+
+  it("reads Saturday at 2:45 PM as Saturday after 2:45 today has passed", async () => {
+    const a = await liveApp({ cleanups });
+    a.clock.t = at(15);
+    await chooseUnit(a);
+    const replies = await a.text("Is Saturday at 2:45 PM possible?");
+    expect(replies.join("\n")).not.toContain("already passed");
+    expect(replies.join("\n")).toContain("2:45 PM");
+    expect(replies.join("\n")).toContain("ask the property team");
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    const pending = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.tourTimeRequests.filter((request) => request.status === "PENDING");
+    expect(pending).toHaveLength(1);
+    expect(pending[0]!.requestedStartsAt).toBe(zonedTimeToUtc({ year: 2026, month: 10, day: 3, hour: 14, minute: 45 }, "America/New_York").toISOString());
   });
 
   it("declines and leaves the current booking confirmed", async () => {
@@ -1657,16 +1763,21 @@ describe("past-time copy", () => {
     expect(replies[0]).toBe(VISITOR_TIME_PASSED);
   });
 
-  it("a same-day weekday or full date in the past is rejected up front", async () => {
+  it("a same-day weekday whose time has passed rolls to next week, and a past calendar date does not", async () => {
     const a = await liveApp({ cleanups });
     await chooseUnit(a);
     a.clock.t = at(15);
     const weekday = await a.text("Can I come Monday at 2:30?");
-    expect(weekday[0]).toBe(VISITOR_TIME_PASSED);
-    expect((await a.grok("list_tour_time_requests")).requests).toHaveLength(0);
+    expect(weekday.join("\n")).not.toContain("already passed");
+    expect(weekday.join("\n")).toContain("2:30 PM");
+    const nextMonday = zonedTimeToUtc({ year: 2026, month: 10, day: 5, hour: 14, minute: 30 }, "America/New_York").toISOString();
+    const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
+    const pending = a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.tourTimeRequests.filter((request) => request.status === "PENDING");
+    expect(pending).toHaveLength(1);
+    expect(pending[0]!.requestedStartsAt).toBe(nextMonday);
     const dated = await a.text("Can I come September 28 at 2:30?");
     expect(dated[0]).toBe(VISITOR_TIME_PASSED);
-    expect((await a.grok("list_tour_time_requests")).requests).toHaveLength(0);
+    expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.tourTimeRequests.filter((request) => request.status === "PENDING")).toHaveLength(1);
   });
 
   it("an operator proposing a past time gets the pick-later line", async () => {
@@ -1924,8 +2035,10 @@ describe("a Sendblue handler throw raises a real landlord alert", () => {
     expect(JSON.stringify(update)).not.toMatch(/approved facts|Future visitors who ask the same thing/);
     const before = a.fake.sent.filter((item) => item.number === PHONE).length;
     const asked = await a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "The lobby door is on the left." });
-    expect(asked.summary).toBe('Send "The lobby door is on the left." to Testy?');
-    expect(asked.confirmation.question).toBe('Send "The lobby door is on the left." to Testy?');
+    expect(asked.summary).toBe('Send this to Testy? "The lobby door is on the left."');
+    expect(asked.confirmation.question).toBe('Send this to Testy? "The lobby door is on the left."');
+    expect(asked.visitorWillReceive).toBe("The lobby door is on the left.");
+    expect(String(asked.summary).slice(String(asked.summary).indexOf('"') + 1, String(asked.summary).lastIndexOf('"'))).toBe(asked.visitorWillReceive);
     expect(asked.summary).not.toContain("Future visitors who ask the same thing will get it too");
     expect(asked.summary).not.toBe("Sent to Testy.");
     expect(a.fake.sent.filter((item) => item.number === PHONE)).toHaveLength(before);
@@ -1980,8 +2093,9 @@ describe("a Sendblue handler throw raises a real landlord alert", () => {
     expect(opened.issue.visitorName).toBe(who);
     expect(opened.summary).toContain(who);
     const asked = await a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "The lobby door is on the left." });
-    expect(asked.confirmation.question).toBe(`Send "The lobby door is on the left." to ${who}?`);
-    expect(asked.summary).toBe(`Send "The lobby door is on the left." to ${who}?`);
+    expect(asked.confirmation.question).toBe(`Send this to ${who}? "The lobby door is on the left."`);
+    expect(asked.summary).toBe(`Send this to ${who}? "The lobby door is on the left."`);
+    expect(asked.visitorWillReceive).toBe("The lobby door is on the left.");
     expect(asked.summary).not.toMatch(/\bA\b/);
     const done = await a.grok("answer_flagged_question", {
       exceptionId: issue.exceptionId,
@@ -2003,8 +2117,9 @@ describe("a Sendblue handler throw raises a real landlord alert", () => {
     const opened = await a.grok("inspect_exception", { exceptionId: issue.exceptionId });
     expect(opened.issue.visitorName).toBe(who);
     const asked = await a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "No pool" });
-    expect(asked.summary).toBe(`Send "No pool" to ${who}? Future visitors who ask the same thing will get it too. Save it?`);
-    expect(asked.confirmation.question).toBe(`Send "No pool" to ${who}? Future visitors who ask the same thing will get it too. Save it?`);
+    expect(asked.visitorWillReceive).toBe("No pool. Let me know if you have any other questions.");
+    expect(asked.summary).toBe(`Send this to ${who}? "${asked.visitorWillReceive}"`);
+    expect(asked.confirmation.question).toBe(asked.summary);
     expect(asked.summary).not.toMatch(/\bA\b/);
     const done = await a.grok("answer_flagged_question", {
       exceptionId: issue.exceptionId,
@@ -2029,7 +2144,7 @@ describe("a Sendblue handler throw raises a real landlord alert", () => {
     const [issue] = (await a.grok("list_exceptions")).exceptions;
     a.visitors.clear();
     const asked = await a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "Call you shortly." });
-    expect(asked.confirmation.question).toBe('Send "Call you shortly." to Testy?');
+    expect(asked.confirmation.question).toBe('Send this to Testy? "Call you shortly."');
     const before = a.fake.sent.filter((item) => item.number === PHONE && item.content === "Call you shortly.").length;
     await expect(
       a.grok("answer_flagged_question", {
@@ -2049,7 +2164,8 @@ describe("a Sendblue handler throw raises a real landlord alert", () => {
     const [issue] = (await a.grok("list_exceptions")).exceptions;
     expect(issue.what).toBe("Question with no approved answer");
     const asked = await a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "There's a gym on the roof." });
-    expect(asked.summary).toContain("Future visitors who ask the same thing will get it too");
+    expect(asked.visitorWillReceive).toBe("There's a gym on the roof. Let me know if you have any other questions.");
+    expect(asked.summary).toBe(`Send this to Testy? "${asked.visitorWillReceive}"`);
     const done = await a.approve("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "There's a gym on the roof." });
     expect(done.savedToSetup).toBe(true);
   });
@@ -2093,7 +2209,7 @@ describe("a Sendblue handler throw raises a real landlord alert", () => {
     await a.text("STOP");
     const b = await liveApp({ root: a.root, clock: a.clock, net: a.net, fake: a.fake, cleanups });
     const asked = await b.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "Call you shortly." });
-    expect(asked.confirmation.question).toBe('Send "Call you shortly." to Testy?');
+    expect(asked.confirmation.question).toBe('Send this to Testy? "Call you shortly."');
     const before = b.fake.sent.filter((item) => item.number === PHONE && item.content === "Call you shortly.").length;
     await expect(
       b.grok("answer_flagged_question", {
