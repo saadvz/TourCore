@@ -296,7 +296,7 @@ describe("restore upload drain", () => {
       "content-length": String(60_000_000),
       "x-tourcore-capability": String(upload.handoff.capability),
     };
-    req.socket = { destroy: () => req.destroy() } as IncomingMessage["socket"];
+    req.socket = { destroy: () => req.destroy() } as unknown as IncomingMessage["socket"];
     const result = await handlePortableRequest(h.inst.backups, "POST", String(upload.handoff.path), req);
     expect(result?.status).toBe(413);
     expect(result?.body).toContain("50 MB");
