@@ -89,7 +89,7 @@ export const SETUP_COMMANDS = {
   }),
   setTourHours: command(TourHoursSchema.partial(), (d, i) => setTourHours(d, i)),
   setVerificationPolicy: command(
-    z.object({ mode: z.enum(["basic-form", "mock", "document-check"]).optional(), reuseForDays: z.number().int().optional() }),
+    z.object({ mode: z.enum(["basic-form", "none"]).optional(), reuseForDays: z.number().int().optional() }),
     (d, i) => setVerificationPolicy(d, i),
   ),
   setServices: command(

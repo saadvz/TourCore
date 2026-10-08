@@ -108,7 +108,7 @@ describe("setup through the tools", () => {
         "Unit 101",
         "  1 bed \u00b7 1 bath \u00b7 $1,950/month \u00b7 available now",
         "  Route: Lobby Entrance \u2192 Unit 101 Door",
-        "Verification: Basic identity form",
+        "Verification: Basic identity form (recommended)",
         "Visitor texting: Practice only (nobody is texted)",
         "Door access: Demo",
         "Visitors can call: not set",

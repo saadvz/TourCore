@@ -1,5 +1,4 @@
 import { isLiveMessaging, TourCoreConfigShape, validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
-import { PRACTICE_ON_LIVE, VERIFICATION_BELOW_FLOOR, verificationFloor } from "./verificationFloor";
 import { usesLocalMessaging } from "../messaging/propertyScope";
 import { visitorSubject } from "../visitor/identity";
 import { FIELD_WORDS, missingProfileFields } from "../config/unitProfile";
@@ -123,9 +122,6 @@ export async function runReadinessCheck(
     }
   }
 
-  if (verificationFloor({ draft: config, installed: options.installed }) === "basic-form" && (config.verificationMode ?? "basic-form") === "mock") {
-    fail("verification", { code: VERIFICATION_BELOW_FLOOR, message: PRACTICE_ON_LIVE, section: "verification" });
-  }
   await probe(fail, "verification", "verification", () => createVerificationProvider(config));
   const messagingChecks = await checkMessaging(config).catch(() => [
     { id: "account" as const, label: "Visitor messaging", ok: false, code: "MESSAGING_CHECK_FAILED", message: "Couldn't check visitor messaging right now." },

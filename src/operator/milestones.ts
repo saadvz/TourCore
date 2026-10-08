@@ -14,7 +14,7 @@ import { applySetupCommand } from "../setup/commands";
 import { canonicalDoor, canonicalUnitName } from "../setup/normalizeDraft";
 import { formatClockTime, type Weekday } from "../core/timezone";
 import { parseDays, parseMinutes, parseTimeOfDay, SAME_DAY_HOURS, tourHoursEndSameDay } from "../setup/parse";
-import { leadBlockers, PRACTICE_REFUSED, VERIFICATION_BELOW_FLOOR, verificationAllowed, verificationFloor, type VerificationLevel } from "../setup/verificationFloor";
+import { NO_FORM_QUESTION } from "../setup/verification";
 import { publishGuards, publishProperty, readinessForProperty, runPracticeTour, visitorTexting } from "./setupFlow";
 import { matchDoor, requireUnit, resolvePropertyId } from "./resolve";
 import { defaultMessagingMode, type OperatorServices } from "./services";
@@ -126,9 +126,6 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       if (i.provider) {
         const chosen = await chooseMessagingProvider(inst, i.provider, { workspace: ctx.services.workspace, propertyId });
         if (chosen.scope === "installation") ctx.resetMessaging?.();
-        const noticeFor = propertyId ?? (chosen.scope === "property" ? ctx.services.workspace.propertyIds()[0] : undefined);
-        const notice = noticeFor ? ctx.services.workspace.takeVerificationNotice(noticeFor) : undefined;
-        if (notice) return envelope(ctx, noticeFor, "done", notice);
       }
       if (i.line) {
         const wanted = toE164(i.line);
@@ -397,41 +394,35 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
     name: "save_settings",
     title: "Save optional settings",
     kind: "change",
-    description: "Saves the optional identity check and tour-update choices, and will not loosen the identity check on a live property.",
+    description: "Saves the basic identity form (recommended) or no form, plus tour-update choices. No form asks first, because anyone who texts could book and get in without saying who they are.",
     input: z.strictObject({
       property: Property,
-      verification: z.enum(["basic-form", "practice", "document-check"]).optional(),
+      verification: z.enum(["basic-form", "none"]).optional(),
       reuseForDays: z.number().int().optional(),
       preset: z.enum(["recommended", "problems-only"]).optional(),
       updates: z.array(z.enum(UPDATE_KINDS)).max(UPDATE_KINDS.length).optional(),
       skipAlerts: z.boolean().optional(),
       connectAlerts: z.boolean().optional(),
+      confirmationCode: z.string().max(20).optional().describe("Only after the operator explicitly said yes to saving no form."),
     }),
     run: async (ctx, i) => {
       const hasProperty = i.property || ctx.services.workspace.propertyIds().length > 0;
       const opened = hasProperty ? open(ctx, i.property) : undefined;
+      if (i.verification === "none" && opened && opened.draft.verificationMode !== "none") {
+        const fingerprint = `none|${opened.draft.verificationMode}`;
+        if (!i.confirmationCode) {
+          const confirmation = ctx.confirmations.issue("no-form", opened.id, fingerprint, NO_FORM_QUESTION);
+          return envelope(ctx, opened.id, "next", NO_FORM_QUESTION, { propertyId: opened.id, confirmation });
+        }
+        ctx.confirmations.redeem(i.confirmationCode, "no-form", opened.id, fingerprint);
+      }
       if (i.verification || i.reuseForDays !== undefined) {
         if (!opened) return envelope(ctx, undefined, "next", "Which property should I save that for?");
-        const requested = (i.verification === "practice" ? "mock" : i.verification) as VerificationLevel | undefined;
-        if (requested) {
-          const saved = ctx.services.workspace.has(opened.id) ? ctx.services.workspace.load(opened.id) : undefined;
-          const floor = verificationFloor({
-            draft: opened.draft,
-            services: servicesOf(ctx),
-            installation: ctx.installation,
-            publishedForDemo: saved?.state.status === "PUBLISHED_FOR_DEMO",
-          });
-          if (!verificationAllowed(floor, requested)) {
-            return envelope(ctx, opened.id, "blocked", PRACTICE_REFUSED, { propertyId: opened.id }, VERIFICATION_BELOW_FLOOR);
-          }
-        }
         const next = applySetupCommand(opened.draft, "setVerificationPolicy", {
-          mode: requested,
+          mode: i.verification,
           reuseForDays: i.reuseForDays,
         });
         ctx.services.workspace.persistEdit(next, ctx.now());
-        const notice = ctx.services.workspace.takeVerificationNotice(opened.id);
-        if (notice) return envelope(ctx, opened.id, "done", notice, { propertyId: opened.id });
       }
       const inst = ctx.installation;
       if (i.skipAlerts) {
@@ -483,9 +474,8 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
         const failed = readiness.result.checks.flatMap((check) =>
           check.codes.map((code, index) => ({ code, message: check.problems[index] ?? "The check found something to fix." })),
         );
-        const verification = failed.find((item) => item.code === VERIFICATION_BELOW_FLOOR);
-        const reason = verification?.message ?? failed[0]?.message ?? "The check found something to fix.";
-        return envelope(ctx, id, "blocked", reason, { propertyId: id, selfTest }, verification ? VERIFICATION_BELOW_FLOOR : "READINESS_FAILED");
+        const reason = failed[0]?.message ?? "The check found something to fix.";
+        return envelope(ctx, id, "blocked", reason, { propertyId: id, selfTest }, "READINESS_FAILED");
       }
       const unitId = i.unit ? requireUnit(draft, i.unit).id : undefined;
       const outcome = await runPracticeTour(services, id, { unitId, now: ctx.now() });
@@ -510,11 +500,9 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       const services = servicesOf(ctx);
       const id = propertyIdOf(ctx, i.property);
       const saved = ws.has(id) ? ws.load(id) : undefined;
-      const blockers = leadBlockers(
-        saved
-          ? [...publishGuards(services, id, saved.config.messagingMode), ...(await ws.publishBlockers(id, ctx.now()))]
-          : [{ code: "NOT_SAVED", message: "Finish the setup answers first." }],
-      );
+      const blockers = saved
+        ? [...publishGuards(services, id, saved.config.messagingMode), ...(await ws.publishBlockers(id, ctx.now()))]
+        : [{ code: "NOT_SAVED", message: "Finish the setup answers first." }];
       if (blockers.length) {
         return envelope(ctx, id, "blocked", blockers[0]!.message, { propertyId: id, blockers: blockers.map((item) => item.message) }, blockers[0]!.code);
       }
@@ -634,7 +622,7 @@ function savedPlaces(names: string[], propertyType: string | undefined): string 
 }
 
 export function settingsSentence(mode: string | undefined, updatesOff: boolean): string {
-  const check = mode === "mock" ? "Visitors will pass the identity check automatically" : mode === "document-check" ? "Visitors will complete a full ID check" : "Visitors will fill out a basic identity form";
+  const check = mode === "none" ? "Visitors won't fill out an identity form" : "Visitors will fill out a basic identity form";
   const updates = updatesOff ? "tour updates are off for now" : "tour updates stay as they are";
   return `${check}, and ${updates}.`;
 }

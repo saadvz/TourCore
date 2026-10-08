@@ -131,11 +131,11 @@ the operator correct it.
    Monday–Friday, 9:00 AM–5:00 PM. Mention the other visible defaults once
    (45-minute tours, a new tour every hour, 10 minutes early) and change any
    they want.
-9. Ask **"How carefully do you want to verify visitors?"** Offer "Basic
-   identity form (free, recommended)" or "Practice verification (everyone
-   passes; for trying things out)". Practice verification only works while
-   texting is in test mode. `set_verification_policy`. Full ID checks
-   aren't available yet; say so if asked.
+9. Ask **"Should visitors fill out a short identity form before their tour? I recommend it, so you know who's coming in."**
+   Options: "Basic identity form (recommended)" and "No form". The basic form is the default.
+   If they pick no form, ask **"Without a form, anyone who texts can book a tour and get in without telling you who they are. Want to go ahead with no form?"**
+   Call `set_verification_policy` with `level: none` only after they say yes, and pass the confirmation code it returns.
+   If they say no, leave the basic identity form.
 10. Texting is automatic: when this Tour Core has visitor texting installed,
     a new property uses it on its own. One touring number covers every property.
     Don't ask "How do you want to text people?" and don't ask for a separate

@@ -14,10 +14,8 @@ describe("milestone landlord copy", () => {
   it("says the identity check and tour updates as one sentence", () => {
     expect(settingsSentence("basic-form", true)).toBe("Visitors will fill out a basic identity form, and tour updates are off for now.");
     expect(settingsSentence("basic-form", false)).toBe("Visitors will fill out a basic identity form, and tour updates stay as they are.");
-    expect(settingsSentence("mock", true)).toBe("Visitors will pass the identity check automatically, and tour updates are off for now.");
-    expect(settingsSentence("mock", false)).toBe("Visitors will pass the identity check automatically, and tour updates stay as they are.");
-    expect(settingsSentence("document-check", true)).toBe("Visitors will complete a full ID check, and tour updates are off for now.");
-    expect(settingsSentence("document-check", false)).toBe("Visitors will complete a full ID check, and tour updates stay as they are.");
+    expect(settingsSentence("none", true)).toBe("Visitors won't fill out an identity form, and tour updates are off for now.");
+    expect(settingsSentence("none", false)).toBe("Visitors won't fill out an identity form, and tour updates stay as they are.");
   });
 
   it("does not say unit twice", () => {

@@ -360,17 +360,28 @@ async function editHours(start: SetupDraft, editing: boolean): Promise<SetupDraf
 async function editVerification(draft: SetupDraft): Promise<SetupDraft> {
   io.say("");
   const mode = await io.choose(
-    "How carefully do you want to verify visitors?",
+    "Should visitors fill out a short identity form before their tour? I recommend it, so you know who's coming in.",
     [
       {
-        label: "Basic identity form",
-        hint: "recommended. Visitors share their legal name, email and phone. It keeps a record of who they say they are, but doesn't prove it",
+        label: "Basic identity form (recommended)",
+        hint: "Visitors share their legal name, email and phone. It keeps a record of who they say they are, but doesn't prove it",
         value: "basic-form" as const,
       },
-      { label: "Practice verification", hint: "everyone passes automatically. Only for trying things out", value: "mock" as const },
+      {
+        label: "No form",
+        hint: "Anyone who texts can book a tour and get in without telling you who they are",
+        value: "none" as const,
+      },
     ],
-    draft.verificationMode === "mock" ? 2 : 1,
+    draft.verificationMode === "none" ? 2 : 1,
   );
+  if (mode === "none" && draft.verificationMode !== "none") {
+    const yes = await io.confirm(
+      "Without a form, anyone who texts can book a tour and get in without telling you who they are. Want to go ahead with no form?",
+      false,
+    );
+    if (!yes) return draft;
+  }
   let next = setVerificationPolicy(draft, { mode });
   io.say("");
   const keep = await io.confirm(

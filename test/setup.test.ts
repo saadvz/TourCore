@@ -85,7 +85,7 @@ describe("guided setup actions", () => {
     expect(section("UNITS")).toEqual(["Unit 101", "Unit 102"]);
     expect(section("ROUTE: UNIT 101")).toEqual(["Lobby Entrance", "Unit 101 Door"]);
     expect(section("ROUTE: UNIT 102")).toEqual(["Lobby Entrance", "Unit 102 Door"]);
-    expect(section("VERIFICATION")?.[0]).toBe("Basic identity form");
+    expect(section("VERIFICATION")?.[0]).toBe("Basic identity form (recommended)");
     expect(section("ALERTS")).toEqual([
       "If a visitor needs help: property team",
       "Visitors can call: not set",
@@ -270,11 +270,12 @@ describe("readiness check", () => {
     expect(result.checks.find((c) => c.id === "property")!.ok).toBe(true);
   });
 
-  it("fails when a chosen option isn't available yet", async () => {
-    const draft = setVerificationPolicy(buildProperty().draft, { mode: "document-check" });
+  it("accepts no form and refuses an older verification value", async () => {
+    const draft = setVerificationPolicy(buildProperty().draft, { mode: "none" });
     const verification = (await runReadinessCheck(draft, { now: MONDAY_MORNING })).checks.find((c) => c.id === "verification")!;
-    expect(verification.ok).toBe(false);
-    expect(verification.problems[0]).toMatch(/Full ID checks aren't available yet/);
+    expect(verification.ok).toBe(true);
+    expect(() => setVerificationPolicy(buildProperty().draft, { mode: "document-check" })).toThrow(/doesn't look right/);
+    expect(() => setVerificationPolicy(buildProperty().draft, { mode: "mock" })).toThrow(/doesn't look right/);
   });
 });
 
@@ -300,12 +301,12 @@ describe("practice tour", () => {
     expect(result.bundle!.accessGrants.some((g) => g.doorId === ids.d102)).toBe(false);
   });
 
-  it("works with practice verification and a single unit", async () => {
+  it("works with no form and a single unit", async () => {
     let draft = createPropertySetup({ address: "5 Elm St, Austin, TX", propertyType: "MULTIFAMILY_HOME" });
     const e = addDoor(draft, { name: "Front Door", kind: "ENTRANCE" });
     const u = addUnit(e.draft, { name: "Loft" });
     const d = addDoor(u.draft, { name: "Loft Door", kind: "UNIT", unitId: u.unit.id });
-    draft = setVerificationPolicy(setRoute(d.draft, u.unit.id, [e.door.id, d.door.id]), { mode: "mock" });
+    draft = setVerificationPolicy(setRoute(d.draft, u.unit.id, [e.door.id, d.door.id]), { mode: "none" });
     expect(draft.property.timezone).toBe("America/Chicago");
     const result = await runDryTour(draft, { now: MONDAY_MORNING });
     expect(result.passed).toBe(true);

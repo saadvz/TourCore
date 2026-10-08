@@ -452,7 +452,7 @@ describe("apartment or condo visitor and landlord copy", () => {
     expect(jane).toContain("Thanks for touring 145 Main Street, Unit 4B, Jane!");
     expect(jane).not.toContain(", Visitor");
 
-    const draft = { ...condoDraft("UNIT_ONLY"), verificationMode: "mock" as const };
+    const draft = { ...condoDraft("UNIT_ONLY"), verificationMode: "none" as const };
     const unnamed = await bookCondo(draft, { name: UNNAMED_VISITOR, phone: "(555) 010-1234" });
     unnamed.clock.set(new Date(unnamed.ready.slotStart!));
     await unnamed.request(draft.units[0]!.doorId);

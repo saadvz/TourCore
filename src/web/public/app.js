@@ -873,8 +873,8 @@ function verificationStep(data) {
     el(
       "div",
       {},
-      el("h1", {}, "How carefully do you want to check visitors?"),
-      el("p", { class: "lead" }, "Every visitor is checked before any door opens for them."),
+      el("h1", {}, "Should visitors fill out a short identity form before their tour? I recommend it, so you know who's coming in."),
+      el("p", { class: "lead" }, "Basic identity form (recommended), or no form. Without a form, anyone who texts can book a tour and get in without telling you who they are."),
       issueList(view.issues.filter((i) => i.fix?.step === "verification"), id, "verification"),
       choices,
       el("div", { class: "card" }, field("How many days can a check be reused?", days, "A visitor who was already checked can book another tour within this many days without being checked again."), errors.node),

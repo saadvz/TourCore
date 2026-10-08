@@ -92,16 +92,16 @@ export const DOOR_KIND_LABELS = { ENTRANCE: "Entrance", UNIT: "Unit door", COMMO
 export const VERIFICATION_OPTIONS = [
   {
     mode: "basic-form" as const,
-    title: "Basic identity form",
+    title: "Basic identity form (recommended)",
     recommended: true,
     explanation:
       "Before the tour, visitors fill out a short form with their legal first and last name, email and phone number. It keeps a record of who they say they are, but it doesn't prove who they are.",
   },
   {
-    mode: "mock" as const,
-    title: "Practice verification",
+    mode: "none" as const,
+    title: "No form",
     recommended: false,
-    explanation: "Everyone passes automatically. Use this only while trying Tour Core out.",
+    explanation: "Without a form, anyone who texts can book a tour and get in without telling you who they are.",
   },
 ];
 
@@ -253,7 +253,7 @@ export function draftView(draft: SetupDraft) {
     {
       step: "verification" as SetupStep,
       title: "Verification",
-      rows: [verification?.title ?? CHOICE_LABELS.verification[draft.verificationMode], `A check can be reused for ${draft.verificationValidForDays} days`],
+      rows: [verification?.title ?? (draft.verificationMode === "none" ? "No form" : "Basic identity form (recommended)"), `A check can be reused for ${draft.verificationValidForDays} days`],
     },
     {
       step: "services" as SetupStep,

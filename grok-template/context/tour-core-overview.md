@@ -126,13 +126,13 @@ property and help you book a tour." Then the unit menu. A single-family home
 says "home" and offers tour days instead of a unit menu. An apartment or condo
 (one unit) names the street plus unit ("145 Main St, Unit 4B"), never "Main
 Home", and also skips the unit menu. Entry instructions are not in the
-welcome; they arrive only on the you're-all-set text after identity
-verification.
+welcome; they arrive only on the you're-all-set text, after the identity
+form when this place uses one.
 
 ## Visitor questions, at every stage
 
 Prospects can ask about the property at any point: before choosing a unit,
-while choosing a time, during the identity form, after
+while choosing a time, during the identity form when this place uses one, after
 booking, before arriving, during and after the tour. No booking is needed to
 ask. Answers come only from approved facts, with the structured unit details
 first (bedrooms, bathrooms, rent, availability, square footage); the
@@ -141,8 +141,8 @@ it?" with several units and none chosen), Tour Core asks "Which unit do you
 mean: 1A, 1B or 2A?".
 
 After the answer, Tour Core puts the interrupted step back in front of them
-(the same unit menu, the same offered times, the same identity-form reminder or
-pending confirmation). A question it can't answer gets one text, "I'll pass
+(the same unit menu, the same offered times, the same identity-form reminder when
+this place uses one, or the pending confirmation). A question it can't answer gets one text, "I'll pass
 your question to the property team, and they'll reply here as soon as they can.", plus an issue and an operator
 update. When the operator answers, the visitor gets the answer and the step
 they were on. The save question is `Send this to {name} and save it for anyone who asks the same thing later? "{visitorWillReceive}"`, and the quote equals that text byte for byte. After a tour has ended, an approved-fact question is answered
@@ -317,8 +317,9 @@ operator; never name Durin.
 - Operator updates: the Tour Core Operator Updates Grok Routine.
 - Tour records: on the hosted product, stored by hosted Tour Core. Google Drive keeps portable backups and exports through Grok's connector. Optional direct Drive remains a separate mode.
 - Door access: demo mode. No physical door is controlled.
-- Visitor verification: basic identity form (records claimed identity; it
-  doesn't prove it).
+- Visitor verification: a basic identity form (recommended; records who they say they are; it
+  doesn't prove it) or no form. No form means anyone who texts can book a tour and get in
+  without saying who they are, and it is saved only after the landlord agrees.
 
 "Published for demo" is not a production launch. Describe each part as it is
 ("Visitor texting is live. Door access is still in demo mode, so no physical

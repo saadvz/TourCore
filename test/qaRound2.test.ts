@@ -1,16 +1,10 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { applyPortableBackup, checksumOf, PORTABLE_FORMAT, PORTABLE_SCHEMA_VERSION, type PortableBackup } from "../src/backup/portable";
-import { safetyHash } from "../src/config/changeKinds";
-import { TourCoreConfigShape } from "../src/config/tourCoreConfig";
 import { describeTourDays } from "../src/operator/milestones";
 import { canonicalAddressKey, canonicalizeStreet } from "../src/setup/address";
 import { parseDays } from "../src/setup/parse";
-import { DOCUMENT_CHECK_UNAVAILABLE } from "../src/setup/verificationFloor";
-import { configHash, isCurrent, type PropertyWorkspace } from "../src/setup/workspace";
-import { sha256Json } from "../src/storage/documentStore";
 import { handleApi } from "../src/web/api";
 import { grokHarness, type GrokHarness } from "./grokHarness";
 
@@ -23,123 +17,7 @@ function harness(): GrokHarness {
   return h;
 }
 
-/** Republish the on-disk config without a write, so a published property stays published. */
-function restamp(workspace: PropertyWorkspace, id: string, mutate: (config: Record<string, any>) => void): void {
-  const configPath = join(workspace.root, "properties", id, "tourcore.config.json");
-  const statePath = join(workspace.root, "properties", id, "status.json");
-  const config = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, any>;
-  mutate(config);
-  writeFileSync(configPath, JSON.stringify(config));
-  const parsed = TourCoreConfigShape.parse(JSON.parse(readFileSync(configPath, "utf8")));
-  const full = configHash(parsed);
-  const safety = safetyHash(parsed);
-  const state = JSON.parse(readFileSync(statePath, "utf8")) as Record<string, any>;
-  const stamp = { passed: true, configHash: full, safetyHash: safety };
-  writeFileSync(
-    statePath,
-    JSON.stringify({
-      ...state,
-      status: "PUBLISHED_FOR_DEMO",
-      configHash: full,
-      safetyHash: safety,
-      publishedAt: state.publishedAt ?? new Date().toISOString(),
-      readiness: { problems: [], checkedAt: state.readiness?.checkedAt ?? new Date().toISOString(), ...stamp },
-      dryTour: { ranAt: state.dryTour?.ranAt ?? new Date().toISOString(), ...stamp },
-    }),
-  );
-}
-
-function localTexting(config: Record<string, any>, verificationMode: string): void {
-  config.messagingMode = "live";
-  config.messagingProvider = "local";
-  config.verificationMode = verificationMode;
-}
-
 describe("QA round 2", () => {
-  it("keeps a published test-texting property published when a full ID check is requested", async () => {
-    const h = harness();
-    const id = await h.publish();
-    restamp(h.workspace, id, (config) => localTexting(config, "basic-form"));
-    const saved = await h.ok("save_settings", { property: id, verification: "document-check" });
-    expect(saved.status).toBe("done");
-    expect(saved.message).toBe(DOCUMENT_CHECK_UNAVAILABLE);
-    const after = h.workspace.load(id);
-    expect(after.config.verificationMode).toBe("basic-form");
-    expect(after.state.status).toBe("PUBLISHED_FOR_DEMO");
-    expect(isCurrent(after.state.readiness, after.state)).toBe(true);
-    const checked = await h.ok("run_checks", { property: id });
-    expect(checked.status).not.toBe("blocked");
-    expect(checked.code).toBeUndefined();
-  });
-
-  it("says the same line when test texting was on practice, and still does not unpublish", async () => {
-    const h = harness();
-    const id = await h.publish();
-    restamp(h.workspace, id, (config) => localTexting(config, "mock"));
-    const saved = await h.ok("save_settings", { property: id, verification: "document-check" });
-    expect(saved.message).toBe(DOCUMENT_CHECK_UNAVAILABLE);
-    const after = h.workspace.load(id);
-    expect(after.config.verificationMode).toBe("basic-form");
-    expect(after.state.status).toBe("PUBLISHED_FOR_DEMO");
-    expect(isCurrent(after.state.readiness, after.state)).toBe(true);
-  });
-
-  it("applies the full ID check rule on the older tool, the setup API, set_services, and backup restore", async () => {
-    const h = harness();
-    const id = await h.publish();
-    restamp(h.workspace, id, (config) => localTexting(config, "basic-form"));
-
-    const older = await h.ok("set_verification_policy", { property: id, level: "document-check" });
-    expect(older.summary).toBe(DOCUMENT_CHECK_UNAVAILABLE);
-    expect(h.workspace.load(id).config.verificationMode).toBe("basic-form");
-    expect(h.workspace.load(id).state.status).toBe("PUBLISHED_FOR_DEMO");
-
-    const api = await handleApi(
-      { ...h.services, workspace: h.workspace, dev: true, now: () => new Date(h.now()) },
-      "POST",
-      `/api/properties/${id}/commands/setVerificationPolicy`,
-      { input: { mode: "document-check" } },
-    );
-    expect(api.status).toBe(200);
-    expect(h.workspace.load(id).config.verificationMode).toBe("basic-form");
-    expect(h.workspace.load(id).state.status).toBe("PUBLISHED_FOR_DEMO");
-
-    restamp(h.workspace, id, (config) => {
-      localTexting(config, "document-check");
-      config.messagingMode = "demo";
-      delete config.messagingProvider;
-    });
-    const switched = await h.ok("set_services", { property: id, messaging: "local" });
-    expect(switched.summary).toBe(DOCUMENT_CHECK_UNAVAILABLE);
-    expect(h.workspace.load(id).config.verificationMode).toBe("basic-form");
-
-    const empty = harness();
-    const body = {
-      property: { id: "prop_qa2" },
-      messagingMode: "live",
-      messagingProvider: "local",
-      verificationMode: "document-check",
-      doors: [],
-      routes: [],
-      units: [],
-    };
-    const file = { path: "properties/prop_qa2/tourcore.config.json", kind: "property" as const, body, sha256: sha256Json(body) };
-    const contents = { files: [file] };
-    const backup: PortableBackup = {
-      format: PORTABLE_FORMAT,
-      schemaVersion: PORTABLE_SCHEMA_VERSION,
-      installationId: "inst_qa_round_2",
-      createdAt: "2026-10-08T12:00:00.000Z",
-      tourCoreVersion: "test",
-      contents,
-      checksum: checksumOf(contents),
-    };
-    const applied = applyPortableBackup(empty.root, backup, false);
-    expect(applied.notes).toContain(DOCUMENT_CHECK_UNAVAILABLE);
-    const stored = JSON.parse(readFileSync(join(empty.root, "properties/prop_qa2/tourcore.config.json"), "utf8")) as { verificationMode: string };
-    expect(stored.verificationMode).toBe("basic-form");
-  });
-
   it("treats St. Marks with and without the period as the same place and keeps the typed display", async () => {
     expect(canonicalAddressKey("12 St. Marks Place, Brooklyn, NY 11217")).toBe(canonicalAddressKey("12 St Marks Place, Brooklyn, NY 11217"));
     expect(canonicalizeStreet("12 St. Marks Place")).toBe("12 St. Marks Place");
@@ -235,10 +113,11 @@ describe("QA round 2", () => {
     expect(h.workspace.openDraft(id).draft.tourHours).toMatchObject({ start: before.start, end: before.end });
   });
 
-  it("documents practice verification, same-day tour hours, and consequential publish", () => {
+  it("documents the identity choices, same-day tour hours, and consequential publish", () => {
     const root = fileURLToPath(new URL("..", import.meta.url));
     const skill = readFileSync(join(root, ".grok/skills/setup-property/SKILL.md"), "utf8").replace(/\s+/g, " ");
-    expect(skill).toContain("Practice verification only works while texting is in test mode.");
+    expect(skill).toContain("Should visitors fill out a short identity form before their tour? I recommend it, so you know who's coming in.");
+    expect(skill).toContain("Without a form, anyone who texts can book a tour and get in without telling you who they are. Want to go ahead with no form?");
     const catalog = readFileSync(join(root, "grok-template/integrations/tour-core-tools.md"), "utf8");
     expect(catalog).toMatch(/\| `publish` \| consequential \|/);
     expect(catalog).toMatch(/\| `save_hours` \| change \|[^\n]*Tours have to end later the same day/);

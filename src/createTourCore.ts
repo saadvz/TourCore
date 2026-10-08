@@ -12,7 +12,8 @@ import { createMessagingProvider, currentMessagingInput, resolveMessagingSelecti
 import { sendblueConfigured } from "./messaging/sendblue/provider";
 import { sendblueRuntime } from "./messaging/sendblue/runtime";
 import { InMemoryStore, type TourCoreStore } from "./storage/Store";
-import { BasicFormVerification, PracticeVerification, type VerificationProvider } from "./verification/basicForm";
+import { presentVerification } from "./setup/verification";
+import { BasicFormVerification, NoFormVerification, type VerificationProvider } from "./verification/basicForm";
 
 /** A configured choice this build can't run yet. Message is operator-facing. */
 export class UnavailableModeError extends Error {
@@ -85,9 +86,9 @@ export async function checkMessaging(config: TourCoreConfig): Promise<MessagingC
 }
 
 export function createVerificationProvider(config: TourCoreConfig): VerificationProvider {
-  if (config.verificationMode === "basic-form") return new BasicFormVerification(config.verificationFormUrl ?? DEMO_VERIFICATION_FORM_URL);
-  if (config.verificationMode === "mock") return new PracticeVerification();
-  throw new UnavailableModeError("VERIFICATION_UNAVAILABLE", "Full ID checks aren't available yet. Choose the basic identity form or practice verification.");
+  const mode = presentVerification(config).verificationMode;
+  if (mode === "none") return new NoFormVerification();
+  return new BasicFormVerification(config.verificationFormUrl ?? DEMO_VERIFICATION_FORM_URL);
 }
 
 export function createDurin(config: TourCoreConfig, clock: Clock, log?: Log): DurinAccessAdapter {

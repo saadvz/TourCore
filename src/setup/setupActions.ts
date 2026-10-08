@@ -18,6 +18,7 @@ import { formatPhone, parsePhone } from "../core/phone";
 import { formatClockTime, friendlyTimeZone, WEEKDAYS, type Weekday } from "../core/timezone";
 import { isApartmentOrCondo, isSingleTourPlace, streetAndUnit, streetLine, unitLabel, visitorSubject } from "../visitor/identity";
 import { inferTimeZone, resolveTimeZone, SAME_DAY_HOURS, slugify, tourHoursEndSameDay } from "./parse";
+import { isLegacyVerification, verificationChoiceLabel } from "./verification";
 import { formatCanonical, parseUsAddress } from "./address";
 import { canonicalDoor, canonicalUnitName } from "./normalizeDraft";
 
@@ -64,9 +65,8 @@ export const SETUP_DEFAULTS = {
 /** What the operator sees instead of mode ids. */
 export const CHOICE_LABELS = {
   verification: {
-    "basic-form": "Basic identity form",
-    mock: "Practice verification (everyone passes)",
-    "document-check": "Full ID check",
+    "basic-form": "Basic identity form (recommended)",
+    none: "No form",
   },
   messaging: { demo: "Demo messaging (texts show on screen)", live: "Real texts to visitors' phones" },
   storage: { memory: "Demo records (kept on this computer)", "google-drive": "Google Drive" },
@@ -690,7 +690,12 @@ export function setVerificationPolicy(
   input: { mode?: SetupDraft["verificationMode"]; reuseForDays?: number },
 ): SetupDraft {
   const next = clone(draft);
-  if (input.mode !== undefined) next.verificationMode = input.mode;
+  if (input.mode !== undefined) {
+    if (isLegacyVerification(input.mode)) {
+      throw new SetupInputError("INPUT_INVALID", "Some of that information is missing or doesn't look right.");
+    }
+    next.verificationMode = input.mode;
+  }
   if (input.reuseForDays !== undefined) {
     if (!Number.isInteger(input.reuseForDays)) throw new SetupInputError("VERIFICATION_REUSE_UNREADABLE", "Please use a whole number of days.");
     next.verificationValidForDays = input.reuseForDays;
@@ -778,7 +783,7 @@ export function reviewSetup(draft: SetupDraft): SetupReview {
       editSection: "verification",
       title: "VERIFICATION",
       lines: [
-        CHOICE_LABELS.verification[draft.verificationMode],
+        verificationChoiceLabel(draft.verificationMode),
         `Checked visitors can book again for ${draft.verificationValidForDays} days without re-checking`,
       ],
     },

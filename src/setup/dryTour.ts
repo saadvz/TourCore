@@ -197,7 +197,7 @@ export async function runDryTour(input: TourCoreConfig, options: DryTourOptions 
       });
     }
     await flush();
-    const identityLabel = config.verificationMode === "mock" ? "Identity check skipped (practice verification)" : "Identity form completed";
+    const identityLabel = config.verificationMode === "none" ? "No identity form" : "Identity form completed";
     await check({ id: "identity", group: "journey", label: identityLabel }, !!reservation.verificationId);
     await check({ id: "ready", group: "journey", label: "Reservation ready" }, reservation.status === "READY");
 

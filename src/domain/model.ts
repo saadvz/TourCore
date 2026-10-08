@@ -92,7 +92,8 @@ export const VerificationSchema = z.object({
   id: z.string(),
   prospectId: z.string(),
   reservationId: z.string(),
-  method: z.enum(["basic-form", "mock"]),
+  /** `mock` remains so older tour records still parse. New checks use `basic-form` or `none`. */
+  method: z.enum(["basic-form", "none", "mock"]),
   status: z.enum(["PASSED", "FAILED"]),
   /** Provider reference (form response id). No ID images are ever stored. */
   reference: z.string(),

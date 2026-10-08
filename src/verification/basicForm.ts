@@ -24,7 +24,7 @@ export type VerificationOutcome =
   | { passed: false; reference: string; reason: string };
 
 export interface VerificationProvider {
-  readonly method: "basic-form" | "mock";
+  readonly method: "basic-form" | "none";
   /** True when no visitor action is needed; Tour Core completes the check itself. */
   readonly automatic: boolean;
   /** What the visitor is told when the check is requested, and whether a form follows. */
@@ -71,20 +71,20 @@ export class BasicFormVerification implements VerificationProvider {
   }
 }
 
-/** Everyone passes. For trying Tour Core out; never for real visitors. */
-export class PracticeVerification implements VerificationProvider {
-  readonly method = "mock" as const;
+/** No identity form. The visit is recorded from the texting opt-in and the visitor is not asked who they are. */
+export class NoFormVerification implements VerificationProvider {
+  readonly method = "none" as const;
   readonly automatic = true;
 
   request(): { body: string; form: boolean } {
-    return { body: "Thanks! This is a practice setup, so there's no ID step. You're checked in automatically.", form: false };
+    return { body: "", form: false };
   }
 
   evaluate(_submission: unknown, prospect: Prospect): VerificationOutcome {
     const [firstName = prospect.name, ...rest] = prospect.name.trim().split(/\s+/);
     return {
       passed: true,
-      reference: `practice_${prospect.id}`,
+      reference: `none_${prospect.id}`,
       claimed: { firstName, lastName: rest.join(" "), email: "", phone: prospect.phone },
     };
   }

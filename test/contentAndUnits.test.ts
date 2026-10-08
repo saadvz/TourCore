@@ -280,7 +280,7 @@ describe("approved content changes keep the property published", () => {
     const hours = clone();
     hours.tourHours.end = "18:00";
     const verification = clone();
-    verification.verificationMode = "mock";
+    verification.verificationMode = "none";
     const route = clone();
     route.routes[0].stops.reverse();
     const help = clone();

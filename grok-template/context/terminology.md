@@ -13,8 +13,8 @@ calls it internally; use it only if the operator asks for technical detail.
 | the unit's door | the unit's own UNIT door |
 | route | the ordered doors a visitor to one unit may use |
 | tour hours | days, first start, last finish, tour length, spacing, early arrival |
-| basic identity form | basic-form verification (claimed identity, not document-checked) |
-| practice verification | mock verification (everyone passes) |
+| basic identity form | basic-form verification (claimed identity). This is the default |
+| no form | `none` (anyone who texts can book without saying who they are; ask before saving) |
 | real texts | live visitor texting |
 | practice texts / on screen | demo messaging |
 | local loopback, QA texts, local test texts | the `local` messaging provider, or a building that opted into it while the installation stays on live texting (`inject_local_sms` / `read_local_outbox`) |

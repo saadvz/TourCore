@@ -1,25 +1,13 @@
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { applyPortableBackup, checksumOf, PORTABLE_FORMAT, PORTABLE_SCHEMA_VERSION, type PortableBackup } from "../src/backup/portable";
 import { safetyHash } from "../src/config/changeKinds";
 import { TourCoreConfigShape } from "../src/config/tourCoreConfig";
 import { interpretByRules, type InterpretContext } from "../src/intent";
-import { sha256Json } from "../src/storage/documentStore";
-import { handleApi } from "../src/web/api";
-import {
-  DOCUMENT_CHECK_UNAVAILABLE,
-  LIVE_TEXTING_IDENTITY,
-  PRACTICE_ON_LIVE,
-  PRACTICE_REFUSED,
-  VERIFICATION_BELOW_FLOOR,
-} from "../src/setup/verificationFloor";
 import { SAME_DAY_HOURS } from "../src/setup/parse";
 import { configHash, isCurrent, type PropertyWorkspace } from "../src/setup/workspace";
 import { grokHarness, type GrokHarness } from "./grokHarness";
-import { installHarness } from "./installHarness";
 
-const CLIENTS = ["grok", "chatgpt", "claude", "mystery-client"] as const;
 const cleanups: Array<() => void> = [];
 afterEach(() => cleanups.splice(0).forEach((run) => run()));
 
@@ -118,149 +106,6 @@ describe("QA round 1", () => {
     expect(chooseUnit("unit 1a", legacy).intent).toMatchObject({ type: "SELECT_UNIT", unitName: "1A" });
   });
 
-  it("raises practice verification when texting goes live, for every client", async () => {
-    const h = harness();
-    h.services.installedMessaging = () => ({ mode: "live", provider: "sendblue", ready: true, requiredForPublish: false });
-    for (const [index, name] of CLIENTS.entries()) {
-      h.ctx.client = { name };
-      const created = await h.ok("create_property_setup", {
-        address: `${10 + index} Maple Street, Teaneck, NJ 07666`,
-        propertyType: "MULTIFAMILY_HOME",
-      });
-      const propertyId = created.setup.propertyId as string;
-      await h.ok("set_services", { property: propertyId, messaging: "demo" });
-      await h.ok("save_settings", { property: propertyId, verification: "practice" });
-      expect(h.workspace.openDraft(propertyId).draft.verificationMode, name).toBe("mock");
-      const switched = await h.ok("set_services", { property: propertyId, messaging: "live" });
-      expect(switched.summary, name).toBe(LIVE_TEXTING_IDENTITY);
-      expect(h.workspace.openDraft(propertyId).draft.verificationMode, name).toBe("basic-form");
-    }
-  });
-
-  it("says the same sentence when set_up_texting turns practice verification into live texting", async () => {
-    const h = installHarness();
-    cleanups.push(h.cleanup);
-    h.inst.files.writeState({ ...h.inst.files.state(), messagingProviderChoice: "sendblue" });
-    h.inst.files.update({ messagingProvider: "SENDBLUE" });
-    for (const [index, name] of CLIENTS.entries()) {
-      h.ctx.client = { name };
-      const created = await h.ok("create_property_setup", {
-        address: `${20 + index} Maple Street, Teaneck, NJ 07666`,
-        propertyType: "MULTIFAMILY_HOME",
-      });
-      const propertyId = created.setup.propertyId as string;
-      await h.ok("save_settings", { property: propertyId, verification: "practice" });
-      const switched = await h.ok("set_up_texting", { property: propertyId, provider: "sendblue" });
-      expect(switched.message, name).toBe(LIVE_TEXTING_IDENTITY);
-      expect(h.workspace.openDraft(propertyId).draft.verificationMode, name).toBe("basic-form");
-    }
-  });
-
-  it("refuses practice verification from the setup API and does not change the saved check", async () => {
-    const h = harness();
-    h.services.installedMessaging = () => ({ mode: "live", provider: "sendblue", ready: true, requiredForPublish: false });
-    const created = await h.ok("create_property_setup", { address: "30 Maple Street, Teaneck, NJ 07666", propertyType: "MULTIFAMILY_HOME" });
-    const propertyId = created.setup.propertyId as string;
-    await h.ok("set_services", { property: propertyId, messaging: "live" });
-    const refused = await handleApi(
-      { ...h.services, workspace: h.workspace, dev: true, now: () => new Date(h.now()) },
-      "POST",
-      `/api/properties/${propertyId}/commands/setVerificationPolicy`,
-      { input: { mode: "mock" } },
-    );
-    expect(refused.status).toBe(400);
-    expect("json" in refused ? refused.json : {}).toMatchObject({ error: { message: PRACTICE_REFUSED, dev: { code: VERIFICATION_BELOW_FLOOR } } });
-    expect(h.workspace.openDraft(propertyId).draft.verificationMode).toBe("basic-form");
-
-    const held = await handleApi(
-      { ...h.services, workspace: h.workspace, dev: true, now: () => new Date(h.now()) },
-      "POST",
-      `/api/properties/${propertyId}/commands/setVerificationPolicy`,
-      { input: { mode: "document-check" } },
-    );
-    expect(held.status).toBe(200);
-    expect(h.workspace.openDraft(propertyId).draft.verificationMode).toBe("basic-form");
-  });
-
-  it("stores the basic identity form when a restored backup would be live texting plus practice", () => {
-    const root = harness().root;
-    const live = { property: { id: "prop_qa" }, messagingMode: "live", verificationMode: "mock", doors: [], routes: [], units: [] };
-    const file = {
-      path: "properties/prop_qa/tourcore.config.json",
-      kind: "property",
-      body: live,
-      sha256: sha256Json(live),
-    };
-    const contents = { files: [file] };
-    const backup: PortableBackup = {
-      format: PORTABLE_FORMAT,
-      schemaVersion: PORTABLE_SCHEMA_VERSION,
-      installationId: "inst_qa_round",
-      createdAt: "2026-10-08T12:00:00.000Z",
-      tourCoreVersion: "test",
-      contents,
-      checksum: checksumOf(contents),
-    };
-    const applied = applyPortableBackup(root, backup, false);
-    expect(applied.notes).toEqual([LIVE_TEXTING_IDENTITY]);
-    const stored = JSON.parse(readFileSync(join(root, "properties/prop_qa/tourcore.config.json"), "utf8")) as { verificationMode: string };
-    expect(stored.verificationMode).toBe("basic-form");
-  });
-
-  it("fails readiness and publish while a live property is still on the practice check, and does not rewrite it", async () => {
-    const h = harness();
-    const id = await h.publish();
-    h.services.installedMessaging = () => ({ mode: "live", provider: "sendblue", ready: false, requiredForPublish: true });
-    restamp(h.workspace, id, (config) => {
-      config.messagingMode = "live";
-      delete config.messagingProvider;
-      config.verificationMode = "mock";
-    });
-    const checked = await h.ok("run_checks", { property: id });
-    expect(checked.status).toBe("blocked");
-    expect(checked.code).toBe(VERIFICATION_BELOW_FLOOR);
-    expect(checked.message).toBe(PRACTICE_ON_LIVE);
-    const published = await h.ok("publish", { property: id });
-    expect(published.code).toBe(VERIFICATION_BELOW_FLOOR);
-    expect(published.message).toBe(PRACTICE_ON_LIVE);
-    const saved = h.workspace.load(id);
-    expect(saved.config.verificationMode).toBe("mock");
-    expect(saved.state.status).toBe("PUBLISHED_FOR_DEMO");
-  });
-
-  it("does not rewrite a stored live practice check on read or on a content edit", async () => {
-    const h = harness();
-    const id = await h.publish();
-    restamp(h.workspace, id, (config) => {
-      config.messagingMode = "live";
-      delete config.messagingProvider;
-      config.verificationMode = "mock";
-    });
-    expect(h.workspace.load(id).config.verificationMode).toBe("mock");
-    expect(h.workspace.load(id).config.verificationMode).toBe("mock");
-    await h.ok("update_property_details", { property: id, facts: ["Street parking only."] });
-    const saved = h.workspace.load(id);
-    expect(saved.config.verificationMode).toBe("mock");
-    expect(saved.state.status).toBe("PUBLISHED_FOR_DEMO");
-  });
-
-  it("keeps a published live property on the basic form when a full ID check is requested", async () => {
-    const h = harness();
-    const id = await h.publish();
-    h.services.installedMessaging = () => ({ mode: "live", provider: "sendblue", ready: true, requiredForPublish: false });
-    restamp(h.workspace, id, (config) => {
-      config.messagingMode = "live";
-      delete config.messagingProvider;
-      config.verificationMode = "basic-form";
-    });
-    const saved = await h.ok("save_settings", { property: id, verification: "document-check" });
-    expect(saved.status).toBe("done");
-    expect(saved.message).toBe(DOCUMENT_CHECK_UNAVAILABLE);
-    const after = h.workspace.load(id);
-    expect(after.config.verificationMode).toBe("basic-form");
-    expect(after.state.status).toBe("PUBLISHED_FOR_DEMO");
-    expect(isCurrent(after.state.readiness, after.state)).toBe(true);
-  });
 
   it("treats a pre-normalization address as the same property for both create and save", async () => {
     const h = harness();

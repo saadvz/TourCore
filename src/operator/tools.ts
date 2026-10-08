@@ -23,7 +23,7 @@ import { parseDays, parseMinutes, parseTimeOfDay, SAME_DAY_HOURS, tourHoursEndSa
 import type { DryTourCheck, DryTourResult } from "../setup/dryTour";
 import type { ReadinessResult } from "../setup/readiness";
 import { condoNextQuestion, createPropertySetup, localTestModeSentence, modeSentence, operatorFacingPropertyName, OperatorTeamCopy, SetupInputError, tourableSpacesQuestion, visitorHelpLines, visitorHelpQuestion, type SetupDraft } from "../setup/setupActions";
-import { leadBlockers, PRACTICE_REFUSED, VERIFICATION_BELOW_FLOOR, verificationAllowed, verificationFloor } from "../setup/verificationFloor";
+import { NO_FORM_QUESTION } from "../setup/verification";
 import { usesLocalMessaging } from "../messaging/propertyScope";
 import { operatorUnitName } from "../visitor/identity";
 import { isHostedRailway } from "../install/deployment";
@@ -294,7 +294,7 @@ const PROOF: Record<string, (c: DryTourCheck) => string | undefined> = {
   inquiry: () => undefined,
   reserved: () => "Booking worked",
   consent: () => "Consent to texts and tour records was recorded",
-  identity: (c) => (c.label.includes("skipped") ? "Verification was skipped (practice verification)" : "Verification worked"),
+  identity: (c) => (c.label === "No identity form" ? "No identity form" : "Verification worked"),
   ready: () => undefined,
   early_arrival: () => "Early arrival was denied",
   entrance: () => "Entrance access was allowed at the right time",
@@ -855,13 +855,14 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const view = draftView(draft);
       return {
         summary: view.reviewCards.find((c) => c.step === "verification")!.rows.join(". "),
-        current: draft.verificationMode === "mock" ? "practice" : draft.verificationMode,
+        current: draft.verificationMode === "none" ? "none" : "basic-form",
         reuseForDays: draft.verificationValidForDays,
-        choices: [
-          { choice: "basic-form", label: "Basic identity form (free)", recommended: true, explanation: view.verification.options[0]!.explanation },
-          { choice: "practice", label: "Practice verification", recommended: false, explanation: view.verification.options[1]!.explanation },
-          { choice: "document-check", label: "Full ID check", available: false, explanation: "Not available yet." },
-        ],
+        choices: view.verification.options.map((option) => ({
+          choice: option.mode,
+          label: option.title,
+          recommended: option.recommended,
+          explanation: option.explanation,
+        })),
       };
     },
   }),
@@ -869,25 +870,21 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "set_verification_policy",
     title: "Set visitor verification",
     kind: "change",
-    description: "Chooses how visitors confirm who they are: the basic identity form (recommended) or practice verification. A full ID check is not stored. Optionally how many days a check can be reused.",
-    input: z.strictObject({ property: Property, level: z.enum(["basic-form", "practice", "document-check"]).optional(), reuseForDays: z.number().int().optional() }),
+    description: "Chooses a basic identity form (recommended) or no form. No form asks first, because anyone who texts could book and get in without saying who they are. Optionally how many days a check can be reused.",
+    input: z.strictObject({
+      property: Property,
+      level: z.enum(["basic-form", "none"]).optional(),
+      reuseForDays: z.number().int().optional(),
+      confirmationCode: Code,
+    }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
-      if (i.level === "practice") {
-        const saved = ctx.services.workspace.has(id) ? ctx.services.workspace.load(id) : undefined;
-        const floor = verificationFloor({
-          draft,
-          services: servicesOf(ctx),
-          installation: ctx.installation,
-          publishedForDemo: saved?.state.status === "PUBLISHED_FOR_DEMO",
-        });
-        if (!verificationAllowed(floor, "mock")) {
-          return { summary: PRACTICE_REFUSED, status: "blocked", code: VERIFICATION_BELOW_FLOOR };
-        }
+      if (i.level === "none" && draft.verificationMode !== "none") {
+        const fingerprint = `none|${draft.verificationMode}`;
+        if (!i.confirmationCode) return needsConfirmation(ctx, "no-form", id, fingerprint, NO_FORM_QUESTION);
+        ctx.confirmations.redeem(i.confirmationCode, "no-form", id, fingerprint);
       }
-      const state = edit(ctx, id, draft, "setVerificationPolicy", { mode: i.level === "practice" ? "mock" : i.level, reuseForDays: i.reuseForDays });
-      const notice = ctx.services.workspace.takeVerificationNotice(id);
-      if (notice) return { summary: notice, ...state };
+      const state = edit(ctx, id, draft, "setVerificationPolicy", { mode: i.level, reuseForDays: i.reuseForDays });
       return { summary: setupSnapshot(ctx, id).verification.join(". "), ...state };
     },
   }),
@@ -934,8 +931,6 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const messagingMode = i.messaging === "sendblue" ? "live" : i.messaging === "local" ? "live" : i.messaging;
       const messagingProvider = i.messaging === "local" ? "local" : undefined;
       const state = edit(ctx, id, draft, "setServices", { messagingMode, ...(messagingProvider ? { messagingProvider } : {}) });
-      const notice = ctx.services.workspace.takeVerificationNotice(id);
-      if (notice) return { summary: notice, ...state };
       return { summary: subsystemLines(ctx, id, ctx.services.workspace.openDraft(id).draft).sentence, ...state };
     },
   }),
@@ -1024,15 +1019,13 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const services = servicesOf(ctx);
       const id = resolvePropertyId(ws, i.property);
       const blocked = (list: PublishBlocker[]) => {
-        const verification = list.find((b) => b.code === "VERIFICATION_BELOW_FLOOR");
         const texting = list.find((b) => b.code.startsWith("TEXTING_"));
         return {
           published: false,
           status: "blocked",
-          summary: verification ? verification.message : texting ? texting.message : "It can't be published yet.",
-          ...(verification ? { code: verification.code } : {}),
+          summary: texting ? texting.message : "It can't be published yet.",
           blockers: list.map((b) => b.message),
-          ...(texting && !verification
+          ...(texting
             ? {
                 remediation:
                   texting.code === "TEXTING_NOT_CONNECTED"
@@ -1043,11 +1036,9 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         };
       };
       const saved = ws.has(id) ? ws.load(id) : undefined;
-      const blockers = leadBlockers(
-        saved
-          ? [...publishGuards(services, id, saved.config.messagingMode), ...(await ws.publishBlockers(id, ctx.now()))]
-          : [{ code: "NOT_SAVED", message: "Finish the setup answers first." }],
-      );
+      const blockers = saved
+        ? [...publishGuards(services, id, saved.config.messagingMode), ...(await ws.publishBlockers(id, ctx.now()))]
+        : [{ code: "NOT_SAVED", message: "Finish the setup answers first." }];
       if (blockers.length) return blocked(blockers);
       const { config, state } = saved!;
       const modes = subsystemLines(ctx, id, config);
@@ -1408,7 +1399,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Set up a one-time tour",
     kind: "consequential",
     description:
-      "Sets up a tour for a visitor who asked for it, including someone who hasn't texted in yet. Use this only when the operator is booking a time they asked for. Pass their phone, the unit, and the time in everyday words. Optional name. Does not change the property's regular hours or which times are offered. First call returns one yes/no question that names the visitor, unit, day and time, says only say yes if they asked, and ends Book it? — never Continue?. \"This is a one-off. Your regular tour hours stay the same\" only when the time is outside tour hours; inside hours still says they get a text to confirm. Call again with confirmationCode only after that explicit yes. A time outside normal touring hours returns a stronger question; call again with confirmationCode and acknowledgeOutsideHours true only after they agree. Tour Core texts first: Reply YES to confirm, NO to cancel, or STOP to opt out. YES continues to the booking confirmation and the identity form. STOP opts out and sends only the standard opt-out confirmation. NO cancels and tells the team. A leftover menu number (digits only, such as 1 or 2) only re-prompts Reply YES to confirm, NO to cancel, or STOP to opt out — no team issue, no alert. A real question before they confirm is flagged for the team (the hold stays pending). If they never reply in time, the slot is released; unless they opted out they get exactly one text that the time was released, then no further texts. A leftover conversation still choosing a day or time, with nothing booked, does not block — the one-off replaces it; later replies (including a leftover menu number) go to the new confirmation, not the old menu. Refused if the property isn't published with live visitor texting, the number already said STOP, the time is in the past, it overlaps another tour (the running tour and every future or held booking, checked before asking and before booking; a failed book does not leave a leftover choosing-a-time entry), or they already have a tour in progress (TOUR_EXISTS: a booked or held reservation, a pending one-off waiting for YES or NO, an active access window, or a paused tour). Tell the operator the refusal word for word — no tool names. Booked or held: They already have a booked tour. I can move it or call it off. Then use reschedule_tour to move it or revoke_tour_access to call it off. Pending one-off: They already have a tour waiting for them to reply YES or NO. I can call it off, or we can wait for them to answer. Then use revoke_tour_access to call it off, or wait. Open tour window: They're on a tour right now. I can call it off. Then use revoke_tour_access. On hold: Their tour is on hold. I can resume it or call it off. Then use clear_operator_hold to resume it or revoke_tour_access to call it off. Keep the STOP / opt-out refusal.",
+      "Sets up a tour for a visitor who asked for it, including someone who hasn't texted in yet. Use this only when the operator is booking a time they asked for. Pass their phone, the unit, and the time in everyday words. Optional name. Does not change the property's regular hours or which times are offered. First call returns one yes/no question that names the visitor, unit, day and time, says only say yes if they asked, and ends Book it? — never Continue?. \"This is a one-off. Your regular tour hours stay the same\" only when the time is outside tour hours; inside hours still says they get a text to confirm. Call again with confirmationCode only after that explicit yes. A time outside normal touring hours returns a stronger question; call again with confirmationCode and acknowledgeOutsideHours true only after they agree. Tour Core texts first: Reply YES to confirm, NO to cancel, or STOP to opt out. YES continues to the booking confirmation, then the identity form when this place uses one. STOP opts out and sends only the standard opt-out confirmation. NO cancels and tells the team. A leftover menu number (digits only, such as 1 or 2) only re-prompts Reply YES to confirm, NO to cancel, or STOP to opt out — no team issue, no alert. A real question before they confirm is flagged for the team (the hold stays pending). If they never reply in time, the slot is released; unless they opted out they get exactly one text that the time was released, then no further texts. A leftover conversation still choosing a day or time, with nothing booked, does not block — the one-off replaces it; later replies (including a leftover menu number) go to the new confirmation, not the old menu. Refused if the property isn't published with live visitor texting, the number already said STOP, the time is in the past, it overlaps another tour (the running tour and every future or held booking, checked before asking and before booking; a failed book does not leave a leftover choosing-a-time entry), or they already have a tour in progress (TOUR_EXISTS: a booked or held reservation, a pending one-off waiting for YES or NO, an active access window, or a paused tour). Tell the operator the refusal word for word — no tool names. Booked or held: They already have a booked tour. I can move it or call it off. Then use reschedule_tour to move it or revoke_tour_access to call it off. Pending one-off: They already have a tour waiting for them to reply YES or NO. I can call it off, or we can wait for them to answer. Then use revoke_tour_access to call it off, or wait. Open tour window: They're on a tour right now. I can call it off. Then use revoke_tour_access. On hold: Their tour is on hold. I can resume it or call it off. Then use clear_operator_hold to resume it or revoke_tour_access to call it off. Keep the STOP / opt-out refusal.",
     input: z.strictObject({
       property: Property,
       phone: z.string().min(7).max(30).describe("The visitor's phone number."),
