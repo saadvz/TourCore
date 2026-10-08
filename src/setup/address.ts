@@ -21,8 +21,6 @@ const STATE_NAMES: Record<string, string> = {
   alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA", colorado: "CO", connecticut: "CT", delaware: "DE", florida: "FL", georgia: "GA", hawaii: "HI", idaho: "ID", illinois: "IL", indiana: "IN", iowa: "IA", kansas: "KS", kentucky: "KY", louisiana: "LA", maine: "ME", maryland: "MD", massachusetts: "MA", michigan: "MI", minnesota: "MN", mississippi: "MS", missouri: "MO", montana: "MT", nebraska: "NE", nevada: "NV", "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY", "north carolina": "NC", "north dakota": "ND", ohio: "OH", oklahoma: "OK", oregon: "OR", pennsylvania: "PA", "rhode island": "RI", "south carolina": "SC", "south dakota": "SD", tennessee: "TN", texas: "TX", utah: "UT", vermont: "VT", virginia: "VA", washington: "WA", "west virginia": "WV", wisconsin: "WI", wyoming: "WY", "district of columbia": "DC",
 };
 
-const SUFFIX = new Set(["ave", "avenue", "st", "street", "rd", "road", "ln", "lane", "dr", "drive", "blvd", "boulevard", "way", "ct", "court", "pl", "place", "ter", "terrace", "cir", "circle", "pkwy", "parkway"]);
-
 /**
  * The address already stored for a property, read back through the same
  * formatter. A legacy "Ave" becomes "Avenue". This is the line to show when
@@ -172,16 +170,20 @@ export function parseUsAddress(raw: string): { address: CanonicalAddress; missin
     if (stateOf(lastTwo) && tokens.length >= 3) {
       state = stateOf(lastTwo)!;
       tokens.splice(-2, 2);
-    } else if (stateOf(last)) {
-      state = stateOf(last)!;
+    } else if (trailingState(last, postalCode)) {
+      state = trailingState(last, postalCode)!;
       tokens.pop();
     }
-    if (tokens.length >= 2) {
-      city = tokens[tokens.length - 1]!;
-      street = tokens.slice(0, -1).join(" ");
-      if (SUFFIX.has(city.toLowerCase())) {
-        city = "";
-      }
+    const split = takeUnit(tokens);
+    unit = split.unit;
+    const place = split.place;
+    // A trailing street type ("Avenue", "Ave S") is part of the street.
+    // The last word is a city only when it is not that type.
+    if (place.length >= 2 && !endsAsStreet(place)) {
+      city = place[place.length - 1]!;
+      street = place.slice(0, -1).join(" ");
+    } else if (place.length >= 2 || split.unit) {
+      street = place.join(" ");
     }
   }
 
@@ -306,6 +308,48 @@ function isUnitClause(word: string): boolean {
   const bare = bareWord(word);
   if (/^(apt|apartment|suite|unit|#)$/.test(bare)) return true;
   return /^#\d/.test(word.replace(/\./g, ""));
+}
+
+/** A unit number: it has a digit, or it is a short code such as "PH". */
+function looksLikeUnitId(word: string): boolean {
+  const bare = bareWord(word);
+  if (!bare) return false;
+  return /\d/.test(bare) || bare.length <= 2;
+}
+
+/**
+ * Pulls "Unit 4B" or "#4B" out of a comma-less line. Words after the unit
+ * stay, so "302 Main Street Unit 4B Hackensack" can still name the city.
+ */
+function takeUnit(tokens: string[]): { place: string[]; unit: string } {
+  const at = tokens.findIndex((word, index) => index > 0 && isUnitClause(word));
+  if (at < 0) return { place: tokens, unit: "" };
+  const glued = /^#\d/.test(tokens[at]!.replace(/\./g, ""));
+  let end = at + 1;
+  if (!glued) {
+    while (end < tokens.length && looksLikeUnitId(tokens[end]!)) end++;
+    if (end === at + 1) return { place: tokens, unit: "" };
+  }
+  return { place: [...tokens.slice(0, at), ...tokens.slice(end)], unit: tokens.slice(at, end).join(" ") };
+}
+
+/**
+ * A trailing state word. "Ct" is also Court, so title case with no ZIP stays
+ * on the street ("3 Birch Ct"). All caps, or a ZIP, is the state ("CT", "Ct 06801").
+ */
+function trailingState(token: string, postalCode: string | undefined): string | undefined {
+  const found = stateOf(token);
+  if (!found) return undefined;
+  if (expandSuffix(token) && !postalCode && token !== token.toUpperCase()) return undefined;
+  return found;
+}
+
+/** The last word is a street type, or a direction after one ("Ave S"). */
+function endsAsStreet(tokens: string[]): boolean {
+  if (tokens.length < 2) return false;
+  const last = tokens[tokens.length - 1]!;
+  if (expandSuffix(last)) return true;
+  return DIRECTIONAL.has(bareWord(last)) && expandSuffix(tokens[tokens.length - 2]!) !== undefined;
 }
 
 /**

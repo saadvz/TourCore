@@ -73,4 +73,55 @@ describe("address canonicalization", () => {
     expect(parsed?.address).toMatchObject({ street: "", city: "", state: "NJ", postalCode: "07601" });
     expect(parsed?.missing).toContain("street");
   });
+
+  it("keeps a street suffix when the line is only a street", () => {
+    expect(parseUsAddress("144 Hillside Avenue")?.address).toMatchObject({
+      street: "144 Hillside Avenue",
+      city: "",
+      state: "",
+    });
+    expect(parseUsAddress("18 Maple St")?.address.street).toBe("18 Maple Street");
+    expect(parseUsAddress("9 Oak Rd")?.address.street).toBe("9 Oak Road");
+    expect(parseUsAddress("4 Pine Dr")?.address.street).toBe("4 Pine Drive");
+    expect(parseUsAddress("7 Cedar Ln")?.address.street).toBe("7 Cedar Lane");
+    expect(parseUsAddress("3 Birch Ct")?.address).toMatchObject({ street: "3 Birch Court", city: "", state: "" });
+    expect(parseUsAddress("3 Birch CT 06801")?.address.state).toBe("CT");
+    expect(parseUsAddress("11 Elm Place")?.address.street).toBe("11 Elm Place");
+    expect(parseUsAddress("6 Park Boulevard")?.address.street).toBe("6 Park Boulevard");
+    expect(parseUsAddress("8 River Way")?.address.street).toBe("8 River Way");
+    expect(parseUsAddress("2 Garden Terrace")?.address.street).toBe("2 Garden Terrace");
+    expect(parseUsAddress("5 Lake Circle")?.address.street).toBe("5 Lake Circle");
+    expect(parseUsAddress("12 Oak Ave S")?.address).toMatchObject({ street: "12 Oak Avenue S", city: "" });
+    expect(parseUsAddress("302 Main Street Unit 4B")?.address).toMatchObject({
+      street: "302 Main Street",
+      unit: "Unit 4B",
+      city: "",
+    });
+  });
+
+  it("still splits a comma-less city from the street", () => {
+    expect(parseUsAddress("144 Hillside Avenue Tenafly NJ 07670")?.address).toEqual({
+      street: "144 Hillside Avenue",
+      city: "Tenafly",
+      state: "NJ",
+      postalCode: "07670",
+      formatted: "144 Hillside Avenue, Tenafly, NJ 07670",
+    });
+    expect(addressConfirmQuestion(parseUsAddress("144 Hillside Avenue Tenafly NJ 07670")?.address)).toBe(
+      "Did I get that right: 144 Hillside Avenue, Tenafly, NJ 07670?",
+    );
+    expect(parseUsAddress("Main St Hackensack NJ 07601")?.address).toMatchObject({
+      street: "Main Street",
+      city: "Hackensack",
+      state: "NJ",
+      postalCode: "07601",
+    });
+    expect(parseUsAddress("146 Hillside Avenue, Tenafly, NJ 07670")?.address).toMatchObject({
+      street: "146 Hillside Avenue",
+      city: "Tenafly",
+      state: "NJ",
+      postalCode: "07670",
+    });
+    expect(parseUsAddress("302 Main Street, Hackensack, NJ 07601")?.address.formatted).toBe("302 Main Street, Hackensack, NJ 07601");
+  });
 });

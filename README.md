@@ -645,7 +645,7 @@ npm run check:storage         # hosted volume verdict for TOURCORE_HOME; does no
 ### Property identity and type
 
 The street address is the property's identity and what visitors hear ("Welcome to the self-guided tour for 144
-Hillside Ave! ..."). Setup asks for one missing part at a time and keeps every part already given: "What's the street address?", then "What state is it in?" before any city question. A city given while the state is still missing is kept, and the reply is "Got it. What state is that in?". "What city should I use?" comes only after the street and state are saved, then "What ZIP code should I use?" when the ZIP is missing. The one-line read-back comes last: street, then ", Unit X" when the address has a unit, then ", City, ST ZIP" ("Did I get that right: 300 Main Street, Unit 4B, Hackensack, NJ 07601?"). A read-back is never shown with a blank city. A property or building name is used only if the operator gives one; Grok never invents one.
+Hillside Ave! ..."). A street typed on its own keeps its full street, including a suffix such as Avenue or a unit. Setup asks for one missing part at a time and keeps every part already given: "What's the street address?", then "What state is it in?" before any city question. A city given while the state is still missing is kept, and the reply is "Got it. What state is that in?". "What city should I use?" comes only after the street and state are saved, then "What ZIP code should I use?" when the ZIP is missing. The one-line read-back comes last: street, then ", Unit X" when the address has a unit, then ", City, ST ZIP" ("Did I get that right: 300 Main Street, Unit 4B, Hackensack, NJ 07601?"). A read-back is never shown with a blank city. A property or building name is used only if the operator gives one; Grok never invents one.
 Right after the address, Grok asks "What type of property is this?" (single-family home; multifamily — a duplex
 or small building you own; apartment or condo — one unit). Whole-building apartment ownership is out of scope.
 The next questions follow the type: a single-family home is one space, "Main Home" by default, with its front
@@ -730,7 +730,7 @@ The actions:
 
 | Action | What it does |
 | --- | --- |
-| `createPropertySetup` / `setPropertyDetails` | Property name, address and time zone (inferred from the address, always confirmed) |
+| `createPropertySetup` / `setPropertyDetails` | Property name, address and time zone (guessed from the address, and guessed again when the state is filled in or changed, unless the operator already set one) |
 | `addUnit` / `renameUnit` / `setUnitDetails` / `removeUnit` | Tourable units, their description and approved facts. A rename can also rename the unit's door, but only if it still has the suggested name. For an apartment or condo, rename applies the same unit casing as add (`4b` → `Unit 4B`, `loft` → `Unit Loft`) and refreshes the street-plus-unit nickname and matching unit door. `update_unit` confirms with that stored name (`Updated Unit Loft.`), not the raw input |
 | `addDoor` / `renameDoor` / `removeDoor` | Entrances, unit doors, and hallway or shared doors (ids are generated and can't collide) |
 | `setRoute` | Ordered doors for one unit, plus optional directions |

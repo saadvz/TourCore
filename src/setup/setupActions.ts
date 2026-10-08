@@ -182,6 +182,22 @@ function addressSoFar(draft: SetupDraft): CanonicalAddress | undefined {
  * when street, city and state are all there, so a read-back is never a
  * blank city. `display` is the line to show until then.
  */
+/** A line inferTimeZone can read, even when the public address is still only the street. */
+function zoneLine(parts: CanonicalAddress | undefined): string {
+  const state = parts?.state.trim() ?? "";
+  if (!state) return "";
+  const zip = parts?.postalCode?.trim();
+  const region = [state, zip].filter(Boolean).join(" ");
+  const head = [parts?.street.trim(), parts?.city.trim()].filter(Boolean).join(", ");
+  return head ? `${head}, ${region}` : region;
+}
+
+/** Replaces a guessed zone from the state now on the address. An operator-set zone is left alone. */
+function applyGuessedTimeZone(property: SetupDraft["property"]): void {
+  const guess = inferTimeZone(zoneLine(property.canonicalAddress));
+  if (guess.basis === "address") property.timezone = guess.timezone;
+}
+
 function storeAddress(draft: SetupDraft, parts: CanonicalAddress, display?: string): void {
   draft.property.canonicalAddress = parts;
   if (parts.street.trim() && parts.city.trim() && parts.state.trim()) draft.property.address = parts.formatted;
@@ -209,7 +225,8 @@ export function createPropertySetup(input: {
   const parsed = parseUsAddress(input.address);
   const address = parsed?.address.formatted || requireName(input.address, "ADDRESS_MISSING", "Please enter the property's address.");
   const displayName = input.name?.trim() || undefined;
-  const timezone = input.timezone ? requireTimeZone(input.timezone) : inferTimeZone(address).timezone;
+  const explicitZone = input.timezone ? requireTimeZone(input.timezone) : undefined;
+  const timezone = explicitZone ?? inferTimeZone(address).timezone;
   const propertyType = input.propertyType ? requirePropertyType(input.propertyType) : undefined;
   const zip = parsed?.address.postalCode;
   const confirmed = !!zip && !!propertyType && !parsed!.missing.some((part) => part !== "postalCode");
@@ -224,6 +241,7 @@ export function createPropertySetup(input: {
       ...(displayName ? { displayName } : {}),
       ...(propertyType ? { propertyType } : {}),
       timezone,
+      ...(explicitZone ? { timezoneConfirmed: true } : {}),
       facts: [],
     }),
     operator: { name: SETUP_DEFAULTS.operatorName, contact: SETUP_DEFAULTS.operatorContact },
@@ -263,6 +281,7 @@ export function setPropertyDetails(
   },
 ): SetupDraft {
   let next = clone(draft);
+  const stateBefore = next.property.canonicalAddress?.state.trim() ?? "";
   // A setup saved before names and addresses were kept apart: an earlier name that isn't the address was the operator's.
   if (next.property.displayName === undefined && next.property.name.trim() && next.property.name.trim() !== next.property.address.trim()) next.property.displayName = next.property.name.trim();
   if (input.name !== undefined) next.property.displayName = input.name.trim() || undefined;
@@ -321,7 +340,13 @@ export function setPropertyDetails(
     next.property.addressConfirmed = true;
   }
   if (input.propertyType !== undefined) next.property.propertyType = requirePropertyType(input.propertyType);
-  if (input.timezone !== undefined) next.property.timezone = requireTimeZone(input.timezone);
+  if (input.timezone !== undefined) {
+    next.property.timezone = requireTimeZone(input.timezone);
+    next.property.timezoneConfirmed = true;
+  } else if (!next.property.timezoneConfirmed) {
+    const stateAfter = next.property.canonicalAddress?.state.trim() ?? "";
+    if (stateAfter && stateAfter !== stateBefore) applyGuessedTimeZone(next.property);
+  }
   if (input.facts !== undefined) next.property.facts = cleanFacts(input.facts);
   if (input.buildingAccess !== undefined) next = setBuildingAccess(next, input.buildingAccess);
   if (input.entryInstructions !== undefined || input.skipEntryInstructions) {

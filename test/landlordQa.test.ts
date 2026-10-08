@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { timeOnDay } from "../src/core/timezone";
 import { tourListSummary } from "../src/operator/dayToDay";
 import { persistSession } from "../src/operator/services";
+import { setTourHours } from "../src/setup/setupActions";
 import { VisitorDemoSession } from "../src/visitor";
 import { grokHarness, type GrokHarness } from "./grokHarness";
 import { installHarness, SB_KEY, SB_SECRET, type InstallHarness } from "./installHarness";
@@ -129,6 +130,98 @@ describe("address parts, one at a time", () => {
   });
 });
 
+describe("street suffix stays on the street", () => {
+  it("reads 144 Hillside Avenue back in full after the city, state, and ZIP", async () => {
+    const h = use(grokHarness());
+    const created = await h.ok("create_property_setup", { address: "144 Hillside Avenue" });
+    const id = created.setup.propertyId as string;
+    expect(created.setup.name).toBe("144 Hillside Avenue");
+    expect(h.workspace.openDraft(id).draft.property.canonicalAddress).toMatchObject({
+      street: "144 Hillside Avenue",
+      city: "",
+      state: "",
+    });
+
+    const city = await h.ok("update_property_details", { city: "Tenafly" });
+    expect(city.nextQuestion).toBe("Got it. What state is that in?");
+    const state = await h.ok("update_property_details", { state: "NJ" });
+    expect(state.nextQuestion).toBe("What ZIP code should I use?");
+    const zip = await h.ok("update_property_details", { postalCode: "07670" });
+    expect(zip.nextQuestion).toBe("Did I get that right: 144 Hillside Avenue, Tenafly, NJ 07670?");
+    expect(zip.setup.name).toBe("144 Hillside Avenue");
+    expect(h.workspace.openDraft(id).draft.property.canonicalAddress).toMatchObject({
+      street: "144 Hillside Avenue",
+      city: "Tenafly",
+      state: "NJ",
+      postalCode: "07670",
+    });
+    expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/New_York");
+    expect(JSON.stringify(zip)).not.toMatch(/UTC|GMT\+00/);
+  });
+
+  it("reads a one-line address with no commas back with the street and the city apart", async () => {
+    const h = use(grokHarness());
+    const created = await h.ok("create_property_setup", { address: "144 Hillside Avenue Tenafly NJ 07670" });
+    expect(created.nextQuestion).toBe("Did I get that right: 144 Hillside Avenue, Tenafly, NJ 07670?");
+    expect(created.setup.name).toBe("144 Hillside Avenue");
+    expect(h.workspace.openDraft(created.setup.propertyId).draft.property.canonicalAddress).toMatchObject({
+      street: "144 Hillside Avenue",
+      city: "Tenafly",
+      state: "NJ",
+      postalCode: "07670",
+    });
+  });
+
+  it("keeps comma addresses and a comma-less city", async () => {
+    const h = use(grokHarness());
+    const comma = await h.ok("create_property_setup", { address: "146 Hillside Avenue, Tenafly, NJ 07670" });
+    expect(comma.nextQuestion).toBe("Did I get that right: 146 Hillside Avenue, Tenafly, NJ 07670?");
+    const main = await h.ok("create_property_setup", { address: "302 Main Street, Hackensack, NJ 07601" });
+    expect(main.nextQuestion).toBe("Did I get that right: 302 Main Street, Hackensack, NJ 07601?");
+    const oneLine = await h.ok("create_property_setup", { address: "Main St Hackensack NJ 07601" });
+    expect(oneLine.nextQuestion).toBe("Did I get that right: Main Street, Hackensack, NJ 07601?");
+    expect(oneLine.setup.name).toBe("Main Street");
+  });
+});
+
+describe("guessed time zone follows the state", () => {
+  it("replaces a computer guess when the state is saved later", async () => {
+    const h = use(grokHarness());
+    const created = await h.ok("create_property_setup", { address: "144 Hillside Avenue" });
+    const id = created.setup.propertyId as string;
+    await h.ok("update_property_details", { state: "NJ" });
+    expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/New_York");
+    expect(h.workspace.openDraft(id).draft.property.timezoneConfirmed).toBeUndefined();
+    const zip = await h.ok("update_property_details", { city: "Tenafly", postalCode: "07670" });
+    expect(zip.nextQuestion).toBe("Did I get that right: 144 Hillside Avenue, Tenafly, NJ 07670?");
+    expect(JSON.stringify(zip)).not.toMatch(/UTC|GMT\+00/);
+    expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/New_York");
+  });
+
+  it("re-guesses when the state changes", async () => {
+    const h = use(grokHarness());
+    const created = await h.ok("create_property_setup", { address: "144 Hillside Avenue, Tenafly, NJ 07670" });
+    const id = created.setup.propertyId as string;
+    expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/New_York");
+    await h.ok("update_property_details", { state: "CA" });
+    expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/Los_Angeles");
+  });
+
+  it("does not replace a time zone the operator set", async () => {
+    const h = use(grokHarness());
+    const created = await h.ok("create_property_setup", { address: "144 Hillside Avenue", timezone: "America/Chicago" });
+    const id = created.setup.propertyId as string;
+    expect(h.workspace.openDraft(id).draft.property.timezoneConfirmed).toBe(true);
+    await h.ok("update_property_details", { city: "Tenafly" });
+    await h.ok("update_property_details", { state: "NJ" });
+    const zip = await h.ok("update_property_details", { postalCode: "07670" });
+    expect(zip.nextQuestion).toBe("Did I get that right: 144 Hillside Avenue, Tenafly, NJ 07670?");
+    expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/Chicago");
+    await h.ok("update_property_details", { state: "CA", timezone: "America/Denver" });
+    expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/Denver");
+  });
+});
+
 describe("next step stays on the property the call was about", () => {
   it("does not return another property's condo read-back", async () => {
     const h = readyInstall();
@@ -148,6 +241,50 @@ describe("next step stays on the property the call was about", () => {
     expect(JSON.stringify(asked)).not.toContain("Did I get that right");
     const aboutHillside = await h.ok("get_state", { propertyId: hillside });
     expect(JSON.stringify(aboutHillside)).not.toContain("300 Main Street");
+  });
+
+  it("does not return a draft property's hours step when a published tour is called off", async () => {
+    const h = readyInstall();
+    const published = await h.publish();
+    await h.touringVisitor(published, { name: "Pat Smith" });
+    const listed = await h.ok("get_tours", { property: published });
+    const tourRef = listed.active[0].tourRef as string;
+
+    const created = await h.ok("create_property_setup", {
+      address: "16 Oak Avenue, Teaneck, NJ 07666",
+      propertyType: "MULTIFAMILY_HOME",
+    });
+    const draftId = created.setup.propertyId as string;
+    await h.ok("update_property_details", { property: draftId, confirmAddress: true, skipVisitorHelp: true });
+    await h.ok("add_unit", { property: draftId, name: "Unit A" });
+    await h.ok("add_unit", { property: draftId, name: "Unit B" });
+    await h.ok("set_unit_details", {
+      property: draftId,
+      details: "Unit A is 2 bed 1 bath for $2,200, available now. Unit B is 1 bed 1 bath for $1,950, available now.",
+    });
+    await h.ok("add_door", { property: draftId, name: "Front Door", kind: "entrance" });
+    await h.ok("set_route", { property: draftId, unit: "Unit A", doors: ["Front Door", "Unit A Door"] });
+    await h.ok("set_route", { property: draftId, unit: "Unit B", doors: ["Front Door", "Unit B Door"] });
+    h.workspace.saveDraft(
+      setTourHours(h.workspace.openDraft(draftId).draft, {
+        days: ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"],
+        start: "08:00",
+        end: "23:59",
+      }),
+    );
+    const draftState = await h.ok("get_state", { propertyId: draftId });
+    const draftHours = "Tours run every day, 8 AM to 11:59 PM. Want to change that?";
+    expect(draftState.nextStep).toMatchObject({ tool: "save_hours", say: draftHours });
+
+    const asked = await h.ok("cancel_tour", { tourRef, reason: "They asked to stop" });
+    const done = await h.ok("cancel_tour", { tourRef, reason: "They asked to stop", confirmationCode: asked.confirmation.code });
+    for (const result of [asked, done]) {
+      const text = JSON.stringify(result);
+      expect(text).not.toContain(draftHours);
+      expect(text).not.toContain("11:59");
+      expect(text).not.toContain("16 Oak Avenue");
+      expect(result.nextStep?.tool).not.toBe("save_hours");
+    }
   });
 });
 

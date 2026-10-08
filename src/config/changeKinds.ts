@@ -28,7 +28,7 @@ export function structuralView(config: TourCoreConfig): unknown {
   return {
     ...c,
     operator: { name: c.operator.name, contact: c.operator.contact },
-    property: { ...c.property, facts: undefined, entryInstructionsDecided: undefined },
+    property: { ...c.property, facts: undefined, entryInstructionsDecided: undefined, timezoneConfirmed: undefined },
     units: c.units.map((u) => ({ ...u, summary: undefined, facts: undefined, profile: undefined, entryInstructions: undefined })),
     routes: c.routes.map((r) => ({ ...r, directions: undefined, stops: r.stops.map((s) => ({ doorId: s.doorId })) })),
   };

@@ -115,6 +115,11 @@ export const PropertySchema = z.object({
   entryInstructionsDecided: z.boolean().optional(),
   /** IANA zone, e.g. America/New_York. All tour hours are read in this zone. */
   timezone: z.string(),
+  /**
+   * The operator set this time zone themselves. Absent when it was only guessed,
+   * so a later state can replace the guess. Never stored as false.
+   */
+  timezoneConfirmed: z.boolean().optional(),
   facts: ApprovedFacts,
 });
 
