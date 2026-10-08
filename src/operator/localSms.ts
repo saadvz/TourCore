@@ -85,7 +85,7 @@ export async function injectLocalSms(
   const id = input.id?.trim() || randomUUID();
   const result = await handleProviderWebhook(
     provider,
-    { rawBody: Buffer.from(JSON.stringify({ id, from, to, text, ...(input.hasMedia ? { hasMedia: true } : {}), ...(input.listingProperty ? { listingProperty: input.listingProperty } : {}) }), "utf8"), headers: { "content-type": "application/json" } },
+    { rawBody: Buffer.from(JSON.stringify({ id, from, to, text, ...(input.hasMedia ? { hasMedia: true } : {}), ...(input.listingProperty ? { listingProperty: input.listingProperty } : {}), ...(input.property ? { property: propertyId } : {}) }), "utf8"), headers: { "content-type": "application/json" } },
     { ledger: ctx.messagingLedger ?? new MessagingLedger(), receive, now: ctx.now },
   );
   if (result.status !== 200 || result.body.ok === false) {

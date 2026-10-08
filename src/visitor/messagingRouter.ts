@@ -23,6 +23,7 @@ import { effectiveEnv } from "../install/settings";
 import type { ResolvedConsentMode } from "../messaging/consentPolicy";
 import { isLeavingTour } from "../core/overstayCopy";
 import { normalize, stripFiller } from "../intent/normalize";
+import { claimVisitorSms } from "../sms/templates";
 import { handleVisitorText, isGreeting, startsNewBookingAfterClose } from "./conversation";
 import { pickerMiss, placeAliases, propertyPickerText, propertyShortName, resolveNamedPlace, STREET_MISS, menuChoice, type PlaceCandidate } from "./portfolioPick";
 import { OverstayScheduler } from "./overstayScheduler";
@@ -64,6 +65,10 @@ function pickedOpener(message: InboundMessage, original: string): InboundMessage
 export const RESTORE_TROUBLE = "I'm having trouble restoring your tour. I've alerted the property team.";
 export const HANDLER_SNAG_ALERTED = "Sorry, I hit a snag with that. I've let the property team know, and they'll reply here as soon as they can.";
 export const HANDLER_SNAG_RETRY = "Sorry, I hit a snag with that. Could you text me again in a few minutes?";
+
+function prospectText(to: string, body: string) {
+  return { to, audience: "PROSPECT" as const, body, templateId: claimVisitorSms(body) };
+}
 
 /** Live sessions and saved bundles share each tour's real effective end, including extensions. */
 export function occupiedWindowsFromRecords(
@@ -185,6 +190,8 @@ export class MessagingConversations {
       return undefined;
     }
     const phone = normalizePhone(message.from);
+    const pinned = message.pinnedProperty?.trim();
+    if (pinned && ids.includes(pinned)) return { propertyId: pinned, endpoint, message };
     const bound = await this.boundProperty(ids, phone, message.text);
     if (bound) return { propertyId: bound, endpoint, message };
     const pending = this.pendingPick(phone, endpoint.address);
@@ -320,7 +327,8 @@ export class MessagingConversations {
   }
 
   private async sendLine(propertyId: string | undefined, phone: string, body: string): Promise<void> {
-    await timeOutboundSend(() => this.deps.transport(propertyId).send({ to: phone, audience: "PROSPECT", body })).catch(() => undefined);
+    const templateId = claimVisitorSms(body);
+    await timeOutboundSend(() => this.deps.transport(propertyId).send({ to: phone, audience: "PROSPECT", body, templateId })).catch(() => undefined);
   }
 
   private pendingPick(phone: string, line: string): PendingPick | undefined {
@@ -387,7 +395,7 @@ export class MessagingConversations {
       const { config, state } = ws.load(propertyId);
       const ready = state.readiness?.passed && isCurrent(state.readiness, state);
       if (!ready) {
-        await transport.send({ to: phone, audience: "PROSPECT", body: `Thanks for reaching out to ${config.property.name}. Self-guided tours by text aren't available right now. Please contact the property team.` }).catch(() => undefined);
+        await transport.send(prospectText(phone, `Thanks for reaching out to ${config.property.name}. Self-guided tours by text aren't available right now. Please contact the property team.`)).catch(() => undefined);
         return {};
       }
       const tourId = ws.newVisitorTourId(propertyId, this.deps.now?.() ?? new Date(), "text");
@@ -424,7 +432,7 @@ export class MessagingConversations {
       await handleVisitorText(session, phone, message.text, meta, this.deps.interpreter);
     } catch (err) {
       if (err instanceof StorageUnavailableError) {
-        await transport.send({ to: phone, audience: "PROSPECT", body: "I couldn't save that, so nothing was booked or changed. Please try again in a little while." }).catch(() => undefined);
+        await transport.send(prospectText(phone, "I couldn't save that, so nothing was booked or changed. Please try again in a little while.")).catch(() => undefined);
         return { correlationId: session.id };
       }
       this.deps.log?.(`Handler error for visitor ${phone}: ${err instanceof Error ? err.message : "unknown error"}`);
@@ -454,7 +462,7 @@ export class MessagingConversations {
       const outboundAfter = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").length;
       if (outboundAfter === outboundBefore) {
         const fallback = alertRecorded ? HANDLER_SNAG_ALERTED : HANDLER_SNAG_RETRY;
-        await transport.send({ to: phone, audience: "PROSPECT", body: fallback }).catch(() => undefined);
+        await transport.send(prospectText(phone, fallback)).catch(() => undefined);
       }
       return { correlationId: session.id };
     }
@@ -697,11 +705,11 @@ export class MessagingConversations {
         updatedAt: now.toISOString(),
         optedOutAt: now.toISOString(),
       });
-      await transport.send({ to: phone, audience: "PROSPECT", body: smsStopAck() }).catch(() => undefined);
+      await transport.send(prospectText(phone, smsStopAck())).catch(() => undefined);
       return;
     }
     if (keyword === "help") {
-      await transport.send({ to: phone, audience: "PROSPECT", body: smsHelpBody() }).catch(() => undefined);
+      await transport.send(prospectText(phone, smsHelpBody())).catch(() => undefined);
       return;
     }
     if (keyword === "start") {
@@ -711,13 +719,7 @@ export class MessagingConversations {
     if (this.removedUnreachable(propertyId, phone)) return;
     if (!shouldReplyRemoved(this.deps.workspace.root, propertyId, phone, now)) return;
     const { config } = this.deps.workspace.load(propertyId);
-    await transport
-      .send({
-        to: phone,
-        audience: "PROSPECT",
-        body: removedPropertyVisitorText(config.property.address, config.operator.visitorContact),
-      })
-      .catch(() => undefined);
+    await transport.send(prospectText(phone, removedPropertyVisitorText(config.property.address, config.operator.visitorContact))).catch(() => undefined);
     markRemovedReply(this.deps.workspace.root, propertyId, phone, now);
   }
 
@@ -740,7 +742,7 @@ export class MessagingConversations {
     const transport = this.deps.transport(snapshot.propertyId);
     const optedOut = this.isOptedOut(snapshot.propertyId, snapshot.visitorPhone);
     if (!snapshot.recovery?.visitorTold) {
-      if (!optedOut) await transport.send({ to: snapshot.visitorPhone, audience: "PROSPECT", body: RESTORE_TROUBLE }).catch(() => undefined);
+      if (!optedOut) await transport.send(prospectText(snapshot.visitorPhone, RESTORE_TROUBLE)).catch(() => undefined);
       const { config } = this.deps.workspace.load(snapshot.propertyId);
       await transport
         .send({
@@ -754,7 +756,7 @@ export class MessagingConversations {
       this.persistence.put(told);
       this.broken.set(key, told);
     } else if (!optedOut) {
-      await transport.send({ to: snapshot.visitorPhone, audience: "PROSPECT", body: `${RESTORE_TROUBLE} Text HI to start a new tour.` }).catch(() => undefined);
+      await transport.send(prospectText(snapshot.visitorPhone, `${RESTORE_TROUBLE} Text HI to start a new tour.`)).catch(() => undefined);
     }
     return false;
   }

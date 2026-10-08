@@ -15,6 +15,8 @@ export interface LocalOutboxBubble {
   body: string;
   sentAt: string;
   audience: "PROSPECT" | "OPERATOR";
+  /** Visitor template id. Present on prospect texts that went through the registry. */
+  templateId?: string;
 }
 
 interface StoredOutbox {

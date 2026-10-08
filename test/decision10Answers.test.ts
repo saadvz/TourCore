@@ -80,7 +80,7 @@ describe("decision 10 flagged answers", () => {
     await a.text("1");
     const fairReplies = await a.text("Are families with children allowed to live here?");
     const other = await a.text("Is there a gym?");
-    expect(fairReplies).toEqual([UNKNOWN_ANSWER]);
+    expect(fairReplies).toEqual(["Good question for the property team. I've passed it along, and they'll text you back here."]);
     expect(other).toEqual([UNKNOWN_ANSWER]);
     expect(fairReplies.join("\n")).not.toContain("I'll check with the property team and get back to you");
     const issues = (await a.grok("list_exceptions")).exceptions as Array<{ exceptionId: string; summary: string; proposeDraft?: boolean }>;

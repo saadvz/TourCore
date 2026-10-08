@@ -18,6 +18,18 @@ const STATE_NAMES: Record<string, string> = {
 
 const SUFFIX = new Set(["ave", "avenue", "st", "street", "rd", "road", "ln", "lane", "dr", "drive", "blvd", "boulevard", "way", "ct", "court", "pl", "place", "ter", "terrace", "cir", "circle", "pkwy", "parkway"]);
 
+/**
+ * The address already stored for a property, read back through the same
+ * formatter. A legacy "Ave" becomes "Avenue". This is the line to show when
+ * someone types the address again, not the raw characters they just typed.
+ */
+export function savedFullAddress(property: { address: string; canonicalAddress?: { formatted?: string } }): string {
+  const stored = property.canonicalAddress?.formatted?.trim() || property.address;
+  const parsed = parseUsAddress(stored);
+  if (parsed?.address.street && parsed.address.city && parsed.address.state) return parsed.address.formatted;
+  return property.address;
+}
+
 export function formatCanonical(parts: { street: string; city: string; state: string; postalCode?: string }): string {
   const place = parts.postalCode ? `${parts.city}, ${parts.state} ${parts.postalCode}` : `${parts.city}, ${parts.state}`;
   return `${parts.street}, ${place}`;

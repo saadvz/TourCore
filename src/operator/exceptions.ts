@@ -663,7 +663,7 @@ export async function answerFlaggedQuestion(
     if (!tour?.live) {
       throw new SetupInputError("VISITOR_UNREACHABLE", sendOnlyUnreachableLine(plan.who));
     }
-    await tour.live.reply(fact);
+    await tour.live.reply(fact, undefined, { templateId: "approved-answer" });
     await persistSession(services, tour.live);
     if (await sendOnlyMissedVisitor(tour.live, fact)) {
       throw new SetupInputError("VISITOR_UNREACHABLE", sendOnlyUnreachableLine(plan.who));
@@ -708,7 +708,7 @@ export async function answerFlaggedQuestion(
     if (optedOut) {
       sendMissed = "opted-out";
     } else {
-      await tour.live.reply(visitorMessage);
+      await tour.live.reply(visitorMessage, undefined, { templateId: "approved-answer-closing" });
       await resumeStep(tour.live);
       await persistSession(services, tour.live);
       if (await sendOnlyMissedVisitor(tour.live, visitorMessage)) {

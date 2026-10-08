@@ -142,7 +142,7 @@ export function semanticIssues(cfg: TourCoreConfig): ConfigIssue[] {
   if (start < end && lengthOk && end - start < th.tourLengthMinutes) {
     add("hours", "TOUR_HOURS_TOO_SHORT", `The tour hours are too short to fit a ${th.tourLengthMinutes}-minute tour.`);
   }
-  const visit = th.tourLengthMinutes + th.earlyArrivalMinutes;
+  const visit = accessVisitMinutes(th);
   if (th.slotEveryMinutes > 0 && th.slotEveryMinutes < visit) {
     add(
       "hours",
@@ -153,10 +153,31 @@ export function semanticIssues(cfg: TourCoreConfig): ConfigIssue[] {
 
   // Verification
   if (!within(cfg.verificationValidForDays, POLICY_LIMITS.verificationValidForDays)) {
-    add("verification", "VERIFICATION_REUSE_INVALID", "Pick a number of days from 1 to 365.");
+    add("verification", "VERIFICATION_REUSE_INVALID", REUSE_DAYS_RANGE);
   }
 
   return issues;
+}
+
+export function accessVisitMinutes(hours: { tourLengthMinutes: number; earlyArrivalMinutes: number }): number {
+  return hours.tourLengthMinutes + hours.earlyArrivalMinutes;
+}
+
+/** Same overlap readiness rejects, in the save-time sentence. Nothing should be written when this is set. */
+export function tourSpacingRefusal(hours: { slotEveryMinutes: number; tourLengthMinutes: number; earlyArrivalMinutes: number }): string | undefined {
+  const visit = accessVisitMinutes(hours);
+  if (hours.slotEveryMinutes > 0 && hours.slotEveryMinutes < visit) {
+    return `Tours every ${hours.slotEveryMinutes} minutes don't leave room for ${visit}-minute visits. Should tours start every ${visit} minutes, or should visits be shorter?`;
+  }
+  return undefined;
+}
+
+export const REUSE_DAYS_RANGE = "Pick a number of days from 1 to 365.";
+
+export function reuseDaysRefusal(days: number | undefined): string | undefined {
+  if (days === undefined) return undefined;
+  if (!Number.isInteger(days) || days < 1 || days > 365) return REUSE_DAYS_RANGE;
+  return undefined;
 }
 
 function duplicates(ids: string[]): string[] {

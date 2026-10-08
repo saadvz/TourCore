@@ -44,8 +44,7 @@ The quoted half equals that text byte for byte. A handler-failed reply saves
 nothing, so it stays `Send this to {who}? "{reply}"`. A fair-housing flag has
 `proposeDraft` false. The refusal is `This one touches on fair housing, so I won't draft an answer. Reply to them yourself, then mark it handled.`
 Next steps are `This one touches on fair housing, so I won't draft an answer. Reply to them yourself.`
-and `Mark it handled once you've replied.` The visitor still gets the ordinary
-holding reply and never hears fair housing.
+and `Mark it handled once you've replied.` After that no-draft flag is saved, the visitor gets `Good question for the property team. I've passed it along, and they'll text you back here.` They never hear fair housing. If the flag cannot be saved, that reply is not sent. They get `I can't open the doors for you right now. I've let the property team know, and they'll text you here shortly.` and the team is alerted.
 
 Tour updates: ask only "Want me to text you when someone books, starts, or
 finishes a tour, and ping you the moment something needs you?" One alert

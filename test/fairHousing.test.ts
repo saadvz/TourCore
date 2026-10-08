@@ -8,8 +8,10 @@ import { hillsideConfig, liveApp, PHONE, type LiveApp } from "./liveApp";
 
 /**
  * Fair-housing questions are caught before rent, keywords, and saved answers.
- * The visitor still gets the ordinary holding reply. No draft is proposed.
+ * After the no-draft flag is saved, the visitor gets the held reply. No draft is proposed.
  */
+
+const HELD = "Good question for the property team. I've passed it along, and they'll text you back here.";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => cleanups.splice(0).forEach((c) => c()));
@@ -147,7 +149,7 @@ describe("fair-housing questions on a live tour", () => {
     for (const text of HOLDING) {
       const replies = await a.text(text);
       sent.push(replies.join("\n"));
-      expect(replies[0]).toBe(UNKNOWN_ANSWER);
+      expect(replies[0]).toBe(HELD);
       expect(replies.join("\n")).not.toContain("rents for");
       expect(replies.join("\n")).not.toContain("Kids are allowed to live in the unit.");
     }
@@ -183,7 +185,7 @@ describe("fair-housing questions on a live tour", () => {
     expect(monthly.join("\n")).toContain(RENT);
     expect(monthly.join("\n")).not.toContain(UNKNOWN_ANSWER);
     expect((await a.grok("list_exceptions")).exceptions).toHaveLength(3);
-    expect(sent).toEqual([UNKNOWN_ANSWER, UNKNOWN_ANSWER, UNKNOWN_ANSWER]);
+    expect(sent).toEqual([HELD, HELD, HELD]);
   });
 
   it("quotes the exact visitor text in the approve question", async () => {
@@ -261,7 +263,7 @@ describe("fair-housing questions on a live tour", () => {
     for (const text of flagged) {
       const replies = await a.text(text);
       sent.push(replies.join("\n"));
-      expect(replies[0], text).toBe(UNKNOWN_ANSWER);
+      expect(replies[0], text).toBe(HELD);
       expect(replies.join("\n"), text).not.toContain("No pets allowed.");
       expect(replies.join("\n"), text).not.toMatch(/fair housing/i);
     }
@@ -276,7 +278,7 @@ describe("fair-housing questions on a live tour", () => {
       expect(flag, text).toBeTruthy();
       expect(flag!.proposeDraft, text).toBe(false);
     }
-    expect(sent).toEqual(flagged.map(() => UNKNOWN_ANSWER));
+    expect(sent).toEqual(flagged.map(() => HELD));
 
     const pets = await a.text("Do you allow pets?");
     const dogs = await a.text("Do you allow dogs?");
@@ -338,7 +340,7 @@ async function saveNoPets(a: LiveApp) {
 async function expectFairHousingHold(a: LiveApp, texts: readonly string[]) {
   for (const text of texts) {
     const replies = await a.text(text);
-    expect(replies[0], text).toBe(UNKNOWN_ANSWER);
+    expect(replies[0], text).toBe(HELD);
     expect(replies.join("\n"), text).not.toContain("No pets allowed.");
     expect(replies.join("\n"), text).not.toMatch(/fair housing/i);
   }

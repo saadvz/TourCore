@@ -1,7 +1,7 @@
 import { isLiveMessaging } from "../config/tourCoreConfig";
 import { moveLaterBookingInstead, moveLaterBookingOutsideHours, movedLaterBookingSummary, tourInProgressCannotMove } from "../core/availabilityCopy";
 import { intervalsOverlap, parseFlexibleTime, placementOf, relativeWhen, tourInterval, touringHoursLabel } from "../core/customSlot";
-import { isUnconfirmedHold, REQUEST_ALREADY_HANDLED, requestAlreadyExpiredLine, requestProposePassedLine, requestTimePassedLine, SLOT_ALREADY_PASSED, TourCoreError, WITHDRAWN_FOR_REGULAR_BOOKING } from "../core/TourCore";
+import { REQUEST_ALREADY_HANDLED, requestAlreadyExpiredLine, requestProposePassedLine, requestTimePassedLine, SLOT_ALREADY_PASSED, TourCoreError, visitorBookingConfirmed, WITHDRAWN_FOR_REGULAR_BOOKING } from "../core/TourCore";
 import { formatDay, formatTime, formatWeekday, localDateOf, timeOnDay } from "../core/timezone";
 import { formatPhone, parsePhone } from "../core/phone";
 import type { Reservation, TourTimeRequest } from "../domain/model";
@@ -65,9 +65,9 @@ function operatorDeclineSummary(name: string, reservation: { slotStart?: string;
   if (!reservation?.slotStart) return "Declined.";
   const time = formatTime(new Date(reservation.slotStart), tz);
   const day = formatDay(new Date(reservation.slotStart), tz);
-  return isUnconfirmedHold(reservation)
-    ? `Declined. ${name} is still booked for ${time} on ${day}.`
-    : `Declined. ${name}'s ${time} tour on ${day} is still confirmed.`;
+  return visitorBookingConfirmed(reservation)
+    ? `Declined. ${name}'s ${time} tour on ${day} is still confirmed.`
+    : `Declined. ${name} is still booked for ${time} on ${day}.`;
 }
 
 function alreadyExpiredResult(visitorWho: string, request: TourTimeRequest) {

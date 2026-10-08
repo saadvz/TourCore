@@ -13,6 +13,8 @@ import { LOCAL_TEST_TEXTING, SetupInputError, createPropertySetup, localTestMode
 import { applySetupCommand } from "../setup/commands";
 import { canonicalDoor, canonicalUnitName } from "../setup/normalizeDraft";
 import { formatClockTime, type Weekday } from "../core/timezone";
+import { reuseDaysRefusal, tourSpacingRefusal } from "../config/validateConfig";
+import { savedFullAddress } from "../setup/address";
 import { parseDays, parseMinutes, parseTimeOfDay, SAME_DAY_HOURS, tourHoursEndSameDay } from "../setup/parse";
 import { NO_FORM_QUESTION } from "../setup/verification";
 import { publishGuards, publishProperty, readinessForProperty, runPracticeTour, visitorTexting } from "./setupFlow";
@@ -194,7 +196,8 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
         if (!i.address) return envelope(ctx, undefined, "next", "What's the street address?");
         const existing = ws.findByAddress(i.address);
         if (existing) {
-          return { ...envelope(ctx, existing, "done", `${i.address} is already set up. I'll keep working on that one.`), status: "already-exists" };
+          const address = savedFullAddress(ws.openDraft(existing).draft.property);
+          return { ...envelope(ctx, existing, "done", `${address} is already set up. I'll keep working on that one.`), status: "already-exists" };
         }
         const messagingMode = defaultMessagingMode(servicesOf(ctx).installedMessaging?.());
         const draft = createPropertySetup({
@@ -384,6 +387,13 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       const start = typeof parsed.start === "string" ? parsed.start : draft.tourHours.start;
       const end = typeof parsed.end === "string" ? parsed.end : draft.tourHours.end;
       if (!tourHoursEndSameDay(start, end)) return envelope(ctx, id, "blocked", SAME_DAY_HOURS, { propertyId: id });
+      const spacing = tourSpacingRefusal({
+        ...draft.tourHours,
+        ...(typeof parsed.slotEveryMinutes === "number" ? { slotEveryMinutes: parsed.slotEveryMinutes } : {}),
+        ...(typeof parsed.tourLengthMinutes === "number" ? { tourLengthMinutes: parsed.tourLengthMinutes } : {}),
+        ...(typeof parsed.earlyArrivalMinutes === "number" ? { earlyArrivalMinutes: parsed.earlyArrivalMinutes } : {}),
+      });
+      if (spacing) return envelope(ctx, id, "blocked", spacing, { propertyId: id });
       const next = applySetupCommand(draft, "setTourHours", parsed);
       ctx.services.workspace.persistEdit(next, ctx.now());
       const hours = ctx.services.workspace.openDraft(id).draft.tourHours;
@@ -418,6 +428,8 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       }
       if (i.verification || i.reuseForDays !== undefined) {
         if (!opened) return envelope(ctx, undefined, "next", "Which property should I save that for?");
+        const reuse = reuseDaysRefusal(i.reuseForDays);
+        if (reuse) return envelope(ctx, opened.id, "blocked", reuse, { propertyId: opened.id });
         const next = applySetupCommand(opened.draft, "setVerificationPolicy", {
           mode: i.verification,
           reuseForDays: i.reuseForDays,
@@ -589,6 +601,11 @@ function spokenClock(hhmm: string): string {
   return formatClockTime(hhmm).replace(":00", "");
 }
 
+/** Hours-step sentence from the hours that are actually saved. */
+export function hoursStepSay(hours: { days: readonly Weekday[]; start: string; end: string }): string {
+  return `Tours run ${describeTourDays(hours.days)}, ${spokenClock(hours.start)} to ${spokenClock(hours.end)}. Want to change that?`;
+}
+
 function joinList(parts: string[]): string {
   if (parts.length <= 1) return parts[0] ?? "";
   if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
@@ -608,7 +625,7 @@ function walkingRouteLine(propertyType: string | undefined, matched: { unit: str
   }
   const line = matched.map((route) => `${route.unit}: ${routeThrough(route.doors)}`).join(". ");
   if (preview) return line ? `I have: ${line}. Nothing was saved.` : "Nothing was saved.";
-  return line || "Saved the doors and the walking route.";
+  return line ? `${line}.` : "Saved the doors and the walking route.";
 }
 
 function landlordPlace(name: string, propertyType: string | undefined): string {

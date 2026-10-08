@@ -1,5 +1,5 @@
 import { PROPERTY_TYPE_LABELS, validateConfig } from "../config/tourCoreConfig";
-import { nextProfileQuestion } from "../config/unitProfile";
+import { hoursStepSay } from "../operator/milestones";
 import { renderPlaybook, spokenAsk } from "../playbooks/compose";
 import { milestoneToolFor } from "../playbooks/milestoneTool";
 import type { ReportedClient } from "../playbooks/select";
@@ -8,7 +8,7 @@ import { SHARED_STEPS, type StepId } from "../playbooks/shared";
 import { visitorTexting } from "../operator/setupFlow";
 import type { OperatorServices } from "../operator/services";
 import { draftView } from "../setup/presenters";
-import { SetupInputError, condoNextQuestion, operatorFacingPropertyName, visitorHelpQuestion, type SetupDraft } from "../setup/setupActions";
+import { SetupInputError, operatorFacingPropertyName, visitorHelpQuestion, type SetupDraft } from "../setup/setupActions";
 import { isCurrent, statusLabel } from "../setup/workspace";
 import { operatorUnitName } from "../visitor/identity";
 import { isHostedRailway } from "./deployment";
@@ -81,7 +81,7 @@ function pictureOf(services: OperatorServices, id: string | undefined): Picture 
   const typeReady = !!draft.property.propertyType;
   const issues = validateConfig(draft);
   const unitIssues = issues.some((issue) => issue.section === "units" || issue.section === "routes");
-  const unitsReady = addressReady && typeReady && draft.units.length > 0 && !condoNextQuestion(draft) && !nextProfileQuestion(draft.units) && !unitIssues;
+  const unitsReady = addressReady && typeReady && draft.units.length > 0 && !unitIssues;
   const helpOpen = !!visitorHelpQuestion(draft);
   const otherIssues = issues.some((issue) => issue.section !== "units" && issue.section !== "routes");
   return {
@@ -129,7 +129,6 @@ function stepFor(action: string, picture: Picture): StepId {
     if (!picture.typeReady) return "property-type";
     if (!picture.unitsReady) {
       if (picture.draft?.property.propertyType === "SINGLE_FAMILY" && picture.draft.units.length === 0) return "units-home";
-      if (picture.draft && picture.draft.units.length > 0 && (condoNextQuestion(picture.draft) || nextProfileQuestion(picture.draft.units))) return "units-details";
       if (picture.draft && picture.draft.units.length > 0) return "units-route";
       return "units-which";
     }
@@ -293,6 +292,18 @@ function propertyList(services: OperatorServices) {
     });
 }
 
+const RAW_SLOT = /\{[A-Za-z][A-Za-z0-9]*\}/;
+
+/** The line for this step, with saved details filled in. Never leaves a raw slot. */
+function sayFor(client: ReportedClient | undefined, step: StepId, draft: SetupDraft | undefined): string {
+  let say = spokenAsk(client, step);
+  if (step === "hours" && draft) say = hoursStepSay(draft.tourHours);
+  if (step === "property-confirm" && draft?.property.address.trim()) say = `Did I get that right: ${draft.property.address}?`;
+  if (RAW_SLOT.test(say) && draft) say = say.replaceAll("{address}", draft.property.address);
+  if (RAW_SLOT.test(say)) throw new SetupInputError("UNFILLED_SLOT", "That line still has a blank.");
+  return say;
+}
+
 /** One read-only picture. Does not persist texting choices or probe the disk. */
 export function readState(input: StateReadInput, propertyId?: string): Record<string, unknown> {
   const inst = input.installation;
@@ -315,7 +326,8 @@ export function readState(input: StateReadInput, propertyId?: string): Record<st
   const current = milestones.find((milestone) => milestone.status === "next") ?? null;
   const next = presentNext(status);
   const step = focusStep(milestones, next.action, picture);
-  const playbook = renderPlaybook(input.client, step);
+  const say = sayFor(input.client, step, picture.draft);
+  const playbook = renderPlaybook(input.client, step, say);
   const copy = SHARED_STEPS[step];
   const setup = setupOf(input.services, inst, picture, status);
   return {
@@ -334,7 +346,7 @@ export function readState(input: StateReadInput, propertyId?: string): Record<st
     storage: { summary: storageLine(inst) },
     milestones,
     currentMilestone: current?.id ?? null,
-    nextStep: { action: next.action, component: next.component, tool: milestoneToolFor(step), say: spokenAsk(input.client, step), doneLooksLike: copy.done },
+    nextStep: { action: next.action, component: next.component, tool: milestoneToolFor(step), say, doneLooksLike: copy.done },
     playbook: { id: playbook.id, version: playbook.version, mode: playbook.mode, step: playbook.step, text: playbook.text },
   };
 }

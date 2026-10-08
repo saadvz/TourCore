@@ -1,0 +1,344 @@
+/**
+ * Every visitor-facing SMS lives here. Outbound prospect texts must match one
+ * id before they are sent. `{slot}` is filled first. A channel prompt (yes/no,
+ * a numbered menu, or a form link) may be appended after the body; those
+ * prompts are listed too and are not a second message.
+ *
+ * Text supplied by the landlord or by a model may reach a visitor only as
+ * `approved-answer` or `approved-answer-closing`, and only from
+ * `answer_flagged_question` (later `resolve_issue`). A no-draft flag never
+ * gets a draft. `approved-profile-fact` repeats a fact the landlord already
+ * saved. It is not a new draft.
+ */
+
+export class UntemplatedVisitorSms extends Error {
+  readonly body: string;
+  constructor(body: string) {
+    super(`Visitor text is not in the template registry: ${JSON.stringify(body)}`);
+    this.name = "UntemplatedVisitorSms";
+    this.body = body;
+  }
+}
+
+export interface VisitorTemplate {
+  id: string;
+  /** Wording with `{slot}` or `{slot?}` (optional, may be empty). */
+  text: string;
+  /**
+   * Not used by reverse matching. Callers must pass the id. Used for
+   * landlord-approved prose and for saved profile facts, whose sentences
+   * are not a fixed pattern.
+   */
+  explicitOnly?: boolean;
+  /** Appended by the channel. Listed for review. Not a full message id. */
+  suffix?: boolean;
+  note?: string;
+}
+
+const TEMPLATES: VisitorTemplate[] = [
+  { id: "fair-housing-held", text: "Good question for the {team}. I've passed it along, and they'll text you back here.", note: "Sent only after the question is flagged no-draft. Never names the reason." },
+  { id: "door-stuck-no-steps", text: "I can't open the doors for you right now. I've let the {team} know, and they'll text you here shortly.", note: "No step left, including a stale denial on a no-form property, and a failed forward of a held question." },
+  { id: "finish-steps", text: "We're not quite ready to open doors yet. Finish the steps I sent earlier and you'll be all set." },
+  { id: "tour-window-ended", text: "Your tour time ended at {time}, so the doors are locked now. Want to come back another time? Just reply with a day that works.", note: "{time} drops :00, for example 3 PM or 3:30 PM. No door opens." },
+  { id: "all-doors-open", text: "Every door on your tour is already open for you. Text HELP if one isn't working." },
+
+  { id: "unknown-answer", text: "I'll pass your question to the property team, and they'll reply here as soon as they can." },
+  { id: "unknown-answer-photo", text: "I can't open photos yet. I'll pass your question to the property team, and they'll reply here as soon as they can." },
+  { id: "unknown-answer-ended", text: "I'll pass your question to the property team, and they'll reply here as soon as they can. If you'd like to tour again, just text HI." },
+  { id: "unknown-answer-ended-photo", text: "I can't open photos yet. I'll pass your question to the property team, and they'll reply here as soon as they can. If you'd like to tour again, just text HI." },
+  { id: "tour-ended-reply", text: "This tour has ended. Text HI any time to start a new one." },
+  { id: "storage-unavailable", text: "I can't check that right now. Please try again in a little while." },
+  { id: "shared-fact", text: "Here's what the property team shared: {fact}" },
+  { id: "approved-profile-fact", text: "{answer}", explicitOnly: true, note: "A profile fact the landlord already saved. Not a draft." },
+  { id: "approved-answer", text: "{answer}", explicitOnly: true, note: "Landlord reply from answer_flagged_question only. No-draft items never use this." },
+  { id: "approved-answer-closing", text: "{answer} Let me know if you have any other questions.", explicitOnly: true, note: "Approved fact plus the closing line, from answer_flagged_question only." },
+
+  { id: "cancel-done", text: "You're cancelled. Text me anytime if you want to book again." },
+  { id: "nothing-booked-cancel", text: "No problem, nothing's booked yet, so I'll stop here. Text me anytime if you want to pick a time." },
+  { id: "cancel-failed", text: "I can't cancel it from here. I've asked the property team to call it off and get back to you." },
+  { id: "cancel-confirm", text: "Cancel your tour on {day} at {time}? Reply YES or NO." },
+  { id: "cancel-kept", text: "Okay, your tour stays on {day} at {time}." },
+  { id: "later-cancel-confirm", text: "Cancel your later tour at {time} on {day}? Your tour right now isn't affected. Reply YES or NO." },
+  { id: "later-cancel-done", text: "Done, I've cancelled your later tour at {time} on {day}. Your tour right now isn't affected." },
+  { id: "later-cancel-kept", text: "Okay, your later tour at {time} on {day} stays booked." },
+  { id: "cannot-cancel-running-later", text: "You can't cancel the tour you're on, but you're free to wrap up whenever you like.{note?} Your later tour at {time} on {day} is still booked. Want me to cancel that one instead? Reply YES or NO." },
+  { id: "cannot-cancel-running", text: "You can't cancel the tour you're on, but you're free to wrap up whenever you like.{note?} Text me anytime if you want to book another tour." },
+
+  { id: "at-door-phone", text: "Stay where you are. {who} reply as soon as they can, or call {phone}." },
+  { id: "at-door", text: "Stay where you are and reply here. {who} reply as soon as they can." },
+  { id: "remote-phone", text: "{who} reply here as soon as they can, or call {phone}." },
+  { id: "remote", text: "{who} reply here as soon as they can." },
+  { id: "operator-hold", text: "Your tour is on hold, and your tour time keeps running while the {team} sorts this out. {rest}" },
+  { id: "called-off", text: "Your tour{when?} has been called off, so the doors won't open for it. {rest}" },
+  { id: "too-early", text: "You're a little early! I can open the doors from {when}. {again}" },
+  { id: "too-early-generic", text: "You're a little early! I can open the doors from your tour time. Text me again at your tour time." },
+  { id: "follow-up-yes", text: "Great. Someone from the {team} will be in touch soon." },
+  { id: "help-ack", text: "I've let the {team} know. {rest}" },
+  { id: "help-repeat", text: "The {team} already knows and is on it. {rest}" },
+  { id: "no-open-times", text: "There are no open tour times right now. The {team} will reach out." },
+  { id: "doors-not-responding", text: "Sorry, the doors aren't responding right now. I've let the {team} know. {rest}" },
+  { id: "follow-up-phone", text: "The {team} will follow up here, or call {phone}." },
+  { id: "follow-up", text: "The {team} will follow up here." },
+  { id: "failed-id-door", text: "I couldn't confirm your details, so I can't open doors for this tour. {rest}" },
+  { id: "failed-id-booking", text: "Thanks for filling that out. {rest}" },
+  { id: "failed-id-ended", text: "I couldn't confirm your details, so your tour has ended. Please head out the way you came in. {rest}" },
+  { id: "stale-verification", text: "Your ID check has expired, so I need a quick re-check before I can open doors." },
+  { id: "missing-consent", text: "Before I can open doors, text me back and I'll finish setting up your tour." },
+  { id: "wrong-route", text: "That door isn't part of your tour, so I can't open it. You're here to see {place}. I've let the {team} know in case you need a hand." },
+  { id: "tour-completed-doors", text: "Your tour is finished, so the doors are locked again. Want to book another visit?" },
+  { id: "tour-inactive", text: "This tour is no longer active, so I can't open doors. Reply if you'd like to book a new time." },
+
+  { id: "booked-for", text: "Great, you're booked for {time} on {day}." },
+  { id: "replaces-tour", text: "That replaces your {time} tour on {day}." },
+  { id: "custom-time-asked", text: "I've asked the property team about {newTime} on {newDay} instead. Your {time} tour on {day} stays booked unless they approve the change." },
+  { id: "decline-request", text: "The property team couldn't approve {newTime} on {newDay}. {rest}" },
+  { id: "decline-still-confirmed", text: "The property team couldn't approve {newTime} on {newDay}. Your {time} tour on {day} is still confirmed." },
+  { id: "decline-still-booked", text: "The property team couldn't approve {newTime} on {newDay}. You're still booked for {time} on {day}." },
+  { id: "decline-no-booking", text: "The property team couldn't approve {newTime} on {newDay}. If you'd like another time, just reply with a day." },
+  { id: "request-expired", text: "The property team couldn't get to your request for {newTime} on {newDay} in time. {rest}" },
+  { id: "propose-one-off", text: "The property team can do {time} on {day} as a one-off. {rest}" },
+  { id: "propose-instead", text: "The property team can't do {requestedTime} on {requestedDay}, but {proposedTime} on {proposedDay} works. {rest}" },
+  { id: "decline-proposed-confirmed", text: "No problem. Your {time} tour on {day} is still confirmed." },
+  { id: "decline-proposed-booked", text: "No problem. You're still booked for {time} on {day}." },
+  { id: "decline-proposed-none", text: "No problem. If you'd like another time, just reply with a day." },
+  { id: "pending-custom", text: "Your request for {time} on {day} is still with the property team. I'll text you as soon as they respond.{rest?}" },
+  { id: "taken-slot", text: "Sorry, {time} on {day} is already taken.{rest?}" },
+  { id: "taken-other-day", text: "If you'd like another time, just reply with a day." },
+  { id: "already-asked", text: "I've already asked the property team about {time} on {day}." },
+  { id: "time-passed", text: "That time has already passed. What later time works for you?" },
+  { id: "time-passed-today", text: "That time today has already passed. Did you mean tomorrow?" },
+  { id: "time-invalid", text: "That time isn't valid." },
+  { id: "consent-declined", text: "No problem, I won't text you again about this tour. Reach out anytime if you change your mind." },
+  { id: "inquiry", text: "{greeting} Happy to set up a self-guided tour of {place}.{summary?}\n{next}" },
+  { id: "tour-moved-window", text: "Your tour has moved to {when}.\nDoors will work for you from {start} to {end}." },
+  { id: "tour-moved-same", text: "Your tour has moved to {when}. Everything else stays the same." },
+  { id: "tour-moved-notice", text: "Your tour of {unit} has been moved to {time} on {day}.{extra?}" },
+  { id: "operator-schedule-declined", text: "No problem. I cancelled that tour. Text me anytime to book another." },
+  { id: "operator-schedule-expired", text: "I didn't hear back, so I released your {when} tour. Text me anytime to book another." },
+  { id: "follow-up-no", text: "No problem. Thanks again for visiting!" },
+  { id: "no-problem", text: "No problem." },
+  { id: "mark-ready", text: "You're all set for your tour on {day} at {time}!\nDoors will work for you from {start} to {end}.{entry?}" },
+  { id: "tour-directions", text: "Here's how to get there: {url}" },
+  { id: "door-open", text: "{door} is open for you now.{tail?}" },
+  { id: "identity-form", text: "Thanks! One last step before your tour: please fill out this short form with your legal name, email and phone." },
+
+  { id: "photo-alone", text: "I can't take photos yet. Text your question and I'll pass it along." },
+  { id: "photo-with-text", text: "I can't take photos yet." },
+  { id: "schedule-changed", text: "Tour times just changed. Here's what's open now:" },
+  { id: "day-menu", text: "I have tours available. Which day works for you?" },
+  { id: "no-weekend", text: "I don't have weekend tours. I have tours available. Which day works for you?" },
+  { id: "sorry", text: "Sorry, I didn't catch that." },
+  { id: "sorry-rest", text: "Sorry, I didn't catch that. {rest}" },
+  { id: "sorry-ready", text: "Sorry, I didn't catch that. You can ask me a question about the property." },
+  { id: "sorry-touring", text: "Sorry, I didn't catch that. You can ask me a question{hint?}, or text \"finish\" when you're done." },
+  { id: "which-unit", text: "Which unit do you mean: {units}?" },
+  { id: "which-unit-plain", text: "Which unit would you like to see?" },
+  { id: "unit-two", text: "Sure — did you mean {a} or {b}?" },
+  { id: "unit-many", text: "Sure — which unit did you mean?" },
+  { id: "day-unclear", text: "I couldn't tell which day you meant. Which day works for you?" },
+  { id: "confirm-arrival", text: "Are you at the property now?" },
+  { id: "confirm-stop", text: "Are you at {stop} now?" },
+  { id: "choose-stop", text: "Which door are you at: {stops}?" },
+  { id: "confirm-finish", text: "Are you finished with your tour?" },
+  { id: "identity-waiting", text: "Your identity form is in my earlier message. Once it's filled out, I'll confirm your tour." },
+  { id: "follow-up-question", text: "Would you like someone from the property team to follow up?" },
+  { id: "follow-up-clarify", text: "Just to check: {question}" },
+  { id: "tour-not-started", text: "Your tour hasn't started yet." },
+  { id: "start-at-first", text: "Let's start at {stop}. Are you there now?" },
+  { id: "arrival-all-set", text: "You're all set.{hint?}" },
+  { id: "which-time", text: "Which time works for you?" },
+  { id: "which-time-sure", text: "Sure — which time works for you?" },
+  { id: "which-time-rule", text: "{lead} Which time works for you?" },
+  { id: "manipulation", text: "I can only help with your own tour. Doors open only for the stops on it, during your tour time.{hint?}" },
+  { id: "custom-time-which-unit", text: "{time} isn't one of the regular tour times. Which unit should I ask the property team about?" },
+  { id: "custom-time-yes", text: "If you'd like {time}, reply YES and I'll ask the property team." },
+  { id: "custom-time-ask", text: "{time} isn't one of the regular tour times, but I can ask the property team. I'll let you know once they respond." },
+  { id: "awaiting-team", text: "I'll check with the {team} and get back to you." },
+  { id: "clarify-which-time", text: "Which time did you mean?" },
+  { id: "clarify-what-time", text: "What time would you like?" },
+  { id: "clarify-what-time-be", text: "What time should that be?" },
+  { id: "clarify-am-pm", text: "Did you mean {label} AM or {label} PM?" },
+  { id: "clarify-time-closed", text: "That time isn't open." },
+  { id: "clarify-en-route", text: "No rush! Text me when you're at the property." },
+  { id: "clarify-arrival-no", text: "No problem. Text me when you're at the property." },
+  { id: "clarify-stop-no", text: "No problem. Text me when you get there." },
+  { id: "clarify-finish-no", text: "No rush. Take your time." },
+
+  { id: "welcome-unit", text: "Hi! Welcome to the self-guided tour for {place}. I can answer questions about the unit and help you book a tour.{next?}" },
+  { id: "welcome-home", text: "Hi! Welcome to the self-guided tour for {place}. I can answer questions about the home and help you book a tour.{next?}" },
+  { id: "welcome-building", text: "Hi! Welcome to the self-guided tours {where}. I can answer questions about the property and help you book a tour.{next?}" },
+  { id: "time-menu", text: "I have these times available {day}:" },
+  { id: "time-menu-empty", text: "I don't have any open times on {day}." },
+  { id: "closed-weekday", text: "Tours don't run on {days}.{rest?}" },
+  { id: "beyond-horizon", text: "I can't book that far ahead yet.{rest?}" },
+  { id: "no-more-today", text: "There are no more tours today.{rest?}" },
+  { id: "day-full", text: "{day} is fully booked.{rest?}" },
+  { id: "day-passed", text: "That day has already passed. {rest}" },
+  { id: "next-opening-follow", text: "Reply yes for {day} at {time}, or pick a day." },
+  { id: "slot-grabbed", text: "Someone just grabbed that time. {rest}" },
+
+  { id: "operator-scheduled", text: "Hi, this is the {team} at {address}. We set up a tour for you on {day} at {time}. Reply YES to confirm, NO to cancel, or STOP to opt out." },
+  { id: "operator-schedule-nudge", text: "Reply YES to confirm, NO to cancel, or STOP to opt out." },
+  { id: "opt-in-again", text: "You'll get messages from {place} again. Text HI any time to start a tour." },
+  { id: "identity-resend", text: "Here's your identity form link again. The earlier link no longer works." },
+  { id: "paused-property", text: "Tours at {address} are paused right now. The {team} will text you when they're back{call?}." },
+  { id: "paused-unit", text: "{unit} isn't open for tours right now.{rest?}" },
+  { id: "removed-property", text: "{address} isn't offering tours anymore.{rest?}" },
+  { id: "called-off-lead", text: "Sorry, the {team} had to cancel your {day} at {time} tour at {address}. {rest}" },
+  { id: "called-off-later", text: "Sorry, the {team} had to cancel your later tour at {time} on {day}. Your tour right now isn't affected. {rest}" },
+  { id: "tours-are-back", text: "Tours at {address} are back. Text me anytime to book." },
+
+  { id: "sms-disclosure", text: "{brand}: You're starting a text conversation about a self-guided property tour.\n\nMessage frequency varies. Message and data rates may apply.\n\nReply YES to continue, HELP for help, or STOP to opt out.\n\nPrivacy: {privacy}\nTerms: {terms}" },
+  { id: "sms-opt-in", text: "{brand}: You're opted in. I can answer questions about the property and help you schedule and complete a self-guided tour.\nI'll keep a record of your visit times and the doors you use.\n\nReply STOP at any time to opt out." },
+  { id: "sms-gate", text: "Reply YES to continue, HELP for help, or STOP to opt out." },
+  { id: "sms-keyword", text: "Text TOUR to ask questions or schedule a self-guided tour. Reply HELP for help or STOP to opt out." },
+  { id: "sms-stop", text: "{brand}: You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help." },
+  { id: "sms-help", text: "{brand}: {help} Message and data rates may apply. Reply STOP to opt out." },
+
+  { id: "property-not-ready", text: "Thanks for reaching out to {name}. Self-guided tours by text aren't available right now. Please contact the property team." },
+  { id: "storage-save-failed", text: "I couldn't save that, so nothing was booked or changed. Please try again in a little while." },
+  { id: "handler-snag-alerted", text: "Sorry, I hit a snag with that. I've let the property team know, and they'll reply here as soon as they can." },
+  { id: "handler-snag-retry", text: "Sorry, I hit a snag with that. Could you text me again in a few minutes?" },
+  { id: "restore-trouble", text: "I'm having trouble restoring your tour. I've alerted the property team." },
+  { id: "restore-trouble-restart", text: "I'm having trouble restoring your tour. I've alerted the property team. Text HI to start a new tour." },
+  { id: "portfolio-picker", text: "Which place are you touring?\n{choices}" },
+  { id: "portfolio-miss-1", text: "I didn't catch that. Reply 1 for which place." },
+  { id: "portfolio-miss-2", text: "I didn't catch that. Reply 1 or 2 for which place." },
+  { id: "portfolio-miss-3", text: "I didn't catch that. Reply 1, 2, or 3 for which place." },
+  { id: "portfolio-street-miss", text: "I couldn't find that one. Reply 1, 2, or 3, or text the street name." },
+
+  { id: "t15", text: "Hope you're enjoying {place}{name?}! You have about 15 minutes left. Any questions about the place? Just text them here." },
+  { id: "t15-yes", text: "Sure, what's your question?" },
+  { id: "t15-no", text: "Sounds good. Enjoy the rest of your tour!" },
+  { id: "t5-offer", text: "Heads up{name?}, your tour of {place} ends in 5 minutes, at {end}. Want 10 more minutes? Just reply and ask." },
+  { id: "t5-no-offer", text: "Heads up{name?}, your tour of {place} ends in 5 minutes, at {end}. Text DONE once you're outside." },
+  { id: "t5-bare-yes", text: "Sounds good. Text DONE once you're outside." },
+  { id: "extension-granted", text: "You've got 10 more minutes. Your tour now ends at {end}, and your doors will keep opening for you until then." },
+  { id: "extension-unavailable", text: "Sorry, I can't add more time to this tour. It still ends at {end}. Want to come back for another look? Reply here and I'll find you another time." },
+  { id: "extension-used", text: "You've already used your extra 10 minutes, so your tour still ends at {end}." },
+  { id: "extension-after-end", text: "Your tour time has ended, so I can't add more time now. Please head out the way you came in and text DONE once you're outside." },
+  { id: "tour-ended-named", text: "Your tour of {place} just ended{name?}. I can't open any more doors for this tour, so please head out the way you came in and text DONE once you're outside." },
+  { id: "door-after-end", text: "Your tour time has ended, so I can't open that door. Please head out the way you came in and text DONE once you're outside." },
+  { id: "late-arrival", text: "Your tour time has ended, so I can't open doors anymore. Want me to find you another time?" },
+  { id: "plus5", text: "Just checking in. Have you left {place}? Text DONE once you're outside." },
+  { id: "plus15-phone", text: "Your tour of {place} is now closed. If you're still inside or need a hand, call {phone}." },
+  { id: "plus15", text: "Your tour of {place} is now closed. If you're still inside or need a hand, reply here and I'll get someone to help." },
+  { id: "after-close-phone", text: "Thanks, I've let the property team know. If you're still inside or need a hand right away, call {phone}." },
+  { id: "after-close", text: "Thanks, I've let the property team know, and someone will reach out soon." },
+  { id: "tour-finished", text: "Thanks for touring {place}{name?}!{recap?} The doors are locked again behind you.\nWould you like someone from the property team to follow up?" },
+
+  { id: "prompt-yes-no", text: "Reply YES or NO.", suffix: true },
+  { id: "prompt-say", text: "Text \"{phrase}\" {purpose}.", suffix: true },
+  { id: "prompt-choose", text: "{menu}", suffix: true, explicitOnly: true },
+  { id: "prompt-form-link", text: "{link}", suffix: true, explicitOnly: true },
+  { id: "prompt-form-pending", text: "The property team will send you the form link shortly.", suffix: true },
+  { id: "prompt-web-choose", text: "Pick {what} below.", suffix: true },
+  { id: "prompt-web-form", text: "The form is just below.", suffix: true },
+];
+
+const byId = new Map(TEMPLATES.map((template) => [template.id, template]));
+
+interface Compiled {
+  template: VisitorTemplate;
+  re: RegExp;
+  literalScore: number;
+  slots: number;
+}
+
+function compile(template: VisitorTemplate): Compiled {
+  const parts = template.text.split(/\{[A-Za-z][A-Za-z0-9]*\??\}/);
+  const slots = parts.length - 1;
+  const literalScore = parts.reduce((n, part) => n + part.length, 0);
+  const chunks = template.text.split(/(\{[A-Za-z][A-Za-z0-9]*\??\})/);
+  const source = chunks
+    .map((chunk) => {
+      const slot = /^\{([A-Za-z][A-Za-z0-9]*)(\?)?\}$/.exec(chunk);
+      if (!slot) return chunk.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return slot[2] ? "([\\s\\S]*?)" : "([\\s\\S]+?)";
+    })
+    .join("");
+  return { template, re: new RegExp(`^${source}$`), literalScore, slots };
+}
+
+const MATCHERS = TEMPLATES.filter((template) => !template.explicitOnly && !template.suffix)
+  .map(compile)
+  .sort((a, b) => b.literalScore - a.literalScore || a.slots - b.slots || a.template.id.localeCompare(b.template.id));
+
+export function listVisitorTemplates(): readonly VisitorTemplate[] {
+  return TEMPLATES;
+}
+
+export function visitorTemplate(id: string): VisitorTemplate {
+  const found = byId.get(id);
+  if (!found) throw new UntemplatedVisitorSms(id);
+  return found;
+}
+
+/** Fill `{slot}` values. Optional slots that are omitted become empty. */
+export function renderSms(id: string, slots: Record<string, string | number | undefined> = {}): { templateId: string; body: string } {
+  const template = visitorTemplate(id);
+  const body = template.text.replace(/\{([A-Za-z][A-Za-z0-9]*)(\?)?\}/g, (_all, name: string) => {
+    const value = slots[name];
+    return value === undefined || value === null ? "" : String(value);
+  });
+  if (/\{[A-Za-z][A-Za-z0-9]*\??\}/.test(body)) throw new UntemplatedVisitorSms(body);
+  return { templateId: id, body };
+}
+
+/** The registry id for this exact visitor body, before any channel prompt. */
+export function matchVisitorTemplate(body: string): string | undefined {
+  for (const matcher of MATCHERS) {
+    if (matcher.re.test(body)) return matcher.template.id;
+  }
+  return undefined;
+}
+
+/**
+ * Every prospect send calls this. `explicitId` is required for approved
+ * answers and saved profile facts. Anything else must match the registry.
+ */
+export function claimVisitorSms(body: string, explicitId?: string): string {
+  if (explicitId) {
+    const template = byId.get(explicitId);
+    if (!template) throw new UntemplatedVisitorSms(body);
+    if (template.explicitOnly || template.suffix) return explicitId;
+    if (matchVisitorTemplate(body) === explicitId || template.text === body) return explicitId;
+    if (compile(template).re.test(body)) return explicitId;
+    throw new UntemplatedVisitorSms(body);
+  }
+  const id = matchVisitorTemplate(body);
+  if (!id) throw new UntemplatedVisitorSms(body);
+  return id;
+}
+
+function fence(text: string): string {
+  return text.replaceAll("```", "` ` `");
+}
+
+/** Checked-in catalog for review. A test fails when this drifts from the registry. */
+export function visitorTemplatesMarkdown(): string {
+  const messages = TEMPLATES.filter((template) => !template.suffix);
+  const suffixes = TEMPLATES.filter((template) => template.suffix);
+  const block = (template: VisitorTemplate) => {
+    const flags = [template.explicitOnly ? "Explicit id only. Not matched automatically." : "", template.note ?? ""].filter(Boolean);
+    return [`### ${template.id}`, "", ...(flags.length ? [flags.join(" "), ""] : []), "```", fence(template.text), "```", ""].join("\n");
+  };
+  return [
+    "# Visitor text templates",
+    "",
+    "Every outbound visitor text uses one of these ids. `{slot}` is filled before send. `{slot?}` may be empty. A channel prompt may be appended after the body. The stored template id is the body, not the prompt.",
+    "",
+    "Text from the landlord or from a model reaches a visitor only as `approved-answer` or `approved-answer-closing`, and only after they approve a flagged question (`answer_flagged_question`, later `resolve_issue`). A no-draft flag never gets a draft. `approved-profile-fact` repeats a fact they already saved.",
+    "",
+    `${messages.length} message templates. ${suffixes.length} channel prompts.`,
+    "",
+    "## Messages",
+    "",
+    ...messages.map(block),
+    "## Channel prompts",
+    "",
+    "These are appended by the channel. They are not a second visitor message.",
+    "",
+    ...suffixes.map(block),
+  ].join("\n");
+}

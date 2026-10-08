@@ -51,7 +51,7 @@
     "status": "done",
     "milestone": "Practice tour",
     "next": "run_checks",
-    "message": "Unit A: Front Door, then Unit A Door. Unit B: Front Door, then Unit B Door"
+    "message": "Unit A: Front Door, then Unit A Door. Unit B: Front Door, then Unit B Door."
   },
   {
     "tool": "save_hours",

@@ -18,6 +18,7 @@ import {
   SetupInputError,
   type SetupDraft,
 } from "./setupActions";
+import { reuseDaysRefusal } from "../config/validateConfig";
 import { NO_FORM_QUESTION } from "./verification";
 import type { ProfileField } from "../config/unitProfile";
 
@@ -97,6 +98,8 @@ export const SETUP_COMMANDS = {
     }),
     (d, i) => {
       if (i.mode === "none" && i.confirm !== true) throw new SetupInputError("NO_FORM_UNCONFIRMED", NO_FORM_QUESTION);
+      const reuse = reuseDaysRefusal(i.reuseForDays);
+      if (reuse) throw new SetupInputError("VERIFICATION_REUSE_INVALID", reuse);
       return setVerificationPolicy(d, { mode: i.mode, reuseForDays: i.reuseForDays });
     },
   ),

@@ -531,13 +531,14 @@ export class VisitorDemoSession {
   }
 
   /** A Tour Core message that isn't part of a tour step (welcome, "didn't catch that", help info). */
-  async reply(body: string, prompt?: ReplyPrompt, options?: { deliverDespiteOptOut?: boolean }): Promise<void> {
+  async reply(body: string, prompt?: ReplyPrompt, options?: { deliverDespiteOptOut?: boolean; templateId?: string }): Promise<void> {
     await this.core.sendConversationText({
       phone: this.visitor?.phone ?? "",
       body,
       prompt,
       reservationId: this.reservationId,
       deliverDespiteOptOut: options?.deliverDespiteOptOut,
+      templateId: options?.templateId,
     });
     await this.syncReplies();
   }

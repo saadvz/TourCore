@@ -38,6 +38,7 @@ import { BOOKING_HORIZON_DAYS, isoDate, nextTourDay, slotsOn, tourWindow, type T
 import { bookedTourCalledOffText, laterCancelConfirm, laterCancelDone, laterCancelKept, tourMovedToText } from "./availabilityCopy";
 import { propertyDirectionsUrl, tourDirectionsText } from "./mapsLink";
 import { addDays, formatDay as formatDayIn, formatTime as formatTimeIn, localDateOf, type LocalDate } from "./timezone";
+import { claimVisitorSms, renderSms } from "../sms/templates";
 
 export interface TourCoreDeps {
   config: TourCoreConfig;
@@ -237,6 +238,16 @@ export function isUnconfirmedHold(reservation?: { status: string; consentId?: st
   return !!reservation && reservation.status === "AWAITING_CONSENT" && !reservation.consentId;
 }
 
+/**
+ * "Still confirmed" is only for a booking that already cleared consent and
+ * the identity form. Awaiting verification is still booked, not confirmed.
+ */
+export function visitorBookingConfirmed(reservation?: { status: string; consentId?: string; slotStart?: string }): boolean {
+  if (!reservation?.slotStart) return false;
+  if (isUnconfirmedHold(reservation)) return false;
+  return reservation.status !== "AWAITING_VERIFICATION";
+}
+
 /** Repeat help on the same reservation re-alerts the team at most once per this window. */
 export const HELP_ALERT_WINDOW_MS = 5 * 60_000;
 
@@ -274,6 +285,11 @@ export const UNKNOWN_ANSWER_ENDED_WITH_PHOTO = `${UNKNOWN_ANSWER_WITH_PHOTO}${TO
 export const TOUR_ENDED_REPLY = "This tour has ended. Text HI any time to start a new one.";
 
 /** One visitor text for an unanswered question. Photo and ended-tour variants replace the short photo line. */
+/** Saved profile facts are explicit. Other approved facts match `shared-fact`. */
+function answerTemplateId(facts: ApprovedFact[]): string | undefined {
+  return facts.length > 0 && facts.every((fact) => fact.profileField) ? "approved-profile-fact" : undefined;
+}
+
 export function unknownAnswerReply(options: { hasMedia?: boolean; ended?: boolean } = {}): string {
   if (options.ended) return options.hasMedia ? UNKNOWN_ANSWER_ENDED_WITH_PHOTO : UNKNOWN_ANSWER_ENDED;
   return options.hasMedia ? UNKNOWN_ANSWER_WITH_PHOTO : UNKNOWN_ANSWER;
@@ -1128,7 +1144,7 @@ export class TourCore {
           newTime: this.time(asked),
           newDay: this.day(asked),
           ...current,
-          confirmed: !isUnconfirmedHold(reservation),
+          confirmed: visitorBookingConfirmed(reservation),
         }),
       );
       await this.record("TOUR_TIME_REQUEST_DECLINED", { reservationId: request.reservationId, prospectId: request.prospectId, detail: note?.trim() || "declined" });
@@ -1210,9 +1226,9 @@ export class TourCore {
       const reservation = request.reservationId ? await this.deps.store.get("reservations", request.reservationId) : undefined;
       const prospect = await this.mustGetProspect(request.prospectId);
       const booked = reservation?.slotStart
-        ? isUnconfirmedHold(reservation)
-          ? `No problem. You're still booked for ${this.time(new Date(reservation.slotStart))} on ${this.day(new Date(reservation.slotStart))}.`
-          : `No problem. Your ${this.time(new Date(reservation.slotStart))} tour on ${this.day(new Date(reservation.slotStart))} is still confirmed.`
+        ? visitorBookingConfirmed(reservation)
+          ? `No problem. Your ${this.time(new Date(reservation.slotStart))} tour on ${this.day(new Date(reservation.slotStart))} is still confirmed.`
+          : `No problem. You're still booked for ${this.time(new Date(reservation.slotStart))} on ${this.day(new Date(reservation.slotStart))}.`
         : "No problem. If you'd like another time, just reply with a day.";
       await this.textProspect(prospect, request.reservationId, booked);
       await this.record("TOUR_TIME_REQUEST_DECLINED", { reservationId: request.reservationId, prospectId: request.prospectId, detail: "visitor kept the current time" });
@@ -1280,10 +1296,11 @@ export class TourCore {
       const resolved = resolveQuestion(this.approvedContent(), input.question.trim().slice(0, 300), unitContext);
       if (resolved.kind === "which-unit") return { outcome: "which-unit", facts: [], units: resolved.units };
       if (read === "cached" && resolved.kind === "answer") {
-        await this.deps.messenger.send({ to: phone, audience: "PROSPECT", body: withAnswerSuffix(approvedAnswerText(resolved.facts), input.answerSuffix) });
+        const body = withAnswerSuffix(approvedAnswerText(resolved.facts), input.answerSuffix);
+        await this.sendProspectDirect(phone, body, answerTemplateId(resolved.facts));
         return { outcome: "answered", facts: resolved.facts, ...(resolved.unitId ? { unitId: resolved.unitId } : {}) };
       }
-      await this.deps.messenger.send({ to: phone, audience: "PROSPECT", body: "I can't check that right now. Please try again in a little while." });
+      await this.sendProspectDirect(phone, "I can't check that right now. Please try again in a little while.");
       return { outcome: "unknown", facts: [] };
     }
     const prospect = (await this.deps.store.list("prospects")).find((p) => p.phone === phone);
@@ -1297,10 +1314,15 @@ export class TourCore {
     if (resolved.kind === "which-unit") return { outcome: "which-unit", facts: [], units: resolved.units };
     if (resolved.kind === "answer") {
       await this.record("QUESTION_ANSWERED", { ...base, detail: asked });
-      await this.sendConversationText({ phone, body: withAnswerSuffix(approvedAnswerText(resolved.facts), input.answerSuffix), reservationId: reservation?.id });
+      const body = withAnswerSuffix(approvedAnswerText(resolved.facts), input.answerSuffix);
+      await this.sendConversationText({ phone, body, reservationId: reservation?.id, templateId: answerTemplateId(resolved.facts) });
       return { outcome: "answered", facts: resolved.facts, ...(resolved.unitId ? { unitId: resolved.unitId } : {}) };
     }
-    await this.record("QUESTION_UNANSWERED", { ...base, detail: asked, ...(resolved.kind === "unknown" && resolved.fairHousing ? { code: FAIR_HOUSING_CODE } : {}) });
+    if (resolved.kind === "unknown" && resolved.fairHousing) {
+      await this.replyFairHousing({ phone, reservationId: reservation?.id, prospectId: prospect?.id, asked, reservation, who: prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : formatPhone(phone), about: !reservation && (resolved.unitId ? this.deps.config.units.find((u) => u.id === resolved.unitId) : undefined) ? ` about ${visitorSubject(this.deps.config.property, this.deps.config.units.find((u) => u.id === resolved.unitId)!.name)}` : "" });
+      return { outcome: "unknown", facts: [], ...(resolved.unitId ? { unitId: resolved.unitId } : {}) };
+    }
+    await this.record("QUESTION_UNANSWERED", { ...base, detail: asked });
     await this.sendConversationText({ phone, body: input.unknownReply ?? UNKNOWN_ANSWER, reservationId: reservation?.id });
     const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : formatPhone(phone);
     const named = resolved.unitId ? this.deps.config.units.find((u) => u.id === resolved.unitId) : undefined;
@@ -1321,15 +1343,76 @@ export class TourCore {
     const asked = input.question.trim().slice(0, 300);
     if (!asked) throw new TourCoreError("EMPTY_QUESTION", "Please type a question");
     if (input.recordInbound !== false) await this.recordIncoming({ phone, body: asked, prospectId: prospect?.id, reservationId: reservation?.id, meta: input.meta });
+    if (isFairHousingQuestion(asked)) {
+      const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : formatPhone(phone);
+      if (!input.silent) {
+        await this.replyFairHousing({ phone, reservationId: reservation?.id, prospectId: prospect?.id, asked, reservation, who, about: "" });
+      } else {
+        const forwarded = await this.forwardFlaggedQuestion({ reservationId: reservation?.id, prospectId: prospect?.id, asked });
+        if (forwarded) await this.notifyOperator(reservation, `${who} asked "${asked}", and there's no approved answer yet.`);
+      }
+      return;
+    }
     await this.record("QUESTION_UNANSWERED", {
       reservationId: reservation?.id,
       prospectId: prospect?.id,
       detail: asked,
-      ...(isFairHousingQuestion(asked) ? { code: FAIR_HOUSING_CODE } : {}),
     });
     if (!input.silent) await this.sendConversationText({ phone, body: input.reply, reservationId: reservation?.id });
     const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : formatPhone(phone);
     await this.notifyOperator(reservation, `${who} asked "${asked}", and there's no approved answer yet.`);
+  }
+
+  /**
+   * Fair-housing questions are forwarded first, as a no-draft flag, and only
+   * then get the held reply. The engine never answers them. If the flag cannot
+   * be saved, the visitor gets the no-steps line and the team is alerted.
+   * Landlord or model prose is not used here.
+   */
+  private async replyFairHousing(input: {
+    phone: string;
+    reservationId?: string;
+    prospectId?: string;
+    asked: string;
+    reservation?: Reservation;
+    who: string;
+    about: string;
+  }): Promise<void> {
+    const forwarded = await this.forwardFlaggedQuestion(input);
+    if (!forwarded) {
+      await this.sendConversationText({
+        phone: input.phone,
+        body: renderSms("door-stuck-no-steps", { team: this.teamName() }).body,
+        reservationId: input.reservationId,
+      });
+      try {
+        await this.notifyOperator(input.reservation, `${input.who} asked a question and I couldn't pass it along. They're waiting on you.`);
+      } catch (err) {
+        console.error(`Visitor question was not forwarded: ${err instanceof Error ? err.message : "unknown error"}`);
+      }
+      return;
+    }
+    await this.sendConversationText({
+      phone: input.phone,
+      body: renderSms("fair-housing-held", { team: this.teamName() }).body,
+      reservationId: input.reservationId,
+    });
+    await this.notifyOperator(input.reservation, `${input.who} asked "${input.asked}"${input.about}, and there's no approved answer yet.`);
+  }
+
+  private async forwardFlaggedQuestion(input: { reservationId?: string; prospectId?: string; asked: string }): Promise<boolean> {
+    try {
+      await this.record("QUESTION_UNANSWERED", {
+        reservationId: input.reservationId,
+        prospectId: input.prospectId,
+        detail: input.asked,
+        code: FAIR_HOUSING_CODE,
+      });
+      return true;
+    } catch (err) {
+      console.error(`Visitor question was not forwarded: ${err instanceof Error ? err.message : "unknown error"}`);
+      return false;
+    }
   }
 
   private approvedContent(): TourCoreConfig {
@@ -1510,9 +1593,10 @@ export class TourCore {
    * A conversation-level text (welcome, help, "didn't catch that"): stored and
    * sent like any other, and suppressed for anyone who opted out.
    */
-  async sendConversationText(input: { phone: string; body: string; prompt?: ReplyPrompt; reservationId?: string; deliverDespiteOptOut?: boolean }): Promise<void> {
+  async sendConversationText(input: { phone: string; body: string; prompt?: ReplyPrompt; reservationId?: string; deliverDespiteOptOut?: boolean; templateId?: string }): Promise<void> {
     const phone = normalizePhone(input.phone);
     const prospect = (await this.deps.store.list("prospects")).find((p) => p.phone === phone);
+    const templateId = claimVisitorSms(input.body, input.templateId);
     await this.deliver({
       audience: "PROSPECT",
       to: phone,
@@ -1521,6 +1605,7 @@ export class TourCore {
       prospectId: prospect?.id,
       reservationId: input.reservationId,
       suppressed: !!prospect?.messagingOptedOut && !input.deliverDespiteOptOut,
+      templateId,
     });
   }
 
@@ -1974,11 +2059,11 @@ export class TourCore {
       if (code === "DENY_CONSENT_MISSING") {
         await this.textProspect(prospect, reservation.id, VisitorDenialCopy.missingConsent());
       } else if (this.deps.verification.method === "none" && (code === "DENY_VERIFICATION_STALE" || code === "DENY_VERIFICATION_INCOMPLETE")) {
-        // No identity step exists, so these denials are not something the visitor can finish.
+        await this.tellDoorStuck(prospect, reservation, doorId);
       } else if (code === "DENY_VERIFICATION_STALE" || code === "DENY_VERIFICATION_INCOMPLETE") {
         const form = this.deps.verification.request(prospect);
         if (!form.form) {
-          await this.textProspect(prospect, reservation.id, "We're not quite ready to open doors yet. Finish the steps I sent earlier and you'll be all set.");
+          await this.tellDoorStuck(prospect, reservation, doorId);
         } else {
           const ask = code === "DENY_VERIFICATION_STALE" ? { body: VisitorDenialCopy.staleVerification(), form: true } : form;
           await this.textProspect(prospect, reservation.id, ask.body, ask.form ? { kind: "form", link: await this.verificationFormLink(reservation, prospect) } : undefined);
@@ -1999,11 +2084,14 @@ export class TourCore {
           DENY_REVOKED: "This tour is no longer active, so I can't open doors. Reply if you'd like to book a new time.",
           DENY_VERIFICATION_FAILED: VisitorDenialCopy.failedIdAtDoor(team, help),
         };
-        await this.textProspect(
-          prospect,
-          reservation.id,
-          text[code] ?? "We're not quite ready to open doors yet. Finish the steps I sent earlier and you'll be all set.",
-        );
+        const mapped = text[code];
+        if (mapped) {
+          await this.textProspect(prospect, reservation.id, mapped);
+        } else if (this.deps.verification.method !== "none" && this.deps.verification.request(prospect).form) {
+          await this.textProspect(prospect, reservation.id, "We're not quite ready to open doors yet. Finish the steps I sent earlier and you'll be all set.");
+        } else {
+          await this.tellDoorStuck(prospect, reservation, doorId);
+        }
       }
     }
     if (needsOperator.includes(code)) {
@@ -2021,6 +2109,15 @@ export class TourCore {
             : `${who} couldn't get into ${door}. They may need a hand.`;
       await this.notifyOperator(reservation, alert);
     }
+  }
+
+  /** No step left. The visitor hears the stuck line and the team is always alerted. */
+  private async tellDoorStuck(prospect: Prospect, reservation: Reservation, doorId: string): Promise<void> {
+    const team = this.teamName();
+    const door = this.deps.config.doors.find((d) => d.id === doorId)?.name ?? "the door";
+    const who = prospect.name && prospect.name !== UNNAMED_VISITOR ? prospect.name : "A visitor";
+    await this.textProspect(prospect, reservation.id, renderSms("door-stuck-no-steps", { team }).body);
+    await this.notifyOperator(reservation, `${who} is at ${door} and the door stayed locked. They don't have a step left to finish.`);
   }
 
   /**
@@ -2079,8 +2176,9 @@ export class TourCore {
     return this.deps.verification.defaultLink?.(prospect);
   }
 
-  private async textProspect(prospect: Prospect, reservationId: string | undefined, body: string, prompt?: ReplyPrompt, options?: { recordFailure?: boolean }): Promise<boolean> {
+  private async textProspect(prospect: Prospect, reservationId: string | undefined, body: string, prompt?: ReplyPrompt, options?: { recordFailure?: boolean; templateId?: string }): Promise<boolean> {
     const current = (await this.deps.store.get("prospects", prospect.id)) ?? prospect;
+    const templateId = claimVisitorSms(body, options?.templateId);
     return this.deliver({
       audience: "PROSPECT",
       to: current.phone,
@@ -2090,7 +2188,14 @@ export class TourCore {
       reservationId,
       suppressed: !!current.messagingOptedOut,
       recordFailure: options?.recordFailure,
+      templateId,
     });
+  }
+
+  /** A prospect text that is delivered but not stored, used when records are not live. */
+  private async sendProspectDirect(phone: string, body: string, templateId?: string): Promise<void> {
+    const id = claimVisitorSms(body, templateId);
+    await this.deps.messenger.send({ to: phone, audience: "PROSPECT", body, templateId: id });
   }
 
   private async notifyOperator(reservation: Reservation | undefined, body: string): Promise<void> {
@@ -2113,8 +2218,10 @@ export class TourCore {
     reservationId?: string;
     suppressed?: boolean;
     recordFailure?: boolean;
+    templateId?: string;
   }): Promise<boolean> {
     const { store, messenger } = this.deps;
+    const templateId = m.audience === "PROSPECT" ? (m.templateId ?? claimVisitorSms(m.body)) : undefined;
     const message: Message = {
       id: newId("msg"),
       direction: "OUTBOUND",
@@ -2126,6 +2233,7 @@ export class TourCore {
       reservationId: m.reservationId,
       at: this.nowIso(),
       provider: messenger.provider,
+      ...(templateId ? { templateId } : {}),
       ...(this.deps.correlationId ? { correlationId: this.deps.correlationId } : {}),
     };
     if (m.suppressed) {
@@ -2136,7 +2244,7 @@ export class TourCore {
     let receipt: DeliveryReceipt;
     try {
       receipt = await timeOutboundSend(() =>
-        messenger.send({ to: m.to, toName: m.toName, audience: m.audience, body: m.body, idempotencyKey: message.id, correlationId: this.deps.correlationId }),
+        messenger.send({ to: m.to, toName: m.toName, audience: m.audience, body: m.body, idempotencyKey: message.id, correlationId: this.deps.correlationId, ...(templateId ? { templateId } : {}) }),
       );
     } catch (err) {
       const code = err instanceof MessagingError ? err.code : "MESSAGING_FAILED";

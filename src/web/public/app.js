@@ -896,6 +896,10 @@ function verificationStep(data) {
   );
   const save = action(async () => {
     if (mode === "none") {
+      if (view.verification.mode === "none") {
+        go(nextHref(id, "verification"));
+        return;
+      }
       confirmCard.hidden = false;
       return;
     }
