@@ -26,6 +26,9 @@ interface HandoffRecord {
 /** Preview or import was asked before the backup file was stored. */
 export const UPLOAD_BACKUP_FIRST = "Upload the backup file first, then I can show you what's in it.";
 
+/** The upload link expired before a file arrived. */
+export const UPLOAD_TIMED_OUT = "That upload timed out. Send me the backup file again and I'll check it.";
+
 export class HandoffError extends Error {
   constructor(message: string) {
     super(message);
@@ -150,8 +153,23 @@ export class HandoffStore {
     }
   }
 
+  /**
+   * Accepts a file only for a live upload that has not been stored.
+   * Reads the handoff record and does not create a file.
+   */
+  assertUploadAvailable(id: string, capability: string): void {
+    const record = this.read(id);
+    const capabilityOk = !!record && matches(record.tokenHash, capability);
+    if (!record || record.kind !== "upload" || record.consumed || record.expiresAt <= this.now() || record.body || record.bodyFile || !capabilityOk) {
+      throw new HandoffError("That restore link has expired.");
+    }
+  }
+
   readUpload(id: string): string {
+    const peeked = this.read(id);
+    const expiredBeforeFile = peeked?.kind === "upload" && !peeked.consumed && peeked.expiresAt <= this.now() && !peeked.body && !peeked.bodyFile;
     this.sweep();
+    if (expiredBeforeFile) throw new HandoffError(UPLOAD_TIMED_OUT);
     const record = this.read(id);
     if (!record || record.kind !== "upload" || record.expiresAt <= this.now() || (!record.body && !record.bodyFile)) {
       throw new HandoffError(UPLOAD_BACKUP_FIRST);

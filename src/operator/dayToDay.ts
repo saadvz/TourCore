@@ -572,7 +572,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
     title: "Restore records",
     kind: "change",
     description:
-      "upload opens a short-lived upload. preview checks the file and changes nothing. import restores it only after confirmationCode from a clear yes. If this Tour Core already has records, pass recovery replace only after they explicitly choose replacement. Logins are not in the backup. A backup up to 50 MB is accepted. An upload over that cap is refused with a message that states the cap.",
+      "upload opens a short-lived upload. preview checks the file and changes nothing. import restores it only after confirmationCode from a clear yes. If this Tour Core already has records, pass recovery replace only after they explicitly choose replacement. Logins are not in the backup. A backup up to 50 MB is accepted. An upload over that cap is refused with a message that states the cap. If the upload link expired before a file arrived, start a new upload with begin_restore_upload.",
     input: z.strictObject({
       action: z.enum(["upload", "preview", "import"]),
       uploadId: z.string().regex(/^art_[A-Za-z0-9_-]{20,80}$/).optional(),

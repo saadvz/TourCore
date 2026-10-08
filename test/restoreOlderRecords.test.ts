@@ -136,10 +136,70 @@ describe("older restore records", () => {
     const h = hosted();
     const upload = await h.ok("begin_restore_upload");
     const uploadId = uploadIdOf(upload);
-    const record = JSON.parse(readFileSync(handoffPath(h, uploadId), "utf8")) as { body?: string; bodyFile?: boolean };
+    const record = JSON.parse(readFileSync(handoffPath(h, uploadId), "utf8")) as { body?: string; bodyFile?: boolean; expiresAt: number };
     expect(record.body).toBeUndefined();
     expect(record.bodyFile).toBeUndefined();
+    expect(record.expiresAt).toBeGreaterThan(h.now());
     expect(await h.fails("preview_portable_restore", { uploadId })).toBe("Upload the backup file first, then I can show you what's in it.");
+  });
+
+  it("says the upload timed out when the link expired before a file arrived", async () => {
+    const h = hosted();
+    const preview = await h.ok("begin_restore_upload");
+    const previewId = uploadIdOf(preview);
+    const previewPath = handoffPath(h, previewId);
+    const opened = JSON.parse(readFileSync(previewPath, "utf8")) as { body?: string; bodyFile?: boolean; expiresAt: number };
+    expect(opened.body).toBeUndefined();
+    expect(opened.bodyFile).toBeUndefined();
+    writeFileSync(previewPath, JSON.stringify({ ...opened, expiresAt: h.now() - 1 }, null, 2) + "\n");
+    expect(await h.fails("preview_portable_restore", { uploadId: previewId })).toBe("That upload timed out. Send me the backup file again and I'll check it.");
+
+    const importing = await h.ok("begin_restore_upload");
+    const importId = uploadIdOf(importing);
+    const importPath = handoffPath(h, importId);
+    const again = JSON.parse(readFileSync(importPath, "utf8")) as { expiresAt: number };
+    writeFileSync(importPath, JSON.stringify({ ...again, expiresAt: h.now() - 1 }, null, 2) + "\n");
+    expect(await h.fails("import_portable_backup", { uploadId: importId })).toBe("That upload timed out. Send me the backup file again and I'll check it.");
+
+    const throughRecords = await h.ok("begin_restore_upload");
+    const recordsId = uploadIdOf(throughRecords);
+    const recordsPath = handoffPath(h, recordsId);
+    const records = JSON.parse(readFileSync(recordsPath, "utf8")) as { expiresAt: number };
+    writeFileSync(recordsPath, JSON.stringify({ ...records, expiresAt: h.now() - 1 }, null, 2) + "\n");
+    const recordsPreview = await h.ok("restore_records", { action: "preview", uploadId: recordsId });
+    expect(recordsPreview).toMatchObject({
+      message: "That upload timed out. Send me the backup file again and I'll check it.",
+      reason: "That upload timed out. Send me the backup file again and I'll check it.",
+    });
+
+    const recordsImport = await h.ok("begin_restore_upload");
+    const recordsImportId = uploadIdOf(recordsImport);
+    const recordsImportPath = handoffPath(h, recordsImportId);
+    const recordsImportOpened = JSON.parse(readFileSync(recordsImportPath, "utf8")) as { expiresAt: number };
+    writeFileSync(recordsImportPath, JSON.stringify({ ...recordsImportOpened, expiresAt: h.now() - 1 }, null, 2) + "\n");
+    const recordsImported = await h.ok("restore_records", { action: "import", uploadId: recordsImportId });
+    expect(recordsImported).toMatchObject({
+      message: "That upload timed out. Send me the backup file again and I'll check it.",
+      reason: "That upload timed out. Send me the backup file again and I'll check it.",
+    });
+  });
+
+  it("asks for the file when the upload id is missing", async () => {
+    const h = hosted();
+    const preview = await h.ok("restore_records", { action: "preview" });
+    const importing = await h.ok("restore_records", { action: "import" });
+    expect(preview).toMatchObject({
+      status: "blocked",
+      code: "UPLOAD_MISSING",
+      message: "Upload the backup file first, then I can show you what's in it.",
+      reason: "Upload the backup file first, then I can show you what's in it.",
+    });
+    expect(importing).toMatchObject({
+      status: "blocked",
+      code: "UPLOAD_MISSING",
+      message: "Upload the backup file first, then I can show you what's in it.",
+      reason: "Upload the backup file first, then I can show you what's in it.",
+    });
   });
 
   it("uses that sentence when reading the upload fails for a reason other than the handoff link", async () => {

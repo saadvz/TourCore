@@ -77,7 +77,8 @@ On an installation whose records live in Google Drive (GOOGLE_DRIVE_READY), `exp
    the JSON into chat. The upload note tells you to upload the file to that
    address. A backup up to 50 MB is accepted. If the upload is refused, say
    the limit from the message (413). Do not describe that refusal as a lost
-   connection.
+   connection. If the upload link expired before a file arrived, start a new
+   upload with `begin_restore_upload`.
 3. `preview_portable_restore` and read the preview aloud:
 
 > Backup contains:

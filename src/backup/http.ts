@@ -22,6 +22,12 @@ function declaredLength(req: IncomingMessage): number | undefined {
   return Number.isSafeInteger(n) ? n : undefined;
 }
 
+/** Discard the body without storing it. Destroying the socket here becomes a bare 502. */
+function drain(req: IncomingMessage): void {
+  req.on("error", () => {});
+  req.resume();
+}
+
 /**
  * Writes the request to `dest` one chunk at a time. The chunk list is not kept,
  * and a body over the cap is discarded instead of buffered. The socket stays
@@ -89,7 +95,7 @@ export async function handlePortableRequest(
   if (!artifact && !upload) return undefined;
   const missing = { status: 404, type: "text/plain", body: "Not found" };
   const cap = capability(req);
-  if (!cap) return missing;
+  if (!cap && !(upload && method === "POST")) return missing;
   const max = restoreUploadMaxBytes();
   let temp: string | undefined;
   try {
@@ -102,6 +108,17 @@ export async function handlePortableRequest(
       };
     }
     if (upload && method === "POST") {
+      try {
+        backups.handoff.assertUploadAvailable(upload[1]!, cap);
+      } catch {
+        drain(req);
+        return missing;
+      }
+      const declared = declaredLength(req);
+      if (declared !== undefined && declared > max) {
+        drain(req);
+        return tooLarge(max);
+      }
       temp = backups.handoff.incomingPath();
       const outcome = await spoolUpload(req, max, temp);
       if (outcome === "too-large") return tooLarge(max);

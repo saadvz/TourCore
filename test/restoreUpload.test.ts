@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { request, type IncomingMessage } from "node:http";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -16,7 +16,7 @@ afterEach(() => {
 });
 
 const RESTORE_NOTE =
-  "For you only. Do not show this link or capability to the operator. Upload the backup file once to this address. Then ask Tour Core to check it before anything changes. The link expires and is not a public restore address.";
+  "For you only. Do not show this link or capability to the operator. Upload the backup file once to this address. Then ask Tour Core to check it before anything changes. The link expires and is not a public restore address. If the upload link expired before a file arrived, start a new upload with begin_restore_upload.";
 
 function hosted(): InstallHarness {
   const h = installHarness({
@@ -112,6 +112,102 @@ function postChunked(port: number, path: string, capability: string, total: numb
   });
 }
 
+function handoffDir(root: string): string {
+  return join(root, "portable-handoff");
+}
+
+/** Names in the upload directory. Incoming temps are written here too. */
+function handoffNames(root: string): string[] {
+  const dir = handoffDir(root);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir).sort();
+}
+
+/**
+ * POST one chunk and leave the body open long enough to see a spool file.
+ * The current route creates that file before it checks the link, then deletes
+ * it once the body ends, so a check after the response would miss the write.
+ */
+function postWhileOpen(input: {
+  port: number;
+  path: string;
+  capability: string;
+  root: string;
+}): Promise<{ status: number; body: string; newNames: string[]; newBytes: number }> {
+  const before = new Set(handoffNames(input.root));
+  const seen = new Map<string, number>();
+  const scan = () => {
+    const dir = handoffDir(input.root);
+    if (!existsSync(dir)) return;
+    for (const name of readdirSync(dir)) {
+      if (before.has(name)) continue;
+      let bytes = 0;
+      try {
+        bytes = statSync(join(dir, name)).size;
+      } catch {
+        bytes = seen.get(name) ?? 0;
+      }
+      seen.set(name, Math.max(seen.get(name) ?? 0, bytes));
+    }
+  };
+  return new Promise((resolve, reject) => {
+    const req = request(
+      {
+        host: "127.0.0.1",
+        port: input.port,
+        path: input.path,
+        method: "POST",
+        headers: { "content-type": "application/json", "x-tourcore-capability": input.capability },
+      },
+      (res) => {
+        readResponse(res)
+          .then((body) => {
+            scan();
+            resolve({
+              status: res.statusCode ?? 0,
+              body,
+              newNames: [...seen.keys()].sort(),
+              newBytes: [...seen.values()].reduce((sum, n) => sum + n, 0),
+            });
+          })
+          .catch(reject);
+      },
+    );
+    req.on("error", reject);
+    const timer = setInterval(scan, 5);
+    const giveUp = setTimeout(() => {
+      clearInterval(timer);
+      req.destroy();
+      reject(new Error("upload response timed out"));
+    }, 5_000);
+    req.write(Buffer.from("not-a-backup"));
+    setTimeout(() => {
+      clearInterval(timer);
+      scan();
+      req.end();
+    }, 250);
+    req.on("response", () => {
+      clearInterval(timer);
+      clearTimeout(giveUp);
+    });
+  });
+}
+
+function expectZeroBytes(
+  root: string,
+  before: string[],
+  posted: { status: number; body: string; newNames: string[]; newBytes: number },
+): void {
+  expect(posted.status).toBe(404);
+  expect(posted.body).toBe("Not found");
+  expect(posted.newNames).toEqual([]);
+  expect(posted.newBytes).toBe(0);
+  const after = handoffNames(root);
+  expect(after.filter((name) => !before.includes(name))).toEqual([]);
+  expect(after.some((name) => name.startsWith(".incoming") || name.endsWith(".tmp"))).toBe(false);
+  expect(after.filter((name) => name.endsWith(".body"))).toEqual(before.filter((name) => name.endsWith(".body")));
+}
+
 describe("restore upload limit", () => {
   it("uploads a generated backup of about 12 MB, previews it, and imports it with replace", async () => {
     const origin = hosted();
@@ -190,6 +286,8 @@ describe("restore upload limit", () => {
     expect(posted.status).toBe(413);
     expect(posted.status).not.toBe(502);
     expect(posted.body).toBe("That file is too big to restore. Backups can be up to 50 MB, so check that it's the Tour Core backup file and try again.");
+    expect(handoffNames(h.root).some((name) => name.startsWith(".incoming") || name.endsWith(".tmp"))).toBe(false);
+    expect(existsSync(join(handoffDir(h.root), `${uploadId}.body`))).toBe(false);
     expect(await h.fails("preview_portable_restore", { uploadId })).toMatch(/Upload the backup/);
 
     const declared = await h.ok("begin_restore_upload");
@@ -215,6 +313,84 @@ describe("restore upload limit", () => {
     expect(posted.status).toBe(413);
     expect(posted.status).not.toBe(502);
     expect(posted.body).toBe("That file is too big to restore. Backups can be up to 1 MB, so check that it's the Tour Core backup file and try again.");
+    expect(handoffNames(h.root).some((name) => name.startsWith(".incoming") || name.endsWith(".tmp"))).toBe(false);
+    expect(existsSync(join(handoffDir(h.root), `${uploadId}.body`))).toBe(false);
     expect(await h.fails("preview_portable_restore", { uploadId })).toMatch(/Upload the backup/);
+  });
+
+  it("a bad capability writes zero bytes", async () => {
+    const h = hosted();
+    const upload = await h.ok("begin_restore_upload");
+    const app = await listen(h);
+    cleanups.push(() => void app.close());
+    const before = handoffNames(h.root);
+    const posted = await postWhileOpen({
+      port: app.port,
+      path: String(upload.handoff.path),
+      capability: "wrong-capability",
+      root: h.root,
+    });
+    expectZeroBytes(h.root, before, posted);
+  });
+
+  it("an unknown id writes zero bytes", async () => {
+    const h = hosted();
+    const app = await listen(h);
+    cleanups.push(() => void app.close());
+    const before = handoffNames(h.root);
+    expect(before).toEqual([]);
+    const posted = await postWhileOpen({
+      port: app.port,
+      path: `/portable/uploads/art_${"b".repeat(24)}`,
+      capability: "made-up-capability",
+      root: h.root,
+    });
+    expectZeroBytes(h.root, before, posted);
+    expect(existsSync(handoffDir(h.root))).toBe(false);
+  });
+
+  it("an expired link writes zero bytes", async () => {
+    const h = hosted();
+    const upload = await h.ok("begin_restore_upload");
+    const uploadId = String(upload.handoff.path).split("/").pop()!;
+    const path = join(handoffDir(h.root), `${uploadId}.json`);
+    const opened = JSON.parse(readFileSync(path, "utf8")) as { expiresAt: number; body?: string; bodyFile?: boolean };
+    expect(opened.body).toBeUndefined();
+    expect(opened.bodyFile).toBeUndefined();
+    writeFileSync(path, JSON.stringify({ ...opened, expiresAt: h.now() - 1 }, null, 2) + "\n");
+    const app = await listen(h);
+    cleanups.push(() => void app.close());
+    const before = handoffNames(h.root);
+    const posted = await postWhileOpen({
+      port: app.port,
+      path: String(upload.handoff.path),
+      capability: String(upload.handoff.capability),
+      root: h.root,
+    });
+    expectZeroBytes(h.root, before, posted);
+  });
+
+  it("a second upload writes zero bytes", async () => {
+    const h = hosted();
+    const upload = await h.ok("begin_restore_upload");
+    const uploadId = String(upload.handoff.path).split("/").pop()!;
+    const app = await listen(h);
+    cleanups.push(() => void app.close());
+    const first = await postUpload({
+      port: app.port,
+      path: String(upload.handoff.path),
+      capability: String(upload.handoff.capability),
+      body: Buffer.from('{"ok":true}\n'),
+    });
+    expect(first.status).toBe(200);
+    const before = handoffNames(h.root);
+    expect(before).toContain(`${uploadId}.body`);
+    const posted = await postWhileOpen({
+      port: app.port,
+      path: String(upload.handoff.path),
+      capability: String(upload.handoff.capability),
+      root: h.root,
+    });
+    expectZeroBytes(h.root, before, posted);
   });
 });
