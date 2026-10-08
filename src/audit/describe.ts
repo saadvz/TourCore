@@ -83,7 +83,8 @@ function sentence(
     case "VERIFICATION_COMPLETED":
       return good(`${c.name} completed the identity form.`);
     case "VERIFICATION_REUSED":
-      return good(`${c.name}'s earlier identity check was reused.`);
+      if (e.detail.startsWith("none ")) return undefined;
+      return good(`${c.name}'s earlier identity form was reused.`);
     case "VERIFICATION_FAILED":
       return blocked(`${c.name}'s identity details didn't check out. The tour was stopped.`);
     case "TOUR_READY":

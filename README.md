@@ -763,7 +763,7 @@ The config holds the property (including its **IANA time zone**, e.g. `America/N
 doors, units, routes, and tour hours: days, start, end, `slotEveryMinutes`, `tourLengthMinutes` and
 `earlyArrivalMinutes`. It also holds `verificationMode`, `verificationValidForDays`, `messagingMode` (`demo` or `live`), optional `messagingProvider` (`local` opts this building into the QA loopback), `storageMode` and
 `accessMode`. The installation still has one primary live provider (Sendblue, Twilio, or Photon). A property may override that with `messagingProvider: "local"` so QA can inject texts without flipping the installation or drafting other published buildings. Full per-property live credentials are a later slice. Older property files that say `messagingMode: "sendblue"` are read as `live` and rewritten in place; that rename does not by itself require a new readiness check or a republish. Policy values live only in config. A new property starts at Monday–Friday, 9:00 AM–5:00 PM. Setup shows the other defaults (45-minute tours, hourly, 10 minutes early,
-checks reusable for 30 days) and lets the operator change them. Changing those starting hours is a product choice; the tools keep this default and say so.
+visitors who filled out the form won't be asked again for 30 days) and lets the operator change them. Changing those starting hours is a product choice; the tools keep this default and say so.
 
 **Approved facts.** `property.facts`, `unit.summary` and `unit.facts` hold only what the operator wrote.
 `approvedFacts(config, unitId)` (`src/core/facts.ts`) and `TourCore.approvedFacts(reservationId)` return them as

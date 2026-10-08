@@ -18,7 +18,7 @@ import { formatPhone, parsePhone } from "../core/phone";
 import { formatClockTime, friendlyTimeZone, WEEKDAYS, type Weekday } from "../core/timezone";
 import { isApartmentOrCondo, isSingleTourPlace, streetAndUnit, streetLine, unitLabel, visitorSubject } from "../visitor/identity";
 import { inferTimeZone, resolveTimeZone, SAME_DAY_HOURS, slugify, tourHoursEndSameDay } from "./parse";
-import { isLegacyVerification, verificationChoiceLabel } from "./verification";
+import { isLegacyVerification, verificationSummaryRows } from "./verification";
 import { formatCanonical, parseUsAddress } from "./address";
 import { canonicalDoor, canonicalUnitName } from "./normalizeDraft";
 
@@ -782,10 +782,7 @@ export function reviewSetup(draft: SetupDraft): SetupReview {
     {
       editSection: "verification",
       title: "VERIFICATION",
-      lines: [
-        verificationChoiceLabel(draft.verificationMode),
-        `Checked visitors can book again for ${draft.verificationValidForDays} days without re-checking`,
-      ],
+      lines: verificationSummaryRows(draft.verificationMode, draft.verificationValidForDays),
     },
     {
       editSection: "services",

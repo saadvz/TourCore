@@ -592,7 +592,7 @@ export class TourCore {
       await this.record("VERIFICATION_REUSED", {
         reservationId: reservation.id,
         prospectId: prospect.id,
-        detail: `prior check ${reusable.id} valid until ${reusable.validUntil.slice(0, 10)}`,
+        detail: `${reusable.method} ${reusable.id} valid until ${reusable.validUntil.slice(0, 10)}`,
       });
       return this.markReady(reservation, prospect);
     }
@@ -1973,6 +1973,8 @@ export class TourCore {
       const unit = this.unitFor(reservation);
       if (code === "DENY_CONSENT_MISSING") {
         await this.textProspect(prospect, reservation.id, VisitorDenialCopy.missingConsent());
+      } else if (this.deps.verification.method === "none" && (code === "DENY_VERIFICATION_STALE" || code === "DENY_VERIFICATION_INCOMPLETE")) {
+        // No identity step exists, so these denials are not something the visitor can finish.
       } else if (code === "DENY_VERIFICATION_STALE" || code === "DENY_VERIFICATION_INCOMPLETE") {
         const form = this.deps.verification.request(prospect);
         if (!form.form) {

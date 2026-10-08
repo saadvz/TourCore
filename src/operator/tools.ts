@@ -848,15 +848,16 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "get_verification_policy",
     title: "Get visitor verification",
     kind: "read",
-    description: "How visitors confirm who they are before any door opens, and how long a check can be reused.",
+    description: "How visitors confirm who they are before any door opens. The basic identity form includes how many days before a visitor fills it out again. No form reads back as No identity form.",
     input: z.strictObject({ property: Property }),
     run: async (ctx, i) => {
       const { draft } = openDraft(ctx, i.property);
       const view = draftView(draft);
+      const none = draft.verificationMode === "none";
       return {
         summary: view.reviewCards.find((c) => c.step === "verification")!.rows.join(". "),
-        current: draft.verificationMode === "none" ? "none" : "basic-form",
-        reuseForDays: draft.verificationValidForDays,
+        current: none ? "none" : "basic-form",
+        ...(none ? {} : { reuseForDays: draft.verificationValidForDays }),
         choices: view.verification.options.map((option) => ({
           choice: option.mode,
           label: option.title,
@@ -870,7 +871,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "set_verification_policy",
     title: "Set visitor verification",
     kind: "change",
-    description: "Chooses a basic identity form (recommended) or no form. No form asks first, because anyone who texts could book and get in without saying who they are. Optionally how many days a check can be reused.",
+    description: "Chooses a basic identity form (recommended) or no form. No form asks first, because anyone who texts could book and get in without saying who they are. Optionally how many days before a visitor fills out the form again.",
     input: z.strictObject({
       property: Property,
       level: z.enum(["basic-form", "none"]).optional(),
@@ -884,7 +885,11 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         if (!i.confirmationCode) return needsConfirmation(ctx, "no-form", id, fingerprint, NO_FORM_QUESTION);
         ctx.confirmations.redeem(i.confirmationCode, "no-form", id, fingerprint);
       }
-      const state = edit(ctx, id, draft, "setVerificationPolicy", { mode: i.level, reuseForDays: i.reuseForDays });
+      const state = edit(ctx, id, draft, "setVerificationPolicy", {
+        mode: i.level,
+        reuseForDays: i.reuseForDays,
+        ...(i.level === "none" ? { confirm: true } : {}),
+      });
       return { summary: setupSnapshot(ctx, id).verification.join(". "), ...state };
     },
   }),

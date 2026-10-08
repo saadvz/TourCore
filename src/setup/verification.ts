@@ -16,6 +16,28 @@ export const NO_FORM_CHOICE = "No form";
 export const NO_FORM_WARNING =
   "Without a form, anyone who texts can book a tour and get in without telling you who they are.";
 
+export const NO_FORM_SUMMARY = "No identity form.";
+
+export const NO_FORM_YES = "Yes, no form";
+export const NO_FORM_KEEP = "Keep the form";
+
+export const WEB_VERIFICATION_HEADING = "Should visitors fill out a short identity form before their tour?";
+export const WEB_VERIFICATION_LEAD = "We recommend it, so you know who's coming in.";
+
+export const REUSE_FIELD_LABEL = "How many days before a visitor fills out the form again?";
+export const REUSE_FIELD_HELP =
+  "A visitor who already filled out the form can book another tour within this many days without filling it out again.";
+
+export function verificationReuseSentence(days: number): string {
+  return `Visitors who filled it out won't be asked again for ${days} days.`;
+}
+
+/** Review and click-path rows. No form is one line, with no reuse wording. */
+export function verificationSummaryRows(mode: string | undefined, days: number): string[] {
+  if (mode === "none") return [NO_FORM_SUMMARY];
+  return [BASIC_FORM_CHOICE, verificationReuseSentence(days)];
+}
+
 /** Older stored modes. Read as the basic identity form. Not a writable choice. */
 export const LEGACY_VERIFICATION_MODES = ["mock", "document-check"] as const;
 

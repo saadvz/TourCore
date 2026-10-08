@@ -161,7 +161,7 @@ export const TourCoreConfigShape = z.object({
    */
   verificationMode: z.enum(["basic-form", "none", "mock", "document-check"]),
   verificationFormUrl: z.url().optional(),
-  /** How long a passed check can be reused for repeat tours. */
+  /** How many days before a visitor who already filled out the form is asked again. No form does not expire. */
   verificationValidForDays: z.number().int(),
   /**
    * "demo" prints messages. "live" texts real phones through the installation's

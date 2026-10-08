@@ -37,6 +37,7 @@ import {
   type DryTourEvent,
   type SetupDraft,
 } from "../setup";
+import { NO_FORM_QUESTION, REUSE_FIELD_HELP, REUSE_FIELD_LABEL, VERIFICATION_QUESTION } from "../setup/verification";
 import { unitDetailsView } from "../setup/presenters";
 import {
   addTourableSpace,
@@ -360,7 +361,7 @@ async function editHours(start: SetupDraft, editing: boolean): Promise<SetupDraf
 async function editVerification(draft: SetupDraft): Promise<SetupDraft> {
   io.say("");
   const mode = await io.choose(
-    "Should visitors fill out a short identity form before their tour? I recommend it, so you know who's coming in.",
+    VERIFICATION_QUESTION,
     [
       {
         label: "Basic identity form (recommended)",
@@ -369,27 +370,26 @@ async function editVerification(draft: SetupDraft): Promise<SetupDraft> {
       },
       {
         label: "No form",
-        hint: "Anyone who texts can book a tour and get in without telling you who they are",
+        hint: "Anyone who texts can book a tour and get in without telling you who they are.",
         value: "none" as const,
       },
     ],
     draft.verificationMode === "none" ? 2 : 1,
   );
   if (mode === "none" && draft.verificationMode !== "none") {
-    const yes = await io.confirm(
-      "Without a form, anyone who texts can book a tour and get in without telling you who they are. Want to go ahead with no form?",
-      false,
-    );
+    const yes = await io.confirm(NO_FORM_QUESTION, false);
     if (!yes) return draft;
   }
   let next = setVerificationPolicy(draft, { mode });
+  if (mode === "none") return next;
   io.say("");
   const keep = await io.confirm(
-    `Once someone has been checked, they can book another tour without re-checking for ${next.verificationValidForDays} days. Keep that?`,
+    `Visitors who filled it out won't be asked again for ${next.verificationValidForDays} days. Keep that?`,
     true,
   );
   if (!keep) {
-    const days = await io.askParsed("How many days should a check stay good for?", String(next.verificationValidForDays), numberBetween(1, 365), "Please enter a number of days from 1 to 365.");
+    io.say(REUSE_FIELD_HELP);
+    const days = await io.askParsed(REUSE_FIELD_LABEL, String(next.verificationValidForDays), numberBetween(1, 365), "Please enter a number of days from 1 to 365.");
     next = setVerificationPolicy(next, { reuseForDays: days });
   }
   return next;

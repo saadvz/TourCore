@@ -421,6 +421,7 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
         const next = applySetupCommand(opened.draft, "setVerificationPolicy", {
           mode: i.verification,
           reuseForDays: i.reuseForDays,
+          ...(i.verification === "none" ? { confirm: true } : {}),
         });
         ctx.services.workspace.persistEdit(next, ctx.now());
       }

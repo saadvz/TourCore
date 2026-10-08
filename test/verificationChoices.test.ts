@@ -8,7 +8,9 @@ import { safetyHash } from "../src/config/changeKinds";
 import { loadConfig, TourCoreConfigShape, type TourCoreConfig } from "../src/config/tourCoreConfig";
 import { zonedTimeToUtc } from "../src/core/timezone";
 import { setSendblueRuntime } from "../src/messaging/sendblue/runtime";
-import { isCurrent, PropertyWorkspace, runReadinessCheck } from "../src/setup";
+import { applySetupCommand, createPropertySetup, isCurrent, PropertyWorkspace, reviewSetup, runReadinessCheck, setVerificationPolicy } from "../src/setup";
+import { draftView } from "../src/setup/presenters";
+import { REUSE_FIELD_HELP, REUSE_FIELD_LABEL, verificationReuseSentence, WEB_VERIFICATION_HEADING, WEB_VERIFICATION_LEAD } from "../src/setup/verification";
 import { configHash } from "../src/setup/workspace";
 import { createSetupServer } from "../src/web/server";
 import { handleApi } from "../src/web/api";
@@ -25,6 +27,8 @@ const NO_FORM_QUESTION =
 const NO_FORM_SAVED_LIVE = "Visitors won't fill out an identity form, and tour updates stay as they are.";
 const FORM_SENTENCE = "please fill out this short form with your legal name, email and phone";
 const IDENTITY_WORDING = /identity form|ID check|ID step|identity check|fill out this short form/i;
+const NOT_READY = "We're not quite ready to open doors yet. Finish the steps I sent earlier and you'll be all set.";
+const ID_EXPIRED = "Your ID check has expired, so I need a quick re-check before I can open doors.";
 const WRITABLE = ["basic-form", "none"];
 
 const cleanups: Array<() => void> = [];
@@ -174,14 +178,29 @@ describe("verification choices", () => {
       expect(h.workspace.load(id).config.verificationMode).toBe("basic-form");
     }
 
-    const accepted = await handleApi(
+    const unconfirmed = await handleApi(
       { workspace: h.workspace, dev: false },
       "POST",
       `/api/properties/${id}/commands/setVerificationPolicy`,
       { input: { mode: "none" } },
     );
+    expect(unconfirmed.status).toBe(400);
+    expect("json" in unconfirmed ? unconfirmed.json : {}).toMatchObject({ error: { message: NO_FORM_QUESTION } });
+    expect(storedMode(h.root, id)).toBe("basic-form");
+    expect(h.workspace.load(id).config.verificationMode).toBe("basic-form");
+
+    const accepted = await handleApi(
+      { workspace: h.workspace, dev: false },
+      "POST",
+      `/api/properties/${id}/commands/setVerificationPolicy`,
+      { input: { mode: "none", confirm: true } },
+    );
     expect(accepted.status).toBe(200);
     expect(storedMode(h.root, id)).toBe("none");
+    const nonePolicy = await h.ok("get_verification_policy", { property: id });
+    expect(nonePolicy.summary).toBe("No identity form.");
+    expect(nonePolicy.summary).not.toMatch(/reuse|days/i);
+    expect(nonePolicy.reuseForDays).toBeUndefined();
     const back = await handleApi(
       { workspace: h.workspace, dev: false },
       "POST",
@@ -310,29 +329,135 @@ describe("verification choices", () => {
     expect(transcript).toContain("Great, you're booked");
     expect(transcript).toContain("Okay, your tour stays on Monday, Sep 28 at 2:00 PM.");
   });
+
+  it("reads the form reuse sentence, and no form as one line with no reuse wording", () => {
+    const draft = setVerificationPolicy(createPropertySetup({ address: "18 Maple St, Teaneck, NJ 07666" }), { reuseForDays: 30 });
+    const formRows = ["Basic identity form (recommended)", verificationReuseSentence(30)];
+    expect(reviewSetup(draft).sections.find((section) => section.title === "VERIFICATION")?.lines).toEqual(formRows);
+    expect(draftView(draft).reviewCards.find((card) => card.step === "verification")?.rows.join(". ")).toBe(
+      "Basic identity form (recommended). Visitors who filled it out won't be asked again for 30 days.",
+    );
+    const none = setVerificationPolicy(draft, { mode: "none" });
+    expect(reviewSetup(none).sections.find((section) => section.title === "VERIFICATION")?.lines).toEqual(["No identity form."]);
+    expect(draftView(none).reviewCards.find((card) => card.step === "verification")?.rows).toEqual(["No identity form."]);
+    expect(() => applySetupCommand(draft, "setVerificationPolicy", { mode: "none" })).toThrow(NO_FORM_QUESTION);
+    expect(draft.verificationMode).toBe("basic-form");
+    const saved = applySetupCommand(draft, "setVerificationPolicy", { mode: "none", confirm: true });
+    expect(saved.verificationMode).toBe("none");
+  });
+
+  it("asks the setup page to confirm no form, and hides reuse days until the form stays", () => {
+    const web = readFileSync(new URL("../src/web/public/app.js", import.meta.url), "utf8");
+    const step = web.slice(web.indexOf("function verificationStep"), web.indexOf("// Records and messages"));
+    expect(step).toContain(`el("h1", {}, ${JSON.stringify(WEB_VERIFICATION_HEADING)})`);
+    expect(step).toContain(`el("p", { class: "lead" }, ${JSON.stringify(WEB_VERIFICATION_LEAD)})`);
+    expect(step).not.toContain("I recommend it, so you know who's coming in.");
+    expect(step).not.toContain("How many days can a check be reused?");
+    expect(step).toContain(REUSE_FIELD_LABEL);
+    expect(step).toContain(REUSE_FIELD_HELP);
+    expect(step).toContain("hidden: mode === \"none\"");
+    expect(step).toContain(NO_FORM_QUESTION);
+    expect(step).toContain('btn("Yes, no form"');
+    expect(step).toContain('btn("Keep the form"');
+    expect(step).toContain('{ mode: "none", confirm: true }');
+    expect(step).toContain("if (mode === \"none\")");
+    expect(step).toContain("confirmCard.hidden = false");
+    expect(step).not.toContain("confirm: true, reuseForDays");
+    expect(step).not.toContain("reuseForDays: Number(days.value), confirm");
+
+    const cli = readFileSync(new URL("../src/cli/setup.ts", import.meta.url), "utf8");
+    const edit = cli.slice(cli.indexOf("async function editVerification"), cli.indexOf("async function editServices"));
+    expect(REUSE_FIELD_LABEL).toBe("How many days before a visitor fills out the form again?");
+    expect(REUSE_FIELD_HELP).toBe("A visitor who already filled out the form can book another tour within this many days without filling it out again.");
+    expect(edit).toContain("Anyone who texts can book a tour and get in without telling you who they are.");
+    expect(edit).toContain("if (mode === \"none\") return next;");
+    expect(edit).toContain("REUSE_FIELD_LABEL");
+    expect(edit).toContain("REUSE_FIELD_HELP");
+    expect(edit).not.toMatch(/Once someone has been checked|How many days should a check stay good/);
+  });
+
+  it("opens the door on Wednesday for a no-form tour booked Monday with a 1-day window", async () => {
+    const none = await startPhoneApp("none", 1);
+    const replies: string[] = [];
+    const say = async (content: string) => {
+      const sent = await none.text(content);
+      replies.push(...sent.replies);
+      return sent;
+    };
+    await say("TOUR");
+    await say("YES");
+    await say("1");
+    const days = await say("3");
+    expect(days.replies.join("\n")).toContain("Wednesday, Sep 30");
+    const booked = await say("1");
+    expect(booked.replies.join("\n")).toContain("You're all set");
+    expect(booked.replies.join("\n")).toContain("Wednesday, Sep 30");
+    none.setClock(at(13, 50, 30));
+    const arrived = await say("I'm here");
+    const again = await say("I'm here");
+    const arrival = [arrived.replies.join("\n"), again.replies.join("\n")].join("\n");
+    expect(arrived.replies.join("\n")).toContain("is open for you now");
+    expect(arrival).not.toContain(NOT_READY);
+    expect(arrival).not.toContain(ID_EXPIRED);
+    expect(replies.join("\n")).not.toMatch(IDENTITY_WORDING);
+  });
+
+  it("opens the door on a rebook after the reuse window, with no identity text", async () => {
+    const none = await startPhoneApp("none", 1);
+    const replies: string[] = [];
+    const say = async (content: string) => {
+      const sent = await none.text(content);
+      replies.push(...sent.replies);
+      return sent;
+    };
+    await say("TOUR");
+    await say("YES");
+    await say("1");
+    await say("1");
+    const first = await say("1");
+    expect(first.replies.join("\n")).toContain("You're all set");
+    await say("Actually cancel that");
+    await say("YES");
+    none.setClock(at(7, 0, 30));
+    await say("TOUR");
+    await say("YES");
+    await say("1");
+    const days = await say("3");
+    expect(days.replies.join("\n")).toContain("Friday, Oct 2");
+    const rebooked = await say("1");
+    expect(rebooked.replies.join("\n")).toContain("You're all set");
+    expect(rebooked.replies.join("\n")).toContain("Friday, Oct 2");
+    none.setClock(at(13, 50, 2, 10));
+    const arrived = await say("I'm here");
+    expect(arrived.replies.join("\n")).toContain("is open for you now");
+    expect(replies.join("\n")).not.toContain(NOT_READY);
+    expect(replies.join("\n")).not.toContain(ID_EXPIRED);
+    expect(replies.join("\n")).not.toMatch(IDENTITY_WORDING);
+  });
 });
 
-/** Monday 28 Sep 2026 at the property; tours at 2:00 PM, doors from 1:50 PM. */
-const at = (hour: number, minute = 0) => zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour, minute }, "America/New_York").getTime();
+/** Monday 28 Sep 2026 at the property unless a later day is given. Tours at 2:00 PM, doors from 1:50 PM. */
+const at = (hour: number, minute = 0, day = 28, month = 9) => zonedTimeToUtc({ year: 2026, month, day, hour, minute }, "America/New_York").getTime();
 const PHONE = "+15550102000";
 
-function phoneProperty(mode: "basic-form" | "none"): TourCoreConfig {
+function phoneProperty(mode: "basic-form" | "none", verificationValidForDays = 30): TourCoreConfig {
   const config = loadConfig();
   return {
     ...config,
     messagingMode: "live",
     verificationMode: mode,
+    verificationValidForDays,
     property: { ...config.property, facts: ["Street parking only."] },
   };
 }
 
-async function startPhoneApp(mode: "basic-form" | "none") {
+async function startPhoneApp(mode: "basic-form" | "none", verificationValidForDays = 30) {
   const root = mkdtempSync(join(tmpdir(), "tourcore-verify-"));
   const fake = fakeSendblue();
   cleanups.push(setSendblueRuntime({ env: () => sendblueEnv(), client: () => fake.client }));
   let clock = at(7);
   const ws = new PropertyWorkspace(root);
-  const { config } = ws.save(phoneProperty(mode));
+  const { config } = ws.save(phoneProperty(mode, verificationValidForDays));
   ws.recordReadiness(config.property.id, await runReadinessCheck(config, { now: new Date(clock) }));
   const server: Server = createSetupServer({ workspace: ws, now: () => new Date(clock), realNow: () => clock, log: () => {} });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

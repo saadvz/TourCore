@@ -135,7 +135,11 @@ the operator correct it.
    Options: "Basic identity form (recommended)" and "No form". The basic form is the default.
    If they pick no form, ask **"Without a form, anyone who texts can book a tour and get in without telling you who they are. Want to go ahead with no form?"**
    Call `set_verification_policy` with `level: none` only after they say yes, and pass the confirmation code it returns.
+   Do not ask how many days the form lasts, and do not mention reuse. Read it back as **"Verification: No identity form."**
    If they say no, leave the basic identity form.
+   If they keep the basic form, the reuse question is **"How many days before a visitor fills out the form again?"**
+   Help: **"A visitor who already filled out the form can book another tour within this many days without filling it out again."**
+   The default is 30. Read the basic form back as **"Verification: Basic identity form (recommended)".**
 10. Texting is automatic: when this Tour Core has visitor texting installed,
     a new property uses it on its own. One touring number covers every property.
     Don't ask "How do you want to text people?" and don't ask for a separate

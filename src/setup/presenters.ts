@@ -18,6 +18,7 @@ import {
 import { isCurrent, statusLabel, type SavedProperty, type TourRecord } from "./workspace";
 import { describeHistory } from "../audit/describe";
 import { PROPERTY_TYPE_LABELS, validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
+import { verificationSummaryRows } from "./verification";
 import { formatDay, formatShortDateTime, formatTime } from "../core/timezone";
 import type { ExportBundle } from "../export/exportBundle";
 
@@ -166,7 +167,6 @@ export function draftView(draft: SetupDraft) {
   const doorName = (id: string) => draft.doors.find((d) => d.id === id)?.name ?? "(a door that no longer exists)";
   const th = draft.tourHours;
   const entrances = draft.doors.filter((d) => d.kind === "ENTRANCE");
-  const verification = VERIFICATION_OPTIONS.find((o) => o.mode === draft.verificationMode);
 
   const units = draft.units.map((u) => {
     const route = draft.routes.find((r) => r.unitId === u.id);
@@ -253,7 +253,7 @@ export function draftView(draft: SetupDraft) {
     {
       step: "verification" as SetupStep,
       title: "Verification",
-      rows: [verification?.title ?? (draft.verificationMode === "none" ? "No form" : "Basic identity form (recommended)"), `A check can be reused for ${draft.verificationValidForDays} days`],
+      rows: verificationSummaryRows(draft.verificationMode, draft.verificationValidForDays),
     },
     {
       step: "services" as SetupStep,
