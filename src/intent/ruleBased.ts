@@ -412,16 +412,11 @@ function isDayPickPhrase(t: string): boolean {
   return dayPickRest(t).every((word) => DAY_PICK_WORDS.has(word));
 }
 
-/** "Can I come Friday at 2:00" asks for that clock. "Friday at 2" is still the day. */
-function explicitCustomTimeAsk(t: string): boolean {
-  return /\b(can i|could i|can we|could we|how about|what about|instead|move|change|reschedule|switch|come at|tour at|book|make it)\b/.test(t);
-}
-
 /**
  * At the day menu, a weekday match that is a question — or clearly not a day
  * pick — stays a question. "Black Friday sale nearby?" and "is Friday busy?"
- * are questions. "Friday", "Friday at 2", "Fri?", and "can I do Friday"
- * are still that day.
+ * are questions. "Friday", "Fri?", and "can I do Friday" are still that day.
+ * A clock on the day ("Friday at 2") is handled before this, as a custom time.
  */
 function questionInsteadOfDayPick(raw: string, t: string, today?: InterpretContext["today"]): boolean {
   const asked = dayReference(t, today);
@@ -560,9 +555,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
         return result({ type: "SELECT_DATE" }, 1, {});
       }
       const customDate = schedulingIntent(raw, t, true, result, unknown, ctx.today);
-      // "Friday at 2" names the day. "Can I come Friday at 2:00" still asks for that time.
-      const dayPickWithClock = customDate?.intent.type === "REQUEST_CUSTOM_TIME" && isDayPickPhrase(t) && !explicitCustomTimeAsk(t);
-      if (customDate && !dayPickWithClock) return customDate;
+      if (customDate) return customDate;
       // A weekday inside a question, or in a message that is not a day pick, is not that day.
       if (questionInsteadOfDayPick(raw, t, ctx.today)) return question(0.9);
       const picked = dateIntent(raw, t, result, ctx.today);

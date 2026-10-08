@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { UNKNOWN_ANSWER } from "../src/core/TourCore";
+import { interpretByRules } from "../src/intent/ruleBased";
 import { liveApp, type LiveApp } from "./liveApp";
 
 /**
@@ -91,9 +92,6 @@ describe("a weekday inside a question at the open day menu", () => {
       "5",
       "Oct 2",
       "10/2",
-      "Friday at 2",
-      "Friday 2pm",
-      "Fri 3:30",
       "Friday afternoon",
       "Friday Oct 2",
       "Friday the 2nd",
@@ -110,5 +108,34 @@ describe("a weekday inside a question at the open day menu", () => {
       expect(replies.join("\n"), text).toBe(FRIDAY_TIMES);
     }
     expect((await a.grok("list_exceptions")).exceptions).toEqual([]);
+  });
+
+  it("keeps a clock on a weekday on the same custom-time path as master 06c491d", async () => {
+    // Captured from master 06c491d with the day menu open, each phrase on a fresh property.
+    const clocks = [
+      { text: "Friday at 2", intent: { type: "REQUEST_CUSTOM_TIME" as const, hour: 2, minute: 0, weekday: "FRI" as const }, booked: "Great, you're booked for 2:00 PM on Friday, Oct 2." },
+      { text: "Friday 2pm", intent: { type: "REQUEST_CUSTOM_TIME" as const, hour: 2, minute: 0, meridiem: "PM" as const, weekday: "FRI" as const }, booked: "Great, you're booked for 2:00 PM on Friday, Oct 2." },
+      { text: "Fri 3:30", intent: { type: "REQUEST_CUSTOM_TIME" as const, hour: 3, minute: 30, weekday: "FRI" as const }, booked: "Great, you're booked for 3:30 PM on Friday, Oct 2." },
+    ];
+    const form = "Thanks! One last step before your tour: please fill out this short form with your legal name, email and phone.\nhttps://tour.example/verify/<token>";
+    for (const [i, item] of clocks.entries()) {
+      const read = interpretByRules({
+        message: item.text,
+        step: "choose-date",
+        units: [{ name: "Unit 1A" }, { name: "Unit 2B" }],
+        timeChoices: ["Monday, Sep 28", "Tuesday, Sep 29", "Wednesday, Sep 30", "Thursday, Oct 1", "Friday, Oct 2"],
+        remainingStops: [],
+        doors: [],
+        today: { year: 2026, month: 9, day: 28 },
+        timezone: "America/New_York",
+      });
+      expect(read.intent, item.text).toEqual(item.intent);
+      expect(read.confidence, item.text).toBe(0.9);
+      const a = await liveApp({ cleanups });
+      const phone = `+155501032${String(i).padStart(2, "0")}`;
+      await openDayMenu(a, phone);
+      const replies = (await a.textFrom(phone, item.text)).map((line) => line.replace(/\/verify\/[A-Za-z0-9_-]+/g, "/verify/<token>"));
+      expect(replies, item.text).toEqual([item.booked, form]);
+    }
   });
 });
