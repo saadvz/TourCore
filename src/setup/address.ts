@@ -59,6 +59,64 @@ export function addressConfirmQuestion(parts: { street: string; city: string; st
   return `Did I get that right: ${line}?`;
 }
 
+/** One missing part, in order. City is never first while the state is still blank. */
+export const STREET_QUESTION = "What's the street address?";
+export const STATE_QUESTION = "What state is it in?";
+export const CITY_QUESTION = "What city should I use?";
+export const ZIP_QUESTION = "What ZIP code should I use?";
+/** Reply when a city was just saved and the state is still missing. */
+export const STATE_AFTER_CITY = "Got it. What state is that in?";
+
+/**
+ * The one address question still open. Undefined once street, city, state
+ * and ZIP are all saved, so the read-back can come last. `cityJustSaved`
+ * is only the turn they gave the city: the reply acknowledges it and asks
+ * for the state, instead of asking for the city again.
+ */
+export function nextAddressPartQuestion(
+  parts: { street?: string; city?: string; state?: string; postalCode?: string } | undefined,
+  options: { cityJustSaved?: boolean } = {},
+): string | undefined {
+  if (!parts) return undefined;
+  if (!parts.street?.trim()) return STREET_QUESTION;
+  if (!parts.state?.trim()) {
+    if (options.cityJustSaved && parts.city?.trim()) return STATE_AFTER_CITY;
+    return STATE_QUESTION;
+  }
+  if (!parts.city?.trim()) return CITY_QUESTION;
+  if (!parts.postalCode?.trim()) return ZIP_QUESTION;
+  return undefined;
+}
+
+/** A US state name or postal abbreviation, or undefined when it isn't one. */
+export function normalizeUsState(input: string): string | undefined {
+  return stateOf(input);
+}
+
+/**
+ * Fills only the parts this patch names. A missing patch field keeps the
+ * part already saved. `null` clears unit or ZIP. The one-line form is
+ * written only when street, city and state are all present.
+ */
+export function fillAddress(
+  previous: CanonicalAddress | undefined,
+  patch: { street?: string; city?: string; state?: string; unit?: string | null; postalCode?: string | null },
+  fallbackFormatted: string,
+): CanonicalAddress {
+  const street = (patch.street ?? previous?.street ?? "").trim();
+  const city = (patch.city ?? previous?.city ?? "").trim();
+  const state = (patch.state ?? previous?.state ?? "").trim();
+  const unitRaw = patch.unit === null ? "" : (patch.unit ?? previous?.unit ?? "");
+  const unit = unitRaw.trim() || undefined;
+  const zipRaw = patch.postalCode === null ? "" : (patch.postalCode ?? previous?.postalCode ?? "");
+  const postalCode = zipRaw.trim() || undefined;
+  const formatted =
+    street && city && state
+      ? formatCanonical({ street, city, state, ...(unit ? { unit } : {}), ...(postalCode ? { postalCode } : {}) })
+      : fallbackFormatted;
+  return { street, city, state, ...(unit ? { unit } : {}), ...(postalCode ? { postalCode } : {}), formatted };
+}
+
 function stateOf(text: string): string | undefined {
   const lower = text.toLowerCase().replace(/\./g, "").trim();
   if (/^[a-z]{2}$/.test(lower) && Object.values(STATE_NAMES).includes(lower.toUpperCase())) return lower.toUpperCase();
@@ -94,6 +152,7 @@ export function parseUsAddress(raw: string): { address: CanonicalAddress; missin
       const place = placeOf(rest[0]!);
       city = place.city;
       state = place.state;
+      if (!city && !state) city = rest[0]!;
     }
   } else if (parts.length === 2 && isUnitPart(parts[1]!)) {
     street = parts[0]!;
@@ -103,6 +162,7 @@ export function parseUsAddress(raw: string): { address: CanonicalAddress; missin
     const place = placeOf(parts[1]!);
     city = place.city;
     state = place.state;
+    if (!city && !state) city = parts[1]!;
   } else {
     const tokens = text.split(" ").filter(Boolean);
     const last = tokens[tokens.length - 1] ?? "";

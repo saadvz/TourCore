@@ -65,7 +65,12 @@ start is connected and tested. Would you like to add your first property?
 **Operator:** 144 Hillside Ave, Teaneck NJ.
 
 [`create_property_setup` address "144 Hillside Ave, Teaneck NJ" (no name: the
-operator didn't give one) → nextQuestion "What ZIP code should I use?"]
+operator didn't give one) → nextQuestion "What ZIP code should I use?" because
+the street, city, and state are already there. A missing street is "What's the
+street address?". A missing state is "What state is it in?" before any city
+question. A city given while the state is still missing is kept: "Got it. What
+state is that in?". "What city should I use?" only after the street and state
+are saved.]
 
 **Tour Core:** What ZIP code should I use?
 

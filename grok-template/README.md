@@ -69,7 +69,9 @@ what never does.
 ## What the Bot does for the operator
 
 - **Property identity and type.** The address is the property's name unless
-  the operator gives one; the Bot never invents a building name. It asks
+  the operator gives one; the Bot never invents a building name. A missing
+  street, state, city, or ZIP is asked one at a time, state before city, and
+  every part already given is kept. It asks
   "What type of property is this?" (single-family home; multifamily — duplex
   or small building they own; apartment or condo — one unit) and shapes the
   units question to match. A new

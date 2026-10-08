@@ -268,10 +268,11 @@ operator; never name Durin.
    computer, then asks the operator only for what needs a person (see
    `installation.md`).
 1. **Set up a property**: address (the property's identity; a name only if the
-   operator gives one), property type (single-family home; multifamily — duplex
-   or small building they own; apartment or condo — one unit), units, doors,
-   routes, tour hours, visitor verification. Visitor texting is used
-   automatically when it's installed.
+   operator gives one), one missing part at a time (street, then state, then
+   city, then ZIP; a city given early is kept), property type (single-family
+   home; multifamily — duplex or small building they own; apartment or condo —
+   one unit), units, doors, routes, tour hours, visitor verification. Visitor
+   texting is used automatically when it's installed.
 2. **Check readiness**: real checks against the pieces the setup uses.
 3. **Run a practice tour**: a full pretend tour with safety checks. Nobody is
    texted and no real door opens. A single-family home keeps the entrance proof
@@ -314,7 +315,7 @@ operator; never name Durin.
    time. `This is a one-off…` only outside tour hours.
 6. **Export the audit**: a validated, provider-neutral record of the day.
 
-Day-to-day work uses `get_tours`, `schedule_tour`, `cancel_tour`, `hold_tour`, `pause_tours`, `get_inbox`, `reply_to_time_request`, `resolve_issue`, `export_records`, `backup_records`, and `restore_records`. `get_state` points at `get_inbox` once a property is published, and at `backup_records` on the backups step. The older tour, inbox, backup, and export tools still work and still enforce the same gates.
+Day-to-day work uses `get_tours`, `schedule_tour`, `cancel_tour`, `hold_tour`, `pause_tours`, `get_inbox`, `reply_to_time_request`, `resolve_issue`, `export_records`, `backup_records`, and `restore_records`. `get_tours` counts a tour in progress as happening now and a later booking as coming up. Someone who is only texting, with no booked tour, is not a tour and is not counted. None reads "No tours right now." One future booking reads "1 tour coming up: {name} at {time} on {day}." `get_state` points at `get_inbox` once a property is published, and at `backup_records` on the backups step. The older tour, inbox, backup, and export tools still work and still enforce the same gates.
 
 ## Current P0 demo configuration
 

@@ -1,7 +1,7 @@
 import { PROPERTY_TYPE_LABELS, validateConfig } from "../config/tourCoreConfig";
 import { nextProfileQuestion } from "../config/unitProfile";
 import { hoursStepSay } from "../operator/milestones";
-import { addressConfirmQuestion } from "../setup/address";
+import { addressConfirmQuestion, nextAddressPartQuestion } from "../setup/address";
 import { renderPlaybook, spokenAsk } from "../playbooks/compose";
 import { milestoneToolFor } from "../playbooks/milestoneTool";
 import type { ReportedClient } from "../playbooks/select";
@@ -90,13 +90,17 @@ function pictureOf(services: OperatorServices, id: string | undefined): Picture 
     return empty;
   }
   const saved = services.workspace.has(id) ? services.workspace.load(id) : undefined;
-  const missingCity = !!draft.property.canonicalAddress && !draft.property.canonicalAddress.city?.trim();
-  const missingZip = !!draft.property.canonicalAddress && !draft.property.canonicalAddress.postalCode;
-  const addressReady = !!draft.property.address.trim() && !missingCity && !missingZip && draft.property.addressConfirmed !== false;
+  const canonical = draft.property.canonicalAddress;
+  const missingStreet = !!canonical && !canonical.street?.trim();
+  const missingState = !!canonical && !canonical.state?.trim();
+  const missingCity = !!canonical && !canonical.city?.trim();
+  const missingZip = !!canonical && !canonical.postalCode;
+  const addressReady = !!draft.property.address.trim() && !missingStreet && !missingState && !missingCity && !missingZip && draft.property.addressConfirmed !== false;
   const needsAddressConfirm =
-    !!draft.property.canonicalAddress?.city?.trim() &&
-    !!draft.property.canonicalAddress?.state?.trim() &&
-    !!draft.property.canonicalAddress?.postalCode &&
+    !!canonical?.street?.trim() &&
+    !!canonical?.city?.trim() &&
+    !!canonical?.state?.trim() &&
+    !!canonical?.postalCode &&
     draft.property.addressConfirmed === false;
   const typeReady = !!draft.property.propertyType;
   const issues = validateConfig(draft);
@@ -355,12 +359,13 @@ function sayFor(client: ReportedClient | undefined, step: StepId, draft: SetupDr
     if (detail) say = detail;
   }
   if (step === "hours" && draft) say = hoursStepSay(draft.tourHours);
-  if (step === "property-address" && draft?.property.canonicalAddress?.street?.trim() && !draft.property.canonicalAddress.city?.trim()) {
-    say = "What city should I use?";
-  }
-  if (step === "property-confirm" && draft?.property.canonicalAddress) {
-    const question = addressConfirmQuestion(draft.property.canonicalAddress);
-    if (question) say = question;
+  if ((step === "property-address" || step === "property-confirm") && draft?.property.canonicalAddress) {
+    const part = nextAddressPartQuestion(draft.property.canonicalAddress);
+    if (part) say = part;
+    else if (draft.property.addressConfirmed === false) {
+      const question = addressConfirmQuestion(draft.property.canonicalAddress);
+      if (question) say = question;
+    }
   }
   if (RAW_SLOT.test(say) && draft) say = say.replaceAll("{address}", draft.property.address);
   if (RAW_SLOT.test(say)) throw new SetupInputError("UNFILLED_SLOT", "That line still has a blank.");

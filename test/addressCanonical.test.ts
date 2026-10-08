@@ -50,4 +50,27 @@ describe("address canonicalization", () => {
     expect(parsed?.missing).toContain("city");
     expect(addressConfirmQuestion(parsed?.address)).toBeUndefined();
   });
+
+  it("keeps a city when no state was given", () => {
+    expect(parseUsAddress("302 Main Street, Hackensack")?.address).toMatchObject({
+      street: "302 Main Street",
+      city: "Hackensack",
+      state: "",
+    });
+    expect(parseUsAddress("300 Main Street, Unit 4B, Hackensack")?.address).toMatchObject({
+      street: "300 Main Street",
+      unit: "Unit 4B",
+      city: "Hackensack",
+      state: "",
+    });
+    const unitOnly = parseUsAddress("302 Main Street, Unit 4B");
+    expect(unitOnly?.address).toMatchObject({ street: "302 Main Street", unit: "Unit 4B", city: "", state: "" });
+    expect(unitOnly?.missing).toEqual(expect.arrayContaining(["city", "state", "postalCode"]));
+  });
+
+  it("keeps a state and ZIP when the street is missing", () => {
+    const parsed = parseUsAddress("NJ 07601");
+    expect(parsed?.address).toMatchObject({ street: "", city: "", state: "NJ", postalCode: "07601" });
+    expect(parsed?.missing).toContain("street");
+  });
 });

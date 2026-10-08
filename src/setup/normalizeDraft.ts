@@ -98,13 +98,17 @@ function canonicalizeAddress(draft: TourCoreConfig): void {
   const property = draft.property;
   const previousAddress = property.address;
   const previousName = property.name;
-  const parsed = parseUsAddress(property.canonicalAddress?.formatted || property.address);
-  if (!parsed) return;
-  const street = canonicalizeStreet(parsed.address.street);
-  const city = titleCasePlace(parsed.address.city);
-  const state = parsed.address.state;
-  const postalCode = parsed.address.postalCode ?? property.canonicalAddress?.postalCode;
-  const unit = parsed.address.unit?.trim();
+  const stored = property.canonicalAddress;
+  const parsed = parseUsAddress(stored?.formatted || property.address);
+  if (!parsed && !stored) return;
+  // A partial save lives on the canonical parts. The one-line form is only
+  // rewritten once street, city, and state are all present, so a reparse of
+  // the earlier line must not drop a part the landlord already gave.
+  const street = canonicalizeStreet(parsed?.address.street || stored?.street || "");
+  const city = titleCasePlace(parsed?.address.city || stored?.city || "");
+  const state = parsed?.address.state || stored?.state || "";
+  const postalCode = parsed?.address.postalCode ?? stored?.postalCode;
+  const unit = (parsed?.address.unit ?? stored?.unit)?.trim();
   const formatted = street && city && state ? formatCanonical({ street, city, state, ...(postalCode ? { postalCode } : {}), ...(unit ? { unit } : {}) }) : property.address;
   property.canonicalAddress = {
     street,

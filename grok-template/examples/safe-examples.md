@@ -89,10 +89,19 @@ published; an approved fact doesn't need another readiness check.
 **Operator:** Set up 12 Maple St, Springfield. Call it Maple House.
 
 [`create_property_setup` address "12 Maple St, Springfield", name "Maple House"
-(the operator said it). A US address still needs a ZIP before it is confirmed.
-A missing city is "What city should I use?" before any read-back. Missing ZIP
-→ "What ZIP code should I use?", then a one-line read-back ("Did I get that
-right: ...?"), then property type. Never invent the city or the ZIP.]
+(the operator said it). Ask for one missing part at a time and keep every
+part already given. A missing street is "What's the street address?". A
+missing state is "What state is it in?" before any city question. A city
+given while the state is still missing is kept: "Got it. What state is that
+in?". "What city should I use?" only after the street and state are saved.
+Missing ZIP → "What ZIP code should I use?", then a one-line read-back ("Did
+I get that right: ...?"), then property type. Never invent a part.]
+
+**Tour Core:** What state is it in?
+
+**Operator:** Massachusetts.
+
+[`update_property_details` state "Massachusetts". Springfield stays the city.]
 
 **Tour Core:** What ZIP code should I use?
 
