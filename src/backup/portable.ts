@@ -277,6 +277,7 @@ export function applyPortableBackup(root: string, backup: PortableBackup, replac
     if (file.path.endsWith("/tourcore.config.json") && body && typeof body === "object") {
       const record = body as { verificationMode?: string };
       if (isLegacyVerification(record.verificationMode)) {
+        if (record.verificationMode === "mock") notes.push('An older "mock" verification setting is restored as basic-form.');
         const parsed = TourCoreConfigShape.safeParse(body);
         body = { ...record, verificationMode: "basic-form" };
         if (parsed.success) coerced.push({ id: parsed.data.property.id, before: parsed.data, after: presentVerification(parsed.data) });

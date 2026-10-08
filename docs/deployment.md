@@ -558,7 +558,7 @@ in Grok's Drive folder.
 
 A Railway restart uses the volume. Restoring a portable backup is for a lost
 volume, onto a clean installation, after an explicit yes. The restore upload
-accepts a backup up to 50 MB (`TOURCORE_RESTORE_UPLOAD_MAX_BYTES`). An upload
+accepts a backup, 50 MB by default (TOURCORE_RESTORE_UPLOAD_MAX_BYTES). An upload
 over that cap returns 413 and states the cap.
 
 ### What a fresh Grok user does

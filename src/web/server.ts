@@ -478,13 +478,13 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         const page = `<!doctype html><meta name="referrer" content="no-referrer"><title>Tour Core</title><p>${result.ok ? "Google Drive is connected to Tour Core. You can return to the chat." : "Google Drive wasn't connected. Return to the chat and try again."}</p>`;
         return send(result.ok ? 200 : 400, "text/html; charset=utf-8", page, { "Referrer-Policy": "no-referrer" });
       }
-      // Restore uploads are capped inside handlePortableRequest (50 MB by default).
+      // Restore uploads are capped inside handlePortableRequest (50 MB by default (TOURCORE_RESTORE_UPLOAD_MAX_BYTES)).
       // MAX_BODY_BYTES stays on the other routes and does not apply here.
       const portable = await handlePortableRequest(installation.backups, method, url.pathname, req);
       if (portable) {
         const extra: Record<string, string> = { "Referrer-Policy": "no-referrer" };
         // A rejected upload may still be arriving. Close so the next request is not read as the rest of this body.
-        if (portable.status === 413) extra.Connection = "close";
+        if (portable.close || portable.status === 413) extra.Connection = "close";
         return send(portable.status, portable.type, portable.body, extra);
       }
       if (url.pathname === "/api/connect" || url.pathname === "/api/connect/approve" || url.pathname === "/api/connect/deny") {

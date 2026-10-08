@@ -51,7 +51,7 @@ describe("Grok skill scenarios", () => {
     expect((await tool("list_properties")).properties).toEqual([]);
     // "100 Alfred Way, Brooklyn NY."
     const created = await tool("create_property_setup", { address: "100 Alfred Way, Brooklyn, NY", name: "100 Alfred Way", propertyType: "APARTMENT_BUILDING" });
-    expect(created.summary).toBe("Started 100 Alfred Way. I guessed Eastern Time for the time zone; please confirm.");
+    expect(created.summary).toBe("Started 100 Alfred Way. I'm using Eastern time for tours. Want a different one?");
     // "Two units, 101 and 102." / "The lobby entrance." / "No hallway doors."
     await tool("add_unit", { name: "Unit 101", description: "One-bedroom" });
     await tool("add_unit", { name: "Unit 102", description: "Two-bedroom" });

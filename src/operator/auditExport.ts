@@ -115,7 +115,7 @@ export async function exportAudit(services: OperatorServices, propertyId: string
     "audit-export.json": JSON.stringify(document, null, 2) + "\n",
     "audit.csv": combinedCsv(events),
   });
-  const windows = AccessWindows.fromTours(tours);
+  const windows = AccessWindows.fromTours(tours, { from, to });
   return { exportId: finalId, summary, files: [...AUDIT_EXPORT_FILES], folder, accessGrants: windows.accessGrants, denials: windows.accessDenials };
 }
 

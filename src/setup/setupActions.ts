@@ -31,6 +31,7 @@ import {
   titleCasePlace,
   type CanonicalAddress,
 } from "./address";
+import { zipStateMismatchQuestion } from "./zipState";
 import { canonicalDoor, canonicalUnitName } from "./normalizeDraft";
 
 /**
@@ -210,6 +211,13 @@ function storeAddress(draft: SetupDraft, parts: CanonicalAddress, display?: stri
   draft.property.addressConfirmed = false;
 }
 
+/** A ZIP entered with a state that doesn't own it is refused before anything is stored. */
+function rejectMismatchedZip(state: string | undefined, zip: string | undefined): void {
+  if (!state?.trim() || !zip?.trim()) return;
+  const question = zipStateMismatchQuestion(state.trim(), zip.trim());
+  if (question) throw new SetupInputError("ZIP_STATE_MISMATCH", question);
+}
+
 function requirePropertyType(input: string): PropertyType {
   const parsed = PropertyTypeSchema.safeParse(input);
   if (!parsed.success) throw new SetupInputError("PROPERTY_TYPE_UNKNOWN", "Choose a single-family home, a multifamily home, or an apartment or condo.");
@@ -228,6 +236,7 @@ export function createPropertySetup(input: {
   messagingMode?: SetupDraft["messagingMode"];
 }): SetupDraft {
   const parsed = parseUsAddress(input.address);
+  rejectMismatchedZip(parsed?.address.state, parsed?.address.postalCode);
   const address = parsed?.address.formatted || requireName(input.address, "ADDRESS_MISSING", "Please enter the property's address.");
   const displayName = input.name?.trim() || undefined;
   const explicitZone = input.timezone ? requireTimeZone(input.timezone) : undefined;
@@ -364,6 +373,12 @@ export function setPropertyDetails(
     if (stateAfter && stateAfter !== stateBefore) applyGuessedTimeZone(next.property);
   } else if (addressWasConfirmed && addressEdited && next.property.timezoneConfirmed !== true) {
     next.property.timezoneConfirmed = true;
+  }
+  const enteredZip =
+    input.postalCode !== undefined || (input.address !== undefined && !!parseUsAddress(input.address)?.address.postalCode);
+  const enteredStateAndZip = input.state !== undefined && input.postalCode !== undefined;
+  if (enteredZip || enteredStateAndZip) {
+    rejectMismatchedZip(next.property.canonicalAddress?.state, next.property.canonicalAddress?.postalCode);
   }
   if (input.facts !== undefined) next.property.facts = cleanFacts(input.facts);
   if (input.buildingAccess !== undefined) next = setBuildingAccess(next, input.buildingAccess);

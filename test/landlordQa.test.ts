@@ -407,7 +407,7 @@ describe("next step stays on the property the call was about", () => {
       }),
     );
     const draftState = await h.ok("get_state", { propertyId: draftId });
-    const draftHours = "Tours run every day, 8 AM to 11:59 PM. Want to change that?";
+    const draftHours = "Tours run every day, 8 AM to midnight. Want to change that?";
     expect(draftState.nextStep).toMatchObject({ tool: "save_hours", say: draftHours });
 
     const asked = await h.ok("cancel_tour", { tourRef, reason: "They asked to stop" });

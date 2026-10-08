@@ -14,12 +14,16 @@ export function restoreUploadMaxBytes(env: NodeJS.ProcessEnv = process.env): num
   return Number.isSafeInteger(n) ? n : RESTORE_UPLOAD_MAX_BYTES;
 }
 
-/** Plain size for the assistant to relay, such as "50 MB" or "1 MB". */
+/**
+ * Plain size for the assistant to relay. An exact decimal megabyte stays
+ * "1 MB". An exact mebibyte that is not a decimal megabyte is "50 MiB",
+ * so the default cap is not labeled as 50 MB.
+ */
 export function restoreUploadLimitLabel(bytes: number): string {
-  const mib = bytes / (1024 * 1024);
-  if (Number.isInteger(mib)) return `${mib} MB`;
   const mb = bytes / 1_000_000;
-  if (Number.isInteger(mb)) return `${mb} MB`;
+  if (Number.isInteger(mb) && mb > 0) return `${mb} MB`;
+  const mib = bytes / (1024 * 1024);
+  if (Number.isInteger(mib) && mib > 0) return `${mib} MiB`;
   return `${bytes} bytes`;
 }
 

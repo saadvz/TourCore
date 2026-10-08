@@ -12,7 +12,8 @@ import { chooseMessagingProvider } from "../messaging/switchProvider";
 import { LOCAL_TEST_TEXTING, SetupInputError, createPropertySetup, localTestModeSentence, modeSentence } from "../setup/setupActions";
 import { applySetupCommand } from "../setup/commands";
 import { canonicalDoor, canonicalUnitName } from "../setup/normalizeDraft";
-import { formatClockTime, type Weekday } from "../core/timezone";
+import { spokenClockTime, type Weekday } from "../core/timezone";
+import { guessedZoneSentence, zoneSwitchSentence } from "./zoneCopy";
 import { hoursRangeRefusal, reuseDaysRefusal, tourSpacingRefusal } from "../config/validateConfig";
 import { addressConfirmQuestion, nextAddressPartQuestion, savedFullAddress } from "../setup/address";
 import { parseTourRef } from "./tours";
@@ -100,14 +101,16 @@ export function envelope(
   const pictureProperty = (picture?.setup as { propertyId?: string } | undefined)?.propertyId;
   const foreignSetup = !!playbookStep && PROPERTY_SETUP_STEPS.has(playbookStep) && (!about || (!!pictureProperty && about !== pictureProperty));
   const next = foreignSetup ? "get_state" : (step?.tool ?? "get_state");
+  const milestone = foreignSetup ? null : (current?.title ?? "Setup");
+  const milestoneId = foreignSetup ? null : (current?.id ?? null);
   return {
     status,
-    milestone: current?.title ?? "Setup",
-    milestoneId: current?.id ?? null,
+    milestone,
+    milestoneId,
     next,
     message,
     ...(status === "blocked" ? { reason: message, code: code ?? "BLOCKED" } : {}),
-    nextStep: { tool: next, ...(foreignSetup ? {} : { say: step?.say }), milestone: current?.id ?? null },
+    nextStep: { tool: next, ...(foreignSetup ? {} : { say: step?.say }), milestone: milestoneId },
     ...extra,
   };
 }
@@ -226,6 +229,13 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
     run: async (ctx, i) => {
       const ws = ctx.services.workspace;
       let id = i.property ? propertyIdOf(ctx, i.property) : ws.propertyIds().length === 1 ? ws.propertyIds()[0] : undefined;
+      let stateBefore = "";
+      let timezoneBefore = "";
+      if (id) {
+        const before = ws.openDraft(id).draft;
+        stateBefore = before.property.canonicalAddress?.state.trim() ?? "";
+        timezoneBefore = before.property.timezone;
+      }
       if (!id) {
         if (!i.address) return envelope(ctx, undefined, "next", "What's the street address?");
         const existing = ws.findByAddress(i.address);
@@ -273,13 +283,16 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       }
       ws.persistEdit(next, ctx.now());
       const saved = ws.openDraft(id).draft;
+      const zone =
+        zoneSwitchSentence(stateBefore, saved, i.timezone !== undefined) ||
+        guessedZoneSentence(stateBefore, timezoneBefore, saved, i.timezone !== undefined);
       const canonical = saved.property.canonicalAddress;
       const part = nextAddressPartQuestion(canonical, { cityJustSaved: i.city !== undefined });
-      if (part) return envelope(ctx, id, "next", part, { propertyId: id });
+      if (part) return envelope(ctx, id, "next", `${part}${zone}`, { propertyId: id });
       const question = canonical && saved.property.addressConfirmed === false ? addressConfirmQuestion(canonical) : undefined;
-      if (question) return envelope(ctx, id, "next", question, { propertyId: id, address: savedFullAddress(saved.property) });
-      if (!saved.property.propertyType) return envelope(ctx, id, "next", "Is this a single-family home, a multifamily home, or one apartment or condo?", { propertyId: id });
-      return envelope(ctx, id, "done", `Saved ${saved.property.name}.`, { propertyId: id });
+      if (question) return envelope(ctx, id, "next", `${question}${zone}`, { propertyId: id, address: savedFullAddress(saved.property) });
+      if (!saved.property.propertyType) return envelope(ctx, id, "next", `Is this a single-family home, a multifamily home, or one apartment or condo?${zone}`, { propertyId: id });
+      return envelope(ctx, id, "done", `Saved ${saved.property.name}.${zone}`, { propertyId: id });
     },
   }),
   tool({
@@ -641,7 +654,7 @@ export function describeTourDays(days: readonly Weekday[]): string {
 }
 
 function spokenClock(hhmm: string): string {
-  return formatClockTime(hhmm).replace(":00", "");
+  return spokenClockTime(hhmm);
 }
 
 /** Hours-step sentence from the hours that are actually saved. */

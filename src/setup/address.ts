@@ -21,6 +21,17 @@ const STATE_NAMES: Record<string, string> = {
   alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA", colorado: "CO", connecticut: "CT", delaware: "DE", florida: "FL", georgia: "GA", hawaii: "HI", idaho: "ID", illinois: "IL", indiana: "IN", iowa: "IA", kansas: "KS", kentucky: "KY", louisiana: "LA", maine: "ME", maryland: "MD", massachusetts: "MA", michigan: "MI", minnesota: "MN", mississippi: "MS", missouri: "MO", montana: "MT", nebraska: "NE", nevada: "NV", "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY", "north carolina": "NC", "north dakota": "ND", ohio: "OH", oklahoma: "OK", oregon: "OR", pennsylvania: "PA", "rhode island": "RI", "south carolina": "SC", "south dakota": "SD", tennessee: "TN", texas: "TX", utah: "UT", vermont: "VT", virginia: "VA", washington: "WA", "west virginia": "WV", wisconsin: "WI", wyoming: "WY", "district of columbia": "DC",
 };
 
+const STATE_SPOKEN: Record<string, string> = {};
+for (const [name, abbr] of Object.entries(STATE_NAMES)) {
+  if (STATE_SPOKEN[abbr]) continue;
+  STATE_SPOKEN[abbr] = name.replace(/\b\w+/g, (word) => (word === "of" ? "of" : word.charAt(0).toUpperCase() + word.slice(1)));
+}
+
+/** "NJ" → "New Jersey". An unknown abbreviation is returned as given. */
+export function spokenStateName(state: string): string {
+  return STATE_SPOKEN[state.trim().toUpperCase()] ?? state.trim();
+}
+
 /**
  * The address already stored for a property, read back through the same
  * formatter. A legacy "Ave" becomes "Avenue". This is the line to show when
@@ -128,7 +139,9 @@ export type AddressPart = "street" | "city" | "state" | "postalCode";
 /** Pulls street, city, state and ZIP out of what the operator typed. Missing pieces are listed, never filled in. */
 export function parseUsAddress(raw: string): { address: CanonicalAddress; missing: AddressPart[] } | undefined {
   let text = raw.trim().replace(/\s+/g, " ").replace(/\s*,\s*/g, ", ");
-  if (text.length < 5) return undefined;
+  const loneState = stateOf(text);
+  const loneZip = /^\d{5}(?:-\d{4})?$/.test(text);
+  if (text.length < 5 && !loneState && !loneZip) return undefined;
   const zipMatch = text.match(/\b(\d{5})(?:-\d{4})?\b/);
   const postalCode = zipMatch?.[1];
   if (zipMatch) text = text.replace(zipMatch[0], " ").replace(/\s+/g, " ").replace(/\s+,/g, ",").replace(/,\s*$/, "").trim();
@@ -167,7 +180,7 @@ export function parseUsAddress(raw: string): { address: CanonicalAddress; missin
     const tokens = text.split(" ").filter(Boolean);
     const last = tokens[tokens.length - 1] ?? "";
     const lastTwo = tokens.slice(-2).join(" ");
-    if (stateOf(lastTwo) && tokens.length >= 3) {
+    if (stateOf(lastTwo) && tokens.length >= 2) {
       state = stateOf(lastTwo)!;
       tokens.splice(-2, 2);
     } else if (trailingState(last, postalCode)) {
@@ -176,15 +189,10 @@ export function parseUsAddress(raw: string): { address: CanonicalAddress; missin
     }
     const split = takeUnit(tokens);
     unit = split.unit;
-    const place = split.place;
-    // A trailing street type ("Avenue", "Ave S") is part of the street.
-    // The last word is a city only when it is not that type.
-    if (place.length >= 2 && !endsAsStreet(place)) {
-      city = place[place.length - 1]!;
-      street = place.slice(0, -1).join(" ");
-    } else if (place.length >= 2 || split.unit) {
-      street = place.join(" ");
-    }
+    const place = splitStreetAndCity(split.place);
+    street = place.street;
+    city = place.city;
+    if (!street && split.unit) street = split.place.join(" ");
   }
 
   street = canonicalizeStreet(street.replace(/,\s*$/, "").trim());
@@ -195,7 +203,7 @@ export function parseUsAddress(raw: string): { address: CanonicalAddress; missin
   if (!city) missing.push("city");
   if (!state) missing.push("state");
   if (!postalCode) missing.push("postalCode");
-  if (!street && !city && !state) return undefined;
+  if (!street && !city && !state && !postalCode) return undefined;
   const address: CanonicalAddress = {
     street,
     city,
@@ -342,6 +350,88 @@ function trailingState(token: string, postalCode: string | undefined): string | 
   if (!found) return undefined;
   if (expandSuffix(token) && !postalCode && token !== token.toUpperCase()) return undefined;
   return found;
+}
+
+/** A city word that usually takes the word before it ("Saddle River", "Salt Lake City"). */
+const CITY_TAIL = new Set([
+  "river",
+  "ferry",
+  "city",
+  "park",
+  "heights",
+  "beach",
+  "hills",
+  "springs",
+  "lake",
+  "falls",
+  "grove",
+  "haven",
+  "ville",
+  "town",
+  "port",
+  "field",
+  "wood",
+  "woods",
+  "ford",
+  "view",
+  "ridge",
+  "point",
+  "landing",
+  "island",
+  "bay",
+  "creek",
+]);
+
+/** A word that starts a longer city name ("New York", "Fort Lee", "Salt Lake City"). */
+const CITY_HEAD = new Set(["salt", "new", "fort", "st", "saint", "little", "north", "south", "east", "west", "lake", "san", "los", "las", "mount", "mt", "grand", "palm", "cape", "port"]);
+
+/**
+ * Comma-less street and city. The rightmost real street suffix (not the
+ * first word, and not "St." with a period) ends the street. A direction
+ * right after that suffix stays on the street when a city follows
+ * ("12 Oak Ave S Fort Lee"). A line that ends as a street has no city.
+ * With no suffix, a house number peels a city off the end; a line with no
+ * house number is the city ("Fort Lee", "St. Louis"). A lone suffix is a
+ * street, not a city.
+ */
+function splitStreetAndCity(place: string[]): { street: string; city: string } {
+  if (place.length === 0) return { street: "", city: "" };
+  if (endsAsStreet(place)) return { street: place.join(" "), city: "" };
+  let suffixAt = -1;
+  for (let i = place.length - 1; i >= 1; i--) {
+    const word = place[i]!;
+    if (word.includes(".")) continue;
+    if (expandSuffix(word)) {
+      suffixAt = i;
+      break;
+    }
+  }
+  if (suffixAt >= 0) {
+    let streetEnd = suffixAt + 1;
+    if (streetEnd < place.length && DIRECTIONAL.has(bareWord(place[streetEnd]!)) && streetEnd + 1 < place.length) streetEnd += 1;
+    const cityTokens = place.slice(streetEnd);
+    if (!cityTokens.length) return { street: place.join(" "), city: "" };
+    return { street: place.slice(0, streetEnd).join(" "), city: cityTokens.join(" ") };
+  }
+  if (!/^\d/.test(place[0]!)) {
+    if (place.length === 1 && expandSuffix(place[0]!)) return { street: place[0]!, city: "" };
+    return { street: "", city: place.join(" ") };
+  }
+  const take = cityTailLength(place);
+  if (take <= 0 || take >= place.length) return { street: place.join(" "), city: "" };
+  return { street: place.slice(0, -take).join(" "), city: place.slice(-take).join(" ") };
+}
+
+function cityTailLength(place: string[]): number {
+  const last = bareWord(place[place.length - 1]!);
+  if (CITY_TAIL.has(last)) {
+    let take = Math.min(2, place.length);
+    if (place.length >= 3 && CITY_HEAD.has(bareWord(place[place.length - 3]!))) take = 3;
+    if (take >= place.length) take = place.length - 1;
+    return take;
+  }
+  if (place.length >= 3 && CITY_HEAD.has(bareWord(place[place.length - 2]!))) return 2;
+  return place.length >= 2 ? 1 : 0;
 }
 
 /** The last word is a street type, or a direction after one ("Ave S"). */

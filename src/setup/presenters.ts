@@ -1,7 +1,7 @@
 import { FIELD_WORDS, missingProfileFields, PROFILE_FIELDS, profileSummaryLine, type ProfileField } from "../config/unitProfile";
 import type { ConfigIssue, ConfigSection } from "../config/validateConfig";
 import { slotStartMinutes } from "../core/schedule";
-import { formatClockTime, friendlyTimeZone } from "../core/timezone";
+import { formatClockTime, friendlyTimeZone, spokenClockTime } from "../core/timezone";
 import type { DryTourGroup, DryTourResult } from "./dryTour";
 import type { ReadinessResult } from "./readiness";
 import {
@@ -38,6 +38,12 @@ export const SETUP_STEPS = [
   { id: "services", title: "Records and messages" },
 ] as const;
 export type SetupStep = (typeof SETUP_STEPS)[number]["id"];
+
+/** 23:59 is said as midnight. Other hours keep the clock with minutes. */
+function hoursRangeLabel(start: string, end: string): string {
+  if (start === "23:59" || end === "23:59") return `${spokenClockTime(start)} to ${spokenClockTime(end)}`;
+  return `${formatClockTime(start)}-${formatClockTime(end)}`;
+}
 
 export interface Fix {
   step: SetupStep;
@@ -193,7 +199,7 @@ export function draftView(draft: SetupDraft) {
   const tourHours = {
     ...th,
     daysLabel: describeDays(th.days),
-    hoursLabel: `${formatClockTime(th.start)}-${formatClockTime(th.end)}`,
+    hoursLabel: hoursRangeLabel(th.start, th.end),
     lengthLabel: describeMinutes(th.tourLengthMinutes),
     spacingLabel: describeInterval(th.slotEveryMinutes),
     earlyLabel: describeMinutes(th.earlyArrivalMinutes),
@@ -201,7 +207,7 @@ export function draftView(draft: SetupDraft) {
     /** Only when the schedule is valid; an overlapping schedule has no honest count. */
     toursPerDay: hoursValid ? slotStartMinutes(th).length : undefined,
     summary: hoursValid
-      ? `${describeDays(th.days)}, ${formatClockTime(th.start)}-${formatClockTime(th.end)}. That's up to ${slotStartMinutes(th).length} tours a day.`
+      ? `${describeDays(th.days)}, ${hoursRangeLabel(th.start, th.end)}. That's up to ${slotStartMinutes(th).length} tours a day.`
       : undefined,
   };
 

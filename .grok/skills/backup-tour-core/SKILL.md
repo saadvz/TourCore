@@ -68,17 +68,17 @@ Exports are for people to read. They are not backups.
 2. Upload that file to Tour Core/Exports with the Google Drive connector.
 3. Say you saved the export. Do not describe it as the live booking record.
 
-On an installation whose records live in Google Drive (GOOGLE_DRIVE_READY), `export_records` day exports are written with the records and copied into Drive automatically by the save step. On a hosted installation (HOSTED_VOLUME, Drive used only for backups), day exports stay on the server as download links. Only readable exports and backups come back as one-time links for the assistant to save into the Tour Core folder in Drive.
+On an installation whose records live in Google Drive (GOOGLE_DRIVE_READY), the day's audit-export.json is written with the records and copied into Drive by the save step. The CSV stays on the Tour Core computer. On a hosted installation (HOSTED_VOLUME, Drive used only for backups), day exports stay on the server as 30-minute download links that can be used until they expire. Only readable exports and backups come back as one-time links for the assistant to save into the Tour Core folder in Drive. Door access in a day export is only what was issued or used that day.
 
 ### Restore
 
 1. Find the latest file in Tour Core/Backups with the Google Drive connector.
 2. `begin_restore_upload`, then upload that file to the handoff. Do not paste
    the JSON into chat. The upload note tells you to upload the file to that
-   address. A backup up to 50 MB is accepted. If the upload is refused, say
+   address. A backup is accepted, 50 MB by default (TOURCORE_RESTORE_UPLOAD_MAX_BYTES). If the upload is refused, say
    the limit from the message (413). Do not describe that refusal as a lost
-   connection. If the upload link expired before a file arrived, start a new
-   upload with `begin_restore_upload`.
+   connection. Every expired upload, including a second look and a file that arrived before the link expired, says to send the file again. Start a new
+   upload with `begin_restore_upload`. "Upload the backup file first, then I can show you what's in it." is only for a live link with no file. An older "mock" verification setting restores as basic-form.
 3. `preview_portable_restore` and read the preview aloud:
 
 > Backup contains:

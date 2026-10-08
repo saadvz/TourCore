@@ -11,6 +11,7 @@ import { PROPERTY_TYPE_LABELS, PROPERTY_TYPES, SETUP_PROPERTY_TYPES, validateCon
 import { extractValues, FIELD_WORDS, missingProfileFields, nextProfileQuestion, parseBulkUnitDetails, profileSummaryLine } from "../config/unitProfile";
 import { formatPhone } from "../core/phone";
 import { formatDay, formatTime, spokenTimeZone } from "../core/timezone";
+import { guessedZoneSentence, zoneSwitchSentence } from "./zoneCopy";
 import { revokeConfirmQuestion } from "../core/availabilityCopy";
 import { TourCoreError } from "../core/TourCore";
 import { PortableBackupError } from "../backup/portable";
@@ -23,7 +24,7 @@ import { hoursRangeRefusal, reuseDaysRefusal, tourSpacingRefusal } from "../conf
 import { parseDays, parseMinutes, parseTimeOfDay, SAME_DAY_HOURS, tourHoursEndSameDay } from "../setup/parse";
 import type { DryTourCheck, DryTourResult } from "../setup/dryTour";
 import type { ReadinessResult } from "../setup/readiness";
-import { addressTimeZoneGuess, condoNextQuestion, createPropertySetup, localTestModeSentence, modeSentence, operatorFacingPropertyName, OperatorTeamCopy, SetupInputError, tourableSpacesQuestion, visitorHelpLines, visitorHelpQuestion, type SetupDraft } from "../setup/setupActions";
+import { condoNextQuestion, createPropertySetup, localTestModeSentence, modeSentence, operatorFacingPropertyName, OperatorTeamCopy, SetupInputError, tourableSpacesQuestion, visitorHelpLines, visitorHelpQuestion, type SetupDraft } from "../setup/setupActions";
 import { NO_FORM_QUESTION } from "../setup/verification";
 import { usesLocalMessaging } from "../messaging/propertyScope";
 import { operatorUnitName } from "../visitor/identity";
@@ -205,19 +206,6 @@ function setupState(ctx: ToolContext, id: string) {
     status: ws.has(id) ? statusLabel(ws.load(id)) : "Setup in progress",
     problems,
   };
-}
-
-/**
- * One sentence when a state change would move a locked zone. Empty when the
- * zone was updated, already matches, or the operator set a zone on this call.
- */
-function zoneSwitchSentence(stateBefore: string, next: SetupDraft, timezoneGiven: boolean): string {
-  if (timezoneGiven) return "";
-  const stateAfter = next.property.canonicalAddress?.state.trim() ?? "";
-  if (!stateAfter || stateAfter === stateBefore) return "";
-  const guess = addressTimeZoneGuess(next.property.canonicalAddress);
-  if (guess.basis !== "address" || guess.timezone === next.property.timezone) return "";
-  return ` Tours still run on ${spokenTimeZone(next.property.timezone)} time. Should I switch to ${spokenTimeZone(guess.timezone)} time?`;
 }
 
 function setupSnapshot(ctx: ToolContext, id: string) {
@@ -469,11 +457,11 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const messagingMode = defaultMessagingMode(servicesOf(ctx).installedMessaging?.());
       const draft = createPropertySetup({ address: i.address, name: i.name, propertyType: i.propertyType, timezone: i.timezone, existingPropertyIds: ws.propertyIds(), messagingMode });
       ws.saveDraft(draft);
-      const view = draftView(draft);
+      const using = guessedZoneSentence("", "", draft, i.timezone !== undefined);
       return {
         status: "created",
-        summary: `Started ${draft.property.name}. I guessed ${view.property.timezoneLabel} for the time zone; please confirm.`,
-        timezoneGuess: view.property.timezoneLabel,
+        summary: `Started ${draft.property.name}.${using}`,
+        ...(using ? { timezoneGuess: spokenTimeZone(draft.property.timezone) } : {}),
         ...propertyNextQuestion(draft),
         setup: setupSnapshot(ctx, draft.property.id),
       };
@@ -492,7 +480,13 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       address: z.string().max(200).optional(),
       street: z.string().max(120).optional().describe("The street address the operator gave. Don't invent one."),
       city: z.string().max(80).optional().describe("The city the operator gave. Don't invent one. Kept even when the state is still missing."),
-      state: z.string().max(40).optional().describe("The state the operator gave, such as NJ or New Jersey. Don't invent one."),
+      state: z
+        .string()
+        .max(40)
+        .optional()
+        .describe(
+          'The state the operator gave, such as NJ or New Jersey. Don\'t invent one. If it isn\'t a US state, the reprompt is exactly: "I didn\'t catch that state. Which state is it, like NJ or New Jersey?"',
+        ),
       postalCode: z.string().max(10).optional().describe("The ZIP code the operator gave. Five digits. Don't invent one. Kept even when another part is still missing."),
       confirmAddress: z.boolean().optional().describe("True only after the operator agreed the read-back address is right."),
       timezone: z.string().max(60).optional(),
@@ -525,6 +519,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
       const stateBefore = draft.property.canonicalAddress?.state.trim() ?? "";
+      const timezoneBefore = draft.property.timezone;
       let next = applySetupCommand(draft, "setPropertyDetails", {
         name: i.name,
         address: i.address,
@@ -550,7 +545,10 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       }
       ctx.services.workspace.persistEdit(next, ctx.now());
       const setup = setupSnapshot(ctx, id);
-      return { summary: `Updated ${setup.name}. ${setup.saved}.${zoneSwitchSentence(stateBefore, next, i.timezone !== undefined)}`, ...propertyNextQuestion(next, { cityJustSaved: i.city !== undefined }), setup };
+      const zone =
+        zoneSwitchSentence(stateBefore, next, i.timezone !== undefined) ||
+        guessedZoneSentence(stateBefore, timezoneBefore, next, i.timezone !== undefined);
+      return { summary: `Updated ${setup.name}. ${setup.saved}.${zone}`, ...propertyNextQuestion(next, { cityJustSaved: i.city !== undefined }), setup };
     },
   }),
 

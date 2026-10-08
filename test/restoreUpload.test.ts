@@ -16,7 +16,7 @@ afterEach(() => {
 });
 
 const RESTORE_NOTE =
-  "For you only. Do not show this link or capability to the operator. Upload the backup file once to this address. Then ask Tour Core to check it before anything changes. The link expires and is not a public restore address. If the upload link expired before a file arrived, start a new upload with begin_restore_upload.";
+  "For you only. Do not show this link or capability to the operator. Upload the backup file once to this address. Then ask Tour Core to check it before anything changes. The link expires and is not a public restore address. Every expired upload says to send the file again. Start a new upload with begin_restore_upload.";
 
 function hosted(): InstallHarness {
   const h = installHarness({
@@ -285,7 +285,7 @@ describe("restore upload limit", () => {
     const posted = await postChunked(app.port, String(streamed.handoff.path), String(streamed.handoff.capability), RESTORE_UPLOAD_MAX_BYTES + 1);
     expect(posted.status).toBe(413);
     expect(posted.status).not.toBe(502);
-    expect(posted.body).toBe("That file is too big to restore. Backups can be up to 50 MB, so check that it's the Tour Core backup file and try again.");
+    expect(posted.body).toBe("That file is too big to restore. Backups can be up to 50 MiB, so check that it's the Tour Core backup file and try again.");
     expect(handoffNames(h.root).some((name) => name.startsWith(".incoming") || name.endsWith(".tmp"))).toBe(false);
     expect(existsSync(join(handoffDir(h.root), `${uploadId}.body`))).toBe(false);
     expect(await h.fails("preview_portable_restore", { uploadId })).toMatch(/Upload the backup/);
