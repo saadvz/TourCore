@@ -106,7 +106,7 @@ export const BACKUP_TOOLS: OperatorTool[] = [
     name: "begin_restore_upload",
     title: "Start a backup restore",
     kind: "change",
-    description: "Opens a short-lived upload for one portable backup. Nothing is imported until the operator approves a preview. Do not paste the backup into chat.",
+    description: "Opens a short-lived upload for one portable backup. Nothing is imported until the operator approves a preview. Do not paste the backup into chat. Upload the file to the handoff. A backup up to 50 MB is accepted. An upload over that cap is refused with a message that states the cap. If the upload link expired before a file arrived, start a new upload with begin_restore_upload.",
     input: z.strictObject({}),
     run: async (ctx) => installation(ctx).backups.beginRestore(),
   }),
@@ -114,7 +114,7 @@ export const BACKUP_TOOLS: OperatorTool[] = [
     name: "preview_portable_restore",
     title: "Preview a backup",
     kind: "read",
-    description: "Checks an uploaded portable backup and returns a plain preview. Does not change operational records.",
+    description: "Checks an uploaded portable backup and returns a plain preview. Does not change operational records. If the upload link expired before a file arrived, start a new upload with begin_restore_upload.",
     input: z.strictObject({ uploadId: z.string().regex(/^art_[A-Za-z0-9_-]{20,80}$/) }),
     run: async (ctx, input) => {
       try {
@@ -129,7 +129,7 @@ export const BACKUP_TOOLS: OperatorTool[] = [
     title: "Restore a portable backup",
     kind: "consequential",
     description:
-      "After a preview, restores business records. Asks once. If this Tour Core already has records, pass recovery replace only after the operator explicitly chooses replacement. Does not restore provider credentials. Does not merge two installations.",
+      "After a preview, restores business records. Asks once. If this Tour Core already has records, pass recovery replace only after the operator explicitly chooses replacement. Does not restore provider credentials. Does not merge two installations. If the upload link expired before a file arrived, start a new upload with begin_restore_upload.",
     input: z.strictObject({
       uploadId: z.string().regex(/^art_[A-Za-z0-9_-]{20,80}$/),
       recovery: z.enum(["replace"]).optional(),

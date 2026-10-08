@@ -2,7 +2,8 @@ import type { InstallationFiles } from "../install/manifest";
 import type { SecretStore } from "../install/secretStore";
 import { secretValues } from "../install/settings";
 import { collectCanonical } from "../storage/canonical";
-import { HandoffError, HandoffStore } from "./handoff";
+import { HandoffError, HandoffStore, UPLOAD_BACKUP_FIRST } from "./handoff";
+import { RestoreUploadTooLargeError } from "./limits";
 import {
   PortableBackupError,
   applyPortableBackup,
@@ -24,6 +25,7 @@ export interface BackupDestinationInput {
 }
 
 const GROK_NOTE = "For you only. Do not show this link or capability to the operator. Download it once, save it with the Google Drive connector, then tell Tour Core it was stored. The link expires and is not a public backup address.";
+const RESTORE_NOTE = "For you only. Do not show this link or capability to the operator. Upload the backup file once to this address. Then ask Tour Core to check it before anything changes. The link expires and is not a public restore address. If the upload link expired before a file arrived, start a new upload with begin_restore_upload.";
 
 /**
  * Portable backups for HOSTED_RAILWAY_P0. The Railway volume stays the live
@@ -212,7 +214,7 @@ export class PortableBackups {
     return {
       summary: "Send the backup file to Tour Core. I'll check it before anything changes.",
       expiresAt: issued.expiresAt,
-      handoff: { note: GROK_NOTE.replace("Download it once", "Upload the backup file once"), method: "POST", path: issued.path, capability: issued.capability },
+      handoff: { note: RESTORE_NOTE, method: "POST", path: issued.path, capability: issued.capability },
     };
   }
 
@@ -220,9 +222,23 @@ export class PortableBackups {
     try {
       this.handoff.receiveUpload(id, capability, body);
     } catch (err) {
-      if (err instanceof HandoffError) throw new PortableBackupError(err.message);
-      throw err;
+      this.rethrowReceive(err);
     }
+  }
+
+  /** Moves a spooled upload into the handoff. Does not import it. */
+  receiveFile(id: string, capability: string, filePath: string): void {
+    try {
+      this.handoff.acceptUploadFile(id, capability, filePath);
+    } catch (err) {
+      this.rethrowReceive(err);
+    }
+  }
+
+  private rethrowReceive(err: unknown): never {
+    if (err instanceof RestoreUploadTooLargeError) throw err;
+    if (err instanceof HandoffError) throw new PortableBackupError(err.message);
+    throw err;
   }
 
   preview(uploadId: string): Record<string, unknown> {
@@ -270,7 +286,7 @@ export class PortableBackups {
     try {
       raw = this.handoff.readUpload(uploadId);
     } catch (err) {
-      throw new PortableBackupError(err instanceof HandoffError ? err.message : "Upload the backup before asking Tour Core to check it.");
+      throw new PortableBackupError(err instanceof HandoffError ? err.message : UPLOAD_BACKUP_FIRST);
     }
     let parsed: unknown;
     try {

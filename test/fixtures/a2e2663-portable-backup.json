@@ -1,0 +1,248 @@
+{
+  "format": "tourcore-portable-backup",
+  "schemaVersion": 1,
+  "installationId": "inst_6BOPTLfKRTmyTnNj",
+  "createdAt": "2026-09-28T11:00:00.000Z",
+  "tourCoreVersion": "0.4.0",
+  "contents": {
+    "files": [
+      {
+        "path": "install/manifest.json",
+        "kind": "installation",
+        "body": {
+          "schemaVersion": 1,
+          "deploymentMode": "HOSTED_RAILWAY_P0",
+          "installationId": "inst_6BOPTLfKRTmyTnNj",
+          "publicBaseUrl": "https://demo.up.railway.app",
+          "publicEndpointProvider": "RAILWAY",
+          "messagingProvider": "UNSET",
+          "storageProvider": "LOCAL_DEMO",
+          "accessProvider": "DURIN_DEMO",
+          "operatorNotificationProvider": "NONE",
+          "installedAt": "2026-10-08T17:22:26.753Z",
+          "updatedAt": "2026-10-08T17:22:26.762Z"
+        },
+        "sha256": "861b414d900ba8fb4d7776a5db4a132a51c5d9ad097734df34b1a50555d176b9"
+      },
+      {
+        "path": "install/state.json",
+        "kind": "record",
+        "body": {
+          "schemaVersion": 1,
+          "publicBaseUrlHistory": [
+            {
+              "url": "https://demo.up.railway.app",
+              "since": "2026-10-08T17:22:26.762Z"
+            }
+          ]
+        },
+        "sha256": "a96140fab511ad6e762612eb5542e1d5aa28c7c414ffd7666a0504042f39dae3"
+      },
+      {
+        "path": "properties/prop_100_alfred_way/content-changes.json",
+        "kind": "content-changes",
+        "body": {
+          "schemaVersion": 1,
+          "changes": [
+            {
+              "at": "2026-09-28T11:00:00.000Z",
+              "changes": [
+                "visitor help number"
+              ]
+            }
+          ]
+        },
+        "sha256": "f45dfee4fffef286e4c97de8db63feb8acbb7614230a15afee7548ca0bc6ee44"
+      },
+      {
+        "path": "properties/prop_100_alfred_way/hours-confirmed.json",
+        "kind": "record",
+        "body": {
+          "confirmedAt": "2026-09-28T11:00:00.000Z"
+        },
+        "sha256": "03d43053254096463d148650158e9e4589ca02ac4bb77c536d39644f2b9806e2"
+      },
+      {
+        "path": "properties/prop_100_alfred_way/status.json",
+        "kind": "property-state",
+        "body": {
+          "propertyId": "prop_100_alfred_way",
+          "status": "DRAFT",
+          "configHash": "7fab35827f61e5f1",
+          "safetyHash": "c62cc7d111d28d7e",
+          "savedAt": "2026-09-28T11:00:00.000Z"
+        },
+        "sha256": "e40b1f926abc67dcf29a75fdadf71d17be25c6266b6fad91d77ebf08a9629ba1"
+      },
+      {
+        "path": "properties/prop_100_alfred_way/tourcore.config.json",
+        "kind": "property",
+        "body": {
+          "schemaVersion": 1,
+          "property": {
+            "id": "prop_100_alfred_way",
+            "name": "100 Alfred Way",
+            "address": "100 Alfred Way, Brooklyn, NY",
+            "canonicalAddress": {
+              "street": "100 Alfred Way",
+              "city": "Brooklyn",
+              "state": "NY",
+              "formatted": "100 Alfred Way, Brooklyn, NY"
+            },
+            "addressConfirmed": false,
+            "displayName": "100 Alfred Way",
+            "propertyType": "APARTMENT_BUILDING",
+            "timezone": "America/New_York",
+            "facts": []
+          },
+          "operator": {
+            "name": "property team",
+            "contact": "Shown on screen (demo)",
+            "visitorHelpDecided": true
+          },
+          "doors": [
+            {
+              "id": "lobby_entrance",
+              "name": "Lobby Entrance",
+              "kind": "ENTRANCE"
+            },
+            {
+              "id": "unit_101_door",
+              "name": "Unit 101 Door",
+              "kind": "UNIT"
+            },
+            {
+              "id": "unit_102_door",
+              "name": "Unit 102 Door",
+              "kind": "UNIT"
+            }
+          ],
+          "units": [
+            {
+              "id": "unit_101",
+              "name": "Unit 101",
+              "doorId": "unit_101_door",
+              "summary": "One-bedroom apartment",
+              "facts": [],
+              "profile": {
+                "bedrooms": {
+                  "status": "PROVIDED",
+                  "value": 1,
+                  "updatedAt": "2026-10-08T17:22:26.803Z"
+                },
+                "bathrooms": {
+                  "status": "PROVIDED",
+                  "value": 1,
+                  "updatedAt": "2026-10-08T17:22:26.803Z"
+                },
+                "monthlyRent": {
+                  "status": "PROVIDED",
+                  "value": {
+                    "amount": 1950,
+                    "currency": "USD"
+                  },
+                  "updatedAt": "2026-10-08T17:22:26.803Z"
+                },
+                "availability": {
+                  "status": "PROVIDED",
+                  "value": {
+                    "text": "now",
+                    "now": true
+                  },
+                  "updatedAt": "2026-10-08T17:22:26.803Z"
+                }
+              }
+            },
+            {
+              "id": "unit_102",
+              "name": "Unit 102",
+              "doorId": "unit_102_door",
+              "summary": "Two-bedroom apartment",
+              "facts": [],
+              "profile": {
+                "bedrooms": {
+                  "status": "PROVIDED",
+                  "value": 2,
+                  "updatedAt": "2026-10-08T17:22:26.804Z"
+                },
+                "bathrooms": {
+                  "status": "PROVIDED",
+                  "value": 1,
+                  "updatedAt": "2026-10-08T17:22:26.804Z"
+                },
+                "monthlyRent": {
+                  "status": "PROVIDED",
+                  "value": {
+                    "amount": 2400,
+                    "currency": "USD"
+                  },
+                  "updatedAt": "2026-10-08T17:22:26.804Z"
+                },
+                "availability": {
+                  "status": "PROVIDED",
+                  "value": {
+                    "text": "now",
+                    "now": true
+                  },
+                  "updatedAt": "2026-10-08T17:22:26.804Z"
+                }
+              }
+            }
+          ],
+          "routes": [
+            {
+              "id": "route_unit_101",
+              "unitId": "unit_101",
+              "stops": [
+                {
+                  "doorId": "lobby_entrance",
+                  "guidance": "Come on in. Head to Unit 101."
+                },
+                {
+                  "doorId": "unit_101_door",
+                  "guidance": "Welcome to Unit 101! Take your time, and text me any questions."
+                }
+              ]
+            },
+            {
+              "id": "route_unit_102",
+              "unitId": "unit_102",
+              "stops": [
+                {
+                  "doorId": "lobby_entrance",
+                  "guidance": "Come on in. Head to Unit 102."
+                },
+                {
+                  "doorId": "unit_102_door",
+                  "guidance": "Welcome to Unit 102! Take your time, and text me any questions."
+                }
+              ]
+            }
+          ],
+          "tourHours": {
+            "days": [
+              "MON",
+              "TUE",
+              "WED",
+              "THU",
+              "FRI"
+            ],
+            "start": "09:00",
+            "end": "17:00",
+            "slotEveryMinutes": 60,
+            "tourLengthMinutes": 45,
+            "earlyArrivalMinutes": 10
+          },
+          "verificationMode": "basic-form",
+          "verificationFormUrl": "https://forms.example/tour-core-basic-id",
+          "verificationValidForDays": 30,
+          "messagingMode": "demo",
+          "storageMode": "memory",
+          "accessMode": "durin-mock"
+        },
+        "sha256": "7fab35827f61e5f10d2289af491cec6418c6b7c4f0a4ad2640f7f0cd94f4d027"
+      }
+    ]
+  },
+  "checksum": "22cd34b9ad1bef8b90f459f64439232eaa9286f1659005b3c59884796a613f36"
+}

@@ -36,9 +36,9 @@ hosted Tour Core.
 ## What you use it for
 
 - Saving a portable backup into `Tour Core/Backups` (`create_portable_backup`, then `confirm_backup_stored` only after the file is there).
-- Saving a readable export into `Tour Core/Exports`. An export is not a backup.
+- Saving a readable export into `Tour Core/Exports`. An export is not a backup. On an installation whose records live in Google Drive (`GOOGLE_DRIVE_READY`), `export_records` day exports are written with the records and copied into Drive automatically by the save step. On a hosted installation (`HOSTED_VOLUME`, Drive used only for backups), day exports stay on the server as download links. Only readable exports and backups come back as one-time links for the assistant to save into the Tour Core folder in Drive.
 - "Open my Tour Core backup." Open the file with the Drive connector. Bookings and access still come from Tour Core tools.
-- Restoring a lost installation: download the latest backup, upload it through Tour Core's restore handoff, read the preview, and import only after an explicit yes.
+- Restoring a lost installation: download the latest backup, upload it through Tour Core's restore handoff (up to 50 MB; a larger file is refused with 413 and the cap stated in the message), read the preview, and import only after an explicit yes.
 
 Do not say "Tour Core needs its own Google Drive permission."
 

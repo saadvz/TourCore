@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { describeOperatorUpdate } from "../alerts/describeUpdate";
+import { UPLOAD_BACKUP_FIRST } from "../backup/handoff";
 import { PortableBackupError } from "../backup/portable";
 import { revokeConfirmQuestion } from "../core/availabilityCopy";
 import { TourCoreError } from "../core/TourCore";
@@ -571,7 +572,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
     title: "Restore records",
     kind: "change",
     description:
-      "upload opens a short-lived upload. preview checks the file and changes nothing. import restores it only after confirmationCode from a clear yes. If this Tour Core already has records, pass recovery replace only after they explicitly choose replacement. Logins are not in the backup.",
+      "upload opens a short-lived upload. preview checks the file and changes nothing. import restores it only after confirmationCode from a clear yes. If this Tour Core already has records, pass recovery replace only after they explicitly choose replacement. Logins are not in the backup. A backup up to 50 MB is accepted. An upload over that cap is refused with a message that states the cap. If the upload link expired before a file arrived, start a new upload with begin_restore_upload.",
     input: z.strictObject({
       action: z.enum(["upload", "preview", "import"]),
       uploadId: z.string().regex(/^art_[A-Za-z0-9_-]{20,80}$/).optional(),
@@ -582,7 +583,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
       attemptWrite(ctx, undefined, async () => {
         const backups = installationOf(ctx).backups;
         if (i.action === "upload") return backups.beginRestore();
-        if (!i.uploadId) throw new SetupInputError("UPLOAD_MISSING", "Upload the backup file first, then I can show you what's in it.");
+        if (!i.uploadId) throw new SetupInputError("UPLOAD_MISSING", UPLOAD_BACKUP_FIRST);
         if (i.action === "preview") return backups.preview(i.uploadId);
         const preview = backups.preview(i.uploadId);
         if (preview.replaceRequired && i.recovery !== "replace") {

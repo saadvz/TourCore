@@ -17,6 +17,8 @@ Tour Core writes the export on its own computer, validated against the same
 schema as every single-tour download: all tours active that day (visitor tours
 and practice tours), every audit event, and the team's exception resolutions.
 
+On an installation whose records live in Google Drive (GOOGLE_DRIVE_READY), `export_records` day exports are written with the records and copied into Drive automatically by the save step. On a hosted installation (HOSTED_VOLUME, Drive used only for backups), day exports stay on the server as download links. Only readable exports and backups come back as one-time links for the assistant to save into the Tour Core folder in Drive.
+
 ## When to use
 
 The operator asks for the audit, history or records for a day. Prefer

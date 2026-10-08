@@ -1,7 +1,8 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { writeJsonAtomic } from "../storage/atomicWrite";
+import { writeFileAtomic, writeJsonAtomic } from "../storage/atomicWrite";
+import { RestoreUploadTooLargeError, restoreUploadMaxBytes } from "./limits";
 
 /** Short-lived capability for Grok to download or upload one artifact. Not a public URL. */
 export const HANDOFF_TTL_MS = 15 * 60_000;
@@ -14,10 +15,19 @@ interface HandoffRecord {
   checksum?: string;
   expiresAt: number;
   createdAt: number;
-  /** Present after a download is prepared, or after an upload arrives. */
+  /** Present after a download is prepared. Uploads keep bytes in a sibling file. */
   body?: string;
+  /** Upload bytes live in `${id}.body`, not in this JSON record. */
+  bodyFile?: boolean;
+  bytes?: number;
   consumed?: boolean;
 }
+
+/** Preview or import was asked before the backup file was stored. */
+export const UPLOAD_BACKUP_FIRST = "Upload the backup file first, then I can show you what's in it.";
+
+/** The upload link expired before a file arrived. */
+export const UPLOAD_TIMED_OUT = "That upload timed out. Send me the backup file again and I'll check it.";
 
 export class HandoffError extends Error {
   constructor(message: string) {
@@ -64,11 +74,20 @@ export class HandoffStore {
       if (!name.endsWith(".json")) continue;
       try {
         const record = JSON.parse(readFileSync(join(dir, name), "utf8")) as HandoffRecord;
-        if (record.expiresAt <= now || record.consumed) rmSync(join(dir, name), { force: true });
+        if (record.expiresAt <= now || record.consumed) {
+          rmSync(join(dir, name), { force: true });
+          rmSync(join(dir, `${name.slice(0, -".json".length)}.body`), { force: true });
+        }
       } catch {
         rmSync(join(dir, name), { force: true });
       }
     }
+  }
+
+  /** A temp file in the handoff directory so a finished upload can be renamed into place. */
+  incomingPath(): string {
+    mkdirSync(this.dir(), { recursive: true });
+    return join(this.dir(), `.incoming-${randomBytes(9).toString("hex")}.tmp`);
   }
 
   putDownload(body: string, fileName: string, checksum: string): { id: string; capability: string; expiresAt: string; path: string } {
@@ -106,28 +125,92 @@ export class HandoffStore {
     return { id, capability, expiresAt: new Date(expiresAt).toISOString(), path: `/portable/uploads/${id}` };
   }
 
-  /** Stores the uploaded bytes. Does not import them. */
+  /** Stores the uploaded text. Does not import it. */
   receiveUpload(id: string, capability: string, body: string): void {
-    this.sweep();
+    const record = this.openUpload(id, capability);
+    const bytes = Buffer.byteLength(body);
+    this.assertUploadSize(bytes);
+    const dest = this.bodyPath(id);
+    writeFileAtomic(dest, body);
+    this.markUploaded(id, record, bytes);
+  }
+
+  /**
+   * Moves an already-spooled upload into the handoff. The file is raw backup
+   * bytes, so preview reads it once instead of keeping extra copies from the request.
+   */
+  acceptUploadFile(id: string, capability: string, filePath: string): void {
+    const record = this.openUpload(id, capability);
+    const bytes = existsSync(filePath) ? statSync(filePath).size : 0;
+    this.assertUploadSize(bytes);
+    const dest = this.bodyPath(id);
+    renameSync(filePath, dest);
+    try {
+      this.markUploaded(id, record, bytes);
+    } catch (err) {
+      rmSync(dest, { force: true });
+      throw err;
+    }
+  }
+
+  /**
+   * Accepts a file only for a live upload that has not been stored.
+   * Reads the handoff record and does not create a file.
+   */
+  assertUploadAvailable(id: string, capability: string): void {
     const record = this.read(id);
-    if (!record || record.kind !== "upload" || record.consumed || record.expiresAt <= this.now() || record.body || !matches(record.tokenHash, capability)) {
+    const capabilityOk = !!record && matches(record.tokenHash, capability);
+    if (!record || record.kind !== "upload" || record.consumed || record.expiresAt <= this.now() || record.body || record.bodyFile || !capabilityOk) {
       throw new HandoffError("That restore link has expired.");
     }
-    if (body.length > 1_000_000) throw new HandoffError("That backup is too large to restore here.");
-    writeJsonAtomic(this.path(id), { ...record, body });
   }
 
   readUpload(id: string): string {
+    const peeked = this.read(id);
+    const expiredBeforeFile = peeked?.kind === "upload" && !peeked.consumed && peeked.expiresAt <= this.now() && !peeked.body && !peeked.bodyFile;
     this.sweep();
+    if (expiredBeforeFile) throw new HandoffError(UPLOAD_TIMED_OUT);
     const record = this.read(id);
-    if (!record || record.kind !== "upload" || record.expiresAt <= this.now() || !record.body) {
-      throw new HandoffError("Upload the backup before asking Tour Core to check it.");
+    if (!record || record.kind !== "upload" || record.expiresAt <= this.now() || (!record.body && !record.bodyFile)) {
+      throw new HandoffError(UPLOAD_BACKUP_FIRST);
     }
-    return record.body;
+    if (record.bodyFile) {
+      const path = this.bodyPath(id);
+      if (!existsSync(path)) throw new HandoffError(UPLOAD_BACKUP_FIRST);
+      return readFileSync(path, "utf8");
+    }
+    return record.body!;
   }
 
   consumeUpload(id: string): void {
+    this.discard(id);
+  }
+
+  private bodyPath(id: string): string {
+    return join(this.dir(), `${id}.body`);
+  }
+
+  private discard(id: string): void {
     rmSync(this.path(id), { force: true });
+    rmSync(this.bodyPath(id), { force: true });
+  }
+
+  private openUpload(id: string, capability: string): HandoffRecord {
+    this.sweep();
+    const record = this.read(id);
+    if (!record || record.kind !== "upload" || record.consumed || record.expiresAt <= this.now() || record.body || record.bodyFile || !matches(record.tokenHash, capability)) {
+      throw new HandoffError("That restore link has expired.");
+    }
+    return record;
+  }
+
+  private assertUploadSize(bytes: number): void {
+    const max = restoreUploadMaxBytes();
+    if (bytes > max) throw new RestoreUploadTooLargeError(max);
+  }
+
+  private markUploaded(id: string, record: HandoffRecord, bytes: number): void {
+    writeJsonAtomic(this.path(id), { ...record, bodyFile: true, bytes });
   }
 
   private read(id: string): HandoffRecord | undefined {

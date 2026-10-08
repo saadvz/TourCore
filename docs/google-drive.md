@@ -49,8 +49,7 @@ capability download. Grok uploads that file to `Tour Core/Backups` and then
 calls `confirm_backup_stored`. Until that call, Tour Core does not say the
 file is in Drive.
 
-Readable exports (`create_readable_export`, `export_audit`) are a different
-format. They go in `Tour Core/Exports`. They are not restored as a backup.
+On an installation whose records live in Google Drive (`GOOGLE_DRIVE_READY`), `export_records` day exports are written with the records and copied into Drive automatically by the save step. On a hosted installation (`HOSTED_VOLUME`, Drive used only for backups), day exports stay on the server as download links. Only readable exports and backups come back as one-time links for the assistant to save into the Tour Core folder in Drive. A readable export is not a backup.
 
 ## Portable snapshot
 
@@ -87,8 +86,12 @@ reconnected after a restore.
 ## Restore
 
 Grok downloads the latest backup and uploads it through a short-lived
-capability. Tour Core validates it, shows a plain preview, and waits for an
-explicit yes. Receiving the file does not change live records.
+capability (`POST` to the restore handoff, not a page). Tour Core accepts a
+backup up to 50 MB (`TOURCORE_RESTORE_UPLOAD_MAX_BYTES`). The bytes are written
+to a file as they arrive. An upload over that cap returns 413 with a plain
+message that states the cap, which Grok can relay. Tour Core validates the
+file, shows a plain preview, and waits for an explicit yes. Receiving the file
+does not change live records.
 
 P0 restore is for an empty installation, such as a volume that was lost.
 If this Tour Core already has property or tour records, import is refused
