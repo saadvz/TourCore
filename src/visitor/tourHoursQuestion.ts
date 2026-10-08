@@ -1,6 +1,6 @@
 import { spokenClockTime, type Weekday } from "../core/timezone";
 import { isGeneralTourHoursQuestion } from "../intent/tourHoursAsk";
-import { describeTourDays } from "../operator/milestones";
+import { describeTourDays } from "../operator/tourDayWords";
 import { renderSms } from "../sms/templates";
 
 export { isGeneralTourHoursQuestion };

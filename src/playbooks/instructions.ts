@@ -1,5 +1,3 @@
-import type { ConnectorScope } from "../mcp/scopes";
-
 /**
  * MCP `instructions` pointer. Landlord-facing copy lives with the playbooks.
  * The first 512 UTF-8 bytes are a complete note on their own.
@@ -32,7 +30,7 @@ export const QA_MCP_INSTRUCTIONS = QA_HEAD + INSTRUCTIONS_TAIL;
 export const OPS_MCP_INSTRUCTIONS = OPS_HEAD + INSTRUCTIONS_TAIL;
 
 /** Startup text for one connector. An unset connector is the landlord note, which the in-process engine still uses. */
-export function mcpInstructions(connector?: ConnectorScope): string {
+export function mcpInstructions(connector?: "landlord" | "ops" | "qa"): string {
   if (connector === "qa") return QA_MCP_INSTRUCTIONS;
   if (connector === "ops") return OPS_MCP_INSTRUCTIONS;
   return MCP_INSTRUCTIONS;

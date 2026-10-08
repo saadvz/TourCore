@@ -1,4 +1,5 @@
-import { request } from "node:http";
+import { request, type IncomingMessage } from "node:http";
+import { Readable } from "node:stream";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -8,6 +9,7 @@ import { TourCoreConfigShape } from "../src/config/tourCoreConfig";
 import { UNKNOWN_ANSWER } from "../src/core/TourCore";
 import { configHash, PropertyWorkspace } from "../src/setup/workspace";
 import { writeJsonAtomic } from "../src/storage/atomicWrite";
+import { handlePortableRequest } from "../src/backup/http";
 import { createSetupServer } from "../src/web/server";
 import { grokHarness, type GrokHarness } from "./grokHarness";
 import { installHarness } from "./installHarness";
@@ -275,6 +277,37 @@ describe("restore upload drain", () => {
     cleanups.push(h.cleanup);
     h.inst.files.ensure({ deploymentMode: "HOSTED_RAILWAY_P0" });
     h.inst.files.setPublicBaseUrl("https://demo.up.railway.app", "RAILWAY");
+    const upload = await h.ok("begin_restore_upload");
+    const total = 8 * 1024 * 1024;
+    let pushed = 0;
+    const req = new Readable({
+      read() {
+        if (pushed >= total) {
+          this.push(null);
+          return;
+        }
+        const n = Math.min(64 * 1024, total - pushed);
+        pushed += n;
+        this.push(Buffer.alloc(n, 0x61));
+      },
+    }) as IncomingMessage;
+    req.headers = {
+      "content-type": "application/json",
+      "content-length": String(60_000_000),
+      "x-tourcore-capability": String(upload.handoff.capability),
+    };
+    req.socket = { destroy: () => req.destroy() } as IncomingMessage["socket"];
+    const result = await handlePortableRequest(h.inst.backups, "POST", String(upload.handoff.path), req);
+    expect(result?.status).toBe(413);
+    expect(result?.body).toContain("50 MB");
+    await new Promise<void>((resolve) => {
+      if (req.destroyed || req.readableEnded) return resolve();
+      req.on("close", () => resolve());
+      req.on("end", () => resolve());
+    });
+    expect(pushed).toBeGreaterThan(0);
+    expect(pushed).toBeLessThan(4 * 1024 * 1024);
+
     const server = createSetupServer({ workspace: new PropertyWorkspace(h.root), installation: h.inst, log: () => {} });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
     cleanups.push(() => {
@@ -283,60 +316,6 @@ describe("restore upload drain", () => {
     });
     const address = server.address();
     const port = typeof address === "object" && address ? address.port : 0;
-    const upload = await h.ok("begin_restore_upload");
-    const total = 8 * 1024 * 1024;
-    const sent = await new Promise<number>((resolve, reject) => {
-      let written = 0;
-      let settled = false;
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        resolve(written);
-      };
-      const req = request(
-        {
-          host: "127.0.0.1",
-          port,
-          path: String(upload.handoff.path),
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "content-length": String(60_000_000),
-            "x-tourcore-capability": String(upload.handoff.capability),
-          },
-        },
-        (res) => {
-          // A 413 by itself is not the cut. Keep writing until the socket stops or the whole body is accepted.
-          res.resume();
-        },
-      );
-      req.on("error", finish);
-      req.on("close", finish);
-      const chunk = Buffer.alloc(64 * 1024, 0x61);
-      const write = () => {
-        if (settled) return;
-        try {
-          while (written < total) {
-            const n = Math.min(chunk.length, total - written);
-            const piece = n === chunk.length ? chunk : chunk.subarray(0, n);
-            const ok = req.write(piece);
-            written += n;
-            if (!ok) {
-              req.once("drain", write);
-              return;
-            }
-          }
-          req.end();
-          finish();
-        } catch {
-          finish();
-        }
-      };
-      write();
-      setTimeout(() => reject(new Error("over-cap upload did not stop")), 20_000);
-    });
-    expect(sent).toBeGreaterThan(0);
-    expect(sent).toBeLessThan(4 * 1024 * 1024);
 
     const declared = await h.ok("begin_restore_upload");
     const empty = await new Promise<{ status: number; body: string }>((resolve, reject) => {
