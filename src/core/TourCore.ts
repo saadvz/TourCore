@@ -39,6 +39,7 @@ import { bookedTourCalledOffText, laterCancelConfirm, laterCancelDone, laterCanc
 import { propertyDirectionsUrl, tourDirectionsText } from "./mapsLink";
 import { addDays, formatDay as formatDayIn, formatTime as formatTimeIn, localDateOf, type LocalDate } from "./timezone";
 import { claimVisitorSms, renderSms, visitorTeamName } from "../sms/templates";
+import { isGeneralTourHoursQuestion, savedTourHours, tourHoursVisitorReply } from "../visitor/tourHoursQuestion";
 
 export interface TourCoreDeps {
   config: TourCoreConfig;
@@ -1342,7 +1343,17 @@ export class TourCore {
     const read = this.deps.storageRead?.() ?? "live";
     const unitContext = { selectedUnitId: input.unitId, ...(input.pickedUnitId ? { pickedUnitId: input.pickedUnitId } : {}) };
     if (read !== "live") {
-      const resolved = resolveQuestion(this.approvedContent(), input.question.trim().slice(0, 300), unitContext);
+      const askedEarly = input.question.trim().slice(0, 300);
+      if (isGeneralTourHoursQuestion(askedEarly)) {
+        if (savedTourHours(this.deps.config.tourHours)) {
+          const reply = tourHoursVisitorReply(this.deps.config.tourHours);
+          await this.sendProspectDirect(phone, reply.body, reply.templateId);
+          return { outcome: "answered", facts: [] };
+        }
+        await this.sendProspectDirect(phone, "I can't check that right now. Please try again in a little while.");
+        return { outcome: "unknown", facts: [] };
+      }
+      const resolved = resolveQuestion(this.approvedContent(), askedEarly, unitContext);
       if (resolved.kind === "which-unit") return { outcome: "which-unit", facts: [], units: resolved.units };
       if (read === "cached" && resolved.kind === "answer") {
         const body = withAnswerSuffix(approvedAnswerText(resolved.facts, this.teamName()), input.answerSuffix);
@@ -1357,6 +1368,21 @@ export class TourCore {
     const asked = input.question.trim().slice(0, 300);
     if (!asked) throw new TourCoreError("EMPTY_QUESTION", "Please type a question");
     if (input.recordInbound !== false) await this.recordIncoming({ phone, body: asked, prospectId: prospect?.id, reservationId: reservation?.id, meta: input.meta });
+
+    if (isGeneralTourHoursQuestion(asked)) {
+      const baseHours = { reservationId: reservation?.id, prospectId: prospect?.id };
+      if (savedTourHours(this.deps.config.tourHours)) {
+        await this.record("QUESTION_ANSWERED", { ...baseHours, detail: asked });
+        const reply = tourHoursVisitorReply(this.deps.config.tourHours);
+        await this.sendConversationText({ phone, body: reply.body, reservationId: reservation?.id, templateId: reply.templateId });
+        return { outcome: "answered", facts: [] };
+      }
+      await this.record("QUESTION_UNANSWERED", { ...baseHours, detail: asked });
+      await this.sendConversationText({ phone, body: input.unknownReply ?? unknownAnswerReply({ team: this.teamName() }), reservationId: reservation?.id });
+      const whoHours = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : formatPhone(phone);
+      await this.notifyOperator(reservation, `${whoHours} asked "${asked}", and there's no approved answer yet.`);
+      return { outcome: "unknown", facts: [] };
+    }
 
     const resolved = resolveQuestion(this.approvedContent(), asked, unitContext);
     const base = { reservationId: reservation?.id, prospectId: prospect?.id, ...(resolved.kind !== "which-unit" && resolved.unitId ? { unitId: resolved.unitId } : {}) };

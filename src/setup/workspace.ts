@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { auditToCsv } from "../audit/audit";
-import { classifyChange, describeContentChanges, fullHash, legacySendblueFingerprints, legacyVisitorHelpSafetyHash, safetyHash } from "../config/changeKinds";
+import { classifyChange, describeContentChanges, fillingUnsetTimeZone, fullHash, legacySendblueFingerprints, legacyVisitorHelpSafetyHash, safetyHash } from "../config/changeKinds";
 import { TourCoreConfigSchema, TourCoreConfigShape, validateConfig, type TourCoreConfig } from "../config/tourCoreConfig";
 import { ExportBundleSchema, type ExportBundle } from "../export/exportBundle";
 import { writeFileAtomic, writeFolderAtomic, writeJsonAtomic } from "../storage/atomicWrite";
@@ -10,6 +10,8 @@ import { runReadinessCheck, type ReadinessResult } from "./readiness";
 import { canonicalAddressKey } from "./address";
 import { normalizeStoredDraft } from "./normalizeDraft";
 import { SetupInputError } from "./setupActions";
+import { isValidTimeZone } from "../core/timezone";
+import { presentStoredTimeZone } from "./storedTimeZone";
 import { presentVerification } from "./verification";
 
 /**
@@ -215,8 +217,8 @@ export class PropertyWorkspace {
     let stored: PropertyState | undefined = existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : undefined;
     if (raw.messagingMode === "sendblue") stored = this.migrateLiveMessaging(propertyId, parsed, stored);
     stored = this.migrateVisitorHelpFingerprint(parsed, stored);
-    const config = presentVerification(parsed);
     const rawFull = configHash(parsed);
+    const config = presentStoredTimeZone(presentVerification(parsed));
     const viewedFull = configHash(config);
     const rawSafety = safetyHash(parsed);
     const viewedSafety = safetyHash(config);
@@ -299,8 +301,9 @@ export class PropertyWorkspace {
     const hash = configHash(config);
     const previous = before?.state;
     const change = before ? classifyChange(before.config, config) : "new";
+    const fillingZone = !!previous && previous.status === "PUBLISHED_FOR_DEMO" && !!before && fillingUnsetTimeZone(before.config, config);
     let state: PropertyState;
-    if (previous && (change === "none" || change === "content")) {
+    if (previous && (change === "none" || change === "content" || fillingZone)) {
       const presented = { full: configHash(before!.config), safety: safetyHash(before!.config) };
       const recorded = { full: previous.configHash, safety: previous.safetyHash ?? presented.safety };
       const next = { full: hash, safety: safetyHash(config) };
@@ -313,7 +316,8 @@ export class PropertyWorkspace {
         ...(spellingOnly && previous.readiness ? { readiness: retargetFrom(previous.readiness, [recorded, presented], next) } : {}),
         ...(spellingOnly && previous.dryTour ? { dryTour: retargetFrom(previous.dryTour, [recorded, presented], next) } : {}),
       };
-      if (change === "content") this.appendContentChange(id, { at: now.toISOString(), changes: describeContentChanges(before!.config, config) });
+      const content = before && change !== "none" ? describeContentChanges(before.config, config) : [];
+      if (content.length) this.appendContentChange(id, { at: now.toISOString(), changes: content });
     } else {
       // Earlier check results stay for history, but their fingerprint no longer matches, so they no longer count.
       // Keep publishedAt so a previously published property that is back in draft still keeps records on remove.
@@ -351,7 +355,7 @@ export class PropertyWorkspace {
     const path = this.draftPath(propertyId);
     if (!existsSync(path)) return undefined;
     const parsed = TourCoreConfigShape.safeParse(JSON.parse(readFileSync(path, "utf8")));
-    return parsed.success ? presentVerification(parsed.data) : undefined;
+    return parsed.success ? presentStoredTimeZone(presentVerification(parsed.data)) : undefined;
   }
 
   /** Unfinished setups may be invalid; they're kept apart from the saved setup until they pass validation. */
@@ -682,7 +686,10 @@ export function statusLabel(saved: SavedProperty): string {
   if (state.removedAt) return "Removed";
   const unitIds = saved.config.units.map((unit) => unit.id);
   const paused = !!state.paused || (unitIds.length > 0 && unitIds.every((id) => (state.pausedUnitIds ?? []).includes(id)));
-  if (state.status === "PUBLISHED_FOR_DEMO") return paused ? "Published for demo · paused" : "Published for demo";
+  if (state.status === "PUBLISHED_FOR_DEMO") {
+    const attention = isValidTimeZone(saved.config.property.timezone) ? "" : " · needs attention";
+    return paused ? `Published for demo · paused${attention}` : `Published for demo${attention}`;
+  }
   if (state.readiness?.passed && isCurrent(state.readiness, state) && state.dryTour?.passed && isCurrent(state.dryTour, state)) {
     return paused ? "Ready to publish for demo · paused" : "Ready to publish for demo";
   }

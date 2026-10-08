@@ -21,6 +21,11 @@ export function visitorTeamName(name: string | undefined | null): string {
   return /\bteam$/i.test(trimmed) ? trimmed : "property team";
 }
 
+/** The human-path reply when tours cannot run, including a published property with no time zone. */
+export function toursUnavailableText(name: string, team?: string): string {
+  return `Thanks for reaching out to ${name}. Self-guided tours by text aren't available right now. Please contact the ${visitorTeamName(team)}.`;
+}
+
 export class UntemplatedVisitorSms extends Error {
   readonly body: string;
   constructor(body: string) {
@@ -191,6 +196,7 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "switch-keep", text: "Reply YES to switch, or NO to keep your {time} tour on {day}." },
   { id: "switch-keep-looking", text: "Reply YES to switch, or NO to keep looking." },
   { id: "which-day", text: "Which day works for you?" },
+  { id: "tour-hours-which-day", text: "Tours run {days}, {hours}. Which day works for you?" },
   { id: "next-opening-want", text: "The next {noun} is {when}. Want that, or another day?" },
   { id: "next-opening-menu", text: "The next {noun} is {when}. Reply yes to take it, or pick a day:" },
   { id: "heres-whats-left", text: "Here's what's left:" },

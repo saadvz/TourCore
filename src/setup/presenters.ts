@@ -235,7 +235,7 @@ export function draftView(draft: SetupDraft) {
         property.propertyTypeLabel ?? "Property type not chosen yet",
         ...(property.buildingAccess === "UNIT_ONLY" ? ["Building entrance: visitors get in on their own"] : []),
         ...(property.buildingAccess === "BUILDING_AND_UNIT" ? ["Building entrance: you control it"] : []),
-        `Timezone: ${property.timezoneLabel}`,
+        ...(property.timezone ? [`Timezone: ${property.timezoneLabel}`] : []),
         ...property.facts,
       ],
     },

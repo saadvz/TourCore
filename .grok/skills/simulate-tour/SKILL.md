@@ -2,7 +2,7 @@
 name: simulate-tour
 description: Run one complete practice tour through the real Tour Core engine (nobody is texted, no real door opens) and summarize the proof points that matter.
 when-to-use: "run a practice tour", "run a dry tour", "test the tour", "simulate a visitor", "local SMS", "inject a visitor text"
-allowed-tools: inject_local_sms read_local_outbox use_local_demo_storage
+allowed-tools: inject_local_sms read_local_outbox use_local_demo_storage list_exceptions inspect_exception resolve_exception test_operator_alerts begin_restore_upload preview_portable_restore import_portable_backup schedule_one_off_tour resume_tours revoke_tour_access run_dry_tour get_installation_status
 argument-hint: "[property] [unit]"
 user-invocable: true
 metadata:

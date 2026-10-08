@@ -4,7 +4,7 @@ Every outbound visitor text uses one of these ids. `{slot}` is filled before sen
 
 Text from the landlord or from a model reaches a visitor only as `approved-answer` or `approved-answer-closing`, and only after they approve a flagged question (`answer_flagged_question`, later `resolve_issue`). A no-draft flag never gets a draft. `approved-profile-fact` repeats a fact they already saved.
 
-194 message templates. 7 channel prompts.
+195 message templates. 7 channel prompts.
 
 ## Messages
 
@@ -855,6 +855,12 @@ Reply YES to switch, or NO to keep looking.
 
 ```
 Which day works for you?
+```
+
+### tour-hours-which-day
+
+```
+Tours run {days}, {hours}. Which day works for you?
 ```
 
 ### next-opening-want

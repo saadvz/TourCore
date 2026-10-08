@@ -70,7 +70,7 @@ Exports are for people to read. They are not backups.
 2. Upload that file to Tour Core/Exports with the Google Drive connector.
 3. Say you saved the export. Do not describe it as the live booking record.
 
-On an installation whose records live in Google Drive (GOOGLE_DRIVE_READY), the day's audit-export.json is written with the records and copied into Drive by the save step. The CSV stays on the Tour Core computer. On a hosted installation (HOSTED_VOLUME, Drive used only for backups), day exports stay on the server as 30-minute download links that can be used until they expire. Only readable exports and backups come back as one-time links for the assistant to save into the Tour Core folder in Drive. Door access in a day export is only what was issued or used that day.
+On an installation whose records live in Google Drive (GOOGLE_DRIVE_READY), the day's audit-export.json is written with the records and copied into Drive by the save step. The CSV stays on the Tour Core computer. On a hosted installation (HOSTED_VOLUME, Drive used only for backups), day exports stay on the server as 30-minute download links that can be used until they expire. Only readable exports and backups come back as one-time links for the assistant to save into the Tour Core folder in Drive. Door access in a day export is only what was issued or used that day. Each embedded tour in that JSON is trimmed to that day's events and grants.
 
 ### Restore
 

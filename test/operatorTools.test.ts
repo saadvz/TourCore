@@ -571,7 +571,7 @@ describe("live tours and exceptions", () => {
 
     const out = await h.ok("export_audit", { day: "today" });
     expect(out.totals).toMatchObject({ day: "Monday, Sep 28", tours: 1, completed: 1, active: 0, stopped: 0, accessDenials: 1, questionsNeedingAttention: 1, practiceTours: 1 });
-    expect(out.summary).toBe("Monday, Sep 28: 1 visitor tour (1 completed, 0 active, 0 stopped), 1 access denial, 1 question needing attention, plus 1 practice tour.");
+    expect(out.summary).toBe("Monday, Sep 28: 1 visitor tour (1 completed, 0 active, 0 stopped), 1 access denial, 1 question needing attention, plus 1 practice tour. 2 practice-tour denials.");
     expect(out.files[0].openOnTourCoreComputer).toMatch(/^http:\/\/localhost:4321\/api\/properties\/prop_100_alfred_way\/audit-exports\/2026-09-28_.+\/audit-export\.json$/);
     expect(out.accessGrants).toEqual(
       expect.arrayContaining([

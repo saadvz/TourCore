@@ -30,21 +30,32 @@ const REJECTED_BODY_MAX = 1024 * 1024;
  * connection. A short body is finished so the refusal can still be sent.
  * Returns true when the socket was destroyed.
  */
-async function drainRejected(req: IncomingMessage): Promise<boolean> {
-  let read = 0;
-  req.on("error", () => {});
-  try {
-    for await (const chunk of req) {
+function drainRejected(req: IncomingMessage): Promise<boolean> {
+  return new Promise((resolve) => {
+    let read = 0;
+    let settled = false;
+    const finish = (destroyed: boolean) => {
+      if (settled) return;
+      settled = true;
+      req.removeListener("data", onData);
+      req.removeListener("end", onEnd);
+      req.removeListener("error", onError);
+      resolve(destroyed);
+    };
+    const onData = (chunk: Buffer | string) => {
       read += typeof chunk === "string" ? Buffer.byteLength(chunk) : chunk.length;
       if (read >= REJECTED_BODY_MAX) {
+        req.socket?.destroy();
         req.destroy();
-        return true;
+        finish(true);
       }
-    }
-  } catch {
-    return true;
-  }
-  return false;
+    };
+    const onEnd = () => finish(false);
+    const onError = () => finish(true);
+    req.on("data", onData);
+    req.on("end", onEnd);
+    req.on("error", onError);
+  });
 }
 
 /**
@@ -56,9 +67,7 @@ async function drainRejected(req: IncomingMessage): Promise<boolean> {
 async function spoolUpload(req: IncomingMessage, max: number, dest: string): Promise<"ok" | "too-large"> {
   const declared = declaredLength(req);
   if (declared !== undefined && declared > max) {
-    // Answer before the body arrives. Keep reading so the socket can flush the 413.
-    req.on("error", () => {});
-    req.resume();
+    void drainRejected(req);
     return "too-large";
   }
   const out = createWriteStream(dest);
@@ -135,9 +144,10 @@ export async function handlePortableRequest(
       }
       const declared = declaredLength(req);
       if (declared !== undefined && declared > max) {
-        // Answer before the rest of a declared body arrives. Close so it is not read as the next request.
-        req.on("error", () => {});
-        req.resume();
+        // Same cap as a bad link: read at most 1 MB, then cut the connection.
+        // Do not wait for that read before answering. A short body, or a declared
+        // size with nothing behind it, still gets 413.
+        void drainRejected(req);
         return { ...tooLarge(max), close: true };
       }
       temp = backups.handoff.incomingPath();

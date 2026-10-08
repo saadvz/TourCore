@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { hostedResetToolVisible, HOSTED_ADMIN_TOOLS } from "../install/hostedAdminTools";
 import { annotationsFor } from "./annotations";
-import { MCP_INSTRUCTIONS } from "../playbooks/instructions";
+import { mcpInstructions } from "../playbooks/instructions";
 import { reportedClientFromInitialize } from "../playbooks/select";
 import { callOperatorTool, legacyInjectLocalSmsInput, OPERATOR_TOOLS, UnknownToolError, type ToolContext } from "../operator/tools";
 import { connectorRefusal, knownOperatorTool, toolsForConnector } from "./scopes";
@@ -64,7 +64,7 @@ export async function handleMcpMessage(ctx: ToolContext, message: unknown): Prom
     case "initialize": {
       const asked = typeof params?.protocolVersion === "string" ? params.protocolVersion : undefined;
       const protocolVersion = asked && SUPPORTED_PROTOCOL_VERSIONS.includes(asked) ? asked : SUPPORTED_PROTOCOL_VERSIONS[0];
-      return rpcResult(id, { protocolVersion, capabilities: { tools: { listChanged: false } }, serverInfo: SERVER_INFO, instructions: MCP_INSTRUCTIONS });
+      return rpcResult(id, { protocolVersion, capabilities: { tools: { listChanged: false } }, serverInfo: SERVER_INFO, instructions: mcpInstructions(ctx.connector) });
     }
     case "ping":
       return rpcResult(id, {});

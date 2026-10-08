@@ -1,5 +1,6 @@
 import { isMoreTimeAsk } from "../core/overstayCopy";
 import { dayReference, namesTourDay, spokenTimes, vagueTimeRequest, type SpokenTime } from "../core/spokenTime";
+import { isGeneralTourHoursQuestion } from "./tourHoursAsk";
 import type { IntentInterpretation, IntentInterpreter, InterpretContext, StepAwaiting, StopRef, TourIntent } from "./model";
 import { normalize, numberWord, ordinalWord, stripFiller } from "./normalize";
 import { acceptsNextOpening, yesNo } from "./yesNo";
@@ -271,6 +272,8 @@ function dateIntent(
   result: (intent: TourIntent, confidence: number, extra?: Partial<IntentInterpretation>) => IntentInterpretation,
   today?: InterpretContext["today"],
 ): IntentInterpretation | undefined {
+  // "when can I tour?" names no day. Leave it as a property question so saved hours can answer it.
+  if (isGeneralTourHoursQuestion(raw)) return undefined;
   const asked = dayReference(t, today);
   if (!asked) return undefined;
   // "available" names a day in a booking, not a missing property fact.

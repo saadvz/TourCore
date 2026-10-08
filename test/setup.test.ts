@@ -163,10 +163,19 @@ describe("guided setup actions", () => {
 
   it("rejects an invalid timezone in plain language", () => {
     const { draft } = buildProperty();
-    expect(() => setPropertyDetails(draft, { timezone: "Mars/Olympus" })).toThrow(SetupInputError);
+    let message = "";
+    try {
+      setPropertyDetails(draft, { timezone: "Mars/Olympus" });
+    } catch (err) {
+      expect(err).toBeInstanceOf(SetupInputError);
+      message = err instanceof Error ? err.message : "";
+    }
+    expect(message).toBe(`I don't recognize the time zone "Mars/Olympus". Try something like Eastern or Pacific.`);
+    expect(message).not.toContain("America/New_York");
     const bad = { ...draft, property: { ...draft.property, timezone: "Mars/Olympus" } };
     const issue = validateConfig(bad).find((i) => i.code === "TIMEZONE_INVALID");
-    expect(issue?.message).toContain("We don't recognize the time zone");
+    expect(issue?.message).toBe(`I don't recognize the time zone "Mars/Olympus". Try something like Eastern or Pacific.`);
+    expect(issue?.message).not.toContain("America/New_York");
     expect(resolveTimeZone("Eastern")).toBe("America/New_York");
     expect(resolveTimeZone("america/los_angeles")).toBe("America/Los_Angeles");
   });

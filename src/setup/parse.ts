@@ -135,6 +135,12 @@ zone("America/Los_Angeles", "CA NV OR WA");
 zone("America/Anchorage", "AK");
 zone("Pacific/Honolulu", "HI");
 
+/** The IANA zone for a US state code, when this list has one. */
+export function zoneForState(state: string): string | undefined {
+  const code = state.trim().toUpperCase();
+  return code ? STATE_ZONES[code] : undefined;
+}
+
 const STATE_NAMES: Record<string, string> = {
   "new york": "NY", "new jersey": "NJ", massachusetts: "MA", pennsylvania: "PA", florida: "FL", georgia: "GA",
   "north carolina": "NC", "south carolina": "SC", virginia: "VA", maryland: "MD", ohio: "OH", michigan: "MI",

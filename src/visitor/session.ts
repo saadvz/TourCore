@@ -6,7 +6,7 @@ import { pausedPropertyVisitorText, pausedUnitVisitorText, removedPropertyVisito
 import { normalizePhone } from "../core/phone";
 import { orList } from "../core/questions";
 import { operatorConfirmBy } from "../core/customSlot";
-import { formatDay, formatLocalDate, formatTime, formatWeekday, localDateOf } from "../core/timezone";
+import { formatDay, formatLocalDate, formatTime, formatWeekday, isValidTimeZone, localDateOf, UnsetTimeZoneError } from "../core/timezone";
 import type { SpokenTime } from "../core/spokenTime";
 import { bookingRefusal, isEffectivelyPaused, isRemoved, openUnits, operatorPausedBookingRefuse } from "../setup/availability";
 import type { PropertyState } from "../setup/workspace";
@@ -24,7 +24,7 @@ import { UNNAMED_VISITOR, type Reservation, type TourTimeRequest } from "../doma
 import { countDurinCalls, type CountingDurin } from "../durin/countingDurin";
 import type { DeliveryReceipt, MessagingAdapter, OutgoingMessage } from "../messaging/Messenger";
 import type { ReplyPrompt } from "../messaging/presentation";
-import { visitorTeamName } from "../sms/templates";
+import { toursUnavailableText, visitorTeamName } from "../sms/templates";
 import { SetupInputError } from "../setup/setupActions";
 import type { ConversationItem, TourRecord } from "../setup/workspace";
 import type { ExportBundle } from "../export/exportBundle";
@@ -441,7 +441,15 @@ export class VisitorDemoSession {
     }
     const stage = await this.stage();
     if (!ALLOWED[stage].includes(action as VisitorAction)) throw new SetupInputError("NOT_AVAILABLE", "That isn't available right now.");
-    await this.run(action as VisitorAction, parsed.data as Record<string, unknown>, said);
+    try {
+      await this.run(action as VisitorAction, parsed.data as Record<string, unknown>, said);
+    } catch (err) {
+      if (err instanceof UnsetTimeZoneError) {
+        await this.reply(toursUnavailableText(this.config.property.name, this.config.operator.name));
+        return;
+      }
+      throw err;
+    }
     await this.syncReplies();
   }
 
@@ -1424,6 +1432,7 @@ export class VisitorDemoSession {
   }
 
   private async inquire(unitId: string, options: { announce?: boolean } = {}): Promise<void> {
+    if (!isValidTimeZone(this.config.property.timezone)) throw new UnsetTimeZoneError();
     const { prospect, reservation } = await this.core.startInquiry({ ...this.visitor!, unitId }, options);
     this.prospectId = prospect.id;
     this.reservationId = reservation.id;
@@ -1502,6 +1511,7 @@ export class VisitorDemoSession {
 
   async welcome(): Promise<void> {
     if (await this.refuseIfPaused()) return;
+    if (!isValidTimeZone(this.config.property.timezone)) throw new UnsetTimeZoneError();
     const open = this.offerableUnits();
     const only = this.config.units.length === 1 ? open.find((unit) => unit.id === this.config.units[0]!.id) : undefined;
     if (only && !this.reservationId) await this.inquire(only.id, { announce: false });

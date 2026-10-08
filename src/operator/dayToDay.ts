@@ -13,7 +13,7 @@ import { DRIVE_NOT_SET_UP_LINE } from "../install/stateView";
 import type { SettingName } from "../install/secretStore";
 import { googleClientConfig } from "../storage/googleOAuth";
 import { envelope } from "./milestones";
-import { exportAudit, parseLocalDate } from "./auditExport";
+import { exportAudit, formatAuditDaySummary, parseLocalDate } from "./auditExport";
 import {
   answerFlaggedQuestion,
   clearHold,
@@ -517,7 +517,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
     title: "Export records",
     kind: "change",
     description:
-      "A day's audit export, or a readable export when kind is readable. Day is today (default), yesterday, YYYY-MM-DD, a month and day like Sept 28, or M/D. A month and day with no year means the most recent past one. Every landlord can export. A readable export is for people to read. It is not a backup.",
+      "A day's audit export, or a readable export when kind is readable. Day is today (default), yesterday, YYYY-MM-DD, a month and day like Sept 28, or M/D. A month and day with no year means the most recent past one. Every landlord can export. A readable export is for people to read. It is not a backup. Each embedded tour keeps only that day's events and grants. A grant belongs to the day it was issued, and to the next day only if a door was used after midnight. Practice-tour denials are counted apart from visitors who were turned away. When only practice tours were denied, the summary says \"No visitors were turned away.\" and then the practice-tour denial count.",
     input: z.strictObject({
       kind: z.enum(["day", "readable"]).optional(),
       property: Property,
@@ -532,7 +532,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
       const out = await exportAudit(ctx.services, id, { day: parsed.day, now: ctx.now() });
       const s = out.summary;
       return {
-        summary: `${s.day}: ${s.tours} visitor tour${s.tours === 1 ? "" : "s"} (${s.completed} completed, ${s.active} active, ${s.stopped} stopped), ${s.accessDenials} access denial${s.accessDenials === 1 ? "" : "s"}, ${s.questionsNeedingAttention} question${s.questionsNeedingAttention === 1 ? "" : "s"} needing attention, plus ${s.practiceTours} practice tour${s.practiceTours === 1 ? "" : "s"}.`,
+        summary: formatAuditDaySummary(s),
         totals: s,
         reference: `Audit export ${out.exportId}, saved with ${ctx.services.workspace.load(id).config.property.name}'s tour records on the Tour Core computer.`,
         accessGrants: out.accessGrants,
@@ -546,7 +546,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
     title: "Back up records",
     kind: "change",
     description:
-      "create builds a portable backup. confirm_destination records the Google Drive folder (provider google_drive, folderName Tour Core). confirm_stored records the file name and checksum after the file is saved. status says whether a backup is due. decline records that portable backups were skipped. Declining stays possible. Keeping records on this computer for a demo is still use_local_demo_storage.",
+      "create builds a portable backup. confirm_destination records the Google Drive folder (provider google_drive, folderName Tour Core). confirm_stored records the file name and checksum after the file is saved. status says whether a backup is due. decline records that portable backups were skipped. On a hosted install, say \"Operational records stay with hosted Tour Core. Portable backups are off until you connect Google Drive.\" When records are already on this computer, or Google Drive is still waiting for approval, say \"Your records stay on this computer. Portable backups stay off until Google Drive is connected.\" Declining stays possible. Keeping records on this computer for a demo is still use_local_demo_storage.",
     input: z.strictObject({
       action: z.enum(["create", "confirm_destination", "confirm_stored", "status", "decline"]),
       reason: z.enum(["operator", "publish", "content", "tour", "routine"]).optional(),
@@ -561,14 +561,16 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
         const backups = installationOf(ctx).backups;
         if (i.action === "status") return backups.status();
         if (i.action === "decline") {
-          const declined = backups.decline();
           const inst = installationOf(ctx);
           if (inst.records.model() !== "HOSTED_P0_VOLUME" && inst.records.provider() === "NOT_CONFIGURED") {
             inst.records.useLocalDemo();
             const google = googleClientConfig(inst.env(), (name) => inst.secrets.get(name as SettingName));
-            if (!google.clientId || !google.clientSecret) return { summary: DRIVE_NOT_SET_UP_LINE };
+            if (!google.clientId || !google.clientSecret) {
+              backups.decline();
+              return { summary: DRIVE_NOT_SET_UP_LINE };
+            }
           }
-          return declined;
+          return backups.decline();
         }
         if (i.action === "create") return backups.create(i.reason);
         if (i.action === "confirm_destination") {
