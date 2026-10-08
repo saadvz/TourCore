@@ -2,7 +2,7 @@ import type { InstallationFiles } from "../install/manifest";
 import type { SecretStore } from "../install/secretStore";
 import { secretValues } from "../install/settings";
 import { collectCanonical } from "../storage/canonical";
-import { HandoffError, HandoffStore } from "./handoff";
+import { HandoffError, HandoffStore, UPLOAD_BACKUP_FIRST } from "./handoff";
 import { RestoreUploadTooLargeError } from "./limits";
 import {
   PortableBackupError,
@@ -286,7 +286,7 @@ export class PortableBackups {
     try {
       raw = this.handoff.readUpload(uploadId);
     } catch (err) {
-      throw new PortableBackupError(err instanceof HandoffError ? err.message : "Upload the backup before asking Tour Core to check it.");
+      throw new PortableBackupError(err instanceof HandoffError ? err.message : UPLOAD_BACKUP_FIRST);
     }
     let parsed: unknown;
     try {

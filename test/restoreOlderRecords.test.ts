@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { request, type IncomingMessage } from "node:http";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -139,6 +139,17 @@ describe("older restore records", () => {
     const record = JSON.parse(readFileSync(handoffPath(h, uploadId), "utf8")) as { body?: string; bodyFile?: boolean };
     expect(record.body).toBeUndefined();
     expect(record.bodyFile).toBeUndefined();
+    expect(await h.fails("preview_portable_restore", { uploadId })).toBe("Upload the backup file first, then I can show you what's in it.");
+  });
+
+  it("uses that sentence when reading the upload fails for a reason other than the handoff link", async () => {
+    const h = hosted();
+    const upload = await h.ok("begin_restore_upload");
+    const uploadId = uploadIdOf(upload);
+    const path = handoffPath(h, uploadId);
+    const opened = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+    writeFileSync(path, JSON.stringify({ ...opened, bodyFile: true }, null, 2) + "\n");
+    mkdirSync(join(h.root, "portable-handoff", `${uploadId}.body`));
     expect(await h.fails("preview_portable_restore", { uploadId })).toBe("Upload the backup file first, then I can show you what's in it.");
   });
 });
