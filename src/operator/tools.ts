@@ -823,7 +823,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Set tour hours",
     kind: "change",
     description:
-      'Sets tour hours from everyday words: days ("weekdays", "Mon-Sat", "every day"), start/end ("9am", "5 PM"), tour length, how often a new tour starts, early arrival ("10 minutes"). Only pass what the operator said; defaults stay visible. A new property starts at Monday–Friday, 9:00 AM–5:00 PM, 45-minute tours, hourly starts, and 10 minutes early. Hours are structural: a published property goes back to draft until readiness, a practice tour, and publish. After those hours are published, open visitor conversations use them on the next inbound text.',
+      'Sets tour hours from everyday words: days ("weekdays", "Mon-Sat", "every day"), start/end ("9am", "5 PM"), tour length, how often a new tour starts, early arrival ("10 minutes"). Only pass what the operator said; defaults stay visible. A new property starts at Monday–Friday, 9:00 AM–5:00 PM, 45-minute tours, hourly starts, and 10 minutes early. Tours have to end later the same day. Hours are structural: a published property goes back to draft until readiness, a practice tour, and publish. After those hours are published, open visitor conversations use them on the next inbound text.',
     input: z.strictObject({
       property: Property,
       days: z.union([z.string().max(80), z.array(z.string().max(20)).max(7)]).optional(),
@@ -869,8 +869,8 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "set_verification_policy",
     title: "Set visitor verification",
     kind: "change",
-    description: "Chooses how visitors confirm who they are: the basic identity form (recommended) or practice verification. Optionally how many days a check can be reused.",
-    input: z.strictObject({ property: Property, level: z.enum(["basic-form", "practice"]).optional(), reuseForDays: z.number().int().optional() }),
+    description: "Chooses how visitors confirm who they are: the basic identity form (recommended) or practice verification. A full ID check is not stored. Optionally how many days a check can be reused.",
+    input: z.strictObject({ property: Property, level: z.enum(["basic-form", "practice", "document-check"]).optional(), reuseForDays: z.number().int().optional() }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
       if (i.level === "practice") {
@@ -886,6 +886,8 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         }
       }
       const state = edit(ctx, id, draft, "setVerificationPolicy", { mode: i.level === "practice" ? "mock" : i.level, reuseForDays: i.reuseForDays });
+      const notice = ctx.services.workspace.takeVerificationNotice(id);
+      if (notice) return { summary: notice, ...state };
       return { summary: setupSnapshot(ctx, id).verification.join(". "), ...state };
     },
   }),

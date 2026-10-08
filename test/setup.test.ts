@@ -204,7 +204,9 @@ describe("guided setup actions", () => {
 
   it("rejects incoherent tour hours and access windows", () => {
     const { draft } = buildProperty();
-    expect(codes(setTourHours(draft, { start: "17:00", end: "09:00" }))).toContain("TOUR_HOURS_BACKWARDS");
+    const overnight = { ...draft, tourHours: { ...draft.tourHours, start: "17:00", end: "09:00" } };
+    expect(codes(overnight)).toContain("TOUR_HOURS_BACKWARDS");
+    expect(() => setTourHours(draft, { start: "17:00", end: "09:00" })).toThrow(/end later the same day/);
     expect(codes(setTourHours(draft, { slotEveryMinutes: 30 }))).toContain("ACCESS_WINDOWS_OVERLAP");
     expect(codes(setTourHours(draft, { days: [] }))).toContain("TOUR_DAYS_MISSING");
     expect(codes(setTourHours(draft, { earlyArrivalMinutes: 90 }))).toContain("EARLY_ARRIVAL_INVALID");

@@ -180,25 +180,37 @@ function expandSuffix(word: string): string | undefined {
   return STREET_SUFFIX[bareWord(word)];
 }
 
+/** "Apt 2" and "#2" (no space before the number) start a unit clause. */
+function isUnitClause(word: string): boolean {
+  const bare = bareWord(word);
+  if (/^(apt|apartment|suite|unit|#)$/.test(bare)) return true;
+  return /^#\d/.test(word.replace(/\./g, ""));
+}
+
 /**
  * One street line. Spacing collapses. The street type expands when it is the
  * last word of the street ("Rd" → "Road"), or the word before a trailing
  * direction ("Ave S" → "Avenue S", "St NW" → "Street NW"). A unit clause
- * ("Apt 2") stays after that type and does not hide it. An earlier "St" or
- * "Dr" stays, and a non-final "St." keeps its period, so "St. Marks Place"
- * never becomes "Street Marks". The first word is a suffix only when a
- * direction follows it. Casing follows canonicalToken.
+ * ("Apt 2", "#2") stays after that type and does not hide it. An earlier
+ * "St" or "Dr" stays, and a non-final "St." keeps its period, so
+ * "St. Marks Place" never becomes "Street Marks". The first word is a suffix
+ * only when a direction follows it. A direction's own trailing period is
+ * dropped ("Ave. S." → "Avenue S"). Casing follows canonicalToken.
  */
 export function canonicalizeStreet(street: string): string {
   const words = street.trim().replace(/\s+/g, " ").split(" ").filter(Boolean);
-  const unitAt = words.findIndex((word, index) => index > 0 && /^(apt|apartment|suite|unit|#)$/.test(bareWord(word)));
+  const unitAt = words.findIndex((word, index) => index > 0 && isUnitClause(word));
   const head = unitAt > 0 ? words.slice(0, unitAt) : words;
   const tail = unitAt > 0 ? words.slice(unitAt) : [];
   const last = head.length - 1;
   let suffixAt = -1;
   if (last >= 0 && isTrailingDirection(head, last)) suffixAt = last - 1;
   else if (last > 0) suffixAt = last;
-  const stored = head.map((word, index) => (index === suffixAt ? (expandSuffix(word) ?? canonicalToken(word)) : canonicalToken(word)));
+  const stored = head.map((word, index) => {
+    if (index === suffixAt) return expandSuffix(word) ?? canonicalToken(word);
+    if (index === last && suffixAt === last - 1) return canonicalToken(word.replace(/\.+$/, ""));
+    return canonicalToken(word);
+  });
   return [...stored, ...tail.map(canonicalToken)].join(" ");
 }
 
@@ -206,8 +218,13 @@ function isTrailingDirection(head: string[], last: number): boolean {
   return last > 0 && DIRECTIONAL.has(bareWord(head[last]!)) && expandSuffix(head[last - 1]!) !== undefined;
 }
 
-/** One identity for "Oak Ave" and "Oak Avenue": the stored formatted address, compared case-insensitively. */
+/**
+ * One identity for "Oak Ave" and "Oak Avenue", and for "St." and "St".
+ * The stored display line keeps the period the landlord typed. This key
+ * ignores that period so the two spellings are the same place.
+ */
 export function canonicalAddressKey(address: string): string | undefined {
   const formatted = parseUsAddress(address)?.address.formatted?.trim();
-  return formatted ? formatted.toLowerCase() : undefined;
+  if (!formatted) return undefined;
+  return formatted.toLowerCase().replace(/\./g, "").replace(/\s+/g, " ").trim();
 }

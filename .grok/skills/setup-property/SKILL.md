@@ -133,7 +133,8 @@ the operator correct it.
    they want.
 9. Ask **"How carefully do you want to verify visitors?"** Offer "Basic
    identity form (free, recommended)" or "Practice verification (everyone
-   passes; for trying things out)". `set_verification_policy`. Full ID checks
+   passes; for trying things out)". Practice verification only works while
+   texting is in test mode. `set_verification_policy`. Full ID checks
    aren't available yet; say so if asked.
 10. Texting is automatic: when this Tour Core has visitor texting installed,
     a new property uses it on its own. One touring number covers every property.

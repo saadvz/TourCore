@@ -64,7 +64,9 @@ export interface VerificationWrite<T> {
  * live property that is still on practice, raises it to the basic form.
  * A property already stored as live plus practice is left alone until a later
  * write raises the floor or someone asks for a legal check.
- * A full ID check is not stored while the floor is the basic form.
+ * A full ID check cannot run, so a request for one is never stored. On test
+ * or local texting the saved check stays put when it is already the basic
+ * form, and otherwise becomes the basic form.
  */
 export function enforceVerificationWrite<T extends Pick<TourCoreConfig, "verificationMode" | "messagingMode" | "messagingProvider">>(
   before: T | undefined,
@@ -78,9 +80,16 @@ export function enforceVerificationWrite<T extends Pick<TourCoreConfig, "verific
   let mode = requested;
   let notice: string | undefined;
 
-  if (requested === "document-check" && floorAfter === "basic-form" && beforeMode !== "document-check") {
-    mode = "basic-form";
-    notice = DOCUMENT_CHECK_UNAVAILABLE;
+  if (requested === "document-check") {
+    const messagingChanged =
+      !!before &&
+      (before.messagingMode !== after.messagingMode || (before.messagingProvider ?? "") !== (after.messagingProvider ?? ""));
+    const askedNow = !before || beforeMode !== "document-check" || messagingChanged;
+    if (askedNow) {
+      const keepCurrent = !!before && beforeMode !== "document-check" && verificationRank(beforeMode) >= verificationRank("basic-form");
+      mode = keepCurrent ? beforeMode : "basic-form";
+      notice = DOCUMENT_CHECK_UNAVAILABLE;
+    }
   }
 
   if (verificationRank(mode) < verificationRank(floorAfter)) {

@@ -44,14 +44,15 @@ describe("identity-check floor", () => {
     }
   });
 
-  it("stores a full ID check while texting is still in demo", async () => {
+  it("keeps the basic identity form when a full ID check is requested in demo", async () => {
     const h = grokHarness();
     try {
       const created = await h.ok("create_property_setup", { address: "18 Maple Street, Teaneck, NJ 07666", propertyType: "MULTIFAMILY_HOME" });
       const propertyId = created.setup.propertyId as string;
       const saved = await h.ok("save_settings", { property: propertyId, verification: "document-check" });
       expect(saved.status).toBe("done");
-      expect(h.workspace.openDraft(propertyId).draft.verificationMode).toBe("document-check");
+      expect(saved.message).toBe("A full ID check isn't available yet, so visitors will keep filling out a basic identity form.");
+      expect(h.workspace.openDraft(propertyId).draft.verificationMode).toBe("basic-form");
     } finally {
       h.cleanup();
     }

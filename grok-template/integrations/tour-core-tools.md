@@ -36,9 +36,9 @@ again with the code after the operator's yes.
 | `preview_route` | read | Resolves the operator's door words to doors on file, without saving |
 | `set_route` | change | Saves a route from exact door names; refuses unknown doors and invalid routes |
 | `get_tour_hours` | read | Days, hours, length, spacing, early arrival. A new property starts at Monday–Friday, 9:00 AM–5:00 PM |
-| `set_tour_hours` | change | Sets tour hours from everyday words. A new property starts at Monday–Friday, 9:00 AM–5:00 PM (45-minute tours, hourly starts, 10 minutes early) until the operator changes it. Hours are structural: a published property goes back to draft until readiness, a practice tour, and publish. After those hours are published, open visitor conversations use them on the next inbound text |
+| `set_tour_hours` | change | Sets tour hours from everyday words. A new property starts at Monday–Friday, 9:00 AM–5:00 PM (45-minute tours, hourly starts, 10 minutes early) until the operator changes it. Tours have to end later the same day. Hours are structural: a published property goes back to draft until readiness, a practice tour, and publish. After those hours are published, open visitor conversations use them on the next inbound text |
 | `get_verification_policy` | read | Visitor verification choice and reuse window |
-| `set_verification_policy` | change | Basic identity form, or practice verification while texting is in test mode. Practice is refused on a live line |
+| `set_verification_policy` | change | Basic identity form, or practice verification while texting is in test mode. Practice is refused on a live line. A full ID check is not stored, because it can't run yet |
 | `get_services` | read | Messaging choice and connection, records location, door access mode. Local or test-mode texting: `messaging.current` is `"test"` (never `"live"`) and the status line is "Visitor texting: test mode". Summary: "Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on. Door access is still in demo mode, so no physical locks will open." — not that texting is live |
 | `set_services` | change | Live texts, local test texts for this building, or practice texts; records location. Local does not change the installation or other buildings. Local summary is the test-mode sentence above; do not name the texting service |
 | `inject_local_sms` | change | QA only. Injects a visitor SMS on the local loopback (same path as a real inbound webhook). `hasMedia` marks a photo; Tour Core does not forward it. A photo alone is told it can't take photos yet; a photo plus a question it can't answer is one combined text and is flagged. Refuses unless that building is on local test texts |
@@ -110,10 +110,10 @@ again with the code after the operator's yes.
 | `save_property` | change | Saves the property address, type, time zone, name, facts, help number, alert contact, building access, and entry instructions |
 | `save_units` | change | Adds, renames, or updates units and their leasing details |
 | `save_doors_and_routes` | change | Saves doors and walking routes, or with preview true only shows the matched route |
-| `save_hours` | change | Saves touring days and hours from everyday words |
+| `save_hours` | change | Saves touring days and hours from everyday words. Tours have to end later the same day |
 | `save_settings` | change | Saves the optional identity check and tour-update choices, and will not loosen the identity check on a live property |
 | `run_checks` | change | Runs the readiness check and a practice tour, including the connection, door-access, and alert self-tests |
-| `publish` | change | Publishes the property for demo after a yes to the confirmation it returns |
+| `publish` | consequential | Publishes the property for demo after a yes to the confirmation it returns |
 
 `reset_hosted_demo` is not offered on a self-hosted or local Tour Core, and it
 is hidden from anyone who is not the current hosted owner. It does not take a

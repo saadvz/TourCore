@@ -514,7 +514,8 @@ Terminal wizard ─────────────────────�
   same normalizer as the older tools, so equivalent wording stores one config. Every setup write goes through that
   save layer. Switching a property to live texting raises practice verification to the basic identity form and says
   so. Asking for practice on a live line is refused, and that refusal does not change the saved check. A full ID
-  check is not stored on a live line. A property already stored as live texting plus the practice check fails
+  check is not stored, because it can't run yet. On test or local texting the basic identity form is saved, unless
+  that property is already on the basic form. A property already stored as live texting plus the practice check fails
   readiness and publish until it is switched. Reading or deploying does not rewrite a stored check. Backups still
   use today's backup tools, and declining stays possible. `get_next_installation_step`
   still names the older tools. The older status tools still work and still follow Tour Core's order. None takes or
@@ -729,8 +730,8 @@ The actions:
 | `addUnit` / `renameUnit` / `setUnitDetails` / `removeUnit` | Tourable units, their description and approved facts. A rename can also rename the unit's door, but only if it still has the suggested name. For an apartment or condo, rename applies the same unit casing as add (`4b` → `Unit 4B`, `loft` → `Unit Loft`) and refreshes the street-plus-unit nickname and matching unit door. `update_unit` confirms with that stored name (`Updated Unit Loft.`), not the raw input |
 | `addDoor` / `renameDoor` / `removeDoor` | Entrances, unit doors, and hallway or shared doors (ids are generated and can't collide) |
 | `setRoute` | Ordered doors for one unit, plus optional directions |
-| `setTourHours` | Days, hours, tour length, spacing, early-arrival allowance |
-| `setVerificationPolicy` | Basic identity form, or practice verification while texting is in test mode. Practice is refused on a live line, and a full ID check is not stored on a live line. Switching to live texting raises practice to the basic form |
+| `setTourHours` | Days, hours, tour length, spacing, early-arrival allowance. Tours have to end later the same day |
+| `setVerificationPolicy` | Basic identity form, or practice verification while texting is in test mode. Practice is refused on a live line. A full ID check is not stored, because it can't run yet. Switching to live texting raises practice to the basic form |
 | `setServices` / `setAlertContact` | Records, messages, door access, and who gets alerts |
 | `reviewSetup` | Readable summary plus every problem, in plain language |
 | `runReadinessCheck` | Eight checks against the real adapters the setup selects |

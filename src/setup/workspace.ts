@@ -10,7 +10,7 @@ import { runReadinessCheck, type ReadinessResult } from "./readiness";
 import { canonicalAddressKey } from "./address";
 import { normalizeStoredDraft } from "./normalizeDraft";
 import { SetupInputError } from "./setupActions";
-import { enforceVerificationWrite, VERIFICATION_BELOW_FLOOR } from "./verificationFloor";
+import { DOCUMENT_CHECK_UNAVAILABLE, enforceVerificationWrite, VERIFICATION_BELOW_FLOOR } from "./verificationFloor";
 
 /**
  * PUBLISHED_FOR_DEMO is NOT a production launch. It only means the setup is
@@ -287,7 +287,14 @@ export class PropertyWorkspace {
     this.rememberNotice(id, enforced.notice);
     const hash = configHash(config);
     const previous = before?.state;
-    const change = before ? classifyChange(before.config, config) : "new";
+    const rawChange = before ? classifyChange(before.config, config) : "new";
+    // Refusing a full ID check that cannot run is not a new setup. Keep the
+    // published property and its current checks when that is the only difference.
+    const heldVerification =
+      !!before &&
+      enforced.notice === DOCUMENT_CHECK_UNAVAILABLE &&
+      fullHash({ ...before.config, verificationMode: config.verificationMode }) === fullHash(config);
+    const change = heldVerification ? "none" : rawChange;
     let state: PropertyState;
     if (previous && (change === "none" || change === "content")) {
       const old = { full: configHash(before!.config), safety: safetyHash(before!.config) };

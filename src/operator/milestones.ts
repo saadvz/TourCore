@@ -355,13 +355,12 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
         }
       }
       if (i.preview) {
-        const line = matched.map((route) => `${route.unit}: ${routeThrough(route.doors)}`).join(". ");
-        return envelope(ctx, id, "next", line ? `I have: ${line}. Nothing was saved.` : "Nothing was saved.", { propertyId: id, preview: true, routes: matched });
+        return envelope(ctx, id, "next", walkingRouteLine(scratch.property.propertyType, matched, true), { propertyId: id, preview: true, routes: matched });
       }
       if (i.doors?.length || i.routes?.length) ctx.services.workspace.persistEdit(scratch, ctx.now());
       const saved = ctx.services.workspace.openDraft(id).draft;
       if (!saved.routes.length) return envelope(ctx, id, "next", "How does someone walk in, from the front door to the door they tour?", { propertyId: id, routes: matched });
-      return envelope(ctx, id, "done", matched.map((route) => `${route.unit}: ${routeThrough(route.doors)}`).join(". ") || "Saved the doors and the walking route.", {
+      return envelope(ctx, id, "done", walkingRouteLine(scratch.property.propertyType, matched, false), {
         propertyId: id,
         routes: matched,
       });
@@ -371,7 +370,7 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
     name: "save_hours",
     title: "Save touring hours",
     kind: "change",
-    description: "Saves touring days and hours from everyday words.",
+    description: "Saves touring days and hours from everyday words. Tours have to end later the same day.",
     input: z.strictObject({
       property: Property,
       days: z.union([z.string().max(80), z.array(z.string().max(20)).max(7)]).optional(),
@@ -570,7 +569,12 @@ const DAY_NAME: Record<Weekday, string> = {
   SUN: "Sunday",
 };
 
-/** "Monday to Friday", "Monday, Wednesday and Friday", "Monday to Friday and Sunday". */
+/**
+ * "Monday to Friday", "Saturday and Sunday", "Saturday to Monday".
+ * Sunday sits next to Monday, so a run can wrap the week. Two days use
+ * "and" when they are the whole list. A longer run uses "to". Several
+ * runs use commas and one "and" before the last run.
+ */
 export function describeTourDays(days: readonly Weekday[]): string {
   const ordered = TOUR_DAY_ORDER.filter((day) => days.includes(day));
   if (ordered.length === TOUR_DAY_ORDER.length) return "every day";
@@ -581,12 +585,21 @@ export function describeTourDays(days: readonly Weekday[]): string {
     if (last && prev && TOUR_DAY_ORDER.indexOf(day) === TOUR_DAY_ORDER.indexOf(prev) + 1) last.push(day);
     else groups.push([day]);
   }
-  const parts = groups.map((group) => {
-    if (group.length === 1) return DAY_NAME[group[0]!];
-    if (group.length === 2) return `${DAY_NAME[group[0]!]} and ${DAY_NAME[group[1]!]}`;
-    return `${DAY_NAME[group[0]!]} to ${DAY_NAME[group[group.length - 1]!]}`;
-  });
-  return joinList(parts);
+  if (groups.length > 1 && groups[0]![0] === "MON" && groups[groups.length - 1]!.at(-1) === "SUN") {
+    const sundaySide = groups.pop()!;
+    const mondaySide = groups.shift()!;
+    groups.unshift([...sundaySide, ...mondaySide]);
+  }
+  const alone = groups.length === 1;
+  return joinList(groups.map((group) => describeDayGroup(group, alone)));
+}
+
+function describeDayGroup(group: Weekday[], alone: boolean): string {
+  const first = DAY_NAME[group[0]!];
+  const last = DAY_NAME[group[group.length - 1]!];
+  if (group.length === 1) return first;
+  if (group.length === 2) return alone ? `${first} and ${last}` : `${first}, ${last}`;
+  return `${first} to ${last}`;
 }
 
 function spokenClock(hhmm: string): string {
@@ -601,6 +614,18 @@ function joinList(parts: string[]): string {
 
 function routeThrough(doors: string[]): string {
   return doors.join(", then ");
+}
+
+/** A single-family route has no "the home:" label. A multi-unit route keeps "Unit A: ...". */
+function walkingRouteLine(propertyType: string | undefined, matched: { unit: string; doors: string[] }[], preview: boolean): string {
+  if (propertyType === "SINGLE_FAMILY") {
+    const through = matched.map((route) => routeThrough(route.doors)).filter(Boolean).join(". ");
+    if (!through) return preview ? "Nothing was saved." : "Saved the doors and the walking route.";
+    return preview ? `The walking route is ${through}. Nothing was saved yet.` : `Saved the walking route: ${through}.`;
+  }
+  const line = matched.map((route) => `${route.unit}: ${routeThrough(route.doors)}`).join(". ");
+  if (preview) return line ? `I have: ${line}. Nothing was saved.` : "Nothing was saved.";
+  return line || "Saved the doors and the walking route.";
 }
 
 function landlordPlace(name: string, propertyType: string | undefined): string {

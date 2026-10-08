@@ -17,7 +17,7 @@ import type { ConfigIssue, ConfigSection } from "../config/validateConfig";
 import { formatPhone, parsePhone } from "../core/phone";
 import { formatClockTime, friendlyTimeZone, WEEKDAYS, type Weekday } from "../core/timezone";
 import { isApartmentOrCondo, isSingleTourPlace, streetAndUnit, streetLine, unitLabel, visitorSubject } from "../visitor/identity";
-import { inferTimeZone, resolveTimeZone, slugify } from "./parse";
+import { inferTimeZone, resolveTimeZone, SAME_DAY_HOURS, slugify, tourHoursEndSameDay } from "./parse";
 import { formatCanonical, parseUsAddress } from "./address";
 import { canonicalDoor, canonicalUnitName } from "./normalizeDraft";
 
@@ -678,6 +678,9 @@ export function setTourHours(draft: SetupDraft, input: Partial<TourHours>): Setu
     if (value === undefined) continue;
     if (!Number.isInteger(value)) throw new SetupInputError("TOUR_MINUTES_UNREADABLE", "Please use a whole number of minutes.");
     next.tourHours[key] = value;
+  }
+  if (!tourHoursEndSameDay(next.tourHours.start, next.tourHours.end)) {
+    throw new SetupInputError("TOUR_HOURS_BACKWARDS", SAME_DAY_HOURS);
   }
   return next;
 }

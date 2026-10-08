@@ -24,7 +24,7 @@ export function parseDays(input: string): Weekday[] | undefined {
   if (/^week ?days$/.test(text)) return WEEK.slice(0, 5);
   if (/^week ?ends$/.test(text)) return WEEK.slice(5);
 
-  const tokens = text.split(/[\s,;&]+/).filter((token) => token && token !== "and");
+  const tokens = text.split(/[\s,;&+]+/).filter((token) => token && token !== "and" && token !== "plus");
   const days = new Set<Weekday>();
   const addRange = (from: Weekday, to: Weekday) => {
     for (let i = WEEK.indexOf(from); ; i = (i + 1) % 7) {

@@ -7,7 +7,7 @@ describe("milestone landlord copy", () => {
     expect(describeTourDays(["SAT", "SUN"])).toBe("Saturday and Sunday");
     expect(describeTourDays(["MON", "TUE", "WED", "THU", "FRI"])).toBe("Monday to Friday");
     expect(describeTourDays(["MON", "WED", "FRI"])).toBe("Monday, Wednesday and Friday");
-    expect(describeTourDays(["MON", "TUE", "WED", "THU", "FRI", "SUN"])).toBe("Monday to Friday and Sunday");
+    expect(describeTourDays(["MON", "TUE", "WED", "THU", "FRI", "SUN"])).toBe("Sunday to Friday");
     expect(`Tours run ${describeTourDays(["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"])}, 9 AM to 5 PM.`).toBe("Tours run every day, 9 AM to 5 PM.");
   });
 
