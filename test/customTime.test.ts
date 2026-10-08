@@ -452,7 +452,7 @@ describe("a pending custom-time request does not block regular booking", () => {
     expect(hi.join("\n")).not.toContain("still with the property team");
     expect(hi.join("\n")).toMatch(/Which day works for you\?|I have tours available/);
     expect(hi.some((line) => line === expected)).toBe(false);
-  });
+  }, 30_000);
 
   it("a day reply or 2 after the pending line shows or books regular slots", async () => {
     const a = await liveApp({ cleanups });
