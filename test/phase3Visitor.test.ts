@@ -6,12 +6,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadConfig, validateConfig, type TourCoreConfig } from "../src/config/tourCoreConfig";
 import { isFairHousingQuestion } from "../src/core/fairHousing";
 import { SimulatedClock } from "../src/core/clock";
-import { UNKNOWN_ANSWER } from "../src/core/TourCore";
+import { describeHistory } from "../src/audit/describe";
+import { teamTextFailedNotice, UNKNOWN_ANSWER } from "../src/core/TourCore";
 import { formatVisitorClock, zonedTimeToUtc } from "../src/core/timezone";
 import { createTourCore, createVerificationProvider } from "../src/createTourCore";
 import { MockDurinAccessAdapter } from "../src/durin/MockDurinAccessAdapter";
 import { hoursStepSay } from "../src/operator/milestones";
-import { FAIR_HOUSING_REFUSAL } from "../src/operator/exceptions";
+import { FAIR_HOUSING_REFUSAL, listExceptions } from "../src/operator/exceptions";
 import { Installation } from "../src/install/installation";
 import type { MessagingAdapter, OutgoingMessage } from "../src/messaging/Messenger";
 import { bindMessagingInstallation } from "../src/messaging/registry";
@@ -131,6 +132,7 @@ function failOperatorSend(ctx: ReturnType<typeof engine>): void {
       channel: "DEMO",
       status: message.audience === "OPERATOR" ? "FAILED" : "SENT",
       sentAt: new Date().toISOString(),
+      ...(message.audience === "OPERATOR" ? { error: { code: "SENDBLUE_DOWN", message: "Sendblue rejected the text" } } : {}),
     };
   };
 }
@@ -338,6 +340,43 @@ describe("dead-end visitor lines", () => {
     expect(prospectTexts(ctx.sent).map((message) => message.body)).toEqual([DOOR_STUCK]);
     expect(errors.join("\n")).toContain("Team alert was not recorded");
     expect((await ctx.store.listAudit()).some((event) => event.type === "OPERATOR_NOTIFIED" && event.detail === DOOR_ALERT)).toBe(false);
+  });
+
+  it("records the landlord notice when the team text fails and the visitor is asked to retry", async () => {
+    const errors = captureErrors();
+    const ctx = engine("none");
+    const booked = await bookJane(ctx);
+    const stored = await ctx.store.get("reservations", booked.reservation.id);
+    await ctx.store.put("reservations", { ...stored!, status: "AWAITING_VERIFICATION" });
+    ctx.sent.length = 0;
+    failOperatorSend(ctx);
+    await ctx.core.requestAccess({ reservationId: booked.reservation.id, prospectId: booked.prospect.id, doorId: "entrance" });
+    expect(prospectTexts(ctx.sent).map((message) => message.body)).toEqual([SNAG]);
+    const notice = teamTextFailedNotice("Jane Smith");
+    const failed = (await ctx.store.listAudit()).filter((event) => event.type === "MESSAGE_FAILED");
+    expect(failed.map((event) => ({ detail: event.detail, code: event.code }))).toEqual([{ detail: notice, code: undefined }]);
+    expect(notice).toBe("I couldn't text you about Jane Smith, so I asked them to text me again in a few minutes.");
+    expect(errors.join("\n")).toContain("Sendblue rejected the text");
+    const bundle = await ctx.core.exportRecords();
+    const history = describeHistory(bundle.auditEvents, bundle, ctx.config.property.timezone).map((entry) => entry.text);
+    expect(history).toContain(notice);
+    expect(history.join("\n")).not.toMatch(/Sendblue|SENDBLUE|rejected/);
+    const root = mkdtempSync(join(tmpdir(), "tourcore-team-text-"));
+    cleanups.push(() => rmSync(root, { recursive: true, force: true }));
+    const ws = new PropertyWorkspace(root);
+    ws.save(ctx.config);
+    ws.recordVisitorDemo(ctx.config.property.id, {
+      schemaVersion: 1,
+      tourId: "2026-09-28T14-00-00-000Z_team-text",
+      kind: "visitor-demo",
+      ranAt: ctx.clock.now().toISOString(),
+      updatedAt: ctx.clock.now().toISOString(),
+      outcome: "in-progress",
+    }, bundle);
+    const issues = await listExceptions({ workspace: ws, now: () => ctx.clock.now() });
+    const missed = issues.filter((issue) => issue.kind === "message-failed");
+    expect(missed.map((issue) => ({ title: issue.title, summary: issue.summary }))).toEqual([{ title: notice, summary: notice }]);
+    expect(JSON.stringify(missed)).not.toMatch(/Sendblue|SENDBLUE|rejected/);
   });
 
   it("sends the snag line for no step left when the team text also fails", async () => {

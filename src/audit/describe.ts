@@ -1,3 +1,4 @@
+import { isTeamTextFailedNotice } from "../core/TourCore";
 import { formatPhone } from "../core/phone";
 import { formatTime } from "../core/timezone";
 import { UNNAMED_VISITOR, type AuditEvent } from "../domain/model";
@@ -166,6 +167,8 @@ function sentence(
       return blocked(e.detail);
     case "HELP_REQUESTED":
       return blocked(`${c.name} asked for help${e.detail ? ` near ${e.detail}` : ""}.`);
+    case "MESSAGE_FAILED":
+      return isTeamTextFailedNotice(e.detail) ? info(e.detail) : info("Something happened on this tour.");
     case "FOLLOW_UP_RESPONSE":
       return e.detail === "yes" ? good(`${c.name} would like someone to follow up.`) : info(`${c.name} doesn't need a follow-up.`);
     default:

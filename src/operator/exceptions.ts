@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { FAIR_HOUSING_CODE } from "../core/fairHousing";
-import { HANDLER_FAILED_NEXT_STEP } from "../core/TourCore";
+import { HANDLER_FAILED_NEXT_STEP, isTeamTextFailedNotice } from "../core/TourCore";
 import { formatPhone } from "../core/phone";
 import { formatShortDateTime } from "../core/timezone";
 import { profileFacts, questionTopic, structuredAnswer, type ProfileField, type UnitProfile } from "../config/unitProfile";
@@ -161,7 +161,7 @@ function kindFor(e: AuditEvent): ExceptionKind | undefined {
     case "OPERATOR_HOLD_PLACED":
       return "operator-hold";
     case "MESSAGE_FAILED":
-      return e.detail.startsWith("message") ? "message-failed" : undefined;
+      return e.detail.startsWith("message") || isTeamTextFailedNotice(e.detail) ? "message-failed" : undefined;
     case "TOUR_OVERSTAY_CLOSED":
       return "overstay";
     case "VISITOR_CONFIRMED_LEFT":
@@ -206,7 +206,7 @@ function summaryFor(kind: ExceptionKind, e: AuditEvent, tour: TourSnapshot): str
     case "operator-hold":
       return `Your team paused this tour${e.detail ? `: ${e.detail}` : ""}.`;
     case "message-failed":
-      return "A message to the visitor couldn't be delivered.";
+      return isTeamTextFailedNotice(e.detail) ? e.detail : "A message to the visitor couldn't be delivered.";
     case "restore-conflict":
       return "Couldn't be restored after a restart.";
     case "overstay":
@@ -285,13 +285,15 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
   const fairHousing = kind === "unanswered-question" && e.code === FAIR_HOUSING_CODE;
   const sent = resolution?.approvedFact?.replace(/\.$/, "");
   const main = asked && sent ? `Asked "${asked}". Sent "${sent}".` : summaryFor(kind, e, tour);
+  const teamTextMissed = kind === "message-failed" && isTeamTextFailedNotice(e.detail);
+  const summary = teamTextMissed ? e.detail : extra ? `${main} ${extra}` : main;
   return {
     exceptionId,
     propertyId: tour.propertyId,
     property: tour.config.property.name,
     kind,
-    title: TITLES[kind],
-    summary: extra ? `${main} ${extra}` : main,
+    title: teamTextMissed ? e.detail : TITLES[kind],
+    summary,
     visitorName: visitorNameOf(tour),
     unitName: unitNameOn(tour, e.reservationId) ?? unitSubject(tour, e.unitId),
     tourRef: tourRef(tour.propertyId, tour.tourId),

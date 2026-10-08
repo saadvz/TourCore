@@ -22,7 +22,7 @@ const norm = (s: string) =>
 export const FAIR_HOUSING_CODE = "FAIR_HOUSING";
 
 const PROTECTED_CLASS =
-  /\b(?:families|family|familial status|kids?|children|child|section\s*8|vouchers?|single (?:moms?|mothers?|dads?|fathers?|parents?)|race|racial|people of color|religion|religious|national origin|nationality|country of origin|sex|gender|disabilities|disability|disabled|handicapped|handicap|ages?|elderly|seniors?|pregnant|pregnancy|newborns?|immigrants?)\b/;
+  /\b(?:families|family|familial status|kids?|children|child|section\s*8|vouchers?|single (?:moms?|mothers?|dads?|fathers?|parents?)|race|racial|people of color|color|religion|religious|national origin|nationality|country of origin|sex|gender|disabilities|disability|disabled|handicapped|handicap|ages?|elderly|seniors?|pregnant|pregnancy|newborns?|immigrants?)\b/;
 
 /** Eligibility phrasing. A bare "rent" or "monthly" is not enough. */
 const ELIGIBILITY =
@@ -65,12 +65,21 @@ const FIFTY_FIVE_PLUS = /55\s*\+/;
 const PEOPLE_BESIDE =
   /\b(?:people|families|family|folks|residents|neighbors|tenants|kids|children|child|hispanics|latinos|latinas|asians|blacks|whites|arabs)\b/;
 
-/** Race, ethnicity, or color. Counts only beside a people word. */
+/**
+ * Race, ethnicity, or color. Quantity phrases count these only beside a
+ * people word. Place phrases count them on their own.
+ */
 const RACE_OR_COLOR = /\b(?:hispanic|latino|latina|asian|black|white|arab|color)\b/;
 
-/** Area or makeup language. The same word cannot also serve as the class. */
-const AREA_OR_COMPOSITION =
-  /\b(?:nearby|around here|in the area|neighborhood|neighbors|in the building|on the block|lives? around|many|a lot of|lots of|mostly|any other)\b/;
+/** How many. A race or color word counts here only beside a people word. */
+const QUANTITY = /\b(?:many|a lot of|lots of)\b/;
+
+/** Where, or what the place is like. A race or color word counts on its own. */
+const PLACE =
+  /\b(?:mostly|around here|in the area|neighborhood|nearby|on the block|in the building)\b/;
+
+/** Other area language. Pairs with a class, a faith, or a people word. */
+const OTHER_AREA = /\b(?:neighbors|lives? around|any other)\b/;
 
 /** Steering even with no class word beside it. */
 const STEERING =
@@ -98,18 +107,23 @@ function beside(text: string, a: { start: number; end: number }, b: { start: num
 
 /**
  * Neighborhood composition or steering. A protected class, a faith, or a
- * people word together with an area or makeup phrase. A singular race or
- * ethnicity word, or "color", counts only when it sits beside a people word,
- * so wall color and "lots of light" stay ordinary. Standalone steering
- * phrases match on their own.
+ * people word together with an area phrase. A bare "color" span is not a
+ * neighborhood class (eligibility still sees it). Quantity phrases count a
+ * race or color word only beside a people word. Place phrases count a race
+ * or color word on their own. Wall color and "lots of light" stay ordinary.
+ * Standalone steering phrases match on their own.
  */
 function neighborhoodSteering(text: string): boolean {
   if (STEERING.test(text)) return true;
   const people = spans(PEOPLE_BESIDE, text);
-  const race = spans(RACE_OR_COLOR, text).filter((word) => people.some((person) => beside(text, word, person)));
-  const classes = [...spans(PROTECTED_CLASS, text), ...spans(FAITH, text), ...people, ...race];
-  const areas = spans(AREA_OR_COMPOSITION, text);
-  return classes.some((word) => areas.some((area) => !overlaps(word, area)));
+  const race = spans(RACE_OR_COLOR, text);
+  const raceBesidePeople = race.filter((word) => people.some((person) => beside(text, word, person)));
+  const protectedSpans = spans(PROTECTED_CLASS, text).filter((word) => text.slice(word.start, word.end) !== "color");
+  const classes = [...protectedSpans, ...spans(FAITH, text), ...people, ...raceBesidePeople];
+  const areas = [...spans(QUANTITY, text), ...spans(PLACE, text), ...spans(OTHER_AREA, text)];
+  if (classes.some((word) => areas.some((area) => !overlaps(word, area)))) return true;
+  const places = spans(PLACE, text);
+  return race.some((word) => places.some((place) => !overlaps(word, place)));
 }
 
 export function isFairHousingQuestion(text: string): boolean {

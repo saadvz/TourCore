@@ -112,6 +112,12 @@ describe("fair-housing detection", () => {
     "what's the crime rate like?",
     "How many people can live in the unit?",
     "do many tenants have cars?",
+    "Would you rent to someone based on their color?",
+    "Do you accept tenants of any color?",
+    "Is color a factor in who you rent to?",
+    "is it mostly white around here?",
+    "is it mostly Black around here?",
+    "is the area mostly Asian?",
   ])("matches %s", (text) => {
     expect(isFairHousingQuestion(text)).toBe(true);
   });

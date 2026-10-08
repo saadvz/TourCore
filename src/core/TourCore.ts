@@ -318,6 +318,19 @@ export function doorStuckAlert(who: string, door: string): string {
   return `${who} is at ${door}, and I couldn't open it for them. Please text them or let them in.`;
 }
 
+/**
+ * Landlord line when a team text did not go out and the visitor was asked to
+ * retry. The whole sentence is what the landlord sees. No provider or error.
+ */
+export function teamTextFailedNotice(who: string): string {
+  return `I couldn't text you about ${who}, so I asked them to text me again in a few minutes.`;
+}
+
+/** True only for that exact landlord sentence, with nothing appended. */
+export function isTeamTextFailedNotice(detail: string): boolean {
+  return /^I couldn't text you about .+?, so I asked them to text me again in a few minutes\.$/.test(detail);
+}
+
 /** Visitor cancel-by-text: Critiquito-locked confirm, done, and keep-booked lines. */
 export const VISITOR_CANCEL_DONE = "You're cancelled. Text me anytime if you want to book again.";
 /** Nothing is booked. The menu is cleared. The next text starts scheduling again. */
@@ -1407,6 +1420,7 @@ export class TourCore {
         phone: input.phone,
         reservation: input.reservation,
         reservationId: input.reservationId,
+        who: input.who,
         alert: questionNotSavedAlert(input.who),
       });
       return;
@@ -1448,12 +1462,11 @@ export class TourCore {
     if (!place) return;
     const prospect = await this.mustGetProspect(reservation.prospectId);
     const said = inbound?.text ?? "I need help";
-    const repeat = (await this.deps.store.listAudit()).some((e) => e.reservationId === reservationId && e.type === "HELP_REQUESTED");
+    const repeat = await this.priorHelpRequest(reservationId);
     await this.recordInbound(prospect.id, reservationId, said, inbound?.meta);
-    await this.record("HELP_REQUESTED", { reservationId, prospectId: prospect.id, detail: where ?? "", code: said });
-    if (await this.shouldAlertHelp(reservationId)) {
-      await this.notifyOperator(reservation, `${prospect.name} asked for help${where ? ` near ${where}` : ""}.`);
-    }
+    const alert = `${prospect.name} asked for help${where ? ` near ${where}` : ""}.`;
+    const alertDue = await this.shouldAlertHelp(reservationId);
+    const alerted = alertDue ? await this.textOperatorFirst(reservation, alert) : false;
     const team = this.teamName();
     const contact = this.visitorHelpNumber();
     const ack =
@@ -1464,16 +1477,49 @@ export class TourCore {
         : repeat
           ? VisitorDenialCopy.helpRepeatAck(team, contact)
           : VisitorDenialCopy.helpAck(team, contact);
-    await this.textProspect(prospect, reservationId, ack);
+    const snag = alertDue && !alerted;
+    await this.textProspect(prospect, reservationId, snag ? renderSms("handler-snag-retry").body : ack);
+    await this.recordBestEffort(
+      "HELP_REQUESTED",
+      { reservationId, prospectId: prospect.id, detail: where ?? "", code: said },
+      "Help request was not recorded",
+    );
+    if (alerted) {
+      await this.recordBestEffort(
+        "OPERATOR_NOTIFIED",
+        { reservationId, prospectId: prospect.id, detail: alert },
+        "Team alert was not recorded",
+      );
+    } else if (snag) {
+      await this.recordTeamTextFailure(prospect.name, reservationId, prospect.id);
+    }
   }
 
-  /** Re-alert at most once per HELP_ALERT_WINDOW_MS for the same reservation's open help. */
+  /** True when this reservation already has a help request. A failed read is a first request. */
+  private async priorHelpRequest(reservationId: string): Promise<boolean> {
+    try {
+      return (await this.deps.store.listAudit()).some((e) => e.reservationId === reservationId && e.type === "HELP_REQUESTED");
+    } catch (err) {
+      console.error(`Help history was not read: ${err instanceof Error ? err.message : "unknown error"}`);
+      return false;
+    }
+  }
+
+  /**
+   * Re-alert at most once per HELP_ALERT_WINDOW_MS for the same reservation's open help.
+   * A failed audit read counts as due, so a down store still texts the team.
+   */
   private async shouldAlertHelp(reservationId: string): Promise<boolean> {
-    const last = [...(await this.deps.store.listAudit())]
-      .reverse()
-      .find((e) => e.reservationId === reservationId && e.type === "OPERATOR_NOTIFIED" && e.detail.includes("asked for help"));
-    if (!last) return true;
-    return this.deps.clock.now().getTime() - Date.parse(last.at) >= HELP_ALERT_WINDOW_MS;
+    try {
+      const last = [...(await this.deps.store.listAudit())]
+        .reverse()
+        .find((e) => e.reservationId === reservationId && e.type === "OPERATOR_NOTIFIED" && e.detail.includes("asked for help"));
+      if (!last) return true;
+      return this.deps.clock.now().getTime() - Date.parse(last.at) >= HELP_ALERT_WINDOW_MS;
+    } catch (err) {
+      console.error(`Help alert history was not read: ${err instanceof Error ? err.message : "unknown error"}`);
+      return true;
+    }
   }
 
   // -------------------------------------------------------- operator actions
@@ -2139,31 +2185,46 @@ export class TourCore {
       prospect,
       reservation,
       reservationId: reservation.id,
+      who,
       alert: doorStuckAlert(who, door),
     });
   }
 
   /**
    * Texts the team before the visitor. The stuck line is sent only when that
-   * text went out. Otherwise the visitor gets the snag retry. The audit write
-   * comes after, and a failed write is logged.
+   * text went out. Otherwise the visitor gets the snag retry, and the landlord
+   * gets a best-effort record of that ask. The audit write comes after, and a
+   * failed write is logged.
    */
   private async alertTeamThenStuck(input: {
     phone: string;
     prospect?: Prospect;
     reservation?: Reservation;
     reservationId?: string;
+    who: string;
     alert: string;
   }): Promise<void> {
     const alerted = await this.textOperatorFirst(input.reservation, input.alert);
     const body = alerted ? renderSms("door-stuck-no-steps", { team: this.teamName() }).body : renderSms("handler-snag-retry").body;
     if (input.prospect) await this.textProspect(input.prospect, input.reservationId, body);
     else await this.sendConversationText({ phone: input.phone, body, reservationId: input.reservationId });
-    if (!alerted) return;
+    if (!alerted) {
+      await this.recordTeamTextFailure(input.who, input.reservation?.id ?? input.reservationId, input.reservation?.prospectId ?? input.prospect?.id);
+      return;
+    }
     await this.recordBestEffort(
       "OPERATOR_NOTIFIED",
       { reservationId: input.reservation?.id, prospectId: input.reservation?.prospectId ?? input.prospect?.id, detail: input.alert },
       "Team alert was not recorded",
+    );
+  }
+
+  /** Landlord-facing record that the visitor was asked to retry. No error code. */
+  private async recordTeamTextFailure(who: string, reservationId?: string, prospectId?: string): Promise<void> {
+    await this.recordBestEffort(
+      "MESSAGE_FAILED",
+      { reservationId, prospectId, detail: teamTextFailedNotice(who) },
+      "Failed team text was not recorded",
     );
   }
 
@@ -2340,6 +2401,9 @@ export class TourCore {
           code: receipt.error?.code,
           detail: `${m.audience === "OPERATOR" ? "alert" : "message"} not delivered`,
         });
+      } else if (m.audience === "OPERATOR") {
+        const reason = receipt.error?.message ?? receipt.error?.code ?? "not delivered";
+        console.error(`Team alert was not sent: ${reason}`);
       }
       return false;
     }
