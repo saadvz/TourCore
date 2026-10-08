@@ -343,7 +343,7 @@ const TOPICS: [ProfileField, RegExp][] = [
   ["monthlyRent", /\b(rent|price|cost|costs|how much|per month|monthly)\b/i],
   ["availability", /\b(availab\w*|move[\s-]?in|vacant|when can i)\b/i],
   ["squareFeet", /\b(square f(ee|oo)t|sq\.?\s*ft|how big|size)\b/i],
-  ["parking", /\b(parking|park|garage)\b/i],
+  ["parking", /\b(parking|garage|park my car|where do i park)\b/i],
   ["laundry", /\b(laundry|washer|dryer)\b/i],
   ["pets", /\b(pets?|dogs?|cats?)\b/i],
   ["utilities", /\butilit(y|ies)\b/i],
