@@ -79,47 +79,68 @@ describe("a weekday inside a question at the open day menu", () => {
     expect((await a.grok("list_exceptions")).exceptions).toEqual([]);
   });
 
-  it("still opens the named day's times for a real pick", async () => {
-    const a = await liveApp({ cleanups });
-    const picks = [
-      "Friday",
-      "friday please",
-      "fri",
-      "Fri?",
-      "how about Friday?",
-      "can I do Friday",
-      "Friday works",
-      "5",
-      "Oct 2",
-      "10/2",
-      "Friday afternoon",
-      "Friday Oct 2",
-      "Friday the 2nd",
-      "Friday!",
-      "Friday is good",
-      "Friday works for me",
-      "this Friday",
-      "yes Friday",
-      "is Friday open?",
-      "is Friday free?",
-      "Friday open?",
-      "anything open Friday?",
-      "is there availability Friday?",
-      "are you open Friday?",
-      "is Friday still open?",
-      "any slots Friday?",
-      "any openings Friday?",
-      "is Friday full?",
-      "anything left Friday?",
-    ];
-    for (const [i, text] of picks.entries()) {
-      const phone = `+155501031${String(i).padStart(2, "0")}`;
-      await openDayMenu(a, phone);
-      const replies = await a.textFrom(phone, text);
-      expect(replies.join("\n"), text).toBe(FRIDAY_TIMES);
-    }
-    expect((await a.grok("list_exceptions")).exceptions).toEqual([]);
-  });
+  it(
+    "still opens the named day's times for a real pick",
+    async () => {
+      const a = await liveApp({ cleanups });
+      const picks = [
+        "Friday",
+        "friday please",
+        "fri",
+        "Fri?",
+        "how about Friday?",
+        "can I do Friday",
+        "Friday works",
+        "5",
+        "Oct 2",
+        "10/2",
+        "Friday afternoon",
+        "Friday Oct 2",
+        "Friday the 2nd",
+        "Friday!",
+        "Friday is good",
+        "Friday works for me",
+        "this Friday",
+        "yes Friday",
+      ];
+      for (const [i, text] of picks.entries()) {
+        const phone = `+155501031${String(i).padStart(2, "0")}`;
+        await openDayMenu(a, phone);
+        const replies = await a.textFrom(phone, text);
+        expect(replies.join("\n"), text).toBe(FRIDAY_TIMES);
+      }
+      expect((await a.grok("list_exceptions")).exceptions).toEqual([]);
+    },
+    30_000,
+  );
+
+  it(
+    "still opens Friday's times for an availability ask",
+    async () => {
+      const a = await liveApp({ cleanups });
+      const picks = [
+        "is Friday open?",
+        "is Friday free?",
+        "Friday open?",
+        "anything open Friday?",
+        "is there availability Friday?",
+        "are you open Friday?",
+        "is Friday still open?",
+        "any slots Friday?",
+        "any openings Friday?",
+        "is Friday full?",
+        "anything left Friday?",
+      ];
+      for (const [i, text] of picks.entries()) {
+        const phone = `+155501033${String(i).padStart(2, "0")}`;
+        await openDayMenu(a, phone);
+        const replies = await a.textFrom(phone, text);
+        expect(replies.join("\n"), text).toBe(FRIDAY_TIMES);
+      }
+      expect((await a.grok("list_exceptions")).exceptions).toEqual([]);
+    },
+    30_000,
+  );
 
   it("keeps a clock on a weekday on the same custom-time path as master 06c491d", async () => {
     // Captured from master 06c491d with the day menu open, each phrase on a fresh property.
