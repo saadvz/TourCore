@@ -697,7 +697,7 @@ export async function answerFlaggedQuestion(
     const unit = draft.units.find((u) => u.id === plan.unitId)!;
     next = applySetupCommand(draft, "setUnitDetails", { unitId: unit.id, facts: [...unit.facts, fact] });
   } else {
-    next = applySetupCommand(draft, "setPropertyDetails", { facts: [...draft.property.facts, fact] });
+    next = applySetupCommand(draft, "setPropertyDetails", { facts: [...draft.property.facts, fact] }, { everPublished: ws.wasEverPublished(exception.propertyId) });
   }
   const saved = ws.persistEdit(next, now);
 

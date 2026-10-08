@@ -261,7 +261,7 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
           buildingAccess: i.buildingAccess,
           entryInstructions: i.entryInstructions,
           skipEntryInstructions: i.skipEntryInstructions,
-        });
+        }, { everPublished: ws.wasEverPublished(id) });
       }
       if (i.alertName !== undefined || i.alertContact !== undefined || i.visitorContact !== undefined || i.skipVisitorHelp) {
         next = applySetupCommand(next, "setAlertContact", {

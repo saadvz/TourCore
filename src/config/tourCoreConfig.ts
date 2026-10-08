@@ -116,8 +116,10 @@ export const PropertySchema = z.object({
   /** IANA zone, e.g. America/New_York. All tour hours are read in this zone. */
   timezone: z.string(),
   /**
-   * The operator set this time zone themselves. Absent when it was only guessed,
-   * so a later state can replace the guess. Never stored as false.
+   * The operator set this time zone, or confirming the address locked it.
+   * Absent while a never-published setup still has an unconfirmed address,
+   * so a later state can replace that guess. Never stored as false.
+   * A published property keeps its zone even when this is absent.
    */
   timezoneConfirmed: z.boolean().optional(),
   facts: ApprovedFacts,

@@ -730,7 +730,7 @@ The actions:
 
 | Action | What it does |
 | --- | --- |
-| `createPropertySetup` / `setPropertyDetails` | Property name, address and time zone (guessed from the address, and guessed again when the state is filled in or changed, unless the operator already set one) |
+| `createPropertySetup` / `setPropertyDetails` | Property name, address and time zone (guessed from the address; a guessed zone updates only before the address is confirmed, and never on a property that was published or already had a confirmed address or an operator-set zone) |
 | `addUnit` / `renameUnit` / `setUnitDetails` / `removeUnit` | Tourable units, their description and approved facts. A rename can also rename the unit's door, but only if it still has the suggested name. For an apartment or condo, rename applies the same unit casing as add (`4b` → `Unit 4B`, `loft` → `Unit Loft`) and refreshes the street-plus-unit nickname and matching unit door. `update_unit` confirms with that stored name (`Updated Unit Loft.`), not the raw input |
 | `addDoor` / `renameDoor` / `removeDoor` | Entrances, unit doors, and hallway or shared doors (ids are generated and can't collide) |
 | `setRoute` | Ordered doors for one unit, plus optional directions |

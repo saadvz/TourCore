@@ -96,8 +96,9 @@ given while the state is still missing is kept: "Got it. What state is that
 in?". "What city should I use?" only after the street and state are saved.
 Missing ZIP → "What ZIP code should I use?", then a one-line read-back ("Did
 I get that right: ...?"), then property type. A street on its own keeps its
-suffix. A guessed time zone updates when the state is saved, unless the
-operator already set one. Never invent a part.]
+suffix. A guessed time zone updates only before the address is confirmed, and
+never on a property that was published or already had a confirmed address or
+an operator-set zone. Never invent a part.]
 
 **Tour Core:** What state is it in?
 

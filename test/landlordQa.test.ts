@@ -1,8 +1,14 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { safetyHash } from "../src/config/changeKinds";
+import type { TourCoreConfig } from "../src/config/tourCoreConfig";
 import { timeOnDay } from "../src/core/timezone";
 import { tourListSummary } from "../src/operator/dayToDay";
 import { persistSession } from "../src/operator/services";
 import { setTourHours } from "../src/setup/setupActions";
+import { configHash } from "../src/setup/workspace";
+import { writeJsonAtomic } from "../src/storage/atomicWrite";
 import { VisitorDemoSession } from "../src/visitor";
 import { grokHarness, type GrokHarness } from "./grokHarness";
 import { installHarness, SB_KEY, SB_SECRET, type InstallHarness } from "./installHarness";
@@ -33,6 +39,28 @@ function readyInstall(): InstallHarness {
 function use(h: GrokHarness): GrokHarness {
   cleanups.push(h.cleanup);
   return h;
+}
+
+/**
+ * An older published property: no timezoneConfirmed flag. Rewrites the saved
+ * file in place and keeps PUBLISHED_FOR_DEMO, so the lock has to come from
+ * wasEverPublished rather than the flag.
+ */
+function asOlderPublished(h: GrokHarness, id: string, mutate: (property: TourCoreConfig["property"]) => void): void {
+  const saved = h.workspace.load(id);
+  const config = structuredClone(saved.config);
+  delete config.property.timezoneConfirmed;
+  mutate(config.property);
+  delete config.property.timezoneConfirmed;
+  const folder = join(h.root, "properties", id);
+  writeJsonAtomic(join(folder, "tourcore.config.json"), config);
+  const status = JSON.parse(readFileSync(join(folder, "status.json"), "utf8")) as { configHash: string; safetyHash?: string; status: string };
+  status.configHash = configHash(config);
+  status.safetyHash = safetyHash(config);
+  writeJsonAtomic(join(folder, "status.json"), status);
+  const loaded = h.workspace.load(id);
+  if (loaded.state.status !== "PUBLISHED_FOR_DEMO") throw new Error(`expected the property to stay published, got ${loaded.state.status}`);
+  if (loaded.config.property.timezoneConfirmed !== undefined) throw new Error("timezoneConfirmed should be absent");
 }
 
 async function browsing(h: GrokHarness, propertyId: string, name: string, phone: string) {
@@ -219,6 +247,112 @@ describe("guessed time zone follows the state", () => {
     expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/Chicago");
     await h.ok("update_property_details", { state: "CA", timezone: "America/Denver" });
     expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/Denver");
+  });
+});
+
+describe("a published property keeps its time zone", () => {
+  async function published(mutate: (property: TourCoreConfig["property"]) => void) {
+    const h = use(grokHarness());
+    const id = await h.publish();
+    asOlderPublished(h, id, mutate);
+    expect(h.workspace.wasEverPublished(id)).toBe(true);
+    return { h, id };
+  }
+
+  it("keeps Chicago when a state is saved onto a property that had none", async () => {
+    const { h, id } = await published((property) => {
+      property.timezone = "America/Chicago";
+      property.address = "100 Alfred Way, Brooklyn";
+      property.addressConfirmed = false;
+      property.canonicalAddress = { ...property.canonicalAddress!, state: "", formatted: "100 Alfred Way, Brooklyn" };
+    });
+    await h.ok("update_property_details", { property: id, state: "NY" });
+    const saved = h.workspace.openDraft(id).draft.property;
+    expect(saved.timezone).toBe("America/Chicago");
+    expect(saved.timezoneConfirmed).toBeUndefined();
+  });
+
+  it("keeps Chicago when the address is re-entered with a state", async () => {
+    const { h, id } = await published((property) => {
+      property.timezone = "America/Chicago";
+      property.address = "100 Alfred Way, Brooklyn";
+      property.addressConfirmed = false;
+      property.canonicalAddress = { ...property.canonicalAddress!, state: "", formatted: "100 Alfred Way, Brooklyn" };
+    });
+    await h.ok("update_property_details", { property: id, address: "100 Alfred Way, Brooklyn, NY" });
+    expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/Chicago");
+  });
+
+  it("keeps Chicago when a ZIP is saved and the property has no canonical address", async () => {
+    const { h, id } = await published((property) => {
+      property.timezone = "America/Chicago";
+      property.address = "100 Alfred Way, Brooklyn, NY";
+      property.addressConfirmed = false;
+      delete property.canonicalAddress;
+    });
+    await h.ok("update_property_details", { property: id, postalCode: "11201" });
+    expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/Chicago");
+  });
+
+  it("keeps Chicago when the state changes from NJ to CA", async () => {
+    const { h, id } = await published((property) => {
+      property.timezone = "America/Chicago";
+      property.address = "100 Alfred Way, Brooklyn, NJ";
+      property.addressConfirmed = false;
+      property.canonicalAddress = { ...property.canonicalAddress!, state: "NJ", formatted: "100 Alfred Way, Brooklyn, NJ" };
+    });
+    await h.ok("update_property_details", { property: id, state: "CA" });
+    expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/Chicago");
+  });
+});
+
+describe("time zone lock and the switch question", () => {
+  it("keeps re-guessing on a never-published setup until the address is confirmed", async () => {
+    const h = use(grokHarness());
+    const created = await h.ok("create_property_setup", { address: "144 Hillside Avenue, Tenafly, NJ 07670" });
+    const id = created.setup.propertyId as string;
+    const moved = await h.ok("update_property_details", { state: "CA" });
+    expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/Los_Angeles");
+    expect(moved.summary).not.toContain("Tours still run");
+    expect(moved.summary).not.toContain("Should I switch");
+
+    const again = await h.ok("create_property_setup", { address: "146 Hillside Avenue, Tenafly, NJ 07670" });
+    const confirmedId = again.setup.propertyId as string;
+    await h.ok("update_property_details", { property: confirmedId, confirmAddress: true });
+    expect(h.workspace.openDraft(confirmedId).draft.property.timezoneConfirmed).toBe(true);
+    const after = await h.ok("update_property_details", { property: confirmedId, state: "CA" });
+    expect(h.workspace.openDraft(confirmedId).draft.property.timezone).toBe("America/New_York");
+    expect(after.summary).toContain("Tours still run on Eastern time. Should I switch to Pacific time?");
+  });
+
+  it("asks before switching a published Eastern property from NJ to CA", async () => {
+    const h = use(grokHarness());
+    const id = await h.publish();
+    asOlderPublished(h, id, (property) => {
+      property.timezone = "America/New_York";
+      property.address = "100 Alfred Way, Brooklyn, NJ";
+      property.addressConfirmed = false;
+      property.canonicalAddress = { ...property.canonicalAddress!, state: "NJ", formatted: "100 Alfred Way, Brooklyn, NJ" };
+    });
+    const changed = await h.ok("update_property_details", { property: id, state: "CA" });
+    expect(changed.summary).toBe("Updated 100 Alfred Way. All changes saved. Tours still run on Eastern time. Should I switch to Pacific time?");
+    expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/New_York");
+    expect(JSON.stringify(changed)).not.toContain("America/Los_Angeles");
+  });
+
+  it("adds no line when a published Eastern property changes from NJ to NY", async () => {
+    const h = use(grokHarness());
+    const id = await h.publish();
+    asOlderPublished(h, id, (property) => {
+      property.timezone = "America/New_York";
+      property.address = "100 Alfred Way, Brooklyn, NJ";
+      property.addressConfirmed = false;
+      property.canonicalAddress = { ...property.canonicalAddress!, state: "NJ", formatted: "100 Alfred Way, Brooklyn, NJ" };
+    });
+    const changed = await h.ok("update_property_details", { property: id, state: "NY" });
+    expect(changed.summary).toBe("Updated 100 Alfred Way. All changes saved.");
+    expect(changed.summary).not.toContain("Tours still run");
+    expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/New_York");
   });
 });
 

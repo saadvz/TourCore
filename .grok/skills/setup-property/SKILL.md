@@ -63,7 +63,7 @@ the operator correct it.
    ("Did I get that right: 300 Main Street, Unit 4B, Hackensack, NJ 07601?"
    when the address has a unit, and the same line without the unit when it
    does not) and wait for yes. Never read an address back with a blank city.
-   A street on its own keeps its suffix and any unit ("144 Hillside Avenue" stays that street). The time zone is guessed from the address and guessed again when the state is saved or changed, unless the operator already set one.
+   A street on its own keeps its suffix and any unit ("144 Hillside Avenue" stays that street). A guessed time zone updates only before the address is confirmed, and never on a property that was published or already had a confirmed address or an operator-set zone.
    Only after `confirmAddress: true` ask property type. Pass `name` only if the operator
    said a public property or building name themselves; never suggest one, and
    never treat an internal space name such as "Main Home" as the property name.

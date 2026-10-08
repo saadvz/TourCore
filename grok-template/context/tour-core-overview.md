@@ -272,8 +272,9 @@ operator; never name Durin.
    at a time (street, then state, then city, then ZIP; a city given early is
    kept), property type (single-family home; multifamily — duplex or small
    building they own; apartment or condo — one unit), units, doors, routes,
-   tour hours, visitor verification. A guessed time zone updates when the state
-   is saved or changed, unless the operator already set one. Visitor texting is
+   tour hours, visitor verification. A guessed time zone updates only before the
+   address is confirmed, and never on a property that was published or already
+   had a confirmed address or an operator-set zone. Visitor texting is
    used automatically when it's installed.
 2. **Check readiness**: real checks against the pieces the setup uses.
 3. **Run a practice tour**: a full pretend tour with safety checks. Nobody is
