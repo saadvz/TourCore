@@ -8,9 +8,9 @@ import { safetyHash } from "../src/config/changeKinds";
 import { loadConfig, TourCoreConfigShape, type TourCoreConfig } from "../src/config/tourCoreConfig";
 import { zonedTimeToUtc } from "../src/core/timezone";
 import { setSendblueRuntime } from "../src/messaging/sendblue/runtime";
-import { applySetupCommand, createPropertySetup, isCurrent, PropertyWorkspace, reviewSetup, runReadinessCheck, setVerificationPolicy } from "../src/setup";
+import { applySetupCommand, createPropertySetup, isCurrent, PropertyWorkspace, reviewSetup, runReadinessCheck, setVerificationPolicy, validateConfig } from "../src/setup";
 import { draftView } from "../src/setup/presenters";
-import { REUSE_FIELD_HELP, REUSE_FIELD_LABEL, verificationReuseSentence, WEB_VERIFICATION_HEADING, WEB_VERIFICATION_LEAD } from "../src/setup/verification";
+import { REUSE_FIELD_HELP, REUSE_FIELD_LABEL, verificationKeepQuestion, verificationReuseSentence, verificationSummaryRows, WEB_VERIFICATION_HEADING, WEB_VERIFICATION_LEAD } from "../src/setup/verification";
 import { configHash } from "../src/setup/workspace";
 import { createSetupServer } from "../src/web/server";
 import { handleApi } from "../src/web/api";
@@ -335,7 +335,7 @@ describe("verification choices", () => {
     const formRows = ["Basic identity form (recommended)", verificationReuseSentence(30)];
     expect(reviewSetup(draft).sections.find((section) => section.title === "VERIFICATION")?.lines).toEqual(formRows);
     expect(draftView(draft).reviewCards.find((card) => card.step === "verification")?.rows.join(". ")).toBe(
-      "Basic identity form (recommended). Visitors who filled it out won't be asked again for 30 days.",
+      "Basic identity form (recommended). Visitors who filled out the form won't be asked again for 30 days.",
     );
     const none = setVerificationPolicy(draft, { mode: "none" });
     expect(reviewSetup(none).sections.find((section) => section.title === "VERIFICATION")?.lines).toEqual(["No identity form."]);
@@ -371,9 +371,29 @@ describe("verification choices", () => {
     expect(REUSE_FIELD_HELP).toBe("A visitor who already filled out the form can book another tour within this many days without filling it out again.");
     expect(edit).toContain("Anyone who texts can book a tour and get in without telling you who they are.");
     expect(edit).toContain("if (mode === \"none\") return next;");
+    expect(edit).toContain("verificationKeepQuestion(next.verificationValidForDays)");
     expect(edit).toContain("REUSE_FIELD_LABEL");
     expect(edit).toContain("REUSE_FIELD_HELP");
     expect(edit).not.toMatch(/Once someone has been checked|How many days should a check stay good/);
+  });
+
+  it("says 1 day or 30 days in the summary and the CLI, and names the day range", () => {
+    const base = createPropertySetup({ address: "18 Maple St, Teaneck, NJ 07666" });
+    const one = setVerificationPolicy(base, { reuseForDays: 1 });
+    const thirty = setVerificationPolicy(base, { reuseForDays: 30 });
+    const summary = (days: number) => verificationSummaryRows("basic-form", days).join(". ");
+    expect(summary(1)).toBe("Basic identity form (recommended). Visitors who filled out the form won't be asked again for 1 day.");
+    expect(summary(30)).toBe("Basic identity form (recommended). Visitors who filled out the form won't be asked again for 30 days.");
+    expect(reviewSetup(one).sections.find((section) => section.title === "VERIFICATION")?.lines.join(". ")).toBe(summary(1));
+    expect(reviewSetup(thirty).sections.find((section) => section.title === "VERIFICATION")?.lines.join(". ")).toBe(summary(30));
+    expect(verificationKeepQuestion(1)).toBe("Visitors who filled out the form won't be asked again for 1 day. Keep that?");
+    expect(verificationKeepQuestion(30)).toBe("Visitors who filled out the form won't be asked again for 30 days. Keep that?");
+    expect(verificationReuseSentence(1)).toBe("Visitors who filled out the form won't be asked again for 1 day.");
+    expect(verificationReuseSentence(30)).toBe("Visitors who filled out the form won't be asked again for 30 days.");
+    const tooSmall = validateConfig(setVerificationPolicy(base, { reuseForDays: 0 })).find((issue) => issue.code === "VERIFICATION_REUSE_INVALID");
+    const tooBig = validateConfig(setVerificationPolicy(base, { reuseForDays: 366 })).find((issue) => issue.code === "VERIFICATION_REUSE_INVALID");
+    expect(tooSmall?.message).toBe("Pick a number of days from 1 to 365.");
+    expect(tooBig?.message).toBe("Pick a number of days from 1 to 365.");
   });
 
   it("opens the door on Wednesday for a no-form tour booked Monday with a 1-day window", async () => {

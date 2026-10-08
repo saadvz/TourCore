@@ -29,7 +29,13 @@ export const REUSE_FIELD_HELP =
   "A visitor who already filled out the form can book another tour within this many days without filling it out again.";
 
 export function verificationReuseSentence(days: number): string {
-  return `Visitors who filled it out won't be asked again for ${days} days.`;
+  const span = days === 1 ? "1 day" : `${days} days`;
+  return `Visitors who filled out the form won't be asked again for ${span}.`;
+}
+
+/** CLI confirm before changing how long a filled-out form can be reused. */
+export function verificationKeepQuestion(days: number): string {
+  return `${verificationReuseSentence(days)} Keep that?`;
 }
 
 /** Review and click-path rows. No form is one line, with no reuse wording. */

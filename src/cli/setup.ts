@@ -37,7 +37,7 @@ import {
   type DryTourEvent,
   type SetupDraft,
 } from "../setup";
-import { NO_FORM_QUESTION, REUSE_FIELD_HELP, REUSE_FIELD_LABEL, VERIFICATION_QUESTION } from "../setup/verification";
+import { NO_FORM_QUESTION, REUSE_FIELD_HELP, REUSE_FIELD_LABEL, VERIFICATION_QUESTION, verificationKeepQuestion } from "../setup/verification";
 import { unitDetailsView } from "../setup/presenters";
 import {
   addTourableSpace,
@@ -383,10 +383,7 @@ async function editVerification(draft: SetupDraft): Promise<SetupDraft> {
   let next = setVerificationPolicy(draft, { mode });
   if (mode === "none") return next;
   io.say("");
-  const keep = await io.confirm(
-    `Visitors who filled it out won't be asked again for ${next.verificationValidForDays} days. Keep that?`,
-    true,
-  );
+  const keep = await io.confirm(verificationKeepQuestion(next.verificationValidForDays), true);
   if (!keep) {
     io.say(REUSE_FIELD_HELP);
     const days = await io.askParsed(REUSE_FIELD_LABEL, String(next.verificationValidForDays), numberBetween(1, 365), "Please enter a number of days from 1 to 365.");
