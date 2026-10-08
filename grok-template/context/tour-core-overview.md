@@ -268,11 +268,14 @@ operator; never name Durin.
    computer, then asks the operator only for what needs a person (see
    `installation.md`).
 1. **Set up a property**: address (the property's identity; a name only if the
-   operator gives one), one missing part at a time (street, then state, then
-   city, then ZIP; a city given early is kept), property type (single-family
-   home; multifamily — duplex or small building they own; apartment or condo —
-   one unit), units, doors, routes, tour hours, visitor verification. Visitor
-   texting is used automatically when it's installed.
+   operator gives one; a street on its own keeps its suffix), one missing part
+   at a time (street, then state, then city, then ZIP; a city given early is
+   kept), property type (single-family home; multifamily — duplex or small
+   building they own; apartment or condo — one unit), units, doors, routes,
+   tour hours, visitor verification. A guessed time zone updates only before the
+   address is confirmed, and never on a property that was published or already
+   had a confirmed address or an operator-set zone. Visitor texting is
+   used automatically when it's installed.
 2. **Check readiness**: real checks against the pieces the setup uses.
 3. **Run a practice tour**: a full pretend tour with safety checks. Nobody is
    texted and no real door opens. A single-family home keeps the entrance proof

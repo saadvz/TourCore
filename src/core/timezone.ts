@@ -171,3 +171,8 @@ export function friendlyTimeZone(timeZone: string): string {
     return timeZone;
   }
 }
+
+/** Plain zone word from {@link friendlyTimeZone}: "Eastern Time" becomes "Eastern". */
+export function spokenTimeZone(timeZone: string): string {
+  return friendlyTimeZone(timeZone).replace(/ Time$/i, "");
+}

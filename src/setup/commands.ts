@@ -119,10 +119,14 @@ export const SETUP_COMMANDS = {
 
 export type SetupCommandName = keyof typeof SETUP_COMMANDS;
 
-export function applySetupCommand(draft: SetupDraft, name: string, input: unknown): SetupDraft {
+/** Server-owned facts. Clients cannot set these through the command input. */
+export type SetupCommandContext = { everPublished?: boolean };
+
+export function applySetupCommand(draft: SetupDraft, name: string, input: unknown, context?: SetupCommandContext): SetupDraft {
   const cmd = (SETUP_COMMANDS as Record<string, (typeof SETUP_COMMANDS)[SetupCommandName]>)[name];
   if (!cmd) throw new SetupInputError("UNKNOWN_ACTION", "That action isn't available.");
   const parsed = cmd.input.safeParse(input ?? {});
   if (!parsed.success) throw new SetupInputError("INPUT_INVALID", "Some of that information is missing or doesn't look right.");
+  if (name === "setPropertyDetails") return setPropertyDetails(draft, parsed.data as Parameters<typeof setPropertyDetails>[1], context);
   return (cmd.run as (d: SetupDraft, i: unknown) => SetupDraft)(draft, parsed.data);
 }

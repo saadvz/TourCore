@@ -228,7 +228,7 @@ async function route(ctx: ApiContext, method: string, path: string, body: Record
 
   if (method === "POST" && action === "commands" && parts[3]) {
     const { draft } = ws.openDraft(id);
-    ws.persistEdit(applySetupCommand(draft, parts[3], body.input), now);
+    ws.persistEdit(applySetupCommand(draft, parts[3], body.input, { everPublished: ws.wasEverPublished(id) }), now);
     return ok(await propertyPayload(ctx, id));
   }
 
