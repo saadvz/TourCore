@@ -90,7 +90,8 @@ describe("address parts, one at a time", () => {
     });
 
     const state = await h.ok("update_property_details", { state: "NJ" });
-    expect(state.nextQuestion).toBe("What ZIP code should I use?");
+    expect(state.summary).toBe("Updated 302 Main Street. I'm using Eastern time for tours. You can change that anytime. What ZIP code should I use?");
+    expect(state.nextQuestion).toBeUndefined();
     const zip = await h.ok("update_property_details", { postalCode: "07601" });
     expect(zip.nextQuestion).toBe("Did I get that right: 302 Main Street, Unit 4B, Hackensack, NJ 07601?");
     expect(zip.nextQuestion).not.toContain("\n");
@@ -133,7 +134,8 @@ describe("address parts, one at a time", () => {
   it("asks for the city when the state is already saved", async () => {
     const h = use(grokHarness());
     const created = await h.ok("create_property_setup", { address: "302 Main Street, NJ" });
-    expect(created.nextQuestion).toBe("What city should I use?");
+    expect(created.summary).toBe("Started 302 Main Street, NJ. I'm using Eastern time for tours. You can change that anytime. What city should I use?");
+    expect(created.nextQuestion).toBeUndefined();
     expect(JSON.stringify(created)).not.toContain("Did I get that right");
     expect(h.workspace.openDraft(created.setup.propertyId).draft.property.canonicalAddress).toMatchObject({
       street: "302 Main Street",
@@ -173,7 +175,8 @@ describe("street suffix stays on the street", () => {
     const city = await h.ok("update_property_details", { city: "Tenafly" });
     expect(city.nextQuestion).toBe("Got it. What state is that in?");
     const state = await h.ok("update_property_details", { state: "NJ" });
-    expect(state.nextQuestion).toBe("What ZIP code should I use?");
+    expect(state.summary).toBe("Updated 144 Hillside Avenue. I'm using Eastern time for tours. You can change that anytime. What ZIP code should I use?");
+    expect(state.nextQuestion).toBeUndefined();
     const zip = await h.ok("update_property_details", { postalCode: "07670" });
     expect(zip.nextQuestion).toBe("Did I get that right: 144 Hillside Avenue, Tenafly, NJ 07670?");
     expect(zip.setup.name).toBe("144 Hillside Avenue");
@@ -190,7 +193,8 @@ describe("street suffix stays on the street", () => {
   it("reads a one-line address with no commas back with the street and the city apart", async () => {
     const h = use(grokHarness());
     const created = await h.ok("create_property_setup", { address: "144 Hillside Avenue Tenafly NJ 07670" });
-    expect(created.nextQuestion).toBe("Did I get that right: 144 Hillside Avenue, Tenafly, NJ 07670?");
+    expect(created.summary).toContain("Did I get that right: 144 Hillside Avenue, Tenafly, NJ 07670?");
+    expect(created.nextQuestion).toBeUndefined();
     expect(created.setup.name).toBe("144 Hillside Avenue");
     expect(h.workspace.openDraft(created.setup.propertyId).draft.property.canonicalAddress).toMatchObject({
       street: "144 Hillside Avenue",
@@ -203,11 +207,14 @@ describe("street suffix stays on the street", () => {
   it("keeps comma addresses and a comma-less city", async () => {
     const h = use(grokHarness());
     const comma = await h.ok("create_property_setup", { address: "146 Hillside Avenue, Tenafly, NJ 07670" });
-    expect(comma.nextQuestion).toBe("Did I get that right: 146 Hillside Avenue, Tenafly, NJ 07670?");
+    expect(comma.summary).toContain("Did I get that right: 146 Hillside Avenue, Tenafly, NJ 07670?");
+    expect(comma.nextQuestion).toBeUndefined();
     const main = await h.ok("create_property_setup", { address: "302 Main Street, Hackensack, NJ 07601" });
-    expect(main.nextQuestion).toBe("Did I get that right: 302 Main Street, Hackensack, NJ 07601?");
+    expect(main.summary).toContain("Did I get that right: 302 Main Street, Hackensack, NJ 07601?");
+    expect(main.nextQuestion).toBeUndefined();
     const oneLine = await h.ok("create_property_setup", { address: "Main St Hackensack NJ 07601" });
-    expect(oneLine.nextQuestion).toBe("Did I get that right: Main Street, Hackensack, NJ 07601?");
+    expect(oneLine.summary).toContain("Did I get that right: Main Street, Hackensack, NJ 07601?");
+    expect(oneLine.nextQuestion).toBeUndefined();
     expect(oneLine.setup.name).toBe("Main Street");
   });
 });
@@ -246,13 +253,15 @@ describe("guessed time zone follows the state", () => {
     expect((state.summary.match(/\?/g) ?? []).length).toBe(1);
     expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/Chicago");
     const zipDuringSwitch = await h.ok("update_property_details", { postalCode: "07670" });
-    expect(zipDuringSwitch.summary).toBe("Tours still run on Central time. Should I switch to Eastern time?");
+    expect(zipDuringSwitch.summary).toBe("Before I save that, one thing. Tours still run on Central time. Should I switch to Eastern time?");
+    expect((zipDuringSwitch.summary.match(/\?/g) ?? []).length).toBe(1);
     expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/Chicago");
     expect(h.workspace.openDraft(id).draft.property.canonicalAddress?.postalCode).toBeUndefined();
-    await h.ok("update_property_details", { timezone: "no" });
+    const zip = await h.ok("update_property_details", { timezone: "no" });
     expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/Chicago");
-    const zip = await h.ok("update_property_details", { postalCode: "07670" });
+    expect(h.workspace.openDraft(id).draft.property.canonicalAddress?.postalCode).toBe("07670");
     expect(zip.nextQuestion).toBe("Did I get that right: 144 Hillside Avenue, Tenafly, NJ 07670?");
+    expect(zip.summary).not.toContain("Did I get that right");
     expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/Chicago");
     await h.ok("update_property_details", { state: "CA", timezone: "America/Denver" });
     expect(h.workspace.openDraft(id).draft.property.timezone).toBe("America/Denver");
@@ -376,7 +385,8 @@ describe("next step stays on the property the call was about", () => {
 
     const condo = await h.ok("create_property_setup", { address: "300 Main Street, Unit 4B, Hackensack, NJ 07601" });
     const readBack = "Did I get that right: 300 Main Street, Unit 4B, Hackensack, NJ 07601?";
-    expect(condo.nextQuestion).toBe(readBack);
+    expect(condo.summary).toContain(readBack);
+    expect(condo.nextQuestion).toBeUndefined();
     const install = await h.ok("get_state", {});
     expect(install.nextStep.say).toBe(readBack);
 

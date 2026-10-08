@@ -11,7 +11,7 @@ import { PROPERTY_TYPE_LABELS, PROPERTY_TYPES, SETUP_PROPERTY_TYPES, validateCon
 import { extractValues, FIELD_WORDS, missingProfileFields, nextProfileQuestion, parseBulkUnitDetails, profileSummaryLine } from "../config/unitProfile";
 import { formatPhone } from "../core/phone";
 import { formatDay, formatTime, spokenTimeZone } from "../core/timezone";
-import { applyZoneSwitchAnswer, guessedZoneName, rememberZoneSwitch, switchQuestionForOffer, zoneReply, zoneSwitchAnswer, zoneSwitchQuestion } from "./zoneCopy";
+import { applyZoneSwitchAnswer, commitZoneAnswer, fieldsToHold, guessedZoneName, heldZoneFields, holdZoneSwitchFields, mergedZoneDetails, rememberZoneSwitch, switchHoldReply, switchQuestionForOffer, zoneReply, zoneSwitchAnswer, zoneSwitchQuestion } from "./zoneCopy";
 import { revokeConfirmQuestion } from "../core/availabilityCopy";
 import { TourCoreError } from "../core/TourCore";
 import { PortableBackupError } from "../backup/portable";
@@ -156,6 +156,14 @@ function propertyNextQuestion(
   if (draft.units.length) return visitorHelpQuestion(draft);
   const spaces = tourableSpacesQuestion(draft);
   return spaces ? { nextQuestion: spaces.question, ...(spaces.suggestedName ? { suggestedName: spaces.suggestedName } : {}) } : undefined;
+}
+
+/** Drops nextQuestion when the summary already asks it. Choices and the confirm flag stay. */
+function exposeFollow<T extends { nextQuestion: string }>(summary: string, follow: T | undefined) {
+  if (!follow) return {};
+  if (!summary.includes(follow.nextQuestion)) return follow;
+  const { nextQuestion: _dropped, ...rest } = follow;
+  return rest;
 }
 
 /** The visitor-facing texting and door lines, kept apart: texting can be live while door access is demo. */
@@ -440,7 +448,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Start a property setup",
     kind: "change",
     description:
-      "Starts a new property from its street address. The address is what visitors hear unless the operator gives a public property name themselves: never suggest or invent one. A US address needs a street, city, state and ZIP. Ask for one missing part at a time and keep every part already given. A missing street is nextQuestion (\"What's the street address?\"). A missing state is nextQuestion (\"What state is it in?\") before any city question. A city saved while the state is still missing is kept, and the reply is \"Got it. What state is that in?\". Ask nextQuestion (\"What city should I use?\") only once the street and state are saved, and save it with update_property_details city. If the ZIP is missing, ask nextQuestion (\"What ZIP code should I use?\") and save it with update_property_details postalCode. Then ask them to confirm the one-line read-back (\"Did I get that right: ...?\") before property type. A unit in the address is read back between the street and the city. Never guess the type from the address. The time zone is guessed from the address: confirm it. A street typed on its own keeps its suffix. A guessed time zone updates only before the address is confirmed, and never on a property that was published or already had a confirmed address or an operator-set zone. Visitor texting is connected automatically when this Tour Core has it. A new property starts with tour hours Monday–Friday, 9:00 AM–5:00 PM, 45-minute tours, a new tour every hour, and 10 minutes early, until the operator changes them with set_tour_hours. If a property with that address already exists, it's returned instead of creating a second one. Also the tool for the installation step that offers another property after one is already published.",
+      "Starts a new property from its street address. The address is what visitors hear unless the operator gives a public property name themselves: never suggest or invent one. A US address needs a street, city, state and ZIP. Ask for one missing part at a time and keep every part already given. A missing street is nextQuestion (\"What's the street address?\"). A missing state is nextQuestion (\"What state is it in?\") before any city question. A city saved while the state is still missing is kept, and the reply is \"Got it. What state is that in?\". Ask nextQuestion (\"What city should I use?\") only once the street and state are saved, and save it with update_property_details city. If the ZIP is missing, ask nextQuestion (\"What ZIP code should I use?\") and save it with update_property_details postalCode. Then ask them to confirm the one-line read-back (\"Did I get that right: ...?\") before property type. A unit in the address is read back between the street and the city. Never guess the type from the address. The time zone is guessed from the address: confirm it. A street typed on its own keeps its suffix. A guessed time zone updates only before the address is confirmed, and never on a property that was published or already had a confirmed address or an operator-set zone. When the summary already asks the next question, nextQuestion is omitted. Ask the summary once. Visitor texting is connected automatically when this Tour Core has it. A new property starts with tour hours Monday–Friday, 9:00 AM–5:00 PM, 45-minute tours, a new tour every hour, and 10 minutes early, until the operator changes them with set_tour_hours. If a property with that address already exists, it's returned instead of creating a second one. Also the tool for the installation step that offers another property after one is already published.",
     input: z.strictObject({
       address: z.string().min(1).max(200).describe("The property's street address, as the operator confirmed it."),
       name: z.string().max(120).optional().describe("Only a property or building name the operator said themselves. Leave out otherwise; the address is used."),
@@ -459,11 +467,12 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       ws.saveDraft(draft);
       const follow = propertyNextQuestion(draft);
       const guessed = guessedZoneName("", "", draft, i.timezone !== undefined);
+      const summary = zoneReply(`Started ${draft.property.name}.`, "", guessed, guessed ? follow?.nextQuestion : undefined);
       return {
         status: "created",
-        summary: zoneReply(`Started ${draft.property.name}.`, "", guessed, guessed ? follow?.nextQuestion : undefined),
+        summary,
         ...(guessed ? { timezoneGuess: guessed } : {}),
-        ...follow,
+        ...exposeFollow(summary, follow),
         setup: setupSnapshot(ctx, draft.property.id),
       };
     },
@@ -473,7 +482,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Update property details",
     kind: "change",
     description:
-      "Changes the property's type, address, street, city, state, ZIP, public name, time zone, approved property facts, apartment or condo building-door control, or optional entry instructions. The name is only one the operator said (an empty name goes back to using the address). A street, city, state or ZIP does not invent the rest of the address, and each part already given is kept. Ask for one missing part at a time: \"What's the street address?\", then \"What state is it in?\" before any city question. A guessed time zone updates only before the address is confirmed, and never on a property that was published or already had a confirmed address or an operator-set zone. When a state change would move a locked time zone, ask the switch question first, on its own: \"Tours still run on {current zone} time. Should I switch to {new zone} time?\" Do not add the next setup question until they answer. timezone \"yes\" switches to the offered zone. A ZIP is not a yes and does not switch. An explicit timezone still switches. A city given while the state is still missing is kept, and the reply is \"Got it. What state is that in?\". Ask \"What city should I use?\" only once the street and state are saved. confirmAddress is true only after they agree to the one-line read-back. Facts must be the operator's own words. For an apartment or condo, buildingAccess is BUILDING_AND_UNIT or UNIT_ONLY from \"Do you control the building entrance, or only the unit door?\"; entryInstructions is how visitors get in and find the unit, sent only after identity verification. If they skip that, pass skipEntryInstructions true and store nothing. Returns nextQuestion when something still has to be asked, and that question comes before property type until the address is confirmed. After the rest of the setup is saveable, nextQuestion is \"What number can stuck visitors call? Pick one someone answers during tour hours.\" visitorContact is that optional number visitors see and call; it is never the team's private alert line. Saving, changing, or clearing it keeps a published property published and does not require a new readiness check or practice tour. If they skip it, pass skipVisitorHelp true so the question is not asked again.",
+      "Changes the property's type, address, street, city, state, ZIP, public name, time zone, approved property facts, apartment or condo building-door control, or optional entry instructions. The name is only one the operator said (an empty name goes back to using the address). A street, city, state or ZIP does not invent the rest of the address, and each part already given is kept. Ask for one missing part at a time: \"What's the street address?\", then \"What state is it in?\" before any city question. A guessed time zone updates only before the address is confirmed, and never on a property that was published or already had a confirmed address or an operator-set zone. When the summary already asks the next question, nextQuestion is omitted. Ask the summary once. When a state change would move a locked time zone, ask the switch question first, on its own: \"Tours still run on {current zone} time. Should I switch to {new zone} time?\" Do not add the next setup question until they answer. timezone \"yes\" switches to the offered zone. timezone \"no\" keeps the current zone. A named zone such as \"Pacific\" or \"keep Eastern\" is that choice. A ZIP is not a yes and does not switch. A ZIP or other detail sent while that question is open is held, not saved yet. The reply is \"Before I save that, one thing. Tours still run on {current zone} time. Should I switch to {new zone} time?\" Once they answer, what they sent while the question was open is saved. Do not send it again. A city given while the state is still missing is kept, and the reply is \"Got it. What state is that in?\". Ask \"What city should I use?\" only once the street and state are saved. confirmAddress is true only after they agree to the one-line read-back. Facts must be the operator's own words. For an apartment or condo, buildingAccess is BUILDING_AND_UNIT or UNIT_ONLY from \"Do you control the building entrance, or only the unit door?\"; entryInstructions is how visitors get in and find the unit, sent only after identity verification. If they skip that, pass skipEntryInstructions true and store nothing. Returns nextQuestion when something still has to be asked, and that question comes before property type until the address is confirmed. After the rest of the setup is saveable, nextQuestion is \"What number can stuck visitors call? Pick one someone answers during tour hours.\" visitorContact is that optional number visitors see and call; it is never the team's private alert line. Saving, changing, or clearing it keeps a published property published and does not require a new readiness check or practice tour. If they skip it, pass skipVisitorHelp true so the question is not asked again.",
     input: z.strictObject({
       property: Property,
       propertyType: z.enum(PROPERTY_TYPES).optional().describe("From the operator's answer to \"What type of property is this?\" Use APARTMENT_OR_CONDO for one apartment or condo unit, not a whole building."),
@@ -521,45 +530,56 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const { id, draft } = openDraft(ctx, i.property);
       const pending = switchQuestionForOffer(draft);
       const answer = zoneSwitchAnswer(draft, i.timezone);
-      if (pending && !answer.answered) return { summary: pending, setup: setupSnapshot(ctx, id) };
-      applyZoneSwitchAnswer(draft, answer);
+      if (pending && !answer.answered) {
+        const incoming = fieldsToHold(i);
+        if (holdZoneSwitchFields(draft, incoming)) ctx.services.workspace.persistEdit(draft, ctx.now());
+        return { summary: incoming ? switchHoldReply(pending) : pending, setup: setupSnapshot(ctx, id) };
+      }
+      const held = heldZoneFields(draft);
       const stateBefore = draft.property.canonicalAddress?.state.trim() ?? "";
       const timezoneBefore = draft.property.timezone;
       const timezone = answer.answered ? answer.timezone : i.timezone;
-      let next = applySetupCommand(draft, "setPropertyDetails", {
-        name: i.name,
-        address: i.address,
-        propertyType: i.propertyType,
-        timezone,
-        facts: i.facts,
-        street: i.street,
-        city: i.city,
-        state: i.state,
-        postalCode: i.postalCode,
-        confirmAddress: i.confirmAddress,
-        buildingAccess: i.buildingAccess,
-        entryInstructions: i.entryInstructions,
-        skipEntryInstructions: i.skipEntryInstructions,
-      }, { everPublished: ctx.services.workspace.wasEverPublished(id) });
-      if (i.alertName !== undefined || i.alertContact !== undefined || i.visitorContact !== undefined || i.skipVisitorHelp) {
-        next = applySetupCommand(next, "setAlertContact", {
-          name: i.alertName,
-          contact: i.alertContact,
-          visitorContact: i.visitorContact,
-          skipVisitorHelp: i.skipVisitorHelp,
-        });
-      }
-      rememberZoneSwitch(next, stateBefore, timezone !== undefined);
-      ctx.services.workspace.persistEdit(next, ctx.now());
+      const everPublished = ctx.services.workspace.wasEverPublished(id);
+      const apply = (dropPostal: boolean) => {
+        const details = mergedZoneDetails(i, held, timezone, dropPostal);
+        let result = applySetupCommand(draft, "setPropertyDetails", {
+          name: details.name,
+          address: details.address,
+          propertyType: details.propertyType,
+          timezone: details.timezone,
+          facts: details.facts,
+          street: details.street,
+          city: details.city,
+          state: details.state,
+          postalCode: details.postalCode,
+          confirmAddress: details.confirmAddress,
+          buildingAccess: details.buildingAccess,
+          entryInstructions: details.entryInstructions,
+          skipEntryInstructions: details.skipEntryInstructions,
+        }, { everPublished });
+        if (details.alertName !== undefined || details.alertContact !== undefined || details.visitorContact !== undefined || details.skipVisitorHelp) {
+          result = applySetupCommand(result, "setAlertContact", {
+            name: details.alertName,
+            contact: details.alertContact,
+            visitorContact: details.visitorContact,
+            skipVisitorHelp: details.skipVisitorHelp,
+          });
+        }
+        applyZoneSwitchAnswer(result, answer);
+        rememberZoneSwitch(result, stateBefore, timezone !== undefined);
+        ctx.services.workspace.persistEdit(result, ctx.now());
+        return result;
+      };
+      const next = answer.answered ? commitZoneAnswer(apply) : apply(false);
       const setup = setupSnapshot(ctx, id);
       const switchQuestion = zoneSwitchQuestion(stateBefore, next, timezone !== undefined);
       const guessed = guessedZoneName(stateBefore, timezoneBefore, next, timezone !== undefined);
-      const follow = propertyNextQuestion(next, { cityJustSaved: i.city !== undefined });
+      const follow = propertyNextQuestion(next, { cityJustSaved: i.city !== undefined || held?.city !== undefined });
       if (switchQuestion) return { summary: zoneReply(`Updated ${setup.name}.`, switchQuestion, ""), setup };
       const summary = guessed
         ? zoneReply(`Updated ${setup.name}.`, "", guessed, follow?.nextQuestion)
         : `Updated ${setup.name}. ${setup.saved}.`;
-      return { summary, ...follow, setup };
+      return { summary, ...exposeFollow(summary, follow), setup };
     },
   }),
 

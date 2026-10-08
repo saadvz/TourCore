@@ -13,7 +13,7 @@ import { LOCAL_TEST_TEXTING, SetupInputError, createPropertySetup, localTestMode
 import { applySetupCommand } from "../setup/commands";
 import { canonicalDoor, canonicalUnitName } from "../setup/normalizeDraft";
 import { spokenClockTime, type Weekday } from "../core/timezone";
-import { applyZoneSwitchAnswer, guessedZoneName, rememberZoneSwitch, switchQuestionForOffer, zoneReply, zoneSwitchAnswer, zoneSwitchQuestion } from "./zoneCopy";
+import { applyZoneSwitchAnswer, commitZoneAnswer, fieldsToHold, guessedZoneName, heldZoneFields, holdZoneSwitchFields, mergedZoneDetails, rememberZoneSwitch, switchHoldReply, switchQuestionForOffer, zoneReply, zoneSwitchAnswer, zoneSwitchQuestion } from "./zoneCopy";
 import { hoursRangeRefusal, reuseDaysRefusal, tourSpacingRefusal } from "../config/validateConfig";
 import { addressConfirmQuestion, nextAddressPartQuestion, savedFullAddress } from "../setup/address";
 import { parseTourRef } from "./tours";
@@ -205,7 +205,7 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
     name: "save_property",
     title: "Save the property",
     kind: "change",
-    description: "Saves the property address, type, time zone, name, facts, help number, alert contact, building access, and entry instructions. When a state change would move a locked time zone, ask the switch question first, on its own. Do not add the next setup question until they answer. timezone \"yes\" switches to the offered zone. A ZIP is not a yes and does not switch.",
+    description: "Saves the property address, type, time zone, name, facts, help number, alert contact, building access, and entry instructions. When a state change would move a locked time zone, ask the switch question first, on its own. Do not add the next setup question until they answer. timezone \"yes\" switches to the offered zone. timezone \"no\" keeps the current zone. A named zone such as \"Pacific\" or \"keep Eastern\" is that choice. A ZIP is not a yes and does not switch. A ZIP or other detail sent while that question is open is held, not saved yet. The reply is \"Before I save that, one thing. Tours still run on {current zone} time. Should I switch to {new zone} time?\" Once they answer, what they sent while the question was open is saved. Do not send it again.",
     input: z.strictObject({
       property: Property,
       address: z.string().max(200).optional(),
@@ -233,14 +233,20 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
       let timezoneBefore = "";
       let timezone = i.timezone;
       let zoneAnswer: { timezone?: string; answered: boolean } = { answered: false };
+      let held = undefined as ReturnType<typeof heldZoneFields>;
       if (id) {
         const before = ws.openDraft(id).draft;
         stateBefore = before.property.canonicalAddress?.state.trim() ?? "";
         timezoneBefore = before.property.timezone;
         const pending = switchQuestionForOffer(before);
         zoneAnswer = zoneSwitchAnswer(before, i.timezone);
-        if (pending && !zoneAnswer.answered) return envelope(ctx, id, "next", pending, { propertyId: id });
+        if (pending && !zoneAnswer.answered) {
+          const incoming = fieldsToHold(i);
+          if (holdZoneSwitchFields(before, incoming)) ws.persistEdit(before, ctx.now());
+          return envelope(ctx, id, "next", incoming ? switchHoldReply(pending) : pending, { propertyId: id });
+        }
         if (zoneAnswer.answered) timezone = zoneAnswer.timezone;
+        held = heldZoneFields(before);
       }
       if (!id) {
         if (!i.address) return envelope(ctx, undefined, "next", "What's the street address?");
@@ -261,41 +267,50 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
         ws.saveDraft(draft);
         id = draft.property.id;
       }
-      let next = ws.openDraft(id).draft;
-      applyZoneSwitchAnswer(next, zoneAnswer);
-      if (i.address || i.name !== undefined || i.propertyType || i.timezone || i.facts || i.street !== undefined || i.city !== undefined || i.state !== undefined || i.postalCode !== undefined || i.confirmAddress || i.buildingAccess || i.entryInstructions !== undefined || i.skipEntryInstructions) {
-        next = applySetupCommand(next, "setPropertyDetails", {
-          name: i.name,
-          address: i.address,
-          propertyType: i.propertyType,
-          timezone,
-          facts: i.facts,
-          street: i.street,
-          city: i.city,
-          state: i.state,
-          postalCode: i.postalCode,
-          confirmAddress: i.confirmAddress,
-          buildingAccess: i.buildingAccess,
-          entryInstructions: i.entryInstructions,
-          skipEntryInstructions: i.skipEntryInstructions,
-        }, { everPublished: ws.wasEverPublished(id) });
-      }
-      if (i.alertName !== undefined || i.alertContact !== undefined || i.visitorContact !== undefined || i.skipVisitorHelp) {
-        next = applySetupCommand(next, "setAlertContact", {
-          name: i.alertName,
-          contact: i.alertContact,
-          visitorContact: i.visitorContact,
-          skipVisitorHelp: i.skipVisitorHelp,
-        });
-      }
+      const propertyId = id;
+      const everPublished = ws.wasEverPublished(propertyId);
+      const applyDetails = !!(i.address || i.name !== undefined || i.propertyType || i.timezone || i.facts || i.street !== undefined || i.city !== undefined || i.state !== undefined || i.postalCode !== undefined || i.confirmAddress || i.buildingAccess || i.entryInstructions !== undefined || i.skipEntryInstructions || held);
+      const apply = (dropPostal: boolean) => {
+        const details = mergedZoneDetails(i, held, timezone, dropPostal);
+        let result = ws.openDraft(propertyId).draft;
+        if (applyDetails) {
+          result = applySetupCommand(result, "setPropertyDetails", {
+            name: details.name,
+            address: details.address,
+            propertyType: details.propertyType,
+            timezone: details.timezone,
+            facts: details.facts,
+            street: details.street,
+            city: details.city,
+            state: details.state,
+            postalCode: details.postalCode,
+            confirmAddress: details.confirmAddress,
+            buildingAccess: details.buildingAccess,
+            entryInstructions: details.entryInstructions,
+            skipEntryInstructions: details.skipEntryInstructions,
+          }, { everPublished });
+        }
+        if (details.alertName !== undefined || details.alertContact !== undefined || details.visitorContact !== undefined || details.skipVisitorHelp) {
+          result = applySetupCommand(result, "setAlertContact", {
+            name: details.alertName,
+            contact: details.alertContact,
+            visitorContact: details.visitorContact,
+            skipVisitorHelp: details.skipVisitorHelp,
+          });
+        }
+        applyZoneSwitchAnswer(result, zoneAnswer);
+        rememberZoneSwitch(result, stateBefore, timezone !== undefined);
+        ws.persistEdit(result, ctx.now());
+        return result;
+      };
+      if (zoneAnswer.answered) commitZoneAnswer(apply);
+      else apply(false);
       const timezoneGiven = timezone !== undefined;
-      rememberZoneSwitch(next, stateBefore, timezoneGiven);
-      ws.persistEdit(next, ctx.now());
-      const saved = ws.openDraft(id).draft;
+      const saved = ws.openDraft(propertyId).draft;
       const switchQuestion = zoneSwitchQuestion(stateBefore, saved, timezoneGiven);
       const guessed = guessedZoneName(stateBefore, timezoneBefore, saved, timezoneGiven);
       const canonical = saved.property.canonicalAddress;
-      const part = nextAddressPartQuestion(canonical, { cityJustSaved: i.city !== undefined });
+      const part = nextAddressPartQuestion(canonical, { cityJustSaved: i.city !== undefined || held?.city !== undefined });
       const confirm = canonical && saved.property.addressConfirmed === false ? addressConfirmQuestion(canonical) : undefined;
       const typeQuestion = !saved.property.propertyType ? "Is this a single-family home, a multifamily home, or one apartment or condo?" : undefined;
       const nextQuestion = part ?? confirm ?? typeQuestion;

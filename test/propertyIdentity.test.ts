@@ -93,7 +93,8 @@ describe("property type", () => {
   it("asks for a missing ZIP, then confirms the address, before property type", async () => {
     const h = harness();
     const created = await h.ok("create_property_setup", { address: "144 Hillside Ave, Teaneck, NJ" });
-    expect(created.nextQuestion).toBe("What ZIP code should I use?");
+    expect(created.summary).toContain("What ZIP code should I use?");
+    expect(created.nextQuestion).toBeUndefined();
     expect(created.choices).toBeUndefined();
     const zipped = await h.ok("update_property_details", { postalCode: "07666" });
     expect(zipped.nextQuestion).toBe("Did I get that right: 144 Hillside Avenue, Teaneck, NJ 07666?");
@@ -116,8 +117,9 @@ describe("property type", () => {
   it("reads a condo address with a unit and a city back on one line", async () => {
     const h = harness();
     const created = await h.ok("create_property_setup", { address: "300 Main Street, Unit 4B, Hackensack, NJ 07601" });
-    expect(created.nextQuestion).toBe("Did I get that right: 300 Main Street, Unit 4B, Hackensack, NJ 07601?");
-    expect(created.nextQuestion).not.toContain("\n");
+    expect(created.summary).toContain("Did I get that right: 300 Main Street, Unit 4B, Hackensack, NJ 07601?");
+    expect(created.nextQuestion).toBeUndefined();
+    expect(created.summary).not.toContain("\n");
     const milestone = await h.ok("save_property", { address: "300 Main Street, Unit 4B, Hackensack, NJ 07601" });
     expect(milestone.message).toBe("Did I get that right: 300 Main Street, Unit 4B, Hackensack, NJ 07601?");
     const draft = h.workspace.openDraft(created.setup.propertyId).draft;
@@ -135,7 +137,8 @@ describe("property type", () => {
   it("asks for the city before any read-back when a condo address has no city", async () => {
     const h = harness();
     const created = await h.ok("create_property_setup", { address: "300 Main Street, Unit 4B, NJ 07601" });
-    expect(created.nextQuestion).toBe("What city should I use?");
+    expect(created.summary).toContain("What city should I use?");
+    expect(created.nextQuestion).toBeUndefined();
     expect(JSON.stringify(created)).not.toContain("Did I get that right");
     const milestone = await h.ok("save_property", { address: "300 Main Street, Unit 4B, NJ 07601" });
     expect(milestone.message).toBe("What city should I use?");
