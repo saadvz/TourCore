@@ -228,7 +228,7 @@ async function setupStep(id, stepId, params) {
 function timezonePicker(current) {
   const zones = [...state.meta.timeZones];
   const select = el("select", {}, zones.map((z) => el("option", { value: z.id }, z.label)), el("option", { value: "__other" }, "Somewhere else (type it)"));
-  const other = input({ placeholder: "e.g. America/Denver or Eastern", hidden: true });
+  const other = input({ placeholder: "e.g. Eastern or Pacific", hidden: true });
   const set = (tz) => {
     if (!tz) return;
     if (!zones.some((z) => z.id === tz)) {

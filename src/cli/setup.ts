@@ -166,12 +166,12 @@ async function askTimeZone(address: string, current?: string): Promise<string> {
   const basis = typeof guess === "string" ? "" : guess.basis === "address" ? " based on the address" : " based on this computer's clock";
   io.say("");
   io.say(`It looks like the property is on ${friendlyTimeZone(tz)} (${tz})${basis}.`);
-  return io.askParsed(
-    "What time zone is the property in?",
-    tz,
-    resolveTimeZone,
-    'I don\'t recognize that time zone. Try "Eastern", "Central", "Mountain", "Pacific", or something like America/New_York.',
-  );
+  for (;;) {
+    const answer = await io.ask("What time zone is the property in?", tz);
+    const resolved = resolveTimeZone(answer);
+    if (resolved) return resolved;
+    io.say(yellow(`I don't recognize the time zone "${answer}". Try something like Eastern or Pacific.`));
+  }
 }
 
 async function askUnitDetails(start: SetupDraft): Promise<SetupDraft> {

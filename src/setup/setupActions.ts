@@ -134,7 +134,7 @@ function requireName(name: string | undefined, code: string, message: string): s
 
 function requireTimeZone(input: string): string {
   const tz = resolveTimeZone(input);
-  if (!tz) throw new SetupInputError("TIMEZONE_INVALID", `I don't recognize the time zone "${input}". Try something like America/New_York or "Eastern".`);
+  if (!tz) throw new SetupInputError("TIMEZONE_INVALID", `I don't recognize the time zone "${input}". Try something like Eastern or Pacific.`);
   return tz;
 }
 
