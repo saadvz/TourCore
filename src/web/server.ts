@@ -53,7 +53,7 @@ import { buildComplianceConfig, isPublicCompliancePath, matchCompliancePath } fr
 import { renderCompliancePage } from "./compliance/pages";
 import { loadLocalEnv } from "./env";
 
-/** In-memory playbook clients. Past this, the oldest write is dropped. */
+/** In-memory playbook clients. Past this, the least recently read session is dropped. */
 export const PLAYBOOK_CLIENT_CAP = 1000;
 
 const PUBLIC_DIR = new URL("./public/", import.meta.url);
@@ -345,15 +345,35 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
    */
   const playbookClients = new Map<string, ReportedClient>();
   const playbookClientCap = Math.max(1, options.playbookClientCap ?? PLAYBOOK_CLIENT_CAP);
-  /** Last write is newest, so a caller that is still connecting is not the first one dropped. */
+  /** The one static token. Kept so a follow-up that omits the session id still finds a client. It is not a session, so it does not count toward the cap. */
+  const staticFallbackKey = "static";
+  const countsTowardCap = (key: string) => key !== staticFallbackKey;
+  const cappedPlaybookClients = () => {
+    let count = 0;
+    for (const key of playbookClients.keys()) if (countsTowardCap(key)) count += 1;
+    return count;
+  };
+  const oldestCappedPlaybookClient = () => {
+    for (const key of playbookClients.keys()) if (countsTowardCap(key)) return key;
+    return undefined;
+  };
+  /** Delete and re-set so this entry is the newest. Then drop the least recently read session past the cap. */
   const rememberPlaybookClient = (key: string, client: ReportedClient) => {
     if (playbookClients.has(key)) playbookClients.delete(key);
     playbookClients.set(key, client);
-    while (playbookClients.size > playbookClientCap) {
-      const oldest = playbookClients.keys().next().value;
+    while (cappedPlaybookClients() > playbookClientCap) {
+      const oldest = oldestCappedPlaybookClient();
       if (oldest === undefined) break;
       playbookClients.delete(oldest);
     }
+  };
+  /** A read refreshes the entry. The Map's order is least-recently-read first. */
+  const touchPlaybookClient = (key: string): ReportedClient | undefined => {
+    const client = playbookClients.get(key);
+    if (!client) return undefined;
+    playbookClients.delete(key);
+    playbookClients.set(key, client);
+    return client;
   };
   const clientFromStoredOAuth = (clientId: string | undefined): ReportedClient | undefined => {
     if (!clientId || !oauth) return undefined;
@@ -534,7 +554,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           rememberPlaybookClient(key, seen);
           if (initializing) rememberPlaybookClient(fallbackKey(caller), seen);
         }
-        let reportedClient = seen ?? playbookClients.get(key);
+        let reportedClient = seen ?? touchPlaybookClient(key);
         if (!reportedClient) {
           const recovered = clientFromStoredOAuth(caller?.clientId);
           if (recovered) {

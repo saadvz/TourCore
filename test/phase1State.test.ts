@@ -419,25 +419,44 @@ describe("playbook client is per session", () => {
     expect(call.session).toBe(init.session);
   });
 
-  it("the session list evicts the oldest playbook client at the cap", async () => {
+  it("a session that keeps being read keeps its playbook while an idle one is evicted first", async () => {
     expect(PLAYBOOK_CLIENT_CAP).toBe(1000);
     const h = installHarness();
     cleanups.push(h.cleanup);
-    const { port } = await listen(h.root, 3);
+    const { port } = await listen(h.root, 2);
+    const idle = await post(port, 1, "initialize", realisticInitialize("Grok", grokClientCaps).params);
+    const live = await post(port, 2, "initialize", realisticInitialize("ChatGPT", grokClientCaps).params);
+    const idleFirst = await post(port, 3, "tools/call", { name: "get_state", arguments: {} }, idle.session!);
+    expect(idleFirst.body.result.structuredContent?.playbook.id).toBe("grok");
+    const liveRead = await post(port, 4, "tools/call", { name: "get_state", arguments: {} }, live.session!);
+    const liveAgain = await post(port, 5, "tools/call", { name: "get_state", arguments: {} }, live.session!);
+    expect(liveRead.body.result.structuredContent?.playbook.id).toBe("chatgpt");
+    expect(liveAgain.body.result.structuredContent?.playbook.id).toBe("chatgpt");
+    const newest = await post(port, 6, "initialize", realisticInitialize("Claude", grokClientCaps).params);
+    const liveAfter = await post(port, 7, "tools/call", { name: "get_state", arguments: {} }, live.session!);
+    const newestRead = await post(port, 8, "tools/call", { name: "get_state", arguments: {} }, newest.session!);
+    const idleAfter = await post(port, 9, "tools/call", { name: "get_state", arguments: {} }, idle.session!);
+    expect(liveAfter.status).toBe(200);
+    expect(liveAfter.body.error).toBeUndefined();
+    expect(liveAfter.body.result.structuredContent?.playbook.id).toBe("chatgpt");
+    expect(idleAfter.status).toBe(200);
+    expect(idleAfter.body.error).toBeUndefined();
+    expect(idleAfter.body.result.structuredContent?.playbook.id).not.toBe("grok");
+    expect(newestRead.body.result.structuredContent?.playbook.id).toBe("claude");
+  });
+
+  it("one new session adds exactly one playbook entry", async () => {
+    const h = installHarness();
+    cleanups.push(h.cleanup);
+    const { port } = await listen(h.root, 2);
     const grok = await post(port, 1, "initialize", realisticInitialize("Grok", grokClientCaps).params);
     const chatgpt = await post(port, 2, "initialize", realisticInitialize("ChatGPT", grokClientCaps).params);
-    const claude = await post(port, 3, "initialize", realisticInitialize("Claude", grokClientCaps).params);
-    expect(grok.status).toBe(200);
-    expect(chatgpt.status).toBe(200);
-    expect(claude.status).toBe(200);
-    const kept = await post(port, 4, "tools/call", { name: "get_state", arguments: {} }, chatgpt.session!);
-    const newest = await post(port, 5, "tools/call", { name: "get_state", arguments: {} }, claude.session!);
-    const oldest = await post(port, 6, "tools/call", { name: "get_state", arguments: {} }, grok.session!);
-    expect(oldest.status).toBe(200);
-    expect(oldest.body.error).toBeUndefined();
-    expect(oldest.body.result.structuredContent?.playbook.id).toBe("claude");
-    expect(kept.body.result.structuredContent?.playbook.id).toBe("chatgpt");
-    expect(newest.body.result.structuredContent?.playbook.id).toBe("claude");
+    const grokRead = await post(port, 3, "tools/call", { name: "get_state", arguments: {} }, grok.session!);
+    const chatgptRead = await post(port, 4, "tools/call", { name: "get_state", arguments: {} }, chatgpt.session!);
+    expect(grokRead.status).toBe(200);
+    expect(grokRead.body.error).toBeUndefined();
+    expect(grokRead.body.result.structuredContent?.playbook.id).toBe("grok");
+    expect(chatgptRead.body.result.structuredContent?.playbook.id).toBe("chatgpt");
   });
 });
 
