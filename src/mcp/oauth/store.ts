@@ -73,6 +73,26 @@ export class OAuthGrantStore {
     return this.read().clients[clientId];
   }
 
+  /**
+   * The name stored for this signed-in caller: the newest live grant's
+   * clientName, otherwise the name the client registered with. Nothing
+   * here is a token or a secret. The name only picks playbook wording.
+   */
+  clientName(clientId: string): string | undefined {
+    if (!clientId) return undefined;
+    const doc = this.read();
+    const t = this.now();
+    const live = doc.grants
+      .filter((g) => g.clientId === clientId && g.expiresAt > t && (g.accessExpiresAt > t || (g.refreshExpiresAt ?? 0) > t))
+      .sort((a, b) => (b.refreshedAt ?? b.createdAt) - (a.refreshedAt ?? a.createdAt));
+    for (const grant of live) {
+      const name = grant.clientName?.trim();
+      if (name) return name;
+    }
+    const registered = doc.clients[clientId]?.info.client_name?.trim();
+    return registered || undefined;
+  }
+
   /** Registration is open (RFC 7591), so only the most recent clients are kept; ones with a live approval always stay. */
   putClient(client: StoredClient): void {
     const doc = this.read();

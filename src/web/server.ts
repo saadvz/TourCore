@@ -53,6 +53,9 @@ import { buildComplianceConfig, isPublicCompliancePath, matchCompliancePath } fr
 import { renderCompliancePage } from "./compliance/pages";
 import { loadLocalEnv } from "./env";
 
+/** In-memory playbook clients. Past this, the oldest write is dropped. */
+export const PLAYBOOK_CLIENT_CAP = 1000;
+
 const PUBLIC_DIR = new URL("./public/", import.meta.url);
 const JS = "text/javascript; charset=utf-8";
 const STATIC: Record<string, { file: string; type: string }> = {
@@ -103,6 +106,8 @@ export interface SetupServerOptions {
   alertRetryMs?: number;
   /** Test hook: pause inside the property slot lock. */
   slotLockBarrier?: import("../core/TourCore").TourCoreDeps["slotLockBarrier"];
+  /** Tests only: cap on the in-memory playbook client list. Default is PLAYBOOK_CLIENT_CAP. */
+  playbookClientCap?: number;
 }
 
 /** The server plus a handle tests use to wait for background operator alerts. */
@@ -332,8 +337,29 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         })
       : undefined;
   const confirmations = new ConfirmationBook();
-  /** Playbook client, keyed by MCP session id, signed-in caller, or the one static token. */
+  /**
+   * Playbook client, keyed by MCP session id, signed-in caller, or the one static token.
+   * Kept in memory only. After a restart the signed-in caller's stored OAuth clientName
+   * is read from the grant store and run through the same playbook selection. That name
+   * only picks wording. A static token has no stored name, so a stale id gets baseline.
+   */
   const playbookClients = new Map<string, ReportedClient>();
+  const playbookClientCap = Math.max(1, options.playbookClientCap ?? PLAYBOOK_CLIENT_CAP);
+  /** Last write is newest, so a caller that is still connecting is not the first one dropped. */
+  const rememberPlaybookClient = (key: string, client: ReportedClient) => {
+    if (playbookClients.has(key)) playbookClients.delete(key);
+    playbookClients.set(key, client);
+    while (playbookClients.size > playbookClientCap) {
+      const oldest = playbookClients.keys().next().value;
+      if (oldest === undefined) break;
+      playbookClients.delete(oldest);
+    }
+  };
+  const clientFromStoredOAuth = (clientId: string | undefined): ReportedClient | undefined => {
+    if (!clientId || !oauth) return undefined;
+    const name = oauth.store.clientName(clientId);
+    return name ? { name } : undefined;
+  };
   const sessionHeader = (req: IncomingMessage) => {
     const raw = req.headers["mcp-session-id"];
     const value = (Array.isArray(raw) ? raw[0] : raw)?.trim();
@@ -505,11 +531,18 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           if (incomingSession) responseSession = incomingSession;
         }
         if (seen) {
-          playbookClients.set(key, seen);
-          if (initializing) playbookClients.set(fallbackKey(caller), seen);
+          rememberPlaybookClient(key, seen);
+          if (initializing) rememberPlaybookClient(fallbackKey(caller), seen);
         }
-        const reportedClient = seen ?? playbookClients.get(key);
-        if (!initializing && incomingSession && !knownSession && reportedClient) playbookClients.set(sessionKey(incomingSession), reportedClient);
+        let reportedClient = seen ?? playbookClients.get(key);
+        if (!reportedClient) {
+          const recovered = clientFromStoredOAuth(caller?.clientId);
+          if (recovered) {
+            reportedClient = recovered;
+            rememberPlaybookClient(key, recovered);
+          }
+        }
+        if (!initializing && incomingSession && !knownSession && reportedClient) rememberPlaybookClient(sessionKey(incomingSession), reportedClient);
         const reply = await handleMcpMessage({ ...tools, ...(caller ? { caller } : {}), ...(reportedClient ? { client: reportedClient } : {}) }, message);
         const sessionHeaders: Record<string, string> = responseSession ? { "Mcp-Session-Id": responseSession } : {};
         if (reply.body === undefined) {

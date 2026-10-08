@@ -391,8 +391,9 @@ There is no separate owner-reset step after this.
 - If a test fails, say so plainly and follow Tour Core's next step. Don't
   improvise workarounds.
 - On the hosted product, if `check_runtime_health` (or `/healthz`) shows
-  `persistentVolume` false, say Tour Core's health line as it is. This one
-  needs the person who runs your Tour Core. Never set, recommend, or ask
+  `persistentVolume` false, say Tour Core's health line as it is.
+  Whoever set up your Tour Core hosting needs to attach permanent storage. Until then, hold off on updating Tour Core.
+  Never set, recommend, or ask
   anyone to set `TOURCORE_ALLOW_EPHEMERAL_STORAGE` on a live service. Do not
   mention that variable, or any other environment variable, to the operator.
   Say:

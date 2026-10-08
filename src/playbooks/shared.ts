@@ -71,7 +71,7 @@ export const SHARED_STEPS = {
   "texting-test": {
     ask: "I'm checking that texting works. I won't text anyone.",
     done: "Texting works.",
-    ifItFails: `Tell them texting isn't working yet, in plain words, with no error code. You try again. ${SETUP_HELP_ENDING}`,
+    ifItFails: `Tell them texting isn't working right now, in plain words, with no error code. You try again. ${SETUP_HELP_ENDING}`,
   },
   backups: {
     ask: "I can keep a private copy of your records in a folder you own, or we can skip that. Skipping is fine. Which do you want?",

@@ -1,4 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { request as httpRequest } from "node:http";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { HOSTED_ADMIN_TOOLS } from "../src/install/hostedAdminTools";
@@ -9,11 +10,13 @@ import { MCP_INSTRUCTIONS } from "../src/playbooks/instructions";
 import { renderPlaybook, spokenAsk } from "../src/playbooks/compose";
 import { GROK_ALERTS_SAY, GROK_WAKE_NO_PLACE, GROK_WAKE_WITH_PLACE } from "../src/playbooks/grok";
 import { GROK_CLIENT_NAMES, reportedClientFromInitialize, selectPlaybook } from "../src/playbooks/select";
-import { SETUP_HELP_CONTACT, SETUP_HELP_ENDING, SETUP_HELP_PAGE, SETUP_HELP_URL } from "../src/playbooks/setupHelp";
+import { OPERATOR_SCOPE } from "../src/mcp/oauth";
+import { hashSecret, OAuthGrantStore } from "../src/mcp/oauth/store";
+import { SETUP_HELP_ENDING, SETUP_HELP_PAGE, SETUP_HELP_URL } from "../src/playbooks/setupHelp";
 import { SHARED_STEPS } from "../src/playbooks/shared";
 import { OPERATOR_TOOLS } from "../src/operator/tools";
 import { PropertyWorkspace } from "../src/setup";
-import { createSetupServer } from "../src/web/server";
+import { createSetupServer, PLAYBOOK_CLIENT_CAP } from "../src/web/server";
 import { installHarness } from "./installHarness";
 
 const cleanups: Array<() => void> = [];
@@ -283,8 +286,13 @@ describe("realistic initialize messages", () => {
 
 describe("playbook client is per session", () => {
   const token = "test-operator-token-123456";
-  const listen = async (root: string) => {
-    const server = createSetupServer({ workspace: new PropertyWorkspace(root), operatorToken: () => token, log: () => {} });
+  const listen = async (root: string, playbookClientCap?: number) => {
+    const server = createSetupServer({
+      workspace: new PropertyWorkspace(root),
+      operatorToken: () => token,
+      log: () => {},
+      ...(playbookClientCap ? { playbookClientCap } : {}),
+    });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     cleanups.push(() => server.close());
     return { server, port: (server.address() as { port: number }).port };
@@ -297,6 +305,40 @@ describe("playbook client is per session", () => {
     });
     const body = (await res.json()) as { error?: { code: number }; result: { structuredContent?: { playbook: { id: string; text: string } } } };
     return { status: res.status, session: res.headers.get("mcp-session-id"), body };
+  };
+  const postSignedIn = async (port: number, access: string, id: number, method: string, params: unknown, session?: string) => {
+    const payload = Buffer.from(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+    return new Promise<{ status: number; session: string | null; body: { error?: { code: number }; result?: { structuredContent?: { playbook: { id: string } } } } }>((resolve, reject) => {
+      const req = httpRequest(
+        {
+          host: "127.0.0.1",
+          port,
+          path: "/mcp",
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "content-length": String(payload.length),
+            host: "tour.example",
+            authorization: `Bearer ${access}`,
+            ...(session ? { "mcp-session-id": session } : {}),
+          },
+        },
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on("data", (chunk: Buffer) => chunks.push(chunk));
+          res.on("end", () => {
+            const raw = Buffer.concat(chunks).toString("utf8");
+            resolve({
+              status: res.statusCode ?? 0,
+              session: res.headers["mcp-session-id"] ? String(res.headers["mcp-session-id"]) : null,
+              body: raw ? (JSON.parse(raw) as { error?: { code: number }; result?: { structuredContent?: { playbook: { id: string } } } }) : {},
+            });
+          });
+        },
+      );
+      req.on("error", reject);
+      req.end(payload);
+    });
   };
 
   it("two sessions echo the server-issued id, and each gets their own playbook", async () => {
@@ -319,21 +361,83 @@ describe("playbook client is per session", () => {
     expect(other.body.result.structuredContent?.playbook.text).not.toContain(GROK_WAKE_WITH_PLACE);
   });
 
-  it("a stale session id after a restart still returns a playbook", async () => {
+  it("a stale session id after a restart returns the grok playbook for a signed-in Grok", async () => {
+    const h = installHarness({ env: { PUBLIC_BASE_URL: "https://tour.example" } });
+    cleanups.push(h.cleanup);
+    const access = "tca_signed-in-grok-access-token";
+    const base = h.inst.publicBaseUrl();
+    expect(base).toBe("https://tour.example");
+    const origin = new URL(base!).origin;
+    const now = Date.now();
+    new OAuthGrantStore(h.runtime, () => now).addGrant({
+      clientId: "grok-client",
+      clientName: "Grok",
+      issuer: origin,
+      resource: `${origin}/mcp`,
+      scopes: [OPERATOR_SCOPE],
+      createdAt: now,
+      expiresAt: now + 30 * 86_400_000,
+      accessHash: hashSecret(access),
+      accessExpiresAt: now + 3_600_000,
+    });
+    const listenOauth = async () => {
+      const server = createSetupServer({ workspace: new PropertyWorkspace(h.root), installation: h.inst, mcpAuth: "oauth", authNow: () => now, log: () => {} });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      cleanups.push(() => server.close());
+      return { server, port: (server.address() as { port: number }).port };
+    };
+    const first = await listenOauth();
+    const init = await postSignedIn(first.port, access, 1, "initialize", realisticInitialize("Grok", grokClientCaps).params);
+    expect(init.status).toBe(200);
+    expect(init.session).toBeTruthy();
+    const before = await postSignedIn(first.port, access, 2, "tools/call", { name: "get_state", arguments: {} }, init.session!);
+    expect(before.body.result?.structuredContent?.playbook.id).toBe("grok");
+    await new Promise<void>((resolve) => first.server.close(() => resolve()));
+    const second = await listenOauth();
+    const call = await postSignedIn(second.port, access, 3, "tools/call", { name: "get_state", arguments: {} }, init.session!);
+    expect(call.status).toBe(200);
+    expect(call.body.error).toBeUndefined();
+    expect(call.body.result?.structuredContent?.playbook.id).toBe("grok");
+    expect(call.session).toBe(init.session);
+  });
+
+  it("a static-token caller with a stale session id gets the baseline playbook", async () => {
     const h = installHarness();
     cleanups.push(h.cleanup);
     const first = await listen(h.root);
     const init = await post(first.port, 1, "initialize", realisticInitialize("Grok", grokClientCaps).params);
     expect(init.status).toBe(200);
     expect(init.session).toBeTruthy();
-    first.server.close();
+    const before = await post(first.port, 2, "tools/call", { name: "get_state", arguments: {} }, init.session!);
+    expect(before.body.result.structuredContent?.playbook.id).toBe("grok");
+    await new Promise<void>((resolve) => first.server.close(() => resolve()));
     const second = await listen(h.root);
-    const call = await post(second.port, 2, "tools/call", { name: "get_state", arguments: {} }, init.session!);
+    const call = await post(second.port, 3, "tools/call", { name: "get_state", arguments: {} }, init.session!);
     expect(call.status).toBe(200);
     expect(call.body.error).toBeUndefined();
-    expect(call.body.result.structuredContent?.playbook.id).toBeTruthy();
-    expect(call.body.result.structuredContent?.playbook.text.length).toBeGreaterThan(0);
+    expect(call.body.result.structuredContent?.playbook.id).toBe("baseline");
     expect(call.session).toBe(init.session);
+  });
+
+  it("the session list evicts the oldest playbook client at the cap", async () => {
+    expect(PLAYBOOK_CLIENT_CAP).toBe(1000);
+    const h = installHarness();
+    cleanups.push(h.cleanup);
+    const { port } = await listen(h.root, 3);
+    const grok = await post(port, 1, "initialize", realisticInitialize("Grok", grokClientCaps).params);
+    const chatgpt = await post(port, 2, "initialize", realisticInitialize("ChatGPT", grokClientCaps).params);
+    const claude = await post(port, 3, "initialize", realisticInitialize("Claude", grokClientCaps).params);
+    expect(grok.status).toBe(200);
+    expect(chatgpt.status).toBe(200);
+    expect(claude.status).toBe(200);
+    const kept = await post(port, 4, "tools/call", { name: "get_state", arguments: {} }, chatgpt.session!);
+    const newest = await post(port, 5, "tools/call", { name: "get_state", arguments: {} }, claude.session!);
+    const oldest = await post(port, 6, "tools/call", { name: "get_state", arguments: {} }, grok.session!);
+    expect(oldest.status).toBe(200);
+    expect(oldest.body.error).toBeUndefined();
+    expect(oldest.body.result.structuredContent?.playbook.id).toBe("claude");
+    expect(kept.body.result.structuredContent?.playbook.id).toBe("chatgpt");
+    expect(newest.body.result.structuredContent?.playbook.id).toBe("claude");
   });
 });
 
@@ -374,8 +478,11 @@ describe("texting summaries", () => {
   });
 });
 
+const HOSTING_STORAGE = "Whoever set up your Tour Core hosting needs to attach permanent storage. Until then, hold off on updating Tour Core.";
+const TEXTING_CHOOSE_NEXT = "Pick again from the list you are shown. If there's nothing to pick from, texting can't be set up yet. Whoever set up your Tour Core hosting can add a texting service.";
+
 describe("setup help", () => {
-  it("matches the public page, ends with the contact placeholder, and stays out of visitor copy", () => {
+  it("matches the public page, has no contact line, and stays out of visitor copy", () => {
     const page = readFileSync(join("docs", "setup-help.md"), "utf8");
     expect(page).toBe(SETUP_HELP_PAGE);
     expect(page.startsWith("# Setup help\n\n")).toBe(true);
@@ -383,6 +490,8 @@ describe("setup help", () => {
     const headings = lines.filter((line) => line.startsWith("## "));
     expect(headings).toHaveLength(20);
     expect(headings).toContain("## Your records aren't saved anywhere permanent yet");
+    expect(headings).toContain("## Texting isn't working right now");
+    expect(headings).not.toContain("## Texting isn't working yet");
     for (let i = 0; i < lines.length; i++) {
       if (!lines[i]?.startsWith("## ")) continue;
       expect(lines[i + 1]).toBe("");
@@ -391,9 +500,12 @@ describe("setup help", () => {
       expect(lines[i + 4]?.length).toBeGreaterThan(0);
     }
     expect(page).toContain(DISK_NOT_SAVED);
-    expect(page).toContain("This one needs the person who runs your Tour Core. Reach them using the contact at the bottom of this page.");
-    expect(page).toContain("Nothing went live, so it's safe to say yes again.");
-    expect(page).toContain("Pick again from the list you are shown. If there's nothing to pick from, reach a person below.");
+    expect(page).toContain(HOSTING_STORAGE);
+    expect(page).toContain("You said yes, and it still isn't published.\n\nNothing went live, so it's safe to say yes again.");
+    expect(page).not.toContain("isn't published. Nothing went live.");
+    expect(page).toContain(TEXTING_CHOOSE_NEXT);
+    expect(SHARED_STEPS["texting-test"].ifItFails).toContain("texting isn't working right now");
+    expect(SHARED_STEPS["texting-test"].ifItFails).not.toContain("isn't working yet");
     expect(page).not.toMatch(/lasting disk/);
     expect(SETUP_HELP_ENDING.endsWith(SETUP_HELP_URL)).toBe(true);
     expect(SETUP_HELP_ENDING.endsWith(".")).toBe(false);
@@ -401,7 +513,8 @@ describe("setup help", () => {
       expect(step.ifItFails.endsWith(SETUP_HELP_URL)).toBe(true);
       expect(step.ifItFails.includes(`${SETUP_HELP_URL}.`)).toBe(false);
     }
-    expect(page.trimEnd().split("\n").at(-1)).toBe(SETUP_HELP_CONTACT);
+    expect(page.trimEnd().split("\n").at(-1)).toBe("Ask for them to be checked again.");
+    for (const phrase of contactPhrases()) expect(page.toLowerCase()).not.toContain(phrase.toLowerCase());
     expect(page).not.toMatch(/sendblue|twilio|photon|durin|main home/i);
     expect(SETUP_HELP_URL).toBe("https://github.com/saadvz/TourCore/blob/master/docs/setup-help.md");
     const roots = ["src/visitor", "src/core"];
@@ -439,4 +552,48 @@ describe("setup help", () => {
     expect(inspect?.description).toContain("never Main Home");
     expect(readFileSync("grok-template/integrations/tour-core-tools.md", "utf8")).toContain("`place`");
   });
+
+  it("no landlord-facing string points at a contact", () => {
+    const files = [
+      "docs/setup-help.md",
+      "README.md",
+      "GROK_BOOTSTRAP.md",
+      ".grok/skills/install-tour-core/SKILL.md",
+      "grok-template/bot-profile.md",
+      "grok-template/context/installation.md",
+      "grok-template/integrations/tour-core-tools.md",
+      "src/install/stateView.ts",
+      "src/playbooks/setupHelp.ts",
+      "src/playbooks/shared.ts",
+    ];
+    const phrases = contactPhrases();
+    for (const file of files) {
+      const text = readFileSync(file, "utf8");
+      for (const phrase of phrases) expect(text.toLowerCase(), file).not.toContain(phrase.toLowerCase());
+    }
+    for (const step of Object.values(SHARED_STEPS)) {
+      const text = `${step.ask}\n${step.done}\n${step.ifItFails}`;
+      for (const phrase of phrases) expect(text.toLowerCase()).not.toContain(phrase.toLowerCase());
+    }
+    for (const file of [
+      "docs/setup-help.md",
+      ".grok/skills/install-tour-core/SKILL.md",
+      "grok-template/bot-profile.md",
+      "grok-template/context/installation.md",
+      "grok-template/integrations/tour-core-tools.md",
+    ]) {
+      expect(readFileSync(file, "utf8")).toContain(HOSTING_STORAGE);
+    }
+  });
 });
+
+/** Phrases that would send a landlord to a person. Split so this file does not contain them whole. */
+function contactPhrases(): string[] {
+  return [
+    ["reach", "a", "person"].join(" "),
+    ["Waiting", "on", "Saad"].join(" "),
+    ["contact", "at", "the", "bottom"].join(" "),
+    ["person", "who", "runs", "your", "Tour", "Core"].join(" "),
+    ["person", "who", "runs", "Tour", "Core"].join(" "),
+  ];
+}

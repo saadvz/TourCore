@@ -1,11 +1,9 @@
 /**
  * The one setup-help link. Swap this line when a shorter docs address exists.
  * The repository is public, so this page opens for a landlord the day it is on master.
+ * The page does not name a person to contact.
  */
 export const SETUP_HELP_URL = "https://github.com/saadvz/TourCore/blob/master/docs/setup-help.md";
-
-/** Saad has not named a person yet. This is the page's last line. Do not invent a contact. */
-export const SETUP_HELP_CONTACT = "To reach a person: Waiting on Saad. The contact for setup help has not been named yet.";
 
 /** The same ending on every failure line. Nothing follows the link. */
 export const SETUP_HELP_ENDING = `If it keeps failing, the setup help page has the usual fixes: ${SETUP_HELP_URL}`;
@@ -30,7 +28,7 @@ Wait a moment, then ask again.
 
 You picked a way for people to text you, and it didn't stick. Or there is nothing to pick.
 
-Pick again from the list you are shown. If there's nothing to pick from, reach a person below.
+Pick again from the list you are shown. If there's nothing to pick from, texting can't be set up yet. Whoever set up your Tour Core hosting can add a texting service.
 
 ## The texting login didn't save
 
@@ -44,7 +42,7 @@ The number you picked isn't on the list, or the list is empty.
 
 Pick a number from the list. If the list is empty, finish the texting login first.
 
-## Texting isn't working yet
+## Texting isn't working right now
 
 Texts aren't going through, and you are not shown an error code.
 
@@ -112,7 +110,7 @@ Fix the thing that failed, then run the practice tour again. Nobody is texted, a
 
 ## It isn't published
 
-You said yes, and it still isn't published. Nothing went live.
+You said yes, and it still isn't published.
 
 Nothing went live, so it's safe to say yes again.
 
@@ -126,16 +124,14 @@ Wait a moment and ask again.
 
 Tour Core is running, but your records aren't saved anywhere permanent yet, so the next update could erase them.
 
-This one needs the person who runs your Tour Core. Reach them using the contact at the bottom of this page.
+Whoever set up your Tour Core hosting needs to attach permanent storage. Until then, hold off on updating Tour Core.
 
 ## Records couldn't be checked
 
 You can't tell whether your records are saved.
 
 Ask for them to be checked again.
-
-${SETUP_HELP_CONTACT}
 `;
 
-/** Full page, ending with the contact line. */
+/** Full page. It does not end with a contact line. */
 export const SETUP_HELP_PAGE = PAGE;
