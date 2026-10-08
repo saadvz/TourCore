@@ -90,7 +90,7 @@ describe("tour lifecycle updates", () => {
     const first = await withDefaults();
     first.net.state.routineDown = true;
     const ready = await first.book();
-    expect(ready).toContain("You're all set for your tour");
+    expect(ready).toContain("You're all set for your");
     expect(first.outbox("tour.booked")).toEqual([expect.objectContaining({ status: "pending", attempts: 1 })]);
     const eventId = first.outbox("tour.booked")[0]!.event.eventId;
     first.close();

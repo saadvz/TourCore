@@ -27,6 +27,11 @@ export interface InboundMessage {
    */
   listingProperty?: string;
   /**
+   * Operator tooling pin. When set, this text belongs to that property even if
+   * the phone already has a conversation somewhere else on the line.
+   */
+  pinnedProperty?: string;
+  /**
    * The visitor picked a property from the portfolio menu (a number or a street
    * name). That pick is the opt-in keyword, the same as texting TOUR.
    */

@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../src/config/tourCoreConfig";
-import { HELP_ALERT_WINDOW_MS, helpContext, VisitorDenialCopy } from "../src/core/TourCore";
+import { HELP_ALERT_WINDOW_MS, helpContext, teamTextFailedNotice, VisitorDenialCopy } from "../src/core/TourCore";
 import { zonedTimeToUtc } from "../src/core/timezone";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
 import { handleVisitorText } from "../src/visitor/conversation";
@@ -12,9 +12,13 @@ import { bookTour, minutesFrom, setup } from "./helpers";
 const at = (hour: number, minute = 0) => zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour, minute }, "America/New_York").getTime();
 const PHONE = "+15550102000";
 const TEAM = "property team";
+const SNAG = "Sorry, I hit a snag with that. Could you text me again in a few minutes?";
 
 const cleanups: Array<() => void> = [];
-afterEach(() => cleanups.splice(0).forEach((c) => c()));
+afterEach(() => {
+  cleanups.splice(0).forEach((c) => c());
+  vi.restoreAllMocks();
+});
 
 function phone(now = at(13, 58)) {
   const transport = new DemoMessagingAdapter(() => {}, "MESSAGING");
@@ -39,6 +43,36 @@ async function bookAndArrive(p: ReturnType<typeof phone>) {
   await p.say("I'm here");
 }
 
+async function openEveryDoor(p: ReturnType<typeof phone>) {
+  await bookAndArrive(p);
+  await p.say("at unit 101");
+  await p.say("I'm here");
+  const bodies = (await prospectOutbound(p.session)).map((m) => m.body).join("\n");
+  expect(bodies).toContain("Every door on your tour is already open for you.");
+}
+
+function failEveryAudit(session: VisitorDemoSession) {
+  session.store.appendAudit = async () => {
+    throw new Error("disk full");
+  };
+}
+
+function failOperatorSend(session: VisitorDemoSession) {
+  const send = session.transport.send.bind(session.transport);
+  session.transport.send = async (message) => {
+    if (message.audience === "OPERATOR") {
+      return {
+        provider: session.transport.provider,
+        channel: "DEMO",
+        status: "FAILED",
+        sentAt: new Date().toISOString(),
+        error: { code: "SENDBLUE_DOWN", message: "Sendblue rejected the text" },
+      };
+    }
+    return send(message);
+  };
+}
+
 async function prospectOutbound(session: VisitorDemoSession) {
   return (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND");
 }
@@ -61,6 +95,7 @@ describe("helpContext", () => {
     expect(helpContext(reservation("TOURING", { start, end }), nowIn)).toBe("in-window");
     expect(helpContext(reservation("READY", { start, end }), nowBefore)).toBe("upcoming");
     expect(helpContext(reservation("READY", { start, end }), nowAfter)).toBeNull();
+    expect(helpContext(reservation("TOURING", { start, end }), nowAfter)).toBe("in-window");
     expect(helpContext(reservation("COMPLETED", { start, end }), nowIn)).toBeNull();
     expect(helpContext(reservation("CANCELLED", { start, end }), nowIn)).toBeNull();
     expect(helpContext(reservation("REVOKED", { start, end }), nowIn)).toBeNull();
@@ -224,16 +259,68 @@ describe("help flow: one visitor reply, one open exception", () => {
     expect((await p.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(0);
   });
 
-  it("HELP after the tour window has ended sends only the carrier keyword reply", async () => {
+  it("HELP after the tour window has ended sends the help reply and alerts the team", async () => {
     const p = phone();
     await bookAndArrive(p);
     p.session.clock.jumpTo(new Date(at(16)));
+    expect((await p.session.reservation())?.status).toBe("TOURING");
     const before = await prospectOutbound(p.session);
     await p.say("HELP");
     const added = (await prospectOutbound(p.session)).slice(before.length);
-    expect(added.map((m) => m.body)).toEqual([smsHelpBody()]);
-    expect((await p.session.store.listAudit()).filter((e) => e.type === "HELP_REQUESTED")).toHaveLength(0);
-    expect((await p.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(0);
+    expect(added.map((m) => m.body)).toEqual([VisitorDenialCopy.helpAck(TEAM)]);
+    expect(added.join("\n")).not.toContain("Reply STOP to opt out.");
+    expect((await p.session.store.listAudit()).filter((e) => e.type === "HELP_REQUESTED")).toHaveLength(1);
+    expect((await p.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(1);
+  });
+
+  it.each([
+    ["mid-tour", async (p: ReturnType<typeof phone>) => bookAndArrive(p)],
+    ["all doors open", async (p: ReturnType<typeof phone>) => openEveryDoor(p)],
+    ["after the window", async (p: ReturnType<typeof phone>) => {
+      await bookAndArrive(p);
+      p.session.clock.jumpTo(new Date(at(16)));
+      expect((await p.session.reservation())?.status).toBe("TOURING");
+    }],
+  ] as const)("HELP %s still texts the team and sends the ack when every audit write fails", async (_label, arrive) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const p = phone();
+    await arrive(p);
+    failEveryAudit(p.session);
+    const before = await prospectOutbound(p.session);
+    await p.say("HELP");
+    const added = (await prospectOutbound(p.session)).slice(before.length);
+    expect(added.map((m) => m.body)).toEqual([VisitorDenialCopy.helpAck(TEAM)]);
+    const messages = await p.session.store.list("messages");
+    const teamText = messages.findIndex((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"));
+    const ack = messages.findIndex((m) => m.body === VisitorDenialCopy.helpAck(TEAM));
+    expect(teamText).toBeGreaterThanOrEqual(0);
+    expect(ack).toBeGreaterThan(teamText);
+  });
+
+  it.each([
+    ["mid-tour", async (p: ReturnType<typeof phone>) => bookAndArrive(p)],
+    ["all doors open", async (p: ReturnType<typeof phone>) => openEveryDoor(p)],
+    ["after the window", async (p: ReturnType<typeof phone>) => {
+      await bookAndArrive(p);
+      p.session.clock.jumpTo(new Date(at(16)));
+    }],
+  ] as const)("HELP %s sends the snag line when the team text fails", async (_label, arrive) => {
+    const p = phone();
+    await arrive(p);
+    failOperatorSend(p.session);
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const before = await prospectOutbound(p.session);
+    await p.say("HELP");
+    const added = (await prospectOutbound(p.session)).slice(before.length);
+    expect(added.map((m) => m.body)).toEqual([SNAG]);
+    expect(added.join("\n")).not.toContain("let the property team know");
+    const notice = teamTextFailedNotice("Pat Smith");
+    const failed = (await p.session.store.listAudit()).filter((event) => event.type === "MESSAGE_FAILED");
+    expect(failed.map((event) => event.detail)).toEqual([notice]);
+    expect(failed[0]!.code).toBeUndefined();
+    expect(failed[0]!.detail).toBe("I couldn't text you about Pat Smith, so I asked them to text me again in a few minutes.");
+    expect(failed[0]!.detail).not.toMatch(/Sendblue|Twilio|SENDBLUE|rejected/i);
+    expect(errors.mock.calls.map((args) => args.join(" ")).join("\n")).toContain("Sendblue rejected the text");
   });
 
   it("a second in-window help says the team already knows, with the at-door next step", async () => {

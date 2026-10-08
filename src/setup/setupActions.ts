@@ -13,7 +13,7 @@ import {
   type Unit,
 } from "../config/tourCoreConfig";
 import { nextProfileQuestion, parseProfileValue, PROFILE_FIELDS, ProfileValueError, type ProfileField, type UnitProfile } from "../config/unitProfile";
-import type { ConfigIssue, ConfigSection } from "../config/validateConfig";
+import { type ConfigIssue, type ConfigSection } from "../config/validateConfig";
 import { formatPhone, parsePhone } from "../core/phone";
 import { formatClockTime, friendlyTimeZone, WEEKDAYS, type Weekday } from "../core/timezone";
 import { isApartmentOrCondo, isSingleTourPlace, streetAndUnit, streetLine, unitLabel, visitorSubject } from "../visitor/identity";

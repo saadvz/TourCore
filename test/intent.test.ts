@@ -319,7 +319,7 @@ describe("semantic interpretation", () => {
         awaiting: { kind: "accept-next-opening", date: "2026-10-05", slotStart },
       }),
     );
-    expect(JSON.parse(calls[0]!.user).lastAsked).toBe("Reply yes for Monday at 8:15 AM, or pick a day.");
+    expect(JSON.parse(calls[0]!.user).lastAsked).toBe("Reply yes for 8:15 AM on Monday, or pick a day.");
     expect(JSON.parse(calls[0]!.user).lastAsked).not.toBe("Reply yes for that opening, or pick a day.");
   });
 

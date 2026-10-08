@@ -38,6 +38,7 @@ import { BOOKING_HORIZON_DAYS, isoDate, nextTourDay, slotsOn, tourWindow, type T
 import { bookedTourCalledOffText, laterCancelConfirm, laterCancelDone, laterCancelKept, tourMovedToText } from "./availabilityCopy";
 import { propertyDirectionsUrl, tourDirectionsText } from "./mapsLink";
 import { addDays, formatDay as formatDayIn, formatTime as formatTimeIn, localDateOf, type LocalDate } from "./timezone";
+import { claimVisitorSms, renderSms, visitorTeamName } from "../sms/templates";
 
 export interface TourCoreDeps {
   config: TourCoreConfig;
@@ -237,6 +238,16 @@ export function isUnconfirmedHold(reservation?: { status: string; consentId?: st
   return !!reservation && reservation.status === "AWAITING_CONSENT" && !reservation.consentId;
 }
 
+/**
+ * "Still confirmed" is only for a booking that already cleared consent and
+ * the identity form. Awaiting verification is still booked, not confirmed.
+ */
+export function visitorBookingConfirmed(reservation?: { status: string; consentId?: string; slotStart?: string }): boolean {
+  if (!reservation?.slotStart) return false;
+  if (isUnconfirmedHold(reservation)) return false;
+  return reservation.status !== "AWAITING_VERIFICATION";
+}
+
 /** Repeat help on the same reservation re-alerts the team at most once per this window. */
 export const HELP_ALERT_WINDOW_MS = 5 * 60_000;
 
@@ -244,17 +255,20 @@ export const HELP_ALERT_WINDOW_MS = 5 * 60_000;
 export type HelpContext = "in-window" | "upcoming";
 
 /**
- * HELP alerts the team only for a booked tour that is upcoming (window not
- * started) or still inside its tour window. Finished, canceled, revoked,
- * failed-ID, expired, past-window, or not-yet-booked reservations do not.
+ * HELP alerts the team for a booked tour that is upcoming, still inside its
+ * window, or past the window while the tour is still in progress (the visitor
+ * may still be inside). Finished, canceled, revoked, failed-ID, expired, or
+ * not-yet-booked reservations do not.
  */
 export function helpContext(reservation: Reservation, now: Date): HelpContext | null {
   if (TERMINAL.includes(reservation.status)) return null;
   if (!reservation.windowStart || !reservation.windowEnd) return null;
   const start = Date.parse(reservation.windowStart);
   const end = Date.parse(reservation.windowEnd);
-  if (Number.isNaN(start) || Number.isNaN(end) || end <= now.getTime()) return null;
-  return now.getTime() < start ? "upcoming" : "in-window";
+  if (Number.isNaN(start) || Number.isNaN(end)) return null;
+  if (now.getTime() < start) return "upcoming";
+  if (now.getTime() < end || reservation.status === "TOURING") return "in-window";
+  return null;
 }
 
 export function isLiveHelpReservation(reservation: Reservation, now: Date): boolean {
@@ -274,6 +288,11 @@ export const UNKNOWN_ANSWER_ENDED_WITH_PHOTO = `${UNKNOWN_ANSWER_WITH_PHOTO}${TO
 export const TOUR_ENDED_REPLY = "This tour has ended. Text HI any time to start a new one.";
 
 /** One visitor text for an unanswered question. Photo and ended-tour variants replace the short photo line. */
+/** Saved profile facts are explicit. Other approved facts match `shared-fact`. */
+function answerTemplateId(facts: ApprovedFact[]): string | undefined {
+  return facts.length > 0 && facts.every((fact) => fact.profileField) ? "approved-profile-fact" : undefined;
+}
+
 export function unknownAnswerReply(options: { hasMedia?: boolean; ended?: boolean } = {}): string {
   if (options.ended) return options.hasMedia ? UNKNOWN_ANSWER_ENDED_WITH_PHOTO : UNKNOWN_ANSWER_ENDED;
   return options.hasMedia ? UNKNOWN_ANSWER_WITH_PHOTO : UNKNOWN_ANSWER;
@@ -289,6 +308,29 @@ export function withAnswerSuffix(answer: string, suffix = ""): string {
   return body + suffix;
 }
 
+/** Team text when a fair-housing question could not be saved. */
+export function questionNotSavedAlert(who: string): string {
+  return `${who} asked a question, but I couldn't save it for you to answer. Please text them back. They're waiting.`;
+}
+
+/** Team text when a door stayed locked and the visitor has no step left. */
+export function doorStuckAlert(who: string, door: string): string {
+  return `${who} is at ${door}, and I couldn't open it for them. Please text them or let them in.`;
+}
+
+/**
+ * Landlord line when a team text did not go out and the visitor was asked to
+ * retry. The whole sentence is what the landlord sees. No provider or error.
+ */
+export function teamTextFailedNotice(who: string): string {
+  return `I couldn't text you about ${who}, so I asked them to text me again in a few minutes.`;
+}
+
+/** True only for that exact landlord sentence, with nothing appended. */
+export function isTeamTextFailedNotice(detail: string): boolean {
+  return /^I couldn't text you about .+?, so I asked them to text me again in a few minutes\.$/.test(detail);
+}
+
 /** Visitor cancel-by-text: Critiquito-locked confirm, done, and keep-booked lines. */
 export const VISITOR_CANCEL_DONE = "You're cancelled. Text me anytime if you want to book again.";
 /** Nothing is booked. The menu is cleared. The next text starts scheduling again. */
@@ -297,11 +339,11 @@ export const NOTHING_BOOKED_CANCEL =
 export const VISITOR_CANCEL_FAILED = "I can't cancel it from here. I've asked the property team to call it off and get back to you.";
 
 export function visitorCancelConfirm(day: string, time: string): string {
-  return `Cancel your tour on ${day} at ${time}? Reply YES or NO.`;
+  return `Cancel your ${time} tour on ${day}? Reply YES or NO.`;
 }
 
 export function visitorCancelKept(day: string, time: string): string {
-  return `Okay, your tour stays on ${day} at ${time}.`;
+  return `Okay, your ${time} tour on ${day} stays booked.`;
 }
 
 export function visitorCancelConfirmFor(reservation: Reservation, timeZone: string, laterWhileTouring = false): string | undefined {
@@ -326,19 +368,22 @@ export function visitorCancelDoneFor(day: string, time: string, laterWhileTourin
  */
 export class VisitorDenialCopy {
   static atDoor(team: string, visitorContact?: string, options?: { teamJustNamed?: boolean }): string {
-    const who = options?.teamJustNamed ? "They'll" : `The ${team} will`;
+    const name = visitorTeamName(team);
+    const who = options?.teamJustNamed ? "They'll" : `The ${name} will`;
     if (visitorContact) return `Stay where you are. ${who} reply as soon as they can, or call ${formatPhone(visitorContact)}.`;
     return `Stay where you are and reply here. ${who} reply as soon as they can.`;
   }
 
   static remote(team: string, visitorContact?: string, options?: { teamJustNamed?: boolean }): string {
-    const who = options?.teamJustNamed ? "They'll" : `The ${team} will`;
+    const name = visitorTeamName(team);
+    const who = options?.teamJustNamed ? "They'll" : `The ${name} will`;
     if (visitorContact) return `${who} reply here as soon as they can, or call ${formatPhone(visitorContact)}.`;
     return `${who} reply here as soon as they can.`;
   }
 
   static operatorHold(team: string, visitorContact?: string): string {
-    return `Your tour is on hold, and your tour time keeps running while the ${team} sorts this out. ${this.atDoor(team, visitorContact, { teamJustNamed: true })}`;
+    const name = visitorTeamName(team);
+    return `Your tour is on hold, and your tour time keeps running while the ${name} sorts this out. ${this.atDoor(name, visitorContact, { teamJustNamed: true })}`;
   }
 
   static calledOff(team: string, visitorContact?: string, when?: { time: string; day: string }): string {
@@ -355,36 +400,42 @@ export class VisitorDenialCopy {
   }
 
   static followUpYes(team: string): string {
-    return `Great. Someone from the ${team} will be in touch soon.`;
+    return `Great. Someone from the ${visitorTeamName(team)} will be in touch soon.`;
   }
 
   static helpAck(team: string, visitorContact?: string): string {
-    return `I've let the ${team} know. ${this.atDoor(team, visitorContact, { teamJustNamed: true })}`;
+    const name = visitorTeamName(team);
+    return `I've let the ${name} know. ${this.atDoor(name, visitorContact, { teamJustNamed: true })}`;
   }
 
   static helpRepeatAck(team: string, visitorContact?: string): string {
-    return `The ${team} already knows and is on it. ${this.atDoor(team, visitorContact, { teamJustNamed: true })}`;
+    const name = visitorTeamName(team);
+    return `The ${name} already knows and is on it. ${this.atDoor(name, visitorContact, { teamJustNamed: true })}`;
   }
 
   static helpAckRemote(team: string, visitorContact?: string): string {
-    return `I've let the ${team} know. ${this.remote(team, visitorContact, { teamJustNamed: true })}`;
+    const name = visitorTeamName(team);
+    return `I've let the ${name} know. ${this.remote(name, visitorContact, { teamJustNamed: true })}`;
   }
 
   static helpRepeatAckRemote(team: string, visitorContact?: string): string {
-    return `The ${team} already knows and is on it. ${this.remote(team, visitorContact, { teamJustNamed: true })}`;
+    const name = visitorTeamName(team);
+    return `The ${name} already knows and is on it. ${this.remote(name, visitorContact, { teamJustNamed: true })}`;
   }
 
   static noOpenTimes(team: string): string {
-    return `There are no open tour times right now. The ${team} will reach out.`;
+    return `There are no open tour times right now. The ${visitorTeamName(team)} will reach out.`;
   }
 
   static doorsNotResponding(team: string, visitorContact?: string): string {
-    return `Sorry, the doors aren't responding right now. I've let the ${team} know. ${this.atDoor(team, visitorContact, { teamJustNamed: true })}`;
+    const name = visitorTeamName(team);
+    return `Sorry, the doors aren't responding right now. I've let the ${name} know. ${this.atDoor(name, visitorContact, { teamJustNamed: true })}`;
   }
 
   static followUp(team: string, visitorContact?: string): string {
-    if (visitorContact) return `The ${team} will follow up here, or call ${formatPhone(visitorContact)}.`;
-    return `The ${team} will follow up here.`;
+    const name = visitorTeamName(team);
+    if (visitorContact) return `The ${name} will follow up here, or call ${formatPhone(visitorContact)}.`;
+    return `The ${name} will follow up here.`;
   }
 
   static failedIdAtDoor(team: string, visitorContact?: string): string {
@@ -400,7 +451,7 @@ export class VisitorDenialCopy {
   }
 
   static staleVerification(): string {
-    return "Your ID check has expired, so I need a quick re-check before I can open doors.";
+    return "It's been a while since you filled out the identity form, so I'll need you to fill it out again before I can open doors.";
   }
 
   static missingConsent(): string {
@@ -1128,7 +1179,7 @@ export class TourCore {
           newTime: this.time(asked),
           newDay: this.day(asked),
           ...current,
-          confirmed: !isUnconfirmedHold(reservation),
+          confirmed: visitorBookingConfirmed(reservation),
         }),
       );
       await this.record("TOUR_TIME_REQUEST_DECLINED", { reservationId: request.reservationId, prospectId: request.prospectId, detail: note?.trim() || "declined" });
@@ -1210,9 +1261,9 @@ export class TourCore {
       const reservation = request.reservationId ? await this.deps.store.get("reservations", request.reservationId) : undefined;
       const prospect = await this.mustGetProspect(request.prospectId);
       const booked = reservation?.slotStart
-        ? isUnconfirmedHold(reservation)
-          ? `No problem. You're still booked for ${this.time(new Date(reservation.slotStart))} on ${this.day(new Date(reservation.slotStart))}.`
-          : `No problem. Your ${this.time(new Date(reservation.slotStart))} tour on ${this.day(new Date(reservation.slotStart))} is still confirmed.`
+        ? visitorBookingConfirmed(reservation)
+          ? `No problem. Your ${this.time(new Date(reservation.slotStart))} tour on ${this.day(new Date(reservation.slotStart))} is still confirmed.`
+          : `No problem. You're still booked for ${this.time(new Date(reservation.slotStart))} on ${this.day(new Date(reservation.slotStart))}.`
         : "No problem. If you'd like another time, just reply with a day.";
       await this.textProspect(prospect, request.reservationId, booked);
       await this.record("TOUR_TIME_REQUEST_DECLINED", { reservationId: request.reservationId, prospectId: request.prospectId, detail: "visitor kept the current time" });
@@ -1280,10 +1331,11 @@ export class TourCore {
       const resolved = resolveQuestion(this.approvedContent(), input.question.trim().slice(0, 300), unitContext);
       if (resolved.kind === "which-unit") return { outcome: "which-unit", facts: [], units: resolved.units };
       if (read === "cached" && resolved.kind === "answer") {
-        await this.deps.messenger.send({ to: phone, audience: "PROSPECT", body: withAnswerSuffix(approvedAnswerText(resolved.facts), input.answerSuffix) });
+        const body = withAnswerSuffix(approvedAnswerText(resolved.facts), input.answerSuffix);
+        await this.sendProspectDirect(phone, body, answerTemplateId(resolved.facts));
         return { outcome: "answered", facts: resolved.facts, ...(resolved.unitId ? { unitId: resolved.unitId } : {}) };
       }
-      await this.deps.messenger.send({ to: phone, audience: "PROSPECT", body: "I can't check that right now. Please try again in a little while." });
+      await this.sendProspectDirect(phone, "I can't check that right now. Please try again in a little while.");
       return { outcome: "unknown", facts: [] };
     }
     const prospect = (await this.deps.store.list("prospects")).find((p) => p.phone === phone);
@@ -1297,10 +1349,15 @@ export class TourCore {
     if (resolved.kind === "which-unit") return { outcome: "which-unit", facts: [], units: resolved.units };
     if (resolved.kind === "answer") {
       await this.record("QUESTION_ANSWERED", { ...base, detail: asked });
-      await this.sendConversationText({ phone, body: withAnswerSuffix(approvedAnswerText(resolved.facts), input.answerSuffix), reservationId: reservation?.id });
+      const body = withAnswerSuffix(approvedAnswerText(resolved.facts), input.answerSuffix);
+      await this.sendConversationText({ phone, body, reservationId: reservation?.id, templateId: answerTemplateId(resolved.facts) });
       return { outcome: "answered", facts: resolved.facts, ...(resolved.unitId ? { unitId: resolved.unitId } : {}) };
     }
-    await this.record("QUESTION_UNANSWERED", { ...base, detail: asked, ...(resolved.kind === "unknown" && resolved.fairHousing ? { code: FAIR_HOUSING_CODE } : {}) });
+    if (resolved.kind === "unknown" && resolved.fairHousing) {
+      await this.replyFairHousing({ phone, reservationId: reservation?.id, prospectId: prospect?.id, asked, reservation, who: prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : formatPhone(phone), about: !reservation && (resolved.unitId ? this.deps.config.units.find((u) => u.id === resolved.unitId) : undefined) ? ` about ${visitorSubject(this.deps.config.property, this.deps.config.units.find((u) => u.id === resolved.unitId)!.name)}` : "" });
+      return { outcome: "unknown", facts: [], ...(resolved.unitId ? { unitId: resolved.unitId } : {}) };
+    }
+    await this.record("QUESTION_UNANSWERED", { ...base, detail: asked });
     await this.sendConversationText({ phone, body: input.unknownReply ?? UNKNOWN_ANSWER, reservationId: reservation?.id });
     const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : formatPhone(phone);
     const named = resolved.unitId ? this.deps.config.units.find((u) => u.id === resolved.unitId) : undefined;
@@ -1321,15 +1378,74 @@ export class TourCore {
     const asked = input.question.trim().slice(0, 300);
     if (!asked) throw new TourCoreError("EMPTY_QUESTION", "Please type a question");
     if (input.recordInbound !== false) await this.recordIncoming({ phone, body: asked, prospectId: prospect?.id, reservationId: reservation?.id, meta: input.meta });
+    if (isFairHousingQuestion(asked)) {
+      const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : formatPhone(phone);
+      if (!input.silent) {
+        await this.replyFairHousing({ phone, reservationId: reservation?.id, prospectId: prospect?.id, asked, reservation, who, about: "" });
+      } else {
+        const forwarded = await this.forwardFlaggedQuestion({ reservationId: reservation?.id, prospectId: prospect?.id, asked });
+        if (forwarded) await this.notifyOperator(reservation, `${who} asked "${asked}", and there's no approved answer yet.`);
+      }
+      return;
+    }
     await this.record("QUESTION_UNANSWERED", {
       reservationId: reservation?.id,
       prospectId: prospect?.id,
       detail: asked,
-      ...(isFairHousingQuestion(asked) ? { code: FAIR_HOUSING_CODE } : {}),
     });
     if (!input.silent) await this.sendConversationText({ phone, body: input.reply, reservationId: reservation?.id });
     const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : formatPhone(phone);
     await this.notifyOperator(reservation, `${who} asked "${asked}", and there's no approved answer yet.`);
+  }
+
+  /**
+   * Fair-housing questions are forwarded first, as a no-draft flag, and only
+   * then get the held reply. The engine never answers them. If the flag cannot
+   * be saved, the team is texted first. The no-steps line goes out only when
+   * that text did.
+   * Landlord or model prose is not used here.
+   */
+  private async replyFairHousing(input: {
+    phone: string;
+    reservationId?: string;
+    prospectId?: string;
+    asked: string;
+    reservation?: Reservation;
+    who: string;
+    about: string;
+  }): Promise<void> {
+    const forwarded = await this.forwardFlaggedQuestion(input);
+    if (!forwarded) {
+      await this.alertTeamThenStuck({
+        phone: input.phone,
+        reservation: input.reservation,
+        reservationId: input.reservationId,
+        who: input.who,
+        alert: questionNotSavedAlert(input.who),
+      });
+      return;
+    }
+    await this.sendConversationText({
+      phone: input.phone,
+      body: renderSms("fair-housing-held", { team: this.teamName() }).body,
+      reservationId: input.reservationId,
+    });
+    await this.notifyOperator(input.reservation, `${input.who} asked "${input.asked}"${input.about}, and there's no approved answer yet.`);
+  }
+
+  private async forwardFlaggedQuestion(input: { reservationId?: string; prospectId?: string; asked: string }): Promise<boolean> {
+    try {
+      await this.record("QUESTION_UNANSWERED", {
+        reservationId: input.reservationId,
+        prospectId: input.prospectId,
+        detail: input.asked,
+        code: FAIR_HOUSING_CODE,
+      });
+      return true;
+    } catch (err) {
+      console.error(`Visitor question was not forwarded: ${err instanceof Error ? err.message : "unknown error"}`);
+      return false;
+    }
   }
 
   private approvedContent(): TourCoreConfig {
@@ -1346,12 +1462,11 @@ export class TourCore {
     if (!place) return;
     const prospect = await this.mustGetProspect(reservation.prospectId);
     const said = inbound?.text ?? "I need help";
-    const repeat = (await this.deps.store.listAudit()).some((e) => e.reservationId === reservationId && e.type === "HELP_REQUESTED");
+    const repeat = await this.priorHelpRequest(reservationId);
     await this.recordInbound(prospect.id, reservationId, said, inbound?.meta);
-    await this.record("HELP_REQUESTED", { reservationId, prospectId: prospect.id, detail: where ?? "", code: said });
-    if (await this.shouldAlertHelp(reservationId)) {
-      await this.notifyOperator(reservation, `${prospect.name} asked for help${where ? ` near ${where}` : ""}.`);
-    }
+    const alert = `${prospect.name} asked for help${where ? ` near ${where}` : ""}.`;
+    const alertDue = await this.shouldAlertHelp(reservationId);
+    const alerted = alertDue ? await this.textOperatorFirst(reservation, alert) : false;
     const team = this.teamName();
     const contact = this.visitorHelpNumber();
     const ack =
@@ -1362,16 +1477,49 @@ export class TourCore {
         : repeat
           ? VisitorDenialCopy.helpRepeatAck(team, contact)
           : VisitorDenialCopy.helpAck(team, contact);
-    await this.textProspect(prospect, reservationId, ack);
+    const snag = alertDue && !alerted;
+    await this.textProspect(prospect, reservationId, snag ? renderSms("handler-snag-retry").body : ack);
+    await this.recordBestEffort(
+      "HELP_REQUESTED",
+      { reservationId, prospectId: prospect.id, detail: where ?? "", code: said },
+      "Help request was not recorded",
+    );
+    if (alerted) {
+      await this.recordBestEffort(
+        "OPERATOR_NOTIFIED",
+        { reservationId, prospectId: prospect.id, detail: alert },
+        "Team alert was not recorded",
+      );
+    } else if (snag) {
+      await this.recordTeamTextFailure(prospect.name, reservationId, prospect.id);
+    }
   }
 
-  /** Re-alert at most once per HELP_ALERT_WINDOW_MS for the same reservation's open help. */
+  /** True when this reservation already has a help request. A failed read is a first request. */
+  private async priorHelpRequest(reservationId: string): Promise<boolean> {
+    try {
+      return (await this.deps.store.listAudit()).some((e) => e.reservationId === reservationId && e.type === "HELP_REQUESTED");
+    } catch (err) {
+      console.error(`Help history was not read: ${err instanceof Error ? err.message : "unknown error"}`);
+      return false;
+    }
+  }
+
+  /**
+   * Re-alert at most once per HELP_ALERT_WINDOW_MS for the same reservation's open help.
+   * A failed audit read counts as due, so a down store still texts the team.
+   */
   private async shouldAlertHelp(reservationId: string): Promise<boolean> {
-    const last = [...(await this.deps.store.listAudit())]
-      .reverse()
-      .find((e) => e.reservationId === reservationId && e.type === "OPERATOR_NOTIFIED" && e.detail.includes("asked for help"));
-    if (!last) return true;
-    return this.deps.clock.now().getTime() - Date.parse(last.at) >= HELP_ALERT_WINDOW_MS;
+    try {
+      const last = [...(await this.deps.store.listAudit())]
+        .reverse()
+        .find((e) => e.reservationId === reservationId && e.type === "OPERATOR_NOTIFIED" && e.detail.includes("asked for help"));
+      if (!last) return true;
+      return this.deps.clock.now().getTime() - Date.parse(last.at) >= HELP_ALERT_WINDOW_MS;
+    } catch (err) {
+      console.error(`Help alert history was not read: ${err instanceof Error ? err.message : "unknown error"}`);
+      return true;
+    }
   }
 
   // -------------------------------------------------------- operator actions
@@ -1510,9 +1658,10 @@ export class TourCore {
    * A conversation-level text (welcome, help, "didn't catch that"): stored and
    * sent like any other, and suppressed for anyone who opted out.
    */
-  async sendConversationText(input: { phone: string; body: string; prompt?: ReplyPrompt; reservationId?: string; deliverDespiteOptOut?: boolean }): Promise<void> {
+  async sendConversationText(input: { phone: string; body: string; prompt?: ReplyPrompt; reservationId?: string; deliverDespiteOptOut?: boolean; templateId?: string }): Promise<void> {
     const phone = normalizePhone(input.phone);
     const prospect = (await this.deps.store.list("prospects")).find((p) => p.phone === phone);
+    const templateId = claimVisitorSms(input.body, input.templateId);
     await this.deliver({
       audience: "PROSPECT",
       to: phone,
@@ -1521,6 +1670,7 @@ export class TourCore {
       prospectId: prospect?.id,
       reservationId: input.reservationId,
       suppressed: !!prospect?.messagingOptedOut && !input.deliverDespiteOptOut,
+      templateId,
     });
   }
 
@@ -1787,7 +1937,7 @@ export class TourCore {
     const now = clock.now();
     const door = config.doors.find((d) => d.id === request.doorId);
     const base = { reservationId: request.reservationId, prospectId: request.prospectId, doorId: request.doorId };
-    await this.record("ACCESS_REQUESTED", { ...base, detail: door?.name ?? "unknown door" });
+    await this.recordBestEffort("ACCESS_REQUESTED", { ...base, detail: door?.name ?? "unknown door" }, "Access request was not recorded");
 
     const reservation = await store.get("reservations", request.reservationId);
     const prospect = await store.get("prospects", request.prospectId);
@@ -1797,7 +1947,7 @@ export class TourCore {
 
     const decision = evaluateAccess({ reservation, prospect, consent, verification, doorId: request.doorId, requestedAt: now, durinHealth });
     if (!decision.allowed) {
-      await this.record("ACCESS_DENIED", { ...base, code: decision.code, detail: decision.reason });
+      await this.recordBestEffort("ACCESS_DENIED", { ...base, code: decision.code, detail: decision.reason }, "Access denial was not recorded");
       await this.explainDenial(decision.code, reservation, prospect, request.doorId);
       return { decision, durinCalled: false };
     }
@@ -1909,7 +2059,7 @@ export class TourCore {
     await this.textProspect(
       prospect,
       ready.id,
-      `You're all set for your tour on ${this.day(start)} at ${this.time(start)}!\n` +
+      `You're all set for your ${this.time(start)} tour on ${this.day(start)}!\n` +
         `Doors will work for you from ${this.time(new Date(ready.windowStart!))} to ${this.time(new Date(ready.windowEnd!))}.` +
         (fragment ? `\n${fragment}` : ""),
       { kind: "say", phrase: "I'm here", purpose: this.arrivalPurpose(ready) },
@@ -1974,11 +2124,11 @@ export class TourCore {
       if (code === "DENY_CONSENT_MISSING") {
         await this.textProspect(prospect, reservation.id, VisitorDenialCopy.missingConsent());
       } else if (this.deps.verification.method === "none" && (code === "DENY_VERIFICATION_STALE" || code === "DENY_VERIFICATION_INCOMPLETE")) {
-        // No identity step exists, so these denials are not something the visitor can finish.
+        await this.tellDoorStuck(prospect, reservation, doorId);
       } else if (code === "DENY_VERIFICATION_STALE" || code === "DENY_VERIFICATION_INCOMPLETE") {
         const form = this.deps.verification.request(prospect);
         if (!form.form) {
-          await this.textProspect(prospect, reservation.id, "We're not quite ready to open doors yet. Finish the steps I sent earlier and you'll be all set.");
+          await this.tellDoorStuck(prospect, reservation, doorId);
         } else {
           const ask = code === "DENY_VERIFICATION_STALE" ? { body: VisitorDenialCopy.staleVerification(), form: true } : form;
           await this.textProspect(prospect, reservation.id, ask.body, ask.form ? { kind: "form", link: await this.verificationFormLink(reservation, prospect) } : undefined);
@@ -1999,11 +2149,14 @@ export class TourCore {
           DENY_REVOKED: "This tour is no longer active, so I can't open doors. Reply if you'd like to book a new time.",
           DENY_VERIFICATION_FAILED: VisitorDenialCopy.failedIdAtDoor(team, help),
         };
-        await this.textProspect(
-          prospect,
-          reservation.id,
-          text[code] ?? "We're not quite ready to open doors yet. Finish the steps I sent earlier and you'll be all set.",
-        );
+        const mapped = text[code];
+        if (mapped) {
+          await this.textProspect(prospect, reservation.id, mapped);
+        } else if (this.deps.verification.method !== "none" && this.deps.verification.request(prospect).form) {
+          await this.textProspect(prospect, reservation.id, "We're not quite ready to open doors yet. Finish the steps I sent earlier and you'll be all set.");
+        } else {
+          await this.tellDoorStuck(prospect, reservation, doorId);
+        }
       }
     }
     if (needsOperator.includes(code)) {
@@ -2020,6 +2173,85 @@ export class TourCore {
             ? `The doors aren't responding for ${who}'s tour. They're waiting at ${door}.`
             : `${who} couldn't get into ${door}. They may need a hand.`;
       await this.notifyOperator(reservation, alert);
+    }
+  }
+
+  /** No step left. The team is texted first. The stuck line goes out only after that text does. */
+  private async tellDoorStuck(prospect: Prospect, reservation: Reservation, doorId: string): Promise<void> {
+    const door = this.deps.config.doors.find((d) => d.id === doorId)?.name ?? "the door";
+    const who = prospect.name && prospect.name !== UNNAMED_VISITOR ? prospect.name : "A visitor";
+    await this.alertTeamThenStuck({
+      phone: prospect.phone,
+      prospect,
+      reservation,
+      reservationId: reservation.id,
+      who,
+      alert: doorStuckAlert(who, door),
+    });
+  }
+
+  /**
+   * Texts the team before the visitor. The stuck line is sent only when that
+   * text went out. Otherwise the visitor gets the snag retry, and the landlord
+   * gets a best-effort record of that ask. The audit write comes after, and a
+   * failed write is logged.
+   */
+  private async alertTeamThenStuck(input: {
+    phone: string;
+    prospect?: Prospect;
+    reservation?: Reservation;
+    reservationId?: string;
+    who: string;
+    alert: string;
+  }): Promise<void> {
+    const alerted = await this.textOperatorFirst(input.reservation, input.alert);
+    const body = alerted ? renderSms("door-stuck-no-steps", { team: this.teamName() }).body : renderSms("handler-snag-retry").body;
+    if (input.prospect) await this.textProspect(input.prospect, input.reservationId, body);
+    else await this.sendConversationText({ phone: input.phone, body, reservationId: input.reservationId });
+    if (!alerted) {
+      await this.recordTeamTextFailure(input.who, input.reservation?.id ?? input.reservationId, input.reservation?.prospectId ?? input.prospect?.id);
+      return;
+    }
+    await this.recordBestEffort(
+      "OPERATOR_NOTIFIED",
+      { reservationId: input.reservation?.id, prospectId: input.reservation?.prospectId ?? input.prospect?.id, detail: input.alert },
+      "Team alert was not recorded",
+    );
+  }
+
+  /** Landlord-facing record that the visitor was asked to retry. No error code. */
+  private async recordTeamTextFailure(who: string, reservationId?: string, prospectId?: string): Promise<void> {
+    await this.recordBestEffort(
+      "MESSAGE_FAILED",
+      { reservationId, prospectId, detail: teamTextFailedNotice(who) },
+      "Failed team text was not recorded",
+    );
+  }
+
+  /** Operator text with no audit write. A failed send returns false. */
+  private async textOperatorFirst(reservation: Reservation | undefined, body: string): Promise<boolean> {
+    const { operator } = this.deps.config;
+    try {
+      return await this.deliver({
+        audience: "OPERATOR",
+        to: operator.contact,
+        toName: operator.name,
+        body,
+        prospectId: reservation?.prospectId,
+        reservationId: reservation?.id,
+        recordFailure: false,
+      });
+    } catch (err) {
+      console.error(`Team alert was not sent: ${err instanceof Error ? err.message : "unknown error"}`);
+      return false;
+    }
+  }
+
+  private async recordBestEffort(type: AuditEventType, input: AuditInput, label: string): Promise<void> {
+    try {
+      await this.record(type, input);
+    } catch (err) {
+      console.error(`${label}: ${err instanceof Error ? err.message : "unknown error"}`);
     }
   }
 
@@ -2066,7 +2298,7 @@ export class TourCore {
   }
 
   private teamName(): string {
-    return this.deps.config.operator.name;
+    return visitorTeamName(this.deps.config.operator.name);
   }
 
   private isStalePassedCheck(verification: Verification | undefined): boolean {
@@ -2079,8 +2311,9 @@ export class TourCore {
     return this.deps.verification.defaultLink?.(prospect);
   }
 
-  private async textProspect(prospect: Prospect, reservationId: string | undefined, body: string, prompt?: ReplyPrompt, options?: { recordFailure?: boolean }): Promise<boolean> {
+  private async textProspect(prospect: Prospect, reservationId: string | undefined, body: string, prompt?: ReplyPrompt, options?: { recordFailure?: boolean; templateId?: string }): Promise<boolean> {
     const current = (await this.deps.store.get("prospects", prospect.id)) ?? prospect;
+    const templateId = claimVisitorSms(body, options?.templateId);
     return this.deliver({
       audience: "PROSPECT",
       to: current.phone,
@@ -2090,7 +2323,14 @@ export class TourCore {
       reservationId,
       suppressed: !!current.messagingOptedOut,
       recordFailure: options?.recordFailure,
+      templateId,
     });
+  }
+
+  /** A prospect text that is delivered but not stored, used when records are not live. */
+  private async sendProspectDirect(phone: string, body: string, templateId?: string): Promise<void> {
+    const id = claimVisitorSms(body, templateId);
+    await this.deps.messenger.send({ to: phone, audience: "PROSPECT", body, templateId: id });
   }
 
   private async notifyOperator(reservation: Reservation | undefined, body: string): Promise<void> {
@@ -2113,8 +2353,10 @@ export class TourCore {
     reservationId?: string;
     suppressed?: boolean;
     recordFailure?: boolean;
+    templateId?: string;
   }): Promise<boolean> {
     const { store, messenger } = this.deps;
+    const templateId = m.audience === "PROSPECT" ? (m.templateId ?? claimVisitorSms(m.body)) : undefined;
     const message: Message = {
       id: newId("msg"),
       direction: "OUTBOUND",
@@ -2126,6 +2368,7 @@ export class TourCore {
       reservationId: m.reservationId,
       at: this.nowIso(),
       provider: messenger.provider,
+      ...(templateId ? { templateId } : {}),
       ...(this.deps.correlationId ? { correlationId: this.deps.correlationId } : {}),
     };
     if (m.suppressed) {
@@ -2136,7 +2379,7 @@ export class TourCore {
     let receipt: DeliveryReceipt;
     try {
       receipt = await timeOutboundSend(() =>
-        messenger.send({ to: m.to, toName: m.toName, audience: m.audience, body: m.body, idempotencyKey: message.id, correlationId: this.deps.correlationId }),
+        messenger.send({ to: m.to, toName: m.toName, audience: m.audience, body: m.body, idempotencyKey: message.id, correlationId: this.deps.correlationId, ...(templateId ? { templateId } : {}) }),
       );
     } catch (err) {
       const code = err instanceof MessagingError ? err.code : "MESSAGING_FAILED";
@@ -2158,6 +2401,9 @@ export class TourCore {
           code: receipt.error?.code,
           detail: `${m.audience === "OPERATOR" ? "alert" : "message"} not delivered`,
         });
+      } else if (m.audience === "OPERATOR") {
+        const reason = receipt.error?.message ?? receipt.error?.code ?? "not delivered";
+        console.error(`Team alert was not sent: ${reason}`);
       }
       return false;
     }

@@ -204,7 +204,7 @@ describe("decision 11 wake copy", () => {
     expect(spokenAsk(undefined, "units-home")).toBe("People will tour the whole home. What should I call it? The street is fine if you don't have a nickname.");
     expect(spokenAsk(undefined, "hours")).toContain("You can keep that.");
     expect(spokenAsk(undefined, "hours-help")).toContain("You can skip this.");
-    expect(spokenAsk(undefined, "property-confirm")).toBe("Did I get that right? {address}");
+    expect(spokenAsk(undefined, "property-confirm")).toBe("Did I get that right: {address}?");
     expect(spokenAsk(undefined, "backups")).toContain("Skipping is fine.");
     expect(spokenAsk(undefined, "units-details")).toBe("");
     const details = renderPlaybook(undefined, "units-details").text;

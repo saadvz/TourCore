@@ -16,7 +16,7 @@ import { hillsideConfig, liveApp, PHONE } from "./liveApp";
  * No complete saved address, no link.
  */
 
-const ALL_SET = "You're all set for your tour on Monday, Sep 28 at 2:00 PM!\nDoors will work for you from 1:50 PM to 2:45 PM.\nText \"I'm here\" when you arrive and I'll open the entrance.";
+const ALL_SET = "You're all set for your 2:00 PM tour on Monday, Sep 28!\nDoors will work for you from 1:50 PM to 2:45 PM.\nText \"I'm here\" when you arrive and I'll open the entrance.";
 
 const DIRECTIONS = "https://www.google.com/maps/dir/?api=1&destination=";
 const HILLSIDE = { street: "144 Hillside Ave", city: "Teaneck", state: "NJ", postalCode: "07666", formatted: "144 Hillside Ave, Teaneck, NJ 07666" };
@@ -128,7 +128,7 @@ describe("all-set directions over Sendblue", () => {
     const a = await liveApp({ cleanups, config: withAddress(hillsideConfig(), HILLSIDE) });
     await a.book();
     const sent = a.fake.sent.filter((s) => s.number === PHONE).map((s) => s.content);
-    const allSet = sent.findIndex((t) => t.startsWith("You're all set for your tour"));
+    const allSet = sent.findIndex((t) => t.startsWith("You're all set for your"));
     expect(sent[allSet]).toBe(ALL_SET);
     expect(sent[allSet + 1]).toBe(HILLSIDE_TEXT.replaceAll("Ave", "Avenue"));
     expect(sent).toHaveLength(allSet + 2);

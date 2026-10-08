@@ -107,7 +107,7 @@ describe("a visitor still waiting on the old visit-record question", () => {
     await say("1");
     const id = await rewindToAwaitingConsent(session);
     await say("Actually cancel that");
-    expect(lastReply()).toContain("Cancel your tour");
+    expect(lastReply()).toContain("Cancel your");
     expect(lastReply()).not.toContain("please fill out this short form");
     expect(lastReply()).not.toContain("Is it OK if I text you");
     const waiting = (await session.store.get("reservations", id))!;
@@ -129,7 +129,7 @@ describe("a visitor still waiting on the old visit-record question", () => {
     await say("ok");
     const reservation = (await session.store.get("reservations", id))!;
     expect(reservation.status).toBe("READY");
-    expect(lastReply()).toContain("You're all set for your tour");
+    expect(lastReply()).toContain("You're all set for your");
     expect(lastReply()).not.toContain("Is it OK if I text you");
   });
 

@@ -100,6 +100,11 @@ export function formatTime(date: Date, timeZone: string): string {
   return clean(date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone }));
 }
 
+/** Same clock as other visitor texts, without ":00". "3 PM" or "3:30 PM". */
+export function formatVisitorClock(date: Date, timeZone: string): string {
+  return formatTime(date, timeZone).replace(":00", "");
+}
+
 /** Clock first, then the calendar day: "2:45 PM on Thursday, Oct 9". */
 export function timeOnDay(date: Date, timeZone: string): string {
   return `${formatTime(date, timeZone)} on ${formatDay(date, timeZone)}`;

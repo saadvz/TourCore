@@ -107,7 +107,7 @@ describe("visitor demo on the real engine", () => {
 
     await s.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: "555-010-2000" });
     expect(await s.stage()).toBe("ready");
-    expect(lastFromTourCore(s)).toContain("You're all set for your tour on Monday, Sep 28 at 2:00 PM");
+    expect(lastFromTourCore(s)).toContain("You're all set for your 2:00 PM tour on Monday, Sep 28");
     const verification = (await s.store.list("verifications"))[0]!;
     expect(verification).toMatchObject({ method: "basic-form", status: "PASSED", claimed: { email: "pat@example.com" } });
   });

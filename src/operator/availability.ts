@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createMessenger } from "../createTourCore";
+import { claimVisitorSms } from "../sms/templates";
 import { pauseConfirmQuestion, PROPERTY_REMOVED_REFUSE, REMOVE_REFUSED_LIVE_TOUR, removeConfirmQuestion, removeSetupConfirmQuestion, removedPropertySummary, removedSetupSummary, resumeConfirmQuestion, toursAreBackText } from "../core/availabilityCopy";
 import { normalizePhone } from "../core/phone";
 import { newId, type AuditEvent, type AuditEventType, type Reservation } from "../domain/model";
@@ -179,6 +180,7 @@ async function notifyWaiters(services: OperatorServices, propertyId: string, uni
   const phones = reachableWaitingPhones(services, propertyId, unitId);
   const { config } = services.workspace.load(propertyId);
   const body = toursAreBackText(config.property.address);
+  const templateId = claimVisitorSms(body);
   let sent = 0;
   for (const phone of phones) {
     if (visitorUnreachable(services, propertyId, phone)) continue;
@@ -187,7 +189,7 @@ async function notifyWaiters(services: OperatorServices, propertyId: string, uni
       await session.reply(body);
       await persistSession(services, session);
     } else {
-      await createMessenger(config).send({ to: phone, audience: "PROSPECT", body }).catch(() => undefined);
+      await createMessenger(config).send({ to: phone, audience: "PROSPECT", body, templateId }).catch(() => undefined);
     }
     appendAvailabilityEvent(services.workspace.root, propertyId, "TOURS_BACK_NOTIFIED", body, now.toISOString(), {
       ...(unitId ? { unitId } : {}),

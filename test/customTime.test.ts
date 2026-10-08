@@ -1891,11 +1891,11 @@ describe("a handler throw never leaves the visitor in silence", () => {
     await app.text("Hi");
     await app.text("1");
     app.session().bookOffered = async () => {
-      await app.session().reply("I found a time that works.");
+      await app.session().reply("No problem.");
       throw new Error("No reservation res_forced");
     };
     const replies = await app.text("Can I come at 3:30?");
-    expect(replies).toContain("I found a time that works.");
+    expect(replies).toContain("No problem.");
     expect(replies).not.toContain(HANDLER_SNAG_ALERTED);
     expect(replies).not.toContain(HANDLER_SNAG_RETRY);
     const events = await app.session().store.listAudit();

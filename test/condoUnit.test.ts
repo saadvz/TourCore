@@ -353,7 +353,7 @@ describe("apartment or condo visitor and landlord copy", () => {
     const withCopy = condoDraft("BUILDING_AND_UNIT", "Use the lobby code 1234, then take the elevator to 4.");
     const { texts, ready } = await bookCondo(withCopy);
     expect(ready.status).toBe("READY");
-    const allSet = texts.find((t) => t.startsWith("You're all set for your tour"))!;
+    const allSet = texts.find((t) => t.startsWith("You're all set for your"))!;
     expect(allSet).toContain("Here's how to get in: Use the lobby code 1234, then take the elevator to 4.");
     expect(allSet).toContain("I'll open the entrance");
     expect(texts.filter((t) => t.includes("Here's how to get in"))).toHaveLength(1);
@@ -361,7 +361,7 @@ describe("apartment or condo visitor and landlord copy", () => {
 
     const skipped = condoDraft("UNIT_ONLY");
     const none = await bookCondo(skipped);
-    const skippedAllSet = none.texts.find((t) => t.startsWith("You're all set for your tour"))!;
+    const skippedAllSet = none.texts.find((t) => t.startsWith("You're all set for your"))!;
     expect(skippedAllSet).not.toContain("Here's how to get in");
     expect(skippedAllSet).toContain("I'll open the unit door");
     expect(none.texts.join("\n")).not.toContain("Here's how to get in");

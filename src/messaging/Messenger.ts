@@ -23,6 +23,8 @@ export interface OutgoingMessage {
   idempotencyKey?: string;
   /** Ties a send to a conversation/session, for records. */
   correlationId?: string;
+  /** Visitor template id, when this text is for a prospect. */
+  templateId?: string;
 }
 
 export interface DeliveryReceipt {

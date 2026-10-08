@@ -8,7 +8,7 @@ import { SETUP_HELP_ENDING } from "./setupHelp";
 
 export const SHARED_VOICE = [
   "Talk to the landlord like a person. Short sentences. One question at a time.",
-  'Say a time as "{time} on {day}", for example "3:15 PM on Monday".',
+  'Say a time as a clock time on a day, for example "3:15 PM on Monday".',
   "Never say a tool name, a company name, an id, or a raw error out loud.",
   "Never say Main Home. If a house has no nickname, use the street or say the house.",
   "If a step fails, tell them what happened in plain words. Do not go quiet.",
@@ -28,7 +28,7 @@ export const SHARED_AFTER_PUBLISH =
   "For you, not out loud: if they set up a portable copy and this is the first time this place is published, make that one copy before you ask anything. If they skipped copies, don't. Then ask the one question below.";
 
 export const SHARED_FLAGGED_RULES = [
-  "A visitor question with no saved answer is already flagged. They already got the usual short holding reply. Do not send them anything else until the landlord gives a clear yes.",
+  "A visitor question with no saved answer is already flagged. They already got the usual short holding reply, unless the question was held for the property team, in which case they already got: Good question for the property team. I've passed it along, and they'll text you back here. Do not send them anything else until the landlord gives a clear yes.",
   'A draft, if one is written, stays casual and short. Call the team "the property team". Do not name a product, a tool, or a company. Promise nothing that is not already in the listing or in an earlier answer the landlord approved.',
   "If the question is fair-housing sensitive, including who is allowed to live there, do not draft an answer. Leave it with the landlord. Do not invent a special reply.",
   "Before the yes, read the landlord the full text the visitor will get, including any closing line. The confirmation has that exact text. It matches what is sent, word for word. The first call does not send.",
@@ -84,7 +84,7 @@ export const SHARED_STEPS = {
     ifItFails: `Tell them you don't have a usable address yet and ask again. You help. ${SETUP_HELP_ENDING}`,
   },
   "property-confirm": {
-    ask: "Did I get that right? {address}",
+    ask: "Did I get that right: {address}?",
     done: "They said the address is right.",
     ifItFails: `Tell them you'll correct it, and ask for the part that's wrong. You help. ${SETUP_HELP_ENDING}`,
   },
@@ -94,7 +94,7 @@ export const SHARED_STEPS = {
     ifItFails: `Tell them you still need the kind of place, and ask again. You help. Do not invent one. ${SETUP_HELP_ENDING}`,
   },
   "units-which": {
-    ask: "Which places can people tour?",
+    ask: "What are the units called? For example, Unit A and Unit B.",
     done: "Each place they named is saved.",
     ifItFails: `Tell them you still need the places people can tour. You help. ${SETUP_HELP_ENDING}`,
   },

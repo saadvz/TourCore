@@ -155,7 +155,7 @@ export class LocalMessagingProvider implements MessagingProvider {
   }
 
   parseInbound(rawBody: Buffer, now = new Date()) {
-    let body: { id?: unknown; from?: unknown; to?: unknown; text?: unknown; media?: unknown; hasMedia?: unknown; listingProperty?: unknown };
+    let body: { id?: unknown; from?: unknown; to?: unknown; text?: unknown; media?: unknown; hasMedia?: unknown; listingProperty?: unknown; property?: unknown };
     try {
       body = JSON.parse(rawBody.toString("utf8") || "{}") as typeof body;
     } catch {
@@ -168,6 +168,7 @@ export class LocalMessagingProvider implements MessagingProvider {
     const id = typeof body.id === "string" && body.id.trim() ? body.id.trim() : randomUUID();
     const media = localInboundMedia(body);
     const listingProperty = typeof body.listingProperty === "string" ? body.listingProperty.trim() : "";
+    const pinnedProperty = typeof body.property === "string" ? body.property.trim() : "";
     return {
       message: {
         provider: "local",
@@ -179,6 +180,7 @@ export class LocalMessagingProvider implements MessagingProvider {
         channel: "SMS" as const,
         receivedAt: now.toISOString(),
         ...(listingProperty ? { listingProperty } : {}),
+        ...(pinnedProperty ? { pinnedProperty } : {}),
       },
     };
   }
@@ -195,7 +197,14 @@ export class LocalMessagingProvider implements MessagingProvider {
     const earlier = key ? this.options.ledger?.get<DeliveryReceipt>(key) : undefined;
     if (earlier) return earlier;
 
-    const bubble = this.outbox().push({ to, from, body: message.body, sentAt, audience: message.audience });
+    const bubble = this.outbox().push({
+      to,
+      from,
+      body: message.body,
+      sentAt,
+      audience: message.audience,
+      ...(message.templateId ? { templateId: message.templateId } : {}),
+    });
     const receipt: DeliveryReceipt = {
       provider: this.provider,
       providerMessageId: bubble.id,

@@ -135,6 +135,8 @@ export const MessageSchema = z.object({
   deliveryStatus: z.enum(["QUEUED", "SENT", "DELIVERED", "FAILED", "SUPPRESSED", "SKIPPED", "RECEIVED"]).optional(),
   deliveryError: z.string().optional(),
   correlationId: z.string().optional(),
+  /** Visitor template id. Set on outbound prospect texts. Operator texts omit it. */
+  templateId: z.string().optional(),
 });
 
 export const AuditEventTypeSchema = z.enum([

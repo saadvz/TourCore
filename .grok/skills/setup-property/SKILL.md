@@ -128,9 +128,18 @@ the operator correct it.
    it).
 8. Ask **"When can people tour?"** Pass their words to `set_tour_hours`
    ("weekdays", "9 to 5", "every day"). A new property starts at
-   Monday–Friday, 9:00 AM–5:00 PM. Mention the other visible defaults once
-   (45-minute tours, a new tour every hour, 10 minutes early) and change any
-   they want.
+   Monday–Friday, 9:00 AM–5:00 PM. When hours are already saved, say the
+   line from `get_state` `nextStep.say`, built from those hours (for example
+   "Tours run every day, 4 AM to 11 PM. Want to change that?"). Do not recite
+   a weekday 9-to-5 line when that is not what is saved. Mention the other
+   visible defaults once (45-minute tours, a new tour every hour, 10 minutes
+   early) and change any they want. If tours would start more often than a
+   visit lasts (tour length plus early arrival), `save_hours` and
+   `set_tour_hours` refuse and save nothing. Say that refusal as returned.
+   The units question, when that step is actually next, is **"What are the
+   units called? For example, Unit A and Unit B."** After doors and routes
+   are saved, do not stay on that question. An address that is already set up
+   is read back as the saved full address, not the raw characters just typed.
 9. Ask **"Should visitors fill out a short identity form before their tour? I recommend it, so you know who's coming in."**
    Options: "Basic identity form (recommended)" and "No form". The basic form is the default.
    If they pick no form, ask **"Without a form, anyone who texts can book a tour and get in without telling you who they are. Want to go ahead with no form?"**
@@ -139,7 +148,10 @@ the operator correct it.
    If they say no, leave the basic identity form.
    If they keep the basic form, the reuse question is **"How many days before a visitor fills out the form again?"**
    Help: **"A visitor who already filled out the form can book another tour within this many days without filling it out again."**
-   The default is 30. Read the basic form back as **"Verification: Basic identity form (recommended)".**
+   The default is 30. A number outside 1 to 365 is refused and nothing is saved.
+   Say **"Pick a number of days from 1 to 365."** Do not read an out-of-range
+   number back. If the property is already on no form, do not ask the no-form
+   confirmation again. Read the basic form back as **"Verification: Basic identity form (recommended)".**
 10. Texting is automatic: when this Tour Core has visitor texting installed,
     a new property uses it on its own. One touring number covers every property.
     Don't ask "How do you want to text people?" and don't ask for a separate

@@ -2,7 +2,7 @@ import { resolveSpokenTime } from "../core/customSlot";
 import { orList, resolveQuestion, unitsNamedIn } from "../core/questions";
 import { isoDate, parseIsoDate } from "../core/schedule";
 import { dayReference, spokenTimes, type DayReference, type SpokenTime } from "../core/spokenTime";
-import { addDays, formatDay, formatTime, localDateOf, weekdayOf, zonedParts, type LocalDate } from "../core/timezone";
+import { addDays, formatDay, formatTime, formatVisitorClock, localDateOf, weekdayOf, zonedParts, type LocalDate } from "../core/timezone";
 import {
   NOTHING_BOOKED_CANCEL,
   TOUR_AGAIN_SUFFIX,
@@ -14,6 +14,7 @@ import {
   type InboundMeta,
 } from "../core/TourCore";
 import { cannotCancelRunningOfferLater, cannotCancelRunningTour, laterCancelConfirm } from "../core/availabilityCopy";
+import { visitorTeamName } from "../sms/templates";
 import { namedCancelFocus } from "./cancelTarget";
 import { awaitingLatestYesNo, doorAskSupersedesCancel } from "./latestQuestion";
 import { isLeavingTour, T5_NO_OFFER_BARE_YES } from "../core/overstayCopy";
@@ -938,7 +939,7 @@ const FOLLOW_UP_QUESTION = "Would you like someone from the property team to fol
 
 /** Pause-cancel team label, only on hold or a door-system problem. */
 function runningCancelTeam(session: VisitorDemoSession, status?: string): string | undefined {
-  return status === "OPERATOR_HOLD" || status === "PROVIDER_FAILURE" ? session.config.operator.name : undefined;
+  return status === "OPERATOR_HOLD" || status === "PROVIDER_FAILURE" ? visitorTeamName(session.config.operator.name) : undefined;
 }
 
 async function offerCancelConfirm(turn: Turn): Promise<void> {
@@ -1095,7 +1096,7 @@ async function showAskedDay(turn: Turn, ask: DayReference, alreadyRecorded = fal
     if (!alreadyRecorded) await session.recordText(turn.said);
     if (weekend.length === 1) return presentDay(turn, weekend[0]!.date, true);
     const options = (weekend.length ? weekend : dates).map((day) => day.label);
-    const lead = weekend.length ? DAY_MENU : "I don't have weekend tours. I have tours available. Which day works for you?";
+    const lead = weekend.length ? DAY_MENU : "I don't have weekend tours, but weekdays are open. Which day works for you?";
     session.markDatesShown();
     await session.reply(lead, { kind: "choose", options, what: "a day" });
     return;
@@ -1834,7 +1835,15 @@ async function onTour(turn: Turn): Promise<void> {
           { kind: "choose-stop", stops },
         );
       }
-      if ("none" in target) return turn.clarify("Every door on your tour is already open for you. Text HELP if one isn't working.", { kind: "say", phrase: "finish", purpose: "when you're done" });
+      if ("none" in target) {
+        const reservation = await session.reservation();
+        const end = reservation?.windowEnd ? Date.parse(reservation.windowEnd) : Number.NaN;
+        if (!Number.isNaN(end) && session.clock.now().getTime() >= end) {
+          const time = formatVisitorClock(new Date(reservation!.windowEnd!), session.config.property.timezone);
+          return turn.respond(`Your tour time ended at ${time}, so the doors are locked now. Want to come back another time? Just reply with a day that works.`);
+        }
+        return turn.clarify("Every door on your tour is already open for you. Text HELP if one isn't working.", { kind: "say", phrase: "finish", purpose: "when you're done" });
+      }
       if ("unknownName" in target) return turn.fallback(`${SORRY}${nextHint}`);
       if (turn.confident) return turn.act("atStop", { doorId: target.doorId });
       return turn.clarify(`Are you at ${session.stopLabel(target.doorId)} now?`, yesNo, { kind: "confirm-stop", stop: stopRef(session, target.doorId) });

@@ -77,7 +77,7 @@ First run ("Set up Tour Core"): use the Install Tour Core skill.
   for a clear yes. A save asks `Send this to {name} and save it for anyone who asks the same thing later? "{visitorWillReceive}"`.
   The quoted text is that exact visitor text, closing line included. A
   fair-housing flag has `proposeDraft` false. The refusal is `This one touches on fair housing, so I won't draft an answer. Reply to them yourself, then mark it handled.`
-  The visitor still gets the ordinary holding reply.
+  After that no-draft flag is saved, the visitor gets `Good question for the property team. I've passed it along, and they'll text you back here.` They never hear fair housing. If the flag cannot be saved, the team is texted first. The visitor gets `I can't open the doors for you right now. I've let the property team know, and they'll text you here shortly.` only if that text went out, and `Sorry, I hit a snag with that. Could you text me again in a few minutes?` otherwise. When that team text does not go out, the landlord sees `I couldn't text you about {who}, so I asked them to text me again in a few minutes.`
 - Tour updates, this bot only: ask "Want me to text you when someone books,
   starts, or finishes a tour, and ping you the moment something needs you?"
   Do not ask a second question. One alert address per install; a new save
@@ -315,8 +315,7 @@ Never:
   unanswered question and leave the hold pending. A visitor with a booked
   tour who texts to cancel (any natural phrasing) is handled by Tour Core:
   it confirms, then YES cancels (`You're cancelled. Text me anytime if you
-  want to book again.`) or NO keeps the booking (`Okay, your tour stays on
-  {day} at {time}.`). While they are touring and the cancel targets a later
+  want to book again.`) or NO keeps the booking (`Okay, your {time} tour on {day} stays booked.`). While they are touring and the cancel targets a later
   booking: confirm `Cancel your later tour at {time} on {day}? Your tour
   right now isn't affected. Reply YES or NO.`; YES `Done, I've cancelled
   your later tour at {time} on {day}. Your tour right now isn't affected.`;

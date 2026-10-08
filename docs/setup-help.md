@@ -72,7 +72,7 @@ Say how someone walks in, from the front door to the door they tour.
 
 The days and times people can tour didn't save.
 
-Say the days and times once more. Weekdays from 9:00 AM to 5:00 PM are already saved, and you can keep those.
+Say the days and times that are already saved. They can keep those.
 
 ## The help number didn't save
 

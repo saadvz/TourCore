@@ -139,13 +139,13 @@ describe("availability copy", () => {
 
   it("uses the approved booked-tour cancel lines", () => {
     expect(bookedTourCalledOffText({ team: "leasing team", day: "Monday, Sep 28", time: "9:00 AM", address: "100 Alfred Way", propertyWide: false })).toBe(
-      "Sorry, the leasing team had to cancel your Monday, Sep 28 at 9:00 AM tour at 100 Alfred Way. Text me anytime to book another.",
+      "Sorry, the leasing team had to cancel your 9:00 AM tour on Monday, Sep 28 at 100 Alfred Way. Text me anytime to book another.",
     );
     expect(bookedTourCalledOffText({ team: "leasing team", day: "Monday, Sep 28", time: "9:00 AM", address: "100 Alfred Way", propertyWide: true })).toBe(
-      "Sorry, the leasing team had to cancel your Monday, Sep 28 at 9:00 AM tour at 100 Alfred Way. They'll text you when tours are back.",
+      "Sorry, the leasing team had to cancel your 9:00 AM tour on Monday, Sep 28 at 100 Alfred Way. They'll text you when tours are back.",
     );
     expect(bookedTourCalledOffText({ team: "leasing team", day: "Monday, Sep 28", time: "9:00 AM", address: "100 Alfred Way", propertyWide: true, removed: true })).toBe(
-      "Sorry, the leasing team had to cancel your Monday, Sep 28 at 9:00 AM tour at 100 Alfred Way. 100 Alfred Way isn't offering tours anymore.",
+      "Sorry, the leasing team had to cancel your 9:00 AM tour on Monday, Sep 28 at 100 Alfred Way. 100 Alfred Way isn't offering tours anymore.",
     );
     expect(bookedTourCalledOffText({ team: "leasing team", day: "Monday, Sep 28", time: "9:00 AM", address: "100 Alfred Way", propertyWide: true, removed: true })).not.toContain(
       "when tours are back",

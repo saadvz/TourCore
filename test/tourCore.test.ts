@@ -236,9 +236,9 @@ describe("Tour Core journey", () => {
     ).toBe("DENY_CONSENT_MISSING");
 
     const bodies = (await ctx.core.exportRecords()).messages.filter((m) => m.audience === "PROSPECT").map((m) => m.body);
-    const staleText = bodies.find((b) => b.includes("ID check has expired"));
+    const staleText = bodies.find((b) => b.includes("fill it out again"));
     const consentText = bodies.find((b) => b.includes("Before I can open doors"));
-    expect(staleText).toContain("Your ID check has expired, so I need a quick re-check before I can open doors.");
+    expect(staleText).toContain("It's been a while since you filled out the identity form, so I'll need you to fill it out again before I can open doors.");
     expect(staleText).toContain("https://forms.example/tour-core-basic-id");
     expect(consentText).toBe("Before I can open doors, text me back and I'll finish setting up your tour.");
     expect(consentText).not.toContain("Is it OK if I text you");

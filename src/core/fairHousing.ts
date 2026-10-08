@@ -1,10 +1,12 @@
 /**
- * Fair-housing questions are detected here, from a fixed list, before any
- * rent sentence, keyword match, or saved answer. The list is not a playbook.
- * A match is eligibility language plus a protected class, a housing subsidy,
- * or a phrase that is fair housing on its own. "How much is rent?" has
- * neither a class nor an eligibility phrase, so it stays a rent question.
- * "Do you allow pets?" and "Is there a minimum lease?" do not match.
+ * Fair-housing questions are detected here, before any rent sentence, keyword
+ * match, or saved answer. The list is not a playbook. A match is eligibility
+ * language plus a protected class, a housing subsidy, a phrase that is fair
+ * housing on its own, or neighborhood composition / steering. "How much is
+ * rent?" has neither a class nor an eligibility phrase, so it stays a rent
+ * question. "Do you allow pets?" and "Is there a minimum lease?" do not match.
+ * A church, parking, or a playground nearby, room for kids' bikes, how many
+ * bedrooms, and whether the building is quiet do not match either.
  */
 
 const norm = (s: string) =>
@@ -55,11 +57,81 @@ const STANDALONE =
 /** "55+" loses the plus when punctuation is stripped, so it is checked on the raw text. */
 const FIFTY_FIVE_PLUS = /55\s*\+/;
 
+/**
+ * People words that can pair with an area phrase. Race plurals count as
+ * people. A singular race word or "color" does not, unless it sits beside
+ * one of these.
+ */
+const PEOPLE_BESIDE =
+  /\b(?:people|families|family|folks|residents|neighbors|tenants|kids|children|child|hispanics|latinos|latinas|asians|blacks|whites|arabs)\b/;
+
+/**
+ * Race, ethnicity, or color. Quantity phrases count these only beside a
+ * people word. Place phrases count them on their own.
+ */
+const RACE_OR_COLOR = /\b(?:hispanic|latino|latina|asian|black|white|arab|color)\b/;
+
+/** How many. A race or color word counts here only beside a people word. */
+const QUANTITY = /\b(?:many|a lot of|lots of)\b/;
+
+/** Where, or what the place is like. A race or color word counts on its own. */
+const PLACE =
+  /\b(?:mostly|around here|in the area|neighborhood|nearby|on the block|in the building)\b/;
+
+/** Other area language. Pairs with a class, a faith, or a people word. */
+const OTHER_AREA = /\b(?:neighbors|lives? around|any other)\b/;
+
+/** Steering even with no class word beside it. */
+const STEERING =
+  /\b(?:what kind of people|what type of people|who lives (?:there|here|in the building|nearby)|is the (?:neighborhood|area) safe|safe neighborhood|safe area|crime rate|good neighborhood|bad neighborhood)\b/;
+
+function spans(re: RegExp, text: string): Array<{ start: number; end: number }> {
+  const flags = re.flags.includes("g") ? re.flags : `${re.flags}g`;
+  return [...text.matchAll(new RegExp(re.source, flags))].map((match) => ({
+    start: match.index ?? 0,
+    end: (match.index ?? 0) + match[0].length,
+  }));
+}
+
+function overlaps(a: { start: number; end: number }, b: { start: number; end: number }): boolean {
+  return a.start < b.end && b.start < a.end;
+}
+
+/** True when the two words have only whitespace between them. */
+function beside(text: string, a: { start: number; end: number }, b: { start: number; end: number }): boolean {
+  const left = a.end <= b.start ? a : b;
+  const right = left === a ? b : a;
+  if (left.end > right.start) return false;
+  return /^\s*$/.test(text.slice(left.end, right.start));
+}
+
+/**
+ * Neighborhood composition or steering. A protected class, a faith, or a
+ * people word together with an area phrase. A bare "color" span is not a
+ * neighborhood class (eligibility still sees it). Quantity phrases count a
+ * race or color word only beside a people word. Place phrases count a race
+ * or color word on their own. Wall color and "lots of light" stay ordinary.
+ * Standalone steering phrases match on their own.
+ */
+function neighborhoodSteering(text: string): boolean {
+  if (STEERING.test(text)) return true;
+  const people = spans(PEOPLE_BESIDE, text);
+  const race = spans(RACE_OR_COLOR, text);
+  const raceBesidePeople = race.filter((word) => people.some((person) => beside(text, word, person)));
+  const protectedSpans = spans(PROTECTED_CLASS, text).filter((word) => text.slice(word.start, word.end) !== "color");
+  const classes = [...protectedSpans, ...spans(FAITH, text), ...people, ...raceBesidePeople];
+  const areas = [...spans(QUANTITY, text), ...spans(PLACE, text), ...spans(OTHER_AREA, text)];
+  if (classes.some((word) => areas.some((area) => !overlaps(word, area)))) return true;
+  const places = spans(PLACE, text);
+  return race.some((word) => places.some((place) => !overlaps(word, place)));
+}
+
 export function isFairHousingQuestion(text: string): boolean {
   if (FIFTY_FIVE_PLUS.test(text.toLowerCase())) return true;
   const t = norm(text);
   if (!t) return false;
   if (ASSISTANCE_ANIMAL.test(t) || FAITH.test(t) || SSN.test(t) || STANDALONE.test(t)) return true;
+  if (neighborhoodSteering(t)) return true;
   if (!PROTECTED_CLASS.test(t)) return false;
   if (ELIGIBILITY.test(t)) return true;
   return HOUSING_SUBSIDY.test(t) && SUBSIDY_TAKE.test(t);

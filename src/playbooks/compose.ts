@@ -55,17 +55,18 @@ function milestoneHint(step: StepId): string | undefined {
 }
 
 /** The one line that can be said out loud for this step. Empty when there is no fixed question. */
-export function spokenAsk(client: ReportedClient | undefined, step: StepId): string {
+export function spokenAsk(client: ReportedClient | undefined, step: StepId, ask?: string): string {
+  if (ask !== undefined) return ask;
   const selection = selectPlaybook(client);
   if (selection.id === "grok" && step === "alerts") return GROK_ALERTS_SAY;
   return SHARED_STEPS[step].ask;
 }
 
-export function renderPlaybook(client: ReportedClient | undefined, step: StepId): PlaybookText {
+export function renderPlaybook(client: ReportedClient | undefined, step: StepId, askOverride?: string): PlaybookText {
   const selection = selectPlaybook(client);
   const copy = SHARED_STEPS[step];
   const extra = profileStep(selection, step);
-  const ask = spokenAsk(client, step);
+  const ask = spokenAsk(client, step, askOverride);
   const text = [
     SHARED_VOICE,
     SHARED_IRREVERSIBLE,

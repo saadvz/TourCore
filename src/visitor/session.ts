@@ -24,6 +24,7 @@ import { UNNAMED_VISITOR, type Reservation, type TourTimeRequest } from "../doma
 import { countDurinCalls, type CountingDurin } from "../durin/countingDurin";
 import type { DeliveryReceipt, MessagingAdapter, OutgoingMessage } from "../messaging/Messenger";
 import type { ReplyPrompt } from "../messaging/presentation";
+import { visitorTeamName } from "../sms/templates";
 import { SetupInputError } from "../setup/setupActions";
 import type { ConversationItem, TourRecord } from "../setup/workspace";
 import type { ExportBundle } from "../export/exportBundle";
@@ -60,7 +61,7 @@ export const OPERATOR_SCHEDULE_CONFIRM_PROMPT = "Reply YES to confirm, NO to can
 /** First outbound text when the operator sets up a tour for someone who hasn't texted in. */
 export function operatorScheduledFirstText(config: TourCoreConfig, start: Date): string {
   const tz = config.property.timezone;
-  return `Hi, this is the ${config.operator.name} at ${config.property.address}. We set up a tour for you on ${formatWeekday(start, tz)} at ${formatTime(start, tz)}. ${OPERATOR_SCHEDULE_CONFIRM_PROMPT}`;
+  return `Hi, this is the ${visitorTeamName(config.operator.name)} at ${config.property.address}. We set up a tour for you at ${formatTime(start, tz)} on ${formatWeekday(start, tz)}. ${OPERATOR_SCHEDULE_CONFIRM_PROMPT}`;
 }
 
 /** The browser phone: nothing to deliver, the page reads the thread. Replies are phrased for buttons. */
@@ -531,13 +532,14 @@ export class VisitorDemoSession {
   }
 
   /** A Tour Core message that isn't part of a tour step (welcome, "didn't catch that", help info). */
-  async reply(body: string, prompt?: ReplyPrompt, options?: { deliverDespiteOptOut?: boolean }): Promise<void> {
+  async reply(body: string, prompt?: ReplyPrompt, options?: { deliverDespiteOptOut?: boolean; templateId?: string }): Promise<void> {
     await this.core.sendConversationText({
       phone: this.visitor?.phone ?? "",
       body,
       prompt,
       reservationId: this.reservationId,
       deliverDespiteOptOut: options?.deliverDespiteOptOut,
+      templateId: options?.templateId,
     });
     await this.syncReplies();
   }
@@ -584,10 +586,11 @@ export class VisitorDemoSession {
   }
 
   /**
-   * HELP: one reply only. A booked tour that is upcoming or still in its
-   * window gets the help ack (at-door or remote) and alerts the team.
-   * Finished, canceled, revoked, expired, past-window, or not-yet-booked
-   * reservations — and unknown numbers — get the carrier HELP keyword reply.
+   * HELP: one reply only. A booked tour that is upcoming, still inside its
+   * window, or past the window while the tour is still in progress gets the
+   * help ack (at-door or remote) and alerts the team. Finished, canceled,
+   * revoked, failed-ID, expired, or not-yet-booked reservations — and unknown
+   * numbers — get the carrier HELP keyword reply.
    */
   async help(said: Said): Promise<void> {
     const reservation = await this.reservation();
@@ -876,7 +879,7 @@ export class VisitorDemoSession {
       question: said.text ?? "",
       reservationId: this.reservationId,
       meta: said.meta,
-      reply: `I'll check with the ${this.config.operator.name} and get back to you.`,
+      reply: `I'll check with the ${visitorTeamName(this.config.operator.name)} and get back to you.`,
     });
     await this.syncReplies();
   }
