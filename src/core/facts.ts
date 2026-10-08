@@ -25,7 +25,7 @@ const STOPWORDS = new Set(
 const SYNONYMS: Record<string, string> = {
   bed: "bedroom", beds: "bedroom", br: "bedroom", bedroom: "bedroom", bedrooms: "bedroom",
   bath: "bathroom", baths: "bathroom", bathroom: "bathroom", bathrooms: "bathroom", ba: "bathroom",
-  park: "parking", parking: "parking", garage: "parking", car: "parking", cars: "parking",
+  parking: "parking", garage: "parking", car: "parking", cars: "parking",
   washer: "laundry", dryer: "laundry", laundry: "laundry",
   pet: "pet", pets: "pet", dog: "pet", dogs: "pet", cat: "pet", cats: "pet",
   include: "include", included: "include", includes: "include", utilities: "include", utility: "include",
@@ -36,16 +36,20 @@ const SYNONYMS: Record<string, string> = {
   studio: "bedroom", furnished: "furnish", unfurnished: "furnish", floor: "floor", story: "floor",
 };
 
+/** Parking is the word itself, or one of these asks. A bare "park" ("dog park") is not parking. */
+const PARKING_PHRASE = /\b(?:parking|park my car|where do i park)\b/;
+
 function keywords(text: string): string[] {
-  return text
-    .toLowerCase()
-    .replace(/['\u2019]/g, "")
+  const lower = text.toLowerCase().replace(/['\u2019]/g, "");
+  const words = lower
     .replace(/\bhow much\b/g, "howmuch")
     .replace(/\bmove[\s-]?in\b/g, "movein")
     .split(/[^a-z0-9]+/)
     .filter((w) => w && !STOPWORDS.has(w))
     .map((w) => SYNONYMS[w] ?? w.replace(/(ing|ed|es|s)$/, ""))
     .filter((w) => w.length > 1);
+  if (PARKING_PHRASE.test(lower) && !words.includes("parking")) words.push("parking");
+  return words;
 }
 
 /**

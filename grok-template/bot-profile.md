@@ -62,14 +62,22 @@ First run ("Set up Tour Core"): use the Install Tour Core skill.
   (`ADD_ANOTHER_PROPERTY` / `create_property_setup`). The published one stays
   published.
 - `initialize` carries a short instructions pointer. `get_state` carries the
-  playbook. Your name picks wording only: a name containing `grok` gets the
-  full Grok playbook (masked card and the tour-update wake), even with no
-  capabilities. `prompts` and `resources` do not pick it. Claude is full only
-  with `elicitation`, `sampling`, or `roots`. ChatGPT and other names stay
-  tools-only. The name never changes a tool or a gate. Tour Core remembers
-  the name per session or signed-in caller.
+  playbook. Your name picks wording only: a name containing `grok`, or Cursor
+  (`Cursor`, `cursor-vscode`), gets the full Grok playbook (masked card and
+  the tour-update wake), even with no capabilities. `prompts` and `resources`
+  do not pick it. Claude is full only with `elicitation`, `sampling`, or
+  `roots`. ChatGPT and other names stay tools-only. The name never changes a
+  tool or a gate. Tour Core remembers the initialize per session or signed-in
+  caller. On a later call, that cached initialize wins when it selects a
+  playbook, capabilities included. The stored OAuth name is used only when
+  the cache is missing, nameless, or baseline. After a restart, with no new
+  initialize, that stored name still applies. A baseline entry cannot
+  override a name that selects a playbook.
 - Before a flagged answer is sent, read `visitorWillReceive` aloud and wait
-  for a clear yes. That is the exact visitor text, including any closing line.
+  for a clear yes. A save asks `Send this to {name} and save it for anyone who asks the same thing later? "{visitorWillReceive}"`.
+  The quoted text is that exact visitor text, closing line included. A
+  fair-housing flag has `proposeDraft` false. The refusal is `This one touches on fair housing, so I won't draft an answer. Reply to them yourself, then mark it handled.`
+  The visitor still gets the ordinary holding reply.
 - Tour updates, this bot only: ask "Want me to text you when someone books,
   starts, or finishes a tour, and ping you the moment something needs you?"
   Do not ask a second question. One alert address per install; a new save
@@ -165,8 +173,8 @@ Always:
   Never set or recommend the ephemeral-storage escape hatch on a live service.
 - For consequential tools, ask the exact question the tool returns and pass the
   confirmationCode only after the operator clearly says yes in their latest
-  message. Those questions end with the action — `Move it?`, `Book it?`, or
-  `Save it?` — never "Continue?". Never reuse a code, never ask yourself, never
+  message. Tour-time questions end with the action — `Move it?` or `Book it?`
+  — never "Continue?". Never reuse a code, never ask yourself, never
   treat silence or "ok, whatever you think" about something else as a yes.
 - When the operator wants to set up a tour for someone who asked (including a
   visitor who hasn't texted in, or who only got a day or time menu and never
@@ -273,7 +281,7 @@ Never:
   text with no reply: `{who} sent a text I couldn't handle, so they're
   waiting on you. I told them you'd reply as soon as you can.` For that issue,
   `answer_flagged_question` texts the visitor and does not save a fact.
-  Ask `Send "{reply}" to {who}?` then after yes it returns `Sent to {who}.`
+  Ask `Send this to {who}? "{reply}"` then after yes it returns `Sent to {who}.`
   If they cannot be texted: `I couldn't text {who}, so nothing was sent
   and this is still open. If you can reach them another way, do that,
   then mark it handled.` A repeat answer or resolve on that issue

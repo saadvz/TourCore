@@ -84,7 +84,7 @@ so they may still be waiting on you.` Partial reply plus empty text:
 so they may still be waiting on you.` Empty text with no reply: `{who}
 sent a text I couldn't handle, so they're waiting on you. I told them
 you'd reply as soon as you can.` `answer_flagged_question` on that issue texts the
-visitor and does not save a fact. First call: `Send "{reply}" to {who}?`
+visitor and does not save a fact. First call: `Send this to {who}? "{reply}"`
 After yes: `Sent to {who}.` If they cannot be texted: `I couldn't text
 {who}, so nothing was sent and this is still open. If you can reach them
 another way, do that, then mark it handled.` A repeat answer or resolve
@@ -145,7 +145,7 @@ After the answer, Tour Core puts the interrupted step back in front of them
 pending confirmation). A question it can't answer gets one text, "I'll pass
 your question to the property team, and they'll reply here as soon as they can.", plus an issue and an operator
 update. When the operator answers, the visitor gets the answer and the step
-they were on. After a tour has ended, an approved-fact question is answered
+they were on. The save question is `Send this to {name} and save it for anyone who asks the same thing later? "{visitorWillReceive}"`, and the quote equals that text byte for byte. After a tour has ended, an approved-fact question is answered
 and that answer gets ` If you'd like to tour again, just text HI.` (a period
 is added first if the answer has no `.` `!` or `?`). A question that fits
 more than one unit is asked back as `Which unit do you mean: {A} or {B}?`
@@ -193,7 +193,7 @@ refusal lines insert `The {team} is still working on the problem and will
 text you here.` after the first sentence. A reply that isn't a clear yes or no is flagged:
 `I'll check with the {team} and get back to you.` STOP still opts out. If
 cancel cannot finish, they get
-`I can't cancel it from here. I've asked the leasing team to call it off and
+`I can't cancel it from here. I've asked the property team to call it off and
 get back to you.` and the team is flagged. Never use the unanswered-question fallback for a clear cancel ask.
 When nothing is booked yet, that same cancel phrasing at the day menu, the time menu, or the property picker (`Actually cancel that`, `cancel that`, `cancel please`, `nevermind`; a bare `cancel` is still STOP) clears the step and replies `No problem, nothing's booked yet, so I'll stop here. Text me anytime if you want to pick a time.` It does not ask YES or NO and it does not say the tour is cancelled. The next text from someone already opted in starts scheduling again, with no TOUR keyword. A named day is used. At the property picker, that next text asks which place again.
 
@@ -202,7 +202,7 @@ date ("Dec 1", "December 1st", "1 Dec", "12/1", "Tuesday Oct 6"). Without a
 year, Tour Core uses the next date on or after today in the property's time
 zone. If that this-year date has already passed and next year is beyond the
 21-day horizon, it stays that past date — "That day has already passed" —
-instead of rolling forward and calling it too far ahead. A date or booking ask is handled as booking, not as a flagged question. If
+instead of rolling forward and calling it too far ahead. A named weekday is that day: the next one, or today only when today is that weekday and the time is still ahead. `Is Saturday at 2:45 PM possible?` is Saturday, not today. A no that names a time (`No, Saturday at 2:45 PM`) starts a request for that time. A bare no with nothing booked is `No problem. If you'd like another time, just reply with a day.` When a tour is booked, that no keeps the current booking. Declining a request with nothing booked is `The property team couldn't approve {time} on {day}. If you'd like another time, just reply with a day.` A booked tour keeps the still-booked or still-confirmed ending. A fair-housing question is detected before rent, keywords, or a saved answer. A service, assistance, support, guide, seeing-eye, or therapy dog, animal, cat, or pet, emotional support followed by any word, and ESA are included even when a pets answer is saved. So are 55+, 55 and over, a senior community, age restrictions, housing assistance, a housing voucher, HUD, Section 8, undocumented status, sexual orientation, gender identity, gay, lesbian, LGBTQ, a same-sex couple, transgender, religion, Christian, Catholic, Protestant, Jewish, Jew, Muslim, Islamic, Hindu, Buddhist, Sikh, Mormon, atheist, a social security number, SSN, pregnancy, a newborn, a baby on the way, adults only, immigrants, immigration status, a minimum age, age limits, and discrimination. `Do you allow pets?`, `Do you allow dogs?`, `Is there a dog park?`, `Is there a church nearby?`, and `Is there a minimum lease?` are not. A dog park is not parking. Parking matches `parking`, `park my car`, or `where do I park`. The visitor gets the ordinary holding reply and never hears fair housing. The flag has `proposeDraft` false. The landlord refusal is `This one touches on fair housing, so I won't draft an answer. Reply to them yourself, then mark it handled.` `How much is rent?` and `Is rent due monthly?` stay rent answers. A date or booking ask is handled as booking, not as a flagged question. If
 the day can't be resolved ("the 45th", "sometime next month"), Tour Core
 asks which day they meant and shows the day menu; it does not flag the team.
 While a one-off tour is waiting on YES, NO, or STOP, a leftover menu
@@ -303,8 +303,8 @@ operator; never name Durin.
    an open tour window, or a hold still refuses — tell the operator Tour Core's
    words (`They already have a booked tour. I can move it or call it off.`),
    then move it with `reschedule_tour` or call it off with `revoke_tour_access`
-   (resume a hold with `clear_operator_hold`). Confirmation
-   questions end `Move it?`, `Book it?`, or `Save it?`. A move names the old
+   (resume a hold with `clear_operator_hold`). Tour-time confirmation
+   questions end `Move it?` or `Book it?`. A move names the old
    time. `This is a one-off…` only outside tour hours.
 6. **Export the audit**: a validated, provider-neutral record of the day.
 

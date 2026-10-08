@@ -124,7 +124,7 @@ describe("setup through the tools", () => {
     const before = h.workspace.load(id).config.operator.contact;
     const saved = await h.ok("update_property_details", { visitorContact: "(555) 010-7777" });
     expect(saved.setup.visitorHelpNumber).toBe("(555) 010-7777");
-    expect(saved.setup.alertsGoTo).toBe("leasing team");
+    expect(saved.setup.alertsGoTo).toBe("property team");
     expect(JSON.stringify(saved)).not.toContain(before);
     expect(h.workspace.load(id).config.operator).toMatchObject({ contact: before, visitorContact: "+15550107777" });
     expect(await h.fails("update_property_details", { visitorContact: "12" })).toMatch(/full phone number/);
@@ -474,7 +474,11 @@ describe("live tours and exceptions", () => {
     const [issue] = (await h.ok("list_exceptions")).exceptions;
 
     const asked = await h.ok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "Parking is included." });
-    expect(asked.summary).toBe('Send "Parking is included" to Pat? Future visitors who ask the same thing will get it too. Save it?');
+    expect(asked.visitorWillReceive).toBe("Parking is included. Let me know if you have any other questions.");
+    expect(asked.summary).toBe('Send this to Pat and save it for anyone who asks the same thing later? "Parking is included. Let me know if you have any other questions."');
+    expect(asked.confirmation.question).toBe(asked.summary);
+    const quoted = String(asked.summary).slice(String(asked.summary).indexOf('"') + 1, String(asked.summary).lastIndexOf('"'));
+    expect(Buffer.from(quoted, "utf8").equals(Buffer.from(asked.visitorWillReceive, "utf8"))).toBe(true);
     expect(h.workspace.load(id).config.property.facts).toEqual([]);
     const threadBefore = v.session.conversation.length;
 
@@ -543,7 +547,7 @@ describe("live tours and exceptions", () => {
     const again = await h.ok("revoke_tour_access", { tourRef: tour.tourRef, reason: "Visitor asked to leave" });
     const done = await h.ok("revoke_tour_access", { tourRef: tour.tourRef, reason: "Visitor asked to leave", confirmationCode: again.confirmation.code });
     expect(done.tour).toMatchObject({ status: "Called off", active: false });
-    expect(v.session.conversation.at(-1)?.text).toBe(VisitorDenialCopy.calledOff("leasing team"));
+    expect(v.session.conversation.at(-1)?.text).toBe(VisitorDenialCopy.calledOff("property team"));
     expect((await v.session.core.listGrants(v.session.reservationId!)).every((g) => g.status === "REVOKED")).toBe(true);
     const afterRevoke = await h.ok("inspect_tour", { tourRef: tour.tourRef });
     expect(afterRevoke.summary).toBe("Pat Smith, Unit 101: Called off.");

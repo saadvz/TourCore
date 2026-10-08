@@ -103,7 +103,13 @@ export function resolveSpokenTime(config: TourCoreConfig, now: Date, spoken: Spo
   if (!meridiem) {
     return { ok: false, ask: `Did you mean ${clockLabel(spoken.hour, spoken.minute)} AM or ${clockLabel(spoken.hour, spoken.minute)} PM?` };
   }
-  const start = at(day, spoken.hour, spoken.minute, meridiem, tz);
+  let start = at(day, spoken.hour, spoken.minute, meridiem, tz);
+  // A named weekday is that day: today only when today is that weekday and the time is still ahead. Otherwise the next one.
+  if (start.getTime() <= now.getTime() && spoken.weekday && !spoken.date && spoken.day !== "today" && spoken.day !== "tomorrow") {
+    const nextDay = weekdayOnOrAfter(addDays(day, 1), spoken.weekday);
+    const nextStart = at(nextDay, spoken.hour, spoken.minute, meridiem, tz);
+    if (nextStart.getTime() > now.getTime()) start = nextStart;
+  }
   if (start.getTime() <= now.getTime()) {
     const namedToday =
       spoken.day === "today" ||

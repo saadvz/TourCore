@@ -87,7 +87,7 @@ describe("Tour Core journey", () => {
 
   it("failed ID, hold, and door-outage texts share a next-step line and never show the operator alert number", async () => {
     const privateLine = loadConfig().operator.contact;
-    const team = "leasing team";
+    const team = "property team";
     const atDoorUnset = VisitorDenialCopy.atDoor(team);
     const atDoorSet = VisitorDenialCopy.atDoor(team, "+15550109999");
     const atDoorNamedUnset = VisitorDenialCopy.atDoor(team, undefined, { teamJustNamed: true });
@@ -203,11 +203,11 @@ describe("Tour Core journey", () => {
     for (const body of [...holdUnset, ...holdSet, ...doorUnset, ...doorSet, ...helpUnset, ...helpSet].filter(
       (b) => b.includes("I've let the") || b.includes("on hold"),
     )) {
-      expect(body.match(/leasing team/gi)).toHaveLength(1);
+      expect(body.match(/property team/gi)).toHaveLength(1);
       expect(body).toContain("They'll reply");
     }
     for (const body of failedIdBodies) {
-      expect(body.match(/The leasing team/g)).toHaveLength(1);
+      expect(body.match(/The property team/g)).toHaveLength(1);
       expect(body).not.toMatch(/on hold|yet|Stay where you are/);
     }
     for (const body of [...failedUnset, ...failedSet, ...endedUnset, ...endedSet, ...holdUnset, ...holdSet, ...doorUnset, ...doorSet, ...helpUnset, ...helpSet]) {
@@ -251,7 +251,7 @@ describe("Tour Core journey", () => {
     const prospectTexts = async (ctx: ReturnType<typeof setup>) =>
       (await ctx.core.exportRecords()).messages.filter((m) => m.audience === "PROSPECT").map((m) => m.body);
 
-    const team = "leasing team";
+    const team = "property team";
     const maple = "Maple Leasing team";
     const earlyToday = VisitorDenialCopy.tooEarly("1:50 PM", "today at 1:50 PM");
     const earlyLater = VisitorDenialCopy.tooEarly("1:50 PM", "on Wednesday, Sep 30 at 1:50 PM");
@@ -274,7 +274,7 @@ describe("Tour Core journey", () => {
     expect(bodies.filter((b) => b === expired)).toEqual([expired]);
     expect(bodies.filter((b) => b === wrong(team))).toEqual([wrong(team)]);
     expect(bodies.filter((b) => b === VisitorDenialCopy.helpAck(team))).toEqual([VisitorDenialCopy.helpAck(team)]);
-    expect(bodies.join("\n")).toContain("the leasing team");
+    expect(bodies.join("\n")).toContain("the property team");
 
     const laterCtx = setup();
     const laterTour = await bookTour(laterCtx, "ready", { year: 2026, month: 9, day: 30 });
@@ -358,13 +358,13 @@ describe("Tour Core journey", () => {
 
     const bodies = (await ctx.core.exportRecords()).messages.filter((m) => m.audience === "PROSPECT").map((m) => m.body);
     expect(bodies.filter((b) => b.startsWith("Thanks for filling that out"))).toEqual([
-      VisitorDenialCopy.failedIdAtBooking("leasing team"),
+      VisitorDenialCopy.failedIdAtBooking("property team"),
     ]);
-    expect(bodies.filter((b) => b === VisitorDenialCopy.failedIdAtDoor("leasing team"))).toEqual([
-      VisitorDenialCopy.failedIdAtDoor("leasing team"),
+    expect(bodies.filter((b) => b === VisitorDenialCopy.failedIdAtDoor("property team"))).toEqual([
+      VisitorDenialCopy.failedIdAtDoor("property team"),
     ]);
     for (const body of bodies.filter((b) => b.includes("I couldn't confirm your details"))) {
-      expect(body.match(/The leasing team/g)).toHaveLength(1);
+      expect(body.match(/The property team/g)).toHaveLength(1);
       expect(body).not.toMatch(/on hold|yet|Stay where you are/);
     }
   });
@@ -398,12 +398,12 @@ describe("Tour Core journey", () => {
 
     const bodies = (await ctx.core.exportRecords()).messages.filter((m) => m.audience === "PROSPECT").map((m) => m.body);
     expect(bodies.filter((b) => b.includes("your tour has ended"))).toEqual([
-      "I couldn't confirm your details, so your tour has ended. Please head out the way you came in. The leasing team will follow up here.",
+      "I couldn't confirm your details, so your tour has ended. Please head out the way you came in. The property team will follow up here.",
     ]);
-    const doorFail = "I couldn't confirm your details, so I can't open doors for this tour. The leasing team will follow up here.";
+    const doorFail = "I couldn't confirm your details, so I can't open doors for this tour. The property team will follow up here.";
     expect(bodies.filter((b) => b === doorFail)).toEqual([doorFail, doorFail]);
     for (const body of bodies.filter((b) => b.includes("I couldn't confirm your details"))) {
-      expect(body.match(/The leasing team/g)).toHaveLength(1);
+      expect(body.match(/The property team/g)).toHaveLength(1);
       expect(body).not.toMatch(/on hold|yet|Stay where you are|Thanks for filling that out/);
     }
   });

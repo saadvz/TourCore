@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { formatPhone } from "../src/core/phone";
 import { UNKNOWN_ANSWER } from "../src/core/TourCore";
 import { liveApp, PHONE } from "./liveApp";
 
 /**
- * Decision 10 checks against today's engine. No fair-housing detector is added.
- * An unanswered question stands in for a fair-housing question on the ordinary flag path.
+ * Decision 10 checks against today's engine. A fair-housing question is flagged
+ * with no draft. An ordinary unanswered question still offers a draft.
  */
 
 const cleanups: Array<() => void> = [];
@@ -25,6 +26,8 @@ describe("decision 10 flagged answers", () => {
     const asked = await a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "There's a gym on the roof." });
     expect(asked.status).toBe("needs-confirmation");
     expect(asked.visitorWillReceive).toBe(COMPOSED);
+    expect(asked.summary).toBe(`Send this to ${formatPhone(PHONE)} and save it for anyone who asks the same thing later? "${COMPOSED}"`);
+    expect(String(asked.summary).slice(String(asked.summary).indexOf('"') + 1, String(asked.summary).lastIndexOf('"'))).toBe(asked.visitorWillReceive);
     expect(a.fake.sent).toHaveLength(before);
     const done = await a.grok("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "There's a gym on the roof.", confirmationCode: asked.confirmation.code });
     expect(done.visitorAnswered).toBe(true);
@@ -75,16 +78,26 @@ describe("decision 10 flagged answers", () => {
     await a.optInSms();
     await a.text("1");
     await a.text("1");
-    const fair = await a.text("Are families with children allowed to live here?");
+    const fairReplies = await a.text("Are families with children allowed to live here?");
     const other = await a.text("Is there a gym?");
-    expect(fair).toEqual([UNKNOWN_ANSWER]);
+    expect(fairReplies).toEqual([UNKNOWN_ANSWER]);
     expect(other).toEqual([UNKNOWN_ANSWER]);
-    expect(fair.join("\n")).not.toContain("I'll check with the property team and get back to you");
-    const issues = (await a.grok("list_exceptions")).exceptions as Array<{ summary: string }>;
+    expect(fairReplies.join("\n")).not.toContain("I'll check with the property team and get back to you");
+    const issues = (await a.grok("list_exceptions")).exceptions as Array<{ exceptionId: string; summary: string; proposeDraft?: boolean }>;
     expect(issues.map((item) => item.summary).sort()).toEqual([
       'Asked "Are families with children allowed to live here?". There\'s no approved answer yet.',
       'Asked "Is there a gym?". There\'s no approved answer yet.',
     ]);
+    const fair = issues.find((item) => item.summary.includes("families"))!;
+    const gym = issues.find((item) => item.summary.includes("gym"))!;
+    expect(fair.proposeDraft).toBe(false);
+    expect(gym.proposeDraft).toBeUndefined();
+    await expect(a.grok("answer_flagged_question", { exceptionId: fair.exceptionId, approvedFact: "Yes." })).rejects.toThrow(
+      "This one touches on fair housing, so I won't draft an answer. Reply to them yourself, then mark it handled.",
+    );
+    const asked = await a.grok("answer_flagged_question", { exceptionId: gym.exceptionId, approvedFact: "There's a gym on the roof." });
+    expect(asked.status).toBe("needs-confirmation");
+    expect(asked.visitorWillReceive).toBe(COMPOSED);
   });
 
   it("send-only preview equals the text that is sent, byte for byte", async () => {

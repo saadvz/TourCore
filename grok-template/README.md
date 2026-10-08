@@ -129,8 +129,8 @@ what never does.
   first text.
   While the visitor is confirming, a leftover
   menu number only re-prompts YES / NO / STOP; a real question is flagged.
-  Confirmation questions end `Move it?`,
-  `Book it?`, or `Save it?`.
+  Tour-time confirmation questions end `Move it?` or `Book it?`.
+  A save asks `Send this to {who} and save it for anyone who asks the same thing later? "{exact visitor text}"`.
 
 Install and publishing steps: [`docs/grok-template-setup.md`](../docs/grok-template-setup.md).
 Manual test: [`docs/grok-manual-test.md`](../docs/grok-manual-test.md).

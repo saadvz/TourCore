@@ -50,6 +50,22 @@ interface Doc {
 const KEY = "grok-access";
 const MAX_RETIRED = 50;
 const MAX_IDLE_CLIENTS = 50;
+const PLACEHOLDER_NAMES = new Set(["an mcp client", "unnamed"]);
+
+function usableClientName(name: string | undefined): string | undefined {
+  const trimmed = name?.trim();
+  if (!trimmed || PLACEHOLDER_NAMES.has(trimmed.toLowerCase())) return undefined;
+  return trimmed;
+}
+
+/** A wording name when the registration never stored client_name. Cursor's callbacks and Grok's hosts select Grok wording only. */
+function wordingFromRegistration(info: { software_id?: string; redirect_uris?: string[] } | undefined): string | undefined {
+  if (!info) return undefined;
+  const blob = `${info.software_id ?? ""} ${(info.redirect_uris ?? []).join(" ")}`.toLowerCase();
+  if (/\bgrok\b|grok\.com|\bx\.ai\b|\bx\.com\b/.test(blob)) return "Grok";
+  if (blob.includes("cursor")) return "Cursor";
+  return undefined;
+}
 
 export class OAuthGrantStore {
   constructor(
@@ -75,8 +91,13 @@ export class OAuthGrantStore {
 
   /**
    * The name stored for this signed-in caller: the newest live grant's
-   * clientName, otherwise the name the client registered with. Nothing
-   * here is a token or a secret. The name only picks playbook wording.
+   * clientName, otherwise the name the client registered with, otherwise a
+   * name read from the registration's software id or redirect URIs.
+   * Placeholders ("An MCP client", "unnamed") count as missing. A name
+   * recovered that way is used in memory for this request and is not written
+   * back. Other grant writes already rewrite the whole file with no shared
+   * lock, so a write from the request path could clobber one of them.
+   * Nothing here is a token or a secret. The name only picks playbook wording.
    */
   clientName(clientId: string): string | undefined {
     if (!clientId) return undefined;
@@ -86,11 +107,11 @@ export class OAuthGrantStore {
       .filter((g) => g.clientId === clientId && g.expiresAt > t && (g.accessExpiresAt > t || (g.refreshExpiresAt ?? 0) > t))
       .sort((a, b) => (b.refreshedAt ?? b.createdAt) - (a.refreshedAt ?? a.createdAt));
     for (const grant of live) {
-      const name = grant.clientName?.trim();
+      const name = usableClientName(grant.clientName);
       if (name) return name;
     }
-    const registered = doc.clients[clientId]?.info.client_name?.trim();
-    return registered || undefined;
+    const info = doc.clients[clientId]?.info;
+    return usableClientName(info?.client_name) ?? wordingFromRegistration(info);
   }
 
   /** Registration is open (RFC 7591), so only the most recent clients are kept; ones with a live approval always stay. */

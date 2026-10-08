@@ -271,7 +271,7 @@ describe("access after a restart is never looser", () => {
     await app.restart();
     const wrongDoor = await app.text("at unit 102");
     expect(wrongDoor.reply).toContain("That door isn't part of your tour");
-    expect(wrongDoor.reply).toContain("I've let the leasing team know");
+    expect(wrongDoor.reply).toContain("I've let the property team know");
     await app.text("at the entrance");
     const live = await liveView(app);
     expect(live.dev.durinRequests).toBe(0);

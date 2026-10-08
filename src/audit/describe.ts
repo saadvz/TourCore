@@ -41,12 +41,10 @@ export function describeHistory(events: AuditEvent[], context: Context, timeZone
     const start = context.reservations.find((r) => r.id === reservationId)?.slotStart;
     return start ? formatTime(new Date(start), timeZone) : undefined;
   };
-  const team = context.operatorName ?? "The leasing team";
-
   const out: HistoryEntry[] = [];
   for (const e of events) {
     const name = person(e.prospectId);
-    const said = sentence(e, { name, door: door(e.doorId), unit: unitFor(e.reservationId), slot: slotFor(e.reservationId), team });
+    const said = sentence(e, { name, door: door(e.doorId), unit: unitFor(e.reservationId), slot: slotFor(e.reservationId) });
     if (!said) continue;
     out.push({
       at: e.at,
@@ -61,7 +59,7 @@ export function describeHistory(events: AuditEvent[], context: Context, timeZone
 
 function sentence(
   e: AuditEvent,
-  c: { name: string; door: string; unit: string; slot?: string; team: string },
+  c: { name: string; door: string; unit: string; slot?: string },
 ): { text: string; tone: HistoryEntry["tone"] } | undefined {
   const info = (text: string) => ({ text, tone: "info" as const });
   const good = (text: string) => ({ text, tone: "good" as const });
@@ -129,7 +127,7 @@ function sentence(
           : `The door system had a problem during ${c.name}'s tour, so the tour was paused.`,
       );
     case "OPERATOR_NOTIFIED":
-      return info(`${c.team} was alerted: ${e.detail}`);
+      return info(`The property team was alerted: ${e.detail}`);
     case "RESERVATION_RESCHEDULED":
       return info(`${c.name}'s tour was moved ${e.detail.split(";")[0]}.`);
     case "TOUR_TIME_REQUESTED":

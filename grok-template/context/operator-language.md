@@ -27,13 +27,13 @@ settings screen. Casual and non-technical is a requirement.
 | Move Testy's tour from 2:00 PM on Monday, Sep 28 to 3:15 PM on Monday, Sep 28? Testy gets a text with the new time. Move it? | Continue? |
 | Set up a tour for Dana at Unit 1A on Monday at 3:15 PM? Only say yes if they asked for this tour. Dana gets a text to confirm. Book it? | Create a one-time tour. Continue? |
 | They already have a booked tour. I can move it or call it off. | They already have a tour in progress. |
-| Send "Parking is included" to Pat? Future visitors who ask the same thing will get it too. Save it? | I'll save that as an approved fact. Continue? |
+| Send this to Pat and save it for anyone who asks the same thing later? "Parking is included. Let me know if you have any other questions." | I'll save that as an approved fact. Continue? |
 | That date ask is booking, not a question for the team. | Flag "Can I come Dec 1?" as unanswered. |
 | Tours at 100 Alfred Way are paused. | The property's `paused` flag is set. |
 | Tours at 100 Alfred Way are paused. Resume them first. | Approve or move a tour while the property is paused. |
 | Tours at 100 Alfred Way are back. Text me anytime to book. | Resume text to waiting visitors. |
 | 100 Alfred Way isn't offering tours anymore. | A text to a removed property. Never say archive. |
-| Sorry, the leasing team had to cancel your Monday, Sep 28 at 9:00 AM tour at 100 Alfred Way. 100 Alfred Way isn't offering tours anymore. | Cancel text when the property is removed. Never "They'll text you when tours are back." |
+| Sorry, the property team had to cancel your Monday, Sep 28 at 9:00 AM tour at 100 Alfred Way. 100 Alfred Way isn't offering tours anymore. | Cancel text when the property is removed. Never "They'll text you when tours are back." |
 | I'll remove 100 Alfred Way. Its records are kept. | The property was archived internally; say remove, never archive. |
 
 ## Habits

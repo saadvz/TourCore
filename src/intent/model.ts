@@ -90,7 +90,15 @@ export interface IntentInterpretation {
    * one intent: the question is answered, and the time is filed only after the
    * visitor confirms it.
    */
-  mentionedTime?: { hour: number; minute: number; meridiem?: "AM" | "PM"; day?: "today" | "tomorrow" };
+  mentionedTime?: {
+    hour: number;
+    minute: number;
+    meridiem?: "AM" | "PM";
+    day?: "today" | "tomorrow";
+    weekday?: "SUN" | "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT";
+    nextWeek?: boolean;
+    date?: { year: number; month: number; day: number };
+  };
   /** A day named next to a property question. The question is answered, then that day's times are shown. */
   mentionedDate?: {
     weekday?: "SUN" | "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT";

@@ -120,9 +120,9 @@ describe("visitor demo on the real engine", () => {
     await s.act("consent", { agree: true });
     await s.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: "555-999-0000" });
     expect(await s.stage()).toBe("stopped");
-    expect(lastFromTourCore(s)).toBe(VisitorDenialCopy.failedIdAtBooking("leasing team"));
+    expect(lastFromTourCore(s)).toBe(VisitorDenialCopy.failedIdAtBooking("property team"));
     expect(lastFromTourCore(s)).not.toMatch(/Stay where you are|I can't open doors yet|on hold|usually replies within 15 minutes/);
-    expect(lastFromTourCore(s).match(/The leasing team/g)).toHaveLength(1);
+    expect(lastFromTourCore(s).match(/The property team/g)).toHaveLength(1);
     expect(lastFromTourCore(s)).not.toContain(s.config.operator.contact);
   });
 
@@ -161,7 +161,7 @@ describe("visitor demo on the real engine", () => {
     expect(s.lastAccess).toMatchObject({ doorId: "unit_102", allowed: false, code: "DENY_WRONG_ROUTE", durinCalled: false });
     expect(s.durin.requestCount).toBe(before);
     expect(s.conversation.at(-2)!.text).toBe(
-      "That door isn't part of your tour, so I can't open it. You're here to see Unit 101. I've let the leasing team know in case you need a hand.",
+      "That door isn't part of your tour, so I can't open it. You're here to see Unit 101. I've let the property team know in case you need a hand.",
     );
     expect(s.conversation.at(-1)).toMatchObject({ from: "demo", text: "Demo safety check: Tour Core kept this door locked because it's not on their route." });
 

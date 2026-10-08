@@ -288,7 +288,7 @@ describe("failure behavior", () => {
     const visitorReply = bundle.messages.filter((m) => m.audience === "PROSPECT").map((m) => m.body).at(-1);
     const expectedVisitor = VisitorDenialCopy.doorsNotResponding(config.operator.name, config.operator.visitorContact);
     expect(visitorReply).toBe(expectedVisitor);
-    expect(visitorReply).toContain("I've let the leasing team know");
+    expect(visitorReply).toContain("I've let the property team know");
     expect(visitorReply).toMatch(/Stay where you are and reply here|or call/);
     expect(visitorReply).not.toMatch(/durin/i);
     const history = describeHistory(bundle.auditEvents, bundle, config.property.timezone).map((e) => e.text);

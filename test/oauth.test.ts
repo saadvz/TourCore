@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { request, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -37,7 +37,8 @@ afterEach(() => cleanups.splice(0).forEach((c) => c()));
 type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 /** fetch() can't set Host, so requests for the public address go over raw HTTP with that Host, as cloudflared sends them. */
-function tunnelFetch(port: number, extraHeaders: Record<string, string> = {}): Fetch {
+function tunnelFetch(port: number | (() => number), extraHeaders: Record<string, string> = {}): Fetch {
+  const portOf = typeof port === "function" ? port : () => port;
   return async (input, init = {}) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     const method = init.method ?? (input instanceof Request ? input.method : "GET");
@@ -50,7 +51,7 @@ function tunnelFetch(port: number, extraHeaders: Record<string, string> = {}): F
     } else if (init.body) body = Buffer.from(await new Response(init.body).arrayBuffer());
     return new Promise<Response>((resolve, reject) => {
       const req = request(
-        { host: "127.0.0.1", port, path: `${url.pathname}${url.search}`, method, headers: { ...Object.fromEntries(headers), ...extraHeaders, host: url.host, ...(body ? { "content-length": String(body.length) } : {}) } },
+        { host: "127.0.0.1", port: portOf(), path: `${url.pathname}${url.search}`, method, headers: { ...Object.fromEntries(headers), ...extraHeaders, host: url.host, ...(body ? { "content-length": String(body.length) } : {}) } },
         (res) => {
           const chunks: Buffer[] = [];
           res.on("data", (c: Buffer) => chunks.push(c));
@@ -82,25 +83,35 @@ async function oauthApp(options: { mcpAuth?: McpAuthMode; operatorToken?: () => 
   const opened: string[] = [];
   const ws = new PropertyWorkspace(root);
   if (options.seed) ws.save(loadConfig());
-  const server: Server = createSetupServer({
+  const serverOptions = {
     workspace: ws,
     mcpAuth: options.mcpAuth ?? (options.operatorToken ? undefined : "oauth"),
     operatorToken: options.operatorToken,
     authNow: () => clock.t,
-    oauthRateLimit: false,
+    oauthRateLimit: false as const,
     fetchClientMetadata: options.fetchClientMetadata,
-    onApprovalRequest: (page) => opened.push(page),
+    onApprovalRequest: (page: string) => opened.push(page),
     now: () => new Date(at(7)),
-    log: (line) => logs.push(line),
-  });
-  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
-  const port = (server.address() as { port: number }).port;
+    log: (line: string) => logs.push(line),
+  };
+  const endpoint = { port: 0 };
+  let server: Server;
+  const listen = async () => {
+    server = createSetupServer(serverOptions);
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    endpoint.port = (server.address() as { port: number }).port;
+  };
+  await listen();
+  const restart = async () => {
+    await new Promise<void>((r) => server.close(() => r()));
+    await listen();
+  };
   cleanups.push(() => {
     server.close();
     rmSync(root, { recursive: true, force: true });
   });
-  const pub = tunnelFetch(port);
-  const local = (path: string, init?: RequestInit) => fetch(`http://127.0.0.1:${port}${path}`, init);
+  const pub = tunnelFetch(() => endpoint.port);
+  const local = (path: string, init?: RequestInit) => fetch(`http://127.0.0.1:${endpoint.port}${path}`, init);
   const localPost = (path: string) => local(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
 
   const register = async (meta: Record<string, unknown> = {}) =>
@@ -145,10 +156,10 @@ async function oauthApp(options: { mcpAuth?: McpAuthMode; operatorToken?: () => 
     return { client, tokens: (await res.json()) as { access_token: string; refresh_token?: string; token_type: string; expires_in: number; scope: string } };
   };
   let rpcId = 0;
-  const mcp = (accessToken: string | undefined, method = "tools/list", params?: Record<string, unknown>) =>
+  const mcp = (accessToken: string | undefined, method = "tools/list", params?: Record<string, unknown>, session?: string) =>
     pub(`${PUBLIC}/mcp`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+      headers: { "Content-Type": "application/json", ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), ...(session ? { "Mcp-Session-Id": session } : {}) },
       body: JSON.stringify({ jsonrpc: "2.0", id: ++rpcId, method, ...(params ? { params } : {}) }),
     });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -160,7 +171,7 @@ async function oauthApp(options: { mcpAuth?: McpAuthMode; operatorToken?: () => 
     return body.result.structuredContent;
   };
   return {
-    root, ws, port, pub, local, localPost, clock, logs, opened,
+    root, ws, get port() { return endpoint.port; }, pub, local, localPost, clock, logs, opened, restart,
     setEnv: (next: Partial<SendblueEnv>) => (env = sendblueEnv(next)),
     register, registered, authorize, finish, approvedCode, token, connect, mcp, tool,
   };
@@ -849,6 +860,76 @@ describe("Grok legacy OAuth compatibility (TOURCORE_GROK_LEGACY_OAUTH_COMPAT)", 
       }
       expect(app.logs.join("\n")).toContain("will return to cursor://anysphere.cursor-mcp/oauth/callback.");
       expect(app.logs.join("\n")).not.toMatch(/tcc_|tca_|tcr_/);
+    });
+
+    it("a pre-existing Cursor OAuth Grok connection keeps the grok playbook after restart", async () => {
+      compat();
+      const app = await oauthApp({ seed: true });
+      const client = await app.registered({ ...cursorClient(), grant_types: ["authorization_code", "refresh_token"] });
+      const got = await codeFor(app, client.client_id, CURSOR_APP);
+      const tokenRes = await app.token({
+        grant_type: "authorization_code",
+        code: got.code,
+        code_verifier: got.verifier,
+        client_id: client.client_id,
+        redirect_uri: CURSOR_APP,
+        resource: RESOURCE,
+      });
+      expect(tokenRes.status).toBe(200);
+      const { access_token } = (await tokenRes.json()) as { access_token: string };
+      expect(access_token).toMatch(/^tca_/);
+
+      const playbook = async (session?: string) => {
+        const res = await app.mcp(access_token, "tools/call", { name: "get_state", arguments: {} }, session);
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as {
+          result: { isError?: boolean; structuredContent: { playbook: { id: string; mode: string; version: string } } };
+        };
+        expect(body.result.isError).toBeFalsy();
+        return body.result.structuredContent.playbook;
+      };
+
+      const init = await app.mcp(access_token, "initialize", {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+        clientInfo: { name: "cursor-vscode", version: "1.0.0" },
+      });
+      expect(init.status).toBe(200);
+      const session = init.headers.get("mcp-session-id");
+      expect(session).toBeTruthy();
+      await init.text();
+
+      const beforeRestart = await playbook(session!);
+      expect(beforeRestart).toMatchObject({ id: "grok", mode: "full" });
+
+      await app.restart();
+      const afterRestart = await playbook(session!);
+      const afterRestartAgain = await playbook(session!);
+      expect(afterRestart).toMatchObject({ id: "grok", mode: "full" });
+      expect(afterRestartAgain).toMatchObject({ id: "grok", mode: "full" });
+
+      const misleading = await app.mcp(access_token, "initialize", {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+        clientInfo: { name: "example-client", version: "1" },
+      });
+      expect(misleading.status).toBe(200);
+      await misleading.text();
+      expect(await playbook()).toMatchObject({ id: "grok", mode: "full" });
+
+      const path = join(app.root, "runtime", "oauth", "grok-access.json");
+      const doc = JSON.parse(readFileSync(path, "utf8")) as {
+        clients: Record<string, { info: { client_name?: string; redirect_uris?: string[] } }>;
+        grants: Array<{ clientName?: string }>;
+      };
+      for (const grant of doc.grants) grant.clientName = "An MCP client";
+      for (const stored of Object.values(doc.clients)) delete stored.info.client_name;
+      expect(doc.grants[0]!.clientName).toBe("An MCP client");
+      writeFileSync(path, JSON.stringify(doc));
+      await app.restart();
+      expect(await playbook(session!)).toMatchObject({ id: "grok", mode: "full" });
+      const filled = JSON.parse(readFileSync(path, "utf8")) as { grants: Array<{ clientName?: string }> };
+      expect(filled.grants.map((grant) => grant.clientName)).toEqual(["An MCP client"]);
     });
 
     it("stops honouring the legacy callback as soon as the flag is turned off", async () => {
