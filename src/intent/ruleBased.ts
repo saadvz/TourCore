@@ -292,6 +292,127 @@ function dateIntent(
   );
 }
 
+/** Longer names first so "monday" wins over "mon" and "thursday" wins over "thu". */
+function dayMenuWeekday(): RegExp {
+  return /\b(?:next\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|thurs|thur|tues|mon|tue|wed|thu|fri|sat|sun)\b/g;
+}
+
+/**
+ * Words that can sit beside a weekday when the visitor is actually choosing
+ * that day ("Friday", "friday please", "how about Friday?", "can I do Friday").
+ * A leftover word such as "sale", "busy", or "parking" means the day word is
+ * only mentioned.
+ */
+const DAY_PICK_WORDS = new Set([
+  "a",
+  "about",
+  "after",
+  "afternoon",
+  "am",
+  "an",
+  "and",
+  "any",
+  "anything",
+  "are",
+  "at",
+  "availability",
+  "available",
+  "before",
+  "but",
+  "can",
+  "change",
+  "come",
+  "coming",
+  "could",
+  "did",
+  "do",
+  "does",
+  "evening",
+  "fine",
+  "for",
+  "good",
+  "great",
+  "have",
+  "hmm",
+  "how",
+  "i",
+  "instead",
+  "is",
+  "it",
+  "let",
+  "like",
+  "make",
+  "me",
+  "morning",
+  "move",
+  "my",
+  "next",
+  "night",
+  "noon",
+  "not",
+  "of",
+  "ok",
+  "okay",
+  "on",
+  "one",
+  "or",
+  "our",
+  "perfect",
+  "please",
+  "reschedule",
+  "see",
+  "sounds",
+  "sure",
+  "thanks",
+  "thank",
+  "the",
+  "this",
+  "time",
+  "times",
+  "to",
+  "tour",
+  "uh",
+  "um",
+  "us",
+  "visit",
+  "want",
+  "we",
+  "week",
+  "what",
+  "which",
+  "will",
+  "work",
+  "works",
+  "would",
+  "yeah",
+  "yep",
+  "yes",
+  "you",
+  "yup",
+]);
+
+/** True when the weekday is the pick, not a word inside some other message. */
+function isDayPickPhrase(t: string): boolean {
+  const rest = t.replace(dayMenuWeekday(), " ").split(/\s+/).filter(Boolean);
+  return rest.every((word) => DAY_PICK_WORDS.has(word));
+}
+
+/**
+ * At the day menu, a weekday match that is a question — or clearly not a day
+ * pick — stays a question. "Black Friday sale nearby?" and "is Friday busy?"
+ * are questions. "Friday", "Fri?", "how about Friday?", and "can I do Friday"
+ * are still that day.
+ */
+function questionInsteadOfDayPick(raw: string, t: string, today?: InterpretContext["today"]): boolean {
+  const asked = dayReference(t, today);
+  if (!asked || asked === "menu" || asked.unclear || asked.date || asked.relative || !asked.weekday) return false;
+  if (isDayPickPhrase(t)) return false;
+  const question = /\?\s*$/.test(raw.trim()) || QUESTION_START.test(t) || WANTS_TO_KNOW.test(t) || TOPIC.test(t);
+  if (question) return true;
+  const extra = t.replace(dayMenuWeekday(), " ").split(/\s+/).filter((word) => word && !DAY_PICK_WORDS.has(word));
+  return extra.length >= 2;
+}
+
 function answerScheduling(
   awaiting: Extract<StepAwaiting, { kind: "confirm-custom-time" | "confirm-alternative" }>,
   t: string,
@@ -420,6 +541,8 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
       }
       const customDate = schedulingIntent(raw, t, true, result, unknown, ctx.today);
       if (customDate) return customDate;
+      // A weekday inside a question, or in a message that is not a day pick, is not that day.
+      if (questionInsteadOfDayPick(raw, t, ctx.today)) return question(0.9);
       const picked = dateIntent(raw, t, result, ctx.today);
       if (picked) return picked;
       const h = help();
