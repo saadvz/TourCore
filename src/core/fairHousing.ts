@@ -78,6 +78,15 @@ const QUANTITY = /\b(?:many|a lot of|lots of)\b/;
 const PLACE =
   /\b(?:mostly|around here|in the area|neighborhood|nearby|on the block|in the building)\b/;
 
+/**
+ * Things a race or color word can describe without being about people.
+ * "Asian restaurants", "white picket fence", "Black Friday", "color of the doors".
+ */
+const OBJECT_NOUN =
+  /\b(?:foods?|restaurants?|stores?|markets?|grocer(?:y|ies)|shops?|cafes?|baker(?:y|ies)|cuisines?|dishes?|meals?|fences?|doors?|walls?|paints?|fridays?|sales?|kitchens?|trim|siding|carpets?|tiles?|cabinets?|floors?|ceilings?|roofs?|appliances?|counters?|windows?|blinds?)\b/;
+
+const OBJECT_FILLER = "(?:picket|painted|front|back|garage|exterior|interior|local|nearby|the|a|an|some|any)";
+
 /** Other area language. Pairs with a class, a faith, or a people word. */
 const OTHER_AREA = /\b(?:neighbors|lives? around|any other)\b/;
 
@@ -110,9 +119,24 @@ function beside(text: string, a: { start: number; end: number }, b: { start: num
  * people word together with an area phrase. A bare "color" span is not a
  * neighborhood class (eligibility still sees it). Quantity phrases count a
  * race or color word only beside a people word. Place phrases count a race
- * or color word on their own. Wall color and "lots of light" stay ordinary.
- * Standalone steering phrases match on their own.
+ * or color word on their own, unless that word directly modifies a non-people
+ * noun (a restaurant, a fence, a door, Friday). Wall color and "lots of light"
+ * stay ordinary. Standalone steering phrases match on their own.
  */
+function modifiesNonPeopleNoun(text: string, word: { start: number; end: number }): boolean {
+  const after = text.slice(word.end);
+  if (/^\s+(?:people|families|family|folks|residents|neighbors|tenants|kids|children|child|hispanics|latinos|latinas|asians|blacks|whites|arabs)\b/.test(after)) {
+    return false;
+  }
+  if (new RegExp(`^\\s+${OBJECT_FILLER}\\s+${OBJECT_NOUN.source}`, "i").test(after)) return true;
+  if (new RegExp(`^\\s+${OBJECT_NOUN.source}`, "i").test(after)) return true;
+  const before = text.slice(0, word.start);
+  if (new RegExp(`${OBJECT_NOUN.source}\\s+(?:are|is|was|were)\\s+$`, "i").test(before)) return true;
+  if (new RegExp(`(?:are|is)\\s+(?:the\\s+)?${OBJECT_NOUN.source}\\s+$`, "i").test(before)) return true;
+  if (/\b(?:what|which)\s+$/.test(before) && new RegExp(`^\\s+(?:are|is)\\s+(?:the\\s+)?${OBJECT_NOUN.source}`, "i").test(after)) return true;
+  return false;
+}
+
 function neighborhoodSteering(text: string): boolean {
   if (STEERING.test(text)) return true;
   const people = spans(PEOPLE_BESIDE, text);
@@ -123,7 +147,8 @@ function neighborhoodSteering(text: string): boolean {
   const areas = [...spans(QUANTITY, text), ...spans(PLACE, text), ...spans(OTHER_AREA, text)];
   if (classes.some((word) => areas.some((area) => !overlaps(word, area)))) return true;
   const places = spans(PLACE, text);
-  return race.some((word) => places.some((place) => !overlaps(word, place)));
+  const placeRace = race.filter((word) => !modifiesNonPeopleNoun(text, word));
+  return placeRace.some((word) => places.some((place) => !overlaps(word, place)));
 }
 
 export function isFairHousingQuestion(text: string): boolean {

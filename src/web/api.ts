@@ -22,6 +22,7 @@ import {
   visitorView,
 } from "./setupFacade";
 import { z } from "zod";
+import { visitorTeamName } from "../sms/templates";
 import { checkMessaging } from "../createTourCore";
 import { TourCoreError } from "../core/TourCore";
 import { zonedParts, zonedTimeToUtc } from "../core/timezone";
@@ -151,7 +152,7 @@ async function route(ctx: ApiContext, method: string, path: string, body: Record
       const passed = !!latest && latest.status === "PASSED" && Date.parse(latest.validUntil) > (ctx.now?.() ?? new Date()).getTime();
       return ok({
         ok: passed,
-        message: passed ? "Thanks, you're all set! Check your messages for your tour details." : "Thanks. We couldn't confirm your details, so the property team will reach out.",
+        message: passed ? "Thanks, you're all set! Check your messages for your tour details." : `Thanks. We couldn't confirm your details, so the ${visitorTeamName(session.config.operator.name)} will reach out.`,
       });
     }
   }

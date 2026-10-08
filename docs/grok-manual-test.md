@@ -112,7 +112,7 @@ phone. "Testy" below is whatever first name you give on the identity form.
 | C4 | While choosing a time, text *"Does it have laundry?"* | The laundry answer from the unit details, then the **same** times re-presented |
 | C5 | Pick a time, agree to texts, fill the identity form | Booking confirmed on the phone. Without anyone asking, Grok posts "New tour booked: Testy is scheduled to tour Unit 1A today at ..." |
 | C6 | Arrive (developer mode "Move tour to now" if needed) and start the tour | Grok posts "Testy's Unit 1A tour has started." |
-| C7 | Inside, text *"Is there a pool?"* | Immediately: "I'll pass your question to the property team, and they'll reply here as soon as they can." Grok, unprompted, tells you Testy asked about a pool and asks what to tell them (not a yes/no) |
+| C7 | Inside, text *"Is there a pool?"* | Immediately: "I'll pass your question to the {team}, and they'll reply here as soon as they can." Grok, unprompted, tells you Testy asked about a pool and asks what to tell them (not a yes/no) |
 | C8 | Reply *"No pool, but there's a gym on the roof."*, then *"yes"* to Grok's one confirmation | The phone gets exactly that answer, then the tour step it was on. The property stays **Published for demo**; no readiness check or practice tour is asked for |
 | C9 | *"What needs attention?"* | Nothing: the question is resolved |
 | C10 | Finish the tour from the phone ("I'm done", "yes") | Recap and follow-up on the phone. Grok posts "Testy's Unit 1A tour is complete." |
@@ -244,7 +244,7 @@ the [setup guide](grok-template-setup.md).
 | 8 | Bot asks to publish. First say *"not yet"*, then *"yes"* | "not yet": still Draft in the browser app. "yes": Published for demo; Bot says visitor texting is live and door access is still in demo mode |
 | 9 | From the real phone, text the Sendblue number "Hi" and book Unit 101 at the next time; consent; fill the identity form | Normal visitor flow (unchanged) |
 | 10 | *"Show active tours"* | Your name, Unit 101, tour time, status; no ids |
-| 11 | Arrive and enter Unit 101 (developer mode "Move tour to now" if needed). Text *"is parking included?"* | "I'll pass your question to the property team, and they'll reply here as soon as they can." on the phone |
+| 11 | Arrive and enter Unit 101 (developer mode "Move tour to now" if needed). Text *"is parking included?"* | "I'll pass your question to the {team}, and they'll reply here as soon as they can." on the phone |
 | 12 | *"What needs attention?"* | "Asked "is parking included?". There's no approved answer yet. Tour still active." |
 | 13 | *"Open that issue. Yes, parking is included."* Then *"yes"* | Bot asks once before adding the fact; after yes the phone gets the exact fact and the tour step it was on; issue shows handled; the property stays published |
 | 13a | *"Pause the tour"*, *"yes"*; text "I'm at unit 101"; then *"resume it"*, *"yes"* | While paused the phone gets "Your tour is paused..." and no door opens; after resume doors work again in the window |
@@ -271,7 +271,7 @@ changing that schedule.
 
 | # | Do | Expect |
 | --- | --- | --- |
-| E1 | Visitor books 4:00 PM, then texts "Can I move it to 3:15?" | The visitor is told their 4:00 PM tour stays confirmed while Tour Core asks the property team. No second booking |
+| E1 | Visitor books 4:00 PM, then texts "Can I move it to 3:15?" | The visitor is told I've asked the {team}, and their 4:00 PM tour stays booked. No second booking |
 | E2 | Watch Grok | Grok says, unprompted, that the visitor wants to move today's tour to 3:15 PM, and that 3:15 isn't a regular start. The webhook itself has no name or phone number |
 | E3 | "Approve 3:15." | Grok asks once to confirm |
 | E4 | "Yes." | The tour moves to 3:15 PM. The visitor is told. The property stays published. A new visitor is still offered the regular hourly times, not 3:15 |

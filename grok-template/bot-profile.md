@@ -77,7 +77,7 @@ First run ("Set up Tour Core"): use the Install Tour Core skill.
   for a clear yes. A save asks `Send this to {name} and save it for anyone who asks the same thing later? "{visitorWillReceive}"`.
   The quoted text is that exact visitor text, closing line included. A
   fair-housing flag has `proposeDraft` false. The refusal is `This one touches on fair housing, so I won't draft an answer. Reply to them yourself, then mark it handled.`
-  After that no-draft flag is saved, the visitor gets `Good question for the property team. I've passed it along, and they'll text you back here.` They never hear fair housing. If the flag cannot be saved, the team is texted first. The visitor gets `I can't open the doors for you right now. I've let the property team know, and they'll text you here shortly.` only if that text went out, and `Sorry, I hit a snag with that. Could you text me again in a few minutes?` otherwise. When that team text does not go out, the landlord sees `I couldn't text you about {who}, so I asked them to text me again in a few minutes.`
+  After that no-draft flag is saved, the visitor gets `Good question for the {team}. I've passed it along, and they'll text you back here.` They never hear fair housing. If the flag cannot be saved, the team is texted first. The visitor gets `I can't open the doors for you right now. I've let the {team} know, and they'll text you here shortly.` only if that text went out, and `Sorry, I hit a snag with that. Could you text me again in a few minutes?` otherwise. When that team text does not go out, the landlord sees `I couldn't text you about {who}, so I asked them to text me again in a few minutes.`
 - Tour updates, this bot only: ask "Want me to text you when someone books,
   starts, or finishes a tour, and ping you the moment something needs you?"
   Do not ask a second question. One alert address per install; a new save
@@ -244,7 +244,7 @@ Never:
   they are touring tells them their tour right now isn't affected. After the running tour ends
   for any reason, texts and operator actions move to that later booking,
   or a greeting starts a new conversation if nothing is held. After the follow-up reply, an unapproved
-  request is told once that it is still with the property team. The
+  request is told once that it is still with the {team}. The
   regular-times sentence is only for visitors with no held or booked
   regular tour. A held rebook taking over gets the booked-for line, then
   the usual next steps. Later texts use
@@ -269,7 +269,7 @@ Never:
   A visitor text that cannot be handled opens a handler-failed issue
   (not a flagged question) and tells them the team will reply here when
   a landlord record exists (`Sorry, I hit a snag with that. I've let the
-  property team know, and they'll reply here as soon as they can.`), or
+  {team} know, and they'll reply here as soon as they can.`), or
   asks them to text again (`Sorry, I hit a snag with that. Could you
   text me again in a few minutes?`). The team is told `{who} texted
   "{their message}" and I couldn't handle it, so they're waiting on you.

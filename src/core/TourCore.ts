@@ -131,8 +131,9 @@ export const PENDING_CUSTOM_TIME_REGULAR_OPTION =
   "If you'd rather pick one of the regular times instead, just reply with a day.";
 
 /** After a tour ends, an unapproved custom-time request stays with the team. */
-export function pendingCustomTimeLine(time: string, day: string, options?: { offerRegularTimes?: boolean }): string {
-  const base = `Your request for ${time} on ${day} is still with the property team. I'll text you as soon as they respond.`;
+export function pendingCustomTimeLine(time: string, day: string, options?: { offerRegularTimes?: boolean; team?: string }): string {
+  const team = visitorTeamName(options?.team);
+  const base = `Your request for ${time} on ${day} is still with the ${team}. I'll text you as soon as they respond.`;
   if (options?.offerRegularTimes === false) return base;
   return `${base} ${PENDING_CUSTOM_TIME_REGULAR_OPTION}`;
 }
@@ -169,8 +170,8 @@ export function takenSlotLine(time: string, day: string, current?: { time: strin
 export const TAKEN_SLOT_OTHER_DAY = "If you'd like another time, just reply with a day.";
 
 /** Repeat custom-time ask for the same time. */
-export function alreadyAskedLine(time: string, day: string): string {
-  return `I've already asked the property team about ${time} on ${day}.`;
+export function alreadyAskedLine(time: string, day: string, team?: string): string {
+  return `I've already asked the ${visitorTeamName(team)} about ${time} on ${day}.`;
 }
 
 /** Next step on a handler-failure issue. Never tells the team to add an approved fact. */
@@ -203,11 +204,13 @@ export function proposeVisitorLine(input: {
   proposedDay: string;
   time?: string;
   day?: string;
+  team?: string;
 }): string {
+  const team = visitorTeamName(input.team);
   const sameSlot = input.requestedTime === input.proposedTime && input.requestedDay === input.proposedDay;
   const lead = sameSlot
-    ? `The property team can do ${input.proposedTime} on ${input.proposedDay} as a one-off.`
-    : `The property team can't do ${input.requestedTime} on ${input.requestedDay}, but ${input.proposedTime} on ${input.proposedDay} works.`;
+    ? `The ${team} can do ${input.proposedTime} on ${input.proposedDay} as a one-off.`
+    : `The ${team} can't do ${input.requestedTime} on ${input.requestedDay}, but ${input.proposedTime} on ${input.proposedDay} works.`;
   return input.time && input.day
     ? `${lead} Reply YES to switch, or NO to keep your ${input.time} tour on ${input.day}.`
     : `${lead} Reply YES to switch, or NO to keep looking.`;
@@ -219,18 +222,18 @@ export function replacesTourLine(time: string, day: string): string {
 }
 
 /** First custom-time acknowledgement when they already have a held or booked tour. */
-export function customTimeAskedLine(newTime: string, newDay: string, time: string, day: string): string {
-  return `I've asked the property team about ${newTime} on ${newDay} instead. Your ${time} tour on ${day} stays booked unless they approve the change.`;
+export function customTimeAskedLine(newTime: string, newDay: string, time: string, day: string, team?: string): string {
+  return `I've asked the ${visitorTeamName(team)} about ${newTime} on ${newDay} instead. Your ${time} tour on ${day} stays booked unless they approve the change.`;
 }
 
-export function declineVisitorLine(input: { newTime: string; newDay: string; time?: string; day?: string; confirmed: boolean }): string {
-  const lead = `The property team couldn't approve ${input.newTime} on ${input.newDay}.`;
+export function declineVisitorLine(input: { newTime: string; newDay: string; time?: string; day?: string; confirmed: boolean; team?: string }): string {
+  const lead = `The ${visitorTeamName(input.team)} couldn't approve ${input.newTime} on ${input.newDay}.`;
   if (!input.time || !input.day) return `${lead} If you'd like another time, just reply with a day.`;
   return input.confirmed ? `${lead} Your ${input.time} tour on ${input.day} is still confirmed.` : `${lead} You're still booked for ${input.time} on ${input.day}.`;
 }
 
-export function requestExpiredLine(newTime: string, newDay: string, current?: { time: string; day: string }): string {
-  const lead = `The property team couldn't get to your request for ${newTime} on ${newDay} in time.`;
+export function requestExpiredLine(newTime: string, newDay: string, current?: { time: string; day: string }, team?: string): string {
+  const lead = `The ${visitorTeamName(team)} couldn't get to your request for ${newTime} on ${newDay} in time.`;
   return current ? `${lead} You're still booked for ${current.time} on ${current.day}.` : `${lead} If you'd like another time, just reply with a day.`;
 }
 
@@ -279,8 +282,14 @@ export function isLiveHelpReservation(reservation: Reservation, now: Date): bool
  * Visitor copy when Tour Core can't answer a question. Design can tweak these
  * constants. Do not mention tools, providers, or MMS.
  */
-export const UNKNOWN_ANSWER = "I'll pass your question to the property team, and they'll reply here as soon as they can.";
-export const UNKNOWN_ANSWER_WITH_PHOTO = "I can't open photos yet. I'll pass your question to the property team, and they'll reply here as soon as they can.";
+export function unknownAnswerLine(options: { hasMedia?: boolean; team?: string } = {}): string {
+  const team = visitorTeamName(options.team);
+  return options.hasMedia
+    ? `I can't open photos yet. I'll pass your question to the ${team}, and they'll reply here as soon as they can.`
+    : `I'll pass your question to the ${team}, and they'll reply here as soon as they can.`;
+}
+export const UNKNOWN_ANSWER = unknownAnswerLine();
+export const UNKNOWN_ANSWER_WITH_PHOTO = unknownAnswerLine({ hasMedia: true });
 /** Appended to an approved-fact answer after a tour has ended. Also used in the locked ended unknown lines. */
 export const TOUR_AGAIN_SUFFIX = " If you'd like to tour again, just text HI.";
 export const UNKNOWN_ANSWER_ENDED = `${UNKNOWN_ANSWER}${TOUR_AGAIN_SUFFIX}`;
@@ -293,9 +302,9 @@ function answerTemplateId(facts: ApprovedFact[]): string | undefined {
   return facts.length > 0 && facts.every((fact) => fact.profileField) ? "approved-profile-fact" : undefined;
 }
 
-export function unknownAnswerReply(options: { hasMedia?: boolean; ended?: boolean } = {}): string {
-  if (options.ended) return options.hasMedia ? UNKNOWN_ANSWER_ENDED_WITH_PHOTO : UNKNOWN_ANSWER_ENDED;
-  return options.hasMedia ? UNKNOWN_ANSWER_WITH_PHOTO : UNKNOWN_ANSWER;
+export function unknownAnswerReply(options: { hasMedia?: boolean; ended?: boolean; team?: string } = {}): string {
+  const line = unknownAnswerLine(options);
+  return options.ended ? `${line}${TOUR_AGAIN_SUFFIX}` : line;
 }
 
 /** Append `suffix` to an approved answer. Adds a period first if the answer has no . ! or ?. Never doubles the suffix. */
@@ -336,7 +345,10 @@ export const VISITOR_CANCEL_DONE = "You're cancelled. Text me anytime if you wan
 /** Nothing is booked. The menu is cleared. The next text starts scheduling again. */
 export const NOTHING_BOOKED_CANCEL =
   "No problem, nothing's booked yet, so I'll stop here. Text me anytime if you want to pick a time.";
-export const VISITOR_CANCEL_FAILED = "I can't cancel it from here. I've asked the property team to call it off and get back to you.";
+export function visitorCancelFailed(team?: string): string {
+  return `I can't cancel it from here. I've asked the ${visitorTeamName(team)} to call it off and get back to you.`;
+}
+export const VISITOR_CANCEL_FAILED = visitorCancelFailed();
 
 export function visitorCancelConfirm(day: string, time: string): string {
   return `Cancel your ${time} tour on ${day}? Reply YES or NO.`;
@@ -527,7 +539,7 @@ export class TourCore {
     const place = isSingleTourPlace(config.property) ? visitorSubject(config.property, unit.name) : `${unit.name} at ${config.property.address}`;
     const intro =
       `${hello} Happy to set up a self-guided tour of ${place}.` +
-      (unit.summary ? ` Here's what the property team shared: ${unit.summary.replace(/\.?$/, ".")}` : "");
+      (unit.summary ? ` Here's what the ${this.teamName()} shared: ${unit.summary.replace(/\.?$/, ".")}` : "");
     if (dates.length === 0) {
       await this.textProspect(prospect, reservation.id, `${intro}\n${VisitorDenialCopy.noOpenTimes(this.teamName())}`);
     } else {
@@ -736,7 +748,7 @@ export class TourCore {
     await this.textProspect(
       prospect,
       reservation.id,
-      tourFinishedFollowUp(place, knownFirstName(prospect.name), unit.summary || undefined),
+      tourFinishedFollowUp(place, knownFirstName(prospect.name), unit.summary || undefined, this.teamName()),
       { kind: "yes-no" },
     );
     await this.record("FOLLOW_UP_SENT", { reservationId: reservation.id, prospectId: prospect.id, detail: "recap + follow-up question" });
@@ -1107,7 +1119,7 @@ export class TourCore {
       ? { time: this.time(new Date(reservation.slotStart)), day: this.day(new Date(reservation.slotStart)) }
       : undefined;
     const prospect = await this.mustGetProspect(request.prospectId);
-    const body = requestExpiredLine(this.time(asked), this.day(asked), current);
+    const body = requestExpiredLine(this.time(asked), this.day(asked), current, this.teamName());
     if (!(await this.visitorAlreadyReceived(request.reservationId ?? "", body))) {
       await this.textProspect(prospect, request.reservationId, body);
     }
@@ -1180,6 +1192,7 @@ export class TourCore {
           newDay: this.day(asked),
           ...current,
           confirmed: visitorBookingConfirmed(reservation),
+          team: this.teamName(),
         }),
       );
       await this.record("TOUR_TIME_REQUEST_DECLINED", { reservationId: request.reservationId, prospectId: request.prospectId, detail: note?.trim() || "declined" });
@@ -1213,6 +1226,7 @@ export class TourCore {
           proposedTime: this.time(start),
           proposedDay: this.day(start),
           ...current,
+          team: this.teamName(),
         }),
       );
       await this.record("TOUR_TIME_ALTERNATIVE_PROPOSED", { reservationId: request.reservationId, prospectId: request.prospectId, detail: `offered ${this.whenPhrase(start)}` });
@@ -1331,7 +1345,7 @@ export class TourCore {
       const resolved = resolveQuestion(this.approvedContent(), input.question.trim().slice(0, 300), unitContext);
       if (resolved.kind === "which-unit") return { outcome: "which-unit", facts: [], units: resolved.units };
       if (read === "cached" && resolved.kind === "answer") {
-        const body = withAnswerSuffix(approvedAnswerText(resolved.facts), input.answerSuffix);
+        const body = withAnswerSuffix(approvedAnswerText(resolved.facts, this.teamName()), input.answerSuffix);
         await this.sendProspectDirect(phone, body, answerTemplateId(resolved.facts));
         return { outcome: "answered", facts: resolved.facts, ...(resolved.unitId ? { unitId: resolved.unitId } : {}) };
       }
@@ -1349,7 +1363,7 @@ export class TourCore {
     if (resolved.kind === "which-unit") return { outcome: "which-unit", facts: [], units: resolved.units };
     if (resolved.kind === "answer") {
       await this.record("QUESTION_ANSWERED", { ...base, detail: asked });
-      const body = withAnswerSuffix(approvedAnswerText(resolved.facts), input.answerSuffix);
+      const body = withAnswerSuffix(approvedAnswerText(resolved.facts, this.teamName()), input.answerSuffix);
       await this.sendConversationText({ phone, body, reservationId: reservation?.id, templateId: answerTemplateId(resolved.facts) });
       return { outcome: "answered", facts: resolved.facts, ...(resolved.unitId ? { unitId: resolved.unitId } : {}) };
     }
@@ -1358,7 +1372,7 @@ export class TourCore {
       return { outcome: "unknown", facts: [], ...(resolved.unitId ? { unitId: resolved.unitId } : {}) };
     }
     await this.record("QUESTION_UNANSWERED", { ...base, detail: asked });
-    await this.sendConversationText({ phone, body: input.unknownReply ?? UNKNOWN_ANSWER, reservationId: reservation?.id });
+    await this.sendConversationText({ phone, body: input.unknownReply ?? unknownAnswerReply({ team: this.teamName() }), reservationId: reservation?.id });
     const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : formatPhone(phone);
     const named = resolved.unitId ? this.deps.config.units.find((u) => u.id === resolved.unitId) : undefined;
     const about = !reservation && named ? ` about ${visitorSubject(this.deps.config.property, named.name)}` : "";
@@ -1575,7 +1589,7 @@ export class TourCore {
     const asked = input.text.trim().slice(0, 300) || "cancel";
     if (input.recordInbound !== false) await this.recordIncoming({ phone, body: asked, prospectId: prospect?.id, reservationId: reservation?.id, meta: input.meta });
     await this.record("QUESTION_UNANSWERED", { reservationId: reservation?.id, prospectId: prospect?.id, detail: asked });
-    await this.sendConversationText({ phone, body: VISITOR_CANCEL_FAILED, reservationId: reservation?.id });
+    await this.sendConversationText({ phone, body: visitorCancelFailed(this.teamName()), reservationId: reservation?.id });
     const who = prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : formatPhone(phone);
     await this.notifyOperator(reservation, `${who} asked to cancel their tour, and I couldn't cancel it from here.`);
   }
@@ -1666,7 +1680,7 @@ export class TourCore {
       audience: "PROSPECT",
       to: phone,
       toName: prospect?.name,
-      body: withPrompt(input.body, input.prompt, this.presentation),
+      body: withPrompt(input.body, input.prompt, this.presentation, this.teamName()),
       prospectId: prospect?.id,
       reservationId: input.reservationId,
       suppressed: !!prospect?.messagingOptedOut && !input.deliverDespiteOptOut,
@@ -1858,7 +1872,7 @@ export class TourCore {
       prospectId: prospect.id,
       detail: "visitor confirmed they left after the tour closed",
     });
-    await this.textProspect(prospect, reservation.id, tourFinishedFollowUp(place, knownFirstName(prospect.name), unit.summary || undefined), { kind: "yes-no" });
+    await this.textProspect(prospect, reservation.id, tourFinishedFollowUp(place, knownFirstName(prospect.name), unit.summary || undefined, this.teamName()), { kind: "yes-no" });
     await this.record("FOLLOW_UP_SENT", { reservationId: reservation.id, prospectId: prospect.id, detail: "recap + follow-up question" });
   }
 
@@ -1877,7 +1891,7 @@ export class TourCore {
     const place = visitorSubject(this.deps.config.property, this.unitFor(reservation).name);
     const said = message.trim().slice(0, 300);
     await this.notifyOperator(reservation, landlordRepliedAfterClose(landlordWho(prospect.name), place, said));
-    await this.textProspect(prospect, reservation.id, visitorRepliedAfterClose(this.visitorHelpNumber()));
+    await this.textProspect(prospect, reservation.id, visitorRepliedAfterClose(this.visitorHelpNumber(), this.teamName()));
   }
 
   private async regrantUntil(reservation: Reservation, newEnd: Date): Promise<void> {
@@ -2038,7 +2052,7 @@ export class TourCore {
       prospect!,
       approved.id,
       `${door?.name ?? "The door"} is open for you now. ${stop?.guidance ?? ""}${reminder ? ` ${reminder}` : ""}`.trim(),
-      nextStop ? { kind: "say", phrase: `at ${this.stopName(nextStop)}`, purpose: "when you get there" } : { kind: "say", phrase: "finish", purpose: "when you're done" },
+      nextStop ? { kind: "say", phrase: `at ${this.stopName(nextStop)}`, purpose: "when you get there" } : { kind: "say", phrase: "DONE", purpose: "when you're finished" },
     );
     return { decision, durinCalled: true, grant };
   }
@@ -2318,7 +2332,7 @@ export class TourCore {
       audience: "PROSPECT",
       to: current.phone,
       toName: current.name,
-      body: withPrompt(body, prompt, this.presentation),
+      body: withPrompt(body, prompt, this.presentation, this.teamName()),
       prospectId: current.id,
       reservationId,
       suppressed: !!current.messagingOptedOut,

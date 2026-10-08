@@ -49,8 +49,8 @@
   {
     "tool": "save_doors_and_routes",
     "status": "done",
-    "milestone": "Practice tour",
-    "next": "run_checks",
+    "milestone": "Hours",
+    "next": "save_hours",
     "message": "Unit A: Front Door, then Unit A Door. Unit B: Front Door, then Unit B Door."
   },
   {

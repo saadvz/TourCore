@@ -33,13 +33,14 @@ settings screen. Casual and non-technical is a requirement.
 | Tours at 100 Alfred Way are paused. Resume them first. | Approve or move a tour while the property is paused. |
 | Tours at 100 Alfred Way are back. Text me anytime to book. | Resume text to waiting visitors. |
 | 100 Alfred Way isn't offering tours anymore. | A text to a removed property. Never say archive. |
-| Sorry, the property team had to cancel your 9:00 AM tour on Monday, Sep 28 at 100 Alfred Way. 100 Alfred Way isn't offering tours anymore. | Cancel text when the property is removed. Never "They'll text you when tours are back." |
+| Sorry, the {team} had to cancel your 9:00 AM tour on Monday, Sep 28 at 100 Alfred Way. 100 Alfred Way isn't offering tours anymore. | Cancel text when the property is removed. Never "They'll text you when tours are back." |
 | {who} asked a question, but I couldn't save it for you to answer. Please text them back. They're waiting. | {who} asked a question and I couldn't pass it along. They're waiting on you. |
 | {who} is at {door}, and I couldn't open it for them. Please text them or let them in. | {who} is at {door} and the door stayed locked. They don't have a step left to finish. |
-| Your tour time ended at {time}, so the doors are locked now. Want to come back another time? Just reply with a day that works. | Every door on your tour is already open for you. Text HELP if one isn't working. |
+| Your tour time ended at {time}, so the doors are locked now. Want to come back another time? Just reply with a day that works. | Every door on your tour is already open for you… (only wrong after the tour window ends) |
 | It's been a while since you filled out the identity form, so I'll need you to fill it out again before I can open doors. | Your ID check has expired, so I need a quick re-check before I can open doors. |
 | I've let the {team} know. Stay where you are and reply here. They'll reply as soon as they can. | I've let the property team know. Stay where you are and reply here. The property team will reply as soon as they can. |
 | property team | the Acme Realty |
+| A text to you didn't go out | Message couldn't be delivered, when the missed text was to the landlord. The notice stays the summary, so it is not shown twice. |
 | I couldn't text you about {who}, so I asked them to text me again in a few minutes. | Sendblue couldn't deliver the team text. |
 | I'll remove 100 Alfred Way. Its records are kept. | The property was archived internally; say remove, never archive. |
 

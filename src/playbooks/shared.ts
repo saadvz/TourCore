@@ -28,8 +28,8 @@ export const SHARED_AFTER_PUBLISH =
   "For you, not out loud: if they set up a portable copy and this is the first time this place is published, make that one copy before you ask anything. If they skipped copies, don't. Then ask the one question below.";
 
 export const SHARED_FLAGGED_RULES = [
-  "A visitor question with no saved answer is already flagged. They already got the usual short holding reply, unless the question was held for the property team, in which case they already got: Good question for the property team. I've passed it along, and they'll text you back here. Do not send them anything else until the landlord gives a clear yes.",
-  'A draft, if one is written, stays casual and short. Call the team "the property team". Do not name a product, a tool, or a company. Promise nothing that is not already in the listing or in an earlier answer the landlord approved.',
+  "A visitor question with no saved answer is already flagged. They already got the usual short holding reply, unless the question was held for the team, in which case they already got: Good question for the {team}. I've passed it along, and they'll text you back here. Do not send them anything else until the landlord gives a clear yes.",
+  'A draft, if one is written, stays casual and short. Call the team by the same name the visitor\'s texts already used ("the {team}", which is "the property team" unless the stored name ends in "team"). Do not name a product, a tool, or a company. Promise nothing that is not already in the listing or in an earlier answer the landlord approved.',
   "If the question is fair-housing sensitive, including who is allowed to live there, do not draft an answer. Leave it with the landlord. Do not invent a special reply.",
   "Before the yes, read the landlord the full text the visitor will get, including any closing line. The confirmation has that exact text. It matches what is sent, word for word. The first call does not send.",
   `If the send fails, tell the landlord the visitor did not get it. You try again only after they say yes again. ${SETUP_HELP_ENDING}`,

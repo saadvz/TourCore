@@ -181,6 +181,20 @@ export class PropertyWorkspace {
       .sort((a, b) => a.config.property.name.localeCompare(b.config.property.name));
   }
 
+  /**
+   * The landlord confirmed touring hours (or saved a change). Kept beside the
+   * setup, not inside the config, so a confirmed default does not look like a
+   * new setup. A published place, or one that already passed readiness, counts
+   * without this file.
+   */
+  noteTourHoursConfirmed(propertyId: string, at: string): void {
+    writeJsonAtomic(this.hoursConfirmedPath(propertyId), { confirmedAt: at });
+  }
+
+  hoursWereConfirmed(propertyId: string): boolean {
+    return existsSync(this.hoursConfirmedPath(propertyId));
+  }
+
   /** Operational status only (pause / remove). Does not change the setup or its fingerprints. */
   patchState(propertyId: string, patch: Partial<PropertyState>): PropertyState {
     const { state } = this.load(propertyId);
@@ -434,6 +448,10 @@ export class PropertyWorkspace {
 
   private draftPath(propertyId: string): string {
     return join(this.dir(propertyId), "draft.json");
+  }
+
+  private hoursConfirmedPath(propertyId: string): string {
+    return join(this.dir(propertyId), "hours-confirmed.json");
   }
 
   // ----------------------------------------------------- checks and publish

@@ -19,7 +19,7 @@ import { checkMessaging, UnavailableModeError } from "../createTourCore";
 import type { MessagingLedger } from "../messaging/ledger";
 import { applySetupCommand } from "../setup/commands";
 import { draftView, readinessView, saveStateView } from "../setup/presenters";
-import { reuseDaysRefusal, tourSpacingRefusal } from "../config/validateConfig";
+import { hoursRangeRefusal, reuseDaysRefusal, tourSpacingRefusal } from "../config/validateConfig";
 import { parseDays, parseMinutes, parseTimeOfDay, SAME_DAY_HOURS, tourHoursEndSameDay } from "../setup/parse";
 import type { DryTourCheck, DryTourResult } from "../setup/dryTour";
 import type { ReadinessResult } from "../setup/readiness";
@@ -827,7 +827,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Set tour hours",
     kind: "change",
     description:
-      'Sets tour hours from everyday words: days ("weekdays", "Mon-Sat", "every day"), start/end ("9am", "5 PM"), tour length, how often a new tour starts, early arrival ("10 minutes"). Only pass what the operator said; defaults stay visible. A new property starts at Monday–Friday, 9:00 AM–5:00 PM, 45-minute tours, hourly starts, and 10 minutes early. Tours have to end later the same day. Hours are structural: a published property goes back to draft until readiness, a practice tour, and publish. After those hours are published, open visitor conversations use them on the next inbound text.',
+      'Sets tour hours from everyday words: days ("weekdays", "Mon-Sat", "every day"), start/end ("9am", "5 PM"), tour length, how often a new tour starts, early arrival ("10 minutes"). Only pass what the operator said; defaults stay visible. A new property starts at Monday–Friday, 9:00 AM–5:00 PM, 45-minute tours, hourly starts, and 10 minutes early. Tours have to end later the same day. Tours must last 15 minutes to 4 hours, and starts must be 15 minutes to 8 hours apart. Hours are structural: a published property goes back to draft until readiness, a practice tour, and publish. After those hours are published, open visitor conversations use them on the next inbound text.',
     input: z.strictObject({
       property: Property,
       days: z.union([z.string().max(80), z.array(z.string().max(20)).max(7)]).optional(),
@@ -843,6 +843,11 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const start = typeof parsed.start === "string" ? parsed.start : draft.tourHours.start;
       const end = typeof parsed.end === "string" ? parsed.end : draft.tourHours.end;
       if (!tourHoursEndSameDay(start, end)) return { summary: SAME_DAY_HOURS, status: "blocked" };
+      const range = hoursRangeRefusal({
+        tourLengthMinutes: typeof parsed.tourLengthMinutes === "number" ? parsed.tourLengthMinutes : undefined,
+        slotEveryMinutes: typeof parsed.slotEveryMinutes === "number" ? parsed.slotEveryMinutes : undefined,
+      });
+      if (range) return { summary: range, status: "blocked" };
       const spacing = tourSpacingRefusal({
         ...draft.tourHours,
         ...(typeof parsed.slotEveryMinutes === "number" ? { slotEveryMinutes: parsed.slotEveryMinutes } : {}),
@@ -851,6 +856,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       });
       if (spacing) return { summary: spacing, status: "blocked" };
       const state = edit(ctx, id, draft, "setTourHours", parsed);
+      ctx.services.workspace.noteTourHoursConfirmed(id, ctx.now().toISOString());
       const s = setupSnapshot(ctx, id);
       return { summary: s.tourHours, tourLength: s.tourLength, newTourEvery: s.newTourEvery, earlyArrival: s.earlyArrival, ...state };
     },
@@ -1108,7 +1114,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Read the local SMS outbox",
     kind: "read",
     description:
-      "QA only. Returns outbound local-loopback replies for a conversation as separate bubbles in send order (body + timestamp). Never one concatenated blob. Refuses unless that property is on local test texts.",
+      "QA only. Returns outbound local-loopback replies for a conversation as separate bubbles in send order (body, timestamp, and templateId when the bubble came from the visitor template registry). Never one concatenated blob. Refuses unless that property is on local test texts.",
     input: z.strictObject({
       from: z.string().min(7).max(30).optional().describe("The visitor's phone number. Leave out to list every prospect bubble."),
       property: Property,
@@ -1148,7 +1154,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     name: "list_exceptions",
     title: "Show what needs attention",
     kind: "read",
-    description: "The queue of issues that need the team: unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored, and a visitor text Tour Core could not handle (handler-failed: the visitor was told the team will reply here; next step is to tell you what to say so you can text them, or to book or change their tour). A fair-housing question is flagged with proposeDraft false. The visitor already got: Good question for the property team. I've passed it along, and they'll text you back here. Next steps: This one touches on fair housing, so I won't draft an answer. Reply to them yourself. Then: Mark it handled once you've replied. A grant that couldn't be saved after unlock is \"Tour Core couldn't save the visit record, so the tour was paused.\" A records check that fails before unlock keeps the door locked and does not open an issue. \"Visitor hasn't confirmed leaving\" stays open until they text DONE or the operator marks it handled; after-close alerts stop at 24 hours.",
+    description: "The queue of issues that need the team: unanswered questions, help requests, door problems, off-route attempts, paused tours, failed identity checks, tours that couldn't be restored, a failed text to you titled \"A text to you didn't go out\", and a visitor text Tour Core could not handle (handler-failed: the visitor was told the team will reply here; next step is to tell you what to say so you can text them, or to book or change their tour). A fair-housing question is flagged with proposeDraft false. The visitor already got: Good question for the {team}. I've passed it along, and they'll text you back here. Next steps: This one touches on fair housing, so I won't draft an answer. Reply to them yourself. Then: Mark it handled once you've replied. A grant that couldn't be saved after unlock is \"Tour Core couldn't save the visit record, so the tour was paused.\" A records check that fails before unlock keeps the door locked and does not open an issue. \"Visitor hasn't confirmed leaving\" stays open until they text DONE or the operator marks it handled; after-close alerts stop at 24 hours.",
     input: z.strictObject({ property: Property, includeHandled: z.boolean().optional() }),
     run: async (ctx, i) => {
       const id = i.property ? resolvePropertyId(ctx.services.workspace, i.property) : undefined;
@@ -1185,7 +1191,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Answer a flagged question with a new approved fact",
     kind: "consequential",
     description:
-      "Only when the OPERATOR supplied the answer or the reply. A fair-housing flag has proposeDraft false: this tool refuses with This one touches on fair housing, so I won't draft an answer. Reply to them yourself, then mark it handled. The visitor already got: Good question for the property team. I've passed it along, and they'll text you back here. Do not draft one. For an unanswered question: as soon as they give it (e.g. \"2 bedrooms\"), call this without a code. Tour Core works out how it will be saved and returns ONE question: Send this to {name} and save it for anyone who asks the same thing later? \"{visitorWillReceive}\" — the quoted text equals visitorWillReceive byte for byte, closing line included, never Continue?. After a clear yes, call again with confirmationCode. After yes, if they opted out: Saved \"{answer}\" for future questions. {who} has turned off texts from us, so I didn't send it and this is still open. If you can reach them another way, do that, then mark it handled. If the send fails for any other reason: Saved \"{answer}\" for future questions, but I couldn't text {who}, so nothing was sent and this is still open. If you can reach them another way, do that, then mark it handled. A repeat on an unanswered question returns exactly That question has already been handled. For a handler-failed issue, this texts the visitor from the Tour Core number and does not save an approved fact. The first call returns Send this to {who}? \"{reply}\" and the quoted text equals visitorWillReceive. After yes, when the text is in the outbox and the issue is closed, it returns exactly Sent to {who}. If the visitor can't be texted, it returns I couldn't text {who}, so nothing was sent and this is still open. If you can reach them another way, do that, then mark it handled. A repeat on a handler-failed issue returns exactly That's already been handled. Never make up or reword the answer.",
+      "Only when the OPERATOR supplied the answer or the reply. A fair-housing flag has proposeDraft false: this tool refuses with This one touches on fair housing, so I won't draft an answer. Reply to them yourself, then mark it handled. The visitor already got: Good question for the {team}. I've passed it along, and they'll text you back here. Do not draft one. For an unanswered question: as soon as they give it (e.g. \"2 bedrooms\"), call this without a code. Tour Core works out how it will be saved and returns ONE question: Send this to {name} and save it for anyone who asks the same thing later? \"{visitorWillReceive}\" — the quoted text equals visitorWillReceive byte for byte, closing line included, never Continue?. After a clear yes, call again with confirmationCode. After yes, if they opted out: Saved \"{answer}\" for future questions. {who} has turned off texts from us, so I didn't send it and this is still open. If you can reach them another way, do that, then mark it handled. If the send fails for any other reason: Saved \"{answer}\" for future questions, but I couldn't text {who}, so nothing was sent and this is still open. If you can reach them another way, do that, then mark it handled. A repeat on an unanswered question returns exactly That question has already been handled. For a handler-failed issue, this texts the visitor from the Tour Core number and does not save an approved fact. The first call returns Send this to {who}? \"{reply}\" and the quoted text equals visitorWillReceive. After yes, when the text is in the outbox and the issue is closed, it returns exactly Sent to {who}. If the visitor can't be texted, it returns I couldn't text {who}, so nothing was sent and this is still open. If you can reach them another way, do that, then mark it handled. A repeat on a handler-failed issue returns exactly That's already been handled. Never make up or reword the answer.",
     input: z.strictObject({
       exceptionId: ExceptionId,
       approvedFact: z.string().min(1).max(300).describe("The operator's own words, e.g. \"2 bedrooms\" or \"Parking is included.\""),
@@ -1389,7 +1395,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Offer another time",
     kind: "change",
     description:
-      "Offers the visitor a different time. Their current booking stays until they agree. When they already have a booking, return I asked {who} about {time} on {day}. Their current booking stays until they say yes. When nothing is booked yet, return Sent {who} {time} on {day}. Nothing's booked until they say yes. If the offer is the same time they asked for, the visitor hears The property team can do {time} on {day} as a one-off. Otherwise: The property team can't do {requestedTime} on {requestedDay}, but {proposedTime} on {proposedDay} works. Say the time in everyday words, like \"3:30 PM\". Use this when the operator wants to suggest another time. If the visitor already booked a regular time, the request is withdrawn: return They booked a regular time instead. If the requested time has already passed, the request is expired: return That request ran out because its time already passed, so your offer of {newTime} on {newDay} didn't go out. I've let {who} know, and you can still book them a one-off time. Then use schedule_one_off_tour or reschedule_tour. The visitor is texted the expiry line once — not the proposal. If already expired, return That request already ran out because its time passed, and {who} has been told. You can still book them a one-off time. Do not text again. That request has already been handled is only for a request that was already approved or declined.",
+      "Offers the visitor a different time. Their current booking stays until they agree. When they already have a booking, return I asked {who} about {time} on {day}. Their current booking stays until they say yes. When nothing is booked yet, return Sent {who} {time} on {day}. Nothing's booked until they say yes. If the offer is the same time they asked for, the visitor hears The {team} can do {time} on {day} as a one-off. Otherwise: The {team} can't do {requestedTime} on {requestedDay}, but {proposedTime} on {proposedDay} works. Say the time in everyday words, like \"3:30 PM\". Use this when the operator wants to suggest another time. If the visitor already booked a regular time, the request is withdrawn: return They booked a regular time instead. If the requested time has already passed, the request is expired: return That request ran out because its time already passed, so your offer of {newTime} on {newDay} didn't go out. I've let {who} know, and you can still book them a one-off time. Then use schedule_one_off_tour or reschedule_tour. The visitor is texted the expiry line once — not the proposal. If already expired, return That request already ran out because its time passed, and {who} has been told. You can still book them a one-off time. Do not text again. That request has already been handled is only for a request that was already approved or declined.",
     input: z.strictObject({
       tourTimeRequestId: z.string().min(3).max(40).describe("The tourTimeRequestId. Never show it to the operator."),
       newStartsAt: z.string().min(1).max(80).describe('The time to offer, such as "3:30 PM" or "tomorrow at 11:15 AM".'),

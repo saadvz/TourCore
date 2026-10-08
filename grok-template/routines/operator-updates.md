@@ -74,7 +74,7 @@ delivery with the same `eventId`, so treat a repeat as the same update.
    yes/no), so the only confirmation later is Tour Core's:
    > Testy, touring Unit 1A, asked how many bedrooms it has. Tour Core doesn't
    > have that yet. The tour is still active. What should I tell them? (Or say
-   > "leave it" and the property team will follow up.)
+   > "leave it" and you can text them back yourself later.)
 
    When the operator answers, the visitor gets the answer and is returned to
    the step they were on. The save question is `Send this to {who} and save it for anyone who asks the same thing later? "{visitorWillReceive}"`.

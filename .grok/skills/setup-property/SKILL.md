@@ -113,7 +113,11 @@ the operator correct it.
    Corrections go through `set_unit_details` too. These details are approved
    facts: visitors' questions ("How many bedrooms?", "How much is it?", "When
    is it available?") are answered from them first, at any point in their
-   conversation.
+   conversation. If they were skipped, `get_state` still asks them after the
+   route, with `set_unit_details`, and that does not block saving the route.
+   An apartment or condo still asks building-door control and the entrance
+   name before the route counts as done (`save_property`). Entry instructions
+   come after the profile.
 6. Doors: ask **"Which door do visitors come in through?"** when this type
    has a building entrance they control. `add_door` with `kind: entrance`.
    Ask **"Any hallway or inside doors on the way to the units?"** Add each as
@@ -136,6 +140,14 @@ the operator correct it.
    early) and change any they want. If tours would start more often than a
    visit lasts (tour length plus early arrival), `save_hours` and
    `set_tour_hours` refuse and save nothing. Say that refusal as returned.
+   A tour shorter than 15 minutes or longer than 4 hours is refused with
+   `Each tour should last between 15 minutes and 4 hours. How long should each tour be?`
+   Spacing under 15 minutes or over 8 hours is refused with
+   `New tours should start between 15 minutes and 8 hours apart. How often should a new tour start?`
+   Hours stay as they were. Valid default hours are still offered before
+   checks. `get_state` stays on hours until `save_hours` or `set_tour_hours`
+   confirms them. A published property, or one whose readiness or practice
+   tour already passed, already counts as confirmed.
    The units question, when that step is actually next, is **"What are the
    units called? For example, Unit A and Unit B."** After doors and routes
    are saved, do not stay on that question. An address that is already set up

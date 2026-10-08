@@ -24,7 +24,7 @@ const CLOCK =
 
 /** Every distinct clock time in already-normalized text. "1" alone is not a time; "3:15" and "at 3" are. */
 export function spokenTimes(normalized: string, today?: LocalDate): SpokenTime[] {
-  const day = /\btomorrow\b/.test(normalized) ? "tomorrow" : /\btoday\b/.test(normalized) ? "today" : undefined;
+  const day = /\b(?:tomorrow|tmrw|tmr)\b/.test(normalized) ? "tomorrow" : /\btoday\b/.test(normalized) ? "today" : undefined;
   const found: SpokenTime[] = [];
   for (const match of normalized.matchAll(CLOCK)) {
     const lead = match[1];
@@ -63,13 +63,26 @@ export function vagueTimeRequest(normalized: string): boolean {
 
 const WEEKDAY_WORD: Record<string, Weekday> = {
   monday: "MON",
+  mon: "MON",
   tuesday: "TUE",
+  tues: "TUE",
+  tue: "TUE",
   wednesday: "WED",
+  wed: "WED",
   thursday: "THU",
+  thurs: "THU",
+  thur: "THU",
+  thu: "THU",
   friday: "FRI",
+  fri: "FRI",
   saturday: "SAT",
+  sat: "SAT",
   sunday: "SUN",
+  sun: "SUN",
 };
+
+/** Longer names first so "monday" wins over "mon" and "thursday" wins over "thu". */
+const WEEKDAY_NAMES = "monday|tuesday|wednesday|thursday|friday|saturday|sunday|thurs|thur|tues|mon|tue|wed|thu|fri|sat|sun";
 
 export interface DayReference {
   weekday?: Weekday;
@@ -91,7 +104,7 @@ export interface DayReference {
  */
 export function dayReference(normalized: string, today?: LocalDate): DayReference | "menu" | undefined {
   if (/\b(this )?weekend\b/.test(normalized)) return { relative: "weekend" };
-  if (/\btomorrow\b/.test(normalized)) return { relative: "tomorrow", ...weekdayFields(normalized) };
+  if (/\b(?:tomorrow|tmrw|tmr)\b/.test(normalized)) return { relative: "tomorrow", ...weekdayFields(normalized) };
   if (/\btoday\b/.test(normalized)) return { relative: "today", ...weekdayFields(normalized) };
   const calendar = calendarDateOf(normalized, today);
   if (calendar) return calendar;
@@ -150,7 +163,7 @@ const MONTH_WORD = Object.keys(MONTH_NUMBER)
 const DAY_TOKEN = String.raw`(?:3[01]|[12]\d|0?[1-9])(?:st|nd|rd|th)?`;
 const MONTH_TOKEN = `(?:${MONTH_WORD})`;
 const YEAR_TOKEN = String.raw`(?:\d{4}|\d{2})`;
-const WEEKDAY_TOKEN = "monday|tuesday|wednesday|thursday|friday|saturday|sunday";
+const WEEKDAY_TOKEN = WEEKDAY_NAMES;
 
 const MONTH_THEN_DAY = new RegExp(`\\b(?:(${WEEKDAY_TOKEN})\\s+)?(${MONTH_TOKEN})\\s+(${DAY_TOKEN})(?:\\s+(${YEAR_TOKEN}))?\\b`);
 const DAY_THEN_MONTH = new RegExp(`\\b(?:(${WEEKDAY_TOKEN})\\s+)?(${DAY_TOKEN})\\s+(${MONTH_TOKEN})(?:\\s+(${YEAR_TOKEN}))?\\b`);
@@ -242,7 +255,7 @@ function weekdayFields(normalized: string): Pick<DayReference, "weekday" | "next
 }
 
 function weekdayOfText(normalized: string): { day: Weekday; next: boolean } | undefined {
-  const match = normalized.match(/\b(next\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/);
+  const match = normalized.match(new RegExp(`\\b(next\\s+)?(${WEEKDAY_NAMES})\\b`));
   if (!match) return undefined;
   return { day: WEEKDAY_WORD[match[2]!]!, next: !!match[1] };
 }

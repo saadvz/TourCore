@@ -1,16 +1,19 @@
 import type { TourCoreConfig } from "../config/tourCoreConfig";
 import type { ReplyPrompt } from "../messaging/presentation";
+import { visitorTeamName } from "../sms/templates";
 import { isApartmentOrCondo, isSingleTourPlace, streetAndUnit, visitorPlace } from "./identity";
 
 /**
- * The one message a visitor gets when a conversation starts. A home or one
- * apartment or condo unit offers the next tour days; a building asks which
- * unit. Times come after a day is chosen. A later step never sends a second
- * introduction.
+ * The one message a visitor gets when a conversation starts. A home, one
+ * apartment or condo, or any property with exactly one unit offers the next
+ * tour days. A building with more than one unit asks which unit, including
+ * when some of those units are paused. Times come after a day is chosen. A
+ * later step never sends a second introduction.
  */
 
 export function entryReply(config: TourCoreConfig, dates: { label: string }[], units = config.units): { body: string; prompt?: ReplyPrompt } {
   const onePlace = isSingleTourPlace(config.property);
+  const skipUnit = onePlace || config.units.length === 1;
   const place = visitorPlace(config.property);
   const named = place.publicName ? `${place.publicName} at ${place.address}` : place.address;
   const condoName = isApartmentOrCondo(config.property) && config.units[0] ? streetAndUnit(config.property, config.units[0].name) : named;
@@ -20,14 +23,14 @@ export function entryReply(config: TourCoreConfig, dates: { label: string }[], u
       ? `Hi! Welcome to the self-guided tour for ${named}. I can answer questions about the home and help you book a tour.`
       : `Hi! Welcome to the self-guided tours ${place.publicName ? `for ${named}` : `at ${place.address}`}. I can answer questions about the property and help you book a tour.`;
 
-  if (!onePlace) {
+  if (!skipUnit) {
     return {
       body: `${welcome}\n\nWhich unit would you like to see?`,
       prompt: { kind: "choose", options: units.map((unit) => unit.name), what: "a unit" },
     };
   }
   if (dates.length === 0) {
-    return { body: `${welcome}\n\nThere are no open tour times right now. The property team will reach out.` };
+    return { body: `${welcome}\n\nThere are no open tour times right now. The ${visitorTeamName(config.operator.name)} will reach out.` };
   }
   return {
     body: `${welcome}\n\nI have tours available. Which day works for you?`,

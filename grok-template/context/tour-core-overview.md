@@ -48,7 +48,7 @@ hours. Want me to move it there anyway?`) and a yes is `Moved {who}'s
 later booking to {time} on {day}.`. Calling off describes the tour that was called off;
 the later booking is `nextBooking`. After the follow-up
 reply, an unapproved custom-time request is told once that it is still
-with the property team; they can reply with a day for a regular
+with the {team}; they can reply with a day for a regular
 time only when they do not already have a held or booked regular tour.
 A held rebook taking over gets the booked-for line, then the usual
 next steps. Later texts use the normal
@@ -71,7 +71,7 @@ if possible`, `later in the week`, `can we do it later`, `anything later`,
 works better`) shows
 that day's times. A leftover number, time, or bare later/earlier/sooner
 does not move a booking. If a visitor text cannot be handled, they are told
-`Sorry, I hit a snag with that. I've let the property team know, and
+`Sorry, I hit a snag with that. I've let the {team} know, and
 they'll reply here as soon as they can.` when a landlord record was
 created, or `Sorry, I hit a snag with that. Could you text me again in a
 few minutes?` when it was not. That opens a handler-failed issue, not a
@@ -95,7 +95,7 @@ approve cannot double-book; replacing a held or booked future tour also
 sends `That replaces your {time} tour on {day}.` Operators see
 `They booked a regular time instead.` If the requested time has already
 passed, the request expires and the visitor is texted once:
-`The property team couldn't get to your request for {newTime} on {newDay} in time.`
+`The {team} couldn't get to your request for {newTime} on {newDay} in time.`
 then `You're still booked for {time} on {day}.` or
 `If you'd like another time, just reply with a day.` Approve and decline
 tell the operator `That time has already passed, so I've let {who} know
@@ -114,7 +114,10 @@ issue is open after the close, stuck-inside texts and greetings stay
 on after-close handling. After the follow-up reply, a booking that was
 still waiting gets the booked-for line, then the usual next steps.
 DONE after the close uses the usual thanks and follow-up; a yes is
-the same follow-up as a normal finish and does not ask again. STOP
+the same follow-up as a normal finish and does not ask again. During a tour,
+the hint when there is no next stop is `Text DONE when you're finished.` The
+didn't-catch line ends `or text DONE when you're finished.` `finish` still
+ends the tour. STOP
 during a tour stops visitor texts only; the tour stays on its window and
 team alerts still go out. Afterwards it sends a recap and one follow-up
 question.
@@ -125,7 +128,10 @@ self-guided tours at 144 Hillside Ave. I can answer questions about the
 property and help you book a tour." Then the unit menu. A single-family home
 says "home" and offers tour days instead of a unit menu. An apartment or condo
 (one unit) names the street plus unit ("145 Main St, Unit 4B"), never "Main
-Home", and also skips the unit menu. Entry instructions are not in the
+Home", and also skips the unit menu. Any property with exactly one unit skips
+the unit question and offers days. A building that still has another unit
+keeps the unit question when one unit is paused. One published place on a
+shared number skips the place question. A one-place miss is `I didn't catch that. Which place are you touring?` Entry instructions are not in the
 welcome; they arrive only on the you're-all-set text, after the identity
 form when this place uses one.
 
@@ -143,7 +149,7 @@ mean: 1A, 1B or 2A?".
 After the answer, Tour Core puts the interrupted step back in front of them
 (the same unit menu, the same offered times, the same identity-form reminder when
 this place uses one, or the pending confirmation). A question it can't answer gets one text, "I'll pass
-your question to the property team, and they'll reply here as soon as they can.", plus an issue and an operator
+your question to the {team}, and they'll reply here as soon as they can.", plus an issue and an operator
 update. When the operator answers, the visitor gets the answer and the step
 they were on. The save question is `Send this to {name} and save it for anyone who asks the same thing later? "{visitorWillReceive}"`, and the quote equals that text byte for byte. After a tour has ended, an approved-fact question is answered
 and that answer gets ` If you'd like to tour again, just text HI.` (a period
@@ -152,14 +158,14 @@ more than one unit is asked back as `Which unit do you mean: {A} or {B}?`
 with no HI line; after the visitor picks a unit, the approved answer gets
 the HI line, or the locked ended flag text if that unit has no approved
 answer. A question with no approved answer is flagged:
-`I'll pass your question to the property team, and they'll reply here as soon as they can. If you'd like to tour
+`I'll pass your question to the {team}, and they'll reply here as soon as they can. If you'd like to tour
 again, just text HI.` A non-question keeps the ended-tour line and is not
 flagged.
 
 Photos are not forwarded yet. A photo alone gets one plain reply:
 `I can't take photos yet. Text your question and I'll pass it along.`
 A photo plus a question Tour Core can't answer gets one text:
-`I can't open photos yet. I'll pass your question to the property team, and they'll reply here as soon as they can.`
+`I can't open photos yet. I'll pass your question to the {team}, and they'll reply here as soon as they can.`
 (and is flagged). After an ended tour, that line adds
 `If you'd like to tour again, just text HI.` A photo plus an answerable
 ended question gets `I can't take photos yet.` once, then the answer with
@@ -193,18 +199,18 @@ refusal lines insert `The {team} is still working on the problem and will
 text you here.` after the first sentence. A reply that isn't a clear yes or no is flagged:
 `I'll check with the {team} and get back to you.` STOP still opts out. If
 cancel cannot finish, they get
-`I can't cancel it from here. I've asked the property team to call it off and
+`I can't cancel it from here. I've asked the {team} to call it off and
 get back to you.` and the team is flagged. Never use the unanswered-question fallback for a clear cancel ask.
 When nothing is booked yet, that same cancel phrasing at the day menu, the time menu, or the property picker (`Actually cancel that`, `cancel that`, `cancel please`, `nevermind`; a bare `cancel` is still STOP) clears the step and replies `No problem, nothing's booked yet, so I'll stop here. Text me anytime if you want to pick a time.` It does not ask YES or NO and it does not say the tour is cancelled. The next text from someone already opted in starts scheduling again, with no TOUR keyword. A named day is used. At the property picker, that next text asks which place again.
 
 Visitors can name a tour day as today, tomorrow, a weekday, or a calendar
-date ("Dec 1", "December 1st", "1 Dec", "12/1", "Tuesday Oct 6"). Without a
+date ("Dec 1", "December 1st", "1 Dec", "12/1", "Tuesday Oct 6", `mon`, `tmrw`). Without a
 year, Tour Core uses the next date on or after today in the property's time
 zone. If that this-year date has already passed and next year is beyond the
 21-day horizon, it stays that past date — "That day has already passed" —
-instead of rolling forward and calling it too far ahead. A named weekday is that day: the next one, or today only when today is that weekday and the time is still ahead. `Is Saturday at 2:45 PM possible?` is Saturday, not today. A no that names a time (`No, Saturday at 2:45 PM`) starts a request for that time. A bare no with nothing booked is `No problem. If you'd like another time, just reply with a day.` When a tour is booked, that no keeps the current booking. Declining a request with nothing booked is `The property team couldn't approve {time} on {day}. If you'd like another time, just reply with a day.` A booked tour keeps the still-booked or still-confirmed ending. A tour still waiting on the identity form says still booked, not still confirmed. A fair-housing question is detected before rent, keywords, or a saved answer. Neighborhood composition and steering are included, such as many families nearby, who lives nearby, is the neighborhood safe, and the crime rate. A church, parking, or a playground nearby, and room for kids' bikes, stay ordinary questions. A service, assistance, support, guide, seeing-eye, or therapy dog, animal, cat, or pet, emotional support followed by any word, and ESA are included even when a pets answer is saved. So are 55+, 55 and over, a senior community, age restrictions, housing assistance, a housing voucher, HUD, Section 8, undocumented status, sexual orientation, gender identity, gay, lesbian, LGBTQ, a same-sex couple, transgender, religion, Christian, Catholic, Protestant, Jewish, Jew, Muslim, Islamic, Hindu, Buddhist, Sikh, Mormon, atheist, a social security number, SSN, pregnancy, a newborn, a baby on the way, adults only, immigrants, immigration status, a minimum age, age limits, and discrimination. `Do you allow pets?`, `Do you allow dogs?`, `Is there a dog park?`, `Is there a church nearby?`, and `Is there a minimum lease?` are not. A dog park is not parking. Parking matches `parking`, `park my car`, or `where do I park`. After that no-draft flag is saved, the visitor gets `Good question for the property team. I've passed it along, and they'll text you back here.` `{team}` is the operator name only when that name ends in "team"; otherwise it is "property team". The visitor never hears fair housing, the law, or why the question was held. If the flag cannot be saved, the team is texted first: `{who} asked a question, but I couldn't save it for you to answer. Please text them back. They're waiting.` The visitor then gets `I can't open the doors for you right now. I've let the {team} know, and they'll text you here shortly.` only if that text went out; otherwise `Sorry, I hit a snag with that. Could you text me again in a few minutes?` The audit write is afterwards, and a failed write is logged. A door with no step left, including a stale denial when there is no form, texts `{who} is at {door}, and I couldn't open it for them. Please text them or let them in.` first, then the same visitor lines. A stale identity form they can fill again is `It's been a while since you filled out the identity form, so I'll need you to fill it out again before I can open doors.` After the window, `Your tour time ended at {time}, so the doors are locked now. Want to come back another time? Just reply with a day that works.` HELP after every door is already open, and HELP after the window while the tour is still in progress, texts the team first. The visitor gets `I've let the {team} know. Stay where you are and reply here. They'll reply as soon as they can.` only if that text went out; otherwise `Sorry, I hit a snag with that. Could you text me again in a few minutes?` When that team text does not go out, the landlord sees `I couldn't text you about {who}, so I asked them to text me again in a few minutes.` That line never names a provider or an error. The fair-housing flag has `proposeDraft` false. The landlord refusal is `This one touches on fair housing, so I won't draft an answer. Reply to them yourself, then mark it handled.` `How much is rent?` and `Is rent due monthly?` stay rent answers. A date or booking ask is handled as booking, not as a flagged question. If
+instead of rolling forward and calling it too far ahead. A named weekday is that day: the next one, or today only when today is that weekday and the time is still ahead. `Is Saturday at 2:45 PM possible?` is Saturday, not today. A no that names a time (`No, Saturday at 2:45 PM`) starts a request for that time. A bare no with nothing booked is `No problem. If you'd like another time, just reply with a day.` When a tour is booked, that no keeps the current booking. Declining a request with nothing booked is `The {team} couldn't approve {time} on {day}. If you'd like another time, just reply with a day.` A booked tour keeps the still-booked or still-confirmed ending. A tour still waiting on the identity form says still booked, not still confirmed. A fair-housing question is detected before rent, keywords, or a saved answer. Neighborhood composition and steering are included, such as many families nearby, who lives nearby, is the neighborhood safe, and the crime rate. A race or color word that directly modifies a non-people noun stays ordinary, including `any Asian restaurants nearby?`, `white picket fence in the neighborhood?`, `what color are the doors in the building?`, and `Black Friday sale nearby?`. `is it mostly white around here?`, `is it mostly Black around here?`, and `is the area mostly Asian?` still match. A church, parking, or a playground nearby, and room for kids' bikes, stay ordinary questions. A service, assistance, support, guide, seeing-eye, or therapy dog, animal, cat, or pet, emotional support followed by any word, and ESA are included even when a pets answer is saved. So are 55+, 55 and over, a senior community, age restrictions, housing assistance, a housing voucher, HUD, Section 8, undocumented status, sexual orientation, gender identity, gay, lesbian, LGBTQ, a same-sex couple, transgender, religion, Christian, Catholic, Protestant, Jewish, Jew, Muslim, Islamic, Hindu, Buddhist, Sikh, Mormon, atheist, a social security number, SSN, pregnancy, a newborn, a baby on the way, adults only, immigrants, immigration status, a minimum age, age limits, and discrimination. `Do you allow pets?`, `Do you allow dogs?`, `Is there a dog park?`, `Is there a church nearby?`, and `Is there a minimum lease?` are not. A dog park is not parking. Parking matches `parking`, `park my car`, or `where do I park`. After that no-draft flag is saved, the visitor gets `Good question for the {team}. I've passed it along, and they'll text you back here.` `{team}` is the operator name only when that name ends in "team"; otherwise it is "property team". The visitor never hears fair housing, the law, or why the question was held. If the flag cannot be saved, the team is texted first: `{who} asked a question, but I couldn't save it for you to answer. Please text them back. They're waiting.` The visitor then gets `I can't open the doors for you right now. I've let the {team} know, and they'll text you here shortly.` only if that text went out; otherwise `Sorry, I hit a snag with that. Could you text me again in a few minutes?` The audit write is afterwards, and a failed write is logged. A door with no step left, including a stale denial when there is no form, texts `{who} is at {door}, and I couldn't open it for them. Please text them or let them in.` first, then the same visitor lines. A stale identity form they can fill again is `It's been a while since you filled out the identity form, so I'll need you to fill it out again before I can open doors.` After the window, `Your tour time ended at {time}, so the doors are locked now. Want to come back another time? Just reply with a day that works.` HELP after every door is already open, and HELP after the window while the tour is still in progress, texts the team first. The visitor gets `I've let the {team} know. Stay where you are and reply here. They'll reply as soon as they can.` only if that text went out; otherwise `Sorry, I hit a snag with that. Could you text me again in a few minutes?` When that team text does not go out, the landlord sees `I couldn't text you about {who}, so I asked them to text me again in a few minutes.` That line never names a provider or an error. The fair-housing flag has `proposeDraft` false. The landlord refusal is `This one touches on fair housing, so I won't draft an answer. Reply to them yourself, then mark it handled.` `How much is rent?` and `Is rent due monthly?` stay rent answers. A date or booking ask is handled as booking, not as a flagged question. If
 the day can't be resolved ("the 45th", "sometime next month"), Tour Core
-asks which day they meant and shows the day menu; it does not flag the team.
+asks which day they meant and shows the day menu; it does not flag the team. A bare fragment at that menu gets `Sorry, I didn't catch that.` `mon` and `tmrw` are days, so they are accepted.
 While a one-off tour is waiting on YES, NO, or STOP, a leftover menu
 number only re-prompts; a real question is flagged for the team and the
 hold stays pending.

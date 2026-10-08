@@ -136,8 +136,8 @@ export function semanticIssues(cfg: TourCoreConfig): ConfigIssue[] {
   if (start >= end) {
     add("hours", "TOUR_HOURS_BACKWARDS", `Tours need to end after they start. Right now they run from ${formatClockTime(th.start)} to ${formatClockTime(th.end)}.`);
   }
-  if (!lengthOk) add("hours", "TOUR_LENGTH_INVALID", "Each tour should last between 15 minutes and 4 hours.");
-  if (!within(th.slotEveryMinutes, POLICY_LIMITS.slotEveryMinutes)) add("hours", "SLOT_SPACING_INVALID", "New tours should start between 15 minutes and 8 hours apart.");
+  if (!lengthOk) add("hours", "TOUR_LENGTH_INVALID", TOUR_LENGTH_RANGE);
+  if (!within(th.slotEveryMinutes, POLICY_LIMITS.slotEveryMinutes)) add("hours", "SLOT_SPACING_INVALID", SLOT_SPACING_RANGE);
   if (!within(th.earlyArrivalMinutes, POLICY_LIMITS.earlyArrivalMinutes)) add("hours", "EARLY_ARRIVAL_INVALID", "Early arrival should be between 0 and 60 minutes.");
   if (start < end && lengthOk && end - start < th.tourLengthMinutes) {
     add("hours", "TOUR_HOURS_TOO_SHORT", `The tour hours are too short to fit a ${th.tourLengthMinutes}-minute tour.`);
@@ -170,6 +170,32 @@ export function tourSpacingRefusal(hours: { slotEveryMinutes: number; tourLength
     return `Tours every ${hours.slotEveryMinutes} minutes don't leave room for ${visit}-minute visits. Should tours start every ${visit} minutes, or should visits be shorter?`;
   }
   return undefined;
+}
+
+export const TOUR_LENGTH_RANGE = "Each tour should last between 15 minutes and 4 hours.";
+export const SLOT_SPACING_RANGE = "New tours should start between 15 minutes and 8 hours apart.";
+
+/** Save-time refusal. The hours already saved stay as they are. */
+export function tourLengthRefusal(minutes: number | undefined): string | undefined {
+  if (minutes === undefined) return undefined;
+  if (!Number.isInteger(minutes) || !within(minutes, POLICY_LIMITS.tourLengthMinutes)) {
+    return `${TOUR_LENGTH_RANGE} How long should each tour be?`;
+  }
+  return undefined;
+}
+
+/** Save-time refusal when a new tour would start too soon or too far apart. */
+export function slotSpacingRangeRefusal(minutes: number | undefined): string | undefined {
+  if (minutes === undefined) return undefined;
+  if (!Number.isInteger(minutes) || !within(minutes, POLICY_LIMITS.slotEveryMinutes)) {
+    return `${SLOT_SPACING_RANGE} How often should a new tour start?`;
+  }
+  return undefined;
+}
+
+/** Length first, then how far apart new tours start. Overlap is a separate sentence. */
+export function hoursRangeRefusal(input: { tourLengthMinutes?: number; slotEveryMinutes?: number }): string | undefined {
+  return tourLengthRefusal(input.tourLengthMinutes) ?? slotSpacingRangeRefusal(input.slotEveryMinutes);
 }
 
 export const REUSE_DAYS_RANGE = "Pick a number of days from 1 to 365.";

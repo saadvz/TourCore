@@ -23,7 +23,7 @@ import { effectiveEnv } from "../install/settings";
 import type { ResolvedConsentMode } from "../messaging/consentPolicy";
 import { isLeavingTour } from "../core/overstayCopy";
 import { normalize, stripFiller } from "../intent/normalize";
-import { claimVisitorSms } from "../sms/templates";
+import { claimVisitorSms, visitorTeamName } from "../sms/templates";
 import { handleVisitorText, isGreeting, startsNewBookingAfterClose } from "./conversation";
 import { pickerMiss, placeAliases, propertyPickerText, propertyShortName, resolveNamedPlace, STREET_MISS, menuChoice, type PlaceCandidate } from "./portfolioPick";
 import { OverstayScheduler } from "./overstayScheduler";
@@ -62,8 +62,16 @@ function pickedOpener(message: InboundMessage, original: string): InboundMessage
   return { ...message, text: openerFor(original), countsAsOptIn: true };
 }
 
-export const RESTORE_TROUBLE = "I'm having trouble restoring your tour. I've alerted the property team.";
-export const HANDLER_SNAG_ALERTED = "Sorry, I hit a snag with that. I've let the property team know, and they'll reply here as soon as they can.";
+export function restoreTrouble(team?: string, restart = false): string {
+  const name = visitorTeamName(team);
+  const base = `I'm having trouble restoring your tour. I've alerted the ${name}.`;
+  return restart ? `${base} Text HI to start a new tour.` : base;
+}
+export const RESTORE_TROUBLE = restoreTrouble();
+export function handlerSnagAlerted(team?: string): string {
+  return `Sorry, I hit a snag with that. I've let the ${visitorTeamName(team)} know, and they'll reply here as soon as they can.`;
+}
+export const HANDLER_SNAG_ALERTED = handlerSnagAlerted();
 export const HANDLER_SNAG_RETRY = "Sorry, I hit a snag with that. Could you text me again in a few minutes?";
 
 function prospectText(to: string, body: string) {
@@ -235,6 +243,11 @@ export class MessagingConversations {
       await this.sendLine(pending.offeredIds[0], pending.phone, NOTHING_BOOKED_CANCEL);
       return undefined;
     }
+    if (pending.offeredIds.length === 1) {
+      const propertyId = pending.offeredIds[0]!;
+      this.clearPick(pending);
+      return { propertyId, endpoint, message: pickedOpener(message, pending.originalText) };
+    }
     const choice = menuChoice(message.text);
     if (choice) {
       const propertyId = pending.offeredIds[choice - 1];
@@ -395,7 +408,7 @@ export class MessagingConversations {
       const { config, state } = ws.load(propertyId);
       const ready = state.readiness?.passed && isCurrent(state.readiness, state);
       if (!ready) {
-        await transport.send(prospectText(phone, `Thanks for reaching out to ${config.property.name}. Self-guided tours by text aren't available right now. Please contact the property team.`)).catch(() => undefined);
+        await transport.send(prospectText(phone, `Thanks for reaching out to ${config.property.name}. Self-guided tours by text aren't available right now. Please contact the ${visitorTeamName(config.operator.name)}.`)).catch(() => undefined);
         return {};
       }
       const tourId = ws.newVisitorTourId(propertyId, this.deps.now?.() ?? new Date(), "text");
@@ -461,7 +474,7 @@ export class MessagingConversations {
       }
       const outboundAfter = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").length;
       if (outboundAfter === outboundBefore) {
-        const fallback = alertRecorded ? HANDLER_SNAG_ALERTED : HANDLER_SNAG_RETRY;
+        const fallback = alertRecorded ? handlerSnagAlerted(session.config.operator.name) : HANDLER_SNAG_RETRY;
         await transport.send(prospectText(phone, fallback)).catch(() => undefined);
       }
       return { correlationId: session.id };
@@ -741,9 +754,9 @@ export class MessagingConversations {
     }
     const transport = this.deps.transport(snapshot.propertyId);
     const optedOut = this.isOptedOut(snapshot.propertyId, snapshot.visitorPhone);
+    const { config } = this.deps.workspace.load(snapshot.propertyId);
     if (!snapshot.recovery?.visitorTold) {
-      if (!optedOut) await transport.send(prospectText(snapshot.visitorPhone, RESTORE_TROUBLE)).catch(() => undefined);
-      const { config } = this.deps.workspace.load(snapshot.propertyId);
+      if (!optedOut) await transport.send(prospectText(snapshot.visitorPhone, restoreTrouble(config.operator.name))).catch(() => undefined);
       await transport
         .send({
           to: config.operator.contact,
@@ -756,7 +769,7 @@ export class MessagingConversations {
       this.persistence.put(told);
       this.broken.set(key, told);
     } else if (!optedOut) {
-      await transport.send(prospectText(snapshot.visitorPhone, `${RESTORE_TROUBLE} Text HI to start a new tour.`)).catch(() => undefined);
+      await transport.send(prospectText(snapshot.visitorPhone, restoreTrouble(config.operator.name, true))).catch(() => undefined);
     }
     return false;
   }

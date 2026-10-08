@@ -1,4 +1,5 @@
 import { PROPERTY_TYPE_LABELS, validateConfig } from "../config/tourCoreConfig";
+import { nextProfileQuestion } from "../config/unitProfile";
 import { hoursStepSay } from "../operator/milestones";
 import { savedFullAddress } from "../setup/address";
 import { renderPlaybook, spokenAsk } from "../playbooks/compose";
@@ -9,7 +10,16 @@ import { SHARED_STEPS, type StepId } from "../playbooks/shared";
 import { visitorTexting } from "../operator/setupFlow";
 import type { OperatorServices } from "../operator/services";
 import { draftView } from "../setup/presenters";
-import { SetupInputError, operatorFacingPropertyName, visitorHelpQuestion, type SetupDraft } from "../setup/setupActions";
+import {
+  BUILDING_ACCESS_QUESTION,
+  BUILDING_ENTRANCE_QUESTION,
+  ENTRY_INSTRUCTIONS_QUESTION,
+  SetupInputError,
+  condoNextQuestion,
+  operatorFacingPropertyName,
+  visitorHelpQuestion,
+  type SetupDraft,
+} from "../setup/setupActions";
 import { isCurrent, statusLabel } from "../setup/workspace";
 import { operatorUnitName } from "../visitor/identity";
 import { isHostedRailway } from "./deployment";
@@ -45,6 +55,8 @@ interface Picture {
   needsAddressConfirm: boolean;
   typeReady: boolean;
   unitsReady: boolean;
+  routesOpen: boolean;
+  condoAccessOpen: boolean;
   helpOpen: boolean;
   hoursReady: boolean;
   readinessPassed: boolean;
@@ -62,6 +74,8 @@ function pictureOf(services: OperatorServices, id: string | undefined): Picture 
     needsAddressConfirm: false,
     typeReady: false,
     unitsReady: false,
+    routesOpen: false,
+    condoAccessOpen: false,
     helpOpen: false,
     hoursReady: false,
     readinessPassed: false,
@@ -81,10 +95,19 @@ function pictureOf(services: OperatorServices, id: string | undefined): Picture 
   const needsAddressConfirm = !!draft.property.canonicalAddress?.postalCode && draft.property.addressConfirmed === false;
   const typeReady = !!draft.property.propertyType;
   const issues = validateConfig(draft);
-  const unitIssues = issues.some((issue) => issue.section === "units" || issue.section === "routes");
-  const unitsReady = addressReady && typeReady && draft.units.length > 0 && !unitIssues;
+  const structuralIssues = issues.some((issue) => issue.section === "units" || issue.section === "routes");
+  const routesOpen = draft.units.length > 0 && issues.some((issue) => issue.section === "routes");
+  const condo = condoNextQuestion(draft);
+  const condoAccessOpen = !!condo && (condo.nextQuestion === BUILDING_ACCESS_QUESTION || condo.nextQuestion === BUILDING_ENTRANCE_QUESTION);
+  const profileOpen = !!nextProfileQuestion(draft.units);
+  const entryOpen = condo?.nextQuestion === ENTRY_INSTRUCTIONS_QUESTION;
+  const unitsReady = addressReady && typeReady && draft.units.length > 0 && !structuralIssues && !profileOpen && !entryOpen && !condoAccessOpen;
   const helpOpen = !!visitorHelpQuestion(draft);
   const otherIssues = issues.some((issue) => issue.section !== "units" && issue.section !== "routes");
+  const readinessPassed = !!saved && !!saved.state.readiness?.passed && isCurrent(saved.state.readiness, saved.state);
+  const practicePassed = !!saved && !!saved.state.dryTour?.passed && isCurrent(saved.state.dryTour, saved.state);
+  const published = saved?.state.status === "PUBLISHED_FOR_DEMO";
+  const hoursConfirmed = published || readinessPassed || practicePassed || services.workspace.hoursWereConfirmed(id);
   return {
     id,
     draft,
@@ -92,11 +115,13 @@ function pictureOf(services: OperatorServices, id: string | undefined): Picture 
     needsAddressConfirm,
     typeReady,
     unitsReady,
+    routesOpen,
+    condoAccessOpen,
     helpOpen,
-    hoursReady: unitsReady && !helpOpen && !otherIssues,
-    readinessPassed: !!saved && !!saved.state.readiness?.passed && isCurrent(saved.state.readiness, saved.state),
-    practicePassed: !!saved && !!saved.state.dryTour?.passed && isCurrent(saved.state.dryTour, saved.state),
-    published: saved?.state.status === "PUBLISHED_FOR_DEMO",
+    hoursReady: unitsReady && !helpOpen && !otherIssues && hoursConfirmed,
+    readinessPassed,
+    practicePassed,
+    published,
   };
 }
 
@@ -130,8 +155,10 @@ function stepFor(action: string, picture: Picture): StepId {
     if (!picture.typeReady) return "property-type";
     if (!picture.unitsReady) {
       if (picture.draft?.property.propertyType === "SINGLE_FAMILY" && picture.draft.units.length === 0) return "units-home";
-      if (picture.draft && picture.draft.units.length > 0) return "units-route";
-      return "units-which";
+      if (!picture.draft || picture.draft.units.length === 0) return "units-which";
+      if (picture.condoAccessOpen) return "units-details";
+      if (picture.routesOpen) return "units-route";
+      return "units-details";
     }
     if (picture.helpOpen) return "hours-help";
     return "hours";
@@ -293,11 +320,35 @@ function propertyList(services: OperatorServices) {
     });
 }
 
+/** Building access and the entrance name come before a condo route can be saved. Profile and entry instructions come after the route. */
+function unitsDetailSay(draft: SetupDraft): string | undefined {
+  const condo = condoNextQuestion(draft);
+  if (condo && (condo.nextQuestion === BUILDING_ACCESS_QUESTION || condo.nextQuestion === BUILDING_ENTRANCE_QUESTION)) return condo.nextQuestion;
+  const profile = nextProfileQuestion(draft.units);
+  if (profile) return profile.question;
+  if (condo?.nextQuestion === ENTRY_INSTRUCTIONS_QUESTION) return condo.nextQuestion;
+  return undefined;
+}
+
+function toolFor(step: StepId, draft: SetupDraft | undefined): string {
+  if (step === "units-details" && draft) {
+    const condo = condoNextQuestion(draft);
+    if (condo && (condo.nextQuestion === BUILDING_ACCESS_QUESTION || condo.nextQuestion === BUILDING_ENTRANCE_QUESTION)) return "save_property";
+    if (nextProfileQuestion(draft.units)) return "set_unit_details";
+    if (condo?.nextQuestion === ENTRY_INSTRUCTIONS_QUESTION) return "save_property";
+  }
+  return milestoneToolFor(step);
+}
+
 const RAW_SLOT = /\{[A-Za-z][A-Za-z0-9]*\}/;
 
 /** The line for this step, with saved details filled in. Never leaves a raw slot. */
 function sayFor(client: ReportedClient | undefined, step: StepId, draft: SetupDraft | undefined): string {
   let say = spokenAsk(client, step);
+  if (step === "units-details" && draft) {
+    const detail = unitsDetailSay(draft);
+    if (detail) say = detail;
+  }
   if (step === "hours" && draft) say = hoursStepSay(draft.tourHours);
   if (step === "property-confirm" && draft?.property.address.trim()) say = `Did I get that right: ${savedFullAddress(draft.property)}?`;
   if (RAW_SLOT.test(say) && draft) say = say.replaceAll("{address}", draft.property.address);
@@ -347,7 +398,7 @@ export function readState(input: StateReadInput, propertyId?: string): Record<st
     storage: { summary: storageLine(inst) },
     milestones,
     currentMilestone: current?.id ?? null,
-    nextStep: { action: next.action, component: next.component, tool: milestoneToolFor(step), say, doneLooksLike: copy.done },
+    nextStep: { action: next.action, component: next.component, tool: toolFor(step, picture.draft), say, doneLooksLike: copy.done },
     playbook: { id: playbook.id, version: playbook.version, mode: playbook.mode, step: playbook.step, text: playbook.text },
   };
 }
