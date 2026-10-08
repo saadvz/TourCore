@@ -106,7 +106,7 @@ export const BACKUP_TOOLS: OperatorTool[] = [
     name: "begin_restore_upload",
     title: "Start a backup restore",
     kind: "change",
-    description: "Opens a short-lived upload for one portable backup. Nothing is imported until the operator approves a preview. Do not paste the backup into chat.",
+    description: "Opens a short-lived upload for one portable backup. Nothing is imported until the operator approves a preview. Do not paste the backup into chat. Upload the file to the handoff. A backup up to 50 MB is accepted. An upload over that cap is refused with a message that states the cap.",
     input: z.strictObject({}),
     run: async (ctx) => installation(ctx).backups.beginRestore(),
   }),
