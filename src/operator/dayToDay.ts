@@ -561,14 +561,16 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
         const backups = installationOf(ctx).backups;
         if (i.action === "status") return backups.status();
         if (i.action === "decline") {
-          const declined = backups.decline();
           const inst = installationOf(ctx);
           if (inst.records.model() !== "HOSTED_P0_VOLUME" && inst.records.provider() === "NOT_CONFIGURED") {
             inst.records.useLocalDemo();
             const google = googleClientConfig(inst.env(), (name) => inst.secrets.get(name as SettingName));
-            if (!google.clientId || !google.clientSecret) return { summary: DRIVE_NOT_SET_UP_LINE };
+            if (!google.clientId || !google.clientSecret) {
+              backups.decline();
+              return { summary: DRIVE_NOT_SET_UP_LINE };
+            }
           }
-          return declined;
+          return backups.decline();
         }
         if (i.action === "create") return backups.create(i.reason);
         if (i.action === "confirm_destination") {

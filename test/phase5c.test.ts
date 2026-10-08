@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { AccessWindows } from "../src/operator/accessWindows";
 import { formatAuditDaySummary } from "../src/operator/auditExport";
-import { TourCoreConfigShape } from "../src/config/tourCoreConfig";
+import { TourCoreConfigShape, validateConfig } from "../src/config/tourCoreConfig";
+import { presentStoredTimeZone } from "../src/setup/storedTimeZone";
 import { UNKNOWN_ANSWER } from "../src/core/TourCore";
 import { configHash, PropertyWorkspace } from "../src/setup/workspace";
 import { writeJsonAtomic } from "../src/storage/atomicWrite";
@@ -267,6 +268,39 @@ describe("unset time zone", () => {
     expect(loaded.state.status).toBe("PUBLISHED_FOR_DEMO");
     expect(JSON.parse(readFileSync(path, "utf8")).property.timezone).toBe("GMT+00:00");
   });
+
+  it("asks for a time zone when none is saved, and names a saved zone it does not recognize", async () => {
+    const h = use();
+    const id = await h.publish();
+    const saved = structuredClone(h.workspace.load(id).config);
+
+    const empty = structuredClone(saved);
+    empty.property.timezone = "";
+    const emptyIssue = validateConfig(empty).find((issue) => issue.code === "TIMEZONE_INVALID");
+    expect(emptyIssue?.message).toBe(EMPTY_ZONE);
+    expect(emptyIssue?.message).not.toContain("America/New_York");
+
+    const older = structuredClone(saved);
+    older.property.timezone = "GMT+00:00";
+    older.property.canonicalAddress = {
+      street: older.property.canonicalAddress?.street ?? "100 Alfred Way",
+      city: older.property.canonicalAddress?.city ?? "Brooklyn",
+      state: "",
+      formatted: older.property.canonicalAddress?.formatted ?? "100 Alfred Way, Brooklyn",
+    };
+    delete older.property.timezoneConfirmed;
+    const presented = presentStoredTimeZone(older);
+    expect(presented.property.timezone).toBe("");
+    const unsetIssue = validateConfig(presented).find((issue) => issue.code === "TIMEZONE_INVALID");
+    expect(unsetIssue?.message).toBe(EMPTY_ZONE);
+    expect(unsetIssue?.message).not.toContain("America/New_York");
+
+    const invalid = structuredClone(saved);
+    invalid.property.timezone = "Mars/Olympus";
+    const invalidIssue = validateConfig(invalid).find((issue) => issue.code === "TIMEZONE_INVALID");
+    expect(invalidIssue?.message).toBe(`I don't recognize the time zone "Mars/Olympus". Try something like Eastern or Pacific.`);
+    expect(invalidIssue?.message).not.toContain("America/New_York");
+  });
 });
 
 describe("restore upload drain", () => {
@@ -345,6 +379,7 @@ describe("restore upload drain", () => {
   }, 30_000);
 });
 
+const EMPTY_ZONE = "What time zone should tours use, like Eastern or Pacific?";
 const HOSTED_DECLINE = "Operational records stay with hosted Tour Core. Portable backups are off until you connect Google Drive.";
 const SELF_HOST_DECLINE = "Your records stay on this computer. Portable backups stay off until Google Drive is connected.";
 
@@ -356,6 +391,25 @@ describe("portable backup decline copy", () => {
     cleanups.push(h.cleanup);
     h.inst.files.ensure({ deploymentMode: "HOSTED_RAILWAY_P0" });
     expect((await h.ok("decline_portable_backup")).summary).toBe(HOSTED_DECLINE);
+    expect((await h.ok("backup_records", { action: "decline" })).message).toBe(HOSTED_DECLINE);
+    expect(h.inst.records.provider()).toBe("HOSTED_VOLUME");
+  });
+
+  it("moves a self-hosted install with Google set up but not connected onto this computer, then says so", async () => {
+    const local = installHarness({
+      env: {
+        TOURCORE_DEPLOYMENT_MODE: "SELF_HOSTED",
+        TOURCORE_GOOGLE_OAUTH_CLIENT_ID: "tourcore-google-client.apps.googleusercontent.com",
+        TOURCORE_GOOGLE_OAUTH_CLIENT_SECRET: "tourcore-google-secret",
+      },
+    });
+    cleanups.push(local.cleanup);
+    local.inst.files.ensure({ deploymentMode: "SELF_HOSTED" });
+    expect(local.inst.records.provider()).toBe("NOT_CONFIGURED");
+    const declined = await local.ok("backup_records", { action: "decline" });
+    expect(declined.message).toBe(SELF_HOST_DECLINE);
+    expect(local.inst.records.provider()).toBe("LOCAL_DEMO");
+    expect(local.inst.files.state().storage?.mode).toBe("LOCAL_DEMO");
   });
 
   it("uses the computer line when records are already local or Drive is still waiting", async () => {
