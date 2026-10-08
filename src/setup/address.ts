@@ -62,6 +62,8 @@ export function addressConfirmQuestion(parts: { street: string; city: string; st
 /** One missing part, in order. City is never first while the state is still blank. */
 export const STREET_QUESTION = "What's the street address?";
 export const STATE_QUESTION = "What state is it in?";
+/** A state was given, and it is not a US state Tour Core can read. */
+export const STATE_UNREADABLE_QUESTION = "I didn't catch that state. Which state is it, like NJ or New Jersey?";
 export const CITY_QUESTION = "What city should I use?";
 export const ZIP_QUESTION = "What ZIP code should I use?";
 /** Reply when a city was just saved and the state is still missing. */

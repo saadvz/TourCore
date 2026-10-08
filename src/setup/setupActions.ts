@@ -23,6 +23,7 @@ import {
   CITY_QUESTION,
   STREET_QUESTION,
   STATE_QUESTION,
+  STATE_UNREADABLE_QUESTION,
   canonicalizeStreet,
   fillAddress,
   normalizeUsState,
@@ -301,7 +302,7 @@ export function setPropertyDetails(
   }
   if (input.state !== undefined) {
     const state = normalizeUsState(input.state);
-    if (!state) throw new SetupInputError("STATE_UNREADABLE", STATE_QUESTION);
+    if (!state) throw new SetupInputError("STATE_UNREADABLE", STATE_UNREADABLE_QUESTION);
     const current = addressSoFar(next);
     storeAddress(next, fillAddress(current, { state }, current?.formatted || next.property.address));
   }

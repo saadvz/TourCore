@@ -83,6 +83,24 @@ describe("address parts, one at a time", () => {
     });
   });
 
+  it("says it did not catch a state it cannot read, and keeps the street and city", async () => {
+    const h = use(grokHarness());
+    const created = await h.ok("create_property_setup", { address: "302 Main Street, Hackensack" });
+    const id = created.setup.propertyId as string;
+    expect(await h.fails("update_property_details", { state: "Jersey" })).toBe("I didn't catch that state. Which state is it, like NJ or New Jersey?");
+    expect(h.workspace.openDraft(id).draft.property.canonicalAddress).toMatchObject({
+      street: "302 Main Street",
+      city: "Hackensack",
+      state: "",
+    });
+  });
+
+  it("still asks for the state when it is simply missing", async () => {
+    const h = use(grokHarness());
+    const created = await h.ok("create_property_setup", { address: "302 Main Street, Unit 4B" });
+    expect(created.nextQuestion).toBe("What state is it in?");
+  });
+
   it("asks for the city when the state is already saved", async () => {
     const h = use(grokHarness());
     const created = await h.ok("create_property_setup", { address: "302 Main Street, NJ" });
