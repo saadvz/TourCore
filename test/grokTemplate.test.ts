@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -55,6 +56,12 @@ describe("Grok skills", () => {
 });
 
 describe("Grok template package", () => {
+  it("keeps SETUP_PROMPT.md byte-identical to master", () => {
+    const current = readFileSync(join(TEMPLATE, "SETUP_PROMPT.md"));
+    const master = execFileSync("git", ["show", "master:grok-template/SETUP_PROMPT.md"]);
+    expect(Buffer.compare(current, master)).toBe(0);
+  });
+
   it("lists every tool exactly once in the integration notes", () => {
     const doc = readFileSync(join(TEMPLATE, "integrations", "tour-core-tools.md"), "utf8");
     const listed = [...doc.matchAll(/^\| `([a-z_]+)` \|/gm)].map((m) => m[1]);

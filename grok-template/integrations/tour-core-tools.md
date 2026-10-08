@@ -106,6 +106,14 @@ again with the code after the operator's yes.
 | `preview_portable_restore` | read | Checks an uploaded backup and returns a plain preview. Does not change records |
 | `import_portable_backup` | consequential | Restores a previewed backup after an explicit yes. Replacement of existing records needs a separate explicit choice. Provider logins are not restored |
 | `reset_hosted_demo` | consequential | Hosted demo only, current owner only. First call warns and changes nothing. Second call erases the demo and starts a fresh unclaimed installation. Keeps the Railway service and Google Drive files. Hidden unless that owner is connected |
+| `set_up_texting` | change | Sets up texting for this install (the provider, the line, and the check) and says whether that step is done, blocked, or still needs an answer |
+| `save_property` | change | Saves the property address, type, time zone, name, facts, help number, alert contact, building access, and entry instructions |
+| `save_units` | change | Adds, renames, or updates units and their leasing details |
+| `save_doors_and_routes` | change | Saves doors and walking routes, or with preview true only shows the matched route |
+| `save_hours` | change | Saves touring days and hours from everyday words |
+| `save_settings` | change | Saves the optional identity check and tour-update choices, and will not loosen the identity check on a live property |
+| `run_checks` | change | Runs the readiness check and a practice tour, including the connection, door-access, and alert self-tests |
+| `publish` | change | Publishes the property for demo after a yes to the confirmation it returns |
 
 `reset_hosted_demo` is not offered on a self-hosted or local Tour Core, and it
 is hidden from anyone who is not the current hosted owner. It does not take a

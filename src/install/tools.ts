@@ -35,6 +35,24 @@ function installation(ctx: ToolContext): Installation {
   return ctx.installation;
 }
 
+/** The same secure-setup card get_secure_setup_url returns. No visitor name, number, or message. */
+export function secureSetupLink(inst: Installation, localUrl: string | undefined, step?: "visitor-messaging" | "operator-alerts"): Record<string, unknown> {
+  const hosted = isHostedRailway(inst.deploymentMode());
+  const minted = hosted ? inst.sessions.mint(HOSTED_SETUP_SESSION_MINUTES, { csrf: true, writes: HOSTED_SETUP_WRITES }) : inst.sessions.mint();
+  const base = hosted ? inst.publicBaseUrl() : (localUrl ?? "http://localhost:4321");
+  if (!base) return { summary: "Tour Core doesn't have a secure page for credentials yet.", instructions: "The hosted public address isn't set, so there is no setup page to open." };
+  const minutes = Math.round((minted.expiresAt - inst.now()) / 60_000) || (hosted ? HOSTED_SETUP_SESSION_MINUTES : DEFAULT_SETUP_SESSION_MINUTES);
+  const fragment = `s=${minted.token}${minted.csrf ? `&c=${minted.csrf}` : ""}${step ? `&step=${step}` : ""}`;
+  return {
+    summary: "I'll ask for these credentials securely; they won't be shown in chat. Then I'll fill Tour Core's setup form.",
+    url: `${base}/install#${fragment}`,
+    expiresInMinutes: minutes,
+    instructions: hosted
+      ? "Open url over https. Prefer Grok's secure secret input and fill the form yourself. Do not show the link, do not ask for the values in chat, and do not pass them as tool arguments. The link expires and can only be used a few times. Hand the browser to the operator only if secure fill isn't available for a field. When they're saved, call get_next_installation_step."
+      : "Open url yourself in your cloud browser (it only works on the Tour Core computer). Prefer Grok's secure secret input and fill the form yourself. Do not show the link, do not ask for the values in chat, and do not pass them as tool arguments. Use a provider login when that provider has one. Hand the browser to the operator only if secure fill isn't available for a field. When they're saved, call get_next_installation_step.",
+  };
+}
+
 const componentOut = (c: ComponentStatus) => ({
   component: c.component,
   label: c.label,
@@ -310,23 +328,7 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
     description:
       "A short-lived link to Tour Core's secure setup page. On a local or Grok-managed install it only opens in the browser on the Tour Core computer. On the hosted demo it is an https page with a one-time session. Prefer a secure secret input that fills the form without the values entering chat. Hand the browser to the operator only if that fill isn't available. Never ask for credentials in chat and never pass them as tool arguments.",
     input: z.strictObject({ step: SecureStep.optional().describe("Which part to open: visitor-messaging or operator-alerts (Grok Routine).") }),
-    run: async (ctx, i) => {
-      const inst = installation(ctx);
-      const hosted = isHostedRailway(inst.deploymentMode());
-      const minted = hosted ? inst.sessions.mint(HOSTED_SETUP_SESSION_MINUTES, { csrf: true, writes: HOSTED_SETUP_WRITES }) : inst.sessions.mint();
-      const base = hosted ? inst.publicBaseUrl() : (ctx.localUrl?.() ?? "http://localhost:4321");
-      if (!base) return { summary: "Tour Core doesn't have a secure page for credentials yet.", instructions: "The hosted public address isn't set, so there is no setup page to open." };
-      const minutes = Math.round((minted.expiresAt - inst.now()) / 60_000) || (hosted ? HOSTED_SETUP_SESSION_MINUTES : DEFAULT_SETUP_SESSION_MINUTES);
-      const fragment = `s=${minted.token}${minted.csrf ? `&c=${minted.csrf}` : ""}${i.step ? `&step=${i.step}` : ""}`;
-      return {
-        summary: "I'll ask for these credentials securely; they won't be shown in chat. Then I'll fill Tour Core's setup form.",
-        url: `${base}/install#${fragment}`,
-        expiresInMinutes: minutes,
-        instructions: hosted
-          ? "Open url over https. Prefer Grok's secure secret input and fill the form yourself. Do not show the link, do not ask for the values in chat, and do not pass them as tool arguments. The link expires and can only be used a few times. Hand the browser to the operator only if secure fill isn't available for a field. When they're saved, call get_next_installation_step."
-          : "Open url yourself in your cloud browser (it only works on the Tour Core computer). Prefer Grok's secure secret input and fill the form yourself. Do not show the link, do not ask for the values in chat, and do not pass them as tool arguments. Use a provider login when that provider has one. Hand the browser to the operator only if secure fill isn't available for a field. When they're saved, call get_next_installation_step.",
-      };
-    },
+    run: async (ctx, i) => secureSetupLink(installation(ctx), ctx.localUrl?.(), i.step),
   }),
   ...STORAGE_TOOLS,
   ...BACKUP_TOOLS,

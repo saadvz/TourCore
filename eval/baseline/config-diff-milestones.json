@@ -1,0 +1,20 @@
+{
+  "diff": {
+    "runs": 10,
+    "runIds": [
+      "canonical",
+      "lowercase-reverse",
+      "st-abbreviation",
+      "state-name",
+      "uppercase",
+      "st-no-period",
+      "no-comma-before-state",
+      "nj-periods",
+      "eastern-timezone",
+      "trimmed-names"
+    ],
+    "differingFieldCount": 0,
+    "fields": []
+  },
+  "matchesOldTools": true
+}

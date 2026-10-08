@@ -7,6 +7,7 @@ import { ExportBundleSchema, type ExportBundle } from "../export/exportBundle";
 import { writeFileAtomic, writeFolderAtomic, writeJsonAtomic } from "../storage/atomicWrite";
 import type { DryTourCheck, DryTourResult } from "./dryTour";
 import { runReadinessCheck, type ReadinessResult } from "./readiness";
+import { normalizeStoredDraft } from "./normalizeDraft";
 import { SetupInputError } from "./setupActions";
 
 /**
@@ -228,7 +229,7 @@ export class PropertyWorkspace {
    * checks and publication, and is recorded in the content log.
    */
   save(draft: TourCoreConfig, now = new Date()): SavedProperty & { change: "new" | "none" | "content" | "structural" } {
-    const parsed = TourCoreConfigSchema.safeParse(draft);
+    const parsed = TourCoreConfigSchema.safeParse(normalizeStoredDraft(draft));
     if (!parsed.success) {
       const error = new SetupInputError("CONFIG_INVALID", "Some answers still need attention before this can be saved.");
       Object.assign(error, { issues: validateConfig(draft) });
@@ -286,7 +287,8 @@ export class PropertyWorkspace {
 
   /** Unfinished setups may be invalid; they're kept apart from the saved setup until they pass validation. */
   saveDraft(draft: TourCoreConfig): void {
-    writeJsonAtomic(this.draftPath(draft.property.id), draft);
+    const normalized = normalizeStoredDraft(draft);
+    writeJsonAtomic(this.draftPath(normalized.property.id), normalized);
   }
 
   /**

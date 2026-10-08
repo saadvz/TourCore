@@ -75,7 +75,7 @@ describe("browser setup", () => {
     await app.cmd(id, "setPropertyDetails", { entryInstructions: "Buzz 4B at the desk." });
     const view = (await app.call("GET", `/api/properties/${id}`)).body.view;
     expect(view.property).toMatchObject({
-      name: "145 Main St, Unit 4B",
+      name: "145 Main Street, Unit 4B",
       propertyType: "APARTMENT_OR_CONDO",
       propertyTypeLabel: "Apartment or condo (one unit)",
       buildingAccess: "BUILDING_AND_UNIT",

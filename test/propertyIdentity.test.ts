@@ -58,7 +58,7 @@ describe("canonical property identity", () => {
   it("keeps the address as the identity, uses it with visitors, and never invents a friendly name", async () => {
     const h = harness();
     const created = await h.ok("create_property_setup", { address: "144 Hillside Ave, Teaneck, NJ" });
-    expect(created.setup).toMatchObject({ name: "144 Hillside Ave", address: "144 Hillside Ave, Teaneck, NJ", propertyType: "Not chosen yet" });
+    expect(created.setup).toMatchObject({ name: "144 Hillside Avenue", address: "144 Hillside Avenue, Teaneck, NJ", propertyType: "Not chosen yet" });
     expect(created.setup.propertyName).toBeUndefined();
     const id = created.setup.propertyId as string;
     expect(h.workspace.openDraft(id).draft.property.displayName).toBeUndefined();
@@ -66,25 +66,25 @@ describe("canonical property identity", () => {
     await h.ok("update_property_details", { propertyType: "APARTMENT_BUILDING" });
     await finishHillside(h);
     const review = await h.ok("review_property_setup");
-    expect(review.lines.slice(0, 3)).toEqual(["144 Hillside Ave, Teaneck, NJ", "Apartment building", ""]);
+    expect(review.lines.slice(0, 3)).toEqual(["144 Hillside Avenue, Teaneck, NJ", "Apartment building", ""]);
     expect(review.lines.join("\n")).not.toMatch(/Called:/);
-    expect(await welcomeFor(h, id)).toContain("Hi! Welcome to the self-guided tours at 144 Hillside Ave, Teaneck, NJ.");
+    expect(await welcomeFor(h, id)).toContain("Hi! Welcome to the self-guided tours at 144 Hillside Avenue, Teaneck, NJ.");
   });
 
   it("stores an operator-given name separately; visitors hear it, the address stays canonical, and it can be removed", async () => {
     const h = harness();
     const created = await h.ok("create_property_setup", { address: "144 Hillside Ave, Teaneck, NJ", name: "Hillside Apartments", propertyType: "APARTMENT_BUILDING" });
     const id = created.setup.propertyId as string;
-    expect(h.workspace.openDraft(id).draft.property).toMatchObject({ address: "144 Hillside Ave, Teaneck, NJ", displayName: "Hillside Apartments", name: "Hillside Apartments" });
+    expect(h.workspace.openDraft(id).draft.property).toMatchObject({ address: "144 Hillside Avenue, Teaneck, NJ", displayName: "Hillside Apartments", name: "Hillside Apartments" });
     await finishHillside(h);
-    expect((await h.ok("review_property_setup")).lines.slice(0, 3)).toEqual(["144 Hillside Ave, Teaneck, NJ", "Called: Hillside Apartments", "Apartment building"]);
+    expect((await h.ok("review_property_setup")).lines.slice(0, 3)).toEqual(["144 Hillside Avenue, Teaneck, NJ", "Called: Hillside Apartments", "Apartment building"]);
     const named = await welcomeFor(h, id);
     expect(named).toContain("Hillside Apartments");
-    expect(named).toContain("144 Hillside Ave, Teaneck, NJ");
+    expect(named).toContain("144 Hillside Avenue, Teaneck, NJ");
 
     await h.ok("update_property_details", { name: "" });
     const property = h.workspace.load(id).config.property;
-    expect(property).toMatchObject({ name: "144 Hillside Ave, Teaneck, NJ", address: "144 Hillside Ave, Teaneck, NJ" });
+    expect(property).toMatchObject({ name: "144 Hillside Avenue, Teaneck, NJ", address: "144 Hillside Avenue, Teaneck, NJ" });
     expect(property.displayName).toBeUndefined();
   });
 });
@@ -96,7 +96,7 @@ describe("property type", () => {
     expect(created.nextQuestion).toBe("What ZIP code should I use?");
     expect(created.choices).toBeUndefined();
     const zipped = await h.ok("update_property_details", { postalCode: "07666" });
-    expect(zipped.nextQuestion).toBe("I have:\n144 Hillside Ave\nTeaneck, NJ 07666\nIs that the address?");
+    expect(zipped.nextQuestion).toBe("I have:\n144 Hillside Avenue\nTeaneck, NJ 07666\nIs that the address?");
     const confirmed = await h.ok("update_property_details", { confirmAddress: true });
     expect(confirmed).toMatchObject({ nextQuestion: "What type of property is this?" });
     expect(confirmed.choices.map((c: { label: string }) => c.label)).toEqual([
@@ -106,7 +106,7 @@ describe("property type", () => {
     ]);
     const draft = h.workspace.openDraft(created.setup.propertyId).draft;
     expect(draft.property.propertyType).toBeUndefined();
-    expect(draft.property.canonicalAddress).toMatchObject({ street: "144 Hillside Ave", city: "Teaneck", state: "NJ", postalCode: "07666" });
+    expect(draft.property.canonicalAddress).toMatchObject({ street: "144 Hillside Avenue", city: "Teaneck", state: "NJ", postalCode: "07666" });
     expect(draft.property.addressConfirmed).toBe(true);
     expect(validateConfig(draft).map((i) => i.code)).toContain("PROPERTY_TYPE_MISSING");
     expect(await h.fails("update_property_details", { propertyType: "CASTLE" })).toContain("doesn't fit update_property_details");
@@ -142,16 +142,16 @@ describe("property type", () => {
     expect(await h.fails("add_unit", { name: "Garage" })).toContain("A single-family home has one tourable space");
     await h.ok("set_unit_details", { units: [{ unit: "Main Home", bedrooms: "3", bathrooms: "2", monthlyRent: "$3,400", availability: "now" }] });
     await h.ok("set_tour_hours", { days: "weekdays", start: "9am", end: "5pm" });
-    const id = "prop_27_oak_ln_teaneck_nj";
+    const id = "prop_27_oak_lane_teaneck_nj";
     expect(validateConfig(h.workspace.load(id).config)).toEqual([]);
-    expect((await h.ok("review_property_setup")).lines).toEqual(expect.arrayContaining(["Single-family home", "27 Oak Ln", "  3 bed \u00b7 2 bath \u00b7 $3,400/month \u00b7 available now", "  Route: Front Door"]));
+    expect((await h.ok("review_property_setup")).lines).toEqual(expect.arrayContaining(["Single-family home", "27 Oak Lane", "  3 bed \u00b7 2 bath \u00b7 $3,400/month \u00b7 available now", "  Route: Front Door"]));
     expect((await h.ok("review_property_setup")).lines).not.toContain("Main Home");
     expect((await h.ok("run_readiness_check")).passed).toBe(true);
     expect((await h.ok("run_dry_tour")).passed).toBe(true);
     expect((await h.approve("publish_demo_property", {})).done.published).toBe(true);
     // Visitors aren't asked to pick from a one-item unit menu.
     const welcome = await welcomeFor(h, id);
-    expect(welcome).toContain("Hi! Welcome to the self-guided tour for 27 Oak Ln, Teaneck, NJ 07666.");
+    expect(welcome).toContain("Hi! Welcome to the self-guided tour for 27 Oak Lane, Teaneck, NJ 07666.");
     expect(welcome).toContain("questions about the home");
     expect(welcome).toContain("Which day works for you?");
     expect(welcome).not.toContain("Which unit");
@@ -159,10 +159,10 @@ describe("property type", () => {
     expect(welcome).not.toContain("Happy to set up");
     const config = h.workspace.load(id).config;
     const rent = resolveQuestion(config, "How much is the rent for this home?");
-    expect(rent).toMatchObject({ kind: "answer", facts: [{ text: "27 Oak Ln rents for $3,400 a month." }] });
+    expect(rent).toMatchObject({ kind: "answer", facts: [{ text: "27 Oak Lane rents for $3,400 a month." }] });
     expect(rent.kind === "answer" ? rent.facts.map((fact) => fact.text).join(" ") : "").not.toMatch(/Main Home|\bunit\b/i);
     const guidance = config.routes[0]!.stops.map((stop) => stop.guidance).join(" ");
-    expect(guidance).toContain("Welcome to 27 Oak Ln");
+    expect(guidance).toContain("Welcome to 27 Oak Lane");
     expect(guidance).not.toContain("Main Home");
   });
 });
@@ -172,12 +172,13 @@ describe("real visitor texting can't be missed", () => {
     const h = harness();
     await h.ok("create_property_setup", { address: "144 Hillside Ave, Teaneck, NJ", propertyType: "APARTMENT_BUILDING" });
     await finishHillside(h);
-    expect(h.workspace.load("prop_144_hillside_ave_teaneck_nj").config.messagingMode).toBe("live");
+    expect(h.workspace.load("prop_144_hillside_avenue_teaneck_nj").config.messagingMode).toBe("live");
     const review = await h.ok("review_property_setup");
-    expect(review.lines.slice(-3)).toEqual([
+    expect(review.lines.slice(-4)).toEqual([
       "Visitor texting: Connected",
       "Door access: Demo",
       "Visitors can call: not set",
+      "Settings: Basic identity form.",
     ]);
     expect(review.lines.join("\n")).not.toMatch(/https?:|trycloudflare|\/mcp|\+1555/);
     const services = await h.ok("get_services");
@@ -188,14 +189,14 @@ describe("real visitor texting can't be missed", () => {
     const h = harness({ texting: false });
     h.inst.secrets.set({ SENDBLUE_API_API_KEY: SB_KEY, SENDBLUE_API_API_SECRET: SB_SECRET, SENDBLUE_FROM_NUMBER: "+15550109999" });
     await h.ok("create_property_setup", { address: "144 Hillside Ave, Teaneck, NJ", propertyType: "APARTMENT_BUILDING" });
-    expect(h.workspace.openDraft("prop_144_hillside_ave_teaneck_nj").draft.messagingMode).toBe("live");
+    expect(h.workspace.openDraft("prop_144_hillside_avenue_teaneck_nj").draft.messagingMode).toBe("live");
     expect((await h.ok("get_services")).messaging).toMatchObject({ visitorTexting: "Not working yet" });
   });
 
   it("without real texting installed, a property is practice-only and says so plainly", async () => {
     const h = harness({ texting: false });
     await h.ok("create_property_setup", { address: "144 Hillside Ave, Teaneck, NJ", propertyType: "APARTMENT_BUILDING" });
-    expect(h.workspace.openDraft("prop_144_hillside_ave_teaneck_nj").draft.messagingMode).toBe("demo");
+    expect(h.workspace.openDraft("prop_144_hillside_avenue_teaneck_nj").draft.messagingMode).toBe("demo");
     expect((await h.ok("get_services")).summary).toBe("Visitor texts are practice only, so nobody is texted. Door access is still in demo mode, so no physical locks will open.");
   });
 
@@ -212,14 +213,14 @@ describe("real visitor texting can't be missed", () => {
     const refused = await h.ok("publish_demo_property", {});
     expect(refused).toMatchObject({ published: false, status: "blocked", summary: TEXTING_NOT_USED });
     expect(refused.remediation).toMatch(/set_services with messaging sendblue, then run_readiness_check and run_dry_tour/);
-    expect(h.workspace.load("prop_144_hillside_ave_teaneck_nj").state.status).toBe("DRAFT");
+    expect(h.workspace.load("prop_144_hillside_avenue_teaneck_nj").state.status).toBe("DRAFT");
 
     await h.ok("set_services", { messaging: "sendblue" });
     await h.ok("run_readiness_check");
     await h.ok("run_dry_tour");
     const { done } = await h.approve("publish_demo_property", {});
     expect(done.summary).toBe(
-      "144 Hillside Ave, Teaneck, NJ is published for demo. Visitors can start a tour by texting your touring number. Visitor texting is live. Door access is still in demo mode, so no physical locks will open.",
+      "144 Hillside Avenue, Teaneck, NJ is published for demo. Visitors can start a tour by texting your touring number. Visitor texting is live. Door access is still in demo mode, so no physical locks will open.",
     );
     expect(done.summary).not.toMatch(/everything (runs|is) in demo/i);
   });

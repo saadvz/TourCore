@@ -84,8 +84,8 @@ export function parseUsAddress(raw: string): { address: CanonicalAddress; missin
     }
   }
 
-  street = street.replace(/,\s*$/, "").trim();
-  city = city.replace(/,\s*$/, "").trim();
+  street = canonicalizeStreet(street.replace(/,\s*$/, "").trim());
+  city = titleCasePlace(city.replace(/,\s*$/, "").trim());
   const missing: AddressPart[] = [];
   if (!street) missing.push("street");
   if (!city) missing.push("city");
@@ -100,4 +100,64 @@ export function parseUsAddress(raw: string): { address: CanonicalAddress; missin
     formatted: street && city && state ? formatCanonical({ street, city, state, ...(postalCode ? { postalCode } : {}) }) : raw.trim(),
   };
   return { address, missing };
+}
+
+const STREET_SUFFIX: Record<string, string> = {
+  st: "Street",
+  street: "Street",
+  ave: "Avenue",
+  av: "Avenue",
+  avenue: "Avenue",
+  rd: "Road",
+  road: "Road",
+  ln: "Lane",
+  lane: "Lane",
+  dr: "Drive",
+  drive: "Drive",
+  blvd: "Boulevard",
+  boulevard: "Boulevard",
+  way: "Way",
+  ct: "Court",
+  court: "Court",
+  pl: "Place",
+  place: "Place",
+  ter: "Terrace",
+  terr: "Terrace",
+  terrace: "Terrace",
+  cir: "Circle",
+  circle: "Circle",
+  pkwy: "Parkway",
+  parkway: "Parkway",
+};
+
+function titleWord(word: string): string {
+  const lower = word.toLowerCase();
+  return lower ? lower.charAt(0).toUpperCase() + lower.slice(1) : word;
+}
+
+/** "teaneck" / "TEANECK" / "new york" → "Teaneck" / "New York". */
+export function titleCasePlace(value: string): string {
+  return value
+    .trim()
+    .replace(/\s+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map(titleWord)
+    .join(" ");
+}
+
+/**
+ * One street line: suffix abbreviations expand ("St." / "st" → "Street"),
+ * spacing collapses, and each word is title-cased. The first word is never
+ * treated as a suffix, so a street named "Court" can still start with it.
+ */
+export function canonicalizeStreet(street: string): string {
+  const words = street.trim().replace(/\s+/g, " ").split(" ").filter(Boolean);
+  return words
+    .map((word, index) => {
+      const bare = word.replace(/\./g, "");
+      const suffix = index > 0 ? STREET_SUFFIX[bare.toLowerCase()] : undefined;
+      return suffix ?? titleWord(bare);
+    })
+    .join(" ");
 }

@@ -2,7 +2,7 @@
 name: run-readiness-check
 description: Run Tour Core's real readiness check for a property and report each result honestly in plain language, with a fix offered for anything that fails.
 when-to-use: "is it ready", "check the setup", "run readiness", "why can't I publish", "what's missing"
-allowed-tools: list_properties run_readiness_check get_property_setup review_property_setup
+allowed-tools: list_properties run_readiness_check run_checks get_property_setup review_property_setup
 argument-hint: "[property]"
 user-invocable: true
 metadata:

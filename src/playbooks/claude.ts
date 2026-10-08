@@ -1,7 +1,7 @@
 /** Claude-only differences. Shared steps live in shared.ts. */
 
-export const CLAUDE_VERSION = "claude@2026-10-07";
-export const CLAUDE_TOOLS_VERSION = "claude@2026-10-07.tools";
+export const CLAUDE_VERSION = "claude@2026-10-08";
+export const CLAUDE_TOOLS_VERSION = "claude@2026-10-08.tools";
 
 export const CLAUDE_FULL = [
   "You can keep this playbook in a project so the next chat starts in the same place.",

@@ -130,7 +130,7 @@ describe("all-set directions over Sendblue", () => {
     const sent = a.fake.sent.filter((s) => s.number === PHONE).map((s) => s.content);
     const allSet = sent.findIndex((t) => t.startsWith("You're all set for your tour"));
     expect(sent[allSet]).toBe(ALL_SET);
-    expect(sent[allSet + 1]).toBe(HILLSIDE_TEXT);
+    expect(sent[allSet + 1]).toBe(HILLSIDE_TEXT.replaceAll("Ave", "Avenue"));
     expect(sent).toHaveLength(allSet + 2);
   });
 });

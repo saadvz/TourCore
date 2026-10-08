@@ -1,6 +1,6 @@
 /** ChatGPT is the tools-only profile. Shared steps live in shared.ts. */
 
-export const CHATGPT_VERSION = "chatgpt@2026-10-07.tools";
+export const CHATGPT_VERSION = "chatgpt@2026-10-08.tools";
 
 export const CHATGPT_TOOLS = [
   "You only have tools. There is no saved prompt beyond this text.",

@@ -54,7 +54,7 @@ describe("single-family alerts and operator replies never say Main Home", () => 
     const h = app();
     const { id, added } = await setupOakHome(h);
     const draft = h.workspace.openDraft(id).draft;
-    expect(visitorSubject(draft.property, "Main Home")).toBe("12 Oak St");
+    expect(visitorSubject(draft.property, "Main Home")).toBe("12 Oak Street");
 
     const replies: Array<[string, string]> = [
       ["add_unit", added.summary],
@@ -80,7 +80,7 @@ describe("single-family alerts and operator replies never say Main Home", () => 
         now,
       );
       replies.push([eventType, String(update.summary)]);
-      expect("tour" in update && update.tour ? update.tour.unitName : undefined, eventType).toBe("12 Oak St");
+      expect("tour" in update && update.tour ? update.tour.unitName : undefined, eventType).toBe("12 Oak Street");
     }
 
     const inspected = await h.ok("inspect_tour", { tourRef: ref });
@@ -120,10 +120,10 @@ describe("single-family alerts and operator replies never say Main Home", () => 
     }
     for (const type of TOUR_EVENT_TYPES) {
       const text = replies.find(([label]) => label === type)?.[1];
-      expect(text, type).toContain("12 Oak St");
+      expect(text, type).toContain("12 Oak Street");
     }
-    expect(added.summary).toContain("12 Oak St");
-    expect(replies.find(([label]) => label === "list_units")?.[1]).toContain("12 Oak St");
-    expect(replies.find(([label]) => label === "inspect_tour.unitName")?.[1]).toBe("12 Oak St");
+    expect(added.summary).toContain("12 Oak Street");
+    expect(replies.find(([label]) => label === "list_units")?.[1]).toContain("12 Oak Street");
+    expect(replies.find(([label]) => label === "inspect_tour.unitName")?.[1]).toBe("12 Oak Street");
   });
 });

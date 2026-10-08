@@ -508,8 +508,13 @@ Terminal wizard ─────────────────────�
 
 - **Installation tools** (`src/install/tools.ts`): report and test the installation
   (`get_state`, `get_installation_status`, `get_next_installation_step`, ...) and a secure setup form Grok fills.
-  `get_state` is the read-only picture to call first. It does not change anything. The older status tools still work
-  and still follow Tour Core's order. None takes or returns a credential or runs a command. See [`docs/deployment.md`](docs/deployment.md).
+  `get_state` is the read-only picture to call first. It does not change anything. Its next step names the milestone
+  write for that step (`set_up_texting`, `save_property`, `save_units`, `save_doors_and_routes`, `save_hours`,
+  `save_settings`, `run_checks`, `publish`). Each of those answers done, blocked, or next, and they write through the
+  same normalizer as the older tools, so equivalent wording stores one config. A live property cannot drop to practice
+  verification. Backups still use today's backup tools, and declining stays possible. `get_next_installation_step`
+  still names the older tools. The older status tools still work and still follow Tour Core's order. None takes or
+  returns a credential or runs a command. See [`docs/deployment.md`](docs/deployment.md).
 - **Tool contract** (`src/operator/tools.ts`): typed, provider-neutral operator tools over the existing actions:
   property setup, units, doors, routes (`preview_route` resolves the operator's words to doors on file; `set_route`
   saves exact names only), tour hours in everyday words, verification, messaging, review, `run_readiness_check`,
@@ -867,7 +872,7 @@ phone). It does not prove identity.
 
 ## Baseline eval
 
-`npm run test:eval` reruns today's duplex setup, golden landlord tasks, and demo click path against the checked-in snapshot in `eval/baseline/`. `npm run eval:rebaseline` records a new snapshot when that behavior is meant to change. `npm run eval:live` points the same flow at hosted Scratch. Run one live eval at a time. It needs `TOURCORE_MCP_URL` and `TOURCORE_MCP_TOKEN` (the one-hour sign-in access token from `POST /token` after the owner's Allow click). It keeps the properties it creates on local test texting, and its end-of-run sweep removes only the property named with this run's `eval-` id. See [docs/eval.md](docs/eval.md).
+`npm run test:eval` reruns today's duplex setup, the same ten duplexes through the milestone tools, golden landlord tasks, and the demo click path against the checked-in snapshot in `eval/baseline/`. Both config-diff reports must show zero fields differing. `npm run eval:rebaseline` records a new snapshot when that behavior is meant to change. `npm run eval:live` points the same flow at hosted Scratch. Run one live eval at a time. It needs `TOURCORE_MCP_URL` and `TOURCORE_MCP_TOKEN` (the one-hour sign-in access token from `POST /token` after the owner's Allow click). It keeps the properties it creates on local test texting, and its end-of-run sweep removes only the property named with this run's `eval-` id. See [docs/eval.md](docs/eval.md).
 
 ## Contributing
 

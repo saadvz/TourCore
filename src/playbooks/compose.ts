@@ -3,6 +3,7 @@ import { CHATGPT_FLAGGED, CHATGPT_KEYS, CHATGPT_TOOLS } from "./chatgpt";
 import { CLAUDE_FLAGGED, CLAUDE_FULL, CLAUDE_KEYS, CLAUDE_TOOLS } from "./claude";
 import { GROK_ALERTS, GROK_ALERTS_SAY, GROK_BACKUPS_FULL, GROK_BACKUPS_TOOLS, GROK_FLAGGED, GROK_FULL, GROK_KEYS_FULL, GROK_KEYS_TOOLS, GROK_TOOLS, GROK_WAKE } from "./grok";
 import { selectPlaybook, type PlaybookSelection, type ReportedClient } from "./select";
+import { milestoneToolFor } from "./milestoneTool";
 import { SHARED_AFTER_PUBLISH, SHARED_FLAGGED_RULES, SHARED_IRREVERSIBLE, SHARED_STEPS, SHARED_VOICE, STEP_TITLES, stepAside, type StepId } from "./shared";
 
 export interface PlaybookText {
@@ -43,6 +44,16 @@ function profileFlagged(selection: PlaybookSelection): string {
   return BASELINE_FLAGGED;
 }
 
+/** Agent-only. Names the milestone tool for this step. Not something to say out loud. */
+function milestoneHint(step: StepId): string | undefined {
+  const tool = milestoneToolFor(step);
+  if (step === "backups") {
+    return "For you, not out loud: backups still use today's tools. Declining stays possible. Call confirm_backup_destination or decline_portable_backup. Do not say those names out loud.";
+  }
+  if (tool === "get_state") return undefined;
+  return `For you, not out loud: call ${tool} for this step. Do not say that name out loud.`;
+}
+
 /** The one line that can be said out loud for this step. Empty when there is no fixed question. */
 export function spokenAsk(client: ReportedClient | undefined, step: StepId): string {
   const selection = selectPlaybook(client);
@@ -63,6 +74,7 @@ export function renderPlaybook(client: ReportedClient | undefined, step: StepId)
     step === "another" ? SHARED_AFTER_PUBLISH : undefined,
     ask ? `Ask only this: ${ask}` : undefined,
     stepAside(step),
+    milestoneHint(step),
     `Done looks like: ${copy.done}`,
     `If it fails: ${copy.ifItFails}`,
     extra,

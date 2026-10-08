@@ -4,8 +4,9 @@ import { secretValues } from "../install/settings";
 import { HOSTED_ADMIN_TOOLS } from "../install/hostedAdminTools";
 import type { ReportedClient } from "../playbooks/select";
 import { INSTALLATION_TOOLS } from "../install/tools";
+import { MILESTONE_TOOLS } from "./milestones";
 import { installedMessaging } from "../install/status";
-import { addressReadback } from "../setup/address";
+import { addressReadback, parseUsAddress } from "../setup/address";
 import { PROPERTY_TYPE_LABELS, PROPERTY_TYPES, SETUP_PROPERTY_TYPES, validateConfig } from "../config/tourCoreConfig";
 import { extractValues, FIELD_WORDS, missingProfileFields, nextProfileQuestion, parseBulkUnitDetails, profileSummaryLine } from "../config/unitProfile";
 import { formatPhone } from "../core/phone";
@@ -22,6 +23,7 @@ import { parseDays, parseMinutes, parseTimeOfDay } from "../setup/parse";
 import type { DryTourCheck, DryTourResult } from "../setup/dryTour";
 import type { ReadinessResult } from "../setup/readiness";
 import { condoNextQuestion, createPropertySetup, localTestModeSentence, modeSentence, operatorFacingPropertyName, OperatorTeamCopy, SetupInputError, tourableSpacesQuestion, visitorHelpLines, visitorHelpQuestion, type SetupDraft } from "../setup/setupActions";
+import { PRACTICE_REFUSED, VERIFICATION_BELOW_FLOOR, verificationAllowed, verificationFloor } from "../setup/verificationFloor";
 import { usesLocalMessaging } from "../messaging/propertyScope";
 import { operatorUnitName } from "../visitor/identity";
 import { isHostedRailway } from "../install/deployment";
@@ -439,9 +441,10 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     }),
     run: async (ctx, i) => {
       const ws = ctx.services.workspace;
+      const wanted = (parseUsAddress(i.address)?.address.formatted ?? i.address).trim().toLowerCase();
       const existing = ws.propertyIds().find((id) => {
         if (ws.has(id) && ws.load(id).state.removedAt) return false;
-        return ws.openDraft(id).draft.property.address.trim().toLowerCase() === i.address.trim().toLowerCase();
+        return ws.openDraft(id).draft.property.address.trim().toLowerCase() === wanted;
       });
       if (existing) return { status: "already-exists", summary: `${i.address} is already set up. I'll keep working on that one.`, setup: setupSnapshot(ctx, existing) };
       const messagingMode = defaultMessagingMode(servicesOf(ctx).installedMessaging?.());
@@ -698,7 +701,13 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
       const { id, draft } = openDraft(ctx, i.property);
       const state = edit(ctx, id, draft, "addDoor", { name: i.name, kind: i.kind === "entrance" ? "ENTRANCE" : "COMMON" });
       const after = ctx.services.workspace.openDraft(id).draft;
-      return { summary: `Added ${i.name.trim()}.`, ...state, ...propertyNextQuestion(after) };
+      const added = after.doors.find((door) => !draft.doors.some((previous) => previous.id === door.id));
+      return {
+        summary: `Added ${added?.name ?? i.name.trim()}.`,
+        ...(added ? { door: { name: added.name, kind: added.kind } } : {}),
+        ...state,
+        ...propertyNextQuestion(after),
+      };
     },
   }),
 
@@ -864,6 +873,18 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     input: z.strictObject({ property: Property, level: z.enum(["basic-form", "practice"]).optional(), reuseForDays: z.number().int().optional() }),
     run: async (ctx, i) => {
       const { id, draft } = openDraft(ctx, i.property);
+      if (i.level === "practice") {
+        const saved = ctx.services.workspace.has(id) ? ctx.services.workspace.load(id) : undefined;
+        const floor = verificationFloor({
+          draft,
+          services: servicesOf(ctx),
+          installation: ctx.installation,
+          publishedForDemo: saved?.state.status === "PUBLISHED_FOR_DEMO",
+        });
+        if (!verificationAllowed(floor, "mock")) {
+          return { summary: PRACTICE_REFUSED, status: "blocked", code: VERIFICATION_BELOW_FLOOR };
+        }
+      }
       const state = edit(ctx, id, draft, "setVerificationPolicy", { mode: i.level === "practice" ? "mock" : i.level, reuseForDays: i.reuseForDays });
       return { summary: setupSnapshot(ctx, id).verification.join(". "), ...state };
     },
@@ -942,6 +963,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
         `Verification: ${view.reviewCards.find((c) => c.step === "verification")!.rows[0]}`,
         ...modes.lines,
         ...visitorHelpLines(draft.operator),
+        `Settings: ${view.reviewCards.find((c) => c.step === "verification")!.rows[0]}.`,
       ];
       return {
         summary: view.canSave ? "Setup looks complete." : `${view.issues.length} thing${view.issues.length === 1 ? "" : "s"} still need${view.issues.length === 1 ? "s" : ""} an answer.`,
@@ -1393,6 +1415,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
 
   // ------------------------------------------------------ installation
   ...INSTALLATION_TOOLS,
+  ...MILESTONE_TOOLS,
 ];
 
 export const OPERATOR_TOOL_NAMES = [...OPERATOR_TOOLS, ...HOSTED_ADMIN_TOOLS].map((t) => t.name);

@@ -469,9 +469,9 @@ describe("pause and remove", () => {
     const listed = await h.ok("list_properties");
     expect(listed.properties[0].status).toBe("Setup in progress");
     const { asked, done } = await h.approve("remove_property", { property: listed.properties[0].address });
-    expect(listed.properties[0].name).toBe("27 Oak Ln");
-    expect(asked.summary).toBe(removeSetupConfirmQuestion("27 Oak Ln"));
-    expect(done.summary).toBe(removedSetupSummary("27 Oak Ln"));
+    expect(listed.properties[0].name).toBe("27 Oak Lane");
+    expect(asked.summary).toBe(removeSetupConfirmQuestion("27 Oak Lane"));
+    expect(done.summary).toBe(removedSetupSummary("27 Oak Lane"));
     expect((await h.ok("list_properties")).properties).toEqual([]);
   });
 
@@ -536,9 +536,9 @@ describe("pause and remove", () => {
     const listed = await condo.ok("list_properties");
     expect(listed.properties[0].status).toBe("Setup in progress");
     const { asked, done } = await condo.approve("remove_property", { property: listed.properties[0].propertyId });
-    expect(asked.summary).toBe(removeSetupConfirmQuestion("145 Main St, Unit 4B"));
+    expect(asked.summary).toBe(removeSetupConfirmQuestion("145 Main Street, Unit 4B"));
     expect(asked.summary).not.toContain("Main Home");
-    expect(done.summary).toBe(removedSetupSummary("145 Main St, Unit 4B"));
+    expect(done.summary).toBe(removedSetupSummary("145 Main Street, Unit 4B"));
     expect(done.summary).not.toContain("Main Home");
   });
 
@@ -558,11 +558,11 @@ describe("pause and remove", () => {
       ],
     });
     expect(h.workspace.has(id)).toBe(false);
-    expect(operatorFacingPropertyName(h.workspace.openDraft(id).draft)).toBe("500 QA Condo Ave");
+    expect(operatorFacingPropertyName(h.workspace.openDraft(id).draft)).toBe("500 Qa Condo Avenue");
     const { asked, done } = await h.approve("remove_property", { property: id });
-    expect(asked.summary).toBe(removeSetupConfirmQuestion("500 QA Condo Ave"));
+    expect(asked.summary).toBe(removeSetupConfirmQuestion("500 Qa Condo Avenue"));
     expect(asked.summary).not.toMatch(/Loft|4B/);
-    expect(done.summary).toBe(removedSetupSummary("500 QA Condo Ave"));
+    expect(done.summary).toBe(removedSetupSummary("500 Qa Condo Avenue"));
     expect(done.summary).not.toMatch(/Loft|4B/);
   });
 
@@ -578,11 +578,11 @@ describe("pause and remove", () => {
     expect(complete.workspace.load(id).state.status).toBe("DRAFT");
     expect((await complete.ok("list_properties")).properties[0].status).not.toMatch(/Published/);
     const asked = await complete.ok("remove_property", { property: id });
-    expect(asked.summary).toBe(removeSetupConfirmQuestion("12 Oak St"));
+    expect(asked.summary).toBe(removeSetupConfirmQuestion("12 Oak Street"));
     expect(asked.summary).not.toMatch(/Tours stop|booked visitor|Its records are kept/);
     expect(asked.summary).not.toContain("Main Home");
     const done = await complete.ok("remove_property", { property: id, confirmationCode: asked.confirmation.code });
-    expect(done.summary).toBe(removedSetupSummary("12 Oak St"));
+    expect(done.summary).toBe(removedSetupSummary("12 Oak Street"));
     expect(done.summary).not.toContain("Main Home");
     expect((await complete.ok("list_properties")).properties).toEqual([]);
     expect(complete.workspace.has(id)).toBe(false);
@@ -590,13 +590,13 @@ describe("pause and remove", () => {
 
     const fresh = app();
     await fresh.ok("create_property_setup", { address: "8 Pine Rd, Tenafly, NJ 07670" });
-    expect(operatorFacingPropertyName(fresh.workspace.openDraft(fresh.workspace.propertyIds()[0]!).draft)).toBe("8 Pine Rd");
-    expect((await fresh.ok("list_properties")).properties[0].name).toBe("8 Pine Rd");
+    expect(operatorFacingPropertyName(fresh.workspace.openDraft(fresh.workspace.propertyIds()[0]!).draft)).toBe("8 Pine Road");
+    expect((await fresh.ok("list_properties")).properties[0].name).toBe("8 Pine Road");
     const { asked: freshAsked, done: freshDone } = await fresh.approve("remove_property", {});
-    expect(freshAsked.summary).toBe(removeSetupConfirmQuestion("8 Pine Rd"));
+    expect(freshAsked.summary).toBe(removeSetupConfirmQuestion("8 Pine Road"));
     expect(freshAsked.summary).not.toContain("Tenafly");
     expect(freshAsked.summary).not.toContain("Main Home");
-    expect(freshDone.summary).toBe(removedSetupSummary("8 Pine Rd"));
+    expect(freshDone.summary).toBe(removedSetupSummary("8 Pine Road"));
   });
 
   it("a complete unpublished setup that ran a practice tour still uses draft wording and is deleted", async () => {
@@ -621,12 +621,12 @@ describe("pause and remove", () => {
     expect(wording.workspace.wasEverPublished(id)).toBe(false);
     const asked = await wording.ok("remove_property", { property: id });
     expect(asked.summary).toBe(
-      "Remove the setup for 12 Oak St? It isn't published yet, so no visitors are affected, but everything entered for it will be deleted for good.",
+      "Remove the setup for 12 Oak Street? It isn't published yet, so no visitors are affected, but everything entered for it will be deleted for good.",
     );
-    expect(asked.summary).toBe(removeSetupConfirmQuestion("12 Oak St"));
+    expect(asked.summary).toBe(removeSetupConfirmQuestion("12 Oak Street"));
     expect(asked.summary).not.toMatch(/Tours stop|Its records are kept/);
     const done = await wording.ok("remove_property", { property: id, confirmationCode: asked.confirmation.code });
-    expect(done.summary).toBe(removedSetupSummary("12 Oak St"));
+    expect(done.summary).toBe(removedSetupSummary("12 Oak Street"));
     expect(wording.workspace.has(id)).toBe(false);
     expect(existsSync(join(wording.root, "properties", id))).toBe(false);
 
@@ -695,11 +695,11 @@ describe("pause and remove", () => {
     expect(h.workspace.wasEverPublished(id)).toBe(true);
 
     const asked = await h.ok("remove_property", { property: id });
-    expect(asked.summary).toBe(removeConfirmQuestion("12 Oak St", 0));
+    expect(asked.summary).toBe(removeConfirmQuestion("12 Oak Street", 0));
     expect(asked.summary).toContain("No one is booked, so no cancel texts go out.");
     expect(asked.summary).not.toMatch(/isn't published yet/);
     const done = await h.ok("remove_property", { property: id, confirmationCode: asked.confirmation.code });
-    expect(done.summary).toBe(removedPropertySummary("12 Oak St"));
+    expect(done.summary).toBe(removedPropertySummary("12 Oak Street"));
     expect(h.workspace.has(id)).toBe(true);
     expect(h.workspace.load(id).state.removedAt).toBeTruthy();
     expect(existsSync(join(h.root, "properties", id))).toBe(true);

@@ -1,0 +1,573 @@
+import { z } from "zod";
+import { PROBLEMS_ONLY, RECOMMENDED_UPDATES, UPDATE_KINDS, choosePreferences, describeUpdates } from "../alerts/preferences";
+import { PROPERTY_TYPES } from "../config/tourCoreConfig";
+import { extractValues, parseBulkUnitDetails } from "../config/unitProfile";
+import { checkPublicEndpoint, testAccess, testOperatorAlerts, testVisitorMessaging } from "../install/checks";
+import { secureSetupLink } from "../install/tools";
+import { getInstallationStatus, installedMessaging } from "../install/status";
+import { readState } from "../install/stateView";
+import { toE164 } from "../messaging/Messenger";
+import { usesLocalMessaging } from "../messaging/propertyScope";
+import { chooseMessagingProvider } from "../messaging/switchProvider";
+import { LOCAL_TEST_TEXTING, SetupInputError, createPropertySetup, localTestModeSentence, modeSentence } from "../setup/setupActions";
+import { applySetupCommand } from "../setup/commands";
+import { canonicalDoor, canonicalUnitName } from "../setup/normalizeDraft";
+import { parseDays, parseMinutes, parseTimeOfDay } from "../setup/parse";
+import { PRACTICE_REFUSED, VERIFICATION_BELOW_FLOOR, verificationAllowed, verificationFloor, type VerificationLevel } from "../setup/verificationFloor";
+import { publishGuards, publishProperty, readinessForProperty, runPracticeTour, visitorTexting } from "./setupFlow";
+import { matchDoor, requireUnit, resolvePropertyId } from "./resolve";
+import { defaultMessagingMode, type OperatorServices } from "./services";
+import type { OperatorTool, ToolContext, ToolKind } from "./tools";
+import type { Door, TourCoreConfig, Unit } from "../config/tourCoreConfig";
+
+/**
+ * Milestone writes. Each one reports done, blocked, or next, plus the same
+ * current milestone and next step get_state reports. They do not text visitors.
+ */
+
+function tool<S extends z.ZodObject>(def: {
+  name: string;
+  title: string;
+  description: string;
+  kind: ToolKind;
+  input: S;
+  run: (ctx: ToolContext, input: z.infer<S>) => Promise<Record<string, unknown>>;
+}): OperatorTool {
+  return def as unknown as OperatorTool;
+}
+
+const Property = z.string().max(200).optional().describe("Which property: its name, address or propertyId. Leave out when there's only one.");
+const UnitValue = z.union([z.string().max(300), z.number(), z.boolean()]).optional();
+const Duration = z.union([z.number().int(), z.string().max(40)]);
+const Facts = z.array(z.string().max(300)).max(30);
+
+function servicesOf(ctx: ToolContext): OperatorServices {
+  if (!ctx.installation) return ctx.services;
+  return { ...ctx.services, installedMessaging: () => installedMessaging(ctx.installation!) };
+}
+
+function envelope(
+  ctx: ToolContext,
+  propertyId: string | undefined,
+  status: "done" | "blocked" | "next",
+  message: string,
+  extra: Record<string, unknown> = {},
+  code?: string,
+): Record<string, unknown> {
+  let picture: Record<string, unknown> | undefined;
+  if (ctx.installation) {
+    try {
+      picture = readState({ installation: ctx.installation, services: servicesOf(ctx), client: ctx.client }, propertyId);
+    } catch {
+      picture = undefined;
+    }
+  }
+  const milestones = (picture?.milestones as Array<{ status: string; title: string; id: string }> | undefined) ?? [];
+  const current = milestones.find((item) => item.status === "next");
+  const step = picture?.nextStep as { tool?: string; say?: string } | undefined;
+  const next = step?.tool ?? "get_state";
+  return {
+    status,
+    milestone: current?.title ?? "Setup",
+    milestoneId: current?.id ?? null,
+    next,
+    message,
+    ...(status === "blocked" ? { reason: message, code: code ?? "BLOCKED" } : {}),
+    nextStep: { tool: next, say: step?.say, milestone: current?.id ?? null },
+    ...extra,
+  };
+}
+
+function propertyIdOf(ctx: ToolContext, property: string | undefined): string {
+  return resolvePropertyId(ctx.services.workspace, property);
+}
+
+function open(ctx: ToolContext, property: string | undefined) {
+  const id = propertyIdOf(ctx, property);
+  return { id, draft: ctx.services.workspace.openDraft(id).draft };
+}
+
+const UnitFields = {
+  name: z.string().max(100).optional(),
+  newName: z.string().max(100).optional(),
+  doorName: z.string().max(100).optional(),
+  description: z.string().max(300).optional(),
+  facts: Facts.optional(),
+  bedrooms: UnitValue,
+  bathrooms: UnitValue,
+  monthlyRent: UnitValue,
+  availability: UnitValue,
+  squareFeet: UnitValue,
+  floor: UnitValue,
+  parking: UnitValue,
+  laundry: UnitValue,
+  pets: UnitValue,
+  utilities: UnitValue,
+  furnished: UnitValue,
+  features: UnitValue,
+};
+
+export const MILESTONE_TOOLS: OperatorTool[] = [
+  tool({
+    name: "set_up_texting",
+    title: "Set up texting",
+    kind: "change",
+    description: "Sets up texting for this install (the provider, the line, and the check) and says whether that step is done, blocked, or still needs an answer.",
+    input: z.strictObject({
+      provider: z.enum(["sendblue", "twilio", "photon", "local"]).optional(),
+      property: Property,
+      line: z.string().max(40).optional().describe("One Photon line address Tour Core already listed."),
+    }),
+    run: async (ctx, i) => {
+      const inst = ctx.installation;
+      if (!inst) return envelope(ctx, undefined, "blocked", "Texting can't be set up from here.", {}, "INSTALLATION_UNAVAILABLE");
+      const propertyId = i.property ? propertyIdOf(ctx, i.property) : undefined;
+      if (i.provider) {
+        const chosen = await chooseMessagingProvider(inst, i.provider, { workspace: ctx.services.workspace, propertyId });
+        if (chosen.scope === "installation") ctx.resetMessaging?.();
+      }
+      if (i.line) {
+        const wanted = toE164(i.line);
+        const known = (inst.files.state().messagingLines ?? []).map((line) => toE164(line.address) ?? line.address);
+        if (!wanted || !known.includes(wanted)) {
+          return envelope(ctx, propertyId, "blocked", "Choose one of the lines Tour Core listed.", {}, "LINE_NOT_LISTED");
+        }
+        inst.secrets.set({ TOURCORE_PHOTON_PHONE_NUMBER: wanted }, new Date(inst.now()));
+        ctx.resetMessaging?.();
+      }
+      let messaging = getInstallationStatus(inst, servicesOf(ctx)).components.find((item) => item.component === "VISITOR_MESSAGING");
+      const action = messaging?.next?.action;
+      if (messaging?.state !== "READY" && (i.provider || action === "TEST_VISITOR_MESSAGING" || action === "RECONNECT_VISITOR_MESSAGING")) {
+        const tested = await testVisitorMessaging(inst, { onConnected: ctx.resetMessaging });
+        if (tested.needsLineChoice && !i.line) {
+          return envelope(ctx, propertyId, "next", "Which of these numbers should people text?", { lines: tested.lines }, "LINE_NEEDED");
+        }
+        messaging = getInstallationStatus(inst, servicesOf(ctx)).components.find((item) => item.component === "VISITOR_MESSAGING");
+      }
+      if (messaging?.state === "READY") {
+        const message = messaging.provider === "local" ? LOCAL_TEST_TEXTING : "Texting is working.";
+        return envelope(ctx, propertyId, "done", message);
+      }
+      const nextAction = messaging?.next?.action;
+      if (!i.provider && (nextAction === "CHOOSE_MESSAGING_PROVIDER" || !nextAction)) {
+        return envelope(ctx, propertyId, "next", "How should people text you about a tour?");
+      }
+      if (nextAction === "CONNECT_VISITOR_MESSAGING" || nextAction === "FIX_VISITOR_MESSAGING") {
+        return envelope(ctx, propertyId, "next", "I need the texting login. I'll collect it privately so it never shows in this chat.", {
+          secureSetup: secureSetupLink(inst, ctx.localUrl?.(), "visitor-messaging"),
+        });
+      }
+      if (nextAction === "CHOOSE_MESSAGING_LINE") return envelope(ctx, propertyId, "next", "Which of these numbers should people text?");
+      if (nextAction === "TEST_VISITOR_MESSAGING" || nextAction === "RECONNECT_VISITOR_MESSAGING") {
+        return envelope(ctx, propertyId, "next", "I'm checking that texting works. I won't text anyone.");
+      }
+      return envelope(ctx, propertyId, "blocked", "Texting isn't working right now.", {}, "TEXTING_NOT_READY");
+    },
+  }),
+  tool({
+    name: "save_property",
+    title: "Save the property",
+    kind: "change",
+    description: "Saves the property address, type, time zone, name, facts, help number, alert contact, building access, and entry instructions.",
+    input: z.strictObject({
+      property: Property,
+      address: z.string().max(200).optional(),
+      name: z.string().max(120).optional(),
+      propertyType: z.enum(PROPERTY_TYPES).optional(),
+      timezone: z.string().max(60).optional(),
+      facts: Facts.optional(),
+      postalCode: z.string().max(10).optional(),
+      confirmAddress: z.boolean().optional(),
+      alertName: z.string().max(120).optional(),
+      alertContact: z.string().max(200).optional(),
+      visitorContact: z.string().max(30).optional(),
+      skipVisitorHelp: z.boolean().optional(),
+      buildingAccess: z.enum(["BUILDING_AND_UNIT", "UNIT_ONLY"]).optional(),
+      entryInstructions: z.string().max(500).optional(),
+      skipEntryInstructions: z.boolean().optional(),
+    }),
+    run: async (ctx, i) => {
+      const ws = ctx.services.workspace;
+      let id = i.property ? propertyIdOf(ctx, i.property) : ws.propertyIds().length === 1 ? ws.propertyIds()[0] : undefined;
+      if (!id) {
+        if (!i.address) return envelope(ctx, undefined, "next", "What's the street address?");
+        const messagingMode = defaultMessagingMode(servicesOf(ctx).installedMessaging?.());
+        const draft = createPropertySetup({
+          address: i.address,
+          name: i.name,
+          propertyType: i.propertyType,
+          timezone: i.timezone,
+          existingPropertyIds: ws.propertyIds(),
+          messagingMode,
+        });
+        ws.saveDraft(draft);
+        id = draft.property.id;
+      }
+      let next = ws.openDraft(id).draft;
+      if (i.address || i.name !== undefined || i.propertyType || i.timezone || i.facts || i.postalCode || i.confirmAddress || i.buildingAccess || i.entryInstructions !== undefined || i.skipEntryInstructions) {
+        next = applySetupCommand(next, "setPropertyDetails", {
+          name: i.name,
+          address: i.address,
+          propertyType: i.propertyType,
+          timezone: i.timezone,
+          facts: i.facts,
+          postalCode: i.postalCode,
+          confirmAddress: i.confirmAddress,
+          buildingAccess: i.buildingAccess,
+          entryInstructions: i.entryInstructions,
+          skipEntryInstructions: i.skipEntryInstructions,
+        });
+      }
+      if (i.alertName !== undefined || i.alertContact !== undefined || i.visitorContact !== undefined || i.skipVisitorHelp) {
+        next = applySetupCommand(next, "setAlertContact", {
+          name: i.alertName,
+          contact: i.alertContact,
+          visitorContact: i.visitorContact,
+          skipVisitorHelp: i.skipVisitorHelp,
+        });
+      }
+      ws.persistEdit(next, ctx.now());
+      const saved = ws.openDraft(id).draft;
+      const missingZip = !!saved.property.canonicalAddress && !saved.property.canonicalAddress.postalCode;
+      if (missingZip) return envelope(ctx, id, "next", "What ZIP code should I use?", { propertyId: id });
+      if (saved.property.canonicalAddress?.postalCode && saved.property.addressConfirmed === false) {
+        return envelope(ctx, id, "next", "Did I get that right?", { propertyId: id, address: saved.property.address });
+      }
+      if (!saved.property.propertyType) return envelope(ctx, id, "next", "Is this a single-family home, a multifamily home, or one apartment or condo?", { propertyId: id });
+      return envelope(ctx, id, "done", `Saved ${saved.property.name}.`, { propertyId: id });
+    },
+  }),
+  tool({
+    name: "save_units",
+    title: "Save units",
+    kind: "change",
+    description: "Adds, renames, or updates units and their leasing details.",
+    input: z.strictObject({
+      property: Property,
+      details: z.string().max(2000).optional(),
+      units: z.array(z.strictObject(UnitFields)).max(50).optional(),
+    }),
+    run: async (ctx, i) => {
+      const { id, draft } = open(ctx, i.property);
+      if (!(i.units?.length || i.details)) return envelope(ctx, id, "next", "Which places can people tour?", { propertyId: id });
+      let next = draft;
+      for (const entry of i.units ?? []) {
+        const wanted = entry.name ? canonicalUnitName(entry.name, next.property.propertyType).toLowerCase() : undefined;
+        const existing = wanted ? next.units.find((unit) => unit.name.toLowerCase() === wanted) : undefined;
+        if (!existing) {
+          if (!entry.name && next.property.propertyType !== "SINGLE_FAMILY") {
+            return envelope(ctx, id, "next", "What's the unit called?", { propertyId: id });
+          }
+          next = applySetupCommand(next, "addUnit", { name: entry.name, summary: entry.description, facts: entry.facts, doorName: entry.doorName });
+        } else {
+          if (entry.description !== undefined || entry.facts) {
+            next = applySetupCommand(next, "setUnitDetails", { unitId: existing.id, summary: entry.description, facts: entry.facts });
+          }
+          if (entry.newName) next = applySetupCommand(next, "renameUnit", { unitId: existing.id, name: entry.newName, alsoRenameDoor: true });
+          if (entry.doorName) {
+            const unit = next.units.find((item) => item.id === existing.id);
+            if (unit?.doorId) next = applySetupCommand(next, "renameDoor", { doorId: unit.doorId, name: entry.doorName });
+          }
+        }
+        const values = profileValues(entry);
+        if (Object.keys(values).length) {
+          const unit = requireUnit(next, entry.newName || entry.name || next.units[next.units.length - 1]!.name);
+          next = applySetupCommand(next, "setUnitProfile", { unitId: unit.id, values });
+        }
+      }
+      if (i.details) {
+        const bulk = parseBulkUnitDetails(i.details, next.units.map((unit) => unit.name));
+        if (!bulk.units.length) {
+          const only = next.property.propertyType === "SINGLE_FAMILY" && next.units.length === 1 ? next.units[0] : undefined;
+          const values = extractValues(i.details);
+          if (!only || !Object.keys(values).length) {
+            return envelope(ctx, id, "next", "I couldn't match those details to a place yet.", { propertyId: id });
+          }
+          next = applySetupCommand(next, "setUnitProfile", { unitId: only.id, values });
+        }
+        for (const entry of bulk.units) {
+          const unit = requireUnit(next, entry.unit);
+          next = applySetupCommand(next, "setUnitProfile", { unitId: unit.id, values: entry.values });
+        }
+      }
+      ctx.services.workspace.persistEdit(next, ctx.now());
+      const saved = ctx.services.workspace.openDraft(id).draft;
+      return envelope(ctx, id, "done", saved.units.map((unit) => unit.name).join(", ") || "Saved the places people can tour.", { propertyId: id });
+    },
+  }),
+  tool({
+    name: "save_doors_and_routes",
+    title: "Save doors and routes",
+    kind: "change",
+    description: "Saves doors and walking routes, or with preview true only shows the matched route.",
+    input: z.strictObject({
+      property: Property,
+      preview: z.boolean().optional().describe("When true, returns the matched route and does not save."),
+      doors: z.array(z.strictObject({ name: z.string().min(1).max(100), kind: z.enum(["entrance", "hallway"]) })).max(20).optional(),
+      routes: z
+        .array(
+          z.strictObject({
+            unit: z.string().min(1).max(100),
+            doors: z.array(z.string().min(1).max(100)).min(1).max(12),
+            directions: z.string().max(300).optional(),
+          }),
+        )
+        .max(50)
+        .optional(),
+    }),
+    run: async (ctx, i) => {
+      const { id, draft } = open(ctx, i.property);
+      let scratch = draft;
+      if (i.doors?.length) {
+        for (const door of i.doors) {
+          const named = canonicalDoor({
+            name: door.name,
+            kind: door.kind === "entrance" ? "ENTRANCE" : "COMMON",
+            propertyType: scratch.property.propertyType,
+          });
+          const exists = scratch.doors.some((item) => item.name.toLowerCase() === named.name.toLowerCase());
+          if (exists) continue;
+          scratch = applySetupCommand(scratch, "addDoor", { name: door.name, kind: door.kind === "entrance" ? "ENTRANCE" : "COMMON" });
+        }
+      }
+      const matched: { unit: string; doors: string[] }[] = [];
+      for (const route of i.routes ?? []) {
+        const unit = requireUnit(scratch, route.unit);
+        const names: string[] = [];
+        for (const ref of route.doors) {
+          const found = resolveRouteDoor(scratch, ref, unit);
+          if (found.question) return envelope(ctx, id, "next", found.question, { propertyId: id });
+          if (!found.door) return envelope(ctx, id, "next", `I don't have "${ref}" on file yet.`, { propertyId: id }, "UNKNOWN_DOORS");
+          names.push(found.door.name);
+        }
+        matched.push({ unit: unit.name, doors: names });
+        if (!i.preview) {
+          const ids = names.map((name) => scratch.doors.find((door) => door.name === name)!.id);
+          scratch = applySetupCommand(scratch, "setRoute", { unitId: unit.id, doorIds: ids, directions: route.directions, onlyIfValid: true });
+        }
+      }
+      if (i.preview) {
+        const line = matched.map((route) => `${route.unit}: ${route.doors.join(" → ")}`).join(". ");
+        return envelope(ctx, id, "next", line ? `I have: ${line}. Nothing was saved.` : "Nothing was saved.", { propertyId: id, preview: true, routes: matched });
+      }
+      if (i.doors?.length || i.routes?.length) ctx.services.workspace.persistEdit(scratch, ctx.now());
+      const saved = ctx.services.workspace.openDraft(id).draft;
+      if (!saved.routes.length) return envelope(ctx, id, "next", "How does someone walk in, from the front door to the door they tour?", { propertyId: id, routes: matched });
+      return envelope(ctx, id, "done", matched.map((route) => `${route.unit}: ${route.doors.join(" → ")}`).join(". ") || "Saved the doors and the way through.", {
+        propertyId: id,
+        routes: matched,
+      });
+    },
+  }),
+  tool({
+    name: "save_hours",
+    title: "Save touring hours",
+    kind: "change",
+    description: "Saves touring days and hours from everyday words.",
+    input: z.strictObject({
+      property: Property,
+      days: z.union([z.string().max(80), z.array(z.string().max(20)).max(7)]).optional(),
+      start: z.string().max(20).optional(),
+      end: z.string().max(20).optional(),
+      tourLength: Duration.optional(),
+      newTourEvery: Duration.optional(),
+      earlyArrival: Duration.optional(),
+    }),
+    run: async (ctx, i) => {
+      const { id, draft } = open(ctx, i.property);
+      const parsed = parseHours(i);
+      if (!Object.keys(parsed).length) return envelope(ctx, id, "next", "What days and times can people tour?");
+      const next = applySetupCommand(draft, "setTourHours", parsed);
+      ctx.services.workspace.persistEdit(next, ctx.now());
+      const hours = ctx.services.workspace.openDraft(id).draft.tourHours;
+      return envelope(ctx, id, "done", `Tours are ${hours.days.join(", ")} from ${hours.start} to ${hours.end}.`, { propertyId: id });
+    },
+  }),
+  tool({
+    name: "save_settings",
+    title: "Save optional settings",
+    kind: "change",
+    description: "Saves the optional identity check and tour-update choices, and will not loosen the identity check on a live property.",
+    input: z.strictObject({
+      property: Property,
+      verification: z.enum(["basic-form", "practice", "document-check"]).optional(),
+      reuseForDays: z.number().int().optional(),
+      preset: z.enum(["recommended", "problems-only"]).optional(),
+      updates: z.array(z.enum(UPDATE_KINDS)).max(UPDATE_KINDS.length).optional(),
+      skipAlerts: z.boolean().optional(),
+      connectAlerts: z.boolean().optional(),
+    }),
+    run: async (ctx, i) => {
+      const hasProperty = i.property || ctx.services.workspace.propertyIds().length > 0;
+      const opened = hasProperty ? open(ctx, i.property) : undefined;
+      if (i.verification || i.reuseForDays !== undefined) {
+        if (!opened) return envelope(ctx, undefined, "next", "Which property should I save that for?");
+        const requested = (i.verification === "practice" ? "mock" : i.verification) as VerificationLevel | undefined;
+        if (requested) {
+          const saved = ctx.services.workspace.has(opened.id) ? ctx.services.workspace.load(opened.id) : undefined;
+          const floor = verificationFloor({
+            draft: opened.draft,
+            services: servicesOf(ctx),
+            installation: ctx.installation,
+            publishedForDemo: saved?.state.status === "PUBLISHED_FOR_DEMO",
+          });
+          if (!verificationAllowed(floor, requested)) {
+            return envelope(ctx, opened.id, "blocked", PRACTICE_REFUSED, { propertyId: opened.id }, VERIFICATION_BELOW_FLOOR);
+          }
+        }
+        const next = applySetupCommand(opened.draft, "setVerificationPolicy", {
+          mode: requested,
+          reuseForDays: i.reuseForDays,
+        });
+        ctx.services.workspace.persistEdit(next, ctx.now());
+      }
+      const inst = ctx.installation;
+      if (i.skipAlerts) {
+        if (!inst) return envelope(ctx, opened?.id, "blocked", "Tour updates can't be changed from here.", {}, "INSTALLATION_UNAVAILABLE");
+        const state = inst.files.state();
+        inst.files.writeState({ ...state, skipped: { ...state.skipped, OPERATOR_ALERTS: new Date(inst.now()).toISOString() } });
+      }
+      if ((i.preset || i.updates) && inst) {
+        const state = inst.files.state();
+        const enabled = i.updates ?? (i.preset === "problems-only" ? PROBLEMS_ONLY : RECOMMENDED_UPDATES);
+        const prefs = choosePreferences(state.operatorUpdates, enabled, new Date(inst.now()));
+        inst.files.writeState({ ...state, operatorUpdates: prefs });
+      }
+      if (i.connectAlerts) {
+        if (!inst) return envelope(ctx, opened?.id, "blocked", "Tour updates can't be changed from here.", {}, "INSTALLATION_UNAVAILABLE");
+        return envelope(ctx, opened?.id, "next", "Want me to tell you when someone books, starts, or finishes a tour, and when something needs you?", {
+          secureSetup: secureSetupLink(inst, ctx.localUrl?.(), "operator-alerts"),
+        });
+      }
+      const mode = opened ? ctx.services.workspace.openDraft(opened.id).draft.verificationMode : undefined;
+      const label = mode === "mock" ? "Practice verification" : mode === "document-check" ? "Full ID check" : "Basic identity form";
+      const alerts = i.skipAlerts ? "Tour updates are off for now." : "Tour updates stay as they are.";
+      return envelope(ctx, opened?.id, "done", `Settings: ${label}. ${alerts}`, { propertyId: opened?.id });
+    },
+  }),
+  tool({
+    name: "run_checks",
+    title: "Run the practice checks",
+    kind: "change",
+    description: "Runs the readiness check and a practice tour, including the connection, door-access, and alert self-tests.",
+    input: z.strictObject({ property: Property, unit: z.string().min(1).max(100).optional() }),
+    run: async (ctx, i) => {
+      const { id, draft } = open(ctx, i.property);
+      if (!draft.units.length || !draft.routes.some((route) => route.stops.length > 0)) {
+        return envelope(ctx, id, "blocked", "This place doesn't have a way through yet, so the practice tour can't run.", { propertyId: id }, "ROUTES_MISSING");
+      }
+      const services = servicesOf(ctx);
+      const selfTest: Record<string, unknown> = {};
+      if (ctx.installation) {
+        const endpoint = await checkPublicEndpoint(ctx.installation, { attempts: 1, delayMs: 0 });
+        const access = await testAccess(ctx.installation);
+        const alerts = await testOperatorAlerts(ctx.installation);
+        selfTest.endpoint = { ok: endpoint.ok, message: endpoint.message };
+        selfTest.access = { ok: access.ok, message: access.message };
+        selfTest.alerts = { ok: alerts.ok, message: alerts.message };
+        if (!endpoint.ok) return envelope(ctx, id, "blocked", "The connection isn't ready yet.", { propertyId: id, selfTest }, "ENDPOINT_NOT_READY");
+        if (!access.ok) return envelope(ctx, id, "blocked", "Door access isn't answering.", { propertyId: id, selfTest }, "ACCESS_NOT_READY");
+      }
+      const readiness = await readinessForProperty(services, id, ctx.now());
+      if (!readiness.result.passed) {
+        const reason = readiness.result.checks.flatMap((check) => check.problems)[0] ?? "The check found something to fix.";
+        return envelope(ctx, id, "blocked", reason, { propertyId: id, selfTest }, "READINESS_FAILED");
+      }
+      const unitId = i.unit ? requireUnit(draft, i.unit).id : undefined;
+      const outcome = await runPracticeTour(services, id, { unitId, now: ctx.now() });
+      if (outcome.kind !== "ran" || !outcome.result.passed) {
+        const reason = outcome.kind === "ran" ? (outcome.result.failure ?? "The practice tour didn't pass.") : "The practice tour didn't run.";
+        return envelope(ctx, id, "blocked", reason, { propertyId: id, selfTest }, "PRACTICE_FAILED");
+      }
+      return envelope(ctx, id, "done", "The check passed, and the practice tour passed.", { propertyId: id, selfTest });
+    },
+  }),
+  tool({
+    name: "publish",
+    title: "Publish for demo",
+    kind: "change",
+    description: "Publishes the property for demo after a yes to the confirmation it returns.",
+    input: z.strictObject({
+      property: Property,
+      confirmationCode: z.string().max(20).optional().describe("Only after the operator explicitly said yes to the exact question this tool returned earlier."),
+    }),
+    run: async (ctx, i) => {
+      const ws = ctx.services.workspace;
+      const services = servicesOf(ctx);
+      const id = propertyIdOf(ctx, i.property);
+      const saved = ws.has(id) ? ws.load(id) : undefined;
+      const blockers = saved
+        ? [...publishGuards(services, id, saved.config.messagingMode), ...(await ws.publishBlockers(id, ctx.now()))]
+        : [{ code: "NOT_SAVED", message: "Finish the setup answers first." }];
+      if (blockers.length) {
+        return envelope(ctx, id, "blocked", blockers[0]!.message, { propertyId: id, blockers: blockers.map((item) => item.message) }, blockers[0]!.code);
+      }
+      const { config, state } = saved!;
+      const texting = visitorTexting(services, id, config.messagingMode);
+      const local = usesLocalMessaging(config, services.installedMessaging?.());
+      const accessDemo = config.accessMode === "durin-mock";
+      const sentence = local ? localTestModeSentence(accessDemo) : modeSentence(texting.state === "connected", accessDemo);
+      if (state.status === "PUBLISHED_FOR_DEMO") {
+        return envelope(ctx, id, "done", `${config.property.name} is already published for demo. ${sentence}`, { propertyId: id, published: true });
+      }
+      const fingerprint = `${state.configHash}|${state.readiness?.checkedAt}|${state.dryTour?.ranAt}`;
+      const question = `Everything passed. Do you want me to publish ${config.property.name} for demo?`;
+      if (!i.confirmationCode) {
+        const confirmation = ctx.confirmations.issue("publish", id, fingerprint, question);
+        return envelope(ctx, id, "next", question, { propertyId: id, confirmation, published: false });
+      }
+      ctx.confirmations.redeem(i.confirmationCode, "publish", id, fingerprint);
+      const result = await publishProperty(services, id, ctx.now());
+      if (!result.published) {
+        return envelope(ctx, id, "blocked", result.blockers[0]?.message ?? "It can't be published yet.", { propertyId: id, blockers: result.blockers.map((item) => item.message) }, result.blockers[0]?.code);
+      }
+      return envelope(ctx, id, "done", `${config.property.name} is published for demo. ${sentence}`, { propertyId: id, published: true });
+    },
+  }),
+];
+
+function resolveRouteDoor(draft: TourCoreConfig, ref: string, unit: Unit): { door?: Door; question?: string } {
+  const found = matchDoor(draft, ref, unit);
+  if (found.kind === "exact" || found.kind === "inferred") return { door: found.item };
+  const named = canonicalDoor({ name: ref, kind: "ENTRANCE", unitName: unit.name, propertyType: draft.property.propertyType });
+  const hit = draft.doors.find((door) => door.name.toLowerCase() === named.name.toLowerCase());
+  if (hit) return { door: hit };
+  if (found.kind === "ambiguous") {
+    return { question: `"${ref}" could be ${found.candidates.map((door) => door.name).join(" or ")}. Which one?` };
+  }
+  return {};
+}
+
+function profileValues(entry: Record<string, unknown>): Record<string, string | number | boolean> {
+  const keys = ["bedrooms", "bathrooms", "monthlyRent", "availability", "squareFeet", "floor", "parking", "laundry", "pets", "utilities", "furnished", "features"];
+  return Object.fromEntries(keys.filter((key) => entry[key] !== undefined).map((key) => [key, entry[key] as string | number | boolean]));
+}
+
+function parseHours(input: { days?: string | string[]; start?: string; end?: string; tourLength?: string | number; newTourEvery?: string | number; earlyArrival?: string | number }) {
+  const out: Record<string, unknown> = {};
+  if (input.days !== undefined) {
+    const text = Array.isArray(input.days) ? input.days.join(", ") : input.days;
+    const days = parseDays(text);
+    if (!days) throw new SetupInputError("TOUR_DAYS_UNREADABLE", `I didn't understand the days "${text}". Try "weekdays", "every day" or "Mon-Sat".`);
+    out.days = days;
+  }
+  for (const key of ["start", "end"] as const) {
+    if (input[key] === undefined) continue;
+    const parsed = parseTimeOfDay(input[key]!);
+    if (!parsed) throw new SetupInputError("TOUR_TIME_UNREADABLE", `I didn't understand the time "${input[key]}". Try something like "9am" or "5:30 PM".`);
+    out[key] = parsed;
+  }
+  const minutes = (value: string | number | undefined, label: string) => {
+    if (value === undefined) return undefined;
+    const parsed = typeof value === "number" ? value : parseMinutes(value);
+    if (parsed === undefined) throw new SetupInputError("TOUR_MINUTES_UNREADABLE", `I didn't understand ${label} "${value}". Try "45 minutes" or "an hour".`);
+    return parsed;
+  };
+  const length = minutes(input.tourLength, "the tour length");
+  const spacing = minutes(input.newTourEvery, "how often tours start");
+  const early = minutes(input.earlyArrival, "the early-arrival time");
+  if (length !== undefined) out.tourLengthMinutes = length;
+  if (spacing !== undefined) out.slotEveryMinutes = spacing;
+  if (early !== undefined) out.earlyArrivalMinutes = early;
+  return out;
+}
