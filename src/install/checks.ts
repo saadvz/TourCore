@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { installationAlertHealth, problemsToClear } from "../alerts/alertHealth";
 import { testEvent } from "../alerts/operatorEvents";
 import { MockDurinAccessAdapter } from "../durin/MockDurinAccessAdapter";
 import { activeFromNumber, createMessagingProvider, ensureMessagingSelection, manifestProviderName } from "../messaging/registry";
@@ -82,7 +83,7 @@ export function runtimeHealth(inst: Installation) {
   } catch {
     storageOk = false;
   }
-  const alerts = safe(() => inst.outbox.health());
+  const alerts = installationAlertHealth(inst);
   return {
     running: true,
     version: TOURCORE_VERSION,
@@ -91,7 +92,8 @@ export function runtimeHealth(inst: Installation) {
     uptimeSeconds: Math.round((inst.now() - inst.startedAt) / 1000),
     deploymentMode: deployment.mode,
     runtimeRecords: storageOk ? "ok" : "can't be saved",
-    alertsWaiting: alerts ? alerts.pending : undefined,
+    alertsWaiting: alerts.pending,
+    alertDelivery: alerts,
     ...storageVolumeHealth(inst.options.root),
   };
 }
@@ -201,7 +203,14 @@ export async function testOperatorAlerts(inst: Installation) {
   } catch (err) {
     message = err instanceof Error ? err.message : "The test alert couldn't be delivered.";
   }
-  inst.files.recordCheck("operatorAlerts", { ok, at: at.toISOString(), message, ...(credentialsChangedAt ? { credentialsChangedAt } : {}) });
+  const clearedFailures = ok ? problemsToClear(inst.outbox.records()) : undefined;
+  inst.files.recordCheck("operatorAlerts", {
+    ok,
+    at: at.toISOString(),
+    message,
+    ...(credentialsChangedAt ? { credentialsChangedAt } : {}),
+    ...(clearedFailures ? { clearedFailures } : {}),
+  });
   if (ok) {
     inst.files.update({ operatorNotificationProvider: "GROK_ROUTINE" }, at);
     void inst.outbox.drain().catch(() => undefined);

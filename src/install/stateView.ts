@@ -192,7 +192,7 @@ function milestonesFor(status: InstallationStatus, picture: Picture) {
   const done = [textingDone, backupsDone, propertyDone, picture.unitsReady, picture.hoursReady, picture.readinessPassed && picture.practicePassed, picture.published];
   const prior = ["RUNTIME", "PUBLIC_ENDPOINT", "GROK_OPERATOR"].map((name) => component(status, name)).find((item) => item && item.state !== "READY");
   const alerts = component(status, "OPERATOR_ALERTS");
-  const alertsBlocking = !!alerts && alerts.state !== "READY" && alerts.state !== "NOT_CONFIGURED" && !!alerts.next && picture.hoursReady && !(picture.readinessPassed && picture.practicePassed);
+  const alertsBlocking = !!alerts && alerts.state !== "READY" && alerts.state !== "NOT_CONFIGURED" && alerts.state !== "DEGRADED" && !!alerts.next && picture.hoursReady && !(picture.readinessPassed && picture.practicePassed);
   const waiting = [
     "Texting isn't finished yet.",
     "Backups aren't decided yet. Saving a copy or skipping both still count.",
@@ -419,8 +419,12 @@ export function readState(input: StateReadInput, propertyId?: string): Record<st
   const milestones = milestonesFor(status, picture);
   const current = milestones.find((milestone) => milestone.status === "next") ?? null;
   const next = presentNext(status);
-  const step = focusStep(milestones, next.action, picture);
   const zoneBlock = publishedMissingZone(input.services.workspace, requested);
+  const alerts = component(status, "OPERATOR_ALERTS");
+  const addressSaved = !!inst.env().TOURCORE_GROK_ROUTINE_URL?.trim();
+  const alertsDegraded = !zoneBlock && next.component === "OPERATOR_ALERTS" && alerts?.state === "DEGRADED";
+  const alertsReconnect = !zoneBlock && next.component === "OPERATOR_ALERTS" && alerts?.state === "ERROR" && addressSaved;
+  const step = alertsDegraded ? "alerts-degraded" : alertsReconnect ? "alerts-error" : focusStep(milestones, next.action, picture);
   const say = zoneBlock ? UNSET_ZONE_LINE : (inst && step === "backups" && driveNotSetUpLine(inst)) || sayFor(input.client, step, picture.draft);
   const playbook = renderPlaybook(input.client, step, say);
   const copy = SHARED_STEPS[step];
@@ -441,7 +445,13 @@ export function readState(input: StateReadInput, propertyId?: string): Record<st
     storage: { summary: storageLine(inst) },
     milestones,
     currentMilestone: current?.id ?? null,
-    nextStep: { action: next.action, component: next.component, tool: zoneBlock ? "save_property" : toolFor(step, picture.draft), say, doneLooksLike: copy.done },
+    nextStep: {
+      action: next.action,
+      component: next.component,
+      tool: zoneBlock ? "save_property" : alertsDegraded ? "test_operator_alerts" : alertsReconnect ? "get_secure_setup_url" : toolFor(step, picture.draft),
+      say,
+      doneLooksLike: copy.done,
+    },
     playbook: { id: playbook.id, version: playbook.version, mode: playbook.mode, step: playbook.step, text: playbook.text },
   };
 }

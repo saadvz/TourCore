@@ -1,9 +1,11 @@
 import { nextProfileQuestion } from "../config/unitProfile";
 import { spokenAsk } from "../playbooks/compose";
+import { RECONNECT_INSTRUCTIONS, SHARED_STEPS } from "../playbooks/shared";
 import type { ReportedClient } from "../playbooks/select";
 import { visitorHelpQuestion } from "../setup/setupActions";
 import { mcpAuthModeFromEnv } from "../mcp/authMode";
 import { MCP_PATH } from "../mcp/paths";
+import { installationAlertHealth } from "../alerts/alertHealth";
 import { describeUpdates, enabledUpdates } from "../alerts/preferences";
 import type { InstalledMessaging, OperatorServices } from "../operator/services";
 import { publishGuards, visitorTexting } from "../operator/setupFlow";
@@ -687,25 +689,32 @@ function alertsStatus(inst: Installation, propertyReady: boolean, client?: Repor
   const changedAt = latest(inst.secrets.updatedAt("TOURCORE_GROK_ROUTINE_URL"), inst.secrets.updatedAt("TOURCORE_GROK_ROUTINE_KEY"));
   const check = inst.files.state().operatorAlerts;
   const test = step("OPERATOR_ALERTS", "TEST_OPERATOR_ALERTS", "GROK", "I'm sending a test update.", { tool: "test_operator_alerts" });
+  const degradedNext = step("OPERATOR_ALERTS", "TEST_OPERATOR_ALERTS", "GROK", SHARED_STEPS["alerts-degraded"].ask, {
+    tool: "test_operator_alerts",
+    grokInstructions:
+      "Send the test this step names. Do not set up tour updates again. Do not create a routine. Do not ask for an address or a key. Do not ask whether they want tour updates.",
+  });
   if (!check || check.credentialsChangedAt !== changedAt) return component("OPERATOR_ALERTS", "ACTION_REQUIRED", "Tour updates are set up but haven't been tested yet.", { provider: "GROK_ROUTINE", next: test });
   if (!check.ok) {
+    const addressSaved = !!env.TOURCORE_GROK_ROUTINE_URL?.trim();
     return component("OPERATOR_ALERTS", "ERROR", "Tour updates aren't reaching you.", {
       provider: "GROK_ROUTINE",
       technical: [check.message],
-      next: connect("Tour updates aren't reaching you yet. I'll ask for the connection again, securely; it won't be shown in chat.", "FIX_OPERATOR_ALERTS"),
+      next: addressSaved
+        ? step("OPERATOR_ALERTS", "FIX_OPERATOR_ALERTS", "OPERATOR_IN_SECURE_SETUP", SHARED_STEPS["alerts-error"].ask, {
+            tool: "get_secure_setup_url",
+            secureSetupStep: "operator-alerts",
+            grokInstructions: RECONNECT_INSTRUCTIONS,
+          })
+        : connect("I'm setting up your tour updates. I'll ask for the connection securely; it won't be shown in chat."),
     });
   }
-  let health;
-  try {
-    health = inst.outbox.health();
-  } catch {
-    health = undefined;
-  }
-  if (health && (health.retrying > 0 || health.failed > 0)) {
+  const health = installationAlertHealth(inst);
+  if (health.retrying > 0 || health.failed > 0) {
     return component("OPERATOR_ALERTS", "DEGRADED", "Some tour updates haven't reached you yet.", {
       provider: "GROK_ROUTINE",
       technical: [`${health.retrying} waiting to retry, ${health.failed} gave up.`, ...(health.lastError ? [health.lastError] : [])],
-      next: test,
+      next: degradedNext,
     });
   }
   return component("OPERATOR_ALERTS", "READY", `I'll keep you posted on ${chosen}.`, { provider: "GROK_ROUTINE" });

@@ -136,6 +136,21 @@ describe("proactive operator alerts", () => {
     expect(app.net.routineCalls()).toHaveLength(1);
   });
 
+  it("an inbox alert keeps the period between the summary and Choosing a time", async () => {
+    const app = await alertApp();
+    await app.text("TOUR");
+    await app.text("YES");
+    await app.text("1");
+    await app.text("Is there a pool?");
+    await app.server.tourCore.settled();
+    const event = app.events()[0]!;
+    expect(event.status).toBe("delivered");
+    const inbox = await app.grok("get_inbox", { eventId: event.event.eventId });
+    expect(inbox.result.summary).toContain("There's no approved answer yet. Choosing a time.");
+    expect(inbox.result.summary).not.toContain("yet Choosing");
+    expect(inbox.result.summary).not.toContain("..");
+  });
+
   it("an alert outage doesn't touch the visitor; the event stays pending and is retried with the same eventId", async () => {
     const app = await alertApp();
     await app.touring();
