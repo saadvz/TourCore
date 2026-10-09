@@ -267,10 +267,7 @@ one of these:
     and condo units keep their stored names. Local or test-mode texting reads
     "Visitor texting: test mode" instead of "Connected".
 
-14. On yes, the setup is saved. Go back to `get_state`. It names `run_checks`
-    once tour updates are saved. Otherwise: "I'll run a
-    readiness check and a practice tour before we turn it on." Then run **Run
-    Readiness Check**. If it fails, explain each problem in plain words and
+14. On yes, the setup is saved. Go back to `get_state`. It names `run_checks` once tour updates are saved. Then say "I'll run a readiness check and a practice tour before we turn it on." and run **Run Readiness Check**. If it fails, explain each problem in plain words and
     offer the fix; change nothing without the operator's OK. If it passes, the
     same `run_checks` call is the practice tour. Say **"The check passed, and the practice tour passed."**
     only when `run_checks` says that.
