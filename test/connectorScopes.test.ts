@@ -182,36 +182,8 @@ describe("connector scopes", () => {
     expect(JSON.stringify(state.json)).not.toMatch(/can't run that tool/);
   });
 
-  it("with TOURCORE_LEGACY_TOOLS=1, /mcp lists and calls inject_local_sms; with the flag off, that call is refused", async () => {
-    const off = await legacySession(undefined);
-    expect(off.names).toEqual([...LANDLORD_CORE_TOOLS]);
-    const refused = await post(off.port, "/mcp", callRpc("inject_local_sms", { from: "+15555550100", text: "Hi" }), LANDLORD);
-    expect(refused.json).toMatchObject({ error: { code: -32602, message: "That's no longer something I can do from this chat. Disconnect and reconnect Tour Core so I'm working from the current list, then ask me again." } });
-
-    const on = await legacySession("1");
-    expect(on.names[0]).toBe("list_properties");
-    expect(on.names).toContain("get_state");
-    expect(on.names).toContain("list_properties");
-    expect(on.names).toContain("get_installation_status");
-    for (const name of QA_TOOL_NAMES) expect(on.names).toContain(name);
-    for (const name of OPS_TOOL_NAMES) expect(on.names).toContain(name);
-    const inject = on.tools.find((tool) => tool.name === "inject_local_sms");
-    expect(inject?.description).toContain("Leave property out");
-    const called = await post(on.port, "/mcp", callRpc("inject_local_sms", { from: "+15555550100", text: "Hi" }), LANDLORD);
-    expect(called.status).toBe(200);
-    const body = called.json as { error?: { message: string }; result?: { isError?: boolean; content?: Array<{ text: string }> } };
-    expect(body.error).toBeUndefined();
-    expect(body.result?.isError).toBe(true);
-    expect(body.result?.content?.[0]?.text).toBe("There aren't any properties set up yet.");
-
-    expect(namesFrom((await post(on.port, "/mcp/qa", listRpc, QA)).json)).toEqual([...QA_TOOL_NAMES]);
-    expect(namesFrom((await post(on.port, "/mcp/ops", listRpc, OPS)).json)).toEqual([...OPS_TOOL_NAMES]);
-    expect(namesFrom((await post(off.port, "/mcp/qa", listRpc, QA)).json)).toEqual([...QA_TOOL_NAMES]);
-    expect(namesFrom((await post(off.port, "/mcp/ops", listRpc, OPS)).json)).toEqual([...OPS_TOOL_NAMES]);
-  });
-
-  it("with the flag off, each former live-check tool is callable on /mcp/qa and mapped in the docs", async () => {
-    const session = await legacySession(undefined);
+  it("each former live-check tool is callable on /mcp/qa and mapped in the docs", async () => {
+    const session = await legacySession();
     expect(session.names).toEqual([...LANDLORD_CORE_TOOLS]);
     const qa = await post(session.port, "/mcp/qa", listRpc, QA);
     expect(namesFrom(qa.json)).toEqual([...QA_TOOL_NAMES]);
@@ -243,7 +215,7 @@ describe("connector scopes", () => {
   });
 
   it("lists test_operator_alerts, run_dry_tour, and get_installation_status on /mcp/qa, and /mcp lists none of them", async () => {
-    const session = await legacySession(undefined);
+    const session = await legacySession();
     const qa = namesFrom((await post(session.port, "/mcp/qa", listRpc, QA)).json);
     const mcp = namesFrom((await post(session.port, "/mcp", listRpc, LANDLORD)).json);
     expect(mcp).toEqual([...LANDLORD_CORE_TOOLS]);
@@ -254,7 +226,7 @@ describe("connector scopes", () => {
   });
 
   it("names only tools that connector lists in its startup instructions", async () => {
-    const session = await legacySession(undefined);
+    const session = await legacySession();
     const catalog = [...OPERATOR_TOOLS.map((tool) => tool.name), "reset_hosted_demo"];
     const named = (text: string) => catalog.filter((name) => new RegExp(`\\b${name}\\b`).test(text));
     const connectors: Array<[string, ConnectorScope, string]> = [
@@ -266,7 +238,7 @@ describe("connector scopes", () => {
       const res = await post(session.port, path, initRpc, token);
       const instructions = (res.json as { result: { instructions: string } }).result.instructions;
       expect(instructions).toBe(mcpInstructions(scope));
-      const allowed = new Set(toolsForConnector(scope, undefined, false).map((tool) => tool.name));
+      const allowed = new Set(toolsForConnector(scope, undefined).map((tool) => tool.name));
       const hits = named(instructions);
       expect(hits.length).toBeGreaterThan(0);
       for (const name of hits) expect(allowed, `${scope} instructions name ${name}`).toContain(name);
@@ -296,12 +268,11 @@ describe("connector scopes", () => {
   }, 120_000);
 });
 
-async function legacySession(flag: string | undefined): Promise<{ port: number; names: string[]; tools: Array<{ name: string; description?: string }> }> {
+async function legacySession(): Promise<{ port: number; names: string[]; tools: Array<{ name: string; description?: string }> }> {
   const root = mkdtempSync(join(tmpdir(), "tourcore-scope-legacy-"));
   cleanups.push(() => rmSync(root, { recursive: true, force: true }));
-  const env: NodeJS.ProcessEnv = flag ? { TOURCORE_LEGACY_TOOLS: flag } : {};
   const runtime = new FileRuntimeStore(join(root, "runtime"));
-  const installation = new Installation({ root, runtime, env: () => env });
+  const installation = new Installation({ root, runtime, env: () => ({}) });
   const server = createSetupServer({
     workspace: new PropertyWorkspace(root),
     installation,

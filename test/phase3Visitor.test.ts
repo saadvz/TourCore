@@ -530,7 +530,7 @@ describe("dead-end visitor lines", () => {
 });
 
 describe("setup step guidance", () => {
-  it("asks for unit names, then leaves save_units once routes can be saved", async () => {
+  it("asks for unit names, then routes, then save_units for the missing profile", async () => {
     const h = hostedInstall();
     await h.ok("choose_messaging_provider", { provider: "local" });
     await h.ok("test_visitor_messaging");
@@ -555,7 +555,8 @@ describe("setup step guidance", () => {
       ],
     });
     const after = await h.ok("get_state", { propertyId: id });
-    expect(after.nextStep.tool).not.toBe("save_units");
+    expect(after.nextStep.tool).toBe("save_units");
+    expect(after.nextStep.say).toBe("How many bedrooms do these units have?");
     expect(String(after.nextStep.say)).not.toMatch(RAW_SLOT);
   });
 
@@ -605,7 +606,7 @@ describe("setup step guidance", () => {
       routes: [{ unit: "Unit A", doors: ["Front Door", "Unit A Door"] }],
     });
     const profile = await h.ok("get_state", { propertyId: id });
-    expect(profile.nextStep.tool).toBe("set_unit_details");
+    expect(profile.nextStep.tool).toBe("save_units");
     expect(profile.nextStep.say).toBe("How many bedrooms does Unit A have?");
     await h.ok("set_unit_details", { property: id, details: "Unit A is 1 bed 1 bath for $1,800, available now." });
     const hours = await h.ok("get_state", { propertyId: id });

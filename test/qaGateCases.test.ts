@@ -19,8 +19,8 @@ import { grokHarness } from "./grokHarness";
 
 /**
  * QA gate cases for the connector split. Each `it` name starts with its case number.
- * Cases the previous head cannot satisfy are the new refusal, the master schema
- * snapshot, the Drive sentence, and the doc tool lists.
+ * Cases the previous head cannot satisfy are the new refusal, the Drive sentence,
+ * and the doc tool lists.
  */
 
 const LANDLORD = "landlord-token-gate-1234567890";
@@ -200,27 +200,6 @@ describe("QA gate cases", () => {
     expect((await post(off, "/mcp/ops", listRpc, OPS)).json).toMatchObject({ error: { message: "The Tour Core ops connector is off." } });
     expect((await post(off, "/mcp/qa", listRpc, QA)).status).toBe(503);
     expect((await post(off, "/mcp/qa", listRpc, QA)).json).toMatchObject({ error: { message: "The Tour Core QA connector is off." } });
-  });
-
-  it("gate 3: legacy /mcp tool names and input schemas match master 8a69f5d", async () => {
-    const master = JSON.parse(read("test/fixtures/master-8a69f5d-mcp-tools.json")) as Array<{ name: string; inputSchema: unknown }>;
-    const root = mkdtempSync(join(tmpdir(), "tourcore-gate3-"));
-    cleanups.push(() => rmSync(root, { recursive: true, force: true }));
-    const env: NodeJS.ProcessEnv = { TOURCORE_LEGACY_TOOLS: "1" };
-    const runtime = new FileRuntimeStore(join(root, "runtime"));
-    const installation = new Installation({ root, runtime, env: () => env });
-    const server = createSetupServer({
-      workspace: new PropertyWorkspace(root),
-      installation,
-      mcpAuth: "static",
-      operatorToken: () => LANDLORD,
-      log: () => {},
-    });
-    cleanups.push(() => server.close());
-    const port = await listen(server);
-    const listed = toolsFrom((await post(port, "/mcp", listRpc, LANDLORD)).json).map((tool) => ({ name: tool.name, inputSchema: tool.inputSchema }));
-    expect(listed.map((tool) => tool.name)).toEqual(master.map((tool) => tool.name));
-    expect(listed).toEqual(master);
   });
 
   it("gate 4: QA connector test text, outbox, and shared-line inject with no property", async () => {

@@ -508,7 +508,7 @@ describe("connector list refresh and the deployed commit", () => {
   });
 
   it("puts the full deploy SHA on /mcp/qa get_installation_status and leaves it off the landlord connector", async () => {
-    const env: NodeJS.ProcessEnv = { RAILWAY_GIT_COMMIT_SHA: SHA, GITHUB_SHA: "should-not-win", TOURCORE_LEGACY_TOOLS: "1" };
+    const env: NodeJS.ProcessEnv = { RAILWAY_GIT_COMMIT_SHA: SHA, GITHUB_SHA: "should-not-win" };
     const server = serverFor(env);
     const port = await listen(server);
     const call = (path: string, token: string, name: string) =>
@@ -522,9 +522,10 @@ describe("connector list refresh and the deployed commit", () => {
     expect(JSON.stringify(landlord.json)).not.toContain(SHA);
     expect(JSON.stringify(landlord.json)).not.toContain('"commit"');
 
-    const legacy = await call("/mcp", LANDLORD, "get_installation_status");
-    expect(JSON.stringify(legacy.json)).not.toContain(SHA);
-    expect((legacy.json.result?.structuredContent?.technical as { commit?: string } | undefined)?.commit).toBeUndefined();
+    const removed = await call("/mcp", LANDLORD, "get_installation_status");
+    expect(removed.json.error?.message).toBe(LANDLORD_REFUSAL);
+    expect(JSON.stringify(removed.json)).not.toContain(SHA);
+    expect(JSON.stringify(removed.json)).not.toContain('"commit"');
 
     delete env.RAILWAY_GIT_COMMIT_SHA;
     env.GITHUB_SHA = "githubsha0123456789abcdef0123456789abcd";

@@ -74,8 +74,7 @@ Sendblue. After the operator chooses, collect only that provider's fields
 with Grok's secure secret input, fill Tour Core's form, and submit it. Then
 follow the next step. Do not ask what to do next. The `local` provider is a
 QA loopback (no credentials, no real texts). A building can use local test
-texts while the installation stays on live visitor texting. Use the QA connector
-(`inject_local_sms` and `read_local_outbox`) only on a building that is on
+texts while the installation stays on live visitor texting. Use the QA connector (`inject_local_sms` and `read_local_outbox`) only on a building that is on
 local. Do not switch the whole installation to local when another building
 is already published and receiving real texts. Switching the installation's
 provider keeps saved credentials and attached lines for other providers. If

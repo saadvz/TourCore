@@ -17,7 +17,7 @@ calls it internally; use it only if the operator asks for technical detail.
 | no form | `none` (anyone who texts can book without saying who they are; ask before saving) |
 | real texts | live visitor texting |
 | practice texts / on screen | demo messaging |
-| local loopback, QA texts, local test texts | the `local` messaging provider, or a building that opted into it while the installation stays on live texting (`inject_local_sms` / `read_local_outbox`) |
+| local loopback, QA texts, local test texts | the `local` messaging provider, or a building that opted into it while the installation stays on live texting (the QA connector's `inject_local_sms` and `read_local_outbox`) |
 | tour records | the canonical tour store and audit |
 | readiness check | readiness checks |
 | practice tour | dry tour |
@@ -30,7 +30,7 @@ calls it internally; use it only if the operator asks for technical detail.
 | door system, door access | Durin Access Platform (Durin demo mode in P0). Never name Durin to the operator |
 | tour updates | operator events delivered to the Tour Core Operator Updates Grok Routine |
 | visitor texting is live | the property uses real texts through the installation's messaging provider (Sendblue, Twilio, or Photon) |
-| texting is in test mode | the property uses local test texts (`get_services` / `set_services local`); texts stay off real phones |
+| texting is in test mode | the property uses local test texts (`get_state` / `set_up_texting local`); texts stay off real phones |
 
 Handles you'll see in tool results and must never show: `propertyId`,
 `unitId`, `doorId`, `tourRef`, `exceptionId`, `eventId`, `confirmation.code`.

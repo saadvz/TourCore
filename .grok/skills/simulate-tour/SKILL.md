@@ -11,6 +11,8 @@ metadata:
   version: "0.2.4"
 ---
 
+<!-- connector: qa-skill -->
+
 # Simulate Tour
 
 These tools are on the QA connector (`TOURCORE_QA_TOKEN`, URL ending in `/mcp/qa`). Leave property out of `inject_local_sms` to use the shared line.
@@ -31,8 +33,7 @@ never silently.
 
 ## When to use
 
-After the readiness check passes, before publishing, or whenever the operator
-wants to prove the tour still works.
+This skill runs on the QA connector (`/mcp/qa`) for testing, and not in a landlord conversation. Use it after the readiness check passes, before publishing, or whenever a test should prove the tour still works.
 
 ## Required inputs and access
 
@@ -76,9 +77,9 @@ Don't list every low-level event unless the operator asks.
 
 To exercise the real visitor SMS path without Sendblue or a carrier:
 
-1. The property must be `messagingMode: live` on local test texts
-   (`choose_messaging_provider` with `local` and that property, or
-   `set_services` with `messaging: local`). That opts this building in
+1. The property must be `messagingMode: live` on local test texts.
+   Call `set_up_texting` on the landlord connector with `provider: local`
+   and that property. That opts this building in
    without changing the installation's live texting or drafting other
    published buildings. Switching the installation to local does not
    clear saved account details. Switching the installation back uses
@@ -91,8 +92,8 @@ To exercise the real visitor SMS path without Sendblue or a carrier:
    `POST /webhooks/local` → `handleProviderWebhook` → `conversations.receive`.
 3. `read_local_outbox` for that conversation. Return **separate bubbles in
    order** (each body is one SMS). Never concatenate them.
-4. `inspect_tour` / `list_active_tours` (Work Exception skill) see the live
-   session the same way they would for a real text.
+4. `get_tours` on the landlord connector (Work Exception skill) sees the live
+   session the same way it would for a real text.
 
 `inject_local_sms` and `read_local_outbox` refuse unless that property is on
 local. They never run against Sendblue, Twilio, Photon, or practice texts.
@@ -105,7 +106,7 @@ Report `passed` exactly as returned. A ✗ line is never rounded up to a pass.
 
 "Practice tour passed" (or where it stopped) and the checklist. If it passed
 and the property isn't published, offer to publish, which goes through
-`publish_demo_property` and its yes/no question.
+`publish` on the landlord connector and its yes/no question.
 
 ## Requires approval
 

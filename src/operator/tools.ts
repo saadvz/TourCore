@@ -99,8 +99,6 @@ export interface ToolContext {
    * (browser, in-process tests, eval harness).
    */
   connector?: ConnectorScope;
-  /** Landlord connector when TOURCORE_LEGACY_TOOLS=1. That flag also keeps QA and ops tools on /mcp during the switch-over. */
-  legacyTools?: boolean;
 }
 
 export type ToolKind = "read" | "change" | "consequential";
@@ -408,20 +406,6 @@ function parseHours(input: { days?: string | string[]; start?: string; end?: str
   if (early !== undefined) out.earlyArrivalMinutes = early;
   return out;
 }
-
-/**
- * Master 8a69f5d input for inject_local_sms. Legacy /mcp advertises this schema.
- * The QA connector keeps the shared-line schema on the live tool.
- */
-export const legacyInjectLocalSmsInput = z.strictObject({
-  from: z.string().min(7).max(30).describe("The visitor's phone number."),
-  text: z.string().max(1600).optional().describe("The visitor's text, one message. Leave empty when they only sent a photo."),
-  to: z.string().min(7).max(30).optional().describe("The property's local touring number. Leave out to use the property's attached line."),
-  property: Property,
-  id: z.string().max(80).optional().describe("Optional inbound id for de-duplication. Leave out to mint one."),
-  hasMedia: z.boolean().optional().describe("True when the inbound includes a photo or other attachment. Tour Core does not forward the file. A photo alone is told it can't take photos yet; a photo plus a question it can't answer is one combined text and is flagged."),
-  listingProperty: z.string().max(200).optional().describe("Listing deep link: the place this first text is for (street, public name, or property id). Leave out when the text itself should choose."),
-});
 
 // ------------------------------------------------------------------- tools
 
@@ -1364,7 +1348,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Pause tours",
     kind: "consequential",
     description:
-      "Pauses new bookings at a property or one unit. Already-booked tours can be kept or cancelled with a text, including a later booking held while someone is still touring; a tour in progress always finishes. Cancelling a later booking while they are touring texts that the later tour is cancelled and their tour right now isn't affected. The cancelled count is only tours actually cancelled, never one that already ended. First call returns a yes/no question; if tours are already booked, say keep or cancel (bookedTours) and call again with confirmationCode only after an explicit yes. Leave paused out, or pass paused true, to pause. Pass paused false to resume bookings. Omitting paused keeps today's result. Passing paused returns done, blocked, or next. resume_tours still resumes. This is not an operator hold on one visitor.",
+      "Pauses new bookings at a property or one unit. Already-booked tours can be kept or cancelled with a text, including a later booking held while someone is still touring; a tour in progress always finishes. Cancelling a later booking while they are touring texts that the later tour is cancelled and their tour right now isn't affected. The cancelled count is only tours actually cancelled, never one that already ended. First call returns a yes/no question; if tours are already booked, say keep or cancel (bookedTours) and call again with confirmationCode only after an explicit yes. Leave paused out, or pass paused true, to pause. Pass paused false to resume bookings. Omitting paused keeps today's result. Passing paused returns done, blocked, or next. This is not a hold on one visitor.",
     input: z.strictObject({
       property: Property,
       unit: z.string().max(100).optional().describe("One unit to pause. Leave out to pause the whole property."),
@@ -1396,7 +1380,7 @@ export const OPERATOR_TOOLS: OperatorTool[] = [
     title: "Remove a property",
     kind: "consequential",
     description:
-      "Removes a property from the operator's list, including a setup that hasn't been published yet (complete or not). Finds it the same way as list_properties (id, name, or address). A published property's records are kept — including one sent back to draft that still has publishedAt, visitor tour or reservation records, or a publish event in its audit. A practice tour alone does not count. An unpublished setup is removed completely (units, doors, and routes go with it). Booked visitors get a cancel text that the property isn't offering tours anymore — not that they'll be texted when tours are back — and pending door access is switched off. Waiting visitors from a pause are not texted that tours are back; that list is dropped. A later text to the property's line gets a goodbye and cannot book. Refused while someone is on a tour. First call returns a yes/no question: unpublished uses the draft wording (it isn't published yet, so no visitors are affected, but everything entered for it will be deleted for good) whether or not the setup is complete. Published with no bookings says no one is booked, so no cancel texts go out; one booked visitor is singular (gets), two or more stay plural. Name the property by the operator-given name, or street plus unit when there is exactly one unit, otherwise the street line — never Main Home. Call again with confirmationCode only after an explicit yes. Say remove, never archive.",
+      "Removes a property from the operator's list, including a setup that hasn't been published yet (complete or not). Finds it by id, name, or address. A published property's records are kept — including one sent back to draft that still has publishedAt, visitor tour or reservation records, or a publish event in its audit. A practice tour alone does not count. An unpublished setup is removed completely (units, doors, and routes go with it). Booked visitors get a cancel text that the property isn't offering tours anymore — not that they'll be texted when tours are back — and pending door access is switched off. Waiting visitors from a pause are not texted that tours are back; that list is dropped. A later text to the property's line gets a goodbye and cannot book. Refused while someone is on a tour. First call returns a yes/no question: unpublished uses the draft wording (it isn't published yet, so no visitors are affected, but everything entered for it will be deleted for good) whether or not the setup is complete. Published with no bookings says no one is booked, so no cancel texts go out; one booked visitor is singular (gets), two or more stay plural. Name the property by the operator-given name, or street plus unit when there is exactly one unit, otherwise the street line — never Main Home. Call again with confirmationCode only after an explicit yes. Say remove, never archive.",
     input: z.strictObject({ property: Property, confirmationCode: Code }),
     run: (ctx, i) => removeProperty(ctx, i),
   }),

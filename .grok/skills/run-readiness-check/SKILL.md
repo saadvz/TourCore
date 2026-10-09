@@ -31,19 +31,8 @@ operator asks why something isn't ready.
 
 ## Sequence
 
-1. `run_readiness_check`.
-2. Show the `lines` as a checklist, e.g.
-   > ✓ Property details
-   > ✓ Tour hours
-   > ✗ Unit routes: Unit 102 doesn't have a complete route yet.
-   > ✓ Verification
-   > ✓ Visitor messaging connected
-   > ✓ Records
-   > ✓ Tour progress can be safely saved
-   > ✓ Door access
-   > ✓ Audit/export
-   > No visitor help number is set, so stuck visitors can only text back.
-   An advisory line after the checks does not fail the check. Say it plainly.
+1. `run_checks`.
+2. Say what it returned. A pass is "The check passed, and the practice tour passed." A block is the reason it returned. Say that reason. Do not turn it into a checklist it did not return.
 3. If anything failed, explain each problem in one plain sentence and offer
    the fix ("Want me to map Unit 102's route now?"). Use **Map Route** or
    **Setup Property** for the fix, only with the operator's OK.
@@ -55,12 +44,12 @@ operator asks why something isn't ready.
 
 ## Validate
 
-- Never say a check passed unless `passed` is true for that line.
-- Never skip or summarize away a failed line.
+- A pass is only "The check passed, and the practice tour passed."
+- Say a blocked reason as returned. Do not say the check passed.
 
 ## Return
 
-The checklist, and either "Everything's ready" or the list of what's left.
+What `run_checks` returned: the pass sentence, or the blocked reason.
 
 ## Requires approval
 

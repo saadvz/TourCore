@@ -23,7 +23,7 @@ import { mcpAuthModeFromEnv, type McpAuthMode } from "../mcp/authMode";
 import { authorized, handleMcpMessage, MCP_PATH } from "../mcp/mcpBridge";
 import { attachToolListStream, isInitializedNotification, noteInitialized } from "../mcp/toolListChanged";
 import { MCP_OPS_PATH, MCP_QA_PATH } from "../mcp/paths";
-import { legacyToolsEnabled, type ConnectorScope } from "../mcp/scopes";
+import { type ConnectorScope } from "../mcp/scopes";
 import { preferPlaybookClient, reportedClientFromInitialize, selectPlaybook, type ReportedClient } from "../playbooks/select";
 import { endpointsFor, isOAuthLocalPath, isOAuthPublicPath, McpOAuth } from "../mcp/oauth";
 import { grokLegacyCompatFromEnv, hostedCompatStartupLine, redirectPolicyFor } from "../mcp/oauth/clients";
@@ -639,7 +639,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
             ...tools,
             ...(caller ? { caller } : {}),
             ...(reportedClient ? { client: reportedClient } : {}),
-            ...(scoped ? { connector: connectorPath, legacyTools: connectorPath === "landlord" && legacyToolsEnabled(installation.env()) } : {}),
+            ...(scoped ? { connector: connectorPath } : {}),
           },
           message,
         );

@@ -109,11 +109,11 @@ what never does.
   picker, that next text asks which place again.
 - **One-off tours.** When the operator wants to set up a tour for someone who
   asked (including a visitor who hasn't texted in, or who only got a day or
-  time menu and never booked), the Bot uses `schedule_one_off_tour` and asks
+  time menu and never booked), the Bot uses `schedule_tour` and asks
   the exact question Tour Core returns. Only a yes that they asked is enough.
   A leftover choosing menu is replaced; a booked tour, pending one-off, open
   tour window, or hold is refused. A time that overlaps a running tour or any
-  future or held booking is refused before asking. `reschedule_tour` will not
+  future or held booking is refused before asking. `schedule_tour` will not
   move a tour in progress, including hold or a door-system problem (`{who} is touring right now, so I can't move this
   tour. Once it ends, you can book them another time.`); if they have a later
   booking it asks `Want me to move their {oldTime} on {oldDay} booking to
@@ -124,8 +124,8 @@ what never does.
   to {time} on {day}.`.
   Tell the operator Tour Core's words
   (`They already have a booked tour. I can move it or call it off.`), then
-  move with `reschedule_tour` or call off with `revoke_tour_access` (resume a
-  hold with `clear_operator_hold`). If tours are paused, approve and
+  move with `schedule_tour` or call off with `cancel_tour` (resume a
+  hold with `hold_tour`). If tours are paused, approve and
   reschedule refuse (`Tours at {property} are paused. Resume them first.`).
   After resume, a visitor Tour / Hi / book restarts booking the same way as a
   first text.

@@ -3,7 +3,7 @@
 This routine is not enabled for HOSTED_RAILWAY_P0.
 
 Grok's native Google Drive connector runs inside a conversation. A Grok
-Routine can wake and call Tour Core (`get_backup_status`), but there is no
+Routine can wake and call Tour Core (`backup_records`), but there is no
 documented way for that routine to upload a file through the Drive connector
 and then stay quiet. Shipping a routine that claimed to do so would be fake.
 

@@ -23,9 +23,8 @@ On an installation whose records live in Google Drive (GOOGLE_DRIVE_READY), the 
 
 ## When to use
 
-The operator asks for the audit, history or records for a day. Prefer
-`export_records` (a day, or kind readable). `export_audit` still writes the
-day's audit.
+The operator asks for the audit, history or records for a day. Call
+`export_records` (a day, or kind readable).
 
 ## Required inputs and access
 
@@ -35,7 +34,7 @@ day's audit.
 
 ## Sequence
 
-1. `export_audit`.
+1. `export_records`.
 2. Summarize the `totals` in plain words:
    > Monday, Sep 28 at 100 Alfred Way:
    > 1 visitor tour: 1 completed, 0 active, 0 stopped

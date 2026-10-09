@@ -29,15 +29,14 @@ request during a tour stays secondary until that tour ends for any
 reason (done, closed, called off, cancelled, or expired), then
 an unfinished identity form continues. A bare yes or no
 answers the latest question asked: a door check wins over a held
-booking. While they are touring, `list_active_tours`,
-`inspect_tour`, pause, resume and call-off target the running tour; the
+booking. While they are touring, `get_tours`, pause, resume and call-off target the running tour; the
 later booking is their next booking. After the running tour ends, texts
 and those tools move to the later booking, or a greeting starts a new
 conversation if nothing is held. `pause_tours` with cancel cancels
 every real future booking, including a held rebook, and counts only
 tours actually cancelled; if they are still touring, the cancel text
 says their tour right now isn't affected. A one-off overlap check sees
-the running tour and every future or held booking. `reschedule_tour`
+the running tour and every future or held booking. `schedule_tour`
 will not move a tour in progress, including hold or a door-system problem (`{who} is touring right now, so I can't
 move this tour. Once it ends, you can book them another time.`); if they
 have a later booking it asks `Want me to move their {oldTime} on {oldDay}
@@ -83,7 +82,7 @@ so they may still be waiting on you.` Partial reply plus empty text:
 `{who} sent a text I couldn't finish handling. They got part of a reply,
 so they may still be waiting on you.` Empty text with no reply: `{who}
 sent a text I couldn't handle, so they're waiting on you. I told them
-you'd reply as soon as you can.` `answer_flagged_question` on that issue texts the
+you'd reply as soon as you can.` `resolve_issue` on that issue texts the
 visitor and does not save a fact. First call: `Send this to {who}? "{reply}"`
 After yes: `Sent to {who}.` If they cannot be texted: `I couldn't text
 {who}, so nothing was sent and this is still open. If you can reach them
@@ -100,7 +99,7 @@ then `You're still booked for {time} on {day}.` or
 `If you'd like another time, just reply with a day.` Approve and decline
 tell the operator `That time has already passed, so I've let {who} know
 their request ran out. You can still book them a one-off time.`
-Then use `schedule_one_off_tour` or `reschedule_tour`.
+Then use `schedule_tour`.
 Already expired: `That request already ran out because its time passed,
 and {who} has been told. You can still book them a one-off time.`
 Already approved or declined: `That request has already been handled.`
@@ -283,11 +282,11 @@ operator; never name Durin.
 4. **Publish for demo**: only after both pass, and only after the operator's yes.
 5. **Watch active tours** and **work exceptions**: unanswered questions, help
    requests, door problems, paused tours, tours that couldn't be restored.
-   Pause or resume bookings at a property or unit (`pause_tours` /
-   `resume_tours`; resume texts people who were told tours would be back;
+   Pause or resume bookings at a property or unit (`pause_tours`;
+   pass `paused` false to resume; resume texts people who were told tours would be back;
    a later Tour / Hi / book restarts booking the same way as a first text),
    or remove a property from the list (`remove_property`; finds any
-   property `list_properties` shows, including an unpublished setup;
+   property `get_state` shows, including an unpublished setup;
    published records stay, including a property sent back to draft that
    still has publishedAt, visitor tour or reservation records, or a publish
    event in its audit (a practice tour alone does not count); an unpublished setup is removed completely,
@@ -298,34 +297,37 @@ operator; never name Durin.
    operator-given name, or street plus unit when there is exactly one unit,
    otherwise the street line, never Main Home; a later text
    gets a goodbye and cannot book; booked cancel text does not promise tours
-   will be back). While paused, `approve_tour_time_request`
-   and `reschedule_tour` refuse (`Tours at {property} are paused. Resume
+   will be back). While paused, `reply_to_time_request`
+   and `schedule_tour` refuse (`Tours at {property} are paused. Resume
    them first.`). Say remove, never archive.
    Tour Core also wakes the Bot (Tour Core Operator Updates routine) for the
    updates the operator chose: bookings, tour starts, completions and anything
    that needs their judgment. Only real text-message tours produce updates.
    A visitor can ask for a time that isn't a regular slot. The operator can
-   also set up a tour for someone who asked (`schedule_one_off_tour`), even if
+   also set up a tour for someone who asked (`schedule_tour`), even if
    they haven't texted in — only after confirming they asked. A leftover day or
    time menu with nothing booked does not block: the one-off replaces it, and
    later replies go to the new confirmation. A leftover menu number only
    re-prompts YES / NO / STOP; a real question is flagged. A booked tour, a pending one-off,
    an open tour window, or a hold still refuses — tell the operator Tour Core's
    words (`They already have a booked tour. I can move it or call it off.`),
-   then move it with `reschedule_tour` or call it off with `revoke_tour_access`
-   (resume a hold with `clear_operator_hold`). Tour-time confirmation
+   then move it with `schedule_tour` or call it off with `cancel_tour`
+   (resume a hold with `hold_tour`). Tour-time confirmation
    questions end `Move it?` or `Book it?`. A move names the old
    time. `This is a one-off…` only outside tour hours.
 6. **Export the audit**: a validated, provider-neutral record of the day. On an installation whose records live in Google Drive (`GOOGLE_DRIVE_READY`), the day's `audit-export.json` is written with the records and copied into Drive by the save step. The CSV stays on the Tour Core computer. On a hosted installation (`HOSTED_VOLUME`, Drive used only for backups), day exports stay on the server as 30-minute download links that can be used until they expire. Only readable exports and backups come back as one-time links for the assistant to save into the Tour Core folder in Drive. Door access in a day export is only what was issued or used that day. Each embedded tour in that JSON is trimmed to that day's events and grants.
 
-Day-to-day work uses `get_tours`, `schedule_tour`, `cancel_tour`, `hold_tour`, `pause_tours`, `get_inbox`, `reply_to_time_request`, `resolve_issue`, `export_records`, `backup_records`, and `restore_records`. `get_tours` counts a tour in progress as happening now and a later booking as coming up. Someone who is only texting, with no booked tour, is not a tour and is not counted. None reads "No tours right now." One future booking reads "1 tour coming up: {name} at {time} on {day}." `get_state` points at `get_inbox` once a property is published, and at `backup_records` on the backups step. The older tour, inbox, backup, and export tools still work and still enforce the same gates.
+Day-to-day work uses `get_tours`, `schedule_tour`, `cancel_tour`, `hold_tour`, `pause_tours`, `get_inbox`, `reply_to_time_request`, `resolve_issue`, `export_records`, `backup_records`, and `restore_records`. `get_tours` counts a tour in progress as happening now and a later booking as coming up. Someone who is only texting, with no booked tour, is not a tour and is not counted. None reads "No tours right now." One future booking reads "1 tour coming up: {name} at {time} on {day}." `get_state` points at `get_inbox` once a property is published, and at `backup_records` on the backups step. The landlord connector does not list the older tour, inbox, backup, and export tools.
 
 ## Current P0 demo configuration
 
 - Tour Core runs on the Bot's cloud computer (a demo deployment) or at a
   stable self-hosted address.
 - Visitor messaging: the provider the operator chooses (Sendblue, Twilio, Photon, or local QA loopback). Do not assume Sendblue.
-- QA without a carrier: put that building on local test texts (`choose_messaging_provider` with `local` and the property, or `set_services` with `messaging: local`), then `inject_local_sms` and `read_local_outbox`. Replies are separate bubbles. `hasMedia` injects a photo inbound (the file is not forwarded; a photo alone is told it can't take photos yet, and a photo plus a question it can't answer is one combined text and is flagged). Those tools refuse unless that building is on local. Other published buildings stay on the installation's live texting. `get_services` reports `messaging.current` as `"test"` (never `"live"`) and "Visitor texting: test mode". `get_services` / `set_services local` say "Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on. Door access is still in demo mode, so no physical locks will open." Do not say texting is live. Publishing a local building leaves out "Visitors can start a tour by texting your touring number." Switching the installation's provider keeps saved carrier credentials.
+- Local test texts, when there is no carrier: put that building on local with `set_up_texting` (`provider` local, and that property). `set_up_texting` says "Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on." Do not say texting is live. Do not switch the whole installation to local when another building is already on live visitor texting. Publishing a local building leaves out "Visitors can start a tour by texting your touring number." Switching the installation's provider keeps saved carrier credentials.
+<!-- connector: qa -->
+  On the QA connector, `inject_local_sms` and `read_local_outbox` send and read those texts as separate bubbles. `hasMedia` injects a photo inbound (the file is not forwarded; a photo alone is told it can't take photos yet, and a photo plus a question it can't answer is one combined text and is flagged). Those tools refuse unless that building is on local.
+<!-- /connector -->
 - Operator updates: the Tour Core Operator Updates Grok Routine.
 - Tour records: on the hosted product, stored by hosted Tour Core (`HOSTED_VOLUME`). Google Drive there is only for portable backups. On an installation whose records live in Google Drive (`GOOGLE_DRIVE_READY`), the day's `audit-export.json` is written with the records and copied into Drive by the save step. The CSV stays on the Tour Core computer. On a hosted installation (`HOSTED_VOLUME`, Drive used only for backups), day exports stay on the server as 30-minute download links that can be used until they expire. Only readable exports and backups come back as one-time links for the assistant to save into the Tour Core folder in Drive. Door access in a day export is only what was issued or used that day. Each embedded tour in that JSON is trimmed to that day's events and grants. Optional direct Drive remains a separate mode.
 - Door access: demo mode. No physical door is controlled.

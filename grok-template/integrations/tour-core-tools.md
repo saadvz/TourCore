@@ -18,9 +18,7 @@ Every tool validates its input and calls the same Tour Core actions as the brows
 Kinds: **read** changes nothing; **change** edits setup or records through Tour Core's normal rules;
 **consequential** returns a yes/no question first and acts only when called again with the code after the operator's yes.
 
-Set `TOURCORE_LEGACY_TOOLS=1` during the switch-over so the landlord connector also keeps the older tools, the QA test tools, and the ops tools. Unset it once the QA connector is confirmed. Planned removal: October 15, 2026. The older tools stay out of the tables below.
-
-A tool that isn't on this connector is refused. On the landlord connector that line is "That's no longer something I can do from this chat. Disconnect and reconnect Tour Core so I'm working from the current list, then ask me again." The ops and QA connectors say "The ops connector can't run that tool." and "The QA connector can't run that tool." Each connector advertises `tools.listChanged` and sends `notifications/tools/list_changed` on the SSE stream after `notifications/initialized`, so a connector that still shows the old list can re-fetch. `get_installation_status` on the QA connector includes `technical.commit` (the full deploy SHA, or `unknown`). The landlord connector does not.
+The older tools are not on these connectors. A Tour Core tool that isn't on the landlord list is refused with "That's no longer something I can do from this chat. Disconnect and reconnect Tour Core so I'm working from the current list, then ask me again." A name that isn't a Tour Core tool at all gets `There's no Tour Core tool called "${name}".` The ops and QA connectors say "The ops connector can't run that tool." and "The QA connector can't run that tool." Each connector advertises `tools.listChanged` and sends `notifications/tools/list_changed` on the SSE stream after `notifications/initialized`, so a connector that still shows the old list can re-fetch. `get_installation_status` on the QA connector includes `technical.commit` (the full deploy SHA, or `unknown`). The landlord connector does not.
 
 ## Landlord connector
 

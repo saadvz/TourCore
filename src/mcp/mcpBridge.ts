@@ -4,7 +4,7 @@ import { hostedResetToolVisible, HOSTED_ADMIN_TOOLS } from "../install/hostedAdm
 import { annotationsFor } from "./annotations";
 import { mcpInstructions } from "../playbooks/instructions";
 import { reportedClientFromInitialize } from "../playbooks/select";
-import { callOperatorTool, legacyInjectLocalSmsInput, OPERATOR_TOOLS, UnknownToolError, type ToolContext } from "../operator/tools";
+import { callOperatorTool, OPERATOR_TOOLS, UnknownToolError, type ToolContext } from "../operator/tools";
 import { connectorRefusal, knownOperatorTool, toolsForConnector } from "./scopes";
 
 /**
@@ -38,14 +38,12 @@ const rpcResult = (id: JsonRpcId, result: unknown): Reply => ({ status: 200, bod
 
 export function mcpToolList(ctx?: ToolContext) {
   const tools = ctx?.connector
-    ? toolsForConnector(ctx.connector, ctx, !!ctx.legacyTools)
+    ? toolsForConnector(ctx.connector, ctx)
     : hostedResetToolVisible(ctx)
       ? [...OPERATOR_TOOLS, ...HOSTED_ADMIN_TOOLS]
       : OPERATOR_TOOLS;
-  const legacyLandlord = ctx?.connector === "landlord" && !!ctx.legacyTools;
   return tools.map((t) => {
-    const input = legacyLandlord && t.name === "inject_local_sms" ? legacyInjectLocalSmsInput : t.input;
-    const { $schema: _s, ...inputSchema } = z.toJSONSchema(input) as Record<string, unknown>;
+    const { $schema: _s, ...inputSchema } = z.toJSONSchema(t.input) as Record<string, unknown>;
     return { name: t.name, title: t.title, description: t.description, inputSchema, annotations: { title: t.title, ...annotationsFor(t) } };
   });
 }
@@ -73,7 +71,7 @@ export async function handleMcpMessage(ctx: ToolContext, message: unknown): Prom
     case "tools/call": {
       const name = typeof params?.name === "string" ? params.name : "";
       if (ctx.connector) {
-        const allowed = new Set(toolsForConnector(ctx.connector, ctx, !!ctx.legacyTools).map((tool) => tool.name));
+        const allowed = new Set(toolsForConnector(ctx.connector, ctx).map((tool) => tool.name));
         if (!allowed.has(name)) {
           if (knownOperatorTool(name)) return rpcError(id, -32602, connectorRefusal(ctx.connector));
         }

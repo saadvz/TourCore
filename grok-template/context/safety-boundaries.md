@@ -15,10 +15,8 @@ only by these instructions.
 
 ## Approval
 
-Consequential tools (`publish_demo_property`, `place_operator_hold`,
-`clear_operator_hold`, `revoke_tour_access`, `pause_tours`, `resume_tours`,
-`remove_property`, `answer_flagged_question`,
-`approve_tour_time_request`, `reschedule_tour`, `schedule_one_off_tour`) work in
+Consequential tools (`publish`, `hold_tour`, `cancel_tour`, `pause_tours`,
+`remove_property`, `resolve_issue`, `reply_to_time_request`, and `schedule_tour`) work in
 two steps:
 
 1. The first call changes nothing and returns the exact yes/no question plus a
@@ -28,8 +26,8 @@ two steps:
 
 Ask the question word for word. Pass the code only after an explicit yes.
 
-If tours at the property are paused, `approve_tour_time_request` and
-`reschedule_tour` refuse on the first call (`Tours at {property} are paused.
+If tours at the property are paused, `reply_to_time_request` and
+`schedule_tour` refuse on the first call (`Tours at {property} are paused.
 Resume them first.`) instead of asking. Tell the operator that. Don't look
 for another way.
 
@@ -69,7 +67,7 @@ the readiness check and a practice tour passed for that exact setup.
   slip through.
 - Operator updates carry only an event id, its type and a tour or issue
   reference: no names, phone numbers or message text. The Bot reads the
-  details from Tour Core with `get_inbox` (pass that event id). `get_operator_update` still reads the same event.
+  details from Tour Core with `get_inbox` (pass that event id). The inbox reads that same event.
 - Day-to-day writes (`schedule_tour`, `cancel_tour`, `hold_tour`, `pause_tours` when `paused` is set, `reply_to_time_request`, `resolve_issue`, `backup_records`, `restore_records`) answer done, blocked, or next. `cancel_tour` and `restore_records` are destructive. A fair-housing item with no draft is refused by `resolve_issue` before any visitor text.
 - Canonical state stays in Tour Core. The Bot re-reads it with tools instead of
   relying on memory, so a new conversation or a restarted Tour Core picks up
