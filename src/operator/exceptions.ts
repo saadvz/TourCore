@@ -316,7 +316,7 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
     propertyId: tour.propertyId,
     property: tour.config.property.name,
     kind,
-    title: teamTextMissed ? "A text to you didn't go out" : fairHousing ? "Fair-housing question" : TITLES[kind],
+    title: teamTextMissed ? "A text to you didn't go out" : fairHousing ? FAIR_HOUSING_TITLE : TITLES[kind],
     summary,
     visitorName: visitorNameOf(tour),
     unitName: unitNameOn(tour, e.reservationId) ?? unitSubject(tour, e.unitId),
@@ -552,8 +552,10 @@ export function visitorAnswerText(_question: string, fact: string): string {
 export const FAIR_HOUSING_REFUSAL = "This one touches on fair housing, so I won't draft an answer. Reply to them yourself, then mark it handled.";
 
 /** The one landlord sentence on a fair-housing flag. The summary says it once. The next step does not repeat it. */
+export const FAIR_HOUSING_TITLE = "Possible fair-housing question";
+
 export const FAIR_HOUSING_INBOX =
-  "This is a fair-housing question, so there's no draft. Only you can answer this one. They were told you'd text them back here.";
+  "This may touch on fair housing, so there's no draft. Only you can answer this one. They were told you'd text them back here.";
 
 export const FAIR_HOUSING_STEPS = ["Mark it handled once you've replied."] as const;
 

@@ -85,7 +85,7 @@ describe("decision 10 flagged answers", () => {
     expect(fairReplies.join("\n")).not.toContain("I'll check with the property team and get back to you");
     const issues = (await a.grok("list_exceptions")).exceptions as Array<{ exceptionId: string; summary: string; proposeDraft?: boolean }>;
     expect(issues.map((item) => item.summary).sort()).toEqual([
-      'They asked: "Are families with children allowed to live here?" This is a fair-housing question, so there\'s no draft. Only you can answer this one. They were told you\'d text them back here.',
+      'They asked: "Are families with children allowed to live here?" This may touch on fair housing, so there\'s no draft. Only you can answer this one. They were told you\'d text them back here.',
       'They asked: "Is there a gym?" There\'s no approved answer yet.',
     ]);
     const fair = issues.find((item) => item.summary.includes("families"))!;

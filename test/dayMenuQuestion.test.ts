@@ -31,10 +31,14 @@ describe("a weekday inside a question at the open day menu", () => {
 
     const replies = await a.textFrom(phone, "Black Friday sale nearby?");
 
-    expect(replies).toEqual([UNKNOWN_ANSWER]);
+    expect(replies).toEqual(["Good question for the property team. I've passed it along, and they'll text you back here."]);
     expect(replies.join("\n")).not.toContain("I have these times available");
     const issues = (await a.grok("list_exceptions")).exceptions as Array<{ exceptionId: string; summary: string }>;
-    const flagged = issues.find((issue) => issue.summary === 'They asked: "Black Friday sale nearby?" There\'s no approved answer yet.');
+    const flagged = issues.find(
+      (issue) =>
+        issue.summary ===
+        'They asked: "Black Friday sale nearby?" This may touch on fair housing, so there\'s no draft. Only you can answer this one. They were told you\'d text them back here.',
+    );
     expect(flagged).toBeTruthy();
     const woken = a.routineEvents().filter((event) => event.eventType === "exception.created");
     expect(woken.map((event) => event.exceptionId)).toContain(flagged!.exceptionId);

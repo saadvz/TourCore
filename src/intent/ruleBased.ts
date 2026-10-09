@@ -1,4 +1,4 @@
-import { isFairHousingQuestion } from "../core/fairHousing";
+import { isFairHousingQuestion, isTourPartyNote } from "../core/fairHousing";
 import { isMoreTimeAsk } from "../core/overstayCopy";
 import { dayReference, namesTourDay, spokenTimes, vagueTimeRequest, type SpokenTime } from "../core/spokenTime";
 import { isGeneralTourHoursQuestion } from "./tourHoursAsk";
@@ -501,7 +501,10 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
     for (const [re, problem] of HELP) if (re.test(t)) return result({ type: "REQUEST_HELP", problem }, 0.9);
     return undefined;
   };
-  const informational = () => (asked ? question(0.9) : WANTS_TO_KNOW.test(t) ? question(0.8) : t.split(" ").length <= 3 && TOPIC.test(t) ? question(0.7) : undefined);
+  const informational = () => {
+    if (isTourPartyNote(raw)) return unknown();
+    return asked ? question(0.9) : WANTS_TO_KNOW.test(t) ? question(0.8) : t.split(" ").length <= 3 && TOPIC.test(t) ? question(0.7) : undefined;
+  };
   // Asking about a detail ("How much is Unit 1A?", "Does 1A have laundry?") isn't choosing it.
   const detailQuestion = asked && (TOPIC.test(t) || /\bhow (much|many|big)\b/.test(t));
 
@@ -547,7 +550,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
       const customDate = schedulingIntent(raw, t, true, result, unknown, ctx.today);
       if (customDate) return customDate;
       // A weekday inside a question, or in a message that is not a day pick, is not that day.
-      if (questionInsteadOfDayPick(raw, t, ctx.today)) return question(0.9);
+      if (questionInsteadOfDayPick(raw, t, ctx.today)) return isTourPartyNote(raw) ? unknown() : question(0.9);
       const picked = dateIntent(raw, t, result, ctx.today);
       if (picked) return picked;
       const availability = availabilityDayPick(t);
@@ -628,6 +631,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
 
   /** Where nothing else is expected, only an unmistakable question counts: a bare "anything" or "ok?" isn't one. */
   function clearQuestion(): IntentInterpretation | undefined {
+    if (isTourPartyNote(raw)) return unknown();
     const words = t.split(" ").length;
     if ((asked && words >= 2) || WANTS_TO_KNOW.test(t) || (words <= 3 && TOPIC.test(t))) return question(0.85);
     return undefined;
@@ -709,7 +713,7 @@ function interpretOnTour(ctx: InterpretContext, t: string, asked: boolean, h: He
   const present = STRONG_PRESENCE.test(t) || PRESENCE.test(t);
   if (named.length) {
     const bare = named.length === 1 && bareReference(t, named[0]!);
-    if (asked && !opening && !bare && !STRONG_PRESENCE.test(t)) return question(0.9);
+    if (asked && !opening && !bare && !STRONG_PRESENCE.test(t)) return isTourPartyNote(ctx.message) ? unknown() : question(0.9);
     if (named.length > 1) return result({ type: "AT_ROUTE_STOP" }, 0.4, { clarificationNeeded: true });
     const stop = named[0]!;
     // Being at a door is what opens it; asking for a door to open without saying you're there gets a check first.

@@ -39,8 +39,7 @@ const START = smsDisclosure(PUBLIC);
 const DRAFT_START = draftStartDisclosure(PUBLIC);
 const HELD = "Good question for the property team. I've passed it along, and they'll text you back here.";
 const PASS_ALONG = UNKNOWN_ANSWER;
-const FAIR_LINE =
-  "This is a fair-housing question, so there's no draft. Only you can answer this one. They were told you'd text them back here.";
+const FAIR_LINE = FAIR_HOUSING_INBOX;
 
 const SUITABILITY = [
   "Is it good for families?",
@@ -293,7 +292,7 @@ describe("suitability questions are fair-housing holds", () => {
     expect(item).toBeTruthy();
     const shown = [item!.what, item!.summary, ...((item!.nextSteps as string[]) ?? [])].join("\n");
     expect(shown).toBe(
-      ["Fair-housing question", `They asked: "Is it good for families?" ${FAIR_LINE}`, "Mark it handled once you've replied."].join("\n"),
+      ["Possible fair-housing question", `They asked: "Is it good for families?" ${FAIR_LINE}`, "Mark it handled once you've replied."].join("\n"),
     );
     expect(shown.split(FAIR_LINE)).toHaveLength(2);
     expect(item!.proposeDraft).toBe(false);
@@ -550,7 +549,7 @@ describe("inbox quotes", () => {
     writeFileSync(path, JSON.stringify(bundle));
     const again = await liveApp({ root: a.root, clock: a.clock, net: a.net, fake: a.fake, cleanups, routine: false });
     const inbox = await again.grok("get_inbox");
-    const item = (inbox.items as Array<{ summary?: string; what?: string }>).find((row) => row.what === "Fair-housing question");
+    const item = (inbox.items as Array<{ summary?: string; what?: string }>).find((row) => row.what === "Possible fair-housing question");
     expect(item?.summary).toBe(`They asked a question. ${FAIR_HOUSING_INBOX}`);
   });
 });

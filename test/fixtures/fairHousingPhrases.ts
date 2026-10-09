@@ -1,8 +1,12 @@
 // QA adds new phrases here instead of retyping lists.
+export type FairHousingExpected = "flagged" | "not-flagged" | "booked" | "tour";
+
 export interface FairHousingPhrase {
   phrase: string;
   flagged: boolean;
   source: string;
+  /** flagged, not-flagged, booked on the tour, or a tour aside with no suitability answer. */
+  expected?: FairHousingExpected;
 }
 
 /** Every fair-housing phrase QA has run on a head of #70. */
@@ -153,7 +157,7 @@ export const FAIR_HOUSING_PHRASES: FairHousingPhrase[] = [
   // Original #70 phrases that are not flagged.
   { phrase: "How much is rent?", flagged: false, source: "original" },
   { phrase: "Is rent due monthly?", flagged: false, source: "original" },
-  { phrase: "What color are the walls?", flagged: false, source: "original" },
+  { phrase: "What color are the walls?", flagged: true, source: "broad rule", expected: "flagged" },
   { phrase: "Do you allow pets?", flagged: false, source: "original" },
   { phrase: "Do you allow dogs?", flagged: false, source: "original" },
   { phrase: "Is there a dog park?", flagged: false, source: "original" },
@@ -163,9 +167,9 @@ export const FAIR_HOUSING_PHRASES: FairHousingPhrase[] = [
   { phrase: "Is there a temple nearby?", flagged: false, source: "original" },
   { phrase: "Is there a mosque nearby?", flagged: false, source: "original" },
   { phrase: "Is there a dog run?", flagged: false, source: "original" },
-  { phrase: "Do you offer senior discounts?", flagged: false, source: "original" },
-  { phrase: "What is the age of the building?", flagged: false, source: "original" },
-  { phrase: "What is the roof age?", flagged: false, source: "original" },
+  { phrase: "Do you offer senior discounts?", flagged: true, source: "broad rule", expected: "flagged" },
+  { phrase: "What is the age of the building?", flagged: true, source: "broad rule", expected: "flagged" },
+  { phrase: "What is the roof age?", flagged: true, source: "broad rule", expected: "flagged" },
   { phrase: "Is there a support beam?", flagged: false, source: "original" },
   { phrase: "What are the customer service hours?", flagged: false, source: "original" },
   { phrase: "Is there a service elevator?", flagged: false, source: "original" },
@@ -176,12 +180,12 @@ export const FAIR_HOUSING_PHRASES: FairHousingPhrase[] = [
   { phrase: "how many units are in the building?", flagged: false, source: "original" },
   { phrase: "how many bedrooms?", flagged: false, source: "original" },
   { phrase: "is the building quiet?", flagged: false, source: "original" },
-  { phrase: "are the walls white? lots of light?", flagged: false, source: "original" },
-  { phrase: "lots of color in the kitchen?", flagged: false, source: "original" },
-  { phrase: "any Asian restaurants nearby?", flagged: false, source: "original" },
-  { phrase: "white picket fence in the neighborhood?", flagged: false, source: "original" },
-  { phrase: "what color are the doors in the building?", flagged: false, source: "original" },
-  { phrase: "Black Friday sale nearby?", flagged: false, source: "original" },
+  { phrase: "are the walls white? lots of light?", flagged: true, source: "broad rule", expected: "flagged" },
+  { phrase: "lots of color in the kitchen?", flagged: true, source: "broad rule", expected: "flagged" },
+  { phrase: "any Asian restaurants nearby?", flagged: true, source: "broad rule", expected: "flagged" },
+  { phrase: "white picket fence in the neighborhood?", flagged: true, source: "broad rule", expected: "flagged" },
+  { phrase: "what color are the doors in the building?", flagged: true, source: "broad rule", expected: "flagged" },
+  { phrase: "Black Friday sale nearby?", flagged: true, source: "broad rule", expected: "flagged" },
 
   // Not a protected class, or the class word only modifies a thing.
   { phrase: "Is it good for parking?", flagged: false, source: "round 1" },
@@ -192,6 +196,82 @@ export const FAIR_HOUSING_PHRASES: FairHousingPhrase[] = [
   { phrase: "Is there a family room?", flagged: false, source: "round 2" },
   { phrase: "Is it family-style?", flagged: false, source: "stop-list" },
   { phrase: "Is it good for a family-style kitchen?", flagged: false, source: "stop-list" },
-  { phrase: "Do you rent to sex offenders?", flagged: false, source: "stop-list" },
-  { phrase: "Is it gender neutral?", flagged: false, source: "stop-list" },
+  { phrase: "Do you rent to sex offenders?", flagged: false, source: "stop-list", expected: "not-flagged" },
+  { phrase: "Is it gender neutral?", flagged: false, source: "stop-list", expected: "not-flagged" },
+
+  // QA not-flagged block. These values win where an earlier brief disagreed.
+  { phrase: "Is it right for me?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it OK for 3 roommates?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it good for students?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it good for a dog?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it good for my cat?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it pet friendly?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it dog friendly?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it good for working from home?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it safe for walking at night?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it close to a church?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it OK for sex offenders?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it good for gender neutral bathrooms?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is there a ramp?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is there an elevator?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is there disabled parking?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it a good area?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is the building quiet?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "good schools nearby?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it good for raising chickens?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it good for a family room?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it safe for a family car?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it good for a kids room?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is there room for a family size fridge?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is there room for a family-size table?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it good for family-style dinners?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it good for a family dinner?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it good for family gatherings?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it good for my kid's bike?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is the yard good for kids' toys?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it safe for my elderly dog?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it good for a senior dog?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it good for a blind cat?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it good for a baby grand piano?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it good for disabled parking?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it good for color photography?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is there an elevator for my mom?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+  { phrase: "Is it OK for two people?", flagged: false, source: "qa not-flagged", expected: "not-flagged" },
+
+  // Bringing people to the tour. Not a suitability answer.
+  { phrase: "Can my family come to the tour?", flagged: false, source: "tour logistics", expected: "tour" },
+  { phrase: "Can I bring my kids to the tour?", flagged: false, source: "tour logistics", expected: "tour" },
+  { phrase: "I'm bringing my baby, is that ok?", flagged: false, source: "tour logistics", expected: "tour" },
+  { phrase: "Can my mom come, she uses a wheelchair", flagged: false, source: "tour logistics", expected: "tour" },
+
+  // A day or time, with no suitability question, is booked.
+  { phrase: "Can I bring my kids Saturday at 2?", flagged: false, source: "booking", expected: "booked" },
+  { phrase: "We're a family of 4, is 3 PM free?", flagged: false, source: "booking", expected: "booked" },
+
+  // Group word anywhere, including a booking that also asks suitability.
+  { phrase: "Is it good for young professionals?", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "Is the area for young professionals?", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "Is it quiet? I have kids", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "Me and my 2 kids", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "just me and my wife and our kids", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "We're a family of 4", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "Is it close to a good school for kids?", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "wheelchair accessible?", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "Is it wheelchair accessible?", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "Is the entrance wheelchair friendly?", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "Is it OK for my elderly mom to visit?", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "Can I come Saturday at 2? Is it good for kids?", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "Is the tour OK for kids?", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "Is it good for a young couple?", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "Is it suitable for a couple?", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "Is it good for a single person?", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "Is it suitable for someone in a wheelchair?", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "Is it big enough for a family?", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "Is the yard big enough for kids to play?", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "Is it OK for my mom to live with me? She's 80", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "I have a newborn", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "What ages live here?", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "Is the area good for raising kids?", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "Is it good for families with a dog?", flagged: true, source: "qa flagged", expected: "flagged" },
+  { phrase: "Is it OK for a service dog?", flagged: true, source: "qa flagged", expected: "flagged" },
 ];
