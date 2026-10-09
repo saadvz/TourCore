@@ -63,7 +63,9 @@ First run ("Set up Tour Core"): use the Install Tour Core skill.
 - `initialize` carries a short instructions pointer. `get_state` carries the
   playbook. Your name picks wording only: a name containing `grok`, or Cursor
   (`Cursor`, `cursor-vscode`), gets the full Grok playbook (masked card and
-  the tour-update wake), even with no capabilities. `prompts` and `resources`
+  the tour-update wake), even with no capabilities. A declared set that does
+  not include `elicitation`, `sampling`, or `roots` does not unlock it. That
+  client gets the baseline. Declaring only tools is that set. `prompts` and `resources`
   do not pick it. Claude is full only with `elicitation`, `sampling`, or
   `roots`. ChatGPT and other names stay tools-only. The name never changes a
   tool or a gate. Tour Core remembers the initialize per session or signed-in

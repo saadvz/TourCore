@@ -11,7 +11,7 @@ npm run test:eval
 npm run eval:baseline
 ```
 
-`npm test` does not include this harness. `npm run test:eval` runs the guard, the config diff, and the full baseline. `npm run eval:baseline` runs the same baseline and exits non-zero if it drifted from `eval/baseline/`.
+`npm test` does not include this harness. `npm run test:eval` runs the guard, the config diff, and the full baseline. `npm run eval:baseline` runs the same baseline and exits non-zero if it drifted from `eval/baseline/`. The per-agent client matrix runs the ten-duplex config diff, plus the safety gates, once for Grok, ChatGPT, Claude, an unknown client, and a spoofed grok name. See [client-matrix.md](client-matrix.md).
 
 ## What it records
 

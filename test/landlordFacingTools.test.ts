@@ -197,6 +197,14 @@ describe("landlord-facing tool names", () => {
     expect(removedTools(untilHeading)).toEqual(["create_property_setup"]);
   });
 
+  it("keeps the client matrix on tools that are on a connector", () => {
+    const hits: string[] = [];
+    for (const rel of ["docs/client-matrix.md", "src/eval/clientMatrix.ts", "src/playbooks/select.ts"]) {
+      for (const name of removedTools(read(rel))) hits.push(`${rel}: ${name}`);
+    }
+    expect(hits).toEqual([]);
+  });
+
   it("keeps skills, the template, the bootstrap, and the README off tools that are not on any connector", () => {
     const hits: string[] = [];
     for (const rel of DOC_ROOTS.flatMap(filesUnder)) {
@@ -220,7 +228,15 @@ describe("landlord-facing tool names", () => {
     for (const name of foreignTools(spoken)) hits.push(`shared step: ${name}`);
     for (const name of foreignTools(read("src/operator/milestones.ts"))) hits.push(`milestones: ${name}`);
     for (const name of foreignTools(MCP_INSTRUCTIONS)) hits.push(`MCP_INSTRUCTIONS: ${name}`);
-    const clients = [undefined, { name: "Grok" }, { name: "Claude" }, { name: "ChatGPT" }];
+    const clients = [
+      undefined,
+      { name: "Grok" },
+      { name: "Grok", capabilities: { elicitation: { form: {} }, sampling: {}, roots: { listChanged: true } } },
+      { name: "grok", capabilities: { tools: {} } },
+      { name: "claude-ai", capabilities: { elicitation: { form: {} }, sampling: {}, roots: { listChanged: true } } },
+      { name: "ChatGPT", capabilities: { elicitation: { form: {} } } },
+      { name: "example-client", capabilities: { tools: {} } },
+    ];
     for (const client of clients) {
       for (const step of Object.keys(SHARED_STEPS) as StepId[]) {
         for (const name of foreignTools(renderPlaybook(client, step).text)) hits.push(`playbook ${client?.name ?? "baseline"} ${step}: ${name}`);
@@ -587,6 +603,41 @@ describe("landlord tool return strings", () => {
     );
     expect(JSON.stringify(flagInbox)).toContain("resolve_issue");
     const hits = [...foreignTools(JSON.stringify(timeInbox)), ...foreignTools(JSON.stringify(flagInbox))];
+    const port = (app.server.address() as { port: number }).port;
+    const token = "test-operator-token-abcdef";
+    const profiles = [
+      { name: "Grok", capabilities: { elicitation: { form: {} }, sampling: {}, roots: { listChanged: true } } },
+      { name: "ChatGPT", capabilities: { elicitation: { form: {} } } },
+      { name: "claude-ai", capabilities: { elicitation: { form: {} }, sampling: {}, roots: { listChanged: true } } },
+      { name: "example-client", capabilities: { tools: {} } },
+      { name: "grok", capabilities: { tools: {} } },
+    ];
+    let rpc = 0;
+    for (const client of profiles) {
+      const init = await fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: ++rpc,
+          method: "initialize",
+          params: { protocolVersion: "2025-06-18", capabilities: client.capabilities, clientInfo: { name: client.name, version: "1" } },
+        }),
+      });
+      const session = init.headers.get("mcp-session-id") ?? "";
+      const res = await fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "Mcp-Session-Id": session },
+        body: JSON.stringify({ jsonrpc: "2.0", id: ++rpc, method: "tools/call", params: { name: "get_state", arguments: {} } }),
+      });
+      const body = (await res.json()) as { result?: { structuredContent?: { playbook?: { id?: string; text?: string } } } };
+      const playbook = body.result?.structuredContent?.playbook;
+      for (const name of foreignTools(JSON.stringify(body.result?.structuredContent ?? {}))) hits.push(`seeded get_state ${client.name}: ${name}`);
+      if (client.name === "grok") {
+        expect(playbook?.id).toBe("baseline");
+        expect(playbook?.text ?? "").not.toContain("masked");
+      }
+    }
     expect(hits).toEqual([]);
   }, 120_000);
 });

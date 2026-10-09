@@ -83,6 +83,8 @@ describe("playbook selection", () => {
       expect(selectPlaybook({ name: name.toUpperCase(), capabilities: { prompts: {}, resources: {} } })).toMatchObject({ id: "grok", mode: "full" });
     }
     expect(selectPlaybook({ name: "Grok", capabilities: grokClientCaps })).toEqual({ id: "grok", mode: "full", version: "grok@2026-10-08" });
+    expect(selectPlaybook({ name: "grok", capabilities: { tools: {} } })).toEqual({ id: "baseline", mode: "tools", version: "baseline@2026-10-08.tools" });
+    expect(selectPlaybook({ name: "Grok", capabilities: { tools: {} } })).toMatchObject({ id: "baseline", mode: "tools" });
     expect(selectPlaybook({ name: "ChatGPT", capabilities: grokClientCaps })).toMatchObject({ id: "chatgpt", mode: "tools", version: "chatgpt@2026-10-08.tools" });
     expect(selectPlaybook({ name: "OpenAI", capabilities: { prompts: {}, resources: {} } })).toMatchObject({ id: "chatgpt", mode: "tools" });
     expect(selectPlaybook({ name: "claude-ai", capabilities: grokClientCaps })).toMatchObject({ id: "claude", mode: "full", version: "claude@2026-10-08" });
@@ -192,7 +194,7 @@ describe("decision 11 wake copy", () => {
     }
     const spoken = full.text.split("For you, not out loud:")[0] ?? "";
     expect(spoken).not.toMatch(/webhook|routine|event id|secure link/i);
-    for (const client of [{ name: "claude", capabilities: { prompts: {}, resources: {} } }, { name: "chatgpt", capabilities: { prompts: {}, resources: {} } }, { name: "unknown" }, undefined]) {
+    for (const client of [{ name: "claude", capabilities: { prompts: {}, resources: {} } }, { name: "chatgpt", capabilities: { prompts: {}, resources: {} } }, { name: "unknown" }, { name: "grok", capabilities: { tools: {} } }, undefined]) {
       const other = renderPlaybook(client, "alerts").text;
       expect(other).not.toContain(offer);
       expect(other).not.toContain("approve_tour_time_request");
