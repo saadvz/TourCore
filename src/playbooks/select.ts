@@ -33,6 +33,15 @@ export const GROK_CLIENT_NAMES = ["Grok", "grok", "grok-bot", "grok-sim", "Grok 
 /** Client capabilities from the MCP spec. Not prompts or resources. */
 const FULL_CLIENT_CAPABILITIES = ["elicitation", "sampling", "roots"] as const;
 
+/** Server capabilities. A client that echoes them is not declaring a client capability. */
+const SERVER_CAPABILITIES = new Set(["prompts", "resources"]);
+
+/**
+ * Tools-only capabilities. This is the baseline set: something was declared,
+ * and it is not elicitation, sampling, or roots.
+ */
+export const BASELINE_CLIENT_CAPABILITIES: Record<string, unknown> = { tools: {} };
+
 function named(client: ReportedClient | undefined): PlaybookId | undefined {
   const raw = client?.name?.trim().toLowerCase() ?? "";
   if (!raw) return undefined;
@@ -63,19 +72,40 @@ export function clientOffersFullPlaybook(caps: Record<string, unknown> | undefin
   return FULL_CLIENT_CAPABILITIES.some((key) => capabilityOn(caps, key));
 }
 
+/** Capability keys the client declared. prompts and resources do not count. */
+export function declaredClientCapabilityKeys(caps: Record<string, unknown> | undefined): string[] {
+  if (!caps) return [];
+  return Object.keys(caps).filter((key) => !SERVER_CAPABILITIES.has(key) && capabilityOn(caps, key));
+}
+
+/**
+ * Grok stays on the full playbook when no client capability is declared.
+ * Grok and Cursor often send none, and a stored sign-in name has none.
+ * A declared set that is not elicitation, sampling, or roots does not unlock it.
+ */
+function grokPlaybookUnlocked(client: ReportedClient): boolean {
+  if (clientOffersFullPlaybook(client.capabilities)) return true;
+  return declaredClientCapabilityKeys(client.capabilities).length === 0;
+}
+
 /**
  * The client name only picks a playbook. It never changes a gate.
  * Unknown names and a missing client get the baseline tools-only playbook.
  * Grok defaults to the full playbook, including when no capabilities are sent.
+ * A grok name that declares capabilities without elicitation, sampling, or
+ * roots gets the baseline. That name does not unlock the full playbook.
  * Claude is full only when it reports elicitation, sampling, or roots.
  * ChatGPT stays tools-only. URL elicitation is not implemented in Phase 1.
  */
 export function selectPlaybook(client?: ReportedClient): PlaybookSelection {
   const id = named(client);
-  if (!id) return { id: "baseline", mode: "tools", version: BASELINE_VERSION };
+  if (!id || !client) return { id: "baseline", mode: "tools", version: BASELINE_VERSION };
   if (id === "chatgpt") return { id, mode: "tools", version: CHATGPT_VERSION };
-  if (id === "grok") return { id, mode: "full", version: GROK_VERSION };
-  if (clientOffersFullPlaybook(client?.capabilities)) return { id, mode: "full", version: CLAUDE_VERSION };
+  if (id === "grok") {
+    if (grokPlaybookUnlocked(client)) return { id, mode: "full", version: GROK_VERSION };
+    return { id: "baseline", mode: "tools", version: BASELINE_VERSION };
+  }
+  if (clientOffersFullPlaybook(client.capabilities)) return { id, mode: "full", version: CLAUDE_VERSION };
   return { id, mode: "tools", version: CLAUDE_TOOLS_VERSION };
 }
 

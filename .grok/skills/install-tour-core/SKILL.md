@@ -28,7 +28,9 @@ decisions.
 `initialize` returns a short instructions pointer. `get_state` returns the
 playbook for this step. A client name containing `grok`, or Cursor
 (`Cursor`, `cursor-vscode`), gets the full Grok playbook, including the
-masked card, even when no capabilities are sent. `prompts` and `resources`
+masked card, even when no capabilities are sent. A declared capability set
+that does not include `elicitation`, `sampling`, or `roots` does not unlock
+it. That client gets the baseline. Declaring only tools is that set. `prompts` and `resources`
 do not pick the playbook. Those two are server capabilities, so a real
 client does not report them. Claude is full only with `elicitation`,
 `sampling`, or `roots`. ChatGPT and any other name are tools-only. The name

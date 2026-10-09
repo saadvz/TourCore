@@ -54,12 +54,15 @@ export class EvalSession {
   readonly workspace: PropertyWorkspace;
   readonly steps: ClickStep[] = [];
   readonly exitHints: ExitHint[] = [];
+  /** First response of each confirm() call. A consequential tool has to ask before it acts. */
+  readonly confirmationAsks: Array<{ tool: string; status: unknown }> = [];
   recording = false;
   private readonly root: string;
   private readonly server: TourCoreServer;
   private readonly port: number;
   private readonly restoreOutbox: () => void;
   private rpcId = 0;
+  private sessionId: string | undefined;
   private closed = false;
 
   private constructor(root: string, workspace: PropertyWorkspace, server: TourCoreServer, port: number, restoreOutbox: () => void) {
@@ -130,6 +133,7 @@ export class EvalSession {
     });
     const body = (await res.json()) as { error?: { message?: string }; result?: ToolResult };
     if (!res.ok || body.error) throw new Error(body.error?.message ?? `initialize failed (${res.status})`);
+    this.sessionId = res.headers.get("mcp-session-id") ?? undefined;
     return body.result ?? {};
   }
 
@@ -156,7 +160,11 @@ export class EvalSession {
   private async rpc(name: string, args: Record<string, unknown>): Promise<ToolResult> {
     const res = await fetch(`http://127.0.0.1:${this.port}/mcp`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TOKEN}`,
+        ...(this.sessionId ? { "Mcp-Session-Id": this.sessionId } : {}),
+      },
       body: JSON.stringify({ jsonrpc: "2.0", id: ++this.rpcId, method: "tools/call", params: { name, arguments: args } }),
     });
     const body = (await res.json()) as {
@@ -228,6 +236,7 @@ export function confirmationCode(result: ToolResult): string {
 
 export async function confirm(session: EvalSession, name: string, args: Record<string, unknown>, record = session.recording): Promise<ToolResult> {
   const asked = await session.call(name, args, record);
+  session.confirmationAsks.push({ tool: name, status: asked.status });
   if (asked.status !== "needs-confirmation") return asked;
   return session.call(name, { ...args, confirmationCode: confirmationCode(asked) }, record);
 }

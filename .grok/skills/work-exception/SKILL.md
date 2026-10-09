@@ -27,7 +27,7 @@ Someone who is only texting, with no booked tour, is not a tour and is not
 counted. None reads `No tours right now.` An alert event id is looked up with `get_inbox`. A published property with no usable time zone is an open inbox item, Time zone needed, using the line about tours not running, and it has no id. A tour already in progress finishes normally. No new tour or reservation starts until a zone is set. Setting a zone clears that item. The older exception list does not include it. A Tour Core tool that isn't on the landlord list is refused with "That's no longer something I can do from this chat. Disconnect and reconnect Tour Core so I'm working from the current list, then ask me again." A name that isn't a Tour Core tool at all gets `There's no Tour Core tool called "${name}".`
 
 `get_state` carries the playbook. Your name picks wording only and never a
-gate. A grok or Cursor name gets the full Grok playbook. After a restart
+gate. A grok or Cursor name gets the full Grok playbook. A grok name that declares capabilities without elicitation, sampling, or roots gets the baseline instead. After a restart
 the stored OAuth name is used, and a baseline entry cannot override it.
 Before a yes on a flagged answer, read `visitorWillReceive` in full.
 A save asks `Send this to {name} and save it for anyone who asks the same thing later? "{visitorWillReceive}"`.
