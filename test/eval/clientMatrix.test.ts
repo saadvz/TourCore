@@ -6,7 +6,13 @@ import { GROK_ALERTS_SAY, GROK_WAKE_WITH_PLACE } from "../../src/playbooks/grok"
 
 describe("per-agent client matrix", () => {
   it("holds every safety gate and a zero config diff for each client", async () => {
-    expect(MATRIX_CLIENTS.map((client) => client.key)).toEqual(["grok", "chatgpt", "claude", "unknown", "spoofed-grok"]);
+    expect(MATRIX_CLIENTS.map((client) => [client.key, client.expected.id, client.expected.mode])).toEqual([
+      ["grok", "grok", "full"],
+      ["chatgpt", "chatgpt", "tools"],
+      ["claude", "claude", "full"],
+      ["unknown", "baseline", "tools"],
+      ["spoofed-grok", "baseline", "tools"],
+    ]);
     expect(selectPlaybook({ name: "grok", capabilities: BASELINE_CLIENT_CAPABILITIES })).toMatchObject({ id: "baseline", mode: "tools" });
     const rows = await runClientMatrix();
     const extras = spoofExtras(rows);

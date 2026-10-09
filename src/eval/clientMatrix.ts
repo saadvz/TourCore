@@ -11,7 +11,7 @@ import { hashSecret, OAuthGrantStore } from "../mcp/oauth/store";
 import { OPERATOR_SCOPE } from "../mcp/oauth/provider";
 import { connectorRefusal, HOSTED_OWNER_TOOL, LANDLORD_CORE_TOOLS, OPS_TOOL_NAMES, QA_TOOL_NAMES } from "../mcp/scopes";
 import { mcpInstructions } from "../playbooks/instructions";
-import { BASELINE_CLIENT_CAPABILITIES, selectPlaybook, type PlaybookSelection } from "../playbooks/select";
+import { BASELINE_CLIENT_CAPABILITIES, type PlaybookId, type PlaybookMode } from "../playbooks/select";
 import { PropertyWorkspace } from "../setup/workspace";
 import { FileRuntimeStore } from "../storage/runtimeStore";
 import { createSetupServer } from "../web/server";
@@ -30,17 +30,19 @@ export interface MatrixClient {
   label: string;
   name: string;
   capabilities: Record<string, unknown>;
+  /** Written here, not taken from selectPlaybook, so the gate can fail. */
+  expected: { id: PlaybookId; mode: PlaybookMode };
   /** A grok name with baseline capabilities. It must not gain a tool, a gate, or a playbook. */
   spoof?: boolean;
 }
 
 /** The four clients, plus a grok name that only declares baseline capabilities. */
 export const MATRIX_CLIENTS: MatrixClient[] = [
-  { key: "grok", label: "Grok", name: "Grok", capabilities: FULL_CAPABILITIES },
-  { key: "chatgpt", label: "ChatGPT", name: "ChatGPT", capabilities: { elicitation: { form: {} } } },
-  { key: "claude", label: "Claude", name: "claude-ai", capabilities: FULL_CAPABILITIES },
-  { key: "unknown", label: "unknown", name: "example-client", capabilities: BASELINE_CLIENT_CAPABILITIES },
-  { key: "spoofed-grok", label: "spoofed grok", name: "grok", capabilities: BASELINE_CLIENT_CAPABILITIES, spoof: true },
+  { key: "grok", label: "Grok", name: "Grok", capabilities: FULL_CAPABILITIES, expected: { id: "grok", mode: "full" } },
+  { key: "chatgpt", label: "ChatGPT", name: "ChatGPT", capabilities: { elicitation: { form: {} } }, expected: { id: "chatgpt", mode: "tools" } },
+  { key: "claude", label: "Claude", name: "claude-ai", capabilities: FULL_CAPABILITIES, expected: { id: "claude", mode: "full" } },
+  { key: "unknown", label: "unknown", name: "example-client", capabilities: BASELINE_CLIENT_CAPABILITIES, expected: { id: "baseline", mode: "tools" } },
+  { key: "spoofed-grok", label: "spoofed grok", name: "grok", capabilities: BASELINE_CLIENT_CAPABILITIES, spoof: true, expected: { id: "baseline", mode: "tools" } },
 ];
 
 export interface ListedTool {
@@ -52,7 +54,7 @@ export interface MatrixRow {
   key: string;
   label: string;
   spoof: boolean;
-  expected: PlaybookSelection;
+  expected: { id: PlaybookId; mode: PlaybookMode };
   playbook: { id: string; mode: string; version: string; text: string };
   instructions: string;
   landlordTools: ListedTool[];
@@ -256,7 +258,7 @@ async function duplexPicture(client: MatrixClient): Promise<Pick<MatrixRow, "pub
 function gatesFor(row: Omit<MatrixRow, "gates">): Record<string, boolean> {
   const landlordNames = names(row.landlordTools);
   const hostedNames = names(row.hostedTools);
-  const samePlaybook = row.playbook.id === row.expected.id && row.playbook.mode === row.expected.mode && row.playbook.version === row.expected.version;
+  const samePlaybook = row.playbook.id === row.expected.id && row.playbook.mode === row.expected.mode;
   return {
     "landlord tools": landlordNames.length === 21 && landlordNames.join() === [...LANDLORD_CORE_TOOLS].join() && !landlordNames.includes("reset_hosted_demo") && !landlordNames.includes("inject_local_sms"),
     "hosted owner tools": hostedNames.length === 22 && hostedNames.join() === [...LANDLORD_CORE_TOOLS, HOSTED_OWNER_TOOL].join(),
@@ -281,7 +283,7 @@ export async function runClientMatrix(clients: MatrixClient[] = MATRIX_CLIENTS):
       const connector = await connectorPicture(client);
       const hostedTools = (await listedTools(hosted.port, "/mcp", OWNER_TOKEN, client)).tools;
       const duplex = await duplexPicture(client);
-      const partial = { ...connector, hostedTools, ...duplex, key: client.key, label: client.label, spoof: !!client.spoof, expected: selectPlaybook({ name: client.name, capabilities: client.capabilities }) };
+      const partial = { ...connector, hostedTools, ...duplex, key: client.key, label: client.label, spoof: !!client.spoof, expected: client.expected };
       rows.push({ ...partial, gates: gatesFor(partial) });
     }
     return rows;

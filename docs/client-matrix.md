@@ -10,9 +10,9 @@ The matrix runs the safety gates and the ten-duplex config diff once for each cl
 | ChatGPT | `ChatGPT` | elicitation | ChatGPT, tools | One step at a time and the secure setup link. Elicitation does not turn this profile into the full one. There is no wake. |
 | Claude | `claude-ai` | elicitation, sampling, and roots | Claude, full | Keeping the playbook in a project, the secure setup link, and a draft only when the landlord asks for one. There is no wake. |
 | Unknown | `example-client` | tools only | Baseline, tools | One step at a time, the secure setup link, and nothing filled in. Elicitation on an unknown name would still be this profile. |
-| Spoofed | `grok` | tools only | Baseline, tools | Nothing beyond the unknown client. The name does not unlock the masked card, the wake, or any tool. |
+| Spoofed | `grok` | tools only | Baseline, tools | Nothing beyond the unknown client. A grok name that declares only tools does not unlock the full playbook. |
 
-A grok or Cursor name that sends no capabilities still gets the full Grok playbook. That is how those clients connect, and it is how a stored sign-in name is applied after a restart. `prompts` and `resources` are ignored. They do not count as a declared set.
+A grok or Cursor name with no capabilities, or with only `prompts` or `resources`, still gets the full Grok playbook. That is how those clients connect. A saved OAuth name that selects a playbook still gets full, including when the initialize in front of us is baseline or has no name. `prompts` and `resources` do not count as a declared set.
 
 Tool lists stay 21 on the landlord connector, 22 for the hosted owner (`reset_hosted_demo`), 15 on QA, and 13 on ops.
 
