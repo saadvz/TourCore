@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { FAIR_HOUSING_CODE } from "../core/fairHousing";
 import { HANDLER_FAILED_NEXT_STEP, isTeamTextFailedNotice } from "../core/TourCore";
+import { isMedicalEmergency } from "../intent/ruleBased";
 import { formatPhone } from "../core/phone";
 import { formatShortDateTime, isValidTimeZone } from "../core/timezone";
 import { profileFacts, questionTopic, structuredAnswer, type ProfileField, type UnitProfile } from "../config/unitProfile";
@@ -189,9 +190,30 @@ function unitNameOn(tour: TourSnapshot, reservationId?: string): string | undefi
 }
 
 /** `They asked: "{q}"` plus a period only when the question does not already end in . ? or ! */
-function quotedVisitorAsk(question: string): string {
+function quotedVisitorAsk(question: string, lead = "They asked"): string {
   const asked = question.trim();
-  return `They asked: "${asked}"${/[.!?]$/.test(asked) ? "" : "."}`;
+  return `${lead}: "${asked}"${/[.!?]$/.test(asked) ? "" : "."}`;
+}
+
+const INJURY_TOLD = "They were told to call 911 if someone is hurt, and that you'd text them here.";
+const INJURY_UNREACHED = "They were told you couldn't be reached.";
+const INJURY_STEP = "Text or call them now, then mark it handled.";
+
+function medicalHelpText(e: AuditEvent): string | undefined {
+  const said = e.code?.trim();
+  return said && isMedicalEmergency(said) ? said : undefined;
+}
+
+/** The team text for this help request failed when the next record is that notice, before another help ask or a sent alert. */
+function helpAlertFailed(tour: TourSnapshot, help: AuditEvent): boolean {
+  const events = [...tour.bundle.auditEvents].sort((a, b) => a.seq - b.seq);
+  for (const e of events) {
+    if (e.seq <= help.seq || e.reservationId !== help.reservationId) continue;
+    if (e.type === "HELP_REQUESTED") break;
+    if (e.type === "OPERATOR_NOTIFIED" && e.detail.includes("asked for help")) return false;
+    if (e.type === "MESSAGE_FAILED" && isTeamTextFailedNotice(e.detail)) return true;
+  }
+  return false;
 }
 
 function summaryFor(kind: ExceptionKind, e: AuditEvent, tour: TourSnapshot): string {
@@ -300,9 +322,14 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
   const extra = replies.map((later) => later.detail).join(" ");
   const asked = kind === "unanswered-question" && e.detail ? e.detail : undefined;
   const fairHousing = kind === "unanswered-question" && e.code === FAIR_HOUSING_CODE;
+  const injury = kind === "needs-help" ? medicalHelpText(e) : undefined;
   const sent = resolution?.approvedFact?.trim();
   const sentPeriod = sent && /[.!?]$/.test(sent) ? "" : ".";
-  const main = asked && sent ? `${quotedVisitorAsk(asked)} They were sent "${sent}"${sentPeriod}` : summaryFor(kind, e, tour);
+  const main = injury
+    ? `${quotedVisitorAsk(injury, "They texted")} ${helpAlertFailed(tour, e) ? INJURY_UNREACHED : INJURY_TOLD}`
+    : asked && sent
+      ? `${quotedVisitorAsk(asked)} They were sent "${sent}"${sentPeriod}`
+      : summaryFor(kind, e, tour);
   const teamTextMissed = kind === "message-failed" && isTeamTextFailedNotice(e.detail);
   const summary = fairHousing
     ? `${asked ? quotedVisitorAsk(asked) : "They asked a question."} ${FAIR_HOUSING_INBOX}`
@@ -316,7 +343,7 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
     propertyId: tour.propertyId,
     property: tour.config.property.name,
     kind,
-    title: teamTextMissed ? "A text to you didn't go out" : fairHousing ? FAIR_HOUSING_TITLE : TITLES[kind],
+    title: injury ? "Possible injury" : teamTextMissed ? "A text to you didn't go out" : fairHousing ? FAIR_HOUSING_TITLE : TITLES[kind],
     summary,
     visitorName: visitorNameOf(tour),
     unitName: unitNameOn(tour, e.reservationId) ?? unitSubject(tour, e.unitId),
@@ -328,7 +355,7 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
     ...(e.reservationId ? { reservationId: e.reservationId } : {}),
     status,
     ...(resolution ? { resolution } : {}),
-    nextSteps: status === "open" ? stepsNotAlreadyInSummary(summary, nextStepsFor(kind, tour, paused, fairHousing)) : [],
+    nextSteps: status === "open" ? stepsNotAlreadyInSummary(summary, injury ? [INJURY_STEP] : nextStepsFor(kind, tour, paused, fairHousing)) : [],
     ...(fairHousing ? { proposeDraft: false as const } : {}),
   };
 }

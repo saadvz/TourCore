@@ -5,9 +5,12 @@ import { VisitorDenialCopy } from "../src/core/TourCore";
 import { zonedTimeToUtc } from "../src/core/timezone";
 import { isMedicalEmergency, interpretByRules } from "../src/intent/ruleBased";
 import type { ConversationStep } from "../src/intent/model";
+import type { OutgoingMessage } from "../src/messaging/Messenger";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
+import { persistSession } from "../src/operator/services";
 import { handleVisitorText } from "../src/visitor/conversation";
 import { VisitorDemoSession } from "../src/visitor";
+import { grokHarness } from "./grokHarness";
 
 /**
  * A 911 line on a normal text is noise, but a missed injury is unsafe.
@@ -124,6 +127,41 @@ async function bookReady(p: ReturnType<typeof phone>) {
 async function onTour(p: ReturnType<typeof phone>) {
   await bookReady(p);
   await p.say("I'm here");
+}
+
+function inboxText(item: { what?: unknown; summary?: unknown; nextSteps?: unknown }): string {
+  const steps = Array.isArray(item.nextSteps) ? item.nextSteps.map(String) : [];
+  return [String(item.what), String(item.summary), ...steps].join("\n");
+}
+
+/** A touring visitor's help text, then the one help row from get_inbox. No live send. */
+async function inboxAfterHelp(text: string, failTeam = false) {
+  const h = grokHarness();
+  cleanups.push(h.cleanup);
+  const id = await h.publish();
+  const v = await h.touringVisitor(id);
+  if (failTeam) {
+    const send = v.session.transport.send.bind(v.session.transport);
+    v.session.transport.send = async (message: OutgoingMessage) => {
+      if (message.audience === "OPERATOR") {
+        return {
+          provider: v.session.transport.provider,
+          channel: "WEB" as const,
+          status: "FAILED" as const,
+          sentAt: new Date().toISOString(),
+          error: { code: "NOT_DELIVERED", message: "The message couldn't be delivered." },
+        };
+      }
+      return send(message);
+    };
+  }
+  await v.session.act("help", {}, { text });
+  await persistSession(h.services, v.session);
+  const inbox = await h.ok("get_inbox");
+  const help = (inbox.items as Array<{ kind?: string; what?: string }>).filter((row) => row.kind === "help");
+  expect(help).toHaveLength(1);
+  const visitor = (await v.session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").at(-1)?.body;
+  return { text: inboxText(help[0]!), visitor };
 }
 
 const ctx = {
@@ -283,6 +321,44 @@ describe("medical help", () => {
     expect(called.replies).toEqual([MISSED_PHONE]);
     expect(called.replies.join("\n")).not.toContain(SNAG);
     expect(called.newAlerts[0]!.deliveryStatus).toBe("FAILED");
+  });
+
+  it("titles a sent medical alert Possible injury in get_inbox", async () => {
+    const shown = await inboxAfterHelp("she's not breathing");
+    expect(shown.visitor).toBe(SENT);
+    expect(shown.text).toBe(
+      [
+        "Possible injury",
+        'They texted: "she\'s not breathing". They were told to call 911 if someone is hurt, and that you\'d text them here.',
+        "Text or call them now, then mark it handled.",
+      ].join("\n"),
+    );
+  });
+
+  it("tells the landlord they could not be reached when the medical alert fails", async () => {
+    const shown = await inboxAfterHelp("she's not breathing", true);
+    expect(shown.visitor).toBe(MISSED);
+    expect(shown.visitor).not.toContain(SNAG);
+    expect(shown.text).toBe(
+      [
+        "Possible injury",
+        'They texted: "she\'s not breathing". They were told you couldn\'t be reached.',
+        "Text or call them now, then mark it handled.",
+      ].join("\n"),
+    );
+  });
+
+  it("keeps the existing get_inbox item for plain HELP", async () => {
+    const shown = await inboxAfterHelp("HELP");
+    expect(shown.visitor).not.toContain("call 911 now");
+    expect(shown.text).toBe(
+      [
+        "Visitor asked for help",
+        "Asked for help near Unit 101 Door.",
+        "Reach out to the visitor.",
+        "Mark it handled once they're sorted.",
+      ].join("\n"),
+    );
   });
 
   it("repeats the sent 911 line inside the help window and does not alert again", async () => {
