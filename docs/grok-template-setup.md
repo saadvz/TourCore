@@ -149,7 +149,7 @@ unlocks a door.
 
 **Approvals.** Grok Bot asks for approval around consequential actions and lets
 you add **Require approval** rules. Add one for the Tour Core tools
-`remove_property`, `cancel_tour` and `restore_records`. On a hosted Tour Core
+`publish`, `remove_property`, `cancel_tour` and `restore_records`. On a hosted Tour Core
 the owner also approves `reset_hosted_demo`. Tour Core enforces its own
 approval regardless: those tools only act when called a second time with a
 short-lived code after the operator's yes, and only if nothing changed.

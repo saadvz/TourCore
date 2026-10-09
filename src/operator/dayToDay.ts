@@ -296,7 +296,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
     title: "Book or move a tour",
     kind: "change",
     description:
-      "Books a one-off for a visitor who asked, or moves an existing tour. Pass phone, unit, and startsAt to book. Pass tourRef, reservationId, or visitor, plus the new time, to move. The first call asks. Call again with confirmationCode only after a clear yes. A time outside touring hours needs acknowledgeOutsideHours true after they agree to that. Does not change regular hours. Same refusals as booking or moving a tour today, including a paused property.",
+      "Books a one-off for a visitor who asked, or moves an existing tour. Pass phone, unit, and startsAt to book. Pass tourRef, reservationId, or visitor, plus the new time, to move. The first call asks. Call again with confirmationCode only after a clear yes. A time outside touring hours needs acknowledgeOutsideHours true after they agree to that. Does not change regular hours. Same refusals as booking or moving a tour today, including a paused property. Refuses on a property that isn't published.",
     input: z.strictObject({
       property: Property,
       phone: z.string().min(7).max(30).optional().describe("The visitor's phone number, when booking a tour they asked for."),

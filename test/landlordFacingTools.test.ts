@@ -23,14 +23,17 @@ import { createSetupServer } from "../src/web/server";
 
 /**
  * Landlord-facing instructions may name only the 21 landlord tools, plus
- * reset_hosted_demo. A file is blanked only when <!-- connector: qa-skill -->
- * is the first line or sits inside the opening frontmatter. A
- * <!-- connector: qa --> or <!-- connector: ops --> region, and an
+ * reset_hosted_demo. <!-- connector: qa-skill --> exempts only its section:
+ * through <!-- /connector --> when that closer is present, otherwise until
+ * the next h1 or h2. A marker inside the opening frontmatter exempts nothing.
+ * A <!-- connector: qa --> or <!-- connector: ops --> region, and an
  * ## QA connector or ## Ops connector section, may name that connector's
- * tools. A line that says "QA connector" or "ops connector" drops only that
- * connector's tool names. No file, including those sections, may name a
- * Tour Core tool that is not on the landlord, QA, or ops connector.
- * grok-template is scanned except SETUP_PROMPT.md.
+ * tools. A line that says "QA connector" or "ops connector", and an
+ * allowed-tools grant line, drops only that connector's tool names.
+ * <!-- historical-tools: reason --> exempts only its section, and only when
+ * the reason is non-empty. No other section may name a Tour Core tool that
+ * is not on the landlord, QA, or ops connector. A marker never blanks a file.
+ * grok-template is scanned except SETUP_PROMPT.md. docs/ is scanned.
  */
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -41,7 +44,7 @@ const REMOVED = [...new Set(OPERATOR_TOOL_NAMES)].filter((name) => !ON_A_CONNECT
 const FOREIGN_RE = new RegExp(`\\b(${FOREIGN.join("|")})\\b`, "g");
 const REMOVED_RE = new RegExp(`\\b(${REMOVED.join("|")})\\b`, "g");
 
-const DOC_ROOTS = [".grok/skills", "grok-template", "GROK_BOOTSTRAP.md", "README.md", "docs/grok-template-setup.md"];
+const DOC_ROOTS = [".grok/skills", "grok-template", "GROK_BOOTSTRAP.md", "README.md", "docs"];
 
 function filesUnder(rel: string): string[] {
   const abs = join(ROOT, rel);
@@ -53,49 +56,94 @@ function filesUnder(rel: string): string[] {
   });
 }
 
-/** A qa-skill marker blanks the file only as the first line or inside the opening frontmatter. */
-function qaSkillExemptsFile(text: string): boolean {
-  const marker = "<!-- connector: qa-skill -->";
-  if ((text.split("\n", 1)[0] ?? "").includes(marker)) return true;
-  const frontmatter = /^---\n([\s\S]*?)\n---/.exec(text.replace(/\r\n/g, "\n"));
-  return !!frontmatter && frontmatter[1]!.includes(marker);
-}
-
 function withoutNames(line: string, names: readonly string[]): string {
   let out = line;
   for (const name of [...names].sort((a, b) => b.length - a.length)) out = out.replaceAll(name, "");
   return out;
 }
 
-/** Landlord-facing prose. QA and ops sections are removed before the scan. */
-export function landlordFacingText(text: string): string {
-  if (qaSkillExemptsFile(text)) return "";
-  const stripped = text.replace(/<!-- connector: (?:qa|ops) -->[\s\S]*?<!-- \/connector -->/g, "");
+function frontmatterEnd(text: string): number {
+  if (!text.startsWith("---\n")) return 0;
+  const close = text.indexOf("\n---", 4);
+  return close < 0 ? 0 : close + "\n---".length;
+}
+
+const HISTORICAL_OPEN = /<!-- historical-tools:\s*\S[^>]*-->/;
+
+/**
+ * Drops marked sections. QA and ops regions need a closer. A qa-skill or
+ * historical marker with a closer drops only that region; without one it
+ * drops lines until the next h1 or h2. A marker in the opening frontmatter
+ * does not start a section.
+ */
+function withoutMarkedSections(text: string, includeConnectorSections: boolean): string {
+  const normalized = text.replace(/\r\n/g, "\n");
+  const fmEnd = frontmatterEnd(normalized);
+  const lines = normalized.split("\n");
   const kept: string[] = [];
-  let skipSection = false;
-  for (const line of stripped.split("\n")) {
-    const heading = /^(#{1,6}) /.exec(line);
-    if (heading && heading[1]!.length <= 2 && skipSection) skipSection = false;
-    if (heading && heading[1]!.length === 2 && /^## (?:QA|Ops) connector\b/.test(line)) {
-      skipSection = true;
+  let skip: { until: "closer" | "heading"; closer: string } | undefined;
+  let offset = 0;
+  const closerAhead = (from: number, closer: string) => lines.slice(from + 1).some((later) => later.includes(closer));
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    const at = offset;
+    offset += line.length + 1;
+    if (skip?.until === "closer") {
+      if (line.includes(skip.closer)) skip = undefined;
       continue;
     }
-    if (skipSection) continue;
+    if (skip?.until === "heading") {
+      if (/^#{1,2} /.test(line)) skip = undefined;
+      else continue;
+    }
+    const inFrontmatter = at < fmEnd;
+    if (!inFrontmatter && includeConnectorSections && line.includes("<!-- connector: qa-skill -->")) {
+      skip = closerAhead(i, "<!-- /connector -->")
+        ? { until: "closer", closer: "<!-- /connector -->" }
+        : { until: "heading", closer: "" };
+      continue;
+    }
+    if (!inFrontmatter && HISTORICAL_OPEN.test(line)) {
+      skip = closerAhead(i, "<!-- /historical-tools -->")
+        ? { until: "closer", closer: "<!-- /historical-tools -->" }
+        : { until: "heading", closer: "" };
+      continue;
+    }
+    if (includeConnectorSections && line.includes("<!-- connector: qa -->") && closerAhead(i, "<!-- /connector -->")) {
+      skip = { until: "closer", closer: "<!-- /connector -->" };
+      continue;
+    }
+    if (includeConnectorSections && line.includes("<!-- connector: ops -->") && closerAhead(i, "<!-- /connector -->")) {
+      skip = { until: "closer", closer: "<!-- /connector -->" };
+      continue;
+    }
+    const heading = /^(#{1,6}) /.exec(line);
+    if (includeConnectorSections && heading && heading[1]!.length === 2 && /^## (?:QA|Ops) connector\b/.test(line)) {
+      skip = { until: "heading", closer: "" };
+      continue;
+    }
     let visible = line;
-    if (/QA connector/.test(line)) visible = withoutNames(visible, QA_TOOL_NAMES);
-    if (/ops connector/.test(line)) visible = withoutNames(visible, OPS_TOOL_NAMES);
+    if (includeConnectorSections && /^allowed-tools:/.test(line)) visible = withoutNames(visible, QA_TOOL_NAMES);
+    if (includeConnectorSections && /QA connector/.test(line)) visible = withoutNames(visible, QA_TOOL_NAMES);
+    if (includeConnectorSections && /ops connector/.test(line)) visible = withoutNames(visible, OPS_TOOL_NAMES);
     kept.push(visible);
   }
   return kept.join("\n");
+}
+
+/** Landlord-facing prose. QA, ops, and historical sections are removed before the scan. */
+export function landlordFacingText(text: string): string {
+  return withoutMarkedSections(text, true);
 }
 
 function foreignTools(text: string): string[] {
   return [...new Set([...text.matchAll(FOREIGN_RE)].map((match) => match[1]!))];
 }
 
-/** Old Tour Core tool names, backticked or bare, including inside QA and ops sections. */
+/** Old Tour Core tool names, backticked or bare. A historical section is skipped. QA and ops sections are not. */
 function removedTools(text: string): string[] {
-  return [...new Set([...text.matchAll(REMOVED_RE)].map((match) => match[1]!))];
+  const visible = withoutMarkedSections(text, false);
+  return [...new Set([...visible.matchAll(REMOVED_RE)].map((match) => match[1]!))];
 }
 
 function read(rel: string): string {
@@ -108,14 +156,18 @@ describe("landlord-facing tool names", () => {
     expect(foreignTools(landlordFacingText("<!-- connector: qa -->\nCall list_properties.\n<!-- /connector -->\nCall get_state."))).toEqual([]);
     expect(foreignTools(landlordFacingText("On the QA connector, call inject_local_sms."))).toEqual([]);
     expect(foreignTools(landlordFacingText("On the ops connector, call check_runtime_health."))).toEqual([]);
-    expect(landlordFacingText("---\nname: x\n<!-- connector: qa-skill -->\n---\nCall list_properties.")).toBe("");
-    expect(landlordFacingText("<!-- connector: qa-skill -->\nCall list_properties.")).toBe("");
+    expect(foreignTools(landlordFacingText("---\nname: x\n<!-- connector: qa-skill -->\n---\nCall list_properties."))).toEqual(["list_properties"]);
+    const marked = ["Call list_properties.", "<!-- connector: qa-skill -->", "Call inject_local_sms.", "<!-- /connector -->", "Call create_property_setup."].join("\n");
+    expect(foreignTools(landlordFacingText(marked))).toEqual(["list_properties", "create_property_setup"]);
+    const untilHeading = ["<!-- connector: qa-skill -->", "Call inject_local_sms.", "## Later", "Call list_properties."].join("\n");
+    expect(foreignTools(landlordFacingText(untilHeading))).toEqual(["list_properties"]);
   });
 
-  it("still names a foreign tool when the qa-skill marker is not the first line or frontmatter, and on a connector line that names another tool", () => {
-    expect(foreignTools(landlordFacingText("See the note.\n<!-- connector: qa-skill -->\nCall list_properties."))).toEqual(["list_properties"]);
+  it("still names a foreign tool outside the qa-skill section, and on a connector line that names another tool", () => {
+    expect(foreignTools(landlordFacingText("See the note.\n<!-- connector: qa-skill -->\nCall inject_local_sms.\n## After\nCall list_properties."))).toEqual(["list_properties"]);
     expect(foreignTools(landlordFacingText("On the QA connector, call list_properties."))).toEqual(["list_properties"]);
     expect(foreignTools(landlordFacingText("On the ops connector, call create_property_setup."))).toEqual(["create_property_setup"]);
+    expect(foreignTools(landlordFacingText("allowed-tools: inject_local_sms get_installation_status\nCall list_properties."))).toEqual(["list_properties"]);
   });
 
   it("scans grok-template except SETUP_PROMPT.md, and the template setup doc", () => {
@@ -137,6 +189,12 @@ describe("landlord-facing tool names", () => {
   it("names a removed tool even inside a QA section", () => {
     expect(removedTools("<!-- connector: qa -->\nCall `publish_demo_property`.\n<!-- /connector -->")).toEqual(["publish_demo_property"]);
     expect(removedTools("Call `get_state`, then `inject_local_sms`. `keyword_confirm` is a setting.")).toEqual([]);
+    const historical = ["<!-- historical-tools: The Phase 0 harness still calls this. -->", "Call publish_demo_property.", "<!-- /historical-tools -->", "Call create_property_setup."].join("\n");
+    expect(removedTools(historical)).toEqual(["create_property_setup"]);
+    expect(foreignTools(landlordFacingText(historical))).toEqual(["create_property_setup"]);
+    expect(removedTools("<!-- historical-tools: -->\nCall publish_demo_property.")).toEqual(["publish_demo_property"]);
+    const untilHeading = ["<!-- historical-tools: Old install inventory in this section. -->", "Call publish_demo_property.", "## Now", "Call create_property_setup."].join("\n");
+    expect(removedTools(untilHeading)).toEqual(["create_property_setup"]);
   });
 
   it("keeps skills, the template, the bootstrap, and the README off tools that are not on any connector", () => {
@@ -503,11 +561,32 @@ describe("landlord tool return strings", () => {
         scan(`${name} ${JSON.stringify(args)}`, outcome.ok ? outcome.result : outcome.error);
       }
     }
-    const described = read("src/alerts/describeUpdate.ts");
-    const rewritten = [...described.matchAll(/"([^"]*answer_flagged_question[^"]*)"/g)].map((match) => match[1]!.replaceAll("answer_flagged_question", "resolve_issue"));
-    expect(rewritten.length).toBeGreaterThan(0);
     expect(read("src/operator/dayToDay.ts")).toContain('replaceAll("answer_flagged_question", "resolve_issue")');
-    for (const line of rewritten) scan("get_inbox instructions", line);
+    const described = read("src/alerts/describeUpdate.ts");
+    expect(described).toContain(
+      "A decision is required. Use reply_to_time_request with approve, propose, or decline. For a move the landlord is directing, use schedule_tour.",
+    );
+    expect(described).not.toMatch(/approve_tour_time_request|propose_tour_time|decline_tour_time_request|reschedule_tour|answer_flagged_question/);
     expect(hits).toEqual([]);
   }, 60_000);
+
+  it("scans a real tour.time_requested event and a flagged question from get_inbox", async () => {
+    const { liveApp } = await import("./liveApp");
+    const app = await liveApp({ cleanups });
+    await app.book();
+    await app.text("Is there a pool?");
+    await app.text("Can I change it to 3:15?");
+    const time = app.outbox("tour.time_requested").at(-1);
+    const flagged = app.outbox("exception.created").at(-1);
+    expect(time?.event.eventId).toBeTruthy();
+    expect(flagged?.event.eventId).toBeTruthy();
+    const timeInbox = await app.grok("get_inbox", { eventId: time!.event.eventId });
+    const flagInbox = await app.grok("get_inbox", { eventId: flagged!.event.eventId });
+    expect(String(timeInbox.instructions)).toMatch(
+      /^A decision is required\. Use reply_to_time_request with approve, propose, or decline\. For a move the landlord is directing, use schedule_tour\./,
+    );
+    expect(JSON.stringify(flagInbox)).toContain("resolve_issue");
+    const hits = [...foreignTools(JSON.stringify(timeInbox)), ...foreignTools(JSON.stringify(flagInbox))];
+    expect(hits).toEqual([]);
+  }, 120_000);
 });

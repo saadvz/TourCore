@@ -8,7 +8,7 @@ import { formatPhone } from "../core/phone";
  *
  * Text supplied by the landlord or by a model may reach a visitor only as
  * `approved-answer` or `approved-answer-closing`, and only from
- * `answer_flagged_question` (later `resolve_issue`). A no-draft flag never
+ * `resolve_issue`. A no-draft flag never
  * gets a draft. `approved-profile-fact` repeats a fact the landlord already
  * saved. It is not a new draft.
  */
@@ -75,8 +75,8 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "storage-unavailable", text: "I can't check that right now. Please try again in a little while." },
   { id: "shared-fact", text: "Here's what the {team} shared: {fact}" },
   { id: "approved-profile-fact", text: "{answer}", explicitOnly: true, note: "A profile fact the landlord already saved. Not a draft." },
-  { id: "approved-answer", text: "{answer}", explicitOnly: true, note: "Landlord reply from answer_flagged_question only. No-draft items never use this." },
-  { id: "approved-answer-closing", text: "{answer} Let me know if you have any other questions.", explicitOnly: true, note: "Approved fact plus the closing line, from answer_flagged_question only." },
+  { id: "approved-answer", text: "{answer}", explicitOnly: true, note: "Landlord reply from resolve_issue only. No-draft items never use this." },
+  { id: "approved-answer-closing", text: "{answer} Let me know if you have any other questions.", explicitOnly: true, note: "Approved fact plus the closing line, from resolve_issue only." },
 
   { id: "cancel-done", text: "You're cancelled. Text me anytime if you want to book again." },
   { id: "nothing-booked-cancel", text: "No problem, nothing's booked yet, so I'll stop here. Text me anytime if you want to pick a time." },
@@ -405,7 +405,7 @@ export function visitorTemplatesMarkdown(): string {
     "",
     "Every outbound visitor text uses one of these ids. `{slot}` is filled before send. `{slot?}` may be empty. A channel prompt may be appended after the body. The stored template id is the body, not the prompt.",
     "",
-    "Text from the landlord or from a model reaches a visitor only as `approved-answer` or `approved-answer-closing`, and only after they approve a flagged question (`answer_flagged_question`, later `resolve_issue`). A no-draft flag never gets a draft. `approved-profile-fact` repeats a fact they already saved.",
+    "Text from the landlord or from a model reaches a visitor only as `approved-answer` or `approved-answer-closing`, and only after they approve a flagged question (`resolve_issue`). A no-draft flag never gets a draft. `approved-profile-fact` repeats a fact they already saved.",
     "",
     `${messages.length} message templates. ${suffixes.length} channel prompts.`,
     "",

@@ -2,7 +2,7 @@
 
 Every outbound visitor text uses one of these ids. `{slot}` is filled before send. `{slot?}` may be empty. A channel prompt may be appended after the body. The stored template id is the body, not the prompt.
 
-Text from the landlord or from a model reaches a visitor only as `approved-answer` or `approved-answer-closing`, and only after they approve a flagged question (`answer_flagged_question`, later `resolve_issue`). A no-draft flag never gets a draft. `approved-profile-fact` repeats a fact they already saved.
+Text from the landlord or from a model reaches a visitor only as `approved-answer` or `approved-answer-closing`, and only after they approve a flagged question (`resolve_issue`). A no-draft flag never gets a draft. `approved-profile-fact` repeats a fact they already saved.
 
 198 message templates. 7 channel prompts.
 
@@ -96,7 +96,7 @@ Explicit id only. Not matched automatically. A profile fact the landlord already
 
 ### approved-answer
 
-Explicit id only. Not matched automatically. Landlord reply from answer_flagged_question only. No-draft items never use this.
+Explicit id only. Not matched automatically. Landlord reply from resolve_issue only. No-draft items never use this.
 
 ```
 {answer}
@@ -104,7 +104,7 @@ Explicit id only. Not matched automatically. Landlord reply from answer_flagged_
 
 ### approved-answer-closing
 
-Explicit id only. Not matched automatically. Approved fact plus the closing line, from answer_flagged_question only.
+Explicit id only. Not matched automatically. Approved fact plus the closing line, from resolve_issue only.
 
 ```
 {answer} Let me know if you have any other questions.

@@ -20,7 +20,9 @@ npm run eval:baseline
 - **Milestone path** (`eval/baseline/milestone-path.md`). One duplex walked in demo order through those tools, including a blocked practice check before any route and the recovery.
 - **Golden tasks** (`eval/baseline/golden-tasks.md`). Full setup to publish, book a one-off, answer a flagged question, pause a unit, export a day. Each row is the tools, the call count, and pass/fail on the end state. `eval/fixtures/golden-prompts.json` is the same five tasks in plain language for a later model-driven run. This harness does not call a model.
 - **Out-of-chat exits** (`eval/baseline/exits.md`). Each place a task sends the landlord out of the chat. `key` means entering an API key or similar secret. A Google sign-in or an Allow click is `not key`. The checked-in path chooses local test texting, declines backups, and skips alerts, so those exits are not taken. A separate in-process Sendblue probe records the texting secure-setup exit without storing the link.
+<!-- historical-tools: The in-process click path still records milestones from the older install step tool. -->
 - **Demo click path** (`eval/baseline/click-path.md`). Ordered tool calls from texting setup through publish, with the milestone each `get_next_installation_step` returns. `get_state` is not on this path. Playbook selection is covered by `test/eval/getState.test.ts`.
+<!-- /historical-tools -->
 
 Upper/Lower is a different duplex shape and is not mixed into the A/B runs.
 
@@ -76,8 +78,10 @@ The hosted install also has real properties on the real texting line, including 
 
 Removing a property hides it from the operator's list. The record stays in storage. One live run can leave about 10 of those hidden `eval-` properties, one for each duplex.
 
+<!-- historical-tools: The live allowlist and the in-process demo path still name the older install tools they actually call. -->
 The live allowlist does not include `get_next_installation_step`. That read persists the messaging selection and can rewrite the saved texting-provider choice. The in-process click path still calls it, on an empty local install, to record milestones. That path is not the live script.
 
 It does not call install-wide writes. That includes texting provider or line changes, `reset_hosted_demo`, `set_services` with live texting, backup and storage changes, and tour-update preference changes. The in-process demo path uses some of those (choose local texting for the empty install, decline backups, skip alerts). Live mode skips them and lists the skips in its report. The live run is not the source of the checked-in baseline: its addresses are namespaced so they do not collide with 18 Maple Street.
+<!-- /historical-tools -->
 
 `test/eval/guard.test.ts` checks that a foreign property id is refused before the tool runs, that the cleanup sweep's filter never selects a non-eval property, and that the end-of-run sweep ignores another run's `eval-` name.

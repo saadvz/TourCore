@@ -9,8 +9,9 @@ metadata:
   author: Tour Core
   short-description: Practice tour with safety proof points
   version: "0.2.4"
-<!-- connector: qa-skill -->
 ---
+
+<!-- connector: qa-skill -->
 
 # Simulate Tour
 
@@ -74,7 +75,7 @@ Don't list every low-level event unless the operator asks.
 
 ## Local SMS loopback (QA)
 
-To exercise the real visitor SMS path without Sendblue or a carrier:
+To exercise the real visitor SMS path without Sendblue or a carrier, publish the scratch building first. A draft does not take a new visitor text.
 
 1. The property must be `messagingMode: live` on local test texts.
    Call `set_up_texting` on the landlord connector with `provider: local`
@@ -115,3 +116,5 @@ afterwards does require approval.
 ## Stop when
 
 The result is reported.
+
+<!-- /connector -->

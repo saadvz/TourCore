@@ -207,7 +207,7 @@ them, with the requirement Tour Core (not the agent) assigns:
 | `GROK_OPERATOR` | required before property | CONNECT |
 | `VISITOR_MESSAGING`, `STORAGE`, `ACCESS` (DURIN_DEMO accepted) | required before property | INFRASTRUCTURE |
 | `PROPERTY` | required to publish | PROPERTY |
-| `OPERATOR_ALERTS` ("Tour updates") | recommended; offered only after the property is saved (`set_notification_preferences`); can be declined (`skip_optional_setup`); chosen but not connected → `CONNECT_OPERATOR_ALERTS` | PROPERTY |
+| `OPERATOR_ALERTS` ("Tour updates") | recommended; offered only after the property is saved (`save_settings`); can be declined (`save_settings`); chosen but not connected → `CONNECT_OPERATOR_ALERTS` | PROPERTY |
 | `READINESS`, `PRACTICE_TOUR` | required to publish; run automatically | VALIDATE |
 | `PUBLISH` | explicit yes | PUBLISH |
 
@@ -228,6 +228,7 @@ under `technical`, marked for Grok only. A later storage provider
 (`ACCESS`) changes what this returns; the Install Tour Core skill doesn't
 change. Tour Core is already built on the Durin Access Platform.
 
+<!-- historical-tools: These names are the install-layer tools still defined in src/install/tools.ts. The landlord connector does not list them. -->
 ### Installation tools (MCP)
 
 `src/install/tools.ts`: `get_installation_status`,
@@ -240,6 +241,7 @@ change. Tour Core is already built on the Durin Access Platform.
 None takes a credential (no input field may even be named like one; a test
 enforces it), none returns one, and none runs a shell command. There is no
 `set_api_key`, `set_sender_key` or `set_sendblue_secret`.
+<!-- /historical-tools -->
 
 ## Bootstrap (`npm run bootstrap:grok`)
 
@@ -312,7 +314,7 @@ connection and OAuth issuer/resource, Sendblue's webhook, and any identity-form
 link built on the old address. Tour Core records every address; when it
 changes, the installation status marks `PUBLIC_ENDPOINT` (check the new
 address), `GROK_OPERATOR` (reconnect at the new connector address) and
-`VISITOR_MESSAGING` (`test_visitor_messaging` moves Tour Core's own Sendblue
+`VISITOR_MESSAGING` (`set_up_texting` moves Tour Core's own Sendblue
 webhook to the new address and removes the old one) as needing action. OAuth
 already refuses tokens issued for a different address. Nothing continues
 silently on a stale address.
@@ -342,7 +344,7 @@ a tour is booked / starts / finishes / is cancelled, or a visitor needs judgment
    → operator event saved in the durable outbox (runtime/operator-events/),
      only for the update kinds the operator chose
    → POST to the Grok Routine webhook (Authorization: Bearer <routine key>)
-   → Tour Core Operator Updates routine wakes, calls get_operator_update(eventId)
+   → Tour Core Operator Updates routine wakes, calls get_inbox(eventId)
    → the operator gets a plain sentence ("New tour booked: Testy is scheduled
      to tour Unit 1A today at 3:00 PM."), without having asked
 ```
@@ -350,12 +352,12 @@ a tour is booked / starts / finishes / is cancelled, or a visitor needs judgment
 - `OperatorNotificationSink` with `NoopOperatorNotificationSink` and
   `GrokRoutineWebhookSink` (`src/alerts/operatorEvents.ts`).
 - Event payload: `schemaVersion`, `eventId`, `eventType`, `propertyId`,
-  `tourId` (the tour handle, `inspect_tour`'s `tourRef`) or `exceptionId`,
+  `tourId` (the tour handle, `get_tours`'s `tourRef`) or `exceptionId`,
   `occurredAt`. `eventType` is `tour.booked`, `tour.started`,
   `tour.completed`, `tour.cancelled`, `exception.created`, `access.problem`,
   `verification.problem` or `installation.test`. No visitor PII, message text
   or credentials.
-- Preferences (`src/alerts/preferences.ts`, `set_notification_preferences`):
+- Preferences (`src/alerts/preferences.ts`, `save_settings`):
   the recommended default is everything except cancellations; before the
   operator chooses, only the three problem kinds are sent. "Booked" means a
   time was chosen and consent is on file (and the identity form, when this place uses one). Only real
@@ -412,7 +414,7 @@ clone whose git origin isn't the canonical repository.
 6. Grok adds the Tour Core connection itself; **the operator approves** it on
    Tour Core's approval screen in Grok's cloud browser. Grok continues on its
    own: "Connected. I'm checking the rest of the setup now."
-7. Grok follows `get_next_installation_step`. A fresh install asks which
+7. Grok follows `get_state`. A fresh install asks which
    messaging provider to use. After the operator chooses, Grok collects that
    provider's credentials with a secure secret input, submits them, and tests
    the provider. Tour records (stored with this installation) and access
@@ -494,7 +496,7 @@ Checked against Railway's docs as of September 2026:
   new containers are not both mounted. A deploy does not delete Drive records.
   The hosted process inspects that mount at startup (mountinfo and device id)
   and refuses to start if `TOURCORE_HOME` is unset or not on a persistent
-  volume. `/healthz` and `check_runtime_health` report the path, whether it is
+  volume. `/healthz` and `check_runtime_health` on the ops connector report the path, whether it is
   persistent, and the mount that was found. `npm run check:storage` or
   `node dist/server.js --check-storage` prints the verdict without starting
   the server or writing files. `TOURCORE_ALLOW_EPHEMERAL_STORAGE=1` turns the

@@ -258,6 +258,8 @@ npm run build               # package with esbuild
 
 Tour Core is provider-agnostic. Choose how prospects reach your property. Current first-party messaging adapters include Sendblue, Twilio, Photon, and a `local` QA loopback that never hits a carrier. Tour Core's booking, property, policy, and tour logic stays the same regardless of messaging provider. Additional providers can be added through the `MessagingProvider` interface (`docs/messaging/providers.md`). Features are not identical across adapters.
 
+A new visitor who texts a draft, including one that already passed its checks, gets the not-ready reply. A tour that was already booked keeps going.
+
 Carrier and provider requirements vary. The deployer is responsible for their provider account and any applicable messaging requirements. Connecting a provider does not mean a carrier has approved application messaging.
 
 With a provider connected, a visitor texts the property's number from their own phone and runs the whole tour
@@ -311,8 +313,9 @@ QA scratch recipe (keep a published live building on Sendblue):
 
 1. Leave the installation on Sendblue (do **not** call `set_up_texting` on the landlord connector with `provider: local` and no property).
 2. Put only the scratch building on local: `set_up_texting` on the landlord connector with `provider: local` and that property. It says "Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on." Do not say texting is live, and do not name the texting service. Publishing a local building leaves out "Visitors can start a tour by texting your touring number."
-3. Run `inject_local_sms` / `read_local_outbox` against the scratch property.
-4. Confirm the live building is still Published. Switching or injecting for scratch must not draft or disconnect it.
+3. Publish the scratch building before injecting a text. A draft does not take a new visitor text.
+4. Run `inject_local_sms` / `read_local_outbox` against the scratch property.
+5. Confirm the live building is still Published. Switching or injecting for scratch must not draft or disconnect it.
 
 When more than one building exists, `set_up_texting` with `provider: local` and no property is refused. Inject against a building that uses the installation's live texting, or practice texts, is refused. An installation-wide switch to `local` or back to a carrier does not delete saved Sendblue, Twilio, or Photon credentials or attached lines. Switching the installation back uses the stored account and a new connection test unless those details were never set. `set_up_texting` with a property only changes that building's texting; it does not touch installation secrets.
 <!-- /connector -->
@@ -555,7 +558,7 @@ Terminal wizard ─────────────────────�
   saves exact names only), tour hours in everyday words, verification, messaging, review, `run_checks`,
   `publish`, `get_tours`, the inbox, holds, calling a
   tour off, answering a flagged question with a new approved fact, custom tour times (`reply_to_time_request` and
-  `schedule_tour`; approving a time and moving a tour refuse while that property is paused:
+  `schedule_tour`, which refuses on a property that isn't published; approving a time and moving a tour refuse while that property is paused:
   `Tours at {property} are paused. Resume them first.`), `pause_tours` (property or unit; pass paused false to resume;
   resume texts waiting visitors that tours are back; a later `Tour` / `Hi` / `book` restarts booking the same way
   as a first text — a home gets the welcome and day list, not a leftover unit picker), `remove_property` (finds any property `get_state` shows, including an unpublished setup; published records are kept, including a property sent back to draft when it still has `publishedAt`, visitor tour or reservation records, or a publish event in its audit — a practice tour alone does not count; an unpublished setup is removed completely, whether or not it is complete; unpublished confirmation says it isn't published yet so no visitors are affected, but everything entered will be deleted for good; published with no bookings says no one is booked, so no cancel texts go out; one booked visitor is singular; names the operator-given name, or street plus unit when there is exactly one unit, otherwise the street line, never Main Home; booked cancel text does
