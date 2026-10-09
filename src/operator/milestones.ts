@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PROBLEMS_ONLY, RECOMMENDED_UPDATES, UPDATE_KINDS, choosePreferences, describeUpdates } from "../alerts/preferences";
+import { PROBLEMS_ONLY, RECOMMENDED_UPDATES, UPDATE_KINDS, choosePreferences, describeUpdates, enabledUpdates } from "../alerts/preferences";
 import { PROPERTY_TYPES } from "../config/tourCoreConfig";
 import { extractValues, parseBulkUnitDetails } from "../config/unitProfile";
 import { checkPublicEndpoint, testAccess, testOperatorAlerts, testVisitorMessaging } from "../install/checks";
@@ -529,11 +529,15 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
         const state = inst.files.state();
         inst.files.writeState({ ...state, skipped: { ...state.skipped, OPERATOR_ALERTS: new Date(inst.now()).toISOString() } });
       }
+      let posted: string | undefined;
       if ((i.preset || i.updates) && inst) {
         const state = inst.files.state();
+        const before = enabledUpdates(state.operatorUpdates);
         const enabled = i.updates ?? (i.preset === "problems-only" ? PROBLEMS_ONLY : RECOMMENDED_UPDATES);
         const prefs = choosePreferences(state.operatorUpdates, enabled, new Date(inst.now()));
         inst.files.writeState({ ...state, operatorUpdates: prefs });
+        const changed = before.length !== prefs.enabled.length || before.some((kind) => !prefs.enabled.includes(kind));
+        if (changed && !i.skipAlerts) posted = `Got it. I'll keep you posted on ${describeUpdates(prefs.enabled)}.`;
       }
       if (i.connectAlerts) {
         if (!inst) return envelope(ctx, opened?.id, "blocked", TOUR_UPDATES_NOT_HERE, {}, "INSTALLATION_UNAVAILABLE");
@@ -542,7 +546,7 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
         });
       }
       const mode = opened ? ctx.services.workspace.openDraft(opened.id).draft.verificationMode : undefined;
-      return envelope(ctx, opened?.id, "done", settingsSentence(mode, !!i.skipAlerts), { propertyId: opened?.id });
+      return envelope(ctx, opened?.id, "done", posted ?? settingsSentence(mode, !!i.skipAlerts), { propertyId: opened?.id });
     },
   }),
   tool({

@@ -10,7 +10,7 @@ import { DemoMessagingAdapter } from "../src/messaging/Messenger";
 import { persistSession } from "../src/operator/services";
 import { tourRef } from "../src/operator/tours";
 import { handleVisitorText } from "../src/visitor/conversation";
-import { smsHelpBody } from "../src/visitor/smsConsent";
+import { smsHelpBody, smsStopAck } from "../src/visitor/smsConsent";
 import { VisitorDemoSession } from "../src/visitor";
 import { fakeSendblue, apiError } from "./fakeSendblue";
 import { grokHarness } from "./grokHarness";
@@ -771,8 +771,43 @@ describe("medical help", () => {
     expect(first?.summary).toBe(`They texted: "my dad passed out". They were told to call 911 if someone is hurt, and that you'd text them here.`);
     expect(first?.nextSteps).toEqual(["Text or call them now, then mark it handled."]);
     expect(second?.summary).toBe(
-      `They texted: "he passed out". They've opted out of texts, so they weren't texted back this time. They were told to call 911 after their first message.`,
+      `They texted: "he passed out". They've opted out of texts, so they weren't texted back this time. They were already told to call 911.`,
     );
     expect(second?.nextSteps).toEqual(["Call them now, then mark it handled."]);
+  });
+
+  it("on a draft with saved setup, sends one more 911 line after STOP and skips the injury after that", async () => {
+    const app = await liveApp({ cleanups });
+    const propertyId = "prop_100_alfred_way";
+    app.ws.patchState(propertyId, { status: "DRAFT" });
+    expect(app.ws.has(propertyId)).toBe(true);
+    expect(app.ws.load(propertyId).state.status).toBe("DRAFT");
+    const phone = "+15550107321";
+    const told = "They were told to call 911 if someone is hurt, and that you'd text them here.";
+    const skipped = "They've opted out of texts, so they weren't texted back this time. They were already told to call 911.";
+    const lines = (replies: string[]) => replies.filter((body) => body.includes("call 911 now"));
+    const injury = async (phrase: string) => {
+      const items = ((await app.grok("get_inbox", { property: "100 Alfred Way" })).items as Array<{ what?: string; summary?: string; nextSteps?: string[] }>).filter(
+        (item) => item.what === "Possible injury" && item.summary?.includes(`They texted: "${phrase}"`),
+      );
+      expect(items).toHaveLength(1);
+      return items[0]!;
+    };
+
+    const first = await app.textFrom(phone, "my dad passed out");
+    expect(lines(first)).toEqual([SENT]);
+    expect((await injury("my dad passed out")).summary).toBe(`They texted: "my dad passed out". ${told}`);
+
+    expect(await app.textFrom(phone, "STOP")).toEqual([smsStopAck()]);
+
+    const second = await app.textFrom(phone, "he passed out again");
+    expect(second).toEqual([SENT]);
+    expect((await injury("he passed out again")).summary).toBe(`They texted: "he passed out again". ${told}`);
+
+    const third = await app.textFrom(phone, "she is not breathing now");
+    expect(third).toEqual([]);
+    const last = await injury("she is not breathing now");
+    expect(last.summary).toBe(`They texted: "she is not breathing now". ${skipped}`);
+    expect(last.nextSteps).toEqual(["Call them now, then mark it handled."]);
   });
 });

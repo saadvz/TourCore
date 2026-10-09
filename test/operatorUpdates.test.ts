@@ -66,6 +66,25 @@ describe("tour lifecycle updates", () => {
     expect((await a.grok("get_operator_update", { eventId: done.eventId })).summary).toBe("Testy's Unit 1A tour is complete.");
   });
 
+  it("names the tour updates when save_settings changes which ones go out", async () => {
+    const bookings = await liveApp({ cleanups });
+    const saved = await bookings.grok("save_settings", { updates: ["TOUR_BOOKED"] });
+    expect(saved.message).toBe("Got it. I'll keep you posted on bookings.");
+
+    const recommended = await liveApp({ cleanups });
+    const preset = await recommended.grok("save_settings", { preset: "recommended" });
+    expect(preset.message).toBe("Got it. I'll keep you posted on bookings, tour starts and completions, and anything that needs your attention.");
+  });
+
+  it("keeps the current line when save_settings does not change tour updates", async () => {
+    const app = await liveApp({ cleanups });
+    const same = await app.grok("save_settings", { updates: ["EXCEPTION_CREATED", "ACCESS_PROBLEM", "VERIFICATION_PROBLEM"] });
+    expect(same.message).toBe("Visitors will fill out a basic identity form, and tour updates stay as they are.");
+    await app.grok("save_settings", { updates: ["TOUR_BOOKED"] });
+    const again = await app.grok("save_settings", { updates: ["TOUR_BOOKED"] });
+    expect(again.message).toBe("Visitors will fill out a basic identity form, and tour updates stay as they are.");
+  });
+
   it("preferences are respected: without tour updates chosen, only what needs the landlord is sent", async () => {
     const a = await liveApp({ cleanups });
     expect((await a.grok("get_notification_preferences")).summary).toBe("I'll keep you posted on anything that needs your attention.");

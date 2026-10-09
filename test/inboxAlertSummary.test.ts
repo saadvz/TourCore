@@ -73,8 +73,9 @@ describe("get_inbox unnamed visitor summary", () => {
       exceptionId: expect.stringMatching(/^exc_[a-f0-9]{12}$/),
     });
     expect(Buffer.byteLength(body)).toBe(203);
+    const readable = body.replace(/"eventId":"evt_[a-f0-9]+"/, "").replace(/"exceptionId":"exc_[a-f0-9]+"/, "");
     for (const leak of ["pool", "555", "010-2000", "0102000", "(555)", "Visitor", "Testy", "Pat", "Smith", QUESTION]) {
-      expect(body, leak).not.toContain(leak);
+      expect(readable, leak).not.toContain(leak);
     }
 
     const inbox = await app.grok("get_inbox", { eventId: event.eventId });
@@ -117,8 +118,65 @@ describe("get_inbox unnamed visitor summary", () => {
 
   it("documents the unnamed summary and the item eventId on get_inbox", () => {
     const tool = DAY_TO_DAY_TOOLS.find((item) => item.name === "get_inbox");
-    expect(tool?.description).toContain("Visitor at (555) 010-2000, 1 QA Scratch Lane: …");
-    expect(tool?.description).toContain("Each item includes that alert's eventId");
+    expect(tool?.description).toContain("When the visitor has no name, the summary starts Visitor at {number}, {place}:");
+    expect(tool?.description).toContain("Each item that had an alert includes its eventId");
+    expect(tool?.description).not.toContain("(555) 010-2000");
     expect(tool?.description).not.toContain("The alert itself still carries no visitor name");
   });
+
+  it("leaves eventId off when that kind of update was never queued", async () => {
+    const app = await liveApp({ cleanups, config: scratchLaneConfig() });
+    await app.grok("save_settings", { updates: ["TOUR_BOOKED"] });
+    await app.text("TOUR");
+    await app.text("YES");
+    await app.text(QUESTION);
+    await app.server.tourCore.settled();
+
+    expect(app.net.routineCalls().some((call) => call.body?.includes("exception.created"))).toBe(false);
+    expect(app.outbox("exception.created")).toEqual([]);
+
+    const listed = await app.grok("get_inbox");
+    const item = (listed.items as Array<{ exceptionId?: string; eventId?: string; summary?: string }>).find((row) => row.summary?.includes("Is there a pool?"));
+    expect(item?.exceptionId).toBeTruthy();
+    expect(item).not.toHaveProperty("eventId");
+
+    const one = await app.grok("get_inbox", { exceptionId: item!.exceptionId });
+    expect(one.item).not.toHaveProperty("eventId");
+    expect(one.summary).toBe(
+      'Visitor at (555) 010-2000, 1 QA Scratch Lane: They asked: "Is there a pool?" There\'s no approved answer yet.',
+    );
+    expect(one.item.tourStatus).toBe("Choosing a time");
+    await expectListedEventIdsResolve(app, listed.items);
+  });
+
+  it("uses the queued alert's eventId, and get_inbox reads that same update", async () => {
+    const app = await liveApp({ cleanups, config: scratchLaneConfig() });
+    await app.text("TOUR");
+    await app.text("YES");
+    await app.text(QUESTION);
+    await app.server.tourCore.settled();
+
+    const ping = app.net.routineCalls().find((call) => call.body?.includes("exception.created"));
+    const event = JSON.parse(ping!.body!) as { eventId: string; exceptionId: string };
+    const listed = await app.grok("get_inbox");
+    const item = (listed.items as Array<{ exceptionId?: string; eventId?: string }>).find((row) => row.exceptionId === event.exceptionId);
+    expect(item?.eventId).toBe(event.eventId);
+
+    const inbox = await app.grok("get_inbox", { eventId: item!.eventId });
+    expect(inbox.summary).toBe(
+      'Visitor at (555) 010-2000, 1 QA Scratch Lane: They asked: "Is there a pool?" There\'s no approved answer yet. Choosing a time.',
+    );
+    const one = await app.grok("get_inbox", { exceptionId: event.exceptionId });
+    expect(one.item.eventId).toBe(event.eventId);
+    await expectListedEventIdsResolve(app, listed.items);
+  });
 });
+
+async function expectListedEventIdsResolve(app: Awaited<ReturnType<typeof liveApp>>, items: Array<{ eventId?: string }>): Promise<void> {
+  const ids = items.map((item) => item.eventId).filter((id): id is string => typeof id === "string");
+  for (const eventId of ids) {
+    const read = await app.grok("get_inbox", { eventId });
+    expect(read.eventId).toBe(eventId);
+    expect(String(read.summary)).not.toBe("I couldn't find that update.");
+  }
+}

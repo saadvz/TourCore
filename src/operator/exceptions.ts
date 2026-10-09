@@ -203,7 +203,7 @@ function quotedVisitorAsk(question: string, lead = "They asked"): string {
 const INJURY_TOLD = "They were told to call 911 if someone is hurt, and that you'd text them here.";
 const INJURY_UNREACHED = "They were told you couldn't be reached.";
 const INJURY_BLOCKED = "Our text telling them to call 911 didn't go out, so they haven't heard back yet.";
-const INJURY_SKIPPED = "They've opted out of texts, so they weren't texted back this time. They were told to call 911 after their first message.";
+const INJURY_SKIPPED = "They've opted out of texts, so they weren't texted back this time. They were already told to call 911.";
 const INJURY_STEP = "Text or call them now, then mark it handled.";
 const INJURY_CALL_STEP = "Call them now, then mark it handled.";
 
@@ -296,7 +296,9 @@ function messageForVisitor(message: Message, help: AuditEvent): boolean {
 /**
  * The 911 text for this help. A repeat after STOP does not use up a message.
  * Each earlier try in this opt-out uses the next matching outbound text.
- * A missing text or a failed send is blocked. Anything else was sent.
+ * A missing text or a failed send is blocked. A suppressed or skipped text
+ * (the one allowed try for this opt-out was already used) is skipped.
+ * Anything else was sent.
  */
 function visitorLineFor(tour: TourSnapshot, help: AuditEvent): "sent" | "blocked" | "skipped" {
   const helps = tour.bundle.auditEvents
@@ -313,7 +315,7 @@ function visitorLineFor(tour: TourSnapshot, help: AuditEvent): "sent" | "blocked
       continue;
     }
     const message = messages[index++];
-    line = !message || message.deliveryStatus === "FAILED" ? "blocked" : "sent";
+    line = !message || message.deliveryStatus === "FAILED" ? "blocked" : message.deliveryStatus === "SUPPRESSED" || message.deliveryStatus === "SKIPPED" ? "skipped" : "sent";
   }
   return line;
 }

@@ -425,7 +425,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
     title: "Show what needs the landlord",
     kind: "read",
     description:
-      "Everything waiting on the landlord: flagged questions (a fair-housing item has proposeDraft false), help requests, door problems, custom-time requests, and a published property with no time zone (Time zone needed, no id). Pass exceptionId or tourTimeRequestId for one item. Pass eventId for one alert. Each item includes that alert's eventId. When the visitor has no name, the summary says Visitor at (555) 010-2000, 1 QA Scratch Lane: … with the full formatted number. Never show ids to the landlord.",
+      "Everything waiting on the landlord: flagged questions (a fair-housing item has proposeDraft false), help requests, door problems, custom-time requests, and a published property with no time zone (Time zone needed, no id). Pass exceptionId or tourTimeRequestId for one item. Pass eventId for one alert. Each item that had an alert includes its eventId. When the visitor has no name, the summary starts Visitor at {number}, {place}:. Never show ids to the landlord.",
     input: z.strictObject({
       property: Property,
       exceptionId: ExceptionId.optional(),
@@ -434,6 +434,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
       includeHandled: z.boolean().optional(),
     }),
     run: async (ctx, i) => {
+      const announced = (id: string) => (ctx.installation?.outbox.get(id) ? { eventId: id } : {});
       if (i.eventId) {
         const record = installationOf(ctx).outbox.get(i.eventId);
         if (!record) throw new SetupInputError("UPDATE_NOT_FOUND", "I couldn't find that update.");
@@ -453,20 +454,20 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
         const who = inboxPhoneVisitorLabel(item.visitorName) ?? item.visitorName;
         return {
           summary: `${who}${item.unitName ? `, ${item.unitName}` : ""}: ${item.summary}`,
-          item: { ...exceptionItem(item), eventId: exceptionEventId(item.exceptionId), question: item.question, tour: item.tour, recentMessages: item.recentMessages },
+          item: { ...exceptionItem(item), ...announced(exceptionEventId(item.exceptionId)), question: item.question, tour: item.tour, recentMessages: item.recentMessages },
         };
       }
-      if (i.tourTimeRequestId) return { ...await inspectTourTimeRequest(ctx, i.tourTimeRequestId), eventId: timeRequestEventId(i.tourTimeRequestId) };
+      if (i.tourTimeRequestId) return { ...await inspectTourTimeRequest(ctx, i.tourTimeRequestId), ...announced(timeRequestEventId(i.tourTimeRequestId)) };
       const propertyId = propertyIdOf(ctx, i.property);
       const issues = await listExceptions(ctx.services, { propertyId, includeClosed: i.includeHandled });
       const times = await listTourTimeRequests(ctx, { property: i.property, includeHandled: i.includeHandled });
       const requests = ((times.requests as Array<Record<string, unknown>> | undefined) ?? []).map((request) => ({
         kind: "custom-time" as const,
         ...request,
-        ...(typeof request.tourTimeRequestId === "string" ? { eventId: timeRequestEventId(request.tourTimeRequestId) } : {}),
+        ...(typeof request.tourTimeRequestId === "string" ? announced(timeRequestEventId(request.tourTimeRequestId)) : {}),
       }));
       const zoneNeeded = i.includeHandled ? [] : unsetZoneInboxItems(ctx.services, propertyId);
-      const items = [...zoneNeeded, ...issues.map((item) => ({ ...exceptionItem(item), eventId: exceptionEventId(item.exceptionId) })), ...requests];
+      const items = [...zoneNeeded, ...issues.map((item) => ({ ...exceptionItem(item), ...announced(exceptionEventId(item.exceptionId)) })), ...requests];
       const open = items.filter((item) => {
         const status = (item as { status?: string }).status;
         return item.kind === "custom-time" ? status === "waiting" : status === "open";
