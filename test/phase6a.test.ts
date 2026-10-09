@@ -12,14 +12,18 @@ import { Installation } from "../src/install/installation";
 import { LANDLORD_CORE_TOOLS, OPS_TOOL_NAMES, QA_TOOL_NAMES } from "../src/mcp/scopes";
 import { UNSET_ZONE_LINE } from "../src/setup/storedTimeZone";
 import { configHash, PropertyWorkspace } from "../src/setup/workspace";
+import { t15Questions, t5NoOffer, t5Offering } from "../src/core/overstayCopy";
+import { VisitorDenialCopy } from "../src/core/TourCore";
+import { formatTime, zonedTimeToUtc } from "../src/core/timezone";
 import { toursUnavailableText } from "../src/sms/templates";
 import { tourHoursVisitorReply } from "../src/visitor/tourHoursQuestion";
+import type { LiveApp } from "./liveApp";
 import { VisitorDemoSession } from "../src/visitor";
 import { writeJsonAtomic } from "../src/storage/atomicWrite";
 import { FileRuntimeStore } from "../src/storage/runtimeStore";
 import { createSetupServer } from "../src/web/server";
 import { installHarness } from "./installHarness";
-import { at, hillsideConfig, liveApp } from "./liveApp";
+import { at, hillsideConfig, liveApp, PHONE } from "./liveApp";
 
 /**
  * Phase 6a gate cases. Each behavior case fails on master 430bd96.
@@ -30,6 +34,7 @@ afterEach(() => cleanups.splice(0).forEach((run) => run()));
 
 const HOURS_REPLY = "Tours run every day, 8 AM to midnight. Which day works for you? Just reply with a day, like today, tomorrow, or Saturday.";
 const WEEKDAY_REPLY = "Tours run Monday to Friday, 9 AM to 5 PM. Which day works for you? Just reply with a day, like today, tomorrow, or Monday.";
+const SATURDAY_WEEKDAY_REPLY = "Tours run Monday to Friday, 9 AM to 5 PM. Which day works for you? Just reply with a day, like Monday or Tuesday.";
 const LANDLORD_REFUSAL = "That's no longer something I can do from this chat. Disconnect and reconnect Tour Core so I'm working from the current list, then ask me again.";
 const TODAY_TIMES = "I have these times available Monday, Sep 28:\nReply 1 for 2:00 PM or 2 for 3:30 PM.";
 const NO_MORE_TODAY = "There are no more tours today. The next one is Tuesday, Sep 29 at 2:00 PM. Reply yes to take it, or pick a day:";
@@ -115,6 +120,18 @@ describe("hours reply names a day the visitor can say", () => {
   it("names Monday when the saved days are weekdays", () => {
     expect(tourHoursVisitorReply({ days: ["MON", "TUE", "WED", "THU", "FRI"], start: "09:00", end: "17:00" }).body).toBe(WEEKDAY_REPLY);
     expect(isGeneralTourHoursQuestion("what are your hours tonight")).toBe(false);
+  });
+
+  it("on a Saturday, a weekdays-only property names Monday or Tuesday and still names today when today is open", async () => {
+    expect(tourHoursVisitorReply({ days: ["MON", "TUE", "WED", "THU", "FRI"], start: "09:00", end: "17:00" }, "SAT").body).toBe(SATURDAY_WEEKDAY_REPLY);
+    expect(tourHoursVisitorReply({ days: ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"], start: "08:00", end: "23:59" }, "MON").body).toBe(HOURS_REPLY);
+    const clock = { t: zonedTimeToUtc({ year: 2026, month: 10, day: 3, hour: 10, minute: 0 }, "America/New_York").getTime() };
+    const config = hillsideConfig();
+    config.tourHours = { ...config.tourHours, days: ["MON", "TUE", "WED", "THU", "FRI"], start: "09:00", end: "17:00" };
+    const a = await liveApp({ cleanups, clock, config });
+    const phone = "+15550106005";
+    await openDayMenu(a, phone);
+    expect(await a.textFrom(phone, "what are your hours")).toEqual([SATURDAY_WEEKDAY_REPLY]);
   });
 });
 
@@ -258,6 +275,142 @@ describe("published zone cleared during a tour", () => {
     const inboxAfter = await h.ok("get_inbox", { property: id });
     expect(JSON.stringify(inboxAfter)).not.toContain(UNSET_ZONE_LINE);
     expect(inboxAfter.summary).toBe("Nothing needs you right now.");
+  });
+});
+
+const PROPERTY = "prop_100_alfred_way";
+const UNAVAILABLE = "Thanks for reaching out to 100 Alfred Way. Self-guided tours by text aren't available right now. Please contact the property team.";
+
+function clearPublishedZone(root: string): void {
+  const path = join(root, "properties", PROPERTY, "tourcore.config.json");
+  const raw = JSON.parse(readFileSync(path, "utf8")) as { property: { timezone: string } };
+  raw.property.timezone = "";
+  writeJsonAtomic(path, raw);
+  const parsed = TourCoreConfigShape.parse(raw);
+  const presentedSafety = safetyHash(parsed);
+  const statusPath = join(root, "properties", PROPERTY, "status.json");
+  const status = JSON.parse(readFileSync(statusPath, "utf8")) as {
+    configHash: string;
+    status: string;
+    readiness?: { configHash?: string; safetyHash?: string };
+    dryTour?: { configHash?: string; safetyHash?: string };
+  };
+  status.status = "PUBLISHED_FOR_DEMO";
+  status.configHash = configHash(parsed);
+  if (status.readiness) {
+    status.readiness.configHash = configHash(parsed);
+    status.readiness.safetyHash = presentedSafety;
+  }
+  if (status.dryTour) {
+    status.dryTour.configHash = configHash(parsed);
+    status.dryTour.safetyHash = presentedSafety;
+  }
+  writeJsonAtomic(statusPath, status);
+}
+
+async function submitIdentity(a: LiveApp, replies: string[], phone: string, first: string, last: string): Promise<void> {
+  const token = /\/verify\/([A-Za-z0-9_-]+)/.exec(replies.join("\n"))![1]!;
+  const port = (a.server.address() as { port: number }).port;
+  const form = await fetch(`http://127.0.0.1:${port}/api/verify/${token}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ firstName: first, lastName: last, email: `${first.toLowerCase()}@example.com`, phone }),
+  });
+  expect(((await form.json()) as { ok: boolean }).ok).toBe(true);
+  await a.server.tourCore.settled();
+}
+
+/** Books the first remaining listed time. The 2:00 PM slot is already taken by the touring visitor. */
+async function bookRemainingSlot(a: LiveApp, phone: string): Promise<void> {
+  await a.textFrom(phone, "TOUR");
+  await a.textFrom(phone, "YES");
+  await a.textFrom(phone, "1");
+  const times = (await a.textFrom(phone, "1")).join("\n");
+  const choice = times.includes("Reply 1 for 3:30 PM") ? "1" : times.includes("2 for 3:30 PM") ? "2" : "";
+  expect(choice, times).not.toBe("");
+  await a.textFrom(phone, choice);
+  await submitIdentity(a, await a.textFrom(phone, "YES"), phone, "Rita", "Ready");
+}
+
+async function activeGrants(a: LiveApp, phone: string) {
+  const session = a.visitors.latestForPhone(PROPERTY, phone, "messaging");
+  if (!session?.reservationId) return [];
+  const grants = await session.store.list("accessGrants");
+  return grants.filter((grant) => grant.reservationId === session.reservationId && grant.status === "ACTIVE");
+}
+
+describe("in-tour texts after the zone is cleared", () => {
+  it.each([
+    { label: "with the zone the tour was booked under", keepBookedZone: true },
+    { label: "with no saved zone", keepBookedZone: false },
+  ])("opens the next stop, answers help and done, and sends T-15 and T-5 $label", async ({ keepBookedZone }) => {
+    const a = await liveApp({ cleanups });
+    await a.book();
+    const readyPhone = "+15550106021";
+    await bookRemainingSlot(a, readyPhone);
+    const touring = a.visitors.latestForPhone(PROPERTY, PHONE, "messaging")!;
+    const booked = await touring.reservation();
+    expect(booked?.status).not.toBe("TOURING");
+    const slotStart = Date.parse(booked!.slotStart!);
+    const windowEnd = Date.parse(booked!.windowEnd!);
+
+    a.clock.t = slotStart;
+    const arrived = await a.text("I'm here");
+    expect(arrived.join("\n")).toContain("Entrance is open for you now");
+    expect(arrived.join("\n")).not.toContain("aren't available right now");
+    expect((await touring.reservation())?.status).toBe("TOURING");
+
+    clearPublishedZone(a.root);
+    if (!keepBookedZone) {
+      const current = await touring.store.get("reservations", touring.reservationId!);
+      const { bookedTimeZone: _dropped, ...rest } = current!;
+      await touring.store.put("reservations", rest);
+      expect((await touring.reservation())?.bookedTimeZone).toBeUndefined();
+    }
+
+    const next = await a.text("at Unit 1A");
+    expect(next.join("\n")).toContain("Unit 1A Door is open for you now");
+    expect(next.join("\n")).not.toContain("aren't available right now");
+    const grants = await activeGrants(a, PHONE);
+    expect(grants.map((grant) => grant.doorId).sort()).toEqual(["entrance", "unit_101"]);
+    expect(touring.config.property.timezone).toBe("");
+    expect((await touring.reservation())?.bookedTimeZone).toBe(keepBookedZone ? "America/New_York" : undefined);
+
+    const help = await a.text("help");
+    expect(help).toEqual([VisitorDenialCopy.helpAck("property team")]);
+    expect(help.join("\n")).not.toContain("aren't available right now");
+
+    const before15 = a.fake.sent.length;
+    a.clock.t = windowEnd - 15 * 60_000;
+    await a.server.tourCore.tickOverstay();
+    await a.server.tourCore.settled();
+    const t15 = a.fake.sent.slice(before15).filter((message) => message.number === PHONE).map((message) => message.content);
+    expect(t15).toEqual([t15Questions("Unit 1A", "Testy")]);
+    expect(t15.join("\n")).not.toMatch(/GMT|UTC/);
+
+    const before5 = a.fake.sent.length;
+    a.clock.t = windowEnd - 5 * 60_000;
+    await a.server.tourCore.tickOverstay();
+    await a.server.tourCore.settled();
+    const t5 = a.fake.sent.slice(before5).filter((message) => message.number === PHONE).map((message) => message.content);
+    const expectedT5 = keepBookedZone
+      ? t5Offering("Unit 1A", formatTime(new Date(windowEnd), "America/New_York"), "Testy")
+      : t5NoOffer("Unit 1A", undefined, "Testy");
+    expect(t5).toEqual([expectedT5]);
+    if (!keepBookedZone) {
+      expect(t5.join("\n")).not.toMatch(/GMT|UTC/);
+      expect(t5.join("\n")).not.toMatch(/\d{1,2}:\d{2}/);
+      expect(t5.join("\n")).not.toMatch(/\b(?:AM|PM)\b/);
+    }
+
+    const done = await a.text("DONE");
+    expect(done.join("\n")).toContain("Thanks for touring Unit 1A, Testy!");
+    expect(done.join("\n")).not.toContain("aren't available right now");
+    expect((await touring.reservation())?.status).toBe("COMPLETED");
+
+    const blocked = await a.textFrom(readyPhone, "I'm here");
+    expect(blocked).toEqual([UNAVAILABLE]);
+    expect(await activeGrants(a, readyPhone)).toEqual([]);
   });
 });
 

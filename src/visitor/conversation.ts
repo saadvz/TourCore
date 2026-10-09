@@ -2,7 +2,8 @@ import { resolveSpokenTime } from "../core/customSlot";
 import { orList, resolveQuestion, unitsNamedIn } from "../core/questions";
 import { isoDate, parseIsoDate } from "../core/schedule";
 import { dayReference, spokenTimes, type DayReference, type SpokenTime } from "../core/spokenTime";
-import { addDays, formatDay, formatTime, formatVisitorClock, localDateOf, weekdayOf, zonedParts, type LocalDate } from "../core/timezone";
+import { bookedClockZone, tourAlreadyUnderway } from "../core/inProgressTour";
+import { addDays, formatDay, formatTime, formatVisitorClock, isValidTimeZone, localDateOf, UnsetTimeZoneError, weekdayOf, zonedParts, type LocalDate } from "../core/timezone";
 import {
   NOTHING_BOOKED_CANCEL,
   TOUR_AGAIN_SUFFIX,
@@ -17,7 +18,7 @@ import { cannotCancelRunningOfferLater, cannotCancelRunningTour, laterCancelConf
 import { renderSms, visitorTeamName } from "../sms/templates";
 import { namedCancelFocus } from "./cancelTarget";
 import { awaitingLatestYesNo, doorAskSupersedesCancel } from "./latestQuestion";
-import { isLeavingTour, T5_NO_OFFER_BARE_YES } from "../core/overstayCopy";
+import { DOOR_AFTER_T, isLeavingTour, T5_NO_OFFER_BARE_YES } from "../core/overstayCopy";
 import { afterCloseAlertOpen } from "./overstayScheduler";
 import { isBareTodayOrTonight } from "../intent/tourHoursAsk";
 import { isFlexibleYes, yesNo } from "../intent/yesNo";
@@ -330,14 +331,21 @@ function stopRef(session: VisitorDemoSession, doorId: string): StopRef {
 async function contextFor(session: VisitorDemoSession, message: string, step: VisitorStage, awaiting?: StepAwaiting): Promise<InterpretContext> {
   const r = await session.reservation();
   const remaining = step === "ready" || step === "touring" ? await session.remainingStops() : [];
+  const now = session.clock.now();
+  const underway = !!r && tourAlreadyUnderway(r, now);
+  const zone = isValidTimeZone(session.config.property.timezone)
+    ? session.config.property.timezone
+    : underway
+      ? bookedClockZone(session.config.property.timezone, r)
+      : undefined;
+  if (!zone && !underway) throw new UnsetTimeZoneError();
   return {
     message,
     step,
     ...(awaiting ? { awaiting } : {}),
     units: session.config.units.map((u) => ({ name: u.name, ...(u.summary ? { summary: u.summary } : {}) })),
     timeChoices: step === "choose-date" ? session.offeredDates.map((day) => day.label) : session.offeredSlots.map((s) => s.label),
-    today: localDateOf(session.clock.now(), session.config.property.timezone),
-    timezone: session.config.property.timezone,
+    ...(zone ? { today: localDateOf(now, zone), timezone: zone } : {}),
     teamName: session.config.operator.name,
     ...(r ? { reservedUnit: session.config.units.find((u) => u.id === r.unitId)?.name } : {}),
     remainingStops: remaining.map((id) => stopRef(session, id)),
@@ -958,17 +966,21 @@ async function offerCancelConfirm(turn: Turn): Promise<void> {
     return;
   }
   const start = new Date(target.reservation.slotStart);
-  const tz = turn.session.config.property.timezone;
-  const day = formatDay(start, tz);
-  const time = formatTime(start, tz);
   const current = await turn.session.reservation();
+  const zone = bookedClockZone(turn.session.config.property.timezone, current ?? target.reservation);
+  if (!zone) {
+    await turn.session.reportCancelFailed(turn.said);
+    return;
+  }
+  const day = formatDay(start, zone);
+  const time = formatTime(start, zone);
   const namedRunning =
     target.laterWhileTouring &&
     namedCancelFocus({
       text: turn.said.text ?? "",
       current,
       later: await turn.session.pendingBooking(),
-      timeZone: tz,
+      timeZone: zone,
       now: turn.session.clock.now(),
     }) === "running";
   const team = runningCancelTeam(turn.session, current?.status);
@@ -1758,7 +1770,10 @@ async function handleProposedTimeReply(turn: Turn): Promise<boolean> {
     return true;
   }
   if (answer === "no") {
-    const named = spokenTimes(normalize(text), localDateOf(session.clock.now(), session.config.property.timezone));
+    const reservation = await session.reservation();
+    const zone = bookedClockZone(session.config.property.timezone, reservation ?? undefined);
+    if (!zone) return false;
+    const named = spokenTimes(normalize(text), localDateOf(session.clock.now(), zone));
     if (named.length === 1 || turn.intent.type === "REQUEST_CUSTOM_TIME") return false;
     await session.recordText(turn.said);
     await session.declineAlternative(request.id);
@@ -1856,7 +1871,9 @@ async function onTour(turn: Turn): Promise<void> {
         const reservation = await session.reservation();
         const end = reservation?.windowEnd ? Date.parse(reservation.windowEnd) : Number.NaN;
         if (!Number.isNaN(end) && session.clock.now().getTime() >= end) {
-          const time = formatVisitorClock(new Date(reservation!.windowEnd!), session.config.property.timezone);
+          const zone = bookedClockZone(session.config.property.timezone, reservation);
+          if (!zone) return turn.respond(DOOR_AFTER_T);
+          const time = formatVisitorClock(new Date(reservation!.windowEnd!), zone);
           return turn.respond(`Your tour time ended at ${time}, so the doors are locked now. Want to come back another time? Just reply with a day that works.`);
         }
         return turn.clarify("Every door on your tour is already open for you. Text HELP if one isn't working.", { kind: "say", phrase: "DONE", purpose: "when you're finished" });

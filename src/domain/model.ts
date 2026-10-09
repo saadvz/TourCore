@@ -48,6 +48,11 @@ export const ReservationSchema = z.object({
   slotStart: IsoDate.optional(),
   windowStart: IsoDate.optional(),
   windowEnd: IsoDate.optional(),
+  /**
+   * IANA zone the window was booked under. An in-progress tour keeps using it
+   * if the property zone is cleared later. Older records omit it.
+   */
+  bookedTimeZone: z.string().optional(),
   /** Window end before a one-time 10-minute extension. */
   originalWindowEnd: IsoDate.optional(),
   /** Set when the visitor used their one extra 10 minutes. */

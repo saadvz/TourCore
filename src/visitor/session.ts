@@ -6,6 +6,7 @@ import { pausedPropertyVisitorText, pausedUnitVisitorText, removedPropertyVisito
 import { normalizePhone } from "../core/phone";
 import { orList } from "../core/questions";
 import { operatorConfirmBy } from "../core/customSlot";
+import { bookedClockZone } from "../core/inProgressTour";
 import { formatDay, formatLocalDate, formatTime, formatWeekday, isValidTimeZone, localDateOf, UnsetTimeZoneError } from "../core/timezone";
 import type { SpokenTime } from "../core/spokenTime";
 import { bookingRefusal, isEffectivelyPaused, isRemoved, openUnits, operatorPausedBookingRefuse } from "../setup/availability";
@@ -959,7 +960,9 @@ export class VisitorDemoSession {
   }
 
   cancelConfirmLine(reservation: Reservation, laterWhileTouring = false): string | undefined {
-    return visitorCancelConfirmFor(reservation, this.config.property.timezone, laterWhileTouring);
+    const zone = bookedClockZone(this.config.property.timezone, reservation);
+    if (!zone) return undefined;
+    return visitorCancelConfirmFor(reservation, zone, laterWhileTouring);
   }
 
   /** Visitor confirmed cancel-by-text: revoke doors, cancel, audit, then the short done line. */
@@ -974,9 +977,9 @@ export class VisitorDemoSession {
       this.clearShownMenus();
       if (this.pendingBookingId === target.reservation.id) this.pendingBookingId = undefined;
       const start = target.reservation.slotStart ? new Date(target.reservation.slotStart) : undefined;
-      const tz = this.config.property.timezone;
+      const zone = bookedClockZone(this.config.property.timezone, target.reservation);
       const later = laterWhileTouring || target.laterWhileTouring;
-      await this.reply(start ? visitorCancelDoneFor(formatDay(start, tz), formatTime(start, tz), later) : visitorCancelDoneFor("", "", later));
+      await this.reply(start && zone ? visitorCancelDoneFor(formatDay(start, zone), formatTime(start, zone), later) : visitorCancelDoneFor("", "", later && !!zone));
       return "cancelled";
     } catch {
       await this.core.flagVisitorCancelFailed({

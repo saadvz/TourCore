@@ -1111,13 +1111,13 @@ Sounds good. Enjoy the rest of your tour!
 ### t5-offer
 
 ```
-Heads up{name?}, your tour of {place} ends in 5 minutes, at {end}. Want 10 more minutes? Just reply and ask.
+Heads up{name?}, your tour of {place} ends in 5 minutes{when?}. Want 10 more minutes? Just reply and ask.
 ```
 
 ### t5-no-offer
 
 ```
-Heads up{name?}, your tour of {place} ends in 5 minutes, at {end}. Text DONE once you're outside.
+Heads up{name?}, your tour of {place} ends in 5 minutes{when?}. Text DONE once you're outside.
 ```
 
 ### t5-bare-yes
@@ -1129,19 +1129,19 @@ Sounds good. Text DONE once you're outside.
 ### extension-granted
 
 ```
-You've got 10 more minutes. Your tour now ends at {end}, and your doors will keep opening for you until then.
+You've got 10 more minutes.{clock?} Your doors will keep opening for you until then.
 ```
 
 ### extension-unavailable
 
 ```
-Sorry, I can't add more time to this tour. It still ends at {end}. Want to come back for another look? Reply here and I'll find you another time.
+Sorry, I can't add more time to this tour.{still?} Want to come back for another look? Reply here and I'll find you another time.
 ```
 
 ### extension-used
 
 ```
-You've already used your extra 10 minutes, so your tour still ends at {end}.
+You've already used your extra 10 minutes{still?}.
 ```
 
 ### extension-after-end

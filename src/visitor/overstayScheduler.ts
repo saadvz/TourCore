@@ -32,6 +32,7 @@ import {
   tourEnded,
 } from "../core/overstayCopy";
 import { withPropertySlotLock } from "../core/slotLock";
+import { bookedClockZone } from "../core/inProgressTour";
 import { formatTime } from "../core/timezone";
 import type { TourCore } from "../core/TourCore";
 import type { Reservation } from "../domain/model";
@@ -281,7 +282,7 @@ export class OverstayScheduler {
     const prospect = await core.getProspect(reservation.prospectId);
     const place = visitorSubject(core.config.property, core.unitName(reservation));
     const name = knownFirstName(prospect?.name);
-    const end = formatTime(new Date(reservation.windowEnd!), core.config.property.timezone);
+    const end = clockLabel(core, reservation, reservation.windowEnd);
     const who = landlordWho(prospect?.name);
     const help = core.visitorHelpNumber();
 
@@ -379,7 +380,7 @@ export class OverstayScheduler {
     if (!reservation?.windowEnd) return EXTENSION_AFTER_T;
     const record = this.ensure(reservation, reservation.propertyId);
     const nowMs = this.now().getTime();
-    const end = formatTime(new Date(reservation.windowEnd), core.config.property.timezone);
+    const end = clockLabel(core, reservation, reservation.windowEnd);
     if (nowMs >= Date.parse(reservation.windowEnd)) return EXTENSION_AFTER_T;
     if (record.extensionGranted || reservation.extensionGrantedAt) return extensionAlreadyUsed(end);
 
@@ -397,7 +398,7 @@ export class OverstayScheduler {
     }
 
     const extended = await core.extendTourWindowLocked(reservationId);
-    const newEnd = formatTime(new Date(extended.windowEnd!), core.config.property.timezone);
+    const newEnd = clockLabel(core, extended, extended.windowEnd);
     const prospect = await core.getProspect(extended.prospectId);
     const place = visitorSubject(core.config.property, core.unitName(extended));
     const fired = this.get(reservationId)!.fired;
@@ -479,6 +480,12 @@ export class OverstayScheduler {
     if (isMoreTimeAsk(t)) return this.handleAsk(core, reservationId, "natural");
     return undefined;
   }
+}
+
+function clockLabel(core: TourCore, reservation: Reservation, at: string | undefined): string | undefined {
+  if (!at) return undefined;
+  const zone = bookedClockZone(core.config.property.timezone, reservation);
+  return zone ? formatTime(new Date(at), zone) : undefined;
 }
 
 export { DOOR_AFTER_T };

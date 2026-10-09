@@ -3,7 +3,8 @@ import type { Reservation, TourTimeRequest } from "../domain/model";
 import { TERMINAL } from "../domain/stateMachine";
 import { intervalsOverlap, type TimeInterval } from "./customSlot";
 import { EXTENSION_MINUTES } from "./overstayCopy";
-import { localDateOf, zonedTimeToUtc } from "./timezone";
+import { bookedClockZone } from "./inProgressTour";
+import { isValidTimeZone, localDateOf, zonedTimeToUtc } from "./timezone";
 
 export const EXTENSION_MS = EXTENSION_MINUTES * 60_000;
 
@@ -34,8 +35,8 @@ export function occupantInterval(occupant: Occupant): TimeInterval {
   return { startMs: occupant.windowStart.getTime(), endMs: occupant.windowEnd.getTime() };
 }
 
-export function tourHoursEndOn(config: TourCoreConfig, at: Date): Date {
-  const tz = config.property.timezone;
+export function tourHoursEndOn(config: TourCoreConfig, at: Date, timeZone = config.property.timezone): Date {
+  const tz = timeZone;
   const day = localDateOf(at, tz);
   const [hour = 0, minute = 0] = config.tourHours.end.split(":").map(Number);
   return zonedTimeToUtc({ ...day, hour, minute }, tz);
@@ -106,8 +107,11 @@ export function extensionAvailability(input: {
   const end = input.reservation.windowEnd ? new Date(input.reservation.windowEnd) : undefined;
   if (!end) return { available: false };
   const extra = extensionWindow(end);
-  if (!isOneOff(input.reservation) && extra.endMs > tourHoursEndOn(input.config, end).getTime()) {
-    return { available: false, blocker: "tour-hours" };
+  if (!isOneOff(input.reservation)) {
+    const zone = bookedClockZone(input.config.property.timezone, input.reservation);
+    if (!zone || !isValidTimeZone(zone) || extra.endMs > tourHoursEndOn(input.config, end, zone).getTime()) {
+      return { available: false, blocker: "tour-hours" };
+    }
   }
   const ourDoors = doorsForUnit(input.config, input.reservation.unitId, input.reservation.allowedRoute);
   for (const other of input.occupants) {
