@@ -24,7 +24,7 @@ import type { ResolvedConsentMode } from "../messaging/consentPolicy";
 import { isLeavingTour } from "../core/overstayCopy";
 import { normalize, stripFiller } from "../intent/normalize";
 import { isValidTimeZone, UnsetTimeZoneError } from "../core/timezone";
-import { claimVisitorSms, toursUnavailableText, visitorTeamName } from "../sms/templates";
+import { claimVisitorSms, renderSms, toursUnavailableText, visitorTeamName } from "../sms/templates";
 import { handleVisitorText, isGreeting, startsNewBookingAfterClose } from "./conversation";
 import { pickerMiss, placeAliases, propertyPickerText, propertyShortName, resolveNamedPlace, STREET_MISS, menuChoice, type PlaceCandidate } from "./portfolioPick";
 import { OverstayScheduler } from "./overstayScheduler";
@@ -236,6 +236,7 @@ export class MessagingConversations {
         if (isMedicalEmergency(message.text)) {
           const propertyId = waiting.find((id) => this.configOf(id));
           if (propertyId) await this.answerDraftInjury(propertyId, phone, message.text);
+          else await this.sendUnreachedInjury(waiting[0], phone);
           return undefined;
         }
         await this.answerNotReady(waiting, phone);
@@ -406,31 +407,55 @@ export class MessagingConversations {
   }
 
   /**
-   * Injury on a draft: one alert, the 911 line, and a Possible injury item.
-   * The conversation is saved for the inbox and is not resumed, so Hi still gets the not-ready line.
+   * Injury on a draft, including one with no saved config. One alert, the 911 line,
+   * and a Possible injury item when the team can be reached. The conversation is
+   * saved for the inbox and is not resumed, so Hi still gets the not-ready line.
+   * An injury text is never dropped: if the team cannot be alerted, the visitor
+   * still gets the unreached 911 line.
    */
   private async answerDraftInjury(propertyId: string, phone: string, text: string): Promise<void> {
     const config = this.configOf(propertyId);
-    if (!config || !this.deps.workspace.has(propertyId)) return;
-    const tourId = this.deps.workspace.newVisitorTourId(propertyId, this.deps.now?.() ?? new Date(), "text");
-    const session = this.attachOverstay(
-      new VisitorDemoSession(propertyId, config, tourId, {
-        transport: this.lazyTransport(propertyId),
-        kind: "messaging",
-        verificationLinks: this.deps.links,
-        realNow: this.deps.realNow,
-        store: this.storeForProperty(propertyId),
-        storageRead: this.deps.storageRead,
-        beforeAccess: this.deps.beforeAccess,
-        otherBusyWindows: () => this.otherBusyWindows(propertyId, tourId),
-        ...(this.deps.slotLockBarrier ? { slotLockBarrier: this.deps.slotLockBarrier } : {}),
-      }),
-    );
-    session.identify(phone);
-    await session.help({ text });
-    const saved = await session.record();
-    this.deps.workspace.recordVisitorDemo(propertyId, { ...saved.record, outcome: "stopped" }, saved.bundle);
-    this.deps.onSaved?.(session);
+    if (!config) {
+      await this.sendUnreachedInjury(propertyId, phone);
+      return;
+    }
+    let told = false;
+    try {
+      const tourId = this.deps.workspace.newVisitorTourId(propertyId, this.deps.now?.() ?? new Date(), "text");
+      const session = this.attachOverstay(
+        new VisitorDemoSession(propertyId, config, tourId, {
+          transport: this.lazyTransport(propertyId),
+          kind: "messaging",
+          verificationLinks: this.deps.links,
+          realNow: this.deps.realNow,
+          store: this.storeForProperty(propertyId),
+          storageRead: this.deps.storageRead,
+          beforeAccess: this.deps.beforeAccess,
+          otherBusyWindows: () => this.otherBusyWindows(propertyId, tourId),
+          ...(this.deps.slotLockBarrier ? { slotLockBarrier: this.deps.slotLockBarrier } : {}),
+        }),
+      );
+      session.identify(phone);
+      await session.help({ text });
+      told = (await session.store.list("messages")).some(
+        (message) => message.audience === "PROSPECT" && message.direction === "OUTBOUND" && message.body.includes("call 911 now"),
+      );
+      try {
+        const saved = await session.record();
+        this.deps.workspace.recordVisitorDemo(propertyId, { ...saved.record, outcome: "stopped" }, saved.bundle);
+      } catch (err) {
+        console.error(`Injury on a draft was not saved: ${err instanceof Error ? err.message : "unknown error"}`);
+      }
+      this.deps.onSaved?.(session);
+    } catch (err) {
+      console.error(`Injury on a draft was not handled: ${err instanceof Error ? err.message : "unknown error"}`);
+    }
+    if (!told) await this.sendUnreachedInjury(propertyId, phone, config.operator.name);
+  }
+
+  /** The 911 line used when a draft injury cannot alert the team. */
+  private async sendUnreachedInjury(propertyId: string | undefined, phone: string, team?: string): Promise<void> {
+    await this.sendLine(propertyId, phone, renderSms("medical-help-unreached", { team: visitorTeamName(team) }).body);
   }
 
   /** The existing not-ready line when nothing on the line is published. Nothing goes out after STOP. */

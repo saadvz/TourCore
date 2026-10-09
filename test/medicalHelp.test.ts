@@ -11,7 +11,9 @@ import { persistSession } from "../src/operator/services";
 import { handleVisitorText } from "../src/visitor/conversation";
 import { smsHelpBody } from "../src/visitor/smsConsent";
 import { VisitorDemoSession } from "../src/visitor";
+import { fakeSendblue, apiError } from "./fakeSendblue";
 import { grokHarness } from "./grokHarness";
+import { liveApp } from "./liveApp";
 
 /**
  * A 911 line on a normal text is noise, but a missed injury is unsafe.
@@ -630,5 +632,83 @@ describe("medical help", () => {
     expect(first.newAlerts).toHaveLength(1);
     expect(second.replies).toEqual([SENT]);
     expect(second.newAlerts).toEqual([]);
+  });
+
+  it("does not let a tour slipping swallow someone who slipped to the ground", () => {
+    expect(isMedicalEmergency("she slipped to the ground, help")).toBe(true);
+    expect(isMedicalEmergency("my son slipped to the floor")).toBe(true);
+    expect(isMedicalEmergency("I slipped to the floor")).toBe(true);
+    expect(isMedicalEmergency("my tour slipped to 3?")).toBe(false);
+  });
+
+  it("after STOP with no booking, sends the 911 line once per opt-out", async () => {
+    const propertyId = "prop_100_alfred_way";
+    const alerts = (app: Awaited<ReturnType<typeof liveApp>>) =>
+      app.ws.listTours(propertyId).flatMap((record) => {
+        const tour = app.ws.loadTour(propertyId, record.tourId);
+        return tour?.bundle.messages.filter((message) => message.audience === "OPERATOR" && message.body.includes("asked for help")) ?? [];
+      });
+    const items = async (app: Awaited<ReturnType<typeof liveApp>>) =>
+      ((await app.grok("get_inbox", { property: "100 Alfred Way" })).items as Array<{ what?: string }>).filter((item) => item.what === "Possible injury");
+
+    for (const [label, phone] of [
+      ["first text", "+15550107101"],
+      ["before a unit", "+15550107102"],
+    ] as const) {
+      const app = await liveApp({ cleanups });
+      if (label === "before a unit") {
+        await app.textFrom(phone, "TOUR");
+        await app.textFrom(phone, "YES");
+      }
+      await app.textFrom(phone, "STOP");
+      const lines: string[] = [];
+      const say = async (text: string) => {
+        const replies = await app.textFrom(phone, text);
+        lines.push(...replies.filter((body) => body.includes("call 911 now")));
+      };
+      await say("my dad passed out");
+      expect(lines, label).toEqual([SENT]);
+      expect(alerts(app), label).toHaveLength(1);
+      expect(await items(app), label).toHaveLength(1);
+      await say("he passed out");
+      expect(lines, label).toEqual([SENT]);
+      expect(alerts(app), label).toHaveLength(2);
+      expect(await items(app), label).toHaveLength(2);
+      await app.textFrom(phone, "START");
+      await app.textFrom(phone, "STOP");
+      await say("call 911");
+      expect(lines, label).toEqual([SENT, SENT]);
+    }
+  });
+
+  it("logs one blocked 911 line after STOP with no booking and does not list a missed text", async () => {
+    const fake = fakeSendblue();
+    let attempts = 0;
+    const send = fake.client.messages.send.bind(fake.client.messages);
+    fake.client.messages.send = async (params) => {
+      if (String(params.content).includes("call 911 now")) {
+        attempts += 1;
+        throw apiError(400);
+      }
+      return send(params);
+    };
+    const app = await liveApp({ cleanups, fake });
+    const phone = "+15550107103";
+    const errors: string[] = [];
+    const orig = console.error;
+    console.error = (...args: unknown[]) => {
+      errors.push(args.map(String).join(" "));
+    };
+    try {
+      await app.textFrom(phone, "STOP");
+      await app.textFrom(phone, "my dad passed out");
+      await app.textFrom(phone, "he passed out");
+    } finally {
+      console.error = orig;
+    }
+    expect(attempts).toBe(1);
+    expect(errors.filter((line) => line.startsWith("911 line was not sent"))).toHaveLength(1);
+    const inbox = (await app.grok("get_inbox", { property: "100 Alfred Way" })).items as Array<{ what?: string }>;
+    expect(inbox.some((item) => item.what === "Message couldn't be delivered")).toBe(false);
   });
 });

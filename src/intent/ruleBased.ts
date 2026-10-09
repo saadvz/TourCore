@@ -46,7 +46,7 @@ function stripNeverCounts(text: string): string {
     .replace(/\bis a heart attack\b/g, " ")
     .replace(/\bpassed out (?:flyers|papers|pamphlets|candy)\b/g, " ")
     .replace(/\btripped the (?:breaker|alarm|switch)\b/g, " ")
-    .replace(/\bslipped to\b/g, " ");
+    .replace(/\b(?:tour|showing|appointment|time|date|it)\s+slipped to\b/g, " ");
 }
 
 function injuryWithPersonOrHelp(text: string): boolean {

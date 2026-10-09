@@ -234,6 +234,35 @@ describe("STOP, HELP, and START on an unchecked draft", () => {
     expect(consent(root, first, "+15555551013")).toBeUndefined();
     expect(consent(root, second, "+15555551013")).toBeUndefined();
   });
+
+  it("sends the 911 line for an injury on an unchecked draft, on one line and on a shared line", async () => {
+    const phrases = ["my dad passed out", "call 911", "he's not breathing"] as const;
+    for (const shared of [false, true]) {
+      const root = mkdtempSync(join(tmpdir(), shared ? "tourcore-draft-injury-shared-" : "tourcore-draft-injury-"));
+      cleanups.push(() => rmSync(root, { recursive: true, force: true }));
+      const ws = new PropertyWorkspace(root);
+      const ids = shared
+        ? [uncheckedDraft(ws, "3 QA Scratch Lane, Teaneck, NJ 07666"), uncheckedDraft(ws, "7 QA Scratch Lane, Teaneck, NJ 07666")]
+        : [uncheckedDraft(ws, "11 QA Scratch Lane, Teaneck, NJ 07666")];
+      const { text } = wire(ws, ids);
+      const name = ws.loadDraft(ids[0]!)!.property.name;
+      for (const [index, phrase] of phrases.entries()) {
+        const phone = `+15555558${shared ? "2" : "1"}${index}`;
+        const replies = await text(phone, phrase);
+        const lines = replies.filter((body) => body.includes("call 911 now"));
+        expect(lines, `${shared ? "shared" : "single"} ${phrase}`).toEqual([
+          "If someone is hurt, call 911 now. I've also let the property team know, and they'll text you here as soon as they can.",
+        ]);
+        expect(replies, phrase).not.toEqual([]);
+        expect(replies.join("\n"), phrase).not.toContain("aren't available");
+      }
+      const hi = shared ? "+1555555829" : "+1555555819";
+      expect(await text(hi, "Hi")).toEqual([toursUnavailableText(name, "property team")]);
+      expect(await text(shared ? "+1555555830" : "+1555555820", "STOP")).toEqual([STOP]);
+      expect(await text(shared ? "+1555555831" : "+1555555821", "HELP")).toEqual([HELP]);
+      expect(await text(shared ? "+1555555832" : "+1555555822", "START")).toEqual([DRAFT_START]);
+    }
+  });
 });
 
 describe("drafts stay out of the property picker", () => {
