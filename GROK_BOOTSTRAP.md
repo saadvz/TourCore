@@ -70,7 +70,7 @@ The other workflows (Setup Property, Map Route, Run Readiness Check, Simulate To
 
 ## Order
 
-Hosted product: approval, choose visitor texting, Google Drive backups through Grok (recommended; they can decline), property, alerts (recommended), readiness, practice, publish, then one portable backup. No second Google approval. `get_state` names the milestone write for the current step. Backups on that picture use `backup_records` (declining stays possible). After publish, day-to-day work uses `get_inbox` and the other day-to-day tools. A name that isn't on the landlord list is refused.
+Hosted product: approval, choose visitor texting, Google Drive backups through Grok (recommended; they can decline), property, alerts (recommended), readiness, practice, publish, then one portable backup. No second Google approval. `get_state` names the milestone write for the current step. Backups on that picture use `backup_records` (declining stays possible). After publish, day-to-day work uses `get_inbox` and the other day-to-day tools. A Tour Core tool that isn't on the landlord list is refused with "That's no longer something I can do from this chat. Disconnect and reconnect Tour Core so I'm working from the current list, then ask me again." A name that isn't a Tour Core tool at all gets `There's no Tour Core tool called "${name}".`
 
 Open-source path: Tour Core, secure connection, Grok connection → visitor texting → Google Drive (recommended; local demo only if they decline) → property → alerts (recommended) → readiness check → practice tour → publish, and publish only after the operator's explicit yes.
 

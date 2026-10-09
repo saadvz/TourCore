@@ -78,7 +78,7 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
     title: "Current setup",
     kind: "read",
     description:
-      "A read-only picture of this install, or of one property when propertyId is set. Returns setup, units, doors, routes, hours, verification, texting, alerts, a one-line health summary, a one-line storage summary, milestones, the next step, and this client's playbook. It does not change anything. Call it first and follow its next step. The older status tools still work.",
+      "A read-only picture of this install, or of one property when propertyId is set. Returns setup, units, doors, routes, hours, verification, texting, alerts, a one-line health summary, a one-line storage summary, milestones, the next step, and this client's playbook. It does not change anything. Call it first and follow its next step. The landlord connector doesn't list the older status tools.",
     input: z.strictObject({
       propertyId: z.string().optional().describe("One property. Leave it out to read the whole install."),
     }),
