@@ -205,6 +205,8 @@ const INJURY_UNREACHED = "They were told you couldn't be reached.";
 const INJURY_BLOCKED = "Our text telling them to call 911 didn't go out, so they haven't heard back yet.";
 const INJURY_SKIPPED = "They've opted out of texts, so they weren't texted back this time. They were already told to call 911.";
 const INJURY_SKIPPED_UNREACHED = "They've opted out of texts, so they weren't texted back this time. Our earlier text telling them to call 911 didn't go out.";
+const INJURY_QUEUED = "They were sent a text to call 911 if someone is hurt, but we can't confirm it reached them.";
+const INJURY_SKIPPED_QUEUED = "They've opted out of texts, so they weren't texted back this time. Our earlier text telling them to call 911 was sent, but we can't confirm it reached them.";
 const INJURY_STEP = "Text or call them now, then mark it handled.";
 const INJURY_CALL_STEP = "Call them now, then mark it handled.";
 
@@ -240,13 +242,24 @@ function injuryEnding(tour: TourSnapshot, helps: AuditEvent[], tours: TourSnapsh
     const line = visitorLineFor(tour, latest, tours);
     if (line === "skipped") return INJURY_SKIPPED;
     if (line === "skipped-unreached") return INJURY_SKIPPED_UNREACHED;
+    if (line === "skipped-queued") return INJURY_SKIPPED_QUEUED;
     if (line === "blocked") return INJURY_BLOCKED;
+    if (line === "queued") {
+      // A failed team alert stays in the same item. The queued sentence stays too, because that text is not confirmed.
+      return latestHelpAttemptFailed(tour, helps) ? `${INJURY_QUEUED} ${INJURY_UNREACHED}` : INJURY_QUEUED;
+    }
   }
   return latestHelpAttemptFailed(tour, helps) ? INJURY_UNREACHED : INJURY_TOLD;
 }
 
 function injuryNextStep(summary: string): string[] {
-  return summary.includes(INJURY_BLOCKED) || summary.includes(INJURY_SKIPPED) || summary.includes(INJURY_SKIPPED_UNREACHED) ? [INJURY_CALL_STEP] : [INJURY_STEP];
+  const call =
+    summary.includes(INJURY_BLOCKED) ||
+    summary.includes(INJURY_SKIPPED) ||
+    summary.includes(INJURY_SKIPPED_UNREACHED) ||
+    summary.includes(INJURY_QUEUED) ||
+    summary.includes(INJURY_SKIPPED_QUEUED);
+  return call ? [INJURY_CALL_STEP] : [INJURY_STEP];
 }
 
 /** The number on a help record: the phone field, or a place field that is only a number. */
@@ -295,53 +308,72 @@ function messageForVisitor(message: Message, help: AuditEvent): boolean {
   return !help.prospectId && !message.prospectId;
 }
 
-/** A 911 text the carrier accepted. A successful send is stored as queued until a later receipt. */
+/** Queued means the provider accepted the send but delivery is unconfirmed. Receipts aren't recorded yet, so only SENT or DELIVERED got through. */
 function injuryTextGotThrough(status: Message["deliveryStatus"]): boolean {
-  return status === "SENT" || status === "DELIVERED" || status === "QUEUED";
+  return status === "SENT" || status === "DELIVERED";
 }
 
 function visitorPhoneFor(help: AuditEvent, tour: TourSnapshot): string | undefined {
   return visitorPhoneOf(help) ?? (tour.visitorPhone && looksLikePhone(tour.visitorPhone) ? normalizePhone(tour.visitorPhone) : undefined);
 }
 
-/** True when this visitor was actually sent the 911 line, including on an earlier tour. */
-function toldToCall911(tours: TourSnapshot[], help: AuditEvent, tour: TourSnapshot): boolean {
+/** The earlier 911 text for this visitor, including on another tour. Confirmed delivery wins over an unconfirmed queue. */
+function earlier911Line(tours: TourSnapshot[], help: AuditEvent, tour: TourSnapshot): "through" | "queued" | "none" {
   const phone = visitorPhoneFor(help, tour);
-  return tours.some((item) =>
-    item.bundle.messages.some((message) => {
-      if (message.audience !== "PROSPECT" || message.direction !== "OUTBOUND" || !message.body.includes("call 911 now")) return false;
-      if (!injuryTextGotThrough(message.deliveryStatus)) return false;
-      if (messageForVisitor(message, help)) return true;
-      return !!phone && looksLikePhone(message.counterparty) && normalizePhone(message.counterparty) === phone;
-    }),
-  );
+  let queued = false;
+  for (const item of tours) {
+    for (const message of item.bundle.messages) {
+      if (message.audience !== "PROSPECT" || message.direction !== "OUTBOUND" || !message.body.includes("call 911 now")) continue;
+      const mine = messageForVisitor(message, help) || (!!phone && looksLikePhone(message.counterparty) && normalizePhone(message.counterparty) === phone);
+      if (!mine) continue;
+      if (injuryTextGotThrough(message.deliveryStatus)) return "through";
+      if (message.deliveryStatus === "QUEUED") queued = true;
+    }
+  }
+  return queued ? "queued" : "none";
 }
 
 /**
  * The 911 text for this help. A repeat after STOP does not use up a message.
  * Each earlier try in this opt-out uses the next matching outbound text.
- * A missing text or a failed send is blocked. A suppressed or skipped text
- * (the one allowed try for this opt-out was already used) is skipped only
- * when an earlier 911 text got through. Otherwise it is skipped-unreached.
- * Anything else was sent.
+ * A missing text or a failed send is blocked. A queued text was accepted
+ * but is unconfirmed. A suppressed or skipped text (the one allowed try
+ * for this opt-out was already used) is skipped when an earlier 911 text
+ * was sent or delivered, skipped-queued when that earlier text is only
+ * queued, and skipped-unreached otherwise. SENT or DELIVERED was sent.
  */
-function visitorLineFor(tour: TourSnapshot, help: AuditEvent, tours: TourSnapshot[]): "sent" | "blocked" | "skipped" | "skipped-unreached" {
+function visitorLineFor(tour: TourSnapshot, help: AuditEvent, tours: TourSnapshot[]): "sent" | "blocked" | "queued" | "skipped" | "skipped-unreached" | "skipped-queued" {
   const helps = tour.bundle.auditEvents
     .filter((event) => event.type === "HELP_REQUESTED" && !!medicalHelpText(event) && sameVisitor(event, help) && event.seq <= help.seq)
     .sort((a, b) => a.seq - b.seq);
   const messages = tour.bundle.messages.filter(
     (message) => message.audience === "PROSPECT" && message.direction === "OUTBOUND" && message.body.includes("call 911 now") && messageForVisitor(message, help),
   );
-  const skipped = (): "skipped" | "skipped-unreached" => (toldToCall911(tours, help, tour) ? "skipped" : "skipped-unreached");
+  const skipped = (): "skipped" | "skipped-unreached" | "skipped-queued" => {
+    const earlier = earlier911Line(tours, help, tour);
+    if (earlier === "through") return "skipped";
+    if (earlier === "queued") return "skipped-queued";
+    return "skipped-unreached";
+  };
   let index = 0;
-  let line: "sent" | "blocked" | "skipped" | "skipped-unreached" = "blocked";
+  let line: "sent" | "blocked" | "queued" | "skipped" | "skipped-unreached" | "skipped-queued" = "blocked";
   for (const item of helps) {
     if (repeatAfterOptOut(tour, item)) {
       line = skipped();
       continue;
     }
     const message = messages[index++];
-    line = !message || message.deliveryStatus === "FAILED" ? "blocked" : message.deliveryStatus === "SUPPRESSED" || message.deliveryStatus === "SKIPPED" ? skipped() : "sent";
+    const status = message?.deliveryStatus;
+    line =
+      !message || status === "FAILED" || !status
+        ? "blocked"
+        : status === "SUPPRESSED" || status === "SKIPPED"
+          ? skipped()
+          : status === "QUEUED"
+            ? "queued"
+            : status === "SENT" || status === "DELIVERED"
+              ? "sent"
+              : "blocked";
   }
   return line;
 }

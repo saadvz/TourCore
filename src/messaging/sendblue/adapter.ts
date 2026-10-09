@@ -31,7 +31,16 @@ export function mapSendblueError(err: unknown): MessagingError {
   return new MessagingError("SENDBLUE_FAILED", "Sending through Sendblue failed.");
 }
 
-const STATUS: Record<string, DeliveryStatus> = { QUEUED: "QUEUED", SENT: "SENT", DELIVERED: "DELIVERED", ERROR: "FAILED" };
+const STATUS: Record<string, DeliveryStatus> = {
+  QUEUED: "QUEUED",
+  PENDING: "QUEUED",
+  REGISTERED: "QUEUED",
+  ACCEPTED: "QUEUED",
+  SENT: "SENT",
+  DELIVERED: "DELIVERED",
+  ERROR: "FAILED",
+  DECLINED: "FAILED",
+};
 
 /**
  * Sends Tour Core's messages through Sendblue. The only messaging code that

@@ -26,6 +26,22 @@ import { liveApp } from "./liveApp";
 const at = (hour: number, minute = 0) => zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour, minute }, "America/New_York").getTime();
 const PHONE = "+15550102000";
 const SENT = "If someone is hurt, call 911 now. I've also let the property team know, and they'll text you here as soon as they can.";
+
+/** Sendblue's send response status. null omits the status, which the adapter stores as queued. */
+function sendblueReturning(status: string | null) {
+  const fake = fakeSendblue();
+  const send = fake.client.messages.send.bind(fake.client.messages);
+  fake.client.messages.send = async (params) => {
+    const result = await send(params);
+    if (status === null) {
+      const { status: dropped, ...rest } = result;
+      void dropped;
+      return rest;
+    }
+    return { ...result, status };
+  };
+  return fake;
+}
 const MISSED = "If someone is hurt, call 911 now. I couldn't reach the property team just now.";
 const MISSED_PHONE = "If someone is hurt, call 911 now. I couldn't reach the property team just now, so please call them at (555) 010-9999 too.";
 const SNAG = "Sorry, I hit a snag with that. Could you text me again in a few minutes?";
@@ -758,7 +774,7 @@ describe("medical help", () => {
   });
 
   it("says they were not texted again when a second injury comes after STOP", async () => {
-    const app = await liveApp({ cleanups });
+    const app = await liveApp({ cleanups, fake: sendblueReturning("SENT") });
     const phone = "+15550107212";
     await app.textFrom(phone, "STOP");
     await app.textFrom(phone, "my dad passed out");
@@ -777,7 +793,7 @@ describe("medical help", () => {
   });
 
   it("on a draft with saved setup, sends one more 911 line after STOP and skips the injury after that", async () => {
-    const app = await liveApp({ cleanups });
+    const app = await liveApp({ cleanups, fake: sendblueReturning("SENT") });
     const propertyId = "prop_100_alfred_way";
     app.ws.patchState(propertyId, { status: "DRAFT" });
     expect(app.ws.has(propertyId)).toBe(true);
@@ -843,6 +859,130 @@ describe("medical help", () => {
       expect(second?.summary, label).toBe(`They texted: "he passed out". ${unreached}`);
       expect(second?.summary, label).not.toContain("already told");
       expect(second?.nextSteps, label).toEqual(["Call them now, then mark it handled."]);
+    }
+  });
+
+  it("does not treat a queued 911 text as confirmed, on a draft or a published tour", async () => {
+    const queued = "They were sent a text to call 911 if someone is hurt, but we can't confirm it reached them.";
+    const skipped = "They've opted out of texts, so they weren't texted back this time. Our earlier text telling them to call 911 was sent, but we can't confirm it reached them.";
+    const call = ["Call them now, then mark it handled."];
+    for (const label of ["draft", "published"] as const) {
+      const fake = sendblueReturning("QUEUED");
+      const app = await liveApp({ cleanups, fake });
+      const phone = label === "draft" ? "+15550107511" : "+15550107512";
+      if (label === "draft") app.ws.patchState("prop_100_alfred_way", { status: "DRAFT" });
+      else {
+        await app.textFrom(phone, "TOUR");
+        await app.textFrom(phone, "YES");
+      }
+      await app.textFrom(phone, "STOP");
+      const firstReply = await app.textFrom(phone, "my dad passed out");
+      const secondReply = await app.textFrom(phone, "he passed out");
+      expect(firstReply, label).toEqual([SENT]);
+      expect(secondReply, label).toEqual([]);
+      expect(fake.sent.filter((row) => row.number === phone && row.content.includes("call 911 now")), label).toHaveLength(1);
+      const items = ((await app.grok("get_inbox", { property: "100 Alfred Way" })).items as Array<{ what?: string; summary?: string; nextSteps?: string[] }>).filter(
+        (item) => item.what === "Possible injury",
+      );
+      expect(items, label).toHaveLength(2);
+      const first = items.find((item) => item.summary?.includes("my dad passed out"));
+      const second = items.find((item) => item.summary?.includes("he passed out"));
+      expect(first?.summary, label).toBe(`They texted: "my dad passed out". ${queued}`);
+      expect(first?.nextSteps, label).toEqual(call);
+      expect(second?.summary, label).toBe(`They texted: "he passed out". ${skipped}`);
+      expect(second?.summary, label).not.toContain("already told");
+      expect(second?.nextSteps, label).toEqual(call);
+    }
+  });
+
+  it("stores a declined or error 911 send as failed and keeps the blocked endings", async () => {
+    const blocked = "Our text telling them to call 911 didn't go out, so they haven't heard back yet.";
+    const unreached = "They've opted out of texts, so they weren't texted back this time. Our earlier text telling them to call 911 didn't go out.";
+    let phoneN = 7521;
+    for (const status of ["DECLINED", "ERROR"] as const) {
+      for (const label of ["draft", "published"] as const) {
+        const fake = sendblueReturning(status);
+        const app = await liveApp({ cleanups, fake });
+        const phone = `+1555010${phoneN++}`;
+        if (label === "draft") app.ws.patchState("prop_100_alfred_way", { status: "DRAFT" });
+        else {
+          await app.textFrom(phone, "TOUR");
+          await app.textFrom(phone, "YES");
+        }
+        await app.textFrom(phone, "STOP");
+        await app.textFrom(phone, "my dad passed out");
+        const secondReply = await app.textFrom(phone, "he passed out");
+        expect(secondReply, `${status} ${label}`).toEqual([]);
+        expect(fake.sent.filter((row) => row.number === phone && row.content.includes("call 911 now")), `${status} ${label}`).toHaveLength(1);
+        const stored = app.ws.listTours("prop_100_alfred_way").flatMap((record) => {
+          const tour = app.ws.loadTour("prop_100_alfred_way", record.tourId);
+          return (
+            tour?.bundle.messages.filter(
+              (message) => message.audience === "PROSPECT" && message.direction === "OUTBOUND" && message.body.includes("call 911 now") && message.deliveryStatus !== "SUPPRESSED",
+            ) ?? []
+          );
+        });
+        expect(stored, `${status} ${label}`).toHaveLength(1);
+        expect(stored[0]?.deliveryStatus, `${status} ${label}`).toBe("FAILED");
+        const items = ((await app.grok("get_inbox", { property: "100 Alfred Way" })).items as Array<{ what?: string; summary?: string; nextSteps?: string[] }>).filter(
+          (item) => item.what === "Possible injury",
+        );
+        expect(items, `${status} ${label}`).toHaveLength(2);
+        const first = items.find((item) => item.summary?.includes("my dad passed out"));
+        const second = items.find((item) => item.summary?.includes("he passed out"));
+        expect(first?.summary, `${status} ${label}`).toBe(`They texted: "my dad passed out". ${blocked}`);
+        expect(second?.summary, `${status} ${label}`).toBe(`They texted: "he passed out". ${unreached}`);
+        expect(second?.nextSteps, `${status} ${label}`).toEqual(["Call them now, then mark it handled."]);
+      }
+    }
+  });
+
+  it("stores a missing Sendblue status as queued and uses the unconfirmed ending", async () => {
+    const queued = "They were sent a text to call 911 if someone is hurt, but we can't confirm it reached them.";
+    const fake = sendblueReturning(null);
+    const app = await liveApp({ cleanups, fake });
+    const phone = "+15550107571";
+    await app.textFrom(phone, "STOP");
+    await app.textFrom(phone, "my dad passed out");
+    const stored = app.ws.listTours("prop_100_alfred_way").flatMap((record) => {
+      const tour = app.ws.loadTour("prop_100_alfred_way", record.tourId);
+      return tour?.bundle.messages.filter((message) => message.audience === "PROSPECT" && message.body.includes("call 911 now") && message.deliveryStatus !== "SUPPRESSED") ?? [];
+    });
+    expect(stored).toHaveLength(1);
+    expect(stored[0]?.deliveryStatus).toBe("QUEUED");
+    const injury = ((await app.grok("get_inbox", { property: "100 Alfred Way" })).items as Array<{ what?: string; summary?: string }>).find((item) => item.what === "Possible injury");
+    expect(injury?.summary).toBe(`They texted: "my dad passed out". ${queued}`);
+  });
+
+  it("keeps the told endings when the 911 text is sent or delivered", async () => {
+    const told = "They were told to call 911 if someone is hurt, and that you'd text them here.";
+    const already = "They've opted out of texts, so they weren't texted back this time. They were already told to call 911.";
+    let phoneN = 7581;
+    for (const status of ["SENT", "DELIVERED"] as const) {
+      for (const label of ["draft", "published"] as const) {
+        const app = await liveApp({ cleanups, fake: sendblueReturning(status) });
+        const phone = `+1555010${phoneN++}`;
+        if (label === "draft") app.ws.patchState("prop_100_alfred_way", { status: "DRAFT" });
+        else {
+          await app.textFrom(phone, "TOUR");
+          await app.textFrom(phone, "YES");
+        }
+        await app.textFrom(phone, "STOP");
+        const firstReply = await app.textFrom(phone, "my dad passed out");
+        const secondReply = await app.textFrom(phone, "he passed out");
+        expect(firstReply, `${status} ${label}`).toEqual([SENT]);
+        expect(secondReply, `${status} ${label}`).toEqual([]);
+        const items = ((await app.grok("get_inbox", { property: "100 Alfred Way" })).items as Array<{ what?: string; summary?: string; nextSteps?: string[] }>).filter(
+          (item) => item.what === "Possible injury",
+        );
+        expect(items, `${status} ${label}`).toHaveLength(2);
+        const first = items.find((item) => item.summary?.includes("my dad passed out"));
+        const second = items.find((item) => item.summary?.includes("he passed out"));
+        expect(first?.summary, `${status} ${label}`).toBe(`They texted: "my dad passed out". ${told}`);
+        expect(first?.nextSteps, `${status} ${label}`).toEqual(["Text or call them now, then mark it handled."]);
+        expect(second?.summary, `${status} ${label}`).toBe(`They texted: "he passed out". ${already}`);
+        expect(second?.nextSteps, `${status} ${label}`).toEqual(["Call them now, then mark it handled."]);
+      }
     }
   });
 });

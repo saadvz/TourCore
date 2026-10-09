@@ -168,7 +168,7 @@ describe("unpublished properties do not take a new visitor text", () => {
         const inbox = await app.grok("get_inbox", { property: "100 Alfred Way" });
         const injury = (inbox.items as Array<{ what?: string; summary?: string }>).filter((item) => item.what === "Possible injury" && item.summary?.includes(`They texted: "${phrase}"`));
         expect(injury, phrase).toHaveLength(1);
-        expect(injury[0]?.summary).toContain("They were told to call 911 if someone is hurt, and that you'd text them here.");
+        expect(injury[0]?.summary).toContain("They were sent a text to call 911 if someone is hurt, but we can't confirm it reached them.");
       }
       const hi = shared ? "+15550104299" : "+15550104199";
       expect(await app.textFrom(hi, "Hi")).toEqual([CHECK_BACK]);
