@@ -88,6 +88,7 @@ const NOT_A_BACKUP = "This file doesn't look like a Tour Core backup, so nothing
 const PART_BROKEN = "Part of this backup file is broken, so nothing was restored. Try the original file.";
 const NOT_MADE = "The backup wasn't made because some saved records don't fit together. Nothing was changed.";
 const NOT_MADE_SECRET = "The backup wasn't made because it would have included a password or key. Nothing was changed.";
+const RESTORE_SECRET = "This backup file includes a password or key, so nothing was restored.";
 
 /** On tool results. The prefix keeps the hash construction from being read aloud. */
 export const CHECKSUM_COVERS_RESULT = `For you, not out loud: ${CHECKSUM_COVERS}`;
@@ -161,7 +162,7 @@ export function exportFileName(createdAt: string): string {
 function assertClean(backup: PortableBackup, secretValues: string[], purpose: "create" | "restore"): PortableBackup {
   const text = JSON.stringify(backup);
   if (secretValues.some((secret) => secret.length >= 6 && text.includes(secret)) || looksLikeSecret(backup, secretValues)) {
-    throw new PortableBackupError(NOT_MADE_SECRET);
+    throw new PortableBackupError(purpose === "create" ? NOT_MADE_SECRET : RESTORE_SECRET);
   }
   const unfit = purpose === "create" ? NOT_MADE : undefined;
   if (backup.checksum !== checksumOf(backup.contents)) throw new PortableBackupError(unfit ?? FILE_CHANGED);

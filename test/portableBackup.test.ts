@@ -15,6 +15,7 @@ const NOT_A_BACKUP = "This file doesn't look like a Tour Core backup, so nothing
 const PART_BROKEN = "Part of this backup file is broken, so nothing was restored. Try the original file.";
 const NOT_MADE = "The backup wasn't made because some saved records don't fit together. Nothing was changed.";
 const NOT_MADE_SECRET = "The backup wasn't made because it would have included a password or key. Nothing was changed.";
+const RESTORE_SECRET = "This backup file includes a password or key, so nothing was restored.";
 
 /** Compact JSON with sorted keys: the documented input to the backup checksum. */
 function compactSortedJson(value: unknown): string {
@@ -533,5 +534,32 @@ describe("portable backup and restore", () => {
     const created = await h.ok("backup_records", { action: "create" });
     expect(created).toMatchObject({ status: "blocked", message: NOT_MADE_SECRET });
     expect(String(created.message)).not.toMatch(/restored/);
+  });
+
+  it("restores nothing when the backup includes a password or key", async () => {
+    const origin = hosted();
+    await origin.setUpAlfredWay();
+    const created = await origin.ok("backup_records", { action: "create" });
+    const artifactId = String(created.handoff.path).split("/").pop()!;
+    const backup = JSON.parse(origin.inst.backups.handoff.takeDownload(artifactId, created.handoff.capability).body) as BackupFile;
+    const config = backup.contents.files.find((file) => file.path.endsWith("/tourcore.config.json"))!;
+    config.body = { ...config.body, apiKey: "stored-api-key" };
+    config.sha256 = sha256Json(config.body);
+    backup.checksum = checksumOf(backup.contents);
+
+    const dest = hosted();
+    await dest.setUpAlfredWay();
+    const before = JSON.stringify(dest.workspace.list());
+    const upload = await dest.ok("restore_records", { action: "upload" });
+    const uploadId = String(upload.handoff.path).split("/").pop()!;
+    dest.inst.backups.receive(uploadId, upload.handoff.capability, JSON.stringify(backup));
+    const preview = await dest.ok("restore_records", { action: "preview", uploadId });
+    const imported = await dest.ok("restore_records", { action: "import", uploadId });
+
+    expect(preview).toMatchObject({ status: "blocked", message: RESTORE_SECRET, checksumCovers: CHECKSUM_COVERS_RESULT });
+    expect(imported).toMatchObject({ status: "blocked", message: RESTORE_SECRET, checksumCovers: CHECKSUM_COVERS_RESULT });
+    expect(String(preview.message)).not.toMatch(/wasn't made/);
+    expect(String(imported.message)).not.toMatch(/wasn't made/);
+    expect(JSON.stringify(dest.workspace.list())).toBe(before);
   });
 });
