@@ -224,7 +224,7 @@ async function duplexPicture(client: MatrixClient): Promise<Pick<MatrixRow, "pub
     try {
       await session.initialize({ name: client.name, capabilities: client.capabilities });
       const setup = await publishDuplex(session, variant);
-      const publishAsks = session.confirmationAsks.filter((ask) => ask.tool === "publish_demo_property");
+      const publishAsks = session.confirmationAsks;
       if (publishAsks.length !== 1 || publishAsks[0]?.status !== "needs-confirmation") publishConfirmed = false;
       const saved = session.workspace.load(setup.propertyId);
       normalized.push(normalizeStoredConfig(saved.config));
