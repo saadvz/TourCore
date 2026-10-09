@@ -226,7 +226,7 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "sms-stop", text: "{brand}: You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help." },
   { id: "sms-help", text: "{brand}: {help} Message and data rates may apply. Reply STOP to opt out." },
 
-  { id: "property-not-ready", text: "Thanks for reaching out to {name}. Self-guided tours by text aren't available right now. Please contact the {team}." },
+  { id: "property-not-ready", text: "Thanks for reaching out to {name}. Self-guided tours by text aren't available right now. Please contact the {team}.", note: "Sent when tours cannot run, including a new visitor text to a property that is not published for demo (a draft, or a demo sent back to draft). A tour that was already booked on that property keeps going." },
   { id: "storage-save-failed", text: "I couldn't save that, so nothing was booked or changed. Please try again in a little while." },
   { id: "handler-snag-alerted", text: "Sorry, I hit a snag with that. I've let the {team} know, and they'll reply here as soon as they can." },
   { id: "handler-snag-retry", text: "Sorry, I hit a snag with that. Could you text me again in a few minutes?" },

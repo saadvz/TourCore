@@ -141,8 +141,7 @@ describe("property-scoped local messaging", () => {
     const injected = await app.grok("inject_local_sms", { from: VISITOR, text: "TOUR", property: app.scratchId });
     expect(injected.bubbles.length).toBeGreaterThanOrEqual(1);
     expect(typeof injected.bubbles[0].body).toBe("string");
-    expect(injected.bubbles[0].body).toMatch(/TOUR|privacy|self-guided/i);
-    expect(injected.bubbles[0].body).not.toMatch(/aren't available right now/);
+    expect(injected.bubbles[0].body).toBe("Thanks for reaching out to 200 Scratch Way. Self-guided tours by text aren't available right now. Please contact the property team.");
     expect(injected.to).toBe(DEFAULT_LOCAL_FROM_NUMBER);
     const outbox = await app.grok("read_local_outbox", { from: VISITOR, property: app.scratchId });
     expect(outbox.bubbles.length).toBeGreaterThanOrEqual(1);
