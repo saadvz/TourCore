@@ -73,6 +73,10 @@ function withChecksumCovers(result: Record<string, unknown>): Record<string, unk
   return { ...result, checksumCovers: CHECKSUM_COVERS_RESULT };
 }
 
+function noteBlockedBackup(result: Record<string, unknown>): Record<string, unknown> {
+  return result.status === "blocked" ? withChecksumCovers(result) : result;
+}
+
 function blockedOf(err: unknown): { message: string; code: string } | undefined {
   if (err instanceof SetupInputError || err instanceof TourCoreError) return { message: err.message, code: err.code };
   if (err instanceof PortableBackupError) return { message: err.message, code: "BACKUP_FAILED" };
@@ -544,7 +548,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
     title: "Export records",
     kind: "change",
     description:
-      `A day's audit export, or a readable export when kind is readable. Day is today (default), yesterday, YYYY-MM-DD, a month and day like Sept 28, or M/D. A month and day with no year means the most recent past one. Every landlord can export. A readable export is for people to read. It is not a backup. Each embedded tour keeps only that day's events and grants. A grant belongs to the day it was issued, and to the next day only if a door was used after midnight. Practice-tour denials are counted apart from visitors who were turned away. When only practice tours were denied, the summary says "No visitors were turned away." and then the practice-tour denial count. ${CHECKSUM_COVERS}`,
+      `A day's audit export, or a readable export when kind is readable. Day is today (default), yesterday, YYYY-MM-DD, a month and day like Sept 28, or M/D. A month and day with no year means the most recent past one. Every landlord can export. A readable export is for people to read. It is not a backup. Each embedded tour keeps only that day's events and grants. A grant belongs to the day it was issued, and to the next day only if a door was used after midnight. Practice-tour denials are counted apart from visitors who were turned away. When only practice tours were denied, the summary says "No visitors were turned away." and then the practice-tour denial count.`,
     input: z.strictObject({
       kind: z.enum(["day", "readable"]).optional(),
       property: Property,
@@ -555,7 +559,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
       const id = resolvePropertyId(ctx.services.workspace, i.property);
       const { config } = ctx.services.workspace.load(id);
       const parsed = parseExportDay(i.day ?? "today", localDateOf(ctx.now(), config.property.timezone));
-      if (!parsed.ok) throw new SetupInputError("DAY_UNREADABLE", "I couldn't read that date. Which day? Say today or a date like Sept 28.");
+      if (!parsed.ok) return envelope(ctx, id, "blocked", "I couldn't read that date. Which day? Say today or a date like Sept 28.", {}, "DAY_UNREADABLE");
       const out = await exportAudit(ctx.services, id, { day: parsed.day, now: ctx.now() });
       const s = out.summary;
       return {
@@ -584,7 +588,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
       checksum: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     }),
     run: async (ctx, i) =>
-      attemptWrite(ctx, undefined, async () => {
+      noteBlockedBackup(await attemptWrite(ctx, undefined, async () => {
         const backups = installationOf(ctx).backups;
         if (i.action === "status") return withChecksumCovers(backups.status());
         if (i.action === "decline") {
@@ -606,7 +610,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
         }
         if (!i.fileName || !i.checksum) throw new SetupInputError("BACKUP_MISMATCH", "That doesn't match the backup Tour Core created. Nothing was marked as stored.");
         return withChecksumCovers(backups.confirmStored({ fileName: i.fileName, checksum: i.checksum }));
-      }),
+      })),
   }),
   tool({
     name: "restore_records",
@@ -621,7 +625,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
       confirmationCode: Code,
     }),
     run: async (ctx, i) =>
-      attemptWrite(ctx, undefined, async () => {
+      noteBlockedBackup(await attemptWrite(ctx, undefined, async () => {
         const backups = installationOf(ctx).backups;
         if (i.action === "upload") return withChecksumCovers(backups.beginRestore());
         if (!i.uploadId) throw new SetupInputError("UPLOAD_MISSING", UPLOAD_BACKUP_FIRST);
@@ -640,6 +644,6 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
         }
         ctx.confirmations.redeem(i.confirmationCode, "import-backup", i.uploadId, fingerprint);
         return withChecksumCovers(backups.importBackup(i.uploadId, i.recovery));
-      }),
+      })),
   }),
 ];

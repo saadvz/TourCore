@@ -13,6 +13,8 @@ const FILE_CHANGED = "This backup file was changed or damaged after it was made,
 const PART_CHANGED = "Part of this backup file was changed or damaged, so nothing was restored. Try the original file.";
 const NOT_A_BACKUP = "This file doesn't look like a Tour Core backup, so nothing was restored. Try the original file.";
 const PART_BROKEN = "Part of this backup file is broken, so nothing was restored. Try the original file.";
+const NOT_MADE = "The backup wasn't made because some saved records don't fit together. Nothing was changed.";
+const NOT_MADE_SECRET = "The backup wasn't made because it would have included a password or key. Nothing was changed.";
 
 /** Compact JSON with sorted keys: the documented input to the backup checksum. */
 function compactSortedJson(value: unknown): string {
@@ -187,7 +189,9 @@ describe("portable backup and restore", () => {
     onDisk.property.facts = [SB_KEY];
     writeFileSync(configPath, JSON.stringify(onDisk));
     h.inst.secrets.set({ SENDBLUE_API_API_KEY: SB_KEY });
-    expect(await h.fails("create_portable_backup")).toMatch(/credential/);
+    const secret = await h.fails("create_portable_backup");
+    expect(secret).toBe(NOT_MADE_SECRET);
+    expect(secret).not.toMatch(/restored/);
   });
 
   it("refuses a destructive restore unless replacement is explicit", async () => {
@@ -263,9 +267,12 @@ describe("portable backup and restore", () => {
     expect(file.indexOf('"kind"')).toBeLessThan(file.indexOf('"path"'));
     expect(file.indexOf('"path"')).toBeLessThan(file.indexOf('"sha256"'));
     expect(created.checksumCovers).toBe(CHECKSUM_COVERS_RESULT);
-    for (const name of ["backup_records", "export_records", "restore_records"]) {
+    for (const name of ["backup_records", "restore_records"]) {
       expect(OPERATOR_TOOLS.find((tool) => tool.name === name)?.description, name).toContain(CHECKSUM_COVERS);
     }
+    const exportDescription = OPERATOR_TOOLS.find((tool) => tool.name === "export_records")?.description ?? "";
+    expect(exportDescription).not.toContain(CHECKSUM_COVERS);
+    expect(exportDescription).not.toContain("SHA-256");
     expect((await h.ok("restore_records", { action: "upload" })).checksumCovers).toBe(CHECKSUM_COVERS_RESULT);
   });
 
@@ -356,8 +363,8 @@ describe("portable backup and restore", () => {
     const preview = await dest.ok("restore_records", { action: "preview", uploadId });
     const imported = await dest.ok("restore_records", { action: "import", uploadId });
 
-    expect(preview).toMatchObject({ status: "blocked", message: NOT_A_BACKUP });
-    expect(imported).toMatchObject({ status: "blocked", message: NOT_A_BACKUP });
+    expect(preview).toMatchObject({ status: "blocked", message: NOT_A_BACKUP, checksumCovers: CHECKSUM_COVERS_RESULT });
+    expect(imported).toMatchObject({ status: "blocked", message: NOT_A_BACKUP, checksumCovers: CHECKSUM_COVERS_RESULT });
     expect(JSON.stringify(dest.workspace.list())).toBe(before);
   });
 
@@ -382,8 +389,8 @@ describe("portable backup and restore", () => {
     const preview = await dest.ok("restore_records", { action: "preview", uploadId });
     const imported = await dest.ok("restore_records", { action: "import", uploadId });
 
-    expect(preview).toMatchObject({ status: "blocked", message: PART_BROKEN });
-    expect(imported).toMatchObject({ status: "blocked", message: PART_BROKEN });
+    expect(preview).toMatchObject({ status: "blocked", message: PART_BROKEN, checksumCovers: CHECKSUM_COVERS_RESULT });
+    expect(imported).toMatchObject({ status: "blocked", message: PART_BROKEN, checksumCovers: CHECKSUM_COVERS_RESULT });
     expect(JSON.stringify(dest.workspace.list())).toBe(before);
     expect(JSON.stringify(dest.workspace.list())).not.toContain("missing_door");
   });
@@ -448,6 +455,8 @@ describe("portable backup and restore", () => {
     expect(stored).not.toBe(sha256Utf8(`${handwritten}\n`));
     expect(CHECKSUM_COVERS).toContain("not \\u-escaped");
     expect(CHECKSUM_COVERS).toContain("no trailing newline");
+    expect(CHECKSUM_COVERS).toContain("`contents`");
+    expect(CHECKSUM_COVERS).toContain("`checksum`");
   });
 
   it("puts the checksum note on backup results and leaves it off exports", async () => {
@@ -467,5 +476,62 @@ describe("portable backup and restore", () => {
     ]) {
       expect(result.checksumCovers).toBeUndefined();
     }
+  });
+
+  it("puts the checksum note on blocked restores and leaves it off a blocked export", async () => {
+    const origin = hosted();
+    await origin.setUpAlfredWay();
+    const created = await origin.ok("backup_records", { action: "create" });
+    const artifactId = String(created.handoff.path).split("/").pop()!;
+    const body = origin.inst.backups.handoff.takeDownload(artifactId, created.handoff.capability).body;
+
+    const dest = hosted();
+    const propertyId = await dest.setUpAlfredWay();
+    const upload = await dest.ok("restore_records", { action: "upload" });
+    const uploadId = String(upload.handoff.path).split("/").pop()!;
+    dest.inst.backups.receive(uploadId, upload.handoff.capability, body);
+    const replaced = await dest.ok("restore_records", { action: "import", uploadId });
+    expect(replaced).toMatchObject({ status: "blocked", code: "REPLACE_REQUIRED", checksumCovers: CHECKSUM_COVERS_RESULT });
+
+    const missing = await dest.ok("restore_records", { action: "import" });
+    expect(missing).toMatchObject({
+      status: "blocked",
+      message: "Upload the backup file first, then I can show you what's in it.",
+      checksumCovers: CHECKSUM_COVERS_RESULT,
+    });
+
+    const blockedExport = await dest.ok("export_records", { property: propertyId, day: "not a day" });
+    expect(blockedExport).toMatchObject({ status: "blocked" });
+    expect(blockedExport.checksumCovers).toBeUndefined();
+  });
+
+  it("refuses to create a backup when saved records don't fit together", async () => {
+    const h = hosted();
+    await h.setUpAlfredWay();
+    const configPath = join(h.root, "properties", h.workspace.propertyIds()[0]!, "tourcore.config.json");
+    const onDisk = JSON.parse(readFileSync(configPath, "utf8")) as { routes: Array<{ stops: Array<{ doorId: string }> }> };
+    onDisk.routes[0]!.stops[0]!.doorId = "missing_door";
+    writeFileSync(configPath, JSON.stringify(onDisk));
+    const before = JSON.stringify(h.workspace.list());
+    const created = await h.ok("backup_records", { action: "create" });
+    expect(created).toMatchObject({ status: "blocked", message: NOT_MADE });
+    expect(String(created.message)).not.toMatch(/restored/);
+    expect(JSON.stringify(h.workspace.list())).toBe(before);
+    const again = await h.fails("create_portable_backup");
+    expect(again).toBe(NOT_MADE);
+    expect(again).not.toMatch(/restored/);
+  });
+
+  it("refuses to create a backup that would include a password or key", async () => {
+    const h = hosted();
+    await h.setUpAlfredWay();
+    const configPath = join(h.root, "properties", h.workspace.propertyIds()[0]!, "tourcore.config.json");
+    const onDisk = JSON.parse(readFileSync(configPath, "utf8")) as { property: { facts?: string[] } };
+    onDisk.property.facts = [SB_KEY];
+    writeFileSync(configPath, JSON.stringify(onDisk));
+    h.inst.secrets.set({ SENDBLUE_API_API_KEY: SB_KEY });
+    const created = await h.ok("backup_records", { action: "create" });
+    expect(created).toMatchObject({ status: "blocked", message: NOT_MADE_SECRET });
+    expect(String(created.message)).not.toMatch(/restored/);
   });
 });

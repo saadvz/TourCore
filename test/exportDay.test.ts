@@ -66,9 +66,11 @@ describe("export_records tells the landlord when a day is unreadable", () => {
       expect(await dayOf("Oct 8")).toBe("2025-10-08");
       expect(await dayOf("2027-03-15")).toBe("2027-03-15");
 
-      expect(await h.fails("export_records", { property: propertyId, day: "Feb 30" })).toBe(UNREADABLE);
-      expect(await h.fails("export_records", { property: propertyId, day: "13/5" })).toBe(UNREADABLE);
-      expect(await h.fails("export_records", { property: propertyId, day: "not a day" })).toBe(UNREADABLE);
+      for (const day of ["Feb 30", "13/5", "not a day"]) {
+        const blocked = await h.ok("export_records", { property: propertyId, day });
+        expect(blocked).toMatchObject({ status: "blocked", message: UNREADABLE });
+        expect(blocked.checksumCovers).toBeUndefined();
+      }
 
       const futureAudit = await h.ok("export_audit", { property: propertyId, day: "2027-03-15" });
       expect(String(futureAudit.reference)).toContain("2027-03-15");

@@ -80,12 +80,14 @@ export function checksumOf(contents: unknown): string {
 
 /** For Grok. The downloaded file is pretty-printed and also includes this field, so hashing the file does not reproduce it. */
 export const CHECKSUM_COVERS =
-  "The checksum is the SHA-256 of the backup's contents only: compact JSON (no spaces), object keys sorted at every level, arrays kept in order, UTF-8 with non-ASCII characters written as-is (not \\u-escaped), no trailing newline. It is stored in the file's checksum field, so a hash of the whole downloaded file won't match.";
+  "The checksum is the SHA-256 of the backup's `contents` only: compact JSON (no spaces), object keys sorted at every level, arrays kept in order, UTF-8 with non-ASCII characters written as-is (not \\u-escaped), no trailing newline. It is stored in the file's `checksum` field, so a hash of the whole downloaded file won't match.";
 
 const FILE_CHANGED = "This backup file was changed or damaged after it was made, so nothing was restored. Try the original file.";
 const PART_CHANGED = "Part of this backup file was changed or damaged, so nothing was restored. Try the original file.";
 const NOT_A_BACKUP = "This file doesn't look like a Tour Core backup, so nothing was restored. Try the original file.";
 const PART_BROKEN = "Part of this backup file is broken, so nothing was restored. Try the original file.";
+const NOT_MADE = "The backup wasn't made because some saved records don't fit together. Nothing was changed.";
+const NOT_MADE_SECRET = "The backup wasn't made because it would have included a password or key. Nothing was changed.";
 
 /** On tool results. The prefix keeps the hash construction from being read aloud. */
 export const CHECKSUM_COVERS_RESULT = `For you, not out loud: ${CHECKSUM_COVERS}`;
@@ -115,7 +117,7 @@ function assertNoSecretFiles(root: string, secretValues: string[]): void {
         continue;
       }
       if (looksLikeSecret(body, secretValues)) {
-        throw new PortableBackupError("A record looked like it contained a credential, so the backup was not created.");
+        throw new PortableBackupError(NOT_MADE_SECRET);
       }
     }
   };
@@ -143,7 +145,7 @@ export function buildPortableBackup(input: {
     contents,
     checksum: checksumOf(contents),
   };
-  return assertClean(PortableBackupSchema.parse(backup), input.secretValues);
+  return assertClean(PortableBackupSchema.parse(backup), input.secretValues, "create");
 }
 
 export function backupFileName(createdAt: string): string {
@@ -156,14 +158,15 @@ export function exportFileName(createdAt: string): string {
   return `tour-core-export-${stamp}.json`;
 }
 
-function assertClean(backup: PortableBackup, secretValues: string[]): PortableBackup {
+function assertClean(backup: PortableBackup, secretValues: string[], purpose: "create" | "restore"): PortableBackup {
   const text = JSON.stringify(backup);
   if (secretValues.some((secret) => secret.length >= 6 && text.includes(secret)) || looksLikeSecret(backup, secretValues)) {
-    throw new PortableBackupError("The backup contained a credential, so it was not created.");
+    throw new PortableBackupError(NOT_MADE_SECRET);
   }
-  if (backup.checksum !== checksumOf(backup.contents)) throw new PortableBackupError(FILE_CHANGED);
+  const unfit = purpose === "create" ? NOT_MADE : undefined;
+  if (backup.checksum !== checksumOf(backup.contents)) throw new PortableBackupError(unfit ?? FILE_CHANGED);
   const problems = relationshipProblems(backup.contents.files);
-  if (problems.length) throw new PortableBackupError(problems[0]!);
+  if (problems.length) throw new PortableBackupError(unfit ?? problems[0]!);
   return backup;
 }
 
@@ -220,7 +223,7 @@ export function parsePortableBackup(raw: unknown, secretValues: string[] = []): 
   const parsed = PortableBackupSchema.safeParse(raw);
   if (!parsed.success) throw new PortableBackupError("That backup isn't valid. Nothing was restored.");
   if (parsed.data.checksum !== checksumOf(parsed.data.contents)) throw new PortableBackupError(FILE_CHANGED);
-  return assertClean(parsed.data, secretValues);
+  return assertClean(parsed.data, secretValues, "restore");
 }
 
 export function countBackup(backup: PortableBackup): BackupCounts {

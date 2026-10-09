@@ -55,7 +55,8 @@ Say:
 3. Upload it with the Google Drive connector to Tour Core/Backups.
 4. Confirm the file is there.
 5. `backup_records` with `action: confirm_stored`, and the file name and checksum from step 1.
-   The checksum is the SHA-256 of the backup's contents only: compact JSON (no spaces), object keys sorted at every level, arrays kept in order, UTF-8 with non-ASCII characters written as-is (not \u-escaped), no trailing newline. It is stored in the file's checksum field, so a hash of the whole downloaded file won't match.
+   The checksum is the SHA-256 of the backup's `contents` only: compact JSON (no spaces), object keys sorted at every level, arrays kept in order, UTF-8 with non-ASCII characters written as-is (not \u-escaped), no trailing newline. It is stored in the file's `checksum` field, so a hash of the whole downloaded file won't match.
+   `c = json.load(f)["contents"]`
    `hashlib.sha256(json.dumps(c, sort_keys=True, separators=(",",":"), ensure_ascii=False).encode("utf-8")).hexdigest()`
 6. Say:
 
@@ -103,7 +104,7 @@ On an installation whose records live in Google Drive (GOOGLE_DRIVE_READY), the 
 - Do not say the backup is in Google Drive until `backup_records` with `action: confirm_stored`
   succeeds. Tour Core cannot see Drive on its own.
 - Reject a file Tour Core says is malformed, was changed or damaged, or uses an
-  unsupported format. Do not import it. Say Tour Core's own words. The checksum is the SHA-256 of the backup's contents only: compact JSON (no spaces), object keys sorted at every level, arrays kept in order, UTF-8 with non-ASCII characters written as-is (not \u-escaped), no trailing newline. It is stored in the file's checksum field, so a hash of the whole downloaded file won't match.
+  unsupported format. Do not import it. Say Tour Core's own words. The checksum is the SHA-256 of the backup's `contents` only: compact JSON (no spaces), object keys sorted at every level, arrays kept in order, UTF-8 with non-ASCII characters written as-is (not \u-escaped), no trailing newline. It is stored in the file's `checksum` field, so a hash of the whole downloaded file won't match.
 - A readable export must not be imported as a backup.
 
 ## Return
