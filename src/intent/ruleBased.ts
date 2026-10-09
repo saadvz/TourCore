@@ -9,11 +9,11 @@ import { acceptsNextOpening, yesNo } from "./yesNo";
 /**
  * Injury texts. Hyphenated compounds stay one word so "ambulance-chaser"
  * is not "ambulance". A 911 line on a normal text is noise, but a missed
- * injury is unsafe, so fell/hurt/injured need a person or a help word.
+ * injury is unsafe, so fell/hurt/injured/slipped/tripped need a person or a help word.
  */
 const STREET_WORD =
   "main|st|street|ave|avenue|rd|road|blvd|boulevard|dr|drive|ln|lane|way|ct|court|pl|place|pkwy|parkway|ter|terrace|cir|circle|hwy|highway|sq|square";
-const INJURY = "(?:fell|hurt|injured)";
+const INJURY = "(?:fell|hurt|injured|slipped|tripped)";
 
 function medicalText(raw: string): string {
   const glued = raw.replace(/([A-Za-z0-9])-([A-Za-z0-9])/g, "$1$2");
@@ -44,6 +44,11 @@ function injuryWithPersonOrHelp(text: string): boolean {
 export function isMedicalEmergency(raw: string): boolean {
   const text = medicalText(raw);
   if (!text) return false;
+  // Lowercased text. slipped and tripped stay in the pattern, then drop out
+  // here so they use the same person-or-help rule as fell and hurt.
+  const acute =
+    /\b(?:not breathing|stopped breathing|cannot breathe|can'?t breathe|choking|unconscious|unresponsive|passed out|fainted|heart attack|having a stroke|seizure|overdos(?:e|ed|ing)|allergic reaction|chest pains?|broke (?:his|her|my|their|a) \w+|slipped|tripped)\b/;
+  if (acute.test(text.replace(/\b(?:slipped|tripped)\b/g, " "))) return true;
   if (/\bbleeding\b/.test(text) || /\bambulance\b/.test(text)) return true;
   if (mentions911(text)) return true;
   return injuryWithPersonOrHelp(text);

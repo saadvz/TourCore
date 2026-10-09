@@ -11,8 +11,9 @@ import { VisitorDemoSession } from "../src/visitor";
 
 /**
  * A 911 line on a normal text is noise, but a missed injury is unsafe.
- * fell, hurt, and injured need a person or a help word. The check runs in
- * every conversation state.
+ * fell, hurt, injured, slipped, and tripped need a person or a help word.
+ * Breathing, choking, collapse, heart, stroke, seizure, overdose, allergy,
+ * chest pain, and a broken bone do not. The check runs in every conversation state.
  */
 
 const at = (hour: number, minute = 0) => zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour, minute }, "America/New_York").getTime();
@@ -27,6 +28,24 @@ const NOT_MEDICAL = [
   "Would it hurt to ask about the rent?",
   "No hurry, we'll call an ambulance-chaser lawyer later 😂",
   "the price fell?",
+] as const;
+const ACUTE = [
+  "she's not breathing",
+  "he stopped breathing",
+  "I can't breathe",
+  "my son is choking",
+  "he's unconscious",
+  "she's unresponsive",
+  "he passed out",
+  "my mom fainted",
+  "my dad is having a heart attack",
+  "I think she's having a stroke",
+  "he's having a seizure",
+  "she overdosed",
+  "allergic reaction",
+  "I have chest pain",
+  "he broke his arm",
+  "I slipped and can't get up",
 ] as const;
 const STEPS: ConversationStep[] = ["intro", "choose-unit", "choose-date", "choose-time", "ready", "touring"];
 
@@ -118,6 +137,37 @@ const ctx = {
 };
 
 describe("medical help", () => {
+  it("sends one 911 line and one help alert for acute phrases at the day menu and on a running tour", async () => {
+    for (const phrase of ACUTE) {
+      const day = phone();
+      await dayMenu(day);
+      const atMenu = await addedReply(day.session, day.say, phrase);
+      expect(atMenu.replies, `day ${phrase}`).toEqual([SENT]);
+      expect(atMenu.newAlerts, `day ${phrase}`).toHaveLength(1);
+
+      const touring = phone(at(13, 58));
+      await onTour(touring);
+      const on = await addedReply(touring.session, touring.say, phrase);
+      expect(on.replies, `tour ${phrase}`).toEqual([SENT]);
+      expect(on.newAlerts, `tour ${phrase}`).toHaveLength(1);
+    }
+
+    expect(isMedicalEmergency("the date slipped")).toBe(false);
+    expect(isMedicalEmergency("he tripped")).toBe(true);
+    expect(isMedicalEmergency("tripped on the stairs")).toBe(false);
+    const day = phone();
+    await dayMenu(day);
+    const slippedDay = await addedReply(day.session, day.say, "the date slipped");
+    expect(slippedDay.replies.join("\n")).not.toContain("call 911 now");
+    expect(slippedDay.newAlerts).toEqual([]);
+
+    const touring = phone(at(13, 58));
+    await onTour(touring);
+    const slippedTour = await addedReply(touring.session, touring.say, "the date slipped");
+    expect(slippedTour.replies.join("\n")).not.toContain("call 911 now");
+    expect(slippedTour.newAlerts).toEqual([]);
+  });
+
   it("requires a person or a help word, and ignores addresses and hyphenated compounds", () => {
     for (const phrase of NOT_MEDICAL) expect(isMedicalEmergency(phrase), phrase).toBe(false);
     expect(isMedicalEmergency("my son is bleeding")).toBe(true);
