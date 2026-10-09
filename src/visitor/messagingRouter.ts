@@ -412,7 +412,7 @@ export class MessagingConversations {
       // A session that already exists keeps going, including a tour booked before this place went back to draft.
       const published = state.status === "PUBLISHED_FOR_DEMO";
       if (!ready || !published || !isValidTimeZone(config.property.timezone)) {
-        await transport.send(prospectText(phone, toursUnavailableText(config.property.name, config.operator.name))).catch(() => undefined);
+        await transport.send(prospectText(phone, toursUnavailableText(config.property.name, config.operator.name, config.operator.visitorContact))).catch(() => undefined);
         return {};
       }
       const tourId = ws.newVisitorTourId(propertyId, this.deps.now?.() ?? new Date(), "text");
@@ -449,7 +449,7 @@ export class MessagingConversations {
       await handleVisitorText(session, phone, message.text, meta, this.deps.interpreter);
     } catch (err) {
       if (err instanceof UnsetTimeZoneError) {
-        await transport.send(prospectText(phone, toursUnavailableText(session.config.property.name, session.config.operator.name))).catch(() => undefined);
+        await transport.send(prospectText(phone, toursUnavailableText(session.config.property.name, session.config.operator.name, session.config.operator.visitorContact))).catch(() => undefined);
         return { correlationId: session.id };
       }
       if (err instanceof StorageUnavailableError) {

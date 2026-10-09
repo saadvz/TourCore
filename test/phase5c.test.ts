@@ -350,7 +350,7 @@ describe("unset time zone", () => {
     expect(loaded.state.status).toBe("PUBLISHED_FOR_DEMO");
     expect(statusLabel(loaded)).toBe("Published for demo · needs attention");
     expect(JSON.parse(readFileSync(path, "utf8")).property.timezone).toBe("GMT+00:00");
-    const human = toursUnavailableText(loaded.config.property.name, loaded.config.operator.name);
+    const human = toursUnavailableText(loaded.config.property.name, loaded.config.operator.name, loaded.config.operator.visitorContact);
 
     const line = "+15550001111";
     const endpoints = new MessagingEndpoints(h.runtime);

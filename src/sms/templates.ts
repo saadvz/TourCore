@@ -1,3 +1,5 @@
+import { formatPhone } from "../core/phone";
+
 /**
  * Every visitor-facing SMS lives here. Outbound prospect texts must match one
  * id before they are sent. `{slot}` is filled first. A channel prompt (yes/no,
@@ -22,9 +24,16 @@ export function visitorTeamName(name: string | undefined | null): string {
   return /\bteam$/i.test(trimmed) ? trimmed : "property team";
 }
 
-/** The human-path reply when tours cannot run, including a published property with no time zone. */
-export function toursUnavailableText(name: string, team?: string): string {
-  return `Thanks for reaching out to ${name}. Self-guided tours by text aren't available right now. Please contact the ${visitorTeamName(team)}.`;
+/**
+ * The human-path reply when tours cannot run, including a draft property and a
+ * published property with no time zone. `visitorContact` is the saved visitor
+ * help number, the same field the paused and removed replies use.
+ */
+export function toursUnavailableText(name: string, team?: string, visitorContact?: string): string {
+  if (visitorContact) {
+    return `Thanks for reaching out to ${name}. Tours by text aren't available right now. You can call the ${visitorTeamName(team)} at ${formatPhone(visitorContact)}.`;
+  }
+  return `Thanks for reaching out to ${name}. Tours by text aren't available right now. Please check back soon.`;
 }
 
 export class UntemplatedVisitorSms extends Error {
@@ -226,7 +235,8 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "sms-stop", text: "{brand}: You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help." },
   { id: "sms-help", text: "{brand}: {help} Message and data rates may apply. Reply STOP to opt out." },
 
-  { id: "property-not-ready", text: "Thanks for reaching out to {name}. Self-guided tours by text aren't available right now. Please contact the {team}.", note: "Sent when tours cannot run, including a new visitor text to a property that is not published for demo (a draft, or a demo sent back to draft). A tour that was already booked on that property keeps going." },
+  { id: "property-not-ready", text: "Thanks for reaching out to {name}. Tours by text aren't available right now. Please check back soon.", note: "Sent when tours cannot run and no visitor help number is saved, including a new visitor text to a property that is not published for demo (a draft, or a demo sent back to draft). A tour that was already booked on that property keeps going." },
+  { id: "property-not-ready-call", text: "Thanks for reaching out to {name}. Tours by text aren't available right now. You can call the {team} at {phone}.", note: "The same reply when a visitor help number is saved. {phone} is that number, formatted the same way as the paused and removed replies." },
   { id: "storage-save-failed", text: "I couldn't save that, so nothing was booked or changed. Please try again in a little while." },
   { id: "handler-snag-alerted", text: "Sorry, I hit a snag with that. I've let the {team} know, and they'll reply here as soon as they can." },
   { id: "handler-snag-retry", text: "Sorry, I hit a snag with that. Could you text me again in a few minutes?" },

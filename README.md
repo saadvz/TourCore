@@ -723,7 +723,7 @@ Publishing sets the property's status to `PUBLISHED_FOR_DEMO`. That is **not** a
 2. the readiness check passed for this exact setup,
 3. a practice tour passed for this exact setup.
 
-A property that is not published for demo, including one sent back to draft, does not take a new visitor text. The reply is the property-not-ready line: "Thanks for reaching out to {name}. Self-guided tours by text aren't available right now. Please contact the {team}." A tour that was already booked keeps going, including door opens during that tour. A finished session that would start a new booking is a new visitor and is refused.
+A property that is not published for demo, including one sent back to draft, does not take a new visitor text. With a saved visitor help number the reply is "Thanks for reaching out to {name}. Tours by text aren't available right now. You can call the {team} at {phone}." With none saved it is "Thanks for reaching out to {name}. Tours by text aren't available right now. Please check back soon." `{phone}` is that number, formatted the same way as the paused and removed replies. A tour that was already booked keeps going, including door opens during that tour. A finished session that would start a new booking is a new visitor and is refused.
 
 Changes afterward come in two kinds, decided in one place (`src/config/changeKinds.ts`):
 

@@ -446,7 +446,7 @@ export class VisitorDemoSession {
       await this.run(action as VisitorAction, parsed.data as Record<string, unknown>, said);
     } catch (err) {
       if (err instanceof UnsetTimeZoneError) {
-        await this.reply(toursUnavailableText(this.config.property.name, this.config.operator.name));
+        await this.reply(toursUnavailableText(this.config.property.name, this.config.operator.name, this.config.operator.visitorContact));
         return;
       }
       throw err;

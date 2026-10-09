@@ -9,6 +9,9 @@ afterEach(() => cleanups.splice(0).forEach((fn) => fn()));
 
 const PROPERTY = "prop_100_alfred_way";
 const OTHER = "+15550102099";
+const HELP = "+15550107777";
+const CHECK_BACK = "Thanks for reaching out to 100 Alfred Way. Tours by text aren't available right now. Please check back soon.";
+const CALL_TEAM = "Thanks for reaching out to 100 Alfred Way. Tours by text aren't available right now. You can call the property team at (555) 010-7777.";
 const UNAVAILABLE = toursUnavailableText("100 Alfred Way", "property team");
 
 describe("unpublished properties do not take a new visitor text", () => {
@@ -36,5 +39,26 @@ describe("unpublished properties do not take a new visitor text", () => {
     const replies = await app.text("Is there a gym?");
     expect(replies.join("\n")).not.toBe(UNAVAILABLE);
     expect(app.visitors.latestForPhone(PROPERTY, PHONE, "messaging")?.id).toBe(booked!.id);
+  });
+
+  it("tells a new visitor to check back when no help number is saved", async () => {
+    const app = await liveApp({ cleanups });
+    expect(app.ws.load(PROPERTY).config.operator.visitorContact).toBeUndefined();
+    app.ws.patchState(PROPERTY, { status: "DRAFT" });
+    expect(await app.textFrom(OTHER, "TOUR")).toEqual([CHECK_BACK]);
+    expect(CHECK_BACK).toBe(UNAVAILABLE);
+  });
+
+  it("gives a new visitor the saved help number", async () => {
+    const app = await liveApp({ cleanups });
+    const saved = app.ws.load(PROPERTY);
+    app.ws.save({
+      ...saved.config,
+      operator: { ...saved.config.operator, visitorContact: HELP, visitorHelpDecided: true },
+    });
+    app.ws.patchState(PROPERTY, { status: "DRAFT" });
+    expect(app.ws.load(PROPERTY).config.operator.visitorContact).toBe(HELP);
+    expect(await app.textFrom("+15550102100", "TOUR")).toEqual([CALL_TEAM]);
+    expect(CALL_TEAM).toBe(toursUnavailableText("100 Alfred Way", "property team", HELP));
   });
 });
