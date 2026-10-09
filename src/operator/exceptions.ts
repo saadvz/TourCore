@@ -220,6 +220,11 @@ function summaryFor(kind: ExceptionKind, e: AuditEvent, tour: TourSnapshot): str
   }
 }
 
+/** Drops a next step whose whole sentence is already in the summary. Other wording stays. */
+function stepsNotAlreadyInSummary(summary: string, steps: string[]): string[] {
+  return steps.filter((step) => !summary.includes(step));
+}
+
 function nextStepsFor(kind: ExceptionKind, tour: TourSnapshot | undefined, stillPaused: boolean, fairHousing = false): string[] {
   const canChange = !!tour?.live;
   switch (kind) {
@@ -292,7 +297,7 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
   const sent = resolution?.approvedFact?.replace(/\.$/, "");
   const main = asked && sent ? `Asked "${asked}". Sent "${sent}".` : summaryFor(kind, e, tour);
   const teamTextMissed = kind === "message-failed" && isTeamTextFailedNotice(e.detail);
-  const summary = fairHousing && asked ? `Asked "${asked}". ${FAIR_HOUSING_INBOX}` : teamTextMissed ? e.detail : extra ? `${main} ${extra}` : main;
+  const summary = fairHousing && asked ? `They asked: "${asked}" ${FAIR_HOUSING_INBOX}` : teamTextMissed ? e.detail : extra ? `${main} ${extra}` : main;
   return {
     exceptionId,
     propertyId: tour.propertyId,
@@ -310,7 +315,7 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
     ...(e.reservationId ? { reservationId: e.reservationId } : {}),
     status,
     ...(resolution ? { resolution } : {}),
-    nextSteps: status === "open" ? nextStepsFor(kind, tour, paused, fairHousing) : [],
+    nextSteps: status === "open" ? stepsNotAlreadyInSummary(summary, nextStepsFor(kind, tour, paused, fairHousing)) : [],
     ...(fairHousing ? { proposeDraft: false as const } : {}),
   };
 }
@@ -382,13 +387,14 @@ export async function listExceptions(services: OperatorServices, options: { prop
       const exceptionId = id(propertyId, "restore", broken.visitorPhone, at);
       const resolution = resolutions.get(exceptionId);
       const earlier = mine.find((t) => t.kind === "messaging" && t.visitorPhone === broken.visitorPhone);
+      const summary = `Couldn't be restored after a restart (${broken.problem.replace(/\.$/, "")}). No doors will open for it.`;
       out.push({
         exceptionId,
         propertyId,
         property: config.property.name,
         kind: "restore-conflict",
         title: TITLES["restore-conflict"],
-        summary: `Couldn't be restored after a restart (${broken.problem.replace(/\.$/, "")}). No doors will open for it.`,
+        summary,
         visitorName: earlier ? visitorNameOf(earlier) : formatPhone(broken.visitorPhone),
         unitName: earlier ? unitNameOf(earlier) : undefined,
         happenedAt: at,
@@ -397,7 +403,7 @@ export async function listExceptions(services: OperatorServices, options: { prop
         accessBlocked: true,
         status: resolution ? "resolved" : "open",
         ...(resolution ? { resolution } : {}),
-        nextSteps: resolution ? [] : nextStepsFor("restore-conflict", undefined, false),
+        nextSteps: resolution ? [] : stepsNotAlreadyInSummary(summary, nextStepsFor("restore-conflict", undefined, false)),
       });
     }
   }
@@ -532,11 +538,11 @@ export function visitorAnswerText(_question: string, fact: string): string {
 /** Landlord-facing refusal. The visitor never sees this, and never hears "fair housing". */
 export const FAIR_HOUSING_REFUSAL = "This one touches on fair housing, so I won't draft an answer. Reply to them yourself, then mark it handled.";
 
-/** What get_inbox shows for a fair-housing flag. No draft, and no tool name. */
+/** The one landlord sentence on a fair-housing flag. The summary says it once. The next step does not repeat it. */
 export const FAIR_HOUSING_INBOX =
-  "This is a fair-housing question. There is no draft. Only you can answer this one. They were told you'd text them back here.";
+  "This is a fair-housing question, so there's no draft. Only you can answer this one. They were told you'd text them back here.";
 
-export const FAIR_HOUSING_STEPS = [FAIR_HOUSING_INBOX, "Mark it handled once you've replied."] as const;
+export const FAIR_HOUSING_STEPS = ["Mark it handled once you've replied."] as const;
 
 /**
  * The landlord's approve question. The quoted text equals `visitorWillReceive` byte for byte.

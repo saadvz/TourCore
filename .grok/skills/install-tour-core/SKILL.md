@@ -49,7 +49,7 @@ Saving asks `Send this to {name} and save it for anyone who asks the same thing 
 The quoted half equals that text byte for byte. A handler-failed reply saves
 nothing, so it stays `Send this to {who}? "{reply}"`. A fair-housing flag has
 `proposeDraft` false. The refusal is `This one touches on fair housing, so I won't draft an answer. Reply to them yourself, then mark it handled.`
-Next steps are `This is a fair-housing question. There is no draft. Only you can answer this one. They were told you'd text them back here.`
+The inbox summary is `They asked: "{question}" This is a fair-housing question, so there's no draft. Only you can answer this one. They were told you'd text them back here.` The next step is `Mark it handled once you've replied.` That sentence is not repeated.
 and `Mark it handled once you've replied.` After that no-draft flag is saved, the visitor gets `Good question for the {team}. I've passed it along, and they'll text you back here.` They never hear fair housing. If the flag cannot be saved, the team is texted first. The visitor gets `I can't open the doors for you right now. I've let the {team} know, and they'll text you here shortly.` only if that text went out, and `Sorry, I hit a snag with that. Could you text me again in a few minutes?` otherwise. When that team text does not go out, the landlord sees `I couldn't text you about {who}, so I asked them to text me again in a few minutes.`
 
 Tour updates: ask only "Want me to text you when someone books, starts, or

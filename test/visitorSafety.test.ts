@@ -37,7 +37,8 @@ const HELP = smsHelpBody();
 const START = smsDisclosure(PUBLIC);
 const HELD = "Good question for the property team. I've passed it along, and they'll text you back here.";
 const PASS_ALONG = UNKNOWN_ANSWER;
-const FAIR_LINE = "This is a fair-housing question. There is no draft. Only you can answer this one. They were told you'd text them back here.";
+const FAIR_LINE =
+  "This is a fair-housing question, so there's no draft. Only you can answer this one. They were told you'd text them back here.";
 
 const SUITABILITY = [
   "Is it good for families?",
@@ -249,13 +250,9 @@ describe("suitability questions are fair-housing holds", () => {
     expect(item).toBeTruthy();
     const shown = [item!.what, item!.summary, ...((item!.nextSteps as string[]) ?? [])].join("\n");
     expect(shown).toBe(
-      [
-        "Fair-housing question",
-        `Asked "Is it good for families?". ${FAIR_LINE}`,
-        FAIR_LINE,
-        "Mark it handled once you've replied.",
-      ].join("\n"),
+      ["Fair-housing question", `They asked: "Is it good for families?" ${FAIR_LINE}`, "Mark it handled once you've replied."].join("\n"),
     );
+    expect(shown.split(FAIR_LINE)).toHaveLength(2);
     expect(item!.proposeDraft).toBe(false);
     expect(item).not.toHaveProperty("draft");
     expect(item).not.toHaveProperty("suggestedAnswer");

@@ -200,12 +200,11 @@ describe("fair-housing questions on a live tour", () => {
       const flag = flags.find((item) => item.summary.includes(text));
       expect(flag, text).toBeTruthy();
       expect(flag!.proposeDraft).toBe(false);
-      expect(flag!.nextSteps).toEqual([
-        "This is a fair-housing question. There is no draft. Only you can answer this one. They were told you'd text them back here.",
-        "Mark it handled once you've replied.",
-      ]);
+      expect(flag!.nextSteps).toEqual(["Mark it handled once you've replied."]);
       expect(sent.join("\n")).not.toMatch(/fair housing/i);
-      expect(flag!.summary).toContain("Only you can answer this one. They were told you'd text them back here.");
+      expect(flag!.summary).toBe(
+        `They asked: "${text}" This is a fair-housing question, so there's no draft. Only you can answer this one. They were told you'd text them back here.`,
+      );
       expect(flag!.summary).not.toContain("There's no approved answer yet.");
       const before = a.fake.sent.length;
       await expect(a.grok("answer_flagged_question", { exceptionId: flag!.exceptionId, approvedFact: "Yes, that's fine." })).rejects.toThrow(
