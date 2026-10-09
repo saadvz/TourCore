@@ -1,5 +1,5 @@
 import { isTeamTextFailedNotice } from "../core/TourCore";
-import { formatPhone } from "../core/phone";
+import { formatPhone, helpNear } from "../core/phone";
 import { formatTime } from "../core/timezone";
 import { UNNAMED_VISITOR, type AuditEvent } from "../domain/model";
 import type { ExportBundle } from "../export/exportBundle";
@@ -160,15 +160,16 @@ function sentence(
     case "PROPERTY_REMOVED":
       return info("The property was removed.");
     case "QUESTION_ANSWERED":
-      return good(`${c.name} asked "${e.detail}" and got an answer from your approved facts.`);
+      return good(`${c.name} asked "${quotedHistoryAsk(e.detail)}" and got an answer from your approved facts.`);
     case "QUESTION_UNANSWERED": {
-      const period = /[.!?]$/.test(e.detail) ? "" : ".";
-      return blocked(`${c.name} asked "${e.detail}"${period} There was no approved answer, so it was flagged for your team.`);
+      const asked = quotedHistoryAsk(e.detail);
+      const period = /[.!?]$/.test(asked) ? "" : ".";
+      return blocked(`${c.name} asked "${asked}"${period} There was no approved answer, so it was flagged for your team.`);
     }
     case "HANDLER_FAILED":
       return blocked(e.detail);
     case "HELP_REQUESTED":
-      return blocked(`${c.name} asked for help${e.detail ? ` near ${e.detail}` : ""}.`);
+      return blocked(`${c.name} asked for help${helpNear(e.detail)}.`);
     case "MESSAGE_FAILED":
       return isTeamTextFailedNotice(e.detail) ? info(e.detail) : info("Something happened on this tour.");
     case "FOLLOW_UP_RESPONSE":
@@ -176,6 +177,11 @@ function sentence(
     default:
       return info("Something happened on this tour.");
   }
+}
+
+/** A double quote inside the visitor's words is a single quote, so the sentence stays one pair of quotes. */
+function quotedHistoryAsk(detail: string): string {
+  return detail.replaceAll('"', "'");
 }
 
 function denial(code: string | undefined, c: { name: string; door: string }): string {

@@ -46,7 +46,7 @@ import { timeMenu } from "./entry";
 import { OPERATOR_SCHEDULE_CONFIRM_PROMPT, type InterpretationNote, type Said, type VisitorDemoSession, type VisitorStage } from "./session";
 import { savedTourHours } from "./tourHoursQuestion";
 import { acceptsOfferedOpening, nextOpeningFollowUp, offerDate, takeOfferedOpening } from "./unavailableDay";
-import { SMS_GATE_REMINDER, SMS_KEYWORD_PROMPT, smsDisclosure, smsOptInConfirmation } from "./smsConsent";
+import { SMS_GATE_REMINDER, SMS_KEYWORD_PROMPT, smsDisclosure, smsHelpBody, smsOptInConfirmation } from "./smsConsent";
 
 /**
  * Typed replies from a real phone ("1", "YES", "just pulled up", "does it
@@ -476,10 +476,20 @@ export async function handleVisitorText(
     session.takeExpected(session.pendingClarification.stage);
   }
 
-  // Someone who opted out gets no texts. A real question is still flagged for the landlord.
-  // Check before the SMS keyword gate so STOP'd visitors aren't treated as un-enrolled senders.
+  // Someone who opted out gets no texts, except HELP and one 911 line per opt-out.
+  // The alert and the Possible injury item do not text the visitor. Check before
+  // the SMS keyword gate so STOP'd visitors aren't treated as un-enrolled senders.
   if (session.optedOut && keyword !== "start" && keyword !== "stop") {
     photoAck.consume();
+    if (keyword === "help") {
+      await session.recordText(said);
+      await session.reply(smsHelpBody(process.env, { visitorContact: session.config.operator.visitorContact }), undefined, { deliverDespiteOptOut: true });
+      return undefined;
+    }
+    if (isMedicalEmergency(text)) {
+      await session.help(said);
+      return undefined;
+    }
     await flagSilentOptedOutQuestion(session, said, text, photo, interpreter);
     return undefined;
   }

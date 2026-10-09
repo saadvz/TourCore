@@ -208,6 +208,8 @@ export const AuditEventSchema = z.object({
   unitId: z.string().optional(),
   code: z.string().optional(),
   detail: z.string(),
+  /** The visitor's number when there is no visitor record yet. Not a place. */
+  phone: z.string().optional(),
   statusChange: z.object({ from: ReservationStatusSchema, to: ReservationStatusSchema }).optional(),
 });
 

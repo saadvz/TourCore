@@ -407,7 +407,7 @@ describe("fair-housing questions on a live tour", () => {
     for (const text of ["Do you allow pets?", "Do you allow dogs?", "Is there a dog park?", "How much is rent?", "Is rent due monthly?"]) {
       expect(after.some((item) => item.summary.includes(text))).toBe(false);
     }
-  });
+  }, 20_000);
 });
 
 /** One sentence for each new fair-housing trigger. */

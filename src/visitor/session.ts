@@ -191,6 +191,11 @@ export class VisitorDemoSession {
   /** A custom time named before a unit was chosen. Filed once the unit is picked. */
   heldTime?: SpokenTime;
   optedOut = false;
+  /**
+   * The router's opt-out already tried the 911 line. Skip another visitor text.
+   * The team is still alerted.
+   */
+  suppressMedicalVisitorLine = false;
   /** Ended because the operator set a one-off tour for this phone. */
   superseded = false;
   /**
@@ -614,7 +619,13 @@ export class VisitorDemoSession {
         await this.core.requestHelp(reservation.id, await this.currentPlace(), { text, meta: said.meta });
       } else {
         await this.recordText(said);
-        await this.core.requestHelp(undefined, undefined, { text, meta: said.meta, phone: this.visitor?.phone ?? "" });
+        await this.core.requestHelp(undefined, undefined, {
+          text,
+          meta: said.meta,
+          phone: this.visitor?.phone ?? "",
+          messagingOptedOut: this.optedOut,
+          suppressMedicalVisitorLine: this.suppressMedicalVisitorLine,
+        });
       }
       await this.syncReplies();
       return;

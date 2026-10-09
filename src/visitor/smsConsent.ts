@@ -139,8 +139,14 @@ export class SmsConsentDirectory {
     if (!existsSync(file)) return undefined;
     try {
       const map = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
-      const at = map[sender];
-      if (typeof at !== "string") return undefined;
+      const value = map[sender];
+      const at =
+        typeof value === "string"
+          ? value
+          : value && typeof value === "object" && typeof (value as { at?: unknown }).at === "string"
+            ? (value as { at: string }).at
+            : undefined;
+      if (!at) return undefined;
       return optedOut(sender, at);
     } catch {
       return optedOut(sender, new Date().toISOString());

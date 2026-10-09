@@ -202,4 +202,17 @@ describe("operator-facing presenters", () => {
     expect(asked("Is there a gym?")).toBe('the visitor asked "Is there a gym?" There was no approved answer, so it was flagged for your team.');
     expect(asked("how many")).toBe('the visitor asked "how many". There was no approved answer, so it was flagged for your team.');
   });
+
+  it("shows a quote inside a visitor question with single quotes", () => {
+    const line = (type: "QUESTION_UNANSWERED" | "QUESTION_ANSWERED", detail: string) =>
+      describeHistory(
+        [{ id: "e1", seq: 1, type, at: "2026-09-28T14:00:00.000Z", detail }],
+        { doors: [], units: [], prospects: [], reservations: [] },
+        "America/New_York",
+      )[0]!.text;
+    expect(line("QUESTION_UNANSWERED", 'he said "I can\'t breathe"')).toBe(
+      'the visitor asked "he said \'I can\'t breathe\'". There was no approved answer, so it was flagged for your team.',
+    );
+    expect(line("QUESTION_ANSWERED", 'he said "the rent"')).toBe('the visitor asked "he said \'the rent\'" and got an answer from your approved facts.');
+  });
 });

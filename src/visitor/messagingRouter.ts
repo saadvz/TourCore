@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { removedPropertyVisitorText } from "../core/availabilityCopy";
 import { normalizePhone } from "../core/phone";
-import { isUnbookedCancelAsk, messagingKeyword as keywordOf, type IntentInterpreter } from "../intent";
+import { isMedicalEmergency, isUnbookedCancelAsk, messagingKeyword as keywordOf, type IntentInterpreter } from "../intent";
 import { NOTHING_BOOKED_CANCEL } from "../core/TourCore";
 import { MessagingEndpoints, type MessagingEndpoint } from "../messaging/endpoints";
 import { hasInboundMedia, type InboundMessage } from "../messaging/inbound";
@@ -24,7 +24,7 @@ import type { ResolvedConsentMode } from "../messaging/consentPolicy";
 import { isLeavingTour } from "../core/overstayCopy";
 import { normalize, stripFiller } from "../intent/normalize";
 import { isValidTimeZone, UnsetTimeZoneError } from "../core/timezone";
-import { claimVisitorSms, toursUnavailableText, visitorTeamName } from "../sms/templates";
+import { claimVisitorSms, renderSms, toursUnavailableText, visitorTeamName } from "../sms/templates";
 import { handleVisitorText, isGreeting, startsNewBookingAfterClose } from "./conversation";
 import { pickerMiss, placeAliases, propertyPickerText, propertyShortName, resolveNamedPlace, STREET_MISS, menuChoice, type PlaceCandidate } from "./portfolioPick";
 import { OverstayScheduler } from "./overstayScheduler";
@@ -233,6 +233,11 @@ export class MessagingConversations {
       if (named) return { propertyId: named, endpoint, message };
       const waiting = [...openSaved, ...draftOnly];
       if (waiting.length && waiting.every((id) => this.isUnpublishedDraft(id))) {
+        if (isMedicalEmergency(message.text)) {
+          const propertyId = waiting.find((id) => this.configOf(id)) ?? waiting[0];
+          if (propertyId) await this.answerDraftInjury(propertyId, phone, message.text);
+          return undefined;
+        }
         await this.answerNotReady(waiting, phone);
         return undefined;
       }
@@ -247,7 +252,10 @@ export class MessagingConversations {
       await this.answerLineKeyword(candidates, phone, keyword);
       return undefined;
     }
-    if (candidates.every((id) => this.isOptedOut(id, phone)) && keyword !== "start") return undefined;
+    if (candidates.every((id) => this.isOptedOut(id, phone)) && keyword !== "start") {
+      if (!isMedicalEmergency(message.text)) return undefined;
+      return { propertyId: candidates[0]!, endpoint, message };
+    }
     await this.askWhichPlace(phone, endpoint.address, candidates, message.text);
     return undefined;
   }
@@ -397,6 +405,67 @@ export class MessagingConversations {
     );
   }
 
+  /**
+   * Injury on a draft, including one with no saved setup. One alert and the 911 line.
+   * A draft with no saved setup does not open a Possible injury inbox item.
+   * After STOP, the 911 line is tried once for that opt-out. A later injury still alerts.
+   * The conversation is saved when it can be, and is not resumed, so Hi still gets the not-ready line.
+   * An injury text is never dropped: if the team cannot be alerted, the visitor
+   * still gets the unreached 911 line.
+   */
+  private async answerDraftInjury(propertyId: string, phone: string, text: string): Promise<void> {
+    const optedOut = this.isOptedOut(propertyId, phone) || this.smsConsent.get(propertyId, phone)?.status === "opted_out";
+    const already = optedOut && this.openIdsOnLine(propertyId).some((id) => this.injuryLineTried(id, phone));
+    const config = this.configOf(propertyId);
+    if (!config) {
+      if (!already) {
+        await this.sendUnreachedInjury(propertyId, phone);
+        if (optedOut) this.markInjuryLineTried(propertyId, phone);
+      }
+      return;
+    }
+    let told = false;
+    try {
+      const tourId = this.deps.workspace.newVisitorTourId(propertyId, this.deps.now?.() ?? new Date(), "text");
+      const session = this.attachOverstay(
+        new VisitorDemoSession(propertyId, config, tourId, {
+          transport: this.lazyTransport(propertyId),
+          kind: "messaging",
+          verificationLinks: this.deps.links,
+          realNow: this.deps.realNow,
+          store: this.storeForProperty(propertyId),
+          storageRead: this.deps.storageRead,
+          beforeAccess: this.deps.beforeAccess,
+          otherBusyWindows: () => this.otherBusyWindows(propertyId, tourId),
+          ...(this.deps.slotLockBarrier ? { slotLockBarrier: this.deps.slotLockBarrier } : {}),
+        }),
+      );
+      session.identify(phone);
+      session.optedOut = optedOut;
+      session.suppressMedicalVisitorLine = already;
+      await session.help({ text });
+      told = (await session.store.list("messages")).some(
+        (message) => message.audience === "PROSPECT" && message.direction === "OUTBOUND" && message.body.includes("call 911 now"),
+      );
+      try {
+        const saved = await session.record();
+        this.deps.workspace.recordVisitorDemo(propertyId, { ...saved.record, outcome: "stopped" }, saved.bundle);
+      } catch (err) {
+        console.error(`Injury on a draft was not saved: ${err instanceof Error ? err.message : "unknown error"}`);
+      }
+      this.deps.onSaved?.(session);
+    } catch (err) {
+      console.error(`Injury on a draft was not handled: ${err instanceof Error ? err.message : "unknown error"}`);
+    }
+    if (!told && !already) await this.sendUnreachedInjury(propertyId, phone, config.operator.name);
+    if (optedOut && !already) this.markInjuryLineTried(propertyId, phone);
+  }
+
+  /** The 911 line used when a draft injury cannot alert the team. */
+  private async sendUnreachedInjury(propertyId: string | undefined, phone: string, team?: string): Promise<void> {
+    await this.sendLine(propertyId, phone, renderSms("medical-help-unreached", { team: visitorTeamName(team) }).body);
+  }
+
   /** The existing not-ready line when nothing on the line is published. Nothing goes out after STOP. */
   private async answerNotReady(propertyIds: string[], phone: string): Promise<void> {
     const reachable = propertyIds.filter((id) => !this.isOptedOut(id, phone) && this.smsConsent.get(id, phone)?.status !== "opted_out");
@@ -503,6 +572,12 @@ export class MessagingConversations {
       // A session that already exists keeps going, including a tour booked before this place went back to draft.
       const published = state.status === "PUBLISHED_FOR_DEMO";
       if (!ready || !published || !isValidTimeZone(config.property.timezone)) {
+        // An injury is checked before the not-ready line, the same way STOP and HELP are.
+        // It does not leave a bookable session, so a later text still gets the not-ready line.
+        if (isMedicalEmergency(message.text)) {
+          await this.answerDraftInjury(propertyId, phone, message.text);
+          return {};
+        }
         // STOP, HELP, and START still work on a draft. They do not open a session, so a later booking text stays refused.
         const keyword = keywordOf(message.text);
         if (keyword === "stop" || keyword === "help" || keyword === "start") {
@@ -941,21 +1016,51 @@ export class MessagingConversations {
   }
 
   private isOptedOut(propertyId: string, phone: string): boolean {
-    const file = this.optOutFile(propertyId);
-    if (!existsSync(file)) return false;
-    try {
-      return !!(JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>)[phone];
-    } catch {
-      return true;
-    }
+    const current = this.readOptOuts(propertyId);
+    if (current === "unreadable") return true;
+    return !!current[phone];
+  }
+
+  /** True only when this opt-out already tried the 911 line. START clears it. */
+  private injuryLineTried(propertyId: string, phone: string): boolean {
+    const current = this.readOptOuts(propertyId);
+    if (current === "unreadable") return false;
+    const value = current[phone];
+    return !!value && typeof value === "object" && value.injuryLineTried === true;
   }
 
   private setOptOut(propertyId: string, phone: string, optedOut: boolean): void {
     const file = this.optOutFile(propertyId);
-    const current: Record<string, string> = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
-    if (optedOut) current[phone] = new Date().toISOString();
-    else delete current[phone];
-    writeJsonAtomic(file, current);
+    const current = this.readOptOuts(propertyId);
+    if (current === "unreadable") JSON.parse(readFileSync(file, "utf8"));
+    const map = { ...(current === "unreadable" ? {} : current) };
+    if (optedOut) {
+      if (map[phone]) return;
+      map[phone] = { at: new Date().toISOString() };
+    } else delete map[phone];
+    writeJsonAtomic(file, map);
+  }
+
+  /** Marks the 911 line tried on every opted-out property on this line. A later STOP does not clear it. */
+  private markInjuryLineTried(propertyId: string, phone: string): void {
+    for (const id of this.openIdsOnLine(propertyId)) {
+      const current = this.readOptOuts(id);
+      if (current === "unreadable" || !current[phone]) continue;
+      const value = current[phone];
+      if (typeof value === "object" && value.injuryLineTried) continue;
+      const at = typeof value === "string" ? value : value.at;
+      writeJsonAtomic(this.optOutFile(id), { ...current, [phone]: { at, injuryLineTried: true } });
+    }
+  }
+
+  private readOptOuts(propertyId: string): Record<string, string | { at: string; injuryLineTried?: boolean }> | "unreadable" {
+    const file = this.optOutFile(propertyId);
+    if (!existsSync(file)) return {};
+    try {
+      return JSON.parse(readFileSync(file, "utf8")) as Record<string, string | { at: string; injuryLineTried?: boolean }>;
+    } catch {
+      return "unreadable";
+    }
   }
 }
 
