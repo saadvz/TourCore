@@ -4,7 +4,7 @@ Every outbound visitor text uses one of these ids. `{slot}` is filled before sen
 
 Text from the landlord or from a model reaches a visitor only as `approved-answer` or `approved-answer-closing`, and only after they approve a flagged question (`answer_flagged_question`, later `resolve_issue`). A no-draft flag never gets a draft. `approved-profile-fact` repeats a fact they already saved.
 
-195 message templates. 7 channel prompts.
+196 message templates. 7 channel prompts.
 
 ## Messages
 
@@ -1129,7 +1129,13 @@ Sounds good. Text DONE once you're outside.
 ### extension-granted
 
 ```
-You've got 10 more minutes.{clock?} Your doors will keep opening for you until then.
+You've got 10 more minutes. Your tour now ends at {end}, and your doors will keep opening for you until then.
+```
+
+### extension-granted-no-clock
+
+```
+You've got 10 more minutes. Your doors will keep opening for you until then.
 ```
 
 ### extension-unavailable
