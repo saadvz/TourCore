@@ -292,13 +292,13 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
   const sent = resolution?.approvedFact?.replace(/\.$/, "");
   const main = asked && sent ? `Asked "${asked}". Sent "${sent}".` : summaryFor(kind, e, tour);
   const teamTextMissed = kind === "message-failed" && isTeamTextFailedNotice(e.detail);
-  const summary = teamTextMissed ? e.detail : extra ? `${main} ${extra}` : main;
+  const summary = fairHousing && asked ? `Asked "${asked}". ${FAIR_HOUSING_INBOX}` : teamTextMissed ? e.detail : extra ? `${main} ${extra}` : main;
   return {
     exceptionId,
     propertyId: tour.propertyId,
     property: tour.config.property.name,
     kind,
-    title: teamTextMissed ? "A text to you didn't go out" : TITLES[kind],
+    title: teamTextMissed ? "A text to you didn't go out" : fairHousing ? "Fair-housing question" : TITLES[kind],
     summary,
     visitorName: visitorNameOf(tour),
     unitName: unitNameOn(tour, e.reservationId) ?? unitSubject(tour, e.unitId),
@@ -532,10 +532,11 @@ export function visitorAnswerText(_question: string, fact: string): string {
 /** Landlord-facing refusal. The visitor never sees this, and never hears "fair housing". */
 export const FAIR_HOUSING_REFUSAL = "This one touches on fair housing, so I won't draft an answer. Reply to them yourself, then mark it handled.";
 
-export const FAIR_HOUSING_STEPS = [
-  "This one touches on fair housing, so I won't draft an answer. Reply to them yourself.",
-  "Mark it handled once you've replied.",
-] as const;
+/** What get_inbox shows for a fair-housing flag. No draft, and no tool name. */
+export const FAIR_HOUSING_INBOX =
+  "This is a fair-housing question. There is no draft. Only you can answer this one. They were told you'd text them back here.";
+
+export const FAIR_HOUSING_STEPS = [FAIR_HOUSING_INBOX, "Mark it handled once you've replied."] as const;
 
 /**
  * The landlord's approve question. The quoted text equals `visitorWillReceive` byte for byte.

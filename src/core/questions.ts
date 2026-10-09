@@ -1,5 +1,5 @@
 import type { TourCoreConfig, Unit } from "../config/tourCoreConfig";
-import { profileFacts, questionTopic, type ProfileField } from "../config/unitProfile";
+import { mentionedButNotAsked, profileFacts, questionTopic, stripFieldWords, type ProfileField } from "../config/unitProfile";
 import { visitorSubject } from "../visitor/identity";
 import { isFairHousingQuestion } from "./fairHousing";
 import { approvedFacts, findApprovedAnswer, type ApprovedFact } from "./facts";
@@ -57,6 +57,23 @@ function propertyFacts(config: TourCoreConfig): ApprovedFact[] {
   return approvedFacts(config).filter((f) => f.scope === "property");
 }
 
+/**
+ * A keyword that only appears because the question mentions a room is not an
+ * answer. "Can I paint the bedroom walls?" does not ask how many bedrooms.
+ */
+function factsForQuestion(facts: ApprovedFact[], question: string): ApprovedFact[] {
+  const skip = mentionedButNotAsked(question);
+  if (!skip.length) return facts;
+  const asked = stripFieldWords(question, skip);
+  return facts.filter((fact) => {
+    if (fact.profileField && skip.includes(fact.profileField)) return false;
+    const stripped = stripFieldWords(fact.text, skip);
+    const still = findApprovedAnswer([{ ...fact, text: stripped, profileField: undefined }], asked);
+    if (still.length) return true;
+    return findApprovedAnswer([fact], question).length === 0;
+  });
+}
+
 /** A unit's facts for keyword matching. Its description is left out for topics its structured details cover. */
 function unitFacts(config: TourCoreConfig, unitId: string, topic: ProfileField | undefined): ApprovedFact[] {
   const unit = config.units.find((u) => u.id === unitId);
@@ -97,11 +114,11 @@ export function resolveQuestion(config: TourCoreConfig, asked: string, context: 
   }
 
   const unitScoped = !!topic && UNIT_FIELDS.includes(topic);
-  const property = findApprovedAnswer(propertyFacts(config), question);
+  const property = findApprovedAnswer(factsForQuestion(propertyFacts(config), question), question);
 
   // 2. With a unit: its own approved facts, then building-wide ones (never for a unit-only detail like rent).
   if (unit) {
-    const own = findApprovedAnswer(unitFacts(config, unit.id, topic), question);
+    const own = findApprovedAnswer(factsForQuestion(unitFacts(config, unit.id, topic), question), question);
     if (own.length) return { kind: "answer", facts: own, unitId: unit.id };
     if (property.length && !unitScoped) return { kind: "answer", facts: property, unitId: unit.id };
     return { kind: "unknown", unitId: unit.id };
@@ -111,7 +128,7 @@ export function resolveQuestion(config: TourCoreConfig, asked: string, context: 
   const whichUnit: QuestionResolution = { kind: "which-unit", units: config.units.map((u) => u.name) };
   if (unitScoped) return config.units.length > 1 ? whichUnit : { kind: "unknown" };
   if (property.length) return { kind: "answer", facts: property };
-  const onFileForSomeUnit = config.units.some((u) => (topic && SHARED_FIELDS.includes(topic) && unitAnswer(config, u, topic)) || findApprovedAnswer(unitFacts(config, u.id, topic), question).length);
+  const onFileForSomeUnit = config.units.some((u) => (topic && SHARED_FIELDS.includes(topic) && unitAnswer(config, u, topic)) || findApprovedAnswer(factsForQuestion(unitFacts(config, u.id, topic), question), question).length);
   return onFileForSomeUnit && config.units.length > 1 ? whichUnit : { kind: "unknown" };
 }
 

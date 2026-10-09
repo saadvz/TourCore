@@ -193,12 +193,27 @@ export class MessagingConversations {
     const line = message.to ?? this.deps.defaultLine?.();
     if (!this.deps.endpoints) adoptLegacyLine(ws, this.endpoints, line);
     const endpoint = this.endpoints.resolve(line);
-    const ids = endpoint?.propertyIds.filter((id) => ws.has(id)) ?? [];
-    if (!endpoint || !ids.length || !line) {
+    const attached = endpoint?.propertyIds ?? [];
+    const saved = attached.filter((id) => ws.has(id));
+    const draftOnly = attached.filter((id) => !ws.has(id) && !!ws.loadDraft(id));
+    const known = [...saved, ...draftOnly];
+    if (!endpoint || !known.length || !line) {
       this.deps.log?.("A message arrived on a texting number that isn't connected to a property. It was not answered.");
       return undefined;
     }
     const phone = normalizePhone(message.from);
+    const keyword = keywordOf(message.text);
+    const openSaved = saved.filter((id) => !ws.load(id).state.removedAt);
+    const open = [...openSaved, ...draftOnly];
+    // STOP, HELP, and START on a draft (including one with no saved config) before any drop or picker.
+    if ((keyword === "stop" || keyword === "help" || keyword === "start") && open.length && open.every((id) => this.isUnpublishedDraft(id))) {
+      const bound = await this.boundProperty(saved, phone, message.text);
+      if (!bound) {
+        await this.answerUnpublishedLine(open, phone, keyword);
+        return undefined;
+      }
+    }
+    const ids = saved;
     const pinned = message.pinnedProperty?.trim();
     if (pinned && ids.includes(pinned)) return { propertyId: pinned, endpoint, message };
     const bound = await this.boundProperty(ids, phone, message.text);
@@ -208,9 +223,14 @@ export class MessagingConversations {
 
     const candidates = this.portfolioCandidates(ids);
     if (!candidates.length) {
-      if (ids.length === 1) return { propertyId: ids[0]!, endpoint, message };
+      if (saved.length === 1 && draftOnly.length === 0) return { propertyId: saved[0]!, endpoint, message };
       const named = this.namedPlace(message, ids);
       if (named) return { propertyId: named, endpoint, message };
+      const waiting = [...openSaved, ...draftOnly];
+      if (waiting.length && waiting.every((id) => this.isUnpublishedDraft(id))) {
+        await this.answerNotReady(waiting, phone);
+        return undefined;
+      }
       this.deps.log?.("A message arrived on a texting number that isn't connected to a property. It was not answered.");
       return undefined;
     }
@@ -218,7 +238,6 @@ export class MessagingConversations {
     const named = this.namedPlace(message, candidates);
     if (named) return { propertyId: named, endpoint, message };
 
-    const keyword = keywordOf(message.text);
     if (keyword === "stop" || keyword === "help") {
       await this.answerLineKeyword(candidates, phone, keyword);
       return undefined;
@@ -226,6 +245,21 @@ export class MessagingConversations {
     if (candidates.every((id) => this.isOptedOut(id, phone)) && keyword !== "start") return undefined;
     await this.askWhichPlace(phone, endpoint.address, candidates, message.text);
     return undefined;
+  }
+
+  /** Saved setup when there is one, otherwise the unsaved draft. */
+  private configOf(propertyId: string): import("../config/tourCoreConfig").TourCoreConfig | undefined {
+    const ws = this.deps.workspace;
+    if (ws.has(propertyId)) return ws.load(propertyId).config;
+    return ws.loadDraft(propertyId);
+  }
+
+  /** A draft that is not taking visitors. A removed property is not a draft. */
+  private isUnpublishedDraft(propertyId: string): boolean {
+    const ws = this.deps.workspace;
+    if (!ws.has(propertyId)) return !!ws.loadDraft(propertyId);
+    const state = ws.load(propertyId).state;
+    return !state.removedAt && state.status !== "PUBLISHED_FOR_DEMO";
   }
 
   private async answerPick(
@@ -288,10 +322,12 @@ export class MessagingConversations {
 
   private portfolioCandidates(ids: string[]): string[] {
     const ws = this.deps.workspace;
-    const open = ids.filter((id) => ws.has(id) && !ws.load(id).state.removedAt);
-    const published = open.filter((id) => ws.load(id).state.status === "PUBLISHED_FOR_DEMO");
-    const pool = published.length ? published : open;
-    return [...pool].sort((a, b) => {
+    const published = ids.filter((id) => {
+      if (!ws.has(id)) return false;
+      const state = ws.load(id).state;
+      return !state.removedAt && state.status === "PUBLISHED_FOR_DEMO";
+    });
+    return [...published].sort((a, b) => {
       const left = ws.load(a).state;
       const right = ws.load(b).state;
       const byTime = (right.publishedAt ?? right.savedAt).localeCompare(left.publishedAt ?? left.savedAt);
@@ -323,6 +359,41 @@ export class MessagingConversations {
     keep.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
     if (keep[0]) return keep[0].propertyId;
     return broken;
+  }
+
+  /** One keyword reply for a line whose open properties are all drafts. STOP is saved on each of them. */
+  private async answerUnpublishedLine(propertyIds: string[], phone: string, keyword: "stop" | "help" | "start"): Promise<void> {
+    const propertyId = propertyIds.find((id) => this.configOf(id)) ?? propertyIds[0];
+    if (!propertyId) return;
+    const now = (this.deps.now?.() ?? new Date()).toISOString();
+    if (keyword === "help") {
+      const contact = this.configOf(propertyId)?.operator.visitorContact;
+      await this.sendLine(propertyId, phone, smsHelpBody(process.env, contact ? { visitorContact: contact } : {}));
+      return;
+    }
+    if (keyword === "stop") {
+      for (const id of propertyIds) {
+        this.setOptOut(id, phone, true);
+        this.smsConsent.save(id, { sender: phone, status: "opted_out", method: "keyword", keyword: "STOP", updatedAt: now, optedOutAt: now });
+      }
+      await this.sendLine(propertyId, phone, smsStopAck());
+      return;
+    }
+    for (const id of propertyIds) {
+      this.setOptOut(id, phone, false);
+      this.smsConsent.save(id, { sender: phone, status: "pending", method: "keyword", keyword: "START", updatedAt: now });
+    }
+    const base = this.deps.publicBaseUrl?.() ?? publicBaseUrl(effectiveEnv());
+    await this.sendLine(propertyId, phone, smsDisclosure(base));
+  }
+
+  /** The existing not-ready line when nothing on the line is published. Nothing goes out after STOP. */
+  private async answerNotReady(propertyIds: string[], phone: string): Promise<void> {
+    const reachable = propertyIds.filter((id) => !this.isOptedOut(id, phone) && this.smsConsent.get(id, phone)?.status !== "opted_out");
+    const propertyId = reachable.find((id) => this.configOf(id));
+    const config = propertyId ? this.configOf(propertyId) : undefined;
+    if (!propertyId || !config) return;
+    await this.sendLine(propertyId, phone, toursUnavailableText(config.property.name, config.operator.name, config.operator.visitorContact));
   }
 
   private async answerLineKeyword(propertyIds: string[], phone: string, keyword: "stop" | "help"): Promise<void> {

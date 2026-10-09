@@ -32,6 +32,16 @@ const HOUSING_SUBSIDY = /\b(?:section\s*8|vouchers?)\b/;
 const SUBSIDY_TAKE = /\b(?:take|takes|taking|consider|considers|considering)\b/;
 
 /**
+ * Suitability for a protected class: "good for families", "safe for a
+ * wheelchair", "a fit for seniors", "is the building for families". A home
+ * office, parking, or pets is not a class, so those questions stay ordinary.
+ */
+const SUITABILITY_LEAD = /\b(?:good|suitable|right|okay|ok|safe|fit)\s+for\b|\ba fit for\b/;
+const SUITABILITY_PLACE = /\b(?:is|are)\s+the\s+(?:area|neighborhood|building|property|block)\b(?:\s+\w+){0,6}\s+for\b/;
+const SUITABILITY_CLASS =
+  /\b(?:families|family|familial status|kids?|children|child|seniors?|elderly|disabled|disabilities|disability|handicapped|handicap|wheelchairs?|religion|religious|race|racial|people of color|national origin|nationality|country of origin|sex|gender|pregnan(?:t|cy)|ages?|single (?:moms?|mothers?|dads?|fathers?|parents?))\b/;
+
+/**
  * Fair housing even with no eligibility verb. A bare "pets", "dogs", or
  * "minimum" is not enough, so an ordinary pets question, a dog park, and a
  * minimum lease stay put. Assistance animals include dog, cat, and pet, and
@@ -151,12 +161,18 @@ function neighborhoodSteering(text: string): boolean {
   return placeRace.some((word) => places.some((place) => !overlaps(word, place)));
 }
 
+function suitabilityForClass(text: string): boolean {
+  if (!SUITABILITY_CLASS.test(text)) return false;
+  return SUITABILITY_LEAD.test(text) || SUITABILITY_PLACE.test(text);
+}
+
 export function isFairHousingQuestion(text: string): boolean {
   if (FIFTY_FIVE_PLUS.test(text.toLowerCase())) return true;
   const t = norm(text);
   if (!t) return false;
   if (ASSISTANCE_ANIMAL.test(t) || FAITH.test(t) || SSN.test(t) || STANDALONE.test(t)) return true;
   if (neighborhoodSteering(t)) return true;
+  if (suitabilityForClass(t)) return true;
   if (!PROTECTED_CLASS.test(t)) return false;
   if (ELIGIBILITY.test(t)) return true;
   return HOUSING_SUBSIDY.test(t) && SUBSIDY_TAKE.test(t);

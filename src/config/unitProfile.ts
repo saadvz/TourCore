@@ -366,9 +366,42 @@ const TOPICS: [ProfileField, RegExp][] = [
   ["floor", /\b(what floor|which floor|floor is)\b/i],
 ];
 
-/** Which unit detail a visitor's question is about, if it's clearly one. */
+/**
+ * A bedroom or bathroom word used as the place where something else happens
+ * ("paint the bedroom walls", "smoke in the bedroom") is not a question about
+ * how many there are.
+ */
+function asksForField(question: string, field: ProfileField): boolean {
+  if (field !== "bedrooms" && field !== "bathrooms") return true;
+  const inquiry =
+    /\b(?:how many|how much|how big|number of|does (?:it|this|the|that) have|do (?:you|they) have|is there|are there|what(?:'s| is| are)(?: the)?|whats)\b/i.test(question) ||
+    /^\s*(?:a\s+)?(?:bed(?:room)?s?|bath(?:room)?s?|studio)\s*\??\s*$/i.test(question);
+  const incidental =
+    /\b(?:paint(?:ing)?|smoke|smoking|vape|vaping|stay|staying|hang|nail|nails|drill|wallpaper|remodel|renovate|alter)\b/i.test(question) ||
+    /\b(?:in|inside) the (?:bed|bath)/i.test(question) ||
+    /\b(?:bed|bath)room walls?\b/i.test(question);
+  return incidental && !inquiry ? false : true;
+}
+
+/** Fields named in the question that the question is not actually asking about. */
+export function mentionedButNotAsked(question: string): ProfileField[] {
+  return TOPICS.filter(([field, re]) => re.test(question) && !asksForField(question, field)).map(([field]) => field);
+}
+
+/** Drop those field words so a later keyword match cannot answer from them alone. */
+export function stripFieldWords(text: string, fields: ProfileField[]): string {
+  let out = text;
+  for (const field of fields) {
+    const re = TOPICS.find(([id]) => id === field)?.[1];
+    if (!re) continue;
+    out = out.replace(new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`), " ");
+  }
+  return out;
+}
+
+/** Which unit detail a visitor's question is about, if it is actually asking for that detail. */
 export function questionTopic(question: string): ProfileField | undefined {
-  const hits = TOPICS.filter(([, re]) => re.test(question)).map(([f]) => f);
+  const hits = TOPICS.filter(([field, re]) => re.test(question) && asksForField(question, field)).map(([field]) => field);
   return hits.length === 1 ? hits[0] : undefined;
 }
 
