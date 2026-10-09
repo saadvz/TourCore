@@ -123,3 +123,15 @@ describe("Grok template package", () => {
     for (const f of src) expect(readFileSync(f, "utf8"), f).not.toMatch(/alfred.*(access|lock|adapter)/i);
   });
 });
+
+describe("landlord docs keep sample phone numbers out", () => {
+  it("has no formatted phone number outside the grok-template examples", () => {
+    const roots = [join(ROOT, "README.md"), join(ROOT, "GROK_BOOTSTRAP.md"), join(ROOT, ".grok"), TEMPLATE];
+    const paths = roots.flatMap((p) => (statSync(p).isDirectory() ? files(p) : [p]));
+    const phone = /\(\d{3}\) \d{3}-\d{4}/;
+    for (const path of paths) {
+      if (path.includes(`${join("grok-template", "examples")}`)) continue;
+      expect(readFileSync(path, "utf8"), path).not.toMatch(phone);
+    }
+  });
+});

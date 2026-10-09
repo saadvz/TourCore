@@ -8,9 +8,10 @@ import type { ConversationStep } from "../src/intent/model";
 import type { OutgoingMessage } from "../src/messaging/Messenger";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
 import { persistSession } from "../src/operator/services";
+import { OPERATOR_TOOLS } from "../src/operator/tools";
 import { tourRef } from "../src/operator/tours";
 import { handleVisitorText } from "../src/visitor/conversation";
-import { smsHelpBody } from "../src/visitor/smsConsent";
+import { smsHelpBody, smsStopAck } from "../src/visitor/smsConsent";
 import { VisitorDemoSession } from "../src/visitor";
 import { fakeSendblue, apiError } from "./fakeSendblue";
 import { grokHarness } from "./grokHarness";
@@ -26,6 +27,22 @@ import { liveApp } from "./liveApp";
 const at = (hour: number, minute = 0) => zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour, minute }, "America/New_York").getTime();
 const PHONE = "+15550102000";
 const SENT = "If someone is hurt, call 911 now. I've also let the property team know, and they'll text you here as soon as they can.";
+
+/** Sendblue's send response status. null omits the status, which the adapter stores as queued. */
+function sendblueReturning(status: string | null) {
+  const fake = fakeSendblue();
+  const send = fake.client.messages.send.bind(fake.client.messages);
+  fake.client.messages.send = async (params) => {
+    const result = await send(params);
+    if (status === null) {
+      const { status: dropped, ...rest } = result;
+      void dropped;
+      return rest;
+    }
+    return { ...result, status };
+  };
+  return fake;
+}
 const MISSED = "If someone is hurt, call 911 now. I couldn't reach the property team just now.";
 const MISSED_PHONE = "If someone is hurt, call 911 now. I couldn't reach the property team just now, so please call them at (555) 010-9999 too.";
 const SNAG = "Sorry, I hit a snag with that. Could you text me again in a few minutes?";
@@ -146,15 +163,15 @@ function inboxText(item: { what?: unknown; summary?: unknown; nextSteps?: unknow
 }
 
 /** A touring visitor's help text, then the one help row from get_inbox. No live send. */
-async function inboxAfterHelp(text: string, failTeam = false) {
+async function inboxAfterHelp(text: string, failTeam = false, options?: { visitorStatus?: "QUEUED" | "SENT"; again?: string }) {
   const h = grokHarness();
   cleanups.push(h.cleanup);
   const id = await h.publish();
   const v = await h.touringVisitor(id);
-  if (failTeam) {
+  if (failTeam || options?.visitorStatus) {
     const send = v.session.transport.send.bind(v.session.transport);
     v.session.transport.send = async (message: OutgoingMessage) => {
-      if (message.audience === "OPERATOR") {
+      if (failTeam && message.audience === "OPERATOR") {
         return {
           provider: v.session.transport.provider,
           channel: "WEB" as const,
@@ -163,16 +180,23 @@ async function inboxAfterHelp(text: string, failTeam = false) {
           error: { code: "NOT_DELIVERED", message: "The message couldn't be delivered." },
         };
       }
+      if (options?.visitorStatus && message.audience === "PROSPECT" && message.body.includes("call 911 now")) {
+        return { provider: v.session.transport.provider, channel: "WEB" as const, status: options.visitorStatus, sentAt: new Date().toISOString() };
+      }
       return send(message);
     };
   }
   await v.session.act("help", {}, { text });
+  if (options?.again) {
+    h.setClock(h.now() + 6 * 60_000);
+    await v.session.act("help", {}, { text: options.again });
+  }
   await persistSession(h.services, v.session);
   const inbox = await h.ok("get_inbox");
-  const help = (inbox.items as Array<{ kind?: string; what?: string }>).filter((row) => row.kind === "help");
+  const help = (inbox.items as Array<{ kind?: string; what?: string; summary?: string; nextSteps?: string[] }>).filter((row) => row.kind === "help");
   expect(help).toHaveLength(1);
   const visitor = (await v.session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").at(-1)?.body;
-  return { text: inboxText(help[0]!), visitor };
+  return { text: inboxText(help[0]!), visitor, item: help[0]!, inbox };
 }
 
 const ctx = {
@@ -353,7 +377,7 @@ describe("medical help", () => {
     expect(shown.text).toBe(
       [
         "Possible injury",
-        'They texted: "she\'s not breathing". They were told you couldn\'t be reached.',
+        'They texted: "she\'s not breathing". They were told to call 911 and that you couldn\'t be reached.',
         "Text or call them now, then mark it handled.",
       ].join("\n"),
     );
@@ -519,7 +543,7 @@ describe("medical help", () => {
     const noneItems = noneInbox.items as Array<{ what?: string; summary?: string }>;
     expect(noneItems.filter((item) => item.what === "Possible injury")).toHaveLength(1);
     expect(noneItems.some((item) => item.what === "A text to you didn't go out")).toBe(false);
-    expect(noneItems.find((item) => item.what === "Possible injury")?.summary).toContain("They were told you couldn't be reached.");
+    expect(noneItems.find((item) => item.what === "Possible injury")?.summary).toContain("They were told to call 911 and that you couldn't be reached.");
     const noneVisitorLine = (await noneVisitor.session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").at(-1)?.body;
     expect(noneVisitorLine).toBe(MISSED);
 
@@ -739,7 +763,7 @@ describe("medical help", () => {
     expect(sent.text).toContain("They were told to call 911 if someone is hurt, and that you'd text them here.");
     expect(sent.text).toContain("Text or call them now, then mark it handled.");
     const missed = await inboxAfterHelp("she's not breathing", true);
-    expect(missed.text).toContain("They were told you couldn't be reached.");
+    expect(missed.text).toContain("They were told to call 911 and that you couldn't be reached.");
     expect(missed.text).toContain("Text or call them now, then mark it handled.");
 
     const fake = fakeSendblue();
@@ -758,7 +782,7 @@ describe("medical help", () => {
   });
 
   it("says they were not texted again when a second injury comes after STOP", async () => {
-    const app = await liveApp({ cleanups });
+    const app = await liveApp({ cleanups, fake: sendblueReturning("SENT") });
     const phone = "+15550107212";
     await app.textFrom(phone, "STOP");
     await app.textFrom(phone, "my dad passed out");
@@ -771,8 +795,237 @@ describe("medical help", () => {
     expect(first?.summary).toBe(`They texted: "my dad passed out". They were told to call 911 if someone is hurt, and that you'd text them here.`);
     expect(first?.nextSteps).toEqual(["Text or call them now, then mark it handled."]);
     expect(second?.summary).toBe(
-      `They texted: "he passed out". They've opted out of texts, so they weren't texted back this time. They were told to call 911 after their first message.`,
+      `They texted: "he passed out". They've opted out of texts, so they weren't texted back this time. They were already told to call 911.`,
     );
     expect(second?.nextSteps).toEqual(["Call them now, then mark it handled."]);
+  });
+
+  it("on a draft with saved setup, sends one more 911 line after STOP and skips the injury after that", async () => {
+    const app = await liveApp({ cleanups, fake: sendblueReturning("SENT") });
+    const propertyId = "prop_100_alfred_way";
+    app.ws.patchState(propertyId, { status: "DRAFT" });
+    expect(app.ws.has(propertyId)).toBe(true);
+    expect(app.ws.load(propertyId).state.status).toBe("DRAFT");
+    const phone = "+15550107321";
+    const told = "They were told to call 911 if someone is hurt, and that you'd text them here.";
+    const skipped = "They've opted out of texts, so they weren't texted back this time. They were already told to call 911.";
+    const lines = (replies: string[]) => replies.filter((body) => body.includes("call 911 now"));
+    const injury = async (phrase: string) => {
+      const items = ((await app.grok("get_inbox", { property: "100 Alfred Way" })).items as Array<{ what?: string; summary?: string; nextSteps?: string[] }>).filter(
+        (item) => item.what === "Possible injury" && item.summary?.includes(`They texted: "${phrase}"`),
+      );
+      expect(items).toHaveLength(1);
+      return items[0]!;
+    };
+
+    const first = await app.textFrom(phone, "my dad passed out");
+    expect(lines(first)).toEqual([SENT]);
+    expect((await injury("my dad passed out")).summary).toBe(`They texted: "my dad passed out". ${told}`);
+
+    expect(await app.textFrom(phone, "STOP")).toEqual([smsStopAck()]);
+
+    const second = await app.textFrom(phone, "he passed out again");
+    expect(second).toEqual([SENT]);
+    expect((await injury("he passed out again")).summary).toBe(`They texted: "he passed out again". ${told}`);
+
+    const third = await app.textFrom(phone, "she is not breathing now");
+    expect(third).toEqual([]);
+    const last = await injury("she is not breathing now");
+    expect(last.summary).toBe(`They texted: "she is not breathing now". ${skipped}`);
+    expect(last.nextSteps).toEqual(["Call them now, then mark it handled."]);
+  });
+
+  it("does not say they were already told to call 911 when that text never went out", async () => {
+    const unreached = "They've opted out of texts, so they weren't texted back this time. Our earlier text telling them to call 911 didn't go out.";
+    const blocked = "Our text telling them to call 911 didn't go out, so they haven't heard back yet.";
+    for (const label of ["draft", "published"] as const) {
+      const fake = fakeSendblue();
+      const send = fake.client.messages.send.bind(fake.client.messages);
+      fake.client.messages.send = async (params) => {
+        if (String(params.content).includes("call 911 now")) throw apiError(400);
+        return send(params);
+      };
+      const app = await liveApp({ cleanups, fake });
+      const phone = label === "draft" ? "+15550107401" : "+15550107402";
+      if (label === "draft") app.ws.patchState("prop_100_alfred_way", { status: "DRAFT" });
+      else {
+        await app.textFrom(phone, "TOUR");
+        await app.textFrom(phone, "YES");
+      }
+      await app.textFrom(phone, "STOP");
+      const firstReply = await app.textFrom(phone, "my dad passed out");
+      const secondReply = await app.textFrom(phone, "he passed out");
+      expect(firstReply, label).toEqual([]);
+      expect(secondReply, label).toEqual([]);
+      const items = ((await app.grok("get_inbox", { property: "100 Alfred Way" })).items as Array<{ what?: string; summary?: string; nextSteps?: string[] }>).filter(
+        (item) => item.what === "Possible injury",
+      );
+      expect(items, label).toHaveLength(2);
+      const first = items.find((item) => item.summary?.includes("my dad passed out"));
+      const second = items.find((item) => item.summary?.includes("he passed out"));
+      expect(first?.summary, label).toBe(`They texted: "my dad passed out". ${blocked}`);
+      expect(second?.summary, label).toBe(`They texted: "he passed out". ${unreached}`);
+      expect(second?.summary, label).not.toContain("already told");
+      expect(second?.nextSteps, label).toEqual(["Call them now, then mark it handled."]);
+    }
+  });
+
+  it("does not treat a queued 911 text as confirmed, on a draft or a published tour", async () => {
+    const queued = "They were sent a text to call 911 if someone is hurt, but we can't confirm it reached them.";
+    const skipped = "They've opted out of texts, so they weren't texted back this time. Our earlier text telling them to call 911 was sent, but we can't confirm it reached them.";
+    const call = ["Call them now, then mark it handled."];
+    for (const label of ["draft", "published"] as const) {
+      const fake = sendblueReturning("QUEUED");
+      const app = await liveApp({ cleanups, fake });
+      const phone = label === "draft" ? "+15550107511" : "+15550107512";
+      if (label === "draft") app.ws.patchState("prop_100_alfred_way", { status: "DRAFT" });
+      else {
+        await app.textFrom(phone, "TOUR");
+        await app.textFrom(phone, "YES");
+      }
+      await app.textFrom(phone, "STOP");
+      const firstReply = await app.textFrom(phone, "my dad passed out");
+      const secondReply = await app.textFrom(phone, "he passed out");
+      expect(firstReply, label).toEqual([SENT]);
+      expect(secondReply, label).toEqual([]);
+      expect(fake.sent.filter((row) => row.number === phone && row.content.includes("call 911 now")), label).toHaveLength(1);
+      const items = ((await app.grok("get_inbox", { property: "100 Alfred Way" })).items as Array<{ what?: string; summary?: string; nextSteps?: string[] }>).filter(
+        (item) => item.what === "Possible injury",
+      );
+      expect(items, label).toHaveLength(2);
+      const first = items.find((item) => item.summary?.includes("my dad passed out"));
+      const second = items.find((item) => item.summary?.includes("he passed out"));
+      expect(first?.summary, label).toBe(`They texted: "my dad passed out". ${queued}`);
+      expect(first?.nextSteps, label).toEqual(call);
+      expect(second?.summary, label).toBe(`They texted: "he passed out". ${skipped}`);
+      expect(second?.summary, label).not.toContain("already told");
+      expect(second?.nextSteps, label).toEqual(call);
+    }
+  });
+
+  it("stores a declined or error 911 send as failed and keeps the blocked endings", async () => {
+    const blocked = "Our text telling them to call 911 didn't go out, so they haven't heard back yet.";
+    const unreached = "They've opted out of texts, so they weren't texted back this time. Our earlier text telling them to call 911 didn't go out.";
+    let phoneN = 7521;
+    for (const status of ["DECLINED", "ERROR"] as const) {
+      for (const label of ["draft", "published"] as const) {
+        const fake = sendblueReturning(status);
+        const app = await liveApp({ cleanups, fake });
+        const phone = `+1555010${phoneN++}`;
+        if (label === "draft") app.ws.patchState("prop_100_alfred_way", { status: "DRAFT" });
+        else {
+          await app.textFrom(phone, "TOUR");
+          await app.textFrom(phone, "YES");
+        }
+        await app.textFrom(phone, "STOP");
+        await app.textFrom(phone, "my dad passed out");
+        const secondReply = await app.textFrom(phone, "he passed out");
+        expect(secondReply, `${status} ${label}`).toEqual([]);
+        expect(fake.sent.filter((row) => row.number === phone && row.content.includes("call 911 now")), `${status} ${label}`).toHaveLength(1);
+        const stored = app.ws.listTours("prop_100_alfred_way").flatMap((record) => {
+          const tour = app.ws.loadTour("prop_100_alfred_way", record.tourId);
+          return (
+            tour?.bundle.messages.filter(
+              (message) => message.audience === "PROSPECT" && message.direction === "OUTBOUND" && message.body.includes("call 911 now") && message.deliveryStatus !== "SUPPRESSED",
+            ) ?? []
+          );
+        });
+        expect(stored, `${status} ${label}`).toHaveLength(1);
+        expect(stored[0]?.deliveryStatus, `${status} ${label}`).toBe("FAILED");
+        const items = ((await app.grok("get_inbox", { property: "100 Alfred Way" })).items as Array<{ what?: string; summary?: string; nextSteps?: string[] }>).filter(
+          (item) => item.what === "Possible injury",
+        );
+        expect(items, `${status} ${label}`).toHaveLength(2);
+        const first = items.find((item) => item.summary?.includes("my dad passed out"));
+        const second = items.find((item) => item.summary?.includes("he passed out"));
+        expect(first?.summary, `${status} ${label}`).toBe(`They texted: "my dad passed out". ${blocked}`);
+        expect(second?.summary, `${status} ${label}`).toBe(`They texted: "he passed out". ${unreached}`);
+        expect(second?.nextSteps, `${status} ${label}`).toEqual(["Call them now, then mark it handled."]);
+      }
+    }
+  });
+
+  it("stores a missing Sendblue status as queued and uses the unconfirmed ending", async () => {
+    const queued = "They were sent a text to call 911 if someone is hurt, but we can't confirm it reached them.";
+    const fake = sendblueReturning(null);
+    const app = await liveApp({ cleanups, fake });
+    const phone = "+15550107571";
+    await app.textFrom(phone, "STOP");
+    await app.textFrom(phone, "my dad passed out");
+    const stored = app.ws.listTours("prop_100_alfred_way").flatMap((record) => {
+      const tour = app.ws.loadTour("prop_100_alfred_way", record.tourId);
+      return tour?.bundle.messages.filter((message) => message.audience === "PROSPECT" && message.body.includes("call 911 now") && message.deliveryStatus !== "SUPPRESSED") ?? [];
+    });
+    expect(stored).toHaveLength(1);
+    expect(stored[0]?.deliveryStatus).toBe("QUEUED");
+    const injury = ((await app.grok("get_inbox", { property: "100 Alfred Way" })).items as Array<{ what?: string; summary?: string }>).find((item) => item.what === "Possible injury");
+    expect(injury?.summary).toBe(`They texted: "my dad passed out". ${queued}`);
+  });
+
+  it("keeps the told endings when the 911 text is sent or delivered", async () => {
+    const told = "They were told to call 911 if someone is hurt, and that you'd text them here.";
+    const already = "They've opted out of texts, so they weren't texted back this time. They were already told to call 911.";
+    let phoneN = 7581;
+    for (const status of ["SENT", "DELIVERED"] as const) {
+      for (const label of ["draft", "published"] as const) {
+        const app = await liveApp({ cleanups, fake: sendblueReturning(status) });
+        const phone = `+1555010${phoneN++}`;
+        if (label === "draft") app.ws.patchState("prop_100_alfred_way", { status: "DRAFT" });
+        else {
+          await app.textFrom(phone, "TOUR");
+          await app.textFrom(phone, "YES");
+        }
+        await app.textFrom(phone, "STOP");
+        const firstReply = await app.textFrom(phone, "my dad passed out");
+        const secondReply = await app.textFrom(phone, "he passed out");
+        expect(firstReply, `${status} ${label}`).toEqual([SENT]);
+        expect(secondReply, `${status} ${label}`).toEqual([]);
+        const items = ((await app.grok("get_inbox", { property: "100 Alfred Way" })).items as Array<{ what?: string; summary?: string; nextSteps?: string[] }>).filter(
+          (item) => item.what === "Possible injury",
+        );
+        expect(items, `${status} ${label}`).toHaveLength(2);
+        const first = items.find((item) => item.summary?.includes("my dad passed out"));
+        const second = items.find((item) => item.summary?.includes("he passed out"));
+        expect(first?.summary, `${status} ${label}`).toBe(`They texted: "my dad passed out". ${told}`);
+        expect(first?.nextSteps, `${status} ${label}`).toEqual(["Text or call them now, then mark it handled."]);
+        expect(second?.summary, `${status} ${label}`).toBe(`They texted: "he passed out". ${already}`);
+        expect(second?.nextSteps, `${status} ${label}`).toEqual(["Call them now, then mark it handled."]);
+      }
+    }
+  });
+
+  it("names a missed team alert for a queued 911 text and for a sent one", async () => {
+    const combined = "We sent them a text to call 911 and said you couldn't be reached, but we can't confirm it got to them.";
+    const unreached = "They were told to call 911 and that you couldn't be reached.";
+    const call = ["Call them now, then mark it handled."];
+    const textStep = ["Text or call them now, then mark it handled."];
+    const again = `Asked again at Sep 28, 9:06 AM: "he passed out".`;
+
+    const queuedOne = await inboxAfterHelp("she's not breathing", true, { visitorStatus: "QUEUED" });
+    expect(JSON.stringify(queuedOne.inbox)).not.toContain("They were told you couldn't be reached.");
+    expect(queuedOne.item.summary).toBe(`They texted: "she's not breathing". ${combined}`);
+    expect(queuedOne.item.nextSteps).toEqual(call);
+
+    const queuedTwo = await inboxAfterHelp("she's not breathing", true, { visitorStatus: "QUEUED", again: "he passed out" });
+    expect(JSON.stringify(queuedTwo.inbox)).not.toContain("They were told you couldn't be reached.");
+    expect(queuedTwo.item.summary).toBe(`They texted: "she's not breathing". ${again} ${combined}`);
+    expect(queuedTwo.item.nextSteps).toEqual(call);
+
+    const sentOne = await inboxAfterHelp("she's not breathing", true, { visitorStatus: "SENT" });
+    expect(sentOne.item.summary).toBe(`They texted: "she's not breathing". ${unreached}`);
+    expect(sentOne.item.nextSteps).toEqual(textStep);
+
+    const sentTwo = await inboxAfterHelp("she's not breathing", true, { visitorStatus: "SENT", again: "he passed out" });
+    expect(sentTwo.item.summary).toBe(`They texted: "she's not breathing". ${again} ${unreached}`);
+    expect(sentTwo.item.nextSteps).toEqual(textStep);
+  });
+
+  it("lists the unconfirmed injury endings on the inbox description", () => {
+    const description = OPERATOR_TOOLS.find((tool) => tool.description.includes("Possible injury"))?.description ?? "";
+    expect(description).toContain("They were sent a text to call 911 if someone is hurt, but we can't confirm it reached them.");
+    expect(description).toContain("They've opted out of texts, so they weren't texted back this time. Our earlier text telling them to call 911 was sent, but we can't confirm it reached them.");
+    expect(description).toContain("We sent them a text to call 911 and said you couldn't be reached, but we can't confirm it got to them.");
+    expect(description).toContain("All three use Call them now, then mark it handled.");
+    expect(description).toContain("They were told to call 911 and that you couldn't be reached when the 911 text went out and the alert did not");
   });
 });

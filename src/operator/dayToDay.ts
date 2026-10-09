@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { describeOperatorUpdate } from "../alerts/describeUpdate";
+import { describeOperatorUpdate, inboxPhoneVisitorLabel } from "../alerts/describeUpdate";
+import { exceptionEventId, timeRequestEventId } from "../alerts/operatorEvents";
 import { UPLOAD_BACKUP_FIRST } from "../backup/handoff";
 import { CHECKSUM_COVERS, CHECKSUM_COVERS_RESULT, PortableBackupError } from "../backup/portable";
 import { revokeConfirmQuestion } from "../core/availabilityCopy";
@@ -424,7 +425,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
     title: "Show what needs the landlord",
     kind: "read",
     description:
-      "Everything waiting on the landlord: flagged questions (a fair-housing item has proposeDraft false), help requests, door problems, custom-time requests, and a published property with no time zone (Time zone needed, no id). Pass exceptionId or tourTimeRequestId for one item. Pass eventId for one alert. The alert itself still carries no visitor name. Never show ids to the landlord.",
+      "Everything waiting on the landlord: flagged questions (a fair-housing item has proposeDraft false), help requests, door problems, custom-time requests, and a published property with no time zone (Time zone needed, no id). Pass exceptionId or tourTimeRequestId for one item. Pass eventId for one alert. Each item that had an alert includes its eventId. When the visitor has no name, the summary starts Visitor at {number}, {place}:. Never show ids to the landlord.",
     input: z.strictObject({
       property: Property,
       exceptionId: ExceptionId.optional(),
@@ -433,27 +434,40 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
       includeHandled: z.boolean().optional(),
     }),
     run: async (ctx, i) => {
+      const announced = (id: string) => (ctx.installation?.outbox.get(id) ? { eventId: id } : {});
       if (i.eventId) {
         const record = installationOf(ctx).outbox.get(i.eventId);
         if (!record) throw new SetupInputError("UPDATE_NOT_FOUND", "I couldn't find that update.");
-        const update = await describeOperatorUpdate(ctx.services, record.event, ctx.now());
+        const update = await describeOperatorUpdate(ctx.services, record.event, ctx.now(), { inbox: true });
         const instructions = typeof update.instructions === "string" ? update.instructions.replaceAll("answer_flagged_question", "resolve_issue") : update.instructions;
-        return { ...update, ...(instructions ? { instructions } : {}) };
+        const eventId = record.event.eventId;
+        return {
+          ...update,
+          ...(instructions ? { instructions } : {}),
+          eventId,
+          ...("issue" in update && update.issue ? { issue: { ...update.issue, eventId } } : {}),
+          ...("request" in update && update.request ? { request: { ...update.request, eventId } } : {}),
+        };
       }
       if (i.exceptionId) {
         const item = await inspectException(ctx.services, i.exceptionId);
+        const who = inboxPhoneVisitorLabel(item.visitorName) ?? item.visitorName;
         return {
-          summary: `${item.visitorName}${item.unitName ? `, ${item.unitName}` : ""}: ${item.summary}`,
-          item: { ...exceptionItem(item), question: item.question, tour: item.tour, recentMessages: item.recentMessages },
+          summary: `${who}${item.unitName ? `, ${item.unitName}` : ""}: ${item.summary}`,
+          item: { ...exceptionItem(item), ...announced(exceptionEventId(item.exceptionId)), question: item.question, tour: item.tour, recentMessages: item.recentMessages },
         };
       }
-      if (i.tourTimeRequestId) return inspectTourTimeRequest(ctx, i.tourTimeRequestId);
+      if (i.tourTimeRequestId) return { ...await inspectTourTimeRequest(ctx, i.tourTimeRequestId), ...announced(timeRequestEventId(i.tourTimeRequestId)) };
       const propertyId = propertyIdOf(ctx, i.property);
       const issues = await listExceptions(ctx.services, { propertyId, includeClosed: i.includeHandled });
       const times = await listTourTimeRequests(ctx, { property: i.property, includeHandled: i.includeHandled });
-      const requests = ((times.requests as Array<Record<string, unknown>> | undefined) ?? []).map((request) => ({ kind: "custom-time" as const, ...request }));
+      const requests = ((times.requests as Array<Record<string, unknown>> | undefined) ?? []).map((request) => ({
+        kind: "custom-time" as const,
+        ...request,
+        ...(typeof request.tourTimeRequestId === "string" ? announced(timeRequestEventId(request.tourTimeRequestId)) : {}),
+      }));
       const zoneNeeded = i.includeHandled ? [] : unsetZoneInboxItems(ctx.services, propertyId);
-      const items = [...zoneNeeded, ...issues.map(exceptionItem), ...requests];
+      const items = [...zoneNeeded, ...issues.map((item) => ({ ...exceptionItem(item), ...announced(exceptionEventId(item.exceptionId)) })), ...requests];
       const open = items.filter((item) => {
         const status = (item as { status?: string }).status;
         return item.kind === "custom-time" ? status === "waiting" : status === "open";

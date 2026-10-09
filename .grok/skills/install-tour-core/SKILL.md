@@ -389,7 +389,8 @@ backups use the Backup Tour Core skill. Do not say a backup is saved until
 Describe each part as it is (texting live, door access demo); never say
 "everything runs in demo mode". From here, when the Tour Core Operator Updates
 routine wakes you, call `get_inbox` with its `eventId` and post the
-`summary` (Work Exception covers issues). Work exceptions when the operator
+`summary` (Work Exception covers issues). Each item that had an alert includes its eventId. When the visitor has no name, the summary starts Visitor at {number}, {place}:.
+A named visitor stays their first name. The ping stays ids only. Work exceptions when the operator
 asks.
 
 ## Reset a hosted demo

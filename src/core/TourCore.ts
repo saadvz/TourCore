@@ -1602,6 +1602,8 @@ export class TourCore {
     if (!options?.suppressMedicalVisitorLine) {
       if (optedOut) await this.sendMedicalVisitorLine(prospect, undefined, body, true, normalized);
       else await this.sendConversationText({ phone: normalized, body, deliverDespiteOptOut: true });
+    } else {
+      await this.deliver({ audience: "PROSPECT", to: normalized, body, prospectId: prospect?.id, suppressed: true });
     }
     await this.recordBestEffort(
       "HELP_REQUESTED",

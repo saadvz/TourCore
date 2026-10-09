@@ -1,4 +1,5 @@
 import { placementOf, touringHoursLabel } from "../core/customSlot";
+import { formatPhone, looksLikePhone, normalizePhone } from "../core/phone";
 import { REQUEST_ALREADY_HANDLED, requestTimePassedLine, WITHDRAWN_FOR_REGULAR_BOOKING } from "../core/TourCore";
 import { addDays, formatDay, formatTime, localDateOf } from "../core/timezone";
 import { UNNAMED_VISITOR } from "../domain/model";
@@ -32,6 +33,17 @@ function when(start: Date, now: Date, tz: string): string {
 /** A sentence end, including an ellipsis or one that sits just inside a closing quote or parenthesis. */
 const SENTENCE_END = /[.!?…]["'”’)]*$/u;
 
+/**
+ * get_inbox label when the visitor has no name and the stored label is a phone
+ * number. The full formatted number, not its first chunk. Undefined when the
+ * label is a real name.
+ */
+export function inboxPhoneVisitorLabel(visitorName: string): string | undefined {
+  const trimmed = visitorName.trim();
+  if (!looksLikePhone(trimmed)) return undefined;
+  return `Visitor at ${formatPhone(normalizePhone(trimmed))}`;
+}
+
 /** Join an alert summary and the tour status. A finished sentence is not glued on, and a period is never doubled. */
 export function joinAlertDetail(summary: string, tourStatus: string): string {
   const left = summary.trim();
@@ -42,7 +54,7 @@ export function joinAlertDetail(summary: string, tourStatus: string): string {
   return SENTENCE_END.test(body) ? body : `${body}.`;
 }
 
-export async function describeOperatorUpdate(services: OperatorServices, event: OperatorEvent, now: Date) {
+export async function describeOperatorUpdate(services: OperatorServices, event: OperatorEvent, now: Date, options?: { inbox?: boolean }) {
   if (event.eventType === "installation.test") {
     return { eventType: event.eventType, summary: "Tour updates are connected. I'll let you know about your tours here." };
   }
@@ -50,7 +62,8 @@ export async function describeOperatorUpdate(services: OperatorServices, event: 
   if (isIssueEvent(event.eventType)) {
     if (!event.exceptionId) throw new SetupInputError("UPDATE_INCOMPLETE", "That update doesn't point at an issue.");
     const x = await inspectException(services, event.exceptionId);
-    const who = x.visitorName.startsWith("A visitor") ? x.visitorName : x.visitorName.split(/\s+/)[0];
+    const phoneLabel = options?.inbox ? inboxPhoneVisitorLabel(x.visitorName) : undefined;
+    const who = phoneLabel ?? (x.visitorName.startsWith("A visitor") ? x.visitorName : x.visitorName.split(/\s+/)[0]);
     return {
       eventType: event.eventType,
       stillOpen: x.status === "open",

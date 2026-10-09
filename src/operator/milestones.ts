@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PROBLEMS_ONLY, RECOMMENDED_UPDATES, UPDATE_KINDS, choosePreferences, describeUpdates } from "../alerts/preferences";
+import { PROBLEMS_ONLY, RECOMMENDED_UPDATES, UPDATE_KINDS, choosePreferences, describeUpdates, enabledUpdates } from "../alerts/preferences";
 import { PROPERTY_TYPES } from "../config/tourCoreConfig";
 import { extractValues, parseBulkUnitDetails } from "../config/unitProfile";
 import { checkPublicEndpoint, testAccess, testOperatorAlerts, testVisitorMessaging } from "../install/checks";
@@ -504,6 +504,7 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
     run: async (ctx, i) => {
       const hasProperty = i.property || ctx.services.workspace.propertyIds().length > 0;
       const opened = hasProperty ? open(ctx, i.property) : undefined;
+      const modeBefore = opened?.draft.verificationMode;
       if (i.verification === "none" && opened && opened.draft.verificationMode !== "none") {
         const fingerprint = `none|${opened.draft.verificationMode}`;
         if (!i.confirmationCode) {
@@ -529,11 +530,25 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
         const state = inst.files.state();
         inst.files.writeState({ ...state, skipped: { ...state.skipped, OPERATOR_ALERTS: new Date(inst.now()).toISOString() } });
       }
+      let posted: string | undefined;
       if ((i.preset || i.updates) && inst) {
         const state = inst.files.state();
+        const before = enabledUpdates(state.operatorUpdates);
         const enabled = i.updates ?? (i.preset === "problems-only" ? PROBLEMS_ONLY : RECOMMENDED_UPDATES);
         const prefs = choosePreferences(state.operatorUpdates, enabled, new Date(inst.now()));
         inst.files.writeState({ ...state, operatorUpdates: prefs });
+        const changed = before.length !== prefs.enabled.length || before.some((kind) => !prefs.enabled.includes(kind));
+        if (changed && !i.skipAlerts) {
+          const modeNow = opened ? ctx.services.workspace.openDraft(opened.id).draft.verificationMode : undefined;
+          const identityChanged = i.verification !== undefined && modeNow !== modeBefore;
+          const chosen = describeUpdates(prefs.enabled);
+          const off = prefs.enabled.length === 0;
+          const offClause = "tour updates are off, but I'll still tell you when a visitor asks for a different time";
+          if (identityChanged) {
+            const check = identityClause(modeNow);
+            posted = off ? `${check}, and ${offClause}.` : `${check}, and I'll keep you posted on ${chosen}.`;
+          } else posted = off ? `Got it. ${offClause.charAt(0).toUpperCase()}${offClause.slice(1)}.` : `Got it. I'll keep you posted on ${chosen}.`;
+        }
       }
       if (i.connectAlerts) {
         if (!inst) return envelope(ctx, opened?.id, "blocked", TOUR_UPDATES_NOT_HERE, {}, "INSTALLATION_UNAVAILABLE");
@@ -542,7 +557,7 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
         });
       }
       const mode = opened ? ctx.services.workspace.openDraft(opened.id).draft.verificationMode : undefined;
-      return envelope(ctx, opened?.id, "done", settingsSentence(mode, !!i.skipAlerts), { propertyId: opened?.id });
+      return envelope(ctx, opened?.id, "done", posted ?? settingsSentence(mode, !!i.skipAlerts), { propertyId: opened?.id });
     },
   }),
   tool({
@@ -688,10 +703,13 @@ function savedPlaces(names: string[], propertyType: string | undefined): string 
   return `Saved ${joinList(shown)}.`;
 }
 
+function identityClause(mode: string | undefined): string {
+  return mode === "none" ? "Visitors won't fill out an identity form" : "Visitors will fill out a basic identity form";
+}
+
 export function settingsSentence(mode: string | undefined, updatesOff: boolean): string {
-  const check = mode === "none" ? "Visitors won't fill out an identity form" : "Visitors will fill out a basic identity form";
   const updates = updatesOff ? "tour updates are off for now" : "tour updates stay as they are";
-  return `${check}, and ${updates}.`;
+  return `${identityClause(mode)}, and ${updates}.`;
 }
 
 function profileValues(entry: Record<string, unknown>): Record<string, string | number | boolean> {
