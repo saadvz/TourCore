@@ -810,4 +810,39 @@ describe("medical help", () => {
     expect(last.summary).toBe(`They texted: "she is not breathing now". ${skipped}`);
     expect(last.nextSteps).toEqual(["Call them now, then mark it handled."]);
   });
+
+  it("does not say they were already told to call 911 when that text never went out", async () => {
+    const unreached = "They've opted out of texts, so they weren't texted back this time. Our earlier text telling them to call 911 didn't go out.";
+    const blocked = "Our text telling them to call 911 didn't go out, so they haven't heard back yet.";
+    for (const label of ["draft", "published"] as const) {
+      const fake = fakeSendblue();
+      const send = fake.client.messages.send.bind(fake.client.messages);
+      fake.client.messages.send = async (params) => {
+        if (String(params.content).includes("call 911 now")) throw apiError(400);
+        return send(params);
+      };
+      const app = await liveApp({ cleanups, fake });
+      const phone = label === "draft" ? "+15550107401" : "+15550107402";
+      if (label === "draft") app.ws.patchState("prop_100_alfred_way", { status: "DRAFT" });
+      else {
+        await app.textFrom(phone, "TOUR");
+        await app.textFrom(phone, "YES");
+      }
+      await app.textFrom(phone, "STOP");
+      const firstReply = await app.textFrom(phone, "my dad passed out");
+      const secondReply = await app.textFrom(phone, "he passed out");
+      expect(firstReply, label).toEqual([]);
+      expect(secondReply, label).toEqual([]);
+      const items = ((await app.grok("get_inbox", { property: "100 Alfred Way" })).items as Array<{ what?: string; summary?: string; nextSteps?: string[] }>).filter(
+        (item) => item.what === "Possible injury",
+      );
+      expect(items, label).toHaveLength(2);
+      const first = items.find((item) => item.summary?.includes("my dad passed out"));
+      const second = items.find((item) => item.summary?.includes("he passed out"));
+      expect(first?.summary, label).toBe(`They texted: "my dad passed out". ${blocked}`);
+      expect(second?.summary, label).toBe(`They texted: "he passed out". ${unreached}`);
+      expect(second?.summary, label).not.toContain("already told");
+      expect(second?.nextSteps, label).toEqual(["Call them now, then mark it handled."]);
+    }
+  });
 });

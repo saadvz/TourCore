@@ -204,6 +204,7 @@ const INJURY_TOLD = "They were told to call 911 if someone is hurt, and that you
 const INJURY_UNREACHED = "They were told you couldn't be reached.";
 const INJURY_BLOCKED = "Our text telling them to call 911 didn't go out, so they haven't heard back yet.";
 const INJURY_SKIPPED = "They've opted out of texts, so they weren't texted back this time. They were already told to call 911.";
+const INJURY_SKIPPED_UNREACHED = "They've opted out of texts, so they weren't texted back this time. Our earlier text telling them to call 911 didn't go out.";
 const INJURY_STEP = "Text or call them now, then mark it handled.";
 const INJURY_CALL_STEP = "Call them now, then mark it handled.";
 
@@ -233,18 +234,19 @@ function latestHelpAttemptFailed(tour: TourSnapshot, helps: AuditEvent[]): boole
   return false;
 }
 
-function injuryEnding(tour: TourSnapshot, helps: AuditEvent[]): string {
+function injuryEnding(tour: TourSnapshot, helps: AuditEvent[], tours: TourSnapshot[]): string {
   const latest = [...helps].sort((a, b) => a.seq - b.seq).at(-1);
   if (latest) {
-    const line = visitorLineFor(tour, latest);
+    const line = visitorLineFor(tour, latest, tours);
     if (line === "skipped") return INJURY_SKIPPED;
+    if (line === "skipped-unreached") return INJURY_SKIPPED_UNREACHED;
     if (line === "blocked") return INJURY_BLOCKED;
   }
   return latestHelpAttemptFailed(tour, helps) ? INJURY_UNREACHED : INJURY_TOLD;
 }
 
 function injuryNextStep(summary: string): string[] {
-  return summary.includes(INJURY_BLOCKED) || summary.includes(INJURY_SKIPPED) ? [INJURY_CALL_STEP] : [INJURY_STEP];
+  return summary.includes(INJURY_BLOCKED) || summary.includes(INJURY_SKIPPED) || summary.includes(INJURY_SKIPPED_UNREACHED) ? [INJURY_CALL_STEP] : [INJURY_STEP];
 }
 
 /** The number on a help record: the phone field, or a place field that is only a number. */
@@ -293,29 +295,53 @@ function messageForVisitor(message: Message, help: AuditEvent): boolean {
   return !help.prospectId && !message.prospectId;
 }
 
+/** A 911 text the carrier accepted. A successful send is stored as queued until a later receipt. */
+function injuryTextGotThrough(status: Message["deliveryStatus"]): boolean {
+  return status === "SENT" || status === "DELIVERED" || status === "QUEUED";
+}
+
+function visitorPhoneFor(help: AuditEvent, tour: TourSnapshot): string | undefined {
+  return visitorPhoneOf(help) ?? (tour.visitorPhone && looksLikePhone(tour.visitorPhone) ? normalizePhone(tour.visitorPhone) : undefined);
+}
+
+/** True when this visitor was actually sent the 911 line, including on an earlier tour. */
+function toldToCall911(tours: TourSnapshot[], help: AuditEvent, tour: TourSnapshot): boolean {
+  const phone = visitorPhoneFor(help, tour);
+  return tours.some((item) =>
+    item.bundle.messages.some((message) => {
+      if (message.audience !== "PROSPECT" || message.direction !== "OUTBOUND" || !message.body.includes("call 911 now")) return false;
+      if (!injuryTextGotThrough(message.deliveryStatus)) return false;
+      if (messageForVisitor(message, help)) return true;
+      return !!phone && looksLikePhone(message.counterparty) && normalizePhone(message.counterparty) === phone;
+    }),
+  );
+}
+
 /**
  * The 911 text for this help. A repeat after STOP does not use up a message.
  * Each earlier try in this opt-out uses the next matching outbound text.
  * A missing text or a failed send is blocked. A suppressed or skipped text
- * (the one allowed try for this opt-out was already used) is skipped.
+ * (the one allowed try for this opt-out was already used) is skipped only
+ * when an earlier 911 text got through. Otherwise it is skipped-unreached.
  * Anything else was sent.
  */
-function visitorLineFor(tour: TourSnapshot, help: AuditEvent): "sent" | "blocked" | "skipped" {
+function visitorLineFor(tour: TourSnapshot, help: AuditEvent, tours: TourSnapshot[]): "sent" | "blocked" | "skipped" | "skipped-unreached" {
   const helps = tour.bundle.auditEvents
     .filter((event) => event.type === "HELP_REQUESTED" && !!medicalHelpText(event) && sameVisitor(event, help) && event.seq <= help.seq)
     .sort((a, b) => a.seq - b.seq);
   const messages = tour.bundle.messages.filter(
     (message) => message.audience === "PROSPECT" && message.direction === "OUTBOUND" && message.body.includes("call 911 now") && messageForVisitor(message, help),
   );
+  const skipped = (): "skipped" | "skipped-unreached" => (toldToCall911(tours, help, tour) ? "skipped" : "skipped-unreached");
   let index = 0;
-  let line: "sent" | "blocked" | "skipped" = "blocked";
+  let line: "sent" | "blocked" | "skipped" | "skipped-unreached" = "blocked";
   for (const item of helps) {
     if (repeatAfterOptOut(tour, item)) {
-      line = "skipped";
+      line = skipped();
       continue;
     }
     const message = messages[index++];
-    line = !message || message.deliveryStatus === "FAILED" ? "blocked" : message.deliveryStatus === "SUPPRESSED" || message.deliveryStatus === "SKIPPED" ? "skipped" : "sent";
+    line = !message || message.deliveryStatus === "FAILED" ? "blocked" : message.deliveryStatus === "SUPPRESSED" || message.deliveryStatus === "SKIPPED" ? skipped() : "sent";
   }
   return line;
 }
@@ -326,7 +352,7 @@ function injuryEndingForQuestion(tour: TourSnapshot, asked: string, reservationI
   const helps = tour.bundle.auditEvents.filter(
     (e) => e.type === "HELP_REQUESTED" && e.reservationId === reservationId && (e.code ?? "").trim() === asked.trim() && !!medicalHelpText(e),
   );
-  return helps.length ? injuryEnding(tour, helps) : undefined;
+  return helps.length ? injuryEnding(tour, helps, [tour]) : undefined;
 }
 
 function askedAgain(tour: TourSnapshot, event: AuditEvent): string {
@@ -336,7 +362,7 @@ function askedAgain(tour: TourSnapshot, event: AuditEvent): string {
 }
 
 /** Same injury words stay the sent sentence. A different later ask is added before the ending. */
-function injuryFoldSummary(tour: TourSnapshot, events: AuditEvent[]): string {
+function injuryFoldSummary(tour: TourSnapshot, events: AuditEvent[], tours: TourSnapshot[]): string {
   const first = events[0];
   const opening = (first && medicalHelpText(first)) || (first && inboundAt(first)) || "";
   let summary = quotedVisitorAsk(opening, "They texted");
@@ -345,7 +371,7 @@ function injuryFoldSummary(tour: TourSnapshot, events: AuditEvent[]): string {
     const sameInjury = !!said && said === opening && !!medicalHelpText(later);
     if (!sameInjury) summary += askedAgain(tour, later);
   }
-  return `${summary} ${injuryEnding(tour, events)}`;
+  return `${summary} ${injuryEnding(tour, events, tours)}`;
 }
 
 /** True when this visitor had opted out and had not texted START again by this event. */
@@ -460,7 +486,7 @@ function unitSubject(tour: TourSnapshot, unitId?: string): string | undefined {
   return unit ? visitorSubject(tour.config.property, unit.name) : undefined;
 }
 
-function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resolutions: Map<string, ExceptionResolution>): OperatorException {
+function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resolutions: Map<string, ExceptionResolution>, tours: TourSnapshot[] = [tour]): OperatorException {
   const exceptionId = id(tour.propertyId, tour.tourId, e.id);
   const pauseKind = kind === "operator-hold" || kind === "provider-failure";
   const paused = pauseKind && stillApplies(e, tour);
@@ -480,7 +506,7 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
   const sent = resolution?.approvedFact?.trim();
   const sentPeriod = sent && /[.!?]$/.test(sent) ? "" : ".";
   const main = injury
-    ? injuryFoldSummary(tour, [e])
+    ? injuryFoldSummary(tour, [e], tours)
     : asked && sent
       ? `${quotedVisitorAsk(asked)} They were sent "${escapeVisitorQuote(sent)}"${sentPeriod}`
       : summaryFor(kind, e, tour);
@@ -534,7 +560,7 @@ function belongsToCurrentHelp(current: OperatorException, event: AuditEvent): bo
  * injury item, and the ending follows the latest alert attempt. While the
  * visitor is opted out, each injury stays its own item.
  */
-function foldHelpExceptions(tour: TourSnapshot, events: AuditEvent[], resolutions: Map<string, ExceptionResolution>): OperatorException[] {
+function foldHelpExceptions(tour: TourSnapshot, events: AuditEvent[], resolutions: Map<string, ExceptionResolution>, tours: TourSnapshot[]): OperatorException[] {
   const byReservation = new Map<string, AuditEvent[]>();
   for (const e of events) {
     const key = e.reservationId ?? e.id;
@@ -558,14 +584,14 @@ function foldHelpExceptions(tour: TourSnapshot, events: AuditEvent[], resolution
         folded.push(e);
         members.set(current, folded);
         if (current.title === "Possible injury") {
-          current.summary = injuryFoldSummary(tour, folded);
+          current.summary = injuryFoldSummary(tour, folded, tours);
           if (current.status === "open") current.nextSteps = stepsNotAlreadyInSummary(current.summary, injuryNextStep(current.summary));
         } else current.summary += askedAgain(tour, e);
         current.happenedAt = e.at;
         current.when = shortWhen(e.at, tour.config.property.timezone);
         continue;
       }
-      current = fromEvent(tour, e, "needs-help", resolutions);
+      current = fromEvent(tour, e, "needs-help", resolutions, tours);
       members.set(current, [e]);
       out.push(current);
     }
@@ -590,7 +616,7 @@ export async function listExceptions(services: OperatorServices, options: { prop
         else if (kind === "message-failed" && teamMissAfterInjury(tour, e)) continue;
         else if (kind) out.push(fromEvent(tour, e, kind, resolutions));
       }
-      out.push(...foldHelpExceptions(tour, help, resolutions));
+      out.push(...foldHelpExceptions(tour, help, resolutions, mine));
     }
     const { config } = services.workspace.load(propertyId);
     for (const broken of services.needsAttention?.(propertyId) ?? []) {

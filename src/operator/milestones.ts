@@ -543,10 +543,11 @@ export const MILESTONE_TOOLS: OperatorTool[] = [
           const identityChanged = i.verification !== undefined && modeNow !== modeBefore;
           const chosen = describeUpdates(prefs.enabled);
           const off = prefs.enabled.length === 0;
+          const offClause = "tour updates are off, but I'll still tell you when a visitor asks for a different time";
           if (identityChanged) {
             const check = identityClause(modeNow);
-            posted = off ? `${check}, and tour updates are off for now.` : `${check}, and I'll keep you posted on ${chosen}.`;
-          } else posted = off ? "Got it. Tour updates are off for now." : `Got it. I'll keep you posted on ${chosen}.`;
+            posted = off ? `${check}, and ${offClause}.` : `${check}, and I'll keep you posted on ${chosen}.`;
+          } else posted = off ? `Got it. ${offClause.charAt(0).toUpperCase()}${offClause.slice(1)}.` : `Got it. I'll keep you posted on ${chosen}.`;
         }
       }
       if (i.connectAlerts) {

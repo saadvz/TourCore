@@ -79,7 +79,7 @@ describe("tour lifecycle updates", () => {
   it("says tour updates are off when save_settings is given an empty list", async () => {
     const app = await liveApp({ cleanups });
     const saved = await app.grok("save_settings", { updates: [] });
-    expect(saved.message).toBe("Got it. Tour updates are off for now.");
+    expect(saved.message).toBe("Got it. Tour updates are off, but I'll still tell you when a visitor asks for a different time.");
   });
 
   it("keeps the identity sentence when one save changes the form and the tour updates", async () => {
@@ -93,7 +93,7 @@ describe("tour lifecycle updates", () => {
     const none = await empty.grok("save_settings", { verification: "none" });
     await empty.grok("save_settings", { verification: "none", confirmationCode: none.confirmation.code });
     const cleared = await empty.grok("save_settings", { verification: "basic-form", updates: [] });
-    expect(cleared.message).toBe("Visitors will fill out a basic identity form, and tour updates are off for now.");
+    expect(cleared.message).toBe("Visitors will fill out a basic identity form, and tour updates are off, but I'll still tell you when a visitor asks for a different time.");
   });
 
   it("keeps the current line when save_settings does not change tour updates", async () => {
