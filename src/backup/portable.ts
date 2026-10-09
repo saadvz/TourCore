@@ -80,10 +80,15 @@ export function checksumOf(contents: unknown): string {
 
 /** For Grok. The downloaded file is pretty-printed and also includes this field, so hashing the file does not reproduce it. */
 export const CHECKSUM_COVERS =
-  "The checksum is the SHA-256 of the backup's `contents`, as compact JSON with sorted keys, and it is stored in the file's `checksum` field, so a hash of the whole downloaded file won't match.";
+  "The checksum is the SHA-256 of the backup's contents only: compact JSON (no spaces), object keys sorted at every level, arrays kept in order, UTF-8 with non-ASCII characters written as-is (not \\u-escaped), no trailing newline. It is stored in the file's checksum field, so a hash of the whole downloaded file won't match.";
 
 const FILE_CHANGED = "This backup file was changed or damaged after it was made, so nothing was restored. Try the original file.";
 const PART_CHANGED = "Part of this backup file was changed or damaged, so nothing was restored. Try the original file.";
+const NOT_A_BACKUP = "This file doesn't look like a Tour Core backup, so nothing was restored. Try the original file.";
+const PART_BROKEN = "Part of this backup file is broken, so nothing was restored. Try the original file.";
+
+/** On tool results. The prefix keeps the hash construction from being read aloud. */
+export const CHECKSUM_COVERS_RESULT = `For you, not out loud: ${CHECKSUM_COVERS}`;
 
 function safePath(path: string): boolean {
   if (path.includes("\\") || path.startsWith("/") || path.includes("..")) return false;
@@ -169,29 +174,29 @@ function relationshipProblems(files: CanonicalFile[]): string[] {
   const tourIds = new Set<string>();
   for (const file of files) {
     if (!safePath(file.path)) {
-      problems.push("The backup contains a file that doesn't belong in a Tour Core snapshot.");
+      problems.push(NOT_A_BACKUP);
       continue;
     }
-    if (paths.has(file.path)) problems.push("The backup has two copies of the same record.");
+    if (paths.has(file.path)) problems.push(PART_BROKEN);
     paths.add(file.path);
     if (sha256Json(file.body) !== file.sha256) problems.push(PART_CHANGED);
     if (!file.path.endsWith("/tourcore.config.json")) continue;
     const body = file.body as { property?: { id?: string }; doors?: { id?: string }[]; routes?: { stops?: { doorId?: string }[] }[]; units?: unknown[] };
     const id = body.property?.id;
     if (!id) {
-      problems.push("A property record is missing its id.");
+      problems.push(PART_BROKEN);
       continue;
     }
-    if (propertyIds.has(id)) problems.push("The backup has two properties with the same id.");
+    if (propertyIds.has(id)) problems.push(PART_BROKEN);
     propertyIds.add(id);
     const doorIds = new Set((body.doors ?? []).map((door) => door.id).filter((doorId): doorId is string => !!doorId));
     for (const route of body.routes ?? []) {
       if (!Array.isArray(route.stops)) {
-        problems.push("A route in the backup is malformed.");
+        problems.push(PART_BROKEN);
         continue;
       }
       for (const stop of route.stops) {
-        if (!stop.doorId || (doorIds.size > 0 && !doorIds.has(stop.doorId))) problems.push("A route in the backup points at a door that isn't on the property.");
+        if (!stop.doorId || (doorIds.size > 0 && !doorIds.has(stop.doorId))) problems.push(PART_BROKEN);
       }
     }
   }

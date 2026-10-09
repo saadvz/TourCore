@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { describeOperatorUpdate } from "../alerts/describeUpdate";
 import { UPLOAD_BACKUP_FIRST } from "../backup/handoff";
-import { CHECKSUM_COVERS, PortableBackupError } from "../backup/portable";
+import { CHECKSUM_COVERS, CHECKSUM_COVERS_RESULT, PortableBackupError } from "../backup/portable";
 import { revokeConfirmQuestion } from "../core/availabilityCopy";
 import { TourCoreError } from "../core/TourCore";
 import { addDays, formatDay, formatTime, isValidTimeZone, localDateOf, timeOnDay, type LocalDate } from "../core/timezone";
@@ -70,7 +70,7 @@ const Code = z.string().max(20).optional().describe("Only after the landlord exp
 const Unit = z.string().min(1).max(100).describe('The unit, e.g. "Unit 101" or "101".');
 
 function withChecksumCovers(result: Record<string, unknown>): Record<string, unknown> {
-  return { ...result, checksumCovers: CHECKSUM_COVERS };
+  return { ...result, checksumCovers: CHECKSUM_COVERS_RESULT };
 }
 
 function blockedOf(err: unknown): { message: string; code: string } | undefined {
@@ -551,21 +551,21 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
       day: z.string().max(20).optional(),
     }),
     run: async (ctx, i) => {
-      if (i.kind === "readable") return withChecksumCovers(installationOf(ctx).backups.createExport());
+      if (i.kind === "readable") return installationOf(ctx).backups.createExport();
       const id = resolvePropertyId(ctx.services.workspace, i.property);
       const { config } = ctx.services.workspace.load(id);
       const parsed = parseExportDay(i.day ?? "today", localDateOf(ctx.now(), config.property.timezone));
       if (!parsed.ok) throw new SetupInputError("DAY_UNREADABLE", "I couldn't read that date. Which day? Say today or a date like Sept 28.");
       const out = await exportAudit(ctx.services, id, { day: parsed.day, now: ctx.now() });
       const s = out.summary;
-      return withChecksumCovers({
+      return {
         summary: formatAuditDaySummary(s),
         totals: s,
         reference: `Audit export ${out.exportId}, saved with ${ctx.services.workspace.load(id).config.property.name}'s tour records on the Tour Core computer.`,
         accessGrants: out.accessGrants,
         denials: out.denials,
         files: out.files.map((file) => ({ file, ...auditExportFileLink(ctx, id, out.exportId, file) })),
-      });
+      };
     },
   }),
   tool({
