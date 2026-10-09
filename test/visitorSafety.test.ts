@@ -263,6 +263,40 @@ describe("STOP, HELP, and START on an unchecked draft", () => {
       expect(await text(shared ? "+1555555832" : "+1555555822", "START")).toEqual([DRAFT_START]);
     }
   });
+
+  it("after STOP on an unchecked draft, sends the 911 line once per opt-out on one line and on a shared line", async () => {
+    const sent =
+      "If someone is hurt, call 911 now. I've also let the property team know, and they'll text you here as soon as they can.";
+    for (const shared of [false, true]) {
+      const root = mkdtempSync(join(tmpdir(), shared ? "tourcore-draft-stop-injury-shared-" : "tourcore-draft-stop-injury-"));
+      cleanups.push(() => rmSync(root, { recursive: true, force: true }));
+      const ws = new PropertyWorkspace(root);
+      const ids = shared
+        ? [uncheckedDraft(ws, "12 QA Scratch Lane, Teaneck, NJ 07666"), uncheckedDraft(ws, "13 QA Scratch Lane, Teaneck, NJ 07666")]
+        : [uncheckedDraft(ws, "14 QA Scratch Lane, Teaneck, NJ 07666")];
+      const { text } = wire(ws, ids);
+      const phone = shared ? "+15555559101" : "+15555559102";
+      const label = shared ? "shared" : "single";
+      const lines = (replies: string[]) => replies.filter((body) => body.includes("call 911 now"));
+      const alerts = (replies: string[]) => replies.filter((body) => body.includes("asked for help"));
+
+      expect(await text(phone, "STOP"), label).toEqual([STOP]);
+      const first = await text(phone, "my dad passed out");
+      expect(lines(first), label).toEqual([sent]);
+      expect(alerts(first), label).toHaveLength(1);
+      const second = await text(phone, "he passed out");
+      expect(lines(second), `${label} repeat`).toEqual([]);
+      expect(alerts(second), `${label} repeat`).toHaveLength(1);
+      expect(await text(phone, "Hi"), label).toEqual([]);
+      expect(await text(phone, "HELP"), label).toEqual([HELP]);
+      expect(await text(phone, "START"), label).toEqual([DRAFT_START]);
+      expect(await text(phone, "STOP"), label).toEqual([STOP]);
+      const again = await text(phone, "she's not breathing");
+      expect(lines(again), `${label} after START`).toEqual([sent]);
+      expect(alerts(again), `${label} after START`).toHaveLength(1);
+      expect(await text(phone, "Hi"), `${label} after second STOP`).toEqual([]);
+    }
+  });
 });
 
 describe("drafts stay out of the property picker", () => {

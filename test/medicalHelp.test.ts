@@ -8,6 +8,7 @@ import type { ConversationStep } from "../src/intent/model";
 import type { OutgoingMessage } from "../src/messaging/Messenger";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
 import { persistSession } from "../src/operator/services";
+import { tourRef } from "../src/operator/tours";
 import { handleVisitorText } from "../src/visitor/conversation";
 import { smsHelpBody } from "../src/visitor/smsConsent";
 import { VisitorDemoSession } from "../src/visitor";
@@ -710,5 +711,68 @@ describe("medical help", () => {
     expect(errors.filter((line) => line.startsWith("911 line was not sent"))).toHaveLength(1);
     const inbox = (await app.grok("get_inbox", { property: "100 Alfred Way" })).items as Array<{ what?: string }>;
     expect(inbox.some((item) => item.what === "Message couldn't be delivered")).toBe(false);
+  });
+
+  it("keeps the phone out of the help location when there is no visitor record", async () => {
+    const propertyId = "prop_100_alfred_way";
+    const cases = [
+      { label: "STOP then injury", phone: "+15550107201", steps: ["STOP", "my dad passed out"] },
+      { label: "injury first", phone: "+15550107202", steps: ["my dad passed out"] },
+      { label: "opt in then STOP then injury", phone: "+15550107203", steps: ["TOUR", "YES", "STOP", "my dad passed out"] },
+    ] as const;
+    for (const item of cases) {
+      const app = await liveApp({ cleanups });
+      for (const step of item.steps) await app.textFrom(item.phone, step);
+      const session = app.visitors.latestForPhone(propertyId, item.phone, "messaging");
+      expect(session, item.label).toBeTruthy();
+      const inspect = await app.grok("inspect_tour", { tourRef: tourRef(propertyId, session!.tourId) });
+      const inbox = await app.grok("get_inbox", { property: "100 Alfred Way" });
+      const blob = JSON.stringify({ inspect, inbox });
+      expect(blob, item.label).toContain("the visitor asked for help.");
+      expect(blob, item.label).not.toContain("+1555");
+      expect(blob, item.label).not.toContain("asked for help near");
+    }
+  });
+
+  it("says the 911 text did not go out when that send is blocked", async () => {
+    const sent = await inboxAfterHelp("she's not breathing");
+    expect(sent.text).toContain("They were told to call 911 if someone is hurt, and that you'd text them here.");
+    expect(sent.text).toContain("Text or call them now, then mark it handled.");
+    const missed = await inboxAfterHelp("she's not breathing", true);
+    expect(missed.text).toContain("They were told you couldn't be reached.");
+    expect(missed.text).toContain("Text or call them now, then mark it handled.");
+
+    const fake = fakeSendblue();
+    const send = fake.client.messages.send.bind(fake.client.messages);
+    fake.client.messages.send = async (params) => {
+      if (String(params.content).includes("call 911 now")) throw apiError(400);
+      return send(params);
+    };
+    const app = await liveApp({ cleanups, fake });
+    await app.textFrom("+15550107211", "my dad passed out");
+    const injury = ((await app.grok("get_inbox", { property: "100 Alfred Way" })).items as Array<{ what?: string; summary?: string; nextSteps?: string[] }>).find(
+      (item) => item.what === "Possible injury",
+    );
+    expect(injury?.summary).toBe(`They texted: "my dad passed out". Our text telling them to call 911 didn't go out, so they haven't heard back yet.`);
+    expect(injury?.nextSteps).toEqual(["Call them now, then mark it handled."]);
+  });
+
+  it("says they were not texted again when a second injury comes after STOP", async () => {
+    const app = await liveApp({ cleanups });
+    const phone = "+15550107212";
+    await app.textFrom(phone, "STOP");
+    await app.textFrom(phone, "my dad passed out");
+    await app.textFrom(phone, "he passed out");
+    const items = ((await app.grok("get_inbox", { property: "100 Alfred Way" })).items as Array<{ what?: string; summary?: string; nextSteps?: string[] }>).filter(
+      (item) => item.what === "Possible injury",
+    );
+    const first = items.find((item) => item.summary?.includes("my dad passed out"));
+    const second = items.find((item) => item.summary?.includes("he passed out"));
+    expect(first?.summary).toBe(`They texted: "my dad passed out". They were told to call 911 if someone is hurt, and that you'd text them here.`);
+    expect(first?.nextSteps).toEqual(["Text or call them now, then mark it handled."]);
+    expect(second?.summary).toBe(
+      `They texted: "he passed out". They've opted out of texts, so they weren't texted back this time. They were told to call 911 after their first message.`,
+    );
+    expect(second?.nextSteps).toEqual(["Call them now, then mark it handled."]);
   });
 });

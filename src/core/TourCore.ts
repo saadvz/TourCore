@@ -30,7 +30,7 @@ import type { Clock } from "./clock";
 import { FAIR_HOUSING_CODE, isFairHousingQuestion } from "./fairHousing";
 import { isMedicalEmergency } from "../intent/ruleBased";
 import { approvedAnswerText, approvedFacts, type ApprovedFact } from "./facts";
-import { formatPhone, normalizePhone } from "./phone";
+import { formatPhone, looksLikePhone, normalizePhone } from "./phone";
 import { resolveQuestion } from "./questions";
 import { closestOpenSlots, intervalsOverlap, occupiedInterval, overlapSummary, placementOf, relativeWhen, releasedWhen, tourInterval, touringHoursLabel, type OccupiedWindow, type TimeInterval } from "./customSlot";
 import { DOOR_AFTER_T, LATE_ARRIVAL_EXPIRED, landlordRepliedAfterClose, landlordWho, tourFinishedFollowUp, visitorRepliedAfterClose } from "./overstayCopy";
@@ -1523,11 +1523,20 @@ export class TourCore {
     }
   }
 
-  async requestHelp(reservationId: string | undefined, where?: string, inbound?: { text: string; meta?: InboundMeta; phone?: string }): Promise<void> {
+  async requestHelp(
+    reservationId: string | undefined,
+    where?: string,
+    inbound?: { text: string; meta?: InboundMeta; phone?: string; messagingOptedOut?: boolean; suppressMedicalVisitorLine?: boolean },
+  ): Promise<void> {
     const said = inbound?.text ?? "I need help";
     const medical = isMedicalEmergency(said);
     if (!reservationId) {
-      if (medical && inbound?.phone) await this.deliverUnbookedMedical(inbound.phone, said);
+      if (medical && inbound?.phone) {
+        await this.deliverUnbookedMedical(inbound.phone, said, {
+          messagingOptedOut: inbound.messagingOptedOut,
+          suppressMedicalVisitorLine: inbound.suppressMedicalVisitorLine,
+        });
+      }
       return;
     }
     const reservation = await this.mustGetReservation(reservationId);
@@ -1576,7 +1585,11 @@ export class TourCore {
   }
 
   /** Injury text before a tour exists. Same 911 lines, including a failed team alert. */
-  private async deliverUnbookedMedical(phone: string, said: string): Promise<void> {
+  private async deliverUnbookedMedical(
+    phone: string,
+    said: string,
+    options?: { messagingOptedOut?: boolean; suppressMedicalVisitorLine?: boolean },
+  ): Promise<void> {
     if (isFairHousingQuestion(said)) {
       await this.forwardFlaggedQuestion({ asked: said.trim().slice(0, 300) });
     }
@@ -1585,12 +1598,14 @@ export class TourCore {
     const body = VisitorDenialCopy.medicalAlert(this.teamName(), this.visitorHelpNumber(), alerted);
     const normalized = normalizePhone(phone);
     const prospect = (await this.deps.store.list("prospects")).find((p) => p.phone === normalized);
-    const optedOut = prospect ? !!prospect.messagingOptedOut : await this.phoneIsOptedOut(normalized);
-    if (optedOut) await this.sendMedicalVisitorLine(prospect, undefined, body, true, normalized);
-    else await this.sendConversationText({ phone: normalized, body, deliverDespiteOptOut: true });
+    const optedOut = prospect ? !!prospect.messagingOptedOut || !!options?.messagingOptedOut : !!options?.messagingOptedOut || (await this.phoneIsOptedOut(normalized));
+    if (!options?.suppressMedicalVisitorLine) {
+      if (optedOut) await this.sendMedicalVisitorLine(prospect, undefined, body, true, normalized);
+      else await this.sendConversationText({ phone: normalized, body, deliverDespiteOptOut: true });
+    }
     await this.recordBestEffort(
       "HELP_REQUESTED",
-      { prospectId: prospect?.id, detail: prospect ? "" : normalized, code: said },
+      { prospectId: prospect?.id, detail: "", code: said, ...(prospect ? {} : { phone: normalized }) },
       "Help request was not recorded",
     );
     if (alerted) {
@@ -2487,10 +2502,10 @@ export class TourCore {
   /**
    * True when this opt-out already tried the 911 line, including a carrier block.
    * A visitor record is matched by prospect id. Before a visitor exists, the
-   * phone on the help record is matched after that number's latest opt-out.
-   * The help record is written after the try, so a later injury in the same
-   * opt-out does not send again. START then STOP is a new opt-out. Clock ties
-   * do not count an earlier try.
+   * phone field on the help record is matched after that number's latest opt-out.
+   * A phone stored in the place field still counts. The help record is written
+   * after the try, so a later injury in the same opt-out does not send again.
+   * START then STOP is a new opt-out. Clock ties do not count an earlier try.
    */
   private async injuryLineAlreadyAttempted(input: { prospectId?: string; phone?: string }): Promise<boolean> {
     try {
@@ -2505,7 +2520,9 @@ export class TourCore {
       return audit.some((e) => {
         if (e.type !== "HELP_REQUESTED" || e.seq <= opted.seq || !isMedicalEmergency(e.code ?? "")) return false;
         if (input.prospectId) return e.prospectId === input.prospectId;
-        return !!phone && e.detail === phone;
+        if (!phone) return false;
+        if (e.phone && normalizePhone(e.phone) === phone) return true;
+        return looksLikePhone(e.detail) && normalizePhone(e.detail) === phone;
       });
     } catch (err) {
       console.error(`911 history was not read: ${err instanceof Error ? err.message : "unknown error"}`);

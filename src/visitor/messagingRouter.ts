@@ -234,9 +234,8 @@ export class MessagingConversations {
       const waiting = [...openSaved, ...draftOnly];
       if (waiting.length && waiting.every((id) => this.isUnpublishedDraft(id))) {
         if (isMedicalEmergency(message.text)) {
-          const propertyId = waiting.find((id) => this.configOf(id));
+          const propertyId = waiting.find((id) => this.configOf(id)) ?? waiting[0];
           if (propertyId) await this.answerDraftInjury(propertyId, phone, message.text);
-          else await this.sendUnreachedInjury(waiting[0], phone);
           return undefined;
         }
         await this.answerNotReady(waiting, phone);
@@ -407,16 +406,22 @@ export class MessagingConversations {
   }
 
   /**
-   * Injury on a draft, including one with no saved config. One alert, the 911 line,
-   * and a Possible injury item when the team can be reached. The conversation is
-   * saved for the inbox and is not resumed, so Hi still gets the not-ready line.
+   * Injury on a draft, including one with no saved setup. One alert and the 911 line.
+   * A draft with no saved setup does not open a Possible injury inbox item.
+   * After STOP, the 911 line is tried once for that opt-out. A later injury still alerts.
+   * The conversation is saved when it can be, and is not resumed, so Hi still gets the not-ready line.
    * An injury text is never dropped: if the team cannot be alerted, the visitor
    * still gets the unreached 911 line.
    */
   private async answerDraftInjury(propertyId: string, phone: string, text: string): Promise<void> {
+    const optedOut = this.isOptedOut(propertyId, phone) || this.smsConsent.get(propertyId, phone)?.status === "opted_out";
+    const already = optedOut && this.openIdsOnLine(propertyId).some((id) => this.injuryLineTried(id, phone));
     const config = this.configOf(propertyId);
     if (!config) {
-      await this.sendUnreachedInjury(propertyId, phone);
+      if (!already) {
+        await this.sendUnreachedInjury(propertyId, phone);
+        if (optedOut) this.markInjuryLineTried(propertyId, phone);
+      }
       return;
     }
     let told = false;
@@ -436,6 +441,8 @@ export class MessagingConversations {
         }),
       );
       session.identify(phone);
+      session.optedOut = optedOut;
+      session.suppressMedicalVisitorLine = already;
       await session.help({ text });
       told = (await session.store.list("messages")).some(
         (message) => message.audience === "PROSPECT" && message.direction === "OUTBOUND" && message.body.includes("call 911 now"),
@@ -450,7 +457,8 @@ export class MessagingConversations {
     } catch (err) {
       console.error(`Injury on a draft was not handled: ${err instanceof Error ? err.message : "unknown error"}`);
     }
-    if (!told) await this.sendUnreachedInjury(propertyId, phone, config.operator.name);
+    if (!told && !already) await this.sendUnreachedInjury(propertyId, phone, config.operator.name);
+    if (optedOut && !already) this.markInjuryLineTried(propertyId, phone);
   }
 
   /** The 911 line used when a draft injury cannot alert the team. */
@@ -1008,21 +1016,51 @@ export class MessagingConversations {
   }
 
   private isOptedOut(propertyId: string, phone: string): boolean {
-    const file = this.optOutFile(propertyId);
-    if (!existsSync(file)) return false;
-    try {
-      return !!(JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>)[phone];
-    } catch {
-      return true;
-    }
+    const current = this.readOptOuts(propertyId);
+    if (current === "unreadable") return true;
+    return !!current[phone];
+  }
+
+  /** True only when this opt-out already tried the 911 line. START clears it. */
+  private injuryLineTried(propertyId: string, phone: string): boolean {
+    const current = this.readOptOuts(propertyId);
+    if (current === "unreadable") return false;
+    const value = current[phone];
+    return !!value && typeof value === "object" && value.injuryLineTried === true;
   }
 
   private setOptOut(propertyId: string, phone: string, optedOut: boolean): void {
     const file = this.optOutFile(propertyId);
-    const current: Record<string, string> = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
-    if (optedOut) current[phone] = new Date().toISOString();
-    else delete current[phone];
-    writeJsonAtomic(file, current);
+    const current = this.readOptOuts(propertyId);
+    if (current === "unreadable") JSON.parse(readFileSync(file, "utf8"));
+    const map = { ...(current === "unreadable" ? {} : current) };
+    if (optedOut) {
+      if (map[phone]) return;
+      map[phone] = { at: new Date().toISOString() };
+    } else delete map[phone];
+    writeJsonAtomic(file, map);
+  }
+
+  /** Marks the 911 line tried on every opted-out property on this line. A later STOP does not clear it. */
+  private markInjuryLineTried(propertyId: string, phone: string): void {
+    for (const id of this.openIdsOnLine(propertyId)) {
+      const current = this.readOptOuts(id);
+      if (current === "unreadable" || !current[phone]) continue;
+      const value = current[phone];
+      if (typeof value === "object" && value.injuryLineTried) continue;
+      const at = typeof value === "string" ? value : value.at;
+      writeJsonAtomic(this.optOutFile(id), { ...current, [phone]: { at, injuryLineTried: true } });
+    }
+  }
+
+  private readOptOuts(propertyId: string): Record<string, string | { at: string; injuryLineTried?: boolean }> | "unreadable" {
+    const file = this.optOutFile(propertyId);
+    if (!existsSync(file)) return {};
+    try {
+      return JSON.parse(readFileSync(file, "utf8")) as Record<string, string | { at: string; injuryLineTried?: boolean }>;
+    } catch {
+      return "unreadable";
+    }
   }
 }
 

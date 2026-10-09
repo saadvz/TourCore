@@ -4,11 +4,11 @@ import { join } from "node:path";
 import { FAIR_HOUSING_CODE } from "../core/fairHousing";
 import { HANDLER_FAILED_NEXT_STEP, isTeamTextFailedNotice } from "../core/TourCore";
 import { isMedicalEmergency } from "../intent/ruleBased";
-import { formatPhone } from "../core/phone";
+import { formatPhone, helpNear, looksLikePhone, normalizePhone } from "../core/phone";
 import { formatShortDateTime, isValidTimeZone } from "../core/timezone";
 import { profileFacts, questionTopic, structuredAnswer, type ProfileField, type UnitProfile } from "../config/unitProfile";
 import { MAX_FACT_LENGTH } from "../config/validateConfig";
-import { UNNAMED_VISITOR, type AuditEvent, type Reservation, type ReservationStatus } from "../domain/model";
+import { UNNAMED_VISITOR, type AuditEvent, type Message, type Reservation, type ReservationStatus } from "../domain/model";
 import { PAUSED, TERMINAL } from "../domain/stateMachine";
 import { applySetupCommand } from "../setup/commands";
 import { SetupInputError } from "../setup/setupActions";
@@ -202,7 +202,10 @@ function quotedVisitorAsk(question: string, lead = "They asked"): string {
 
 const INJURY_TOLD = "They were told to call 911 if someone is hurt, and that you'd text them here.";
 const INJURY_UNREACHED = "They were told you couldn't be reached.";
+const INJURY_BLOCKED = "Our text telling them to call 911 didn't go out, so they haven't heard back yet.";
+const INJURY_SKIPPED = "They've opted out of texts, so they weren't texted back this time. They were told to call 911 after their first message.";
 const INJURY_STEP = "Text or call them now, then mark it handled.";
+const INJURY_CALL_STEP = "Call them now, then mark it handled.";
 
 function medicalHelpText(e: AuditEvent): string | undefined {
   const said = e.code?.trim();
@@ -231,7 +234,88 @@ function latestHelpAttemptFailed(tour: TourSnapshot, helps: AuditEvent[]): boole
 }
 
 function injuryEnding(tour: TourSnapshot, helps: AuditEvent[]): string {
+  const latest = [...helps].sort((a, b) => a.seq - b.seq).at(-1);
+  if (latest) {
+    const line = visitorLineFor(tour, latest);
+    if (line === "skipped") return INJURY_SKIPPED;
+    if (line === "blocked") return INJURY_BLOCKED;
+  }
   return latestHelpAttemptFailed(tour, helps) ? INJURY_UNREACHED : INJURY_TOLD;
+}
+
+function injuryNextStep(summary: string): string[] {
+  return summary.includes(INJURY_BLOCKED) || summary.includes(INJURY_SKIPPED) ? [INJURY_CALL_STEP] : [INJURY_STEP];
+}
+
+/** The number on a help record: the phone field, or a place field that is only a number. */
+function visitorPhoneOf(event: AuditEvent): string | undefined {
+  if (event.phone && looksLikePhone(event.phone)) return normalizePhone(event.phone);
+  if (looksLikePhone(event.detail)) return normalizePhone(event.detail);
+  return undefined;
+}
+
+function sameVisitor(a: AuditEvent, b: AuditEvent): boolean {
+  if (a.prospectId && b.prospectId) return a.prospectId === b.prospectId;
+  const left = visitorPhoneOf(a);
+  const right = visitorPhoneOf(b);
+  if (left && right) return left === right;
+  return !a.prospectId && !b.prospectId;
+}
+
+function optOutMatches(event: AuditEvent, help: AuditEvent): boolean {
+  if (help.prospectId && event.prospectId) return help.prospectId === event.prospectId;
+  const phone = visitorPhoneOf(help);
+  if (phone && event.code && looksLikePhone(event.code)) return normalizePhone(event.code) === phone;
+  return !help.prospectId && !event.prospectId;
+}
+
+/** True when this injury is a later one in the same opt-out, so no new 911 text was sent. */
+function repeatAfterOptOut(tour: TourSnapshot, help: AuditEvent): boolean {
+  if (!medicalHelpText(help)) return false;
+  let optSeq = -1;
+  for (const event of [...tour.bundle.auditEvents].sort((a, b) => a.seq - b.seq)) {
+    if (event.seq > help.seq) break;
+    if (!optOutMatches(event, help)) continue;
+    if (event.type === "MESSAGING_OPTED_OUT") optSeq = event.seq;
+    if (event.type === "MESSAGING_OPTED_IN") optSeq = -1;
+  }
+  if (optSeq < 0) return false;
+  return tour.bundle.auditEvents.some(
+    (event) =>
+      event.type === "HELP_REQUESTED" && !!medicalHelpText(event) && sameVisitor(event, help) && event.seq > optSeq && event.seq < help.seq,
+  );
+}
+
+function messageForVisitor(message: Message, help: AuditEvent): boolean {
+  if (help.prospectId && message.prospectId) return help.prospectId === message.prospectId;
+  const phone = visitorPhoneOf(help);
+  if (phone) return normalizePhone(message.counterparty) === phone;
+  return !help.prospectId && !message.prospectId;
+}
+
+/**
+ * The 911 text for this help. A repeat after STOP does not use up a message.
+ * Each earlier try in this opt-out uses the next matching outbound text.
+ * A missing text or a failed send is blocked. Anything else was sent.
+ */
+function visitorLineFor(tour: TourSnapshot, help: AuditEvent): "sent" | "blocked" | "skipped" {
+  const helps = tour.bundle.auditEvents
+    .filter((event) => event.type === "HELP_REQUESTED" && !!medicalHelpText(event) && sameVisitor(event, help) && event.seq <= help.seq)
+    .sort((a, b) => a.seq - b.seq);
+  const messages = tour.bundle.messages.filter(
+    (message) => message.audience === "PROSPECT" && message.direction === "OUTBOUND" && message.body.includes("call 911 now") && messageForVisitor(message, help),
+  );
+  let index = 0;
+  let line: "sent" | "blocked" | "skipped" = "blocked";
+  for (const item of helps) {
+    if (repeatAfterOptOut(tour, item)) {
+      line = "skipped";
+      continue;
+    }
+    const message = messages[index++];
+    line = !message || message.deliveryStatus === "FAILED" ? "blocked" : "sent";
+  }
+  return line;
 }
 
 /** The fair-housing last sentence becomes the injury ending when this text also got the 911 line. */
@@ -292,7 +376,7 @@ function summaryFor(kind: ExceptionKind, e: AuditEvent, tour: TourSnapshot): str
     case "handler-failed":
       return e.detail;
     case "needs-help":
-      return `Asked for help${e.detail ? ` near ${e.detail}` : ""}.`;
+      return `Asked for help${helpNear(e.detail)}.`;
     case "off-route-door":
       return `Tried ${door}, which isn't on their tour. It stayed locked.`;
     case "door-system":
@@ -425,7 +509,7 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
     ...(e.reservationId ? { reservationId: e.reservationId } : {}),
     status,
     ...(resolution ? { resolution } : {}),
-    nextSteps: status === "open" ? stepsNotAlreadyInSummary(summary, injury ? [INJURY_STEP] : nextStepsFor(kind, tour, paused, fairHousing)) : [],
+    nextSteps: status === "open" ? stepsNotAlreadyInSummary(summary, injury ? injuryNextStep(summary) : nextStepsFor(kind, tour, paused, fairHousing)) : [],
     ...(fairHousing ? { proposeDraft: false as const } : {}),
   };
 }
@@ -473,7 +557,7 @@ function foldHelpExceptions(tour: TourSnapshot, events: AuditEvent[], resolution
         members.set(current, folded);
         if (current.title === "Possible injury") {
           current.summary = injuryFoldSummary(tour, folded);
-          if (current.status === "open") current.nextSteps = stepsNotAlreadyInSummary(current.summary, [INJURY_STEP]);
+          if (current.status === "open") current.nextSteps = stepsNotAlreadyInSummary(current.summary, injuryNextStep(current.summary));
         } else current.summary += askedAgain(tour, e);
         current.happenedAt = e.at;
         current.when = shortWhen(e.at, tour.config.property.timezone);
