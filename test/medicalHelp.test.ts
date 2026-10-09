@@ -8,6 +8,7 @@ import type { ConversationStep } from "../src/intent/model";
 import type { OutgoingMessage } from "../src/messaging/Messenger";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
 import { persistSession } from "../src/operator/services";
+import { OPERATOR_TOOLS } from "../src/operator/tools";
 import { tourRef } from "../src/operator/tours";
 import { handleVisitorText } from "../src/visitor/conversation";
 import { smsHelpBody, smsStopAck } from "../src/visitor/smsConsent";
@@ -162,15 +163,15 @@ function inboxText(item: { what?: unknown; summary?: unknown; nextSteps?: unknow
 }
 
 /** A touring visitor's help text, then the one help row from get_inbox. No live send. */
-async function inboxAfterHelp(text: string, failTeam = false) {
+async function inboxAfterHelp(text: string, failTeam = false, options?: { visitorStatus?: "QUEUED" | "SENT"; again?: string }) {
   const h = grokHarness();
   cleanups.push(h.cleanup);
   const id = await h.publish();
   const v = await h.touringVisitor(id);
-  if (failTeam) {
+  if (failTeam || options?.visitorStatus) {
     const send = v.session.transport.send.bind(v.session.transport);
     v.session.transport.send = async (message: OutgoingMessage) => {
-      if (message.audience === "OPERATOR") {
+      if (failTeam && message.audience === "OPERATOR") {
         return {
           provider: v.session.transport.provider,
           channel: "WEB" as const,
@@ -179,16 +180,23 @@ async function inboxAfterHelp(text: string, failTeam = false) {
           error: { code: "NOT_DELIVERED", message: "The message couldn't be delivered." },
         };
       }
+      if (options?.visitorStatus && message.audience === "PROSPECT" && message.body.includes("call 911 now")) {
+        return { provider: v.session.transport.provider, channel: "WEB" as const, status: options.visitorStatus, sentAt: new Date().toISOString() };
+      }
       return send(message);
     };
   }
   await v.session.act("help", {}, { text });
+  if (options?.again) {
+    h.setClock(h.now() + 6 * 60_000);
+    await v.session.act("help", {}, { text: options.again });
+  }
   await persistSession(h.services, v.session);
   const inbox = await h.ok("get_inbox");
-  const help = (inbox.items as Array<{ kind?: string; what?: string }>).filter((row) => row.kind === "help");
+  const help = (inbox.items as Array<{ kind?: string; what?: string; summary?: string; nextSteps?: string[] }>).filter((row) => row.kind === "help");
   expect(help).toHaveLength(1);
   const visitor = (await v.session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").at(-1)?.body;
-  return { text: inboxText(help[0]!), visitor };
+  return { text: inboxText(help[0]!), visitor, item: help[0]!, inbox };
 }
 
 const ctx = {
@@ -369,7 +377,7 @@ describe("medical help", () => {
     expect(shown.text).toBe(
       [
         "Possible injury",
-        'They texted: "she\'s not breathing". They were told you couldn\'t be reached.',
+        'They texted: "she\'s not breathing". They were told to call 911 and that you couldn\'t be reached.',
         "Text or call them now, then mark it handled.",
       ].join("\n"),
     );
@@ -535,7 +543,7 @@ describe("medical help", () => {
     const noneItems = noneInbox.items as Array<{ what?: string; summary?: string }>;
     expect(noneItems.filter((item) => item.what === "Possible injury")).toHaveLength(1);
     expect(noneItems.some((item) => item.what === "A text to you didn't go out")).toBe(false);
-    expect(noneItems.find((item) => item.what === "Possible injury")?.summary).toContain("They were told you couldn't be reached.");
+    expect(noneItems.find((item) => item.what === "Possible injury")?.summary).toContain("They were told to call 911 and that you couldn't be reached.");
     const noneVisitorLine = (await noneVisitor.session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").at(-1)?.body;
     expect(noneVisitorLine).toBe(MISSED);
 
@@ -755,7 +763,7 @@ describe("medical help", () => {
     expect(sent.text).toContain("They were told to call 911 if someone is hurt, and that you'd text them here.");
     expect(sent.text).toContain("Text or call them now, then mark it handled.");
     const missed = await inboxAfterHelp("she's not breathing", true);
-    expect(missed.text).toContain("They were told you couldn't be reached.");
+    expect(missed.text).toContain("They were told to call 911 and that you couldn't be reached.");
     expect(missed.text).toContain("Text or call them now, then mark it handled.");
 
     const fake = fakeSendblue();
@@ -984,5 +992,40 @@ describe("medical help", () => {
         expect(second?.nextSteps, `${status} ${label}`).toEqual(["Call them now, then mark it handled."]);
       }
     }
+  });
+
+  it("names a missed team alert for a queued 911 text and for a sent one", async () => {
+    const combined = "We sent them a text to call 911 and said you couldn't be reached, but we can't confirm it got to them.";
+    const unreached = "They were told to call 911 and that you couldn't be reached.";
+    const call = ["Call them now, then mark it handled."];
+    const textStep = ["Text or call them now, then mark it handled."];
+    const again = `Asked again at Sep 28, 9:06 AM: "he passed out".`;
+
+    const queuedOne = await inboxAfterHelp("she's not breathing", true, { visitorStatus: "QUEUED" });
+    expect(JSON.stringify(queuedOne.inbox)).not.toContain("They were told you couldn't be reached.");
+    expect(queuedOne.item.summary).toBe(`They texted: "she's not breathing". ${combined}`);
+    expect(queuedOne.item.nextSteps).toEqual(call);
+
+    const queuedTwo = await inboxAfterHelp("she's not breathing", true, { visitorStatus: "QUEUED", again: "he passed out" });
+    expect(JSON.stringify(queuedTwo.inbox)).not.toContain("They were told you couldn't be reached.");
+    expect(queuedTwo.item.summary).toBe(`They texted: "she's not breathing". ${again} ${combined}`);
+    expect(queuedTwo.item.nextSteps).toEqual(call);
+
+    const sentOne = await inboxAfterHelp("she's not breathing", true, { visitorStatus: "SENT" });
+    expect(sentOne.item.summary).toBe(`They texted: "she's not breathing". ${unreached}`);
+    expect(sentOne.item.nextSteps).toEqual(textStep);
+
+    const sentTwo = await inboxAfterHelp("she's not breathing", true, { visitorStatus: "SENT", again: "he passed out" });
+    expect(sentTwo.item.summary).toBe(`They texted: "she's not breathing". ${again} ${unreached}`);
+    expect(sentTwo.item.nextSteps).toEqual(textStep);
+  });
+
+  it("lists the unconfirmed injury endings on the inbox description", () => {
+    const description = OPERATOR_TOOLS.find((tool) => tool.description.includes("Possible injury"))?.description ?? "";
+    expect(description).toContain("They were sent a text to call 911 if someone is hurt, but we can't confirm it reached them.");
+    expect(description).toContain("They've opted out of texts, so they weren't texted back this time. Our earlier text telling them to call 911 was sent, but we can't confirm it reached them.");
+    expect(description).toContain("We sent them a text to call 911 and said you couldn't be reached, but we can't confirm it got to them.");
+    expect(description).toContain("All three use Call them now, then mark it handled.");
+    expect(description).toContain("They were told to call 911 and that you couldn't be reached when the 911 text went out and the alert did not");
   });
 });

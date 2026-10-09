@@ -201,12 +201,13 @@ function quotedVisitorAsk(question: string, lead = "They asked"): string {
 }
 
 const INJURY_TOLD = "They were told to call 911 if someone is hurt, and that you'd text them here.";
-const INJURY_UNREACHED = "They were told you couldn't be reached.";
+const INJURY_UNREACHED = "They were told to call 911 and that you couldn't be reached.";
 const INJURY_BLOCKED = "Our text telling them to call 911 didn't go out, so they haven't heard back yet.";
 const INJURY_SKIPPED = "They've opted out of texts, so they weren't texted back this time. They were already told to call 911.";
 const INJURY_SKIPPED_UNREACHED = "They've opted out of texts, so they weren't texted back this time. Our earlier text telling them to call 911 didn't go out.";
 const INJURY_QUEUED = "They were sent a text to call 911 if someone is hurt, but we can't confirm it reached them.";
 const INJURY_SKIPPED_QUEUED = "They've opted out of texts, so they weren't texted back this time. Our earlier text telling them to call 911 was sent, but we can't confirm it reached them.";
+const INJURY_QUEUED_UNREACHED = "We sent them a text to call 911 and said you couldn't be reached, but we can't confirm it got to them.";
 const INJURY_STEP = "Text or call them now, then mark it handled.";
 const INJURY_CALL_STEP = "Call them now, then mark it handled.";
 
@@ -244,10 +245,7 @@ function injuryEnding(tour: TourSnapshot, helps: AuditEvent[], tours: TourSnapsh
     if (line === "skipped-unreached") return INJURY_SKIPPED_UNREACHED;
     if (line === "skipped-queued") return INJURY_SKIPPED_QUEUED;
     if (line === "blocked") return INJURY_BLOCKED;
-    if (line === "queued") {
-      // A failed team alert stays in the same item. The queued sentence stays too, because that text is not confirmed.
-      return latestHelpAttemptFailed(tour, helps) ? `${INJURY_QUEUED} ${INJURY_UNREACHED}` : INJURY_QUEUED;
-    }
+    if (line === "queued") return latestHelpAttemptFailed(tour, helps) ? INJURY_QUEUED_UNREACHED : INJURY_QUEUED;
   }
   return latestHelpAttemptFailed(tour, helps) ? INJURY_UNREACHED : INJURY_TOLD;
 }
@@ -258,7 +256,8 @@ function injuryNextStep(summary: string): string[] {
     summary.includes(INJURY_SKIPPED) ||
     summary.includes(INJURY_SKIPPED_UNREACHED) ||
     summary.includes(INJURY_QUEUED) ||
-    summary.includes(INJURY_SKIPPED_QUEUED);
+    summary.includes(INJURY_SKIPPED_QUEUED) ||
+    summary.includes(INJURY_QUEUED_UNREACHED);
   return call ? [INJURY_CALL_STEP] : [INJURY_STEP];
 }
 
