@@ -204,7 +204,7 @@ function relationshipProblems(files: CanonicalFile[]): string[] {
     if (!file.path.endsWith("/record.json")) continue;
     const tourId = (file.body as { tourId?: string }).tourId;
     if (tourId) {
-      if (tourIds.has(tourId)) problems.push("The backup has two tours with the same id.");
+      if (tourIds.has(tourId)) problems.push(PART_BROKEN);
       tourIds.add(tourId);
     }
   }

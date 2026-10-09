@@ -388,6 +388,37 @@ describe("portable backup and restore", () => {
     expect(JSON.stringify(dest.workspace.list())).not.toContain("missing_door");
   });
 
+  it("restores nothing when the backup has two tours with the same id", async () => {
+    const origin = hosted();
+    await origin.setUpAlfredWay();
+    const created = await origin.ok("backup_records", { action: "create" });
+    const artifactId = String(created.handoff.path).split("/").pop()!;
+    const backup = JSON.parse(origin.inst.backups.handoff.takeDownload(artifactId, created.handoff.capability).body) as BackupFile & {
+      contents: { files: Array<{ path: string; kind: string; sha256: string; body: Record<string, unknown> }> };
+    };
+    const tour = { tourId: "tour_same" };
+    const sha256 = sha256Json(tour);
+    backup.contents.files.push(
+      { path: "properties/demo/tours/one/record.json", kind: "record", sha256, body: tour },
+      { path: "properties/demo/tours/two/record.json", kind: "record", sha256, body: { tourId: "tour_same" } },
+    );
+    backup.checksum = checksumOf(backup.contents);
+
+    const dest = hosted();
+    await dest.setUpAlfredWay();
+    const before = JSON.stringify(dest.workspace.list());
+    const upload = await dest.ok("restore_records", { action: "upload" });
+    const uploadId = String(upload.handoff.path).split("/").pop()!;
+    dest.inst.backups.receive(uploadId, upload.handoff.capability, JSON.stringify(backup));
+    const preview = await dest.ok("restore_records", { action: "preview", uploadId });
+    const imported = await dest.ok("restore_records", { action: "import", uploadId });
+
+    expect(preview).toMatchObject({ status: "blocked", message: PART_BROKEN });
+    expect(imported).toMatchObject({ status: "blocked", message: PART_BROKEN });
+    expect(JSON.stringify(dest.workspace.list())).toBe(before);
+    expect(JSON.stringify(dest.workspace.list())).not.toContain("tour_same");
+  });
+
   it("stores the checksum of raw UTF-8 contents, not a \\u escape or a trailing newline", () => {
     const contents = {
       files: [
