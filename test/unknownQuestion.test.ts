@@ -237,7 +237,7 @@ describe.each(["sendblue", "local"] as const)("unanswered visitor questions (%s)
     const replies = await a.text("Is there a gym?");
     expect(replies[0]).toBe(UNKNOWN_ANSWER);
     expect(replies.join("\n")).not.toMatch(/I don't have that information|flagged it for the property team|MMS/i);
-    expect((await a.exceptions()).map((x) => x.summary)).toEqual(['Asked "Is there a gym?". There\'s no approved answer yet.']);
+    expect((await a.exceptions()).map((x) => x.summary)).toEqual(['They asked: "Is there a gym?" There\'s no approved answer yet.']);
   });
 
   it("a photo plus an unanswerable question is one combined text, not the short photo line", async () => {
@@ -247,7 +247,7 @@ describe.each(["sendblue", "local"] as const)("unanswered visitor questions (%s)
     expect(replies[0]).toBe(UNKNOWN_ANSWER_WITH_PHOTO);
     expect(replies.filter((r) => r === PHOTO_WITH_TEXT_REPLY)).toHaveLength(0);
     expect(replies.join("\n")).not.toMatch(/I don't have that information|Text your question|MMS/i);
-    expect((await a.exceptions()).map((x) => x.summary)).toEqual(['Asked "Is there a gym?". There\'s no approved answer yet.']);
+    expect((await a.exceptions()).map((x) => x.summary)).toEqual(['They asked: "Is there a gym?" There\'s no approved answer yet.']);
   });
 
   it("a photo plus an approved-fact question keeps the short photo line and the answer", async () => {
@@ -282,9 +282,9 @@ describe.each(["sendblue", "local"] as const)("unanswered visitor questions (%s)
     await a.book();
     await a.finishTour();
     expect(await a.text("Is there a gym?")).toEqual([UNKNOWN_ANSWER_ENDED]);
-    expect((await a.exceptions()).map((x) => x.summary)).toEqual(['Asked "Is there a gym?". There\'s no approved answer yet.']);
+    expect((await a.exceptions()).map((x) => x.summary)).toEqual(['They asked: "Is there a gym?" There\'s no approved answer yet.']);
     expect(await a.text("ok")).toEqual([TOUR_ENDED_REPLY]);
-    expect((await a.exceptions()).map((x) => x.summary)).toEqual(['Asked "Is there a gym?". There\'s no approved answer yet.']);
+    expect((await a.exceptions()).map((x) => x.summary)).toEqual(['They asked: "Is there a gym?" There\'s no approved answer yet.']);
   });
 
   it("an ended-tour photo plus a non-question keeps the ended reply and does not flag", async () => {
@@ -345,7 +345,7 @@ describe.each(["sendblue", "local"] as const)("unanswered visitor questions (%s)
     const flagged = await a.text("1");
     expect(flagged).toEqual([UNKNOWN_ANSWER_ENDED]);
     expect(flagged.join("\n").match(/If you'd like to tour again/g)).toEqual(["If you'd like to tour again"]);
-    expect((await a.exceptions()).map((x) => x.summary)).toEqual(['Asked "Is there a gym in 1A or 2B?". There\'s no approved answer yet.']);
+    expect((await a.exceptions()).map((x) => x.summary)).toEqual(['They asked: "Is there a gym in 1A or 2B?" There\'s no approved answer yet.']);
   });
 
   it("adds a period before the HI line when an approved answer has no terminal punctuation", async () => {
@@ -367,7 +367,7 @@ describe.each(["sendblue", "local"] as const)("unanswered visitor questions (%s)
     const replies = await a.text("Is there a pool?", { photo: true });
     expect(replies).toEqual([UNKNOWN_ANSWER_ENDED_WITH_PHOTO]);
     expect(replies.filter((r) => r === PHOTO_WITH_TEXT_REPLY)).toHaveLength(0);
-    expect((await a.exceptions()).map((x) => x.summary)).toEqual(['Asked "Is there a pool?". There\'s no approved answer yet.']);
+    expect((await a.exceptions()).map((x) => x.summary)).toEqual(['They asked: "Is there a pool?" There\'s no approved answer yet.']);
   });
 
   it("a retried inbound is not answered or flagged twice", async () => {
@@ -376,7 +376,7 @@ describe.each(["sendblue", "local"] as const)("unanswered visitor questions (%s)
     const first = await a.text("Is there a gym?", { id: "same-unknown-q" });
     expect(first[0]).toBe(UNKNOWN_ANSWER);
     expect(await a.text("Is there a gym?", { id: "same-unknown-q" })).toEqual([]);
-    expect((await a.exceptions()).map((x) => x.summary)).toEqual(['Asked "Is there a gym?". There\'s no approved answer yet.']);
+    expect((await a.exceptions()).map((x) => x.summary)).toEqual(['They asked: "Is there a gym?" There\'s no approved answer yet.']);
   });
 
   it("STOP'd visitors get no texts but the flag still reaches the landlord", async () => {
@@ -386,7 +386,7 @@ describe.each(["sendblue", "local"] as const)("unanswered visitor questions (%s)
     const replies = await a.text("Is there a gym?");
     expect(replies.join("\n")).not.toContain(UNKNOWN_ANSWER);
     expect(replies.join("\n")).not.toMatch(/property team|MMS/i);
-    expect((await a.exceptions()).map((x) => x.summary)).toEqual(['Asked "Is there a gym?". There\'s no approved answer yet.']);
+    expect((await a.exceptions()).map((x) => x.summary)).toEqual(['They asked: "Is there a gym?" There\'s no approved answer yet.']);
   });
 });
 

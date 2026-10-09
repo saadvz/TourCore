@@ -214,7 +214,7 @@ describe("operators can set up a one-time tour", () => {
     expect(bundle.auditEvents.some((event) => event.type === "QUESTION_UNANSWERED")).toBe(false);
     expect(bundle.auditEvents.some((event) => event.type === "OPERATOR_NOTIFIED" && event.detail.includes("asked"))).toBe(false);
     const afterTap = await a.grok("list_exceptions");
-    expect(afterTap.exceptions.some((item: { summary: string }) => item.summary.includes('Asked "1"'))).toBe(false);
+    expect(afterTap.exceptions.some((item: { summary: string }) => item.summary.includes('They asked: "1"'))).toBe(false);
     expect(a.routineEvents().filter((event) => event.eventType === "exception.created")).toHaveLength(exceptionsBefore);
 
     const who = await a.text("Who is this?");
@@ -223,7 +223,7 @@ describe("operators can set up a one-time tour", () => {
     expect(bundle.reservations[0]).toMatchObject({ status: "RESERVED", awaitingVisitorConfirm: { kind: "OPERATOR_SCHEDULED" } });
     expect(bundle.auditEvents.some((event) => event.type === "QUESTION_UNANSWERED" && event.detail === "Who is this?")).toBe(true);
     const afterQuestion = await a.grok("list_exceptions");
-    expect(afterQuestion.exceptions.some((item: { summary: string }) => item.summary.includes('Asked "Who is this?"'))).toBe(true);
+    expect(afterQuestion.exceptions.some((item: { summary: string }) => item.summary.includes('They asked: "Who is this?"'))).toBe(true);
     expect(a.routineEvents().filter((event) => event.eventType === "exception.created").length).toBeGreaterThan(exceptionsBefore);
 
     const yes = await a.text("YES");
@@ -286,7 +286,7 @@ describe("operators can set up a one-time tour", () => {
     expect(bundle.auditEvents.some((event) => event.type === "QUESTION_UNANSWERED" && event.detail === "Which unit?")).toBe(true);
     expect(bundle.auditEvents.some((event) => event.type === "QUESTION_UNANSWERED" && event.detail === "Who is this?")).toBe(true);
     const queue = await a.grok("list_exceptions");
-    expect(queue.exceptions.some((item: { summary: string }) => item.summary.includes('Asked "Which unit?"'))).toBe(true);
+    expect(queue.exceptions.some((item: { summary: string }) => item.summary.includes('They asked: "Which unit?"'))).toBe(true);
 
     const yes = await a.text("YES");
     expect(yes.join("\n")).toContain("Great, you're booked for 2:00 PM");

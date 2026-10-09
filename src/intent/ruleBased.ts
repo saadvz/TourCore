@@ -1,3 +1,4 @@
+import { isFairHousingQuestion } from "../core/fairHousing";
 import { isMoreTimeAsk } from "../core/overstayCopy";
 import { dayReference, namesTourDay, spokenTimes, vagueTimeRequest, type SpokenTime } from "../core/spokenTime";
 import { isGeneralTourHoursQuestion } from "./tourHoursAsk";
@@ -478,6 +479,8 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
   if (keyword === "help") return result({ type: "REQUEST_HELP", problem: "GENERAL" }, 1);
   if (NATURAL_STOP.test(t)) return result({ type: "STOP_MESSAGES" }, 0.95);
   if (MANIPULATION.test(t)) return unknown({ manipulation: true, clarificationNeeded: true });
+  // Suitability phrasing is a question even with no question mark, so a menu cannot swallow it.
+  if (isFairHousingQuestion(raw)) return result({ type: "ASK_PROPERTY_QUESTION", question: raw.trim().slice(0, 300) }, 0.95);
 
   if (ctx.awaiting?.kind === "confirm-cancel-tour") {
     const yn = yesNo(t);

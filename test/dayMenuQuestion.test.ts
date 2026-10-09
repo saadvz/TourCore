@@ -34,7 +34,7 @@ describe("a weekday inside a question at the open day menu", () => {
     expect(replies).toEqual([UNKNOWN_ANSWER]);
     expect(replies.join("\n")).not.toContain("I have these times available");
     const issues = (await a.grok("list_exceptions")).exceptions as Array<{ exceptionId: string; summary: string }>;
-    const flagged = issues.find((issue) => issue.summary === 'Asked "Black Friday sale nearby?". There\'s no approved answer yet.');
+    const flagged = issues.find((issue) => issue.summary === 'They asked: "Black Friday sale nearby?" There\'s no approved answer yet.');
     expect(flagged).toBeTruthy();
     const woken = a.routineEvents().filter((event) => event.eventType === "exception.created");
     expect(woken.map((event) => event.exceptionId)).toContain(flagged!.exceptionId);
@@ -59,7 +59,7 @@ describe("a weekday inside a question at the open day menu", () => {
 
     const issues = (await a.grok("list_exceptions")).exceptions as Array<{ exceptionId: string; summary: string }>;
     const summaries = issues.map((issue) => issue.summary);
-    expect(summaries).toEqual(['Asked "is Friday busy?". There\'s no approved answer yet.']);
+    expect(summaries).toEqual(['They asked: "is Friday busy?" There\'s no approved answer yet.']);
     const woken = a.routineEvents().filter((event) => event.eventType === "exception.created");
     expect(woken.map((event) => event.exceptionId)).toContain(issues[0]!.exceptionId);
   });

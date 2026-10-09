@@ -150,7 +150,7 @@ describe("honest photo reply", () => {
     expect(replies.join("\n")).not.toContain("Text your question");
     expect(replies.join("\n")).not.toMatch(/I don't have that information|flagged it for the property team/);
     const issues = (await a.grok("list_exceptions")).exceptions;
-    expect(issues.map((x: { summary: string }) => x.summary)).toEqual(['Asked "Is there a gym?". There\'s no approved answer yet.']);
+    expect(issues.map((x: { summary: string }) => x.summary)).toEqual(['They asked: "Is there a gym?" There\'s no approved answer yet.']);
   });
 
   it("a photo during a tour gets the honesty reply and does not say it didn't catch that", async () => {

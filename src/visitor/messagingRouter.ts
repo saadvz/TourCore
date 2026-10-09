@@ -30,7 +30,7 @@ import { pickerMiss, placeAliases, propertyPickerText, propertyShortName, resolv
 import { OverstayScheduler } from "./overstayScheduler";
 import { oneOffBlockReason } from "./oneOffGate";
 import { markRemovedReply, shouldReplyRemoved } from "./removedReplies";
-import { smsDisclosure, smsHelpBody, smsStopAck, SmsConsentDirectory } from "./smsConsent";
+import { draftStartDisclosure, smsDisclosure, smsHelpBody, smsStopAck, SmsConsentDirectory } from "./smsConsent";
 import { restoreSession, RestoreError, SessionPersistence, type DurableSession } from "./durableSession";
 import { VisitorDemoSession, type VisitorDemoRegistry } from "./session";
 import type { VerificationLinks } from "./verificationLinks";
@@ -222,6 +222,11 @@ export class MessagingConversations {
     if (pending) return this.answerPick(pending, message, endpoint);
 
     const candidates = this.portfolioCandidates(ids);
+    // STOP on a mixed line opts out every open property, including an unsaved draft.
+    if (keyword === "stop" && open.length > 1) {
+      await this.answerLineKeyword(open, phone, "stop");
+      return undefined;
+    }
     if (!candidates.length) {
       if (saved.length === 1 && draftOnly.length === 0) return { propertyId: saved[0]!, endpoint, message };
       const named = this.namedPlace(message, ids);
@@ -379,12 +384,14 @@ export class MessagingConversations {
       await this.sendLine(propertyId, phone, smsStopAck());
       return;
     }
-    for (const id of propertyIds) {
-      this.setOptOut(id, phone, false);
-      this.smsConsent.save(id, { sender: phone, status: "pending", method: "keyword", keyword: "START", updatedAt: now });
-    }
+    for (const id of propertyIds) this.setOptOut(id, phone, false);
+    const config = this.configOf(propertyId);
     const base = this.deps.publicBaseUrl?.() ?? publicBaseUrl(effectiveEnv());
-    await this.sendLine(propertyId, phone, smsDisclosure(base));
+    await this.sendLine(
+      propertyId,
+      phone,
+      draftStartDisclosure(base, config?.operator.name, config?.operator.visitorContact),
+    );
   }
 
   /** The existing not-ready line when nothing on the line is published. Nothing goes out after STOP. */
@@ -396,15 +403,25 @@ export class MessagingConversations {
     await this.sendLine(propertyId, phone, toursUnavailableText(config.property.name, config.operator.name, config.operator.visitorContact));
   }
 
+  /** Every open property on the same texting line, published or unsaved draft. */
+  private openIdsOnLine(propertyId: string): string[] {
+    const ws = this.deps.workspace;
+    const attached = this.endpoints.forProperty(propertyId)?.propertyIds ?? [propertyId];
+    const saved = attached.filter((id) => ws.has(id) && !ws.load(id).state.removedAt);
+    const drafts = attached.filter((id) => !ws.has(id) && !!ws.loadDraft(id));
+    return [...saved, ...drafts];
+  }
+
   private async answerLineKeyword(propertyIds: string[], phone: string, keyword: "stop" | "help"): Promise<void> {
-    const propertyId = propertyIds.find((id) => this.deps.workspace.has(id));
+    const ids = keyword === "stop" ? [...new Set(propertyIds.flatMap((id) => this.openIdsOnLine(id)))] : propertyIds;
+    const propertyId = ids.find((id) => this.deps.workspace.has(id)) ?? ids.find((id) => this.configOf(id));
     if (!propertyId) return;
     if (keyword === "help") {
       await this.sendLine(propertyId, phone, smsHelpBody());
       return;
     }
     const now = (this.deps.now?.() ?? new Date()).toISOString();
-    for (const id of propertyIds) {
+    for (const id of ids) {
       this.setOptOut(id, phone, true);
       this.smsConsent.save(id, { sender: phone, status: "opted_out", method: "keyword", keyword: "STOP", updatedAt: now, optedOutAt: now });
     }
@@ -814,15 +831,11 @@ export class MessagingConversations {
       return;
     }
     this.setOptOut(propertyId, phone, false);
-    this.smsConsent.save(propertyId, {
-      sender: phone,
-      status: "pending",
-      method: "keyword",
-      keyword: "START",
-      updatedAt: now,
-    });
+    const named = this.configOf(propertyId);
     const base = this.deps.publicBaseUrl?.() ?? publicBaseUrl(effectiveEnv());
-    await transport.send(prospectText(phone, smsDisclosure(base))).catch(() => undefined);
+    await transport
+      .send(prospectText(phone, draftStartDisclosure(base, named?.operator.name, visitorContact ?? named?.operator.visitorContact)))
+      .catch(() => undefined);
   }
 
   /**

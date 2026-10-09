@@ -162,7 +162,7 @@ describe("bare today and tonight", () => {
     writeJsonAtomic(statusPath, status);
     expect(await bare.textFrom(unanswered, "tonight?")).toEqual(["I'll pass your question to the property team, and they'll reply here as soon as they can."]);
     const issues = (await bare.grok("list_exceptions")).exceptions as Array<{ summary: string }>;
-    expect(issues.map((issue) => issue.summary)).toContain('Asked "tonight?". There\'s no approved answer yet.');
+    expect(issues.map((issue) => issue.summary)).toContain('They asked: "tonight?" There\'s no approved answer yet.');
   });
 
   it("says there are no more tours today when the last start has passed", async () => {

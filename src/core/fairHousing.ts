@@ -21,8 +21,58 @@ const norm = (s: string) =>
 /** Audit code on a flagged fair-housing question. No draft is proposed. */
 export const FAIR_HOUSING_CODE = "FAIR_HOUSING";
 
-const PROTECTED_CLASS =
-  /\b(?:families|family|familial status|kids?|children|child|section\s*8|vouchers?|single (?:moms?|mothers?|dads?|fathers?|parents?)|race|racial|people of color|color|religion|religious|national origin|nationality|country of origin|sex|gender|disabilities|disability|disabled|handicapped|handicap|ages?|elderly|seniors?|pregnant|pregnancy|newborns?|immigrants?)\b/;
+/**
+ * One list for eligibility and suitability. Suitability used to keep a second
+ * copy, which dropped newborns and immigrants. Toddlers, babies, infants,
+ * teens, retirees, older people, blind, deaf, and wheelchair belong here too.
+ */
+const PROTECTED_INNER = [
+  "familial status",
+  "people of color",
+  "national origin",
+  "country of origin",
+  "older people",
+  "single (?:moms?|mothers?|dads?|fathers?|parents?)",
+  "section\\s*8",
+  "teenagers?",
+  "newborns?",
+  "toddlers?",
+  "infants?",
+  "wheelchairs?",
+  "disabilities",
+  "disability",
+  "handicapped",
+  "handicap",
+  "families",
+  "family",
+  "children",
+  "babies",
+  "baby",
+  "child",
+  "retirees",
+  "elderly",
+  "seniors?",
+  "teens?",
+  "kids?",
+  "vouchers?",
+  "disabled",
+  "pregnant",
+  "pregnancy",
+  "immigrants?",
+  "nationality",
+  "religious",
+  "religion",
+  "racial",
+  "race",
+  "color",
+  "gender",
+  "blind",
+  "deaf",
+  "ages?",
+  "sex",
+].join("|");
+
+const PROTECTED_CLASS = new RegExp(`\\b(?:${PROTECTED_INNER})\\b`);
 
 /** Eligibility phrasing. A bare "rent" or "monthly" is not enough. */
 const ELIGIBILITY =
@@ -32,14 +82,20 @@ const HOUSING_SUBSIDY = /\b(?:section\s*8|vouchers?)\b/;
 const SUBSIDY_TAKE = /\b(?:take|takes|taking|consider|considers|considering)\b/;
 
 /**
- * Suitability for a protected class: "good for families", "safe for a
- * wheelchair", "a fit for seniors", "is the building for families". A home
- * office, parking, or pets is not a class, so those questions stay ordinary.
+ * Suitability for a protected class: "good for families", "a good place for
+ * kids", "accessible for a wheelchair", "family friendly", "is the building
+ * for families". The class word has to come right after "for" (an article or
+ * "someone who is" may sit in between). "Good for a family car" does not
+ * match, because "family" only modifies "car". "Good for ages 20-30" does:
+ * age is a protected class, and a trailing number is still that question.
+ * A home office, parking, or pets is not a class.
  */
-const SUITABILITY_LEAD = /\b(?:good|suitable|right|okay|ok|safe|fit)\s+for\b|\ba fit for\b/;
-const SUITABILITY_PLACE = /\b(?:is|are)\s+the\s+(?:area|neighborhood|building|property|block)\b(?:\s+\w+){0,6}\s+for\b/;
-const SUITABILITY_CLASS =
-  /\b(?:families|family|familial status|kids?|children|child|seniors?|elderly|disabled|disabilities|disability|handicapped|handicap|wheelchairs?|religion|religious|race|racial|people of color|national origin|nationality|country of origin|sex|gender|pregnan(?:t|cy)|ages?|single (?:moms?|mothers?|dads?|fathers?|parents?))\b/;
+const FRIENDLY = /\b(?:family|kid|child) friendly\b/;
+const SUITABILITY_LEAD =
+  /\b(?:good place for|good home for|(?:good|suitable|right|okay|ok|safe|fit|accessible) for|a fit for)\b/g;
+const SUITABILITY_PLACE =
+  /\b(?:is|are) the (?:area|neighborhood|building|property|block)\b(?: \w+){0,6} for\b/g;
+const SUITABILITY_ARTICLE = /^(?:a|an|the|my|someone who is)\s+/;
 
 /**
  * Fair housing even with no eligibility verb. A bare "pets", "dogs", or
@@ -161,9 +217,27 @@ function neighborhoodSteering(text: string): boolean {
   return placeRace.some((word) => places.some((place) => !overlaps(word, place)));
 }
 
+/** The protected class sits at the start of `after`, then nothing, "person", or a number. */
+function classFollowsFor(after: string): boolean {
+  const rest = after.replace(SUITABILITY_ARTICLE, "");
+  const match = new RegExp(`^(?:${PROTECTED_INNER})\\b`).exec(rest);
+  if (!match) return false;
+  const tail = rest.slice(match[0].length).replace(/^\s+(?:person|people)\b/, "");
+  return tail === "" || /^\s+\d+(?:\s+\d+)*$/.test(tail);
+}
+
+function leadThenClass(text: string, lead: RegExp): boolean {
+  const flags = lead.flags.includes("g") ? lead.flags : `${lead.flags}g`;
+  for (const match of text.matchAll(new RegExp(lead.source, flags))) {
+    const after = text.slice((match.index ?? 0) + match[0].length).trimStart();
+    if (classFollowsFor(after)) return true;
+  }
+  return false;
+}
+
 function suitabilityForClass(text: string): boolean {
-  if (!SUITABILITY_CLASS.test(text)) return false;
-  return SUITABILITY_LEAD.test(text) || SUITABILITY_PLACE.test(text);
+  if (FRIENDLY.test(text)) return true;
+  return leadThenClass(text, SUITABILITY_LEAD) || leadThenClass(text, SUITABILITY_PLACE);
 }
 
 export function isFairHousingQuestion(text: string): boolean {

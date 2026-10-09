@@ -173,7 +173,7 @@ describe("Grok skill scenarios", () => {
     // "Show me what needs attention."
     const queue = await tool("list_exceptions");
     expect(queue.exceptions.map((x: { visitorName: string; unitName: string; summary: string; tourStatus: string }) => [x.visitorName, x.unitName, x.summary, x.tourStatus])).toEqual([
-      ["Pat Smith", "Unit 101", 'Asked "Is parking included?". There\'s no approved answer yet.', "Tour still active"],
+      ["Pat Smith", "Unit 101", 'They asked: "Is parking included?" There\'s no approved answer yet.', "Tour still active"],
     ]);
     // "Open Pat's issue."
     const opened = await tool("inspect_exception", { exceptionId: queue.exceptions[0].exceptionId });

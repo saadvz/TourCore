@@ -632,10 +632,12 @@ async function handleSmsGate(session: VisitorDemoSession, said: Said, text: stri
     return;
   }
   const normalized = normalize(text);
-  if (keyword === "start" || normalized === "tour" || said.meta?.countsAsOptIn) {
+  // A yes with no campaign record is the disclosure, not an opt-in. Draft START does not leave a pending record.
+  const freshYes = !session.smsConsent && isFlexibleYes(normalized);
+  if (keyword === "start" || normalized === "tour" || said.meta?.countsAsOptIn || freshYes) {
     await session.recordText(said);
     await session.allowMessagingAgain();
-    session.noteSmsConsent("pending", keyword === "start" ? "START" : "TOUR");
+    session.noteSmsConsent("pending", keyword === "start" ? "START" : freshYes ? "YES" : "TOUR");
     await session.reply(smsDisclosure(session.complianceBaseUrl?.()), undefined, { deliverDespiteOptOut: true });
     return;
   }

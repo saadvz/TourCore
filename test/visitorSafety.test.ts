@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -15,9 +15,9 @@ import { MemoryRuntimeStore } from "../src/storage/runtimeStore";
 import { MessagingConversations } from "../src/visitor/messagingRouter";
 import { VerificationLinks } from "../src/visitor/verificationLinks";
 import { VisitorDemoRegistry } from "../src/visitor/session";
-import { smsDisclosure, smsHelpBody, smsStopAck } from "../src/visitor/smsConsent";
-import { MATRIX_CLIENTS } from "../src/eval/clientMatrix";
-import { FAIR_HOUSING_REFUSAL } from "../src/operator/exceptions";
+import { draftStartDisclosure, smsDisclosure, smsHelpBody, smsStopAck } from "../src/visitor/smsConsent";
+import { MATRIX_CLIENTS, playbookVersionMatches } from "../src/eval/clientMatrix";
+import { FAIR_HOUSING_INBOX, FAIR_HOUSING_REFUSAL } from "../src/operator/exceptions";
 import { hillsideConfig, liveApp } from "./liveApp";
 
 /**
@@ -35,6 +35,7 @@ const PUBLIC = "https://tour.example";
 const STOP = smsStopAck();
 const HELP = smsHelpBody();
 const START = smsDisclosure(PUBLIC);
+const DRAFT_START = draftStartDisclosure(PUBLIC);
 const HELD = "Good question for the property team. I've passed it along, and they'll text you back here.";
 const PASS_ALONG = UNKNOWN_ANSWER;
 const FAIR_LINE =
@@ -51,6 +52,22 @@ const SUITABILITY = [
   "Is the building a fit for seniors?",
   "Is the building for seniors?",
   "Is it safe for a wheelchair?",
+  "Is it family friendly?",
+  "kid-friendly",
+  "child-friendly",
+  "a good place for kids",
+  "a good home for a family",
+  "safe for a baby",
+  "good for a toddler",
+  "good for teenagers",
+  "OK for retirees",
+  "good for older people",
+  "accessible for a wheelchair",
+  "accessible for a deaf person",
+  "accessible for someone who is blind",
+  "good for ages 20-30",
+  "good for newborns",
+  "good for immigrants",
 ] as const;
 
 function consent(root: string, propertyId: string, phone: string) {
@@ -152,10 +169,16 @@ describe("STOP, HELP, and START on an unchecked draft", () => {
     expect(help.join("\n")).not.toContain("aren't available");
 
     const start = await text("+15555551003", "START");
-    expect(start).toEqual([START]);
-    expect(start.join("\n")).not.toContain("aren't available");
+    expect(start).toEqual([DRAFT_START]);
+    expect(start[0]).toContain("You're starting a text conversation about a self-guided property tour.");
+    expect(start[0]).toContain("Message frequency varies.");
+    expect(start[0]).toContain("Message and data rates may apply.");
+    expect(start[0]).toContain("Privacy:");
+    expect(start[0]).toContain("Terms:");
+    expect(start[0]).not.toContain("Reply YES to continue");
+    expect(start[0]).toContain("Tours by text aren't available right now. Please check back soon. Reply HELP for help or STOP to opt out.");
     expect(start.join("\n")).not.toContain("Which place");
-    expect(consent(root, id, "+15555551003")).toMatchObject({ status: "pending", method: "keyword", keyword: "START" });
+    expect(consent(root, id, "+15555551003")).toBeUndefined();
     expect(await text("+15555551003", "Hi")).toEqual([toursUnavailableText(name, "property team")]);
   });
 
@@ -179,9 +202,11 @@ describe("STOP, HELP, and START on an unchecked draft", () => {
 
     expect(await text("+15555551012", "HELP")).toEqual([HELP]);
     const start = await text("+15555551013", "START");
-    expect(start).toEqual([START]);
+    expect(start).toEqual([DRAFT_START]);
     expect(start.join("\n")).not.toContain("Which place");
-    expect(start.join("\n")).not.toContain("aren't available");
+    expect(start.join("\n")).not.toContain("Reply YES to continue");
+    expect(consent(root, first, "+15555551013")).toBeUndefined();
+    expect(consent(root, second, "+15555551013")).toBeUndefined();
   });
 });
 
@@ -196,7 +221,7 @@ describe("drafts stay out of the property picker", () => {
     const hi = await alone.text("+15555551021", "Hi");
     expect(hi).toEqual([toursUnavailableText(name, "property team")]);
     expect(hi.join("\n")).not.toContain("Which place");
-    expect(await alone.text("+15555551022", "START")).toEqual([START]);
+    expect(await alone.text("+15555551022", "START")).toEqual([DRAFT_START]);
 
     const sharedRoot = mkdtempSync(join(tmpdir(), "tourcore-picker-shared-"));
     cleanups.push(() => rmSync(sharedRoot, { recursive: true, force: true }));
@@ -205,9 +230,9 @@ describe("drafts stay out of the property picker", () => {
     const oak = savedUnchecked(shared, "prop_4_oak", "4 Oak Ave, Teaneck, NJ 07666", "4 Oak Ave");
     const drafts = wire(shared, [pine, oak]);
     const started = await drafts.text("+15555551023", "START");
-    expect(started).toEqual([START]);
+    expect(started).toEqual([DRAFT_START]);
     expect(started.join("\n")).not.toContain("Which place");
-    expect(started.join("\n")).not.toContain("aren't available");
+    expect(started.join("\n")).not.toContain("Reply YES to continue");
     const tour = await drafts.text("+15555551024", "Tour");
     expect(tour.join("\n")).not.toContain("Which place");
     expect(tour.join("\n")).toContain("aren't available right now");
@@ -229,7 +254,13 @@ describe("suitability questions are fair-housing holds", () => {
     expect(isFairHousingQuestion(text)).toBe(true);
   });
 
-  it.each(["Is it good for parking?", "pets ok?", "Is it good for a home office?", "Is the building good for parking?"])(
+  it.each([
+    "Is it good for parking?",
+    "pets ok?",
+    "Is it good for a home office?",
+    "Is the building good for parking?",
+    "Is parking good for a family car?",
+  ])(
     "does not match %s",
     (text) => {
       expect(isFairHousingQuestion(text)).toBe(false);
@@ -275,7 +306,7 @@ describe("suitability questions are fair-housing holds", () => {
     );
     expect(held).toMatchObject({
       status: "open",
-      summary: 'Asked "Is it good for a home office?". There\'s no approved answer yet.',
+      summary: 'They asked: "Is it good for a home office?" There\'s no approved answer yet.',
     });
     expect(held!.proposeDraft).toBeUndefined();
   });
@@ -316,19 +347,162 @@ describe("a fact keyword is not an answer", () => {
     expect(shown).toBe(
       [
         "Question with no approved answer",
-        'Asked "Can I paint the bedroom walls?". There\'s no approved answer yet.',
+        'They asked: "Can I paint the bedroom walls?" There\'s no approved answer yet.',
         "If you know the answer, tell me and I can add it to the approved facts and text the visitor (with your OK).",
         "Or mark it handled if you've already answered them another way.",
       ].join("\n"),
     );
     expect(shown).not.toContain("2 bedrooms");
   });
+
+  it("holds questions about a room's closet, windows, size, carpet, or updates", async () => {
+    const config = hillsideConfig();
+    const held = [
+      "How big is the bedroom",
+      "Does the bedroom have a closet?",
+      "Do the bedrooms have windows?",
+      "Is the master bedroom carpeted?",
+      "Is the bathroom updated?",
+      "is there a bathroom in the bedroom",
+      "Does the bedroom have a washer?",
+    ];
+    for (const question of held) {
+      const resolved = resolveQuestion(config, question, { selectedUnitId: "apt_101" });
+      expect(resolved.kind, question).toBe("unknown");
+    }
+    expect(resolveQuestion(config, "How many bedrooms?", { selectedUnitId: "apt_101" })).toMatchObject({
+      kind: "answer",
+      facts: [{ text: "Unit 1A has 2 bedrooms." }],
+    });
+    expect(resolveQuestion(config, "How many bathrooms?", { selectedUnitId: "apt_101" })).toMatchObject({
+      kind: "answer",
+      facts: [{ text: "Unit 1A has 1 bathroom." }],
+    });
+
+    const a = await liveApp({ cleanups });
+    await a.optInSms();
+    await a.text("1");
+    await a.text("1");
+    for (const question of held) {
+      const replies = await a.text(question);
+      expect(replies[0], question).toBe(PASS_ALONG);
+      expect(replies.join("\n"), question).not.toContain("2 bedrooms");
+      expect(replies.join("\n"), question).not.toContain("1 bathroom");
+    }
+  });
+});
+
+describe("draft START does not leave a pending consent", () => {
+  it("sends the disclosure after publish when the visitor texts yes", async () => {
+    const app = await liveApp({ cleanups });
+    const id = "prop_100_alfred_way";
+    app.ws.patchState(id, { status: "DRAFT" });
+    const phone = "+15550102130";
+    const start = await app.textFrom(phone, "START");
+    expect(start).toEqual([draftStartDisclosure(PUBLIC)]);
+    expect(start[0]).not.toContain("Reply YES to continue");
+    const file = join(app.root, "properties", id, "sms-campaign-consent.json");
+    expect(existsSync(file) ? JSON.parse(readFileSync(file, "utf8")).senders[phone] : undefined).toBeUndefined();
+
+    app.ws.patchState(id, { status: "PUBLISHED_FOR_DEMO" });
+    const yes = await app.textFrom(phone, "yes");
+    expect(yes).toEqual([smsDisclosure(PUBLIC)]);
+    expect(yes.join("\n")).not.toContain("You're opted in");
+    const consent = JSON.parse(readFileSync(file, "utf8")).senders[phone];
+    expect(consent.status).toBe("pending");
+    expect(consent.status).not.toBe("opted_in");
+  });
+
+  it("uses the help number on a draft-only START when one is saved", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tourcore-draft-start-call-"));
+    cleanups.push(() => rmSync(root, { recursive: true, force: true }));
+    const ws = new PropertyWorkspace(root);
+    const id = uncheckedDraft(ws, "8 QA Scratch Lane, Teaneck, NJ 07666");
+    const draft = ws.loadDraft(id)!;
+    ws.saveDraft({
+      ...draft,
+      operator: { ...draft.operator, name: "leasing team", visitorContact: "+15550107777", visitorHelpDecided: true },
+    });
+    const { text } = wire(ws, [id]);
+    const start = await text("+15555551040", "START");
+    const expected = draftStartDisclosure(PUBLIC, "leasing team", "+15550107777");
+    expect(start).toEqual([expected]);
+    expect(start[0]).toContain(
+      "Tours by text aren't available right now. You can call the leasing team at (555) 010-7777. Reply HELP for help or STOP to opt out.",
+    );
+    expect(start[0]).toContain("You're starting a text conversation about a self-guided property tour.");
+    expect(start[0]).not.toContain("Reply YES to continue");
+    expect(start[0]).not.toContain("Please check back soon");
+    expect(consent(root, id, "+15555551040")).toBeUndefined();
+  });
+});
+
+describe("STOP and HELP on a mixed line", () => {
+  it("opts out every open property on STOP and still answers HELP", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tourcore-mixed-stop-"));
+    cleanups.push(() => rmSync(root, { recursive: true, force: true }));
+    const ws = new PropertyWorkspace(root);
+    const pine = savedUnchecked(ws, "prop_88_pine_mix", "88 Pine St, Teaneck, NJ 07666", "88 Pine St");
+    const oak = savedUnchecked(ws, "prop_4_oak_mix", "4 Oak Ave, Teaneck, NJ 07666", "4 Oak Ave");
+    ws.patchState(pine, { status: "PUBLISHED_FOR_DEMO", publishedAt: "2026-10-02T00:00:00.000Z" });
+    ws.patchState(oak, { status: "PUBLISHED_FOR_DEMO", publishedAt: "2026-10-03T00:00:00.000Z" });
+    const scratch = uncheckedDraft(ws, "9 Birch Rd, Teaneck, NJ 07666");
+    const { text } = wire(ws, [pine, oak, scratch]);
+
+    const stop = await text("+15555551050", "STOP");
+    expect(stop).toEqual([STOP]);
+    expect(stop.join("\n")).not.toContain("Which place");
+    for (const id of [pine, oak, scratch]) {
+      expect(consent(root, id, "+15555551050"), id).toMatchObject({ status: "opted_out", keyword: "STOP" });
+      expect(optedOut(root, id, "+15555551050"), id).toBeTruthy();
+    }
+
+    const help = await text("+15555551051", "HELP");
+    expect(help).toEqual([HELP]);
+    expect(help.join("\n")).not.toContain("Which place");
+    expect(consent(root, scratch, "+15555551051")).toBeUndefined();
+    expect(optedOut(root, scratch, "+15555551051")).toBeUndefined();
+  });
+});
+
+describe("inbox quotes", () => {
+  it("adds a period only when the visitor's question has no closing punctuation", async () => {
+    const a = await liveApp({ cleanups });
+    await a.optInSms();
+    await a.text("1");
+    await a.text("1");
+    expect(await a.text("good for kids")).toEqual([HELD]);
+    const inbox = await a.grok("get_inbox");
+    const item = (inbox.items as Array<{ summary?: string }>).find((row) => row.summary?.includes("good for kids"));
+    expect(item?.summary).toBe(`They asked: "good for kids". ${FAIR_HOUSING_INBOX}`);
+  });
+
+  it("falls back when a fair-housing flag has no question text", async () => {
+    const a = await liveApp({ cleanups });
+    await a.optInSms();
+    await a.text("1");
+    await a.text("1");
+    await a.text("Is it good for families?");
+    const tours = join(a.root, "properties", "prop_100_alfred_way", "practice-tours");
+    const folder = readdirSync(tours).find((name) => existsSync(join(tours, name, "tour-export.json")));
+    expect(folder).toBeTruthy();
+    const path = join(tours, folder!, "tour-export.json");
+    const bundle = JSON.parse(readFileSync(path, "utf8")) as { auditEvents: Array<{ type: string; code?: string; detail: string }> };
+    const event = bundle.auditEvents.find((row) => row.type === "QUESTION_UNANSWERED" && row.code === "FAIR_HOUSING");
+    expect(event).toBeTruthy();
+    event!.detail = "";
+    writeFileSync(path, JSON.stringify(bundle));
+    const again = await liveApp({ root: a.root, clock: a.clock, net: a.net, fake: a.fake, cleanups, routine: false });
+    const inbox = await again.grok("get_inbox");
+    const item = (inbox.items as Array<{ summary?: string; what?: string }>).find((row) => row.what === "Fair-housing question");
+    expect(item?.summary).toBe(`They asked a question. ${FAIR_HOUSING_INBOX}`);
+  });
 });
 
 describe("playbook gate", () => {
   it("asserts the hard-coded playbook version on each client", () => {
-    const src = readFileSync(new URL("../src/eval/clientMatrix.ts", import.meta.url), "utf8");
-    expect(src).toContain("playbook.version === expected.version");
+    const grok = MATRIX_CLIENTS.find((row) => row.key === "grok")!;
+    expect(playbookVersionMatches({ ...grok.expected, version: "wrong@version" }, grok.expected)).toBe(false);
     expect(MATRIX_CLIENTS.map((row) => [row.key, row.expected.version])).toEqual([
       ["grok", "grok@2026-10-08"],
       ["chatgpt", "chatgpt@2026-10-08.tools"],

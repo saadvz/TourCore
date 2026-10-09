@@ -4,7 +4,7 @@ Every outbound visitor text uses one of these ids. `{slot}` is filled before sen
 
 Text from the landlord or from a model reaches a visitor only as `approved-answer` or `approved-answer-closing`, and only after they approve a flagged question (`resolve_issue`). A no-draft flag never gets a draft. `approved-profile-fact` repeats a fact they already saved.
 
-198 message templates. 7 channel prompts.
+200 message templates. 7 channel prompts.
 
 ## Messages
 
@@ -985,6 +985,36 @@ Tours at {address} are back. Text me anytime to book.
 Message frequency varies. Message and data rates may apply.
 
 Reply YES to continue, HELP for help, or STOP to opt out.
+
+Privacy: {privacy}
+Terms: {terms}
+```
+
+### sms-disclosure-draft
+
+START on a draft-only line when no visitor help number is saved. Same disclosure as sms-disclosure, with the YES line replaced.
+
+```
+{brand}: You're starting a text conversation about a self-guided property tour.
+
+Message frequency varies. Message and data rates may apply.
+
+Tours by text aren't available right now. Please check back soon. Reply HELP for help or STOP to opt out.
+
+Privacy: {privacy}
+Terms: {terms}
+```
+
+### sms-disclosure-draft-call
+
+START on a draft-only line when a visitor help number is saved. {team} and {phone} use the same help-number wording as the not-ready reply.
+
+```
+{brand}: You're starting a text conversation about a self-guided property tour.
+
+Message frequency varies. Message and data rates may apply.
+
+Tours by text aren't available right now. You can call the {team} at {phone}. Reply HELP for help or STOP to opt out.
 
 Privacy: {privacy}
 Terms: {terms}

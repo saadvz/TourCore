@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { formatPhone, normalizePhone } from "../core/phone";
+import { visitorTeamName } from "../sms/templates";
 import { complianceLinkPair, publicBrandName } from "../web/compliance/config";
 import { campaignConfirmation, campaignDisclosure, MESSAGE_RATES } from "../web/compliance/pages";
 import { writeJsonAtomic } from "../storage/atomicWrite";
@@ -38,6 +39,28 @@ export const SMS_KEYWORD_PROMPT = "Text TOUR to ask questions or schedule a self
 export function smsDisclosure(publicBaseUrl: string | undefined, env: NodeJS.ProcessEnv = process.env): string {
   const links = complianceLinkPair(publicBaseUrl);
   return campaignDisclosure(links.privacy, links.terms, publicBrandName(env));
+}
+
+/**
+ * The line that replaces "Reply YES..." when START arrives on a draft-only
+ * line. Same help-number choice as the not-ready reply. The rest of the
+ * disclosure stays as it is.
+ */
+export function draftStartLine(team?: string, visitorContact?: string): string {
+  const number = visitorContact?.trim() ? formatPhone(visitorContact.trim()) : undefined;
+  if (number) {
+    return `Tours by text aren't available right now. You can call the ${visitorTeamName(team)} at ${number}. Reply HELP for help or STOP to opt out.`;
+  }
+  return `Tours by text aren't available right now. Please check back soon. Reply HELP for help or STOP to opt out.`;
+}
+
+export function draftStartDisclosure(
+  publicBaseUrl: string | undefined,
+  team?: string,
+  visitorContact?: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  return smsDisclosure(publicBaseUrl, env).replace(SMS_GATE_REMINDER, draftStartLine(team, visitorContact));
 }
 
 export function smsOptInConfirmation(env: NodeJS.ProcessEnv = process.env): string {

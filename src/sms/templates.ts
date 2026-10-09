@@ -229,6 +229,16 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "tours-are-back", text: "Tours at {address} are back. Text me anytime to book." },
 
   { id: "sms-disclosure", text: "{brand}: You're starting a text conversation about a self-guided property tour.\n\nMessage frequency varies. Message and data rates may apply.\n\nReply YES to continue, HELP for help, or STOP to opt out.\n\nPrivacy: {privacy}\nTerms: {terms}" },
+  {
+    id: "sms-disclosure-draft",
+    text: "{brand}: You're starting a text conversation about a self-guided property tour.\n\nMessage frequency varies. Message and data rates may apply.\n\nTours by text aren't available right now. Please check back soon. Reply HELP for help or STOP to opt out.\n\nPrivacy: {privacy}\nTerms: {terms}",
+    note: "START on a draft-only line when no visitor help number is saved. Same disclosure as sms-disclosure, with the YES line replaced.",
+  },
+  {
+    id: "sms-disclosure-draft-call",
+    text: "{brand}: You're starting a text conversation about a self-guided property tour.\n\nMessage frequency varies. Message and data rates may apply.\n\nTours by text aren't available right now. You can call the {team} at {phone}. Reply HELP for help or STOP to opt out.\n\nPrivacy: {privacy}\nTerms: {terms}",
+    note: "START on a draft-only line when a visitor help number is saved. {team} and {phone} use the same help-number wording as the not-ready reply.",
+  },
   { id: "sms-opt-in", text: "{brand}: You're opted in. I can answer questions about the property and help you schedule and complete a self-guided tour.\nI'll keep a record of your visit times and the doors you use.\n\nReply STOP at any time to opt out." },
   { id: "sms-gate", text: "Reply YES to continue, HELP for help, or STOP to opt out." },
   { id: "sms-keyword", text: "Text TOUR to ask questions or schedule a self-guided tour. Reply HELP for help or STOP to opt out." },

@@ -59,7 +59,7 @@ you. No doors were refused.
 
 **Tour Core:**
 1. Pat Smith — Unit 101
-   Asked "Is parking included?". There's no approved answer yet.
+   They asked: "Is parking included?" There's no approved answer yet.
    Tour still active.
 
 **Operator:** Open Pat's issue. Yes, parking is included.

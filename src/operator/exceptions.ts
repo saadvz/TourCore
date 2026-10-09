@@ -188,11 +188,17 @@ function unitNameOn(tour: TourSnapshot, reservationId?: string): string | undefi
   return unit ? visitorSubject(tour.config.property, unit.name) : undefined;
 }
 
+/** `They asked: "{q}"` plus a period only when the question does not already end in . ? or ! */
+function quotedVisitorAsk(question: string): string {
+  const asked = question.trim();
+  return `They asked: "${asked}"${/[.!?]$/.test(asked) ? "" : "."}`;
+}
+
 function summaryFor(kind: ExceptionKind, e: AuditEvent, tour: TourSnapshot): string {
   const door = tour.config.doors.find((d) => d.id === e.doorId)?.name ?? "a door that isn't on file";
   switch (kind) {
     case "unanswered-question":
-      return `Asked "${e.detail}". There's no approved answer yet.`;
+      return `${quotedVisitorAsk(e.detail)} There's no approved answer yet.`;
     case "handler-failed":
       return e.detail;
     case "needs-help":
@@ -297,7 +303,13 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
   const sent = resolution?.approvedFact?.replace(/\.$/, "");
   const main = asked && sent ? `Asked "${asked}". Sent "${sent}".` : summaryFor(kind, e, tour);
   const teamTextMissed = kind === "message-failed" && isTeamTextFailedNotice(e.detail);
-  const summary = fairHousing && asked ? `They asked: "${asked}" ${FAIR_HOUSING_INBOX}` : teamTextMissed ? e.detail : extra ? `${main} ${extra}` : main;
+  const summary = fairHousing
+    ? `${asked ? quotedVisitorAsk(asked) : "They asked a question."} ${FAIR_HOUSING_INBOX}`
+    : teamTextMissed
+      ? e.detail
+      : extra
+        ? `${main} ${extra}`
+        : main;
   return {
     exceptionId,
     propertyId: tour.propertyId,
