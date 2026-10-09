@@ -370,11 +370,11 @@ const ROOM_WORD = String.raw`(?:(?:master|guest|primary|main)\s+)?(?:bed(?:room)
 
 /**
  * The room is the subject of a question about the room itself (its closet,
- * windows, size, carpet, updates, washer), or one room is inside another.
+ * windows, size, "what size", carpet, updates, washer), or one room is inside another.
  * Those are not "how many bedrooms?" A count question still is.
  */
 function roomAttributeQuestion(question: string): boolean {
-  if (new RegExp(String.raw`\bhow\s+(?:big|large)\b[\s\S]{0,40}\b${ROOM_WORD}\b`, "i").test(question)) return true;
+  if (new RegExp(String.raw`\b(?:how\s+(?:big|large)|what\s+size|size\s+of)\b[\s\S]{0,40}\b${ROOM_WORD}\b`, "i").test(question)) return true;
   if (new RegExp(String.raw`\b(?:does|do)\s+(?:the\s+|a\s+|your\s+)?${ROOM_WORD}\s+have\b`, "i").test(question)) return true;
   if (
     new RegExp(

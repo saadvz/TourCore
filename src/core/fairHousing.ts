@@ -84,18 +84,23 @@ const SUBSIDY_TAKE = /\b(?:take|takes|taking|consider|considers|considering)\b/;
 /**
  * Suitability for a protected class: "good for families", "a good place for
  * kids", "accessible for a wheelchair", "family friendly", "is the building
- * for families". The class word has to come right after "for" (an article or
- * "someone who is" may sit in between). "Good for a family car" does not
- * match, because "family" only modifies "car". "Good for ages 20-30" does:
- * age is a protected class, and a trailing number is still that question.
- * A home office, parking, or pets is not a class.
+ * for families", "good for raising a family", "a family building". After
+ * "for", a determiner or adjective may come first, and any words may follow
+ * the class, including another sentence. "Good for a family car" does not
+ * match, because the next word is car. The same for room, size, style,
+ * offenders, and neutral. "Good for ages 20-30" does: age is a protected
+ * class. A home office, parking, or pets is not a class.
  */
 const FRIENDLY = /\b(?:family|kid|child) friendly\b/;
+const FAMILY_BUILDING = /\bfamily buildings?\b/;
 const SUITABILITY_LEAD =
-  /\b(?:good place for|good home for|(?:good|suitable|right|okay|ok|safe|fit|accessible) for|a fit for)\b/g;
+  /\b(?:good (?:place|home|area|neighborhood) for|(?:good|suitable|right|okay|ok|safe|fit|accessible) for|a fit for|raising)\b/g;
 const SUITABILITY_PLACE =
   /\b(?:is|are) the (?:area|neighborhood|building|property|block)\b(?: \w+){0,6} for\b/g;
-const SUITABILITY_ARTICLE = /^(?:a|an|the|my|someone who is)\s+/;
+const SUITABILITY_PREFIX =
+  /^(?:someone who is|a|an|the|my|our|your|their|young|small|little|large|growing|elderly|older|single|disabled|raising)\s+/;
+/** The class word only modifies this thing. It is not a question about the class. */
+const CLASS_STOP = /^\s+(?:car|room|size|style|offenders|neutral)\b/;
 
 /**
  * Fair housing even with no eligibility verb. A bare "pets", "dogs", or
@@ -217,13 +222,27 @@ function neighborhoodSteering(text: string): boolean {
   return placeRace.some((word) => places.some((place) => !overlaps(word, place)));
 }
 
-/** The protected class sits at the start of `after`, then nothing, "person", or a number. */
+/**
+ * A protected class after optional determiners or adjectives. Any text may
+ * follow that class. A class word directly before car, room, size, style,
+ * offenders, or neutral is not the class ("family car", "family room",
+ * "family-style", "sex offenders", "gender neutral").
+ */
 function classFollowsFor(after: string): boolean {
-  const rest = after.replace(SUITABILITY_ARTICLE, "");
-  const match = new RegExp(`^(?:${PROTECTED_INNER})\\b`).exec(rest);
-  if (!match) return false;
-  const tail = rest.slice(match[0].length).replace(/^\s+(?:person|people)\b/, "");
-  return tail === "" || /^\s+\d+(?:\s+\d+)*$/.test(tail);
+  let rest = after.trimStart();
+  for (let i = 0; i < 8 && rest; i++) {
+    const match = new RegExp(`^(?:${PROTECTED_INNER})\\b`).exec(rest);
+    if (match) return !CLASS_STOP.test(rest.slice(match[0].length));
+    const prefix = SUITABILITY_PREFIX.exec(rest);
+    if (!prefix) return false;
+    rest = rest.slice(prefix[0].length);
+  }
+  return false;
+}
+
+/** "Family car" and "sex offenders" are not the protected class. */
+function withoutNonPeopleUse(text: string): string {
+  return text.replace(new RegExp(`\\b(?:${PROTECTED_INNER})\\s+(?:car|room|size|style|offenders|neutral)\\b`, "g"), "item");
 }
 
 function leadThenClass(text: string, lead: RegExp): boolean {
@@ -236,13 +255,13 @@ function leadThenClass(text: string, lead: RegExp): boolean {
 }
 
 function suitabilityForClass(text: string): boolean {
-  if (FRIENDLY.test(text)) return true;
+  if (FRIENDLY.test(text) || FAMILY_BUILDING.test(text)) return true;
   return leadThenClass(text, SUITABILITY_LEAD) || leadThenClass(text, SUITABILITY_PLACE);
 }
 
 export function isFairHousingQuestion(text: string): boolean {
   if (FIFTY_FIVE_PLUS.test(text.toLowerCase())) return true;
-  const t = norm(text);
+  const t = withoutNonPeopleUse(norm(text));
   if (!t) return false;
   if (ASSISTANCE_ANIMAL.test(t) || FAITH.test(t) || SSN.test(t) || STANDALONE.test(t)) return true;
   if (neighborhoodSteering(t)) return true;

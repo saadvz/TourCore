@@ -191,4 +191,15 @@ describe("operator-facing presenters", () => {
     const named = describeHistory([event], { doors: [], units: [], prospects: [], reservations: [], operatorName: "leasing team" }, "America/New_York");
     expect(named[0]!.text).toBe("The property team was alerted: Pat asked for help.");
   });
+
+  it("adds a period after an unanswered question only when the question has none", () => {
+    const asked = (detail: string) =>
+      describeHistory(
+        [{ id: "e1", seq: 1, type: "QUESTION_UNANSWERED", at: "2026-09-28T14:00:00.000Z", detail }],
+        { doors: [], units: [], prospects: [], reservations: [] },
+        "America/New_York",
+      )[0]!.text;
+    expect(asked("Is there a gym?")).toBe('the visitor asked "Is there a gym?" There was no approved answer, so it was flagged for your team.');
+    expect(asked("how many")).toBe('the visitor asked "how many". There was no approved answer, so it was flagged for your team.');
+  });
 });

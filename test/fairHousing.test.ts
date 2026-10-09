@@ -3,6 +3,7 @@ import { formatPhone } from "../src/core/phone";
 import { UNKNOWN_ANSWER } from "../src/core/TourCore";
 import { approvedFacts, findApprovedAnswer } from "../src/core/facts";
 import { isFairHousingQuestion } from "../src/core/fairHousing";
+import { FAIR_HOUSING_PHRASES } from "./fixtures/fairHousingPhrases";
 import { FAIR_HOUSING_REFUSAL } from "../src/operator/exceptions";
 import { hillsideConfig, liveApp, PHONE, type LiveApp } from "./liveApp";
 
@@ -24,6 +25,12 @@ const HOLDING = [
 ] as const;
 
 describe("fair-housing detection", () => {
+  it("checks every shared fair-housing phrase", () => {
+    for (const row of FAIR_HOUSING_PHRASES) {
+      expect(isFairHousingQuestion(row.phrase), `${row.source}: ${row.phrase}`).toBe(row.flagged);
+    }
+  });
+
   it.each([
     "Do you rent to families with kids?",
     "Would you rent to a single mom with a Section 8 voucher?",

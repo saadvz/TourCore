@@ -19,6 +19,7 @@ import { draftStartDisclosure, smsDisclosure, smsHelpBody, smsStopAck } from "..
 import { MATRIX_CLIENTS, playbookVersionMatches } from "../src/eval/clientMatrix";
 import { FAIR_HOUSING_INBOX, FAIR_HOUSING_REFUSAL } from "../src/operator/exceptions";
 import { hillsideConfig, liveApp } from "./liveApp";
+import { ROOM_QUESTIONS } from "./fixtures/roomQuestions";
 
 /**
  * Visitor-safety fixes. Each case is wrong on 73dcf35:
@@ -163,6 +164,10 @@ describe("STOP, HELP, and START on an unchecked draft", () => {
     expect(optedOut(root, id, "+15555551001")).toBeTruthy();
     expect(await text("+15555551001", "TOUR")).toEqual([]);
     expect(await text("+15555551001", "Hi")).toEqual([]);
+    expect(await text("+15555551001", "START")).toEqual([DRAFT_START]);
+    expect(consent(root, id, "+15555551001")).toBeUndefined();
+    expect(optedOut(root, id, "+15555551001")).toBeUndefined();
+    expect(await text("+15555551001", "Hi")).toEqual([toursUnavailableText(name, "property team")]);
 
     const help = await text("+15555551002", "HELP");
     expect(help).toEqual([HELP]);
@@ -199,6 +204,13 @@ describe("STOP, HELP, and START on an unchecked draft", () => {
       expect(optedOut(root, id, "+15555551011")).toBeTruthy();
     }
     expect(await text("+15555551011", "Hello")).toEqual([]);
+    expect(await text("+15555551011", "START")).toEqual([DRAFT_START]);
+    expect(consent(root, first, "+15555551011")).toBeUndefined();
+    expect(consent(root, second, "+15555551011")).toBeUndefined();
+    expect(optedOut(root, first, "+15555551011")).toBeUndefined();
+    expect(optedOut(root, second, "+15555551011")).toBeUndefined();
+    const sharedName = ws.loadDraft(first)!.property.name;
+    expect(await text("+15555551011", "Hello")).toEqual([toursUnavailableText(sharedName, "property team")]);
 
     expect(await text("+15555551012", "HELP")).toEqual([HELP]);
     const start = await text("+15555551013", "START");
@@ -392,6 +404,16 @@ describe("a fact keyword is not an answer", () => {
   });
 });
 
+describe("room and unit questions", () => {
+  it("checks every shared room question", () => {
+    const config = hillsideConfig();
+    for (const row of ROOM_QUESTIONS) {
+      const kind = resolveQuestion(config, row.question, { selectedUnitId: "apt_101" }).kind;
+      expect(kind, `${row.source}: ${row.question}`).toBe(row.expected === "answered" ? "answer" : "unknown");
+    }
+  });
+});
+
 describe("draft START does not leave a pending consent", () => {
   it("sends the disclosure after publish when the visitor texts yes", async () => {
     const app = await liveApp({ cleanups });
@@ -411,6 +433,26 @@ describe("draft START does not leave a pending consent", () => {
     const consent = JSON.parse(readFileSync(file, "utf8")).senders[phone];
     expect(consent.status).toBe("pending");
     expect(consent.status).not.toBe("opted_in");
+  });
+
+  it("clears a draft opt-out on START so Hi is answered and yes after publish is the disclosure", async () => {
+    const app = await liveApp({ cleanups });
+    const id = "prop_100_alfred_way";
+    app.ws.patchState(id, { status: "DRAFT" });
+    const phone = "+15550102131";
+    expect(await app.textFrom(phone, "STOP")).toEqual([smsStopAck()]);
+    const start = await app.textFrom(phone, "START");
+    expect(start).toEqual([draftStartDisclosure(PUBLIC)]);
+    const file = join(app.root, "properties", id, "sms-campaign-consent.json");
+    const record = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")).senders[phone] : undefined;
+    expect(record).toBeUndefined();
+    const saved = app.ws.load(id).config;
+    expect(await app.textFrom(phone, "Hi")).toEqual([toursUnavailableText(saved.property.name, saved.operator.name)]);
+    app.ws.patchState(id, { status: "PUBLISHED_FOR_DEMO" });
+    const yes = await app.textFrom(phone, "yes");
+    expect(yes).toEqual([smsDisclosure(PUBLIC)]);
+    expect(yes.join("\n")).not.toContain("You're opted in");
+    expect(JSON.parse(readFileSync(file, "utf8")).senders[phone].status).toBe("pending");
   });
 
   it("uses the help number on a draft-only START when one is saved", async () => {
@@ -462,6 +504,20 @@ describe("STOP and HELP on a mixed line", () => {
     expect(help.join("\n")).not.toContain("Which place");
     expect(consent(root, scratch, "+15555551051")).toBeUndefined();
     expect(optedOut(root, scratch, "+15555551051")).toBeUndefined();
+  });
+});
+
+describe("a resolved question", () => {
+  it("says they were sent the answer, and does not add a period when it already ends in !", async () => {
+    const a = await liveApp({ cleanups });
+    await a.optInSms();
+    await a.text("1");
+    await a.text("1");
+    await a.text("Is there a gym?");
+    const open = (await a.grok("list_exceptions")).exceptions.find((item: { what: string }) => item.what === "Question with no approved answer");
+    await a.approve("answer_flagged_question", { exceptionId: open.exceptionId, approvedFact: "Call you shortly!" });
+    const closed = await a.grok("inspect_exception", { exceptionId: open.exceptionId });
+    expect(closed.summary).toBe('(555) 010-2000, Unit 1A: They asked: "Is there a gym?" They were sent "Call you shortly!"');
   });
 });
 

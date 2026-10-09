@@ -300,8 +300,9 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
   const extra = replies.map((later) => later.detail).join(" ");
   const asked = kind === "unanswered-question" && e.detail ? e.detail : undefined;
   const fairHousing = kind === "unanswered-question" && e.code === FAIR_HOUSING_CODE;
-  const sent = resolution?.approvedFact?.replace(/\.$/, "");
-  const main = asked && sent ? `Asked "${asked}". Sent "${sent}".` : summaryFor(kind, e, tour);
+  const sent = resolution?.approvedFact?.trim();
+  const sentPeriod = sent && /[.!?]$/.test(sent) ? "" : ".";
+  const main = asked && sent ? `${quotedVisitorAsk(asked)} They were sent "${sent}"${sentPeriod}` : summaryFor(kind, e, tour);
   const teamTextMissed = kind === "message-failed" && isTeamTextFailedNotice(e.detail);
   const summary = fairHousing
     ? `${asked ? quotedVisitorAsk(asked) : "They asked a question."} ${FAIR_HOUSING_INBOX}`

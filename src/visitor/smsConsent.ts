@@ -112,6 +112,16 @@ export class SmsConsentDirectory {
     writeJsonAtomic(this.file(propertyId), { schemaVersion: 1, senders });
   }
 
+  /** Drops this number's campaign record. A later yes is a fresh disclosure, not an opt-out. */
+  delete(propertyId: string, phone: string): void {
+    const sender = normalizePhone(phone);
+    const current = this.read(propertyId);
+    if (!current || current === "unreadable" || !current.senders[sender]) return;
+    const senders = { ...current.senders };
+    delete senders[sender];
+    writeJsonAtomic(this.file(propertyId), { schemaVersion: 1, senders });
+  }
+
   private read(propertyId: string): z.infer<typeof FileSchema> | undefined | "unreadable" {
     const file = this.file(propertyId);
     if (!existsSync(file)) return undefined;

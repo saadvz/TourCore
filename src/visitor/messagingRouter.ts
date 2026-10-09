@@ -384,7 +384,10 @@ export class MessagingConversations {
       await this.sendLine(propertyId, phone, smsStopAck());
       return;
     }
-    for (const id of propertyIds) this.setOptOut(id, phone, false);
+    for (const id of propertyIds) {
+      this.setOptOut(id, phone, false);
+      this.smsConsent.delete(id, phone);
+    }
     const config = this.configOf(propertyId);
     const base = this.deps.publicBaseUrl?.() ?? publicBaseUrl(effectiveEnv());
     await this.sendLine(
@@ -831,6 +834,7 @@ export class MessagingConversations {
       return;
     }
     this.setOptOut(propertyId, phone, false);
+    this.smsConsent.delete(propertyId, phone);
     const named = this.configOf(propertyId);
     const base = this.deps.publicBaseUrl?.() ?? publicBaseUrl(effectiveEnv());
     await transport
