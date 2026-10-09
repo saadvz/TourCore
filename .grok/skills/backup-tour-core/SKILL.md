@@ -22,7 +22,7 @@ not decide access, and a failed backup never stops a tour.
 Prefer `backup_records` for create, confirm_destination, confirm_stored,
 status, and decline, and `restore_records` for upload, preview, and import.
 Import asks first, and replacing records that are already here needs an
-explicit yes to replacement. The older backup tools still work. Keeping
+explicit yes to replacement. The landlord connector does not list the older backup tools. Keeping
 records on this computer for a demo is still `use_local_demo_storage`.
 
 ## When to use

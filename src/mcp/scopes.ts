@@ -80,11 +80,6 @@ export const QA_TOOL_NAMES = [
   "get_installation_status",
 ] as const;
 
-export function legacyToolsEnabled(env?: { TOURCORE_LEGACY_TOOLS?: string }): boolean {
-  const raw = (env?.TOURCORE_LEGACY_TOOLS ?? "").trim().toLowerCase();
-  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
-}
-
 export function connectorRefusal(scope: ConnectorScope): string {
   if (scope === "landlord") {
     return "That's no longer something I can do from this chat. Disconnect and reconnect Tour Core so I'm working from the current list, then ask me again.";
@@ -104,7 +99,7 @@ function catalog(ctx: ScopeContext): OperatorTool[] {
 }
 
 /** Tools this connector may list and call, in tools/list order. */
-export function toolsForConnector(connector: ConnectorScope, ctx: ScopeContext, legacy: boolean): OperatorTool[] {
+export function toolsForConnector(connector: ConnectorScope, ctx: ScopeContext): OperatorTool[] {
   const all = catalog(ctx);
   const byName = new Map<string, OperatorTool>();
   for (const tool of all) if (!byName.has(tool.name)) byName.set(tool.name, tool);
@@ -114,10 +109,6 @@ export function toolsForConnector(connector: ConnectorScope, ctx: ScopeContext, 
   });
   if (connector === "ops") return pick(OPS_TOOL_NAMES);
   if (connector === "qa") return pick(QA_TOOL_NAMES);
-  if (legacy) {
-    // Switch-over: /mcp lists the same catalog master listed, including QA and ops tools.
-    return all;
-  }
   const names: string[] = [...LANDLORD_CORE_TOOLS];
   if (hostedResetToolVisible(ctx)) names.push(HOSTED_OWNER_TOOL);
   return pick(names);

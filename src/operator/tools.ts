@@ -99,8 +99,6 @@ export interface ToolContext {
    * (browser, in-process tests, eval harness).
    */
   connector?: ConnectorScope;
-  /** Landlord connector when TOURCORE_LEGACY_TOOLS=1. That flag also keeps QA and ops tools on /mcp during the switch-over. */
-  legacyTools?: boolean;
 }
 
 export type ToolKind = "read" | "change" | "consequential";
@@ -408,20 +406,6 @@ function parseHours(input: { days?: string | string[]; start?: string; end?: str
   if (early !== undefined) out.earlyArrivalMinutes = early;
   return out;
 }
-
-/**
- * Master 8a69f5d input for inject_local_sms. Legacy /mcp advertises this schema.
- * The QA connector keeps the shared-line schema on the live tool.
- */
-export const legacyInjectLocalSmsInput = z.strictObject({
-  from: z.string().min(7).max(30).describe("The visitor's phone number."),
-  text: z.string().max(1600).optional().describe("The visitor's text, one message. Leave empty when they only sent a photo."),
-  to: z.string().min(7).max(30).optional().describe("The property's local touring number. Leave out to use the property's attached line."),
-  property: Property,
-  id: z.string().max(80).optional().describe("Optional inbound id for de-duplication. Leave out to mint one."),
-  hasMedia: z.boolean().optional().describe("True when the inbound includes a photo or other attachment. Tour Core does not forward the file. A photo alone is told it can't take photos yet; a photo plus a question it can't answer is one combined text and is flagged."),
-  listingProperty: z.string().max(200).optional().describe("Listing deep link: the place this first text is for (street, public name, or property id). Leave out when the text itself should choose."),
-});
 
 // ------------------------------------------------------------------- tools
 
