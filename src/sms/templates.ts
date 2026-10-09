@@ -13,11 +13,12 @@
 
 /**
  * Visitor-facing team label. A stored name is used only when it already ends
- * in "team" (for example "leasing team"). A company name or a blank becomes
- * "property team", so the sentence stays grammatical.
+ * in "team" (for example "leasing team"). A leading "the " is removed so the
+ * template can add it once. A company name or a blank becomes "property team",
+ * so the sentence stays grammatical.
  */
 export function visitorTeamName(name: string | undefined | null): string {
-  const trimmed = (name ?? "").trim();
+  const trimmed = (name ?? "").trim().replace(/^the\s+/i, "");
   return /\bteam$/i.test(trimmed) ? trimmed : "property team";
 }
 
@@ -196,7 +197,7 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "switch-keep", text: "Reply YES to switch, or NO to keep your {time} tour on {day}." },
   { id: "switch-keep-looking", text: "Reply YES to switch, or NO to keep looking." },
   { id: "which-day", text: "Which day works for you?" },
-  { id: "tour-hours-which-day", text: "Tours run {days}, {hours}. Which day works for you?" },
+  { id: "tour-hours-which-day", text: "Tours run {days}, {hours}. Which day works for you? Just reply with a day, like {examples}." },
   { id: "next-opening-want", text: "The next {noun} is {when}. Want that, or another day?" },
   { id: "next-opening-menu", text: "The next {noun} is {when}. Reply yes to take it, or pick a day:" },
   { id: "heres-whats-left", text: "Here's what's left:" },
@@ -240,12 +241,14 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "t15", text: "Hope you're enjoying {place}{name?}! You have about 15 minutes left. Any questions about the place? Just text them here." },
   { id: "t15-yes", text: "Sure, what's your question?" },
   { id: "t15-no", text: "Sounds good. Enjoy the rest of your tour!" },
-  { id: "t5-offer", text: "Heads up{name?}, your tour of {place} ends in 5 minutes, at {end}. Want 10 more minutes? Just reply and ask." },
-  { id: "t5-no-offer", text: "Heads up{name?}, your tour of {place} ends in 5 minutes, at {end}. Text DONE once you're outside." },
+  { id: "t5-offer", text: "Heads up{name?}, your tour of {place} ends in 5 minutes{when?}. Want 10 more minutes? Just reply and ask." },
+  { id: "t5-no-offer", text: "Heads up{name?}, your tour of {place} ends in 5 minutes{when?}. Text DONE once you're outside." },
   { id: "t5-bare-yes", text: "Sounds good. Text DONE once you're outside." },
   { id: "extension-granted", text: "You've got 10 more minutes. Your tour now ends at {end}, and your doors will keep opening for you until then." },
-  { id: "extension-unavailable", text: "Sorry, I can't add more time to this tour. It still ends at {end}. Want to come back for another look? Reply here and I'll find you another time." },
-  { id: "extension-used", text: "You've already used your extra 10 minutes, so your tour still ends at {end}." },
+  { id: "extension-granted-no-clock", text: "You've got 10 more minutes. Your doors will keep opening for you until then." },
+  { id: "extension-unavailable", text: "Sorry, I can't add more time to this tour. It still ends at {end}. If you'd like another look, the {team} can set that up for you." },
+  { id: "extension-unavailable-no-clock", text: "Sorry, I can't add more time to this tour. If you'd like another look, the {team} can set that up for you." },
+  { id: "extension-used", text: "You've already used your extra 10 minutes{still?}." },
   { id: "extension-after-end", text: "Your tour time has ended, so I can't add more time now. Please head out the way you came in and text DONE once you're outside." },
   { id: "tour-ended-named", text: "Your tour of {place} just ended{name?}. I can't open any more doors for this tour, so please head out the way you came in and text DONE once you're outside." },
   { id: "door-after-end", text: "Your tour time has ended, so I can't open that door. Please head out the way you came in and text DONE once you're outside." },

@@ -113,8 +113,12 @@ export const PropertySchema = z.object({
    * (with instructions or an explicit skip). Absent on older setups.
    */
   entryInstructionsDecided: z.boolean().optional(),
-  /** IANA zone, e.g. America/New_York. All tour hours are read in this zone. */
-  timezone: z.string(),
+  /**
+   * IANA zone, e.g. America/New_York. All tour hours are read in this zone.
+   * A file with the field missing is the same as an empty zone: tours stay off
+   * until one is set. The file is not rewritten just to fill this in.
+   */
+  timezone: z.string().default(""),
   /**
    * The operator set this time zone, or confirming the address locked it.
    * Absent while a never-published setup still has an unconfirmed address,

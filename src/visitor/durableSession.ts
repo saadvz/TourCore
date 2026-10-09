@@ -4,6 +4,7 @@ import type { Reservation } from "../domain/model";
 import type { MessagingAdapter } from "../messaging/Messenger";
 import type { PropertyWorkspace } from "../setup/workspace";
 import type { RuntimeStore } from "../storage/runtimeStore";
+import { bookedClockZone } from "../core/inProgressTour";
 import { localDateOf } from "../core/timezone";
 import { parseIsoDate } from "../core/schedule";
 import { VisitorDemoSession, type VisitorStage } from "./session";
@@ -243,8 +244,12 @@ export async function restoreSession(snapshot: DurableSession, deps: RestoreDeps
   session.offeredDates = snapshot.offeredDates ?? [];
   session.selectedDate = snapshot.selectedDate;
   if (!session.selectedDate && snapshot.offeredSlots[0]) {
-    const local = localDateOf(new Date(snapshot.offeredSlots[0].start), config.property.timezone);
-    session.selectedDate = `${local.year}-${String(local.month).padStart(2, "0")}-${String(local.day).padStart(2, "0")}`;
+    const reservation = await session.reservation();
+    const zone = bookedClockZone(config.property.timezone, reservation);
+    if (zone) {
+      const local = localDateOf(new Date(snapshot.offeredSlots[0].start), zone);
+      session.selectedDate = `${local.year}-${String(local.month).padStart(2, "0")}-${String(local.day).padStart(2, "0")}`;
+    }
   }
 
   const stage = await session.stage();

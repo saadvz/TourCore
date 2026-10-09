@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { FAIR_HOUSING_CODE } from "../core/fairHousing";
 import { HANDLER_FAILED_NEXT_STEP, isTeamTextFailedNotice } from "../core/TourCore";
 import { formatPhone } from "../core/phone";
-import { formatShortDateTime } from "../core/timezone";
+import { formatShortDateTime, isValidTimeZone } from "../core/timezone";
 import { profileFacts, questionTopic, structuredAnswer, type ProfileField, type UnitProfile } from "../config/unitProfile";
 import { MAX_FACT_LENGTH } from "../config/validateConfig";
 import { UNNAMED_VISITOR, type AuditEvent, type Reservation, type ReservationStatus } from "../domain/model";
@@ -29,6 +29,12 @@ import {
   visitorNameOf,
   type TourSnapshot,
 } from "./tours";
+
+/** A blank zone must not throw and hide the rest of the inbox. */
+function shortWhen(at: string, timeZone: string): string {
+  if (!isValidTimeZone(timeZone)) return "";
+  return formatShortDateTime(new Date(at), timeZone);
+}
 
 /**
  * The operator's exception queue. Exceptions are derived from the canonical
@@ -298,7 +304,7 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
     unitName: unitNameOn(tour, e.reservationId) ?? unitSubject(tour, e.unitId),
     tourRef: tourRef(tour.propertyId, tour.tourId),
     happenedAt: e.at,
-    when: formatShortDateTime(new Date(e.at), tour.config.property.timezone),
+    when: shortWhen(e.at, tour.config.property.timezone),
     ...tourStatusFor(tour, e.reservationId),
     ...(kind === "unanswered-question" ? { question: e.detail, ...(e.unitId ? { questionUnitId: e.unitId } : {}) } : {}),
     ...(e.reservationId ? { reservationId: e.reservationId } : {}),
@@ -338,7 +344,7 @@ function foldHelpExceptions(tour: TourSnapshot, events: AuditEvent[], resolution
     let current: OperatorException | undefined;
     for (const e of group) {
       if (current && belongsToCurrentHelp(current, e)) {
-        const when = formatShortDateTime(new Date(e.at), tour.config.property.timezone);
+        const when = shortWhen(e.at, tour.config.property.timezone);
         const said = inboundAt(e);
         current.summary += said ? ` Asked again at ${when}: "${said}".` : ` Asked again at ${when}.`;
         current.happenedAt = e.at;
@@ -386,7 +392,7 @@ export async function listExceptions(services: OperatorServices, options: { prop
         visitorName: earlier ? visitorNameOf(earlier) : formatPhone(broken.visitorPhone),
         unitName: earlier ? unitNameOf(earlier) : undefined,
         happenedAt: at,
-        when: formatShortDateTime(new Date(at), config.property.timezone),
+        when: shortWhen(at, config.property.timezone),
         tourStatus: "Access is blocked",
         accessBlocked: true,
         status: resolution ? "resolved" : "open",

@@ -64,7 +64,7 @@ export async function handleMcpMessage(ctx: ToolContext, message: unknown): Prom
     case "initialize": {
       const asked = typeof params?.protocolVersion === "string" ? params.protocolVersion : undefined;
       const protocolVersion = asked && SUPPORTED_PROTOCOL_VERSIONS.includes(asked) ? asked : SUPPORTED_PROTOCOL_VERSIONS[0];
-      return rpcResult(id, { protocolVersion, capabilities: { tools: { listChanged: false } }, serverInfo: SERVER_INFO, instructions: mcpInstructions(ctx.connector) });
+      return rpcResult(id, { protocolVersion, capabilities: { tools: { listChanged: true } }, serverInfo: SERVER_INFO, instructions: mcpInstructions(ctx.connector) });
     }
     case "ping":
       return rpcResult(id, {});

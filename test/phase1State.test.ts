@@ -234,7 +234,7 @@ describe("realistic initialize messages", () => {
     const h = installHarness();
     cleanups.push(h.cleanup);
     const init = await handleMcpMessage(h.ctx, messages.grok);
-    expect(init.body).toMatchObject({ result: { instructions: MCP_INSTRUCTIONS, capabilities: { tools: { listChanged: false } } } });
+    expect(init.body).toMatchObject({ result: { instructions: MCP_INSTRUCTIONS, capabilities: { tools: { listChanged: true } } } });
     expect(reportedClientFromInitialize(messages.grok)).toMatchObject({ name: "Grok", capabilities: grokClientCaps });
     const state = await h.ok("get_state");
     expect(state.playbook).toMatchObject({ id: "grok", mode: "full", version: "grok@2026-10-08" });

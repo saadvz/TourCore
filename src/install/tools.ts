@@ -3,7 +3,7 @@ import { describeOperatorUpdate } from "../alerts/describeUpdate";
 import { choosePreferences, describeUpdates, enabledUpdates, PROBLEMS_ONLY, RECOMMENDED_UPDATES, UPDATE_KINDS, UPDATE_LABELS } from "../alerts/preferences";
 import type { OperatorTool, ToolContext, ToolKind } from "../operator/tools";
 import { SetupInputError } from "../setup/setupActions";
-import { checkPublicEndpoint, runtimeHealth, testAccess, testOperatorAlerts, testStorage, testVisitorMessaging } from "./checks";
+import { checkPublicEndpoint, deployedCommitLabel, runtimeHealth, testAccess, testOperatorAlerts, testStorage, testVisitorMessaging } from "./checks";
 import { toE164 } from "../messaging/Messenger";
 import { chooseMessagingProvider } from "../messaging/switchProvider";
 import { resolvePropertyId } from "../operator/resolve";
@@ -101,7 +101,12 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
         nextStep: s.nextStep,
         rule: SEQUENCE_RULE,
         components: s.components.map(componentOut),
-        technical: { note: TECHNICAL_NOTE, deployment: s.deploymentLabel, ...s.technical },
+        technical: {
+          note: TECHNICAL_NOTE,
+          deployment: s.deploymentLabel,
+          ...s.technical,
+          ...(ctx.connector === "qa" ? { commit: deployedCommitLabel(ctx.installation?.env() ?? {}) } : {}),
+        },
       };
     },
   }),

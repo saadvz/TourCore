@@ -37,7 +37,8 @@ import { withPropertySlotLock } from "./slotLock";
 import { BOOKING_HORIZON_DAYS, isoDate, nextTourDay, slotsOn, tourWindow, type TourSlot } from "./schedule";
 import { bookedTourCalledOffText, laterCancelConfirm, laterCancelDone, laterCancelKept, tourMovedToText } from "./availabilityCopy";
 import { propertyDirectionsUrl, tourDirectionsText } from "./mapsLink";
-import { addDays, formatDay as formatDayIn, formatTime as formatTimeIn, localDateOf, type LocalDate } from "./timezone";
+import { bookedClockZone, tourAlreadyUnderway } from "./inProgressTour";
+import { addDays, formatDay as formatDayIn, formatTime as formatTimeIn, isValidTimeZone, localDateOf, UnsetTimeZoneError, weekdayOf, type LocalDate, type Weekday } from "./timezone";
 import { claimVisitorSms, renderSms, visitorTeamName } from "../sms/templates";
 import { isGeneralTourHoursQuestion, savedTourHours, tourHoursVisitorReply } from "../visitor/tourHoursQuestion";
 
@@ -492,6 +493,7 @@ export class TourCore {
   // ---------------------------------------------------------------- journey
 
   async startInquiry(input: { name: string; phone: string; unitId: string }, options: { announce?: boolean } = {}): Promise<{ prospect: Prospect; reservation: Reservation }> {
+    if (!isValidTimeZone(this.deps.config.property.timezone)) throw new UnsetTimeZoneError();
     const { config, store } = this.deps;
     this.assertBookingAllowed(input.unitId);
     const phone = normalizePhone(input.phone);
@@ -576,6 +578,7 @@ export class TourCore {
   }
 
   async reserveSlot(reservationId: string, slotStartIso: string, options: { replace?: boolean } = {}): Promise<Reservation> {
+    if (!isValidTimeZone(this.deps.config.property.timezone)) throw new UnsetTimeZoneError();
     return this.withSlotLock(async () => {
       await this.deps.slotLockBarrier?.("reserve");
       let reservation = await this.mustGetReservation(reservationId);
@@ -607,7 +610,13 @@ export class TourCore {
 
       await this.cancelOtherLiveBookings(prospect.id, reservation.id);
       const { windowStart, windowEnd } = tourWindow(this.deps.config, start);
-      reservation = { ...reservation, slotStart: start.toISOString(), windowStart: windowStart.toISOString(), windowEnd: windowEnd.toISOString() };
+      reservation = {
+        ...reservation,
+        slotStart: start.toISOString(),
+        windowStart: windowStart.toISOString(),
+        windowEnd: windowEnd.toISOString(),
+        bookedTimeZone: this.deps.config.property.timezone,
+      };
       reservation = await this.move(reservation, "RESERVED", "RESERVATION_CREATED", {
         detail: `${this.day(start)} at ${this.time(start)}; doors usable ${this.time(windowStart)}-${this.time(windowEnd)}`,
       });
@@ -831,6 +840,7 @@ export class TourCore {
       slotStart: start.toISOString(),
       windowStart: windowStart.toISOString(),
       windowEnd: windowEnd.toISOString(),
+      bookedTimeZone: config.property.timezone,
       ...(override ? { scheduleOverride: override } : {}),
     };
     const detail = `from ${this.day(from)} ${this.time(from)} to ${this.day(start)} ${this.time(start)}; doors usable ${this.time(windowStart)}-${this.time(windowEnd)}`;
@@ -926,6 +936,7 @@ export class TourCore {
       slotStart: start.toISOString(),
       windowStart: windowStart.toISOString(),
       windowEnd: windowEnd.toISOString(),
+      bookedTimeZone: config.property.timezone,
       ...(override ? { scheduleOverride: override } : {}),
     };
     reservation = await this.move(reservation, "RESERVED", "RESERVATION_CREATED", {
@@ -1116,13 +1127,16 @@ export class TourCore {
     });
     const asked = new Date(request.requestedStartsAt);
     const reservation = request.reservationId ? await this.deps.store.get("reservations", request.reservationId) : undefined;
-    const current = reservation?.slotStart
-      ? { time: this.time(new Date(reservation.slotStart)), day: this.day(new Date(reservation.slotStart)) }
-      : undefined;
-    const prospect = await this.mustGetProspect(request.prospectId);
-    const body = requestExpiredLine(this.time(asked), this.day(asked), current, this.teamName());
-    if (!(await this.visitorAlreadyReceived(request.reservationId ?? "", body))) {
-      await this.textProspect(prospect, request.reservationId, body);
+    const zone = bookedClockZone(this.deps.config.property.timezone, reservation);
+    if (zone) {
+      const current = reservation?.slotStart
+        ? { time: formatTimeIn(new Date(reservation.slotStart), zone), day: formatDayIn(new Date(reservation.slotStart), zone) }
+        : undefined;
+      const prospect = await this.mustGetProspect(request.prospectId);
+      const body = requestExpiredLine(formatTimeIn(asked, zone), formatDayIn(asked, zone), current, this.teamName());
+      if (!(await this.visitorAlreadyReceived(request.reservationId ?? "", body))) {
+        await this.textProspect(prospect, request.reservationId, body);
+      }
     }
     return next;
   }
@@ -1346,8 +1360,8 @@ export class TourCore {
       const askedEarly = input.question.trim().slice(0, 300);
       if (isGeneralTourHoursQuestion(askedEarly)) {
         if (savedTourHours(this.deps.config.tourHours)) {
-          const reply = tourHoursVisitorReply(this.deps.config.tourHours);
-          await this.sendProspectDirect(phone, reply.body, reply.templateId);
+        const reply = tourHoursVisitorReply(this.deps.config.tourHours, this.hoursExampleDay());
+        await this.sendProspectDirect(phone, reply.body, reply.templateId);
           return { outcome: "answered", facts: [] };
         }
         await this.sendProspectDirect(phone, "I can't check that right now. Please try again in a little while.");
@@ -1373,7 +1387,7 @@ export class TourCore {
       const baseHours = { reservationId: reservation?.id, prospectId: prospect?.id };
       if (savedTourHours(this.deps.config.tourHours)) {
         await this.record("QUESTION_ANSWERED", { ...baseHours, detail: asked });
-        const reply = tourHoursVisitorReply(this.deps.config.tourHours);
+        const reply = tourHoursVisitorReply(this.deps.config.tourHours, this.hoursExampleDay(reservation));
         await this.sendConversationText({ phone, body: reply.body, reservationId: reservation?.id, templateId: reply.templateId });
         return { outcome: "answered", facts: [] };
       }
@@ -1866,7 +1880,7 @@ export class TourCore {
     await this.record("TOUR_EXTENDED", {
       reservationId: saved.id,
       prospectId: saved.prospectId,
-      detail: `+${extraMinutes} minutes; doors until ${this.time(newEnd)}`,
+      detail: `+${extraMinutes} minutes; doors until ${this.clockLabel(newEnd, saved)}`,
     });
     await this.regrantUntil(saved, newEnd);
     return saved;
@@ -1942,7 +1956,7 @@ export class TourCore {
         reservationId: reservation.id,
         prospectId: reservation.prospectId,
         doorId: grant.doorId,
-        detail: `extension; Durin grant ${result.grantRef} until ${this.time(newEnd)}`,
+        detail: `extension; Durin grant ${result.grantRef} until ${this.clockLabel(newEnd, reservation)}`,
       });
     }
   }
@@ -2000,6 +2014,9 @@ export class TourCore {
       await this.record("ACCESS_ALLOWED", { ...base, code: decision.code, detail: `duplicate request; reused grant ${existing.durinGrantRef}, Durin not called again` });
       return { decision, durinCalled: false, grant: existing, reusedGrant: true };
     }
+
+    // A tour already inside its booked window finishes on that window. Anything else needs a zone.
+    if (!isValidTimeZone(config.property.timezone) && !tourAlreadyUnderway(approved, now)) throw new UnsetTimeZoneError();
 
     try {
       await this.deps.beforeAccess?.();
@@ -2063,7 +2080,8 @@ export class TourCore {
       }
       throw err;
     }
-    await this.record("ACCESS_ALLOWED", { ...base, code: decision.code, detail: `Durin grant ${result.grantRef} until ${this.time(new Date(grant.validUntil))}` });
+    const until = isValidTimeZone(config.property.timezone) ? this.time(new Date(grant.validUntil)) : grant.validUntil;
+    await this.record("ACCESS_ALLOWED", { ...base, code: decision.code, detail: `Durin grant ${result.grantRef} until ${until}` });
 
     if (approved.status === "READY") {
       await this.move(approved, "TOURING", "TOUR_STARTED", { detail: `entered via ${door?.name ?? request.doorId}` });
@@ -2575,6 +2593,19 @@ export class TourCore {
     const next: TourTimeRequest = { ...request, status, resolvedAt: this.nowIso(), resolvedBy: by, ...(note?.trim() ? { operatorNote: note.trim() } : {}) };
     await this.deps.store.put("tourTimeRequests", next);
     return next;
+  }
+
+  /** Open day used in the hours hint. Omitted when no zone can name today. */
+  private hoursExampleDay(reservation?: Pick<Reservation, "bookedTimeZone">): Weekday | undefined {
+    const zone = bookedClockZone(this.deps.config.property.timezone, reservation);
+    if (!zone) return undefined;
+    return weekdayOf(localDateOf(this.deps.clock.now(), zone));
+  }
+
+  /** Visitor-facing clock when a zone exists; otherwise the absolute instant, for the audit only. */
+  private clockLabel(d: Date, reservation?: Pick<Reservation, "bookedTimeZone">): string {
+    const zone = bookedClockZone(this.deps.config.property.timezone, reservation);
+    return zone ? formatTimeIn(d, zone) : d.toISOString();
   }
 
   private time(d: Date): string {

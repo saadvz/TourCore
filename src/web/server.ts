@@ -21,6 +21,7 @@ import { publicBaseUrl } from "../messaging/publicUrl";
 import { createIntentInterpreter, intentModelFromEnv, type IntentInterpreter } from "../intent";
 import { mcpAuthModeFromEnv, type McpAuthMode } from "../mcp/authMode";
 import { authorized, handleMcpMessage, MCP_PATH } from "../mcp/mcpBridge";
+import { attachToolListStream, isInitializedNotification, noteInitialized } from "../mcp/toolListChanged";
 import { MCP_OPS_PATH, MCP_QA_PATH } from "../mcp/paths";
 import { legacyToolsEnabled, type ConnectorScope } from "../mcp/scopes";
 import { preferPlaybookClient, reportedClientFromInitialize, selectPlaybook, type ReportedClient } from "../playbooks/select";
@@ -562,7 +563,24 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
             return send(401, json, JSON.stringify({ error: { message: "Missing or wrong Tour Core connector token." } }), { "WWW-Authenticate": 'Bearer realm="tour-core"' });
           }
         }
-        if (method !== "POST") return send(405, json, JSON.stringify({ error: { message: "Send MCP requests with POST." } }), { Allow: "POST" });
+        const noticeKey = () => sessionHeader(req) ?? fallbackKey(caller);
+        if (method === "GET") {
+          const accept = String(req.headers.accept ?? "");
+          if (!accept.includes("text/event-stream")) {
+            return send(405, json, JSON.stringify({ error: { message: "Send MCP requests with POST." } }), { Allow: "POST, GET" });
+          }
+          const session = sessionHeader(req);
+          res.writeHead(200, {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache, no-transform",
+            Connection: "keep-alive",
+            "X-Accel-Buffering": "no",
+            ...(session ? { "Mcp-Session-Id": session } : {}),
+          });
+          attachToolListStream(noticeKey(), res);
+          return;
+        }
+        if (method !== "POST") return send(405, json, JSON.stringify({ error: { message: "Send MCP requests with POST." } }), { Allow: "POST, GET" });
         if (!String(req.headers["content-type"] ?? "").startsWith("application/json")) return send(415, json, JSON.stringify({ error: { message: "Unsupported request." } }));
         let message: unknown;
         try {
@@ -625,6 +643,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           },
           message,
         );
+        if (isInitializedNotification(message)) noteInitialized(incomingSession ?? responseSession ?? fallbackKey(caller));
         const sessionHeaders: Record<string, string> = responseSession ? { "Mcp-Session-Id": responseSession } : {};
         if (reply.body === undefined) {
           res.writeHead(reply.status, { "Cache-Control": "no-store", ...sessionHeaders });

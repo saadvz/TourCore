@@ -4,7 +4,8 @@ import { UPLOAD_BACKUP_FIRST } from "../backup/handoff";
 import { PortableBackupError } from "../backup/portable";
 import { revokeConfirmQuestion } from "../core/availabilityCopy";
 import { TourCoreError } from "../core/TourCore";
-import { addDays, formatDay, formatTime, localDateOf, timeOnDay, type LocalDate } from "../core/timezone";
+import { addDays, formatDay, formatTime, isValidTimeZone, localDateOf, timeOnDay, type LocalDate } from "../core/timezone";
+import { UNSET_ZONE_LINE } from "../setup/storedTimeZone";
 import { UnavailableModeError } from "../createTourCore";
 import { InvalidTransitionError, isRunningReservation } from "../domain/stateMachine";
 import { AuditExportLinks } from "./auditExportLinks";
@@ -13,6 +14,7 @@ import { DRIVE_NOT_SET_UP_LINE } from "../install/stateView";
 import type { SettingName } from "../install/secretStore";
 import { googleClientConfig } from "../storage/googleOAuth";
 import { envelope } from "./milestones";
+import type { OperatorServices } from "./services";
 import { exportAudit, formatAuditDaySummary, parseLocalDate } from "./auditExport";
 import {
   answerFlaggedQuestion,
@@ -114,6 +116,26 @@ function auditExportFileLink(ctx: ToolContext, propertyId: string, exportId: str
   }
   const local = ctx.localUrl?.();
   return local ? { openOnTourCoreComputer: AuditExportLinks.localUrl(local, propertyId, exportId, file) } : {};
+}
+
+/** Derived from the published setup. Setting a zone removes it. Not stored as an exception. */
+function unsetZoneInboxItems(services: OperatorServices, propertyId: string | undefined): Array<Record<string, unknown>> {
+  const ids = propertyId ? [propertyId] : services.workspace.propertyIds();
+  const items: Array<Record<string, unknown>> = [];
+  for (const id of ids) {
+    if (!services.workspace.has(id)) continue;
+    const saved = services.workspace.load(id);
+    if (saved.state.status !== "PUBLISHED_FOR_DEMO" || saved.state.removedAt) continue;
+    if (isValidTimeZone(saved.config.property.timezone)) continue;
+    items.push({
+      kind: "issue",
+      property: saved.config.property.name,
+      what: "Time zone needed",
+      summary: UNSET_ZONE_LINE,
+      status: "open",
+    });
+  }
+  return items;
 }
 
 function inboxKind(item: OperatorException): "flagged-question" | "help" | "door" | "issue" {
@@ -394,7 +416,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
     title: "Show what needs the landlord",
     kind: "read",
     description:
-      "Everything waiting on the landlord: flagged questions (a fair-housing item has proposeDraft false), help requests, door problems, and custom-time requests. Pass exceptionId or tourTimeRequestId for one item. Pass eventId for one alert. The alert itself still carries no visitor name. Never show ids to the landlord.",
+      "Everything waiting on the landlord: flagged questions (a fair-housing item has proposeDraft false), help requests, door problems, custom-time requests, and a published property with no time zone (Time zone needed, no id). Pass exceptionId or tourTimeRequestId for one item. Pass eventId for one alert. The alert itself still carries no visitor name. Never show ids to the landlord.",
     input: z.strictObject({
       property: Property,
       exceptionId: ExceptionId.optional(),
@@ -422,7 +444,8 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
       const issues = await listExceptions(ctx.services, { propertyId, includeClosed: i.includeHandled });
       const times = await listTourTimeRequests(ctx, { property: i.property, includeHandled: i.includeHandled });
       const requests = ((times.requests as Array<Record<string, unknown>> | undefined) ?? []).map((request) => ({ kind: "custom-time" as const, ...request }));
-      const items = [...issues.map(exceptionItem), ...requests];
+      const zoneNeeded = i.includeHandled ? [] : unsetZoneInboxItems(ctx.services, propertyId);
+      const items = [...zoneNeeded, ...issues.map(exceptionItem), ...requests];
       const open = items.filter((item) => {
         const status = (item as { status?: string }).status;
         return item.kind === "custom-time" ? status === "waiting" : status === "open";

@@ -29,29 +29,40 @@ export function t15Questions(place: string, name?: string): string {
 export const T15_BARE_YES = "Sure, what's your question?";
 export const T15_NO_OR_ALL_GOOD = "Sounds good. Enjoy the rest of your tour!";
 
-export function t5Offering(place: string, end: string, name?: string): string {
-  return name
-    ? `Heads up, ${name}, your tour of ${place} ends in 5 minutes, at ${end}. Want 10 more minutes? Just reply and ask.`
-    : `Heads up, your tour of ${place} ends in 5 minutes, at ${end}. Want 10 more minutes? Just reply and ask.`;
+function atClock(end: string | undefined): string {
+  return end ? `, at ${end}` : "";
 }
 
-export function t5NoOffer(place: string, end: string, name?: string): string {
+export function t5Offering(place: string, end: string | undefined, name?: string): string {
+  const when = atClock(end);
   return name
-    ? `Heads up, ${name}, your tour of ${place} ends in 5 minutes, at ${end}. Text DONE once you're outside.`
-    : `Heads up, your tour of ${place} ends in 5 minutes, at ${end}. Text DONE once you're outside.`;
+    ? `Heads up, ${name}, your tour of ${place} ends in 5 minutes${when}. Want 10 more minutes? Just reply and ask.`
+    : `Heads up, your tour of ${place} ends in 5 minutes${when}. Want 10 more minutes? Just reply and ask.`;
+}
+
+export function t5NoOffer(place: string, end: string | undefined, name?: string): string {
+  const when = atClock(end);
+  return name
+    ? `Heads up, ${name}, your tour of ${place} ends in 5 minutes${when}. Text DONE once you're outside.`
+    : `Heads up, your tour of ${place} ends in 5 minutes${when}. Text DONE once you're outside.`;
 }
 
 export const T5_NO_OFFER_BARE_YES = "Sounds good. Text DONE once you're outside.";
 
-export function extensionGranted(newEnd: string): string {
+export function extensionGranted(newEnd?: string): string {
+  if (!newEnd) return "You've got 10 more minutes. Your doors will keep opening for you until then.";
   return `You've got 10 more minutes. Your tour now ends at ${newEnd}, and your doors will keep opening for you until then.`;
 }
 
-export function extensionUnavailable(end: string): string {
-  return `Sorry, I can't add more time to this tour. It still ends at ${end}. Want to come back for another look? Reply here and I'll find you another time.`;
+export function extensionUnavailable(end?: string, team?: string): string {
+  const who = visitorTeamName(team);
+  const another = `If you'd like another look, the ${who} can set that up for you.`;
+  if (!end) return `Sorry, I can't add more time to this tour. ${another}`;
+  return `Sorry, I can't add more time to this tour. It still ends at ${end}. ${another}`;
 }
 
-export function extensionAlreadyUsed(end: string): string {
+export function extensionAlreadyUsed(end?: string): string {
+  if (!end) return "You've already used your extra 10 minutes.";
   return `You've already used your extra 10 minutes, so your tour still ends at ${end}.`;
 }
 
@@ -76,7 +87,8 @@ export function plus15Closed(place: string, helpNumber?: string): string {
   return `Your tour of ${place} is now closed. If you're still inside or need a hand, reply here and I'll get someone to help.`;
 }
 
-export function landlordExtensionGranted(who: string, place: string, end: string): string {
+export function landlordExtensionGranted(who: string, place: string, end?: string): string {
+  if (!end) return `${who}'s tour of ${place} was extended.`;
   return `${who}'s tour of ${place} was extended. It now ends at ${end}.`;
 }
 
