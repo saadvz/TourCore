@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { publicHealth } from "../src/install/checks";
 import { HOSTED_ADMIN_TOOLS } from "../src/install/hostedAdminTools";
 import { Installation } from "../src/install/installation";
-import { HOSTED_OWNER_TOOL, LANDLORD_CORE_TOOLS } from "../src/mcp/scopes";
+import { HOSTED_OWNER_TOOL, LANDLORD_CORE_TOOLS, OPS_TOOL_NAMES, QA_TOOL_NAMES } from "../src/mcp/scopes";
 import { OPERATOR_TOOLS, OPERATOR_TOOL_NAMES } from "../src/operator/tools";
 import { renderPlaybook } from "../src/playbooks/compose";
 import { MCP_INSTRUCTIONS } from "../src/playbooks/instructions";
@@ -22,13 +22,17 @@ import { createSetupServer } from "../src/web/server";
  * reset_hosted_demo. A whole file marked qa-skill, a <!-- connector: qa -->
  * or <!-- connector: ops --> region, an ## QA connector or ## Ops connector
  * section, or a line that says "QA connector" or "ops connector" may name
- * the other connectors' tools.
+ * the other connectors' tools. No file, including those sections, may name
+ * a Tour Core tool that is not on the landlord, QA, or ops connector.
  */
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const LANDLORD = new Set<string>([...LANDLORD_CORE_TOOLS, HOSTED_OWNER_TOOL]);
+const ON_A_CONNECTOR = new Set<string>([...LANDLORD, ...QA_TOOL_NAMES, ...OPS_TOOL_NAMES]);
 const FOREIGN = [...new Set(OPERATOR_TOOL_NAMES)].filter((name) => !LANDLORD.has(name)).sort((a, b) => b.length - a.length);
+const REMOVED = [...new Set(OPERATOR_TOOL_NAMES)].filter((name) => !ON_A_CONNECTOR.has(name)).sort((a, b) => b.length - a.length);
 const FOREIGN_RE = new RegExp(`\\b(${FOREIGN.join("|")})\\b`, "g");
+const REMOVED_RE = new RegExp(`\\b(${REMOVED.join("|")})\\b`, "g");
 
 const DOC_ROOTS = [".grok/skills", "grok-template", "GROK_BOOTSTRAP.md", "README.md"];
 
@@ -66,6 +70,11 @@ function foreignTools(text: string): string[] {
   return [...new Set([...text.matchAll(FOREIGN_RE)].map((match) => match[1]!))];
 }
 
+/** Old Tour Core tool names, backticked or bare, including inside QA and ops sections. */
+function removedTools(text: string): string[] {
+  return [...new Set([...text.matchAll(REMOVED_RE)].map((match) => match[1]!))];
+}
+
 function read(rel: string): string {
   return readFileSync(join(ROOT, rel), "utf8");
 }
@@ -81,6 +90,20 @@ describe("landlord-facing tool names", () => {
     const hits: string[] = [];
     for (const rel of DOC_ROOTS.flatMap(filesUnder)) {
       const found = foreignTools(landlordFacingText(read(rel)));
+      for (const name of found) hits.push(`${rel}: ${name}`);
+    }
+    expect(hits).toEqual([]);
+  });
+
+  it("names a removed tool even inside a QA section", () => {
+    expect(removedTools("<!-- connector: qa -->\nCall `publish_demo_property`.\n<!-- /connector -->")).toEqual(["publish_demo_property"]);
+    expect(removedTools("Call `get_state`, then `inject_local_sms`. `keyword_confirm` is a setting.")).toEqual([]);
+  });
+
+  it("keeps skills, the template, the bootstrap, and the README off tools that are not on any connector", () => {
+    const hits: string[] = [];
+    for (const rel of DOC_ROOTS.flatMap(filesUnder)) {
+      const found = removedTools(read(rel));
       for (const name of found) hits.push(`${rel}: ${name}`);
     }
     expect(hits).toEqual([]);

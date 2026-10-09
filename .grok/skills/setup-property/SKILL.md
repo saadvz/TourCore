@@ -32,13 +32,13 @@ doors, tour hours, verification or messaging. For route questions on their own, 
 - From the operator, in this order: address; property type (single-family
   home, multifamily, or apartment or condo — one unit); the units or spaces
   people can tour; for an apartment or condo, whether they control the
-  building entrance or only the unit door, then optional entry instructions;
+  building entrance or only the unit door, then the entrance name if they
+  control it; the entrance(s) they control; any hallway doors on the way;
   each unit's basic information (bedrooms, bathrooms, monthly rent,
   availability are required; square footage, floor, description, parking,
-  laundry, pets, utilities, furnished and features are offered); the
-  entrance(s) they control; any hallway doors on the way; tour days and hours;
-  how careful to be about checking IDs. A property or building name only if
-  the operator offers one.
+  laundry, pets, utilities, furnished and features are offered); optional
+  entry instructions; tour days and hours; how careful to be about checking
+  IDs. A property or building name only if the operator offers one.
 - Never ask for API keys, secrets, passwords or phone-provider credentials.
   Those are collected with a secure secret input during install, never in chat.
 
@@ -64,7 +64,28 @@ one of these:
 
 1. `get_state`. Its `properties` list is the places already on file. If the
    address already exists, say so and continue with that property.
-2. Ask **"What's the property address?"** when `nextStep.say` is that
+
+2. Texting is automatic: when this Tour Core has visitor texting installed,
+    a new property uses it on its own. One touring number covers every property.
+    Don't ask "How do you want to text people?" and don't ask for a separate
+    number per property. When `get_state` names `set_up_texting`, call
+    `set_up_texting`. If texting is installed and this property is still on
+    practice texts, `set_up_texting` with `provider: sendblue` and that property
+    yourself. `set_up_texting` sets the provider and checks it. It does not
+    ask the operator for a login in chat.
+    `provider: local` puts this building on local test texts without drafting other published buildings.
+    For local, say "Visitor texting: test mode" and
+    "Texting is in test mode, so texts
+    don't reach real phones. Real visitors won't get anything until live texting is
+    turned on. Door access is still in demo mode, so no physical locks will open."
+    Do not say texting is live and do not name the texting service.
+    Where
+    records live comes from `get_state` `storage` (this computer, or Google Drive).
+    Don't ask about it.
+
+3. When `get_state` names `backup_records`, follow **Backup Tour Core**. Skipping is fine.
+
+4. Ask **"What's the property address?"** when `nextStep.say` is that
    question, or ask the `say` `get_state` already returned. Then `save_property`
    with the address. A US address needs a street, city, state and ZIP. Ask for one
    missing part at a time and keep every part already given. If the reply
@@ -85,14 +106,16 @@ one of these:
    Only after `confirmAddress: true` ask property type. Pass `name` only if the operator
    said a public property or building name themselves; never suggest one, and
    never treat an internal space name such as "Main Home" as the property name.
-3. Ask Tour Core's next question, **"Is this a single-family home, a multifamily home, or one apartment or condo?"**,
+
+5. Ask Tour Core's next question, **"Is this a single-family home, a multifamily home, or one apartment or condo?"**,
    in plain words: single-family home; multifamily (duplex /
    small building you own); apartment or condo (one unit). Never guess the
    type from the address. There is no whole-building apartment option. Save
    the answer with `save_property` (`propertyType`: `SINGLE_FAMILY`,
    `MULTIFAMILY_HOME`, or `APARTMENT_OR_CONDO`). It returns the
    next question about the spaces people tour.
-4. Ask about the tourable spaces the way that type needs. `get_state` names
+
+6. Ask about the tourable spaces the way that type needs. `get_state` names
    `save_units` for this step.
    - **Single-family home:** people tour the whole home. Ask whether to call it
      "Main Home" or something else, then `save_units` (leave `name` out for
@@ -113,17 +136,28 @@ one of these:
      entrance, ask **"What's the building entrance called?"** and
      `save_doors_and_routes` with that door `kind: entrance` — Tour Core sets the route as building entrance + unit
      door. If they only control the unit door, the route is that door alone
-     (no building door on the route or in arrival text). Then ask the optional
-     **"How should visitors get in and find your unit?"** Save their words as
-     `entryInstructions` on `save_property`, or `skipEntryInstructions: true` if they skip.
-     Skip stores nothing. Visitors hear those words only after identity
-     verification, on the you're-all-set text. The nickname is the street
+     (no building door on the route or in arrival text). The nickname is the street
      plus unit (`145 Main St, Unit 4B`), never "Main Home". Mid-tour texts
      say `at Unit 4B`; a single-family home says `the front door`, never
      "Main Home".
 
    Never write a description or fact yourself.
-5. **Unit information, before doors and routes.** `get_state` names `save_units`
+
+7. Doors: ask **"Which door do visitors come in through?"** when this type
+   has a building entrance they control. `save_doors_and_routes` with `kind: entrance`.
+   Ask **"Any hallway or inside doors on the way to the units?"** Add each as
+   `kind: hallway`. Add only doors the operator named. A single-family home
+   already has its entrance; ask only if they want to rename it or there are
+   inside doors. An apartment or condo that only controls the unit door has
+   no building door to add. `get_state` names `save_doors_and_routes` for the route.
+
+8. Routes: follow the **Map Route** skill for each unit (`save_doors_and_routes`
+   with `preview: true`, show the operator, then `save_doors_and_routes` with the exact names). A single-family
+   home's route is already set. An apartment or condo route is set when they
+   answer the building-door question (and name the entrance, if they control
+   it).
+
+9. **Unit information, after doors and routes.** `get_state` names `save_units`
    while a required detail is still open. Ask for bedrooms, bathrooms,
    rent and availability, and accept a natural answer for several units at
    once ("1A and 1B are 2 bed 1 bath for $2,200. 2A is 3 bed 2 bath for
@@ -148,24 +182,23 @@ one of these:
    Corrections go through `save_units` too. These details are approved
    facts: visitors' questions ("How many bedrooms?", "How much is it?", "When
    is it available?") are answered from them first, at any point in their
-   conversation. If they were skipped, `get_state` still asks them after the
-   route, with `save_units`, and that does not block saving the route.
-   An apartment or condo still asks building-door control and the entrance
+   conversation. An apartment or condo still asks building-door control and the entrance
    name before the route counts as done (`save_property`). Entry instructions
-   come after the profile.
-6. Doors: ask **"Which door do visitors come in through?"** when this type
-   has a building entrance they control. `save_doors_and_routes` with `kind: entrance`.
-   Ask **"Any hallway or inside doors on the way to the units?"** Add each as
-   `kind: hallway`. Add only doors the operator named. A single-family home
-   already has its entrance; ask only if they want to rename it or there are
-   inside doors. An apartment or condo that only controls the unit door has
-   no building door to add. `get_state` names `save_doors_and_routes` for the route.
-7. Routes: follow the **Map Route** skill for each unit (`save_doors_and_routes`
-   with `preview: true`, show the operator, then `save_doors_and_routes` with the exact names). A single-family
-   home's route is already set. An apartment or condo route is set when they
-   answer the building-door question (and name the entrance, if they control
-   it).
-8. Ask **"When can people tour?"** when `get_state` names `save_hours`. Pass their words to `save_hours`
+   come after the profile. Ask the optional
+   **"How should visitors get in and find your unit?"** Save their words as
+   `entryInstructions` on `save_property`, or `skipEntryInstructions: true` if they skip.
+   Skip stores nothing. Visitors hear those words only after identity
+   verification, on the you're-all-set text.
+
+10. Ask Tour Core's next question about visitor help word for word. `get_state`
+    names `save_property` for that step:
+    **"What number can stuck visitors call? Someone should answer it during touring hours. You can skip this."**
+    Save a number with `save_property` `visitorContact`. If they skip,
+    call `save_property` with `skipVisitorHelp: true` so it is not
+    asked again. Never use the team's private alert line as the visitor number.
+    The number stays optional.
+
+11. Ask **"When can people tour?"** when `get_state` names `save_hours`. Pass their words to `save_hours`
    ("weekdays", "9 to 5", "every day"). A new property starts at
    Monday–Friday, 9:00 AM–5:00 PM. When hours are already saved, say the
    line from `get_state` `nextStep.say`, built from those hours (for example
@@ -187,7 +220,8 @@ one of these:
    units called? For example, Unit A and Unit B."** After doors and routes
    are saved, do not stay on that question. An address that is already set up
    is read back as the saved full address, not the raw characters just typed.
-9. When `get_state` names `save_settings`, ask **"Should visitors fill out a short identity form before their tour? I recommend it, so you know who's coming in."**
+
+12. When `get_state` names `save_settings`, ask **"Should visitors fill out a short identity form before their tour? I recommend it, so you know who's coming in."**
    Options: "Basic identity form (recommended)" and "No form". The basic form is the default.
    If they pick no form, ask **"Without a form, anyone who texts can book a tour and get in without telling you who they are. Want to go ahead with no form?"**
    Call `save_settings` with `verification: none` only after they say yes, and pass the confirmation code it returns.
@@ -202,31 +236,8 @@ one of these:
    Save the basic form with `save_settings` `verification: basic-form`.
    Tour updates on that same tool: ask only the question `get_state` returns.
    `skipAlerts: true` when they skip updates.
-10. Texting is automatic: when this Tour Core has visitor texting installed,
-    a new property uses it on its own. One touring number covers every property.
-    Don't ask "How do you want to text people?" and don't ask for a separate
-    number per property. When `get_state` names `set_up_texting`, call
-    `set_up_texting`. If texting is installed and this property is still on
-    practice texts, `set_up_texting` with `provider: sendblue` and that property
-    yourself. `set_up_texting` sets the provider and checks it. It does not
-    ask the operator for a login in chat.
-    `provider: local` puts this building on local test texts without drafting other published buildings.
-    For local, say "Visitor texting: test mode" and
-    "Texting is in test mode, so texts
-    don't reach real phones. Real visitors won't get anything until live texting is
-    turned on. Door access is still in demo mode, so no physical locks will open."
-    Do not say texting is live and do not name the texting service.
-    Where
-    records live comes from `get_state` `storage` (this computer, or Google Drive).
-    Don't ask about it.
-11. Ask Tour Core's next question about visitor help word for word. `get_state`
-    names `save_property` for that step:
-    **"What number can stuck visitors call? Someone should answer it during touring hours. You can skip this."**
-    Save a number with `save_property` `visitorContact`. If they skip,
-    call `save_property` with `skipVisitorHelp: true` so it is not
-    asked again. Never use the team's private alert line as the visitor number.
-    The number stays optional.
-12. `get_state` and read the property back as a short list from `setup`,
+
+13. `get_state` and read the property back as a short list from `setup`,
     `units`, `routes`, `hours`, `verification`, and `texting`:
 
     > Here's what I have:
@@ -255,14 +266,16 @@ one of these:
     (for example "910 QA Gate Rd"), never "Main Home". Multifamily, apartment
     and condo units keep their stored names. Local or test-mode texting reads
     "Visitor texting: test mode" instead of "Connected".
-13. On yes, the setup is saved. In a guided install, go back to `get_state`:
-    it offers tour updates next (`save_settings`), then `run_checks`. Otherwise: "I'll run a
+
+14. On yes, the setup is saved. Go back to `get_state`. It names `run_checks`
+    once tour updates are saved. Otherwise: "I'll run a
     readiness check and a practice tour before we turn it on." Then run **Run
     Readiness Check**. If it fails, explain each problem in plain words and
     offer the fix; change nothing without the operator's OK. If it passes, the
     same `run_checks` call is the practice tour. Say **"The check passed, and the practice tour passed."**
     only when `run_checks` says that.
-14. If both passed, `publish`. It returns one question; ask it
+
+15. If both passed, `publish`. It returns one question; ask it
     word for word. Only after a clear yes, call it again with the
     `confirmationCode` and wait for the result. Then `get_state`
     and say it is published only if that says so.
