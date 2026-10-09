@@ -78,6 +78,13 @@ export function checksumOf(contents: unknown): string {
   return createHash("sha256").update(stableStringify(contents), "utf8").digest("hex");
 }
 
+/** For Grok. The downloaded file is pretty-printed and also includes this field, so hashing the file does not reproduce it. */
+export const CHECKSUM_COVERS =
+  "The checksum is the SHA-256 of the backup's `contents`, as compact JSON with sorted keys, and it is stored in the file's `checksum` field, so a hash of the whole downloaded file won't match.";
+
+const FILE_CHANGED = "This backup file was changed or damaged after it was made, so nothing was restored. Try the original file.";
+const PART_CHANGED = "Part of this backup file was changed or damaged, so nothing was restored. Try the original file.";
+
 function safePath(path: string): boolean {
   if (path.includes("\\") || path.startsWith("/") || path.includes("..")) return false;
   if (SKIP_FILES.has(path) || SKIP_PREFIXES.some((prefix) => path.startsWith(prefix))) return false;
@@ -149,7 +156,7 @@ function assertClean(backup: PortableBackup, secretValues: string[]): PortableBa
   if (secretValues.some((secret) => secret.length >= 6 && text.includes(secret)) || looksLikeSecret(backup, secretValues)) {
     throw new PortableBackupError("The backup contained a credential, so it was not created.");
   }
-  if (backup.checksum !== checksumOf(backup.contents)) throw new PortableBackupError("The backup checksum doesn't match. Nothing was restored.");
+  if (backup.checksum !== checksumOf(backup.contents)) throw new PortableBackupError(FILE_CHANGED);
   const problems = relationshipProblems(backup.contents.files);
   if (problems.length) throw new PortableBackupError(problems[0]!);
   return backup;
@@ -167,7 +174,7 @@ function relationshipProblems(files: CanonicalFile[]): string[] {
     }
     if (paths.has(file.path)) problems.push("The backup has two copies of the same record.");
     paths.add(file.path);
-    if (sha256Json(file.body) !== file.sha256) problems.push("A record in the backup doesn't match its checksum.");
+    if (sha256Json(file.body) !== file.sha256) problems.push(PART_CHANGED);
     if (!file.path.endsWith("/tourcore.config.json")) continue;
     const body = file.body as { property?: { id?: string }; doors?: { id?: string }[]; routes?: { stops?: { doorId?: string }[] }[]; units?: unknown[] };
     const id = body.property?.id;
@@ -207,7 +214,7 @@ export function parsePortableBackup(raw: unknown, secretValues: string[] = []): 
   if (doc.schemaVersion !== PORTABLE_SCHEMA_VERSION) throw new PortableBackupError("This backup uses a format this Tour Core doesn't support yet.");
   const parsed = PortableBackupSchema.safeParse(raw);
   if (!parsed.success) throw new PortableBackupError("That backup isn't valid. Nothing was restored.");
-  if (parsed.data.checksum !== checksumOf(parsed.data.contents)) throw new PortableBackupError("The backup checksum doesn't match. Nothing was restored.");
+  if (parsed.data.checksum !== checksumOf(parsed.data.contents)) throw new PortableBackupError(FILE_CHANGED);
   return assertClean(parsed.data, secretValues);
 }
 

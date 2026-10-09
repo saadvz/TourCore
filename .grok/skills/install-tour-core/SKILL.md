@@ -384,7 +384,7 @@ Google Drive connector, confirm the file is there, then call
 
 A backup that fails does not unpublish the property or stop a tour. Later
 backups use the Backup Tour Core skill. Do not say a backup is saved until
-`backup_records` succeeds.
+`backup_records` succeeds. The checksum is the SHA-256 of the backup's `contents`, as compact JSON with sorted keys, and it is stored in the file's `checksum` field, so a hash of the whole downloaded file won't match.
 
 Describe each part as it is (texting live, door access demo); never say
 "everything runs in demo mode". From here, when the Tour Core Operator Updates

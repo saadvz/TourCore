@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { describeOperatorUpdate } from "../alerts/describeUpdate";
 import { UPLOAD_BACKUP_FIRST } from "../backup/handoff";
-import { PortableBackupError } from "../backup/portable";
+import { CHECKSUM_COVERS, PortableBackupError } from "../backup/portable";
 import { revokeConfirmQuestion } from "../core/availabilityCopy";
 import { TourCoreError } from "../core/TourCore";
 import { addDays, formatDay, formatTime, isValidTimeZone, localDateOf, timeOnDay, type LocalDate } from "../core/timezone";
@@ -68,6 +68,10 @@ const TourRef = z.string().min(3).max(200).describe("The tourRef from get_tours 
 const ExceptionId = z.string().min(3).max(60).describe("The exceptionId from get_inbox. Never show it to the landlord.");
 const Code = z.string().max(20).optional().describe("Only after the landlord explicitly said yes to the exact question this tool returned earlier.");
 const Unit = z.string().min(1).max(100).describe('The unit, e.g. "Unit 101" or "101".');
+
+function withChecksumCovers(result: Record<string, unknown>): Record<string, unknown> {
+  return { ...result, checksumCovers: CHECKSUM_COVERS };
+}
 
 function blockedOf(err: unknown): { message: string; code: string } | undefined {
   if (err instanceof SetupInputError || err instanceof TourCoreError) return { message: err.message, code: err.code };
@@ -540,28 +544,28 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
     title: "Export records",
     kind: "change",
     description:
-      "A day's audit export, or a readable export when kind is readable. Day is today (default), yesterday, YYYY-MM-DD, a month and day like Sept 28, or M/D. A month and day with no year means the most recent past one. Every landlord can export. A readable export is for people to read. It is not a backup. Each embedded tour keeps only that day's events and grants. A grant belongs to the day it was issued, and to the next day only if a door was used after midnight. Practice-tour denials are counted apart from visitors who were turned away. When only practice tours were denied, the summary says \"No visitors were turned away.\" and then the practice-tour denial count.",
+      `A day's audit export, or a readable export when kind is readable. Day is today (default), yesterday, YYYY-MM-DD, a month and day like Sept 28, or M/D. A month and day with no year means the most recent past one. Every landlord can export. A readable export is for people to read. It is not a backup. Each embedded tour keeps only that day's events and grants. A grant belongs to the day it was issued, and to the next day only if a door was used after midnight. Practice-tour denials are counted apart from visitors who were turned away. When only practice tours were denied, the summary says "No visitors were turned away." and then the practice-tour denial count. ${CHECKSUM_COVERS}`,
     input: z.strictObject({
       kind: z.enum(["day", "readable"]).optional(),
       property: Property,
       day: z.string().max(20).optional(),
     }),
     run: async (ctx, i) => {
-      if (i.kind === "readable") return installationOf(ctx).backups.createExport();
+      if (i.kind === "readable") return withChecksumCovers(installationOf(ctx).backups.createExport());
       const id = resolvePropertyId(ctx.services.workspace, i.property);
       const { config } = ctx.services.workspace.load(id);
       const parsed = parseExportDay(i.day ?? "today", localDateOf(ctx.now(), config.property.timezone));
       if (!parsed.ok) throw new SetupInputError("DAY_UNREADABLE", "I couldn't read that date. Which day? Say today or a date like Sept 28.");
       const out = await exportAudit(ctx.services, id, { day: parsed.day, now: ctx.now() });
       const s = out.summary;
-      return {
+      return withChecksumCovers({
         summary: formatAuditDaySummary(s),
         totals: s,
         reference: `Audit export ${out.exportId}, saved with ${ctx.services.workspace.load(id).config.property.name}'s tour records on the Tour Core computer.`,
         accessGrants: out.accessGrants,
         denials: out.denials,
         files: out.files.map((file) => ({ file, ...auditExportFileLink(ctx, id, out.exportId, file) })),
-      };
+      });
     },
   }),
   tool({
@@ -569,7 +573,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
     title: "Back up records",
     kind: "change",
     description:
-      "create builds a portable backup. confirm_destination records the Google Drive folder (provider google_drive, folderName Tour Core). confirm_stored records the file name and checksum after the file is saved. status says whether a backup is due. decline records that portable backups were skipped. On a hosted install, say \"Operational records stay with hosted Tour Core. Portable backups are off until you connect Google Drive.\" When records are already on this computer, or Google Drive is still waiting for approval, say \"Your records stay on this computer. Portable backups stay off until Google Drive is connected.\" Declining stays possible. On a demo, declining keeps records on this computer.",
+      `create builds a portable backup. confirm_destination records the Google Drive folder (provider google_drive, folderName Tour Core). confirm_stored records the file name and checksum after the file is saved. status says whether a backup is due. decline records that portable backups were skipped. On a hosted install, say "Operational records stay with hosted Tour Core. Portable backups are off until you connect Google Drive." When records are already on this computer, or Google Drive is still waiting for approval, say "Your records stay on this computer. Portable backups stay off until Google Drive is connected." Declining stays possible. On a demo, declining keeps records on this computer. ${CHECKSUM_COVERS}`,
     input: z.strictObject({
       action: z.enum(["create", "confirm_destination", "confirm_stored", "status", "decline"]),
       reason: z.enum(["operator", "publish", "content", "tour", "routine"]).optional(),
@@ -582,7 +586,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
     run: async (ctx, i) =>
       attemptWrite(ctx, undefined, async () => {
         const backups = installationOf(ctx).backups;
-        if (i.action === "status") return backups.status();
+        if (i.action === "status") return withChecksumCovers(backups.status());
         if (i.action === "decline") {
           const inst = installationOf(ctx);
           if (inst.records.model() !== "HOSTED_P0_VOLUME" && inst.records.provider() === "NOT_CONFIGURED") {
@@ -590,18 +594,18 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
             const google = googleClientConfig(inst.env(), (name) => inst.secrets.get(name as SettingName));
             if (!google.clientId || !google.clientSecret) {
               backups.decline();
-              return { summary: DRIVE_NOT_SET_UP_LINE };
+              return withChecksumCovers({ summary: DRIVE_NOT_SET_UP_LINE });
             }
           }
-          return backups.decline();
+          return withChecksumCovers(backups.decline());
         }
-        if (i.action === "create") return backups.create(i.reason);
+        if (i.action === "create") return withChecksumCovers(backups.create(i.reason));
         if (i.action === "confirm_destination") {
           if (!i.provider || !i.folderName) throw new SetupInputError("DESTINATION_MISSING", "What should the backup folder be called?");
-          return backups.confirmDestination({ provider: i.provider, folderName: i.folderName, accountLabel: i.accountLabel });
+          return withChecksumCovers(backups.confirmDestination({ provider: i.provider, folderName: i.folderName, accountLabel: i.accountLabel }));
         }
         if (!i.fileName || !i.checksum) throw new SetupInputError("BACKUP_MISMATCH", "That doesn't match the backup Tour Core created. Nothing was marked as stored.");
-        return backups.confirmStored({ fileName: i.fileName, checksum: i.checksum });
+        return withChecksumCovers(backups.confirmStored({ fileName: i.fileName, checksum: i.checksum }));
       }),
   }),
   tool({
@@ -609,7 +613,7 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
     title: "Restore records",
     kind: "change",
     description:
-      "upload opens a short-lived upload. preview checks the file and changes nothing. import restores it only after confirmationCode from a clear yes. If this Tour Core already has records, pass recovery replace only after they explicitly choose replacement. Logins are not in the backup. A backup up to 50 MB is accepted. An upload over that cap is refused with a message that states the cap. Every expired upload says to send the file again, including a second look and a file that arrived before the link expired. Upload the backup file first is only for a live link with no file. An older ID check is named in the import summary: it now uses the basic identity form, and the landlord can ask for no form. Start a new upload with restore_records, action upload.",
+      `upload opens a short-lived upload. preview checks the file and changes nothing. import restores it only after confirmationCode from a clear yes. If this Tour Core already has records, pass recovery replace only after they explicitly choose replacement. Logins are not in the backup. A backup up to 50 MB is accepted. An upload over that cap is refused with a message that states the cap. Every expired upload says to send the file again, including a second look and a file that arrived before the link expired. Upload the backup file first is only for a live link with no file. An older ID check is named in the import summary: it now uses the basic identity form, and the landlord can ask for no form. Start a new upload with restore_records, action upload. ${CHECKSUM_COVERS}`,
     input: z.strictObject({
       action: z.enum(["upload", "preview", "import"]),
       uploadId: z.string().regex(/^art_[A-Za-z0-9_-]{20,80}$/).optional(),
@@ -619,9 +623,9 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
     run: async (ctx, i) =>
       attemptWrite(ctx, undefined, async () => {
         const backups = installationOf(ctx).backups;
-        if (i.action === "upload") return backups.beginRestore();
+        if (i.action === "upload") return withChecksumCovers(backups.beginRestore());
         if (!i.uploadId) throw new SetupInputError("UPLOAD_MISSING", UPLOAD_BACKUP_FIRST);
-        if (i.action === "preview") return backups.preview(i.uploadId);
+        if (i.action === "preview") return withChecksumCovers(backups.preview(i.uploadId));
         const preview = backups.preview(i.uploadId);
         if (preview.replaceRequired && i.recovery !== "replace") {
           throw new SetupInputError("REPLACE_REQUIRED", "This Tour Core already has records. Restoring would replace them. Nothing was changed.");
@@ -632,10 +636,10 @@ export const DAY_TO_DAY_TOOLS: OperatorTool[] = [
           : "Restore this backup onto this Tour Core? Logins for texting and updates are not in the backup.";
         if (!i.confirmationCode) {
           const confirmation = ctx.confirmations.issue("import-backup", i.uploadId, fingerprint, question);
-          return { status: "needs-confirmation", summary: confirmation.question, confirmation, requiresConfirmation: true, lines: preview.lines };
+          return withChecksumCovers({ status: "needs-confirmation", summary: confirmation.question, confirmation, requiresConfirmation: true, lines: preview.lines });
         }
         ctx.confirmations.redeem(i.confirmationCode, "import-backup", i.uploadId, fingerprint);
-        return backups.importBackup(i.uploadId, i.recovery);
+        return withChecksumCovers(backups.importBackup(i.uploadId, i.recovery));
       }),
   }),
 ];

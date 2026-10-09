@@ -85,7 +85,7 @@ one of these:
     records live comes from `get_state` `storage` (this computer, or Google Drive).
     Don't ask about it.
 
-3. When `get_state` names `backup_records`, follow **Backup Tour Core**. Skipping is fine.
+3. When `get_state` names `backup_records`, follow **Backup Tour Core**. Skipping is fine. The checksum is the SHA-256 of the backup's `contents`, as compact JSON with sorted keys, and it is stored in the file's `checksum` field, so a hash of the whole downloaded file won't match.
 
 4. Ask **"What's the property address?"** when `nextStep.say` is that
    question, or ask the `say` `get_state` already returned. Then `save_property`
