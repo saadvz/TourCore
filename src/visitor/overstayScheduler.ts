@@ -394,7 +394,7 @@ export class OverstayScheduler {
       const current = this.get(reservationId)!;
       const { t5Kind: _offer, ...rest } = current;
       this.put({ ...rest, pendingRebook: true, prompt: "none" });
-      return extensionUnavailable(end);
+      return extensionUnavailable(end, core.config.operator.name);
     }
 
     const extended = await core.extendTourWindowLocked(reservationId);

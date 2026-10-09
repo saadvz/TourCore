@@ -54,9 +54,9 @@ export function extensionGranted(newEnd?: string): string {
   return `You've got 10 more minutes. Your tour now ends at ${newEnd}, and your doors will keep opening for you until then.`;
 }
 
-export function extensionUnavailable(end?: string): string {
-  const still = end ? ` It still ends at ${end}.` : "";
-  return `Sorry, I can't add more time to this tour.${still} Want to come back for another look? Reply here and I'll find you another time.`;
+export function extensionUnavailable(end?: string, team?: string): string {
+  if (!end) return `Sorry, I can't add more time to this tour. If you'd like another look, the ${visitorTeamName(team)} can set that up for you.`;
+  return `Sorry, I can't add more time to this tour. It still ends at ${end}. Want to come back for another look? Reply here and I'll find you another time.`;
 }
 
 export function extensionAlreadyUsed(end?: string): string {

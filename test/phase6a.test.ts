@@ -12,7 +12,7 @@ import { Installation } from "../src/install/installation";
 import { LANDLORD_CORE_TOOLS, OPS_TOOL_NAMES, QA_TOOL_NAMES } from "../src/mcp/scopes";
 import { UNSET_ZONE_LINE } from "../src/setup/storedTimeZone";
 import { configHash, PropertyWorkspace } from "../src/setup/workspace";
-import { t15Questions, t5NoOffer, t5Offering } from "../src/core/overstayCopy";
+import { extensionUnavailable, t15Questions, t5NoOffer, t5Offering } from "../src/core/overstayCopy";
 import { VisitorDenialCopy } from "../src/core/TourCore";
 import { formatTime, zonedTimeToUtc } from "../src/core/timezone";
 import { toursUnavailableText } from "../src/sms/templates";
@@ -401,6 +401,10 @@ describe("in-tour texts after the zone is cleared", () => {
       expect(t5.join("\n")).not.toMatch(/GMT|UTC/);
       expect(t5.join("\n")).not.toMatch(/\d{1,2}:\d{2}/);
       expect(t5.join("\n")).not.toMatch(/\b(?:AM|PM)\b/);
+      const more = await a.text("can I have 10 more minutes");
+      const granted = more.some((line) => line.startsWith("You've got 10 more minutes."));
+      expect(t5).toEqual([granted ? t5Offering("Unit 1A", undefined, "Testy") : t5NoOffer("Unit 1A", undefined, "Testy")]);
+      expect(more).toEqual([extensionUnavailable(undefined, "property team")]);
     }
 
     const done = await a.text("DONE");
@@ -411,6 +415,23 @@ describe("in-tour texts after the zone is cleared", () => {
     const blocked = await a.textFrom(readyPhone, "I'm here");
     expect(blocked).toEqual([UNAVAILABLE]);
     expect(await activeGrants(a, readyPhone)).toEqual([]);
+  });
+});
+
+describe("no-clock extension refusal", () => {
+  it("names the team the contact line uses, and keeps the clocked refusal", () => {
+    expect(extensionUnavailable(undefined, "property team")).toBe(
+      "Sorry, I can't add more time to this tour. If you'd like another look, the property team can set that up for you.",
+    );
+    expect(extensionUnavailable(undefined, "leasing team")).toBe(
+      "Sorry, I can't add more time to this tour. If you'd like another look, the leasing team can set that up for you.",
+    );
+    expect(extensionUnavailable(undefined, "Alfred Homes")).toBe(
+      "Sorry, I can't add more time to this tour. If you'd like another look, the property team can set that up for you.",
+    );
+    expect(extensionUnavailable("2:45 PM", "property team")).toBe(
+      "Sorry, I can't add more time to this tour. It still ends at 2:45 PM. Want to come back for another look? Reply here and I'll find you another time.",
+    );
   });
 });
 
