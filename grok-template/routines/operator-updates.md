@@ -69,6 +69,8 @@ delivery with the same `eventId`, so treat a repeat as the same update.
    > Testy's Unit 1A tour has started.
 
    > Testy's Unit 1A tour is complete.
+
+   A visitor with no name is `Visitor at (555) 010-2000` with the full formatted number, then the place (`Visitor at (555) 010-2000, 1 QA Scratch Lane: …`). A named visitor stays their first name. The inbox item includes that alert's `eventId`. The webhook stays ids only.
 4. For an issue: if `stillOpen` is false (it was handled already), stop
    quietly. For an unanswered question, ask for the answer itself (not a
    yes/no), so the only confirmation later is Tour Core's:

@@ -39,7 +39,7 @@ The older tools are not on these connectors. A Tour Core tool that isn't on the 
 | `cancel_tour` | consequential | Calls off a tour after a yes. Destructive hint |
 | `hold_tour` | consequential | Holds a tour after a yes |
 | `pause_tours` | consequential | Pauses or resumes tours for a property or unit after a yes (`paused` true or false) |
-| `get_inbox` | read | What needs the landlord, including a tour-update event id |
+| `get_inbox` | read | What needs the landlord, including a tour-update event id. Each item includes that alert's `eventId`. A visitor with no name is summarized as `Visitor at (555) 010-2000` with the full formatted number (`Visitor at (555) 010-2000, 1 QA Scratch Lane: …`). A named visitor stays their first name. The ping stays ids only |
 | `reply_to_time_request` | consequential | Answers a requested tour time after a yes |
 | `resolve_issue` | consequential | Handles an open issue. Show `visitorWillReceive` before a yes |
 | `export_records` | read | A day's tour records as a validated export. Each embedded tour keeps only that day's events and grants. Practice-tour denials are counted apart from visitors who were turned away. |

@@ -21,6 +21,8 @@ settings screen. Casual and non-technical is a requirement.
 | Tour updates aren't reaching you. I'll send you a secure link to reconnect them. Nothing you type there shows in chat. | A new routine, or a new address or key in chat, when an alert address is already saved. |
 | There's no approved answer yet. Choosing a time. | There's no approved answer yet Choosing a time. |
 | New tour booked: Testy is scheduled to tour Unit 1A today at 3:00 PM. | tour.booked evt_... |
+| Visitor at (555) 010-2000, 1 QA Scratch Lane: They asked: "Is there a pool?" | (555), 1 QA Scratch Lane: … |
+| The inbox item's eventId is the same id the ping sent. | Working the event id out from the code. |
 | Visitor texting is live. Door access is still in demo mode, so no physical locks will open. | Everything runs in demo mode. |
 | Texting is in test mode, so texts don't reach real phones. Real visitors won't get anything until live texting is turned on. Door access is still in demo mode, so no physical locks will open. | Visitor texting is live. (local test texts) |
 | Your touring number covers every property. A text that names the place starts there. | one number per property, or a property id |

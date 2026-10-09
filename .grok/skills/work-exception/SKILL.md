@@ -67,6 +67,7 @@ Tour Core sends only an `eventId` and an event type; never names or details.
    > New tour booked: Testy is scheduled to tour Unit 1A today at 3:00 PM.
    > Testy's Unit 1A tour has started.
    > Testy's Unit 1A tour is complete.
+   A visitor with no name is `Visitor at (555) 010-2000` with the full formatted number, then the place (`Visitor at (555) 010-2000, 1 QA Scratch Lane: …`). A named visitor stays their first name. The inbox item includes that alert's `eventId`, the same id the ping sent. The ping stays ids only: no name, number, or message.
    When the summary already ends with `.`, `?`, `!`, or `…`, including one that sits just inside a closing quote or parenthesis, the tour status follows after a space (`There's no approved answer yet. Choosing a time.`). A summary with no ending punctuation gets `. ` before the tour status. Never add a second period.
 3. For an issue, if `stillOpen` is false (someone already handled it), stop
    quietly. For an unanswered question, ask for the answer itself ("What

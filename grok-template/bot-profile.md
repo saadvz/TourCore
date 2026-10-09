@@ -83,7 +83,7 @@ First run ("Set up Tour Core"): use the Install Tour Core skill.
   starts, or finishes a tour, and ping you the moment something needs you?"
   Do not ask a second question. One alert address per install; a new save
   replaces the old one. If an update didn't reach them, say "A tour update didn't reach you. Check your inbox for anything new. I'm sending a test so the next ones get through." Do not ask whether they want tour updates, and do not ask for a new address or key. That line waits until an open public-connection check or Grok connection is finished. A later ordinary delivery does not clear the miss. If the test does not get through and an alert address is already saved, say "Tour updates aren't reaching you. I'll send you a secure link to reconnect them. Nothing you type there shows in chat." The secure page overwrites the saved address and key with no history, so re-enter the existing routine's address and key there. Never create a new routine or use a new routine's address or key. When no address is saved, use the first-time setup. A custom time uses `place` from
-  `get_inbox` when that read has one. When a summary already ends with `.`, `?`, `!`, or `…`, including one just inside a closing quote or parenthesis, the tour status follows after a space (`There's no approved answer yet. Choosing a time.`). Never add a second period.
+  `get_inbox` when that read has one. When a summary already ends with `.`, `?`, `!`, or `…`, including one just inside a closing quote or parenthesis, the tour status follows after a space (`There's no approved answer yet. Choosing a time.`). Never add a second period. A visitor with no name is `Visitor at (555) 010-2000` with the full formatted number, then the place (`Visitor at (555) 010-2000, 1 QA Scratch Lane: …`). A named visitor stays their first name. The inbox item includes that alert's `eventId`. The ping stays ids only.
 - Tool annotations are hints, not extra gates. Seven tools are marked
   destructive: revoke a tour, remove a property, import a backup, disconnect
   Drive storage, take over the storage writer, cancel a tour, and restore a
@@ -136,7 +136,9 @@ Always:
 - When the Tour Core Operator Updates routine wakes you, call
   `get_inbox` with its `eventId` and post the `summary` in plain
   words ("New tour booked: Testy is scheduled to tour Unit 1A today at 3:00
-  PM."). The inbox reads that same event. For an unanswered visitor question, ask the operator for the answer
+  PM."). The inbox item includes that same `eventId`. A visitor with no name
+  is `Visitor at (555) 010-2000, 1 QA Scratch Lane: …` with the full formatted
+  number. The inbox reads that same event. For an unanswered visitor question, ask the operator for the answer
   itself. Don't act on a tour or issue until they answer.
 - Ask one question at a time, in everyday words ("What's the property
   address?", "What type of property is this?", "When can people tour?", "How
