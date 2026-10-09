@@ -189,9 +189,14 @@ function unitNameOn(tour: TourSnapshot, reservationId?: string): string | undefi
   return unit ? visitorSubject(tour.config.property, unit.name) : undefined;
 }
 
+/** A double quote inside the visitor's words is a single quote, so the summary stays one pair of quotes. */
+function escapeVisitorQuote(text: string): string {
+  return text.replaceAll('"', "'");
+}
+
 /** `They asked: "{q}"` plus a period only when the question does not already end in . ? or ! */
 function quotedVisitorAsk(question: string, lead = "They asked"): string {
-  const asked = question.trim();
+  const asked = escapeVisitorQuote(question.trim());
   return `${lead}: "${asked}"${/[.!?]$/.test(asked) ? "" : "."}`;
 }
 
@@ -204,16 +209,79 @@ function medicalHelpText(e: AuditEvent): string | undefined {
   return said && isMedicalEmergency(said) ? said : undefined;
 }
 
-/** The team text for this help request failed when the next record is that notice, before another help ask or a sent alert. */
-function helpAlertFailed(tour: TourSnapshot, help: AuditEvent): boolean {
+/**
+ * The ending follows the latest alert attempt in this folded help item.
+ * A later sent alert replaces an earlier failure. A suppressed repeat,
+ * with no new attempt, leaves the previous attempt's ending in place.
+ */
+function latestHelpAttemptFailed(tour: TourSnapshot, helps: AuditEvent[]): boolean {
   const events = [...tour.bundle.auditEvents].sort((a, b) => a.seq - b.seq);
-  for (const e of events) {
-    if (e.seq <= help.seq || e.reservationId !== help.reservationId) continue;
-    if (e.type === "HELP_REQUESTED") break;
-    if (e.type === "OPERATOR_NOTIFIED" && e.detail.includes("asked for help")) return false;
-    if (e.type === "MESSAGE_FAILED" && isTeamTextFailedNotice(e.detail)) return true;
+  for (const help of [...helps].reverse()) {
+    for (const e of events) {
+      if (e.seq <= help.seq) continue;
+      if (help.reservationId) {
+        if (e.reservationId !== help.reservationId) continue;
+      } else if (e.reservationId) continue;
+      if (e.type === "HELP_REQUESTED") break;
+      if (e.type === "OPERATOR_NOTIFIED" && e.detail.includes("asked for help")) return false;
+      if (e.type === "MESSAGE_FAILED" && isTeamTextFailedNotice(e.detail)) return true;
+    }
   }
   return false;
+}
+
+function injuryEnding(tour: TourSnapshot, helps: AuditEvent[]): string {
+  return latestHelpAttemptFailed(tour, helps) ? INJURY_UNREACHED : INJURY_TOLD;
+}
+
+/** The fair-housing last sentence becomes the injury ending when this text also got the 911 line. */
+function injuryEndingForQuestion(tour: TourSnapshot, asked: string, reservationId?: string): string | undefined {
+  if (!isMedicalEmergency(asked)) return undefined;
+  const helps = tour.bundle.auditEvents.filter(
+    (e) => e.type === "HELP_REQUESTED" && e.reservationId === reservationId && (e.code ?? "").trim() === asked.trim() && !!medicalHelpText(e),
+  );
+  return helps.length ? injuryEnding(tour, helps) : undefined;
+}
+
+function askedAgain(tour: TourSnapshot, event: AuditEvent): string {
+  const when = shortWhen(event.at, tour.config.property.timezone);
+  const said = inboundAt(event);
+  return said ? ` Asked again at ${when}: "${escapeVisitorQuote(said)}".` : ` Asked again at ${when}.`;
+}
+
+/** Same injury words stay the sent sentence. A different later ask is added before the ending. */
+function injuryFoldSummary(tour: TourSnapshot, events: AuditEvent[]): string {
+  const first = events[0];
+  const opening = (first && medicalHelpText(first)) || (first && inboundAt(first)) || "";
+  let summary = quotedVisitorAsk(opening, "They texted");
+  for (const later of events.slice(1)) {
+    const said = inboundAt(later);
+    const sameInjury = !!said && said === opening && !!medicalHelpText(later);
+    if (!sameInjury) summary += askedAgain(tour, later);
+  }
+  return `${summary} ${injuryEnding(tour, events)}`;
+}
+
+/** True when this visitor had opted out and had not texted START again by this event. */
+function injuryWhileOptedOut(tour: TourSnapshot, event: AuditEvent): boolean {
+  if (!medicalHelpText(event)) return false;
+  let opted = false;
+  for (const e of [...tour.bundle.auditEvents].sort((a, b) => a.seq - b.seq)) {
+    if (e.seq > event.seq) break;
+    if (event.prospectId && e.prospectId && e.prospectId !== event.prospectId) continue;
+    if (e.type === "MESSAGING_OPTED_OUT") opted = true;
+    if (e.type === "MESSAGING_OPTED_IN") opted = false;
+  }
+  return opted;
+}
+
+/** The audit row stays. It is not listed when the record before it, for that reservation, is an injury help request. */
+function teamMissAfterInjury(tour: TourSnapshot, failed: AuditEvent): boolean {
+  if (!isTeamTextFailedNotice(failed.detail)) return false;
+  const prior = tour.bundle.auditEvents
+    .filter((e) => e.seq < failed.seq && e.reservationId === failed.reservationId)
+    .sort((a, b) => b.seq - a.seq)[0];
+  return !!prior && prior.type === "HELP_REQUESTED" && !!medicalHelpText(prior);
 }
 
 function summaryFor(kind: ExceptionKind, e: AuditEvent, tour: TourSnapshot): string {
@@ -326,13 +394,15 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
   const sent = resolution?.approvedFact?.trim();
   const sentPeriod = sent && /[.!?]$/.test(sent) ? "" : ".";
   const main = injury
-    ? `${quotedVisitorAsk(injury, "They texted")} ${helpAlertFailed(tour, e) ? INJURY_UNREACHED : INJURY_TOLD}`
+    ? injuryFoldSummary(tour, [e])
     : asked && sent
-      ? `${quotedVisitorAsk(asked)} They were sent "${sent}"${sentPeriod}`
+      ? `${quotedVisitorAsk(asked)} They were sent "${escapeVisitorQuote(sent)}"${sentPeriod}`
       : summaryFor(kind, e, tour);
   const teamTextMissed = kind === "message-failed" && isTeamTextFailedNotice(e.detail);
+  const injuryTold = fairHousing && asked ? injuryEndingForQuestion(tour, asked, e.reservationId) : undefined;
+  const fairInbox = injuryTold ? FAIR_HOUSING_INBOX.replace(/They were told you'd text them back here\.$/, injuryTold) : FAIR_HOUSING_INBOX;
   const summary = fairHousing
-    ? `${asked ? quotedVisitorAsk(asked) : "They asked a question."} ${FAIR_HOUSING_INBOX}`
+    ? `${asked ? quotedVisitorAsk(asked) : "They asked a question."} ${fairInbox}`
     : teamTextMissed
       ? e.detail
       : extra
@@ -372,9 +442,11 @@ function belongsToCurrentHelp(current: OperatorException, event: AuditEvent): bo
 }
 
 /**
- * One open help exception per reservation. Later HELP_REQUESTED events on the
- * same reservation append their time (and the visitor's words) until the
- * operator marks that exception handled; a later ask then opens a new one.
+ * Help on one reservation stays one open item, except an injury text.
+ * An injury never folds into an open plain-help item. A later plain HELP
+ * still folds into an open injury item. A later injury folds into that
+ * injury item, and the ending follows the latest alert attempt. While the
+ * visitor is opted out, each injury stays its own item.
  */
 function foldHelpExceptions(tour: TourSnapshot, events: AuditEvent[], resolutions: Map<string, ExceptionResolution>): OperatorException[] {
   const byReservation = new Map<string, AuditEvent[]>();
@@ -385,18 +457,30 @@ function foldHelpExceptions(tour: TourSnapshot, events: AuditEvent[], resolution
     byReservation.set(key, list);
   }
   const out: OperatorException[] = [];
+  const members = new Map<OperatorException, AuditEvent[]>();
   for (const group of byReservation.values()) {
     let current: OperatorException | undefined;
     for (const e of group) {
-      if (current && belongsToCurrentHelp(current, e)) {
-        const when = shortWhen(e.at, tour.config.property.timezone);
-        const said = inboundAt(e);
-        current.summary += said ? ` Asked again at ${when}: "${said}".` : ` Asked again at ${when}.`;
+      const incomingInjury = !!medicalHelpText(e);
+      const startNew =
+        !current ||
+        !belongsToCurrentHelp(current, e) ||
+        (incomingInjury && current.title !== "Possible injury") ||
+        (incomingInjury && injuryWhileOptedOut(tour, e));
+      if (!startNew && current) {
+        const folded = members.get(current) ?? [];
+        folded.push(e);
+        members.set(current, folded);
+        if (current.title === "Possible injury") {
+          current.summary = injuryFoldSummary(tour, folded);
+          if (current.status === "open") current.nextSteps = stepsNotAlreadyInSummary(current.summary, [INJURY_STEP]);
+        } else current.summary += askedAgain(tour, e);
         current.happenedAt = e.at;
-        current.when = when;
+        current.when = shortWhen(e.at, tour.config.property.timezone);
         continue;
       }
       current = fromEvent(tour, e, "needs-help", resolutions);
+      members.set(current, [e]);
       out.push(current);
     }
   }
@@ -417,6 +501,7 @@ export async function listExceptions(services: OperatorServices, options: { prop
       for (const e of tour.bundle.auditEvents) {
         const kind = kindFor(e);
         if (kind === "needs-help") help.push(e);
+        else if (kind === "message-failed" && teamMissAfterInjury(tour, e)) continue;
         else if (kind) out.push(fromEvent(tour, e, kind, resolutions));
       }
       out.push(...foldHelpExceptions(tour, help, resolutions));

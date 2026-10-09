@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config/tourCoreConfig";
-import { FAIR_HOUSING_CODE } from "../src/core/fairHousing";
+import { FAIR_HOUSING_CODE, isFairHousingQuestion } from "../src/core/fairHousing";
 import { VisitorDenialCopy } from "../src/core/TourCore";
 import { zonedTimeToUtc } from "../src/core/timezone";
 import { isMedicalEmergency, interpretByRules } from "../src/intent/ruleBased";
@@ -9,6 +9,7 @@ import type { OutgoingMessage } from "../src/messaging/Messenger";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
 import { persistSession } from "../src/operator/services";
 import { handleVisitorText } from "../src/visitor/conversation";
+import { smsHelpBody } from "../src/visitor/smsConsent";
 import { VisitorDemoSession } from "../src/visitor";
 import { grokHarness } from "./grokHarness";
 
@@ -48,7 +49,14 @@ const ACUTE = [
   "allergic reaction",
   "I have chest pain",
   "he broke his arm",
+  "broke his back",
+  "my son broke his back",
+  "broken arm",
   "I slipped and can't get up",
+  "fell and can't get up",
+  "can't get up",
+  "she can not breathe",
+  "had a stroke",
 ] as const;
 const STEPS: ConversationStep[] = ["intro", "choose-unit", "choose-date", "choose-time", "ready", "touring"];
 
@@ -359,6 +367,258 @@ describe("medical help", () => {
         "Mark it handled once they're sorted.",
       ].join("\n"),
     );
+  });
+
+  it("does not let never-count phrases swallow a real emergency", async () => {
+    const must = [
+      "he passed out",
+      "my kid is choking",
+      "she's having a heart attack",
+      "broke his back",
+      "had a stroke",
+      "cant get up",
+      "cannot get up",
+      "can not get up",
+      "can not breathe",
+      "cannot breathe",
+      "collapsed",
+      "trouble breathing",
+      "has a stroke",
+    ];
+    const mustNot = [
+      "they passed out flyers",
+      "choking hazard for toddlers?",
+      "broke a back window",
+      "my tour slipped to 3?",
+      "I broke a lease before",
+      "is there a seizure of deposit",
+      "my heart attack of a commute lol",
+      "price is a heart attack",
+      "I tripped the breaker",
+      "we tripped the alarm",
+      "my roommate broke her lease",
+      "we broke a window",
+      "sorry we broke a glass",
+      "broke a nail lol",
+    ];
+    for (const phrase of must) expect(isMedicalEmergency(phrase), phrase).toBe(true);
+    for (const phrase of mustNot) expect(isMedicalEmergency(phrase), phrase).toBe(false);
+    expect(isFairHousingQuestion("choking hazard for toddlers?")).toBe(true);
+
+    const day = phone();
+    await dayMenu(day);
+    for (const phrase of mustNot) {
+      const hit = await addedReply(day.session, day.say, phrase);
+      expect(hit.replies.join("\n"), phrase).not.toContain("call 911 now");
+      expect(hit.newAlerts, phrase).toEqual([]);
+    }
+    expect((await fairFlags(day.session)).map((e) => e.detail)).toContain("choking hazard for toddlers?");
+  });
+
+  it("keeps the plain help item and one Possible injury after two injury texts", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const v = await h.touringVisitor(id);
+    await v.session.act("help", {});
+    const start = h.now();
+    h.setClock(start + 60_000);
+    await v.session.act("help", {}, { text: "my dad passed out" });
+    h.setClock(start + 6 * 60_000);
+    await v.session.act("help", {}, { text: "my dad passed out" });
+    await persistSession(h.services, v.session);
+    const inbox = await h.ok("get_inbox");
+    const items = inbox.items as Array<{ kind?: string; what?: string; summary?: string; nextSteps?: string[] }>;
+    expect(items).toHaveLength(2);
+    const plain = items.find((item) => item.what === "Visitor asked for help");
+    const injury = items.find((item) => item.what === "Possible injury");
+    expect(inboxText(plain!)).toBe(
+      ["Visitor asked for help", "Asked for help near Unit 101 Door.", "Reach out to the visitor.", "Mark it handled once they're sorted."].join("\n"),
+    );
+    expect(injury?.summary).toBe('They texted: "my dad passed out". They were told to call 911 if someone is hurt, and that you\'d text them here.');
+    expect(injury?.nextSteps).toEqual(["Text or call them now, then mark it handled."]);
+  });
+
+  it("ends with the 911 sentence after a failed alert is retried and sent", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const v = await h.touringVisitor(id);
+    const send = v.session.transport.send.bind(v.session.transport);
+    let fail = true;
+    v.session.transport.send = async (message: OutgoingMessage) => {
+      if (fail && message.audience === "OPERATOR") {
+        return {
+          provider: v.session.transport.provider,
+          channel: "WEB" as const,
+          status: "FAILED" as const,
+          sentAt: new Date().toISOString(),
+          error: { code: "NOT_DELIVERED", message: "The message couldn't be delivered." },
+        };
+      }
+      return send(message);
+    };
+    await v.session.act("help", {}, { text: "she's not breathing" });
+    h.setClock(h.now() + 6 * 60_000);
+    fail = false;
+    await v.session.act("help", {}, { text: "she's not breathing" });
+    await persistSession(h.services, v.session);
+    const inbox = await h.ok("get_inbox");
+    const items = inbox.items as Array<{ kind?: string; what?: string; summary?: string }>;
+    const help = items.filter((item) => item.kind === "help");
+    expect(help).toHaveLength(1);
+    expect(help[0]?.summary).toBe('They texted: "she\'s not breathing". They were told to call 911 if someone is hurt, and that you\'d text them here.');
+    expect(help[0]?.summary?.endsWith("They were told to call 911 if someone is hurt, and that you'd text them here.")).toBe(true);
+    expect(items.some((item) => item.what === "A text to you didn't go out")).toBe(false);
+    expect((await v.session.store.listAudit()).some((e) => e.type === "MESSAGE_FAILED" && e.detail.includes("couldn't text you"))).toBe(true);
+  });
+
+  it("renders a visitor quote inside a quote with single quotes", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const v = await h.touringVisitor(id);
+    await v.session.act("help", {}, { text: 'he said "I can\'t breathe"' });
+    await persistSession(h.services, v.session);
+    const inbox = await h.ok("get_inbox");
+    const injury = (inbox.items as Array<{ what?: string; summary?: string }>).find((item) => item.what === "Possible injury");
+    expect(injury?.summary).toBe('They texted: "he said \'I can\'t breathe\'". They were told to call 911 if someone is hurt, and that you\'d text them here.');
+  });
+
+  it("uses the injury ending on a fair-housing text that also got the 911 line", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const v = await h.touringVisitor(id);
+    await v.session.act("help", {}, { text: "my kid is choking" });
+    await persistSession(h.services, v.session);
+    const inbox = await h.ok("get_inbox");
+    const items = inbox.items as Array<{ what?: string; summary?: string; nextSteps?: string[]; proposeDraft?: boolean }>;
+    const fair = items.find((item) => item.what === "Possible fair-housing question");
+    expect(fair?.proposeDraft).toBe(false);
+    expect(fair?.summary).toBe(
+      'They asked: "my kid is choking". This may touch on fair housing, so there\'s no draft. Only you can answer this one. They were told to call 911 if someone is hurt, and that you\'d text them here.',
+    );
+    expect(fair?.summary).not.toContain("They were told you'd text them back here.");
+    expect(fair?.nextSteps).toEqual(["Mark it handled once you've replied."]);
+    expect(items.filter((item) => item.what === "Possible injury")).toHaveLength(1);
+  });
+
+  it("lists one Possible injury when the alert fails, with or without a help number", async () => {
+    const none = grokHarness();
+    cleanups.push(none.cleanup);
+    const noneId = await none.publish();
+    const noneVisitor = await none.touringVisitor(noneId);
+    failOperatorSend(noneVisitor.session);
+    await noneVisitor.session.act("help", {}, { text: "she's not breathing" });
+    await persistSession(none.services, noneVisitor.session);
+    const noneInbox = await none.ok("get_inbox");
+    const noneItems = noneInbox.items as Array<{ what?: string; summary?: string }>;
+    expect(noneItems.filter((item) => item.what === "Possible injury")).toHaveLength(1);
+    expect(noneItems.some((item) => item.what === "A text to you didn't go out")).toBe(false);
+    expect(noneItems.find((item) => item.what === "Possible injury")?.summary).toContain("They were told you couldn't be reached.");
+    const noneVisitorLine = (await noneVisitor.session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").at(-1)?.body;
+    expect(noneVisitorLine).toBe(MISSED);
+
+    const withNumber = grokHarness();
+    cleanups.push(withNumber.cleanup);
+    const withId = await withNumber.publish();
+    const saved = withNumber.workspace.load(withId);
+    withNumber.workspace.save({
+      ...saved.config,
+      operator: { ...saved.config.operator, visitorContact: "+15550109999", visitorHelpDecided: true },
+    });
+    const numbered = await withNumber.touringVisitor(withId);
+    failOperatorSend(numbered.session);
+    await numbered.session.act("help", {}, { text: "she's not breathing" });
+    await persistSession(withNumber.services, numbered.session);
+    const numberedInbox = await withNumber.ok("get_inbox");
+    const numberedItems = numberedInbox.items as Array<{ what?: string }>;
+    expect(numberedItems.filter((item) => item.what === "Possible injury")).toHaveLength(1);
+    expect(numberedItems.some((item) => item.what === "A text to you didn't go out")).toBe(false);
+    const numberedLine = (await numbered.session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").at(-1)?.body;
+    expect(numberedLine).toBe(MISSED_PHONE);
+  });
+
+  it("after STOP, sends the 911 line once per opt-out and still alerts each injury", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const v = await h.touringVisitor(id);
+    const say = (text: string) => handleVisitorText(v.session, PHONE, text);
+    const injuryLines = async () => (await prospectOutbound(v.session)).map((m) => m.body).filter((body) => body.includes("call 911 now"));
+    await say("STOP");
+    await say("my dad passed out");
+    expect(await helpAlerts(v.session)).toHaveLength(1);
+    expect(await injuryLines()).toEqual([SENT]);
+    expect((await h.ok("get_inbox")).items.filter((item: { what?: string }) => item.what === "Possible injury")).toHaveLength(1);
+
+    await say("he passed out");
+    expect(await helpAlerts(v.session)).toHaveLength(2);
+    expect(await injuryLines()).toEqual([SENT]);
+    expect((await h.ok("get_inbox")).items.filter((item: { what?: string }) => item.what === "Possible injury")).toHaveLength(2);
+
+    await say("START");
+    await say("STOP");
+    await say("call 911");
+    expect(await injuryLines()).toHaveLength(2);
+    expect(await helpAlerts(v.session)).toHaveLength(3);
+    expect((await h.ok("get_inbox")).items.filter((item: { what?: string }) => item.what === "Possible injury")).toHaveLength(3);
+
+    const beforeHelp = (await prospectOutbound(v.session)).length;
+    await say("HELP");
+    const afterHelp = await prospectOutbound(v.session);
+    expect(afterHelp.slice(beforeHelp).map((m) => m.body)).toEqual([smsHelpBody()]);
+    expect(await helpAlerts(v.session)).toHaveLength(3);
+
+    const beforeQuiet = afterHelp.length;
+    await say("Hi");
+    await say("2pm");
+    expect(await prospectOutbound(v.session)).toHaveLength(beforeQuiet);
+    expect(v.session.optedOut).toBe(true);
+    expect((await h.ok("get_inbox")).items.some((item: { what?: string }) => item.what === "A text to you didn't go out")).toBe(false);
+  });
+
+  it("logs one blocked 911 line after STOP, does not retry, and does not list a missed text", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const v = await h.touringVisitor(id);
+    const say = (text: string) => handleVisitorText(v.session, PHONE, text);
+    await say("STOP");
+    const send = v.session.transport.send.bind(v.session.transport);
+    let blocked = 0;
+    v.session.transport.send = async (message: OutgoingMessage) => {
+      if (message.audience === "PROSPECT" && message.body.includes("call 911 now")) {
+        blocked += 1;
+        return {
+          provider: v.session.transport.provider,
+          channel: "WEB" as const,
+          status: "FAILED" as const,
+          sentAt: new Date().toISOString(),
+          error: { code: "NOT_DELIVERED", message: "The message couldn't be delivered." },
+        };
+      }
+      return send(message);
+    };
+    const errors: string[] = [];
+    const orig = console.error;
+    console.error = (...args: unknown[]) => {
+      errors.push(args.map(String).join(" "));
+    };
+    try {
+      await say("my dad passed out");
+      await say("he passed out");
+    } finally {
+      console.error = orig;
+    }
+    expect(blocked).toBe(1);
+    expect(errors.filter((line) => line.startsWith("911 line was not sent"))).toHaveLength(1);
+    const items = (await h.ok("get_inbox")).items as Array<{ what?: string }>;
+    expect(items.filter((item) => item.what === "Possible injury")).toHaveLength(2);
+    expect(items.some((item) => item.what === "A text to you didn't go out")).toBe(false);
+    expect(items.some((item) => item.what === "Message couldn't be delivered")).toBe(false);
+    expect(await helpAlerts(v.session)).toHaveLength(2);
   });
 
   it("repeats the sent 911 line inside the help window and does not alert again", async () => {

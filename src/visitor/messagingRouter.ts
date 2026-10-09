@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { removedPropertyVisitorText } from "../core/availabilityCopy";
 import { normalizePhone } from "../core/phone";
-import { isUnbookedCancelAsk, messagingKeyword as keywordOf, type IntentInterpreter } from "../intent";
+import { isMedicalEmergency, isUnbookedCancelAsk, messagingKeyword as keywordOf, type IntentInterpreter } from "../intent";
 import { NOTHING_BOOKED_CANCEL } from "../core/TourCore";
 import { MessagingEndpoints, type MessagingEndpoint } from "../messaging/endpoints";
 import { hasInboundMedia, type InboundMessage } from "../messaging/inbound";
@@ -233,6 +233,11 @@ export class MessagingConversations {
       if (named) return { propertyId: named, endpoint, message };
       const waiting = [...openSaved, ...draftOnly];
       if (waiting.length && waiting.every((id) => this.isUnpublishedDraft(id))) {
+        if (isMedicalEmergency(message.text)) {
+          const propertyId = waiting.find((id) => this.configOf(id));
+          if (propertyId) await this.answerDraftInjury(propertyId, phone, message.text);
+          return undefined;
+        }
         await this.answerNotReady(waiting, phone);
         return undefined;
       }
@@ -247,7 +252,10 @@ export class MessagingConversations {
       await this.answerLineKeyword(candidates, phone, keyword);
       return undefined;
     }
-    if (candidates.every((id) => this.isOptedOut(id, phone)) && keyword !== "start") return undefined;
+    if (candidates.every((id) => this.isOptedOut(id, phone)) && keyword !== "start") {
+      if (!isMedicalEmergency(message.text)) return undefined;
+      return { propertyId: candidates[0]!, endpoint, message };
+    }
     await this.askWhichPlace(phone, endpoint.address, candidates, message.text);
     return undefined;
   }
@@ -397,6 +405,34 @@ export class MessagingConversations {
     );
   }
 
+  /**
+   * Injury on a draft: one alert, the 911 line, and a Possible injury item.
+   * The conversation is saved for the inbox and is not resumed, so Hi still gets the not-ready line.
+   */
+  private async answerDraftInjury(propertyId: string, phone: string, text: string): Promise<void> {
+    const config = this.configOf(propertyId);
+    if (!config || !this.deps.workspace.has(propertyId)) return;
+    const tourId = this.deps.workspace.newVisitorTourId(propertyId, this.deps.now?.() ?? new Date(), "text");
+    const session = this.attachOverstay(
+      new VisitorDemoSession(propertyId, config, tourId, {
+        transport: this.lazyTransport(propertyId),
+        kind: "messaging",
+        verificationLinks: this.deps.links,
+        realNow: this.deps.realNow,
+        store: this.storeForProperty(propertyId),
+        storageRead: this.deps.storageRead,
+        beforeAccess: this.deps.beforeAccess,
+        otherBusyWindows: () => this.otherBusyWindows(propertyId, tourId),
+        ...(this.deps.slotLockBarrier ? { slotLockBarrier: this.deps.slotLockBarrier } : {}),
+      }),
+    );
+    session.identify(phone);
+    await session.help({ text });
+    const saved = await session.record();
+    this.deps.workspace.recordVisitorDemo(propertyId, { ...saved.record, outcome: "stopped" }, saved.bundle);
+    this.deps.onSaved?.(session);
+  }
+
   /** The existing not-ready line when nothing on the line is published. Nothing goes out after STOP. */
   private async answerNotReady(propertyIds: string[], phone: string): Promise<void> {
     const reachable = propertyIds.filter((id) => !this.isOptedOut(id, phone) && this.smsConsent.get(id, phone)?.status !== "opted_out");
@@ -503,6 +539,12 @@ export class MessagingConversations {
       // A session that already exists keeps going, including a tour booked before this place went back to draft.
       const published = state.status === "PUBLISHED_FOR_DEMO";
       if (!ready || !published || !isValidTimeZone(config.property.timezone)) {
+        // An injury is checked before the not-ready line, the same way STOP and HELP are.
+        // It does not leave a bookable session, so a later text still gets the not-ready line.
+        if (isMedicalEmergency(message.text)) {
+          await this.answerDraftInjury(propertyId, phone, message.text);
+          return {};
+        }
         // STOP, HELP, and START still work on a draft. They do not open a session, so a later booking text stays refused.
         const keyword = keywordOf(message.text);
         if (keyword === "stop" || keyword === "help" || keyword === "start") {

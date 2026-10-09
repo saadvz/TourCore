@@ -146,6 +146,35 @@ describe("unpublished properties do not take a new visitor text", () => {
     expect(await app.textFrom(phone, "TOUR")).toEqual([CHECK_BACK]);
   });
 
+  it("an injury on a draft single line and a shared line sends the 911 line and opens Possible injury", async () => {
+    const sent = "If someone is hurt, call 911 now. I've also let the property team know, and they'll text you here as soon as they can.";
+    for (const shared of [false, true]) {
+      const app = await liveApp({ cleanups });
+      if (shared) shareLineWithOnlyThisDraft(app);
+      else app.ws.patchState(PROPERTY, { status: "DRAFT" });
+      const phones = shared ? ["+15550104201", "+15550104202"] : ["+15550104101", "+15550104102"];
+      for (const [index, phrase] of ["my dad passed out", "call 911"].entries()) {
+        const phone = phones[index]!;
+        const replies = await app.textFrom(phone, phrase);
+        expect(replies, `${shared ? "shared" : "single"} ${phrase}`).toEqual([sent]);
+        expect(replies.join("\n")).not.toContain("aren't available");
+        const alerts = app.ws.listTours(PROPERTY).flatMap((record) => {
+          const tour = app.ws.loadTour(PROPERTY, record.tourId);
+          if (!tour?.bundle.auditEvents.some((event) => event.type === "HELP_REQUESTED" && event.code === phrase)) return [];
+          return tour.bundle.messages.filter((message) => message.audience === "OPERATOR" && message.body.includes("asked for help"));
+        });
+        expect(alerts, phrase).toHaveLength(1);
+        expect(app.visitors.latestForPhone(PROPERTY, phone, "messaging")).toBeUndefined();
+        const inbox = await app.grok("get_inbox", { property: "100 Alfred Way" });
+        const injury = (inbox.items as Array<{ what?: string; summary?: string }>).filter((item) => item.what === "Possible injury" && item.summary?.includes(`They texted: "${phrase}"`));
+        expect(injury, phrase).toHaveLength(1);
+        expect(injury[0]?.summary).toContain("They were told to call 911 if someone is hurt, and that you'd text them here.");
+      }
+      const hi = shared ? "+15550104299" : "+15550104199";
+      expect(await app.textFrom(hi, "Hi")).toEqual([CHECK_BACK]);
+    }
+  });
+
   it("START on a shared line whose only open property is a draft sends the disclosure", async () => {
     const app = await liveApp({ cleanups });
     shareLineWithOnlyThisDraft(app);

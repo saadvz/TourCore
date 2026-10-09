@@ -1534,13 +1534,16 @@ export class TourCore {
     const place = helpContext(reservation, this.deps.clock.now());
     if (!place && !medical) return;
     const prospect = await this.mustGetProspect(reservation.prospectId);
+    const stored = (await this.deps.store.get("prospects", prospect.id)) ?? prospect;
+    const optedOut = !!stored.messagingOptedOut;
     const repeat = await this.priorHelpRequest(reservationId);
     await this.recordInbound(prospect.id, reservationId, said, inbound?.meta);
     if (isFairHousingQuestion(said)) {
       await this.forwardFlaggedQuestion({ reservationId, prospectId: prospect.id, asked: said.trim().slice(0, 300) });
     }
     const alert = `${prospect.name} asked for help${where ? ` near ${where}` : ""}.`;
-    const alertDue = await this.shouldAlertHelp(reservationId);
+    // An opted-out injury still alerts. The visitor is not texted by that alert, and the 911 line is separate.
+    const alertDue = medical && optedOut ? true : await this.shouldAlertHelp(reservationId);
     const alerted = alertDue ? await this.textOperatorFirst(reservation, alert) : false;
     const failed = alertDue && !alerted;
     const team = this.teamName();
@@ -1554,7 +1557,8 @@ export class TourCore {
         : repeat
           ? VisitorDenialCopy.helpRepeatAck(team, contact)
           : VisitorDenialCopy.helpAck(team, contact);
-    await this.textProspect(prospect, reservationId, !medical && failed ? renderSms("handler-snag-retry").body : ack);
+    if (medical) await this.sendMedicalVisitorLine(stored, reservationId, ack, optedOut);
+    else await this.textProspect(prospect, reservationId, failed ? renderSms("handler-snag-retry").body : ack);
     await this.recordBestEffort(
       "HELP_REQUESTED",
       { reservationId, prospectId: prospect.id, detail: where ?? "", code: said },
@@ -1579,7 +1583,9 @@ export class TourCore {
     const alert = "A visitor asked for help.";
     const alerted = await this.textOperatorFirst(undefined, alert);
     const body = VisitorDenialCopy.medicalAlert(this.teamName(), this.visitorHelpNumber(), alerted);
-    await this.sendConversationText({ phone, body, deliverDespiteOptOut: true });
+    const prospect = (await this.deps.store.list("prospects")).find((p) => p.phone === normalizePhone(phone));
+    if (prospect?.messagingOptedOut) await this.sendMedicalVisitorLine(prospect, undefined, body, true);
+    else await this.sendConversationText({ phone, body, deliverDespiteOptOut: true });
     await this.recordBestEffort("HELP_REQUESTED", { detail: "", code: said }, "Help request was not recorded");
     if (alerted) {
       await this.recordBestEffort("OPERATOR_NOTIFIED", { detail: alert }, "Team alert was not recorded");
@@ -2408,7 +2414,13 @@ export class TourCore {
     return this.deps.verification.defaultLink?.(prospect);
   }
 
-  private async textProspect(prospect: Prospect, reservationId: string | undefined, body: string, prompt?: ReplyPrompt, options?: { recordFailure?: boolean; templateId?: string }): Promise<boolean> {
+  private async textProspect(
+    prospect: Prospect,
+    reservationId: string | undefined,
+    body: string,
+    prompt?: ReplyPrompt,
+    options?: { recordFailure?: boolean; templateId?: string; deliverDespiteOptOut?: boolean },
+  ): Promise<boolean> {
     const current = (await this.deps.store.get("prospects", prospect.id)) ?? prospect;
     const templateId = claimVisitorSms(body, options?.templateId);
     return this.deliver({
@@ -2418,10 +2430,50 @@ export class TourCore {
       body: withPrompt(body, prompt, this.presentation, this.teamName()),
       prospectId: current.id,
       reservationId,
-      suppressed: !!current.messagingOptedOut,
+      suppressed: !!current.messagingOptedOut && !options?.deliverDespiteOptOut,
       recordFailure: options?.recordFailure,
       templateId,
     });
+  }
+
+  /**
+   * The 911 line. After STOP it goes out once per opt-out, even though other
+   * texts stay silent. A carrier block is one log line and is not retried.
+   */
+  private async sendMedicalVisitorLine(prospect: Prospect, reservationId: string | undefined, body: string, optedOut: boolean): Promise<void> {
+    if (!optedOut) {
+      await this.textProspect(prospect, reservationId, body);
+      return;
+    }
+    if (await this.injuryLineAlreadyAttempted(prospect.id)) return;
+    const sent = await this.textProspect(prospect, reservationId, body, undefined, { deliverDespiteOptOut: true, recordFailure: false });
+    if (sent) return;
+    let reason = "not delivered";
+    try {
+      const failed = (await this.deps.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND" && m.deliveryStatus === "FAILED").at(-1);
+      if (failed?.deliveryError) reason = failed.deliveryError;
+    } catch {
+      reason = "not delivered";
+    }
+    console.error(`911 line was not sent: ${reason}`);
+  }
+
+  /**
+   * True when this opt-out already tried the 911 line, including a carrier block.
+   * The help record is written after that try, so a later injury in the same
+   * opt-out does not send again. START then STOP is a new opt-out. Clock ties
+   * do not count an earlier try.
+   */
+  private async injuryLineAlreadyAttempted(prospectId: string): Promise<boolean> {
+    try {
+      const audit = await this.deps.store.listAudit();
+      const opted = [...audit].reverse().find((e) => e.prospectId === prospectId && e.type === "MESSAGING_OPTED_OUT");
+      if (!opted) return false;
+      return audit.some((e) => e.prospectId === prospectId && e.type === "HELP_REQUESTED" && e.seq > opted.seq && isMedicalEmergency(e.code ?? ""));
+    } catch (err) {
+      console.error(`911 history was not read: ${err instanceof Error ? err.message : "unknown error"}`);
+      return false;
+    }
   }
 
   /** A prospect text that is delivered but not stored, used when records are not live. */

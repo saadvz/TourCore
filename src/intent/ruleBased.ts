@@ -10,10 +10,18 @@ import { acceptsNextOpening, yesNo } from "./yesNo";
  * Injury texts. Hyphenated compounds stay one word so "ambulance-chaser"
  * is not "ambulance". A 911 line on a normal text is noise, but a missed
  * injury is unsafe, so fell/hurt/injured/slipped/tripped need a person or a help word.
+ * slipped and tripped are not acute phrases. A broken bone counts; a broken
+ * lease, window, or nail does not. back counts only with his/her/my/their/your/our.
  */
 const STREET_WORD =
   "main|st|street|ave|avenue|rd|road|blvd|boulevard|dr|drive|ln|lane|way|ct|court|pl|place|pkwy|parkway|ter|terrace|cir|circle|hwy|highway|sq|square";
 const INJURY = "(?:fell|hurt|injured|slipped|tripped)";
+const BODY_PART =
+  "(?:arms?|legs?|wrists?|ankles?|hands?|feet|foot|fingers?|toes?|ribs?|noses?|hips?|collarbones?|necks?|bones?|teeth|tooth|jaws?|elbows?|knees?|shoulders?|skulls?)";
+const BROKE_BODY = `(?:broke|broken) (?:(?:his|her|my|their|your|our|a) )?${BODY_PART}`;
+const BROKE_BACK = "(?:broke|broken) (?:his|her|my|their|your|our) back";
+const ACUTE =
+  /\b(?:not breathing|stopped breathing|trouble breathing|cannot breathe|can not breathe|cannot get up|can not get up|choking|unconscious|unresponsive|passed out|fainted|collapsed|heart attack|(?:had|has|having) a stroke|seizure|overdos(?:e|ed|ing)|allergic reaction|chest pains?)\b/;
 
 function medicalText(raw: string): string {
   const glued = raw.replace(/([A-Za-z0-9])-([A-Za-z0-9])/g, "$1$2");
@@ -26,29 +34,36 @@ function mentions911(text: string): boolean {
   return /^911$/.test(kept.trim());
 }
 
-function injuryWithPersonOrHelp(text: string): boolean {
-  // These collocations never count, even with a person or a help word beside them.
-  const body = text
+/** Collocations that share an injury word and still are not an emergency. */
+function stripNeverCounts(text: string): string {
+  return text
     .replace(/\bfell in love\b/g, " ")
     .replace(/\bprice fell\b/g, " ")
-    .replace(/\bwould it hurt\b/g, " ");
-  if (!new RegExp(`\\b${INJURY}\\b`).test(body)) return false;
-  if (/\bhelp\b/.test(body)) return true;
-  if (new RegExp(`\\b(?:i|we|he|she|they|someone)\\b(?:\\s+\\w+){0,6}\\s+${INJURY}\\b`).test(body)) return true;
-  if (new RegExp(`\\bmy\\s+(?:\\w+\\s+){1,6}${INJURY}\\b`).test(body)) return true;
-  if (new RegExp(`\\b${INJURY}\\b(?:\\s+\\w+){0,4}\\s+(?:me|him|her|them|someone)\\b`).test(body)) return true;
-  return new RegExp(`\\b(?!(?:it|that|this|there|what|which|price|the|a|an|would|to)\\b)\\w+\\s+(?:is|was|got|gets)\\s+(?:hurt|injured)\\b`).test(body);
+    .replace(/\bwould it hurt\b/g, " ")
+    .replace(/\bchoking hazard\b/g, " ")
+    .replace(/\bseizure of\b/g, " ")
+    .replace(/\bheart attack of\b/g, " ")
+    .replace(/\bis a heart attack\b/g, " ")
+    .replace(/\bpassed out (?:flyers|papers|pamphlets|candy)\b/g, " ")
+    .replace(/\btripped the (?:breaker|alarm|switch)\b/g, " ")
+    .replace(/\bslipped to\b/g, " ");
+}
+
+function injuryWithPersonOrHelp(text: string): boolean {
+  if (!new RegExp(`\\b${INJURY}\\b`).test(text)) return false;
+  if (/\bhelp\b/.test(text)) return true;
+  if (new RegExp(`\\b(?:i|we|he|she|they|someone)\\b(?:\\s+\\w+){0,6}\\s+${INJURY}\\b`).test(text)) return true;
+  if (new RegExp(`\\bmy\\s+(?:\\w+\\s+){1,6}${INJURY}\\b`).test(text)) return true;
+  if (new RegExp(`\\b${INJURY}\\b(?:\\s+\\w+){0,4}\\s+(?:me|him|her|them|someone)\\b`).test(text)) return true;
+  return new RegExp(`\\b(?!(?:it|that|this|there|what|which|price|the|a|an|would|to)\\b)\\w+\\s+(?:is|was|got|gets)\\s+(?:hurt|injured)\\b`).test(text);
 }
 
 /** True when this text should get the 911 help reply, in any conversation state. */
 export function isMedicalEmergency(raw: string): boolean {
-  const text = medicalText(raw);
-  if (!text) return false;
-  // Lowercased text. slipped and tripped stay in the pattern, then drop out
-  // here so they use the same person-or-help rule as fell and hurt.
-  const acute =
-    /\b(?:not breathing|stopped breathing|cannot breathe|can'?t breathe|choking|unconscious|unresponsive|passed out|fainted|heart attack|having a stroke|seizure|overdos(?:e|ed|ing)|allergic reaction|chest pains?|broke (?:his|her|my|their|a) \w+|slipped|tripped)\b/;
-  if (acute.test(text.replace(/\b(?:slipped|tripped)\b/g, " "))) return true;
+  const text = stripNeverCounts(medicalText(raw));
+  if (!text.trim()) return false;
+  if (ACUTE.test(text)) return true;
+  if (new RegExp(`\\b(?:${BROKE_BODY}|${BROKE_BACK})\\b`).test(text)) return true;
   if (/\bbleeding\b/.test(text) || /\bambulance\b/.test(text)) return true;
   if (mentions911(text)) return true;
   return injuryWithPersonOrHelp(text);
