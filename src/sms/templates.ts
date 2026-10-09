@@ -13,11 +13,12 @@
 
 /**
  * Visitor-facing team label. A stored name is used only when it already ends
- * in "team" (for example "leasing team"). A company name or a blank becomes
- * "property team", so the sentence stays grammatical.
+ * in "team" (for example "leasing team"). A leading "the " is removed so the
+ * template can add it once. A company name or a blank becomes "property team",
+ * so the sentence stays grammatical.
  */
 export function visitorTeamName(name: string | undefined | null): string {
-  const trimmed = (name ?? "").trim();
+  const trimmed = (name ?? "").trim().replace(/^the\s+/i, "");
   return /\bteam$/i.test(trimmed) ? trimmed : "property team";
 }
 

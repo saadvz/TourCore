@@ -439,6 +439,24 @@ describe("no-clock extension refusal", () => {
       "Sorry, I can't add more time to this tour. It still ends at 2:45 PM. If you'd like another look, the property team can set that up for you.",
     );
   });
+
+  it("strips a leading the so the template does not double the article", () => {
+    const noClock = "Sorry, I can't add more time to this tour. If you'd like another look,";
+    const clocked = "Sorry, I can't add more time to this tour. It still ends at 2:45 PM. If you'd like another look,";
+    const contact = "Thanks for reaching out to 100 Alfred Way. Self-guided tours by text aren't available right now. Please contact";
+    expect(extensionUnavailable(undefined, "the leasing team")).toBe(`${noClock} the leasing team can set that up for you.`);
+    expect(extensionUnavailable("2:45 PM", "the leasing team")).toBe(`${clocked} the leasing team can set that up for you.`);
+    expect(toursUnavailableText("100 Alfred Way", "the leasing team")).toBe(`${contact} the leasing team.`);
+    expect(extensionUnavailable(undefined, "The Leasing Team")).toBe(`${noClock} the Leasing Team can set that up for you.`);
+    expect(extensionUnavailable("2:45 PM", "The Leasing Team")).toBe(`${clocked} the Leasing Team can set that up for you.`);
+    expect(toursUnavailableText("100 Alfred Way", "The Leasing Team")).toBe(`${contact} the Leasing Team.`);
+    expect(extensionUnavailable(undefined, "leasing team")).toBe(`${noClock} the leasing team can set that up for you.`);
+    expect(extensionUnavailable("2:45 PM", "leasing team")).toBe(`${clocked} the leasing team can set that up for you.`);
+    expect(toursUnavailableText("100 Alfred Way", "leasing team")).toBe(`${contact} the leasing team.`);
+    expect(extensionUnavailable(undefined, "Alfred Homes")).toBe(`${noClock} the property team can set that up for you.`);
+    expect(extensionUnavailable("2:45 PM", "Alfred Homes")).toBe(`${clocked} the property team can set that up for you.`);
+    expect(toursUnavailableText("100 Alfred Way", "Alfred Homes")).toBe(`${contact} the property team.`);
+  });
 });
 
 describe("connector list refresh and the deployed commit", () => {
