@@ -76,6 +76,26 @@ describe("tour lifecycle updates", () => {
     expect(preset.message).toBe("Got it. I'll keep you posted on bookings, tour starts and completions, and anything that needs your attention.");
   });
 
+  it("says tour updates are off when save_settings is given an empty list", async () => {
+    const app = await liveApp({ cleanups });
+    const saved = await app.grok("save_settings", { updates: [] });
+    expect(saved.message).toBe("Got it. Tour updates are off for now.");
+  });
+
+  it("keeps the identity sentence when one save changes the form and the tour updates", async () => {
+    const bookings = await liveApp({ cleanups });
+    const asked = await bookings.grok("save_settings", { verification: "none" });
+    await bookings.grok("save_settings", { verification: "none", confirmationCode: asked.confirmation.code });
+    const saved = await bookings.grok("save_settings", { verification: "basic-form", updates: ["TOUR_BOOKED"] });
+    expect(saved.message).toBe("Visitors will fill out a basic identity form, and I'll keep you posted on bookings.");
+
+    const empty = await liveApp({ cleanups });
+    const none = await empty.grok("save_settings", { verification: "none" });
+    await empty.grok("save_settings", { verification: "none", confirmationCode: none.confirmation.code });
+    const cleared = await empty.grok("save_settings", { verification: "basic-form", updates: [] });
+    expect(cleared.message).toBe("Visitors will fill out a basic identity form, and tour updates are off for now.");
+  });
+
   it("keeps the current line when save_settings does not change tour updates", async () => {
     const app = await liveApp({ cleanups });
     const same = await app.grok("save_settings", { updates: ["EXCEPTION_CREATED", "ACCESS_PROBLEM", "VERIFICATION_PROBLEM"] });
