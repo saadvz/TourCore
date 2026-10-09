@@ -26,11 +26,15 @@ const MUST_MATCH = [
   "are there asian residents nearby?",
 ];
 
-const NOW_FLAGGED = [
+const NOW_FLAGGED = ["white picket fence in the neighborhood?", "what color are the doors in the building?"];
+
+const NOT_FLAGGED = [
   "any Asian restaurants nearby?",
-  "white picket fence in the neighborhood?",
-  "what color are the doors in the building?",
   "Black Friday sale nearby?",
+  "What color are the walls?",
+  "Do you offer senior discounts?",
+  "What is the age of the building?",
+  "What is the roof age?",
 ];
 
 describe("phase 4a visitor copy", () => {
@@ -67,6 +71,7 @@ describe("phase 4a visitor copy", () => {
   it("keeps the must-match fair-housing lines and flags a race or color word on its own", () => {
     for (const line of MUST_MATCH) expect(isFairHousingQuestion(line), line).toBe(true);
     for (const line of NOW_FLAGGED) expect(isFairHousingQuestion(line), line).toBe(true);
+    for (const line of NOT_FLAGGED) expect(isFairHousingQuestion(line), line).toBe(false);
   });
 
   it("accepts mon and tmrw as days and still misses a bare fragment", () => {
@@ -128,7 +133,8 @@ describe("phase 4a visitor copy", () => {
     expect(gym.join("\n")).toContain("leasing team");
     expect(gym.join("\n")).not.toContain("property team");
     const restaurants = await app.text("any Asian restaurants nearby?");
-    expect(restaurants.join("\n")).toContain("Good question for the leasing team. I've passed it along, and they'll text you back here.");
+    expect(restaurants.join("\n")).toContain("I'll pass your question to the leasing team, and they'll reply here as soon as they can.");
+    expect(restaurants.join("\n")).not.toContain("Good question for");
     expect(restaurants.join("\n")).not.toContain("property team");
     const steering = await app.text("is it mostly white around here?");
     expect(steering.join("\n")).toContain("Good question for the leasing team. I've passed it along, and they'll text you back here.");

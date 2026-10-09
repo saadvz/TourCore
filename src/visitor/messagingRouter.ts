@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { removedPropertyVisitorText } from "../core/availabilityCopy";
 import { normalizePhone } from "../core/phone";
-import { isUnbookedCancelAsk, keywordOf, type IntentInterpreter } from "../intent";
+import { isUnbookedCancelAsk, messagingKeyword as keywordOf, type IntentInterpreter } from "../intent";
 import { NOTHING_BOOKED_CANCEL } from "../core/TourCore";
 import { MessagingEndpoints, type MessagingEndpoint } from "../messaging/endpoints";
 import { hasInboundMedia, type InboundMessage } from "../messaging/inbound";

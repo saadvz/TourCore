@@ -32,6 +32,7 @@ describe("fair-housing detection", () => {
       if (row.expected === "flagged") expect(row.flagged, row.phrase).toBe(true);
       if (row.expected === "not-flagged" || row.expected === "booked" || row.expected === "tour") expect(row.flagged, row.phrase).toBe(false);
     }
+    expect(FAIR_HOUSING_PHRASES.filter((row) => row.source === "QA probe")).toHaveLength(84);
   });
 
   it.each([
@@ -208,17 +209,28 @@ describe("booking and tour logistics", () => {
       facts: ["Street parking only.", "Families are welcome.", "The entrance is wheelchair accessible."],
     });
     const planted = /Families are welcome|wheelchair accessible|good for kids|good for families/i;
-    for (const phrase of ["Can my family come to the tour?", "Can I bring my kids to the tour?", "I'm bringing my baby, is that ok?", "Can my mom come, she uses a wheelchair"]) {
+    for (const phrase of [
+      "Can my family come to the tour?",
+      "Can I bring my kids to the tour?",
+      "I'm bringing my baby, is that ok?",
+      "Can my kids come to the showing?",
+      "Is my partner allowed on the tour?",
+    ]) {
       const replies = await a.text(phrase);
       expect(replies.join("\n"), phrase).not.toMatch(planted);
       expect(replies.join("\n"), phrase).not.toContain("Good question for the");
       expect(replies.join("\n"), phrase).toContain("Which day works for you?");
     }
+    const wheelchair = await a.text("Can my mom come, she uses a wheelchair");
+    expect(wheelchair[0]).toBe(HELD);
+    expect(wheelchair.join("\n")).toContain("Which day works for you?");
+    expect(wheelchair.join("\n")).not.toMatch(planted);
     const booked = await a.text("Can I bring my kids Saturday at 2?");
     expect(booked.join("\n")).not.toMatch(planted);
     expect(booked.join("\n")).not.toContain("Good question for the");
     const held = await a.text("Is the tour OK for kids?");
-    expect(held).toEqual([HELD]);
+    expect(held[0]).toBe(HELD);
+    expect(held.join("\n")).toContain("Which day works for you?");
     expect(held.join("\n")).not.toMatch(planted);
   });
 });
@@ -273,7 +285,7 @@ describe("fair-housing questions on a live tour", () => {
     expect(monthly.join("\n")).toContain(RENT);
     expect(monthly.join("\n")).not.toContain(UNKNOWN_ANSWER);
     expect((await a.grok("list_exceptions")).exceptions).toHaveLength(3);
-    expect(sent).toEqual([HELD, HELD, HELD]);
+    expect(sent.every((body) => body.startsWith(HELD) && body.includes("I have these times available"))).toBe(true);
   });
 
   it("quotes the exact visitor text in the approve question", async () => {
@@ -366,7 +378,7 @@ describe("fair-housing questions on a live tour", () => {
       expect(flag, text).toBeTruthy();
       expect(flag!.proposeDraft, text).toBe(false);
     }
-    expect(sent).toEqual(flagged.map(() => HELD));
+    expect(sent.every((body) => body.startsWith(HELD) && body.includes("I have these times available"))).toBe(true);
 
     const pets = await a.text("Do you allow pets?");
     const dogs = await a.text("Do you allow dogs?");

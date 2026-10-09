@@ -1,8 +1,8 @@
-import { isFairHousingQuestion, isTourPartyNote } from "../core/fairHousing";
+import { isFairHousingQuestion, isTourPartyNote, suitabilityBlocksBooking } from "../core/fairHousing";
 import { isMoreTimeAsk } from "../core/overstayCopy";
 import { dayReference, namesTourDay, spokenTimes, vagueTimeRequest, type SpokenTime } from "../core/spokenTime";
 import { isGeneralTourHoursQuestion } from "./tourHoursAsk";
-import type { IntentInterpretation, IntentInterpreter, InterpretContext, StepAwaiting, StopRef, TourIntent } from "./model";
+import type { IntentInterpretation, IntentInterpreter, IntentType, InterpretContext, StepAwaiting, StopRef, TourIntent } from "./model";
 import { normalize, numberWord, ordinalWord, stripFiller } from "./normalize";
 import { acceptsNextOpening, yesNo } from "./yesNo";
 
@@ -28,7 +28,20 @@ export function keywordOf(text: string): Keyword | undefined {
   return undefined;
 }
 
-const NATURAL_STOP = /^(please )?(stop|quit) (texting|messaging|contacting) (me|us)( please)?$|^(please )?(do not|never) (text|message|contact) (me|us)( again| anymore)?$|^(unsubscribe|remove) me( from (this|your|the) list)?$/;
+const NATURAL_STOP = /^(please )?(stop|quit) (texting|messaging|contacting) (me|us)( please)?$|^(please )?(stop|quit) (texting|messaging|contacting) my\b.*|^(please )?(do not|never) (text|message|contact) (me|us)( again| anymore)?$|^(unsubscribe|remove) me( from (this|your|the) list)?$/;
+
+/** "stop texting me", "stop texting us", "stop texting my family", "please stop texting my ...". */
+export function isPlainLanguageStop(text: string): boolean {
+  return NATURAL_STOP.test(stripFiller(normalize(text)));
+}
+
+/**
+ * Carrier keywords, plus a plain-language stop. The plain-language stop is
+ * the keyword STOP: same opt-out, same acknowledgement, before any other check.
+ */
+export function messagingKeyword(text: string): Keyword | undefined {
+  return keywordOf(text) ?? (isPlainLanguageStop(text) ? "stop" : undefined);
+}
 
 const MANIPULATION = new RegExp(
   [
@@ -453,7 +466,50 @@ function bedroomCount(text: string): number | undefined {
   return m[1] ? 0 : numberWord(m[2]!);
 }
 
+/** Help, doors, cancel, and a menu answer win. A fair-housing question is only the leftover free text. */
+const OPERATION_WINS = new Set<IntentType>([
+  "REQUEST_HELP",
+  "STOP_MESSAGES",
+  "START_MESSAGES",
+  "ARRIVAL",
+  "AT_UNIT",
+  "AT_ROUTE_STOP",
+  "CONFIRM_CANCEL_TOUR",
+  "KEEP_TOUR",
+  "CANCEL_TOUR",
+  "FINISH_TOUR",
+  "ASK_MORE_TIME",
+  "FOLLOW_UP_YES",
+  "FOLLOW_UP_NO",
+  "CONSENT_YES",
+  "CONSENT_NO",
+  "SELECT_UNIT",
+  "ACCEPT_PROPOSED_TIME",
+  "DECLINE_PROPOSED_TIME",
+  "START_INQUIRY",
+]);
+
+function holdFairHousingLast(raw: string, found: IntentInterpretation): IntentInterpretation {
+  if (!isFairHousingQuestion(raw)) return found;
+  const type = found.intent.type;
+  if (OPERATION_WINS.has(type)) return found;
+  if ((type === "SELECT_DATE" || type === "SELECT_TIME" || type === "REQUEST_CUSTOM_TIME") && !suitabilityBlocksBooking(raw)) return found;
+  if (type === "ASK_PROPERTY_QUESTION") return found;
+  const question = raw.trim().slice(0, 300);
+  if (!question) return found;
+  return {
+    intent: { type: "ASK_PROPERTY_QUESTION", question },
+    confidence: 0.95,
+    interpreter: "rules",
+    clarificationNeeded: false,
+  };
+}
+
 export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
+  return holdFairHousingLast(ctx.message ?? "", readByRules(ctx));
+}
+
+function readByRules(ctx: InterpretContext): IntentInterpretation {
   const raw = ctx.message ?? "";
   const full = normalize(raw);
   const t = stripFiller(full);
@@ -477,12 +533,14 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
   }
   if (keyword === "start") return result({ type: "START_MESSAGES" }, 1);
   if (keyword === "help") return result({ type: "REQUEST_HELP", problem: "GENERAL" }, 1);
-  if (NATURAL_STOP.test(t)) return result({ type: "STOP_MESSAGES" }, 0.95);
+  if (isPlainLanguageStop(raw)) return result({ type: "STOP_MESSAGES" }, 0.95);
   if (MANIPULATION.test(t)) return unknown({ manipulation: true, clarificationNeeded: true });
-  // Suitability phrasing is a question even with no question mark, so a menu cannot swallow it.
-  if (isFairHousingQuestion(raw)) return result({ type: "ASK_PROPERTY_QUESTION", question: raw.trim().slice(0, 300) }, 0.95);
 
   if (ctx.awaiting?.kind === "confirm-cancel-tour") {
+    // "yes cancel, family emergency": cancel is a negation, and emergency is a help word.
+    if (/^(yes|yeah|yep|yup|sure|ok|okay)\b/.test(t) && /\bcancel\b/.test(t) && !/\b(?:do not|never)\b/.test(t)) {
+      return result({ type: "CONFIRM_CANCEL_TOUR" }, 0.95);
+    }
     const yn = yesNo(t);
     if (yn.answer === "no" && yn.confidence >= 0.75) return result({ type: "KEEP_TOUR" }, yn.confidence);
     if (yn.answer === "yes" && yn.confidence >= 0.75) return result({ type: "CONFIRM_CANCEL_TOUR" }, yn.confidence);

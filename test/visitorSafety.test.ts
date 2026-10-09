@@ -186,6 +186,21 @@ describe("STOP, HELP, and START on an unchecked draft", () => {
     expect(await text("+15555551003", "Hi")).toEqual([toursUnavailableText(name, "property team")]);
   });
 
+  it("opts out a draft for plain-language stop the same way as STOP", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tourcore-draft-plain-stop-"));
+    cleanups.push(() => rmSync(root, { recursive: true, force: true }));
+    const ws = new PropertyWorkspace(root);
+    const id = uncheckedDraft(ws, "5 QA Scratch Lane, Teaneck, NJ 07666");
+    const { text } = wire(ws, [id]);
+    const phrases = ["stop texting me", "stop texting us", "stop texting my family", "please stop texting my kids"];
+    for (const [index, phrase] of phrases.entries()) {
+      const phone = `+1555555106${index}`;
+      expect(await text(phone, phrase), phrase).toEqual([STOP]);
+      expect(consent(root, id, phone), phrase).toMatchObject({ status: "opted_out", method: "keyword", keyword: "STOP" });
+      expect(optedOut(root, id, phone), phrase).toBeTruthy();
+    }
+  });
+
   it("handles each keyword on a shared line of drafts that have no saved config", async () => {
     const root = mkdtempSync(join(tmpdir(), "tourcore-draft-shared-"));
     cleanups.push(() => rmSync(root, { recursive: true, force: true }));
@@ -284,7 +299,8 @@ describe("suitability questions are fair-housing holds", () => {
     await a.text("1");
     await a.text("1");
     const replies = await a.text("Is it good for families?");
-    expect(replies).toEqual([HELD]);
+    expect(replies[0]).toBe(HELD);
+    expect(replies.join("\n")).toContain("I have these times available");
     expect(replies.join("\n")).not.toMatch(/fair housing/i);
 
     const inbox = await a.grok("get_inbox");
@@ -526,7 +542,9 @@ describe("inbox quotes", () => {
     await a.optInSms();
     await a.text("1");
     await a.text("1");
-    expect(await a.text("good for kids")).toEqual([HELD]);
+    const heldKids = await a.text("good for kids");
+    expect(heldKids[0]).toBe(HELD);
+    expect(heldKids.join("\n")).toContain("I have these times available");
     const inbox = await a.grok("get_inbox");
     const item = (inbox.items as Array<{ summary?: string }>).find((row) => row.summary?.includes("good for kids"));
     expect(item?.summary).toBe(`They asked: "good for kids". ${FAIR_HOUSING_INBOX}`);

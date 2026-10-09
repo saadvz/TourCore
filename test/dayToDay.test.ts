@@ -183,7 +183,9 @@ describe("day-to-day writes", () => {
     expect(item).toMatchObject({ kind: "flagged-question", proposeDraft: false });
     const refused = await a.grok("resolve_issue", { action: "answer", exceptionId: item!.exceptionId, approvedFact: "Yes, that's fine." });
     expect(refused).toMatchObject({ status: "blocked", code: "NO_DRAFT", message: FAIR_HOUSING_REFUSAL });
-    expect(a.fake.sent).toHaveLength(before + 1);
+    expect(a.fake.sent).toHaveLength(before + 2);
+    expect(a.fake.sent.at(-2)!.content).toContain("Good question for the property team");
+    expect(a.fake.sent.at(-1)!.content).toContain("I have these times available");
     remember("resolve_issue_fair_housing", { inbox: listed, blocked: refused });
   });
 

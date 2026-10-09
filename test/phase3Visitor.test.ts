@@ -208,7 +208,8 @@ describe("fair-housing safe reply", () => {
     await a.optInSms();
     await a.text("1");
     const replies = await a.text("Do you rent to families with kids?");
-    expect(replies).toEqual([HELD]);
+    expect(replies[0]).toBe(HELD);
+    expect(replies.join("\n")).toContain("Which day works for you?");
     expect(replies.join("\n")).not.toMatch(/fair housing|Fair Housing|discriminat/i);
     const flags = (await a.grok("list_exceptions")).exceptions as Array<{ exceptionId: string; summary: string; proposeDraft?: boolean }>;
     expect(flags).toHaveLength(1);
@@ -231,7 +232,8 @@ describe("fair-housing safe reply", () => {
     await a.text("1");
     for (const phrase of phrases) {
       const replies = await a.text(phrase);
-      expect(replies, phrase).toEqual([HELD]);
+      expect(replies[0], phrase).toBe(HELD);
+      expect(replies.join("\n"), phrase).toContain("Which day works for you?");
       expect(replies.join("\n")).not.toMatch(/fair housing|Fair Housing|discriminat/i);
     }
     const flags = (await a.grok("list_exceptions")).exceptions as Array<{ summary: string; proposeDraft?: boolean }>;

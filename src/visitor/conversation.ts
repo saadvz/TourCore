@@ -29,6 +29,7 @@ import {
   isUnbookedCancelAsk,
   isConfident,
   keywordOf,
+  messagingKeyword,
   LayeredIntentInterpreter,
   normalize,
   type Awaiting,
@@ -452,7 +453,7 @@ export async function handleVisitorText(
 
   const photo = !!meta?.hasMedia;
   const typed = text.trim();
-  const keyword = keywordOf(text);
+  const keyword = messagingKeyword(text);
   const silent = session.optedOut && keyword !== "start" && keyword !== "stop";
   const photoAck = photoAckFor(session, photo && !!typed && !silent);
 
@@ -583,7 +584,7 @@ export async function handleVisitorText(
 }
 
 async function handleOperatorScheduledReply(session: VisitorDemoSession, said: Said, text: string): Promise<void> {
-  const keyword = keywordOf(text);
+  const keyword = messagingKeyword(text);
   if (keyword === "stop") {
     session.takeExpected(await session.stage());
     await session.optOut(said);
@@ -622,7 +623,7 @@ async function handleOperatorScheduledReply(session: VisitorDemoSession, said: S
  * enough to keep a record of the visit; booking does not ask again.
  */
 async function handleSmsGate(session: VisitorDemoSession, said: Said, text: string): Promise<void> {
-  const keyword = keywordOf(text);
+  const keyword = messagingKeyword(text);
   if (keyword === "stop") {
     await session.optOut(said);
     return;
@@ -773,7 +774,7 @@ async function ask(turn: Turn, question: string, resume?: () => Promise<void>): 
     return;
   }
   if (resume) await resume();
-  else await resumeStep(session, turn.stage, turn.awaiting);
+  else await resumeStep(session, turn.stage, turn.awaiting, out.fairHousing ? { repeatLiveMenu: true } : undefined);
 }
 
 const listOf = (items: string[]) => (items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`);
@@ -890,7 +891,12 @@ async function openWithCustomTime(turn: Turn): Promise<void> {
  * or running tour there's no menu to repeat, so only an open confirmation is
  * asked again.
  */
-export async function resumeStep(session: VisitorDemoSession, stage?: VisitorStage, awaiting?: StepAwaiting): Promise<void> {
+export async function resumeStep(
+  session: VisitorDemoSession,
+  stage?: VisitorStage,
+  awaiting?: StepAwaiting,
+  options?: { repeatLiveMenu?: boolean },
+): Promise<void> {
   const now = await session.stage();
   // Called from outside a text (e.g. the operator answered later): repeat whatever confirmation is still open.
   const open = stage === undefined ? session.pendingClarification : undefined;
@@ -903,7 +909,7 @@ export async function resumeStep(session: VisitorDemoSession, stage?: VisitorSta
     (now === "choose-time" && session.slotMenuLive && session.lastShownSlots.length > 0);
   if (now === "choose-date") session.markDatesShown();
   if (now === "choose-time") session.markTimesShown();
-  if (menuAlreadyLive) return;
+  if (menuAlreadyLive && !options?.repeatLiveMenu) return;
   await session.reply(p.body, p.prompt);
 }
 

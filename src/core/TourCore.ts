@@ -1352,7 +1352,7 @@ export class TourCore {
     answerSuffix?: string;
     /** Unit the visitor just picked from "Which unit do you mean?". */
     pickedUnitId?: string;
-  }): Promise<{ outcome: "answered" | "unknown" | "which-unit"; facts: ApprovedFact[]; unitId?: string; units?: string[] }> {
+  }): Promise<{ outcome: "answered" | "unknown" | "which-unit"; facts: ApprovedFact[]; unitId?: string; units?: string[]; fairHousing?: boolean }> {
     const phone = normalizePhone(input.phone);
     const read = this.deps.storageRead?.() ?? "live";
     const unitContext = { selectedUnitId: input.unitId, ...(input.pickedUnitId ? { pickedUnitId: input.pickedUnitId } : {}) };
@@ -1409,7 +1409,7 @@ export class TourCore {
     }
     if (resolved.kind === "unknown" && resolved.fairHousing) {
       await this.replyFairHousing({ phone, reservationId: reservation?.id, prospectId: prospect?.id, asked, reservation, who: prospect && prospect.name !== UNNAMED_VISITOR ? prospect.name : formatPhone(phone), about: !reservation && (resolved.unitId ? this.deps.config.units.find((u) => u.id === resolved.unitId) : undefined) ? ` about ${visitorSubject(this.deps.config.property, this.deps.config.units.find((u) => u.id === resolved.unitId)!.name)}` : "" });
-      return { outcome: "unknown", facts: [], ...(resolved.unitId ? { unitId: resolved.unitId } : {}) };
+      return { outcome: "unknown", facts: [], fairHousing: true, ...(resolved.unitId ? { unitId: resolved.unitId } : {}) };
     }
     await this.record("QUESTION_UNANSWERED", { ...base, detail: asked });
     await this.sendConversationText({ phone, body: input.unknownReply ?? unknownAnswerReply({ team: this.teamName() }), reservationId: reservation?.id });
@@ -1518,6 +1518,9 @@ export class TourCore {
     const said = inbound?.text ?? "I need help";
     const repeat = await this.priorHelpRequest(reservationId);
     await this.recordInbound(prospect.id, reservationId, said, inbound?.meta);
+    if (isFairHousingQuestion(said)) {
+      await this.forwardFlaggedQuestion({ reservationId, prospectId: prospect.id, asked: said.trim().slice(0, 300) });
+    }
     const alert = `${prospect.name} asked for help${where ? ` near ${where}` : ""}.`;
     const alertDue = await this.shouldAlertHelp(reservationId);
     const alerted = alertDue ? await this.textOperatorFirst(reservation, alert) : false;

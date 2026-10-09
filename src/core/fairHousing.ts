@@ -1,10 +1,15 @@
 /**
  * Fair-housing questions are detected here, before any rent sentence, keyword
  * match, or saved answer. A protected-group word anywhere in the message
- * matches, unless the next word names a thing (a family car, a kid's bike).
- * Patterns that already matched still match. A day or time the scheduler
- * already recognizes, or bringing someone along to the tour, stays on the
- * tour when the message does not also ask whether the place suits them.
+ * matches, unless the next word names a thing (a family car, a kid's bike,
+ * a white door, senior discounts, Asian restaurants). "age of the building"
+ * and "roof age" name the building, not a person. A name after "I'm" or
+ * "my name is" is not a group word. A day or time the scheduler already
+ * recognizes, or bringing someone to the tour or showing, stays on the tour
+ * when the message does not also ask whether the place suits them. So does
+ * "allowed" on the tour or showing. "works for" next to a recognized time
+ * is that booking. A wheelchair, walker, cane, or the words blind, deaf,
+ * disabled, or disability is not that tour-logistics exemption.
  */
 
 import { dayReference, spokenTimes } from "./spokenTime";
@@ -111,7 +116,7 @@ const GROUP = new RegExp(`\\b(?:${GROUP_WORD})\\b`, "g");
 
 /** The group word only names this thing. It is not a question about the group. */
 const CLASS_STOP =
-  /^(?:car|cars|room|rooms|size|sizes|style|styles|offender|offenders|neutral|dinner|dinners|gathering|gatherings|bike|bikes|toy|toys|dog|dogs|cat|cats|piano|pianos|parking|photography|table|tables|fridge|fridges)$/;
+  /^(?:car|cars|room|rooms|size|sizes|style|styles|offender|offenders|neutral|dinner|dinners|gathering|gatherings|bike|bikes|toy|toys|dog|dogs|cat|cats|piano|pianos|parking|photography|table|tables|fridge|fridges|walls?|doors?|gates?|paints?|roofs?|buildings?|discounts?|fridays?|restaurants?)$/;
 
 const FRIENDLY = /\b(?:family|kid|child) friendly\b/;
 const FAMILY_BUILDING = /\bfamily buildings?\b/;
@@ -167,8 +172,20 @@ const STEERING =
   /\b(?:what kind of people|what type of people|who lives (?:there|here|in the building|nearby)|is the (?:neighborhood|area) safe|safe neighborhood|safe area|crime rate|good neighborhood|bad neighborhood)\b/;
 
 /** Suitability, as opposed to "is that ok?" about bringing someone along. */
-const SUITABILITY =
-  /\b(?:good|safe|okay|ok|right|suitable|ideal|great|perfect)\s+for\b|\bbig enough\b|\b(?:work|works|working)\s+for\b|\ba fit for\b|\baccessible for\b/;
+const SUITABILITY_OTHER =
+  /\b(?:good|safe|okay|ok|right|suitable|ideal|great|perfect)\s+for\b|\bbig enough\b|\ba fit for\b|\baccessible for\b/;
+
+/** "2 pm works for my family" is a booking. "works for my family" with no clock is suitability. */
+const WORKS_FOR = /\b(?:work|works|working)\s+for\b/;
+
+/** An object a person might ask the age of. Sits on either side of "age". */
+const AGE_OBJECT = "(?:walls?|doors?|gates?|paints?|roofs?|buildings?|discounts?|fridays?|restaurants?)";
+
+/**
+ * These words are not "can my mom come to the tour". The message stays a
+ * possible fair-housing question.
+ */
+const DISABILITY_SKIPS_TOUR = /\b(?:wheelchairs?|walkers?|canes?|blind|deaf|disabled|disabilit(?:y|ies))\b/;
 
 function spans(re: RegExp, text: string): Array<{ start: number; end: number }> {
   const flags = re.flags.includes("g") ? re.flags : `${re.flags}g`;
@@ -225,20 +242,55 @@ function personAge(text: string): boolean {
   return /\b(?:shes|hes|theyre)\s+\d{1,3}\b/.test(text) || /\b\d{1,3}\s+years?\s+old\b/.test(text);
 }
 
+/** "age of the building", "age of the roof", "roof age". Not "what ages live here". */
+function ageBesideObject(text: string, start: number, end: number): boolean {
+  const after = text.slice(end);
+  const before = text.slice(0, start);
+  if (new RegExp(`^\\s+of\\s+(?:the\\s+|a\\s+|an\\s+)?${AGE_OBJECT}\\b`).test(after)) return true;
+  return new RegExp(`(?:^|\\s)${AGE_OBJECT}\\s+$`).test(before);
+}
+
+/**
+ * "Hi, I'm Kim Single" / "my name is Kim Single". The word right after I'm
+ * ("I'm single") is still the group word.
+ */
+function isIntroducedSurname(text: string, start: number): boolean {
+  const before = text.slice(0, start);
+  if (!/\b(?:im|i am|my name is)\s+[a-z]+\s+$/.test(before)) return false;
+  return !/\b(?:im|i am|my name is)\s+(?:a|an|the|very|so|just|still|not|really|also|my)\s+$/.test(before);
+}
+
 function unstoppedGroupWord(text: string): boolean {
   for (const match of text.matchAll(new RegExp(GROUP.source, "g"))) {
     const word = match[0];
-    const after = text.slice((match.index ?? 0) + word.length);
+    const start = match.index ?? 0;
+    const end = start + word.length;
+    const after = text.slice(end);
     const next = nextWord(after);
     if (word === "baby" && next === "grand") continue;
     if (next && CLASS_STOP.test(next)) continue;
+    if (word === "age" && ageBesideObject(text, start, end)) continue;
+    if (word === "color" && /^\s+(?:are|is)\s+(?:the\s+)?walls?\b/.test(after)) continue;
+    if (isIntroducedSurname(text, start)) continue;
     return true;
   }
   return false;
 }
 
 function asksSuitability(text: string): boolean {
-  return SUITABILITY.test(text);
+  return SUITABILITY_OTHER.test(text) || WORKS_FOR.test(text);
+}
+
+/** "2 pm works for my family" books. Other suitability still holds the message. */
+function worksForRecognizedTime(text: string): boolean {
+  return WORKS_FOR.test(text) && !SUITABILITY_OTHER.test(text) && schedulerRecognizes(text);
+}
+
+/** True when a recognized day or time should stay a question because it also asks suitability. */
+export function suitabilityBlocksBooking(text: string): boolean {
+  const t = norm(text);
+  if (SUITABILITY_OTHER.test(t)) return true;
+  return WORKS_FOR.test(t) && !schedulerRecognizes(t);
 }
 
 /**
@@ -258,14 +310,18 @@ function schedulerRecognizes(text: string): boolean {
 }
 
 /**
- * Bringing someone to the tour. "Is the tour OK for kids?" is suitability,
- * not this. An assistance animal is handled before this is consulted.
+ * Bringing someone to the tour or showing, including "allowed on the tour".
+ * "Is the tour OK for kids?" is suitability, not this. A wheelchair, walker,
+ * cane, or the words blind, deaf, disabled, or disability is not this.
+ * An assistance animal is handled before this is consulted.
  */
 function isTourAccompaniment(text: string): boolean {
+  if (DISABILITY_SKIPS_TOUR.test(text)) return false;
   if (/\b(?:i am|im|we are|were) bringing\b/.test(text)) return true;
   if (/\b(?:bring(?:ing)?|brought)\b/.test(text) && /\b(?:tour|showing)\b/.test(text)) return true;
   if (/\b(?:come|coming)\b/.test(text) && /\b(?:tour|showing)\b/.test(text)) return true;
   if (/\b(?:can|could|may)\s+(?:my|our)\s+\w+\s+come\b/.test(text)) return true;
+  if (/\ballowed\b/.test(text) && /\b(?:tour|showing)\b/.test(text)) return true;
   return false;
 }
 
@@ -286,6 +342,7 @@ export function isFairHousingQuestion(text: string): boolean {
   if (ASSISTANCE_ANIMAL.test(t) || FAITH.test(t) || SSN.test(t) || STANDALONE.test(t)) return true;
   if (FRIENDLY.test(t) || FAMILY_BUILDING.test(t)) return true;
   if (neighborhoodSteering(t)) return true;
+  if (worksForRecognizedTime(t)) return false;
   if (!asksSuitability(t) && (schedulerRecognizes(t) || isTourAccompaniment(t))) return false;
   if (personAge(t) || unstoppedGroupWord(t)) return true;
   return false;
