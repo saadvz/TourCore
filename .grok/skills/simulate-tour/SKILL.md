@@ -11,6 +11,8 @@ metadata:
   version: "0.2.4"
 ---
 
+<!-- connector: qa-skill -->
+
 # Simulate Tour
 
 These tools are on the QA connector (`TOURCORE_QA_TOKEN`, URL ending in `/mcp/qa`). Leave property out of `inject_local_sms` to use the shared line.

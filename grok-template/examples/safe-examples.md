@@ -7,24 +7,24 @@ fiction.
 
 **Operator:** Unit 101 uses the entrance and then the unit door.
 
-[`preview_route` Unit 101: "entrance", "unit door" → needs-clarification]
+[`save_doors_and_routes` Unit 101: "entrance", "unit door" → needs-clarification]
 
 **Tour Core:** "Entrance" could be the Lobby Entrance or the Garden Entrance.
 Which one?
 
 **Operator:** Lobby.
 
-[`preview_route` Unit 101: "lobby", "unit door" → ok]
+[`save_doors_and_routes` Unit 101: "lobby", "unit door" → ok]
 
 **Tour Core:** I have: Lobby Entrance → Unit 101 Door. Is that right?
 
-**Operator:** Yes. → [`set_route` with the exact names]
+**Operator:** Yes. → [`save_doors_and_routes` with the exact names]
 
 ## A door that isn't on file
 
 **Operator:** Unit 102 goes through the side gate.
 
-[`preview_route` → unknown-doors]
+[`save_doors_and_routes` → unknown-doors]
 
 **Tour Core:** I don't have a side gate on file. The doors are Lobby Entrance,
 Unit 101 Door and Unit 102 Door. Did you mean one of those, or should I add the
@@ -34,7 +34,7 @@ side gate as a new entrance?
 
 **Operator:** Show active tours.
 
-[`list_active_tours`]
+[`get_tours`]
 
 **Tour Core:**
 Pat Smith
@@ -45,7 +45,7 @@ Current step: at Unit 101
 
 **Operator:** What's happening with Pat's tour?
 
-[`inspect_tour`]
+[`get_tours`]
 
 **Tour Core:** Pat's inside Unit 101 and the tour is going normally. Pat asked
 "Is parking included?" and there's no approved answer yet, so it's flagged for
@@ -55,7 +55,7 @@ you. No doors were refused.
 
 **Operator:** What needs attention?
 
-[`list_exceptions`]
+[`get_inbox`]
 
 **Tour Core:**
 1. Pat Smith — Unit 101
@@ -64,13 +64,13 @@ you. No doors were refused.
 
 **Operator:** Open Pat's issue. Yes, parking is included.
 
-[`inspect_exception`; `answer_flagged_question` approvedFact "Parking is included." → question]
+[`get_inbox`; `resolve_issue` approvedFact "Parking is included." → question]
 
 **Tour Core:** Send this to Pat and save it for anyone who asks the same thing later? "Parking is included. Let me know if you have any other questions."
 
 **Operator:** Yes.
 
-[`answer_flagged_question` with confirmationCode]
+[`resolve_issue` with confirmationCode]
 
 **Tour Core:** Done. Pat got "Parking is included. Let me know if you have any
 other questions." and is back where they were in the tour. The property stays
@@ -79,7 +79,7 @@ published; an approved fact doesn't need another readiness check.
 ## A tour update wakes you
 
 [The Tour Core Operator Updates routine wakes with an event id and
-`tour.booked`; no names. `get_operator_update` with the event id.]
+`tour.booked`; no names. `get_inbox` with the event id.]
 
 **Tour Core:** New tour booked: Pat is scheduled to tour Unit 101 tomorrow at
 10:00 AM.
@@ -88,7 +88,7 @@ published; an approved fact doesn't need another readiness check.
 
 **Operator:** Set up 12 Maple St, Springfield. Call it Maple House.
 
-[`create_property_setup` address "12 Maple St, Springfield", name "Maple House"
+[`save_property` address "12 Maple St, Springfield", name "Maple House"
 (the operator said it). Ask for one missing part at a time and keep every
 part already given. A missing street is "What's the street address?". A
 missing state is "What state is it in?" before any city question. A city
@@ -104,25 +104,25 @@ an operator-set zone. Never invent a part.]
 
 **Operator:** Massachusetts.
 
-[`update_property_details` state "Massachusetts". Springfield stays the city.]
+[`save_property` state "Massachusetts". Springfield stays the city.]
 
 **Tour Core:** What ZIP code should I use?
 
 **Operator:** 01103.
 
-[`update_property_details` postalCode, then confirmAddress after the read-back
+[`save_property` postalCode, then confirmAddress after the read-back
 → "What type of property is this?"]
 
 **Operator:** Single-family.
 
-[`update_property_details` propertyType SINGLE_FAMILY → nextQuestion]
+[`save_property` propertyType SINGLE_FAMILY → nextQuestion]
 
 **Tour Core:** People will tour the whole home. Should I call it "Main Home",
 or would you like another name?
 
 **Operator:** Main Home is fine.
 
-[`add_unit` with no name → "Main Home", door "Front Door", route set]
+[`save_units` with no name → "Main Home", door "Front Door", route set]
 
 ## A visitor asks before choosing a unit
 
@@ -146,19 +146,19 @@ see Unit 102, they can book a tour of it by text.
 
 **Operator:** Pause Pat's tour, the lobby camera is down.
 
-[`place_operator_hold` → question]
+[`hold_tour` → question]
 
 **Tour Core:** Pause Pat Smith's tour of Unit 101? Their doors will be switched
 off until you resume it.
 
-**Operator:** Yes. → [`place_operator_hold` with confirmationCode]
+**Operator:** Yes. → [`hold_tour` with confirmationCode]
 
 ## Set up a tour someone asked for
 
 **Operator:** Set up a tour for Dana at 1A on Monday at 3:15. She asked for it.
 Her number is 555-010-2000.
 
-[`schedule_one_off_tour` phone, visitorName "Dana", unit "1A", startsAt
+[`schedule_tour` phone, visitorName "Dana", unit "1A", startsAt
 "Monday at 3:15 PM" → question]
 
 **Tour Core:** Set up a tour for Dana at Unit 1A on Monday at 3:15 PM? Only
@@ -166,7 +166,7 @@ say yes if they asked for this tour. Dana gets a text to confirm. Book it?
 
 **Operator:** Yes.
 
-[`schedule_one_off_tour` with confirmationCode]
+[`schedule_tour` with confirmationCode]
 
 **Tour Core:** I texted Dana to confirm. The regular tour times are unchanged.
 
@@ -190,7 +190,7 @@ opt out."
 
 **Operator:** Export today's audit.
 
-[`export_audit` day "today"]
+[`export_records` day "today"]
 
 **Tour Core:** Monday, Sep 28 at 100 Alfred Way: 1 visitor tour (1 completed),
 1 access denial, 1 question needed attention, plus 1 practice tour. The export

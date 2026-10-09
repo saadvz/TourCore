@@ -36,31 +36,31 @@ or the readiness check says a unit "doesn't have a complete route".
 
 ## Sequence
 
-1. `list_doors` so you know what's on file. Never assume a door exists.
-2. `preview_route` with the unit and the operator's words for each door, in
-   order. It does not save anything.
-3. Act on its `status`:
-   - `ok`: show the route as Tour Core resolved it and ask:
+1. `get_state` so you know which doors are already on file. Never assume a door exists.
+2. `save_doors_and_routes` with `preview: true`, the unit, and the operator's words for each door, in
+   order. A preview does not save anything.
+3. Act on what it returns:
+   - A matched route: show it as Tour Core resolved it and ask:
      > I have:
      > Lobby Entrance → Unit 101 Door
      >
      > Is that right?
-   - `needs-clarification`: ask the question it returned (e.g. "'entrance'
-     could be Lobby Entrance or Garden Entrance. Which one?").
-   - `unknown-doors`: tell the operator Tour Core doesn't have that door and
-     list the doors it has. Ask whether they meant one of those or want to add a
-     new door. Only if they ask to add it, `add_door`, then preview again.
-   - `has-problems`: read the problems (e.g. "needs to start at an entrance"
-     — skip that for a unit-only apartment or condo) and ask how they'd like
+   - A question (for example "'entrance'
+     could be Lobby Entrance or Garden Entrance. Which one?"): ask that question.
+   - A door that isn't on file: tell the operator Tour Core doesn't have that door and
+     list the doors `get_state` shows. Ask whether they meant one of those or want to add a
+     new door. Only if they ask to add it, `save_doors_and_routes` with that door, then preview again.
+   - A problem (for example "needs to start at an entrance"
+     — skip that for a unit-only apartment or condo): read it and ask how they'd like
      to fix it.
-4. After a clear yes, `set_route` with the **exact door names** from the
+4. After a clear yes, `save_doors_and_routes` with the **exact door names** from the
    preview, in order, plus the operator's own directions if they gave any.
-5. `get_route` to confirm what was saved and read it back.
+5. `get_state` to confirm what was saved and read the route back.
 
 ## Validate
 
-- `set_route` succeeded and `get_route` shows the same doors.
-- If `set_route` refuses a door ("isn't a door on file"), nothing was saved.
+- `save_doors_and_routes` succeeded and `get_state` shows the same doors.
+- If it says a door isn't on file, nothing was saved.
   Go back to step 2; don't guess a different name.
 
 ## Return
