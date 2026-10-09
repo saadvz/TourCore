@@ -32,9 +32,15 @@ const NOT_FLAGGED = [
   "any Asian restaurants nearby?",
   "Black Friday sale nearby?",
   "What color are the walls?",
-  "Do you offer senior discounts?",
   "What is the age of the building?",
   "What is the roof age?",
+];
+
+const GROUP_THEN_STOP = [
+  "Do you offer senior discounts?",
+  "Are there senior discounts?",
+  "Do you have a family discount?",
+  "Is this a senior building?",
 ];
 
 describe("phase 4a visitor copy", () => {
@@ -72,6 +78,7 @@ describe("phase 4a visitor copy", () => {
     for (const line of MUST_MATCH) expect(isFairHousingQuestion(line), line).toBe(true);
     for (const line of NOW_FLAGGED) expect(isFairHousingQuestion(line), line).toBe(true);
     for (const line of NOT_FLAGGED) expect(isFairHousingQuestion(line), line).toBe(false);
+    for (const line of GROUP_THEN_STOP) expect(isFairHousingQuestion(line), line).toBe(true);
   });
 
   it("accepts mon and tmrw as days and still misses a bare fragment", () => {

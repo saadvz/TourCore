@@ -2,9 +2,12 @@
  * Fair-housing questions are detected here, before any rent sentence, keyword
  * match, or saved answer. A protected-group word anywhere in the message
  * matches, unless the next word names a thing (a family car, a kid's bike,
- * a white door, senior discounts, Asian restaurants). "age of the building"
- * and "roof age" name the building, not a person. A name after "I'm" or
- * "my name is" is not a group word. A day or time the scheduler already
+ * a white door, Asian restaurants). "discount" and "building" do not stop
+ * a group word, so senior discounts and a senior building still match.
+ * "age of the building" and "roof age" name the building, not a person.
+ * A group word after "I'm", "I am", or "my name is" is skipped only when
+ * that word and the word before it are both capitalized ("Kim Single",
+ * "Jordan Black"). A day or time the scheduler already
  * recognizes, or bringing someone to the tour or showing, stays on the tour
  * when the message does not also ask whether the place suits them. So does
  * "allowed" on the tour or showing. "works for" next to a recognized time
@@ -116,7 +119,7 @@ const GROUP = new RegExp(`\\b(?:${GROUP_WORD})\\b`, "g");
 
 /** The group word only names this thing. It is not a question about the group. */
 const CLASS_STOP =
-  /^(?:car|cars|room|rooms|size|sizes|style|styles|offender|offenders|neutral|dinner|dinners|gathering|gatherings|bike|bikes|toy|toys|dog|dogs|cat|cats|piano|pianos|parking|photography|table|tables|fridge|fridges|walls?|doors?|gates?|paints?|roofs?|buildings?|discounts?|fridays?|restaurants?)$/;
+  /^(?:car|cars|room|rooms|size|sizes|style|styles|offender|offenders|neutral|dinner|dinners|gathering|gatherings|bike|bikes|toy|toys|dog|dogs|cat|cats|piano|pianos|parking|photography|table|tables|fridge|fridges|walls?|doors?|gates?|paints?|roofs?|fridays?|restaurants?)$/;
 
 const FRIENDLY = /\b(?:family|kid|child) friendly\b/;
 const FAMILY_BUILDING = /\bfamily buildings?\b/;
@@ -250,17 +253,35 @@ function ageBesideObject(text: string, start: number, end: number): boolean {
   return new RegExp(`(?:^|\\s)${AGE_OBJECT}\\s+$`).test(before);
 }
 
-/**
- * "Hi, I'm Kim Single" / "my name is Kim Single". The word right after I'm
- * ("I'm single") is still the group word.
- */
-function isIntroducedSurname(text: string, start: number): boolean {
-  const before = text.slice(0, start);
-  if (!/\b(?:im|i am|my name is)\s+[a-z]+\s+$/.test(before)) return false;
-  return !/\b(?:im|i am|my name is)\s+(?:a|an|the|very|so|just|still|not|really|also|my)\s+$/.test(before);
+/** Words of the original text, aligned with fair-housing normalization. */
+function originalTokens(raw: string): Array<{ norm: string; cap: boolean }> {
+  const tokens: Array<{ norm: string; cap: boolean }> = [];
+  for (const match of raw.matchAll(/[A-Za-z0-9]+(?:['’][A-Za-z0-9]+)*/g)) {
+    const piece = match[0];
+    const folded = piece.toLowerCase().replace(/['’]/g, "");
+    if (folded) tokens.push({ norm: folded, cap: /^[A-Z]/.test(piece) });
+  }
+  return tokens;
 }
 
-function unstoppedGroupWord(text: string): boolean {
+/**
+ * "Hi, I'm Kim Single" / "my name is Jordan Black". The word right after I'm
+ * ("I'm single", "I'm legally blind") is still the group word. The surname
+ * slot is skipped only when both that word and the word before it are
+ * capitalized in the original text.
+ */
+function isIntroducedSurname(text: string, start: number, original: string): boolean {
+  const before = text.slice(0, start);
+  if (!/\b(?:im|i am|my name is)\s+[a-z0-9]+\s+$/.test(before)) return false;
+  if (/\b(?:im|i am|my name is)\s+(?:a|an|the|very|so|just|still|not|really|also|my)\s+$/.test(before)) return false;
+  const normWords = text.split(" ").filter(Boolean);
+  const index = text.slice(0, start).split(" ").filter(Boolean).length;
+  const tokens = originalTokens(original);
+  if (tokens.length !== normWords.length || tokens.some((token, i) => token.norm !== normWords[i])) return false;
+  return !!tokens[index]?.cap && !!tokens[index - 1]?.cap;
+}
+
+function unstoppedGroupWord(text: string, original: string): boolean {
   for (const match of text.matchAll(new RegExp(GROUP.source, "g"))) {
     const word = match[0];
     const start = match.index ?? 0;
@@ -271,7 +292,7 @@ function unstoppedGroupWord(text: string): boolean {
     if (next && CLASS_STOP.test(next)) continue;
     if (word === "age" && ageBesideObject(text, start, end)) continue;
     if (word === "color" && /^\s+(?:are|is)\s+(?:the\s+)?walls?\b/.test(after)) continue;
-    if (isIntroducedSurname(text, start)) continue;
+    if (isIntroducedSurname(text, start, original)) continue;
     return true;
   }
   return false;
@@ -344,6 +365,6 @@ export function isFairHousingQuestion(text: string): boolean {
   if (neighborhoodSteering(t)) return true;
   if (worksForRecognizedTime(t)) return false;
   if (!asksSuitability(t) && (schedulerRecognizes(t) || isTourAccompaniment(t))) return false;
-  if (personAge(t) || unstoppedGroupWord(t)) return true;
+  if (personAge(t) || unstoppedGroupWord(t, text)) return true;
   return false;
 }

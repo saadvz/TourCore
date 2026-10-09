@@ -32,7 +32,7 @@ describe("fair-housing detection", () => {
       if (row.expected === "flagged") expect(row.flagged, row.phrase).toBe(true);
       if (row.expected === "not-flagged" || row.expected === "booked" || row.expected === "tour") expect(row.flagged, row.phrase).toBe(false);
     }
-    expect(FAIR_HOUSING_PHRASES.filter((row) => row.source === "QA probe")).toHaveLength(84);
+    expect(FAIR_HOUSING_PHRASES.filter((row) => row.source === "QA probe")).toHaveLength(92);
   });
 
   it.each([

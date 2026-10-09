@@ -167,7 +167,7 @@ export const FAIR_HOUSING_PHRASES: FairHousingPhrase[] = [
   { phrase: "Is there a temple nearby?", flagged: false, source: "original" },
   { phrase: "Is there a mosque nearby?", flagged: false, source: "original" },
   { phrase: "Is there a dog run?", flagged: false, source: "original" },
-  { phrase: "Do you offer senior discounts?", flagged: false, source: "QA probe", expected: "not-flagged" },
+  { phrase: "Do you offer senior discounts?", flagged: true, source: "QA probe", expected: "flagged" },
   { phrase: "What is the age of the building?", flagged: false, source: "QA probe", expected: "not-flagged" },
   { phrase: "What is the roof age?", flagged: false, source: "stop-list", expected: "not-flagged" },
   { phrase: "Is there a support beam?", flagged: false, source: "original" },
@@ -275,15 +275,15 @@ export const FAIR_HOUSING_PHRASES: FairHousingPhrase[] = [
   { phrase: "Is it good for families with a dog?", flagged: true, source: "qa flagged", expected: "flagged" },
   { phrase: "Is it OK for a service dog?", flagged: true, source: "qa flagged", expected: "flagged" },
 
-  // The class word only names the building, a discount, or a sale.
-  { phrase: "Are there senior discounts?", flagged: false, source: "stop-list", expected: "not-flagged" },
+  // Age of the building, roof age, and a sale still name a thing. A group word plus discount or building matches.
+  { phrase: "Are there senior discounts?", flagged: true, source: "stop-list", expected: "flagged" },
   { phrase: "What's the age of the building?", flagged: false, source: "stop-list", expected: "not-flagged" },
   { phrase: "How old is the roof", flagged: false, source: "stop-list", expected: "not-flagged" },
   { phrase: "roof age", flagged: false, source: "stop-list", expected: "not-flagged" },
   { phrase: "Any Black Friday deals?", flagged: false, source: "stop-list", expected: "not-flagged" },
   { phrase: "Asian restaurants nearby?", flagged: false, source: "stop-list", expected: "not-flagged" },
 
-  // QA probe. Exact lines. 84 of them, counting the ones updated in place above.
+  // QA probe. Exact lines. 92 of them, counting the ones updated in place above.
   { phrase: "Is it family-friendly?", flagged: true, source: "QA probe", expected: "flagged" },
   { phrase: "Is it kid friendly?", flagged: true, source: "QA probe", expected: "flagged" },
   { phrase: "Is it kid-friendly?", flagged: true, source: "QA probe", expected: "flagged" },
@@ -363,4 +363,12 @@ export const FAIR_HOUSING_PHRASES: FairHousingPhrase[] = [
   { phrase: "Is there a family size fridge?", flagged: false, source: "QA probe", expected: "not-flagged" },
   { phrase: "Is my partner allowed on the tour?", flagged: false, source: "QA probe", expected: "tour" },
   { phrase: "Hi, I'm Kim Single", flagged: false, source: "QA probe", expected: "not-flagged" },
+  { phrase: "I'm legally blind, is there an elevator?", flagged: true, source: "QA probe", expected: "flagged" },
+  { phrase: "I am totally deaf, how do I get in?", flagged: true, source: "QA probe", expected: "flagged" },
+  { phrase: "I'm newly disabled", flagged: true, source: "QA probe", expected: "flagged" },
+  { phrase: "I'm currently single, is it quiet?", flagged: true, source: "QA probe", expected: "flagged" },
+  { phrase: "I'm happily married, is there parking?", flagged: true, source: "QA probe", expected: "flagged" },
+  { phrase: "my name is Jordan Black", flagged: false, source: "QA probe", expected: "not-flagged" },
+  { phrase: "Do you have a family discount?", flagged: true, source: "QA probe", expected: "flagged" },
+  { phrase: "Is this a senior building?", flagged: true, source: "QA probe", expected: "flagged" },
 ];

@@ -28,6 +28,7 @@ import { AuditLog, type AuditInput } from "../audit/audit";
 import { buildExport, type ExportBundle } from "../export/exportBundle";
 import type { Clock } from "./clock";
 import { FAIR_HOUSING_CODE, isFairHousingQuestion } from "./fairHousing";
+import { isMedicalEmergency } from "../intent/ruleBased";
 import { approvedAnswerText, approvedFacts, type ApprovedFact } from "./facts";
 import { formatPhone, normalizePhone } from "./phone";
 import { resolveQuestion } from "./questions";
@@ -435,6 +436,18 @@ export class VisitorDenialCopy {
   static helpRepeatAckRemote(team: string, visitorContact?: string): string {
     const name = visitorTeamName(team);
     return `The ${name} already knows and is on it. ${this.remote(name, visitorContact, { teamJustNamed: true })}`;
+  }
+
+  /**
+   * Injury help. The team-alert failure uses the same help-number choice as
+   * the not-ready line, and never the snag line.
+   */
+  static medicalAlert(team: string, visitorContact: string | undefined, sent: boolean): string {
+    const name = visitorTeamName(team);
+    if (sent) return `If someone is hurt, call 911 now. I've also let the ${name} know, and they'll text you here as soon as they can.`;
+    const number = visitorContact?.trim() ? formatPhone(visitorContact.trim()) : undefined;
+    if (number) return `If someone is hurt, call 911 now. I couldn't reach the ${name} just now, so please call them at ${number} too.`;
+    return `If someone is hurt, call 911 now. I couldn't reach the ${name} just now.`;
   }
 
   static noOpenTimes(team: string): string {
@@ -1510,12 +1523,17 @@ export class TourCore {
     }
   }
 
-  async requestHelp(reservationId: string, where?: string, inbound?: { text: string; meta?: InboundMeta }): Promise<void> {
+  async requestHelp(reservationId: string | undefined, where?: string, inbound?: { text: string; meta?: InboundMeta; phone?: string }): Promise<void> {
+    const said = inbound?.text ?? "I need help";
+    const medical = isMedicalEmergency(said);
+    if (!reservationId) {
+      if (medical && inbound?.phone) await this.deliverUnbookedMedical(inbound.phone, said);
+      return;
+    }
     const reservation = await this.mustGetReservation(reservationId);
     const place = helpContext(reservation, this.deps.clock.now());
-    if (!place) return;
+    if (!place && !medical) return;
     const prospect = await this.mustGetProspect(reservation.prospectId);
-    const said = inbound?.text ?? "I need help";
     const repeat = await this.priorHelpRequest(reservationId);
     await this.recordInbound(prospect.id, reservationId, said, inbound?.meta);
     if (isFairHousingQuestion(said)) {
@@ -1524,18 +1542,19 @@ export class TourCore {
     const alert = `${prospect.name} asked for help${where ? ` near ${where}` : ""}.`;
     const alertDue = await this.shouldAlertHelp(reservationId);
     const alerted = alertDue ? await this.textOperatorFirst(reservation, alert) : false;
+    const failed = alertDue && !alerted;
     const team = this.teamName();
     const contact = this.visitorHelpNumber();
-    const ack =
-      place === "upcoming"
+    const ack = medical
+      ? VisitorDenialCopy.medicalAlert(team, contact, !failed)
+      : place === "upcoming"
         ? repeat
           ? VisitorDenialCopy.helpRepeatAckRemote(team, contact)
           : VisitorDenialCopy.helpAckRemote(team, contact)
         : repeat
           ? VisitorDenialCopy.helpRepeatAck(team, contact)
           : VisitorDenialCopy.helpAck(team, contact);
-    const snag = alertDue && !alerted;
-    await this.textProspect(prospect, reservationId, snag ? renderSms("handler-snag-retry").body : ack);
+    await this.textProspect(prospect, reservationId, !medical && failed ? renderSms("handler-snag-retry").body : ack);
     await this.recordBestEffort(
       "HELP_REQUESTED",
       { reservationId, prospectId: prospect.id, detail: where ?? "", code: said },
@@ -1547,8 +1566,25 @@ export class TourCore {
         { reservationId, prospectId: prospect.id, detail: alert },
         "Team alert was not recorded",
       );
-    } else if (snag) {
+    } else if (failed) {
       await this.recordTeamTextFailure(prospect.name, reservationId, prospect.id);
+    }
+  }
+
+  /** Injury text before a tour exists. Same 911 lines, including a failed team alert. */
+  private async deliverUnbookedMedical(phone: string, said: string): Promise<void> {
+    if (isFairHousingQuestion(said)) {
+      await this.forwardFlaggedQuestion({ asked: said.trim().slice(0, 300) });
+    }
+    const alert = "A visitor asked for help.";
+    const alerted = await this.textOperatorFirst(undefined, alert);
+    const body = VisitorDenialCopy.medicalAlert(this.teamName(), this.visitorHelpNumber(), alerted);
+    await this.sendConversationText({ phone, body, deliverDespiteOptOut: true });
+    await this.recordBestEffort("HELP_REQUESTED", { detail: "", code: said }, "Help request was not recorded");
+    if (alerted) {
+      await this.recordBestEffort("OPERATOR_NOTIFIED", { detail: alert }, "Team alert was not recorded");
+    } else {
+      await this.recordTeamTextFailure("a visitor");
     }
   }
 

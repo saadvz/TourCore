@@ -7,6 +7,49 @@ import { normalize, numberWord, ordinalWord, stripFiller } from "./normalize";
 import { acceptsNextOpening, yesNo } from "./yesNo";
 
 /**
+ * Injury texts. Hyphenated compounds stay one word so "ambulance-chaser"
+ * is not "ambulance". A 911 line on a normal text is noise, but a missed
+ * injury is unsafe, so fell/hurt/injured need a person or a help word.
+ */
+const STREET_WORD =
+  "main|st|street|ave|avenue|rd|road|blvd|boulevard|dr|drive|ln|lane|way|ct|court|pl|place|pkwy|parkway|ter|terrace|cir|circle|hwy|highway|sq|square";
+const INJURY = "(?:fell|hurt|injured)";
+
+function medicalText(raw: string): string {
+  const glued = raw.replace(/([A-Za-z0-9])-([A-Za-z0-9])/g, "$1$2");
+  return stripFiller(normalize(glued));
+}
+
+function mentions911(text: string): boolean {
+  const kept = text.replace(new RegExp(`\\b911\\s+(?:${STREET_WORD})\\b`, "g"), " ");
+  if (/\b(?:call|dial)\s+911\b/.test(kept)) return true;
+  return /^911$/.test(kept.trim());
+}
+
+function injuryWithPersonOrHelp(text: string): boolean {
+  // These collocations never count, even with a person or a help word beside them.
+  const body = text
+    .replace(/\bfell in love\b/g, " ")
+    .replace(/\bprice fell\b/g, " ")
+    .replace(/\bwould it hurt\b/g, " ");
+  if (!new RegExp(`\\b${INJURY}\\b`).test(body)) return false;
+  if (/\bhelp\b/.test(body)) return true;
+  if (new RegExp(`\\b(?:i|we|he|she|they|someone)\\b(?:\\s+\\w+){0,6}\\s+${INJURY}\\b`).test(body)) return true;
+  if (new RegExp(`\\bmy\\s+(?:\\w+\\s+){1,6}${INJURY}\\b`).test(body)) return true;
+  if (new RegExp(`\\b${INJURY}\\b(?:\\s+\\w+){0,4}\\s+(?:me|him|her|them|someone)\\b`).test(body)) return true;
+  return new RegExp(`\\b(?!(?:it|that|this|there|what|which|price|the|a|an|would|to)\\b)\\w+\\s+(?:is|was|got|gets)\\s+(?:hurt|injured)\\b`).test(body);
+}
+
+/** True when this text should get the 911 help reply, in any conversation state. */
+export function isMedicalEmergency(raw: string): boolean {
+  const text = medicalText(raw);
+  if (!text) return false;
+  if (/\bbleeding\b/.test(text) || /\bambulance\b/.test(text)) return true;
+  if (mentions911(text)) return true;
+  return injuryWithPersonOrHelp(text);
+}
+
+/**
  * Deterministic interpretation: menu numbers, YES/NO, messaging keywords and
  * the common ways people say "I'm here", "I'm at 101", "I'm done". No model
  * call, no network. Anything it can't place confidently comes back UNKNOWN
@@ -64,6 +107,7 @@ const HELP: [RegExp, NonNullable<Extract<TourIntent, { type: "REQUEST_HELP" }>["
     /^(i |we )?(really )?(need|want) (some )?help\b|\bhelp (me|us|please)\b|\bcan (you|someone|somebody|anyone) help\b|\b(need|want) (assistance|a hand)\b|\bemergency\b|\bsomething is wrong\b|\b(have|having|got|there is) (a |an |some )?(problem|issue|trouble)\b|^sos$/,
     "GENERAL",
   ],
+  [/^(?:help)\b|\bhelp$/, "GENERAL"],
 ];
 
 const QUESTION_START =
@@ -535,6 +579,7 @@ function readByRules(ctx: InterpretContext): IntentInterpretation {
   if (keyword === "help") return result({ type: "REQUEST_HELP", problem: "GENERAL" }, 1);
   if (isPlainLanguageStop(raw)) return result({ type: "STOP_MESSAGES" }, 0.95);
   if (MANIPULATION.test(t)) return unknown({ manipulation: true, clarificationNeeded: true });
+  if (isMedicalEmergency(raw)) return result({ type: "REQUEST_HELP", problem: "GENERAL" }, 0.95);
 
   if (ctx.awaiting?.kind === "confirm-cancel-tour") {
     // "yes cancel, family emergency": cancel is a negation, and emergency is a help word.

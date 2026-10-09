@@ -29,7 +29,7 @@ import { toursUnavailableText, visitorTeamName } from "../sms/templates";
 import { SetupInputError } from "../setup/setupActions";
 import type { ConversationItem, TourRecord } from "../setup/workspace";
 import type { ExportBundle } from "../export/exportBundle";
-import { isPlainLanguageStop, type Awaiting, type IntentInterpretation } from "../intent";
+import { isMedicalEmergency, isPlainLanguageStop, type Awaiting, type IntentInterpretation } from "../intent";
 import { smsHelpBody, smsStopAck, type SmsCampaignConsent, type SmsConsentStatus } from "./smsConsent";
 import type { VerificationLinks } from "./verificationLinks";
 import { afterCloseAlertOpen } from "./overstayScheduler";
@@ -606,6 +606,19 @@ export class VisitorDemoSession {
    * numbers — get the carrier HELP keyword reply.
    */
   async help(said: Said): Promise<void> {
+    const text = said.text ?? "HELP";
+    if (isMedicalEmergency(text)) {
+      const reservation = await this.reservation();
+      if (reservation) {
+        this.say("visitor", text);
+        await this.core.requestHelp(reservation.id, await this.currentPlace(), { text, meta: said.meta });
+      } else {
+        await this.recordText(said);
+        await this.core.requestHelp(undefined, undefined, { text, meta: said.meta, phone: this.visitor?.phone ?? "" });
+      }
+      await this.syncReplies();
+      return;
+    }
     const reservation = await this.reservation();
     if (reservation && isLiveHelpReservation(reservation, this.clock.now())) {
       this.say("visitor", said.text ?? "HELP");

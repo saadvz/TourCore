@@ -26,6 +26,7 @@ import { isRunningReservation, TERMINAL } from "../domain/stateMachine";
 import { stripFiller } from "../intent/normalize";
 import {
   isCancelTourAsk,
+  isMedicalEmergency,
   isUnbookedCancelAsk,
   isConfident,
   keywordOf,
@@ -543,6 +544,7 @@ export async function handleVisitorText(
 
   if (intent.type === "STOP_MESSAGES" && turn.confident) await session.optOut(said);
   else if (intent.type === "START_MESSAGES" && turn.confident) await session.optIn(said);
+  else if (isMedicalEmergency(text)) await session.help(said);
   else if (await handleOverstayReply(turn)) {
     /* T-15 / T-5 / more-time / DONE / after-close / rebook after no-time */
   } else if (await handlePostTourDistress(turn)) {
@@ -629,6 +631,10 @@ async function handleSmsGate(session: VisitorDemoSession, said: Said, text: stri
     return;
   }
   if (keyword === "help") {
+    await session.help(said);
+    return;
+  }
+  if (isMedicalEmergency(text)) {
     await session.help(said);
     return;
   }
