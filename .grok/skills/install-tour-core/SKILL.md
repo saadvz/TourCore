@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Connect to Tour Core and guide onboarding, in Tour Core's order
-  version: "0.7.1"
+  version: "0.7.2"
 ---
 
 # Install Tour Core
@@ -324,6 +324,8 @@ question:
   `CONNECT_OPERATOR_ALERTS`: pick up at step 2.
 - **No.** Call `get_state` and continue. They
   can turn updates on any time later.
+
+If `get_state` says a tour update didn't reach them, say "A tour update didn't reach you. Check your inbox for anything new. I'm sending a test so the next ones get through." and send the test that step names. Do not ask the first-time question, do not create a routine, and do not ask for a new address or key. After that test gets through, the ready line is back. If the test does not get through, follow the step that asks for the connection again.
 
 To see or change what they get later, use `get_state` and `save_settings`. Missed tours (no-shows) aren't detected yet;
 don't promise them.

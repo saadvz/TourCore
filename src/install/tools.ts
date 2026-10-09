@@ -153,7 +153,7 @@ export const INSTALLATION_TOOLS: OperatorTool[] = [
     title: "Check Tour Core's health",
     kind: "read",
     description:
-      "Whether Tour Core is running and healthy: version, uptime, deployment mode, whether running tours can be saved, alerts waiting to be delivered, storagePath, persistentVolume, and volumeMount. persistentVolume true means TOURCORE_HOME is on a mounted volume. On the hosted product, persistentVolume false means records sit on disposable disk and will be wiped on the next deploy: tell the operator a volume must be attached so records last. Never set or recommend TOURCORE_ALLOW_EPHEMERAL_STORAGE on a live service; that switch is only for disposable demos.",
+      "Whether Tour Core is running and healthy: version, uptime, deployment mode, whether running tours can be saved, alerts waiting to be delivered, storagePath, persistentVolume, and volumeMount. alertDelivery is the same missed-update count installation status uses (pending, retrying, failed, delivered), counting only misses since the last successful delivery or successful test. persistentVolume true means TOURCORE_HOME is on a mounted volume. On the hosted product, persistentVolume false means records sit on disposable disk and will be wiped on the next deploy: tell the operator a volume must be attached so records last. Never set or recommend TOURCORE_ALLOW_EPHEMERAL_STORAGE on a live service; that switch is only for disposable demos.",
     input: z.strictObject({}),
     run: async (ctx) => {
       const h = runtimeHealth(installation(ctx));

@@ -29,6 +29,19 @@ function when(start: Date, now: Date, tz: string): string {
   return `${label} at ${formatTime(start, tz)}`;
 }
 
+/** A sentence end, including one that sits just inside a closing quote. */
+const SENTENCE_END = /[.!?]["']?$/;
+
+/** Join an alert summary and the tour status. A finished sentence is not glued on, and a period is never doubled. */
+export function joinAlertDetail(summary: string, tourStatus: string): string {
+  const left = summary.trim();
+  const right = tourStatus.trim();
+  if (!right) return left;
+  if (!left) return SENTENCE_END.test(right) ? right : `${right}.`;
+  const body = SENTENCE_END.test(left) ? `${left} ${right}` : `${left}. ${right}`;
+  return SENTENCE_END.test(body) ? body : `${body}.`;
+}
+
 export async function describeOperatorUpdate(services: OperatorServices, event: OperatorEvent, now: Date) {
   if (event.eventType === "installation.test") {
     return { eventType: event.eventType, summary: "Tour updates are connected. I'll let you know about your tours here." };
@@ -41,7 +54,7 @@ export async function describeOperatorUpdate(services: OperatorServices, event: 
     return {
       eventType: event.eventType,
       stillOpen: x.status === "open",
-      summary: `${who}${x.unitName ? `, ${x.unitName}` : ""}: ${[x.summary.replace(/\.+$/, ""), x.tourStatus.replace(/\.+$/, "")].filter(Boolean).join(" ")}.`,
+      summary: `${who}${x.unitName ? `, ${x.unitName}` : ""}: ${joinAlertDetail(x.summary, x.tourStatus)}`,
       issue: { exceptionId: x.exceptionId, what: x.title, question: x.question, tourStatus: x.tourStatus, nextSteps: x.nextSteps, tourRef: x.tourRef },
       instructions:
         x.kind === "unanswered-question"

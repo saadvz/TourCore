@@ -128,6 +128,11 @@ export const SHARED_STEPS = {
     done: "They said yes and a test note arrived, or they said no and that is saved.",
     ifItFails: `Tell them the updates didn't connect, and that you'll try the private link again. You help. They can also skip updates. ${SETUP_HELP_ENDING}`,
   },
+  "alerts-degraded": {
+    ask: "A tour update didn't reach you. Check your inbox for anything new. I'm sending a test so the next ones get through.",
+    done: "A test update got through, and tour updates are working again.",
+    ifItFails: `Tell them the test didn't get through. You help. ${SETUP_HELP_ENDING}`,
+  },
   readiness: {
     ask: "I'm checking that a tour can run. Nobody is texted, and no real door opens.",
     done: "The check passed.",
@@ -181,6 +186,7 @@ export const STEP_TITLES: Record<StepId, string> = {
   hours: "Hours",
   "hours-help": "Hours",
   alerts: "Tour updates",
+  "alerts-degraded": "Tour updates",
   readiness: "Practice tour",
   practice: "Practice tour",
   publish: "Publish",

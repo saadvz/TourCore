@@ -1,4 +1,5 @@
 import type { RuntimeStore } from "../storage/runtimeStore";
+import { alertDeliveryHealth, type AlertDeliveryHealth } from "./alertHealth";
 import { DeliveryError, type OperatorEvent, type OperatorNotificationSink } from "./operatorEvents";
 
 /**
@@ -137,21 +138,9 @@ export class OperatorEventOutbox {
     return Math.min(base * 2 ** Math.max(0, attempts - 1), this.options.maxDelayMs ?? 15 * 60_000);
   }
 
-  /** For installation status. No payload details beyond counts and the last plain error. */
-  health(): { pending: number; retrying: number; failed: number; delivered: number; lastError?: string; lastDeliveredAt?: string } {
-    const all = this.records();
-    const delivered = all.filter((r) => r.status === "delivered");
-    const retrying = all.filter((r) => r.status === "pending" && r.attempts > 0);
-    const latestProblem = [...all].filter((r) => r.lastError && r.status !== "delivered").sort((a, b) => (b.lastAttemptAt ?? "").localeCompare(a.lastAttemptAt ?? ""))[0];
-    const lastDelivered = delivered.map((r) => r.deliveredAt!).sort().at(-1);
-    return {
-      pending: all.filter((r) => r.status === "pending").length,
-      retrying: retrying.length,
-      failed: all.filter((r) => r.status === "failed").length,
-      delivered: delivered.length,
-      ...(latestProblem?.lastError ? { lastError: latestProblem.lastError } : {}),
-      ...(lastDelivered ? { lastDeliveredAt: lastDelivered } : {}),
-    };
+  /** Same window as installation status. Pass a successful test time to ignore misses from before it. */
+  health(successfulTestAt?: string): AlertDeliveryHealth {
+    return alertDeliveryHealth(this.records(), successfulTestAt);
   }
 }
 

@@ -28,6 +28,9 @@ function profileStep(selection: PlaybookSelection, step: StepId): string | undef
     if (selection.id === "chatgpt") return CHATGPT_KEYS;
     return BASELINE_KEYS;
   }
+  if (step === "alerts-degraded") {
+    return "For you, not out loud: send the test this step names. Do not set up tour updates again. Do not create a routine. Do not ask for an address or a key. Do not ask whether they want tour updates.";
+  }
   if (step === "backups" && selection.id === "grok") return selection.mode === "full" ? GROK_BACKUPS_FULL : GROK_BACKUPS_TOOLS;
   if (step === "alerts" && selection.id === "grok") return GROK_ALERTS;
   return undefined;
@@ -74,9 +77,9 @@ export function renderPlaybook(client: ReportedClient | undefined, step: StepId,
     SHARED_VOICE,
     SHARED_IRREVERSIBLE,
     profileIntro(selection),
-    `${STEP_TITLES[step]}. Ask one thing.`,
+    step === "alerts-degraded" ? `${STEP_TITLES[step]}.` : `${STEP_TITLES[step]}. Ask one thing.`,
     step === "another" ? SHARED_AFTER_PUBLISH : undefined,
-    ask ? `Ask only this: ${ask}` : undefined,
+    ask ? (step === "alerts-degraded" ? `Say only this: ${ask}` : `Ask only this: ${ask}`) : undefined,
     stepAside(step),
     milestoneHint(step),
     `Done looks like: ${copy.done}`,

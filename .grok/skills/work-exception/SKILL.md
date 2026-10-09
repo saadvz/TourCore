@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Tour updates, exception queue, monitoring, holds and approved answers
-  version: "0.3.23"
+  version: "0.3.24"
 ---
 
 # Work Exception
@@ -67,6 +67,7 @@ Tour Core sends only an `eventId` and an event type; never names or details.
    > New tour booked: Testy is scheduled to tour Unit 1A today at 3:00 PM.
    > Testy's Unit 1A tour has started.
    > Testy's Unit 1A tour is complete.
+   When the summary already ends with `.`, `?`, or `!`, the tour status follows after a space (`There's no approved answer yet. Choosing a time.`). A summary with no ending punctuation gets `. ` before the tour status. Never add a second period.
 3. For an issue, if `stillOpen` is false (someone already handled it), stop
    quietly. For an unanswered question, ask for the answer itself ("What
    should I tell them?"), not a yes/no, then continue with **Resolve** below

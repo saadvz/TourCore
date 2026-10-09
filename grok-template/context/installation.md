@@ -65,7 +65,7 @@ chosen but the routine isn't connected, the next step is
 CONNECT_OPERATOR_ALERTS.
 
 States: READY, ACTION_REQUIRED, CONFIGURING, NOT_CONFIGURED, DEGRADED, ERROR.
-Only READY means done.
+Only READY means done. DEGRADED counts a missed tour update only since the last one that got through, or since a test that got through. The next step says "A tour update didn't reach you. Check your inbox for anything new. I'm sending a test so the next ones get through." Send the test that step names. Do not offer first-time setup, do not create a routine, and do not ask for a new address or key. A test that gets through returns to "I'll keep you posted on" what they chose. A test that does not get through is ERROR: "Tour updates aren't reaching you." and the connection is asked for again. Landlord status and the installation status use that same count.
 
 ## Credentials
 
