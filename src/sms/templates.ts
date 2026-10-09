@@ -245,7 +245,7 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "t5-bare-yes", text: "Sounds good. Text DONE once you're outside." },
   { id: "extension-granted", text: "You've got 10 more minutes. Your tour now ends at {end}, and your doors will keep opening for you until then." },
   { id: "extension-granted-no-clock", text: "You've got 10 more minutes. Your doors will keep opening for you until then." },
-  { id: "extension-unavailable", text: "Sorry, I can't add more time to this tour. It still ends at {end}. Want to come back for another look? Reply here and I'll find you another time." },
+  { id: "extension-unavailable", text: "Sorry, I can't add more time to this tour. It still ends at {end}. If you'd like another look, the {team} can set that up for you." },
   { id: "extension-unavailable-no-clock", text: "Sorry, I can't add more time to this tour. If you'd like another look, the {team} can set that up for you." },
   { id: "extension-used", text: "You've already used your extra 10 minutes{still?}." },
   { id: "extension-after-end", text: "Your tour time has ended, so I can't add more time now. Please head out the way you came in and text DONE once you're outside." },

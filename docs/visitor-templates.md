@@ -1141,7 +1141,7 @@ You've got 10 more minutes. Your doors will keep opening for you until then.
 ### extension-unavailable
 
 ```
-Sorry, I can't add more time to this tour. It still ends at {end}. Want to come back for another look? Reply here and I'll find you another time.
+Sorry, I can't add more time to this tour. It still ends at {end}. If you'd like another look, the {team} can set that up for you.
 ```
 
 ### extension-unavailable-no-clock

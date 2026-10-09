@@ -55,8 +55,10 @@ export function extensionGranted(newEnd?: string): string {
 }
 
 export function extensionUnavailable(end?: string, team?: string): string {
-  if (!end) return `Sorry, I can't add more time to this tour. If you'd like another look, the ${visitorTeamName(team)} can set that up for you.`;
-  return `Sorry, I can't add more time to this tour. It still ends at ${end}. Want to come back for another look? Reply here and I'll find you another time.`;
+  const who = visitorTeamName(team);
+  const another = `If you'd like another look, the ${who} can set that up for you.`;
+  if (!end) return `Sorry, I can't add more time to this tour. ${another}`;
+  return `Sorry, I can't add more time to this tour. It still ends at ${end}. ${another}`;
 }
 
 export function extensionAlreadyUsed(end?: string): string {

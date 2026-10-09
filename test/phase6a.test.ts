@@ -430,7 +430,13 @@ describe("no-clock extension refusal", () => {
       "Sorry, I can't add more time to this tour. If you'd like another look, the property team can set that up for you.",
     );
     expect(extensionUnavailable("2:45 PM", "property team")).toBe(
-      "Sorry, I can't add more time to this tour. It still ends at 2:45 PM. Want to come back for another look? Reply here and I'll find you another time.",
+      "Sorry, I can't add more time to this tour. It still ends at 2:45 PM. If you'd like another look, the property team can set that up for you.",
+    );
+    expect(extensionUnavailable("2:45 PM", "leasing team")).toBe(
+      "Sorry, I can't add more time to this tour. It still ends at 2:45 PM. If you'd like another look, the leasing team can set that up for you.",
+    );
+    expect(extensionUnavailable("2:45 PM", "Alfred Homes")).toBe(
+      "Sorry, I can't add more time to this tour. It still ends at 2:45 PM. If you'd like another look, the property team can set that up for you.",
     );
   });
 });
