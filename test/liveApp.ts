@@ -56,6 +56,7 @@ export async function liveApp(
   if (fresh) {
     const { config } = ws.save(options.config ?? hillsideConfig());
     ws.recordReadiness(config.property.id, await runReadinessCheck(config, { now: new Date(clock.t) }));
+    publishForVisitors(ws, config.property.id, new Date(clock.t));
   }
   const runtime = new FileRuntimeStore(join(root, "runtime"));
   const installation = new Installation({ root, runtime, secrets: new LocalSecretStore(join(root, "install", "secrets.json"), () => clock.t), now: () => clock.t, fetch: net.fetch as never, outbox: { baseDelayMs: 1000 } });
@@ -138,3 +139,8 @@ export async function liveApp(
   return { root, clock, net, fake, installation, server, visitors, text, textFrom, optInSms, grok, approve, fillForm, book, routineEvents, outbox, close, ws };
 }
 export type LiveApp = Awaited<ReturnType<typeof liveApp>>;
+
+/** A readiness-passed property can take new visitor texts only after it is published. No practice-tour folder. */
+export function publishForVisitors(ws: PropertyWorkspace, propertyId: string, at: Date): void {
+  ws.patchState(propertyId, { status: "PUBLISHED_FOR_DEMO", publishedAt: at.toISOString() });
+}

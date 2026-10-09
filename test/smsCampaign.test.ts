@@ -9,6 +9,7 @@ import { setSendblueRuntime } from "../src/messaging/sendblue/runtime";
 import { PropertyWorkspace, runReadinessCheck } from "../src/setup";
 import { createSetupServer } from "../src/web/server";
 import { fakeSendblue, inbound, PUBLIC, SECRET, sendblueEnv } from "./fakeSendblue";
+import { publishForVisitors } from "./liveApp";
 
 const at = (hour: number, minute = 0) => zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour, minute }, "America/New_York").getTime();
 const PHONE = "+15550102000";
@@ -35,6 +36,7 @@ async function startPhoneApp(root?: string, operator: { visitorContact?: string 
       operator: { ...base.operator, ...operator, ...(operator.visitorContact ? { visitorHelpDecided: true } : {}) },
     });
     ws.recordReadiness(config.property.id, await runReadinessCheck(config, { now: new Date(clock) }));
+    publishForVisitors(ws, config.property.id, new Date(clock));
   }
   const server: Server = createSetupServer({
     toolSurface: "all", workspace: ws, now: () => new Date(clock), realNow: () => clock, log: () => {} });

@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Guided property setup, checked and practiced before publish
-  version: "0.3.14"
+  version: "0.3.15"
 ---
 
 # Setup Property
@@ -65,14 +65,16 @@ one of these:
 1. `get_state`. Its `properties` list is the places already on file. If the
    address already exists, say so and continue with that property.
 
-2. Texting is automatic: when this Tour Core has visitor texting installed,
-    a new property uses it on its own. One touring number covers every property.
-    Don't ask "How do you want to text people?" and don't ask for a separate
-    number per property. When `get_state` names `set_up_texting`, call
-    `set_up_texting`. If texting is installed and this property is still on
-    practice texts, `set_up_texting` with `provider: sendblue` and that property
-    yourself. `set_up_texting` sets the provider and checks it. It does not
-    ask the operator for a login in chat.
+2. Texting is an install-wide choice, set once with `set_up_texting`. On a fresh
+    install, `get_state` asks **"How should people text you about a tour?"** Ask
+    that question and call `set_up_texting` with the provider they choose. One
+    touring number covers every property. Don't ask for a separate number per
+    property. Once texting is installed, a later property uses it automatically
+    and is not asked again. When `get_state` names `set_up_texting` after that,
+    call `set_up_texting` without asking the question again. If texting is
+    installed and this property is still on practice texts, `set_up_texting`
+    with `provider: sendblue` and that property yourself. `set_up_texting` sets
+    the provider and checks it. It does not ask the operator for a login in chat.
     `provider: local` puts this building on local test texts without drafting other published buildings.
     For local, say "Visitor texting: test mode" and
     "Texting is in test mode, so texts
@@ -133,7 +135,8 @@ one of these:
      only the unit door?"** `get_state` names `save_property` for that question.
      Save `buildingAccess` `BUILDING_AND_UNIT` or
      `UNIT_ONLY` with `save_property`. If they control the building
-     entrance, ask **"What's the building entrance called?"** and
+     entrance, ask **"What's the building entrance called?"** `get_state` names
+     `save_doors_and_routes` for that question. Call
      `save_doors_and_routes` with that door `kind: entrance` — Tour Core sets the route as building entrance + unit
      door. If they only control the unit door, the route is that door alone
      (no building door on the route or in arrival text). The nickname is the street
@@ -182,8 +185,8 @@ one of these:
    Corrections go through `save_units` too. These details are approved
    facts: visitors' questions ("How many bedrooms?", "How much is it?", "When
    is it available?") are answered from them first, at any point in their
-   conversation. An apartment or condo still asks building-door control and the entrance
-   name before the route counts as done (`save_property`). Entry instructions
+   conversation. An apartment or condo still asks building-door control (`save_property`) and the entrance
+   name (`save_doors_and_routes`) before the route counts as done. Entry instructions
    come after the profile. Ask the optional
    **"How should visitors get in and find your unit?"** Save their words as
    `entryInstructions` on `save_property`, or `skipEntryInstructions: true` if they skip.

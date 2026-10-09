@@ -652,9 +652,9 @@ On the ops connector, `disconnect_google_drive_storage` and `takeover_storage_wr
   Core's own confirmation codes. `TOURCORE_MCP_AUTH_MODE=static` swaps in a single bearer token for development
   (never both).
 - **Operator updates** (`src/alerts/`): see "Operator updates" below.
-- **Skills and template**: Install Tour Core plus the six operator skills (Setup Property, Map Route, Run
-  Readiness Check, Simulate Tour, Work Exception, Export Audit) are in [`.grok/skills/`](.grok/skills/); the Bot
-  profile, context, routine, safe examples and integration notes are in [`grok-template/`](grok-template/). Setup, team-only publishing and install:
+- **Skills and template**: Install Tour Core, Setup Property, Map Route, Run
+  Readiness Check, Work Exception, Export Audit, and Backup Tour Core ship in the landlord template. Simulate Tour stays in [`.grok/skills/`](.grok/skills/) for the QA connector and is not packed into [`grok-template/`](grok-template/). The Bot
+  profile, context, routine, safe examples and integration notes are in that template. Setup, team-only publishing and install:
   [`docs/grok-template-setup.md`](docs/grok-template-setup.md). Manual test with a real Bot:
   [`docs/grok-manual-test.md`](docs/grok-manual-test.md).
 
@@ -685,12 +685,13 @@ Right after the address, Grok asks "What type of property is this?" (single-fami
 or small building you own; apartment or condo — one unit). Whole-building apartment ownership is out of scope.
 The next questions follow the type: a single-family home is one space, "Main Home" by default, with its front
 door as the route and no unit menu for visitors. An apartment or condo asks for the unit number, then whether
-the landlord controls the building entrance or only the unit door. Control-both routes go through the building
+the landlord controls the building entrance or only the unit door. `get_state` names `save_property` for that
+building-access question and `save_doors_and_routes` for "What's the building entrance called?" Control-both routes go through the building
 entrance and the unit door; unit-only routes are the unit door alone, and lobby wayfinding is optional landlord
 copy. Visitors hear the street address plus unit (for example `145 Main St, Unit 4B`); a single-family home is the street line. Mid-tour they are told `at Unit 4B` (the unit label), never the street-plus-unit nickname; a single-family home uses the door name (`the front door`), never "Main Home". A paused unit says `Unit 4B isn't open for tours right now` so it matches the unit picker; a single-family home uses the street line. Landlord alerts and operator replies use street line / street-plus-unit, never "Main Home". Entry
 instructions, when set, go out only once — on the you're-all-set text after identity verification. Skip stores
-nothing. A new property uses the installation's visitor texting automatically, so Grok never asks how to text
-people. The review reads back the address, type, each unit with its details and route, tours, verification,
+nothing. Texting is an install-wide first milestone, set with `set_up_texting`. On a fresh install, `get_state` asks "How should people text you about a tour?" Once texting is installed, a later property uses it automatically and is not asked again.
+The review reads back the address, type, each unit with its details and route, tours, verification,
 "Visitor texting: Connected" (or "Visitor texting: test mode" for local or
 test-mode texting) and "Door access: Demo". A single-family home's
 unit heading is the street line (for example `910 QA Gate Rd`), never "Main Home".
@@ -721,6 +722,8 @@ Publishing sets the property's status to `PUBLISHED_FOR_DEMO`. That is **not** a
 1. the saved setup is valid,
 2. the readiness check passed for this exact setup,
 3. a practice tour passed for this exact setup.
+
+A property that is not published for demo, including one sent back to draft, does not take a new visitor text. The reply is the property-not-ready line: "Thanks for reaching out to {name}. Self-guided tours by text aren't available right now. Please contact the {team}." A tour that was already booked keeps going, including door opens during that tour. A finished session that would start a new booking is a new visitor and is refused.
 
 Changes afterward come in two kinds, decided in one place (`src/config/changeKinds.ts`):
 

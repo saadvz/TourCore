@@ -32,7 +32,7 @@ import { OverstayScheduler } from "../src/visitor/overstayScheduler";
 import { VisitorDemoRegistry, VisitorDemoSession } from "../src/visitor/session";
 import { VerificationLinks } from "../src/visitor/verificationLinks";
 import { at, grokHarness } from "./grokHarness";
-import { liveApp, PHONE as LIVE_PHONE } from "./liveApp";
+import { liveApp, PHONE as LIVE_PHONE, publishForVisitors } from "./liveApp";
 
 const TZ = "America/New_York";
 const PHONE = "+15550102000";
@@ -995,6 +995,7 @@ async function smsStuckTour(options: { held: boolean }) {
   const ws = new PropertyWorkspace(root);
   const { config } = ws.save(loadConfig());
   ws.recordReadiness(config.property.id, await runReadinessCheck(config, { now: new Date(clock.t) }));
+  publishForVisitors(ws, config.property.id, new Date(clock.t));
   const runtime = new MemoryRuntimeStore();
   const endpoints = new MessagingEndpoints(runtime);
   endpoints.attach({ address: LINE, provider: "demo", propertyId: PROPERTY });

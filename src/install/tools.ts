@@ -48,8 +48,8 @@ export function secureSetupLink(inst: Installation, localUrl: string | undefined
     url: `${base}/install#${fragment}`,
     expiresInMinutes: minutes,
     instructions: hosted
-      ? "Open url over https. Prefer Grok's secure secret input and fill the form yourself. Do not show the link, do not ask for the values in chat, and do not pass them as tool arguments. The link expires and can only be used a few times. Hand the browser to the operator only if secure fill isn't available for a field. When they're saved, call get_next_installation_step."
-      : "Open url yourself in your cloud browser (it only works on the Tour Core computer). Prefer Grok's secure secret input and fill the form yourself. Do not show the link, do not ask for the values in chat, and do not pass them as tool arguments. Use a provider login when that provider has one. Hand the browser to the operator only if secure fill isn't available for a field. When they're saved, call get_next_installation_step.",
+      ? "Open url over https. Prefer Grok's secure secret input and fill the form yourself. Do not show the link, do not ask for the values in chat, and do not pass them as tool arguments. The link expires and can only be used a few times. Hand the browser to the operator only if secure fill isn't available for a field. When they're saved, call get_state."
+      : "Open url yourself in your cloud browser (it only works on the Tour Core computer). Prefer Grok's secure secret input and fill the form yourself. Do not show the link, do not ask for the values in chat, and do not pass them as tool arguments. Use a provider login when that provider has one. Hand the browser to the operator only if secure fill isn't available for a field. When they're saved, call get_state.",
   };
 }
 

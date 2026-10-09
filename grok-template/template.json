@@ -22,7 +22,6 @@
     "../.grok/skills/setup-property/SKILL.md",
     "../.grok/skills/map-route/SKILL.md",
     "../.grok/skills/run-readiness-check/SKILL.md",
-    "../.grok/skills/simulate-tour/SKILL.md",
     "../.grok/skills/work-exception/SKILL.md",
     "../.grok/skills/export-audit/SKILL.md",
     "../.grok/skills/backup-tour-core/SKILL.md"
@@ -55,7 +54,7 @@
     }
   ],
   "marketplace": {
-    "ships": ["Bot instructions and profile", "the eight Tour Core skills", "the Tour Core Operator Updates routine definition", "integration references for the Tour Core tools"],
+    "ships": ["Bot instructions and profile", "the seven Tour Core skills", "the Tour Core Operator Updates routine definition", "integration references for the Tour Core tools"],
     "neverShips": ["installation webhook secrets", "Sendblue secrets", "Tour Core OAuth tokens", "Google OAuth tokens", "a Google account", "a Tour Core Drive folder id", "live property data"],
     "activation": "A new user connects to the hosted Tour Core service named by hostedTourCoreUrl, approves the connection, and authorizes tour updates once. They do not create a Railway project. The open-source path remains for operators who run their own copy."
   },

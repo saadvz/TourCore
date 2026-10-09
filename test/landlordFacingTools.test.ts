@@ -5,25 +5,32 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { publicHealth } from "../src/install/checks";
+import { secureSetupLink } from "../src/install/tools";
 import { HOSTED_ADMIN_TOOLS } from "../src/install/hostedAdminTools";
 import { Installation } from "../src/install/installation";
 import { HOSTED_OWNER_TOOL, LANDLORD_CORE_TOOLS, OPS_TOOL_NAMES, QA_TOOL_NAMES } from "../src/mcp/scopes";
-import { OPERATOR_TOOLS, OPERATOR_TOOL_NAMES } from "../src/operator/tools";
+import { ConfirmationBook } from "../src/operator/confirmations";
+import { callOperatorTool, OPERATOR_TOOLS, OPERATOR_TOOL_NAMES, type ToolContext } from "../src/operator/tools";
 import { renderPlaybook } from "../src/playbooks/compose";
 import { MCP_INSTRUCTIONS } from "../src/playbooks/instructions";
 import { milestoneToolFor } from "../src/playbooks/milestoneTool";
 import { SHARED_STEPS, type StepId } from "../src/playbooks/shared";
 import { PropertyWorkspace } from "../src/setup";
+import { BUILDING_ACCESS_QUESTION, BUILDING_ENTRANCE_QUESTION, ENTRY_INSTRUCTIONS_QUESTION } from "../src/setup/setupActions";
+import { VisitorDemoRegistry } from "../src/visitor";
 import { FileRuntimeStore } from "../src/storage/runtimeStore";
 import { createSetupServer } from "../src/web/server";
 
 /**
  * Landlord-facing instructions may name only the 21 landlord tools, plus
- * reset_hosted_demo. A whole file marked qa-skill, a <!-- connector: qa -->
- * or <!-- connector: ops --> region, an ## QA connector or ## Ops connector
- * section, or a line that says "QA connector" or "ops connector" may name
- * the other connectors' tools. No file, including those sections, may name
- * a Tour Core tool that is not on the landlord, QA, or ops connector.
+ * reset_hosted_demo. A file is blanked only when <!-- connector: qa-skill -->
+ * is the first line or sits inside the opening frontmatter. A
+ * <!-- connector: qa --> or <!-- connector: ops --> region, and an
+ * ## QA connector or ## Ops connector section, may name that connector's
+ * tools. A line that says "QA connector" or "ops connector" drops only that
+ * connector's tool names. No file, including those sections, may name a
+ * Tour Core tool that is not on the landlord, QA, or ops connector.
+ * grok-template is scanned except SETUP_PROMPT.md.
  */
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -34,7 +41,7 @@ const REMOVED = [...new Set(OPERATOR_TOOL_NAMES)].filter((name) => !ON_A_CONNECT
 const FOREIGN_RE = new RegExp(`\\b(${FOREIGN.join("|")})\\b`, "g");
 const REMOVED_RE = new RegExp(`\\b(${REMOVED.join("|")})\\b`, "g");
 
-const DOC_ROOTS = [".grok/skills", "grok-template", "GROK_BOOTSTRAP.md", "README.md"];
+const DOC_ROOTS = [".grok/skills", "grok-template", "GROK_BOOTSTRAP.md", "README.md", "docs/grok-template-setup.md"];
 
 function filesUnder(rel: string): string[] {
   const abs = join(ROOT, rel);
@@ -46,9 +53,23 @@ function filesUnder(rel: string): string[] {
   });
 }
 
+/** A qa-skill marker blanks the file only as the first line or inside the opening frontmatter. */
+function qaSkillExemptsFile(text: string): boolean {
+  const marker = "<!-- connector: qa-skill -->";
+  if ((text.split("\n", 1)[0] ?? "").includes(marker)) return true;
+  const frontmatter = /^---\n([\s\S]*?)\n---/.exec(text.replace(/\r\n/g, "\n"));
+  return !!frontmatter && frontmatter[1]!.includes(marker);
+}
+
+function withoutNames(line: string, names: readonly string[]): string {
+  let out = line;
+  for (const name of [...names].sort((a, b) => b.length - a.length)) out = out.replaceAll(name, "");
+  return out;
+}
+
 /** Landlord-facing prose. QA and ops sections are removed before the scan. */
 export function landlordFacingText(text: string): string {
-  if (text.includes("<!-- connector: qa-skill -->")) return "";
+  if (qaSkillExemptsFile(text)) return "";
   const stripped = text.replace(/<!-- connector: (?:qa|ops) -->[\s\S]*?<!-- \/connector -->/g, "");
   const kept: string[] = [];
   let skipSection = false;
@@ -60,8 +81,10 @@ export function landlordFacingText(text: string): string {
       continue;
     }
     if (skipSection) continue;
-    if (/QA connector|ops connector/.test(line)) continue;
-    kept.push(line);
+    let visible = line;
+    if (/QA connector/.test(line)) visible = withoutNames(visible, QA_TOOL_NAMES);
+    if (/ops connector/.test(line)) visible = withoutNames(visible, OPS_TOOL_NAMES);
+    kept.push(visible);
   }
   return kept.join("\n");
 }
@@ -84,6 +107,22 @@ describe("landlord-facing tool names", () => {
     expect(foreignTools("Call list_properties, then create_property_setup.")).toEqual(["list_properties", "create_property_setup"]);
     expect(foreignTools(landlordFacingText("<!-- connector: qa -->\nCall list_properties.\n<!-- /connector -->\nCall get_state."))).toEqual([]);
     expect(foreignTools(landlordFacingText("On the QA connector, call inject_local_sms."))).toEqual([]);
+    expect(foreignTools(landlordFacingText("On the ops connector, call check_runtime_health."))).toEqual([]);
+    expect(landlordFacingText("---\nname: x\n<!-- connector: qa-skill -->\n---\nCall list_properties.")).toBe("");
+    expect(landlordFacingText("<!-- connector: qa-skill -->\nCall list_properties.")).toBe("");
+  });
+
+  it("still names a foreign tool when the qa-skill marker is not the first line or frontmatter, and on a connector line that names another tool", () => {
+    expect(foreignTools(landlordFacingText("See the note.\n<!-- connector: qa-skill -->\nCall list_properties."))).toEqual(["list_properties"]);
+    expect(foreignTools(landlordFacingText("On the QA connector, call list_properties."))).toEqual(["list_properties"]);
+    expect(foreignTools(landlordFacingText("On the ops connector, call create_property_setup."))).toEqual(["create_property_setup"]);
+  });
+
+  it("scans grok-template except SETUP_PROMPT.md, and the template setup doc", () => {
+    const files = DOC_ROOTS.flatMap(filesUnder);
+    expect(files).toContain("docs/grok-template-setup.md");
+    expect(files).toContain("grok-template/bot-profile.md");
+    expect(files.some((file) => file.endsWith("SETUP_PROMPT.md"))).toBe(false);
   });
 
   it("keeps skills, the template, the bootstrap, and the README on landlord tools outside QA and ops sections", () => {
@@ -161,6 +200,37 @@ async function post(port: number, body: unknown) {
   if (json.error) throw new Error(json.error.message);
   if (json.result?.isError) throw new Error(json.result.content?.[0]?.text ?? "tool error");
   return json.result?.structuredContent ?? {};
+}
+
+async function hostedWalkPort(): Promise<number> {
+  const root = mkdtempSync(join(tmpdir(), "tourcore-landlord-walk-"));
+  cleanups.push(() => rmSync(root, { recursive: true, force: true }));
+  const env: NodeJS.ProcessEnv = {
+    TOURCORE_DEPLOYMENT_MODE: "HOSTED_RAILWAY_P0",
+    RAILWAY_PUBLIC_DOMAIN: "demo.up.railway.app",
+    TOURCORE_MCP_AUTH_MODE: "static",
+    TOURCORE_OPERATOR_TOKEN: TOKEN,
+    PUBLIC_BASE_URL: HOST,
+  };
+  const runtime = new FileRuntimeStore(join(root, "runtime"));
+  let inst!: Installation;
+  const fetchImpl = async (url: string) => {
+    if (url.includes("/healthz")) return { status: 200, json: async () => publicHealth(inst) };
+    return { status: 200, json: async () => ({}) };
+  };
+  inst = new Installation({ root, runtime, env: () => env, fetch: fetchImpl as never, now: () => Date.parse("2026-10-09T15:00:00.000Z") });
+  inst.files.ensure({ deploymentMode: "HOSTED_RAILWAY_P0" });
+  inst.files.setPublicBaseUrl(HOST, "RAILWAY");
+  inst.files.recordCheck("publicEndpointCheck", { ok: true, at: "2026-10-09T15:00:00.000Z", message: "Tour Core is reachable at its public address.", url: HOST });
+  const server = createSetupServer({
+    workspace: new PropertyWorkspace(root),
+    installation: inst,
+    mcpAuth: "static",
+    operatorToken: () => TOKEN,
+    log: () => {},
+  });
+  cleanups.push(() => server.close());
+  return listen(server);
 }
 
 describe("hosted setup-property dry walk", () => {
@@ -286,4 +356,158 @@ describe("hosted setup-property dry walk", () => {
     expect(log.some((line) => line.startsWith("returned ")), log.join("\n")).toBe(false);
     expect(used.every((name) => (LANDLORD_CORE_TOOLS as readonly string[]).includes(name))).toBe(true);
   }, 120_000);
+
+  it("follows nextStep.tool on a fresh hosted condo through publish", async () => {
+    const port = await hostedWalkPort();
+    const used: string[] = [];
+    const log: string[] = [];
+    let propertyId: string | undefined;
+    let publishCode: string | undefined;
+    let published = false;
+    let entranceTool = "";
+
+    const call = async (name: string, args: Record<string, unknown> = {}) => {
+      expect(LANDLORD_CORE_TOOLS, name).toContain(name);
+      used.push(name);
+      const result = await post(port, { jsonrpc: "2.0", id: used.length, method: "tools/call", params: { name, arguments: args } });
+      for (const nameHit of foreignTools(JSON.stringify(result))) log.push(`returned ${nameHit} from ${name}`);
+      if (typeof result.propertyId === "string") propertyId = result.propertyId;
+      const confirmation = result.confirmation as { code?: string } | undefined;
+      if (name === "publish" && confirmation?.code) publishCode = confirmation.code;
+      if (result.published === true) published = true;
+      if (result.status === "blocked") throw new Error(`${name} blocked: ${String(result.message ?? result.reason)}\n${log.join("\n")}`);
+      return result;
+    };
+
+    const answer = (tool: string, say: string): { name: string; args: Record<string, unknown> } => {
+      const property = propertyId ? { property: propertyId } : {};
+      if (say === BUILDING_ENTRANCE_QUESTION) {
+        entranceTool = tool;
+        if (tool !== "save_doors_and_routes") throw new Error(`entrance question named ${tool}`);
+        return { name: tool, args: { ...property, doors: [{ name: "Lobby Door", kind: "entrance" }] } };
+      }
+      if (tool === "set_up_texting") return { name: tool, args: { provider: "local" } };
+      if (tool === "backup_records") return { name: tool, args: { action: "decline" } };
+      if (tool === "save_hours") return { name: tool, args: { ...property, days: "weekdays", start: "9am", end: "5pm" } };
+      if (tool === "save_settings") return { name: tool, args: { ...property, verification: "basic-form", skipAlerts: true } };
+      if (tool === "run_checks") return { name: tool, args: property };
+      if (tool === "publish") return { name: tool, args: { ...property, ...(publishCode ? { confirmationCode: publishCode } : {}) } };
+      if (tool === "save_units") {
+        if (/unit number|units called/i.test(say)) return { name: tool, args: { ...property, units: [{ name: "4B" }] } };
+        if (/bedroom|bathroom|rent|available/i.test(say)) {
+          return { name: tool, args: { ...property, details: "4B is 2 bed 1 bath for $2,200, available now." } };
+        }
+      }
+      if (tool === "save_property") {
+        if (/street address|property address/i.test(say)) {
+          return propertyId ? { name: tool, args: { ...property, street: "42 Cedar Lane" } } : { name: tool, args: { address: "42 Cedar Lane" } };
+        }
+        if (/what state/i.test(say)) return { name: tool, args: { ...property, state: "NJ" } };
+        if (/what city/i.test(say)) return { name: tool, args: { ...property, city: "Hackensack" } };
+        if (/zip/i.test(say)) return { name: tool, args: { ...property, postalCode: "07601" } };
+        if (/did i get that right/i.test(say)) return { name: tool, args: { ...property, confirmAddress: true } };
+        if (/single-family|apartment or condo/i.test(say)) return { name: tool, args: { ...property, propertyType: "APARTMENT_OR_CONDO" } };
+        if (say === BUILDING_ACCESS_QUESTION) return { name: tool, args: { ...property, buildingAccess: "BUILDING_AND_UNIT" } };
+        if (say === ENTRY_INSTRUCTIONS_QUESTION) return { name: tool, args: { ...property, skipEntryInstructions: true } };
+        if (/stuck visitors|touring hours/i.test(say)) return { name: tool, args: { ...property, skipVisitorHelp: true } };
+        if (/time zone|switch to/i.test(say)) return { name: tool, args: { ...property, timezone: "no" } };
+      }
+      throw new Error(`No landlord answer for ${tool}: ${say}`);
+    };
+
+    for (let step = 0; step < 40 && !published; step++) {
+      const state = await call("get_state");
+      const next = state.nextStep as { tool?: string; say?: string };
+      const tool = String(next.tool ?? "");
+      const say = String(next.say ?? "");
+      log.push(`${tool}: ${say}`);
+      expect(LANDLORD.has(tool), `${tool} from get_state`).toBe(true);
+      if (tool === "get_inbox" || tool === "get_state") break;
+      const turn = answer(tool, say);
+      log.push(`call ${turn.name} ${JSON.stringify(turn.args)}`);
+      const result = await call(turn.name, turn.args);
+      log.push(`-> ${String(result.status ?? "")} ${String(result.message ?? "")}`);
+      const repeated = log.filter((line) => line.startsWith(`${tool}: ${say}`)).length;
+      if (repeated > 2) throw new Error(`Stuck on ${tool}: ${say}\n${log.join("\n")}`);
+    }
+
+    expect(published, log.join("\n")).toBe(true);
+    expect(entranceTool, log.join("\n")).toBe("save_doors_and_routes");
+    expect(log.some((line) => line.startsWith(`save_property: ${BUILDING_ENTRANCE_QUESTION}`)), log.join("\n")).toBe(false);
+    expect(log.some((line) => line.startsWith("returned ")), log.join("\n")).toBe(false);
+  }, 120_000);
+});
+
+describe("landlord tool return strings", () => {
+  it("would have failed on the old secure-setup sentence", () => {
+    const oldLine = "When they're saved, call get_next_installation_step.";
+    expect(foreignTools(oldLine)).toContain("get_next_installation_step");
+  });
+
+  it("keeps returned text from each landlord tool on the landlord list", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tourcore-landlord-returns-"));
+    cleanups.push(() => rmSync(root, { recursive: true, force: true }));
+    const env: NodeJS.ProcessEnv = {
+      TOURCORE_DEPLOYMENT_MODE: "HOSTED_RAILWAY_P0",
+      RAILWAY_PUBLIC_DOMAIN: "demo.up.railway.app",
+      PUBLIC_BASE_URL: HOST,
+    };
+    const runtime = new FileRuntimeStore(join(root, "runtime"));
+    let inst!: Installation;
+    const fetchImpl = async (url: string) => {
+      if (url.includes("/healthz")) return { status: 200, json: async () => publicHealth(inst) };
+      return { status: 200, json: async () => ({}) };
+    };
+    inst = new Installation({ root, runtime, env: () => env, fetch: fetchImpl as never, now: () => Date.parse("2026-10-09T15:00:00.000Z") });
+    inst.files.ensure({ deploymentMode: "HOSTED_RAILWAY_P0" });
+    inst.files.setPublicBaseUrl(HOST, "RAILWAY");
+    const localRoot = mkdtempSync(join(tmpdir(), "tourcore-landlord-returns-local-"));
+    cleanups.push(() => rmSync(localRoot, { recursive: true, force: true }));
+    const localEnv: NodeJS.ProcessEnv = { TOURCORE_DEPLOYMENT_MODE: "LOCAL_DEVELOPER" };
+    const local = new Installation({
+      root: localRoot,
+      runtime: new FileRuntimeStore(join(localRoot, "runtime")),
+      env: () => localEnv,
+      now: () => Date.parse("2026-10-09T15:00:00.000Z"),
+    });
+    local.files.ensure({ deploymentMode: "LOCAL_DEVELOPER" });
+    const visitors = new VisitorDemoRegistry();
+    const ctx: ToolContext = {
+      services: { workspace: new PropertyWorkspace(root), visitors, now: () => new Date(inst.now()) },
+      confirmations: new ConfirmationBook(10 * 60_000, () => inst.now()),
+      now: () => new Date(inst.now()),
+      localUrl: () => "http://127.0.0.1:4321",
+      installation: inst,
+      resetMessaging: () => {},
+    };
+    const hits: string[] = [];
+    const scan = (label: string, value: unknown) => {
+      const text = typeof value === "string" ? value : JSON.stringify(value);
+      for (const name of foreignTools(text)) hits.push(`${label}: ${name}`);
+    };
+    scan("secureSetupLink hosted", secureSetupLink(inst, undefined, "visitor-messaging"));
+    scan("secureSetupLink local", secureSetupLink(local, "http://127.0.0.1:4321", "operator-alerts"));
+    const extras: Record<string, unknown[]> = {
+      set_up_texting: [{ provider: "sendblue" }, { provider: "local" }, { provider: "twilio" }, { provider: "photon" }],
+      save_settings: [{ connectAlerts: true }, { skipAlerts: true }],
+      backup_records: [{ action: "decline" }, { action: "status" }, { action: "create" }],
+      restore_records: [{ action: "upload" }, { action: "preview" }],
+      save_property: [{ address: "42 Cedar Lane" }],
+      get_inbox: [{}],
+      export_records: [{ kind: "readable" }, { day: "today" }],
+    };
+    for (const name of [...LANDLORD_CORE_TOOLS, HOSTED_OWNER_TOOL]) {
+      const calls = [{}, ...(extras[name] ?? [])];
+      for (const args of calls) {
+        const outcome = await callOperatorTool(ctx, name, args);
+        scan(`${name} ${JSON.stringify(args)}`, outcome.ok ? outcome.result : outcome.error);
+      }
+    }
+    const described = read("src/alerts/describeUpdate.ts");
+    const rewritten = [...described.matchAll(/"([^"]*answer_flagged_question[^"]*)"/g)].map((match) => match[1]!.replaceAll("answer_flagged_question", "resolve_issue"));
+    expect(rewritten.length).toBeGreaterThan(0);
+    expect(read("src/operator/dayToDay.ts")).toContain('replaceAll("answer_flagged_question", "resolve_issue")');
+    for (const line of rewritten) scan("get_inbox instructions", line);
+    expect(hits).toEqual([]);
+  }, 60_000);
 });

@@ -9,9 +9,8 @@ metadata:
   author: Tour Core
   short-description: Practice tour with safety proof points
   version: "0.2.4"
----
-
 <!-- connector: qa-skill -->
+---
 
 # Simulate Tour
 

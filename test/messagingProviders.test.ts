@@ -21,7 +21,7 @@ import { PropertyWorkspace, runReadinessCheck } from "../src/setup";
 import { FileRuntimeStore } from "../src/storage/runtimeStore";
 import { createSetupServer } from "../src/web/server";
 import { fakeSendblue, LINE, PUBLIC, SECRET, sendblueEnv } from "./fakeSendblue";
-import { hillsideConfig } from "./liveApp";
+import { hillsideConfig, publishForVisitors } from "./liveApp";
 import { installHarness, SB_KEY, SB_SECRET } from "./installHarness";
 
 const cleanups: Array<() => void> = [];
@@ -529,6 +529,7 @@ describe("Twilio visitor pipeline", () => {
     const ws = new PropertyWorkspace(root);
     const { config } = ws.save(hillsideConfig());
     ws.recordReadiness(config.property.id, await runReadinessCheck(config));
+    publishForVisitors(ws, config.property.id, new Date());
     const runtime = new FileRuntimeStore(join(root, "runtime"));
     const env: NodeJS.ProcessEnv = { PUBLIC_BASE_URL: PUBLIC, TOURCORE_SMS_CONSENT_MODE: "keyword_confirm", TOURCORE_TWILIO_ACCOUNT_SID: TWILIO_SID, TOURCORE_TWILIO_AUTH_TOKEN: TWILIO_TOKEN, TOURCORE_TWILIO_PHONE_NUMBER: TWILIO_NUMBER };
     const client = fakeTwilio();

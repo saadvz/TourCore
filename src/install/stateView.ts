@@ -347,7 +347,8 @@ function unitsDetailSay(draft: SetupDraft): string | undefined {
 function toolFor(step: StepId, draft: SetupDraft | undefined): string {
   if (step === "units-details" && draft) {
     const condo = condoNextQuestion(draft);
-    if (condo && (condo.nextQuestion === BUILDING_ACCESS_QUESTION || condo.nextQuestion === BUILDING_ENTRANCE_QUESTION)) return "save_property";
+    if (condo?.nextQuestion === BUILDING_ACCESS_QUESTION) return "save_property";
+    if (condo?.nextQuestion === BUILDING_ENTRANCE_QUESTION) return "save_doors_and_routes";
     if (nextProfileQuestion(draft.units)) return "save_units";
     if (condo?.nextQuestion === ENTRY_INSTRUCTIONS_QUESTION) return "save_property";
   }

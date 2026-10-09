@@ -27,7 +27,7 @@ import { handleApi } from "../src/web/api";
 import { createSetupServer } from "../src/web/server";
 import { at, grokHarness, type GrokHarness } from "./grokHarness";
 import { installHarness, type InstallHarness } from "./installHarness";
-import { hillsideConfig, liveApp, PHONE } from "./liveApp";
+import { hillsideConfig, liveApp, PHONE, publishForVisitors } from "./liveApp";
 import { PUBLIC } from "./fakeSendblue";
 import { basicForm, TOUR_DAY } from "./helpers";
 
@@ -765,6 +765,8 @@ async function startTwoLocalProperties() {
   const now = new Date(clock);
   ws.recordReadiness(firstSaved.config.property.id, await runReadinessCheck(firstSaved.config, { now }));
   ws.recordReadiness(secondSaved.config.property.id, await runReadinessCheck(secondSaved.config, { now }));
+  publishForVisitors(ws, firstSaved.config.property.id, now);
+  publishForVisitors(ws, secondSaved.config.property.id, now);
   const runtime = new FileRuntimeStore(join(root, "runtime"));
   const env: NodeJS.ProcessEnv = { TOURCORE_MESSAGING_PROVIDER: "local", PUBLIC_BASE_URL: PUBLIC, TOURCORE_SMS_CONSENT_MODE: "keyword_confirm" };
   cleanups.push(bindMessagingInstallation(() => ({ env, sendblue: sendblueRuntime.env(), choice: "local", manifestProvider: "LOCAL" })));

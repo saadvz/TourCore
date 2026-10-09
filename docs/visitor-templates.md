@@ -1025,6 +1025,8 @@ Text TOUR to ask questions or schedule a self-guided tour. Reply HELP for help o
 
 ### property-not-ready
 
+Sent when tours cannot run, including a new visitor text to a property that is not published for demo (a draft, or a demo sent back to draft). A tour that was already booked on that property keeps going.
+
 ```
 Thanks for reaching out to {name}. Self-guided tours by text aren't available right now. Please contact the {team}.
 ```

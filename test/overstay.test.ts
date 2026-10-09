@@ -40,6 +40,7 @@ import { MessagingConversations, occupiedWindowsFromRecords } from "../src/visit
 import { MessagingEndpoints } from "../src/messaging/endpoints";
 import { PropertyWorkspace, runReadinessCheck } from "../src/setup";
 import { VerificationLinks } from "../src/visitor/verificationLinks";
+import { publishForVisitors } from "./liveApp";
 import { inspectException, listExceptions, resolveException } from "../src/operator/exceptions";
 import { describeOperatorUpdate } from "../src/alerts/describeUpdate";
 import { exceptionCreatedEvent } from "../src/alerts/operatorEvents";
@@ -1864,6 +1865,7 @@ async function smsClosedTour(label: string, options: { rebook?: boolean; customT
   const ws = new PropertyWorkspace(root);
   const { config } = ws.save(loadConfig());
   ws.recordReadiness(config.property.id, await runReadinessCheck(config, { now: new Date(clock.t) }));
+  publishForVisitors(ws, config.property.id, new Date(clock.t));
   const runtime = new MemoryRuntimeStore();
   const endpoints = new MessagingEndpoints(runtime);
   endpoints.attach({ address: SMS_LINE, provider: "demo", propertyId: SMS_PROPERTY });

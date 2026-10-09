@@ -408,7 +408,10 @@ export class MessagingConversations {
     if (!session) {
       const { config, state } = ws.load(propertyId);
       const ready = state.readiness?.passed && isCurrent(state.readiness, state);
-      if (!ready || !isValidTimeZone(config.property.timezone)) {
+      // A draft, or any property that is not published for demo, does not take a new visitor.
+      // A session that already exists keeps going, including a tour booked before this place went back to draft.
+      const published = state.status === "PUBLISHED_FOR_DEMO";
+      if (!ready || !published || !isValidTimeZone(config.property.timezone)) {
         await transport.send(prospectText(phone, toursUnavailableText(config.property.name, config.operator.name))).catch(() => undefined);
         return {};
       }

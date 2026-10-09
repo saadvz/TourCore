@@ -22,7 +22,7 @@ import { FileRuntimeStore } from "../src/storage/runtimeStore";
 import { PHOTO_ALONE_REPLY, PHOTO_WITH_TEXT_REPLY } from "../src/visitor/conversation";
 import { createSetupServer } from "../src/web/server";
 import { PUBLIC } from "./fakeSendblue";
-import { at, hillsideConfig, liveApp, PHONE } from "./liveApp";
+import { at, hillsideConfig, liveApp, PHONE, publishForVisitors } from "./liveApp";
 
 const PHOTO = { media_url: "https://cdn.example.invalid/photo.jpg" };
 const LOCAL_VISITOR = "+15555550100";
@@ -81,6 +81,7 @@ async function localApp(config?: TourCoreConfig): Promise<QuestionApp> {
   const ws = new PropertyWorkspace(root);
   const { config: saved } = ws.save(config ?? hillsideConfig());
   ws.recordReadiness(saved.property.id, await runReadinessCheck(saved, { now: new Date(clock) }));
+  publishForVisitors(ws, saved.property.id, new Date(clock));
   const runtime = new FileRuntimeStore(join(root, "runtime"));
   const env: NodeJS.ProcessEnv = {
     TOURCORE_MESSAGING_PROVIDER: "local",
