@@ -4,7 +4,7 @@ import { CLAUDE_FLAGGED, CLAUDE_FULL, CLAUDE_KEYS, CLAUDE_TOOLS } from "./claude
 import { GROK_ALERTS, GROK_ALERTS_SAY, GROK_BACKUPS_FULL, GROK_BACKUPS_TOOLS, GROK_FLAGGED, GROK_FULL, GROK_KEYS_FULL, GROK_KEYS_TOOLS, GROK_TOOLS, GROK_WAKE } from "./grok";
 import { selectPlaybook, type PlaybookSelection, type ReportedClient } from "./select";
 import { milestoneToolFor } from "./milestoneTool";
-import { SHARED_AFTER_PUBLISH, SHARED_FLAGGED_RULES, SHARED_IRREVERSIBLE, SHARED_STEPS, SHARED_VOICE, STEP_TITLES, stepAside, type StepId } from "./shared";
+import { RECONNECT_INSTRUCTIONS, SHARED_AFTER_PUBLISH, SHARED_FLAGGED_RULES, SHARED_IRREVERSIBLE, SHARED_STEPS, SHARED_VOICE, STEP_TITLES, stepAside, type StepId } from "./shared";
 
 export interface PlaybookText {
   id: PlaybookSelection["id"];
@@ -31,9 +31,14 @@ function profileStep(selection: PlaybookSelection, step: StepId): string | undef
   if (step === "alerts-degraded") {
     return "For you, not out loud: send the test this step names. Do not set up tour updates again. Do not create a routine. Do not ask for an address or a key. Do not ask whether they want tour updates.";
   }
+  if (step === "alerts-error") return RECONNECT_INSTRUCTIONS;
   if (step === "backups" && selection.id === "grok") return selection.mode === "full" ? GROK_BACKUPS_FULL : GROK_BACKUPS_TOOLS;
   if (step === "alerts" && selection.id === "grok") return GROK_ALERTS;
   return undefined;
+}
+
+function statesTheLine(step: StepId): boolean {
+  return step === "alerts-degraded" || step === "alerts-error";
 }
 
 function profileWake(selection: PlaybookSelection): string | undefined {
@@ -77,9 +82,9 @@ export function renderPlaybook(client: ReportedClient | undefined, step: StepId,
     SHARED_VOICE,
     SHARED_IRREVERSIBLE,
     profileIntro(selection),
-    step === "alerts-degraded" ? `${STEP_TITLES[step]}.` : `${STEP_TITLES[step]}. Ask one thing.`,
+    statesTheLine(step) ? `${STEP_TITLES[step]}.` : `${STEP_TITLES[step]}. Ask one thing.`,
     step === "another" ? SHARED_AFTER_PUBLISH : undefined,
-    ask ? (step === "alerts-degraded" ? `Say only this: ${ask}` : `Ask only this: ${ask}`) : undefined,
+    ask ? (statesTheLine(step) ? `Say only this: ${ask}` : `Ask only this: ${ask}`) : undefined,
     stepAside(step),
     milestoneHint(step),
     `Done looks like: ${copy.done}`,

@@ -1,6 +1,6 @@
 import { nextProfileQuestion } from "../config/unitProfile";
 import { spokenAsk } from "../playbooks/compose";
-import { SHARED_STEPS } from "../playbooks/shared";
+import { RECONNECT_INSTRUCTIONS, SHARED_STEPS } from "../playbooks/shared";
 import type { ReportedClient } from "../playbooks/select";
 import { visitorHelpQuestion } from "../setup/setupActions";
 import { mcpAuthModeFromEnv } from "../mcp/authMode";
@@ -696,10 +696,17 @@ function alertsStatus(inst: Installation, propertyReady: boolean, client?: Repor
   });
   if (!check || check.credentialsChangedAt !== changedAt) return component("OPERATOR_ALERTS", "ACTION_REQUIRED", "Tour updates are set up but haven't been tested yet.", { provider: "GROK_ROUTINE", next: test });
   if (!check.ok) {
+    const addressSaved = !!env.TOURCORE_GROK_ROUTINE_URL?.trim();
     return component("OPERATOR_ALERTS", "ERROR", "Tour updates aren't reaching you.", {
       provider: "GROK_ROUTINE",
       technical: [check.message],
-      next: connect("Tour updates aren't reaching you yet. I'll ask for the connection again, securely; it won't be shown in chat.", "FIX_OPERATOR_ALERTS"),
+      next: addressSaved
+        ? step("OPERATOR_ALERTS", "FIX_OPERATOR_ALERTS", "OPERATOR_IN_SECURE_SETUP", SHARED_STEPS["alerts-error"].ask, {
+            tool: "get_secure_setup_url",
+            secureSetupStep: "operator-alerts",
+            grokInstructions: RECONNECT_INSTRUCTIONS,
+          })
+        : connect("I'm setting up your tour updates. I'll ask for the connection securely; it won't be shown in chat."),
     });
   }
   const health = installationAlertHealth(inst);

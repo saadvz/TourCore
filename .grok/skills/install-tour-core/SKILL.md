@@ -8,7 +8,7 @@ user-invocable: true
 metadata:
   author: Tour Core
   short-description: Connect to Tour Core and guide onboarding, in Tour Core's order
-  version: "0.7.2"
+  version: "0.7.3"
 ---
 
 # Install Tour Core
@@ -325,7 +325,7 @@ question:
 - **No.** Call `get_state` and continue. They
   can turn updates on any time later.
 
-If `get_state` says a tour update didn't reach them, say "A tour update didn't reach you. Check your inbox for anything new. I'm sending a test so the next ones get through." and send the test that step names. Do not ask the first-time question, do not create a routine, and do not ask for a new address or key. After that test gets through, the ready line is back. If the test does not get through, follow the step that asks for the connection again.
+If `get_state` says a tour update didn't reach them, say "A tour update didn't reach you. Check your inbox for anything new. I'm sending a test so the next ones get through." and send the test that step names. Do not ask the first-time question, do not create a routine, and do not ask for a new address or key. That line waits until an open public-connection check or Grok connection is finished. A later ordinary delivery does not clear the miss. After that test gets through, the ready line is back. If the test does not get through and an alert address is already saved, say "Tour updates aren't reaching you. I'll send you a secure link to reconnect them. Nothing you type there shows in chat." The secure page overwrites the saved address and key with no history, so re-enter the existing routine's address and key there. Never create a new routine or use a new routine's address or key. When no address is saved, use the first-time setup above.
 
 To see or change what they get later, use `get_state` and `save_settings`. Missed tours (no-shows) aren't detected yet;
 don't promise them.

@@ -5,6 +5,8 @@ describe("alert summary punctuation", () => {
   it("joins a finished sentence with a space, and adds a period only when the summary has none", () => {
     expect(joinAlertDetail("There's no approved answer yet.", "Choosing a time")).toBe("There's no approved answer yet. Choosing a time.");
     expect(joinAlertDetail('They asked: "Pool?"', "Choosing a time")).toBe('They asked: "Pool?" Choosing a time.');
+    expect(joinAlertDetail("They asked: “Pool?”", "Choosing a time")).toBe("They asked: “Pool?” Choosing a time.");
+    expect(joinAlertDetail("Waiting…", "Choosing a time")).toBe("Waiting… Choosing a time.");
     expect(joinAlertDetail("They need help!", "Choosing a time")).toBe("They need help! Choosing a time.");
     expect(joinAlertDetail("There's no approved answer yet", "Choosing a time")).toBe("There's no approved answer yet. Choosing a time.");
   });

@@ -3,6 +3,7 @@ import { exceptionCreatedEvent } from "../src/alerts/operatorEvents";
 import { describeUpdates, RECOMMENDED_UPDATES } from "../src/alerts/preferences";
 import { getInstallationStatus } from "../src/install/status";
 import { GROK_ALERTS_SAY } from "../src/playbooks/grok";
+import { SHARED_STEPS } from "../src/playbooks/shared";
 import { installHarness, ROUTINE_KEY, ROUTINE_URL, SB_KEY, SB_SECRET, type InstallHarness } from "./installHarness";
 
 /**
@@ -11,6 +12,7 @@ import { installHarness, ROUTINE_KEY, ROUTINE_URL, SB_KEY, SB_SECRET, type Insta
  */
 
 const DEGRADED_SAY = "A tour update didn't reach you. Check your inbox for anything new. I'm sending a test so the next ones get through.";
+const RECONNECT_SAY = "Tour updates aren't reaching you. I'll send you a secure link to reconnect them. Nothing you type there shows in chat.";
 const DEGRADED_SUMMARY = "Some tour updates haven't reached you yet.";
 const READY_LINE = `I'll keep you posted on ${describeUpdates(RECOMMENDED_UPDATES)}.`;
 const SETUP = /Want me to text you|Want me to tell you when someone books|create the Tour Core Operator Updates|webhook address|secure secret input|I'm setting up your tour updates|get_secure_setup_url/;
@@ -143,7 +145,7 @@ describe("operator alert recovery", () => {
     expect(JSON.stringify(ready.state)).not.toMatch(/A tour update didn't reach you/);
   });
 
-  it("a failing test keeps the error path", async () => {
+  it("a failing test with an address saved reconnects the existing routine, and no address falls back to first-time setup", async () => {
     const h = harness();
     const propertyId = await publishedWithAlerts(h);
     h.setClock(h.now() + 60_000);
@@ -160,9 +162,124 @@ describe("operator alert recovery", () => {
       next: {
         action: "FIX_OPERATOR_ALERTS",
         tool: "get_secure_setup_url",
-        operatorMessage: "Tour updates aren't reaching you yet. I'll ask for the connection again, securely; it won't be shown in chat.",
+        operatorMessage: RECONNECT_SAY,
       },
     });
+    expect(component.next.grokInstructions).toMatch(/overwrites the saved address and key with no history/);
+    expect(component.next.grokInstructions).toMatch(/existing routine's address and key/);
+    expect(component.next.grokInstructions).toMatch(/Never create a new routine/);
+    const state = await h.ok("get_state");
+    expect(state.nextStep).toMatchObject({ action: "FIX_OPERATOR_ALERTS", tool: "get_secure_setup_url", say: RECONNECT_SAY });
+    expect(state.playbook.step).toBe("alerts-error");
+    expect(state.playbook.text).toContain(`Say only this: ${RECONNECT_SAY}`);
+    expect(state.playbook.text).not.toContain("Ask one thing");
+    expect(state.playbook.text).not.toContain("Ask only this");
+    expect(state.playbook.text).not.toContain("Create the Tour Core Operator Updates routine");
+    expect(JSON.stringify(state)).not.toMatch(/What ZIP code/);
+
+    h.inst.secrets.delete(["TOURCORE_GROK_ROUTINE_URL"]);
+    let fresh = await h.ok("get_state");
+    expect(fresh.nextStep.say).not.toBe(RECONNECT_SAY);
+    expect(fresh.playbook.text).not.toContain("I'll send you a secure link to reconnect them");
+    for (let i = 0; i < 6 && fresh.nextStep.say !== GROK_ALERTS_SAY; i++) {
+      const say = String(fresh.nextStep.say);
+      const id = (fresh.setup as { propertyId?: string } | undefined)?.propertyId;
+      const property = id ? { property: id } : {};
+      if (/zip/i.test(say)) await h.ok("save_property", { ...property, postalCode: "11215" });
+      else if (/did i get that right/i.test(say)) await h.ok("save_property", { ...property, confirmAddress: true });
+      else if (/what state/i.test(say)) await h.ok("save_property", { ...property, state: "NY" });
+      else if (/what city/i.test(say)) await h.ok("save_property", { ...property, city: "Brooklyn" });
+      else break;
+      fresh = await h.ok("get_state");
+    }
+    expect(fresh.nextStep.say).toBe(GROK_ALERTS_SAY);
+    expect(fresh.playbook.step).toBe("alerts");
+    expect(fresh.playbook.text).toContain("create the Tour Core Operator Updates routine");
+    expect(fresh.nextStep.say).not.toBe(RECONNECT_SAY);
+  });
+
+  it("waits to say the degraded line until the endpoint check and the Grok connection are done", async () => {
+    const h = harness();
+    completeInfrastructure(h);
+    await h.ok("set_notification_preferences", { preset: "recommended" });
+    const propertyId = await h.setUpAlfredWay();
+    await h.ok("save_property", { property: propertyId, postalCode: "11215" });
+    const addressed = await h.ok("get_state");
+    if (/did i get that right/i.test(String(addressed.nextStep.say))) await h.ok("save_property", { property: propertyId, confirmAddress: true });
+    await h.ok("run_readiness_check");
+    await h.ok("run_dry_tour");
+    await h.approve("publish_demo_property", {});
+    h.setClock(h.now() + 60_000);
+    h.net.state.routineStatus = 400;
+    h.inst.outbox.enqueue(exceptionCreatedEvent({ propertyId, exceptionId: "exc_aa11bb22cc01", occurredAt: new Date(h.now()).toISOString() }));
+    await h.inst.outbox.drain();
+    const saved = h.inst.files.state();
+    delete saved.publicEndpointCheck;
+    h.inst.files.writeState(saved);
+
+    const endpoint = await h.ok("get_state");
+    expect(endpoint.nextStep).toMatchObject({ action: "CHECK_PUBLIC_ENDPOINT", tool: "get_state", say: SHARED_STEPS.starting.ask });
+    expect(endpoint.playbook.step).toBe("starting");
+    expect(endpoint.nextStep.say).not.toBe(DEGRADED_SAY);
+
+    markChecked(h, "endpoint");
+    h.inst.grants.revokeAll();
+    const connect = await h.ok("get_state");
+    expect(connect.nextStep).toMatchObject({ action: "CONNECT_GROK", tool: "get_state", say: SHARED_STEPS.connect.ask });
+    expect(connect.playbook.step).toBe("connect");
+    expect(connect.nextStep.say).not.toBe(DEGRADED_SAY);
+
+    h.connectGrok();
+    const degraded = await h.ok("get_state");
+    expect(degraded.nextStep).toMatchObject({ action: "TEST_OPERATOR_ALERTS", tool: "test_operator_alerts", say: DEGRADED_SAY });
+    expect(degraded.playbook.step).toBe("alerts-degraded");
+  });
+
+  it("stays degraded after a later ordinary delivery until a test passes", async () => {
+    const h = harness();
+    const propertyId = await publishedWithAlerts(h);
+    h.setClock(h.now() + 60_000);
+    h.net.state.routineStatus = 400;
+    h.inst.outbox.enqueue(exceptionCreatedEvent({ propertyId, exceptionId: "exc_aa11bb22cc02", occurredAt: new Date(h.now()).toISOString() }));
+    await h.inst.outbox.drain();
+    h.setClock(h.now() + 60_000);
+    h.net.state.routineStatus = 202;
+    h.inst.outbox.enqueue(exceptionCreatedEvent({ propertyId, exceptionId: "exc_aa11bb22cc03", occurredAt: new Date(h.now()).toISOString() }));
+    await h.inst.outbox.drain();
+
+    const still = await views(h);
+    expectSameHealth(still, { state: "DEGRADED", summary: DEGRADED_SUMMARY, action: "TEST_OPERATOR_ALERTS", failed: 1, retrying: 0 });
+
+    h.setClock(h.now() + 60_000);
+    expect((await h.ok("test_operator_alerts")).ok).toBe(true);
+    const ready = await views(h);
+    expectSameHealth(ready, { state: "READY", summary: READY_LINE, action: "ADD_ANOTHER_PROPERTY", failed: 0, retrying: 0 });
+  });
+
+  it("a passing test clears a failure stamped ahead of the clock, and a newer miss still counts", async () => {
+    const h = harness();
+    const propertyId = await publishedWithAlerts(h);
+    h.setClock(h.now() + 60_000);
+    h.net.state.routineStatus = 400;
+    const event = exceptionCreatedEvent({ propertyId, exceptionId: "exc_aa11bb22cc04", occurredAt: new Date(h.now()).toISOString() });
+    h.inst.outbox.enqueue(event);
+    await h.inst.outbox.drain();
+    const failed = h.inst.outbox.get(event.eventId)!;
+    const skewed = new Date(h.now() + 60 * 60_000).toISOString();
+    h.runtime.put("operator-events", event.eventId, { ...failed, lastAttemptAt: skewed });
+    h.net.state.routineStatus = 202;
+    expect((await h.ok("test_operator_alerts")).ok).toBe(true);
+    expect(h.inst.files.state().operatorAlerts?.clearedFailures).toEqual([{ eventId: event.eventId, lastAttemptAt: skewed }]);
+    const ready = await views(h);
+    expectSameHealth(ready, { state: "READY", summary: READY_LINE, action: "ADD_ANOTHER_PROPERTY", failed: 0, retrying: 0 });
+
+    h.setClock(h.now() + 60_000);
+    h.net.state.routineStatus = 400;
+    h.inst.outbox.enqueue(exceptionCreatedEvent({ propertyId, exceptionId: "exc_aa11bb22cc05", occurredAt: new Date(h.now()).toISOString() }));
+    await h.inst.outbox.drain();
+    const again = await views(h);
+    expectSameHealth(again, { state: "DEGRADED", summary: DEGRADED_SUMMARY, action: "TEST_OPERATOR_ALERTS", failed: 1, retrying: 0 });
+    expect(h.inst.outbox.records().some((record) => record.lastAttemptAt === skewed)).toBe(true);
   });
 
   it("a fresh install still offers tour updates the first time", async () => {

@@ -138,7 +138,7 @@ export class OperatorEventOutbox {
     return Math.min(base * 2 ** Math.max(0, attempts - 1), this.options.maxDelayMs ?? 15 * 60_000);
   }
 
-  /** Same window as installation status. Pass a successful test time to ignore misses from before it. */
+  /** Same window as installation status. Pass a successful test time to ignore misses from before it. A delivery does not. */
   health(successfulTestAt?: string): AlertDeliveryHealth {
     return alertDeliveryHealth(this.records(), successfulTestAt);
   }

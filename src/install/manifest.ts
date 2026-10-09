@@ -59,8 +59,8 @@ export interface InstallState {
   messagingProviderChoice?: "sendblue" | "twilio" | "photon" | "local";
   /** Provisioned lines last reported by the active provider. Phone numbers only, never secrets. */
   messagingLines?: { id: string; address: string; status?: string }[];
-  /** credentialsChangedAt: when the routine settings were last changed, so an old test doesn't vouch for new ones. */
-  operatorAlerts?: CheckResult & { credentialsChangedAt?: string };
+  /** credentialsChangedAt: when the routine settings were last changed, so an old test doesn't vouch for new ones. clearedFailures: misses a passing test covered by each record's own time. */
+  operatorAlerts?: CheckResult & { credentialsChangedAt?: string; clearedFailures?: { eventId: string; lastAttemptAt?: string }[] };
   /** Exceptions that existed before operator alerts were first set up aren't announced. */
   alertsBaselineAt?: string;
   /** Which operator updates the landlord chose. Unset: only issues that need them. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alertDeliveryHealth, installationAlertHealth } from "../src/alerts/alertHealth";
+import { alertDeliveryHealth, installationAlertHealth, type ClearedFailure } from "../src/alerts/alertHealth";
 import type { OutboxRecord } from "../src/alerts/outbox";
 import { OperatorEventOutbox } from "../src/alerts/outbox";
 import { exceptionCreatedEvent } from "../src/alerts/operatorEvents";
@@ -26,7 +26,7 @@ describe("alert delivery health", () => {
     expect(alertDeliveryHealth([failed], "2026-09-28T13:06:00.000Z")).toMatchObject({ failed: 0, retrying: 0 });
   });
 
-  it("a later delivery clears earlier misses, and a miss after that delivery counts", () => {
+  it("a later delivery does not clear a miss, including one that shares its timestamp", () => {
     const oldFailure = record({ status: "failed", attempts: 1, lastAttemptAt: "2026-09-28T13:01:00.000Z", lastError: "old" });
     const delivered = record({
       status: "delivered",
@@ -42,8 +42,29 @@ describe("alert delivery health", () => {
       lastError: "new",
       event: { ...event, eventId: "evt_failed_2" },
     });
-    expect(alertDeliveryHealth([oldFailure, delivered])).toMatchObject({ failed: 0, delivered: 1, lastDeliveredAt: "2026-09-28T13:02:00.000Z" });
-    expect(alertDeliveryHealth([oldFailure, delivered, laterFailure])).toMatchObject({ failed: 1, lastError: "new" });
+    expect(alertDeliveryHealth([oldFailure, delivered])).toMatchObject({ failed: 1, delivered: 1, lastDeliveredAt: "2026-09-28T13:02:00.000Z", lastError: "old" });
+    expect(alertDeliveryHealth([oldFailure, delivered, laterFailure])).toMatchObject({ failed: 2, lastError: "new" });
+    const sameTime = "2026-09-28T13:04:00.000Z";
+    const sameFailure = record({ status: "failed", attempts: 1, lastAttemptAt: sameTime, lastError: "same", event: { ...event, eventId: "evt_failed_same" } });
+    const sameDelivery = record({
+      status: "delivered",
+      attempts: 1,
+      lastAttemptAt: sameTime,
+      deliveredAt: sameTime,
+      event: { ...event, eventId: "evt_delivered_same" },
+    });
+    expect(alertDeliveryHealth([sameFailure, sameDelivery])).toMatchObject({ failed: 1, delivered: 1 });
+    expect(alertDeliveryHealth([sameFailure, sameDelivery], "2026-09-28T13:05:00.000Z")).toMatchObject({ failed: 0 });
+  });
+
+  it("a passing test covers a failure stamped ahead of the clock, and a later miss still counts", () => {
+    const skewed = record({ status: "failed", attempts: 1, lastAttemptAt: "2026-09-28T15:00:00.000Z", lastError: "ahead", event: { ...event, eventId: "evt_skewed_1" } });
+    const cleared: ClearedFailure[] = [{ eventId: "evt_skewed_1", lastAttemptAt: "2026-09-28T15:00:00.000Z" }];
+    const testAt = "2026-09-28T13:00:00.000Z";
+    expect(alertDeliveryHealth([skewed], testAt)).toMatchObject({ failed: 1 });
+    expect(alertDeliveryHealth([skewed], testAt, cleared)).toMatchObject({ failed: 0 });
+    const between = record({ status: "failed", attempts: 1, lastAttemptAt: "2026-09-28T14:00:00.000Z", lastError: "between", event: { ...event, eventId: "evt_between_1" } });
+    expect(alertDeliveryHealth([skewed, between], testAt, cleared)).toMatchObject({ failed: 1, lastError: "between" });
   });
 
   it("a retry from before a successful test does not count, and a pending first try does not count", () => {

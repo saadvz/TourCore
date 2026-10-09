@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { installationAlertHealth } from "../alerts/alertHealth";
+import { installationAlertHealth, problemsToClear } from "../alerts/alertHealth";
 import { testEvent } from "../alerts/operatorEvents";
 import { MockDurinAccessAdapter } from "../durin/MockDurinAccessAdapter";
 import { activeFromNumber, createMessagingProvider, ensureMessagingSelection, manifestProviderName } from "../messaging/registry";
@@ -203,7 +203,14 @@ export async function testOperatorAlerts(inst: Installation) {
   } catch (err) {
     message = err instanceof Error ? err.message : "The test alert couldn't be delivered.";
   }
-  inst.files.recordCheck("operatorAlerts", { ok, at: at.toISOString(), message, ...(credentialsChangedAt ? { credentialsChangedAt } : {}) });
+  const clearedFailures = ok ? problemsToClear(inst.outbox.records()) : undefined;
+  inst.files.recordCheck("operatorAlerts", {
+    ok,
+    at: at.toISOString(),
+    message,
+    ...(credentialsChangedAt ? { credentialsChangedAt } : {}),
+    ...(clearedFailures ? { clearedFailures } : {}),
+  });
   if (ok) {
     inst.files.update({ operatorNotificationProvider: "GROK_ROUTINE" }, at);
     void inst.outbox.drain().catch(() => undefined);

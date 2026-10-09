@@ -1,6 +1,15 @@
 import { SETUP_HELP_ENDING } from "./setupHelp";
 
 /**
+ * Grok-only, for an error while an alert address is already saved.
+ * The secure page replaces that address and key, so the existing ones must be entered again.
+ */
+export const RECONNECT_EXISTING =
+  "The secure page overwrites the saved address and key with no history, so re-enter the existing routine's address and key there. Never create a new routine or use a new routine's address or key. Do not ask for an address or a key in chat.";
+
+export const RECONNECT_INSTRUCTIONS = `For you, not out loud: send the secure setup page this step names. ${RECONNECT_EXISTING}`;
+
+/**
  * Wording shared by every playbook. Profiles add only their own differences.
  * Lines under "ask" are what the agent may say to the landlord.
  * An empty ask means there is no fixed line to say out loud.
@@ -133,6 +142,11 @@ export const SHARED_STEPS = {
     done: "A test update got through, and tour updates are working again.",
     ifItFails: `Tell them the test didn't get through. You help. ${SETUP_HELP_ENDING}`,
   },
+  "alerts-error": {
+    ask: "Tour updates aren't reaching you. I'll send you a secure link to reconnect them. Nothing you type there shows in chat.",
+    done: "The saved connection is back, and a test update got through.",
+    ifItFails: `Tell them the updates still aren't reaching them. You help. ${SETUP_HELP_ENDING}`,
+  },
   readiness: {
     ask: "I'm checking that a tour can run. Nobody is texted, and no real door opens.",
     done: "The check passed.",
@@ -187,6 +201,7 @@ export const STEP_TITLES: Record<StepId, string> = {
   "hours-help": "Hours",
   alerts: "Tour updates",
   "alerts-degraded": "Tour updates",
+  "alerts-error": "Tour updates",
   readiness: "Practice tour",
   practice: "Practice tour",
   publish: "Publish",

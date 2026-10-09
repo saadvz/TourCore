@@ -29,8 +29,8 @@ function when(start: Date, now: Date, tz: string): string {
   return `${label} at ${formatTime(start, tz)}`;
 }
 
-/** A sentence end, including one that sits just inside a closing quote. */
-const SENTENCE_END = /[.!?]["']?$/;
+/** A sentence end, including an ellipsis or one that sits just inside a closing quote or parenthesis. */
+const SENTENCE_END = /[.!?…]["'”’)]*$/u;
 
 /** Join an alert summary and the tour status. A finished sentence is not glued on, and a period is never doubled. */
 export function joinAlertDetail(summary: string, tourStatus: string): string {

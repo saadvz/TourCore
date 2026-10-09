@@ -420,8 +420,11 @@ export function readState(input: StateReadInput, propertyId?: string): Record<st
   const current = milestones.find((milestone) => milestone.status === "next") ?? null;
   const next = presentNext(status);
   const zoneBlock = publishedMissingZone(input.services.workspace, requested);
-  const alertsDegraded = !zoneBlock && component(status, "OPERATOR_ALERTS")?.state === "DEGRADED";
-  const step = alertsDegraded ? "alerts-degraded" : focusStep(milestones, next.action, picture);
+  const alerts = component(status, "OPERATOR_ALERTS");
+  const addressSaved = !!inst.env().TOURCORE_GROK_ROUTINE_URL?.trim();
+  const alertsDegraded = !zoneBlock && next.component === "OPERATOR_ALERTS" && alerts?.state === "DEGRADED";
+  const alertsReconnect = !zoneBlock && next.component === "OPERATOR_ALERTS" && alerts?.state === "ERROR" && addressSaved;
+  const step = alertsDegraded ? "alerts-degraded" : alertsReconnect ? "alerts-error" : focusStep(milestones, next.action, picture);
   const say = zoneBlock ? UNSET_ZONE_LINE : (inst && step === "backups" && driveNotSetUpLine(inst)) || sayFor(input.client, step, picture.draft);
   const playbook = renderPlaybook(input.client, step, say);
   const copy = SHARED_STEPS[step];
@@ -445,7 +448,7 @@ export function readState(input: StateReadInput, propertyId?: string): Record<st
     nextStep: {
       action: next.action,
       component: next.component,
-      tool: zoneBlock ? "save_property" : alertsDegraded ? "test_operator_alerts" : toolFor(step, picture.draft),
+      tool: zoneBlock ? "save_property" : alertsDegraded ? "test_operator_alerts" : alertsReconnect ? "get_secure_setup_url" : toolFor(step, picture.draft),
       say,
       doneLooksLike: copy.done,
     },

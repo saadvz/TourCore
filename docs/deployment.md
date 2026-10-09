@@ -379,7 +379,7 @@ a tour is booked / starts / finishes / is cancelled, or a visitor needs judgment
 - On the first start with alerts, exceptions that already exist are recorded
   but not announced.
 - A delivery failure never affects the visitor; the installation status shows
-  tour updates as degraded until deliveries go through.
+  tour updates as degraded until a test update gets through. A later ordinary delivery does not clear a miss.
 
 ## Full new-user experience (Grok-managed)
 
