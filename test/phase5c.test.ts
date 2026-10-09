@@ -245,7 +245,7 @@ describe("tour time questions", () => {
     const replies = await a.textFrom(phone, "what are your tour times?");
     expect(replies).toEqual([UNKNOWN_ANSWER]);
     const issues = (await a.grok("list_exceptions")).exceptions as Array<{ summary: string }>;
-    expect(issues.map((issue) => issue.summary)).toContain('Asked "what are your tour times?". There\'s no approved answer yet.');
+    expect(issues.map((issue) => issue.summary)).toContain('They asked: "what are your tour times?" There\'s no approved answer yet.');
   });
 });
 

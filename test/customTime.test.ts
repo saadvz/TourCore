@@ -2618,7 +2618,7 @@ describe("a flagged answer on a live day menu", () => {
     expect(sent).toHaveLength(1);
     expect(sent[0]!.content).not.toMatch(/Which day works for you\?|I have tours available/);
     const opened = await a.grok("inspect_exception", { exceptionId: issue.exceptionId });
-    expect(opened.summary).toContain('Sent "There\'s a gym on the roof"');
+    expect(opened.summary).toBe('(555) 010-2000, Unit 1A: They asked: "Is there a gym?" They were sent "There\'s a gym on the roof."');
     expect(opened.summary).not.toContain("There's no approved answer yet.");
     const pick = await a.text("2");
     expect(pick.join("\n")).toMatch(/Tuesday|2:00 PM|3:30 PM/);

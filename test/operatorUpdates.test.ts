@@ -119,7 +119,7 @@ describe("tour lifecycle updates", () => {
     const [question] = a.routineEvents().filter((e) => e.eventType === "exception.created");
     const update = await a.grok("get_operator_update", { eventId: question!.eventId });
     expect(update).toMatchObject({ eventType: "exception.created", stillOpen: true, issue: { what: "Question with no approved answer", question: "Is there a pool?" } });
-    expect(update.summary).toContain('Asked "Is there a pool?"');
+    expect(update.summary).toContain('They asked: "Is there a pool?"');
     expect(JSON.stringify(question)).not.toContain(PHONE.slice(2));
   });
 });

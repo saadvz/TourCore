@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { MessagingEndpoints } from "../src/messaging/endpoints";
 import { toursUnavailableText } from "../src/sms/templates";
 import { FileRuntimeStore } from "../src/storage/runtimeStore";
-import { smsDisclosure, smsHelpBody, smsStopAck } from "../src/visitor/smsConsent";
+import { draftStartDisclosure, smsDisclosure, smsHelpBody, smsStopAck } from "../src/visitor/smsConsent";
 import { hillsideConfig, liveApp, PHONE, type LiveApp } from "./liveApp";
 import { LINE, PUBLIC } from "./fakeSendblue";
 
@@ -117,8 +117,11 @@ describe("unpublished properties do not take a new visitor text", () => {
     const app = await liveApp({ cleanups });
     app.ws.patchState(PROPERTY, { status: "DRAFT" });
     const phone = "+15550102113";
-    expect(await app.textFrom(phone, "START")).toEqual([smsDisclosure(PUBLIC)]);
-    expect(consentOf(app, phone)).toMatchObject({ status: "pending", method: "keyword", keyword: "START" });
+    const start = await app.textFrom(phone, "START");
+    expect(start).toEqual([draftStartDisclosure(PUBLIC)]);
+    expect(start[0]).not.toContain("Reply YES to continue");
+    expect(start[0]).toContain("Please check back soon. Reply HELP for help or STOP to opt out.");
+    expect(() => consentOf(app, phone)).toThrow();
     expect(app.visitors.latestForPhone(PROPERTY, phone, "messaging")).toBeUndefined();
     expect(await app.textFrom(phone, "TOUR")).toEqual([CHECK_BACK]);
   });
@@ -147,8 +150,10 @@ describe("unpublished properties do not take a new visitor text", () => {
     const app = await liveApp({ cleanups });
     shareLineWithOnlyThisDraft(app);
     const phone = "+15550102116";
-    expect(await app.textFrom(phone, "START")).toEqual([smsDisclosure(PUBLIC)]);
-    expect(consentOf(app, phone)).toMatchObject({ status: "pending", keyword: "START" });
+    const start = await app.textFrom(phone, "START");
+    expect(start).toEqual([draftStartDisclosure(PUBLIC)]);
+    expect(start[0]).not.toContain("Reply YES to continue");
+    expect(() => consentOf(app, phone)).toThrow();
     expect(app.visitors.latestForPhone(PROPERTY, phone, "messaging")).toBeUndefined();
     expect(await app.textFrom(phone, "TOUR")).toEqual([CHECK_BACK]);
   });

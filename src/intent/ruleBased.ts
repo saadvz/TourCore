@@ -1,9 +1,53 @@
+import { isFairHousingQuestion, isTourPartyNote, suitabilityBlocksBooking } from "../core/fairHousing";
 import { isMoreTimeAsk } from "../core/overstayCopy";
 import { dayReference, namesTourDay, spokenTimes, vagueTimeRequest, type SpokenTime } from "../core/spokenTime";
 import { isGeneralTourHoursQuestion } from "./tourHoursAsk";
-import type { IntentInterpretation, IntentInterpreter, InterpretContext, StepAwaiting, StopRef, TourIntent } from "./model";
+import type { IntentInterpretation, IntentInterpreter, IntentType, InterpretContext, StepAwaiting, StopRef, TourIntent } from "./model";
 import { normalize, numberWord, ordinalWord, stripFiller } from "./normalize";
 import { acceptsNextOpening, yesNo } from "./yesNo";
+
+/**
+ * Injury texts. Hyphenated compounds stay one word so "ambulance-chaser"
+ * is not "ambulance". A 911 line on a normal text is noise, but a missed
+ * injury is unsafe, so fell/hurt/injured need a person or a help word.
+ */
+const STREET_WORD =
+  "main|st|street|ave|avenue|rd|road|blvd|boulevard|dr|drive|ln|lane|way|ct|court|pl|place|pkwy|parkway|ter|terrace|cir|circle|hwy|highway|sq|square";
+const INJURY = "(?:fell|hurt|injured)";
+
+function medicalText(raw: string): string {
+  const glued = raw.replace(/([A-Za-z0-9])-([A-Za-z0-9])/g, "$1$2");
+  return stripFiller(normalize(glued));
+}
+
+function mentions911(text: string): boolean {
+  const kept = text.replace(new RegExp(`\\b911\\s+(?:${STREET_WORD})\\b`, "g"), " ");
+  if (/\b(?:call|dial)\s+911\b/.test(kept)) return true;
+  return /^911$/.test(kept.trim());
+}
+
+function injuryWithPersonOrHelp(text: string): boolean {
+  // These collocations never count, even with a person or a help word beside them.
+  const body = text
+    .replace(/\bfell in love\b/g, " ")
+    .replace(/\bprice fell\b/g, " ")
+    .replace(/\bwould it hurt\b/g, " ");
+  if (!new RegExp(`\\b${INJURY}\\b`).test(body)) return false;
+  if (/\bhelp\b/.test(body)) return true;
+  if (new RegExp(`\\b(?:i|we|he|she|they|someone)\\b(?:\\s+\\w+){0,6}\\s+${INJURY}\\b`).test(body)) return true;
+  if (new RegExp(`\\bmy\\s+(?:\\w+\\s+){1,6}${INJURY}\\b`).test(body)) return true;
+  if (new RegExp(`\\b${INJURY}\\b(?:\\s+\\w+){0,4}\\s+(?:me|him|her|them|someone)\\b`).test(body)) return true;
+  return new RegExp(`\\b(?!(?:it|that|this|there|what|which|price|the|a|an|would|to)\\b)\\w+\\s+(?:is|was|got|gets)\\s+(?:hurt|injured)\\b`).test(body);
+}
+
+/** True when this text should get the 911 help reply, in any conversation state. */
+export function isMedicalEmergency(raw: string): boolean {
+  const text = medicalText(raw);
+  if (!text) return false;
+  if (/\bbleeding\b/.test(text) || /\bambulance\b/.test(text)) return true;
+  if (mentions911(text)) return true;
+  return injuryWithPersonOrHelp(text);
+}
 
 /**
  * Deterministic interpretation: menu numbers, YES/NO, messaging keywords and
@@ -27,7 +71,20 @@ export function keywordOf(text: string): Keyword | undefined {
   return undefined;
 }
 
-const NATURAL_STOP = /^(please )?(stop|quit) (texting|messaging|contacting) (me|us)( please)?$|^(please )?(do not|never) (text|message|contact) (me|us)( again| anymore)?$|^(unsubscribe|remove) me( from (this|your|the) list)?$/;
+const NATURAL_STOP = /^(please )?(stop|quit) (texting|messaging|contacting) (me|us)( please)?$|^(please )?(stop|quit) (texting|messaging|contacting) my\b.*|^(please )?(do not|never) (text|message|contact) (me|us)( again| anymore)?$|^(unsubscribe|remove) me( from (this|your|the) list)?$/;
+
+/** "stop texting me", "stop texting us", "stop texting my family", "please stop texting my ...". */
+export function isPlainLanguageStop(text: string): boolean {
+  return NATURAL_STOP.test(stripFiller(normalize(text)));
+}
+
+/**
+ * Carrier keywords, plus a plain-language stop. The plain-language stop is
+ * the keyword STOP: same opt-out, same acknowledgement, before any other check.
+ */
+export function messagingKeyword(text: string): Keyword | undefined {
+  return keywordOf(text) ?? (isPlainLanguageStop(text) ? "stop" : undefined);
+}
 
 const MANIPULATION = new RegExp(
   [
@@ -50,6 +107,7 @@ const HELP: [RegExp, NonNullable<Extract<TourIntent, { type: "REQUEST_HELP" }>["
     /^(i |we )?(really )?(need|want) (some )?help\b|\bhelp (me|us|please)\b|\bcan (you|someone|somebody|anyone) help\b|\b(need|want) (assistance|a hand)\b|\bemergency\b|\bsomething is wrong\b|\b(have|having|got|there is) (a |an |some )?(problem|issue|trouble)\b|^sos$/,
     "GENERAL",
   ],
+  [/^(?:help)\b|\bhelp$/, "GENERAL"],
 ];
 
 const QUESTION_START =
@@ -452,7 +510,50 @@ function bedroomCount(text: string): number | undefined {
   return m[1] ? 0 : numberWord(m[2]!);
 }
 
+/** Help, doors, cancel, and a menu answer win. A fair-housing question is only the leftover free text. */
+const OPERATION_WINS = new Set<IntentType>([
+  "REQUEST_HELP",
+  "STOP_MESSAGES",
+  "START_MESSAGES",
+  "ARRIVAL",
+  "AT_UNIT",
+  "AT_ROUTE_STOP",
+  "CONFIRM_CANCEL_TOUR",
+  "KEEP_TOUR",
+  "CANCEL_TOUR",
+  "FINISH_TOUR",
+  "ASK_MORE_TIME",
+  "FOLLOW_UP_YES",
+  "FOLLOW_UP_NO",
+  "CONSENT_YES",
+  "CONSENT_NO",
+  "SELECT_UNIT",
+  "ACCEPT_PROPOSED_TIME",
+  "DECLINE_PROPOSED_TIME",
+  "START_INQUIRY",
+]);
+
+function holdFairHousingLast(raw: string, found: IntentInterpretation): IntentInterpretation {
+  if (!isFairHousingQuestion(raw)) return found;
+  const type = found.intent.type;
+  if (OPERATION_WINS.has(type)) return found;
+  if ((type === "SELECT_DATE" || type === "SELECT_TIME" || type === "REQUEST_CUSTOM_TIME") && !suitabilityBlocksBooking(raw)) return found;
+  if (type === "ASK_PROPERTY_QUESTION") return found;
+  const question = raw.trim().slice(0, 300);
+  if (!question) return found;
+  return {
+    intent: { type: "ASK_PROPERTY_QUESTION", question },
+    confidence: 0.95,
+    interpreter: "rules",
+    clarificationNeeded: false,
+  };
+}
+
 export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
+  return holdFairHousingLast(ctx.message ?? "", readByRules(ctx));
+}
+
+function readByRules(ctx: InterpretContext): IntentInterpretation {
   const raw = ctx.message ?? "";
   const full = normalize(raw);
   const t = stripFiller(full);
@@ -476,10 +577,15 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
   }
   if (keyword === "start") return result({ type: "START_MESSAGES" }, 1);
   if (keyword === "help") return result({ type: "REQUEST_HELP", problem: "GENERAL" }, 1);
-  if (NATURAL_STOP.test(t)) return result({ type: "STOP_MESSAGES" }, 0.95);
+  if (isPlainLanguageStop(raw)) return result({ type: "STOP_MESSAGES" }, 0.95);
   if (MANIPULATION.test(t)) return unknown({ manipulation: true, clarificationNeeded: true });
+  if (isMedicalEmergency(raw)) return result({ type: "REQUEST_HELP", problem: "GENERAL" }, 0.95);
 
   if (ctx.awaiting?.kind === "confirm-cancel-tour") {
+    // "yes cancel, family emergency": cancel is a negation, and emergency is a help word.
+    if (/^(yes|yeah|yep|yup|sure|ok|okay)\b/.test(t) && /\bcancel\b/.test(t) && !/\b(?:do not|never)\b/.test(t)) {
+      return result({ type: "CONFIRM_CANCEL_TOUR" }, 0.95);
+    }
     const yn = yesNo(t);
     if (yn.answer === "no" && yn.confidence >= 0.75) return result({ type: "KEEP_TOUR" }, yn.confidence);
     if (yn.answer === "yes" && yn.confidence >= 0.75) return result({ type: "CONFIRM_CANCEL_TOUR" }, yn.confidence);
@@ -498,7 +604,10 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
     for (const [re, problem] of HELP) if (re.test(t)) return result({ type: "REQUEST_HELP", problem }, 0.9);
     return undefined;
   };
-  const informational = () => (asked ? question(0.9) : WANTS_TO_KNOW.test(t) ? question(0.8) : t.split(" ").length <= 3 && TOPIC.test(t) ? question(0.7) : undefined);
+  const informational = () => {
+    if (isTourPartyNote(raw)) return unknown();
+    return asked ? question(0.9) : WANTS_TO_KNOW.test(t) ? question(0.8) : t.split(" ").length <= 3 && TOPIC.test(t) ? question(0.7) : undefined;
+  };
   // Asking about a detail ("How much is Unit 1A?", "Does 1A have laundry?") isn't choosing it.
   const detailQuestion = asked && (TOPIC.test(t) || /\bhow (much|many|big)\b/.test(t));
 
@@ -544,7 +653,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
       const customDate = schedulingIntent(raw, t, true, result, unknown, ctx.today);
       if (customDate) return customDate;
       // A weekday inside a question, or in a message that is not a day pick, is not that day.
-      if (questionInsteadOfDayPick(raw, t, ctx.today)) return question(0.9);
+      if (questionInsteadOfDayPick(raw, t, ctx.today)) return isTourPartyNote(raw) ? unknown() : question(0.9);
       const picked = dateIntent(raw, t, result, ctx.today);
       if (picked) return picked;
       const availability = availabilityDayPick(t);
@@ -625,6 +734,7 @@ export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
 
   /** Where nothing else is expected, only an unmistakable question counts: a bare "anything" or "ok?" isn't one. */
   function clearQuestion(): IntentInterpretation | undefined {
+    if (isTourPartyNote(raw)) return unknown();
     const words = t.split(" ").length;
     if ((asked && words >= 2) || WANTS_TO_KNOW.test(t) || (words <= 3 && TOPIC.test(t))) return question(0.85);
     return undefined;
@@ -706,7 +816,7 @@ function interpretOnTour(ctx: InterpretContext, t: string, asked: boolean, h: He
   const present = STRONG_PRESENCE.test(t) || PRESENCE.test(t);
   if (named.length) {
     const bare = named.length === 1 && bareReference(t, named[0]!);
-    if (asked && !opening && !bare && !STRONG_PRESENCE.test(t)) return question(0.9);
+    if (asked && !opening && !bare && !STRONG_PRESENCE.test(t)) return isTourPartyNote(ctx.message) ? unknown() : question(0.9);
     if (named.length > 1) return result({ type: "AT_ROUTE_STOP" }, 0.4, { clarificationNeeded: true });
     const stop = named[0]!;
     // Being at a door is what opens it; asking for a door to open without saying you're there gets a check first.

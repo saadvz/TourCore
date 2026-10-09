@@ -99,7 +99,7 @@ describe("P0 operator demo through Grok tools, with a real-phone visitor", () =>
     expect(await demo.text("is there a gym?")).toContain("I'll pass your question to the property team, and they'll reply here as soon as they can.");
     // Operator: "What needs attention?" -> "Open Pat's issue. Yes, there's a gym on the roof." -> "Yes."
     const [issue] = (await demo.grok("list_exceptions")).exceptions;
-    expect(issue).toMatchObject({ visitorName: "Pat Smith", summary: 'Asked "is there a gym?". There\'s no approved answer yet.' });
+    expect(issue).toMatchObject({ visitorName: "Pat Smith", summary: 'They asked: "is there a gym?" There\'s no approved answer yet.' });
     const sentBefore = demo.fake.sent.length;
     const answered = await demo.approve("answer_flagged_question", { exceptionId: issue.exceptionId, approvedFact: "There's a gym on the roof." });
     expect(answered.visitorAnswered).toBe(true);

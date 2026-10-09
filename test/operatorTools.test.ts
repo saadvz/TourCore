@@ -449,7 +449,7 @@ describe("live tours and exceptions", () => {
 
     const queue = await h.ok("list_exceptions");
     expect(queue.summary).toBe("1 thing needs attention.");
-    expect(queue.exceptions[0]).toMatchObject({ visitorName: "Pat Smith", unitName: "Unit 101", summary: 'Asked "Is parking included?". There\'s no approved answer yet.', tourStatus: "Tour still active" });
+    expect(queue.exceptions[0]).toMatchObject({ visitorName: "Pat Smith", unitName: "Unit 101", summary: 'They asked: "Is parking included?" There\'s no approved answer yet.', tourStatus: "Tour still active" });
 
     const opened = await h.ok("inspect_exception", { exceptionId: queue.exceptions[0].exceptionId });
     expect(opened.issue.question).toBe("Is parking included?");

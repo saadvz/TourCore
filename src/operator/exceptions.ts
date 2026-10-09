@@ -188,11 +188,17 @@ function unitNameOn(tour: TourSnapshot, reservationId?: string): string | undefi
   return unit ? visitorSubject(tour.config.property, unit.name) : undefined;
 }
 
+/** `They asked: "{q}"` plus a period only when the question does not already end in . ? or ! */
+function quotedVisitorAsk(question: string): string {
+  const asked = question.trim();
+  return `They asked: "${asked}"${/[.!?]$/.test(asked) ? "" : "."}`;
+}
+
 function summaryFor(kind: ExceptionKind, e: AuditEvent, tour: TourSnapshot): string {
   const door = tour.config.doors.find((d) => d.id === e.doorId)?.name ?? "a door that isn't on file";
   switch (kind) {
     case "unanswered-question":
-      return `Asked "${e.detail}". There's no approved answer yet.`;
+      return `${quotedVisitorAsk(e.detail)} There's no approved answer yet.`;
     case "handler-failed":
       return e.detail;
     case "needs-help":
@@ -218,6 +224,11 @@ function summaryFor(kind: ExceptionKind, e: AuditEvent, tour: TourSnapshot): str
     case "overstay":
       return `Hasn't confirmed leaving ${unitNameOn(tour, e.reservationId) ?? "the property"}.`;
   }
+}
+
+/** Drops a next step whose whole sentence is already in the summary. Other wording stays. */
+function stepsNotAlreadyInSummary(summary: string, steps: string[]): string[] {
+  return steps.filter((step) => !summary.includes(step));
 }
 
 function nextStepsFor(kind: ExceptionKind, tour: TourSnapshot | undefined, stillPaused: boolean, fairHousing = false): string[] {
@@ -289,16 +300,23 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
   const extra = replies.map((later) => later.detail).join(" ");
   const asked = kind === "unanswered-question" && e.detail ? e.detail : undefined;
   const fairHousing = kind === "unanswered-question" && e.code === FAIR_HOUSING_CODE;
-  const sent = resolution?.approvedFact?.replace(/\.$/, "");
-  const main = asked && sent ? `Asked "${asked}". Sent "${sent}".` : summaryFor(kind, e, tour);
+  const sent = resolution?.approvedFact?.trim();
+  const sentPeriod = sent && /[.!?]$/.test(sent) ? "" : ".";
+  const main = asked && sent ? `${quotedVisitorAsk(asked)} They were sent "${sent}"${sentPeriod}` : summaryFor(kind, e, tour);
   const teamTextMissed = kind === "message-failed" && isTeamTextFailedNotice(e.detail);
-  const summary = teamTextMissed ? e.detail : extra ? `${main} ${extra}` : main;
+  const summary = fairHousing
+    ? `${asked ? quotedVisitorAsk(asked) : "They asked a question."} ${FAIR_HOUSING_INBOX}`
+    : teamTextMissed
+      ? e.detail
+      : extra
+        ? `${main} ${extra}`
+        : main;
   return {
     exceptionId,
     propertyId: tour.propertyId,
     property: tour.config.property.name,
     kind,
-    title: teamTextMissed ? "A text to you didn't go out" : TITLES[kind],
+    title: teamTextMissed ? "A text to you didn't go out" : fairHousing ? FAIR_HOUSING_TITLE : TITLES[kind],
     summary,
     visitorName: visitorNameOf(tour),
     unitName: unitNameOn(tour, e.reservationId) ?? unitSubject(tour, e.unitId),
@@ -310,7 +328,7 @@ function fromEvent(tour: TourSnapshot, e: AuditEvent, kind: ExceptionKind, resol
     ...(e.reservationId ? { reservationId: e.reservationId } : {}),
     status,
     ...(resolution ? { resolution } : {}),
-    nextSteps: status === "open" ? nextStepsFor(kind, tour, paused, fairHousing) : [],
+    nextSteps: status === "open" ? stepsNotAlreadyInSummary(summary, nextStepsFor(kind, tour, paused, fairHousing)) : [],
     ...(fairHousing ? { proposeDraft: false as const } : {}),
   };
 }
@@ -382,13 +400,14 @@ export async function listExceptions(services: OperatorServices, options: { prop
       const exceptionId = id(propertyId, "restore", broken.visitorPhone, at);
       const resolution = resolutions.get(exceptionId);
       const earlier = mine.find((t) => t.kind === "messaging" && t.visitorPhone === broken.visitorPhone);
+      const summary = `Couldn't be restored after a restart (${broken.problem.replace(/\.$/, "")}). No doors will open for it.`;
       out.push({
         exceptionId,
         propertyId,
         property: config.property.name,
         kind: "restore-conflict",
         title: TITLES["restore-conflict"],
-        summary: `Couldn't be restored after a restart (${broken.problem.replace(/\.$/, "")}). No doors will open for it.`,
+        summary,
         visitorName: earlier ? visitorNameOf(earlier) : formatPhone(broken.visitorPhone),
         unitName: earlier ? unitNameOf(earlier) : undefined,
         happenedAt: at,
@@ -397,7 +416,7 @@ export async function listExceptions(services: OperatorServices, options: { prop
         accessBlocked: true,
         status: resolution ? "resolved" : "open",
         ...(resolution ? { resolution } : {}),
-        nextSteps: resolution ? [] : nextStepsFor("restore-conflict", undefined, false),
+        nextSteps: resolution ? [] : stepsNotAlreadyInSummary(summary, nextStepsFor("restore-conflict", undefined, false)),
       });
     }
   }
@@ -532,10 +551,13 @@ export function visitorAnswerText(_question: string, fact: string): string {
 /** Landlord-facing refusal. The visitor never sees this, and never hears "fair housing". */
 export const FAIR_HOUSING_REFUSAL = "This one touches on fair housing, so I won't draft an answer. Reply to them yourself, then mark it handled.";
 
-export const FAIR_HOUSING_STEPS = [
-  "This one touches on fair housing, so I won't draft an answer. Reply to them yourself.",
-  "Mark it handled once you've replied.",
-] as const;
+/** The one landlord sentence on a fair-housing flag. The summary says it once. The next step does not repeat it. */
+export const FAIR_HOUSING_TITLE = "Possible fair-housing question";
+
+export const FAIR_HOUSING_INBOX =
+  "This may touch on fair housing, so there's no draft. Only you can answer this one. They were told you'd text them back here.";
+
+export const FAIR_HOUSING_STEPS = ["Mark it handled once you've replied."] as const;
 
 /**
  * The landlord's approve question. The quoted text equals `visitorWillReceive` byte for byte.

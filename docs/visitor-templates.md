@@ -4,7 +4,7 @@ Every outbound visitor text uses one of these ids. `{slot}` is filled before sen
 
 Text from the landlord or from a model reaches a visitor only as `approved-answer` or `approved-answer-closing`, and only after they approve a flagged question (`resolve_issue`). A no-draft flag never gets a draft. `approved-profile-fact` repeats a fact they already saved.
 
-198 message templates. 7 channel prompts.
+203 message templates. 7 channel prompts.
 
 ## Messages
 
@@ -234,6 +234,30 @@ I've let the {team} know. {rest}
 
 ```
 The {team} already knows and is on it. {rest}
+```
+
+### medical-help
+
+Injury help when the team alert went out. Plain help with no medical word keeps help-ack.
+
+```
+If someone is hurt, call 911 now. I've also let the {team} know, and they'll text you here as soon as they can.
+```
+
+### medical-help-call
+
+Injury help when the team alert failed and a visitor help number is saved. Same help-number choice as property-not-ready-call. Never the snag line.
+
+```
+If someone is hurt, call 911 now. I couldn't reach the {team} just now, so please call them at {phone} too.
+```
+
+### medical-help-unreached
+
+Injury help when the team alert failed and no visitor help number is saved. Never the snag line.
+
+```
+If someone is hurt, call 911 now. I couldn't reach the {team} just now.
 ```
 
 ### no-open-times
@@ -985,6 +1009,36 @@ Tours at {address} are back. Text me anytime to book.
 Message frequency varies. Message and data rates may apply.
 
 Reply YES to continue, HELP for help, or STOP to opt out.
+
+Privacy: {privacy}
+Terms: {terms}
+```
+
+### sms-disclosure-draft
+
+START on a draft-only line when no visitor help number is saved. Same disclosure as sms-disclosure, with the YES line replaced.
+
+```
+{brand}: You're starting a text conversation about a self-guided property tour.
+
+Message frequency varies. Message and data rates may apply.
+
+Tours by text aren't available right now. Please check back soon. Reply HELP for help or STOP to opt out.
+
+Privacy: {privacy}
+Terms: {terms}
+```
+
+### sms-disclosure-draft-call
+
+START on a draft-only line when a visitor help number is saved. {team} and {phone} use the same help-number wording as the not-ready reply.
+
+```
+{brand}: You're starting a text conversation about a self-guided property tour.
+
+Message frequency varies. Message and data rates may apply.
+
+Tours by text aren't available right now. You can call the {team} at {phone}. Reply HELP for help or STOP to opt out.
 
 Privacy: {privacy}
 Terms: {terms}

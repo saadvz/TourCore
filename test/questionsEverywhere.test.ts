@@ -143,7 +143,7 @@ describe("questions at every stage of a text conversation", () => {
     await a.text("1");
     const issues = (await a.grok("list_exceptions")).exceptions;
     expect(issues.map((x: { summary: string }) => x.summary).sort()).toEqual(
-      ['Asked "Can I bring my bike inside?". There\'s no approved answer yet.', 'Asked "Is there a gym?". There\'s no approved answer yet.', 'Asked "Is there a pool?". There\'s no approved answer yet.'],
+      ['They asked: "Can I bring my bike inside?" There\'s no approved answer yet.', 'They asked: "Is there a gym?" There\'s no approved answer yet.', 'They asked: "Is there a pool?" There\'s no approved answer yet.'],
     );
     expect(issues.find((x: { summary: string }) => x.summary.includes("gym"))).toMatchObject({ visitorName: "(555) 010-2000", what: "Question with no approved answer" });
     // Consent still works after the interruption.

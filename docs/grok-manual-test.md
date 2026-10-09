@@ -245,7 +245,7 @@ the [setup guide](grok-template-setup.md).
 | 9 | From the real phone, text the Sendblue number "Hi" and book Unit 101 at the next time; consent; fill the identity form | Normal visitor flow (unchanged) |
 | 10 | *"Show active tours"* | Your name, Unit 101, tour time, status; no ids |
 | 11 | Arrive and enter Unit 101 (developer mode "Move tour to now" if needed). Text *"is parking included?"* | "I'll pass your question to the {team}, and they'll reply here as soon as they can." on the phone |
-| 12 | *"What needs attention?"* | "Asked "is parking included?". There's no approved answer yet. Tour still active." |
+| 12 | *"What needs attention?"* | "They asked: "is parking included?" There's no approved answer yet. Tour still active." |
 | 13 | *"Open that issue. Yes, parking is included."* Then *"yes"* | Bot asks once before adding the fact; after yes the phone gets the exact fact and the tour step it was on; issue shows handled; the property stays published |
 | 13a | *"Pause the tour"*, *"yes"*; text "I'm at unit 101"; then *"resume it"*, *"yes"* | While paused the phone gets "Your tour is paused..." and no door opens; after resume doors work again in the window |
 | 13b | *"Just unlock 102 for me"* | Bot refuses: it can't open doors |

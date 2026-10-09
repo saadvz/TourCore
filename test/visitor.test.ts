@@ -186,7 +186,7 @@ describe("visitor demo on the real engine", () => {
     expect(lastFromTourCore(s)).toBe("I'll pass your question to the property team, and they'll reply here as soon as they can.");
     expect((await s.store.listAudit()).some((e) => e.type === "QUESTION_UNANSWERED" && e.detail === "Is there a gym?")).toBe(true);
     const live = await liveTourView(s);
-    expect(live.questions.map((q) => q.text)).toContain('Pat asked "Is there a gym?". There was no approved answer, so it was flagged for your team.');
+    expect(live.questions.map((q) => q.text)).toContain('Pat asked "Is there a gym?" There was no approved answer, so it was flagged for your team.');
   });
 
   it("finishing the tour locks up and asks the follow-up question, and the answer is recorded", async () => {

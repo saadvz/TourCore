@@ -29,7 +29,7 @@ import { toursUnavailableText, visitorTeamName } from "../sms/templates";
 import { SetupInputError } from "../setup/setupActions";
 import type { ConversationItem, TourRecord } from "../setup/workspace";
 import type { ExportBundle } from "../export/exportBundle";
-import type { Awaiting, IntentInterpretation } from "../intent";
+import { isMedicalEmergency, isPlainLanguageStop, type Awaiting, type IntentInterpretation } from "../intent";
 import { smsHelpBody, smsStopAck, type SmsCampaignConsent, type SmsConsentStatus } from "./smsConsent";
 import type { VerificationLinks } from "./verificationLinks";
 import { afterCloseAlertOpen } from "./overstayScheduler";
@@ -111,6 +111,8 @@ const ALLOWED: Record<VisitorStage, VisitorAction[]> = {
 export interface QuestionOutcome {
   outcome: "answered" | "unknown" | "which-unit";
   units?: string[];
+  /** A fair-housing hold. The open day or time menu is sent again. */
+  fairHousing?: boolean;
 }
 
 export interface LastAccess {
@@ -583,8 +585,10 @@ export class VisitorDemoSession {
     await this.recordText(said);
     await this.reply(smsStopAck(), undefined, { deliverDespiteOptOut: true });
     this.optedOut = true;
-    this.noteSmsConsent("opted_out", (said.text ?? "STOP").trim().toUpperCase());
-    await this.core.optOutOfMessaging(this.visitor?.phone ?? "", (said.text ?? "STOP").trim());
+    const raw = (said.text ?? "STOP").trim();
+    const keyword = isPlainLanguageStop(raw) ? "STOP" : raw.toUpperCase();
+    this.noteSmsConsent("opted_out", keyword);
+    await this.core.optOutOfMessaging(this.visitor?.phone ?? "", keyword);
     await this.syncReplies();
   }
 
@@ -602,6 +606,19 @@ export class VisitorDemoSession {
    * numbers — get the carrier HELP keyword reply.
    */
   async help(said: Said): Promise<void> {
+    const text = said.text ?? "HELP";
+    if (isMedicalEmergency(text)) {
+      const reservation = await this.reservation();
+      if (reservation) {
+        this.say("visitor", text);
+        await this.core.requestHelp(reservation.id, await this.currentPlace(), { text, meta: said.meta });
+      } else {
+        await this.recordText(said);
+        await this.core.requestHelp(undefined, undefined, { text, meta: said.meta, phone: this.visitor?.phone ?? "" });
+      }
+      await this.syncReplies();
+      return;
+    }
     const reservation = await this.reservation();
     if (reservation && isLiveHelpReservation(reservation, this.clock.now())) {
       this.say("visitor", said.text ?? "HELP");
@@ -649,7 +666,7 @@ export class VisitorDemoSession {
       ...(options.answerSuffix ? { answerSuffix: options.answerSuffix } : {}),
     });
     await this.syncReplies();
-    return { outcome: out.outcome, ...(out.units ? { units: out.units } : {}) };
+    return { outcome: out.outcome, ...(out.units ? { units: out.units } : {}), ...(out.fairHousing ? { fairHousing: true } : {}) };
   }
 
   /** Flags a question for the team and sends `reply` (skipped when they opted out). */

@@ -3,7 +3,9 @@ import { formatPhone } from "../src/core/phone";
 import { UNKNOWN_ANSWER } from "../src/core/TourCore";
 import { approvedFacts, findApprovedAnswer } from "../src/core/facts";
 import { isFairHousingQuestion } from "../src/core/fairHousing";
-import { FAIR_HOUSING_REFUSAL } from "../src/operator/exceptions";
+import { interpretByRules } from "../src/intent/ruleBased";
+import { FAIR_HOUSING_PHRASES } from "./fixtures/fairHousingPhrases";
+import { FAIR_HOUSING_INBOX, FAIR_HOUSING_REFUSAL } from "../src/operator/exceptions";
 import { hillsideConfig, liveApp, PHONE, type LiveApp } from "./liveApp";
 
 /**
@@ -24,6 +26,15 @@ const HOLDING = [
 ] as const;
 
 describe("fair-housing detection", () => {
+  it("checks every shared fair-housing phrase", () => {
+    for (const row of FAIR_HOUSING_PHRASES) {
+      expect(isFairHousingQuestion(row.phrase), `${row.source}: ${row.phrase}`).toBe(row.flagged);
+      if (row.expected === "flagged") expect(row.flagged, row.phrase).toBe(true);
+      if (row.expected === "not-flagged" || row.expected === "booked" || row.expected === "tour") expect(row.flagged, row.phrase).toBe(false);
+    }
+    expect(FAIR_HOUSING_PHRASES.filter((row) => row.source === "QA probe")).toHaveLength(92);
+  });
+
   it.each([
     "Do you rent to families with kids?",
     "Would you rent to a single mom with a Section 8 voucher?",
@@ -125,7 +136,6 @@ describe("fair-housing detection", () => {
   it.each([
     "How much is rent?",
     "Is rent due monthly?",
-    "What color are the walls?",
     "Do you allow pets?",
     "Do you allow dogs?",
     "Is there a dog park?",
@@ -135,9 +145,6 @@ describe("fair-housing detection", () => {
     "Is there a temple nearby?",
     "Is there a mosque nearby?",
     "Is there a dog run?",
-    "Do you offer senior discounts?",
-    "What is the age of the building?",
-    "What is the roof age?",
     "Is there a support beam?",
     "What are the customer service hours?",
     "Is there a service elevator?",
@@ -148,23 +155,83 @@ describe("fair-housing detection", () => {
     "how many units are in the building?",
     "how many bedrooms?",
     "is the building quiet?",
-    "are the walls white? lots of light?",
-    "lots of color in the kitchen?",
-    "any Asian restaurants nearby?",
-    "white picket fence in the neighborhood?",
-    "what color are the doors in the building?",
-    "Black Friday sale nearby?",
   ])("does not match %s", (text) => {
     expect(isFairHousingQuestion(text)).toBe(false);
   });
 });
 
 describe("neighborhood composition", () => {
-  it("uses race words only together with a composition phrase", () => {
+  it("treats a race word on its own as a possible fair-housing question", () => {
     for (const word of ["hispanic", "latino", "latina", "asian", "black", "white", "arab"]) {
-      expect(isFairHousingQuestion(word)).toBe(false);
-      expect(isFairHousingQuestion(`are there ${word} residents nearby?`)).toBe(true);
+      expect(isFairHousingQuestion(word), word).toBe(true);
+      expect(isFairHousingQuestion(`are there ${word} residents nearby?`), word).toBe(true);
     }
+  });
+});
+
+const DAY_MENU = {
+  message: "",
+  step: "choose-date" as const,
+  units: [{ name: "Unit 1A" }],
+  timeChoices: ["Monday, Sep 28", "Tuesday, Sep 29", "Wednesday, Sep 30", "Thursday, Oct 1", "Friday, Oct 2"],
+  remainingStops: [],
+  doors: [],
+  today: { year: 2026, month: 9, day: 28 },
+  timezone: "America/New_York",
+};
+
+describe("booking and tour logistics", () => {
+  it("books a day or time that only mentions who is coming", () => {
+    const kids = interpretByRules({ ...DAY_MENU, message: "Can I bring my kids Saturday at 2?" });
+    expect(kids.intent).toMatchObject({ type: "REQUEST_CUSTOM_TIME", hour: 2, weekday: "SAT" });
+    const family = interpretByRules({ ...DAY_MENU, message: "We're a family of 4, is 3 PM free?" });
+    expect(family.intent).toMatchObject({ type: "REQUEST_CUSTOM_TIME", hour: 3, minute: 0, meridiem: "PM" });
+  });
+
+  it("keeps a booking that also asks suitability on hold", () => {
+    const both = interpretByRules({ ...DAY_MENU, message: "Can I come Saturday at 2? Is it good for kids?" });
+    expect(both.intent).toEqual({ type: "ASK_PROPERTY_QUESTION", question: "Can I come Saturday at 2? Is it good for kids?" });
+  });
+
+  it("continues the tour for bringing someone along and does not treat it as a property question", () => {
+    for (const phrase of FAIR_HOUSING_PHRASES.filter((row) => row.expected === "tour").map((row) => row.phrase)) {
+      const intent = interpretByRules({ ...DAY_MENU, message: phrase }).intent;
+      expect(intent.type, phrase).toBe("UNKNOWN");
+    }
+  });
+
+  it("does not answer whether the place suits the people coming along", async () => {
+    const a = await liveApp({ cleanups });
+    await a.optInSms();
+    await a.text("1");
+    await a.grok("update_property_details", {
+      property: "100 Alfred Way",
+      facts: ["Street parking only.", "Families are welcome.", "The entrance is wheelchair accessible."],
+    });
+    const planted = /Families are welcome|wheelchair accessible|good for kids|good for families/i;
+    for (const phrase of [
+      "Can my family come to the tour?",
+      "Can I bring my kids to the tour?",
+      "I'm bringing my baby, is that ok?",
+      "Can my kids come to the showing?",
+      "Is my partner allowed on the tour?",
+    ]) {
+      const replies = await a.text(phrase);
+      expect(replies.join("\n"), phrase).not.toMatch(planted);
+      expect(replies.join("\n"), phrase).not.toContain("Good question for the");
+      expect(replies.join("\n"), phrase).toContain("Which day works for you?");
+    }
+    const wheelchair = await a.text("Can my mom come, she uses a wheelchair");
+    expect(wheelchair[0]).toBe(HELD);
+    expect(wheelchair.join("\n")).toContain("Which day works for you?");
+    expect(wheelchair.join("\n")).not.toMatch(planted);
+    const booked = await a.text("Can I bring my kids Saturday at 2?");
+    expect(booked.join("\n")).not.toMatch(planted);
+    expect(booked.join("\n")).not.toContain("Good question for the");
+    const held = await a.text("Is the tour OK for kids?");
+    expect(held[0]).toBe(HELD);
+    expect(held.join("\n")).toContain("Which day works for you?");
+    expect(held.join("\n")).not.toMatch(planted);
   });
 });
 
@@ -200,12 +267,10 @@ describe("fair-housing questions on a live tour", () => {
       const flag = flags.find((item) => item.summary.includes(text));
       expect(flag, text).toBeTruthy();
       expect(flag!.proposeDraft).toBe(false);
-      expect(flag!.nextSteps).toEqual([
-        "This one touches on fair housing, so I won't draft an answer. Reply to them yourself.",
-        "Mark it handled once you've replied.",
-      ]);
+      expect(flag!.nextSteps).toEqual(["Mark it handled once you've replied."]);
       expect(sent.join("\n")).not.toMatch(/fair housing/i);
-      expect(flag!.summary).toContain("There's no approved answer yet.");
+      expect(flag!.summary).toBe(`They asked: "${text}" ${FAIR_HOUSING_INBOX}`);
+      expect(flag!.summary).not.toContain("There's no approved answer yet.");
       const before = a.fake.sent.length;
       await expect(a.grok("answer_flagged_question", { exceptionId: flag!.exceptionId, approvedFact: "Yes, that's fine." })).rejects.toThrow(
         "This one touches on fair housing, so I won't draft an answer. Reply to them yourself, then mark it handled.",
@@ -220,7 +285,7 @@ describe("fair-housing questions on a live tour", () => {
     expect(monthly.join("\n")).toContain(RENT);
     expect(monthly.join("\n")).not.toContain(UNKNOWN_ANSWER);
     expect((await a.grok("list_exceptions")).exceptions).toHaveLength(3);
-    expect(sent).toEqual([HELD, HELD, HELD]);
+    expect(sent.every((body) => body.startsWith(HELD) && body.includes("I have these times available"))).toBe(true);
   });
 
   it("quotes the exact visitor text in the approve question", async () => {
@@ -313,7 +378,7 @@ describe("fair-housing questions on a live tour", () => {
       expect(flag, text).toBeTruthy();
       expect(flag!.proposeDraft, text).toBe(false);
     }
-    expect(sent).toEqual(flagged.map(() => HELD));
+    expect(sent.every((body) => body.startsWith(HELD) && body.includes("I have these times available"))).toBe(true);
 
     const pets = await a.text("Do you allow pets?");
     const dogs = await a.text("Do you allow dogs?");

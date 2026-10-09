@@ -161,8 +161,10 @@ function sentence(
       return info("The property was removed.");
     case "QUESTION_ANSWERED":
       return good(`${c.name} asked "${e.detail}" and got an answer from your approved facts.`);
-    case "QUESTION_UNANSWERED":
-      return blocked(`${c.name} asked "${e.detail}". There was no approved answer, so it was flagged for your team.`);
+    case "QUESTION_UNANSWERED": {
+      const period = /[.!?]$/.test(e.detail) ? "" : ".";
+      return blocked(`${c.name} asked "${e.detail}"${period} There was no approved answer, so it was flagged for your team.`);
+    }
     case "HANDLER_FAILED":
       return blocked(e.detail);
     case "HELP_REQUESTED":

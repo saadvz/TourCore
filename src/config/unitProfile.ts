@@ -366,9 +366,77 @@ const TOPICS: [ProfileField, RegExp][] = [
   ["floor", /\b(what floor|which floor|floor is)\b/i],
 ];
 
-/** Which unit detail a visitor's question is about, if it's clearly one. */
+const ROOM_WORD = String.raw`(?:(?:master|guest|primary|main)\s+)?(?:bed(?:room)?s?|bath(?:room)?s?)`;
+
+/**
+ * The room is the subject of a question about the room itself (its closet,
+ * windows, size, "what size", carpet, updates, washer), or one room is inside another.
+ * Those are not "how many bedrooms?" A count question still is.
+ */
+function roomAttributeQuestion(question: string): boolean {
+  if (new RegExp(String.raw`\b(?:how\s+(?:big|large)|what\s+size|size\s+of)\b[\s\S]{0,40}\b${ROOM_WORD}\b`, "i").test(question)) return true;
+  if (new RegExp(String.raw`\b(?:does|do)\s+(?:the\s+|a\s+|your\s+)?${ROOM_WORD}\s+have\b`, "i").test(question)) return true;
+  if (
+    new RegExp(
+      String.raw`\b(?:is|are)\s+(?:the\s+|a\s+|your\s+)?${ROOM_WORD}\s+(?:carpet\w*|updat\w*|renovat\w*|modern|new|big|large|small|painted)\b`,
+      "i",
+    ).test(question)
+  ) {
+    return true;
+  }
+  if (
+    !/\bhow many\b/i.test(question) &&
+    new RegExp(String.raw`\b${ROOM_WORD}\b`, "i").test(question) &&
+    /\b(?:closets?|wardrobes?|windows?|carpet\w*|updat\w*|renovat\w*|washers?|dryers?|flooring)\b/i.test(question)
+  ) {
+    return true;
+  }
+  return (
+    /\b(?:in|inside)\s+the\s+(?:bed(?:room)?s?|bath(?:room)?s?)\b/i.test(question) &&
+    /\b(?:bed(?:room)?s?|bath(?:room)?s?)\b/i.test(question)
+  );
+}
+
+/**
+ * A bedroom or bathroom word used as the place where something else happens
+ * ("paint the bedroom walls", "smoke in the bedroom", "how big is the bedroom")
+ * is not a question about how many there are.
+ */
+function asksForField(question: string, field: ProfileField): boolean {
+  if (roomAttributeQuestion(question)) {
+    if (/\bhow many\b/i.test(question) && (field === "bedrooms" || field === "bathrooms")) return true;
+    if (field === "bedrooms" || field === "bathrooms" || field === "squareFeet" || field === "laundry") return false;
+  }
+  if (field !== "bedrooms" && field !== "bathrooms") return true;
+  const inquiry =
+    /\b(?:how many|how much|number of|does (?:it|this|the|that) have|do (?:you|they) have|is there|are there|what(?:'s| is| are)(?: the)?|whats)\b/i.test(question) ||
+    /^\s*(?:a\s+)?(?:bed(?:room)?s?|bath(?:room)?s?|studio)\s*\??\s*$/i.test(question);
+  const incidental =
+    /\b(?:paint(?:ing)?|smoke|smoking|vape|vaping|stay|staying|hang|nail|nails|drill|wallpaper|remodel|renovate|alter)\b/i.test(question) ||
+    /\b(?:in|inside) the (?:bed|bath)/i.test(question) ||
+    /\b(?:bed|bath)room walls?\b/i.test(question);
+  return incidental && !inquiry ? false : true;
+}
+
+/** Fields named in the question that the question is not actually asking about. */
+export function mentionedButNotAsked(question: string): ProfileField[] {
+  return TOPICS.filter(([field, re]) => re.test(question) && !asksForField(question, field)).map(([field]) => field);
+}
+
+/** Drop those field words so a later keyword match cannot answer from them alone. */
+export function stripFieldWords(text: string, fields: ProfileField[]): string {
+  let out = text;
+  for (const field of fields) {
+    const re = TOPICS.find(([id]) => id === field)?.[1];
+    if (!re) continue;
+    out = out.replace(new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`), " ");
+  }
+  return out;
+}
+
+/** Which unit detail a visitor's question is about, if it is actually asking for that detail. */
 export function questionTopic(question: string): ProfileField | undefined {
-  const hits = TOPICS.filter(([, re]) => re.test(question)).map(([f]) => f);
+  const hits = TOPICS.filter(([field, re]) => re.test(question) && asksForField(question, field)).map(([field]) => field);
   return hits.length === 1 ? hits[0] : undefined;
 }
 
