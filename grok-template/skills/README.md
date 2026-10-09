@@ -12,10 +12,11 @@ The Tour Core skills live in one place only:
 | Setup Property | `.grok/skills/setup-property/SKILL.md` |
 | Map Route | `.grok/skills/map-route/SKILL.md` |
 | Run Readiness Check | `.grok/skills/run-readiness-check/SKILL.md` |
-| Simulate Tour | `.grok/skills/simulate-tour/SKILL.md` |
 | Work Exception | `.grok/skills/work-exception/SKILL.md` |
 | Export Audit | `.grok/skills/export-audit/SKILL.md` |
+| Backup Tour Core | `.grok/skills/backup-tour-core/SKILL.md` |
 
-Install Tour Core is the installer skill; the other six are the PRD's operator
-skills. They aren't copied here, so there's one source of truth.
-`template.json` lists them as part of the template.
+Install Tour Core is the installer skill. The landlord template ships these
+seven skills. They aren't copied here, so there's one source of truth.
+`template.json` lists them. Simulate Tour stays in `.grok/skills/` for the QA
+connector and is not part of this landlord template.

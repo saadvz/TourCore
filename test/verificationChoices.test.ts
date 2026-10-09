@@ -16,6 +16,7 @@ import { createSetupServer } from "../src/web/server";
 import { handleApi } from "../src/web/api";
 import { fakeSendblue, inbound, SECRET, sendblueEnv } from "./fakeSendblue";
 import { grokHarness, type GrokHarness } from "./grokHarness";
+import { publishForVisitors } from "./liveApp";
 
 /**
  * Proof that the only writable verification choices are basic-form and none.
@@ -479,6 +480,7 @@ async function startPhoneApp(mode: "basic-form" | "none", verificationValidForDa
   const ws = new PropertyWorkspace(root);
   const { config } = ws.save(phoneProperty(mode, verificationValidForDays));
   ws.recordReadiness(config.property.id, await runReadinessCheck(config, { now: new Date(clock) }));
+  publishForVisitors(ws, config.property.id, new Date(clock));
   const server: Server = createSetupServer({
     toolSurface: "all", workspace: ws, now: () => new Date(clock), realNow: () => clock, log: () => {} });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

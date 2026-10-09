@@ -65,8 +65,9 @@ for a short-lived token (`/token`, PKCE S256). Through the tunnel address,
 and the page where you approve connections, answer only on this computer.
 
 `npm run grok:status` shows the mode, the URL and what's connected (never token
-values). `npm run grok:tools` lists the 58 tools (44 property and tour tools
-plus 14 installation tools).
+values). `npm run grok:tools` lists the 21 landlord tools. The hosted owner
+also sees `reset_hosted_demo`. The ops connector lists its 13 tools and the
+QA connector lists its 15. Those connectors are separate from the landlord list.
 
 ## 3. Create the Tour Core Bot
 
@@ -89,7 +90,7 @@ folders:
 2. Ask: *"Save this as a skill called Setup Property. Keep the instructions,
    the allowed tools, the approval rules and the stop condition exactly as
    written."* (Use the matching name: Install Tour Core, Setup Property, Map
-   Route, Run Readiness Check, Simulate Tour, Work Exception, Export Audit.)
+   Route, Run Readiness Check, Work Exception, Export Audit, Backup Tour Core.)
 3. Review what the Bot saved; it should match the file.
 
 ### The Tour Core Operator Updates routine
@@ -142,14 +143,14 @@ itself: each refresh token is single-use, lasts up to 30 days, and an approval
 ends after 90 days at most. Then you approve again.
 
 New tools are available from your next message. Check with *"List the Tour Core
-tools you can use."* You should see tools such as `create_property_setup`,
-`run_readiness_check`, `list_exceptions` and `export_audit`, and nothing that
+tools you can use."* You should see tools such as `get_state`,
+`save_property`, `run_checks`, `get_inbox` and `export_records`, and nothing that
 unlocks a door.
 
 **Approvals.** Grok Bot asks for approval around consequential actions and lets
 you add **Require approval** rules. Add one for the Tour Core tools
-`publish_demo_property`, `place_operator_hold`, `clear_operator_hold`,
-`revoke_tour_access` and `answer_flagged_question`. Tour Core enforces its own
+`publish`, `remove_property`, `cancel_tour` and `restore_records`. On a hosted Tour Core
+the owner also approves `reset_hosted_demo`. Tour Core enforces its own
 approval regardless: those tools only act when called a second time with a
 short-lived code after the operator's yes, and only if nothing changed.
 Connecting with OAuth doesn't change that. OAuth only decides whether Grok may
@@ -166,7 +167,7 @@ Grok-managed install the bootstrap records the new address and the
 installation status marks Grok's connection and visitor messaging as needing
 action. Otherwise update `PUBLIC_BASE_URL` and restart Tour Core. Either way,
 remove the Tour Core connector in Grok and add it again with the new URL, then
-run `test_visitor_messaging` (or ask the Bot to "check texting") so Sendblue
+ask the Bot to check texting (`set_up_texting`) so the texting provider
 gets the new address. Tokens and registrations are tied to the address they
 were issued for, so the old ones stop working by design.
 
@@ -202,8 +203,9 @@ asks one question at a time (address, then "What type of property is this?",
 units or the whole home, unit details, entrance, hallway doors, routes, tour
 hours, verification), shows what it inferred, and reads the setup back. The
 address is the property's name unless you give one; the Bot never invents a
-building name. When texting is installed the property uses it automatically,
-so the Bot doesn't ask how to text people. See
+building name. On a fresh install the Bot asks "How should people text you about a tour?"
+and calls `set_up_texting`. Once texting is installed, a new property uses it
+automatically, so the Bot doesn't ask that again. See
 [`grok-template/examples/first-run.md`](../grok-template/examples/first-run.md).
 
 ## 8. Run readiness
@@ -213,7 +215,8 @@ Tour Core's readiness engine; failures come back in plain words with a fix.
 
 ## 9. Run a practice tour
 
-Say *"Run a practice tour"* (Simulate Tour). Nobody is texted and no real door
+Say *"Run a practice tour"* (Run Readiness Check). `run_checks` runs the
+readiness check and the practice tour. Nobody is texted and no real door
 opens. The Bot lists the proof points.
 
 ## 10. Publish

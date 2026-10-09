@@ -1,3 +1,5 @@
+import { formatPhone } from "../core/phone";
+
 /**
  * Every visitor-facing SMS lives here. Outbound prospect texts must match one
  * id before they are sent. `{slot}` is filled first. A channel prompt (yes/no,
@@ -6,7 +8,7 @@
  *
  * Text supplied by the landlord or by a model may reach a visitor only as
  * `approved-answer` or `approved-answer-closing`, and only from
- * `answer_flagged_question` (later `resolve_issue`). A no-draft flag never
+ * `resolve_issue`. A no-draft flag never
  * gets a draft. `approved-profile-fact` repeats a fact the landlord already
  * saved. It is not a new draft.
  */
@@ -22,9 +24,16 @@ export function visitorTeamName(name: string | undefined | null): string {
   return /\bteam$/i.test(trimmed) ? trimmed : "property team";
 }
 
-/** The human-path reply when tours cannot run, including a published property with no time zone. */
-export function toursUnavailableText(name: string, team?: string): string {
-  return `Thanks for reaching out to ${name}. Self-guided tours by text aren't available right now. Please contact the ${visitorTeamName(team)}.`;
+/**
+ * The human-path reply when tours cannot run, including a draft property and a
+ * published property with no time zone. `visitorContact` is the saved visitor
+ * help number, the same field the paused and removed replies use.
+ */
+export function toursUnavailableText(name: string, team?: string, visitorContact?: string): string {
+  if (visitorContact) {
+    return `Thanks for reaching out to ${name}. Tours by text aren't available right now. You can call the ${visitorTeamName(team)} at ${formatPhone(visitorContact)}.`;
+  }
+  return `Thanks for reaching out to ${name}. Tours by text aren't available right now. Please check back soon.`;
 }
 
 export class UntemplatedVisitorSms extends Error {
@@ -66,8 +75,8 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "storage-unavailable", text: "I can't check that right now. Please try again in a little while." },
   { id: "shared-fact", text: "Here's what the {team} shared: {fact}" },
   { id: "approved-profile-fact", text: "{answer}", explicitOnly: true, note: "A profile fact the landlord already saved. Not a draft." },
-  { id: "approved-answer", text: "{answer}", explicitOnly: true, note: "Landlord reply from answer_flagged_question only. No-draft items never use this." },
-  { id: "approved-answer-closing", text: "{answer} Let me know if you have any other questions.", explicitOnly: true, note: "Approved fact plus the closing line, from answer_flagged_question only." },
+  { id: "approved-answer", text: "{answer}", explicitOnly: true, note: "Landlord reply from resolve_issue only. No-draft items never use this." },
+  { id: "approved-answer-closing", text: "{answer} Let me know if you have any other questions.", explicitOnly: true, note: "Approved fact plus the closing line, from resolve_issue only." },
 
   { id: "cancel-done", text: "You're cancelled. Text me anytime if you want to book again." },
   { id: "nothing-booked-cancel", text: "No problem, nothing's booked yet, so I'll stop here. Text me anytime if you want to pick a time." },
@@ -226,7 +235,8 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "sms-stop", text: "{brand}: You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help." },
   { id: "sms-help", text: "{brand}: {help} Message and data rates may apply. Reply STOP to opt out." },
 
-  { id: "property-not-ready", text: "Thanks for reaching out to {name}. Self-guided tours by text aren't available right now. Please contact the {team}." },
+  { id: "property-not-ready", text: "Thanks for reaching out to {name}. Tours by text aren't available right now. Please check back soon.", note: "Sent when tours cannot run and no visitor help number is saved, including a new visitor text to a property that is not published for demo (a draft, or a demo sent back to draft). A tour that was already booked on that property keeps going." },
+  { id: "property-not-ready-call", text: "Thanks for reaching out to {name}. Tours by text aren't available right now. You can call the {team} at {phone}.", note: "The same reply when a visitor help number is saved. {phone} is that number, formatted the same way as the paused and removed replies." },
   { id: "storage-save-failed", text: "I couldn't save that, so nothing was booked or changed. Please try again in a little while." },
   { id: "handler-snag-alerted", text: "Sorry, I hit a snag with that. I've let the {team} know, and they'll reply here as soon as they can." },
   { id: "handler-snag-retry", text: "Sorry, I hit a snag with that. Could you text me again in a few minutes?" },
@@ -395,7 +405,7 @@ export function visitorTemplatesMarkdown(): string {
     "",
     "Every outbound visitor text uses one of these ids. `{slot}` is filled before send. `{slot?}` may be empty. A channel prompt may be appended after the body. The stored template id is the body, not the prompt.",
     "",
-    "Text from the landlord or from a model reaches a visitor only as `approved-answer` or `approved-answer-closing`, and only after they approve a flagged question (`answer_flagged_question`, later `resolve_issue`). A no-draft flag never gets a draft. `approved-profile-fact` repeats a fact they already saved.",
+    "Text from the landlord or from a model reaches a visitor only as `approved-answer` or `approved-answer-closing`, and only after they approve a flagged question (`resolve_issue`). A no-draft flag never gets a draft. `approved-profile-fact` repeats a fact they already saved.",
     "",
     `${messages.length} message templates. ${suffixes.length} channel prompts.`,
     "",

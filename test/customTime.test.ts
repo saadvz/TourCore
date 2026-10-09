@@ -40,7 +40,7 @@ import {
 } from "../src/core/TourCore";
 import { createTourCore } from "../src/createTourCore";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
-import { at, hillsideConfig, liveApp, PHONE, type LiveApp } from "./liveApp";
+import { at, hillsideConfig, liveApp, PHONE, publishForVisitors, type LiveApp } from "./liveApp";
 
 /**
  * Regular slots stay on the property's schedule. Any other minute is a
@@ -1805,6 +1805,7 @@ describe("a handler throw never leaves the visitor in silence", () => {
     const ws = new PropertyWorkspace(root);
     const { config } = ws.save(hillsideConfig());
     ws.recordReadiness(config.property.id, await runReadinessCheck(config, { now: new Date(clock.t) }));
+    publishForVisitors(ws, config.property.id, new Date(clock.t));
     const runtime = new MemoryRuntimeStore();
     const endpoints = new MessagingEndpoints(runtime);
     endpoints.attach({ address: "+15550001111", provider: "demo", propertyId: "prop_100_alfred_way" });

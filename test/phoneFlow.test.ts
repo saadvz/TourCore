@@ -10,6 +10,7 @@ import { setSendblueRuntime } from "../src/messaging/sendblue/runtime";
 import { PropertyWorkspace, runReadinessCheck } from "../src/setup";
 import { createSetupServer } from "../src/web/server";
 import { fakeSendblue, inbound, PUBLIC, SECRET, sendblueEnv } from "./fakeSendblue";
+import { publishForVisitors } from "./liveApp";
 
 /** Monday 28 Sep 2026 at the property; tours at 2:00 PM and 3:30 PM, doors from 1:50 PM. */
 const at = (hour: number, minute = 0) => zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour, minute }, "America/New_York").getTime();
@@ -35,6 +36,7 @@ async function startPhoneApp(options: { sendError?: () => Error | undefined } = 
   const ws = new PropertyWorkspace(root);
   const { config } = ws.save(sendblueProperty());
   ws.recordReadiness(config.property.id, await runReadinessCheck(config, { now: new Date(clock) }));
+  publishForVisitors(ws, config.property.id, new Date(clock));
 
   const server: Server = createSetupServer({
     toolSurface: "all", workspace: ws, now: () => new Date(clock), realNow: () => clock, log: () => {} });

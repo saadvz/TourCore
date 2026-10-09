@@ -16,7 +16,7 @@ import { grokHarness } from "./grokHarness";
 import { installHarness, SB_KEY, SB_SECRET } from "./installHarness";
 import { UNKNOWN_ANSWER_WITH_PHOTO } from "../src/core/TourCore";
 import { PHOTO_ALONE_REPLY, PHOTO_WITH_TEXT_REPLY } from "../src/visitor/conversation";
-import { hillsideConfig } from "./liveApp";
+import { hillsideConfig, publishForVisitors } from "./liveApp";
 import { LINE, PUBLIC } from "./fakeSendblue";
 
 const VISITOR = "+15555550100";
@@ -39,6 +39,7 @@ async function startLocalApp() {
   const ws = new PropertyWorkspace(root);
   const { config } = ws.save(hillsideConfig());
   ws.recordReadiness(config.property.id, await runReadinessCheck(config, { now: new Date(clock) }));
+  publishForVisitors(ws, config.property.id, new Date(clock));
   const runtime = new FileRuntimeStore(join(root, "runtime"));
   const env: NodeJS.ProcessEnv = {
     TOURCORE_MESSAGING_PROVIDER: "local",

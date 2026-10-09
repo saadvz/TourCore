@@ -9,6 +9,7 @@ import { setSendblueRuntime } from "../src/messaging/sendblue/runtime";
 import { PropertyWorkspace, runReadinessCheck } from "../src/setup";
 import { createSetupServer } from "../src/web/server";
 import { fakeSendblue, inbound, SECRET, sendblueEnv } from "./fakeSendblue";
+import { publishForVisitors } from "./liveApp";
 import { at } from "./grokHarness";
 
 /**
@@ -30,6 +31,7 @@ async function liveDemo() {
   const ws = new PropertyWorkspace(root);
   const { config } = ws.save({ ...loadConfig(), messagingMode: "live" });
   ws.recordReadiness(config.property.id, await runReadinessCheck(config, { now: new Date(clock) }));
+  publishForVisitors(ws, config.property.id, new Date(clock));
 
   const server: Server = createSetupServer({
     toolSurface: "all", workspace: new PropertyWorkspace(root), now: () => new Date(clock), realNow: () => clock, operatorToken: () => TOKEN, log: () => {} });

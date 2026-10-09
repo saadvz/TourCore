@@ -437,7 +437,16 @@ describe("operators can set up a one-time tour", () => {
 
   it("refuses when the property isn't published, the time is in the past, or it overlaps another tour", async () => {
     const a = await liveApp({ cleanups });
+    a.ws.patchState(PROPERTY, { status: "DRAFT" });
     await expect(a.grok("schedule_one_off_tour", { phone: PHONE, unit: "1A", startsAt: "3:15 PM today" })).rejects.toThrow(/isn't published with live visitor texting/);
+    const landlord = await a.grok("schedule_tour", { phone: PHONE, unit: "1A", startsAt: "3:15 PM today" });
+    expect(landlord).toMatchObject({
+      status: "blocked",
+      code: "NOT_LIVE",
+      message: "That property isn't published with live visitor texting, so I can't set up a tour.",
+    });
+    expect(landlord.confirmation).toBeUndefined();
+    expect(JSON.stringify(landlord)).not.toMatch(/Book it\?/);
 
     await publish(a);
     a.clock.t = at(16);

@@ -12,6 +12,7 @@ import { handleVisitorText, SCHEDULE_CHANGED_LEAD } from "../src/visitor/convers
 import { MessagingConversations } from "../src/visitor/messagingRouter";
 import { VisitorDemoRegistry, VisitorDemoSession } from "../src/visitor/session";
 import { VerificationLinks } from "../src/visitor/verificationLinks";
+import { publishForVisitors } from "./liveApp";
 
 const PHONE = "+15550102000";
 const LINE = "+15550001111";
@@ -40,6 +41,7 @@ async function textApp(options: { clock: number; hours?: TourHours }) {
   const ws = new PropertyWorkspace(root);
   const { config } = ws.save(propertyConfig(options.hours));
   ws.recordReadiness(config.property.id, await runReadinessCheck(config, { now: new Date(options.clock) }));
+  publishForVisitors(ws, config.property.id, new Date(options.clock));
   const runtime = new MemoryRuntimeStore();
   const endpoints = new MessagingEndpoints(runtime);
   endpoints.attach({ address: LINE, provider: "demo", propertyId: PROPERTY });

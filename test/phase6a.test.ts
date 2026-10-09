@@ -246,7 +246,7 @@ describe("published zone cleared during a tour", () => {
     expect(unit?.status).toBe("ACTIVE");
     const spoken = v.session.conversation.map((item) => item.text).join("\n");
     expect(spoken).toContain("is open for you now");
-    expect(spoken).not.toContain(toursUnavailableText(loaded.config.property.name, loaded.config.operator.name));
+    expect(spoken).not.toContain(toursUnavailableText(loaded.config.property.name, loaded.config.operator.name, loaded.config.operator.visitorContact));
 
     const fresh = h.visitors.add(
       new VisitorDemoSession(id, h.workspace.load(id).config, h.workspace.newVisitorTourId(id, new Date(h.now())), { realNow: () => h.now() }),
@@ -279,7 +279,7 @@ describe("published zone cleared during a tour", () => {
 });
 
 const PROPERTY = "prop_100_alfred_way";
-const UNAVAILABLE = "Thanks for reaching out to 100 Alfred Way. Self-guided tours by text aren't available right now. Please contact the property team.";
+const UNAVAILABLE = "Thanks for reaching out to 100 Alfred Way. Tours by text aren't available right now. Please check back soon.";
 
 function clearPublishedZone(root: string): void {
   const path = join(root, "properties", PROPERTY, "tourcore.config.json");
@@ -443,19 +443,20 @@ describe("no-clock extension refusal", () => {
   it("strips a leading the so the template does not double the article", () => {
     const noClock = "Sorry, I can't add more time to this tour. If you'd like another look,";
     const clocked = "Sorry, I can't add more time to this tour. It still ends at 2:45 PM. If you'd like another look,";
-    const contact = "Thanks for reaching out to 100 Alfred Way. Self-guided tours by text aren't available right now. Please contact";
+    const help = "+15550102000";
+    const contact = "Thanks for reaching out to 100 Alfred Way. Tours by text aren't available right now. You can call";
     expect(extensionUnavailable(undefined, "the leasing team")).toBe(`${noClock} the leasing team can set that up for you.`);
     expect(extensionUnavailable("2:45 PM", "the leasing team")).toBe(`${clocked} the leasing team can set that up for you.`);
-    expect(toursUnavailableText("100 Alfred Way", "the leasing team")).toBe(`${contact} the leasing team.`);
+    expect(toursUnavailableText("100 Alfred Way", "the leasing team", help)).toBe(`${contact} the leasing team at (555) 010-2000.`);
     expect(extensionUnavailable(undefined, "The Leasing Team")).toBe(`${noClock} the Leasing Team can set that up for you.`);
     expect(extensionUnavailable("2:45 PM", "The Leasing Team")).toBe(`${clocked} the Leasing Team can set that up for you.`);
-    expect(toursUnavailableText("100 Alfred Way", "The Leasing Team")).toBe(`${contact} the Leasing Team.`);
+    expect(toursUnavailableText("100 Alfred Way", "The Leasing Team", help)).toBe(`${contact} the Leasing Team at (555) 010-2000.`);
     expect(extensionUnavailable(undefined, "leasing team")).toBe(`${noClock} the leasing team can set that up for you.`);
     expect(extensionUnavailable("2:45 PM", "leasing team")).toBe(`${clocked} the leasing team can set that up for you.`);
-    expect(toursUnavailableText("100 Alfred Way", "leasing team")).toBe(`${contact} the leasing team.`);
+    expect(toursUnavailableText("100 Alfred Way", "leasing team", help)).toBe(`${contact} the leasing team at (555) 010-2000.`);
     expect(extensionUnavailable(undefined, "Alfred Homes")).toBe(`${noClock} the property team can set that up for you.`);
     expect(extensionUnavailable("2:45 PM", "Alfred Homes")).toBe(`${clocked} the property team can set that up for you.`);
-    expect(toursUnavailableText("100 Alfred Way", "Alfred Homes")).toBe(`${contact} the property team.`);
+    expect(toursUnavailableText("100 Alfred Way", "Alfred Homes", help)).toBe(`${contact} the property team at (555) 010-2000.`);
   });
 });
 

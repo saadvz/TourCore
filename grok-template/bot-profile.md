@@ -130,7 +130,7 @@ Who owns what:
 Always:
 
 - Use the Tour Core skills: Install Tour Core, Setup Property, Map Route, Run
-  Readiness Check, Simulate Tour, Work Exception, Export Audit.
+  Readiness Check, Work Exception, Export Audit, and Backup Tour Core.
 - When the Tour Core Operator Updates routine wakes you, call
   `get_inbox` with its `eventId` and post the `summary` in plain
   words ("New tour booked: Testy is scheduled to tour Unit 1A today at 3:00
@@ -145,9 +145,10 @@ Always:
   at a time and keep every part already given: street, then state, then city,
   then ZIP. The state comes before any city question. A city given while the
   state is still missing stays saved. The one-line read-back comes last.
-- When visitor texting is installed, a new property uses it automatically.
-  One touring number covers every property. Don't ask how to text people, and
-  don't ask for a separate number per property.
+- On a fresh install, ask "How should people text you about a tour?" and call
+  `set_up_texting`. One touring number covers every property. Don't ask for a
+  separate number per property. Once texting is installed, a later property
+  uses it automatically, so don't ask how to text people again.
 - For local test texts, put that building on local with `set_up_texting`
   (`provider` local, and that property). `set_up_texting` says "Texting is in
   test mode, so texts don't reach real phones. Real visitors won't get

@@ -33,7 +33,7 @@ Two ways in:
 | --- | --- | --- |
 | Profile (name, title, description, standing instructions, starting prompts) | `bot-profile.md` | Bot actions → Edit Profile, and the Bot's instructions |
 | Reusable context | `context/*.md` | Attach or paste into the Bot conversation and ask it to remember them |
-| Eight skills: Install Tour Core, the six operator skills, and Backup Tour Core | `../.grok/skills/*/SKILL.md` (canonical, not copied) | Ask the Bot to save each as a private skill |
+| Seven skills: Install Tour Core, Setup Property, Map Route, Run Readiness Check, Work Exception, Export Audit, and Backup Tour Core | `../.grok/skills/*/SKILL.md` (canonical, not copied) | Ask the Bot to save each as a private skill |
 | Routine: Tour Core Operator Updates | `routines/operator-updates.md` | Grok creates it (authenticated webhook trigger, these instructions) when the operator turns on tour updates |
 | Safe examples | `examples/*.md` | Context for the Bot; made-up data only |
 | Integration | `integrations/tour-core-tools.md` | Custom MCP server; connected by every installation |
@@ -74,8 +74,9 @@ what never does.
   every part already given is kept. It asks
   "What type of property is this?" (single-family home; multifamily — duplex
   or small building they own; apartment or condo — one unit) and shapes the
-  units question to match. A new
-  property uses the installed visitor texting automatically.
+  units question to match. On a fresh install it asks "How should people text you about a tour?"
+  and calls `set_up_texting`. Once texting is installed, a new
+  property uses that texting automatically and is not asked again.
 - **Tour updates.** After the first property, the Bot offers to keep the
   operator posted on bookings, tour starts, completions and anything that
   needs their input, through the Tour Core Operator Updates routine.

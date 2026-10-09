@@ -6,7 +6,7 @@ import { z } from "zod";
  * Deliberately minimal: what kind of update, which property, which tour or
  * issue, when. No visitor names, numbers or message text, and no
  * credentials. The receiver (a Grok Routine today) wakes up and reads the
- * canonical details over MCP (`get_operator_update`), so Tour Core stays the
+ * canonical details over MCP (`get_inbox`), so Tour Core stays the
  * system of record.
  */
 
@@ -26,7 +26,7 @@ export const OperatorEventSchema = z.strictObject({
   eventId: z.string().regex(/^evt_[A-Za-z0-9_-]{8,80}$/),
   eventType: z.enum(OPERATOR_EVENT_TYPES),
   propertyId: z.string().regex(/^[a-z0-9_]+$/).optional(),
-  /** The tour's handle (inspect_tour's tourRef). A date-and-channel label; never a name or number. */
+  /** The tour's handle (get_tours tourRef). A date-and-channel label; never a name or number. */
   tourId: z.string().regex(/^[a-z0-9_]+~[A-Za-z0-9_-]+$/).optional(),
   exceptionId: z.string().regex(/^exc_[a-f0-9]{12}$/).optional(),
   tourTimeRequestId: z.string().regex(/^ttr_[a-f0-9]{12}$/).optional(),

@@ -45,9 +45,9 @@ export async function describeOperatorUpdate(services: OperatorServices, event: 
       issue: { exceptionId: x.exceptionId, what: x.title, question: x.question, tourStatus: x.tourStatus, nextSteps: x.nextSteps, tourRef: x.tourRef },
       instructions:
         x.kind === "unanswered-question"
-          ? "Ask the operator for the answer itself (not a yes/no). When they give it, use answer_flagged_question; its question is the only confirmation."
+          ? "Ask the operator for the answer itself (not a yes/no). When they give it, use resolve_issue; its question is the only confirmation."
           : x.kind === "handler-failed"
-            ? "Ask the operator what to tell the visitor. When they give it, use answer_flagged_question; it texts them from this number and does not save an approved fact. Ask Send \"{reply}\" to {who}? then after yes it returns Sent to {who}."
+            ? "Ask the operator what to tell the visitor. When they give it, use resolve_issue; it texts them from this number and does not save an approved fact. Ask Send \"{reply}\" to {who}? then after yes it returns Sent to {who}."
             : "Tell the operator what happened. Change nothing unless they ask, through the Work Exception skill.",
     };
   }
@@ -159,6 +159,6 @@ async function describeTimeRequest(services: OperatorServices, event: OperatorEv
         status: "waiting",
     },
     instructions:
-      "A decision is required. Use approve_tour_time_request, propose_tour_time, or decline_tour_time_request. For a move the landlord is directing, use reschedule_tour. Ask once, using the question Tour Core returns, before approving or moving a tour. A time outside normal touring hours needs the stronger confirmation Tour Core returns. Don't change the property's regular hours. If the time overlaps another tour, say so and don't approve it.",
+      "A decision is required. Use reply_to_time_request with approve, propose, or decline. For a move the landlord is directing, use schedule_tour. Ask once, using the question Tour Core returns, before approving or moving a tour. A time outside normal touring hours needs the stronger confirmation Tour Core returns. Don't change the property's regular hours. If the time overlaps another tour, say so and don't approve it.",
   };
 }

@@ -14,6 +14,7 @@ import { SessionPersistence } from "../src/visitor/durableSession";
 import { RESTORE_TROUBLE } from "../src/visitor/messagingRouter";
 import { createSetupServer } from "../src/web/server";
 import { fakeSendblue, inbound, LINE, SECRET, sendblueEnv } from "./fakeSendblue";
+import { publishForVisitors } from "./liveApp";
 
 /** Monday 28 Sep 2026 at the property; tours at 2:00 PM and 3:30 PM, doors 1:50 PM to 2:45 PM for the first. */
 const at = (hour: number, minute = 0) => zonedTimeToUtc({ year: 2026, month: 9, day: 28, hour, minute }, "America/New_York").getTime();
@@ -45,6 +46,7 @@ async function durableApp(options: { line?: string } = {}) {
   const setup = new PropertyWorkspace(root);
   const { config } = setup.save(sendblueProperty());
   setup.recordReadiness(config.property.id, await runReadinessCheck(config, { now: new Date(clock) }));
+  publishForVisitors(setup, config.property.id, new Date(clock));
 
   let server: Server | undefined;
   let port = 0;

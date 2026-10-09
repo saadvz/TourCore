@@ -2,9 +2,9 @@
 
 Every outbound visitor text uses one of these ids. `{slot}` is filled before send. `{slot?}` may be empty. A channel prompt may be appended after the body. The stored template id is the body, not the prompt.
 
-Text from the landlord or from a model reaches a visitor only as `approved-answer` or `approved-answer-closing`, and only after they approve a flagged question (`answer_flagged_question`, later `resolve_issue`). A no-draft flag never gets a draft. `approved-profile-fact` repeats a fact they already saved.
+Text from the landlord or from a model reaches a visitor only as `approved-answer` or `approved-answer-closing`, and only after they approve a flagged question (`resolve_issue`). A no-draft flag never gets a draft. `approved-profile-fact` repeats a fact they already saved.
 
-197 message templates. 7 channel prompts.
+198 message templates. 7 channel prompts.
 
 ## Messages
 
@@ -96,7 +96,7 @@ Explicit id only. Not matched automatically. A profile fact the landlord already
 
 ### approved-answer
 
-Explicit id only. Not matched automatically. Landlord reply from answer_flagged_question only. No-draft items never use this.
+Explicit id only. Not matched automatically. Landlord reply from resolve_issue only. No-draft items never use this.
 
 ```
 {answer}
@@ -104,7 +104,7 @@ Explicit id only. Not matched automatically. Landlord reply from answer_flagged_
 
 ### approved-answer-closing
 
-Explicit id only. Not matched automatically. Approved fact plus the closing line, from answer_flagged_question only.
+Explicit id only. Not matched automatically. Approved fact plus the closing line, from resolve_issue only.
 
 ```
 {answer} Let me know if you have any other questions.
@@ -1025,8 +1025,18 @@ Text TOUR to ask questions or schedule a self-guided tour. Reply HELP for help o
 
 ### property-not-ready
 
+Sent when tours cannot run and no visitor help number is saved, including a new visitor text to a property that is not published for demo (a draft, or a demo sent back to draft). A tour that was already booked on that property keeps going.
+
 ```
-Thanks for reaching out to {name}. Self-guided tours by text aren't available right now. Please contact the {team}.
+Thanks for reaching out to {name}. Tours by text aren't available right now. Please check back soon.
+```
+
+### property-not-ready-call
+
+The same reply when a visitor help number is saved. {phone} is that number, formatted the same way as the paused and removed replies.
+
+```
+Thanks for reaching out to {name}. Tours by text aren't available right now. You can call the {team} at {phone}.
 ```
 
 ### storage-save-failed

@@ -33,7 +33,7 @@ tour.
 
 After Sendblue, Tour Core recommends Drive. Grok connects its own connector,
 creates or finds a private folder named `Tour Core`, with `Backups/`,
-`Exports/`, and `Properties/`, and calls `confirm_backup_destination`. No
+`Exports/`, and `Properties/`, and calls `backup_records` with `confirm_destination`. No
 OAuth token is passed. Tour Core records that the backup destination is
 configured. It does not pretend to hold Grok's Google token.
 
@@ -41,12 +41,12 @@ The folder belongs to the user. Tour Core does not create public sharing links.
 
 Backups are saved at checkpoints: after the first publish, after a structural
 republish, after an approved content change, after a completed tour, when the
-operator asks, and when `get_backup_status` says one is due. Not on every
+operator asks, and when `backup_records` with `status` says one is due. Not on every
 transaction.
 
-`create_portable_backup` writes a validated snapshot and a short-lived
+`backup_records` with `create` writes a validated snapshot and a short-lived
 capability download. Grok uploads that file to `Tour Core/Backups` and then
-calls `confirm_backup_stored`. Until that call, Tour Core does not say the
+calls `backup_records` with `confirm_stored`. Until that call, Tour Core does not say the
 file is in Drive.
 
 On an installation whose records live in Google Drive (`GOOGLE_DRIVE_READY`), the day's `audit-export.json` is written with the records and copied into Drive by the save step. The CSV stays on the Tour Core computer. On a hosted installation (`HOSTED_VOLUME`, Drive used only for backups), day exports stay on the server as 30-minute download links that can be used until they expire. Only readable exports and backups come back as one-time links for the assistant to save into the Tour Core folder in Drive. A readable export is not a backup. Door access in a day export is only what was issued or used that day. Each embedded tour in that JSON is trimmed to that day's events and grants.

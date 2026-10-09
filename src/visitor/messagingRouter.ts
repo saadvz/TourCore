@@ -30,7 +30,7 @@ import { pickerMiss, placeAliases, propertyPickerText, propertyShortName, resolv
 import { OverstayScheduler } from "./overstayScheduler";
 import { oneOffBlockReason } from "./oneOffGate";
 import { markRemovedReply, shouldReplyRemoved } from "./removedReplies";
-import { smsHelpBody, smsStopAck, SmsConsentDirectory } from "./smsConsent";
+import { smsDisclosure, smsHelpBody, smsStopAck, SmsConsentDirectory } from "./smsConsent";
 import { restoreSession, RestoreError, SessionPersistence, type DurableSession } from "./durableSession";
 import { VisitorDemoSession, type VisitorDemoRegistry } from "./session";
 import type { VerificationLinks } from "./verificationLinks";
@@ -408,8 +408,18 @@ export class MessagingConversations {
     if (!session) {
       const { config, state } = ws.load(propertyId);
       const ready = state.readiness?.passed && isCurrent(state.readiness, state);
-      if (!ready || !isValidTimeZone(config.property.timezone)) {
-        await transport.send(prospectText(phone, toursUnavailableText(config.property.name, config.operator.name))).catch(() => undefined);
+      // A draft, or any property that is not published for demo, does not take a new visitor.
+      // A session that already exists keeps going, including a tour booked before this place went back to draft.
+      const published = state.status === "PUBLISHED_FOR_DEMO";
+      if (!ready || !published || !isValidTimeZone(config.property.timezone)) {
+        // STOP, HELP, and START still work on a draft. They do not open a session, so a later booking text stays refused.
+        const keyword = keywordOf(message.text);
+        if (keyword === "stop" || keyword === "help" || keyword === "start") {
+          await this.answerUnpublishedKeyword(propertyId, phone, keyword, config.operator.visitorContact);
+          return {};
+        }
+        if (this.isOptedOut(propertyId, phone) || this.smsConsent.get(propertyId, phone)?.status === "opted_out") return {};
+        await transport.send(prospectText(phone, toursUnavailableText(config.property.name, config.operator.name, config.operator.visitorContact))).catch(() => undefined);
         return {};
       }
       const tourId = ws.newVisitorTourId(propertyId, this.deps.now?.() ?? new Date(), "text");
@@ -446,7 +456,7 @@ export class MessagingConversations {
       await handleVisitorText(session, phone, message.text, meta, this.deps.interpreter);
     } catch (err) {
       if (err instanceof UnsetTimeZoneError) {
-        await transport.send(prospectText(phone, toursUnavailableText(session.config.property.name, session.config.operator.name))).catch(() => undefined);
+        await transport.send(prospectText(phone, toursUnavailableText(session.config.property.name, session.config.operator.name, session.config.operator.visitorContact))).catch(() => undefined);
         return { correlationId: session.id };
       }
       if (err instanceof StorageUnavailableError) {
@@ -700,6 +710,48 @@ export class MessagingConversations {
       }
     }
     return restored;
+  }
+
+  /**
+   * Keyword replies for a property that is not taking new visitors. Same
+   * records and replies as a ready property's SMS gate, without opening a
+   * session a later TOUR could book through.
+   */
+  private async answerUnpublishedKeyword(
+    propertyId: string,
+    phone: string,
+    keyword: "stop" | "help" | "start",
+    visitorContact?: string,
+  ): Promise<void> {
+    const transport = this.deps.transport(propertyId);
+    const now = (this.deps.now?.() ?? new Date()).toISOString();
+    if (keyword === "stop") {
+      this.setOptOut(propertyId, phone, true);
+      this.smsConsent.save(propertyId, {
+        sender: phone,
+        status: "opted_out",
+        method: "keyword",
+        keyword: "STOP",
+        updatedAt: now,
+        optedOutAt: now,
+      });
+      await transport.send(prospectText(phone, smsStopAck())).catch(() => undefined);
+      return;
+    }
+    if (keyword === "help") {
+      await transport.send(prospectText(phone, smsHelpBody(process.env, { visitorContact }))).catch(() => undefined);
+      return;
+    }
+    this.setOptOut(propertyId, phone, false);
+    this.smsConsent.save(propertyId, {
+      sender: phone,
+      status: "pending",
+      method: "keyword",
+      keyword: "START",
+      updatedAt: now,
+    });
+    const base = this.deps.publicBaseUrl?.() ?? publicBaseUrl(effectiveEnv());
+    await transport.send(prospectText(phone, smsDisclosure(base))).catch(() => undefined);
   }
 
   /**

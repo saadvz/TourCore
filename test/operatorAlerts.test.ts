@@ -14,6 +14,7 @@ import { FileRuntimeStore, MemoryRuntimeStore } from "../src/storage/runtimeStor
 import { createSetupServer, type TourCoreServer } from "../src/web/server";
 import { fakeSendblue, inbound, SECRET, sendblueEnv } from "./fakeSendblue";
 import { fakeNetwork, ROUTINE_KEY, ROUTINE_URL } from "./installHarness";
+import { publishForVisitors } from "./liveApp";
 
 /**
  * Proactive operator alerts, end to end: a real visitor (Sendblue faked at
@@ -41,6 +42,7 @@ async function alertApp(options: { root?: string; clock?: { t: number }; net?: R
     const config = loadConfig();
     const { config: saved } = ws.save({ ...config, messagingMode: "live", property: { ...config.property, facts: ["Street parking only."] } });
     ws.recordReadiness(saved.property.id, await runReadinessCheck(saved, { now: new Date(clock.t) }));
+    publishForVisitors(ws, saved.property.id, new Date(clock.t));
   }
   const runtime = new FileRuntimeStore(join(root, "runtime"));
   const installation = new Installation({ root, runtime, secrets: new LocalSecretStore(join(root, "install", "secrets.json"), () => clock.t), now: () => clock.t, fetch: net.fetch as never, outbox: { baseDelayMs: 1000 } });

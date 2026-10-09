@@ -81,7 +81,8 @@ describe("day-to-day writes", () => {
     expect(event.instructions).toContain("resolve_issue");
     expect(event.instructions).not.toContain("answer_flagged_question");
     const old = await a.grok("get_operator_update", { eventId });
-    expect(old.instructions).toContain("answer_flagged_question");
+    expect(old.instructions).toContain("resolve_issue");
+    expect(old.instructions).not.toContain("answer_flagged_question");
 
     const answerAsked = await a.grok("resolve_issue", { action: "answer", exceptionId: flagged!.exceptionId, approvedFact: "There's no gym" });
     expect(answerAsked.status).toBe("next");
