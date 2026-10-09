@@ -78,6 +78,21 @@ export function checksumOf(contents: unknown): string {
   return createHash("sha256").update(stableStringify(contents), "utf8").digest("hex");
 }
 
+/** For Grok. The downloaded file is pretty-printed and also includes this field, so hashing the file does not reproduce it. */
+export const CHECKSUM_COVERS =
+  "The checksum is the SHA-256 of the backup's `contents` only: compact JSON (no spaces), object keys sorted at every level, arrays kept in order, UTF-8 with non-ASCII characters written as-is (not \\u-escaped), no trailing newline. It is stored in the file's `checksum` field, so a hash of the whole downloaded file won't match.";
+
+const FILE_CHANGED = "This backup file was changed or damaged after it was made, so nothing was restored. Try the original file.";
+const PART_CHANGED = "Part of this backup file was changed or damaged, so nothing was restored. Try the original file.";
+const NOT_A_BACKUP = "This file doesn't look like a Tour Core backup, so nothing was restored. Try the original file.";
+const PART_BROKEN = "Part of this backup file is broken, so nothing was restored. Try the original file.";
+const NOT_MADE = "The backup wasn't made because some saved records don't fit together. Nothing was changed.";
+const NOT_MADE_SECRET = "The backup wasn't made because it would have included a password or key. Nothing was changed.";
+const RESTORE_SECRET = "This backup file includes a password or key, so nothing was restored.";
+
+/** On tool results. The prefix keeps the hash construction from being read aloud. */
+export const CHECKSUM_COVERS_RESULT = `For you, not out loud: ${CHECKSUM_COVERS}`;
+
 function safePath(path: string): boolean {
   if (path.includes("\\") || path.startsWith("/") || path.includes("..")) return false;
   if (SKIP_FILES.has(path) || SKIP_PREFIXES.some((prefix) => path.startsWith(prefix))) return false;
@@ -103,7 +118,7 @@ function assertNoSecretFiles(root: string, secretValues: string[]): void {
         continue;
       }
       if (looksLikeSecret(body, secretValues)) {
-        throw new PortableBackupError("A record looked like it contained a credential, so the backup was not created.");
+        throw new PortableBackupError(NOT_MADE_SECRET);
       }
     }
   };
@@ -131,7 +146,7 @@ export function buildPortableBackup(input: {
     contents,
     checksum: checksumOf(contents),
   };
-  return assertClean(PortableBackupSchema.parse(backup), input.secretValues);
+  return assertClean(PortableBackupSchema.parse(backup), input.secretValues, "create");
 }
 
 export function backupFileName(createdAt: string): string {
@@ -144,14 +159,15 @@ export function exportFileName(createdAt: string): string {
   return `tour-core-export-${stamp}.json`;
 }
 
-function assertClean(backup: PortableBackup, secretValues: string[]): PortableBackup {
+function assertClean(backup: PortableBackup, secretValues: string[], purpose: "create" | "restore"): PortableBackup {
   const text = JSON.stringify(backup);
   if (secretValues.some((secret) => secret.length >= 6 && text.includes(secret)) || looksLikeSecret(backup, secretValues)) {
-    throw new PortableBackupError("The backup contained a credential, so it was not created.");
+    throw new PortableBackupError(purpose === "create" ? NOT_MADE_SECRET : RESTORE_SECRET);
   }
-  if (backup.checksum !== checksumOf(backup.contents)) throw new PortableBackupError("The backup checksum doesn't match. Nothing was restored.");
+  const unfit = purpose === "create" ? NOT_MADE : undefined;
+  if (backup.checksum !== checksumOf(backup.contents)) throw new PortableBackupError(unfit ?? FILE_CHANGED);
   const problems = relationshipProblems(backup.contents.files);
-  if (problems.length) throw new PortableBackupError(problems[0]!);
+  if (problems.length) throw new PortableBackupError(unfit ?? problems[0]!);
   return backup;
 }
 
@@ -162,29 +178,29 @@ function relationshipProblems(files: CanonicalFile[]): string[] {
   const tourIds = new Set<string>();
   for (const file of files) {
     if (!safePath(file.path)) {
-      problems.push("The backup contains a file that doesn't belong in a Tour Core snapshot.");
+      problems.push(NOT_A_BACKUP);
       continue;
     }
-    if (paths.has(file.path)) problems.push("The backup has two copies of the same record.");
+    if (paths.has(file.path)) problems.push(PART_BROKEN);
     paths.add(file.path);
-    if (sha256Json(file.body) !== file.sha256) problems.push("A record in the backup doesn't match its checksum.");
+    if (sha256Json(file.body) !== file.sha256) problems.push(PART_CHANGED);
     if (!file.path.endsWith("/tourcore.config.json")) continue;
     const body = file.body as { property?: { id?: string }; doors?: { id?: string }[]; routes?: { stops?: { doorId?: string }[] }[]; units?: unknown[] };
     const id = body.property?.id;
     if (!id) {
-      problems.push("A property record is missing its id.");
+      problems.push(PART_BROKEN);
       continue;
     }
-    if (propertyIds.has(id)) problems.push("The backup has two properties with the same id.");
+    if (propertyIds.has(id)) problems.push(PART_BROKEN);
     propertyIds.add(id);
     const doorIds = new Set((body.doors ?? []).map((door) => door.id).filter((doorId): doorId is string => !!doorId));
     for (const route of body.routes ?? []) {
       if (!Array.isArray(route.stops)) {
-        problems.push("A route in the backup is malformed.");
+        problems.push(PART_BROKEN);
         continue;
       }
       for (const stop of route.stops) {
-        if (!stop.doorId || (doorIds.size > 0 && !doorIds.has(stop.doorId))) problems.push("A route in the backup points at a door that isn't on the property.");
+        if (!stop.doorId || (doorIds.size > 0 && !doorIds.has(stop.doorId))) problems.push(PART_BROKEN);
       }
     }
   }
@@ -192,7 +208,7 @@ function relationshipProblems(files: CanonicalFile[]): string[] {
     if (!file.path.endsWith("/record.json")) continue;
     const tourId = (file.body as { tourId?: string }).tourId;
     if (tourId) {
-      if (tourIds.has(tourId)) problems.push("The backup has two tours with the same id.");
+      if (tourIds.has(tourId)) problems.push(PART_BROKEN);
       tourIds.add(tourId);
     }
   }
@@ -207,8 +223,8 @@ export function parsePortableBackup(raw: unknown, secretValues: string[] = []): 
   if (doc.schemaVersion !== PORTABLE_SCHEMA_VERSION) throw new PortableBackupError("This backup uses a format this Tour Core doesn't support yet.");
   const parsed = PortableBackupSchema.safeParse(raw);
   if (!parsed.success) throw new PortableBackupError("That backup isn't valid. Nothing was restored.");
-  if (parsed.data.checksum !== checksumOf(parsed.data.contents)) throw new PortableBackupError("The backup checksum doesn't match. Nothing was restored.");
-  return assertClean(parsed.data, secretValues);
+  if (parsed.data.checksum !== checksumOf(parsed.data.contents)) throw new PortableBackupError(FILE_CHANGED);
+  return assertClean(parsed.data, secretValues, "restore");
 }
 
 export function countBackup(backup: PortableBackup): BackupCounts {

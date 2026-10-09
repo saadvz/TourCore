@@ -1,11 +1,45 @@
+import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { handlePortableRequest } from "../src/backup/http";
-import { checksumOf, parsePortableBackup } from "../src/backup/portable";
+import { CHECKSUM_COVERS, CHECKSUM_COVERS_RESULT, checksumOf, parsePortableBackup } from "../src/backup/portable";
+import { OPERATOR_TOOLS } from "../src/operator/tools";
 import { sha256Json } from "../src/storage/documentStore";
 import { InMemoryStore } from "../src/storage/Store";
 import { installHarness, SB_KEY, SB_SECRET, type InstallHarness } from "./installHarness";
+
+const FILE_CHANGED = "This backup file was changed or damaged after it was made, so nothing was restored. Try the original file.";
+const PART_CHANGED = "Part of this backup file was changed or damaged, so nothing was restored. Try the original file.";
+const NOT_A_BACKUP = "This file doesn't look like a Tour Core backup, so nothing was restored. Try the original file.";
+const PART_BROKEN = "Part of this backup file is broken, so nothing was restored. Try the original file.";
+const NOT_MADE = "The backup wasn't made because some saved records don't fit together. Nothing was changed.";
+const NOT_MADE_SECRET = "The backup wasn't made because it would have included a password or key. Nothing was changed.";
+const RESTORE_SECRET = "This backup file includes a password or key, so nothing was restored.";
+
+/** Compact JSON with sorted keys: the documented input to the backup checksum. */
+function compactSortedJson(value: unknown): string {
+  const normalized = JSON.parse(JSON.stringify(value)) as unknown;
+  const walk = (node: unknown): string => {
+    if (node === null || typeof node !== "object") return JSON.stringify(node) ?? "null";
+    if (Array.isArray(node)) return `[${node.map((item) => walk(item)).join(",")}]`;
+    const obj = node as Record<string, unknown>;
+    return `{${Object.keys(obj)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${walk(obj[key])}`)
+      .join(",")}}`;
+  };
+  return walk(normalized);
+}
+
+function documentedChecksum(contents: unknown): string {
+  return createHash("sha256").update(compactSortedJson(contents), "utf8").digest("hex");
+}
+
+type BackupFile = {
+  checksum: string;
+  contents: { files: Array<{ path: string; sha256: string; body: Record<string, unknown> }> };
+};
 
 const cleanups: Array<() => void> = [];
 afterEach(() => cleanups.splice(0).forEach((run) => run()));
@@ -140,7 +174,7 @@ describe("portable backup and restore", () => {
       contents: { files: Array<{ path: string; sha256: string; body: Record<string, unknown> }> };
     };
 
-    expect(() => parsePortableBackup({ ...backup, checksum: "a".repeat(64) })).toThrow(/checksum/);
+    expect(() => parsePortableBackup({ ...backup, checksum: "a".repeat(64) })).toThrow(FILE_CHANGED);
     expect(() => parsePortableBackup({ ...backup, schemaVersion: 2 })).toThrow(/doesn't support/);
 
     const malformed = structuredClone(backup);
@@ -149,14 +183,16 @@ describe("portable backup and restore", () => {
     body.routes[0]!.stops[0]!.doorId = "missing_door";
     config.sha256 = sha256Json(body);
     malformed.checksum = checksumOf(malformed.contents);
-    expect(() => parsePortableBackup(malformed)).toThrow(/door/);
+    expect(() => parsePortableBackup(malformed)).toThrow(PART_BROKEN);
 
     const configPath = join(h.root, "properties", h.workspace.propertyIds()[0]!, "tourcore.config.json");
     const onDisk = JSON.parse(readFileSync(configPath, "utf8")) as { property: { facts?: string[] } };
     onDisk.property.facts = [SB_KEY];
     writeFileSync(configPath, JSON.stringify(onDisk));
     h.inst.secrets.set({ SENDBLUE_API_API_KEY: SB_KEY });
-    expect(await h.fails("create_portable_backup")).toMatch(/credential/);
+    const secret = await h.fails("create_portable_backup");
+    expect(secret).toBe(NOT_MADE_SECRET);
+    expect(secret).not.toMatch(/restored/);
   });
 
   it("refuses a destructive restore unless replacement is explicit", async () => {
@@ -214,5 +250,316 @@ describe("portable backup and restore", () => {
     expect(ok?.body).not.toContain(SB_KEY);
     const again = await handlePortableRequest(h.inst.backups, "GET", path, { headers: { "x-tourcore-capability": created.handoff.capability } } as never);
     expect(again).toMatchObject({ status: 404 });
+  });
+
+  it("reports the checksum of contents, not a hash of the downloaded file", async () => {
+    const h = hosted();
+    await h.setUpAlfredWay();
+    const created = await h.ok("backup_records", { action: "create" });
+    const artifactId = String(created.handoff.path).split("/").pop()!;
+    const raw = h.inst.backups.handoff.takeDownload(artifactId, created.handoff.capability).body;
+    const backup = JSON.parse(raw) as BackupFile;
+    const digest = documentedChecksum(backup.contents);
+    expect(digest).toBe(created.checksum);
+    expect(digest).toBe(backup.checksum);
+    expect(createHash("sha256").update(raw, "utf8").digest("hex")).not.toBe(digest);
+    const file = compactSortedJson(backup.contents.files[0]);
+    expect(file.indexOf('"body"')).toBeLessThan(file.indexOf('"kind"'));
+    expect(file.indexOf('"kind"')).toBeLessThan(file.indexOf('"path"'));
+    expect(file.indexOf('"path"')).toBeLessThan(file.indexOf('"sha256"'));
+    expect(created.checksumCovers).toBe(CHECKSUM_COVERS_RESULT);
+    for (const name of ["backup_records", "restore_records"]) {
+      expect(OPERATOR_TOOLS.find((tool) => tool.name === name)?.description, name).toContain(CHECKSUM_COVERS);
+    }
+    const exportDescription = OPERATOR_TOOLS.find((tool) => tool.name === "export_records")?.description ?? "";
+    expect(exportDescription).not.toContain(CHECKSUM_COVERS);
+    expect(exportDescription).not.toContain("SHA-256");
+    expect((await h.ok("restore_records", { action: "upload" })).checksumCovers).toBe(CHECKSUM_COVERS_RESULT);
+  });
+
+  it("prefixes checksumCovers so SHA-256 is not read aloud", async () => {
+    const h = hosted();
+    await h.setUpAlfredWay();
+    const results = [
+      await h.ok("backup_records", { action: "create" }),
+      await h.ok("backup_records", { action: "status" }),
+      await h.ok("backup_records", { action: "decline" }),
+      await h.ok("restore_records", { action: "upload" }),
+    ];
+    for (const result of results) {
+      expect(result.checksumCovers).toBe(CHECKSUM_COVERS_RESULT);
+      expect(String(result.checksumCovers).startsWith("For you, not out loud: ")).toBe(true);
+      const spoken = typeof result.message === "string" ? result.message : String(result.summary ?? "");
+      expect(spoken).not.toMatch(/SHA-256/);
+      expect(String(result.checksumCovers).split("For you, not out loud:")[0]).not.toMatch(/SHA-256/);
+    }
+  });
+
+  it("restores nothing when the backup file was changed", async () => {
+    const origin = hosted();
+    await origin.setUpAlfredWay();
+    const created = await origin.ok("backup_records", { action: "create" });
+    const artifactId = String(created.handoff.path).split("/").pop()!;
+    const backup = JSON.parse(origin.inst.backups.handoff.takeDownload(artifactId, created.handoff.capability).body) as BackupFile;
+    backup.checksum = "a".repeat(64);
+
+    const dest = hosted();
+    const propertyId = await dest.setUpAlfredWay();
+    const before = JSON.stringify(dest.workspace.list());
+    const upload = await dest.ok("restore_records", { action: "upload" });
+    const uploadId = String(upload.handoff.path).split("/").pop()!;
+    dest.inst.backups.receive(uploadId, upload.handoff.capability, JSON.stringify(backup));
+    const preview = await dest.ok("restore_records", { action: "preview", uploadId });
+    const imported = await dest.ok("restore_records", { action: "import", uploadId });
+
+    expect(preview).toMatchObject({ status: "blocked", message: FILE_CHANGED });
+    expect(imported).toMatchObject({ status: "blocked", message: FILE_CHANGED });
+    expect(JSON.stringify(dest.workspace.list())).toBe(before);
+    expect(dest.workspace.list().map((property) => property.config.property.id)).toEqual([propertyId]);
+  });
+
+  it("restores nothing when part of the backup was changed", async () => {
+    const origin = hosted();
+    await origin.setUpAlfredWay();
+    const created = await origin.ok("backup_records", { action: "create" });
+    const artifactId = String(created.handoff.path).split("/").pop()!;
+    const backup = JSON.parse(origin.inst.backups.handoff.takeDownload(artifactId, created.handoff.capability).body) as BackupFile;
+    const config = backup.contents.files.find((file) => file.path.endsWith("/tourcore.config.json"))!;
+    const body = config.body as { property?: { facts?: string[] } };
+    body.property = { ...body.property, facts: [...(body.property?.facts ?? []), "Tampered fact."] };
+    backup.checksum = documentedChecksum(backup.contents);
+
+    const dest = hosted();
+    await dest.setUpAlfredWay();
+    const before = JSON.stringify(dest.workspace.list());
+    const upload = await dest.ok("restore_records", { action: "upload" });
+    const uploadId = String(upload.handoff.path).split("/").pop()!;
+    dest.inst.backups.receive(uploadId, upload.handoff.capability, JSON.stringify(backup));
+    const preview = await dest.ok("restore_records", { action: "preview", uploadId });
+    const imported = await dest.ok("restore_records", { action: "import", uploadId });
+
+    expect(preview).toMatchObject({ status: "blocked", message: PART_CHANGED });
+    expect(imported).toMatchObject({ status: "blocked", message: PART_CHANGED });
+    expect(JSON.stringify(dest.workspace.list())).toBe(before);
+    expect(JSON.stringify(dest.workspace.list())).not.toContain("Tampered fact.");
+  });
+
+  it("restores nothing when the backup has a stray path", async () => {
+    const origin = hosted();
+    await origin.setUpAlfredWay();
+    const created = await origin.ok("backup_records", { action: "create" });
+    const artifactId = String(created.handoff.path).split("/").pop()!;
+    const backup = JSON.parse(origin.inst.backups.handoff.takeDownload(artifactId, created.handoff.capability).body) as BackupFile & {
+      contents: { files: Array<{ path: string; kind: string; sha256: string; body: Record<string, unknown> }> };
+    };
+    backup.contents.files.push({ path: "notes/stray.json", kind: "record", sha256: "ab".repeat(32), body: {} });
+    backup.checksum = checksumOf(backup.contents);
+
+    const dest = hosted();
+    await dest.setUpAlfredWay();
+    const before = JSON.stringify(dest.workspace.list());
+    const upload = await dest.ok("restore_records", { action: "upload" });
+    const uploadId = String(upload.handoff.path).split("/").pop()!;
+    dest.inst.backups.receive(uploadId, upload.handoff.capability, JSON.stringify(backup));
+    const preview = await dest.ok("restore_records", { action: "preview", uploadId });
+    const imported = await dest.ok("restore_records", { action: "import", uploadId });
+
+    expect(preview).toMatchObject({ status: "blocked", message: NOT_A_BACKUP, checksumCovers: CHECKSUM_COVERS_RESULT });
+    expect(imported).toMatchObject({ status: "blocked", message: NOT_A_BACKUP, checksumCovers: CHECKSUM_COVERS_RESULT });
+    expect(JSON.stringify(dest.workspace.list())).toBe(before);
+  });
+
+  it("restores nothing when a route in the backup is broken", async () => {
+    const origin = hosted();
+    await origin.setUpAlfredWay();
+    const created = await origin.ok("backup_records", { action: "create" });
+    const artifactId = String(created.handoff.path).split("/").pop()!;
+    const backup = JSON.parse(origin.inst.backups.handoff.takeDownload(artifactId, created.handoff.capability).body) as BackupFile;
+    const config = backup.contents.files.find((file) => file.path.endsWith("/tourcore.config.json"))!;
+    const body = config.body as { routes: Array<{ stops: Array<{ doorId: string }> }> };
+    body.routes[0]!.stops[0]!.doorId = "missing_door";
+    config.sha256 = sha256Json(body);
+    backup.checksum = checksumOf(backup.contents);
+
+    const dest = hosted();
+    await dest.setUpAlfredWay();
+    const before = JSON.stringify(dest.workspace.list());
+    const upload = await dest.ok("restore_records", { action: "upload" });
+    const uploadId = String(upload.handoff.path).split("/").pop()!;
+    dest.inst.backups.receive(uploadId, upload.handoff.capability, JSON.stringify(backup));
+    const preview = await dest.ok("restore_records", { action: "preview", uploadId });
+    const imported = await dest.ok("restore_records", { action: "import", uploadId });
+
+    expect(preview).toMatchObject({ status: "blocked", message: PART_BROKEN, checksumCovers: CHECKSUM_COVERS_RESULT });
+    expect(imported).toMatchObject({ status: "blocked", message: PART_BROKEN, checksumCovers: CHECKSUM_COVERS_RESULT });
+    expect(JSON.stringify(dest.workspace.list())).toBe(before);
+    expect(JSON.stringify(dest.workspace.list())).not.toContain("missing_door");
+  });
+
+  it("restores nothing when the backup has two tours with the same id", async () => {
+    const origin = hosted();
+    await origin.setUpAlfredWay();
+    const created = await origin.ok("backup_records", { action: "create" });
+    const artifactId = String(created.handoff.path).split("/").pop()!;
+    const backup = JSON.parse(origin.inst.backups.handoff.takeDownload(artifactId, created.handoff.capability).body) as BackupFile & {
+      contents: { files: Array<{ path: string; kind: string; sha256: string; body: Record<string, unknown> }> };
+    };
+    const tour = { tourId: "tour_same" };
+    const sha256 = sha256Json(tour);
+    backup.contents.files.push(
+      { path: "properties/demo/tours/one/record.json", kind: "record", sha256, body: tour },
+      { path: "properties/demo/tours/two/record.json", kind: "record", sha256, body: { tourId: "tour_same" } },
+    );
+    backup.checksum = checksumOf(backup.contents);
+
+    const dest = hosted();
+    await dest.setUpAlfredWay();
+    const before = JSON.stringify(dest.workspace.list());
+    const upload = await dest.ok("restore_records", { action: "upload" });
+    const uploadId = String(upload.handoff.path).split("/").pop()!;
+    dest.inst.backups.receive(uploadId, upload.handoff.capability, JSON.stringify(backup));
+    const preview = await dest.ok("restore_records", { action: "preview", uploadId });
+    const imported = await dest.ok("restore_records", { action: "import", uploadId });
+
+    expect(preview).toMatchObject({ status: "blocked", message: PART_BROKEN });
+    expect(imported).toMatchObject({ status: "blocked", message: PART_BROKEN });
+    expect(JSON.stringify(dest.workspace.list())).toBe(before);
+    expect(JSON.stringify(dest.workspace.list())).not.toContain("tour_same");
+  });
+
+  it("stores the checksum of raw UTF-8 contents, not a \\u escape or a trailing newline", () => {
+    const contents = {
+      files: [
+        {
+          sha256: "ab".repeat(32),
+          path: "properties/demo/note.json",
+          kind: "record",
+          body: {
+            note: "café",
+            quote: "’",
+            emoji: "😀",
+            nested: { z: 1, a: 2 },
+          },
+        },
+      ],
+    };
+    const handwritten =
+      '{"files":[{"body":{"emoji":"😀","nested":{"a":2,"z":1},"note":"café","quote":"’"},"kind":"record","path":"properties/demo/note.json","sha256":"abababababababababababababababababababababababababababababababab"}]}';
+    const escaped =
+      '{"files":[{"body":{"emoji":"\\uD83D\\uDE00","nested":{"a":2,"z":1},"note":"caf\\u00e9","quote":"\\u2019"},"kind":"record","path":"properties/demo/note.json","sha256":"abababababababababababababababababababababababababababababababab"}]}';
+    const sha256Utf8 = (text: string) => createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex");
+    expect(handwritten.endsWith("\n")).toBe(false);
+    expect(handwritten.includes("\\u")).toBe(false);
+    const stored = checksumOf(contents);
+    expect(stored).toBe(sha256Utf8(handwritten));
+    expect(stored).not.toBe(sha256Utf8(escaped));
+    expect(stored).not.toBe(sha256Utf8(`${handwritten}\n`));
+    expect(CHECKSUM_COVERS).toContain("not \\u-escaped");
+    expect(CHECKSUM_COVERS).toContain("no trailing newline");
+    expect(CHECKSUM_COVERS).toContain("`contents`");
+    expect(CHECKSUM_COVERS).toContain("`checksum`");
+  });
+
+  it("puts the checksum note on backup results and leaves it off exports", async () => {
+    const h = hosted();
+    const propertyId = await h.setUpAlfredWay();
+    for (const result of [
+      await h.ok("backup_records", { action: "create" }),
+      await h.ok("backup_records", { action: "status" }),
+      await h.ok("restore_records", { action: "upload" }),
+    ]) {
+      expect(result.checksumCovers).toBe(`For you, not out loud: ${CHECKSUM_COVERS}`);
+    }
+    for (const result of [
+      await h.ok("export_records", { property: propertyId, day: "today" }),
+      await h.ok("export_audit", { property: propertyId, day: "today" }),
+      await h.ok("export_records", { kind: "readable" }),
+    ]) {
+      expect(result.checksumCovers).toBeUndefined();
+    }
+  });
+
+  it("puts the checksum note on blocked restores and leaves it off a blocked export", async () => {
+    const origin = hosted();
+    await origin.setUpAlfredWay();
+    const created = await origin.ok("backup_records", { action: "create" });
+    const artifactId = String(created.handoff.path).split("/").pop()!;
+    const body = origin.inst.backups.handoff.takeDownload(artifactId, created.handoff.capability).body;
+
+    const dest = hosted();
+    const propertyId = await dest.setUpAlfredWay();
+    const upload = await dest.ok("restore_records", { action: "upload" });
+    const uploadId = String(upload.handoff.path).split("/").pop()!;
+    dest.inst.backups.receive(uploadId, upload.handoff.capability, body);
+    const replaced = await dest.ok("restore_records", { action: "import", uploadId });
+    expect(replaced).toMatchObject({ status: "blocked", code: "REPLACE_REQUIRED", checksumCovers: CHECKSUM_COVERS_RESULT });
+
+    const missing = await dest.ok("restore_records", { action: "import" });
+    expect(missing).toMatchObject({
+      status: "blocked",
+      message: "Upload the backup file first, then I can show you what's in it.",
+      checksumCovers: CHECKSUM_COVERS_RESULT,
+    });
+
+    const blockedExport = await dest.ok("export_records", { property: propertyId, day: "not a day" });
+    expect(blockedExport).toMatchObject({ status: "blocked" });
+    expect(blockedExport.checksumCovers).toBeUndefined();
+  });
+
+  it("refuses to create a backup when saved records don't fit together", async () => {
+    const h = hosted();
+    await h.setUpAlfredWay();
+    const configPath = join(h.root, "properties", h.workspace.propertyIds()[0]!, "tourcore.config.json");
+    const onDisk = JSON.parse(readFileSync(configPath, "utf8")) as { routes: Array<{ stops: Array<{ doorId: string }> }> };
+    onDisk.routes[0]!.stops[0]!.doorId = "missing_door";
+    writeFileSync(configPath, JSON.stringify(onDisk));
+    const before = JSON.stringify(h.workspace.list());
+    const created = await h.ok("backup_records", { action: "create" });
+    expect(created).toMatchObject({ status: "blocked", message: NOT_MADE });
+    expect(String(created.message)).not.toMatch(/restored/);
+    expect(JSON.stringify(h.workspace.list())).toBe(before);
+    const again = await h.fails("create_portable_backup");
+    expect(again).toBe(NOT_MADE);
+    expect(again).not.toMatch(/restored/);
+  });
+
+  it("refuses to create a backup that would include a password or key", async () => {
+    const h = hosted();
+    await h.setUpAlfredWay();
+    const configPath = join(h.root, "properties", h.workspace.propertyIds()[0]!, "tourcore.config.json");
+    const onDisk = JSON.parse(readFileSync(configPath, "utf8")) as { property: { facts?: string[] } };
+    onDisk.property.facts = [SB_KEY];
+    writeFileSync(configPath, JSON.stringify(onDisk));
+    h.inst.secrets.set({ SENDBLUE_API_API_KEY: SB_KEY });
+    const created = await h.ok("backup_records", { action: "create" });
+    expect(created).toMatchObject({ status: "blocked", message: NOT_MADE_SECRET });
+    expect(String(created.message)).not.toMatch(/restored/);
+  });
+
+  it("restores nothing when the backup includes a password or key", async () => {
+    const origin = hosted();
+    await origin.setUpAlfredWay();
+    const created = await origin.ok("backup_records", { action: "create" });
+    const artifactId = String(created.handoff.path).split("/").pop()!;
+    const backup = JSON.parse(origin.inst.backups.handoff.takeDownload(artifactId, created.handoff.capability).body) as BackupFile;
+    const config = backup.contents.files.find((file) => file.path.endsWith("/tourcore.config.json"))!;
+    config.body = { ...config.body, apiKey: "stored-api-key" };
+    config.sha256 = sha256Json(config.body);
+    backup.checksum = checksumOf(backup.contents);
+
+    const dest = hosted();
+    await dest.setUpAlfredWay();
+    const before = JSON.stringify(dest.workspace.list());
+    const upload = await dest.ok("restore_records", { action: "upload" });
+    const uploadId = String(upload.handoff.path).split("/").pop()!;
+    dest.inst.backups.receive(uploadId, upload.handoff.capability, JSON.stringify(backup));
+    const preview = await dest.ok("restore_records", { action: "preview", uploadId });
+    const imported = await dest.ok("restore_records", { action: "import", uploadId });
+
+    expect(preview).toMatchObject({ status: "blocked", message: RESTORE_SECRET, checksumCovers: CHECKSUM_COVERS_RESULT });
+    expect(imported).toMatchObject({ status: "blocked", message: RESTORE_SECRET, checksumCovers: CHECKSUM_COVERS_RESULT });
+    expect(String(preview.message)).not.toMatch(/wasn't made/);
+    expect(String(imported.message)).not.toMatch(/wasn't made/);
+    expect(JSON.stringify(dest.workspace.list())).toBe(before);
   });
 });

@@ -85,7 +85,7 @@ one of these:
     records live comes from `get_state` `storage` (this computer, or Google Drive).
     Don't ask about it.
 
-3. When `get_state` names `backup_records`, follow **Backup Tour Core**. Skipping is fine.
+3. When `get_state` names `backup_records`, follow **Backup Tour Core**. Skipping is fine. The checksum is the SHA-256 of the backup's `contents` only: compact JSON (no spaces), object keys sorted at every level, arrays kept in order, UTF-8 with non-ASCII characters written as-is (not \u-escaped), no trailing newline. It is stored in the file's `checksum` field, so a hash of the whole downloaded file won't match. `c = json.load(f)["contents"]` `hashlib.sha256(json.dumps(c, sort_keys=True, separators=(",",":"), ensure_ascii=False).encode("utf-8")).hexdigest()`
 
 4. Ask **"What's the property address?"** when `nextStep.say` is that
    question, or ask the `say` `get_state` already returned. Then `save_property`

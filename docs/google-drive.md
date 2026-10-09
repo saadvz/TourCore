@@ -71,8 +71,8 @@ On an installation whose records live in Google Drive (`GOOGLE_DRIVE_READY`), th
 addresses, types, units, facts, content changes, doors, routes, schedules,
 prospects, reservations, custom time requests, consent, verification status,
 tour state, operator holds, exceptions, preferences, audit, operator-event
-metadata, and visitor session state that is already stored. The snapshot is
-rejected unless its checksum, schema, and record relationships check out.
+metadata, and visitor session state that is already stored. The checksum is the SHA-256 of the backup's `contents` only: compact JSON (no spaces), object keys sorted at every level, arrays kept in order, UTF-8 with non-ASCII characters written as-is (not \u-escaped), no trailing newline. It is stored in the file's `checksum` field, so a hash of the whole downloaded file won't match. `c = json.load(f)["contents"]` `hashlib.sha256(json.dumps(c, sort_keys=True, separators=(",",":"), ensure_ascii=False).encode("utf-8")).hexdigest()` The snapshot is
+rejected unless that checksum, the schema, and the record relationships check out.
 
 Portable backups can contain visitor details that Tour Core already stores.
 They do not add extra personal data for the sake of the copy. The Drive
