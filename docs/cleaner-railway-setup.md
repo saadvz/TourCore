@@ -108,6 +108,13 @@ commit. The correct startup log includes
 Keep the domain's target port at 8080. Changing it to 4321 would route to the
 original app rather than fix the deployment selection.
 
+If the correct container starts and then exits, its startup diagnostics name
+missing/short token variables, matching token values, invalid HTTPS origins,
+or unreadable stored data without printing credential values. Public startup
+requires both token variables to be present, different, and at least 32
+characters long. A successful build and mounted volume alone do not satisfy
+those credential requirements.
+
 ## Optional Docker workflow
 
 If using an image registry instead of Railway's GitHub source build:
