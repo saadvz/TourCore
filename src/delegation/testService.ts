@@ -9,6 +9,7 @@ import express from "express";
 import { SmsProof, SmsProofError, SMS_PROOF_INBOUND, SMS_PROOF_STATUS, SMS_PROOF_RECIPIENT, type SmsProofSettings, type SmsProofClient } from "./smsProof";
 import { AgentProfiles, AgentProfileError } from "../agents/registry";
 import { GrokAgentAdapter } from "../agents/grok";
+import { Capability } from "../agents/profile";
 
 /** Isolated fixtures; optional SMS proof reaches only one configured test phone. */
 export function createDelegationTestService(options: {
@@ -85,7 +86,42 @@ export function createDelegationTestService(options: {
     try { await task; } finally { activeProfileRequests.delete(task); }
   };
   app.get("/test/agent/profile", (_req, res) => profileResponse(res, async () => ({ profile: await profiles.get(identity, options.deadlineMs), adapter: GrokAgentAdapter })));
+  app.get("/test/agent/onboarding", (req, res) => profileResponse(res, async () => {
+    const query = z.strictObject({ workId: z.string().regex(/^work_[a-f0-9]{32}$/) }).safeParse(req.query);
+    if (!query.success) throw new AgentProfileError("INVALID_INPUT", "Supply only the completed workId query parameter.");
+    const work = await engine.get(identity, query.data.workId);
+    if (work.status !== "completed") throw new AgentProfileError("COMPLETED_WORK_REQUIRED", "Use already-completed work for compatible onboarding.");
+    return { mode: "core_mcp_owner_http", workId: work.id,
+      declarationTemplate: { capabilities: Capability.options.map((capability) => ({ capability, availability: "unknown" })) }, instructions: [
+      "Use the existing saved admin bearer token for admin_http steps. Keep credentials and challenge nonces private.",
+      "Report the actual app tool inventory; a bridge/server inventory is not the app inventory. Do not delete/re-add connectors again.",
+      "Declare only abilities you can claim; optional capabilities can remain unknown. Declarations do not verify them.",
+      "For configured_connector steps use the actual app connector tool, never raw HTTP/JSON-RPC or a direct bridge script as a substitute.",
+      "The synthetic draft is graded but never sent. Reason from the returned task/fixture and submit its nonce and answer privately.",
+      "Submit conversationClosed=true for the existing workflow only if the owner already confirmed that interval. Otherwise leave background verification pending.",
+      "Report capability status, method, scope, expiry, readiness, fallback and app discovery limitation. Create no events, SMS or routines; preserve both receivers and Tour Core.",
+    ], steps: [
+      { transport: "admin_http", method: "POST", path: "/test/agent/profile/discovery", input: "bridgeToolCount and exposedTools from the actual current inventory" },
+      { transport: "admin_http", method: "POST", path: "/test/agent/profile/declarations", input: { capabilities: "array of {capability, availability}; available/unavailable/unknown", nativeExtensions: "optional read-only declarations, no credentials or grants" } },
+      { transport: "admin_http", method: "POST", path: "/test/agent/probes/core-mcp", body: { workId: work.id } },
+      { transport: "configured_connector", tool: "read_delegated_work", arguments: { id: work.id } },
+      { transport: "admin_http", method: "POST", path: "/test/agent/probes", body: { capability: "generation_reasoning" } },
+      { transport: "admin_http", method: "POST", path: "/test/agent/probes/draft", input: "returned probeId, nonce and answer:{decision,draft} from the synthetic task" },
+      { transport: "admin_http", method: "POST", path: "/test/agent/profile/verify-workflow", input: { workId: work.id, conversationClosed: "true only with the owner's prior confirmation" } },
+      { transport: "admin_http", method: "GET", path: "/test/agent/profile" },
+    ] };
+  }));
+  app.post("/test/agent/profile/discovery", (req, res) => profileResponse(res, () => profiles.reportDiscovery(identity, req.body)));
+  app.post("/test/agent/profile/declarations", (req, res) => profileResponse(res, () => profiles.declare(identity, req.body)));
+  app.post("/test/agent/probes/core-mcp", (req, res) => profileResponse(res, async () => {
+    const request = z.strictObject({ workId: z.string().regex(/^work_[a-f0-9]{32}$/) }).safeParse(req.body);
+    if (!request.success) throw new AgentProfileError("INVALID_INPUT", "Provide only the existing completed workId.");
+    const work = await engine.get(identity, request.data.workId);
+    if (work.status !== "completed") throw new AgentProfileError("COMPLETED_WORK_REQUIRED", "Use already-completed work for this read-only compatibility probe.");
+    return profiles.beginCoreRead(identity, work.id);
+  }));
   app.post("/test/agent/probes", (req, res) => profileResponse(res, () => profiles.begin(identity, req.body)));
+  app.post("/test/agent/probes/draft", (req, res) => profileResponse(res, () => profiles.completeDraft(identity, req.body)));
   app.post("/test/agent/probes/attest", (req, res) => profileResponse(res, () => profiles.attest(identity, req.body)));
   app.post("/test/agent/native-grants", (req, res) => profileResponse(res, () => profiles.grantNative(identity, req.body)));
   app.delete("/test/agent/native-grants/:id", (req, res) => profileResponse(res, () => profiles.revokeNative(identity, req.params.id as string)));

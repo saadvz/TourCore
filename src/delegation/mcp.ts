@@ -5,7 +5,7 @@ import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js
 import { z } from "zod";
 import { DelegationError, type AgentIdentity, type DelegationPrototype } from "./prototype";
 import { AgentProfiles, AgentProfileError } from "../agents/registry";
-import { AgentId, Capability, CapabilityDeclaration } from "../agents/profile";
+import { AgentId, Capability, CapabilityDeclaration, CAPABILITY_MCP_SERVER_VERSION } from "../agents/profile";
 
 export interface PrototypeBinding extends AgentIdentity { token: string }
 export function delegationApp(engine: DelegationPrototype, bindings: PrototypeBinding[], options: { allowedHosts?: string[]; profiles?: AgentProfiles; deadlineMs?: number } = {}) {
@@ -18,13 +18,18 @@ export function delegationApp(engine: DelegationPrototype, bindings: PrototypeBi
     const identity = { tenantId: binding.tenantId, agentId: binding.agentId };
     // Advertise a new version when the capability catalog is enabled so clients
     // can distinguish it from the original four-tool prototype.
-    const server = new McpServer({ name: "cleaner-core-delegation-prototype", version: options.profiles ? "0.2.0" : "0.1.0" });
+    const server = new McpServer({ name: "cleaner-core-delegation-prototype", version: options.profiles ? CAPABILITY_MCP_SERVER_VERSION : "0.1.0" });
     const result = async (action: () => Promise<unknown>) => {
       try { const value = await action(); return { content: [{ type: "text" as const, text: JSON.stringify(value) }] }; }
       catch (err) { return { isError: true, content: [{ type: "text" as const, text: JSON.stringify(err instanceof DelegationError || err instanceof AgentProfileError ? { code: err.code, message: err.message } : { code: "UNAVAILABLE", message: "The action could not be confirmed. Retry only with the same action key." }) }] }; }
     };
     server.registerTool("list_delegated_work", { description: "List pending cleaner requests for this authenticated tenant.", inputSchema: z.strictObject({}) }, () => result(() => engine.list(identity)));
-    server.registerTool("read_delegated_work", { description: "Read current authoritative booking constraints and completion status.", inputSchema: z.strictObject({ id: z.string() }) }, (i) => result(() => engine.get(identity, i.id)));
+    server.registerTool("read_delegated_work", { description: "Read current authoritative booking constraints and completion status.", inputSchema: z.strictObject({ id: z.string() }) }, (i) => result(async () => {
+      const work = await engine.get(identity, i.id);
+      // Capability telemetry cannot block the existing operational read path.
+      await options.profiles?.observeCoreRead(identity, i.id).catch(() => { console.error("Cleaner Core capability observation unavailable; inspect profile storage."); });
+      return work;
+    }));
     server.registerTool("claim_delegated_work", { description: "Claim a deadline-bounded lease before proposing a cleaning time.", inputSchema: z.strictObject({ id: z.string() }) }, (i) => result(() => engine.claim(identity, i.id)));
     server.registerTool("propose_cleaning_time", { description: "Propose a start time. The engine validates fresh booking state and composes the reply. accepted is not completed; read status to confirm delivery.", inputSchema: z.strictObject({ id: z.string(), leaseToken: z.string(), actionKey: z.string(), expectedTurnVersion: z.number().int().positive(), start: z.iso.datetime() }) }, (i) => result(() => engine.propose(identity, i)));
     const profiles = options.profiles;

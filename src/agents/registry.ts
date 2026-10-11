@@ -4,13 +4,14 @@ import { join } from "node:path";
 import { z } from "zod";
 import { writeJsonAtomic } from "../storage/atomicWrite";
 import type { AgentIdentity } from "../delegation/prototype";
-import { AgentId, AgentProfile, Capability, CapabilityDeclaration, NativeGrant, agentReadiness, type CapabilityEvidence } from "./profile";
+import { AgentId, AgentProfile, Capability, CapabilityDeclaration, NativeGrant, ToolDiscoveryReport, CAPABILITY_MCP_SERVER_VERSION, agentReadiness, type CapabilityEvidence } from "./profile";
 
 const Instant = z.iso.datetime();
 const Probe = z.strictObject({
   id: AgentId, tenantId: AgentId, agentId: AgentId, capability: Capability, nonceHash: z.string().regex(/^[a-f0-9]{64}$/),
   issuedAt: Instant, deadlineAt: Instant, status: z.enum(["pending", "awaiting_review", "verified", "failed", "cancelled"]),
   observedAt: Instant.optional(), extensionId: AgentId.optional(), grantFingerprint: z.string().optional(),
+  expectedWorkId: z.string().regex(/^work_[a-f0-9]{32}$/).optional(),
   scenario: z.strictObject({ requestedStart: Instant, windowStart: Instant, windowEnd: Instant, minimumMinutes: z.number().int().positive() }).optional(),
 });
 const StoredProfile = z.strictObject({ profile: AgentProfile, credentialHash: z.string().regex(/^[a-f0-9]{64}$/) });
@@ -52,6 +53,7 @@ export class AgentProfiles {
         saved.profile.connectionChangedAt = saved.profile.updatedAt = this.iso();
         for (const capability of saved.profile.capabilities) { delete capability.evidence; capability.declared = "unknown"; }
         saved.profile.grants = []; saved.profile.nativeExtensions = [];
+        delete saved.profile.toolDiscovery;
         for (const probe of state.probes.filter((p) => p.tenantId === binding.tenantId && p.agentId === binding.agentId)) probe.status = "cancelled";
       }
     }
@@ -84,6 +86,40 @@ export class AgentProfiles {
     profile.updatedAt = this.iso();
   }
   get(identity: AgentIdentity, deadlineMs = 120000) { return this.exclusive(() => agentReadiness(this.find(this.read(), identity), this.now(), deadlineMs)); }
+  reportDiscovery(identity: AgentIdentity, input: unknown) {
+    return this.exclusive(() => {
+      const report = parse(ToolDiscoveryReport, input);
+      const state = this.read(); const profile = this.find(state, identity);
+      profile.toolDiscovery = { ...report, method: "operator_report", observedAt: this.iso(), serverSoftwareVersion: CAPABILITY_MCP_SERVER_VERSION, serverToolCount: 8 };
+      profile.updatedAt = this.iso(); this.save(state); return agentReadiness(profile, this.now());
+    });
+  }
+  /** Trusted owner prepares a read of existing completed work, never a synthetic work item. */
+  beginCoreRead(identity: AgentIdentity, workId: string) {
+    return this.exclusive(() => {
+      parse(z.string().regex(/^work_[a-f0-9]{32}$/), workId); const state = this.read(); this.find(state, identity);
+      state.probes = state.probes.filter((p) => Date.parse(p.deadlineAt) > this.now() && (p.status === "pending" || p.status === "awaiting_review"));
+      if (state.probes.length >= 256) throw new AgentProfileError("PROBE_LIMIT", "Too many active probes; finish existing probes first.");
+      const probe: z.infer<typeof Probe> = { id: `probe_${randomUUID().replaceAll("-", "")}`, ...identity, capability: "mcp_tools", nonceHash: hash(randomBytes(24).toString("hex")),
+        issuedAt: this.iso(), deadlineAt: new Date(this.now() + 10 * 60000).toISOString(), status: "pending", expectedWorkId: workId };
+      state.probes.push(probe); this.save(state);
+      return { probeId: probe.id, tool: "read_delegated_work", arguments: { id: workId }, deadlineAt: probe.deadlineAt, task: "Call this tool through the actual configured Cleaner Core connector. An admin HTTP evidence read does not complete this probe." };
+    });
+  }
+  /** Invoked only by the authenticated existing MCP tool handler after a successful work read. */
+  observeCoreRead(identity: AgentIdentity, workId: string) {
+    return this.exclusive(() => {
+      const state = this.read(); const profile = this.find(state, identity);
+      const matches = state.probes.filter((p) => p.tenantId === identity.tenantId && p.agentId === identity.agentId && p.capability === "mcp_tools"
+        && p.expectedWorkId === workId && p.status === "pending" && this.now() >= Date.parse(p.issuedAt) && this.now() < Date.parse(p.deadlineAt));
+      if (!matches.length) return;
+      for (const probe of matches) {
+        probe.status = "verified"; probe.observedAt = this.iso();
+        this.record(profile, "mcp_tools", { status: "verified", method: "server_probe", evidenceId: probe.id, scope: "authenticated_core_work_read", observedAt: probe.observedAt });
+      }
+      this.save(state);
+    });
+  }
   declare(identity: AgentIdentity, input: unknown) {
     return this.exclusive(() => {
       const declaration = parse(CapabilityDeclaration, input); const state = this.read(); const profile = this.find(state, identity);
@@ -151,14 +187,22 @@ export class AgentProfiles {
     });
   }
   complete(identity: AgentIdentity, input: unknown) {
+    return this.finish(identity, input, "mcp");
+  }
+  /** Protected fixture grader; this HTTP path can never verify MCP calling. */
+  completeDraft(identity: AgentIdentity, input: unknown) {
+    return this.finish(identity, input, "owner_http");
+  }
+  private finish(identity: AgentIdentity, input: unknown, transport: "mcp" | "owner_http") {
     return this.exclusive(() => {
       const answer = parse(z.strictObject({ probeId: AgentId, nonce: z.string().regex(/^[a-f0-9]{48}$/), answer: z.strictObject({ decision: z.enum(["propose_time", "host_review"]), draft: z.string().min(10).max(500) }).optional() }), input);
       const state = this.read(); const profile = this.find(state, identity); const probe = this.findProbe(state, identity, answer.probeId);
+      if (probe.expectedWorkId || transport === "owner_http" && probe.capability !== "generation_reasoning") throw new AgentProfileError("INVALID_TRANSPORT", "Use the issued probe's actual connector read or its supported completion transport.");
       if (hash(answer.nonce) !== probe.nonceHash) throw new AgentProfileError("PROBE_MISMATCH", "The challenge response does not match this probe.");
       if (probe.status !== "pending") throw new AgentProfileError("PROBE_CLOSED", "This probe no longer accepts a response.");
       if (probe.grantFingerprint && !profile.grants.some((g) => g.extensionId === probe.extensionId && g.fingerprint === probe.grantFingerprint)) throw new AgentProfileError("PERMISSION_REQUIRED", "The native fixture grant changed; start a new probe.");
       const at = this.iso(); probe.observedAt = at;
-      this.record(profile, "mcp_tools", { status: "verified", method: "server_probe", evidenceId: probe.id, scope: "authenticated_read_only_roundtrip", observedAt: at });
+      if (transport === "mcp") this.record(profile, "mcp_tools", { status: "verified", method: "server_probe", evidenceId: probe.id, scope: "authenticated_read_only_roundtrip", observedAt: at });
       if (probe.capability === "generation_reasoning") {
         const scenario = probe.scenario!;
         const valid = Date.parse(scenario.requestedStart) >= Date.parse(scenario.windowStart)
@@ -167,7 +211,7 @@ export class AgentProfiles {
         const passed = answer.answer?.decision === (valid ? "propose_time" : "host_review") && text.includes("host clearance")
           && (valid ? text.includes(scenario.requestedStart.toLowerCase()) : text.includes("review") && text.includes("unchanged"));
         probe.status = passed ? "verified" : "failed";
-        this.record(profile, probe.capability, { status: probe.status, method: "server_probe", evidenceId: probe.id, scope: "synthetic_policy_draft", observedAt: at });
+        this.record(profile, probe.capability, { status: probe.status, method: transport === "mcp" ? "server_probe" : "server_fixture", evidenceId: probe.id, scope: "synthetic_policy_draft", observedAt: at });
       } else if (probe.capability === "mcp_tools") probe.status = "verified";
       else probe.status = "awaiting_review";
       this.save(state); return { probeId: probe.id, status: probe.status, sendsMessages: false };

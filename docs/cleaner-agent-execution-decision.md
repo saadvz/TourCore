@@ -78,6 +78,11 @@ source contract rather than an independently observed correlation.
 
 Phase 0.2 now adds the [AgentProfile, capability checks and Grok adapter](cleaner-agent-capabilities.md).
 The implementation is verified locally; current-account onboarding is pending.
+The app's tool inventory remains four despite server/bridge discovery of eight
+and an advertised version update. Capability onboarding has a compatible path:
+an actual existing connector read verifies core MCP, and protected admin APIs
+handle declarations/draft grading. The app discovery limitation stays recorded
+separately; HTTP grading cannot promote MCP verification.
 The supported execution evidence is webhook-triggered
 background execution with authenticated MCP calls and engine-owned deadline
 fallback. Polling latency, quota exhaustion, credential revocation, concurrent

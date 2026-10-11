@@ -36,6 +36,59 @@
       "format": "date-time",
       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
     },
+    "toolDiscovery": {
+      "type": "object",
+      "properties": {
+        "bridgeToolCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 128
+        },
+        "exposedTools": {
+          "maxItems": 8,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "list_delegated_work",
+              "read_delegated_work",
+              "claim_delegated_work",
+              "propose_cleaning_time",
+              "read_agent_profile",
+              "declare_agent_capabilities",
+              "begin_agent_probe",
+              "complete_agent_probe"
+            ]
+          }
+        },
+        "method": {
+          "type": "string",
+          "const": "operator_report"
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "serverSoftwareVersion": {
+          "type": "string",
+          "const": "0.2.0"
+        },
+        "serverToolCount": {
+          "type": "number",
+          "const": 8
+        }
+      },
+      "required": [
+        "bridgeToolCount",
+        "exposedTools",
+        "method",
+        "observedAt",
+        "serverSoftwareVersion",
+        "serverToolCount"
+      ],
+      "additionalProperties": false
+    },
     "capabilities": {
       "minItems": 7,
       "maxItems": 7,
@@ -77,6 +130,7 @@
                 "type": "string",
                 "enum": [
                   "server_probe",
+                  "server_fixture",
                   "engine_workflow",
                   "operator_review"
                 ]
@@ -274,6 +328,22 @@
             "unverified"
           ]
         },
+        "appToolDiscovery": {
+          "type": "string",
+          "enum": [
+            "unknown",
+            "complete",
+            "partial"
+          ]
+        },
+        "onboardingTransport": {
+          "type": "string",
+          "enum": [
+            "unverified",
+            "mcp",
+            "core_mcp_owner_http"
+          ]
+        },
         "missingForAutonomous": {
           "type": "array",
           "items": {
@@ -281,7 +351,8 @@
             "enum": [
               "verified_mcp_tools",
               "verified_background_runs",
-              "background_latency_within_deadline"
+              "background_latency_within_deadline",
+              "delegation_tools_unavailable"
             ]
           }
         }
@@ -293,6 +364,8 @@
         "productionReady",
         "autonomousScopes",
         "generation",
+        "appToolDiscovery",
+        "onboardingTransport",
         "missingForAutonomous"
       ],
       "additionalProperties": false

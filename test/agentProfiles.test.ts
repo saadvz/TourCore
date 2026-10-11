@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { AgentProfiles } from "../src/agents/registry";
-import { AgentProfile, CapabilityDeclaration } from "../src/agents/profile";
+import { AgentProfile, CapabilityDeclaration, CORE_AGENT_TOOLS } from "../src/agents/profile";
 import { GrokWorkEvent, grokWorkEvent, GrokAgentAdapter } from "../src/agents/grok";
 
 const roots: string[] = [];
@@ -157,4 +157,43 @@ it("rejects duplicate declarations and conflicting Grok envelopes while preservi
   expect(GrokWorkEvent.safeParse({ ...envelope, eventId: `work_${"b".repeat(32)}` }).success).toBe(false);
   expect(GrokWorkEvent.safeParse({ ...envelope, type: envelope.eventType }).success).toBe(false);
   expect(GrokAgentAdapter.ownsMessageSending).toBe(false);
+});
+
+it("grades an HTTP draft fixture without falsely verifying or refreshing MCP capability", async () => {
+  const h = setup(60000, "fits");
+  const p = await h.profiles.begin(identity, { capability: "generation_reasoning" });
+  await h.profiles.completeDraft(identity, { probeId: p.probeId, nonce: p.nonce, answer: { decision: "propose_time", draft: `Scheduled ${p.scenario!.requestedStart}. Entry requires host clearance.` } });
+  const profile = await h.profiles.get(identity);
+  expect(cap(profile, "generation_reasoning")).toMatchObject({ status: "verified", evidence: { method: "server_fixture", scope: "synthetic_policy_draft" } });
+  expect(cap(profile, "mcp_tools").status).toBe("unknown"); expect(profile.readiness.executionMode).toBe("unavailable");
+  const mcp = await h.profiles.begin(identity, { capability: "mcp_tools" });
+  await expect(h.profiles.completeDraft(identity, { probeId: mcp.probeId, nonce: mcp.nonce })).rejects.toMatchObject({ code: "INVALID_TRANSPORT" });
+  expect(cap(await h.profiles.get(identity), "mcp_tools").status).toBe("unknown");
+});
+
+it("correlates only a fresh same-identity core read with the issued probe, without refreshing a consumed probe", async () => {
+  const h = setup(); const p = await h.profiles.beginCoreRead(identity, workId);
+  expect(p).toMatchObject({ tool: "read_delegated_work", arguments: { id: workId } });
+  await h.profiles.observeCoreRead(other, workId);
+  await h.profiles.observeCoreRead(identity, `work_${"b".repeat(32)}`);
+  expect(cap(await h.profiles.get(identity), "mcp_tools").status).toBe("unknown");
+  await h.profiles.observeCoreRead(identity, workId);
+  const first = cap(await h.profiles.get(identity), "mcp_tools").evidence!;
+  expect(first).toMatchObject({ evidenceId: p.probeId, scope: "authenticated_core_work_read", method: "server_probe" });
+  h.clock.now += 1000; await h.profiles.observeCoreRead(identity, workId);
+  expect(cap(await h.profiles.get(identity), "mcp_tools").evidence).toEqual(first);
+  await h.profiles.beginCoreRead(other, workId); h.clock.now += 600000;
+  await h.profiles.observeCoreRead(other, workId);
+  expect(cap(await h.profiles.get(other), "mcp_tools").status).toBe("unknown");
+});
+
+it("keeps the app catalog partial while allowing verified core autonomy and rejects a missing required delegation tool", async () => {
+  const h = setup(); await h.profiles.reportDiscovery(identity, { bridgeToolCount: 8, exposedTools: [...CORE_AGENT_TOOLS] });
+  await h.profiles.beginCoreRead(identity, workId); await h.profiles.observeCoreRead(identity, workId);
+  const result = await h.profiles.verifyWorkflow(identity, { workId, completedAt: new Date(h.clock.now).toISOString(), latencyMs: 23878 }, true);
+  expect(result.readiness).toMatchObject({ executionMode: "autonomous", appToolDiscovery: "partial", onboardingTransport: "core_mcp_owner_http" });
+  expect(result.toolDiscovery).toMatchObject({ method: "operator_report", serverToolCount: 8, bridgeToolCount: 8 });
+  await expect(h.profiles.reportDiscovery(identity, { bridgeToolCount: 8, exposedTools: ["read_delegated_work", "read_delegated_work"] })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  const missing = await h.profiles.reportDiscovery(identity, { bridgeToolCount: 8, exposedTools: ["read_delegated_work"] });
+  expect(missing.readiness.executionMode).toBe("interactive"); expect(missing.readiness.missingForAutonomous).toContain("delegation_tools_unavailable");
 });

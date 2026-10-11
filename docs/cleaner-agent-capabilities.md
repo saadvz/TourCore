@@ -44,7 +44,7 @@ in-flight probes; an old workflow cannot reverify that changed connection.
 
 States are `unknown`, `declared`, `unavailable`, `verified`, `failed` and
 `expired`. Evidence provenance remains visible: `server_probe`,
-`engine_workflow`, or `operator_review`. Background/scheduled evidence explicitly records the owner's closed-conversation
+`engine_workflow`, `server_fixture`, or `operator_review`. Background/scheduled evidence explicitly records the owner's closed-conversation
 confirmation; the backend cannot observe whether a browser conversation is open.
 For external native abilities the backend cannot independently inspect an agent's private connector trace. The
 owner must review an actual exercised fixture before attesting; a declaration
@@ -60,6 +60,9 @@ artifact ID, and keep credentials/personal content out of evidence.
   deadline enable `autonomous` readiness for `cleaner.reschedule_requested`.
 - Default deadline is 120 seconds. A tighter deadline can downgrade autonomous
   readiness; expired evidence cannot silently retain it.
+- A reported app inventory missing a required delegation tool downgrades
+  autonomous readiness. Inventory and transport limits remain separate from
+  capability verification, even if the existing four core tools work.
 
 The report always identifies `fallback=engine_owned` and
 `productionReady=false`. Capabilities do not authorize booking, messaging,
@@ -155,7 +158,12 @@ agent MCP tool.
 | Endpoint | Input or result |
 | --- | --- |
 | `GET /test/agent/profile` | Profile readiness plus Grok adapter metadata |
+| `GET /test/agent/onboarding?workId=WORK_ID` | Protected compatible onboarding plan for existing completed work; no probes or work are created by this GET |
+| `POST /test/agent/profile/discovery` | `{bridgeToolCount, exposedTools}`; owner-reported app inventory, with server metadata supplied by the backend |
+| `POST /test/agent/profile/declarations` | Same declaration schema as the MCP tool; never writes verified evidence |
 | `POST /test/agent/probes` | `{capability, extensionId?}` |
+| `POST /test/agent/probes/core-mcp` | `{workId}` for completed work; only an actual authenticated `read_delegated_work` call completes it |
+| `POST /test/agent/probes/draft` | `{probeId, nonce, answer:{decision,draft}}` for generation only; never verifies MCP |
 | `POST /test/agent/profile/verify-workflow` | `{workId, conversationClosed:true}`; accepted wakeup and completed agent audit are read by the server |
 | `POST /test/agent/native-grants` | `{extensionId, permissions, resourceId}` for a declared read-only fixture |
 | `DELETE /test/agent/native-grants/EXTENSION_ID` | Revoke that fixture grant |
@@ -237,3 +245,87 @@ deployment, inspect the server metadata and retry discovery once in a fresh
 Grok message. Do not repeatedly delete/re-add connectors or use raw HTTP probe
 calls to claim configured-connector verification. If the app still shows four,
 preserve the limitation and use supported app discovery/session controls.
+
+At 6:59 PM ET the user reported that the deployed server advertised `0.2.0`
+and the exact bridge still exposed eight tools, while the app exposed only the
+original four. Grok stopped again with no profile declarations, probes,
+workflow import, SMS or routine changes. The version change did not clear this
+account's app inventory. Further remove/re-add cycles are not required.
+
+## Compatible onboarding when the app exposes only four tools
+
+The server and bridge can remain at eight while the actual Grok app exposes
+four. The profile records that limitation rather than pretending new tools
+became available. The existing operational connector can prove MCP capability
+through its real `read_delegated_work` tool; profile administration and a
+synthetic drafting exercise can use the protected admin HTTP API. No raw
+JSON-RPC substitute is used to claim configured-connector verification.
+
+The MCP probe is correlated to an owner-issued, ten-minute challenge targeting
+already-completed work. Only the authenticated existing MCP read handler
+records the observation. Owner HTTP evidence/profile reads cannot complete it.
+Wrong work, wrong agent/tenant, expiry or a consumed probe cannot verify or
+refresh the evidence. Capability observation failures leave the ordinary work
+read usable and the profile unverifiable; telemetry does not block operations.
+
+Draft completion via the protected HTTP grader records method `server_fixture`
+and scope `synthetic_policy_draft`. It does not write or refresh MCP evidence.
+Its nonce, schema, fixture facts and expiry are still validated. The HTTP
+endpoint rejects MCP/core-read probes and all other capabilities. An actual
+MCP draft-probe completion continues to use `server_probe` provenance.
+
+Grok must use its actual configured connector for the operational read and
+report that tool trace. The backend sees the authenticated MCP handler, but
+cannot independently distinguish every possible client implementation; the
+native app's inventory and usage remain attributed to the account report.
+
+Use the existing saved admin token, with the usual administrator bearer header,
+for the following protected endpoints. Keep the agent token in the existing
+bridge and call the one operational MCP tool through the app itself. Let
+`BASE=https://tourcore-production-72ec.up.railway.app` and
+`WORK=work_e9935dc0acb6f9e0b7fa55306a21e656`.
+
+For a single handoff, Grok can GET
+`BASE/test/agent/onboarding?workId=WORK` with that actual work ID and follow the
+returned plan. It explicitly separates the configured connector read from
+admin HTTP steps and requires prior owner confirmation for background evidence.
+
+1. Check health. Do not retry connector deletion/re-addition. Record the observed
+   app inventory with `POST BASE/test/agent/profile/discovery`:
+   `{"bridgeToolCount":8,"exposedTools":["claim_delegated_work","list_delegated_work","propose_cleaning_time","read_delegated_work"]}`.
+2. Declare actual current abilities through
+   `POST BASE/test/agent/profile/declarations`, using the MCP declaration schema.
+   Claim core MCP, drafting and background execution as available; leave optional
+   capabilities unknown unless their current availability is established.
+3. `POST BASE/test/agent/probes/core-mcp` with `{"workId":"WORK"}`, replacing
+   WORK with the exact ID above. Then invoke **the app connector's actual**
+   `read_delegated_work` with that work ID. Do not send this read as raw HTTP or
+   JSON-RPC. Reading admin evidence instead does not pass the probe.
+4. `POST BASE/test/agent/probes` with `{"capability":"generation_reasoning"}`.
+   Reason from the returned synthetic fixture and task, then submit the returned
+   probe ID/nonce and structured decision/draft to
+   `POST BASE/test/agent/probes/draft`. This grades a draft but sends nothing.
+5. `POST BASE/test/agent/profile/verify-workflow` with the existing work ID and
+   `conversationClosed:true`. The user already confirmed the old SMS run's
+   closed interval. Do not recreate work or perform claim/propose to generate
+   evidence. The backend reads the existing notification and completed audit.
+6. Read `GET BASE/test/agent/profile` and save the sanitized report. Expected:
+   core MCP verified as `authenticated_core_work_read`; draft verified as
+   `server_fixture`; background verified as `engine_workflow`; autonomous
+   readiness scoped to `cleaner.reschedule_requested`; engine-owned fallback;
+   `appToolDiscovery=partial`; `onboardingTransport=core_mcp_owner_http`.
+
+No new SMS, event, routine, connector or environment is needed. Preserve the
+receivers and Tour Core. Report HTTP/tool errors and approval blocks, and keep
+tokens, nonces, phone numbers and private webhook URLs out of the shared report.
+The app's new-tool discovery limitation remains open after successful core
+onboarding. The compatibility profile does not claim those four new native
+tool attachments were verified.
+
+Compatibility validation checkpoint: typechecking and 71 focused tests passed.
+The SDK integration completed a real original-tool read after an issued probe,
+showed that admin evidence reads do not verify MCP, graded a draft through the
+HTTP-only fixture path, and imported correlated background evidence while
+retaining partial app discovery. Original work evidence stayed identical and
+the simulated reply count stayed one. No live compatibility result is claimed
+until the current Grok account reports it.

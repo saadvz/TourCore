@@ -103,3 +103,46 @@ it("fails closed on profile corruption without exposing stored content in MCP er
   expect(result.isError).toBe(true); expect(JSON.stringify(result)).not.toContain("private_corrupt_contents");
   expect((await h.admin("/test/agent/profile")).status).toBe(503);
 });
+
+it("completes compatible onboarding through a real original connector tool, without confusing admin HTTP reads with MCP proof", async () => {
+  const h = await setup(async (id, call) => { const work = await call("claim_delegated_work", { id }); await call("propose_cleaning_time", { id, leaseToken: work.leaseToken, expectedTurnVersion: work.turn.version, actionKey: `grok_${id}`, start: work.requestedStart }); });
+  const { work } = await (await h.admin("/test/events", { eventId: "already_completed_for_compatibility" })).json() as { work: { id: string } };
+  await expect.poll(() => h.service.sink.replies().length).toBe(1);
+  const baseline = await (await h.admin(`/test/evidence/${work.id}`)).json();
+  expect((await h.admin(`/test/agent/onboarding?workId=${work.id}`, undefined, agentToken)).status).toBe(401);
+  expect((await h.admin(`/test/agent/onboarding?workId=${work.id}`)).status).toBe(200);
+  expect((await h.admin("/test/agent/onboarding?workId=bad")).status).toBe(400);
+  expect((await h.admin("/test/agent/profile/discovery", { bridgeToolCount: 8, exposedTools: ["claim_delegated_work", "list_delegated_work", "propose_cleaning_time", "read_delegated_work"] })).status).toBe(200);
+  expect((await h.admin("/test/agent/profile/declarations", { capabilities: [{ capability: "mcp_tools", availability: "available" }] })).status).toBe(200);
+  const body = { workId: work.id };
+  expect((await h.admin("/test/agent/probes/core-mcp", body, agentToken)).status).toBe(401);
+  expect((await h.admin("/test/agent/probes/core-mcp", { ...body, verified: true })).status).toBe(400);
+  const probeResponse = await h.admin("/test/agent/probes/core-mcp", body); expect(probeResponse.status).toBe(200);
+  const probe = await probeResponse.json() as { probeId: string };
+  await h.admin(`/test/evidence/${work.id}`);
+  const before = await (await h.admin("/test/agent/profile")).json() as { profile: { readiness: { executionMode: string } } };
+  expect(before.profile.readiness.executionMode).toBe("unavailable");
+  await h.call("read_delegated_work", { id: work.id });
+  const after = await (await h.admin("/test/agent/profile")).json() as { profile: { capabilities: unknown[]; readiness: unknown } };
+  expect(after.profile.capabilities).toEqual(expect.arrayContaining([expect.objectContaining({ capability: "mcp_tools", status: "verified", evidence: expect.objectContaining({ evidenceId: probe.probeId, scope: "authenticated_core_work_read" }) })]));
+  const g = await (await h.admin("/test/agent/probes", { capability: "generation_reasoning" })).json() as { probeId: string; nonce: string; scenario: { requestedStart: string; windowEnd: string; minimumMinutes: number } };
+  const valid = Date.parse(g.scenario.requestedStart) + g.scenario.minimumMinutes * 60000 <= Date.parse(g.scenario.windowEnd);
+  const answer = { probeId: g.probeId, nonce: g.nonce, answer: { decision: valid ? "propose_time" : "host_review", draft: valid ? `Scheduled ${g.scenario.requestedStart}; entry requires host clearance.` : "Host review required; existing time unchanged. Entry requires host clearance." } };
+  expect((await h.admin("/test/agent/probes/draft", answer, agentToken)).status).toBe(401);
+  expect((await h.admin("/test/agent/probes/draft", answer)).status).toBe(200);
+  await expect.poll(async () => (await h.service.notifications!.status(work.id)).status).toBe("accepted");
+  const verified = await (await h.admin("/test/agent/profile/verify-workflow", { workId: work.id, conversationClosed: true })).json();
+  expect(verified).toMatchObject({ readiness: { executionMode: "autonomous", appToolDiscovery: "partial", onboardingTransport: "core_mcp_owner_http", generation: "synthetic_probe_verified" } });
+  const final = await (await h.admin(`/test/evidence/${work.id}`)).json();
+  expect(final).toEqual(baseline); expect(h.service.sink.replies()).toHaveLength(1);
+});
+
+it("refuses an unfinished work item as a compatibility fixture and preserves ordinary reads when profile storage fails", async () => {
+  const h = await setup();
+  const { work } = await (await h.admin("/test/events", { eventId: "pending_not_a_probe_fixture" })).json() as { work: { id: string } };
+  expect((await h.admin("/test/agent/probes/core-mcp", { workId: work.id })).status).toBe(409);
+  expect((await h.admin(`/test/agent/onboarding?workId=${work.id}`)).status).toBe(409);
+  writeFileSync(join(h.root, "agent-profiles.json"), "{corrupt");
+  expect(await h.call("read_delegated_work", { id: work.id })).toMatchObject({ status: "pending" });
+  expect((await h.admin("/test/agent/profile")).status).toBe(503);
+});
