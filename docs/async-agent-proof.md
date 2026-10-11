@@ -318,3 +318,33 @@ agent over actual MCP SDK HTTP -> engine-validated reply -> delivery acknowledgm
 plus independent timeout fallback. All 17 prototype tests passed within the
 1,686-test product run; the demo, typecheck, build, and 26 baseline evaluation
 tests also passed. Live Grok/Guesty/SMS adapters are separate remaining work.
+
+
+## Cleaner Core connection reported 11 October 2026
+
+The user supplied Grok's report: at 2:54 AM ET, the isolated Railway service's
+`/healthz` returned HTTP 200 with `service=cleaner-core-test`, `mode=synthetic`,
+and `ready=true`. At 2:55 AM ET, a separately configured connector advertised
+all four delegation tools and server `cleaner-core-delegation-prototype` 0.1.0.
+Grok reports authenticated requests succeed and unauthenticated requests return
+401. It reports leaving the original Tour Core connector and routine unchanged.
+
+This connector uses a bridge on Grok's computer that reads a masked saved token
+and forwards a bearer header. Discovery does not establish that background
+routine runs can use that bridge. No Cleaner Core tool call or synthetic event
+had been made at this checkpoint. These are account-reported observations;
+Codex's egress proxy blocks independent requests to the Railway hostname before
+reaching the application.
+
+The subsequent account report confirms `list_delegated_work` executed once
+through that bridge and returned `[]`. Grok reports creating a separate,
+webhook-only Cleaner Core Delegation Test routine using read/claim/propose/read,
+the claim's lease and turn version, and stable `grok_<workId>` action keys.
+It reports no events or webhook sends yet. Interactive tool execution and
+receiver preparation are now reported; unattended bridge execution is pending.
+
+The test service now has a durable, bounded notification worker and timestamped
+admin evidence. Its 34 focused tests pass, including a scripted webhook receiver
+using actual SDK MCP HTTP to claim/propose and obtain a completed local reply.
+This is local integration validation, not a live Grok or real SMS result. Follow
+[the separate trial instructions](cleaner-grok-delegation-trial.md) for that gate.

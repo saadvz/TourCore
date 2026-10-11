@@ -35,18 +35,18 @@ try {
     credentials = validateTestCredentials(saved.agentToken, saved.adminToken);
   }
   stage = "storage";
-  service = createDelegationTestService({ root, ...credentials, publicBaseUrl, railwayHealthcheck: Boolean(process.env.RAILWAY_ENVIRONMENT_ID) });
+  service = createDelegationTestService({ root, ...credentials, publicBaseUrl, webhook: config.webhook, railwayHealthcheck: Boolean(process.env.RAILWAY_ENVIRONMENT_ID) });
 } catch {
   release();
   console.error(stage === "credentials"
     ? "Cleaner Core test startup blocked: saved local credentials.json is unreadable or invalid. Check that file and its permissions."
-    : "Cleaner Core test startup blocked: durable test storage could not be initialized. Check delegation.json, replies.json, and volume permissions.");
+    : "Cleaner Core test startup blocked: durable test storage could not be initialized. Check delegation.json, replies.json, notifications.json, and volume permissions.");
   process.exit(1);
 }
 const server = service.app.listen(port, host, () => {
   console.log(`Cleaner Core synthetic test service ready on ${host}:${port}`);
   console.log("MCP: /mcp; health: /healthz. Authentication values are saved privately and are never printed.");
-  console.log("No Grok event dispatch, Guesty import, real SMS, or production configuration is enabled.");
+  console.log(`Grok test webhook notifications: ${config.webhook ? "configured" : "disabled"}. Replies use the local simulated ledger.`);
 });
 let stopping = false;
 const stop = async (exitCode: number) => {

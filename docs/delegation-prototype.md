@@ -132,8 +132,9 @@ be verified. Do not label a real SMS provider idempotent solely because the
 engine supplies a key. Lost acknowledgments through a non-idempotent provider
 require reconciliation rather than blind resend.
 
-The agent is scripted and obtains work through MCP; this prototype does not yet
-dispatch webhook notifications to a live Grok routine. There is no Guesty
+The local demo agent is scripted. The separate test service now includes durable
+webhook wakeups for a dedicated Grok routine; actual background use of its new
+connector still needs a correlated live trial. There is no Guesty
 reservation import, full cleaning-turn state machine, host review UI, OAuth
 integration, or live messaging. Review state is inspectable in durable records;
 operator review and resolution are a later integration.

@@ -80,7 +80,7 @@ export class DelegationPrototype {
   private view(state: State, work: Work) {
     const { recipient: _recipient, tenantId: _tenantId, ...turn } = this.turn(state, work);
     return { id: work.id, eventType: "cleaner.reschedule_requested", requestedStart: work.requestedStart,
-      deadlineAt: new Date(work.deadlineAt).toISOString(), status: work.status, turn,
+      receivedAt: work.receivedAt, deadlineAt: new Date(work.deadlineAt).toISOString(), status: work.status, turn,
       ...(work.reply ? { decisionSource: work.reply.source, deliveryStatus: work.reply.status } : {}) };
   }
   private expire(state: State): boolean {
@@ -147,6 +147,14 @@ export class DelegationPrototype {
   }
   get(identity: AgentIdentity, id: string) {
     return this.exclusive(() => { const state = this.refreshed(); return this.view(state, this.find(state, identity, id)); });
+  }
+  /** Operator evidence only; no lease token or credential is included. */
+  evidence(identity: AgentIdentity, id: string) {
+    return this.exclusive(() => {
+      const state = this.refreshed();
+      const work = this.find(state, identity, id);
+      return { work: this.view(state, work), audit: work.audit };
+    });
   }
   claim(identity: AgentIdentity, id: string) {
     return this.exclusive(() => {

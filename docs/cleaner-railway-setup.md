@@ -58,8 +58,9 @@ After connection Grok must list these tools:
 - `propose_cleaning_time`
 
 OAuth is not implemented by this prototype. The user's Grok account reports
-support for static bearer/header authentication; the actual connector setup
-still needs to be verified. The existing Tour Core connector does not expose
+support for static bearer/header authentication; the user subsequently reported successful connection and authenticated discovery
+on 11 October 2026. Background execution through its token-forwarding bridge
+still needs the separate live trial. The existing Tour Core connector does not expose
 these prototype tools.
 
 ## Container behavior and limits
@@ -84,9 +85,11 @@ Railway's `healthcheck.railway.app` hostname is accepted when the Railway
 environment is detected. Secrets are supplied through Railway variables,
 not included in the image, and are never printed by the application.
 
-The service is a single-process development prototype. It still needs an
-outbound webhook notification adapter and a dedicated Grok test routine before
-the unattended delegation trial. Do not inject a test request until that
+The service is a single-process development prototype. It includes a durable outbound webhook notification worker. Create a dedicated
+Grok test routine, then add `CLEANER_TEST_WEBHOOK_URL` and
+`CLEANER_TEST_WEBHOOK_AUTH` to Railway variables. Copy both values privately
+from that routine panel; the auth variable must be its complete Authorization
+header value. Redeploy and follow [the live trial](cleaner-grok-delegation-trial.md). Do not inject a test request until that
 setup is ready: its agent deadline starts immediately and lasts two minutes.
 There are no real SMS sends or production cleaning operations in this test.
 
@@ -94,8 +97,9 @@ Verified locally on 11 October 2026: Docker image build, required-volume guard,
 Railway-style port/domain/healthcheck handling, concurrent writer exclusion,
 pending-work recovery after a forced container kill, authenticated SDK MCP
 tool discovery and claim/proposal completion, and reply deduplication. Typecheck
-and all 20 delegation/service tests passed. The agent in this container check
-was scripted; actual Railway deployment and live Grok execution are pending.
+and all 20 delegation/service tests passed at that container checkpoint. The agent in this container check
+was scripted; the user has since reported Railway health and connector discovery; live Grok
+delegation completion remains pending.
 
 ## If Railway returns 502
 

@@ -30,5 +30,15 @@ export function resolveTestStartupConfig(env: NodeJS.ProcessEnv) {
   }
   const supplied = env.CLEANER_TEST_AGENT_TOKEN !== undefined || env.CLEANER_TEST_ADMIN_TOKEN !== undefined;
   const credentials = supplied || host === "0.0.0.0" ? validateTestCredentials(env.CLEANER_TEST_AGENT_TOKEN, env.CLEANER_TEST_ADMIN_TOKEN) : undefined;
-  return { root, port, host, publicBaseUrl, credentials };
+  let webhook: { url: string; authorization: string } | undefined;
+  if (env.CLEANER_TEST_WEBHOOK_URL !== undefined || env.CLEANER_TEST_WEBHOOK_AUTH !== undefined) {
+    if (!env.CLEANER_TEST_WEBHOOK_URL) throw new DelegationStartupError("CLEANER_TEST_WEBHOOK_URL is missing. Supply both webhook variables or remove both.");
+    if (!env.CLEANER_TEST_WEBHOOK_AUTH || /[\r\n]/.test(env.CLEANER_TEST_WEBHOOK_AUTH)) throw new DelegationStartupError("CLEANER_TEST_WEBHOOK_AUTH must contain the complete Authorization header value without line breaks.");
+    let url: URL;
+    try { url = new URL(env.CLEANER_TEST_WEBHOOK_URL); }
+    catch { throw new DelegationStartupError("CLEANER_TEST_WEBHOOK_URL must be a valid HTTPS address."); }
+    if (url.protocol !== "https:" || url.username || url.password || url.hash) throw new DelegationStartupError("CLEANER_TEST_WEBHOOK_URL must be HTTPS with no embedded credentials or fragment.");
+    webhook = { url: env.CLEANER_TEST_WEBHOOK_URL, authorization: env.CLEANER_TEST_WEBHOOK_AUTH };
+  }
+  return { root, port, host, publicBaseUrl, credentials, webhook };
 }

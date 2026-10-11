@@ -53,7 +53,8 @@ token. Never give that credential to the agent connector:
   a synthetic request with a valid proposed time roughly one day ahead.
   Replaying the same event ID returns the existing work; no second request is
   created. Extra inputs such as recipients or tenant IDs are refused.
-- `GET /test/evidence/WORK_ID` returns the current work and its simulated reply.
+- `GET /test/evidence/WORK_ID` returns current work, timestamped engine audit, simulated replies, and
+  notification transport status.
   It does not expose authentication values.
 
 The background worker sends a fallback to the local ledger after the two-minute
@@ -62,9 +63,23 @@ not demonstrate Grok completion; verify `decisionSource: "agent"` and
 `status: "completed"` for the live agent trial. `decisionSource: "fallback"`
 demonstrates the independent timeout path instead.
 
-The service does **not** dispatch a webhook to Grok. A supported secure
-notification adapter and dedicated test routine must be set up separately
-before an unattended live trial. Do not create a request until that routine and
+To enable authenticated HTTPS wakeups, create a dedicated Grok test routine and
+set both `CLEANER_TEST_WEBHOOK_URL` and `CLEANER_TEST_WEBHOOK_AUTH` in the hosting
+service's private variables. The authorization setting is the **complete header
+value**, including `Bearer ` if the routine panel supplies it. Leave both unset
+to disable notifications. The service never logs these values.
+
+The separate notification worker reconciles pending durable work after restart,
+persists each attempt before sending, and posts only schema version, event type,
+work/event ID, and deadline. It uses a five-second timeout, at most three attempts,
+and exponential backoff for network errors, 408, 429, and 5xx responses. Redirects
+are refused. Retries reuse the same work ID. HTTP 2xx means receiver acceptance,
+not agent completion. An interrupted send can be repeated after restart; the
+routine must use the stable action key and authoritative completion status.
+`notifications.json` stores attempt/status/timing metadata, with no destination,
+credentials, or response bodies. Damaged records fail closed.
+
+See [the live trial instructions](cleaner-grok-delegation-trial.md). Do not create a request until that routine and
 connector are ready; the two-minute deadline starts when the event is saved.
 Scheduled polling can exercise the tools but does not prove webhook delegation.
 

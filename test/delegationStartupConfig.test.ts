@@ -4,6 +4,25 @@ import { DelegationStartupError, resolveTestStartupConfig } from "../src/delegat
 const railway = { CLEANER_TEST_HOST: "0.0.0.0", RAILWAY_PUBLIC_DOMAIN: "cleaner.example", PORT: "8080", CLEANER_TEST_AGENT_TOKEN: "a".repeat(32), CLEANER_TEST_ADMIN_TOKEN: "b".repeat(32) };
 
 describe("Cleaner Core deployment configuration", () => {
+  it("accepts paired webhook settings and rejects invalid or incomplete settings without disclosing them", () => {
+    const valid = { CLEANER_TEST_WEBHOOK_URL: "https://hooks.example/private", CLEANER_TEST_WEBHOOK_AUTH: "Bearer private_webhook_value" };
+    expect(resolveTestStartupConfig({ ...railway, ...valid }).webhook).toEqual({ url: valid.CLEANER_TEST_WEBHOOK_URL, authorization: valid.CLEANER_TEST_WEBHOOK_AUTH });
+    for (const settings of [
+      { ...valid, CLEANER_TEST_WEBHOOK_URL: undefined },
+      { ...valid, CLEANER_TEST_WEBHOOK_AUTH: undefined },
+      { ...valid, CLEANER_TEST_WEBHOOK_AUTH: "Bearer private\nvalue" },
+      { ...valid, CLEANER_TEST_WEBHOOK_URL: "http://hooks.example/private" },
+      { ...valid, CLEANER_TEST_WEBHOOK_URL: "https://user:private@hooks.example/private" },
+      { ...valid, CLEANER_TEST_WEBHOOK_URL: "not_a_url" },
+    ]) {
+      try { resolveTestStartupConfig({ ...railway, ...settings }); throw new Error("Expected validation failure"); }
+      catch (error) {
+        expect(error).toBeInstanceOf(DelegationStartupError);
+        expect((error as Error).message).not.toContain("private");
+        if (settings.CLEANER_TEST_WEBHOOK_URL) expect((error as Error).message).not.toContain(settings.CLEANER_TEST_WEBHOOK_URL);
+      }
+    }
+  });
   it("accepts Railway port/domain with distinct valid credentials and leaves local automatic credentials available", () => {
     expect(resolveTestStartupConfig(railway)).toMatchObject({ port: 8080, host: "0.0.0.0", publicBaseUrl: "https://cleaner.example" });
     expect(resolveTestStartupConfig({})).toMatchObject({ port: 4332, host: "127.0.0.1", credentials: undefined });

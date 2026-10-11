@@ -2,6 +2,7 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { DelegationError, DelegationPrototype, LocalReplySink } from "./prototype";
 import { delegationApp } from "./mcp";
 import { startDelegationWorker } from "./worker";
+import { DelegationNotifications, type WebhookSettings, type FetchWebhook } from "./notifications";
 import { join } from "node:path";
 import { z } from "zod";
 
@@ -9,6 +10,7 @@ import { z } from "zod";
 export function createDelegationTestService(options: {
   root: string; agentToken: string; adminToken: string; publicBaseUrl?: string;
   deadlineMs?: number; intervalMs?: number; now?: () => number; railwayHealthcheck?: boolean;
+  webhook?: WebhookSettings; webhookFetch?: FetchWebhook;
 }) {
   if (options.adminToken.length < 32 || options.adminToken === options.agentToken) throw new Error("Separate test administrator credentials are required.");
   const allowedHosts = ["127.0.0.1", "localhost", "[::1]"];
@@ -23,8 +25,10 @@ export function createDelegationTestService(options: {
   sink.replies(); // Fail closed on a damaged message ledger before accepting traffic.
   const engine = new DelegationPrototype(options.root, sink, { now: options.now, deadlineMs: options.deadlineMs });
   const app = delegationApp(engine, [{ ...identity, token: options.agentToken }], { allowedHosts });
+  const notifications = options.webhook ? new DelegationNotifications(options.root, engine, identity, options.webhook, { now: options.now, fetch: options.webhookFetch }) : undefined;
   let failed = false;
   const worker = startDelegationWorker(engine, { intervalMs: options.intervalMs, onError: () => { failed = true; console.error("Cleaner Core test worker failed; inspect local storage before continuing."); } });
+  const notificationWorker = notifications ? startDelegationWorker(notifications, { intervalMs: options.intervalMs, onError: () => { failed = true; console.error("Cleaner Core notification worker failed; check notifications.json and volume permissions."); } }) : undefined;
   app.get("/healthz", (_req, res) => { res.status(failed ? 503 : 200).json({ service: "cleaner-core-test", mode: "synthetic", ready: !failed }); });
   app.use("/test", (req, res, next) => {
     const actual = Buffer.from(req.headers.authorization ?? "");
@@ -56,11 +60,12 @@ export function createDelegationTestService(options: {
   });
   app.get("/test/evidence/:id", async (req, res) => {
     try {
-      const work = await engine.get(identity, req.params.id as string);
-      res.json({ mode: "synthetic", work, replies: sink.replies().filter((reply) => reply.key === `reply_${work.id}`) });
+      const evidence = await engine.evidence(identity, req.params.id as string);
+      res.json({ mode: "synthetic", ...evidence, replies: sink.replies().filter((reply) => reply.key === `reply_${evidence.work.id}`),
+        notification: notifications ? await notifications.status(evidence.work.id) : { status: "disabled" } });
     } catch (error) {
       res.status(error instanceof DelegationError && error.code === "NOT_FOUND" ? 404 : 503).json({ error: "Evidence unavailable." });
     }
   });
-  return { app, engine, sink, stop: async () => { await fixtureQueue; await worker.stop(); } };
+  return { app, engine, sink, notifications, stop: async () => { await fixtureQueue; await notificationWorker?.stop(); await worker.stop(); } };
 }

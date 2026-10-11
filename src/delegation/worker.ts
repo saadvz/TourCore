@@ -1,7 +1,7 @@
 import type { DelegationPrototype } from "./prototype";
 
 /** One sweep at a time, independent of agent traffic. Persistence errors stay visible. */
-export function startDelegationWorker(engine: DelegationPrototype, options: { intervalMs?: number; onError: () => void }) {
+export function startDelegationWorker(engine: Pick<DelegationPrototype, "tick">, options: { intervalMs?: number; onError: () => void }) {
   const interval = options.intervalMs ?? 1000;
   if (!Number.isSafeInteger(interval) || interval <= 0) throw new Error("Worker interval must be a positive integer.");
   let running: Promise<void> | undefined;
