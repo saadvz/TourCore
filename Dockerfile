@@ -3,12 +3,12 @@
 FROM node:24-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
+RUN npm ci --no-audit --no-fund
 COPY src/delegation/ src/delegation/
 COPY src/storage/atomicWrite.ts src/storage/atomicWrite.ts
 COPY scripts/serve-delegation.ts scripts/serve-delegation.ts
 RUN ./node_modules/.bin/esbuild scripts/serve-delegation.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/cleaner-test-server.mjs
-RUN --mount=type=cache,target=/root/.npm npm prune --omit=dev --no-audit --no-fund
+RUN npm prune --omit=dev --no-audit --no-fund
 
 FROM node:24-bookworm-slim
 WORKDIR /app

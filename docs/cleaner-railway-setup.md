@@ -67,8 +67,10 @@ these prototype tools.
 The Docker build bundles only the Cleaner Core test entrypoint and its local
 storage helper. Its final image has production dependencies. Docker excludes
 local secrets, runtime state, and exports from the build context.
-The deployment Dockerfiles use only cache mounts, which Railway supports;
-workspace-specific certificate secret mounts must stay outside these files.
+The deployment Dockerfiles use ordinary `RUN` steps with no mount flags.
+Railway's cache mounts require a service-specific ID, so this portable test
+build uses standard npm installation instead. Workspace proxy preparation
+must stay outside the deployment Dockerfiles.
 
 The entrypoint requires `/data` to be a mount point and writes to
 `/data/cleaner-core-test`. `flock` enforces a single writer and automatically
