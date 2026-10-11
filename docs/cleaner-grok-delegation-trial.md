@@ -39,6 +39,12 @@ In this isolated service's Railway Variables add:
 | `CLEANER_TEST_WEBHOOK_URL` | Complete Webhook URL |
 | `CLEANER_TEST_WEBHOOK_AUTH` | Complete Authorization header value, including `Bearer ` if present |
 
+The sender uses this value verbatim. If the panel shows
+`Authorization: Bearer EXAMPLE_KEY`, save only `Bearer EXAMPLE_KEY`; exclude
+`Authorization:`, surrounding quotes, and leading/trailing whitespace. Do not
+substitute the Cleaner Core agent or administrator token. Copy the URL and
+header value from the same dedicated receiver routine.
+
 Save and redeploy. Keep both existing test tokens and the `/data` volume.
 Readiness must return the exact synthetic health response. Startup reports
 `Grok test webhook notifications: configured` without printing secrets.
@@ -94,3 +100,10 @@ After the first success, separately test duplicate event delivery and a disabled
 **test** routine to establish deduplication and independent fallback. Then collect
 repeated ordinary trials for latency. Do not disable the production routine,
 revoke production access, or attach a real SMS provider to this experiment.
+
+If the notification receives HTTP 401, recopy the dedicated routine's current
+URL and authorization value into Railway privately and redeploy. A configured
+startup log confirms settings exist; it does not verify the receiver accepts
+them. Repeat the scheduled trial using a **fresh** eventId. A repeated eventId
+returns the original work, including its completed fallback, and does not send
+another webhook. Keep the failed trial's evidence; do not reset its ledger.

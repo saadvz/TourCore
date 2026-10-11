@@ -348,3 +348,41 @@ admin evidence. Its 34 focused tests pass, including a scripted webhook receiver
 using actual SDK MCP HTTP to claim/propose and obtain a completed local reply.
 This is local integration validation, not a live Grok or real SMS result. Follow
 [the separate trial instructions](cleaner-grok-delegation-trial.md) for that gate.
+
+## First Cleaner Core delegation trial reported 11 October 2026
+
+Evidence source: the user's Grok report; remote logs and tool traces were not
+independently inspected by Codex. Railway webhook configuration and readiness
+had been confirmed by the user before the trial.
+
+| Observation | Account-reported evidence (America/New_York) |
+| --- | --- |
+| Fixture event | `grok-trial-20261011031128-31beb6e267b9` |
+| Work ID | `work_d5f10bc480988dcf9edb490c56ffc0d9`, matching POST response and evidence |
+| Fixture POST | One attempt, 3:16:00.484–3:16:00.807 AM ET, HTTP 200 |
+| Engine received | 3:16:00.749 AM ET |
+| Notification queued / attempted | 3:16:00.821 / 3:16:00.829 AM ET |
+| Notification outcome | HTTP 401, one attempt, terminal `failed`; response time unavailable |
+| Receiver execution | No run, start/end, or approval prompt recorded |
+| Agent audit | No `claimed` or `validated_action_and_reply_saved` entry |
+| Fallback selected | 3:18:00.938 AM ET |
+| Send / completion audit | `send_attempt` at 3:18:00.944; `delivery_acknowledged_and_completed` at 3:18:00.955 AM ET |
+| Final result | `decisionSource=fallback`, `status=completed`, `deliveryStatus=sent`, one simulated reply |
+| Report schedule / run | Due 3:23 AM ET, reportedly ran around 3:27 AM ET |
+| Cleanup | Only temporary sender deleted; logs, evidence, report and receiver retained on Grok's computer |
+
+The engine completed fallback 120.206 seconds after durable receipt. This is
+account-reported evidence of independent fallback during an authentication
+failure, not unattended agent completion. The report's delay is separate from
+engine execution. The closed-conversation interval was not explicitly confirmed.
+The completion audit uses `delivery_acknowledged_and_completed`; no entry named
+exactly `completed` is expected.
+
+The 401 establishes rejection at the webhook boundary. It does not identify
+whether the URL, header format, or credential is wrong, and gives no evidence
+about background access through the new connector bridge. Code inspection
+confirms the sender sets `Authorization` to `CLEANER_TEST_WEBHOOK_AUTH` verbatim;
+it does not add `Bearer ` or a header-name prefix. Recopy the same dedicated
+routine's URL and authorization **value** privately into Railway, redeploy,
+then use a fresh fixture event ID. Reusing the completed failed trial's event ID
+returns its existing fallback and does not dispatch a new notification.
