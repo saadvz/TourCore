@@ -6,9 +6,13 @@ receiver/MCP tools → engine validation → real outbound SMS. Cleaning turns
 remain synthetic. It does not change a real booking or the Tour Core installation.
 
 The user confirmed on 11 October 2026 that a separate SMS-capable Twilio number
-is on a paid account and already sends to their controlled test phone. No live
-SMS result is recorded yet. The 20 synthetic trials were confirmed to have run
-with the Grok conversation closed.
+is on a paid account and already sends to their controlled test phone. One live
+SMS proof subsequently passed in the supplied account report, with exactly one
+phone reply and a closed conversation confirmed by the user. Engine received
+audit to completion took 23.847 seconds; Twilio delivered status was recorded
+after 24.803 seconds. The full attributed record is in
+[the proof report](async-agent-proof.md#real-inboundoutbound-sms-proof-reported-11-october-2026).
+The 20 synthetic trials also ran with the conversation confirmed closed.
 
 ## Configure the existing isolated Railway service
 
@@ -66,14 +70,22 @@ no separate status URL needs to be copied into the number panel. They use
 
 Do not send the test SMS until health and the existing Grok receiver are ready.
 The current receiver already checks `eventType` and uses the four existing
-Cleaner Core tools; no new routine or connector is needed.
+Cleaner Core tools; no new routine or connector is needed. Its original
+synthetic-test instructions prohibited real SMS. Update only that instruction
+to acknowledge this authorized test: a validated Cleaner Core proposal may
+cause the engine to send one test reply to the configured controlled phone.
+Keep the existing event guard, deadline checks, claim/version/lease validation,
+stable action key, and authoritative status read. The receiver uses only the
+Cleaner Core delegation tools; sending remains owned by the engine. Preserve
+its URL/key, and keep Tour Core, external bookings and door operations untouched.
 
 ## One real unattended trial
 
 1. Have Grok check the expected `sms-proof` health response and confirm that
-   **Cleaner Core Delegation Test** is enabled with its existing instructions
-   and connector. Do not create `/test/events` requests or call claim/propose
-   from the conversation.
+   **Cleaner Core Delegation Test** is enabled with the SMS authorization above
+   and its existing connector. Save baseline `/test/sms/evidence` using the
+   separate admin token so the new work can be identified. Do not create
+   `/test/events` requests or call claim/propose from the conversation.
 2. Close the Grok conversation before sending. From the configured test phone,
    send **`CLEANER CORE TEST`** once to the separate Twilio number, without an
    attachment. Keep the conversation closed until after the reply arrives;
@@ -143,4 +155,6 @@ fictional SMS settings in the existing production-dependency container image;
 health, admin evidence authentication, unsigned-provider rejection and graceful
 shutdown passed. Both deployment Dockerfiles passed build validation. A fresh
 local image build was stopped while dependency installation made no progress
-in this workspace; the new Railway image build remains to be observed.
+in this workspace. Railway subsequently returned ready SMS-proof health and
+completed the reported real SMS trial; no fresh local image build completion
+is claimed.

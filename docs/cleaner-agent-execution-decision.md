@@ -1,10 +1,11 @@
 # Cleaner Core agent execution decision
 
-Status: supported for the isolated synthetic prototype on account-reported
-evidence; production live-SMS suitability remains unverified. Decision date:
-11 October 2026. The roadmap informs this decision. The authorized work so far
-has used isolated synthetic requests and simulated replies; a real messaging
-test needs an identified test sender and controlled recipient.
+Status: asynchronous execution feasibility supported for the isolated prototype
+by synthetic trials and one real SMS trial on account-reported evidence.
+Production suitability remains unverified. Decision date: 11 October 2026.
+The real SMS trial used a separate Twilio number, a controlled phone and
+synthetic cleaning state; the user confirmed one phone reply and a closed
+conversation throughout execution.
 
 ## Supported execution mode
 
@@ -23,6 +24,13 @@ The repeated sample's independently recomputed receipt-to-completion median is
 These describe durable engine receipt through a local simulated reply receipt.
 They do not measure real SMS ingestion or carrier delivery. The 120-second
 deadline is a provisional prototype limit, not an agreed live-SMS SLA.
+
+The subsequent real SMS trial completed through the agent in **23.847 seconds**
+from the engine's received audit timestamp. Twilio `delivered` status was
+recorded **24.803 seconds** after that timestamp. The user confirmed exactly
+one reply arrived on the phone, but no precise phone receipt time was supplied.
+There was no approval prompt or block. This is one observation, separate from
+the 20 simulated trials and their percentiles.
 
 ## Engine and agent boundary
 
@@ -59,14 +67,20 @@ POST timeout recovered the existing work by retrying the same event ID.
 
 ## Remaining gates and next boundary
 
-The synthetic execution feasibility gate has supporting evidence. The plan's
-full live-SMS chain still needs an isolated, explicitly authorized provider
-test: inbound SMS -> verified provider webhook -> durable event -> Grok tools ->
-validated action -> real outbound SMS and provider status evidence. The user
-confirmed a separate paid Twilio number already sends to their controlled test
-phone. An opt-in [SMS proof adapter](cleaner-sms-proof.md) now provides the
-transport; private Railway settings, number webhook configuration and the live
-trial are still required. It uses synthetic turns and a fixed test recipient.
+The plan's real inbound SMS -> durable event -> Grok tools -> validated action
+-> outbound SMS feasibility chain now has one passing isolated account report
+with user-confirmed phone receipt and a closed conversation. The opt-in
+[SMS proof adapter](cleaner-sms-proof.md) provides reusable transport. Its
+cleaning state is synthetic and its recipient is fixed by trusted configuration.
+Remote raw evidence was not directly inspected; the report omitted the
+outbound record's deterministic key, so that specific field remains an expected
+source contract rather than an independently observed correlation.
+
+Next in the roadmap is Phase 0.2: a verified AgentProfile, capability checks,
+and the Grok adapter contract. The supported profile is webhook-triggered
+background execution with authenticated MCP calls and engine-owned deadline
+fallback. Polling latency, quota exhaustion, credential revocation, concurrent
+live SMS and provider-restart reconciliation remain unverified boundaries.
 
 An SMS adapter must not claim provider idempotency merely because the engine
 supplies a key. Lost acknowledgments through a non-idempotent provider need

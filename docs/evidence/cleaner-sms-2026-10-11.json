@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "trial": "cleaner-real-sms-2026-10-11",
+  "evidenceSource": "User-supplied Grok account report; remote raw evidence not directly inspected",
+  "timezone": "America/New_York",
+  "baseline": {
+    "fetchedAt": "2026-10-11T17:51:33-04:00",
+    "httpStatus": 200,
+    "inboundCount": 0,
+    "outboundCount": 0
+  },
+  "health": {
+    "httpStatus": 200,
+    "service": "cleaner-core-test",
+    "mode": "sms-proof",
+    "ready": true
+  },
+  "inbound": {
+    "messageSid": "SMbf158299c9456f03d812ba27eca6034b",
+    "workId": "work_e9935dc0acb6f9e0b7fa55306a21e656",
+    "processed": true,
+    "count": 1,
+    "ledgerReceivedAt": null
+  },
+  "notification": {
+    "queuedAt": "2026-10-11T17:53:42.991-04:00",
+    "attemptedAt": "2026-10-11T17:53:42.997-04:00",
+    "acceptedAt": "2026-10-11T17:53:43.441-04:00",
+    "httpStatus": 200,
+    "attempts": 1,
+    "status": "accepted"
+  },
+  "receiver": {
+    "startedAt": "2026-10-11T17:53:53-04:00",
+    "endedAt": "2026-10-11T17:54:12-04:00",
+    "timestampPrecision": "seconds",
+    "approvalPrompt": false,
+    "block": false,
+    "tools": [
+      "read_delegated_work",
+      "claim_delegated_work",
+      "propose_cleaning_time",
+      "read_delegated_work"
+    ],
+    "actionKey": "grok_work_e9935dc0acb6f9e0b7fa55306a21e656"
+  },
+  "engine": {
+    "receivedAt": "2026-10-11T17:53:42.441-04:00",
+    "claimedAt": "2026-10-11T17:54:00.907-04:00",
+    "validatedAt": "2026-10-11T17:54:05.995-04:00",
+    "sendAttemptAt": "2026-10-11T17:54:06.013-04:00",
+    "completedAt": "2026-10-11T17:54:06.288-04:00",
+    "deadlineAt": "2026-10-11T17:55:42.410-04:00",
+    "decisionSource": "agent",
+    "status": "completed",
+    "deliveryStatus": "sent",
+    "turnVersion": 2
+  },
+  "outbound": {
+    "messageSid": "SMb40e511627c6c6f505c13df68ccd67c1",
+    "count": 1,
+    "attemptedAt": "2026-10-11T17:54:06.018-04:00",
+    "acceptedAt": "2026-10-11T17:54:06.284-04:00",
+    "providerStatus": "delivered",
+    "providerStatusRecordedAt": "2026-10-11T17:54:07.244-04:00",
+    "receiptMeaning": "provider_acceptance",
+    "rawKeyObserved": null
+  },
+  "userConfirmed": {
+    "phoneReceivedExactlyOneReply": true,
+    "conversationClosedBeforeSmsThroughReceiverEnd": true,
+    "phoneReceiptAt": null
+  },
+  "independentlyDerived": {
+    "inboundWorkHashMatches": true,
+    "expectedOutboundKey": "reply_work_e9935dc0acb6f9e0b7fa55306a21e656",
+    "engineReceiptToCompletionSeconds": 23.847,
+    "engineReceiptToValidationSeconds": 23.554,
+    "engineReceiptToDeliveryStatusRecordedSeconds": 24.803,
+    "completionBeforeDeadlineSeconds": 96.122
+  },
+  "limitations": [
+    "One real SMS trial with synthetic cleaning state; no production SLA or natural-language/Guesty proof",
+    "Exact phone receipt time was not supplied",
+    "Outbound raw key was omitted from the report; source contract uses reply_WORK_ID, while Grok reported the link from timing and unique count",
+    "Provider status timestamp is local callback recording time, not an independently observed carrier event time"
+  ],
+  "remoteEvidenceDirectory": "/workspace/cleaner-sms/",
+  "tourCoreReportedUntouched": true
+}

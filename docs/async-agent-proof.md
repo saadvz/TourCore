@@ -7,9 +7,10 @@ receiver-outage fallback also passed in account-reported evidence. A 20-request
 ordinary sample reported 20 agent completions, no deadline misses and no duplicate
 replies; its statistics were recomputed from the supplied timestamp table.
 The user explicitly confirmed the conversation stayed closed for all 20 trials.
-Real SMS delegation and production reliability remain unverified**. The next
-transport is the [opt-in isolated Twilio proof](cleaner-sms-proof.md); its live
-trial is pending private Railway/Twilio configuration.
+One real Twilio SMS delegation also passed in account-reported evidence: the
+user confirmed exactly one phone reply and a closed conversation throughout
+execution. Production reliability remains unverified**. The transport and
+reusable setup are in the [isolated Twilio proof](cleaner-sms-proof.md).
 This discovery record attributes the live findings to the user's Grok account
 report. It does not establish a general vendor guarantee or a production SLA.
 
@@ -286,10 +287,10 @@ start, MCP completion, and eventual SMS delivery times.
 | Scheduled run, chat closed | Real run history and successful MCP read | One success reported; 130s late, 10s duration; independent trace not supplied |
 | External trigger, chat closed | Correlated event, real run and MCP trace | One successful webhook-triggered MCP read reported; ~48s to start, 7s receiver run, ~55s to receiver end |
 | OAuth expiry/revocation | No unauthorized action; visible failure/escalation | Unrun |
-| Approval prompt | Explicitly observed block or permitted read | None reported for scheduled or webhook read; consequential actions untested |
-| Duplicate event | Receiver processes/rejects repeat safely | Unrun live; engine deduplication tested locally |
-| Disabled routine/quota limit | No lost input; measured fallback/alert behavior | Unrun live; transport outage tested locally |
-| Twilio SMS to event to action to SMS | Authorized test sender/number; complete timestamps and audit | Unrun; later delegation experiment |
+| Approval prompt | Explicitly observed block or permitted action | None reported for reads, synthetic proposals or the real SMS proof |
+| Duplicate event | Receiver processes/rejects repeat safely | Completed fixture replay and duplicate webhook passed; evidence unchanged, one simulated reply |
+| Disabled routine/quota limit | No lost input; measured fallback/alert behavior | Paused receiver passed engine fallback; quota exhaustion untested |
+| Twilio SMS to event to action to SMS | Controlled test number/phone; timestamps and audit | One real SMS passed; agent completion in 23.847s, delivery status recorded in 24.803s; exactly one phone reply and closed conversation confirmed |
 
 Begin with one read-only probe for feasibility. If it succeeds, collect at
 least 20 ordinary offline trials for useful preliminary P50/P95 latency,
@@ -579,6 +580,67 @@ This is a small, successful synthetic sample at roughly one request per minute,
 not a production SLA, concurrency/load test, or actual carrier-delivery test.
 The supplied engine times establish that every proposal and local completion
 preceded the provisional 120-second deadline. The full plan's Twilio inbound
-SMS -> durable event -> agent -> validated action -> outbound SMS chain remains
-unrun. The first successful trial and forced faults remain separate from this
+SMS -> durable event -> agent -> validated action -> outbound SMS chain was
+subsequently tested below. The first successful trial and forced faults remain separate from this
 ordinary-run latency sample.
+
+## Real inbound/outbound SMS proof reported 11 October 2026
+
+Evidence source: the user's Grok account report, followed by the user's explicit
+confirmation that the phone received exactly one Cleaner Core TEST reply and
+the Grok conversation stayed closed from before sending through receiver end.
+Remote raw evidence remains under `/workspace/cleaner-sms/` on Grok's computer
+and was not directly inspected by Codex. The sanitized report is committed in
+[`evidence/cleaner-sms-2026-10-11.json`](evidence/cleaner-sms-2026-10-11.json).
+
+This used the separate paid Twilio test number and configured controlled phone.
+Health returned HTTP 200, `service=cleaner-core-test`, `mode=sms-proof`,
+`ready=true`. Only the receiver instructions were changed to allow the
+engine-owned test reply; its URL, key, connector and delegation guards were
+reportedly preserved. The baseline at 5:51:33 PM ET contained no inbound or
+outbound messages. Tour Core was reportedly untouched.
+
+| Observation | Account-reported evidence, America/New_York |
+| --- | --- |
+| Inbound Message SID | `SMbf158299c9456f03d812ba27eca6034b` |
+| Work ID | `work_e9935dc0acb6f9e0b7fa55306a21e656` |
+| Outbound Message SID | `SMb40e511627c6c6f505c13df68ccd67c1` |
+| Notification queued / attempted / accepted | 5:53:42.991 / 5:53:42.997 / 5:53:43.441 PM; one attempt, HTTP 200 |
+| Receiver start / end | 5:53:53 / 5:54:12 PM; timestamps supplied to whole seconds |
+| Engine received / claimed | 5:53:42.441 / 5:54:00.907 PM |
+| Validated action | 5:54:05.995 PM; `validated_action_and_reply_saved`, agent actor |
+| Engine send attempt / completion | 5:54:06.013 / 5:54:06.288 PM; `delivery_acknowledged_and_completed` |
+| SMS attempted / accepted | 5:54:06.018 / 5:54:06.284 PM |
+| Provider delivery status recorded | `delivered`, 5:54:07.244 PM |
+| Deadline | 5:55:42.410 PM |
+| Final work | `agent`, `completed`, `sent`; turn version 2 |
+| Counts / approval | One inbound and one outbound since empty baseline; no approval prompt or block |
+| User observation | Exactly one phone reply; conversation closed throughout execution |
+
+The receiver read pending work, claimed it, proposed requestedStart with stable
+key `grok_work_e9935dc0acb6f9e0b7fa55306a21e656`, then read completed status.
+The cleaning turn remained a synthetic fixture. Its confirmed start was
+12 October at 6:53:42 PM ET. The local simulated `replies` list being empty is
+expected: actual provider evidence is stored in the SMS ledger.
+
+Codex independently recomputed engine-receipt-to-validation as 23.554 seconds,
+engine-receipt-to-completion as **23.847 seconds**, and engine-receipt-to-recorded
+delivery-status as **24.803 seconds**. Completion preceded the deadline by
+96.122 seconds. The exact phone receipt time was not supplied. The provider
+status timestamp is the app's callback recording time, not an independently
+observed carrier event time. The first SMS ledger receipt timestamp was not
+included; do not substitute the later engine audit time for it.
+
+Codex also recomputed the incoming SID-to-work hash and matched the reported
+work ID. The outbound schema has a deterministic `key=reply_WORK_ID`; its
+`messageSid` binds the provider result. Grok omitted that raw key and described
+the outbound link as an inference from unique count and timing. The expected
+key is `reply_work_e9935dc0acb6f9e0b7fa55306a21e656`, established from the source
+contract; it was not independently read from remote evidence. Preserve that
+distinction rather than describing the omitted key as an observed field.
+
+Together with the synthetic sample, replay and paused-receiver fallback, this
+supports the Phase 0.1 asynchronous execution feasibility decision for this
+account and isolated prototype. One real SMS is not a live SMS percentile,
+production SLA, quota/revocation proof, or natural-language/Guesty workflow
+evaluation. Keep engine fallback and review for uncertain non-idempotent sends.

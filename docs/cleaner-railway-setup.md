@@ -106,7 +106,10 @@ was scripted; the user has since reported Railway health, connector discovery,
 and one full unattended synthetic Grok delegation completed in 23.656 seconds.
 A later account-reported 20-run sample completed all requests as agent with
 the conversation confirmed closed; nearest-rank P95 was 25.343 seconds.
-Real messaging remains unverified.
+One subsequent real SMS proof passed in the account report, with phone receipt
+and a closed conversation confirmed by the user. See
+[the SMS proof instructions and result](cleaner-sms-proof.md); production
+messaging reliability remains unverified.
 
 ## If Railway returns 502
 

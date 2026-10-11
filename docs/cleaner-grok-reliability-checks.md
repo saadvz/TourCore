@@ -16,7 +16,11 @@ completions with no deadline misses, fallback or duplicate replies; receipt-to-
 completion median was 22.908 seconds and P95 25.343 seconds, independently
 recomputed from the supplied table. The user confirmed the conversation stayed
 closed throughout all 20 trials.
-Real SMS and remaining controlled fault cases are separate work.
+One later real SMS trial also passed on the supplied account report: 23.847
+seconds from engine received audit to completion, with delivered status recorded
+after 24.803 seconds. The user confirmed exactly one phone reply and a closed
+conversation. Real SMS repeated-run reliability and remaining controlled fault
+cases are separate work.
 
 ## Completed-request replay and duplicate webhook
 
@@ -87,4 +91,5 @@ Concurrent duplicates, active-lease retries, changed booking versions, revoked
 test authentication and restart recovery need their own controlled live trials.
 Existing local tests cover these engine contracts; do not label that local
 coverage as live-provider proof. Do not deliberately exhaust paid quotas or
-alter production credentials. Real SMS and Guesty integration remain later work.
+alter production credentials. Repeated real SMS trials and Guesty integration
+remain separate from the successful one-message SMS feasibility proof.
