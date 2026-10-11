@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import { writeJsonAtomic } from "../storage/atomicWrite";
 import { type AgentIdentity, type DelegationPrototype } from "./prototype";
+import { grokWorkEvent } from "../agents/grok";
 
 const Notification = z.strictObject({
   workId: z.string().regex(/^work_[a-f0-9]{32}$/), deadlineAt: z.iso.datetime(),
@@ -76,7 +77,7 @@ export class DelegationNotifications {
             (this.options.fetch ?? fetch)(this.settings.url, {
               method: "POST", redirect: "error", signal: controller.signal,
               headers: { Authorization: this.settings.authorization, "Content-Type": "application/json" },
-              body: JSON.stringify({ schemaVersion: 1, eventType: "cleaner.reschedule_requested", eventId: event.workId, workId: event.workId, deadlineAt: event.deadlineAt }),
+              body: JSON.stringify(grokWorkEvent({ id: event.workId, deadlineAt: event.deadlineAt })),
             }),
             new Promise<never>((_resolve, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error("Notification timeout")); }, this.options.timeoutMs ?? 5000); }),
           ]);

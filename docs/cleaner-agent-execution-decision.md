@@ -76,8 +76,9 @@ Remote raw evidence was not directly inspected; the report omitted the
 outbound record's deterministic key, so that specific field remains an expected
 source contract rather than an independently observed correlation.
 
-Next in the roadmap is Phase 0.2: a verified AgentProfile, capability checks,
-and the Grok adapter contract. The supported profile is webhook-triggered
+Phase 0.2 now adds the [AgentProfile, capability checks and Grok adapter](cleaner-agent-capabilities.md).
+The implementation is verified locally; current-account onboarding is pending.
+The supported execution evidence is webhook-triggered
 background execution with authenticated MCP calls and engine-owned deadline
 fallback. Polling latency, quota exhaustion, credential revocation, concurrent
 live SMS and provider-restart reconciliation remain unverified boundaries.
@@ -88,7 +89,7 @@ reconciliation or review. Keep engine acceptance, provider acceptance and actual
 delivery status distinct. The prototype's single-process JSON storage and local
 reply sink are not a production shared database or SMS provider.
 
-Other Phase 0 work remains separate: capability profiles; two-tenant hosted
+Other Phase 0 work remains separate: optional capability probes; two-tenant hosted
 isolation and economics; Guesty account feasibility; model evaluation; and live
 concurrent/restart/revocation failure cases. None is established by the synthetic
 latency sample. The evidence and exact limitations are in

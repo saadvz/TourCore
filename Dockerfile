@@ -5,6 +5,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY src/delegation/ src/delegation/
+COPY src/agents/ src/agents/
 COPY src/storage/atomicWrite.ts src/storage/atomicWrite.ts
 COPY src/messaging/Messenger.ts src/messaging/Messenger.ts
 COPY src/messaging/twilio/client.ts src/messaging/twilio/signature.ts src/messaging/twilio/

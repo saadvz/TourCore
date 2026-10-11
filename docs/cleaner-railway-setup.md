@@ -59,6 +59,13 @@ After connection Grok must list these tools:
 - `claim_delegated_work`
 - `propose_cleaning_time`
 
+The Phase 0.2 update also exposes `read_agent_profile`,
+`declare_agent_capabilities`, `begin_agent_probe`, and `complete_agent_probe`.
+Refresh existing connector discovery and follow the
+[capability onboarding instructions](cleaner-agent-capabilities.md), reusing the
+completed SMS trial rather than creating another event. No new variables are
+required. Capability state is stored on the same dedicated proof volume.
+
 OAuth is not implemented by this prototype. The user's Grok account reports
 support for static bearer/header authentication; the user subsequently reported successful connection and authenticated discovery
 on 11 October 2026. A subsequent full background trial through its token-forwarding

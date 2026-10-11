@@ -40,7 +40,7 @@ try {
   release();
   console.error(stage === "credentials"
     ? "Cleaner Core test startup blocked: saved local credentials.json is unreadable or invalid. Check that file and its permissions."
-    : "Cleaner Core test startup blocked: durable test storage could not be initialized. Check delegation.json, replies.json, notifications.json, sms-proof.json, routing settings, and volume permissions.");
+    : "Cleaner Core test startup blocked: durable test storage could not be initialized. Check delegation.json, replies.json, notifications.json, sms-proof.json, agent-profiles.json, routing settings, and volume permissions.");
   process.exit(1);
 }
 const server = service.app.listen(port, host, () => {

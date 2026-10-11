@@ -7,6 +7,8 @@ import { join } from "node:path";
 import { z } from "zod";
 import express from "express";
 import { SmsProof, SmsProofError, SMS_PROOF_INBOUND, SMS_PROOF_STATUS, SMS_PROOF_RECIPIENT, type SmsProofSettings, type SmsProofClient } from "./smsProof";
+import { AgentProfiles, AgentProfileError } from "../agents/registry";
+import { GrokAgentAdapter } from "../agents/grok";
 
 /** Isolated fixtures; optional SMS proof reaches only one configured test phone. */
 export function createDelegationTestService(options: {
@@ -36,7 +38,8 @@ export function createDelegationTestService(options: {
     return sink.send(reply);
   } };
   const engine = new DelegationPrototype(options.root, replySink, { now: options.now, deadlineMs: options.deadlineMs });
-  const app = delegationApp(engine, [{ ...identity, token: options.agentToken }], { allowedHosts });
+  const profiles = new AgentProfiles(options.root, [{ ...identity, adapterId: "grok", token: options.agentToken }], { now: options.now });
+  const app = delegationApp(engine, [{ ...identity, token: options.agentToken }], { allowedHosts, profiles, deadlineMs: options.deadlineMs });
   const notifications = options.webhook ? new DelegationNotifications(options.root, engine, identity, options.webhook, { now: options.now, fetch: options.webhookFetch }) : undefined;
   let failed = false;
   const worker = startDelegationWorker(engine, { intervalMs: options.intervalMs, onError: () => { failed = true; console.error("Cleaner Core test worker failed; inspect local storage before continuing."); } });
@@ -68,6 +71,43 @@ export function createDelegationTestService(options: {
     res.setHeader("Cache-Control", "no-store"); next();
   });
   let fixtureQueue: Promise<unknown> = Promise.resolve();
+  const activeProfileRequests = new Set<Promise<void>>();
+  const profileResponse = async (res: express.Response, action: () => Promise<unknown>) => {
+    const task = (async () => {
+      try { res.json(await action()); }
+      catch (error) {
+        const code = error instanceof AgentProfileError ? error.code : "UNAVAILABLE";
+        const status = code === "NOT_FOUND" ? 404 : code === "PERMISSION_REQUIRED" ? 403 : code === "INVALID_INPUT" ? 400 : code === "UNAVAILABLE" ? 503 : 409;
+        res.status(status).json({ error: { code, message: error instanceof AgentProfileError ? error.message : "Agent profile evidence could not be confirmed." } });
+      }
+    })();
+    activeProfileRequests.add(task);
+    try { await task; } finally { activeProfileRequests.delete(task); }
+  };
+  app.get("/test/agent/profile", (_req, res) => profileResponse(res, async () => ({ profile: await profiles.get(identity, options.deadlineMs), adapter: GrokAgentAdapter })));
+  app.post("/test/agent/probes", (req, res) => profileResponse(res, () => profiles.begin(identity, req.body)));
+  app.post("/test/agent/probes/attest", (req, res) => profileResponse(res, () => profiles.attest(identity, req.body)));
+  app.post("/test/agent/native-grants", (req, res) => profileResponse(res, () => profiles.grantNative(identity, req.body)));
+  app.delete("/test/agent/native-grants/:id", (req, res) => profileResponse(res, () => profiles.revokeNative(identity, req.params.id as string)));
+  app.post("/test/agent/profile/verify-workflow", (req, res) => profileResponse(res, async () => {
+    const request = z.strictObject({ workId: z.string().regex(/^work_[a-f0-9]{32}$/), conversationClosed: z.literal(true) }).safeParse(req.body);
+    if (!request.success) throw new AgentProfileError("INVALID_INPUT", "Provide only workId and an explicit true closed-conversation confirmation.");
+    const evidence = await engine.evidence(identity, request.data.workId);
+    const notification = await notifications?.status(request.data.workId);
+    const claimed = evidence.audit.find((e) => e.type === "claimed" && e.actor === identity.agentId);
+    const validated = evidence.audit.find((e) => e.type === "validated_action_and_reply_saved" && e.actor === identity.agentId);
+    const completed = evidence.audit.find((e) => e.type === "delivery_acknowledged_and_completed" && e.actor === "engine");
+    if (evidence.work.status !== "completed" || evidence.work.decisionSource !== "agent" || evidence.work.deliveryStatus !== "sent"
+      || !claimed || !validated || !completed || !notification || notification.status !== "accepted"
+      || !("attemptedAt" in notification) || !notification.attemptedAt || !("lastHttpStatus" in notification)
+      || notification.lastHttpStatus === undefined || notification.lastHttpStatus < 200 || notification.lastHttpStatus >= 300
+      || Date.parse(notification.attemptedAt) > Date.parse(claimed.at)
+      || Date.parse(claimed.at) > Date.parse(validated.at) || Date.parse(validated.at) > Date.parse(completed.at)) {
+      throw new AgentProfileError("WORKFLOW_NOT_VERIFIED", "Require a correlated accepted webhook and completed agent claim/proposal, not fallback or HTTP acceptance alone.");
+    }
+    return profiles.verifyWorkflow(identity, { workId: evidence.work.id, completedAt: completed.at,
+      latencyMs: Date.parse(completed.at) - Date.parse(evidence.work.receivedAt) }, request.data.conversationClosed);
+  }));
   if (sms) app.get("/test/sms/evidence", async (_req, res) => {
     try { res.json({ mode: "sms-proof", ...await sms.evidence() }); }
     catch { res.status(503).json({ error: "SMS evidence unavailable." }); }
@@ -104,5 +144,5 @@ export function createDelegationTestService(options: {
       res.status(error instanceof DelegationError && error.code === "NOT_FOUND" ? 404 : 503).json({ error: "Evidence unavailable." });
     }
   });
-  return { app, engine, sink, notifications, sms, stop: async () => { stopping = true; await Promise.all(activeSms); await fixtureQueue; await notificationWorker?.stop(); await smsWorker?.stop(); await worker.stop(); } };
+  return { app, engine, sink, notifications, sms, profiles, stop: async () => { stopping = true; await Promise.all([...activeSms, ...activeProfileRequests]); await fixtureQueue; await notificationWorker?.stop(); await smsWorker?.stop(); await worker.stop(); await profiles.drain(); } };
 }

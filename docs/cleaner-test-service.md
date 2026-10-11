@@ -40,7 +40,8 @@ The Railway container binds `0.0.0.0` and obtains its public origin from
 `RAILWAY_PUBLIC_DOMAIN`; its reverse proxy supplies HTTPS. See the separate
 [Railway instructions](cleaner-railway-setup.md).
 
-`/mcp` exposes the four delegation tools with the **agent** bearer token.
+`/mcp` exposes the four delegation tools and four
+[capability onboarding tools](cleaner-agent-capabilities.md) with the **agent** bearer token.
 This service has no OAuth authorization flow. First confirm that your Grok
 custom connector supports securely supplied static bearer authentication for
 an isolated test. If it requires OAuth, this package cannot be connected yet;
