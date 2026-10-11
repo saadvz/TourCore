@@ -8,7 +8,10 @@ Neither result proves real SMS delivery or repeated-run reliability.
 On 11 October 2026 the user also supplied a passing completed-request replay
 report: two fixture replays and one direct duplicate webhook left the final
 evidence byte-for-byte identical to baseline, including version 2 and one reply.
-The next pending check is the explicit test-receiver outage below.
+The subsequent explicit pause test also passed on the supplied evidence:
+fallback completed after 120.236 seconds with no agent action and one reply.
+The receiver was restored interactively; scheduled routine-to-routine restore
+was rejected by the platform. The next pending check is repeated ordinary runs.
 
 ## Completed-request replay and duplicate webhook
 
@@ -58,6 +61,9 @@ one simulated reply, and no required user intervention. Record receipt,
 deadline, notification status/attempts, fallback/send/completion audit times,
 and evidence of no receiver run. Re-enable only the test receiver afterward,
 verify that it is enabled, and confirm it was not recreated or its key changed.
+The account's live trial established that one routine cannot resume another.
+Arrange supported interactive restore rather than relying on a scheduled
+routine to restore the receiver. The test receiver is now reported enabled.
 Delayed notifications must not produce another reply for the completed work.
 
 ## Repeated runs and remaining cases
@@ -67,6 +73,10 @@ and closed conversations. Separate fixture HTTP, webhook acceptance, agent start
 validated proposal, reply completion, and report timings. Preserve failures and
 missing timestamps. Report sample size, success fraction, deadline misses, and
 preliminary latency percentiles with the limits of such a small sample.
+
+Use [the bounded batch instructions](cleaner-grok-batch-trial.md) to schedule
+20 ordinary requests and preserve per-request results. Do not mix the forced
+outage or completed-work replay into this ordinary-run latency sample.
 
 Concurrent duplicates, active-lease retries, changed booking versions, revoked
 test authentication and restart recovery need their own controlled live trials.

@@ -2,8 +2,8 @@
 
 Status: **first complete unattended Cleaner Core synthetic delegation passed
 in account-reported evidence, with the closed-conversation interval confirmed
-by the user; completed-request replay and duplicate webhook handling also passed
-in account-reported evidence. Explicit receiver-outage testing, repeated-run
+by the user; completed-request replay, duplicate webhook handling and explicit
+receiver-outage fallback also passed in account-reported evidence. Repeated-run
 reliability and real SMS delegation remain unverified**.
 This discovery record attributes the live findings to the user's Grok account
 report. It does not establish a general vendor guarantee or a production SLA.
@@ -490,6 +490,39 @@ and work were reused; no fresh fixture was created.
 
 This passes source-event deduplication after completion and the receiver's
 completed-work guard on the supplied evidence. It does not test overlapping
-duplicate agent runs or proposal retry while a lease is active. The next live
-check explicitly disables only the test receiver and verifies deadline fallback
-without an agent action, then restores the existing receiver.
+duplicate agent runs or proposal retry while a lease is active. The subsequent
+test-receiver outage result appears below.
+
+## Explicit test-receiver outage reported 11 October 2026
+
+Evidence source: the user's Grok report; Codex did not inspect remote evidence
+or routine controls. The supported interactive pause control reportedly
+disabled only Cleaner Core Delegation Test at approximately 1:51 PM ET without
+changing its URL/key. A sender was scheduled for 1:56 PM ET and evidence for
+approximately 1:59 PM ET. The separate restore/report routine was due 2:03 PM ET
+and reportedly ran about seven minutes late.
+
+| Observation | Account-reported evidence (America/New_York) |
+| --- | --- |
+| Fixture event | `grok-trial3-20261011135154-e1c4a4a933f8` |
+| Work ID | `work_a09418ab34427cc537fdd2b5917699e8` |
+| Notification | One attempt around 1:56 PM ET; HTTP 400; terminal `failed` |
+| Received / deadline | 1:56:00.435 / 1:58:00.435 PM ET |
+| Fallback / completed | 1:58:00.652 / 1:58:00.671 PM ET |
+| Agent execution | No receiver run, claim or proposal; subsequent audit actors were the engine |
+| Booking | requestedStart unchanged, version 1 unchanged, no confirmedStart set |
+| Outcome | `decisionSource=fallback`, `status=completed`, `deliveryStatus=sent`, one simulated reply |
+| Restore | Scheduled routine could not resume another routine; Grok reported successful interactive resume at 2:15 PM ET |
+| Receiver identity | Same URL, key and instructions reportedly preserved |
+| Cleanup | Only sender script deleted; evidence/report retained under `/workspace/cleaner-trial3/`; Tour Core unchanged |
+
+Derived receipt-to-fallback latency is 120.217 seconds; receipt-to-completion
+is 120.236 seconds. This passes independent engine fallback with the dedicated
+receiver explicitly paused on the supplied evidence. Exact notification POST
+and send-attempt timestamps were not supplied. The user explicitly confirmed
+the conversation stayed closed from before the POST through fallback completion.
+
+The failed scheduled restore is a platform control limitation, separate from
+engine fallback. Future pause tests must arrange supported interactive restore;
+do not rely on a routine resuming another routine. Reported interactive restore
+succeeded, so the test receiver is available for repeated ordinary trials.
