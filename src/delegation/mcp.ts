@@ -16,7 +16,9 @@ export function delegationApp(engine: DelegationPrototype, bindings: PrototypeBi
     const binding = bindings.find((b) => { const token = Buffer.from(b.token); return token.length === supplied.length && timingSafeEqual(token, supplied) && req.headers.authorization?.startsWith("Bearer "); });
     if (!binding) { res.status(401).json({ error: "Unauthorized" }); return; }
     const identity = { tenantId: binding.tenantId, agentId: binding.agentId };
-    const server = new McpServer({ name: "cleaner-core-delegation-prototype", version: "0.1.0" });
+    // Advertise a new version when the capability catalog is enabled so clients
+    // can distinguish it from the original four-tool prototype.
+    const server = new McpServer({ name: "cleaner-core-delegation-prototype", version: options.profiles ? "0.2.0" : "0.1.0" });
     const result = async (action: () => Promise<unknown>) => {
       try { const value = await action(); return { content: [{ type: "text" as const, text: JSON.stringify(value) }] }; }
       catch (err) { return { isError: true, content: [{ type: "text" as const, text: JSON.stringify(err instanceof DelegationError || err instanceof AgentProfileError ? { code: err.code, message: err.message } : { code: "UNAVAILABLE", message: "The action could not be confirmed. Retry only with the same action key." }) }] }; }

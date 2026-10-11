@@ -211,3 +211,29 @@ run with fictional credentials in the existing production-dependency container
 image: eight-tool discovery, MCP/draft probes, zero created work, owner endpoint
 authentication, restart preservation and graceful shutdown passed. This does
 not claim a fresh full local image build or live Grok onboarding completion.
+
+## Live discovery checkpoint, 11 October 2026
+
+At 6:48 PM ET the user supplied Grok's report: health returned HTTP 200 with
+SMS-proof readiness, and a direct server discovery query listed all eight
+tools. The existing configured Cleaner Core connector still exposed its old
+four-tool inventory after connector restart. Grok stopped before declarations,
+probes or workflow verification and did not substitute raw HTTP probe calls.
+Thus deployment/discovery at the server is supported by the account report,
+while configured-connector onboarding remains pending.
+
+The subsequent fresh-message retry and supported removal/re-addition of only
+Cleaner Core did not resolve discovery. Grok reports that the exact saved
+`mcp-remote` bridge command returns eight tools while the app exposes four.
+The receiver resolves its connector by name and needed no association change;
+its instructions, URL and key stayed unchanged. No declarations, probes,
+workflow import, new work or SMS were performed. Tour Core was unchanged.
+
+The expanded server catalog had still advertised software version `0.1.0`.
+It now advertises `0.2.0` when profile tools are enabled; the original standalone
+four-tool prototype remains `0.1.0`. This gives clients a distinct catalog
+version but does not establish that Grok's app cache uses that field. After
+deployment, inspect the server metadata and retry discovery once in a fresh
+Grok message. Do not repeatedly delete/re-add connectors or use raw HTTP probe
+calls to claim configured-connector verification. If the app still shows four,
+preserve the limitation and use supported app discovery/session controls.
