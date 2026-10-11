@@ -1,8 +1,8 @@
 # Cleaner Core Phase 0: unattended agent execution
 
-Status: **feasibility supported by one account-reported webhook-triggered
-background MCP read and one scheduled read; reliability and SMS delegation
-remain unverified**.
+Status: **first complete unattended Cleaner Core synthetic delegation passed
+in account-reported evidence, with the closed-conversation interval confirmed
+by the user. Repeated-run reliability and real SMS delegation remain unverified**.
 This discovery record attributes the live findings to the user's Grok account
 report. It does not establish a general vendor guarantee or a production SLA.
 
@@ -411,4 +411,54 @@ of its receiver condition. The actual Cleaner Core sender emits `eventType`,
 not `type`. Ensure the receiver handles the established `eventType` contract
 without requiring a second discriminator. After correcting auth, repeat the
 completed-work diagnostic with the exact sender envelope before a fresh live
-trial. Authentication and payload handling remain unverified until that result.
+trial. Authentication and payload handling remained unverified at this checkpoint;
+the subsequent successful results appear below.
+
+## Corrected diagnostic and successful delegation reported 11 October 2026
+
+Evidence source: the user supplied Grok's report. Codex has not directly inspected
+remote logs or independently reached the Railway host. After the auth correction
+and receiver instruction change to `eventType`, Grok's direct completed-work
+probe returned HTTP 200 at 3:51:27 AM ET. The receiver reportedly ran
+3:51:34–3:51:41 AM ET, called `read_delegated_work` once, observed completed
+fallback status, and stopped without claim/proposal or approval prompt. These
+timestamps imply seven seconds to start, seven seconds of run duration, and
+14 seconds from HTTP acceptance to run end. The user then confirmed readiness
+after being instructed to save the complete Bearer value in Railway and redeploy.
+
+The subsequent fresh trial used the application's own webhook sender:
+
+| Observation | Account-reported evidence (America/New_York) |
+| --- | --- |
+| Fixture event | `grok-trial2-20261011035922-99e29bf23114` |
+| Work ID | `work_ad84198e386b10d6c73c414835b009c4`, matching POST, evidence, and receiver run |
+| Fixture POST | One attempt, 4:04:00.277–4:04:00.581 AM ET, HTTP 200 |
+| Engine received | 4:04:00.525 AM ET |
+| Notification queued / attempted | 4:04:01.156 / 4:04:01.159 AM ET |
+| Notification outcome | HTTP 200, `accepted`; exact response timestamp not supplied |
+| Receiver start / end | 4:04:09–4:04:28 AM ET |
+| Claimed | 4:04:17.621 AM ET |
+| Validated action and reply saved | 4:04:23.379 AM ET |
+| Send / completed | 4:04:24.169 / 4:04:24.181 AM ET |
+| Stable action key | `grok_work_ad84198e386b10d6c73c414835b009c4` |
+| Final result | `decisionSource=agent`, `status=completed`, `deliveryStatus=sent`, one simulated reply |
+| Approval | No approval prompt or block reported |
+| Report schedule / run | Due 4:11 AM ET; reportedly ran about four minutes late |
+| Cleanup | Temporary sender deleted; receiver and evidence retained; Tour Core reportedly unchanged |
+
+The receiver reportedly read, claimed, proposed the requested time, and read
+completed status through the separate Cleaner Core connector. Engine audit uses
+`validated_action_and_reply_saved` and `delivery_acknowledged_and_completed`.
+Derived receipt-to-claim latency is 17.096 seconds, receipt-to-validation 22.854
+seconds, and receipt-to-completion 23.656 seconds. The receiver ran for about
+19 seconds, using timestamps supplied to the second. Both validation and
+completion preceded the provisional two-minute deadline. The late final report
+does not change these engine timings.
+
+The user explicitly confirmed that the Grok conversation stayed closed from
+before the sender POST through receiver execution. This passes the first full
+unattended synthetic delegation trial on the supplied evidence. It is one
+success, not a latency distribution or real provider delivery result.
+Next: completed-event replay/duplicate delivery, an explicitly disabled test
+receiver, and repeated ordinary trials. Preserve the failed auth/fallback trial.
+See [the reliability checks](cleaner-grok-reliability-checks.md).

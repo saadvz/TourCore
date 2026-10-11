@@ -115,8 +115,10 @@ cases; typecheck and build passed; all 1,686 product tests passed (including
 17 prototype tests); all 26 baseline evaluation tests passed. The existing
 touring server, tool registry, dependency manifests, and lockfile were unchanged.
 This validation was performed locally. The separate Railway test build is
-described in [Cleaner Core Railway setup](cleaner-railway-setup.md); live Grok
-completion and hosted readiness require their own verification.
+described in [Cleaner Core Railway setup](cleaner-railway-setup.md). Subsequent
+account-reported hosted health and one full unattended Grok completion are
+recorded in [the proof record](async-agent-proof.md); they are distinct from
+this local validation.
 
 ## Practical limits and next integration
 
@@ -133,8 +135,9 @@ engine supplies a key. Lost acknowledgments through a non-idempotent provider
 require reconciliation rather than blind resend.
 
 The local demo agent is scripted. The separate test service now includes durable
-webhook wakeups for a dedicated Grok routine; actual background use of its new
-connector still needs a correlated live trial. There is no Guesty
+webhook wakeups for a dedicated Grok routine. One correlated live background
+completion through its new connector has now been reported with the conversation
+closed. Repeated reliability checks remain. There is no Guesty
 reservation import, full cleaning-turn state machine, host review UI, OAuth
 integration, or live messaging. Review state is inspectable in durable records;
 operator review and resolution are a later integration.

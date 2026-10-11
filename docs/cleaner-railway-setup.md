@@ -59,8 +59,9 @@ After connection Grok must list these tools:
 
 OAuth is not implemented by this prototype. The user's Grok account reports
 support for static bearer/header authentication; the user subsequently reported successful connection and authenticated discovery
-on 11 October 2026. Background execution through its token-forwarding bridge
-still needs the separate live trial. The existing Tour Core connector does not expose
+on 11 October 2026. A subsequent full background trial through its token-forwarding
+bridge was reported successful with the conversation closed; see the
+[proof record](async-agent-proof.md). The existing Tour Core connector does not expose
 these prototype tools.
 
 ## Container behavior and limits
@@ -98,8 +99,9 @@ Railway-style port/domain/healthcheck handling, concurrent writer exclusion,
 pending-work recovery after a forced container kill, authenticated SDK MCP
 tool discovery and claim/proposal completion, and reply deduplication. Typecheck
 and all 20 delegation/service tests passed at that container checkpoint. The agent in this container check
-was scripted; the user has since reported Railway health and connector discovery; live Grok
-delegation completion remains pending.
+was scripted; the user has since reported Railway health, connector discovery,
+and one full unattended synthetic Grok delegation completed in 23.656 seconds.
+Repeated-run reliability and real messaging remain unverified.
 
 ## If Railway returns 502
 
