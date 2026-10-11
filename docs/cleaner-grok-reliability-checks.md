@@ -5,6 +5,11 @@ The first complete synthetic delegation was reported successful on 11 October
 took 23.656 seconds. The earlier 401 trial completed independent fallback.
 Neither result proves real SMS delivery or repeated-run reliability.
 
+On 11 October 2026 the user also supplied a passing completed-request replay
+report: two fixture replays and one direct duplicate webhook left the final
+evidence byte-for-byte identical to baseline, including version 2 and one reply.
+The next pending check is the explicit test-receiver outage below.
+
 ## Completed-request replay and duplicate webhook
 
 Use the existing successful event

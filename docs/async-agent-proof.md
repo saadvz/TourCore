@@ -2,7 +2,9 @@
 
 Status: **first complete unattended Cleaner Core synthetic delegation passed
 in account-reported evidence, with the closed-conversation interval confirmed
-by the user. Repeated-run reliability and real SMS delegation remain unverified**.
+by the user; completed-request replay and duplicate webhook handling also passed
+in account-reported evidence. Explicit receiver-outage testing, repeated-run
+reliability and real SMS delegation remain unverified**.
 This discovery record attributes the live findings to the user's Grok account
 report. It does not establish a general vendor guarantee or a production SLA.
 
@@ -459,6 +461,35 @@ The user explicitly confirmed that the Grok conversation stayed closed from
 before the sender POST through receiver execution. This passes the first full
 unattended synthetic delegation trial on the supplied evidence. It is one
 success, not a latency distribution or real provider delivery result.
-Next: completed-event replay/duplicate delivery, an explicitly disabled test
-receiver, and repeated ordinary trials. Preserve the failed auth/fallback trial.
+The completed-event replay/duplicate delivery result appears below. Next:
+an explicitly disabled test receiver and repeated ordinary trials.
+Preserve the failed auth/fallback trial.
 See [the reliability checks](cleaner-grok-reliability-checks.md).
+
+## Completed-request replay and duplicate webhook reported 11 October 2026
+
+Evidence source: the user supplied Grok's report; the remote baseline and final
+files were not independently inspected by Codex. The existing successful event
+and work were reused; no fresh fixture was created.
+
+- Baseline evidence GET returned HTTP 200. Two repeated `/test/events` POSTs
+  returned HTTP 200 and the same completed work
+  `work_ad84198e386b10d6c73c414835b009c4` at 1:45:03.652 and 1:45:04.068 PM ET.
+- A direct duplicate webhook returned HTTP 200 at 1:45:04.412 PM ET. It used
+  the exact five-field sender envelope and existing deadline
+  `2026-10-11T08:06:00.525Z`.
+- The receiver ran 1:45:12–1:45:19 PM ET, called `read_delegated_work` once,
+  observed completed agent/sent status with turn version 2, and stopped.
+  No claim, proposal, approval prompt, or block was reported.
+- Final evidence GET returned HTTP 200. Grok reports the final evidence was
+  byte-for-byte identical to baseline: confirmed start
+  `2026-10-12T09:04:00.521Z`, version 2, one accepted notification attempt,
+  the same five engine audit entries, and exactly one simulated reply.
+- Evidence is retained on Grok's computer under `/workspace/cleaner-dup/`;
+  credentials remain saved and Tour Core was reportedly untouched.
+
+This passes source-event deduplication after completion and the receiver's
+completed-work guard on the supplied evidence. It does not test overlapping
+duplicate agent runs or proposal retry while a lease is active. The next live
+check explicitly disables only the test receiver and verifies deadline fallback
+without an agent action, then restores the existing receiver.
