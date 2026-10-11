@@ -386,3 +386,29 @@ it does not add `Bearer ` or a header-name prefix. Recopy the same dedicated
 routine's URL and authorization **value** privately into Railway, redeploy,
 then use a fresh fixture event ID. Reusing the completed failed trial's event ID
 returns its existing fallback and does not dispatch a new notification.
+
+## Direct webhook authentication diagnostic reported 11 October 2026
+
+The user supplied Grok's direct-probe result: one POST at 3:44:45.748 AM ET,
+with no redirects or retries, returned HTTP 401 and the sanitized error
+`Malformed Authorization header. Use Authorization: Bearer <key>.`
+No receiver run or tool call occurred; the completed work was unchanged.
+Grok reports that the privately supplied Railway auth setting began with
+`Authorization:`, which the sender then used as the Authorization **value**.
+This duplicated the header name. The corrective configuration is only
+`Bearer <key>`, preserving the existing key and URL. This is an attributed
+account report, not direct inspection of Railway's secret by Codex.
+
+The separate temporary trial-report routine was confirmed by the account
+report to be scheduled, not a webhook receiver; it reportedly did not change
+the original receiver. The original receiver was reportedly created at
+3:05 AM ET and not subsequently deleted, recreated, disabled, or regenerated
+during the trial. That temporary reporting routine does not explain the 401.
+
+The diagnostic used the completed work ID and saved deadline
+`2026-10-11T07:18:00.749Z`, but Grok also reports adding a `type` field because
+of its receiver condition. The actual Cleaner Core sender emits `eventType`,
+not `type`. Ensure the receiver handles the established `eventType` contract
+without requiring a second discriminator. After correcting auth, repeat the
+completed-work diagnostic with the exact sender envelope before a fresh live
+trial. Authentication and payload handling remain unverified until that result.

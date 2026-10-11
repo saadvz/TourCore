@@ -26,6 +26,9 @@ routine named **Cleaner Core Delegation Test**, with these instructions:
 > invent another action key. Report any approval prompt or block. Use no Tour
 > Core tools, real SMS, external bookings, publishing, or door operations.
 
+The actual sender envelope has exactly `schemaVersion`, `eventType`, `eventId`,
+`workId`, and `deadlineAt`. Inspect `eventType`; do not require a `type` field.
+
 Do not create the test event yet. Leave Operator Updates unchanged. Keep the
 receiver's private address and authorization value in its routine panel.
 
@@ -107,3 +110,11 @@ startup log confirms settings exist; it does not verify the receiver accepts
 them. Repeat the scheduled trial using a **fresh** eventId. A repeated eventId
 returns the original work, including its completed fallback, and does not send
 another webhook. Keep the failed trial's evidence; do not reset its ledger.
+
+When diagnosing auth, first repeat one direct webhook POST using the corrected
+private settings and an already-completed work ID. Use the exact five-field
+sender envelope and the existing deadline from saved evidence. The receiver
+should read completed status and stop. This checks auth and handler routing
+without creating a new cleaning request; it does not count as the unattended
+fresh-request trial. Do not recreate the receiver or regenerate credentials
+just to correct a duplicated `Authorization:` prefix.
