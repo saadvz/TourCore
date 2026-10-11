@@ -11,9 +11,12 @@ The existing touring application's default build and startup are unchanged.
    repository, select `cleaner-core/railway-agent-proof`, and name the service
    `cleaner-core-test`. If Railway immediately builds the default app, wait to
    treat it as usable until the settings below are saved and redeployed.
-2. Set `RAILWAY_DOCKERFILE_PATH` to `Dockerfile.cleaner-test`. Use the Dockerfile
-   builder and its entrypoint; remove any custom build or start command that
-   overrides it. Do not use the repository's `npm start` for this service.
+2. Let Railway detect the root `Dockerfile` on this test branch. If a builder
+   override is set, select the Dockerfile builder instead of Railpack. Both the
+   root `Dockerfile` and `RAILWAY_DOCKERFILE_PATH=Dockerfile.cleaner-test` build
+   this same isolated service. Clear the custom build command (`npm run build`)
+   and custom start command (`npm run start`/`npm start`); the Dockerfile's
+   entrypoint must control startup.
 3. Add a dedicated persistent volume mounted at `/data`. Use one replica.
    The container refuses startup without the volume. Never attach Tour Core's
    existing volume to this test service.
@@ -89,6 +92,17 @@ pending-work recovery after a forced container kill, authenticated SDK MCP
 tool discovery and claim/proposal completion, and reply deduplication. Typecheck
 and all 20 delegation/service tests passed. The agent in this container check
 was scripted; actual Railway deployment and live Grok execution are pending.
+
+## If Railway returns 502
+
+Check the deployment's runtime and build logs. `using build driver railpack`,
+`npm run start`, `node dist/server.js`, and `Tour Core setup is running` identify
+the original touring build, not the Cleaner Core container. Confirm the source
+branch, choose the Dockerfile build, clear custom commands, and deploy the latest
+commit. The correct startup log includes
+`Cleaner Core synthetic test service ready on 0.0.0.0:8080` when `PORT=8080`.
+Keep the domain's target port at 8080. Changing it to 4321 would route to the
+original app rather than fix the deployment selection.
 
 ## Optional Docker workflow
 
