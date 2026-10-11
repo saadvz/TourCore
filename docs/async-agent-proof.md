@@ -3,8 +3,11 @@
 Status: **first complete unattended Cleaner Core synthetic delegation passed
 in account-reported evidence, with the closed-conversation interval confirmed
 by the user; completed-request replay, duplicate webhook handling and explicit
-receiver-outage fallback also passed in account-reported evidence. Repeated-run
-reliability and real SMS delegation remain unverified**.
+receiver-outage fallback also passed in account-reported evidence. A 20-request
+ordinary sample reported 20 agent completions, no deadline misses and no duplicate
+replies; its statistics were recomputed from the supplied timestamp table.
+The batch's closed-conversation interval awaits explicit confirmation.
+Real SMS delegation and production reliability remain unverified**.
 This discovery record attributes the live findings to the user's Grok account
 report. It does not establish a general vendor guarantee or a production SLA.
 
@@ -526,3 +529,54 @@ The failed scheduled restore is a platform control limitation, separate from
 engine fallback. Future pause tests must arrange supported interactive restore;
 do not rely on a routine resuming another routine. Reported interactive restore
 succeeded, so the test receiver is available for repeated ordinary trials.
+
+## Twenty-request ordinary sample reported 11 October 2026
+
+Evidence source: the user's Grok report and per-trial timestamp table. Codex
+recomputed arithmetic from that table but did not directly inspect remote raw
+evidence. The sanitized source timestamps are committed in
+[`evidence/cleaner-sample-2026-10-11.csv`](evidence/cleaner-sample-2026-10-11.csv).
+Times were supplied as PM America/New_York on 11 October and stored with the
+corresponding UTC offset. All 20 work IDs are distinct.
+
+| Result | Reported or recomputed value |
+| --- | --- |
+| Created / agent completed | 20 / 20, all `agent`, `completed`, `sent` |
+| Fallbacks / workflow failures / deadline misses | 0 / 0 / 0 |
+| Notification / reply count | Every work: one attempt, HTTP 200 accepted, one reply |
+| Approval prompts or blocks | None reported |
+| Receipt-to-completion minimum / median | 20.293 / 22.908 seconds |
+| Receipt-to-completion P95 / maximum | 25.343 / 41.612 seconds |
+| Receipt-to-validation minimum / median | 19.801 / 22.701 seconds |
+| Receipt-to-validation P95 / maximum | 25.119 / 41.070 seconds |
+| POST anomaly | Trial 1 first attempt timed out after about 70 seconds; same-eventId retry recovered existing work without duplication |
+| Remaining fixture POSTs | Trials 2–20 returned HTTP 200 on their first attempt |
+| Sampler finished | 2:52:07 PM ET |
+| Report schedule / actual run | Due 2:57 PM ET; reportedly ran around 3:03 PM ET |
+
+Percentile method: sort the 20 values and use nearest rank `ceil(0.95*n)` for
+P95, giving the 19th value; median averages the 10th and 11th values. Grok's
+initial P95 of 41.612 seconds was reportedly an off-by-one analysis error.
+Its corrected 25.343-second P95 agrees with Codex's calculation from the table.
+The maximum belongs to trial 1 and is a valid retained observation.
+
+There were 20 created requests and, derived from the reported one retry, 21
+fixture POST attempts. Count the initial timeout as a transport anomaly even
+though all workflows ultimately succeeded. The remote cause of the timeout
+is not established. An ingestion timeout does not mean no durable work exists;
+retry the original source ID. The sampler/report delay is separate from engine
+execution latency. No missing timing was replaced with an estimate.
+
+The user reports no early stop, quota/rate-limit issue, approval prompt or block,
+and no duplicate replies. Only the sampler script was removed; evidence and
+the corrected report remain under `/workspace/cleaner-sample/` on Grok's
+computer, and Tour Core was reportedly untouched. Explicit confirmation of
+the batch's closed-conversation interval was requested and is pending.
+
+This is a small, successful synthetic sample at roughly one request per minute,
+not a production SLA, concurrency/load test, or actual carrier-delivery test.
+The supplied engine times establish that every proposal and local completion
+preceded the provisional 120-second deadline. The full plan's Twilio inbound
+SMS -> durable event -> agent -> validated action -> outbound SMS chain remains
+unrun. The first successful trial and forced faults remain separate from this
+ordinary-run latency sample.

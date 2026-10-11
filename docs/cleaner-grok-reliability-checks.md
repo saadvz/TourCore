@@ -11,7 +11,11 @@ evidence byte-for-byte identical to baseline, including version 2 and one reply.
 The subsequent explicit pause test also passed on the supplied evidence:
 fallback completed after 120.236 seconds with no agent action and one reply.
 The receiver was restored interactively; scheduled routine-to-routine restore
-was rejected by the platform. The next pending check is repeated ordinary runs.
+was rejected by the platform. A subsequent ordinary sample reported 20/20 agent
+completions with no deadline misses, fallback or duplicate replies; receipt-to-
+completion median was 22.908 seconds and P95 25.343 seconds, independently
+recomputed from the supplied table. Batch closed-chat confirmation is pending.
+Real SMS and remaining controlled fault cases are separate work.
 
 ## Completed-request replay and duplicate webhook
 
