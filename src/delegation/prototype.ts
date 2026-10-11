@@ -121,9 +121,9 @@ export class DelegationPrototype {
     });
   }
   /** Trusted inbound adapter: persist before acknowledging. Repeated source IDs return the same work. */
-  receive(input: { tenantId: string; providerEventId: string; turnId: string; requestedStart: string }): Promise<string> {
+  receive(input: { tenantId: string; providerEventId: string; turnId: string; requestedStart: string; receivedAt?: string }): Promise<string> {
     return this.exclusive(() => {
-      const parsed = z.strictObject({ tenantId: Id, providerEventId: z.string().min(1).max(200), turnId: Id, requestedStart: Instant }).parse(input);
+      const parsed = z.strictObject({ tenantId: Id, providerEventId: z.string().min(1).max(200), turnId: Id, requestedStart: Instant, receivedAt: Instant.optional() }).parse(input);
       const state = this.read();
       const id = `work_${createHash("sha256").update(JSON.stringify([parsed.tenantId, parsed.providerEventId])).digest("hex").slice(0, 32)}`;
       const existing = state.work.find((w) => w.id === id);
@@ -131,7 +131,11 @@ export class DelegationPrototype {
         if (existing.turnId !== parsed.turnId || existing.requestedStart !== parsed.requestedStart) throw new DelegationError("SOURCE_CONFLICT", "A repeated source event changed its contents.");
         return id;
       }
-      const work: Work = { ...parsed, id, receivedAt: new Date(this.now()).toISOString(), deadlineAt: this.now() + (this.options.deadlineMs ?? 120_000), status: "pending", audit: [] };
+      // Recovery must preserve the first durable receipt's deadline, rather than grant more time.
+      const receivedAt = parsed.receivedAt ?? new Date(this.now()).toISOString();
+      const receivedMs = Date.parse(receivedAt);
+      if (receivedMs > this.now()) throw new DelegationError("INVALID_RECEIPT", "The trusted receipt time cannot be in the future.");
+      const work: Work = { ...parsed, id, receivedAt, deadlineAt: receivedMs + (this.options.deadlineMs ?? 120_000), status: "pending", audit: [] };
       this.turn(state, work);
       this.audit(work, "received", "inbound_adapter");
       state.work.push(work);

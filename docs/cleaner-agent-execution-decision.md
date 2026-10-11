@@ -15,7 +15,8 @@ background calls in the supplied account reports. The first full synthetic
 trial completed in 23.656 seconds with the conversation explicitly confirmed
 closed and no approval prompt. A subsequent 20-request ordinary sample reported
 20 completed agent decisions, no deadline misses, and one simulated reply per
-work. Batch closed-conversation confirmation is pending.
+work. The user explicitly confirmed the conversation stayed closed throughout
+all 20 trials.
 
 The repeated sample's independently recomputed receipt-to-completion median is
 22.908 seconds, nearest-rank P95 25.343 seconds, and maximum 41.612 seconds.
@@ -61,11 +62,11 @@ POST timeout recovered the existing work by retrying the same event ID.
 The synthetic execution feasibility gate has supporting evidence. The plan's
 full live-SMS chain still needs an isolated, explicitly authorized provider
 test: inbound SMS -> verified provider webhook -> durable event -> Grok tools ->
-validated action -> real outbound SMS and provider status evidence. Before
-implementing that live test, identify an isolated Twilio sender/account and
-controlled recipient, verify account/campaign/consent coverage, and supply
-credentials through supported private controls. Do not repurpose production
-Tour Core messaging bindings to run it.
+validated action -> real outbound SMS and provider status evidence. The user
+confirmed a separate paid Twilio number already sends to their controlled test
+phone. An opt-in [SMS proof adapter](cleaner-sms-proof.md) now provides the
+transport; private Railway settings, number webhook configuration and the live
+trial are still required. It uses synthetic turns and a fixed test recipient.
 
 An SMS adapter must not claim provider idempotency merely because the engine
 supplies a key. Lost acknowledgments through a non-idempotent provider need

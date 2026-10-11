@@ -14,7 +14,8 @@ The receiver was restored interactively; scheduled routine-to-routine restore
 was rejected by the platform. A subsequent ordinary sample reported 20/20 agent
 completions with no deadline misses, fallback or duplicate replies; receipt-to-
 completion median was 22.908 seconds and P95 25.343 seconds, independently
-recomputed from the supplied table. Batch closed-chat confirmation is pending.
+recomputed from the supplied table. The user confirmed the conversation stayed
+closed throughout all 20 trials.
 Real SMS and remaining controlled fault cases are separate work.
 
 ## Completed-request replay and duplicate webhook

@@ -2,7 +2,9 @@
 
 Deploy a new service from `saadvz/TourCore`, branch
 `cleaner-core/railway-agent-proof`. This branch contains the isolated delegation
-test service. Its replies are simulated and it has no Guesty or SMS provider.
+test service. Replies are simulated by default. A separate
+[opt-in Twilio proof](cleaner-sms-proof.md) sends only to one controlled test
+phone; Guesty is not connected.
 The existing touring application's default build and startup are unchanged.
 
 ## Railway settings
@@ -67,7 +69,7 @@ these prototype tools.
 ## Container behavior and limits
 
 The Docker build bundles only the Cleaner Core test entrypoint and its local
-storage helper. Its final image has production dependencies. Docker excludes
+storage helpers and Twilio client/signature helpers. Its final image has production dependencies. Docker excludes
 local secrets, runtime state, and exports from the build context.
 The deployment Dockerfiles use ordinary `RUN` steps with no mount flags.
 Railway's cache mounts require a service-specific ID, so this portable test
@@ -92,7 +94,8 @@ Grok test routine, then add `CLEANER_TEST_WEBHOOK_URL` and
 from that routine panel; the auth variable must be its complete Authorization
 header value. Redeploy and follow [the live trial](cleaner-grok-delegation-trial.md). Do not inject a test request until that
 setup is ready: its agent deadline starts immediately and lasts two minutes.
-There are no real SMS sends or production cleaning operations in this test.
+The default configuration sends no SMS. Real SMS requires the explicit opt-in
+settings in the separate proof instructions. Cleaning turns remain synthetic.
 
 Verified locally on 11 October 2026: Docker image build, required-volume guard,
 Railway-style port/domain/healthcheck handling, concurrent writer exclusion,
@@ -101,7 +104,9 @@ tool discovery and claim/proposal completion, and reply deduplication. Typecheck
 and all 20 delegation/service tests passed at that container checkpoint. The agent in this container check
 was scripted; the user has since reported Railway health, connector discovery,
 and one full unattended synthetic Grok delegation completed in 23.656 seconds.
-Repeated-run reliability and real messaging remain unverified.
+A later account-reported 20-run sample completed all requests as agent with
+the conversation confirmed closed; nearest-rank P95 was 25.343 seconds.
+Real messaging remains unverified.
 
 ## If Railway returns 502
 

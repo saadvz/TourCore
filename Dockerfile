@@ -6,6 +6,8 @@ COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY src/delegation/ src/delegation/
 COPY src/storage/atomicWrite.ts src/storage/atomicWrite.ts
+COPY src/messaging/Messenger.ts src/messaging/Messenger.ts
+COPY src/messaging/twilio/client.ts src/messaging/twilio/signature.ts src/messaging/twilio/
 COPY scripts/serve-delegation.ts scripts/serve-delegation.ts
 RUN ./node_modules/.bin/esbuild scripts/serve-delegation.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/cleaner-test-server.mjs
 RUN npm prune --omit=dev --no-audit --no-fund

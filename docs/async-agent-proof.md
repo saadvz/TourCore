@@ -6,8 +6,10 @@ by the user; completed-request replay, duplicate webhook handling and explicit
 receiver-outage fallback also passed in account-reported evidence. A 20-request
 ordinary sample reported 20 agent completions, no deadline misses and no duplicate
 replies; its statistics were recomputed from the supplied timestamp table.
-The batch's closed-conversation interval awaits explicit confirmation.
-Real SMS delegation and production reliability remain unverified**.
+The user explicitly confirmed the conversation stayed closed for all 20 trials.
+Real SMS delegation and production reliability remain unverified**. The next
+transport is the [opt-in isolated Twilio proof](cleaner-sms-proof.md); its live
+trial is pending private Railway/Twilio configuration.
 This discovery record attributes the live findings to the user's Grok account
 report. It does not establish a general vendor guarantee or a production SLA.
 
@@ -570,8 +572,8 @@ execution latency. No missing timing was replaced with an estimate.
 The user reports no early stop, quota/rate-limit issue, approval prompt or block,
 and no duplicate replies. Only the sampler script was removed; evidence and
 the corrected report remain under `/workspace/cleaner-sample/` on Grok's
-computer, and Tour Core was reportedly untouched. Explicit confirmation of
-the batch's closed-conversation interval was requested and is pending.
+computer, and Tour Core was reportedly untouched. The user explicitly confirmed
+the conversation stayed closed from before the first send through the last run.
 
 This is a small, successful synthetic sample at roughly one request per minute,
 not a production SLA, concurrency/load test, or actual carrier-delivery test.

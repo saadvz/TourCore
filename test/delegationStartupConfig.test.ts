@@ -4,6 +4,33 @@ import { DelegationStartupError, resolveTestStartupConfig } from "../src/delegat
 const railway = { CLEANER_TEST_HOST: "0.0.0.0", RAILWAY_PUBLIC_DOMAIN: "cleaner.example", PORT: "8080", CLEANER_TEST_AGENT_TOKEN: "a".repeat(32), CLEANER_TEST_ADMIN_TOKEN: "b".repeat(32) };
 
 describe("Cleaner Core deployment configuration", () => {
+  const sms = { CLEANER_TEST_SMS_ENABLED: "true", CLEANER_TEST_TWILIO_ACCOUNT_SID: `AC${"c".repeat(32)}`,
+    CLEANER_TEST_TWILIO_AUTH_TOKEN: "private_twilio_token".repeat(3), CLEANER_TEST_TWILIO_FROM_NUMBER: "+12025550100", CLEANER_TEST_SMS_TEST_NUMBER: "+12025550101",
+    CLEANER_TEST_WEBHOOK_URL: "https://hooks.example/private", CLEANER_TEST_WEBHOOK_AUTH: "Bearer private_webhook_value" };
+  it("keeps SMS disabled by default and enables only a complete dedicated phone pair with canonical HTTPS origin", () => {
+    expect(resolveTestStartupConfig(railway).sms).toBeUndefined();
+    expect(resolveTestStartupConfig({ ...railway, ...sms, CLEANER_TEST_SMS_ENABLED: "false" }).sms).toBeUndefined();
+    expect(resolveTestStartupConfig({ ...railway, ...sms, CLEANER_TEST_PUBLIC_URL: "https://cleaner.example/" }).sms).toEqual({
+      accountSid: sms.CLEANER_TEST_TWILIO_ACCOUNT_SID, authToken: sms.CLEANER_TEST_TWILIO_AUTH_TOKEN,
+      fromNumber: sms.CLEANER_TEST_TWILIO_FROM_NUMBER, testNumber: sms.CLEANER_TEST_SMS_TEST_NUMBER, publicBaseUrl: "https://cleaner.example" });
+  });
+  it("refuses incomplete SMS settings and invalid opt-in values without printing credentials or phone numbers", () => {
+    const invalid = [
+      ...["CLEANER_TEST_TWILIO_ACCOUNT_SID", "CLEANER_TEST_TWILIO_AUTH_TOKEN", "CLEANER_TEST_TWILIO_FROM_NUMBER", "CLEANER_TEST_SMS_TEST_NUMBER", "CLEANER_TEST_WEBHOOK_URL", "CLEANER_TEST_WEBHOOK_AUTH"].map((name) => ({ [name]: undefined })),
+      { CLEANER_TEST_SMS_ENABLED: "yes" }, { CLEANER_TEST_TWILIO_ACCOUNT_SID: "private_wrong_sid" },
+      { CLEANER_TEST_TWILIO_AUTH_TOKEN: " private_twilio_token".repeat(3) },
+      { CLEANER_TEST_TWILIO_FROM_NUMBER: "12025550100" },
+      { CLEANER_TEST_SMS_TEST_NUMBER: sms.CLEANER_TEST_TWILIO_FROM_NUMBER },
+    ];
+    for (const change of invalid) {
+      try { resolveTestStartupConfig({ ...railway, ...sms, ...change }); throw new Error("Expected validation failure"); }
+      catch (error) {
+        expect(error).toBeInstanceOf(DelegationStartupError);
+        for (const value of [sms.CLEANER_TEST_TWILIO_ACCOUNT_SID, sms.CLEANER_TEST_TWILIO_AUTH_TOKEN, sms.CLEANER_TEST_TWILIO_FROM_NUMBER, sms.CLEANER_TEST_SMS_TEST_NUMBER, "private_wrong_sid"]) expect((error as Error).message).not.toContain(value);
+      }
+    }
+    expect(() => resolveTestStartupConfig({ ...sms })).toThrow("HTTPS public origin");
+  });
   it("accepts paired webhook settings and rejects invalid or incomplete settings without disclosing them", () => {
     const valid = { CLEANER_TEST_WEBHOOK_URL: "https://hooks.example/private", CLEANER_TEST_WEBHOOK_AUTH: "Bearer private_webhook_value" };
     expect(resolveTestStartupConfig({ ...railway, ...valid }).webhook).toEqual({ url: valid.CLEANER_TEST_WEBHOOK_URL, authorization: valid.CLEANER_TEST_WEBHOOK_AUTH });

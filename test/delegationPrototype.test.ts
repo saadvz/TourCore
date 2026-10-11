@@ -92,6 +92,12 @@ describe("cleaner delegation prototype", () => {
     expect((await h.engine.get(identity, h.id)).status).toBe("leased");
   });
 
+  it("refuses a future trusted receipt without creating a work item", async () => {
+    const h = await setup();
+    await expect(h.engine.receive({ ...h.request, providerEventId: "future_receipt", receivedAt: new Date(h.clock.t + 1000).toISOString() })).rejects.toMatchObject({ code: "INVALID_RECEIPT" });
+    expect(h.state().work).toHaveLength(1);
+  });
+
   it("rejects stale booking versions and proposals violating the revised next-arrival window", async () => {
     const h = await setup();
     const action = await h.proposal();

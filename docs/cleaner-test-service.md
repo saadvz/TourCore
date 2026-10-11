@@ -1,7 +1,9 @@
 # Isolated Cleaner Core test service
 
 This package runs the delegation prototype as a persistent **development test**
-process. Replies are written to `replies.json`; they are never sent as SMS.
+process. By default replies are written to `replies.json`. The separate
+[opt-in SMS proof](cleaner-sms-proof.md) can send to one configured test phone;
+synthetic `/test/events` requests continue to use the local ledger.
 It neither reads nor changes your existing Tour Core installation.
 
 ## Start locally
@@ -56,6 +58,9 @@ token. Never give that credential to the agent connector:
 - `GET /test/evidence/WORK_ID` returns current work, timestamped engine audit, simulated replies, and
   notification transport status.
   It does not expose authentication values.
+- With SMS proof enabled, `GET /test/sms/evidence` returns sanitized provider
+  input/send/delivery evidence. Work evidence includes its `sms` records and
+  identifies real SMS work as `mode: "sms-proof"`.
 
 The background worker sends a fallback to the local ledger after the two-minute
 agent deadline, independently of agent requests. A healthy HTTP listener does
