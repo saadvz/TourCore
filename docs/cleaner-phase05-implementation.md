@@ -132,8 +132,10 @@ The full suite is therefore **not green**. No test was weakened or existing
 proof phone/configuration changed to hide these failures.
 
 This establishes a local two-tenant implementation, not production readiness.
-Live Grok unattended execution, real vendor ingress/signatures/delivery,
-reservation authority and door/access-provider integration remain untested.
+At initial local acceptance, live Grok unattended execution, real vendor
+ingress/signatures/delivery, reservation authority and door/access-provider
+integration remained untested. Later synthetic account-export evidence is
+recorded below; real-provider and production boundaries remain unchanged.
 OAuth here has an authenticated owner consent API, not a browser account/consent
 UI or complete discovery integration. Owner credentials are local fixture
 bootstrap credentials, not a landlord account system. Optional external native
@@ -145,6 +147,44 @@ exposed SQL service or row-level security system. Fair transport admission is
 proved in one process; multi-host worker capacity enforcement is not established.
 Deadlines close proposals at the exact boundary, while bounded worker sweeps may
 process a large backlog over several cycles; no production deadline SLA is claimed.
+
+## Live evidence and synthetic server-clock scheduling
+
+The user deployed the optional Phase 0.5 test runtime on the existing Railway
+URL. Uploaded A engine/profile exports reconcile one background agent decision
+and one simulated receipt in 21,246ms. Reciprocal tenant read/claim and owner
+denials are reported with own-tenant controls; their raw denial logs are not
+supplied. An initial reverse-direction attempt authenticated as cached A and
+is excluded. B onboarding failed: its notification was queued 46,176ms after
+the deadline and cancelled with zero attempts. Its unchanged-booking fallback
+and single simulated receipt passed. These outcomes are retained in
+`docs/evidence/cleaner-phase05-live-reconciliation-2026-10-12.json`.
+
+`testSchedules.ts` adds an indexed, durable fixture scheduler only to the
+synthetic hosted-test runtime. Owner POST `/test/schedules` queues a stable
+event for the server clock; GET/DELETE its ID read or cancel only owned,
+not-yet-fired jobs. One owner/tenant cannot select another through request
+fields. Both owner authority and a live agent grant are checked at submission
+and fire time. Queues are bounded per tenant, with one due job per tenant per
+pass; there is no always-polling idle timer when the queue is empty.
+
+At fire time, the server creates the source under existing deduplication and
+prepares onboarding probe/wakeup/fired-marker records transactionally, without
+network awaits. A crash between source creation and setup recovers the same
+work and original deadline. It checks that deadline again before preparing
+setup; expired work receives no stale wakeup. A not-yet-created job over five
+seconds late expires visibly. The engine retains all booking, lease, action,
+reply and provider authority. Ordinary test scheduling uses normal capability-
+gated dispatch; it does not assert native agent scheduled_runs capability.
+
+Local scheduler regression, core isolation and cost checks pass, along with
+typecheck, bundle and bundled-server smoke. Exact commands/counts/source hashes
+are in `docs/evidence/cleaner-phase05-server-clock-validation-2026-10-12.json`.
+This supplements the earlier acceptance runs and does not claim the full
+repository suite is green. The existing volume, environment settings and
+five-field receiver envelope are retained. No real SMS/access adapter or new
+inference stack is introduced. Deployment feature confirmation and a successful
+B retry are still pending; use the single-retry section in the live Grok packet.
 
 ## Raw resource observations
 

@@ -1,0 +1,74 @@
+{
+  "mode": "synthetic",
+  "work": {
+    "id": "work_602f066d39fa839b6b61f2ff98bf8e9f",
+    "eventType": "cleaner.reschedule_requested",
+    "requestedStart": "2026-10-13T19:20:21.756Z",
+    "receivedAt": "2026-10-12T18:20:21.771Z",
+    "deadlineAt": "2026-10-12T18:22:21.771Z",
+    "status": "completed",
+    "turn": {
+      "id": "turn_6af2e3fd9b06076a1f51affc80e8ce9f",
+      "version": 2,
+      "timeZone": "America/New_York",
+      "windowStart": "2026-10-13T18:20:21.756Z",
+      "windowEnd": "2026-10-14T00:20:21.756Z",
+      "nextArrival": "2026-10-14T01:20:21.756Z",
+      "minimumMinutes": 90,
+      "confirmedStart": "2026-10-13T19:20:21.756Z"
+    },
+    "decisionSource": "agent",
+    "deliveryStatus": "sent"
+  },
+  "audit": [
+    {
+      "at": "2026-10-12T18:20:21.772Z",
+      "type": "received",
+      "actor": "verified_provider"
+    },
+    {
+      "at": "2026-10-12T18:20:37.949Z",
+      "type": "claimed",
+      "actor": "grok_test_agent"
+    },
+    {
+      "at": "2026-10-12T18:20:42.854Z",
+      "type": "validated_action_and_reply_saved",
+      "actor": "grok_test_agent"
+    },
+    {
+      "at": "2026-10-12T18:20:43.008Z",
+      "type": "send_attempt",
+      "actor": "engine"
+    },
+    {
+      "at": "2026-10-12T18:20:43.017Z",
+      "type": "provider_accepted_and_completed",
+      "actor": "engine"
+    }
+  ],
+  "reply": "{\"key\":\"reply_work_602f066d39fa839b6b61f2ff98bf8e9f\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 3:20 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791829242854,\"receipt\":\"simulated_a5f55f58-34c1-4a71-8a7b-18c9d053bde1\"}",
+  "carrierEvents": [],
+  "replies": [
+    {
+      "key": "reply_work_602f066d39fa839b6b61f2ff98bf8e9f",
+      "recipient": "synthetic_cleaner_A",
+      "text": "Cleaning scheduled for Oct 13, 2026, 3:20 PM (America/New_York). Entry requires host clearance.",
+      "receipt": "simulated_a5f55f58-34c1-4a71-8a7b-18c9d053bde1"
+    }
+  ],
+  "notification": {
+    "tenant": "A",
+    "work_id": "work_602f066d39fa839b6b61f2ff98bf8e9f",
+    "agent": "grok_test_agent",
+    "epoch": 1,
+    "status": "accepted",
+    "due": 1791829223897,
+    "attempts": 1,
+    "http": 200,
+    "attempted_at": 1791829222461,
+    "accepted_at": 1791829222897
+  },
+  "carrierDelivery": "not applicable; simulated provider",
+  "operatesDoors": false
+}

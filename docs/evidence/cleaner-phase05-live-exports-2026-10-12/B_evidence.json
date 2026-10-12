@@ -1,0 +1,68 @@
+{
+  "mode": "synthetic",
+  "work": {
+    "id": "work_8556142056ae3d70a7ed948cb0f5058b",
+    "eventType": "cleaner.reschedule_requested",
+    "requestedStart": "2026-10-13T20:10:38.713Z",
+    "receivedAt": "2026-10-12T19:10:38.724Z",
+    "deadlineAt": "2026-10-12T19:12:38.724Z",
+    "status": "completed",
+    "turn": {
+      "id": "turn_c68a3c19a3cf2d84942b754d12933e96",
+      "version": 1,
+      "timeZone": "America/New_York",
+      "windowStart": "2026-10-13T19:10:38.713Z",
+      "windowEnd": "2026-10-14T01:10:38.713Z",
+      "nextArrival": "2026-10-14T02:10:38.713Z",
+      "minimumMinutes": 90
+    },
+    "decisionSource": "fallback",
+    "deliveryStatus": "sent"
+  },
+  "audit": [
+    {
+      "at": "2026-10-12T19:10:38.724Z",
+      "type": "received",
+      "actor": "verified_provider"
+    },
+    {
+      "at": "2026-10-12T19:12:38.854Z",
+      "type": "deadline_fallback_selected",
+      "actor": "engine"
+    },
+    {
+      "at": "2026-10-12T19:12:38.861Z",
+      "type": "send_attempt",
+      "actor": "engine"
+    },
+    {
+      "at": "2026-10-12T19:12:38.869Z",
+      "type": "provider_accepted_and_completed",
+      "actor": "engine"
+    }
+  ],
+  "reply": "{\"key\":\"reply_work_8556142056ae3d70a7ed948cb0f5058b\",\"text\":\"Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.\",\"recipient\":\"synthetic_cleaner_B\",\"source\":\"fallback\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791832358854,\"receipt\":\"simulated_0b5057be-f473-40d0-82f1-6b547ef5267e\"}",
+  "carrierEvents": [],
+  "replies": [
+    {
+      "key": "reply_work_8556142056ae3d70a7ed948cb0f5058b",
+      "recipient": "synthetic_cleaner_B",
+      "text": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "receipt": "simulated_0b5057be-f473-40d0-82f1-6b547ef5267e"
+    }
+  ],
+  "notification": {
+    "tenant": "B",
+    "work_id": "work_8556142056ae3d70a7ed948cb0f5058b",
+    "agent": "grok_test_agent",
+    "epoch": 1,
+    "status": "cancelled",
+    "due": 1791832404900,
+    "attempts": 0,
+    "http": null,
+    "attempted_at": null,
+    "accepted_at": null
+  },
+  "carrierDelivery": "not applicable; simulated provider",
+  "operatesDoors": false
+}

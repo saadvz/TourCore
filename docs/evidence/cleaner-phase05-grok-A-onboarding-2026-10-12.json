@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "recordedAt": "2026-10-12T18:30:40.621433+00:00",
-  "evidenceSource": "User-pasted Grok QA bot narrative and result table; sanitized raw engine/profile JSON and native connector trace IDs have not yet been supplied",
-  "status": "PASS_REPORTED_PENDING_RAW_RECONCILIATION",
+  "evidenceSource": "User-pasted Grok narrative followed by user-uploaded raw engine evidence and saved verify-workflow JSON, reconciled locally; not a direct authenticated hosted read",
+  "status": "PASS_RECONCILED_EXPORTED_ENGINE_RECORDS",
   "tenant": "A",
   "eventId": "p05_10121415_onboard_A",
   "workId": "work_602f066d39fa839b6b61f2ff98bf8e9f",
@@ -98,10 +98,8 @@
     "classification": "Source/math consistency only, not independent hosted authentication or execution verification"
   },
   "missingEvidence": [
-    "Sanitized raw GET /test/evidence/WORK_ID JSON",
-    "Sanitized raw A profile and verify-workflow result",
-    "Actual connector tool names, trace IDs or trace records if available",
-    "Exact accepted action timestamps/keys and outbox/provider receipt identifiers"
+    "Native per-call trace IDs (account reports unavailable)",
+    "Raw original proposal/action arguments (not present in the public evidence view)"
   ],
   "limitations": [
     "One onboarding fixture is not an ordinary-run latency distribution or two-tenant isolation proof",
@@ -110,5 +108,7 @@
     "Existing legacy proof profiles are stored separately and are not imported into the new Phase 0.5 profile database",
     "No direct authenticated hosted read was possible from this workspace; source provenance remains account-reported",
     "Synthetic receipt completion is not phone delivery"
-  ]
+  ],
+  "originalEvidenceSource": "User-pasted Grok QA bot narrative and result table; sanitized raw engine/profile JSON and native connector trace IDs have not yet been supplied",
+  "reconciliation": "docs/evidence/cleaner-phase05-live-reconciliation-2026-10-12.json"
 }

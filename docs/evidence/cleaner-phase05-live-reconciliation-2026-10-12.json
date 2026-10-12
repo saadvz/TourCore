@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "evidenceSource": "User-uploaded engine exports plus pasted account execution narrative; exports reconciled locally, not direct authenticated hosted reads",
+  "sources": [
+    {
+      "name": "A_evidence",
+      "uploadedFileName": "export_A_evidence.json",
+      "bytes": 2452,
+      "sha256": "51a9059553682adea9051d8eaabcf1923b057051ae09a67537e8e2766e317600",
+      "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/A_evidence.json"
+    },
+    {
+      "name": "B_evidence",
+      "uploadedFileName": "export_B_evidence.json",
+      "bytes": 2296,
+      "sha256": "d526ccb091d57bae129895e3d4a134a169dfca9572c87bde9631592b763db3d1",
+      "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/B_evidence.json"
+    },
+    {
+      "name": "A_verify_saved",
+      "uploadedFileName": "export_A_verify_saved.json",
+      "bytes": 2071,
+      "sha256": "3cf869d97e93180f50e8a7b5590ed4aced994516672299a69ce778f493216715",
+      "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/A_verify_saved.json"
+    }
+  ],
+  "checks": {
+    "AOnboarding": "PASS_RECONCILED_EXPORTED_ENGINE_RECORDS",
+    "AEngineLatencyMs": 21246,
+    "ASimulatedReceipts": 1,
+    "BOnboarding": "FAIL_NO_AGENT_DISPATCH_BEFORE_DEADLINE",
+    "BDeadlineProtectionAndFallback": "PASS_RECONCILED_EXPORTED_ENGINE_RECORDS",
+    "BNotificationQueuedAfterDeadlineMs": 46176,
+    "BNotificationAttempts": 0,
+    "BSimulatedReceipts": 1,
+    "scopeAtoB": "PASS_REPORTED_WITH_OWN_TENANT_CONTROLS; raw scope-response logs not provided",
+    "scopeBtoA": "PASS_REPORTED_WITH_OWN_TENANT_CONTROLS; cached-A attempt excluded",
+    "realSmsOrDoors": "No real operation evidenced; both exports show synthetic provider and operatesDoors=false"
+  },
+  "accountReportedOperationalFaults": [
+    "Initial B connector switch retained tenant A until old session was stopped; initial successful read/CLOSED claim excluded from isolation results",
+    "First B scheduled job started late and was stopped before creating a fixture; no exported engine record for that non-attempt",
+    "Actual B onboarding fixture created at 15:10:38 EDT, but client reports receiving its response after deadline; late probe/notification followed",
+    "Grok attributes delays to its computer stalling while conversation closed; server export verifies late notification, not the client-side cause"
+  ],
+  "remaining": [
+    "Successful B native onboarding with owner-confirmed closed conversation",
+    "Ordinary-run samples for A/B; no latency P95 derived from one onboarding",
+    "Live revocation and profile/grant/lease freshness",
+    "Live replay/retry, provider ingress, OAuth, property/access storage checks and restart evidence as available"
+  ],
+  "rawLimitations": [
+    "Scope-check B fixture JSON and exact denied responses were not supplied",
+    "Native per-call trace IDs unavailable in account",
+    "Profile grants field was redacted by exporter; do not treat its string as an original valid profile schema"
+  ]
+}

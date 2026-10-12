@@ -21,7 +21,7 @@
   },
   "runtimeMatchesPhase05": true,
   "userReported": "Existing Cleaner Core Railway service updated; continue account-side live validation on the same URL",
-  "liveGrokStatus": "A_onboarding_pass_reported_pending_raw_reconciliation_and_reciprocal_scope_tests",
+  "liveGrokStatus": "A_onboarding_reconciled; scope_checks_reported; B_onboarding_failed_late_setup; server_clock_retry_pending",
   "classification": "Actual HTTPS runtime and unauthenticated transport observations; not proof of account-side agent execution, tenant isolation, provider acceptance or phone delivery",
   "latestObservations": [
     {
@@ -75,10 +75,11 @@
   "checks": {
     "runtimeReadiness": "PASS",
     "unauthenticatedMcpAndOwnerDenial": "PASS",
-    "authenticatedSyntheticMode": "PASS_REPORTED in Grok account; raw JSON pending",
-    "reciprocalTenantIsolation": "UNTESTED on deployed runtime",
-    "nativeGrokCompletion": "A onboarding PASS_REPORTED, one synthetic receipt, latency 21246ms; raw JSON/native trace records pending",
-    "realSmsOrDoors": "No such operations attempted"
+    "authenticatedSyntheticMode": "PASS in uploaded A/B engine exports; account-reported runtime read",
+    "reciprocalTenantIsolation": "PASS_REPORTED with own-tenant controls; initial cached-A B attempt excluded; raw scope response logs not supplied",
+    "nativeGrokCompletion": "A PASS_RECONCILED from exports, 21246ms and one receipt; B FAIL, notification late/cancelled with zero attempts",
+    "realSmsOrDoors": "No such operations attempted",
+    "BDeadlineFallback": "PASS_RECONCILED, unchanged turn v1 and one simulated receipt"
   },
   "previousObservation": {
     "name": "railway_health",
@@ -94,6 +95,8 @@
     }
   },
   "accountReportedEvidence": [
-    "docs/evidence/cleaner-phase05-grok-A-onboarding-2026-10-12.json"
-  ]
+    "docs/evidence/cleaner-phase05-grok-A-onboarding-2026-10-12.json",
+    "docs/evidence/cleaner-phase05-live-reconciliation-2026-10-12.json"
+  ],
+  "serverClockScheduler": "Local checks pass; deployment feature confirmation and one explicit B retry pending"
 }

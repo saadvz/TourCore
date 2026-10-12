@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-12T19:45:45.281674+00:00",
+  "status": "local_validation_passed_live_retry_pending",
+  "sourceSha256": {
+    "src/delegation/phase05/hostedTest.ts": "1979dbc038a33e4efcb98e0a6ddfef9421726762d67f29561afaa3edfd0b553f",
+    "src/delegation/phase05/testSchedules.ts": "8b93c8b25db2b2514fe90917aba18b8e9cfb0b7863c1093cd533411453855ded",
+    "test/cleanerPhase05Hosted.test.ts": "df127a9c43a14022136d4ff3acff34db0fbd3582dc231e5daba53fdc94a92c69"
+  },
+  "checks": [
+    {
+      "command": "npm test -- test/cleanerPhase05Hosted.test.ts test/cleanerPhase05.test.ts test/cleanerCostModel.test.ts",
+      "status": "PASS",
+      "testFiles": 3,
+      "tests": 50,
+      "hostedTests": 14,
+      "newHostedRegressionTests": 11
+    },
+    {
+      "command": "npm run typecheck",
+      "status": "PASS"
+    },
+    {
+      "command": "esbuild scripts/serve-delegation.ts --bundle --platform=node --format=esm --packages=external",
+      "status": "PASS"
+    },
+    {
+      "check": "Actual child-process bundled server startup, authenticated synthetic runtime feature read, durable schedule POST/GET and graceful stop before fire",
+      "status": "PASS",
+      "agentCompletion": "NOT_ATTEMPTED"
+    }
+  ],
+  "coverage": [
+    "Actual HTTP tenant/owner grant boundaries and native SDK MCP read/claim/propose",
+    "Server timer firing without later fixture/probe/notification client requests",
+    "Restart before scheduled fire and no repeat after fired marker",
+    "Partial setup rollback and source recovery under original deadline",
+    "No stale wakeup or fresh deadline after recovery past original deadline",
+    "Missed schedule expiry without creating a later fixture",
+    "Owner and agent authorization rechecked at fire time",
+    "Stable scheduling retries, changed-payload/source conflicts, cancellation and tenant queue limits",
+    "Other tenant proceeds after revocation and at most one due fixture per tenant per pass",
+    "Unexpected scheduler failures exposed and new scheduling requests rejected",
+    "No late setup when an injected server stall crosses the original source deadline"
+  ],
+  "limitations": [
+    "Local synthetic/injected tests are not native Grok account execution",
+    "Bundled smoke stops before scheduled fire and does not claim agent completion",
+    "Full repository suite not rerun; earlier baseline failures remain documented separately",
+    "No Docker image build, AWS migration, paid inference, real SMS or access operation performed",
+    "Existing raw fleet observations not regenerated or relabeled; test scheduler overhead not billed-host performance evidence"
+  ],
+  "bundleSha256": "9e76c63020f8297c6c50af31bb785937d5293167ad65ffeb35baa041214ac517"
+}

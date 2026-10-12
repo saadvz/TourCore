@@ -1,8 +1,11 @@
 # Phase 0.5 live Grok packet — same Cleaner Core URL
 
-Status: deployed runtime observed; authenticated synthetic-mode verification
-and A onboarding are now reported successful in the Grok account. Raw evidence
-reconciliation, reciprocal scope checks and remaining trials are pending.
+Status: A onboarding reconciles with uploaded engine/profile exports. Reciprocal
+scope checks are reported successful with own-tenant controls; their raw denied
+responses are not supplied. B onboarding failed because its wakeup was queued
+after the deadline, with zero delivery attempts. Its deadline fallback passed.
+The server-clock fixture scheduler is locally tested; confirm its feature
+version on the same Railway service before retrying B.
 The user reported the existing service updated on 12 October 2026. A health
 check at 14:08:09 EDT returned `phase05-indexed-v1`, two tenants and `ready=true`.
 Unauthenticated MCP initialization and owner reads returned HTTP 401. These
@@ -77,8 +80,11 @@ successful fixture under a new event ID to inflate the sample.
 
 ### Next bounded stage: evidence and reciprocal scope checks
 
-Copy the following instruction into the same Grok account. It narrows the full
-packet below and creates no ordinary ten-request stage.
+This stage is retained as a reference for the completed scope checks. Do not
+repeat the successful A fixture or scope checks to fill missing observations.
+Proceed to the server-clock B retry below. It creates no ordinary ten-request
+stage. The pasted report's first B-direction attempt ran as cached tenant A and
+is excluded; only the subsequent checks authenticated as B are counted.
 
 > Continue on the same Cleaner Core URL and preserve the current receiver,
 > unrelated routines and all real-provider settings. First return sanitized raw
@@ -127,11 +133,101 @@ packet below and creates no ordinary ten-request stage.
 > Stop on unhealthy/non-synthetic runtime or an unexpected cross-tenant success;
 > preserve and collect already-created fixtures rather than generating more.
 
+### Next bounded stage: server-clock B onboarding retry
+
+The new scheduler exists only in `CLEANER_TEST_RUNTIME=phase05`, uses the same
+SQLite volume and constructs only simulated provider receipts. Keep the same
+Railway branch, variables, domain and receiver. After the tested branch is
+deployed, owner GET `/test/runtime` must expose
+`fixtureSchedulerVersion=server-clock-v1` and `fixtureSchedulerHealthy=true`.
+No new secret or environment setting is required. If those fields are absent,
+the scheduler change is not live yet; do not retry the old client-timed sequence.
+
+Copy only the following quoted block into Grok. The failed work
+`work_8556142056ae3d70a7ed948cb0f5058b` stays in the results; use a separately
+labeled new event for this explicit retry, not a silent replacement.
+
+> Retry only B onboarding using the same Cleaner Core URL. First confirm the
+> authenticated runtime is synthetic, `realSmsEnabled=false`, two tenants,
+> `fixtureSchedulerVersion=server-clock-v1` and `fixtureSchedulerHealthy=true`.
+> Stop if any check fails. Preserve the receiver, real-provider settings and all
+> unrelated routines/connectors. No real SMS, doors or ordinary test runs.
+>
+> Mint a fresh B grant through B owner HTTP. Stop the currently running Cleaner
+> Core test connection before reconnecting that same connector and `/mcp` URL
+> with B's grant. Native `read_agent_profile` must identify tenant B; do not
+> assume changing the credential field replaced the cached A session.
+>
+> While this conversation is open, make ONE B-owner POST `/test/schedules` with
+> `{"eventId":"p05_SESSION_B_onboarding_server_retry_01","kind":"onboarding","delaySeconds":300}`.
+> Replace SESSION with a unique session identifier once, and retain that exact
+> eventId and payload. Record HTTP status, schedule ID and server-returned
+> `runAt`; HTTP 202 means durable scheduling acceptance only. On an uncertain
+> response, retry that identical request at most once. A replay must retain the
+> same schedule/runAt; do not invent a replacement ID. Require status `scheduled`
+> and at least one minute remaining before runAt before asking me to close the
+> conversation. Otherwise report the timing fault and preserve the result.
+>
+> Do not schedule jobs on your computer, and do not call `/test/events`, the
+> probe endpoint or `/owner/notifications` for this retry. The server creates
+> the fixture at runAt, prepares the core-read probe and queues the unchanged
+> five-field wakeup. It does not claim or propose for the agent. Let the existing
+> receiver execute native read/claim/propose. Keep all credentials, grant IDs,
+> lease tokens, probe nonces and headers private.
+>
+> Tell me the server runAt in Eastern time and ask me to close the conversation
+> until at least three minutes after it. Collect only after I return and
+> explicitly confirm it stayed closed throughout receiver execution; no
+> computer-scheduled collection job is needed. Owner GET `/test/schedules/ID`
+> must report `fired` with a workId. Export its sanitized JSON and owner GET
+> `/test/evidence/WORK_ID`. If the schedule is expired/failed/cancelled, preserve
+> that outcome and stop; do not create another fixture automatically.
+>
+> Require a completed agent decision before the original work deadline,
+> an accepted notification, and exactly one simulated receipt. If it passes,
+> owner POST `/owner/agents/grok_test_agent/verify-workflow` with that workId
+> and `conversationClosed=true`, then export its sanitized result and B profile.
+> A fallback result is a failed onboarding trial; do not call verify-workflow
+> on it. Include actual native tool names/errors and trace IDs if available;
+> missing trace IDs remain missing. This is simulated completion, not delivery
+> to a phone. Keep the earlier failed B onboarding in the trial accounting.
+>
+> Stop after this single explicit retry. Restore the same test connector to a
+> fresh A grant by stopping the B connection first, and confirm tenant A through
+> native `read_agent_profile`. Preserve both profiles and leave the receiver
+> enabled. No own-grant revocation, restart or ten-request stages in this run.
+
+Scheduler semantics: the authenticated owner selects the tenant. Strict request
+fields are eventId, kind and delaySeconds (30–1200, default 300). Scheduling is
+limited to twelve pending jobs per tenant and one pending onboarding job per
+tenant; callbacks process at most one due job per tenant per pass. Existing
+event IDs cannot be scheduled as new fixtures. Identical scheduling replays
+retain their original runAt and terminal outcome; changed payloads conflict.
+Owners can read or cancel their own not-yet-fired schedule using
+GET/DELETE `/test/schedules/ID`; foreign IDs deny access. Cancellation does not
+undo or delete fired work. Ordinary scheduling is available for later stages,
+but uses normal profile-gated engine dispatch and does not force onboarding.
+
+Scheduled jobs survive restart and revalidate owner and agent grants before
+firing. More than five seconds of lateness expires a not-yet-created fixture
+instead of silently shifting the test. A partially committed source recovers
+under its original durable deadline. Probe, notification and fired marker
+commit together; source creation uses its existing deduplication transaction.
+An unexpected scheduler failure sets `fixtureSchedulerHealthy=false` and
+rejects new jobs. Queue acceptance and schedule firing never establish agent
+completion. This test scheduler does not verify Grok's native scheduled_runs.
+
 ### Original full packet (reference; skip already recorded stages)
 
 The original end-to-end packet is retained below. Its onboarding and scope
 stages must not be counted twice when proceeding to ordinary-run, revocation,
 ingress and restart checks after the bounded stage above.
+For later ordinary runs, server-clock scheduling supersedes computer-timed
+fixture creation: queue the ten eventIds while the conversation is open using
+kind `ordinary` and delays 300, 360, ... 840 seconds. Use the same saved eventId
+list for A and B and retain each returned schedule/runAt. Require a live grant
+covering the last deadline and a verified profile; collect after returning to
+the conversation. Do not start that stage as part of the single B retry.
 
 > Run a bounded Phase 0.5 test against the existing Cleaner Core URL above.
 > Use only the dedicated Cleaner Core receiver/connector; preserve all unrelated

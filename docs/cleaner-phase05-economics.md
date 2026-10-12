@@ -205,9 +205,9 @@ Grok account report of A onboarding: event `p05_10121415_onboard_A`, work
 simulated receipt, reported engine latency 21,246ms within the 120-second
 deadline. The user confirmed the conversation was closed during execution.
 The reported work ID matches the source's deterministic tenant-scoped ID
-calculation. Record this as **PASS_REPORTED**, not an independently authenticated
-hosted read; sanitized raw evidence/profile JSON and native trace records are
-still missing. Details and limitations are retained in
+calculation. The initial narrative was recorded as **PASS_REPORTED**; subsequent
+uploaded records reconcile it as described below. Native per-call trace IDs
+remain unavailable. Details and source provenance are retained in
 `docs/evidence/cleaner-phase05-grok-A-onboarding-2026-10-12.json`.
 
 The app reportedly lists eight tools, while `appToolDiscovery=unknown` and
@@ -220,10 +220,53 @@ separately and were not imported into the new indexed runtime. The current
 grant-issuance path alone does not erase profile evidence; explicit revocation
 invalidates the agent epoch and evidence as designed.
 
-Next collect the raw A engine/profile results and perform A-to-B scope denials,
-B onboarding, then B-to-A scope denials before ordinary latency trials. One
-onboarding observation does not supply an ordinary-run P95 or reciprocal tenant
-isolation proof. Costs are conditional tested models; live two-tenant
+The user subsequently uploaded A evidence, its saved verify-workflow response,
+and B onboarding evidence. A's exact audit/notification/profile timestamps
+reconcile to 21,246ms with one receipt and a validated agent decision. This is
+**PASS_RECONCILED_EXPORTED_ENGINE_RECORDS**, with account-export provenance;
+the workspace still has no direct authenticated hosted read. Raw bytes and
+hashes are retained under
+`docs/evidence/cleaner-phase05-live-exports-2026-10-12/` and checks in
+`docs/evidence/cleaner-phase05-live-reconciliation-2026-10-12.json`.
+
+Reciprocal MCP read/claim and owner evidence/revocation denials are reported
+with successful own-tenant controls. Their exact denied-response logs and the
+B scope-check fixture JSON remain missing. The initial B switch retained a
+cached A connection; that attempt's successful read and CLOSED claim are
+excluded. The later correctly identified B session supplies the reported
+reverse denials. A's profile reportedly remained unchanged.
+
+B onboarding is **FAIL**: its exported notification was queued 46,176ms after
+the original deadline, cancelled with zero attempts, and has no accepted or
+attempted timestamp. The engine completed one deterministic simulated fallback,
+kept turn version 1 and set no confirmed start. Deadline protection therefore
+passes while agent onboarding fails. Grok attributes the delay to its computer
+stalling while the conversation was closed; the engine export establishes
+late setup, not the client-side cause. An earlier scheduled job was reportedly
+stopped before fixture creation and is not an additional engine trial. Preserve
+these failures separately from the ordinary-run latency sample.
+
+A durable, indexed server-clock scheduler was added only to the synthetic
+hosted-test runtime to remove client-timed fixture/probe/notification setup.
+One owner-authenticated POST queues a stable fixture event; the server creates
+it later and atomically prepares its probe, wakeup and fired marker. Existing
+engine source deduplication and absolute work deadlines remain authoritative.
+See the live packet's single B retry. This change passed 50 focused tests,
+typecheck, esbuild bundle and actual bundled-server startup/authenticated
+schedule-acceptance smoke locally. These are local checks, not a new live B
+success. Confirmation of `fixtureSchedulerVersion=server-clock-v1` on Railway
+and a successful closed-conversation B retry are pending.
+
+Preserve the original fleet/resource observations. They predate this additional
+test-only schedule table and timer; do not relabel them as measurements of the
+scheduler or EC2/Podman. Neither the shared-host budget nor the previous Railway
+calculator was changed by this harness repair. No paid inference or real
+provider operation was performed.
+
+One successful onboarding observation does not supply an ordinary-run P95.
+Ordinary A/B trials, live revocation/freshness, replay/retry, provider ingress,
+OAuth/storage and restart checks remain to be collected. Costs are conditional
+tested models; live two-tenant
 Grok completion is **pending**, not inferred from HTTP acceptance, old reports,
 OpenRouter availability or local scripted clients. Phase 0.5 cannot be marked
 fully closed until those fresh account-side results are reconciled.
