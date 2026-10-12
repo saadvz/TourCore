@@ -253,7 +253,7 @@ try {
   summary:{passed:checks.filter(c=>c.status==='passed').length,knownGaps:checks.filter(c=>c.status==='known_gap').length,failed:checks.filter(c=>c.status==='failed').length},
   productionReady:false,costAnalysis:'Deferred by user; current hosting service is not the final deployment choice',
   notMeasured:['Actual Grok background execution with two landlords','OAuth tenant isolation','Real SMS provider credential/number routing','Production properties and access records','Tenant-aware admin/event endpoints','Enforced per-tenant rate limits and budgets','Production hot token revocation'],
-  fixtureSecretPolicy:'Tokens/nonces remain memory-only and are omitted from reports; all runtime fixture files removed after run'};
+  fixtureSecretPolicy:'Bearer credentials and probe nonces remain in memory and are omitted from reports. Temporary runtime fixtures hold lease tokens/nonce hashes for recovery; all fixture files are removed after the run.'};
 } finally {
  for(const cleanup of cleanups.reverse())await cleanup();
  rmSync(home,{recursive:true,force:true});

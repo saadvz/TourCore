@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "scope": "One-process two-tenant existing delegation/MCP/profile components, scripted SDK clients and local/injected providers only",
-  "sourceCommit": "45084ffe55ad53f265e0c0006f2c42bc892c46a6",
-  "generatedAt": "2026-10-12T06:00:59.587Z",
-  "runnerSha256": "a29b7105564cb7e6313aa24159dd6817dddd3c91b5e64520318546597397e477",
+  "sourceCommit": "8ab290cdef16cbcc564ac2ebcc167549b821bbfd",
+  "generatedAt": "2026-10-12T06:15:00.911Z",
+  "runnerSha256": "a53b53016014e3d5e03e2a92d2ce041f232ed14a88368b1e9af90a772703ba23",
   "checks": [
     {
       "name": "tenant-qualified source IDs, shared booking IDs and recipient separation",
@@ -144,5 +144,5 @@
     "Enforced per-tenant rate limits and budgets",
     "Production hot token revocation"
   ],
-  "fixtureSecretPolicy": "Tokens/nonces remain memory-only and are omitted from reports; all runtime fixture files removed after run"
+  "fixtureSecretPolicy": "Bearer credentials and probe nonces remain in memory and are omitted from reports. Temporary runtime fixtures hold lease tokens/nonce hashes for recovery; all fixture files are removed after the run."
 }
