@@ -3,7 +3,8 @@
 The implementation plan asks for an AgentProfile schema, capability verification
 checks, and a Grok-specific adapter. These are implemented in the isolated
 Cleaner Core prototype. Local checks cover the profile and authenticated MCP
-onboarding. The actual Grok profile still needs the live onboarding below.
+onboarding. The user supplied a successful current-account onboarding report
+on 11 October 2026; its evidence and limits are recorded below.
 Optional capabilities may remain explicitly unknown; they are not required to
 complete the core onboarding.
 
@@ -228,7 +229,7 @@ tools. The existing configured Cleaner Core connector still exposed its old
 four-tool inventory after connector restart. Grok stopped before declarations,
 probes or workflow verification and did not substitute raw HTTP probe calls.
 Thus deployment/discovery at the server is supported by the account report,
-while configured-connector onboarding remains pending.
+while configured-connector onboarding was pending at that checkpoint.
 
 The subsequent fresh-message retry and supported removal/re-addition of only
 Cleaner Core did not resolve discovery. Grok reports that the exact saved
@@ -327,5 +328,51 @@ The SDK integration completed a real original-tool read after an issued probe,
 showed that admin evidence reads do not verify MCP, graded a draft through the
 HTTP-only fixture path, and imported correlated background evidence while
 retaining partial app discovery. Original work evidence stayed identical and
-the simulated reply count stayed one. No live compatibility result is claimed
-until the current Grok account reports it.
+the simulated reply count stayed one.
+
+## Successful current-account onboarding, 11 October 2026
+
+After deploying `806a91a`, the user supplied Grok's completed onboarding report.
+The sanitized [evidence record](evidence/cleaner-agent-profile-2026-10-11.json)
+is a transcription of that report, not a raw backend profile export. Remote
+artifacts in Grok's `/workspace/cleaner-onboard/` were not directly inspected.
+
+The actual Cleaner Core app connector called `read_delegated_work` once on the
+existing completed SMS work `work_e9935dc0acb6f9e0b7fa55306a21e656`. It returned
+`completed`, `decisionSource=agent`, `deliveryStatus=sent`, and turn version 2.
+Grok reported no raw HTTP/bridge-script substitution and no approval prompt.
+The HTTP-only drafting exercise correctly selected `host_review` for a
+90-minute cleaning that would overrun the allowed window. Its draft preserved
+the existing time and host-clearance requirement; it was graded and never sent.
+
+| Capability | Reported state / method | Scope | Observed (Oct 11, ET) | Expires (Oct 18, ET) |
+| --- | --- | --- | --- | --- |
+| `mcp_tools` | verified / `server_probe` | `authenticated_core_work_read` | 8:10:38 PM | 8:10:38 PM |
+| `generation_reasoning` | verified / `server_fixture` | `synthetic_policy_draft` | 8:10:52 PM | 8:10:52 PM |
+| `background_runs` | verified / `engine_workflow` | `webhook_cleaner_reschedule` | 5:54:06 PM | 5:54:06 PM |
+| `scheduled_runs` | declared available, unverified | No probe performed | — | — |
+| `native_integrations`, `files_images`, `reminders_notifications` | unknown | No verification reported | — | — |
+
+Background verification reused the earlier SMS work and the user's explicit
+closed-conversation confirmation. The profile reported latency **23,878 ms**,
+measured from the work's durable receipt. The earlier SMS report's **23,847 ms**
+starts at the later `received` audit entry; these have different start points.
+Profile observation/expiry times above were reported only to whole seconds.
+
+The final report has `executionMode=autonomous`, scoped to
+`cleaner.reschedule_requested`, `missingForAutonomous=[]`, a 120,000 ms deadline,
+`generation=synthetic_probe_verified`, `fallback=engine_owned`, and
+`productionReady=false`. `appToolDiscovery=partial` remains accurate: server
+version `0.2.0` and the bridge expose eight tools, while the app exposes the
+original four. `onboardingTransport=core_mcp_owner_http` records the actual
+compatible path. Discovery of the four new tools through the app remains
+unresolved and is not claimed by this result.
+
+No new event, SMS or routine was created during onboarding. Both receivers
+and Tour Core were reported unchanged. The core Phase 0.2 deliverables and
+current-account onboarding are complete; optional probes and production
+readiness remain separate. Background evidence expires first on October 18
+at approximately 5:54 PM ET, so autonomous readiness requires renewed evidence
+after that point. This synthetic drafting check does not replace Phase 0.4
+model evaluation. The next planned step is Phase 0.3: finalize the engine/agent
+contract and deterministic fallback responsibilities.

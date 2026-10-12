@@ -77,12 +77,21 @@ outbound record's deterministic key, so that specific field remains an expected
 source contract rather than an independently observed correlation.
 
 Phase 0.2 now adds the [AgentProfile, capability checks and Grok adapter](cleaner-agent-capabilities.md).
-The implementation is verified locally; current-account onboarding is pending.
+The implementation is verified locally, and current-account core onboarding
+passed on the user-supplied 11 October report. The profile verifies actual
+connector MCP reads, a synthetic policy draft and background execution;
+optional scheduled/native/file/reminder capabilities remain unverified.
+Its readiness is `autonomous` for `cleaner.reschedule_requested`, with no missing
+autonomous requirements, `fallback=engine_owned` and `productionReady=false`.
 The app's tool inventory remains four despite server/bridge discovery of eight
 and an advertised version update. Capability onboarding has a compatible path:
 an actual existing connector read verifies core MCP, and protected admin APIs
 handle declarations/draft grading. The app discovery limitation stays recorded
 separately; HTTP grading cannot promote MCP verification.
+The [sanitized profile evidence](evidence/cleaner-agent-profile-2026-10-11.json)
+records methods, scopes and seven-day expiries. Background evidence expires
+first on October 18 at approximately 5:54 PM ET; expired evidence cannot retain
+autonomous readiness. No new SMS, event or routine was needed for onboarding.
 The supported execution evidence is webhook-triggered
 background execution with authenticated MCP calls and engine-owned deadline
 fallback. Polling latency, quota exhaustion, credential revocation, concurrent
@@ -99,3 +108,7 @@ isolation and economics; Guesty account feasibility; model evaluation; and live
 concurrent/restart/revocation failure cases. None is established by the synthetic
 latency sample. The evidence and exact limitations are in
 [the proof record](async-agent-proof.md).
+
+Core Phase 0.2 is complete. Phase 0.3 is next: finalize the engine/agent
+contract, keeping deadlines, policy validation, authoritative state, sending,
+retries and audit in the engine, and reasoning/drafting in the optional agent.

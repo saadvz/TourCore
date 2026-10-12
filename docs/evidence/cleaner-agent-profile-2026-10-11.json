@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "cleaner-phase-0.2-current-account-onboarding",
+  "deploymentCommit": "806a91a",
+  "evidenceSource": "User-supplied Grok account report; remote raw artifacts and full backend profile not directly inspected",
+  "artifactKind": "sanitized_report_transcription",
+  "timezone": "America/New_York",
+  "reportedDate": "2026-10-11",
+  "connectorTrace": {
+    "transport": "actual_cleaner_core_app_connector",
+    "tool": "read_delegated_work",
+    "callCount": 1,
+    "workId": "work_e9935dc0acb6f9e0b7fa55306a21e656",
+    "rawHttpOrBridgeScriptSubstitutionReported": false,
+    "approvalPromptReported": false,
+    "result": {
+      "status": "completed",
+      "decisionSource": "agent",
+      "deliveryStatus": "sent",
+      "turnVersion": 2,
+      "confirmedStartReportedToSeconds": "2026-10-12T18:53:42-04:00"
+    }
+  },
+  "capabilities": {
+    "mcp_tools": {
+      "status": "verified",
+      "method": "server_probe",
+      "scope": "authenticated_core_work_read",
+      "observedAt": "2026-10-11T20:10:38-04:00",
+      "expiresAt": "2026-10-18T20:10:38-04:00",
+      "timestampPrecision": "seconds"
+    },
+    "generation_reasoning": {
+      "status": "verified",
+      "method": "server_fixture",
+      "scope": "synthetic_policy_draft",
+      "observedAt": "2026-10-11T20:10:52-04:00",
+      "expiresAt": "2026-10-18T20:10:52-04:00",
+      "timestampPrecision": "seconds",
+      "fixtureDecision": "host_review",
+      "reason": "Requested start plus 90 minutes exceeded the window end",
+      "draftFactsReported": ["host review", "existing time unchanged", "host clearance"],
+      "draftSent": false
+    },
+    "background_runs": {
+      "status": "verified",
+      "method": "engine_workflow",
+      "scope": "webhook_cleaner_reschedule",
+      "observedAt": "2026-10-11T17:54:06-04:00",
+      "expiresAt": "2026-10-18T17:54:06-04:00",
+      "timestampPrecision": "seconds",
+      "latencyMs": 23878,
+      "latencyStart": "work durable receivedAt",
+      "workId": "work_e9935dc0acb6f9e0b7fa55306a21e656",
+      "ownerConfirmedConversationClosed": true,
+      "reusedPriorSmsWorkflow": true
+    },
+    "scheduled_runs": {"status": "declared", "declaredAvailability": "available", "verified": false},
+    "native_integrations": {"status": "unknown"},
+    "files_images": {"status": "unknown"},
+    "reminders_notifications": {"status": "unknown"}
+  },
+  "readiness": {
+    "executionMode": "autonomous",
+    "scope": "cleaner.reschedule_requested",
+    "missingForAutonomous": [],
+    "deadlineMs": 120000,
+    "generation": "synthetic_probe_verified",
+    "productionReady": false,
+    "fallback": "engine_owned",
+    "appToolDiscovery": "partial",
+    "onboardingTransport": "core_mcp_owner_http"
+  },
+  "discovery": {
+    "serverSoftwareVersion": "0.2.0",
+    "serverToolCount": 8,
+    "bridgeToolCount": 8,
+    "appToolCount": 4,
+    "appExposedTools": ["claim_delegated_work", "list_delegated_work", "propose_cleaning_time", "read_delegated_work"]
+  },
+  "adapter": {
+    "connectorAuthentication": "bearer_header",
+    "trigger": "authenticated_routine_webhook",
+    "messageSendingOwner": "engine"
+  },
+  "onboardingSideEffectsReported": {
+    "newEvents": 0,
+    "newSms": 0,
+    "newRoutines": 0,
+    "receiversUnchanged": true,
+    "tourCoreUntouched": true
+  },
+  "limitations": [
+    "Account-reported connector inventory and trace; no independent access to the Grok app",
+    "Four new app tool attachments remain undiscovered despite eight server/bridge tools",
+    "Synthetic drafting verification is not semantic safety or a model benchmark",
+    "Optional capabilities are unverified and productionReady remains false",
+    "Reported evidence times omit milliseconds; evidence IDs and a full backend profile were not supplied"
+  ],
+  "remoteEvidenceDirectory": "/workspace/cleaner-onboard/"
+}
