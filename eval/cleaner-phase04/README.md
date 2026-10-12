@@ -156,3 +156,21 @@ a new experiment and matched reruns.
 it only those task files and instructions, excluding this repository/reports.
 Return prediction JSON for the existing scorers. Static packets do not measure
 evolving multi-turn behavior or native tool actions; those remain separate.
+
+The user returned both Grok prediction files on 12 October 2026. Originals are
+retained byte-for-byte as `results/grok-sms-predictions.json` and
+`results/grok-draft-predictions.json`. The existing scorers produced 115/120 full
+SMS interpretations and 24/24 scheduling decisions. Per-case timing/cost remain
+null. `interpretation.manipulation` is accepted alongside `intent`.
+
+The strict draft required-fact result is 0/24 because alternate date formats and
+`current time ... stays unchanged` do not match the frozen literal checks.
+`grok-draft-supplemental-review.json` records a separate inspection of the actual
+dates/unchanged times/clearance wording. It does not replace the strict score or
+claim an independent semantic review. No scorer, labels or prompts were tuned.
+
+```sh
+node --import tsx eval/cleaner-phase04/run.mjs score eval/cleaner-phase04/results/grok-sms-predictions.json /tmp/grok-sms-report.json
+node --import tsx eval/cleaner-phase04/run.mjs score-drafts eval/cleaner-phase04/results/grok-draft-predictions.json /tmp/grok-draft-report.json
+node --import tsx eval/cleaner-phase04/run.mjs compare eval/cleaner-phase04/results/rules-first-report.json eval/cleaner-phase04/results/grok-sms-report.json /tmp/grok-rules-comparison.json
+```

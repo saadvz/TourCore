@@ -4,8 +4,10 @@ Status: **partial**. The dataset, offline scoring and measured rules/template
 baselines are ready. Three small Decision 3.0 variants have now been measured
 locally on native screening tasks, and Microsoft and Perplexity have completed
 the same hosted screening. One small generator was measured separately and
-failed the host-review wording fixtures. Connected-agent and complete
-architecture comparisons remain pending; no production model is selected.
+failed the host-review wording fixtures. The connected Grok static comparison
+is now scored from user-uploaded predictions. Complete architecture,
+multi-turn, independent review and cost comparisons remain pending; no new
+production model dependency is selected.
 
 The user added the [vLLM Semantic Router Decision 3.0 collection](https://huggingface.co/collections/vllm-sr/decision-30)
 to the roadmap's Microsoft Decision-1, Perplexity Decider, rules-first and
@@ -82,7 +84,7 @@ Regex/fact checks alone do not establish safety or correct meaning.
 | Candidate | Evidence available here | Remaining prerequisite |
 | --- | --- | --- |
 | Rules-first interpreter | Measured directly against the frozen synthetic cases | Independent labels and representative production messages |
-| Connected Grok | Earlier verified workflow/capability evidence; user has a connected account | Closed-book predictions on these exact cases, measured timing/cost and separate multi-turn/native-tool exercises |
+| Connected Grok | 120 closed-book SMS + 24 scheduling/draft predictions scored; earlier workflow/capability evidence | Measured per-case timing/cost, independent review and separate evolving multi-turn/native-tool exercises |
 | Microsoft Decision 1 | Actual 120 intent + 24 constraint calls through OpenRouter native Decisions API | Full entities/abstention/generation architecture and independent holdout |
 | Perplexity Decider | Actual 120 intent + 24 constraint calls; v1.1 HF card is Apache-2.0 | Full architecture and independent holdout; local full checkpoint exceeds memory budget |
 | vLLM-SR Decision 3.0 | Exact collection/cards verified; `d3-edge`, `d3-lite`, `d3-nano` benchmarked locally | Larger variants, extracted entities, generated replies and live workflows remain untested |
@@ -253,8 +255,81 @@ architecture or real SMS action was run. Retain deterministic reply templates.
 
 Provisional direction: keep the existing rules and engine templates. Perplexity
 is the only measured candidate worth a further classification comparison on
-these results, not a selected production dependency. A new generator prompt
+the native screening results, not a selected production dependency. A new generator prompt
 would be a new experiment with matched reruns; these failures were preserved.
+
+## Connected Grok static evaluation, 12 October 2026
+
+The user returned both prediction files from the standalone closed-book
+packet. The original bytes were retained, their dataset hashes and all case
+IDs validated, and the existing scorers were used without changing labels or
+acceptance patterns. [Provenance and file hashes](evidence/cleaner-grok-evaluation-2026-10-12.json)
+record the reported in-chat reasoning/local-file-writing method. Model/version
+was not exposed. Closed-book compliance and absence of application calls are
+agent-reported; this workspace did not independently trace that execution.
+`manipulation` is correctly located at `interpretation.manipulation`, alongside
+`intent`, as the existing scorer and application interpretation support.
+
+| Metric | Grok static packet | Rules baseline |
+| --- | ---: | ---: |
+| Intent labels correct | 115/120 (95.8%) | 111/120 (92.5%) |
+| Intent, required entities and abstention decision correct | 115/120 (95.8%) | 110/120 (91.7%) |
+| Schema-valid interpretations | 120/120 | 120/120 |
+| Abstention behavior correct | 115/120 | 118/120 |
+| Effective clarification/abstention rate | 44/120 (36.7%) | 39/120 (32.5%) |
+| Explicit clarification-needed flag | 17/120 (14.2%) | 18/120 (15.0%) |
+| Raw access false positives / 106 negative cases | 0 | 6 |
+| Access false positives above existing engine thresholds | 0 | 1 |
+| Per-case inference P50/P95 and provider cost | Unmeasured | Local timing/API spend reported above |
+
+All five full-interpretation misses (`p04_061`, `062`, `063`, `064`, `066`)
+contain both a property question and a requested time. Grok prioritized the
+time rather than the question, and its low confidence caused engine abstention.
+The frozen gold expects the property-question intent. The existing application
+supports retaining a mentioned time alongside that intent for subsequent
+confirmation; no interpreter or prompt was changed here. All twelve untrusted
+instruction cases were UNKNOWN with manipulation flagged. There were 39 UNKNOWN
+labels; effective abstention also includes five low-confidence specific labels.
+
+The [paired full-interpretation comparison](../eval/cleaner-phase04/results/grok-rules-comparison.json)
+shows nine wins and four losses against rules, a +4.17 percentage-point
+diagnostic gain. Its exact two-sided McNemar value is 0.267, not production
+significance. Grok and Perplexity both reach 115/120 label accuracy but on
+different errors: Grok's are mixed question/time messages, Perplexity's are
+conflicting replies. Perplexity's native heads were not scored as full grounded
+intent/entity/abstention outputs, so the complete-output figure is not shared.
+
+Grok chose the correct scheduling decision on **24/24** fixtures (ten proposals,
+fourteen host reviews). All drafts mention host clearance and no prohibited
+access pattern was flagged. The frozen strict required-fact score is **0/24**:
+proposal dates use `Tue Oct 13, 10:00 AM EDT` rather than the canonical label or
+ISO string, and host reviews use `current time ... stays unchanged` rather than
+the accepted `existing time ... unchanged` pattern. This is preserved as a
+literal-check failure, not represented as 24 incorrect scheduling decisions.
+
+A [separate supplemental fact inspection](../eval/cleaner-phase04/results/grok-draft-supplemental-review.json)
+verified every requested local date/time/EDT-or-BST literal, each host review's
+unchanged confirmed time and every clearance statement. This inspection was
+written after observing the wording; it is not a replacement comparable scorer
+or an independent human semantic review. Years are omitted in draft text and
+inferred from fixture context. Proposal drafts add `pending confirmation` and
+say nothing has changed yet. The packet does not specify a post-commit delivery
+stage, so this cannot establish compatibility with the live engine's completion
+messages; wording must be checked against that stage before deployment.
+
+The reported 01:17:06–01:17:41 AM America/New_York interval is a **35-second
+batch duration**, from opening the packet to saving files. It is not per-case
+model latency or end-to-end request latency. Every per-case latency and cost
+remains `null`. No new action-tool/SMS/booking operation was performed to score
+these files. Static contexts do not prove evolving multi-turn behavior, native
+tool execution or the cheapest complete architecture.
+
+Current architecture decision: retain deterministic scheduling, access policy
+and reply templates; retain the already-supported optional Grok adapter with
+engine-owned fallback. Do not add a required decision-model/generator service
+on this evidence. Grok and Perplexity merit further classification work if
+needed, but unresolved combined-message behavior, unknown Grok economics and
+missing complete-architecture checks prevent selecting a replacement.
 
 ## Comparison protocol and model decision
 
@@ -306,21 +381,22 @@ The earlier proxy CONNECT 403 was resolved after the user saved/published
 unrestricted Internet settings. Direct collection, model-card and primary
 provider metadata reads returned HTTP 200. Network access is now verified.
 
-The published, reviewed setup saves CPU dependencies, reusable checkpoint
+The saved, reviewed setup draft records CPU dependencies, reusable checkpoint
 commands and the supported secret requirement. Native local and authenticated
-hosted inference are verified. No new SMS or external booking action occurred.
+hosted inference are verified. Publication of the latest draft/snapshot is a
+separate environment-settings step and has not been independently confirmed.
+No new SMS or external booking action occurred.
 
-Next, use the [connected-agent instructions](../eval/cleaner-phase04/connected-agent-instructions.md)
-with only the two label-free task packets in that directory, then score the
-returned files locally. No Grok inference tool is available from this workspace;
-the user must run that closed-book comparison through their connected account.
-Full entity extraction/abstention pipelines, evolving multi-turn/native-read
-exercises and independent labels/semantic reviews remain open. Static native
-screening and a generator-component test do not establish a complete model
-architecture or justify wiring a candidate into live authorization.
+The connected-agent static packet has been returned and scored. No further
+API setup or model calls are needed to preserve this diagnostic comparison.
+Before a production replacement, complete grounded native-model pipelines,
+measure connected-agent inference latency/cost, exercise evolving multi-turn
+context/native reads and independently review labels and draft meaning. Static
+native screening and a generator-component test do not establish a complete
+model architecture or justify wiring a candidate into live authorization.
 
 The offline scorer and exporters were exercised, including rejection of bad
 hashes, missing/duplicate cases and invalid results. Baseline metrics were
 independently recomputed from the saved predictions. Phase 0.4 remains open
-until the remaining candidate/generator/connected-agent comparisons and a
-defensible measured architecture decision are recorded.
+for those remaining checks. The provisional decision keeps models optional and
+the existing deterministic controls authoritative.

@@ -1,0 +1,265 @@
+{
+  "schemaVersion": 1,
+  "candidateId": "grok-bot-qa-bot-closed-book",
+  "scope": "Supplemental fact inspection; existing frozen strict draft score remains 0/24 and is not changed",
+  "originalPredictionFileSha256": "16a769dfcf95da067e87b0666e6072b81f38a06f4e04820e9c97bc3010493ee2",
+  "inspector": "Codex supplemental review, not independent human semantic review",
+  "summary": {
+    "count": 24,
+    "matchingSchedulingDecisions": 24,
+    "matchingRequestedLocalTimeLiterals": 24,
+    "matchingUnchangedConfirmedLocalTimeInHostReview": 14,
+    "hostClearanceWordingPresent": 24,
+    "draftsWithExplicitYear": 0,
+    "proposeDraftsAddingPendingConfirmation": 10,
+    "independentHumanSemanticReviewsCompleted": 0
+  },
+  "limitations": [
+    "Inspected alternate date/unchanged wording after observing strict score; not a new comparable benchmark score",
+    "Year is inferred from fixture context, omitted in draft text",
+    "Proposal drafts add pending confirmation; test packet does not specify a post-commit delivery stage, so this does not establish engine-compatible live wording",
+    "No full semantic or production workflow guarantee"
+  ],
+  "rows": [
+    {
+      "id": "draft_001",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": null,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": true
+    },
+    {
+      "id": "draft_002",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": null,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": true
+    },
+    {
+      "id": "draft_003",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": null,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": true
+    },
+    {
+      "id": "draft_004",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": true,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": false
+    },
+    {
+      "id": "draft_005",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": true,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": false
+    },
+    {
+      "id": "draft_006",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": true,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": false
+    },
+    {
+      "id": "draft_007",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": true,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": false
+    },
+    {
+      "id": "draft_008",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": true,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": false
+    },
+    {
+      "id": "draft_009",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": true,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": false
+    },
+    {
+      "id": "draft_010",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": null,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": true
+    },
+    {
+      "id": "draft_011",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": true,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": false
+    },
+    {
+      "id": "draft_012",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": null,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": true
+    },
+    {
+      "id": "draft_013",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": null,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": true
+    },
+    {
+      "id": "draft_014",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": null,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": true
+    },
+    {
+      "id": "draft_015",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": null,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": true
+    },
+    {
+      "id": "draft_016",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": true,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": false
+    },
+    {
+      "id": "draft_017",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": true,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": false
+    },
+    {
+      "id": "draft_018",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": true,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": false
+    },
+    {
+      "id": "draft_019",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": true,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": false
+    },
+    {
+      "id": "draft_020",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": true,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": false
+    },
+    {
+      "id": "draft_021",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": true,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": false
+    },
+    {
+      "id": "draft_022",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": null,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": true
+    },
+    {
+      "id": "draft_023",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": true,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": false
+    },
+    {
+      "id": "draft_024",
+      "decisionMatchesFrozenGold": true,
+      "requestedLocalTimeLiteralMatches": true,
+      "confirmedLocalTimeAndUnchangedWordingMatch": null,
+      "hostClearanceWordingPresent": true,
+      "reviewScope": "Supplemental inspection of observed candidate wording, not a frozen independent semantic scorer",
+      "yearExplicitInDraft": false,
+      "proposeDraftAddsPendingConfirmation": true
+    }
+  ]
+}

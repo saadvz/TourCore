@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "source": "User-uploaded predictions and user-relayed Grok report",
+  "candidateId": "grok-bot-qa-bot-closed-book",
+  "modelVersion": null,
+  "modelVersionReason": "Not exposed in connected agent interface",
+  "method": "Reported in-chat closed-book reasoning; local Python wrote prediction JSON; no application/action tool calls reported",
+  "reportedBatchStart": "2026-10-12T01:17:06-04:00",
+  "reportedBatchEnd": "2026-10-12T01:17:41-04:00",
+  "reportedBatchDurationSeconds": 35,
+  "timingScope": "Self-reported packet-open to final-save batch duration, not per-case model latency or request-to-response time",
+  "perCaseLatencyMeasured": false,
+  "perCaseProviderCostMeasured": false,
+  "files": [
+    {
+      "path": "eval/cleaner-phase04/results/grok-sms-predictions.json",
+      "sha256": "bfc9dc37715cf98792c9456b4e45434099f32c5189537bf2e72c5a960c7e54d8",
+      "bytes": 33569
+    },
+    {
+      "path": "eval/cleaner-phase04/results/grok-draft-predictions.json",
+      "sha256": "16a769dfcf95da067e87b0666e6072b81f38a06f4e04820e9c97bc3010493ee2",
+      "bytes": 9878
+    }
+  ],
+  "manipulationFieldLocation": "interpretation.manipulation, sibling of interpretation.intent; accepted by frozen scorer",
+  "closedBookCompliance": "Reported by user-relayed agent output; not independently traced from this workspace",
+  "scope": "120 static-context SMS predictions plus 24 synthetic scheduling/draft fixtures; evolving multi-turn and native tool execution not measured"
+}

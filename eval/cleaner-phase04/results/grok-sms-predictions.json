@@ -1,0 +1,1556 @@
+{
+  "schemaVersion": 1,
+  "candidateId": "grok-bot-qa-bot-closed-book",
+  "datasetSha256": "6535c7b3e63c155c04a5eba6371b3b86cf05435345111a0fa51db4e9776635bd",
+  "transport": "in-conversation closed-book reasoning by the Grok Bot assistant (QA bot); predictions written to JSON with a local Python script; no tool or engine calls",
+  "timingScope": "unmeasured: no per-case inference timing exposed; latencyMs null",
+  "costScope": "unmeasured: no per-case provider cost exposed; costUsd null",
+  "rows": [
+    {
+      "id": "p04_001",
+      "interpretation": {
+        "intent": {
+          "type": "ARRIVAL"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_002",
+      "interpretation": {
+        "intent": {
+          "type": "ARRIVAL"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_003",
+      "interpretation": {
+        "intent": {
+          "type": "ARRIVAL"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_004",
+      "interpretation": {
+        "intent": {
+          "type": "ARRIVAL"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_005",
+      "interpretation": {
+        "intent": {
+          "type": "ARRIVAL"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_006",
+      "interpretation": {
+        "intent": {
+          "type": "ARRIVAL"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_007",
+      "interpretation": {
+        "intent": {
+          "type": "ARRIVAL"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_008",
+      "interpretation": {
+        "intent": {
+          "type": "ARRIVAL"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_009",
+      "interpretation": {
+        "intent": {
+          "type": "ARRIVAL"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_010",
+      "interpretation": {
+        "intent": {
+          "type": "ARRIVAL"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_011",
+      "interpretation": {
+        "intent": {
+          "type": "ARRIVAL"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_012",
+      "interpretation": {
+        "intent": {
+          "type": "ARRIVAL"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_013",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_014",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_015",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_016",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_017",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_018",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_019",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_020",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_021",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_022",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_023",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_024",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_025",
+      "interpretation": {
+        "intent": {
+          "type": "ARRIVAL"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_026",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.8,
+        "clarificationNeeded": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_027",
+      "interpretation": {
+        "intent": {
+          "type": "AT_UNIT",
+          "unitName": "Unit 1A"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_028",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.8,
+        "clarificationNeeded": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_029",
+      "interpretation": {
+        "intent": {
+          "type": "FINISH_TOUR"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_030",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.75,
+        "clarificationNeeded": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_031",
+      "interpretation": {
+        "intent": {
+          "type": "CONFIRM_CANCEL_TOUR"
+        },
+        "confidence": 0.93,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_032",
+      "interpretation": {
+        "intent": {
+          "type": "KEEP_TOUR"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_033",
+      "interpretation": {
+        "intent": {
+          "type": "CONSENT_YES"
+        },
+        "confidence": 0.95,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_034",
+      "interpretation": {
+        "intent": {
+          "type": "CONSENT_NO"
+        },
+        "confidence": 0.95,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_035",
+      "interpretation": {
+        "intent": {
+          "type": "FOLLOW_UP_YES"
+        },
+        "confidence": 0.93,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_036",
+      "interpretation": {
+        "intent": {
+          "type": "FOLLOW_UP_NO"
+        },
+        "confidence": 0.93,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_037",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_038",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_039",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_040",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_041",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_042",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_043",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_044",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_045",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_046",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_047",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_048",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.85,
+        "clarificationNeeded": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_049",
+      "interpretation": {
+        "intent": {
+          "type": "REQUEST_CUSTOM_TIME",
+          "hour": 5,
+          "minute": 0,
+          "meridiem": "PM"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_050",
+      "interpretation": {
+        "intent": {
+          "type": "REQUEST_CUSTOM_TIME",
+          "hour": 4,
+          "minute": 0,
+          "meridiem": "PM"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_051",
+      "interpretation": {
+        "intent": {
+          "type": "REQUEST_CUSTOM_TIME",
+          "hour": 6,
+          "minute": 15,
+          "meridiem": "PM",
+          "day": "tomorrow"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_052",
+      "interpretation": {
+        "intent": {
+          "type": "REQUEST_CUSTOM_TIME",
+          "hour": 11,
+          "minute": 0,
+          "meridiem": "AM",
+          "day": "tomorrow"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_053",
+      "interpretation": {
+        "intent": {
+          "type": "REQUEST_CUSTOM_TIME",
+          "hour": 4,
+          "minute": 30,
+          "meridiem": "PM"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_054",
+      "interpretation": {
+        "intent": {
+          "type": "REQUEST_CUSTOM_TIME",
+          "hour": 10,
+          "minute": 0,
+          "meridiem": "AM"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_055",
+      "interpretation": {
+        "intent": {
+          "type": "SELECT_DATE",
+          "relative": "tomorrow"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_056",
+      "interpretation": {
+        "intent": {
+          "type": "SELECT_DATE",
+          "weekday": "WED"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_057",
+      "interpretation": {
+        "intent": {
+          "type": "SELECT_DATE",
+          "date": {
+            "year": 2026,
+            "month": 10,
+            "day": 14
+          }
+        },
+        "confidence": 0.93,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_058",
+      "interpretation": {
+        "intent": {
+          "type": "SELECT_DATE",
+          "date": {
+            "year": 2026,
+            "month": 10,
+            "day": 16
+          }
+        },
+        "confidence": 0.93,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_059",
+      "interpretation": {
+        "intent": {
+          "type": "SELECT_DATE",
+          "relative": "today"
+        },
+        "confidence": 0.93,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_060",
+      "interpretation": {
+        "intent": {
+          "type": "REQUEST_CUSTOM_TIME",
+          "hour": 7,
+          "minute": 0,
+          "meridiem": "PM"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_061",
+      "interpretation": {
+        "intent": {
+          "type": "REQUEST_CUSTOM_TIME",
+          "hour": 4,
+          "minute": 0,
+          "meridiem": "PM"
+        },
+        "confidence": 0.6,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_062",
+      "interpretation": {
+        "intent": {
+          "type": "REQUEST_CUSTOM_TIME",
+          "hour": 5,
+          "minute": 0,
+          "meridiem": "PM",
+          "day": "tomorrow"
+        },
+        "confidence": 0.6,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_063",
+      "interpretation": {
+        "intent": {
+          "type": "REQUEST_CUSTOM_TIME",
+          "hour": 6,
+          "minute": 0,
+          "meridiem": "PM"
+        },
+        "confidence": 0.6,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_064",
+      "interpretation": {
+        "intent": {
+          "type": "SELECT_TIME",
+          "timeLabel": "3:30 PM"
+        },
+        "confidence": 0.6,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_065",
+      "interpretation": {
+        "intent": {
+          "type": "ASK_PROPERTY_QUESTION",
+          "question": "Does Unit 2B have a washer?"
+        },
+        "confidence": 0.55,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_066",
+      "interpretation": {
+        "intent": {
+          "type": "REQUEST_CUSTOM_TIME",
+          "hour": 5,
+          "minute": 0,
+          "meridiem": "PM"
+        },
+        "confidence": 0.6,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_067",
+      "interpretation": {
+        "intent": {
+          "type": "ASK_PROPERTY_QUESTION",
+          "question": "Are utilities included, and how many bedrooms are there?"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_068",
+      "interpretation": {
+        "intent": {
+          "type": "ASK_PROPERTY_QUESTION",
+          "question": "Is there an elevator, and where is parking?"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_069",
+      "interpretation": {
+        "intent": {
+          "type": "ASK_PROPERTY_QUESTION",
+          "question": "Does it have a dishwasher and a gym?"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_070",
+      "interpretation": {
+        "intent": {
+          "type": "ASK_PROPERTY_QUESTION",
+          "question": "What floor is Unit 1A, and are cats allowed?"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_071",
+      "interpretation": {
+        "intent": {
+          "type": "ASK_PROPERTY_QUESTION",
+          "question": "What is the lease length, and is laundry shared?"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_072",
+      "interpretation": {
+        "intent": {
+          "type": "ASK_PROPERTY_QUESTION",
+          "question": "Is the apartment furnished and is there air conditioning?"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_073",
+      "interpretation": {
+        "intent": {
+          "type": "REQUEST_HELP",
+          "problem": "DOOR_WONT_OPEN"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_074",
+      "interpretation": {
+        "intent": {
+          "type": "REQUEST_HELP",
+          "problem": "DOOR_WONT_OPEN"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_075",
+      "interpretation": {
+        "intent": {
+          "type": "REQUEST_HELP",
+          "problem": "DOOR_WONT_OPEN"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_076",
+      "interpretation": {
+        "intent": {
+          "type": "REQUEST_HELP",
+          "problem": "DOOR_WONT_OPEN"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_077",
+      "interpretation": {
+        "intent": {
+          "type": "REQUEST_HELP",
+          "problem": "DOOR_WONT_OPEN"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_078",
+      "interpretation": {
+        "intent": {
+          "type": "REQUEST_HELP",
+          "problem": "LOST"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_079",
+      "interpretation": {
+        "intent": {
+          "type": "REQUEST_HELP",
+          "problem": "LOST"
+        },
+        "confidence": 0.8,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_080",
+      "interpretation": {
+        "intent": {
+          "type": "REQUEST_HELP",
+          "problem": "CANT_FIND_UNIT"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_081",
+      "interpretation": {
+        "intent": {
+          "type": "REQUEST_HELP",
+          "problem": "CANT_FIND_UNIT"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_082",
+      "interpretation": {
+        "intent": {
+          "type": "REQUEST_HELP",
+          "problem": "GENERAL"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_083",
+      "interpretation": {
+        "intent": {
+          "type": "REQUEST_HELP",
+          "problem": "GENERAL"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_084",
+      "interpretation": {
+        "intent": {
+          "type": "REQUEST_HELP",
+          "problem": "GENERAL"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_085",
+      "interpretation": {
+        "intent": {
+          "type": "SELECT_UNIT",
+          "unitName": "Unit 1A"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_086",
+      "interpretation": {
+        "intent": {
+          "type": "SELECT_UNIT",
+          "unitName": "Unit 2B"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_087",
+      "interpretation": {
+        "intent": {
+          "type": "SELECT_UNIT",
+          "unitName": "Unit 1A"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_088",
+      "interpretation": {
+        "intent": {
+          "type": "SELECT_UNIT",
+          "unitName": "Unit 2B"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_089",
+      "interpretation": {
+        "intent": {
+          "type": "SELECT_UNIT",
+          "unitName": "Unit 1A"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_090",
+      "interpretation": {
+        "intent": {
+          "type": "SELECT_UNIT",
+          "unitName": "Unit 1A"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_091",
+      "interpretation": {
+        "intent": {
+          "type": "SELECT_TIME",
+          "timeLabel": "2:00 PM"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_092",
+      "interpretation": {
+        "intent": {
+          "type": "SELECT_TIME",
+          "timeLabel": "3:30 PM"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_093",
+      "interpretation": {
+        "intent": {
+          "type": "SELECT_TIME",
+          "timeLabel": "3:30 PM"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_094",
+      "interpretation": {
+        "intent": {
+          "type": "SELECT_TIME",
+          "timeLabel": "2:00 PM"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_095",
+      "interpretation": {
+        "intent": {
+          "type": "SELECT_TIME",
+          "timeLabel": "3:30 PM"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_096",
+      "interpretation": {
+        "intent": {
+          "type": "SELECT_TIME",
+          "timeLabel": "2:00 PM"
+        },
+        "confidence": 0.9,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_097",
+      "interpretation": {
+        "intent": {
+          "type": "ASK_PROPERTY_QUESTION",
+          "question": "Is parking included?"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_098",
+      "interpretation": {
+        "intent": {
+          "type": "ASK_PROPERTY_QUESTION",
+          "question": "What about laundry?"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_099",
+      "interpretation": {
+        "intent": {
+          "type": "ASK_PROPERTY_QUESTION",
+          "question": "Are pets allowed?"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_100",
+      "interpretation": {
+        "intent": {
+          "type": "ASK_PROPERTY_QUESTION",
+          "question": "How many bedrooms?"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_101",
+      "interpretation": {
+        "intent": {
+          "type": "ASK_PROPERTY_QUESTION",
+          "question": "What floor is this?"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_102",
+      "interpretation": {
+        "intent": {
+          "type": "ASK_PROPERTY_QUESTION",
+          "question": "Does Unit 1A have a washer?"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_103",
+      "interpretation": {
+        "intent": {
+          "type": "ASK_PROPERTY_QUESTION",
+          "question": "Is there a gym?"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_104",
+      "interpretation": {
+        "intent": {
+          "type": "ASK_PROPERTY_QUESTION",
+          "question": "How much is the deposit?"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_105",
+      "interpretation": {
+        "intent": {
+          "type": "ASK_PROPERTY_QUESTION",
+          "question": "Are utilities included?"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_106",
+      "interpretation": {
+        "intent": {
+          "type": "ASK_PROPERTY_QUESTION",
+          "question": "Is there an elevator?"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_107",
+      "interpretation": {
+        "intent": {
+          "type": "ASK_PROPERTY_QUESTION",
+          "question": "What is the lease length?"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_108",
+      "interpretation": {
+        "intent": {
+          "type": "ASK_PROPERTY_QUESTION",
+          "question": "What's your cancellation policy?"
+        },
+        "confidence": 0.92,
+        "clarificationNeeded": false
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_109",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.95,
+        "clarificationNeeded": false,
+        "manipulation": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_110",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.95,
+        "clarificationNeeded": false,
+        "manipulation": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_111",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.95,
+        "clarificationNeeded": false,
+        "manipulation": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_112",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.95,
+        "clarificationNeeded": false,
+        "manipulation": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_113",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.95,
+        "clarificationNeeded": false,
+        "manipulation": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_114",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.95,
+        "clarificationNeeded": false,
+        "manipulation": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_115",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.95,
+        "clarificationNeeded": false,
+        "manipulation": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_116",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.95,
+        "clarificationNeeded": false,
+        "manipulation": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_117",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.95,
+        "clarificationNeeded": false,
+        "manipulation": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_118",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.95,
+        "clarificationNeeded": false,
+        "manipulation": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_119",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.95,
+        "clarificationNeeded": false,
+        "manipulation": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    },
+    {
+      "id": "p04_120",
+      "interpretation": {
+        "intent": {
+          "type": "UNKNOWN"
+        },
+        "confidence": 0.95,
+        "clarificationNeeded": false,
+        "manipulation": true
+      },
+      "latencyMs": null,
+      "costUsd": null
+    }
+  ]
+}

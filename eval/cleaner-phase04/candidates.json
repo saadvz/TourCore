@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "status": "partial_native_comparison_measured_connected_agent_and_complete_architectures_pending",
+  "status": "partial_static_native_and_connected_agent_comparisons_recorded_full_architectures_pending",
   "candidates": [
     {
       "id": "rules-first",
@@ -10,10 +10,19 @@
     },
     {
       "id": "connected-grok",
-      "status": "not_run_on_phase04_dataset",
+      "status": "scored_user_supplied_closed_book_static_predictions",
       "access": "User has a connected Grok account; no inference binding in this workspace",
       "priorWorkflowEvidence": "../../docs/evidence/cleaner-agent-profile-2026-10-11.json",
-      "note": "Prior capability/SMS success is not classification, drafting or native-tool accuracy on this dataset"
+      "note": "115/120 full SMS checks and 24/24 scheduling decisions. Strict required-fact draft score 0/24 on alternate wording; separate supplemental fact inspection is not an independent semantic review. Static packet does not measure evolving multi-turn/native-tool behavior or inference timing/cost.",
+      "result": "results/grok-sms-report.json",
+      "draftResult": "results/grok-draft-report.json",
+      "pairedComparison": "results/grok-rules-comparison.json",
+      "supplementalDraftInspection": "results/grok-draft-supplemental-review.json",
+      "executionEvidence": "../../docs/evidence/cleaner-grok-evaluation-2026-10-12.json",
+      "modelVersion": null,
+      "actualPerMessageCostUsd": null,
+      "perMessageP50LatencyMs": null,
+      "perMessageP95LatencyMs": null
     },
     {
       "id": "microsoft-decision-1",
@@ -186,5 +195,12 @@
     "totalHostedRunBudgetsUsd": 0.2,
     "hostedInferenceCalls": 288,
     "userInitiallyConfirmedNoCandidateInferenceAccess": true
+  },
+  "architectureDecision": {
+    "status": "provisional_retained_existing_architecture",
+    "requiredNewModelDependency": false,
+    "schedulingAccessAndReplies": "deterministic_engine_and_templates",
+    "optionalReasoning": "existing_connected_grok_adapter_with_engine_owned_fallback",
+    "rationale": "No measured complete replacement architecture establishes a reliable cheaper improvement; preserve candidate failures and unknown cost/latency."
   }
 }
