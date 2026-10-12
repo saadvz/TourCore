@@ -21,7 +21,7 @@
   },
   "runtimeMatchesPhase05": true,
   "userReported": "Existing Cleaner Core Railway service updated; continue account-side live validation on the same URL",
-  "liveGrokStatus": "A_and_B_onboarding_reconciled; initial_B_failure_retained; ordinary_and_recovery_trials_pending",
+  "liveGrokStatus": "A_B_onboarding_reconciled; ordinary_20_of_20_reported_pending_raw_exports; security_and_recovery_checks_pending",
   "classification": "Actual HTTPS runtime and unauthenticated transport observations; not proof of account-side agent execution, tenant isolation, provider acceptance or phone delivery",
   "latestObservations": [
     {
@@ -79,7 +79,10 @@
     "reciprocalTenantIsolation": "PASS_REPORTED with own-tenant controls; initial cached-A B attempt excluded; raw scope response logs not supplied",
     "nativeGrokCompletion": "A PASS_RECONCILED 21246ms; B explicit retry PASS_RECONCILED 94349ms, one simulated receipt each. Initial B late-setup trial remains FAIL.",
     "realSmsOrDoors": "No such operations attempted",
-    "BDeadlineFallback": "PASS_RECONCILED, unchanged turn v1 and one simulated receipt"
+    "BDeadlineFallback": "PASS_RECONCILED, unchanged turn v1 and one simulated receipt",
+    "ordinaryA": "PASS_REPORTED 10/10; P95 31.60s, raw per-trial records missing",
+    "ordinaryB": "PASS_REPORTED 10/10; P95 35.69s, raw per-trial records missing",
+    "BPostOrdinaryProfile": "UNTESTED in supplied report; B last profile read was before its stage"
   },
   "previousObservation": {
     "name": "railway_health",
@@ -97,7 +100,8 @@
   "accountReportedEvidence": [
     "docs/evidence/cleaner-phase05-grok-A-onboarding-2026-10-12.json",
     "docs/evidence/cleaner-phase05-live-reconciliation-2026-10-12.json",
-    "docs/evidence/cleaner-phase05-grok-B-retry-2026-10-12.json"
+    "docs/evidence/cleaner-phase05-grok-B-retry-2026-10-12.json",
+    "docs/evidence/cleaner-phase05-grok-ordinary-reported-2026-10-12.json"
   ],
   "serverClockScheduler": "PASS_RECONCILED: deterministic B schedule/work linkage, fixture receipt 17ms after runAt, fired marker 24ms after runAt"
 }

@@ -187,8 +187,15 @@ inference stack is introduced. The subsequent uploaded server-clock B retry
 schedule, engine and profile records reconcile to 94,349ms agent completion
 with one simulated receipt and 25,652ms remaining before its stored deadline.
 Both tenants therefore have one successful exported onboarding observation;
-the earlier failed B trial remains recorded. Ordinary-run, fault and recovery
-live checks remain pending; use the ordinary A/B section in the live packet.
+the earlier failed B trial remains recorded. The account subsequently reports
+ordinary A 10/10 and B 10/10, with no fallback/review/duplicates and engine
+median/P95 19.45/31.60s and 20.29/35.69s respectively. The raw twenty-trial
+exports are not yet supplied, so these remain reported aggregates. At n=10
+nearest-rank P95 equals the sample maximum. B's post-stage profile is also
+missing. See `docs/evidence/cleaner-phase05-grok-ordinary-reported-2026-10-12.json`.
+Security, fault and recovery live checks remain pending; use the exports,
+replay, ingress, storage and OAuth section in the live packet, without repeating
+ordinary trials or retiring either main agent.
 
 ## Raw resource observations
 

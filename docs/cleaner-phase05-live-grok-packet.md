@@ -5,7 +5,9 @@ uploaded engine/profile exports. B has two created onboarding trials and one
 pass; its earlier late-setup failure remains recorded. Reciprocal scope checks
 are reported successful with own-tenant controls; their raw denied responses
 are not supplied. The server schedule/work linkage is verified in B's exports.
-Ordinary-run and recovery/fault trials remain pending.
+Ordinary A/B trials are now reported 20/20 with no fallback/review or duplicate
+receipts. Their raw twenty-trial exports are still needed for reconciliation;
+security and recovery/fault trials remain pending. Do not repeat ordinary runs.
 The user reported the existing service updated on 12 October 2026. A health
 check at 14:08:09 EDT returned `phase05-indexed-v1`, two tenants and `ready=true`.
 Unauthenticated MCP initialization and owner reads returned HTTP 401. These
@@ -229,7 +231,15 @@ completion. This test scheduler does not verify Grok's native scheduled_runs.
 
 ### Next bounded stage: ordinary A then B trials
 
-Copy only the following quoted block into the same Grok account. There are two
+This stage is retained as a reference: the account now reports A 10/10 and B
+10/10, with explicitly confirmed closed windows. Engine median/P95 are
+19.45/31.60 seconds for A and 20.29/35.69 seconds for B. At n=10 nearest-rank
+P95 equals the sample maximum. Raw schedules, evidence and per-trial values
+have not been supplied, so these are reported results, not independently
+recomputed statistics. B's profile was last read before its stage, not after.
+Proceed to the exports/security stage below; do not rerun these twenty fixtures.
+
+The following historical quoted block describes two
 separate closed-conversation windows, ten ordinary fixtures per tenant, and no
 repeat onboarding. Both profiles now have verified mcp_tools/background_runs
 for this synthetic workflow; productionReady remains false. Queue each stage
@@ -309,6 +319,141 @@ comes from exported engine records, not HTTP acceptance or receiver summaries.
 > fresh A grant by stopping B first, confirm native tenant A and unchanged A/B
 > profiles, and leave the receiver enabled. Revocation, replay/retry, OAuth,
 > provider ingress/storage and restart checks are later stages, not this run.
+
+### Next bounded stage: exports, replay, ingress, storage and OAuth
+
+Copy only this quoted block into Grok. Keep the conversation open; this stage
+requires no timed jobs, new ordinary fixtures or deployment. It uses completed
+work, inert synthetic access records and temporary OAuth agents. Revocation
+here applies only to those temporary agents, preserving both main profiles.
+
+> Continue on the same Cleaner Core URL, with the existing test receiver and
+> connector. Recheck healthy two-tenant synthetic runtime, realSmsEnabled=false
+> and server-clock-v1. Preserve unrelated routines/connectors and real provider
+> settings. No real SMS, doors, restarts, main-agent revocation, verify-workflow
+> or new ordinary fixtures. Keep this conversation open; do not use timed jobs.
+>
+> First export the saved twenty-trial results, without rerunning anything:
+> exact shared eventId/delay manifest, original request acknowledgments if
+> available, all twenty current schedule records and all twenty engine evidence
+> records. Include every planned trial and any unavailable response. Add a
+> per-trial table with received/deadline/validated/provider-completed timestamps,
+> decision source, turn version, recipient, receipt count and deadline margin.
+> Recompute each tenant's median/min/max/nearest-rank P95 from actual values;
+> keep onboarding and failures outside that ordinary sample. Export current A
+> and B main profiles, particularly B after its ordinary stage. Do not claim
+> unchanged B from the earlier pre-stage read. Preserve available actual native
+> tool names/errors; unavailable per-call trace IDs remain missing.
+>
+> Keep raw JSON response values intact except explicit secret redactions. Never
+> export owner/agent bearers, authorization headers, OAuth codes/verifiers,
+> refresh tokens, lease/probe nonces, grant IDs or HMAC signatures. Use stable
+> reference labels for private IDs, retain work IDs/timestamps/receipts and
+> label reconstructed tables separately from raw HTTP/engine responses.
+>
+> Choose one already-completed ordinary work and its original schedule request
+> per tenant. For each, replay POST /test/schedules twice with exactly its saved
+> eventId, kind=ordinary and delaySeconds; HTTP 202 must return the original
+> fired schedule/runAt/work, not queue another execution. Replay POST /test/events
+> twice with only that saved eventId. Compare before/after evidence: same work,
+> receivedAt/deadline, turn version, action/reply key and receipt; no extra source
+> audit or simulated send. If the saved request is unavailable, mark that replay
+> not run rather than invent an event. A changed scheduling payload should be
+> rejected as conflict without modifying the original job.
+>
+> Capture reciprocal scope evidence with fresh native positive controls. Mint
+> main A/B grants only if needed; issuance preserves profiles. Stop the current
+> test connection before each reconnect to the same /mcp URL. Require native
+> read_agent_profile to identify the intended tenant/agent. Native read of own
+> completed work must succeed, read and claim of the other tenant's work must
+> return NOT_FOUND, and own completed claim must return CLOSED. Record actual
+> responses and transport status when exposed, not inferred HTTP success. Owner
+> GET /test/evidence/foreign-work and /test/schedules/foreign-schedule must return
+> 404 with own reads succeeding. Never claim pending work in this stage.
+>
+> Test synthetic provider ingress in both directions using the selected
+> completed fixtures, never a new source. POST /providers/provider_A/inbound
+> (or provider_B) with exact compact UTF-8 JSON:
+> {"account":"synthetic_account_A","to":"synthetic_line_A",
+> "from":"synthetic_cleaner_A","payload":{"eventId":"test_SAVED_EVENT_ID",
+> "turnId":"SAVED_TURN_ID","requestedStart":"SAVED_REQUESTED_START"}}.
+> Replace A with B for its own fixture. The synthetic signing secret is the
+> ASCII lowercase SHA256 hex digest of "synthetic ingress:" plus that tenant's
+> private owner credential. X-Cleaner-Timestamp is current Unix milliseconds;
+> X-Cleaner-Signature is lowercase HMAC-SHA256 hex of timestamp + "." + exact
+> body bytes. Send Content-Type application/json; keep proof values private.
+> The valid replay must return the original workId and leave all work/reply
+> evidence unchanged. Independently change account, to and from to the other
+> tenant's value, recomputing a valid signature with the original signer each
+> time: each must be 401. Send an original valid envelope/signature to the other
+> provider's endpoint: 401. Test missing signature and a freshly signed timestamp
+> older than 30 seconds: 401. These are the synthetic adapter's guarantees;
+> do not invoke real Twilio endpoints or equate acceptance with phone delivery.
+>
+> Test property/access persistence without clearance. Use new test-only marker
+> IDs for this stage: one shared property ID with different names for A and B,
+> plus one unique property per tenant. Owner POST /owner/properties accepts
+> only {id,name}. Read shared IDs under each owner and prove each sees its own
+> value; each other's unique IDs must be 404. POST /owner/access with only
+> {id,propertyId,hostClearance:false,expiresAt:future-UTC-ISO} using one shared
+> access ID referencing that tenant's unique property, and one unique access ID
+> each. Own reads must show correct references, clearanceCurrent=false and
+> operatesDoors=false; foreign unique reads and foreign property references
+> must be 404. Reject added tenantId/body-authority fields with 400. Preserve
+> the inert records for later restart reads; never set hostClearance=true.
+>
+> Now test OAuth using a new temporary agent in EACH tenant, not grok_test_agent.
+> Save both main profiles as pre-security baselines. Owner POST /owner/agents
+> with {agentId:unique_test_id,adapterId:"generic_mcp"}, then POST
+> /owner/oauth/clients with {agentId:that_id,
+> redirect_uri:"http://127.0.0.1:1/cleaner-test-callback"}. This redirect is
+> registration metadata; do not navigate or contact a local callback server.
+> Keep all private client/grant references mapped locally.
+>
+> For each client, the OTHER owner POST /oauth/authorize must return 404. Under
+> its correct owner, create a random PKCE verifier (43–128 allowed characters),
+> challenge=base64url SHA256(verifier), and random state. POST /oauth/authorize
+> with {client_id,redirect_uri,response_type:"code",
+> code_challenge_method:"S256",code_challenge,state}. Verify returned state.
+> Codes expire in 60 seconds: execute that client's tests promptly and preserve
+> any expiration failure, rather than silently replacing it. Public POST
+> /oauth/token with {grant_type:"authorization_code",client_id,redirect_uri,
+> code,code_verifier} must reject a wrong verifier and the other tenant's client
+> with 401. Then the correct exchange must succeed; consumed-code replay is 401.
+>
+> Stop the current test connection before connecting each temporary OAuth access
+> token to the same /mcp URL. Require native read_agent_profile to show its exact
+> temporary agent and tenant; own completed read succeeds and foreign read is
+> NOT_FOUND. Do this for both tenants with positive controls. An agent token on
+> owner routes and an owner token on /mcp must return 401. Label API authorization
+> plus native bearer transport accurately; this does not verify Grok's browser
+> OAuth consent/discovery UI. If the native connector cannot accept this access,
+> record that limit rather than substitute direct HTTP as native Grok evidence.
+>
+> For temporary A, POST /oauth/token with {grant_type:"refresh_token",client_id,
+> refresh_token} to rotate: old access must fail 401 on an actual native call,
+> then reconnect the fresh access and verify A temporary identity/own read.
+> Reuse the OLD refresh token: 401; the new access must now fail on a native call
+> because reuse retires that temporary agent. B temporary access and both main
+> owner profiles must remain valid. Separately, A owner POST /oauth/revoke with
+> temporary B's grantId (and B owner with temporary A's grantId) must be 404.
+> Revoke temporary B only under B's owner, then its native access must fail 401.
+> Do not revoke any main-agent grant or revoke by a guessed/redacted ID.
+>
+> Respect tenant rate/concurrency limits; serialize bounded tests and retain any
+> 429/timeout/tool-load errors. Do not treat an unavailable tool, cached tenant
+> session or expired token as a successful isolation check. Stop on unintended
+> messaging, new pending work, main-profile changes or tenant authority leakage,
+> preserve evidence and report the precise failing step. No automatic rescues.
+>
+> Finish by stopping temporary connections and restoring a fresh main A grant
+> on the same connector. Confirm native tenant A/grok_test_agent, re-read both
+> main profiles and compare with the saved baselines. Leave the receiver enabled.
+> Return sanitized raw exports plus a matrix of every test, actual response,
+> positive control and PASS/FAIL/NOT_RUN. Separate simulated provider acceptance
+> from phone delivery and missing evidence from failure. Stop here: main-agent
+> revocation/profile/lease freshness, stale actions, uncertain sends and controlled
+> restart/recovery are later checks; do not perform them in this packet.
 
 ### Original full packet (reference; skip already recorded stages)
 

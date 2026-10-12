@@ -61,7 +61,10 @@
     "BOnboardingSummary": "Two created onboarding trials, one failed late-setup trial and one successful explicit server-clock retry",
     "BRetryEngineLatencyMs": 94349,
     "BRetryStoredDeadlineMarginMs": 25652,
-    "BRetrySimulatedReceipts": 1
+    "BRetrySimulatedReceipts": 1,
+    "ordinaryA": "PASS_REPORTED_10_OF_10; raw per-trial reconciliation pending",
+    "ordinaryB": "PASS_REPORTED_10_OF_10; raw per-trial reconciliation pending",
+    "BPostOrdinaryProfile": "NOT_SUPPLIED; account last read B before ordinary stage"
   },
   "accountReportedOperationalFaults": [
     "Initial B connector switch retained tenant A until old session was stopped; initial successful read/CLOSED claim excluded from isolation results",
@@ -70,7 +73,7 @@
     "Grok attributes delays to its computer stalling while conversation closed; server export verifies late notification, not the client-side cause"
   ],
   "remaining": [
-    "Ordinary-run samples for A/B; no latency P95 derived from one onboarding",
+    "Raw ordinary A/B schedules, event manifest, engine evidence and per-trial statistics reconciliation; fresh post-stage B profile",
     "Live revocation and profile/grant/lease freshness",
     "Live replay/retry, provider ingress, OAuth, property/access storage checks and restart evidence as available"
   ],
@@ -79,5 +82,6 @@
     "Native per-call trace IDs unavailable in account",
     "Profile grants field was redacted by exporter; do not treat its string as an original valid profile schema"
   ],
-  "retryReconciliation": "docs/evidence/cleaner-phase05-grok-B-retry-2026-10-12.json"
+  "retryReconciliation": "docs/evidence/cleaner-phase05-grok-B-retry-2026-10-12.json",
+  "ordinaryReport": "docs/evidence/cleaner-phase05-grok-ordinary-reported-2026-10-12.json"
 }

@@ -1,7 +1,8 @@
 # Phase 0.5 economics validation
 
 Status: cost model implemented and tested; A/B live onboarding reconciled from
-exports, ordinary/recovery live validation pending.
+exports, ordinary 20/20 account-reported pending raw reconciliation,
+security/recovery live validation pending.
 Measured locally on 12 October 2026. The user authorized 20/100/300 requests per
 landlord per month and fleets of 2/10/100 landlords. The original cost deferral
 is superseded for this validation; no final hosting choice has been made.
@@ -280,14 +281,30 @@ scheduler or EC2/Podman. Neither the shared-host budget nor the previous Railway
 calculator was changed by this harness repair. No paid inference or real
 provider operation was performed.
 
-One successful onboarding observation per tenant does not supply an ordinary-run P95.
-Ordinary A/B trials, live revocation/freshness, replay/retry, provider ingress,
-OAuth/storage and restart checks remain to be collected. Costs are conditional
-tested models; the live two-tenant onboarding demonstration now passes against
-account-exported records, while full Phase 0.5 live validation remains **open**.
-The next packet queues ten ordinary server-clock fixtures per tenant using
-normal profile-gated dispatch. Report planned and created denominators,
-decision/completion deadline outcomes and failure counts separately from
-success-only latency statistics. Do not infer completion or phone delivery
-from HTTP acceptance. Phase 0.5 cannot be marked fully closed until the remaining
-fresh account-side results are reconciled.
+The account now reports ten ordinary server-clock fixtures per tenant, with
+explicitly confirmed closed-conversation windows and no manual rescues. All
+twenty reportedly completed by the agent before their deadlines, with zero
+fallback, review, unresolved work, duplicate receipts or late provider completion.
+
+| Tenant | Planned / accepted / fired / created / on-time agent completion | Engine median seconds | Engine nearest-rank P95 seconds | Tightest deadline margin seconds |
+| --- | --- | ---: | ---: | ---: |
+| A | 10 / 10 / 10 / 10 / 10 | 19.45 | 31.60 | 88.4 |
+| B | 10 / 10 / 10 / 10 / 10 | 20.29 | 35.69 | 84.3 |
+
+These are **reported aggregates**, not recomputed measurements: the exact event
+manifest, twenty raw schedule/evidence records and per-trial values have not
+been supplied. At n=10, nearest-rank P95 is the slowest sample; this establishes
+no production SLA, combined P95 or real-provider latency. All receipts remain
+simulated. B's last profile read preceded its ordinary stage, so post-stage
+profile preservation still needs a read. Preserve the earlier B onboarding
+failure separately; ordinary success does not erase it. The structured report
+is in `docs/evidence/cleaner-phase05-grok-ordinary-reported-2026-10-12.json`.
+
+Costs remain conditional tested models; these observations supply no new billed
+hosting or inference usage. Preserve the raw resource observations and current
+hosting assumptions. Full Phase 0.5 live validation remains **open** pending raw
+ordinary reconciliation and live revocation/freshness, replay/retry, provider
+ingress, OAuth/storage and restart evidence. The next bounded packet collects
+the ordinary exports and tests security using completed work and temporary
+agents; it does not repeat the twenty ordinary fixtures. Do not infer agent
+completion or phone delivery from HTTP/provider acceptance.

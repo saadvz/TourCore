@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-12T22:23:40.920807+00:00",
+  "status": "PASS_REPORTED_RAW_TRIAL_RECONCILIATION_PENDING",
+  "evidenceSource": "User-pasted Grok QA bot aggregate ordinary-stage report and closed-conversation confirmations; no raw ten-trial schedules/evidence, event manifest or per-trial table supplied with this message",
+  "stages": [
+    {
+      "tenant": "A",
+      "status": "PASS_REPORTED",
+      "reportedCounts": {
+        "planned": 10,
+        "accepted": 10,
+        "fired": 10,
+        "created": 10,
+        "agentDecisionAndCompletionBeforeDeadline": 10,
+        "fallback": 0,
+        "review": 0,
+        "missed": 0,
+        "unresolved": 0,
+        "duplicateReceipts": 0,
+        "lateProviderCompletions": 0
+      },
+      "engineLatencySeconds": {
+        "n": 10,
+        "median": 19.45,
+        "min": 16.97,
+        "max": 31.6,
+        "p95NearestRank": 31.6
+      },
+      "validatedDecisionLatencySeconds": {
+        "n": 10,
+        "median": 19.27,
+        "min": 16.88,
+        "max": 31.49,
+        "p95NearestRank": 31.49
+      },
+      "reportedDeadlineMarginSeconds": {
+        "min": 88.4,
+        "max": 103.0
+      },
+      "scope": {
+        "notificationTenant": "A",
+        "replyRecipient": "synthetic_cleaner_A",
+        "receiptsPerWork": 1
+      },
+      "summaryConsistencyOnly": {
+        "nearestRankP95Index": 10,
+        "p95EqualsReportedMax": true,
+        "roundedMarginsConsistentWithReportedLatencyBounds": true
+      }
+    },
+    {
+      "tenant": "B",
+      "status": "PASS_REPORTED",
+      "reportedCounts": {
+        "planned": 10,
+        "accepted": 10,
+        "fired": 10,
+        "created": 10,
+        "agentDecisionAndCompletionBeforeDeadline": 10,
+        "fallback": 0,
+        "review": 0,
+        "missed": 0,
+        "unresolved": 0,
+        "duplicateReceipts": 0,
+        "lateProviderCompletions": 0
+      },
+      "engineLatencySeconds": {
+        "n": 10,
+        "median": 20.29,
+        "min": 17.05,
+        "max": 35.69,
+        "p95NearestRank": 35.69
+      },
+      "validatedDecisionLatencySeconds": {
+        "n": 10,
+        "median": 20.21,
+        "min": 16.93,
+        "max": 35.51,
+        "p95NearestRank": 35.51
+      },
+      "reportedDeadlineMarginSeconds": {
+        "min": 84.3,
+        "max": 103.0
+      },
+      "scope": {
+        "notificationTenant": "B",
+        "replyRecipient": "synthetic_cleaner_B",
+        "receiptsPerWork": 1
+      },
+      "summaryConsistencyOnly": {
+        "nearestRankP95Index": 10,
+        "p95EqualsReportedMax": true,
+        "roundedMarginsConsistentWithReportedLatencyBounds": true
+      }
+    }
+  ],
+  "combinedReportedCounts": {
+    "planned": 20,
+    "accepted": 20,
+    "fired": 20,
+    "created": 20,
+    "agentDecisionAndCompletionBeforeDeadline": 20,
+    "fallback": 0,
+    "review": 0,
+    "missed": 0,
+    "unresolved": 0,
+    "duplicateReceipts": 0,
+    "lateProviderCompletions": 0
+  },
+  "combinedLatencyStatistics": null,
+  "closedConversationWindowsReported": {
+    "A": {
+      "start": "2026-10-12T17:09:00-04:00",
+      "end": "2026-10-12T17:26:20-04:00",
+      "explicitOwnerConfirmation": true
+    },
+    "B": {
+      "start": "2026-10-12T17:49:00-04:00",
+      "end": "2026-10-12T18:06:46-04:00",
+      "explicitOwnerConfirmation": true
+    }
+  },
+  "reportedRuntime": {
+    "mode": "synthetic",
+    "tenants": 2,
+    "realSmsEnabled": false,
+    "fixtureSchedulerVersion": "server-clock-v1",
+    "fixtureSchedulerHealthy": true
+  },
+  "reportedProfiles": {
+    "restoredConnectorTenant": "A",
+    "AAfterStage": "Reported unchanged since onboarding; fresh grant minted at 18:08 EDT",
+    "BBeforeStage": "Reported unchanged at 17:49 EDT",
+    "BAfterStage": "Not supplied; current post-stage B profile read required"
+  },
+  "trialAccounting": "Ordinary 20/20 reported. Keep A onboarding 1/1 and B onboarding 1/2 separate; initial B late-setup failure remains recorded. Scope fixture and cancelled pre-fixture setup are separate cases.",
+  "missingEvidence": [
+    "Exact saved shared eventId list and request/ack manifest",
+    "All ten A and ten B raw schedule JSON records",
+    "All twenty raw engine evidence records",
+    "Per-trial timestamps/outcomes and observed native action names",
+    "Current A/B profile exports, particularly post-stage B",
+    "Raw reciprocal denied responses from earlier scope checks"
+  ],
+  "limitations": [
+    "Median and other percentiles cannot be recomputed without per-trial values",
+    "At n=10 nearest-rank P95 is the maximum of that sample; no production latency guarantee",
+    "Combined P95 cannot be inferred from the two aggregate summaries",
+    "Last narrative sentence paraphrases read_agent_profile and workflow tools ambiguously; obtain actual core tool names when available",
+    "Receipts are simulated provider acceptance, not phone delivery",
+    "Native trace IDs remain unavailable as previously reported"
+  ]
+}
