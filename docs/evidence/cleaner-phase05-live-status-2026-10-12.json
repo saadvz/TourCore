@@ -21,7 +21,7 @@
   },
   "runtimeMatchesPhase05": true,
   "userReported": "Existing Cleaner Core Railway service updated; continue account-side live validation on the same URL",
-  "liveGrokStatus": "pending_authenticated_synthetic_mode_and_account_execution",
+  "liveGrokStatus": "A_onboarding_pass_reported_pending_raw_reconciliation_and_reciprocal_scope_tests",
   "classification": "Actual HTTPS runtime and unauthenticated transport observations; not proof of account-side agent execution, tenant isolation, provider acceptance or phone delivery",
   "latestObservations": [
     {
@@ -75,9 +75,9 @@
   "checks": {
     "runtimeReadiness": "PASS",
     "unauthenticatedMcpAndOwnerDenial": "PASS",
-    "authenticatedSyntheticMode": "UNTESTED: no hosted owner credential configured in this workspace",
+    "authenticatedSyntheticMode": "PASS_REPORTED in Grok account; raw JSON pending",
     "reciprocalTenantIsolation": "UNTESTED on deployed runtime",
-    "nativeGrokCompletion": "PENDING account-side onboarding",
+    "nativeGrokCompletion": "A onboarding PASS_REPORTED, one synthetic receipt, latency 21246ms; raw JSON/native trace records pending",
     "realSmsOrDoors": "No such operations attempted"
   },
   "previousObservation": {
@@ -92,5 +92,8 @@
       "mode": "sms-proof",
       "ready": true
     }
-  }
+  },
+  "accountReportedEvidence": [
+    "docs/evidence/cleaner-phase05-grok-A-onboarding-2026-10-12.json"
+  ]
 }

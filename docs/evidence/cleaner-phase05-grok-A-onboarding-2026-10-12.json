@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-12T18:30:40.621433+00:00",
+  "evidenceSource": "User-pasted Grok QA bot narrative and result table; sanitized raw engine/profile JSON and native connector trace IDs have not yet been supplied",
+  "status": "PASS_REPORTED_PENDING_RAW_RECONCILIATION",
+  "tenant": "A",
+  "eventId": "p05_10121415_onboard_A",
+  "workId": "work_602f066d39fa839b6b61f2ff98bf8e9f",
+  "timeZone": "America/New_York",
+  "timelinePrecision": "Narrative timestamps rounded to seconds; exact engine timestamps not supplied",
+  "reportedTimeline": {
+    "received": "2026-10-12T14:20:21-04:00",
+    "deadline": "2026-10-12T14:22:21-04:00",
+    "receiverStarted": "2026-10-12T14:20:30-04:00",
+    "claimed": "2026-10-12T14:20:37-04:00",
+    "validated": "2026-10-12T14:20:42-04:00",
+    "providerAccepted": "2026-10-12T14:20:43-04:00",
+    "receiverEnded": "2026-10-12T14:20:47-04:00",
+    "workflowVerified": "2026-10-12T14:26:21-04:00"
+  },
+  "reportedRuntime": {
+    "runtimeVersion": "phase05-indexed-v1",
+    "tenants": 2,
+    "ready": true,
+    "mode": "synthetic",
+    "realSmsEnabled": false
+  },
+  "reportedOwnerCalls": {
+    "eventHttpStatus": 200,
+    "probeHttpStatus": 200,
+    "notificationHttpStatus": 200,
+    "notificationAttempts": 1,
+    "verifyWorkflowHttpStatus": 200,
+    "conversationClosed": true
+  },
+  "reportedConnector": {
+    "nativeCoreActions": [
+      "read_delegated_work",
+      "claim_delegated_work",
+      "propose_cleaning_time",
+      "read_delegated_work"
+    ],
+    "appListedToolCount": 8,
+    "listedToolNames": null,
+    "approvalOrBlockReported": false,
+    "traceIds": null,
+    "receiverNarrationIssue": "Receiver initially guessed a text went to a real phone from old SMS-proof wording; final account report corrected that interpretation to synthetic-only."
+  },
+  "reportedResult": {
+    "status": "completed",
+    "decisionSource": "agent",
+    "deliveryStatus": "sent",
+    "turnVersionBefore": 1,
+    "turnVersionAfter": 2,
+    "confirmedStart": "2026-10-13T15:20:00-04:00",
+    "confirmedStartPrecision": "Minute-level narrative; exact engine start timestamp not supplied",
+    "replyCount": 1,
+    "recipient": "synthetic_cleaner_A",
+    "carrierEventCount": 0,
+    "realPhoneSendReported": false
+  },
+  "reportedProfile": {
+    "executionMode": "autonomous",
+    "scope": "cleaner.reschedule_requested",
+    "fallback": "engine_owned",
+    "deadlineMs": 120000,
+    "productionReady": false,
+    "mcp_tools": {
+      "status": "verified",
+      "method": "server_probe",
+      "scope": "authenticated_core_work_read"
+    },
+    "background_runs": {
+      "status": "verified",
+      "method": "engine_workflow",
+      "scope": "cleaner_reschedule",
+      "latencyMs": 21246,
+      "ownerConfirmedConversationClosed": true
+    },
+    "generation_reasoning": "unknown",
+    "scheduled_runs": "unknown",
+    "otherCapabilities": "unknown",
+    "appToolDiscovery": "unknown",
+    "onboardingTransport": "unverified",
+    "evidenceExpiryReported": "2026-10-13 approximately 14:20 EDT"
+  },
+  "userConfirmation": "User reported the conversation remained closed throughout the scheduled receiver execution window, until approximately 14:25 EDT",
+  "completedTrials": {
+    "AOnboardingReported": 1,
+    "BScopeCheck": 0,
+    "BOnboarding": 0,
+    "ordinaryA": 0,
+    "ordinaryB": 0
+  },
+  "localConsistencyChecks": {
+    "deterministicTenantScopedWorkIdMatches": true,
+    "reportedLatencyWithinDeadline": true,
+    "classification": "Source/math consistency only, not independent hosted authentication or execution verification"
+  },
+  "missingEvidence": [
+    "Sanitized raw GET /test/evidence/WORK_ID JSON",
+    "Sanitized raw A profile and verify-workflow result",
+    "Actual connector tool names, trace IDs or trace records if available",
+    "Exact accepted action timestamps/keys and outbox/provider receipt identifiers"
+  ],
+  "limitations": [
+    "One onboarding fixture is not an ordinary-run latency distribution or two-tenant isolation proof",
+    "Profile discovery metadata is not persisted by the current Phase 0.5 profile path; app listing eight tools alone does not populate those fields",
+    "This workflow does not verify generation_reasoning or scheduled_runs",
+    "Existing legacy proof profiles are stored separately and are not imported into the new Phase 0.5 profile database",
+    "No direct authenticated hosted read was possible from this workspace; source provenance remains account-reported",
+    "Synthetic receipt completion is not phone delivery"
+  ]
+}

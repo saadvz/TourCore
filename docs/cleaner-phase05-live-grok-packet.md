@@ -1,7 +1,8 @@
 # Phase 0.5 live Grok packet — same Cleaner Core URL
 
 Status: deployed runtime observed; authenticated synthetic-mode verification
-and account-side execution remain pending.
+and A onboarding are now reported successful in the Grok account. Raw evidence
+reconciliation, reciprocal scope checks and remaining trials are pending.
 The user reported the existing service updated on 12 October 2026. A health
 check at 14:08:09 EDT returned `phase05-indexed-v1`, two tenants and `ready=true`.
 Unauthenticated MCP initialization and owner reads returned HTTP 401. These
@@ -66,6 +67,71 @@ evidence before starting the two ordinary ten-request stages. Do not rerun the
 deployment steps just to perform onboarding. If the account cannot perform
 owner HTTP or reconnect the native test connector, report that missing
 capability and stop rather than substitute another client as Grok evidence.
+
+A onboarding was subsequently reported successful for event
+`p05_10121415_onboard_A`, work `work_602f066d39fa839b6b61f2ff98bf8e9f`:
+21,246ms engine completion, one simulated receipt and owner-confirmed closed
+conversation. See `docs/evidence/cleaner-phase05-grok-A-onboarding-2026-10-12.json`
+for the account-reported provenance and missing raw evidence. Do not repeat this
+successful fixture under a new event ID to inflate the sample.
+
+### Next bounded stage: evidence and reciprocal scope checks
+
+Copy the following instruction into the same Grok account. It narrows the full
+packet below and creates no ordinary ten-request stage.
+
+> Continue on the same Cleaner Core URL and preserve the current receiver,
+> unrelated routines and all real-provider settings. First return sanitized raw
+> owner GET `/test/evidence/work_602f066d39fa839b6b61f2ff98bf8e9f`, GET
+> `/owner/agents/grok_test_agent/profile` and the saved verify-workflow response.
+> If the saved response is unavailable, report it missing rather than rerun it
+> as though it were the original observation. Include actual connector tool
+> names and trace records/IDs if available. Do not export bearer credentials,
+> grant IDs, lease tokens, probe nonces, signatures or headers. Preserve work
+> IDs, timestamps, decision/action and receipt identifiers needed to reconcile
+> the fixture. Redact authentication fields without rewriting observations.
+>
+> Recheck authenticated synthetic runtime and live own-tenant connector access
+> before each cross-tenant stage. Mint a fresh A grant if needed; issuance alone
+> preserves profile evidence. Do not revoke either tenant's own grant yet.
+>
+> While the connector is A, mint a temporary B grant through B owner HTTP and
+> create one B scope-check fixture with a new session-unique eventId. B owner
+> evidence must confirm it exists. Through A's native connector, attempt read
+> and claim of its work ID; both must deny access. A owner HTTP must also deny
+> reading B evidence and deleting that B grant. Export exact errors/statuses
+> with the grant ID redacted. Verify the B grant/profile remain unaffected.
+> Never rescue or manually complete the scope fixture; collect after its
+> original deadline and require one deterministic simulated fallback with no
+> booking change. A 401 from an expired token is not an isolation pass: pair
+> each denial with a successful own-tenant control under the same live identity.
+>
+> Now connect the SAME Cleaner Core connector at the SAME `/mcp` URL using B's
+> live grant. Schedule exactly one separate B onboarding fixture five minutes
+> ahead using B owner HTTP, followed by its core-mcp probe and notification, as
+> for A. Let the unchanged receiver perform the actual native read/claim/propose;
+> do not do these manually. Collect evidence three minutes after actual fixture
+> creation. Ask me to confirm the conversation was closed during execution
+> before setting `conversationClosed=true` in B's verify-workflow call.
+> Require an agent decision before deadline and exactly one simulated receipt.
+>
+> With B connected, attempt native read and claim of A's existing onboarding
+> work ID above; both must deny access. B owner HTTP must deny A evidence and
+> deleting A's privately saved grant. Pair denials with successful B-owned
+> controls and verify A profile/grants remain unchanged. Return sanitized raw
+> B evidence/profile JSON, actual native connector errors/traces and owner HTTP
+> statuses for both directions, including any failures or unavailable checks.
+> Stop here: no ten-request stages, own-grant revocation, restarts, real SMS or
+> doors in this bounded stage. Restore the connector to a fresh A grant after
+> evidence collection unless I choose B, and report which tenant is connected.
+> Stop on unhealthy/non-synthetic runtime or an unexpected cross-tenant success;
+> preserve and collect already-created fixtures rather than generating more.
+
+### Original full packet (reference; skip already recorded stages)
+
+The original end-to-end packet is retained below. Its onboarding and scope
+stages must not be counted twice when proceeding to ordinary-run, revocation,
+ingress and restart checks after the bounded stage above.
 
 > Run a bounded Phase 0.5 test against the existing Cleaner Core URL above.
 > Use only the dedicated Cleaner Core receiver/connector; preserve all unrelated

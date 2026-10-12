@@ -199,9 +199,31 @@ was reported by the user and its runtime version independently observed over
 HTTPS; no AWS migration occurred. A healthy deployed runtime does not establish
 agent execution or completion.
 The workspace has GitHub access but no Railway deployment credential or Grok
-account binding or configured hosted owner credentials. The user will run A
-onboarding first in the Grok account, then the remaining packet after its
-evidence passes. Costs are conditional tested models; live two-tenant
+account binding or configured hosted owner credentials. The user supplied a
+Grok account report of A onboarding: event `p05_10121415_onboard_A`, work
+`work_602f066d39fa839b6b61f2ff98bf8e9f`, one completed agent decision and one
+simulated receipt, reported engine latency 21,246ms within the 120-second
+deadline. The user confirmed the conversation was closed during execution.
+The reported work ID matches the source's deterministic tenant-scoped ID
+calculation. Record this as **PASS_REPORTED**, not an independently authenticated
+hosted read; sanitized raw evidence/profile JSON and native trace records are
+still missing. Details and limitations are retained in
+`docs/evidence/cleaner-phase05-grok-A-onboarding-2026-10-12.json`.
+
+The app reportedly lists eight tools, while `appToolDiscovery=unknown` and
+`onboardingTransport=unverified` remain in the backend view because this Phase
+0.5 profile path does not persist the app discovery report. These metadata
+fields do not negate a correlated core-workflow probe, and must not be silently
+changed to verified. No reasoning or scheduling probe ran; those capabilities
+remain unknown, and `productionReady=false`. Legacy proof profiles are stored
+separately and were not imported into the new indexed runtime. The current
+grant-issuance path alone does not erase profile evidence; explicit revocation
+invalidates the agent epoch and evidence as designed.
+
+Next collect the raw A engine/profile results and perform A-to-B scope denials,
+B onboarding, then B-to-A scope denials before ordinary latency trials. One
+onboarding observation does not supply an ordinary-run P95 or reciprocal tenant
+isolation proof. Costs are conditional tested models; live two-tenant
 Grok completion is **pending**, not inferred from HTTP acceptance, old reports,
 OpenRouter availability or local scripted clients. Phase 0.5 cannot be marked
 fully closed until those fresh account-side results are reconciled.
