@@ -109,6 +109,8 @@ concurrent/restart/revocation failure cases. None is established by the syntheti
 latency sample. The evidence and exact limitations are in
 [the proof record](async-agent-proof.md).
 
-Core Phase 0.2 is complete. Phase 0.3 is next: finalize the engine/agent
-contract, keeping deadlines, policy validation, authoritative state, sending,
-retries and audit in the engine, and reasoning/drafting in the optional agent.
+Core Phase 0.2 is complete. Phase 0.3 has now finalized the
+[engine/agent contract](cleaner-engine-agent-contract.md): responsibility,
+delegated data and commands, minimum recovery state, deterministic fallback,
+and the gate for optional inference. The contract records production gaps
+separately from existing prototype behavior. Next is Phase 0.4 model evaluation.

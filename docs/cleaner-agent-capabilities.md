@@ -374,5 +374,6 @@ current-account onboarding are complete; optional probes and production
 readiness remain separate. Background evidence expires first on October 18
 at approximately 5:54 PM ET, so autonomous readiness requires renewed evidence
 after that point. This synthetic drafting check does not replace Phase 0.4
-model evaluation. The next planned step is Phase 0.3: finalize the engine/agent
-contract and deterministic fallback responsibilities.
+model evaluation. Phase 0.3 subsequently finalized the
+[engine/agent contract](cleaner-engine-agent-contract.md) and deterministic
+fallback responsibilities. The next planned step is Phase 0.4 model evaluation.

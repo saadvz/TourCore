@@ -21,6 +21,10 @@ ephemeral local authentication is generated in memory and is not printed.
 
 ## Responsibility boundary
 
+The normative [Phase 0.3 engine/agent contract](cleaner-engine-agent-contract.md)
+defines the authority and recovery requirements, including the gaps between
+this isolated prototype and the future shared platform.
+
 ```mermaid
 flowchart LR
   A[Trusted simulated inbound adapter] --> B[Durable request and deadline]
