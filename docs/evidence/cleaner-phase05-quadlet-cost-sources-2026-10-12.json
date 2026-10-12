@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-12T17:42:59.902463+00:00",
+  "status": "future_design_recorded_not_deployed",
+  "deploymentDesign": {
+    "host": "Shared Linux EC2 host with systemd and cgroup v2",
+    "management": "Podman Quadlets",
+    "initialContainers": [
+      "HTTPS reverse proxy",
+      "One multi-tenant Cleaner Core engine"
+    ],
+    "state": "Exactly one SQLite writer/runtime with an EBS-backed persistent mount and explicit backup/recovery procedures",
+    "tenantAuthority": "Authenticated owner/agent grants and tenant-scoped engine records; tenant count does not multiply host cost",
+    "liveTestHost": "Existing Railway Cleaner Core service; no AWS migration"
+  },
+  "sources": [
+    {
+      "name": "aws_t3",
+      "url": "https://aws.amazon.com/ec2/instance-types/t3/",
+      "status": 200,
+      "bytes": 459743,
+      "fetchedAt": "2026-10-12T17:40:02.341006+00:00",
+      "sha256": "797ffb0ec4914531513b6c6f8705353126a0e6a9cd12a7bc94f75eb35ac8f416"
+    },
+    {
+      "name": "aws_ebs",
+      "url": "https://aws.amazon.com/ebs/pricing/",
+      "status": 200,
+      "bytes": 383371,
+      "fetchedAt": "2026-10-12T17:40:02.250329+00:00",
+      "sha256": "cb2626edc09e7cb381ed2bc208d1b69ede377b8dcf6659a513851193e32959bc"
+    },
+    {
+      "name": "aws_vpc",
+      "url": "https://aws.amazon.com/vpc/pricing/",
+      "status": 200,
+      "bytes": 388572,
+      "fetchedAt": "2026-10-12T17:40:02.248989+00:00",
+      "sha256": "dc508012bce36cf986b6f49f362529bcba7d4ed346b96a75a85ff5e91de0e8f8"
+    },
+    {
+      "name": "quadlet",
+      "url": "https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html",
+      "status": 200,
+      "bytes": 252664,
+      "fetchedAt": "2026-10-12T17:40:02.536338+00:00",
+      "sha256": "c445978ddb2d5434cb78e14442553330017ec7717d353b6a91f2787ac82df53f"
+    },
+    {
+      "name": "unifi",
+      "url": "https://help.ui.com/hc/en-us/articles/34210126298775-Self-Hosting-UniFi",
+      "status": 200,
+      "bytes": 53570,
+      "fetchedAt": "2026-10-12T17:40:02.310339+00:00",
+      "sha256": "7eea254ad18666c9f9c11f0df8371d235972de64f28c5eb7088c2742ebb44dd1"
+    }
+  ],
+  "priceAssumptions": {
+    "region": "us-east-1",
+    "os": "Linux/Unix",
+    "purchaseOption": "On-Demand",
+    "hoursPerMonth": 720,
+    "instances": 1,
+    "allocatedGp3Gb": 10,
+    "gp3UsdPerGbMonth": 0.08,
+    "gp3RateClassification": "Budget assumption based on published AWS EBS pricing example, not a verified account quote",
+    "publicIpv4Addresses": 1,
+    "ipv4UsdPerHour": 0.005,
+    "t3MicroUsdPerHour": 0.0104,
+    "t3SmallUsdPerHour": 0.0209
+  },
+  "excludedCosts": [
+    "Backups",
+    "DNS",
+    "Logs",
+    "Image registry/S3",
+    "Internet transfer",
+    "CPU-credit overages",
+    "Tax",
+    "External provider charges"
+  ],
+  "baselines": [
+    {
+      "instance": "t3.micro",
+      "ramGiB": 1,
+      "computeUsd": 7.4879999999999995,
+      "allocatedStorageUsd": 0.8,
+      "publicIpv4Usd": 3.6,
+      "sharedMonthlyBaselineUsd": 11.888,
+      "perLandlordUsd": {
+        "2": 5.944,
+        "10": 1.1888,
+        "100": 0.11888
+      },
+      "monthlyRequestsPerLandlordCases": [
+        20,
+        100,
+        300
+      ],
+      "capacity": "Unverified; same infrastructure baseline across tiers only if one host has sufficient capacity"
+    },
+    {
+      "instance": "t3.small",
+      "ramGiB": 2,
+      "computeUsd": 15.047999999999998,
+      "allocatedStorageUsd": 0.8,
+      "publicIpv4Usd": 3.6,
+      "sharedMonthlyBaselineUsd": 19.448,
+      "perLandlordUsd": {
+        "2": 9.724,
+        "10": 1.9448,
+        "100": 0.19448000000000001
+      },
+      "monthlyRequestsPerLandlordCases": [
+        20,
+        100,
+        300
+      ],
+      "capacity": "Unverified; same infrastructure baseline across tiers only if one host has sufficient capacity"
+    }
+  ],
+  "classification": "Infrastructure budget only; no EC2/Podman capacity test, vendor invoice, cluster failover or deployment proof"
+}

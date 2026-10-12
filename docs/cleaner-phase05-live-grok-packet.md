@@ -1,6 +1,11 @@
 # Phase 0.5 live Grok packet — same Cleaner Core URL
 
 Status: prepared; live execution is pending deployment and account-side runs.
+The user confirmed on 12 October 2026 that the existing service has not yet
+been updated. Railway remains the live-test host; the proposed future
+EC2/Podman Quadlet design in `cleaner-phase05-economics.md` does not change this
+packet or require another endpoint. A health check at 17:40:02 UTC still
+reported the earlier `sms-proof` runtime (see the sanitized live-status record).
 Use `https://tourcore-production-72ec.up.railway.app`, with the existing dedicated
 Cleaner Core receiver and connector. One `/mcp` URL serves both tenants through
 separate credentials. If Grok only permits one connection per URL, run A and

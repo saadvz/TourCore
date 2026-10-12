@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "observation": {
+    "name": "railway_health",
+    "url": "https://tourcore-production-72ec.up.railway.app/healthz",
+    "status": 200,
+    "bytes": 63,
+    "fetchedAt": "2026-10-12T17:40:02.272863+00:00",
+    "sha256": "ae2b5c13e8ac21a13580fb4f758e2073246c0cd55db1153149d976d99996447c",
+    "body": {
+      "service": "cleaner-core-test",
+      "mode": "sms-proof",
+      "ready": true
+    }
+  },
+  "expectedPhase05Health": {
+    "runtimeVersion": "phase05-indexed-v1",
+    "tenantCount": 2,
+    "ready": true
+  },
+  "runtimeMatchesPhase05": false,
+  "userReported": "Existing Cleaner Core Railway service not yet updated; continue live testing on Railway after same-service update",
+  "liveGrokStatus": "pending_same_service_update_and_account_execution",
+  "classification": "Public health observation only; no native agent completion, provider acceptance or phone-delivery claim"
+}
