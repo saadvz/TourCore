@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-12T20:58:04.239827+00:00",
+  "status": "PASS_RECONCILED_EXPORTED_ENGINE_RECORDS",
+  "evidenceSource": "User-uploaded schedule, engine evidence and profile plus pasted native receiver report and explicit owner closed-conversation confirmation; not a direct authenticated hosted read",
+  "sources": [
+    {
+      "name": "B_retry_evidence",
+      "uploadedFileName": "export_Bretry_evidence.json",
+      "bytes": 2452,
+      "sha256": "13dd75ef5bbcd541bf21a57edac2078102665f81b5c8376aa5176e758047f9b7",
+      "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/B_retry_evidence.json"
+    },
+    {
+      "name": "B_retry_profile",
+      "uploadedFileName": "export_B_profile.json",
+      "bytes": 2061,
+      "sha256": "0a76d8c32da7e5a53685175685e97afb4e132a8fa93d67cbd3f8552f3c1afbaf",
+      "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/B_retry_profile.json"
+    },
+    {
+      "name": "B_retry_schedule",
+      "uploadedFileName": "export_Bretry_schedule.json",
+      "bytes": 400,
+      "sha256": "88760444d8ac28927181709e9b97e7df25172a72fc050f08da62242421d8332b",
+      "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/B_retry_schedule.json"
+    }
+  ],
+  "tenant": "B",
+  "eventId": "p05_1012162412_B_onboarding_server_retry_01",
+  "scheduleId": "test_schedule_65dc440aa992aa6ceebe48ba8c5aa938",
+  "workId": "work_b088a49c406ea19116f7d319f5927eda",
+  "metrics": {
+    "scheduleToWorkReceiptMs": 17,
+    "scheduleToFiredMarkerMs": 24,
+    "receivedToNotificationAcceptedMs": 665,
+    "notificationAcceptedToClaimMs": 89158,
+    "claimToCompletionMs": 4526,
+    "engineLatencyMs": 94349,
+    "storedDeadlineMarginMs": 25652,
+    "storedReceiptToDeadlineMs": 120001
+  },
+  "checks": {
+    "deterministicTenantBoundScheduleAndWorkIds": "PASS",
+    "scheduleToWorkLinkage": "PASS",
+    "agentDecisionBeforeStoredDeadline": "PASS",
+    "unchanged120SecondPolicy": "Profile deadlineMs=120000; stored receipt/deadline timestamps span 120001ms. Preserve this observed 1ms sampling difference rather than normalize raw evidence.",
+    "singleSimulatedReceipt": "PASS",
+    "correlatedProbeAndBackgroundEvidence": "PASS",
+    "profileSchema": "PASS via AgentProfileView.parse",
+    "evidenceExpiry24Hours": "PASS"
+  },
+  "accountReportedNativeExecution": {
+    "tools": [
+      "read_delegated_work",
+      "claim_delegated_work",
+      "propose_cleaning_time",
+      "read_delegated_work"
+    ],
+    "receiverStart": "2026-10-12T16:30:31-04:00",
+    "receiverEnd": "2026-10-12T16:30:52-04:00",
+    "timestampPrecision": "Narrative seconds; no native per-call trace IDs available",
+    "approvalOrBlock": false,
+    "ownerExplicitlyConfirmedConversationClosed": true,
+    "verifyWorkflowHttpStatus": 200,
+    "restoredConnectorTenant": "A",
+    "restoredAProfileUnchanged": true,
+    "temporaryConnectorToolListFailure": "Recovered before scheduling; no inference about ongoing capability from the transient app error"
+  },
+  "trialAccounting": {
+    "AOnboardingCreated": 1,
+    "AOnboardingPassed": 1,
+    "BOnboardingCreated": 2,
+    "BOnboardingPassed": 1,
+    "BInitialOnboardingFailed": 1,
+    "earlierCancelledBeforeFixture": "Not counted as created engine work",
+    "ordinaryTrialsCreated": 0
+  },
+  "limitations": [
+    "Native execution traces and connector restoration are account-reported; engine/profile records are exported by the account",
+    "Existing reciprocal scope checks remain reported; raw denied responses missing",
+    "One successful onboarding per tenant is not a measured ordinary-run latency distribution",
+    "ProductionReady remains false; generation, scheduled_runs and discovery metadata remain unverified",
+    "Synthetic receipt completion does not establish phone delivery",
+    "Raw timing decomposition does not independently identify the cause of the pre-claim delay"
+  ]
+}

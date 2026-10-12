@@ -1,0 +1,14 @@
+{
+  "mode": "synthetic",
+  "schedule": {
+    "id": "test_schedule_65dc440aa992aa6ceebe48ba8c5aa938",
+    "eventId": "p05_1012162412_B_onboarding_server_retry_01",
+    "kind": "onboarding",
+    "delaySeconds": 300,
+    "runAt": "2026-10-12T20:29:12.980Z",
+    "status": "fired",
+    "workId": "work_b088a49c406ea19116f7d319f5927eda",
+    "firedAt": "2026-10-12T20:29:13.004Z",
+    "error": null
+  }
+}

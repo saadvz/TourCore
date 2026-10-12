@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "evidenceSource": "User-uploaded engine exports plus pasted account execution narrative; exports reconciled locally, not direct authenticated hosted reads",
   "sources": [
     {
@@ -22,6 +22,27 @@
       "bytes": 2071,
       "sha256": "3cf869d97e93180f50e8a7b5590ed4aced994516672299a69ce778f493216715",
       "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/A_verify_saved.json"
+    },
+    {
+      "name": "B_retry_evidence",
+      "uploadedFileName": "export_Bretry_evidence.json",
+      "bytes": 2452,
+      "sha256": "13dd75ef5bbcd541bf21a57edac2078102665f81b5c8376aa5176e758047f9b7",
+      "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/B_retry_evidence.json"
+    },
+    {
+      "name": "B_retry_profile",
+      "uploadedFileName": "export_B_profile.json",
+      "bytes": 2061,
+      "sha256": "0a76d8c32da7e5a53685175685e97afb4e132a8fa93d67cbd3f8552f3c1afbaf",
+      "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/B_retry_profile.json"
+    },
+    {
+      "name": "B_retry_schedule",
+      "uploadedFileName": "export_Bretry_schedule.json",
+      "bytes": 400,
+      "sha256": "88760444d8ac28927181709e9b97e7df25172a72fc050f08da62242421d8332b",
+      "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/B_retry_schedule.json"
     }
   ],
   "checks": {
@@ -35,7 +56,12 @@
     "BSimulatedReceipts": 1,
     "scopeAtoB": "PASS_REPORTED_WITH_OWN_TENANT_CONTROLS; raw scope-response logs not provided",
     "scopeBtoA": "PASS_REPORTED_WITH_OWN_TENANT_CONTROLS; cached-A attempt excluded",
-    "realSmsOrDoors": "No real operation evidenced; both exports show synthetic provider and operatesDoors=false"
+    "realSmsOrDoors": "No real operation evidenced; both exports show synthetic provider and operatesDoors=false",
+    "BOnboardingRetry": "PASS_RECONCILED_EXPORTED_ENGINE_RECORDS",
+    "BOnboardingSummary": "Two created onboarding trials, one failed late-setup trial and one successful explicit server-clock retry",
+    "BRetryEngineLatencyMs": 94349,
+    "BRetryStoredDeadlineMarginMs": 25652,
+    "BRetrySimulatedReceipts": 1
   },
   "accountReportedOperationalFaults": [
     "Initial B connector switch retained tenant A until old session was stopped; initial successful read/CLOSED claim excluded from isolation results",
@@ -44,7 +70,6 @@
     "Grok attributes delays to its computer stalling while conversation closed; server export verifies late notification, not the client-side cause"
   ],
   "remaining": [
-    "Successful B native onboarding with owner-confirmed closed conversation",
     "Ordinary-run samples for A/B; no latency P95 derived from one onboarding",
     "Live revocation and profile/grant/lease freshness",
     "Live replay/retry, provider ingress, OAuth, property/access storage checks and restart evidence as available"
@@ -53,5 +78,6 @@
     "Scope-check B fixture JSON and exact denied responses were not supplied",
     "Native per-call trace IDs unavailable in account",
     "Profile grants field was redacted by exporter; do not treat its string as an original valid profile schema"
-  ]
+  ],
+  "retryReconciliation": "docs/evidence/cleaner-phase05-grok-B-retry-2026-10-12.json"
 }

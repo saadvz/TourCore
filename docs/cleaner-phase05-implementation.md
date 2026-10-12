@@ -183,8 +183,12 @@ are in `docs/evidence/cleaner-phase05-server-clock-validation-2026-10-12.json`.
 This supplements the earlier acceptance runs and does not claim the full
 repository suite is green. The existing volume, environment settings and
 five-field receiver envelope are retained. No real SMS/access adapter or new
-inference stack is introduced. Deployment feature confirmation and a successful
-B retry are still pending; use the single-retry section in the live Grok packet.
+inference stack is introduced. The subsequent uploaded server-clock B retry
+schedule, engine and profile records reconcile to 94,349ms agent completion
+with one simulated receipt and 25,652ms remaining before its stored deadline.
+Both tenants therefore have one successful exported onboarding observation;
+the earlier failed B trial remains recorded. Ordinary-run, fault and recovery
+live checks remain pending; use the ordinary A/B section in the live packet.
 
 ## Raw resource observations
 

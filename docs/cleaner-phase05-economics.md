@@ -1,6 +1,7 @@
 # Phase 0.5 economics validation
 
-Status: cost model implemented and tested; live Grok validation pending.
+Status: cost model implemented and tested; A/B live onboarding reconciled from
+exports, ordinary/recovery live validation pending.
 Measured locally on 12 October 2026. The user authorized 20/100/300 requests per
 landlord per month and fleets of 2/10/100 landlords. The original cost deferral
 is superseded for this validation; no final hosting choice has been made.
@@ -190,8 +191,8 @@ After the user reported the same service updated, a fresh health check at
 14:08:09 EDT (18:08:09 UTC) returned HTTP 200, `phase05-indexed-v1`, two tenants
 and `ready=true`. Unauthenticated MCP initialization, `/test/runtime` and an
 owner work read returned HTTP 401. Runtime readiness and these unauthenticated
-denials pass; authenticated synthetic-mode verification, reciprocal tenant
-checks and native Grok completion remain pending. Sanitized observations are retained in
+denials passed at that checkpoint; later authenticated exports and account
+execution results are recorded below. Sanitized observations are retained in
 `docs/evidence/cleaner-phase05-live-status-2026-10-12.json`.
 
 No deployment occurred during cost measurements. The later same-service update
@@ -236,7 +237,7 @@ cached A connection; that attempt's successful read and CLOSED claim are
 excluded. The later correctly identified B session supplies the reported
 reverse denials. A's profile reportedly remained unchanged.
 
-B onboarding is **FAIL**: its exported notification was queued 46,176ms after
+B's initial onboarding is **FAIL**: its exported notification was queued 46,176ms after
 the original deadline, cancelled with zero attempts, and has no accepted or
 attempted timestamp. The engine completed one deterministic simulated fallback,
 kept turn version 1 and set no confirmed start. Deadline protection therefore
@@ -253,9 +254,25 @@ it later and atomically prepares its probe, wakeup and fired marker. Existing
 engine source deduplication and absolute work deadlines remain authoritative.
 See the live packet's single B retry. This change passed 50 focused tests,
 typecheck, esbuild bundle and actual bundled-server startup/authenticated
-schedule-acceptance smoke locally. These are local checks, not a new live B
-success. Confirmation of `fixtureSchedulerVersion=server-clock-v1` on Railway
-and a successful closed-conversation B retry are pending.
+schedule-acceptance smoke locally. Those checks were local; the subsequent
+closed-conversation B retry now reconciles as **PASS** from uploaded schedule,
+engine and profile records. Event `p05_1012162412_B_onboarding_server_retry_01`
+produced work `work_b088a49c406ea19116f7d319f5927eda` and one simulated receipt.
+Its schedule created the work 17ms after runAt; the notification was accepted
+665ms after receipt. Engine completion took 94,349ms and preceded the stored
+deadline by 25,652ms. An additional 89,158ms elapsed from notification acceptance
+to claim, followed by 4,526ms from claim to completion. This describes the
+observed pre-claim delay without independently identifying its cause.
+
+The B profile's correlated background evidence matches the exact work and
+completion timestamp, owner-confirmed closed conversation and 94,349ms latency.
+Its mcp_tools/background_runs evidence expires 24 hours after observation;
+productionReady remains false and other capabilities/discovery remain unknown.
+Raw source hashes and decomposition are retained in
+`docs/evidence/cleaner-phase05-grok-B-retry-2026-10-12.json`. B accounting is two
+created onboarding trials, one success and one earlier late-setup failure. The
+earlier cancelled pre-fixture job remains a setup non-attempt, not another work.
+No failed work was deleted or substituted out of the results.
 
 Preserve the original fleet/resource observations. They predate this additional
 test-only schedule table and timer; do not relabel them as measurements of the
@@ -263,10 +280,14 @@ scheduler or EC2/Podman. Neither the shared-host budget nor the previous Railway
 calculator was changed by this harness repair. No paid inference or real
 provider operation was performed.
 
-One successful onboarding observation does not supply an ordinary-run P95.
+One successful onboarding observation per tenant does not supply an ordinary-run P95.
 Ordinary A/B trials, live revocation/freshness, replay/retry, provider ingress,
 OAuth/storage and restart checks remain to be collected. Costs are conditional
-tested models; live two-tenant
-Grok completion is **pending**, not inferred from HTTP acceptance, old reports,
-OpenRouter availability or local scripted clients. Phase 0.5 cannot be marked
-fully closed until those fresh account-side results are reconciled.
+tested models; the live two-tenant onboarding demonstration now passes against
+account-exported records, while full Phase 0.5 live validation remains **open**.
+The next packet queues ten ordinary server-clock fixtures per tenant using
+normal profile-gated dispatch. Report planned and created denominators,
+decision/completion deadline outcomes and failure counts separately from
+success-only latency statistics. Do not infer completion or phone delivery
+from HTTP acceptance. Phase 0.5 cannot be marked fully closed until the remaining
+fresh account-side results are reconciled.

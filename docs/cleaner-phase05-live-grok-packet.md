@@ -1,11 +1,11 @@
 # Phase 0.5 live Grok packet — same Cleaner Core URL
 
-Status: A onboarding reconciles with uploaded engine/profile exports. Reciprocal
-scope checks are reported successful with own-tenant controls; their raw denied
-responses are not supplied. B onboarding failed because its wakeup was queued
-after the deadline, with zero delivery attempts. Its deadline fallback passed.
-The server-clock fixture scheduler is locally tested; confirm its feature
-version on the same Railway service before retrying B.
+Status: A onboarding and the explicit server-clock B retry reconcile with
+uploaded engine/profile exports. B has two created onboarding trials and one
+pass; its earlier late-setup failure remains recorded. Reciprocal scope checks
+are reported successful with own-tenant controls; their raw denied responses
+are not supplied. The server schedule/work linkage is verified in B's exports.
+Ordinary-run and recovery/fault trials remain pending.
 The user reported the existing service updated on 12 October 2026. A health
 check at 14:08:09 EDT returned `phase05-indexed-v1`, two tenants and `ready=true`.
 Unauthenticated MCP initialization and owner reads returned HTTP 401. These
@@ -135,6 +135,16 @@ is excluded; only the subsequent checks authenticated as B are counted.
 
 ### Next bounded stage: server-clock B onboarding retry
 
+This retry is now completed. Do not repeat it: event
+`p05_1012162412_B_onboarding_server_retry_01`, schedule
+`test_schedule_65dc440aa992aa6ceebe48ba8c5aa938`, work
+`work_b088a49c406ea19116f7d319f5927eda` reconcile to a 94,349ms agent completion,
+25,652ms before the stored deadline, with one simulated receipt and an
+owner-confirmed closed-conversation workflow. See
+`docs/evidence/cleaner-phase05-grok-B-retry-2026-10-12.json` for raw source hashes,
+timing decomposition and limitations. The following retry instructions are
+retained as a reference; proceed to ordinary A/B trials below.
+
 The new scheduler exists only in `CLEANER_TEST_RUNTIME=phase05`, uses the same
 SQLite volume and constructs only simulated provider receipts. Keep the same
 Railway branch, variables, domain and receiver. After the tested branch is
@@ -216,6 +226,89 @@ commit together; source creation uses its existing deduplication transaction.
 An unexpected scheduler failure sets `fixtureSchedulerHealthy=false` and
 rejects new jobs. Queue acceptance and schedule firing never establish agent
 completion. This test scheduler does not verify Grok's native scheduled_runs.
+
+### Next bounded stage: ordinary A then B trials
+
+Copy only the following quoted block into the same Grok account. There are two
+separate closed-conversation windows, ten ordinary fixtures per tenant, and no
+repeat onboarding. Both profiles now have verified mcp_tools/background_runs
+for this synthetic workflow; productionReady remains false. Queue each stage
+while its conversation is open and collect after returning. All per-work timing
+comes from exported engine records, not HTTP acceptance or receiver summaries.
+
+> Run only the ordinary A/B stages, at most ten planned fixtures per tenant, on
+> the same Cleaner Core URL with simulated providers. Preserve the current
+> receiver, real-provider settings and unrelated routines/connectors. Recheck
+> healthy two-tenant synthetic runtime, `realSmsEnabled=false`, server-clock-v1
+> and a healthy scheduler. No SMS, doors, calendar edits, restarts or revocation.
+>
+> Start with A. Mint a fresh A grant covering the last fixture's deadline. Stop
+> the currently running Cleaner Core test connection before reconnecting the
+> same connector and URL, then require native read_agent_profile to identify A
+> with fresh verified mcp_tools/background_runs and autonomous cleaner-reschedule
+> readiness. Do not change unknown capabilities or overwrite existing evidence.
+>
+> Choose one new alphanumeric/underscore/hyphen SESSION identifier and save the
+> exact list `p05_SESSION_shared_01` through `_10`. While the conversation is
+> open, owner POST `/test/schedules` once per eventId with kind `ordinary` and
+> delays 300, 360, 420, 480, 540, 600, 660, 720, 780 and 840 seconds respectively.
+> Use only eventId, kind and delaySeconds; owner credentials determine authority.
+> These are normal capability-gated fixtures: no manual probe, notification,
+> claim or proposal and no computer-scheduled jobs. The existing receiver must
+> perform each native read/claim/propose under its connected tenant grant.
+>
+> Record each POST's actual time/status, payload, schedule ID and server runAt.
+> HTTP 202 only means schedule acceptance. If a response is uncertain, retry
+> that identical eventId/payload at most once; never invent another ID or fill a
+> missing trial with a replacement. Keep all planned IDs in the final table.
+> Stop queuing on an unhealthy state, rate/quota block, wrong connector scope or
+> any indication of real messaging. Preserve existing results and cancel only
+> owned, still-scheduled jobs when stopping; do not delete fired work.
+>
+> Require all acknowledged jobs scheduled and at least one minute remaining
+> before the earliest runAt before asking me to close the conversation. Otherwise
+> report a setup timing failure and preserve its accounting. Tell me the exact
+> Eastern-time window ending three minutes after the latest returned runAt.
+> After I return, ask explicitly whether the conversation stayed closed through
+> that entire execution window. Do not collect with computer-scheduled jobs.
+>
+> Collect owner GET `/test/schedules/ID` for every planned fixture and sanitized
+> `/test/evidence/WORK_ID` for every created work. Capture non-200 responses,
+> failed/expired/cancelled schedules, null/missing work IDs, fallback/review and
+> any native approval/block/errors without manufacturing observations. No manual
+> rescue, fresh event IDs or verify-workflow calls to rewrite profile evidence.
+>
+> Return A's results before starting B. Do not start B on an unhealthy runtime,
+> quota block, unresolved scope mismatch or three consecutive A agent failures.
+> Preserve already-created evidence and report the blocking condition. Otherwise
+> mint a fresh B grant, stop the A test connection before reconnecting, confirm
+> native profile tenant B and fresh readiness, then repeat with B owner HTTP and
+> EXACTLY A's saved ten eventIds/delays. Ask for a second closed-conversation
+> window and collect B after I return and explicitly confirm it stayed closed.
+>
+> Corresponding A/B work IDs must differ despite identical eventIds; turn IDs
+> may match within their tenant namespaces. Check each notification tenant and
+> simulated reply recipient against its owner. Return sanitized raw schedule
+> and engine JSON, a table of all planned trials and any receiver traces/errors
+> available. Keep credentials, grant IDs, nonces, lease tokens, signatures and
+> headers private. Per-call trace IDs that the app cannot expose remain missing.
+>
+> Per tenant, report planned/accepted/fired/created work counts; completed agent
+> decisions and completed agent replies before stored deadlines; fallback,
+> review, missed deadlines, unresolved requests and duplicate receipt counts.
+> For a timed agent decision followed by late provider completion, report both
+> timings and classify the late completion separately. One simulated receipt
+> does not establish phone delivery. Compute engine latency from receivedAt to
+> provider_accepted_and_completed, validated-decision latency separately, and
+> each stored deadline margin. Show median/min/max and nearest-rank P95 for the
+> successful ordinary agent-completion subset, with its n and all failure
+> counts alongside it. P95 uses sorted value at ceil(0.95*n); n=0 is unavailable.
+> Never blend onboarding, forced faults or fallback completion into that subset.
+>
+> Stop after these two ordinary stages. Restore the same test connector to a
+> fresh A grant by stopping B first, confirm native tenant A and unchanged A/B
+> profiles, and leave the receiver enabled. Revocation, replay/retry, OAuth,
+> provider ingress/storage and restart checks are later stages, not this run.
 
 ### Original full packet (reference; skip already recorded stages)
 

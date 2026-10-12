@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "tenantId": "B",
+  "agentId": "grok_test_agent",
+  "adapterId": "grok",
+  "createdAt": "2026-10-12T20:30:40.020Z",
+  "updatedAt": "2026-10-12T20:43:47.915Z",
+  "capabilities": [
+    {
+      "capability": "mcp_tools",
+      "declared": "unknown",
+      "evidence": {
+        "status": "verified",
+        "method": "server_probe",
+        "evidenceId": "probe_67873e49995c451ba9590486e76d524c",
+        "scope": "authenticated_core_work_read",
+        "observedAt": "2026-10-12T20:30:40.020Z",
+        "expiresAt": "2026-10-13T20:30:40.020Z"
+      },
+      "status": "verified"
+    },
+    {
+      "capability": "generation_reasoning",
+      "declared": "unknown",
+      "status": "unknown"
+    },
+    {
+      "capability": "background_runs",
+      "declared": "unknown",
+      "evidence": {
+        "status": "verified",
+        "method": "engine_workflow",
+        "evidenceId": "work_b088a49c406ea19116f7d319f5927eda",
+        "scope": "cleaner_reschedule",
+        "observedAt": "2026-10-12T20:30:47.346Z",
+        "expiresAt": "2026-10-13T20:30:47.346Z",
+        "latencyMs": 94349,
+        "ownerConfirmedConversationClosed": true
+      },
+      "status": "verified"
+    },
+    {
+      "capability": "scheduled_runs",
+      "declared": "unknown",
+      "status": "unknown"
+    },
+    {
+      "capability": "native_integrations",
+      "declared": "unknown",
+      "status": "unknown"
+    },
+    {
+      "capability": "files_images",
+      "declared": "unknown",
+      "status": "unknown"
+    },
+    {
+      "capability": "reminders_notifications",
+      "declared": "unknown",
+      "status": "unknown"
+    }
+  ],
+  "nativeExtensions": [],
+  "grants": [],
+  "readiness": {
+    "executionMode": "autonomous",
+    "deadlineMs": 120000,
+    "fallback": "engine_owned",
+    "productionReady": false,
+    "autonomousScopes": [
+      "cleaner.reschedule_requested"
+    ],
+    "generation": "unverified",
+    "appToolDiscovery": "unknown",
+    "onboardingTransport": "unverified",
+    "missingForAutonomous": []
+  },
+  "extensions": []
+}
