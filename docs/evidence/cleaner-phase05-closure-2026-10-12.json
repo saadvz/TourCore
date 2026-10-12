@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-12T23:50:17.153270+00:00",
+  "phase": "Cleaner Core Phase 0.5",
+  "status": "COMPLETE_SCOPED_SYNTHETIC_TWO_TENANT_PROOF_WITH_KNOWN_LIMITS",
+  "productionReady": false,
+  "authority": "User implementation request, final model architecture decision and subsequently authorized cost/live validation; attachment roadmap treated as background",
+  "deliverables": {
+    "isolatedRuntime": "Indexed SQLite, tenant-bound authenticated grants, deterministic engine, outbox and per-tenant limits",
+    "agentContract": "Grok first optional client, agent-agnostic contract and engine-owned fallback; no new inference stack",
+    "isolationSuite": "Actual local HTTP/MCP/OAuth/owner/ingress/storage, injected-provider/clock/process-kill tests; hosted native/account exports",
+    "costModel": "Tested conditional 20/100/300 requests per landlord/month at 2/10/100 fleets, shared-runtime container/Podman Quadlet design and retained raw resource observations"
+  },
+  "localValidation": "51 relevant tests, typecheck and bundle passed at recorded source hashes; existing full-suite baseline failures not relabeled",
+  "ordinaryAccounting": {
+    "A": {
+      "planned": 10,
+      "onTimeAgentCompletions": 10
+    },
+    "B": {
+      "planned": 10,
+      "onTimeAgentCompletions": 10
+    },
+    "fallbackReviewDuplicates": 0,
+    "receipts": "Simulated, one each; no phone-delivery claim"
+  },
+  "onboardingAccounting": {
+    "AInitial": {
+      "created": 1,
+      "passed": 1
+    },
+    "BInitialAndRetry": {
+      "created": 2,
+      "passed": 1,
+      "failedLateSetup": 1
+    },
+    "ARestoration": {
+      "acceptedSchedules": 2,
+      "failedBeforeWorkCreation": 1,
+      "createdWorks": 1,
+      "agentCompletions": 1
+    }
+  },
+  "securityMatrix": "76 rows: 71 marked PASS, three native failures with inferred underlying status, one NOT_RUN browser UI, missing trace IDs",
+  "finalFaultRecoveryMatrix": {
+    "rows": 61,
+    "counts": {
+      "PASS": 56,
+      "MISSING": 2,
+      "NOT_RUN": 2,
+      "FAIL": 1
+    },
+    "note": "Overlaps earlier snapshots; not a new count of independent tests"
+  },
+  "restartRecovery": {
+    "status": "PASS_RECONCILED_EXPORTED_BASELINE_VALUES",
+    "restartControl": "Owner-confirmed once; hosting controls not independently inspected",
+    "workReplays": 5,
+    "A7A8Denial": "401 reported inside original validity; exported UNAUTHORIZED bodies lack numeric status/time wrappers; native bridge failure recorded separately",
+    "propertyAccess": "A/B scoped records unchanged",
+    "BProfile": "Full public exported profile unchanged"
+  },
+  "restorationRetry": {
+    "status": "PASS_RECONCILED_ENGINE_AND_OWNER_CONFIRMATION",
+    "schedule": {
+      "id": "test_schedule_d5534d93ed15356c2804d630d7542938",
+      "eventId": "p05_s10121857_restore_onboard_retry",
+      "kind": "onboarding",
+      "delaySeconds": 300,
+      "runAt": "2026-10-12T23:37:53.589Z",
+      "status": "fired",
+      "workId": "work_9f5dbc97def60de4fcfbc9cd7b4dd77e",
+      "firedAt": "2026-10-12T23:37:53.601Z",
+      "error": null
+    },
+    "workId": "work_9f5dbc97def60de4fcfbc9cd7b4dd77e",
+    "source": "agent",
+    "engineLatencyMs": 18641,
+    "validatedDecisionLatencyMs": 18525,
+    "storedDeadlineMarginMs": 101359,
+    "scheduleFireLagMs": 12,
+    "receipt": "simulated_7eaf15c9-504d-419e-b0e3-d467a30fd89c",
+    "notificationEpoch": 4,
+    "closedWindow": {
+      "source": "User answer in this thread after exports supplied",
+      "question": "Did the Grok conversation actually stay closed throughout the retry window, approximately 7:32:53\u20137:40:54 PM ET on October 12?",
+      "answer": "Yes, closed throughout that window",
+      "confirmed": true,
+      "windowStart": "2026-10-12T19:32:53-04:00",
+      "windowEnd": "2026-10-12T19:40:54-04:00",
+      "backendVerifyAt": "2026-10-12T23:38:18.374Z",
+      "note": "Backend verification was called during the window using the advance promise; retrospective owner confirmation was obtained here afterward."
+    },
+    "verification": "HTTP 200; fresh work-linked background evidence; A autonomous; productionReady false"
+  },
+  "failureRetention": {
+    "firstBOnboarding": "Retained failed late-setup engine trial",
+    "firstARestoration": "Retained UNAUTHORIZED/no-work failed schedule",
+    "reportedCause": "Accidental extra A grant revoke, consistent with agent-wide retirement; actual extra revoke call not exported",
+    "badMintRequests": "Two INVALID_INPUT calls and wrong-route 404 reads preserved"
+  },
+  "sourceAndScopeLimits": [
+    "Missing earlier original native/refresh/revoke logs, native trace IDs and global schedule listing remain missing",
+    "A tenantId-added checks and separate revoke-fixture pre-claim read remain NOT_RUN; local transport suite covers schema rejection",
+    "Backend verify-workflow ran before the closed window ended using an advance promise; genuine retrospective confirmation was obtained in this thread afterward",
+    "Original wire bytes, restart hosting controls and reported extra revoke call are not independently inspected",
+    "Profile grants lists describe native resource grants, not OAuth bearer validity",
+    "Reply is simulated provider acceptance, not a phone delivery; no carrier events or door operation",
+    "Restoration/fault/manual-action observations remain outside the twenty ordinary trials",
+    "Owner turn write has no separate audit entry; proof does not claim complete owner CRUD auditing",
+    "Browser OAuth UI not exercised; initial native/refresh/revoke original logs and global scheduled-job listing absent",
+    "Hosted provider-send faults and natural capability expiry not forced; actual local injected/clock/process-kill tests cover them",
+    "Conditional economics are not measured host invoices, customer demand or live Grok per-request spend"
+  ],
+  "localFixDeployment": "Empty-profile timestamp fix is tested/published on review branch and not deployed",
+  "rawResourceObservations": "Preserved unchanged; not rerun or relabeled as live/hosted measurements",
+  "remainingRequiredProofWork": [],
+  "laterWork": [
+    "Production hosting/deployment decision and review of local timestamp fix",
+    "Real provider integration/delivery guarantees and complete owner CRUD audit",
+    "Production agent credential lifecycle/UI, wider workload reliability and actual billed usage"
+  ],
+  "evidence": [
+    "docs/evidence/cleaner-phase05-recovery-final-reconciled-2026-10-12.json",
+    "docs/evidence/cleaner-phase05-recovery-provenance-2026-10-12.json",
+    "docs/evidence/cleaner-phase05-ordinary-security-reconciled-2026-10-12.json",
+    "docs/evidence/cleaner-phase05-fault-reconciled-2026-10-12.json",
+    "docs/evidence/cleaner-phase05-profile-validation-2026-10-12.json",
+    "eval/cleaner-phase05/results/fleet-resource-sample.json",
+    "eval/cleaner-phase05/results/cost-scenarios.json"
+  ],
+  "reproductionCommands": [
+    "node eval/cleaner-phase05/reconcile-live.mjs",
+    "node eval/cleaner-phase05/reconcile-fault.mjs",
+    "node eval/cleaner-phase05/reconcile-recovery.mjs"
+  ]
+}

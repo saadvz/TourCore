@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-12T23:42:36.814365+00:00",
+  "originalUploads": [
+    {
+      "fileName": "export_fault_packet.json",
+      "bytes": 175470,
+      "sha256": "c637e66a0e1198dfb08bb0a691675c21c05405b473b4dcc6b960ffe677d73177",
+      "publishedPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/Fault_packet_recovery_final.json",
+      "redactions": [
+        {
+          "path": "responses.r8_mint_A10.json.grantId",
+          "reason": "Private grant identifier; replacement applied once without changing response values elsewhere. Bearer values were already redacted by exporter."
+        }
+      ]
+    },
+    {
+      "fileName": "fault_packet_report.json",
+      "bytes": 26811,
+      "sha256": "5040d2364ee4cf530f566bd413c0c0659277a9659ea43f2959fce5d1f900dcde",
+      "publishedPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/Fault_packet_recovery_final_report.json",
+      "redactions": []
+    }
+  ],
+  "ownerClosedWindowConfirmation": {
+    "source": "User answer in this thread after exports supplied",
+    "question": "Did the Grok conversation actually stay closed throughout the retry window, approximately 7:32:53\u20137:40:54 PM ET on October 12?",
+    "answer": "Yes, closed throughout that window",
+    "confirmed": true,
+    "windowStart": "2026-10-12T19:32:53-04:00",
+    "windowEnd": "2026-10-12T19:40:54-04:00",
+    "backendVerifyAt": "2026-10-12T23:38:18.374Z",
+    "note": "Backend verification was called during the window using the advance promise; retrospective owner confirmation was obtained here afterward."
+  }
+}

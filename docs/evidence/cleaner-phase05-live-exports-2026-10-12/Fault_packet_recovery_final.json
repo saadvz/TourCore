@@ -1,0 +1,5349 @@
+{
+  "session": "s10121857",
+  "native": [
+    {
+      "step": "1.1",
+      "identity": "B(grantB5)",
+      "tool": "read_agent_profile",
+      "args": {},
+      "response": {
+        "tenantId": "B",
+        "agentId": "grok_test_agent",
+        "updatedAt": "2026-10-12T20:43:47.915Z",
+        "executionMode": "autonomous",
+        "mcp_tools": "verified(probe_67873e49995c451ba9590486e76d524c, exp 2026-10-13T20:30:40.020Z)",
+        "background_runs": "verified(work_b088a49c406ea19116f7d319f5927eda, exp 2026-10-13T20:30:47.346Z)",
+        "grants": []
+      },
+      "note": "RestartMcpServers unavailable in executor ('MCP server \"cursor\" is not available here'); pkill caused stdio respawn with new token"
+    },
+    {
+      "step": "1.1",
+      "identity": "B",
+      "tool": "read_delegated_work",
+      "args": {
+        "id": "work_2d48b19802916c30a7f411a281386f75"
+      },
+      "response": {
+        "id": "work_2d48b19802916c30a7f411a281386f75",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T22:54:43.992Z",
+        "receivedAt": "2026-10-12T21:54:43.999Z",
+        "deadlineAt": "2026-10-12T21:56:43.999Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_c772208bd9263e2f23a7bb54b52ff481",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T21:54:43.992Z",
+          "windowEnd": "2026-10-14T03:54:43.992Z",
+          "nextArrival": "2026-10-14T04:54:43.992Z",
+          "minimumMinutes": 90,
+          "confirmedStart": "2026-10-13T22:54:43.992Z"
+        },
+        "decisionSource": "agent",
+        "deliveryStatus": "sent"
+      }
+    },
+    {
+      "step": "1.1",
+      "identity": "B",
+      "tool": "list_delegated_work",
+      "args": {},
+      "response": []
+    },
+    {
+      "step": "1.2",
+      "identity": "B",
+      "tool": "propose_cleaning_time",
+      "args": {
+        "id": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+        "leaseToken": "dummy_lease_for_scope",
+        "actionKey": "test_scope_foreign_A",
+        "expectedTurnVersion": 2,
+        "start": "2026-10-13T22:14:17.574Z"
+      },
+      "response": {
+        "code": "NOT_FOUND",
+        "message": "No owned work."
+      }
+    },
+    {
+      "step": "1.3",
+      "identity": "B",
+      "tool": "read_delegated_work",
+      "args": {
+        "id": "work_2d48b19802916c30a7f411a281386f75",
+        "tenantId": "A"
+      },
+      "response_text": "MCP error -32602: Input validation error: Invalid arguments for tool read_delegated_work: Unrecognized key: \"tenantId\""
+    },
+    {
+      "step": "1.3",
+      "identity": "B",
+      "tool": "claim_delegated_work",
+      "args": {
+        "id": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+        "tenantId": "A"
+      },
+      "response_text": "MCP error -32602: Input validation error: Invalid arguments for tool claim_delegated_work: Unrecognized key: \"tenantId\""
+    },
+    {
+      "step": "1.3",
+      "identity": "B",
+      "tool": "propose_cleaning_time",
+      "args": {
+        "id": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+        "leaseToken": "dummy_lease_for_scope",
+        "actionKey": "test_scope_foreign_A_tid",
+        "expectedTurnVersion": 2,
+        "start": "2026-10-13T22:14:17.574Z",
+        "tenantId": "A"
+      },
+      "response_text": "MCP error -32602: Input validation error: Invalid arguments for tool propose_cleaning_time: Unrecognized key: \"tenantId\""
+    },
+    {
+      "step": "1.4",
+      "identity": "A(grantA7)",
+      "tool": "read_agent_profile",
+      "args": {},
+      "response": {
+        "tenantId": "A",
+        "agentId": "grok_test_agent",
+        "updatedAt": "2026-10-12T18:26:21.432Z",
+        "executionMode": "autonomous",
+        "mcp_tools": "verified(probe_4a561936c8d844e7b18da795c2b29c25, exp 2026-10-13T18:20:33.976Z)",
+        "background_runs": "verified(work_602f066d39fa839b6b61f2ff98bf8e9f, exp 2026-10-13T18:20:43.017Z)",
+        "grants": [],
+        "missingForAutonomous": []
+      }
+    },
+    {
+      "step": "1.4",
+      "identity": "A",
+      "tool": "read_delegated_work",
+      "args": {
+        "id": "work_81f25a6ec1109b0a08d3b2e4bd85d126"
+      },
+      "response": {
+        "id": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+        "requestedStart": "2026-10-13T22:14:17.574Z",
+        "receivedAt": "2026-10-12T21:14:17.594Z",
+        "deadlineAt": "2026-10-12T21:16:17.594Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_c772208bd9263e2f23a7bb54b52ff481",
+          "version": 2,
+          "confirmedStart": "2026-10-13T22:14:17.574Z"
+        },
+        "decisionSource": "agent",
+        "deliveryStatus": "sent"
+      }
+    },
+    {
+      "step": "1.4",
+      "identity": "A",
+      "tool": "list_delegated_work",
+      "args": {},
+      "response": []
+    },
+    {
+      "step": "1.4",
+      "identity": "A",
+      "tool": "propose_cleaning_time",
+      "args": {
+        "id": "work_2d48b19802916c30a7f411a281386f75",
+        "leaseToken": "dummy_lease_for_scope",
+        "actionKey": "test_scope_foreign_B",
+        "expectedTurnVersion": 2,
+        "start": "2026-10-13T22:54:43.992Z"
+      },
+      "response": {
+        "code": "NOT_FOUND",
+        "message": "No owned work."
+      }
+    },
+    {
+      "step": "2.3",
+      "identity": "A(grantA7 revoked)",
+      "tool": "read_agent_profile",
+      "args": {},
+      "response_text": "Error: Box MCP execution failed for \"user-Cleaner Core-read_agent_profile\": MCP error -32001: mcp-remote: Dynamic Client Registration rejected (HTTP 404): Cannot POST /register",
+      "note": "bridge error; the HTTP 404 refers to mcp-remote's /register fallback, not the /mcp auth status"
+    },
+    {
+      "step": "2.3",
+      "identity": "A(grantA7 revoked)",
+      "tool": "read_delegated_work",
+      "args": {
+        "id": "work_81f25a6ec1109b0a08d3b2e4bd85d126"
+      },
+      "response_text": "Error: Box MCP execution failed for \"user-Cleaner Core-read_delegated_work\": MCP error -32001: mcp-remote: Dynamic Client Registration rejected (HTTP 404): Cannot POST /register"
+    },
+    {
+      "step": "2.7",
+      "identity": "A(grantA8)",
+      "tool": "read_agent_profile",
+      "response_file": "profile_A_cleared.json"
+    },
+    {
+      "step": "3.4",
+      "identity": "A(grantA8 revoked)",
+      "tool": "propose_cleaning_time",
+      "args": "[private_revoke_proposal.json: id work_d84837d5cd476027d35197853c68aa69, leaseToken REDACTED, actionKey grok_work_d84837d5cd476027d35197853c68aa69, v1, start 2026-10-13T23:59:00.189Z]",
+      "response_text": "Error: Box MCP execution failed for \"user-Cleaner Core-propose_cleaning_time\": MCP error -32001: mcp-remote: Dynamic Client Registration rejected (HTTP 404): Cannot POST /register"
+    },
+    {
+      "step": "3.2",
+      "identity": "A(grantA8)",
+      "tool": "claim_delegated_work",
+      "args": {
+        "id": "work_d84837d5cd476027d35197853c68aa69"
+      },
+      "response": {
+        "status": "leased",
+        "turn": {
+          "id": "turn_a6b430f9e5e433b0bee1516ab4d7bb44",
+          "version": 1
+        },
+        "leaseToken": "[redacted]",
+        "leaseExpiresAt": "2026-10-12T23:00:02.840Z",
+        "deadlineAt": "2026-10-12T23:01:00.196Z",
+        "receivedAt": "2026-10-12T22:59:00.196Z"
+      },
+      "note": "claim issued directly (no separate native read before claim); claim response includes full work"
+    },
+    {
+      "step": "3.6",
+      "identity": "A(grantA9)",
+      "tool": "propose_cleaning_time",
+      "args": "[old revoke-fixture lease, REDACTED]",
+      "response": {
+        "code": "LEASE_INVALID",
+        "message": "Claim current work."
+      }
+    },
+    {
+      "step": "3.6",
+      "identity": "A(grantA9)",
+      "tool": "read_agent_profile",
+      "response": {
+        "tenantId": "A",
+        "agentId": "grok_test_agent",
+        "createdAt": "2026-10-12T22:59:22.419Z",
+        "executionMode": "unavailable",
+        "capabilities": "all unknown",
+        "missingForAutonomous": [
+          "verified_mcp_tools",
+          "verified_background_runs"
+        ]
+      }
+    },
+    {
+      "step": "4.1",
+      "identity": "A(grantA9)",
+      "tool": "claim_delegated_work",
+      "args": {
+        "id": "work_21a87566495afb5c4d62e2282baba8f1"
+      },
+      "response": {
+        "status": "leased",
+        "turn": {
+          "id": "turn_cd6e172988a002465a6e7411c5ba2970",
+          "version": 1
+        },
+        "leaseToken": "[redacted]",
+        "leaseExpiresAt": "2026-10-12T23:00:28.657Z",
+        "deadlineAt": "2026-10-12T23:01:25.997Z"
+      }
+    },
+    {
+      "step": "4.3",
+      "identity": "A(grantA9)",
+      "tool": "claim_delegated_work",
+      "args": {
+        "id": "work_21a87566495afb5c4d62e2282baba8f1"
+      },
+      "response": {
+        "status": "leased",
+        "turn": {
+          "version": 1
+        },
+        "leaseToken": "[redacted; differs from first lease]",
+        "leaseExpiresAt": "2026-10-12T23:01:25.997Z",
+        "deadlineAt": "2026-10-12T23:01:25.997Z"
+      },
+      "note": "server time ~23:00:31Z, before deadline 23:01:25.997Z"
+    },
+    {
+      "step": "4.3",
+      "identity": "A(grantA9)",
+      "tool": "propose_cleaning_time",
+      "args": "[first expired lease, REDACTED; v1; start 2026-10-13T23:59:25.992Z]",
+      "response": {
+        "code": "LEASE_INVALID",
+        "message": "Claim current work."
+      }
+    },
+    {
+      "step": "4.5",
+      "identity": "A(grantA9)",
+      "tool": "propose_cleaning_time",
+      "args": "[fresh lease REDACTED; expectedTurnVersion 1 after owner v2; start 2026-10-13T23:59:25.992Z]",
+      "response": {
+        "code": "VERSION_CONFLICT",
+        "message": "Turn changed."
+      }
+    },
+    {
+      "step": "6.1",
+      "identity": "A(grantA9)",
+      "tool": "read_delegated_work",
+      "args": {
+        "id": "work_1d061f44b3ec4877c50fea4391334cc6"
+      },
+      "response": {
+        "status": "pending",
+        "turn": {
+          "id": "turn_632ae7ed081cf0da86ae9956464a2761",
+          "version": 1
+        },
+        "requestedStart": "2026-10-14T00:01:45.745Z",
+        "deadlineAt": "2026-10-12T23:03:45.749Z"
+      }
+    },
+    {
+      "step": "6.1",
+      "identity": "A(grantA9)",
+      "tool": "claim_delegated_work",
+      "args": {
+        "id": "work_1d061f44b3ec4877c50fea4391334cc6"
+      },
+      "response": {
+        "status": "leased",
+        "leaseToken": "[redacted]",
+        "leaseExpiresAt": "2026-10-12T23:02:48.686Z"
+      }
+    },
+    {
+      "step": "6.1",
+      "identity": "A(grantA9)",
+      "tool": "propose_cleaning_time",
+      "args": {
+        "id": "work_1d061f44b3ec4877c50fea4391334cc6",
+        "leaseToken": "[redacted]",
+        "actionKey": "grok_action_s10121857_01",
+        "expectedTurnVersion": 1,
+        "start": "2026-10-14T00:01:45.745Z"
+      },
+      "response": {
+        "accepted": true,
+        "completed": false,
+        "deliveryStatus": "pending"
+      }
+    },
+    {
+      "step": "6.2",
+      "identity": "A(grantA9)",
+      "tool": "propose_cleaning_time",
+      "args": "identical to 6.1",
+      "response": {
+        "accepted": true,
+        "completed": true,
+        "deliveryStatus": "sent"
+      },
+      "label": "replay1"
+    },
+    {
+      "step": "6.2",
+      "identity": "A(grantA9)",
+      "tool": "read_delegated_work",
+      "args": {
+        "id": "work_1d061f44b3ec4877c50fea4391334cc6"
+      },
+      "response": {
+        "status": "completed",
+        "turn": {
+          "version": 2,
+          "confirmedStart": "2026-10-14T00:01:45.745Z"
+        },
+        "decisionSource": "agent",
+        "deliveryStatus": "sent"
+      }
+    },
+    {
+      "step": "6.2",
+      "identity": "A(grantA9)",
+      "tool": "propose_cleaning_time",
+      "args": "identical to 6.1",
+      "response": {
+        "accepted": true,
+        "completed": true,
+        "deliveryStatus": "sent"
+      },
+      "label": "replay2"
+    },
+    {
+      "step": "6.3",
+      "identity": "A(grantA9)",
+      "tool": "propose_cleaning_time",
+      "args": {
+        "id": "work_1d061f44b3ec4877c50fea4391334cc6",
+        "leaseToken": "[redacted]",
+        "actionKey": "grok_action_s10121857_01",
+        "expectedTurnVersion": 1,
+        "start": "2026-10-14T00:31:45.745Z"
+      },
+      "response": {
+        "code": "ACTION_CONFLICT",
+        "message": "Action key changed."
+      }
+    },
+    {
+      "step": "7",
+      "identity": "A(grantA9)",
+      "tool": "list_delegated_work",
+      "args": {},
+      "response": []
+    },
+    {
+      "name": "r8_native_A7_profile",
+      "identity": "revoked A7",
+      "tool": "read_agent_profile",
+      "result": "FAIL",
+      "literal": "MCP error -32000: Connection closed; bridge stderr: RegistrationRejectedError: Dynamic Client Registration rejected (HTTP 404) Cannot POST /register (after handleOAuthUnauthorized); no tools discovered",
+      "note": "bridge shows only /register 404; HTTP 401 not observed from bridge",
+      "at": "2026-10-12 19:25:48 EDT"
+    },
+    {
+      "name": "r8_native_A9_profile",
+      "result": "PASS",
+      "tenant": "A",
+      "agentId": "grok_test_agent",
+      "executionMode": "unavailable",
+      "caps": "all unknown",
+      "grants": []
+    },
+    {
+      "name": "r8_native_A9_trial01",
+      "result": "PASS",
+      "workId": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+      "status": "completed",
+      "turnVersion": 2,
+      "decisionSource": "agent"
+    },
+    {
+      "name": "r8_native_B6_profile",
+      "result": "PASS",
+      "tenant": "B",
+      "mode": "autonomous",
+      "caps": "mcp_tools+background_runs verified"
+    },
+    {
+      "name": "r8_native_B6_trial01",
+      "result": "PASS",
+      "workId": "work_2d48b19802916c30a7f411a281386f75",
+      "status": "completed"
+    },
+    {
+      "name": "r8_native_A11_profile",
+      "result": "PASS",
+      "tenant": "A",
+      "mode": "unavailable",
+      "caps": "all unknown"
+    }
+  ],
+  "http_log": [
+    {
+      "name": "s1_mint_B",
+      "owner": "B",
+      "method": "POST",
+      "path": "/owner/grants",
+      "http": 200,
+      "at": "2026-10-12 18:57:55.207 EDT"
+    },
+    {
+      "name": "s1_evA_after_foreign",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/evidence/work_81f25a6ec1109b0a08d3b2e4bd85d126",
+      "http": 200,
+      "at": "2026-10-12 18:58:21.534 EDT"
+    },
+    {
+      "name": "s1_mint_A",
+      "owner": "A",
+      "method": "POST",
+      "path": "/owner/grants",
+      "http": 200,
+      "at": "2026-10-12 18:58:21.847 EDT"
+    },
+    {
+      "name": "s1_evB_after_foreign",
+      "owner": "B",
+      "method": "GET",
+      "path": "/test/evidence/work_2d48b19802916c30a7f411a281386f75",
+      "http": 200,
+      "at": "2026-10-12 18:58:33.785 EDT"
+    },
+    {
+      "name": "s2_delete_A7",
+      "owner": "A",
+      "method": "DELETE",
+      "path": "/owner/grants/[PRIVATE_A7]",
+      "http": 200,
+      "at": "2026-10-12 18:58:34.074 EDT"
+    },
+    {
+      "name": "s2_profile_A_after_revoke",
+      "owner": "A",
+      "method": "GET",
+      "path": "/owner/agents/grok_test_agent/profile",
+      "http": 200,
+      "at": "2026-10-12 18:58:43.479 EDT"
+    },
+    {
+      "name": "s2_profile_B",
+      "owner": "B",
+      "method": "GET",
+      "path": "/owner/agents/grok_test_agent/profile",
+      "http": 200,
+      "at": "2026-10-12 18:58:43.754 EDT"
+    },
+    {
+      "name": "s2_verify_old_A",
+      "owner": "A",
+      "method": "POST",
+      "path": "/owner/agents/grok_test_agent/verify-workflow",
+      "http": 409,
+      "at": "2026-10-12 18:58:47.083 EDT"
+    },
+    {
+      "name": "s2_profile_A_after_verify",
+      "owner": "A",
+      "method": "GET",
+      "path": "/owner/agents/grok_test_agent/profile",
+      "http": 200,
+      "at": "2026-10-12 18:58:47.356 EDT"
+    },
+    {
+      "name": "s2_mint_A8",
+      "owner": "A",
+      "method": "POST",
+      "path": "/owner/grants",
+      "http": 200,
+      "at": "2026-10-12 18:58:50.077 EDT"
+    },
+    {
+      "name": "s3_event_revoke",
+      "owner": "A",
+      "method": "POST",
+      "path": "/test/events",
+      "http": 200,
+      "at": "2026-10-12 18:59:00.259 EDT"
+    },
+    {
+      "name": "s3_delete_A8",
+      "owner": "A",
+      "method": "DELETE",
+      "path": "/owner/grants/[PRIVATE_A8]",
+      "http": 200,
+      "at": "2026-10-12 18:59:06.723 EDT"
+    },
+    {
+      "name": "s3_ev_revoke_after",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/evidence/work_d84837d5cd476027d35197853c68aa69",
+      "http": 200,
+      "at": "2026-10-12 18:59:10.350 EDT"
+    },
+    {
+      "name": "s3_mint_A9",
+      "owner": "A",
+      "method": "POST",
+      "path": "/owner/grants",
+      "http": 200,
+      "at": "2026-10-12 18:59:15.282 EDT"
+    },
+    {
+      "name": "s3_ev_revoke_after_leaseinvalid",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/evidence/work_d84837d5cd476027d35197853c68aa69",
+      "http": 200,
+      "at": "2026-10-12 18:59:25.765 EDT"
+    },
+    {
+      "name": "s4_event_expiry",
+      "owner": "A",
+      "method": "POST",
+      "path": "/test/events",
+      "http": 200,
+      "at": "2026-10-12 18:59:26.058 EDT"
+    },
+    {
+      "name": "s4_owner_turn_v2",
+      "owner": "A",
+      "method": "POST",
+      "path": "/owner/turns",
+      "http": 200,
+      "at": "2026-10-12 19:00:37.085 EDT"
+    },
+    {
+      "name": "s4_ev_expiry_after_vc",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/evidence/work_21a87566495afb5c4d62e2282baba8f1",
+      "http": 200,
+      "at": "2026-10-12 19:00:43.825 EDT"
+    },
+    {
+      "name": "s5_ev_revoke_final",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/evidence/work_d84837d5cd476027d35197853c68aa69",
+      "http": 200,
+      "at": "2026-10-12 19:01:41.970 EDT"
+    },
+    {
+      "name": "s5_ev_expiry_final",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/evidence/work_21a87566495afb5c4d62e2282baba8f1",
+      "http": 200,
+      "at": "2026-10-12 19:01:42.252 EDT"
+    },
+    {
+      "name": "s5_profile_B",
+      "owner": "B",
+      "method": "GET",
+      "path": "/owner/agents/grok_test_agent/profile",
+      "http": 200,
+      "at": "2026-10-12 19:01:45.221 EDT"
+    },
+    {
+      "name": "s5_evB_trial01",
+      "owner": "B",
+      "method": "GET",
+      "path": "/test/evidence/work_2d48b19802916c30a7f411a281386f75",
+      "http": 200,
+      "at": "2026-10-12 19:01:45.485 EDT"
+    },
+    {
+      "name": "s6_event_action",
+      "owner": "A",
+      "method": "POST",
+      "path": "/test/events",
+      "http": 200,
+      "at": "2026-10-12 19:01:45.811 EDT"
+    },
+    {
+      "name": "s6_ev_action_after1",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/evidence/work_1d061f44b3ec4877c50fea4391334cc6",
+      "http": 200,
+      "at": "2026-10-12 19:01:57.429 EDT"
+    },
+    {
+      "name": "s6_ev_action_after_replays",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/evidence/work_1d061f44b3ec4877c50fea4391334cc6",
+      "http": 200,
+      "at": "2026-10-12 19:02:10.168 EDT"
+    },
+    {
+      "name": "s7_ev_revoke",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/evidence/work_d84837d5cd476027d35197853c68aa69",
+      "http": 200,
+      "at": "2026-10-12 19:02:10.483 EDT"
+    },
+    {
+      "name": "s7_ev_expiry",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/evidence/work_21a87566495afb5c4d62e2282baba8f1",
+      "http": 200,
+      "at": "2026-10-12 19:02:10.766 EDT"
+    },
+    {
+      "name": "s7_profile_A",
+      "owner": "A",
+      "method": "GET",
+      "path": "/owner/agents/grok_test_agent/profile",
+      "http": 200,
+      "at": "2026-10-12 19:02:11.068 EDT"
+    },
+    {
+      "name": "s7_profile_B",
+      "owner": "B",
+      "method": "GET",
+      "path": "/owner/agents/grok_test_agent/profile",
+      "http": 200,
+      "at": "2026-10-12 19:02:11.346 EDT"
+    },
+    {
+      "name": "s7pa_A_properties_prop_s3m1832_shared",
+      "owner": "A",
+      "method": "GET",
+      "path": "/owner/properties/prop_s3m1832_shared",
+      "http": 200,
+      "at": "2026-10-12 19:02:21.504 EDT"
+    },
+    {
+      "name": "s7pa_A_properties_prop_s3m1832_A",
+      "owner": "A",
+      "method": "GET",
+      "path": "/owner/properties/prop_s3m1832_A",
+      "http": 200,
+      "at": "2026-10-12 19:02:21.762 EDT"
+    },
+    {
+      "name": "s7pa_A_properties_prop_s3m1832_B",
+      "owner": "A",
+      "method": "GET",
+      "path": "/owner/properties/prop_s3m1832_B",
+      "http": 404,
+      "at": "2026-10-12 19:02:22.029 EDT"
+    },
+    {
+      "name": "s7pa_A_access_acc_s3m1832_shared",
+      "owner": "A",
+      "method": "GET",
+      "path": "/owner/access/acc_s3m1832_shared",
+      "http": 200,
+      "at": "2026-10-12 19:02:22.270 EDT"
+    },
+    {
+      "name": "s7pa_A_access_acc_s3m1832_A",
+      "owner": "A",
+      "method": "GET",
+      "path": "/owner/access/acc_s3m1832_A",
+      "http": 200,
+      "at": "2026-10-12 19:02:22.512 EDT"
+    },
+    {
+      "name": "s7pa_A_access_acc_s3m1832_B",
+      "owner": "A",
+      "method": "GET",
+      "path": "/owner/access/acc_s3m1832_B",
+      "http": 404,
+      "at": "2026-10-12 19:02:22.781 EDT"
+    },
+    {
+      "name": "s7pa_B_properties_prop_s3m1832_shared",
+      "owner": "B",
+      "method": "GET",
+      "path": "/owner/properties/prop_s3m1832_shared",
+      "http": 200,
+      "at": "2026-10-12 19:02:23.159 EDT"
+    },
+    {
+      "name": "s7pa_B_properties_prop_s3m1832_B",
+      "owner": "B",
+      "method": "GET",
+      "path": "/owner/properties/prop_s3m1832_B",
+      "http": 200,
+      "at": "2026-10-12 19:02:23.413 EDT"
+    },
+    {
+      "name": "s7pa_B_properties_prop_s3m1832_A",
+      "owner": "B",
+      "method": "GET",
+      "path": "/owner/properties/prop_s3m1832_A",
+      "http": 404,
+      "at": "2026-10-12 19:02:23.737 EDT"
+    },
+    {
+      "name": "s7pa_B_access_acc_s3m1832_shared",
+      "owner": "B",
+      "method": "GET",
+      "path": "/owner/access/acc_s3m1832_shared",
+      "http": 200,
+      "at": "2026-10-12 19:02:24.016 EDT"
+    },
+    {
+      "name": "s7pa_B_access_acc_s3m1832_B",
+      "owner": "B",
+      "method": "GET",
+      "path": "/owner/access/acc_s3m1832_B",
+      "http": 200,
+      "at": "2026-10-12 19:02:24.279 EDT"
+    },
+    {
+      "name": "s7pa_B_access_acc_s3m1832_A",
+      "owner": "B",
+      "method": "GET",
+      "path": "/owner/access/acc_s3m1832_A",
+      "http": 404,
+      "at": "2026-10-12 19:02:24.552 EDT"
+    },
+    {
+      "name": "r8_mint_B6",
+      "owner": "B",
+      "method": "POST",
+      "path": "/owner/grants",
+      "http": 200,
+      "at": "2026-10-12 19:26:04.997 EDT"
+    },
+    {
+      "name": "r8_mint_A_check",
+      "owner": "A",
+      "method": "POST",
+      "path": "/owner/grants",
+      "http": 400,
+      "at": "2026-10-12 19:26:08.491 EDT"
+    },
+    {
+      "name": "r8_profile_A_now",
+      "owner": "A",
+      "method": "GET",
+      "path": "/owner/agents/grok_test_agent/profile",
+      "http": 200,
+      "at": "2026-10-12 19:26:08.761 EDT"
+    },
+    {
+      "name": "r8_sched_restore_onboard",
+      "owner": "A",
+      "method": "POST",
+      "path": "/test/schedules",
+      "http": 202,
+      "at": "2026-10-12 19:26:16.054 EDT"
+    },
+    {
+      "name": "r8_mint_body_probe",
+      "owner": "A",
+      "method": "POST",
+      "path": "/owner/grants",
+      "http": 400,
+      "at": "2026-10-12 19:27:26.335 EDT"
+    },
+    {
+      "name": "r8_sched_poll",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/schedules/test_schedule_b657ea0c32814023630b801b00eb0a1f",
+      "http": 200,
+      "at": "2026-10-12 19:28:25.113 EDT"
+    },
+    {
+      "name": "r8_sched_poll",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/schedules/test_schedule_b657ea0c32814023630b801b00eb0a1f",
+      "http": 200,
+      "at": "2026-10-12 19:28:35.420 EDT"
+    },
+    {
+      "name": "r8_sched_poll",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/schedules/test_schedule_b657ea0c32814023630b801b00eb0a1f",
+      "http": 200,
+      "at": "2026-10-12 19:28:45.714 EDT"
+    },
+    {
+      "name": "r8_sched_poll",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/schedules/test_schedule_b657ea0c32814023630b801b00eb0a1f",
+      "http": 200,
+      "at": "2026-10-12 19:28:56.024 EDT"
+    },
+    {
+      "name": "r8_sched_poll",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/schedules/test_schedule_b657ea0c32814023630b801b00eb0a1f",
+      "http": 200,
+      "at": "2026-10-12 19:29:06.313 EDT"
+    },
+    {
+      "name": "r8_sched_poll",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/schedules/test_schedule_b657ea0c32814023630b801b00eb0a1f",
+      "http": 200,
+      "at": "2026-10-12 19:29:16.640 EDT"
+    },
+    {
+      "name": "r8_sched_poll",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/schedules/test_schedule_b657ea0c32814023630b801b00eb0a1f",
+      "http": 200,
+      "at": "2026-10-12 19:29:26.971 EDT"
+    },
+    {
+      "name": "r8_sched_poll",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/schedules/test_schedule_b657ea0c32814023630b801b00eb0a1f",
+      "http": 200,
+      "at": "2026-10-12 19:29:37.286 EDT"
+    },
+    {
+      "name": "r8_sched_poll",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/schedules/test_schedule_b657ea0c32814023630b801b00eb0a1f",
+      "http": 200,
+      "at": "2026-10-12 19:29:47.615 EDT"
+    },
+    {
+      "name": "r8_sched_poll",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/schedules/test_schedule_b657ea0c32814023630b801b00eb0a1f",
+      "http": 200,
+      "at": "2026-10-12 19:29:57.923 EDT"
+    },
+    {
+      "name": "r8_sched_poll",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/schedules/test_schedule_b657ea0c32814023630b801b00eb0a1f",
+      "http": 200,
+      "at": "2026-10-12 19:30:08.213 EDT"
+    },
+    {
+      "name": "r8_sched_poll",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/schedules/test_schedule_b657ea0c32814023630b801b00eb0a1f",
+      "http": 200,
+      "at": "2026-10-12 19:30:18.480 EDT"
+    },
+    {
+      "name": "r8_sched_poll",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/schedules/test_schedule_b657ea0c32814023630b801b00eb0a1f",
+      "http": 200,
+      "at": "2026-10-12 19:30:28.766 EDT"
+    },
+    {
+      "name": "r8_sched_poll",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/schedules/test_schedule_b657ea0c32814023630b801b00eb0a1f",
+      "http": 200,
+      "at": "2026-10-12 19:30:39.031 EDT"
+    },
+    {
+      "name": "r8_sched_poll",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/schedules/test_schedule_b657ea0c32814023630b801b00eb0a1f",
+      "http": 200,
+      "at": "2026-10-12 19:30:49.351 EDT"
+    },
+    {
+      "name": "r8_sched_poll",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/schedules/test_schedule_b657ea0c32814023630b801b00eb0a1f",
+      "http": 200,
+      "at": "2026-10-12 19:30:59.652 EDT"
+    },
+    {
+      "name": "r8_sched_poll",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/schedules/test_schedule_b657ea0c32814023630b801b00eb0a1f",
+      "http": 200,
+      "at": "2026-10-12 19:31:09.975 EDT"
+    },
+    {
+      "name": "r8_sched_poll",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/schedules/test_schedule_b657ea0c32814023630b801b00eb0a1f",
+      "http": 200,
+      "at": "2026-10-12 19:31:20.240 EDT"
+    },
+    {
+      "name": "r8_profile_A_postfail",
+      "owner": "A",
+      "method": "GET",
+      "path": "/owner/agents/grok_test_agent",
+      "http": 404,
+      "at": "2026-10-12 19:31:24.631 EDT"
+    },
+    {
+      "name": "r8_profile_B_postfail",
+      "owner": "B",
+      "method": "GET",
+      "path": "/owner/agents/grok_test_agent",
+      "http": 404,
+      "at": "2026-10-12 19:31:24.915 EDT"
+    },
+    {
+      "name": "r8_profile_A_postfail",
+      "owner": "A",
+      "method": "GET",
+      "path": "/owner/agents/grok_test_agent/profile",
+      "http": 200,
+      "at": "2026-10-12 19:31:33.009 EDT"
+    },
+    {
+      "name": "r8_profile_B_postfail",
+      "owner": "B",
+      "method": "GET",
+      "path": "/owner/agents/grok_test_agent/profile",
+      "http": 200,
+      "at": "2026-10-12 19:31:33.282 EDT"
+    },
+    {
+      "name": "r8_runtime_postfail",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/runtime",
+      "http": 200,
+      "at": "2026-10-12 19:31:33.579 EDT"
+    },
+    {
+      "name": "r8_mint_A11",
+      "owner": "A",
+      "method": "POST",
+      "path": "/owner/grants",
+      "http": 200,
+      "at": "2026-10-12 19:31:41.874 EDT"
+    },
+    {
+      "name": "r9_sched_retry",
+      "owner": "A",
+      "method": "POST",
+      "path": "/test/schedules",
+      "http": 202,
+      "at": "2026-10-12 19:32:53.652 EDT"
+    },
+    {
+      "name": "r9_sched_poll",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/schedules/test_schedule_d5534d93ed15356c2804d630d7542938",
+      "http": 200,
+      "at": "2026-10-12 19:37:56.458 EDT"
+    },
+    {
+      "name": "r9_ev_poll",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/evidence/work_9f5dbc97def60de4fcfbc9cd7b4dd77e",
+      "http": 200,
+      "at": "2026-10-12 19:38:00.084 EDT"
+    },
+    {
+      "name": "r9_ev_poll",
+      "owner": "A",
+      "method": "GET",
+      "path": "/test/evidence/work_9f5dbc97def60de4fcfbc9cd7b4dd77e",
+      "http": 200,
+      "at": "2026-10-12 19:38:15.369 EDT"
+    },
+    {
+      "name": "r9_verify",
+      "owner": "A",
+      "method": "POST",
+      "path": "/owner/agents/grok_test_agent/verify-workflow",
+      "http": 200,
+      "at": "2026-10-12 19:38:18.439 EDT"
+    },
+    {
+      "name": "r9_profile_A",
+      "owner": "A",
+      "method": "GET",
+      "path": "/owner/agents/grok_test_agent/profile",
+      "http": 200,
+      "at": "2026-10-12 19:38:18.734 EDT"
+    },
+    {
+      "name": "r9_profile_B",
+      "owner": "B",
+      "method": "GET",
+      "path": "/owner/agents/grok_test_agent/profile",
+      "http": 200,
+      "at": "2026-10-12 19:38:19.000 EDT"
+    }
+  ],
+  "responses": {
+    "profile_A_cleared.json": {
+      "source": "native read_agent_profile via grantA8 at ~2026-10-12 18:59 EDT",
+      "response": {
+        "schemaVersion": 1,
+        "tenantId": "A",
+        "agentId": "grok_test_agent",
+        "adapterId": "grok",
+        "createdAt": "2026-10-12T22:58:56.151Z",
+        "updatedAt": "2026-10-12T22:58:56.151Z",
+        "capabilities": [
+          {
+            "capability": "mcp_tools",
+            "declared": "unknown",
+            "status": "unknown"
+          },
+          {
+            "capability": "generation_reasoning",
+            "declared": "unknown",
+            "status": "unknown"
+          },
+          {
+            "capability": "background_runs",
+            "declared": "unknown",
+            "status": "unknown"
+          },
+          {
+            "capability": "scheduled_runs",
+            "declared": "unknown",
+            "status": "unknown"
+          },
+          {
+            "capability": "native_integrations",
+            "declared": "unknown",
+            "status": "unknown"
+          },
+          {
+            "capability": "files_images",
+            "declared": "unknown",
+            "status": "unknown"
+          },
+          {
+            "capability": "reminders_notifications",
+            "declared": "unknown",
+            "status": "unknown"
+          }
+        ],
+        "nativeExtensions": [],
+        "grants": [],
+        "readiness": {
+          "executionMode": "unavailable",
+          "deadlineMs": 120000,
+          "fallback": "engine_owned",
+          "productionReady": false,
+          "autonomousScopes": [],
+          "generation": "unverified",
+          "appToolDiscovery": "unknown",
+          "onboardingTransport": "unverified",
+          "missingForAutonomous": [
+            "verified_mcp_tools",
+            "verified_background_runs"
+          ]
+        },
+        "extensions": []
+      }
+    },
+    "s1_evA_after_foreign.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T22:14:17.574Z",
+        "receivedAt": "2026-10-12T21:14:17.594Z",
+        "deadlineAt": "2026-10-12T21:16:17.594Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_c772208bd9263e2f23a7bb54b52ff481",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T21:14:17.574Z",
+          "windowEnd": "2026-10-14T03:14:17.575Z",
+          "nextArrival": "2026-10-14T04:14:17.575Z",
+          "minimumMinutes": 90,
+          "confirmedStart": "2026-10-13T22:14:17.574Z"
+        },
+        "decisionSource": "agent",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T21:14:17.594Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T21:14:43.689Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T21:14:49.080Z",
+          "type": "validated_action_and_reply_saved",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T21:14:49.190Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T21:14:49.198Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_81f25a6ec1109b0a08d3b2e4bd85d126\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:14 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791839689080,\"receipt\":\"simulated_4de3a740-1c3b-4928-b381-faef4f8be675\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_81f25a6ec1109b0a08d3b2e4bd85d126",
+          "recipient": "synthetic_cleaner_A",
+          "text": "Cleaning scheduled for Oct 13, 2026, 6:14 PM (America/New_York). Entry requires host clearance.",
+          "receipt": "simulated_4de3a740-1c3b-4928-b381-faef4f8be675"
+        }
+      ],
+      "notification": {
+        "tenant": "A",
+        "work_id": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+        "agent": "grok_test_agent",
+        "epoch": 1,
+        "status": "accepted",
+        "due": 1791839659108,
+        "attempts": 1,
+        "http": 200,
+        "attempted_at": 1791839657631,
+        "accepted_at": 1791839658108
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "s1_evB_after_foreign.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_2d48b19802916c30a7f411a281386f75",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T22:54:43.992Z",
+        "receivedAt": "2026-10-12T21:54:43.999Z",
+        "deadlineAt": "2026-10-12T21:56:43.999Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_c772208bd9263e2f23a7bb54b52ff481",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T21:54:43.992Z",
+          "windowEnd": "2026-10-14T03:54:43.992Z",
+          "nextArrival": "2026-10-14T04:54:43.992Z",
+          "minimumMinutes": 90,
+          "confirmedStart": "2026-10-13T22:54:43.992Z"
+        },
+        "decisionSource": "agent",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T21:54:44.000Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T21:55:11.877Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T21:55:19.511Z",
+          "type": "validated_action_and_reply_saved",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T21:55:19.659Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T21:55:19.690Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_2d48b19802916c30a7f411a281386f75\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:54 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_B\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791842119509,\"receipt\":\"simulated_25ff7e81-d077-4f7e-8aba-aea13bc60744\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_2d48b19802916c30a7f411a281386f75",
+          "recipient": "synthetic_cleaner_B",
+          "text": "Cleaning scheduled for Oct 13, 2026, 6:54 PM (America/New_York). Entry requires host clearance.",
+          "receipt": "simulated_25ff7e81-d077-4f7e-8aba-aea13bc60744"
+        }
+      ],
+      "notification": {
+        "tenant": "B",
+        "work_id": "work_2d48b19802916c30a7f411a281386f75",
+        "agent": "grok_test_agent",
+        "epoch": 1,
+        "status": "accepted",
+        "due": 1791842085564,
+        "attempts": 1,
+        "http": 200,
+        "attempted_at": 1791842084101,
+        "accepted_at": 1791842084564
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "s1_mint_A.json": {
+      "grantId": "[redacted]",
+      "access_token": "[redacted]",
+      "token_type": "[redacted]",
+      "expires_in": 3600
+    },
+    "s1_mint_B.json": {
+      "grantId": "[redacted]",
+      "access_token": "[redacted]",
+      "token_type": "[redacted]",
+      "expires_in": 3600
+    },
+    "s2_delete_A7.json": {
+      "revoked": true
+    },
+    "s2_http_init_revokedA7.json": {
+      "http": 401,
+      "body": "{\"error\":\"UNAUTHORIZED\"}",
+      "wwwAuthenticate": "",
+      "at": "2026-10-12 18:58:43.196 EDT"
+    },
+    "s2_mint_A8.json": {
+      "grantId": "[redacted]",
+      "access_token": "[redacted]",
+      "token_type": "[redacted]",
+      "expires_in": 3600
+    },
+    "s2_profile_A_after_revoke.json": {
+      "schemaVersion": 1,
+      "tenantId": "A",
+      "agentId": "grok_test_agent",
+      "adapterId": "grok",
+      "createdAt": "2026-10-12T22:58:43.407Z",
+      "updatedAt": "2026-10-12T22:58:43.407Z",
+      "capabilities": [
+        {
+          "capability": "mcp_tools",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "generation_reasoning",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "background_runs",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "scheduled_runs",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "native_integrations",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "files_images",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "reminders_notifications",
+          "declared": "unknown",
+          "status": "unknown"
+        }
+      ],
+      "nativeExtensions": [],
+      "grants": [],
+      "readiness": {
+        "executionMode": "unavailable",
+        "deadlineMs": 120000,
+        "fallback": "engine_owned",
+        "productionReady": false,
+        "autonomousScopes": [],
+        "generation": "unverified",
+        "appToolDiscovery": "unknown",
+        "onboardingTransport": "unverified",
+        "missingForAutonomous": [
+          "verified_mcp_tools",
+          "verified_background_runs"
+        ]
+      },
+      "extensions": []
+    },
+    "s2_profile_A_after_verify.json": {
+      "schemaVersion": 1,
+      "tenantId": "A",
+      "agentId": "grok_test_agent",
+      "adapterId": "grok",
+      "createdAt": "2026-10-12T22:58:47.304Z",
+      "updatedAt": "2026-10-12T22:58:47.304Z",
+      "capabilities": [
+        {
+          "capability": "mcp_tools",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "generation_reasoning",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "background_runs",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "scheduled_runs",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "native_integrations",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "files_images",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "reminders_notifications",
+          "declared": "unknown",
+          "status": "unknown"
+        }
+      ],
+      "nativeExtensions": [],
+      "grants": [],
+      "readiness": {
+        "executionMode": "unavailable",
+        "deadlineMs": 120000,
+        "fallback": "engine_owned",
+        "productionReady": false,
+        "autonomousScopes": [],
+        "generation": "unverified",
+        "appToolDiscovery": "unknown",
+        "onboardingTransport": "unverified",
+        "missingForAutonomous": [
+          "verified_mcp_tools",
+          "verified_background_runs"
+        ]
+      },
+      "extensions": []
+    },
+    "s2_profile_B.json": {
+      "schemaVersion": 1,
+      "tenantId": "B",
+      "agentId": "grok_test_agent",
+      "adapterId": "grok",
+      "createdAt": "2026-10-12T20:30:40.020Z",
+      "updatedAt": "2026-10-12T20:43:47.915Z",
+      "capabilities": [
+        {
+          "capability": "mcp_tools",
+          "declared": "unknown",
+          "evidence": {
+            "status": "verified",
+            "method": "server_probe",
+            "evidenceId": "probe_67873e49995c451ba9590486e76d524c",
+            "scope": "authenticated_core_work_read",
+            "observedAt": "2026-10-12T20:30:40.020Z",
+            "expiresAt": "2026-10-13T20:30:40.020Z"
+          },
+          "status": "verified"
+        },
+        {
+          "capability": "generation_reasoning",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "background_runs",
+          "declared": "unknown",
+          "evidence": {
+            "status": "verified",
+            "method": "engine_workflow",
+            "evidenceId": "work_b088a49c406ea19116f7d319f5927eda",
+            "scope": "cleaner_reschedule",
+            "observedAt": "2026-10-12T20:30:47.346Z",
+            "expiresAt": "2026-10-13T20:30:47.346Z",
+            "latencyMs": 94349,
+            "ownerConfirmedConversationClosed": true
+          },
+          "status": "verified"
+        },
+        {
+          "capability": "scheduled_runs",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "native_integrations",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "files_images",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "reminders_notifications",
+          "declared": "unknown",
+          "status": "unknown"
+        }
+      ],
+      "nativeExtensions": [],
+      "grants": [],
+      "readiness": {
+        "executionMode": "autonomous",
+        "deadlineMs": 120000,
+        "fallback": "engine_owned",
+        "productionReady": false,
+        "autonomousScopes": [
+          "cleaner.reschedule_requested"
+        ],
+        "generation": "unverified",
+        "appToolDiscovery": "unknown",
+        "onboardingTransport": "unverified",
+        "missingForAutonomous": []
+      },
+      "extensions": []
+    },
+    "s2_verify_old_A.json": {
+      "error": "WORKFLOW_NOT_VERIFIED"
+    },
+    "s3_delete_A8.json": {
+      "revoked": true
+    },
+    "s3_ev_revoke_after.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_d84837d5cd476027d35197853c68aa69",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T23:59:00.189Z",
+        "receivedAt": "2026-10-12T22:59:00.196Z",
+        "deadlineAt": "2026-10-12T23:01:00.196Z",
+        "status": "pending",
+        "turn": {
+          "id": "turn_a6b430f9e5e433b0bee1516ab4d7bb44",
+          "version": 1,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T22:59:00.189Z",
+          "windowEnd": "2026-10-14T04:59:00.189Z",
+          "nextArrival": "2026-10-14T05:59:00.189Z",
+          "minimumMinutes": 90
+        }
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T22:59:00.197Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T22:59:02.840Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T22:59:06.663Z",
+          "type": "grant_revoked_lease_released",
+          "actor": "credential_registry"
+        }
+      ],
+      "carrierEvents": [],
+      "replies": [],
+      "notification": {
+        "status": "not_queued"
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "s3_ev_revoke_after_leaseinvalid.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_d84837d5cd476027d35197853c68aa69",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T23:59:00.189Z",
+        "receivedAt": "2026-10-12T22:59:00.196Z",
+        "deadlineAt": "2026-10-12T23:01:00.196Z",
+        "status": "pending",
+        "turn": {
+          "id": "turn_a6b430f9e5e433b0bee1516ab4d7bb44",
+          "version": 1,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T22:59:00.189Z",
+          "windowEnd": "2026-10-14T04:59:00.189Z",
+          "nextArrival": "2026-10-14T05:59:00.189Z",
+          "minimumMinutes": 90
+        }
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T22:59:00.197Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T22:59:02.840Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T22:59:06.663Z",
+          "type": "grant_revoked_lease_released",
+          "actor": "credential_registry"
+        }
+      ],
+      "carrierEvents": [],
+      "replies": [],
+      "notification": {
+        "status": "not_queued"
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "s3_event_revoke.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_d84837d5cd476027d35197853c68aa69",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T23:59:00.189Z",
+        "receivedAt": "2026-10-12T22:59:00.196Z",
+        "deadlineAt": "2026-10-12T23:01:00.196Z",
+        "status": "pending",
+        "turn": {
+          "id": "turn_a6b430f9e5e433b0bee1516ab4d7bb44",
+          "version": 1,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T22:59:00.189Z",
+          "windowEnd": "2026-10-14T04:59:00.189Z",
+          "nextArrival": "2026-10-14T05:59:00.189Z",
+          "minimumMinutes": 90
+        }
+      }
+    },
+    "s3_http_init_revokedA8.json": {
+      "http": 401,
+      "body": "{\"error\":\"UNAUTHORIZED\"}",
+      "wwwAuthenticate": "",
+      "at": "2026-10-12 18:59:10.099 EDT"
+    },
+    "s3_mint_A9.json": {
+      "grantId": "[redacted]",
+      "access_token": "[redacted]",
+      "token_type": "[redacted]",
+      "expires_in": 3600
+    },
+    "s4_ev_expiry_after_vc.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_21a87566495afb5c4d62e2282baba8f1",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T23:59:25.992Z",
+        "receivedAt": "2026-10-12T22:59:25.997Z",
+        "deadlineAt": "2026-10-12T23:01:25.997Z",
+        "status": "leased",
+        "turn": {
+          "id": "turn_cd6e172988a002465a6e7411c5ba2970",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T22:59:25.992Z",
+          "windowEnd": "2026-10-14T04:59:25.992Z",
+          "nextArrival": "2026-10-14T05:59:25.992Z",
+          "minimumMinutes": 90
+        }
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T22:59:25.998Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T22:59:28.657Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:00:28.663Z",
+          "type": "lease_expired_or_grant_revoked",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:00:33.563Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        }
+      ],
+      "carrierEvents": [],
+      "replies": [],
+      "notification": {
+        "status": "not_queued"
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "s4_ev_expiry_at_lease_expiry.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_21a87566495afb5c4d62e2282baba8f1",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T23:59:25.992Z",
+        "receivedAt": "2026-10-12T22:59:25.997Z",
+        "deadlineAt": "2026-10-12T23:01:25.997Z",
+        "status": "pending",
+        "turn": {
+          "id": "turn_cd6e172988a002465a6e7411c5ba2970",
+          "version": 1,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T22:59:25.992Z",
+          "windowEnd": "2026-10-14T04:59:25.992Z",
+          "nextArrival": "2026-10-14T05:59:25.992Z",
+          "minimumMinutes": 90
+        }
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T22:59:25.998Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T22:59:28.657Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:00:28.663Z",
+          "type": "lease_expired_or_grant_revoked",
+          "actor": "engine"
+        }
+      ],
+      "carrierEvents": [],
+      "replies": [],
+      "notification": {
+        "status": "not_queued"
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "s4_event_expiry.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_21a87566495afb5c4d62e2282baba8f1",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T23:59:25.992Z",
+        "receivedAt": "2026-10-12T22:59:25.997Z",
+        "deadlineAt": "2026-10-12T23:01:25.997Z",
+        "status": "pending",
+        "turn": {
+          "id": "turn_cd6e172988a002465a6e7411c5ba2970",
+          "version": 1,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T22:59:25.992Z",
+          "windowEnd": "2026-10-14T04:59:25.992Z",
+          "nextArrival": "2026-10-14T05:59:25.992Z",
+          "minimumMinutes": 90
+        }
+      }
+    },
+    "s4_owner_turn_v2.json": {
+      "saved": true
+    },
+    "s5_evB_trial01.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_2d48b19802916c30a7f411a281386f75",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T22:54:43.992Z",
+        "receivedAt": "2026-10-12T21:54:43.999Z",
+        "deadlineAt": "2026-10-12T21:56:43.999Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_c772208bd9263e2f23a7bb54b52ff481",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T21:54:43.992Z",
+          "windowEnd": "2026-10-14T03:54:43.992Z",
+          "nextArrival": "2026-10-14T04:54:43.992Z",
+          "minimumMinutes": 90,
+          "confirmedStart": "2026-10-13T22:54:43.992Z"
+        },
+        "decisionSource": "agent",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T21:54:44.000Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T21:55:11.877Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T21:55:19.511Z",
+          "type": "validated_action_and_reply_saved",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T21:55:19.659Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T21:55:19.690Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_2d48b19802916c30a7f411a281386f75\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:54 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_B\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791842119509,\"receipt\":\"simulated_25ff7e81-d077-4f7e-8aba-aea13bc60744\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_2d48b19802916c30a7f411a281386f75",
+          "recipient": "synthetic_cleaner_B",
+          "text": "Cleaning scheduled for Oct 13, 2026, 6:54 PM (America/New_York). Entry requires host clearance.",
+          "receipt": "simulated_25ff7e81-d077-4f7e-8aba-aea13bc60744"
+        }
+      ],
+      "notification": {
+        "tenant": "B",
+        "work_id": "work_2d48b19802916c30a7f411a281386f75",
+        "agent": "grok_test_agent",
+        "epoch": 1,
+        "status": "accepted",
+        "due": 1791842085564,
+        "attempts": 1,
+        "http": 200,
+        "attempted_at": 1791842084101,
+        "accepted_at": 1791842084564
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "s5_ev_expiry_final.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_21a87566495afb5c4d62e2282baba8f1",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T23:59:25.992Z",
+        "receivedAt": "2026-10-12T22:59:25.997Z",
+        "deadlineAt": "2026-10-12T23:01:25.997Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_cd6e172988a002465a6e7411c5ba2970",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T22:59:25.992Z",
+          "windowEnd": "2026-10-14T04:59:25.992Z",
+          "nextArrival": "2026-10-14T05:59:25.992Z",
+          "minimumMinutes": 90
+        },
+        "decisionSource": "fallback",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T22:59:25.998Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T22:59:28.657Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:00:28.663Z",
+          "type": "lease_expired_or_grant_revoked",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:00:33.563Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:01:26.240Z",
+          "type": "deadline_fallback_selected",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:26.245Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:26.255Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_21a87566495afb5c4d62e2282baba8f1\",\"text\":\"Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"source\":\"fallback\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791846086240,\"receipt\":\"simulated_e61b26d5-5356-43a7-9a7f-58d8891aa1b1\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_21a87566495afb5c4d62e2282baba8f1",
+          "recipient": "synthetic_cleaner_A",
+          "text": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+          "receipt": "simulated_e61b26d5-5356-43a7-9a7f-58d8891aa1b1"
+        }
+      ],
+      "notification": {
+        "status": "not_queued"
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "s5_ev_revoke_final.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_d84837d5cd476027d35197853c68aa69",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T23:59:00.189Z",
+        "receivedAt": "2026-10-12T22:59:00.196Z",
+        "deadlineAt": "2026-10-12T23:01:00.196Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_a6b430f9e5e433b0bee1516ab4d7bb44",
+          "version": 1,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T22:59:00.189Z",
+          "windowEnd": "2026-10-14T04:59:00.189Z",
+          "nextArrival": "2026-10-14T05:59:00.189Z",
+          "minimumMinutes": 90
+        },
+        "decisionSource": "fallback",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T22:59:00.197Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T22:59:02.840Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T22:59:06.663Z",
+          "type": "grant_revoked_lease_released",
+          "actor": "credential_registry"
+        },
+        {
+          "at": "2026-10-12T23:01:00.202Z",
+          "type": "deadline_fallback_selected",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:00.212Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:00.222Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_d84837d5cd476027d35197853c68aa69\",\"text\":\"Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"source\":\"fallback\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791846060202,\"receipt\":\"simulated_d0846a62-de7f-4287-a23e-960afcce53ea\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_d84837d5cd476027d35197853c68aa69",
+          "recipient": "synthetic_cleaner_A",
+          "text": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+          "receipt": "simulated_d0846a62-de7f-4287-a23e-960afcce53ea"
+        }
+      ],
+      "notification": {
+        "status": "not_queued"
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "s5_profile_B.json": {
+      "schemaVersion": 1,
+      "tenantId": "B",
+      "agentId": "grok_test_agent",
+      "adapterId": "grok",
+      "createdAt": "2026-10-12T20:30:40.020Z",
+      "updatedAt": "2026-10-12T20:43:47.915Z",
+      "capabilities": [
+        {
+          "capability": "mcp_tools",
+          "declared": "unknown",
+          "evidence": {
+            "status": "verified",
+            "method": "server_probe",
+            "evidenceId": "probe_67873e49995c451ba9590486e76d524c",
+            "scope": "authenticated_core_work_read",
+            "observedAt": "2026-10-12T20:30:40.020Z",
+            "expiresAt": "2026-10-13T20:30:40.020Z"
+          },
+          "status": "verified"
+        },
+        {
+          "capability": "generation_reasoning",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "background_runs",
+          "declared": "unknown",
+          "evidence": {
+            "status": "verified",
+            "method": "engine_workflow",
+            "evidenceId": "work_b088a49c406ea19116f7d319f5927eda",
+            "scope": "cleaner_reschedule",
+            "observedAt": "2026-10-12T20:30:47.346Z",
+            "expiresAt": "2026-10-13T20:30:47.346Z",
+            "latencyMs": 94349,
+            "ownerConfirmedConversationClosed": true
+          },
+          "status": "verified"
+        },
+        {
+          "capability": "scheduled_runs",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "native_integrations",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "files_images",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "reminders_notifications",
+          "declared": "unknown",
+          "status": "unknown"
+        }
+      ],
+      "nativeExtensions": [],
+      "grants": [],
+      "readiness": {
+        "executionMode": "autonomous",
+        "deadlineMs": 120000,
+        "fallback": "engine_owned",
+        "productionReady": false,
+        "autonomousScopes": [
+          "cleaner.reschedule_requested"
+        ],
+        "generation": "unverified",
+        "appToolDiscovery": "unknown",
+        "onboardingTransport": "unverified",
+        "missingForAutonomous": []
+      },
+      "extensions": []
+    },
+    "s6_ev_action_after1.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_1d061f44b3ec4877c50fea4391334cc6",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-14T00:01:45.745Z",
+        "receivedAt": "2026-10-12T23:01:45.749Z",
+        "deadlineAt": "2026-10-12T23:03:45.749Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_632ae7ed081cf0da86ae9956464a2761",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T23:01:45.745Z",
+          "windowEnd": "2026-10-14T05:01:45.745Z",
+          "nextArrival": "2026-10-14T06:01:45.745Z",
+          "minimumMinutes": 90,
+          "confirmedStart": "2026-10-14T00:01:45.745Z"
+        },
+        "decisionSource": "agent",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T23:01:45.749Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T23:01:48.686Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:01:51.410Z",
+          "type": "validated_action_and_reply_saved",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:01:51.522Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:51.530Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_1d061f44b3ec4877c50fea4391334cc6\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 8:01 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791846111410,\"receipt\":\"simulated_7b9fe23f-ec51-4319-8eaf-29dab225d5d1\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_1d061f44b3ec4877c50fea4391334cc6",
+          "recipient": "synthetic_cleaner_A",
+          "text": "Cleaning scheduled for Oct 13, 2026, 8:01 PM (America/New_York). Entry requires host clearance.",
+          "receipt": "simulated_7b9fe23f-ec51-4319-8eaf-29dab225d5d1"
+        }
+      ],
+      "notification": {
+        "status": "not_queued"
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "s6_ev_action_after_replays.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_1d061f44b3ec4877c50fea4391334cc6",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-14T00:01:45.745Z",
+        "receivedAt": "2026-10-12T23:01:45.749Z",
+        "deadlineAt": "2026-10-12T23:03:45.749Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_632ae7ed081cf0da86ae9956464a2761",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T23:01:45.745Z",
+          "windowEnd": "2026-10-14T05:01:45.745Z",
+          "nextArrival": "2026-10-14T06:01:45.745Z",
+          "minimumMinutes": 90,
+          "confirmedStart": "2026-10-14T00:01:45.745Z"
+        },
+        "decisionSource": "agent",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T23:01:45.749Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T23:01:48.686Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:01:51.410Z",
+          "type": "validated_action_and_reply_saved",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:01:51.522Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:51.530Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_1d061f44b3ec4877c50fea4391334cc6\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 8:01 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791846111410,\"receipt\":\"simulated_7b9fe23f-ec51-4319-8eaf-29dab225d5d1\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_1d061f44b3ec4877c50fea4391334cc6",
+          "recipient": "synthetic_cleaner_A",
+          "text": "Cleaning scheduled for Oct 13, 2026, 8:01 PM (America/New_York). Entry requires host clearance.",
+          "receipt": "simulated_7b9fe23f-ec51-4319-8eaf-29dab225d5d1"
+        }
+      ],
+      "notification": {
+        "status": "not_queued"
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "s6_event_action.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_1d061f44b3ec4877c50fea4391334cc6",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-14T00:01:45.745Z",
+        "receivedAt": "2026-10-12T23:01:45.749Z",
+        "deadlineAt": "2026-10-12T23:03:45.749Z",
+        "status": "pending",
+        "turn": {
+          "id": "turn_632ae7ed081cf0da86ae9956464a2761",
+          "version": 1,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T23:01:45.745Z",
+          "windowEnd": "2026-10-14T05:01:45.745Z",
+          "nextArrival": "2026-10-14T06:01:45.745Z",
+          "minimumMinutes": 90
+        }
+      }
+    },
+    "s7_ev_expiry.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_21a87566495afb5c4d62e2282baba8f1",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T23:59:25.992Z",
+        "receivedAt": "2026-10-12T22:59:25.997Z",
+        "deadlineAt": "2026-10-12T23:01:25.997Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_cd6e172988a002465a6e7411c5ba2970",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T22:59:25.992Z",
+          "windowEnd": "2026-10-14T04:59:25.992Z",
+          "nextArrival": "2026-10-14T05:59:25.992Z",
+          "minimumMinutes": 90
+        },
+        "decisionSource": "fallback",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T22:59:25.998Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T22:59:28.657Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:00:28.663Z",
+          "type": "lease_expired_or_grant_revoked",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:00:33.563Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:01:26.240Z",
+          "type": "deadline_fallback_selected",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:26.245Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:26.255Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_21a87566495afb5c4d62e2282baba8f1\",\"text\":\"Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"source\":\"fallback\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791846086240,\"receipt\":\"simulated_e61b26d5-5356-43a7-9a7f-58d8891aa1b1\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_21a87566495afb5c4d62e2282baba8f1",
+          "recipient": "synthetic_cleaner_A",
+          "text": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+          "receipt": "simulated_e61b26d5-5356-43a7-9a7f-58d8891aa1b1"
+        }
+      ],
+      "notification": {
+        "status": "not_queued"
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "s7_ev_revoke.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_d84837d5cd476027d35197853c68aa69",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T23:59:00.189Z",
+        "receivedAt": "2026-10-12T22:59:00.196Z",
+        "deadlineAt": "2026-10-12T23:01:00.196Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_a6b430f9e5e433b0bee1516ab4d7bb44",
+          "version": 1,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T22:59:00.189Z",
+          "windowEnd": "2026-10-14T04:59:00.189Z",
+          "nextArrival": "2026-10-14T05:59:00.189Z",
+          "minimumMinutes": 90
+        },
+        "decisionSource": "fallback",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T22:59:00.197Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T22:59:02.840Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T22:59:06.663Z",
+          "type": "grant_revoked_lease_released",
+          "actor": "credential_registry"
+        },
+        {
+          "at": "2026-10-12T23:01:00.202Z",
+          "type": "deadline_fallback_selected",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:00.212Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:00.222Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_d84837d5cd476027d35197853c68aa69\",\"text\":\"Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"source\":\"fallback\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791846060202,\"receipt\":\"simulated_d0846a62-de7f-4287-a23e-960afcce53ea\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_d84837d5cd476027d35197853c68aa69",
+          "recipient": "synthetic_cleaner_A",
+          "text": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+          "receipt": "simulated_d0846a62-de7f-4287-a23e-960afcce53ea"
+        }
+      ],
+      "notification": {
+        "status": "not_queued"
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "s7_profile_A.json": {
+      "schemaVersion": 1,
+      "tenantId": "A",
+      "agentId": "grok_test_agent",
+      "adapterId": "grok",
+      "createdAt": "2026-10-12T23:02:11.004Z",
+      "updatedAt": "2026-10-12T23:02:11.004Z",
+      "capabilities": [
+        {
+          "capability": "mcp_tools",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "generation_reasoning",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "background_runs",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "scheduled_runs",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "native_integrations",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "files_images",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "reminders_notifications",
+          "declared": "unknown",
+          "status": "unknown"
+        }
+      ],
+      "nativeExtensions": [],
+      "grants": [],
+      "readiness": {
+        "executionMode": "unavailable",
+        "deadlineMs": 120000,
+        "fallback": "engine_owned",
+        "productionReady": false,
+        "autonomousScopes": [],
+        "generation": "unverified",
+        "appToolDiscovery": "unknown",
+        "onboardingTransport": "unverified",
+        "missingForAutonomous": [
+          "verified_mcp_tools",
+          "verified_background_runs"
+        ]
+      },
+      "extensions": []
+    },
+    "s7_profile_B.json": {
+      "schemaVersion": 1,
+      "tenantId": "B",
+      "agentId": "grok_test_agent",
+      "adapterId": "grok",
+      "createdAt": "2026-10-12T20:30:40.020Z",
+      "updatedAt": "2026-10-12T20:43:47.915Z",
+      "capabilities": [
+        {
+          "capability": "mcp_tools",
+          "declared": "unknown",
+          "evidence": {
+            "status": "verified",
+            "method": "server_probe",
+            "evidenceId": "probe_67873e49995c451ba9590486e76d524c",
+            "scope": "authenticated_core_work_read",
+            "observedAt": "2026-10-12T20:30:40.020Z",
+            "expiresAt": "2026-10-13T20:30:40.020Z"
+          },
+          "status": "verified"
+        },
+        {
+          "capability": "generation_reasoning",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "background_runs",
+          "declared": "unknown",
+          "evidence": {
+            "status": "verified",
+            "method": "engine_workflow",
+            "evidenceId": "work_b088a49c406ea19116f7d319f5927eda",
+            "scope": "cleaner_reschedule",
+            "observedAt": "2026-10-12T20:30:47.346Z",
+            "expiresAt": "2026-10-13T20:30:47.346Z",
+            "latencyMs": 94349,
+            "ownerConfirmedConversationClosed": true
+          },
+          "status": "verified"
+        },
+        {
+          "capability": "scheduled_runs",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "native_integrations",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "files_images",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "reminders_notifications",
+          "declared": "unknown",
+          "status": "unknown"
+        }
+      ],
+      "nativeExtensions": [],
+      "grants": [],
+      "readiness": {
+        "executionMode": "autonomous",
+        "deadlineMs": 120000,
+        "fallback": "engine_owned",
+        "productionReady": false,
+        "autonomousScopes": [
+          "cleaner.reschedule_requested"
+        ],
+        "generation": "unverified",
+        "appToolDiscovery": "unknown",
+        "onboardingTransport": "unverified",
+        "missingForAutonomous": []
+      },
+      "extensions": []
+    },
+    "s7pa_A_access_acc_s3m1832_A.json": {
+      "id": "acc_s3m1832_A",
+      "propertyId": "prop_s3m1832_A",
+      "hostClearance": false,
+      "expiresAt": "2026-11-11T22:32:23.000Z",
+      "clearanceCurrent": false,
+      "operatesDoors": false
+    },
+    "s7pa_A_access_acc_s3m1832_B.json": {
+      "error": "NOT_FOUND"
+    },
+    "s7pa_A_access_acc_s3m1832_shared.json": {
+      "id": "acc_s3m1832_shared",
+      "propertyId": "prop_s3m1832_A",
+      "hostClearance": false,
+      "expiresAt": "2026-11-11T22:32:23.000Z",
+      "clearanceCurrent": false,
+      "operatesDoors": false
+    },
+    "s7pa_A_properties_prop_s3m1832_A.json": {
+      "id": "prop_s3m1832_A",
+      "name": "A only"
+    },
+    "s7pa_A_properties_prop_s3m1832_B.json": {
+      "error": "NOT_FOUND"
+    },
+    "s7pa_A_properties_prop_s3m1832_shared.json": {
+      "id": "prop_s3m1832_shared",
+      "name": "A shared house"
+    },
+    "s7pa_B_access_acc_s3m1832_A.json": {
+      "error": "NOT_FOUND"
+    },
+    "s7pa_B_access_acc_s3m1832_B.json": {
+      "id": "acc_s3m1832_B",
+      "propertyId": "prop_s3m1832_B",
+      "hostClearance": false,
+      "expiresAt": "2026-11-11T22:32:23.000Z",
+      "clearanceCurrent": false,
+      "operatesDoors": false
+    },
+    "s7pa_B_access_acc_s3m1832_shared.json": {
+      "id": "acc_s3m1832_shared",
+      "propertyId": "prop_s3m1832_B",
+      "hostClearance": false,
+      "expiresAt": "2026-11-11T22:32:23.000Z",
+      "clearanceCurrent": false,
+      "operatesDoors": false
+    },
+    "s7pa_B_properties_prop_s3m1832_A.json": {
+      "error": "NOT_FOUND"
+    },
+    "s7pa_B_properties_prop_s3m1832_B.json": {
+      "id": "prop_s3m1832_B",
+      "name": "B only"
+    },
+    "s7pa_B_properties_prop_s3m1832_shared.json": {
+      "id": "prop_s3m1832_shared",
+      "name": "B shared house"
+    },
+    "r8_A_access_acc_s3m1832_A.json": {
+      "id": "acc_s3m1832_A",
+      "propertyId": "prop_s3m1832_A",
+      "hostClearance": false,
+      "expiresAt": "2026-11-11T22:32:23.000Z",
+      "clearanceCurrent": false,
+      "operatesDoors": false
+    },
+    "r8_A_access_acc_s3m1832_B.json": {
+      "error": "NOT_FOUND"
+    },
+    "r8_A_access_acc_s3m1832_shared.json": {
+      "id": "acc_s3m1832_shared",
+      "propertyId": "prop_s3m1832_A",
+      "hostClearance": false,
+      "expiresAt": "2026-11-11T22:32:23.000Z",
+      "clearanceCurrent": false,
+      "operatesDoors": false
+    },
+    "r8_A_properties_prop_s3m1832_A.json": {
+      "id": "prop_s3m1832_A",
+      "name": "A only"
+    },
+    "r8_A_properties_prop_s3m1832_B.json": {
+      "error": "NOT_FOUND"
+    },
+    "r8_A_properties_prop_s3m1832_shared.json": {
+      "id": "prop_s3m1832_shared",
+      "name": "A shared house"
+    },
+    "r8_A_shared01_ev_after.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T22:14:17.574Z",
+        "receivedAt": "2026-10-12T21:14:17.594Z",
+        "deadlineAt": "2026-10-12T21:16:17.594Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_c772208bd9263e2f23a7bb54b52ff481",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T21:14:17.574Z",
+          "windowEnd": "2026-10-14T03:14:17.575Z",
+          "nextArrival": "2026-10-14T04:14:17.575Z",
+          "minimumMinutes": 90,
+          "confirmedStart": "2026-10-13T22:14:17.574Z"
+        },
+        "decisionSource": "agent",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T21:14:17.594Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T21:14:43.689Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T21:14:49.080Z",
+          "type": "validated_action_and_reply_saved",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T21:14:49.190Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T21:14:49.198Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_81f25a6ec1109b0a08d3b2e4bd85d126\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:14 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791839689080,\"receipt\":\"simulated_4de3a740-1c3b-4928-b381-faef4f8be675\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_81f25a6ec1109b0a08d3b2e4bd85d126",
+          "recipient": "synthetic_cleaner_A",
+          "text": "Cleaning scheduled for Oct 13, 2026, 6:14 PM (America/New_York). Entry requires host clearance.",
+          "receipt": "simulated_4de3a740-1c3b-4928-b381-faef4f8be675"
+        }
+      ],
+      "notification": {
+        "tenant": "A",
+        "work_id": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+        "agent": "grok_test_agent",
+        "epoch": 1,
+        "status": "accepted",
+        "due": 1791839659108,
+        "attempts": 1,
+        "http": 200,
+        "attempted_at": 1791839657631,
+        "accepted_at": 1791839658108
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "r8_A_shared01_ev_before.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T22:14:17.574Z",
+        "receivedAt": "2026-10-12T21:14:17.594Z",
+        "deadlineAt": "2026-10-12T21:16:17.594Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_c772208bd9263e2f23a7bb54b52ff481",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T21:14:17.574Z",
+          "windowEnd": "2026-10-14T03:14:17.575Z",
+          "nextArrival": "2026-10-14T04:14:17.575Z",
+          "minimumMinutes": 90,
+          "confirmedStart": "2026-10-13T22:14:17.574Z"
+        },
+        "decisionSource": "agent",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T21:14:17.594Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T21:14:43.689Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T21:14:49.080Z",
+          "type": "validated_action_and_reply_saved",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T21:14:49.190Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T21:14:49.198Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_81f25a6ec1109b0a08d3b2e4bd85d126\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:14 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791839689080,\"receipt\":\"simulated_4de3a740-1c3b-4928-b381-faef4f8be675\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_81f25a6ec1109b0a08d3b2e4bd85d126",
+          "recipient": "synthetic_cleaner_A",
+          "text": "Cleaning scheduled for Oct 13, 2026, 6:14 PM (America/New_York). Entry requires host clearance.",
+          "receipt": "simulated_4de3a740-1c3b-4928-b381-faef4f8be675"
+        }
+      ],
+      "notification": {
+        "tenant": "A",
+        "work_id": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+        "agent": "grok_test_agent",
+        "epoch": 1,
+        "status": "accepted",
+        "due": 1791839659108,
+        "attempts": 1,
+        "http": 200,
+        "attempted_at": 1791839657631,
+        "accepted_at": 1791839658108
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "r8_A_shared01_replay.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T22:14:17.574Z",
+        "receivedAt": "2026-10-12T21:14:17.594Z",
+        "deadlineAt": "2026-10-12T21:16:17.594Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_c772208bd9263e2f23a7bb54b52ff481",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T21:14:17.574Z",
+          "windowEnd": "2026-10-14T03:14:17.575Z",
+          "nextArrival": "2026-10-14T04:14:17.575Z",
+          "minimumMinutes": 90,
+          "confirmedStart": "2026-10-13T22:14:17.574Z"
+        },
+        "decisionSource": "agent",
+        "deliveryStatus": "sent"
+      }
+    },
+    "r8_B_access_acc_s3m1832_A.json": {
+      "error": "NOT_FOUND"
+    },
+    "r8_B_access_acc_s3m1832_B.json": {
+      "id": "acc_s3m1832_B",
+      "propertyId": "prop_s3m1832_B",
+      "hostClearance": false,
+      "expiresAt": "2026-11-11T22:32:23.000Z",
+      "clearanceCurrent": false,
+      "operatesDoors": false
+    },
+    "r8_B_access_acc_s3m1832_shared.json": {
+      "id": "acc_s3m1832_shared",
+      "propertyId": "prop_s3m1832_B",
+      "hostClearance": false,
+      "expiresAt": "2026-11-11T22:32:23.000Z",
+      "clearanceCurrent": false,
+      "operatesDoors": false
+    },
+    "r8_B_properties_prop_s3m1832_A.json": {
+      "error": "NOT_FOUND"
+    },
+    "r8_B_properties_prop_s3m1832_B.json": {
+      "id": "prop_s3m1832_B",
+      "name": "B only"
+    },
+    "r8_B_properties_prop_s3m1832_shared.json": {
+      "id": "prop_s3m1832_shared",
+      "name": "B shared house"
+    },
+    "r8_B_shared01_ev_after.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_2d48b19802916c30a7f411a281386f75",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T22:54:43.992Z",
+        "receivedAt": "2026-10-12T21:54:43.999Z",
+        "deadlineAt": "2026-10-12T21:56:43.999Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_c772208bd9263e2f23a7bb54b52ff481",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T21:54:43.992Z",
+          "windowEnd": "2026-10-14T03:54:43.992Z",
+          "nextArrival": "2026-10-14T04:54:43.992Z",
+          "minimumMinutes": 90,
+          "confirmedStart": "2026-10-13T22:54:43.992Z"
+        },
+        "decisionSource": "agent",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T21:54:44.000Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T21:55:11.877Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T21:55:19.511Z",
+          "type": "validated_action_and_reply_saved",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T21:55:19.659Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T21:55:19.690Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_2d48b19802916c30a7f411a281386f75\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:54 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_B\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791842119509,\"receipt\":\"simulated_25ff7e81-d077-4f7e-8aba-aea13bc60744\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_2d48b19802916c30a7f411a281386f75",
+          "recipient": "synthetic_cleaner_B",
+          "text": "Cleaning scheduled for Oct 13, 2026, 6:54 PM (America/New_York). Entry requires host clearance.",
+          "receipt": "simulated_25ff7e81-d077-4f7e-8aba-aea13bc60744"
+        }
+      ],
+      "notification": {
+        "tenant": "B",
+        "work_id": "work_2d48b19802916c30a7f411a281386f75",
+        "agent": "grok_test_agent",
+        "epoch": 1,
+        "status": "accepted",
+        "due": 1791842085564,
+        "attempts": 1,
+        "http": 200,
+        "attempted_at": 1791842084101,
+        "accepted_at": 1791842084564
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "r8_B_shared01_ev_before.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_2d48b19802916c30a7f411a281386f75",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T22:54:43.992Z",
+        "receivedAt": "2026-10-12T21:54:43.999Z",
+        "deadlineAt": "2026-10-12T21:56:43.999Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_c772208bd9263e2f23a7bb54b52ff481",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T21:54:43.992Z",
+          "windowEnd": "2026-10-14T03:54:43.992Z",
+          "nextArrival": "2026-10-14T04:54:43.992Z",
+          "minimumMinutes": 90,
+          "confirmedStart": "2026-10-13T22:54:43.992Z"
+        },
+        "decisionSource": "agent",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T21:54:44.000Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T21:55:11.877Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T21:55:19.511Z",
+          "type": "validated_action_and_reply_saved",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T21:55:19.659Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T21:55:19.690Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_2d48b19802916c30a7f411a281386f75\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:54 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_B\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791842119509,\"receipt\":\"simulated_25ff7e81-d077-4f7e-8aba-aea13bc60744\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_2d48b19802916c30a7f411a281386f75",
+          "recipient": "synthetic_cleaner_B",
+          "text": "Cleaning scheduled for Oct 13, 2026, 6:54 PM (America/New_York). Entry requires host clearance.",
+          "receipt": "simulated_25ff7e81-d077-4f7e-8aba-aea13bc60744"
+        }
+      ],
+      "notification": {
+        "tenant": "B",
+        "work_id": "work_2d48b19802916c30a7f411a281386f75",
+        "agent": "grok_test_agent",
+        "epoch": 1,
+        "status": "accepted",
+        "due": 1791842085564,
+        "attempts": 1,
+        "http": 200,
+        "attempted_at": 1791842084101,
+        "accepted_at": 1791842084564
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "r8_B_shared01_replay.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_2d48b19802916c30a7f411a281386f75",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T22:54:43.992Z",
+        "receivedAt": "2026-10-12T21:54:43.999Z",
+        "deadlineAt": "2026-10-12T21:56:43.999Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_c772208bd9263e2f23a7bb54b52ff481",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T21:54:43.992Z",
+          "windowEnd": "2026-10-14T03:54:43.992Z",
+          "nextArrival": "2026-10-14T04:54:43.992Z",
+          "minimumMinutes": 90,
+          "confirmedStart": "2026-10-13T22:54:43.992Z"
+        },
+        "decisionSource": "agent",
+        "deliveryStatus": "sent"
+      }
+    },
+    "r8_action_ev_after.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_1d061f44b3ec4877c50fea4391334cc6",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-14T00:01:45.745Z",
+        "receivedAt": "2026-10-12T23:01:45.749Z",
+        "deadlineAt": "2026-10-12T23:03:45.749Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_632ae7ed081cf0da86ae9956464a2761",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T23:01:45.745Z",
+          "windowEnd": "2026-10-14T05:01:45.745Z",
+          "nextArrival": "2026-10-14T06:01:45.745Z",
+          "minimumMinutes": 90,
+          "confirmedStart": "2026-10-14T00:01:45.745Z"
+        },
+        "decisionSource": "agent",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T23:01:45.749Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T23:01:48.686Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:01:51.410Z",
+          "type": "validated_action_and_reply_saved",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:01:51.522Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:51.530Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_1d061f44b3ec4877c50fea4391334cc6\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 8:01 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791846111410,\"receipt\":\"simulated_7b9fe23f-ec51-4319-8eaf-29dab225d5d1\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_1d061f44b3ec4877c50fea4391334cc6",
+          "recipient": "synthetic_cleaner_A",
+          "text": "Cleaning scheduled for Oct 13, 2026, 8:01 PM (America/New_York). Entry requires host clearance.",
+          "receipt": "simulated_7b9fe23f-ec51-4319-8eaf-29dab225d5d1"
+        }
+      ],
+      "notification": {
+        "status": "not_queued"
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "r8_action_ev_before.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_1d061f44b3ec4877c50fea4391334cc6",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-14T00:01:45.745Z",
+        "receivedAt": "2026-10-12T23:01:45.749Z",
+        "deadlineAt": "2026-10-12T23:03:45.749Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_632ae7ed081cf0da86ae9956464a2761",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T23:01:45.745Z",
+          "windowEnd": "2026-10-14T05:01:45.745Z",
+          "nextArrival": "2026-10-14T06:01:45.745Z",
+          "minimumMinutes": 90,
+          "confirmedStart": "2026-10-14T00:01:45.745Z"
+        },
+        "decisionSource": "agent",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T23:01:45.749Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T23:01:48.686Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:01:51.410Z",
+          "type": "validated_action_and_reply_saved",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:01:51.522Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:51.530Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_1d061f44b3ec4877c50fea4391334cc6\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 8:01 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791846111410,\"receipt\":\"simulated_7b9fe23f-ec51-4319-8eaf-29dab225d5d1\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_1d061f44b3ec4877c50fea4391334cc6",
+          "recipient": "synthetic_cleaner_A",
+          "text": "Cleaning scheduled for Oct 13, 2026, 8:01 PM (America/New_York). Entry requires host clearance.",
+          "receipt": "simulated_7b9fe23f-ec51-4319-8eaf-29dab225d5d1"
+        }
+      ],
+      "notification": {
+        "status": "not_queued"
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "r8_action_replay.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_1d061f44b3ec4877c50fea4391334cc6",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-14T00:01:45.745Z",
+        "receivedAt": "2026-10-12T23:01:45.749Z",
+        "deadlineAt": "2026-10-12T23:03:45.749Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_632ae7ed081cf0da86ae9956464a2761",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T23:01:45.745Z",
+          "windowEnd": "2026-10-14T05:01:45.745Z",
+          "nextArrival": "2026-10-14T06:01:45.745Z",
+          "minimumMinutes": 90,
+          "confirmedStart": "2026-10-14T00:01:45.745Z"
+        },
+        "decisionSource": "agent",
+        "deliveryStatus": "sent"
+      }
+    },
+    "r8_evB_trial01.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_2d48b19802916c30a7f411a281386f75",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T22:54:43.992Z",
+        "receivedAt": "2026-10-12T21:54:43.999Z",
+        "deadlineAt": "2026-10-12T21:56:43.999Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_c772208bd9263e2f23a7bb54b52ff481",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T21:54:43.992Z",
+          "windowEnd": "2026-10-14T03:54:43.992Z",
+          "nextArrival": "2026-10-14T04:54:43.992Z",
+          "minimumMinutes": 90,
+          "confirmedStart": "2026-10-13T22:54:43.992Z"
+        },
+        "decisionSource": "agent",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T21:54:44.000Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T21:55:11.877Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T21:55:19.511Z",
+          "type": "validated_action_and_reply_saved",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T21:55:19.659Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T21:55:19.690Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_2d48b19802916c30a7f411a281386f75\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:54 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_B\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791842119509,\"receipt\":\"simulated_25ff7e81-d077-4f7e-8aba-aea13bc60744\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_2d48b19802916c30a7f411a281386f75",
+          "recipient": "synthetic_cleaner_B",
+          "text": "Cleaning scheduled for Oct 13, 2026, 6:54 PM (America/New_York). Entry requires host clearance.",
+          "receipt": "simulated_25ff7e81-d077-4f7e-8aba-aea13bc60744"
+        }
+      ],
+      "notification": {
+        "tenant": "B",
+        "work_id": "work_2d48b19802916c30a7f411a281386f75",
+        "agent": "grok_test_agent",
+        "epoch": 1,
+        "status": "accepted",
+        "due": 1791842085564,
+        "attempts": 1,
+        "http": 200,
+        "attempted_at": 1791842084101,
+        "accepted_at": 1791842084564
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "r8_ev_work_1d061f44b3ec4877c50fea4391334cc6.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_1d061f44b3ec4877c50fea4391334cc6",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-14T00:01:45.745Z",
+        "receivedAt": "2026-10-12T23:01:45.749Z",
+        "deadlineAt": "2026-10-12T23:03:45.749Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_632ae7ed081cf0da86ae9956464a2761",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T23:01:45.745Z",
+          "windowEnd": "2026-10-14T05:01:45.745Z",
+          "nextArrival": "2026-10-14T06:01:45.745Z",
+          "minimumMinutes": 90,
+          "confirmedStart": "2026-10-14T00:01:45.745Z"
+        },
+        "decisionSource": "agent",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T23:01:45.749Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T23:01:48.686Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:01:51.410Z",
+          "type": "validated_action_and_reply_saved",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:01:51.522Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:51.530Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_1d061f44b3ec4877c50fea4391334cc6\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 8:01 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791846111410,\"receipt\":\"simulated_7b9fe23f-ec51-4319-8eaf-29dab225d5d1\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_1d061f44b3ec4877c50fea4391334cc6",
+          "recipient": "synthetic_cleaner_A",
+          "text": "Cleaning scheduled for Oct 13, 2026, 8:01 PM (America/New_York). Entry requires host clearance.",
+          "receipt": "simulated_7b9fe23f-ec51-4319-8eaf-29dab225d5d1"
+        }
+      ],
+      "notification": {
+        "status": "not_queued"
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "r8_ev_work_21a87566495afb5c4d62e2282baba8f1.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_21a87566495afb5c4d62e2282baba8f1",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T23:59:25.992Z",
+        "receivedAt": "2026-10-12T22:59:25.997Z",
+        "deadlineAt": "2026-10-12T23:01:25.997Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_cd6e172988a002465a6e7411c5ba2970",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T22:59:25.992Z",
+          "windowEnd": "2026-10-14T04:59:25.992Z",
+          "nextArrival": "2026-10-14T05:59:25.992Z",
+          "minimumMinutes": 90
+        },
+        "decisionSource": "fallback",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T22:59:25.998Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T22:59:28.657Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:00:28.663Z",
+          "type": "lease_expired_or_grant_revoked",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:00:33.563Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:01:26.240Z",
+          "type": "deadline_fallback_selected",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:26.245Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:26.255Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_21a87566495afb5c4d62e2282baba8f1\",\"text\":\"Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"source\":\"fallback\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791846086240,\"receipt\":\"simulated_e61b26d5-5356-43a7-9a7f-58d8891aa1b1\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_21a87566495afb5c4d62e2282baba8f1",
+          "recipient": "synthetic_cleaner_A",
+          "text": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+          "receipt": "simulated_e61b26d5-5356-43a7-9a7f-58d8891aa1b1"
+        }
+      ],
+      "notification": {
+        "status": "not_queued"
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "r8_ev_work_81f25a6ec1109b0a08d3b2e4bd85d126.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T22:14:17.574Z",
+        "receivedAt": "2026-10-12T21:14:17.594Z",
+        "deadlineAt": "2026-10-12T21:16:17.594Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_c772208bd9263e2f23a7bb54b52ff481",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T21:14:17.574Z",
+          "windowEnd": "2026-10-14T03:14:17.575Z",
+          "nextArrival": "2026-10-14T04:14:17.575Z",
+          "minimumMinutes": 90,
+          "confirmedStart": "2026-10-13T22:14:17.574Z"
+        },
+        "decisionSource": "agent",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T21:14:17.594Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T21:14:43.689Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T21:14:49.080Z",
+          "type": "validated_action_and_reply_saved",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T21:14:49.190Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T21:14:49.198Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_81f25a6ec1109b0a08d3b2e4bd85d126\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:14 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791839689080,\"receipt\":\"simulated_4de3a740-1c3b-4928-b381-faef4f8be675\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_81f25a6ec1109b0a08d3b2e4bd85d126",
+          "recipient": "synthetic_cleaner_A",
+          "text": "Cleaning scheduled for Oct 13, 2026, 6:14 PM (America/New_York). Entry requires host clearance.",
+          "receipt": "simulated_4de3a740-1c3b-4928-b381-faef4f8be675"
+        }
+      ],
+      "notification": {
+        "tenant": "A",
+        "work_id": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+        "agent": "grok_test_agent",
+        "epoch": 1,
+        "status": "accepted",
+        "due": 1791839659108,
+        "attempts": 1,
+        "http": 200,
+        "attempted_at": 1791839657631,
+        "accepted_at": 1791839658108
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "r8_ev_work_d84837d5cd476027d35197853c68aa69.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_d84837d5cd476027d35197853c68aa69",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T23:59:00.189Z",
+        "receivedAt": "2026-10-12T22:59:00.196Z",
+        "deadlineAt": "2026-10-12T23:01:00.196Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_a6b430f9e5e433b0bee1516ab4d7bb44",
+          "version": 1,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T22:59:00.189Z",
+          "windowEnd": "2026-10-14T04:59:00.189Z",
+          "nextArrival": "2026-10-14T05:59:00.189Z",
+          "minimumMinutes": 90
+        },
+        "decisionSource": "fallback",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T22:59:00.197Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T22:59:02.840Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T22:59:06.663Z",
+          "type": "grant_revoked_lease_released",
+          "actor": "credential_registry"
+        },
+        {
+          "at": "2026-10-12T23:01:00.202Z",
+          "type": "deadline_fallback_selected",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:00.212Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:00.222Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_d84837d5cd476027d35197853c68aa69\",\"text\":\"Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"source\":\"fallback\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791846060202,\"receipt\":\"simulated_d0846a62-de7f-4287-a23e-960afcce53ea\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_d84837d5cd476027d35197853c68aa69",
+          "recipient": "synthetic_cleaner_A",
+          "text": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+          "receipt": "simulated_d0846a62-de7f-4287-a23e-960afcce53ea"
+        }
+      ],
+      "notification": {
+        "status": "not_queued"
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "r8_expiry_ev_after.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_21a87566495afb5c4d62e2282baba8f1",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T23:59:25.992Z",
+        "receivedAt": "2026-10-12T22:59:25.997Z",
+        "deadlineAt": "2026-10-12T23:01:25.997Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_cd6e172988a002465a6e7411c5ba2970",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T22:59:25.992Z",
+          "windowEnd": "2026-10-14T04:59:25.992Z",
+          "nextArrival": "2026-10-14T05:59:25.992Z",
+          "minimumMinutes": 90
+        },
+        "decisionSource": "fallback",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T22:59:25.998Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T22:59:28.657Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:00:28.663Z",
+          "type": "lease_expired_or_grant_revoked",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:00:33.563Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:01:26.240Z",
+          "type": "deadline_fallback_selected",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:26.245Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:26.255Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_21a87566495afb5c4d62e2282baba8f1\",\"text\":\"Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"source\":\"fallback\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791846086240,\"receipt\":\"simulated_e61b26d5-5356-43a7-9a7f-58d8891aa1b1\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_21a87566495afb5c4d62e2282baba8f1",
+          "recipient": "synthetic_cleaner_A",
+          "text": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+          "receipt": "simulated_e61b26d5-5356-43a7-9a7f-58d8891aa1b1"
+        }
+      ],
+      "notification": {
+        "status": "not_queued"
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "r8_expiry_ev_before.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_21a87566495afb5c4d62e2282baba8f1",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T23:59:25.992Z",
+        "receivedAt": "2026-10-12T22:59:25.997Z",
+        "deadlineAt": "2026-10-12T23:01:25.997Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_cd6e172988a002465a6e7411c5ba2970",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T22:59:25.992Z",
+          "windowEnd": "2026-10-14T04:59:25.992Z",
+          "nextArrival": "2026-10-14T05:59:25.992Z",
+          "minimumMinutes": 90
+        },
+        "decisionSource": "fallback",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T22:59:25.998Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T22:59:28.657Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:00:28.663Z",
+          "type": "lease_expired_or_grant_revoked",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:00:33.563Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:01:26.240Z",
+          "type": "deadline_fallback_selected",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:26.245Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:26.255Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_21a87566495afb5c4d62e2282baba8f1\",\"text\":\"Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"source\":\"fallback\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791846086240,\"receipt\":\"simulated_e61b26d5-5356-43a7-9a7f-58d8891aa1b1\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_21a87566495afb5c4d62e2282baba8f1",
+          "recipient": "synthetic_cleaner_A",
+          "text": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+          "receipt": "simulated_e61b26d5-5356-43a7-9a7f-58d8891aa1b1"
+        }
+      ],
+      "notification": {
+        "status": "not_queued"
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "r8_expiry_replay.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_21a87566495afb5c4d62e2282baba8f1",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T23:59:25.992Z",
+        "receivedAt": "2026-10-12T22:59:25.997Z",
+        "deadlineAt": "2026-10-12T23:01:25.997Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_cd6e172988a002465a6e7411c5ba2970",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T22:59:25.992Z",
+          "windowEnd": "2026-10-14T04:59:25.992Z",
+          "nextArrival": "2026-10-14T05:59:25.992Z",
+          "minimumMinutes": 90
+        },
+        "decisionSource": "fallback",
+        "deliveryStatus": "sent"
+      }
+    },
+    "r8_http_init_A7.json": {
+      "error": "UNAUTHORIZED"
+    },
+    "r8_http_init_A8.json": {
+      "error": "UNAUTHORIZED"
+    },
+    "r8_http_init_A9.json": {
+      "http": 200,
+      "body": "{\"result\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{\"tools\":{\"listChanged\":true}},\"serverInfo\":{\"name\":\"cleaner-core-delegation-prototype\",\"version\":\"0.2.0\"}},\"jsonrpc\":\"2.0\",\"id\":1}",
+      "wwwAuthenticate": "",
+      "at": "2026-10-12 19:25:48.529 EDT"
+    },
+    "r8_http_init_Bcur.json": {
+      "http": 401,
+      "body": "{\"error\":\"UNAUTHORIZED\"}",
+      "wwwAuthenticate": "",
+      "at": "2026-10-12 19:26:00.029 EDT"
+    },
+    "r8_mint_A_check.json": {
+      "error": "INVALID_INPUT"
+    },
+    "r8_mint_B6.json": {
+      "grantId": "[redacted]",
+      "access_token": "[redacted]",
+      "token_type": "[redacted]",
+      "expires_in": 3599
+    },
+    "r8_native_A7.json": {
+      "name": "r8_native_A7_profile",
+      "identity": "revoked A7",
+      "tool": "read_agent_profile",
+      "result": "FAIL",
+      "literal": "MCP error -32000: Connection closed; bridge stderr: RegistrationRejectedError: Dynamic Client Registration rejected (HTTP 404) Cannot POST /register (after handleOAuthUnauthorized); no tools discovered",
+      "note": "bridge shows only /register 404; HTTP 401 not observed from bridge",
+      "at": "2026-10-12 19:25:48 EDT"
+    },
+    "r8_native_B_profile.json": {
+      "tenantId": "B",
+      "agentId": "grok_test_agent",
+      "updatedAt": "2026-10-12T20:43:47.915Z",
+      "executionMode": "autonomous",
+      "mcp_tools": {
+        "status": "verified",
+        "evidenceId": "probe_67873e49995c451ba9590486e76d524c",
+        "observedAt": "2026-10-12T20:30:40.020Z"
+      },
+      "background_runs": {
+        "status": "verified",
+        "evidenceId": "work_b088a49c406ea19116f7d319f5927eda",
+        "observedAt": "2026-10-12T20:30:47.346Z"
+      }
+    },
+    "r8_profile_A.json": {
+      "schemaVersion": 1,
+      "tenantId": "A",
+      "agentId": "grok_test_agent",
+      "adapterId": "grok",
+      "createdAt": "2026-10-12T23:24:02.994Z",
+      "updatedAt": "2026-10-12T23:24:02.994Z",
+      "capabilities": [
+        {
+          "capability": "mcp_tools",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "generation_reasoning",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "background_runs",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "scheduled_runs",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "native_integrations",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "files_images",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "reminders_notifications",
+          "declared": "unknown",
+          "status": "unknown"
+        }
+      ],
+      "nativeExtensions": [],
+      "grants": [],
+      "readiness": {
+        "executionMode": "unavailable",
+        "deadlineMs": 120000,
+        "fallback": "engine_owned",
+        "productionReady": false,
+        "autonomousScopes": [],
+        "generation": "unverified",
+        "appToolDiscovery": "unknown",
+        "onboardingTransport": "unverified",
+        "missingForAutonomous": [
+          "verified_mcp_tools",
+          "verified_background_runs"
+        ]
+      },
+      "extensions": []
+    },
+    "r8_profile_A_now.json": {
+      "schemaVersion": 1,
+      "tenantId": "A",
+      "agentId": "grok_test_agent",
+      "adapterId": "grok",
+      "createdAt": "2026-10-12T23:26:08.705Z",
+      "updatedAt": "2026-10-12T23:26:08.705Z",
+      "capabilities": [
+        {
+          "capability": "mcp_tools",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "generation_reasoning",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "background_runs",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "scheduled_runs",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "native_integrations",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "files_images",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "reminders_notifications",
+          "declared": "unknown",
+          "status": "unknown"
+        }
+      ],
+      "nativeExtensions": [],
+      "grants": [],
+      "readiness": {
+        "executionMode": "unavailable",
+        "deadlineMs": 120000,
+        "fallback": "engine_owned",
+        "productionReady": false,
+        "autonomousScopes": [],
+        "generation": "unverified",
+        "appToolDiscovery": "unknown",
+        "onboardingTransport": "unverified",
+        "missingForAutonomous": [
+          "verified_mcp_tools",
+          "verified_background_runs"
+        ]
+      },
+      "extensions": []
+    },
+    "r8_profile_B.json": {
+      "schemaVersion": 1,
+      "tenantId": "B",
+      "agentId": "grok_test_agent",
+      "adapterId": "grok",
+      "createdAt": "2026-10-12T20:30:40.020Z",
+      "updatedAt": "2026-10-12T20:43:47.915Z",
+      "capabilities": [
+        {
+          "capability": "mcp_tools",
+          "declared": "unknown",
+          "evidence": {
+            "status": "verified",
+            "method": "server_probe",
+            "evidenceId": "probe_67873e49995c451ba9590486e76d524c",
+            "scope": "authenticated_core_work_read",
+            "observedAt": "2026-10-12T20:30:40.020Z",
+            "expiresAt": "2026-10-13T20:30:40.020Z"
+          },
+          "status": "verified"
+        },
+        {
+          "capability": "generation_reasoning",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "background_runs",
+          "declared": "unknown",
+          "evidence": {
+            "status": "verified",
+            "method": "engine_workflow",
+            "evidenceId": "work_b088a49c406ea19116f7d319f5927eda",
+            "scope": "cleaner_reschedule",
+            "observedAt": "2026-10-12T20:30:47.346Z",
+            "expiresAt": "2026-10-13T20:30:47.346Z",
+            "latencyMs": 94349,
+            "ownerConfirmedConversationClosed": true
+          },
+          "status": "verified"
+        },
+        {
+          "capability": "scheduled_runs",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "native_integrations",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "files_images",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "reminders_notifications",
+          "declared": "unknown",
+          "status": "unknown"
+        }
+      ],
+      "nativeExtensions": [],
+      "grants": [],
+      "readiness": {
+        "executionMode": "autonomous",
+        "deadlineMs": 120000,
+        "fallback": "engine_owned",
+        "productionReady": false,
+        "autonomousScopes": [
+          "cleaner.reschedule_requested"
+        ],
+        "generation": "unverified",
+        "appToolDiscovery": "unknown",
+        "onboardingTransport": "unverified",
+        "missingForAutonomous": []
+      },
+      "extensions": []
+    },
+    "r8_revoke_ev_after.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_d84837d5cd476027d35197853c68aa69",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T23:59:00.189Z",
+        "receivedAt": "2026-10-12T22:59:00.196Z",
+        "deadlineAt": "2026-10-12T23:01:00.196Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_a6b430f9e5e433b0bee1516ab4d7bb44",
+          "version": 1,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T22:59:00.189Z",
+          "windowEnd": "2026-10-14T04:59:00.189Z",
+          "nextArrival": "2026-10-14T05:59:00.189Z",
+          "minimumMinutes": 90
+        },
+        "decisionSource": "fallback",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T22:59:00.197Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T22:59:02.840Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T22:59:06.663Z",
+          "type": "grant_revoked_lease_released",
+          "actor": "credential_registry"
+        },
+        {
+          "at": "2026-10-12T23:01:00.202Z",
+          "type": "deadline_fallback_selected",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:00.212Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:00.222Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_d84837d5cd476027d35197853c68aa69\",\"text\":\"Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"source\":\"fallback\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791846060202,\"receipt\":\"simulated_d0846a62-de7f-4287-a23e-960afcce53ea\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_d84837d5cd476027d35197853c68aa69",
+          "recipient": "synthetic_cleaner_A",
+          "text": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+          "receipt": "simulated_d0846a62-de7f-4287-a23e-960afcce53ea"
+        }
+      ],
+      "notification": {
+        "status": "not_queued"
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "r8_revoke_ev_before.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_d84837d5cd476027d35197853c68aa69",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T23:59:00.189Z",
+        "receivedAt": "2026-10-12T22:59:00.196Z",
+        "deadlineAt": "2026-10-12T23:01:00.196Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_a6b430f9e5e433b0bee1516ab4d7bb44",
+          "version": 1,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T22:59:00.189Z",
+          "windowEnd": "2026-10-14T04:59:00.189Z",
+          "nextArrival": "2026-10-14T05:59:00.189Z",
+          "minimumMinutes": 90
+        },
+        "decisionSource": "fallback",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T22:59:00.197Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T22:59:02.840Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T22:59:06.663Z",
+          "type": "grant_revoked_lease_released",
+          "actor": "credential_registry"
+        },
+        {
+          "at": "2026-10-12T23:01:00.202Z",
+          "type": "deadline_fallback_selected",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:00.212Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:01:00.222Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_d84837d5cd476027d35197853c68aa69\",\"text\":\"Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"source\":\"fallback\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791846060202,\"receipt\":\"simulated_d0846a62-de7f-4287-a23e-960afcce53ea\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_d84837d5cd476027d35197853c68aa69",
+          "recipient": "synthetic_cleaner_A",
+          "text": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+          "receipt": "simulated_d0846a62-de7f-4287-a23e-960afcce53ea"
+        }
+      ],
+      "notification": {
+        "status": "not_queued"
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "r8_revoke_replay.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_d84837d5cd476027d35197853c68aa69",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-13T23:59:00.189Z",
+        "receivedAt": "2026-10-12T22:59:00.196Z",
+        "deadlineAt": "2026-10-12T23:01:00.196Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_a6b430f9e5e433b0bee1516ab4d7bb44",
+          "version": 1,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T22:59:00.189Z",
+          "windowEnd": "2026-10-14T04:59:00.189Z",
+          "nextArrival": "2026-10-14T05:59:00.189Z",
+          "minimumMinutes": 90
+        },
+        "decisionSource": "fallback",
+        "deliveryStatus": "sent"
+      }
+    },
+    "r8_runtime.json": {
+      "service": "cleaner-core-phase05-test",
+      "mode": "synthetic",
+      "tenants": 2,
+      "agentId": "grok_test_agent",
+      "mcp": "/mcp",
+      "realSmsEnabled": false,
+      "version": "phase05-indexed-v1",
+      "fixtureSchedulerVersion": "server-clock-v1",
+      "fixtureSchedulerHealthy": true
+    },
+    "r8_sched_restore_onboard.json": {
+      "mode": "synthetic",
+      "schedule": {
+        "id": "test_schedule_b657ea0c32814023630b801b00eb0a1f",
+        "eventId": "p05_s10121857_restore_onboard",
+        "kind": "onboarding",
+        "delaySeconds": 300,
+        "runAt": "2026-10-12T23:31:15.981Z",
+        "status": "scheduled",
+        "workId": null,
+        "firedAt": null,
+        "error": null
+      }
+    },
+    "r8_http_init_A10.json": {
+      "http": 401,
+      "body": "{\"error\":\"UNAUTHORIZED\"}",
+      "wwwAuthenticate": "",
+      "at": "2026-10-12 19:31:29.276 EDT"
+    },
+    "r8_http_init_A11.json": {
+      "http": 200,
+      "body": "{\"result\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{\"tools\":{\"listChanged\":true}},\"serverInfo\":{\"name\":\"cleaner-core-delegation-prototype\",\"version\":\"0.2.0\"}},\"jsonrpc\":\"2.0\",\"id\":1}",
+      "wwwAuthenticate": "",
+      "at": "2026-10-12 19:31:42.153 EDT"
+    },
+    "r8_http_init_A9_post.json": {
+      "http": 401,
+      "body": "{\"error\":\"UNAUTHORIZED\"}",
+      "wwwAuthenticate": "",
+      "at": "2026-10-12 19:31:25.203 EDT"
+    },
+    "r8_http_init_B6.json": {
+      "http": 200,
+      "body": "{\"result\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{\"tools\":{\"listChanged\":true}},\"serverInfo\":{\"name\":\"cleaner-core-delegation-prototype\",\"version\":\"0.2.0\"}},\"jsonrpc\":\"2.0\",\"id\":1}",
+      "wwwAuthenticate": "",
+      "at": "2026-10-12 19:31:29.572 EDT"
+    },
+    "r8_mint_A10.json": {
+      "grantId": "<redacted private grant ID>",
+      "access_token": "[redacted]",
+      "token_type": "[redacted]",
+      "expires_in": 3600
+    },
+    "r8_mint_A11.json": {
+      "grantId": "[redacted]",
+      "access_token": "[redacted]",
+      "token_type": "[redacted]",
+      "expires_in": 3600
+    },
+    "r8_mint_body_probe.json": {
+      "error": "INVALID_INPUT"
+    },
+    "r8_profile_A_postfail.json": {
+      "schemaVersion": 1,
+      "tenantId": "A",
+      "agentId": "grok_test_agent",
+      "adapterId": "grok",
+      "createdAt": "2026-10-12T23:31:32.945Z",
+      "updatedAt": "2026-10-12T23:31:32.945Z",
+      "capabilities": [
+        {
+          "capability": "mcp_tools",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "generation_reasoning",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "background_runs",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "scheduled_runs",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "native_integrations",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "files_images",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "reminders_notifications",
+          "declared": "unknown",
+          "status": "unknown"
+        }
+      ],
+      "nativeExtensions": [],
+      "grants": [],
+      "readiness": {
+        "executionMode": "unavailable",
+        "deadlineMs": 120000,
+        "fallback": "engine_owned",
+        "productionReady": false,
+        "autonomousScopes": [],
+        "generation": "unverified",
+        "appToolDiscovery": "unknown",
+        "onboardingTransport": "unverified",
+        "missingForAutonomous": [
+          "verified_mcp_tools",
+          "verified_background_runs"
+        ]
+      },
+      "extensions": []
+    },
+    "r8_profile_B_postfail.json": {
+      "schemaVersion": 1,
+      "tenantId": "B",
+      "agentId": "grok_test_agent",
+      "adapterId": "grok",
+      "createdAt": "2026-10-12T20:30:40.020Z",
+      "updatedAt": "2026-10-12T20:43:47.915Z",
+      "capabilities": [
+        {
+          "capability": "mcp_tools",
+          "declared": "unknown",
+          "evidence": {
+            "status": "verified",
+            "method": "server_probe",
+            "evidenceId": "probe_67873e49995c451ba9590486e76d524c",
+            "scope": "authenticated_core_work_read",
+            "observedAt": "2026-10-12T20:30:40.020Z",
+            "expiresAt": "2026-10-13T20:30:40.020Z"
+          },
+          "status": "verified"
+        },
+        {
+          "capability": "generation_reasoning",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "background_runs",
+          "declared": "unknown",
+          "evidence": {
+            "status": "verified",
+            "method": "engine_workflow",
+            "evidenceId": "work_b088a49c406ea19116f7d319f5927eda",
+            "scope": "cleaner_reschedule",
+            "observedAt": "2026-10-12T20:30:47.346Z",
+            "expiresAt": "2026-10-13T20:30:47.346Z",
+            "latencyMs": 94349,
+            "ownerConfirmedConversationClosed": true
+          },
+          "status": "verified"
+        },
+        {
+          "capability": "scheduled_runs",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "native_integrations",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "files_images",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "reminders_notifications",
+          "declared": "unknown",
+          "status": "unknown"
+        }
+      ],
+      "nativeExtensions": [],
+      "grants": [],
+      "readiness": {
+        "executionMode": "autonomous",
+        "deadlineMs": 120000,
+        "fallback": "engine_owned",
+        "productionReady": false,
+        "autonomousScopes": [
+          "cleaner.reschedule_requested"
+        ],
+        "generation": "unverified",
+        "appToolDiscovery": "unknown",
+        "onboardingTransport": "unverified",
+        "missingForAutonomous": []
+      },
+      "extensions": []
+    },
+    "r8_runtime_postfail.json": {
+      "service": "cleaner-core-phase05-test",
+      "mode": "synthetic",
+      "tenants": 2,
+      "agentId": "grok_test_agent",
+      "mcp": "/mcp",
+      "realSmsEnabled": false,
+      "version": "phase05-indexed-v1",
+      "fixtureSchedulerVersion": "server-clock-v1",
+      "fixtureSchedulerHealthy": true
+    },
+    "r8_sched_fired.json": {
+      "mode": "synthetic",
+      "schedule": {
+        "id": "test_schedule_b657ea0c32814023630b801b00eb0a1f",
+        "eventId": "p05_s10121857_restore_onboard",
+        "kind": "onboarding",
+        "delaySeconds": 300,
+        "runAt": "2026-10-12T23:31:15.981Z",
+        "status": "failed",
+        "workId": null,
+        "firedAt": null,
+        "error": "UNAUTHORIZED"
+      }
+    },
+    "r8_sched_poll.json": {
+      "mode": "synthetic",
+      "schedule": {
+        "id": "test_schedule_b657ea0c32814023630b801b00eb0a1f",
+        "eventId": "p05_s10121857_restore_onboard",
+        "kind": "onboarding",
+        "delaySeconds": 300,
+        "runAt": "2026-10-12T23:31:15.981Z",
+        "status": "failed",
+        "workId": null,
+        "firedAt": null,
+        "error": "UNAUTHORIZED"
+      }
+    },
+    "r8_sched_poll_now.json": {
+      "mode": "synthetic",
+      "schedule": {
+        "id": "test_schedule_b657ea0c32814023630b801b00eb0a1f",
+        "eventId": "p05_s10121857_restore_onboard",
+        "kind": "onboarding",
+        "delaySeconds": 300,
+        "runAt": "2026-10-12T23:31:15.981Z",
+        "status": "scheduled",
+        "workId": null,
+        "firedAt": null,
+        "error": null
+      }
+    },
+    "r9_pre.json": {
+      "http": 200,
+      "body": "{\"result\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{\"tools\":{\"listChanged\":true}},\"serverInfo\":{\"name\":\"cleaner-core-delegation-prototype\",\"version\":\"0.2.0\"}},\"jsonrpc\":\"2.0\",\"id\":1}",
+      "wwwAuthenticate": "",
+      "at": "2026-10-12 19:32:50.277 EDT"
+    },
+    "r9_sched_retry.json": {
+      "mode": "synthetic",
+      "schedule": {
+        "id": "test_schedule_d5534d93ed15356c2804d630d7542938",
+        "eventId": "p05_s10121857_restore_onboard_retry",
+        "kind": "onboarding",
+        "delaySeconds": 300,
+        "runAt": "2026-10-12T23:37:53.589Z",
+        "status": "scheduled",
+        "workId": null,
+        "firedAt": null,
+        "error": null
+      }
+    },
+    "r9_sched_fired.json": {
+      "mode": "synthetic",
+      "schedule": {
+        "id": "test_schedule_d5534d93ed15356c2804d630d7542938",
+        "eventId": "p05_s10121857_restore_onboard_retry",
+        "kind": "onboarding",
+        "delaySeconds": 300,
+        "runAt": "2026-10-12T23:37:53.589Z",
+        "status": "fired",
+        "workId": "work_9f5dbc97def60de4fcfbc9cd7b4dd77e",
+        "firedAt": "2026-10-12T23:37:53.601Z",
+        "error": null
+      }
+    },
+    "r9_ev_completed.json": {
+      "mode": "synthetic",
+      "work": {
+        "id": "work_9f5dbc97def60de4fcfbc9cd7b4dd77e",
+        "eventType": "cleaner.reschedule_requested",
+        "requestedStart": "2026-10-14T00:37:53.590Z",
+        "receivedAt": "2026-10-12T23:37:53.595Z",
+        "deadlineAt": "2026-10-12T23:39:53.595Z",
+        "status": "completed",
+        "turn": {
+          "id": "turn_f15f5db84a587580e24746685f5e1d64",
+          "version": 2,
+          "timeZone": "America/New_York",
+          "windowStart": "2026-10-13T23:37:53.590Z",
+          "windowEnd": "2026-10-14T05:37:53.590Z",
+          "nextArrival": "2026-10-14T06:37:53.590Z",
+          "minimumMinutes": 90,
+          "confirmedStart": "2026-10-14T00:37:53.590Z"
+        },
+        "decisionSource": "agent",
+        "deliveryStatus": "sent"
+      },
+      "audit": [
+        {
+          "at": "2026-10-12T23:37:53.595Z",
+          "type": "received",
+          "actor": "verified_provider"
+        },
+        {
+          "at": "2026-10-12T23:38:07.996Z",
+          "type": "claimed",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:38:12.120Z",
+          "type": "validated_action_and_reply_saved",
+          "actor": "grok_test_agent"
+        },
+        {
+          "at": "2026-10-12T23:38:12.226Z",
+          "type": "send_attempt",
+          "actor": "engine"
+        },
+        {
+          "at": "2026-10-12T23:38:12.236Z",
+          "type": "provider_accepted_and_completed",
+          "actor": "engine"
+        }
+      ],
+      "reply": "{\"key\":\"reply_work_9f5dbc97def60de4fcfbc9cd7b4dd77e\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 8:37 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791848292120,\"receipt\":\"simulated_7eaf15c9-504d-419e-b0e3-d467a30fd89c\"}",
+      "carrierEvents": [],
+      "replies": [
+        {
+          "key": "reply_work_9f5dbc97def60de4fcfbc9cd7b4dd77e",
+          "recipient": "synthetic_cleaner_A",
+          "text": "Cleaning scheduled for Oct 13, 2026, 8:37 PM (America/New_York). Entry requires host clearance.",
+          "receipt": "simulated_7eaf15c9-504d-419e-b0e3-d467a30fd89c"
+        }
+      ],
+      "notification": {
+        "tenant": "A",
+        "work_id": "work_9f5dbc97def60de4fcfbc9cd7b4dd77e",
+        "agent": "grok_test_agent",
+        "epoch": 4,
+        "status": "accepted",
+        "due": 1791848275155,
+        "attempts": 1,
+        "http": 200,
+        "attempted_at": 1791848273694,
+        "accepted_at": 1791848274155
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+    },
+    "r9_verify.json": {
+      "schemaVersion": 1,
+      "tenantId": "A",
+      "agentId": "grok_test_agent",
+      "adapterId": "grok",
+      "createdAt": "2026-10-12T23:38:04.566Z",
+      "updatedAt": "2026-10-12T23:38:18.374Z",
+      "capabilities": [
+        {
+          "capability": "mcp_tools",
+          "declared": "unknown",
+          "evidence": {
+            "status": "verified",
+            "method": "server_probe",
+            "evidenceId": "probe_be088e1452a44324ab9b092c8209108f",
+            "scope": "authenticated_core_work_read",
+            "observedAt": "2026-10-12T23:38:04.566Z",
+            "expiresAt": "2026-10-13T23:38:04.566Z"
+          },
+          "status": "verified"
+        },
+        {
+          "capability": "generation_reasoning",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "background_runs",
+          "declared": "unknown",
+          "evidence": {
+            "status": "verified",
+            "method": "engine_workflow",
+            "evidenceId": "work_9f5dbc97def60de4fcfbc9cd7b4dd77e",
+            "scope": "cleaner_reschedule",
+            "observedAt": "2026-10-12T23:38:12.236Z",
+            "expiresAt": "2026-10-13T23:38:12.236Z",
+            "latencyMs": 18641,
+            "ownerConfirmedConversationClosed": true
+          },
+          "status": "verified"
+        },
+        {
+          "capability": "scheduled_runs",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "native_integrations",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "files_images",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "reminders_notifications",
+          "declared": "unknown",
+          "status": "unknown"
+        }
+      ],
+      "nativeExtensions": [],
+      "grants": [],
+      "readiness": {
+        "executionMode": "autonomous",
+        "deadlineMs": 120000,
+        "fallback": "engine_owned",
+        "productionReady": false,
+        "autonomousScopes": [
+          "cleaner.reschedule_requested"
+        ],
+        "generation": "unverified",
+        "appToolDiscovery": "unknown",
+        "onboardingTransport": "unverified",
+        "missingForAutonomous": []
+      },
+      "extensions": []
+    },
+    "r9_profile_A.json": {
+      "schemaVersion": 1,
+      "tenantId": "A",
+      "agentId": "grok_test_agent",
+      "adapterId": "grok",
+      "createdAt": "2026-10-12T23:38:04.566Z",
+      "updatedAt": "2026-10-12T23:38:18.374Z",
+      "capabilities": [
+        {
+          "capability": "mcp_tools",
+          "declared": "unknown",
+          "evidence": {
+            "status": "verified",
+            "method": "server_probe",
+            "evidenceId": "probe_be088e1452a44324ab9b092c8209108f",
+            "scope": "authenticated_core_work_read",
+            "observedAt": "2026-10-12T23:38:04.566Z",
+            "expiresAt": "2026-10-13T23:38:04.566Z"
+          },
+          "status": "verified"
+        },
+        {
+          "capability": "generation_reasoning",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "background_runs",
+          "declared": "unknown",
+          "evidence": {
+            "status": "verified",
+            "method": "engine_workflow",
+            "evidenceId": "work_9f5dbc97def60de4fcfbc9cd7b4dd77e",
+            "scope": "cleaner_reschedule",
+            "observedAt": "2026-10-12T23:38:12.236Z",
+            "expiresAt": "2026-10-13T23:38:12.236Z",
+            "latencyMs": 18641,
+            "ownerConfirmedConversationClosed": true
+          },
+          "status": "verified"
+        },
+        {
+          "capability": "scheduled_runs",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "native_integrations",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "files_images",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "reminders_notifications",
+          "declared": "unknown",
+          "status": "unknown"
+        }
+      ],
+      "nativeExtensions": [],
+      "grants": [],
+      "readiness": {
+        "executionMode": "autonomous",
+        "deadlineMs": 120000,
+        "fallback": "engine_owned",
+        "productionReady": false,
+        "autonomousScopes": [
+          "cleaner.reschedule_requested"
+        ],
+        "generation": "unverified",
+        "appToolDiscovery": "unknown",
+        "onboardingTransport": "unverified",
+        "missingForAutonomous": []
+      },
+      "extensions": []
+    },
+    "r9_profile_B.json": {
+      "schemaVersion": 1,
+      "tenantId": "B",
+      "agentId": "grok_test_agent",
+      "adapterId": "grok",
+      "createdAt": "2026-10-12T20:30:40.020Z",
+      "updatedAt": "2026-10-12T20:43:47.915Z",
+      "capabilities": [
+        {
+          "capability": "mcp_tools",
+          "declared": "unknown",
+          "evidence": {
+            "status": "verified",
+            "method": "server_probe",
+            "evidenceId": "probe_67873e49995c451ba9590486e76d524c",
+            "scope": "authenticated_core_work_read",
+            "observedAt": "2026-10-12T20:30:40.020Z",
+            "expiresAt": "2026-10-13T20:30:40.020Z"
+          },
+          "status": "verified"
+        },
+        {
+          "capability": "generation_reasoning",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "background_runs",
+          "declared": "unknown",
+          "evidence": {
+            "status": "verified",
+            "method": "engine_workflow",
+            "evidenceId": "work_b088a49c406ea19116f7d319f5927eda",
+            "scope": "cleaner_reschedule",
+            "observedAt": "2026-10-12T20:30:47.346Z",
+            "expiresAt": "2026-10-13T20:30:47.346Z",
+            "latencyMs": 94349,
+            "ownerConfirmedConversationClosed": true
+          },
+          "status": "verified"
+        },
+        {
+          "capability": "scheduled_runs",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "native_integrations",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "files_images",
+          "declared": "unknown",
+          "status": "unknown"
+        },
+        {
+          "capability": "reminders_notifications",
+          "declared": "unknown",
+          "status": "unknown"
+        }
+      ],
+      "nativeExtensions": [],
+      "grants": [],
+      "readiness": {
+        "executionMode": "autonomous",
+        "deadlineMs": 120000,
+        "fallback": "engine_owned",
+        "productionReady": false,
+        "autonomousScopes": [
+          "cleaner.reschedule_requested"
+        ],
+        "generation": "unverified",
+        "appToolDiscovery": "unknown",
+        "onboardingTransport": "unverified",
+        "missingForAutonomous": []
+      },
+      "extensions": []
+    }
+  },
+  "replay_summary": [
+    {
+      "name": "r8_A_shared01",
+      "owner": "A",
+      "eventId": "p05_s10121709_shared_01",
+      "http": 200,
+      "workId": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+      "expectedWorkId": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+      "matchExpected": true,
+      "evidence": "EQ",
+      "status": "completed",
+      "turnVersion": "2",
+      "at": "2026-10-12 19:25:28 EDT"
+    },
+    {
+      "name": "r8_B_shared01",
+      "owner": "B",
+      "eventId": "p05_s10121709_shared_01",
+      "http": 200,
+      "workId": "work_2d48b19802916c30a7f411a281386f75",
+      "expectedWorkId": "work_2d48b19802916c30a7f411a281386f75",
+      "matchExpected": true,
+      "evidence": "EQ",
+      "status": "completed",
+      "turnVersion": "2",
+      "at": "2026-10-12 19:25:28 EDT"
+    },
+    {
+      "name": "r8_revoke",
+      "owner": "A",
+      "eventId": "p05_s10121857_revoke",
+      "http": 200,
+      "workId": "work_d84837d5cd476027d35197853c68aa69",
+      "expectedWorkId": "work_d84837d5cd476027d35197853c68aa69",
+      "matchExpected": true,
+      "evidence": "EQ",
+      "status": "completed",
+      "turnVersion": "1",
+      "at": "2026-10-12 19:25:29 EDT"
+    },
+    {
+      "name": "r8_expiry",
+      "owner": "A",
+      "eventId": "p05_s10121857_expiry",
+      "http": 200,
+      "workId": "work_21a87566495afb5c4d62e2282baba8f1",
+      "expectedWorkId": "work_21a87566495afb5c4d62e2282baba8f1",
+      "matchExpected": true,
+      "evidence": "EQ",
+      "status": "completed",
+      "turnVersion": "2",
+      "at": "2026-10-12 19:25:30 EDT"
+    },
+    {
+      "name": "r8_action",
+      "owner": "A",
+      "eventId": "p05_s10121857_action",
+      "http": 200,
+      "workId": "work_1d061f44b3ec4877c50fea4391334cc6",
+      "expectedWorkId": "work_1d061f44b3ec4877c50fea4391334cc6",
+      "matchExpected": true,
+      "evidence": "EQ",
+      "status": "completed",
+      "turnVersion": "2",
+      "at": "2026-10-12 19:25:31 EDT"
+    }
+  ],
+  "matrix": [
+    {
+      "area": "runtime",
+      "test": "synthetic, 2 tenants, realSmsEnabled=false, server-clock-v1 healthy",
+      "actual": "GET /test/runtime HTTP 200 mode=synthetic tenants=2 realSmsEnabled=false fixtureSchedulerVersion=server-clock-v1 healthy=true (parent check, runtime0.json)",
+      "positiveControl": "n/a",
+      "result": "PASS",
+      "files": [
+        "runtime0.json"
+      ]
+    },
+    {
+      "area": "prior-packet",
+      "test": "Saved raw native scope/identity/error and refresh/revoke HTTP bodies from security packet",
+      "actual": "Not saved as raw files; only live-observed",
+      "positiveControl": "n/a",
+      "result": "MISSING",
+      "files": [
+        "prior_packet_raw_inventory.json"
+      ]
+    },
+    {
+      "area": "scope-B",
+      "test": "Mint main B grant (issuance preserves profile)",
+      "actual": "HTTP 200 {grantId,access_token,token_type,expires_in:3600} (secrets redacted); B profile unchanged vs pre",
+      "positiveControl": "profile_B_pre compare",
+      "result": "PASS",
+      "files": [
+        "s1_mint_B.json",
+        "s2_profile_B.json"
+      ]
+    },
+    {
+      "area": "scope-B",
+      "test": "Native read_agent_profile = B/grok_test_agent",
+      "actual": "tenantId B, agentId grok_test_agent, autonomous, mcp_tools+background_runs verified (exp 2026-10-13T20:30Z)",
+      "positiveControl": "itself",
+      "result": "PASS",
+      "files": [
+        "native_log.jsonl#1.1"
+      ]
+    },
+    {
+      "area": "scope-B",
+      "test": "Native read own completed B trial-01",
+      "actual": "status completed, turn v2, decisionSource agent",
+      "positiveControl": "positive control",
+      "result": "PASS",
+      "files": [
+        "native_log.jsonl#1.1"
+      ]
+    },
+    {
+      "area": "scope-B",
+      "test": "Native list_delegated_work",
+      "actual": "[]",
+      "positiveControl": "n/a",
+      "result": "PASS",
+      "files": [
+        "native_log.jsonl#1.1"
+      ]
+    },
+    {
+      "area": "scope-B",
+      "test": "B propose on A completed work (dummy lease)",
+      "actual": "{code:NOT_FOUND,message:'No owned work.'}; A trial-01 evidence byte-equal after",
+      "positiveControl": "own read succeeded",
+      "result": "PASS",
+      "files": [
+        "native_log.jsonl#1.2",
+        "s1_evA_after_foreign.json"
+      ]
+    },
+    {
+      "area": "scope-B",
+      "test": "read_delegated_work + tenantId",
+      "actual": "MCP error -32602 Unrecognized key tenantId (server input validation, relayed by bridge)",
+      "positiveControl": "own read without tenantId succeeded",
+      "result": "PASS",
+      "files": [
+        "native_log.jsonl#1.3"
+      ]
+    },
+    {
+      "area": "scope-B",
+      "test": "claim_delegated_work + tenantId (A work)",
+      "actual": "MCP error -32602 Unrecognized key tenantId",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "native_log.jsonl#1.3"
+      ]
+    },
+    {
+      "area": "scope-B",
+      "test": "propose_cleaning_time + tenantId (A work)",
+      "actual": "MCP error -32602 Unrecognized key tenantId",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "native_log.jsonl#1.3"
+      ]
+    },
+    {
+      "area": "scope-A",
+      "test": "Mint main A grant A7; native read_agent_profile = A/grok_test_agent, capabilities verified fresh",
+      "actual": "tenant A, autonomous, mcp_tools verified exp 2026-10-13T18:20Z, background_runs verified exp 2026-10-13T18:20Z",
+      "positiveControl": "itself",
+      "result": "PASS",
+      "files": [
+        "s1_mint_A.json",
+        "native_log.jsonl#1.4"
+      ]
+    },
+    {
+      "area": "scope-A",
+      "test": "Native read own completed A trial-01",
+      "actual": "completed, v2, agent",
+      "positiveControl": "positive control",
+      "result": "PASS",
+      "files": [
+        "native_log.jsonl#1.4"
+      ]
+    },
+    {
+      "area": "scope-A",
+      "test": "Native list_delegated_work",
+      "actual": "[]",
+      "positiveControl": "n/a",
+      "result": "PASS",
+      "files": [
+        "native_log.jsonl#1.4"
+      ]
+    },
+    {
+      "area": "scope-A",
+      "test": "A propose on B completed work (dummy lease)",
+      "actual": "{code:NOT_FOUND}; B trial-01 evidence equal after",
+      "positiveControl": "own read succeeded",
+      "result": "PASS",
+      "files": [
+        "native_log.jsonl#1.4",
+        "s1_evB_after_foreign.json"
+      ]
+    },
+    {
+      "area": "scope-A",
+      "test": "tenantId-added native calls under A identity",
+      "actual": "Not repeated under A (schema rejection is tool-level and was shown under B)",
+      "positiveControl": "-",
+      "result": "NOT_RUN",
+      "files": []
+    },
+    {
+      "area": "retire-A",
+      "test": "A owner DELETE /owner/grants/[PRIVATE_A7]",
+      "actual": "HTTP 200 {revoked:true}",
+      "positiveControl": "n/a",
+      "result": "PASS",
+      "files": [
+        "s2_delete_A7.json"
+      ]
+    },
+    {
+      "area": "retire-A",
+      "test": "Native read_agent_profile on revoked A7 (bridge)",
+      "actual": "Bridge error: MCP error -32001 mcp-remote: Dynamic Client Registration rejected (HTTP 404) Cannot POST /register. No /mcp status exposed by bridge.",
+      "positiveControl": "A7 worked immediately before",
+      "result": "PASS",
+      "files": [
+        "native_log.jsonl#2.3"
+      ]
+    },
+    {
+      "area": "retire-A",
+      "test": "Native read_delegated_work on revoked A7 (bridge)",
+      "actual": "Same bridge error -32001 DCR 404 /register",
+      "positiveControl": "A7 worked immediately before",
+      "result": "PASS",
+      "files": [
+        "native_log.jsonl#2.3"
+      ]
+    },
+    {
+      "area": "retire-A",
+      "test": "Direct HTTP POST /mcp initialize with revoked A7 (negative HTTP check)",
+      "actual": "HTTP 401 {error:UNAUTHORIZED}",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "s2_http_init_revokedA7.json"
+      ]
+    },
+    {
+      "area": "retire-A",
+      "test": "A owner profile loses verified evidence/autonomy",
+      "actual": "HTTP 200; all capabilities unknown; executionMode unavailable; missingForAutonomous [verified_mcp_tools,verified_background_runs]; createdAt reset to revoke time (known empty-profile timestamp issue)",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "s2_profile_A_after_revoke.json"
+      ]
+    },
+    {
+      "area": "retire-A",
+      "test": "B profile unchanged after A retire",
+      "actual": "Byte-equal to profile_B_pre",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "s2_profile_B.json"
+      ]
+    },
+    {
+      "area": "retire-A",
+      "test": "verify-workflow with OLD A trial-01 work, conversationClosed=true",
+      "actual": "HTTP 409 {error:WORKFLOW_NOT_VERIFIED}; A profile still unavailable after",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "s2_verify_old_A.json",
+        "s2_profile_A_after_verify.json"
+      ]
+    },
+    {
+      "area": "retire-A",
+      "test": "Mint fresh A8; native profile cleared",
+      "actual": "tenant A grok_test_agent; all capabilities unknown; executionMode unavailable",
+      "positiveControl": "itself",
+      "result": "PASS",
+      "files": [
+        "s2_mint_A8.json",
+        "profile_A_cleared.json"
+      ]
+    },
+    {
+      "area": "revoke-fixture",
+      "test": "POST /test/events p05_s10121857_revoke",
+      "actual": "HTTP 200 work_d84837d5cd476027d35197853c68aa69 pending v1 received 22:59:00.196Z deadline 23:01:00.196Z",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "s3_event_revoke.json"
+      ]
+    },
+    {
+      "area": "revoke-fixture",
+      "test": "Native read before claim",
+      "actual": "Not issued separately (claim response returned full work)",
+      "positiveControl": "-",
+      "result": "NOT_RUN",
+      "files": []
+    },
+    {
+      "area": "revoke-fixture",
+      "test": "Native claim",
+      "actual": "leased, lease exp 23:00:02.840Z",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "native_log.jsonl#3.2"
+      ]
+    },
+    {
+      "area": "revoke-fixture",
+      "test": "A owner DELETE /owner/grants/[PRIVATE_A8] before lease/deadline",
+      "actual": "HTTP 200 {revoked:true} at 18:59:06.723 EDT",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "s3_delete_A8.json"
+      ]
+    },
+    {
+      "area": "revoke-fixture",
+      "test": "Native propose with saved args on revoked A8 (bridge)",
+      "actual": "Bridge error -32001 DCR rejected (HTTP 404) /register",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "native_log.jsonl#3.4"
+      ]
+    },
+    {
+      "area": "revoke-fixture",
+      "test": "Direct HTTP /mcp initialize revoked A8",
+      "actual": "HTTP 401 {error:UNAUTHORIZED}",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "s3_http_init_revokedA8.json"
+      ]
+    },
+    {
+      "area": "revoke-fixture",
+      "test": "Owner evidence after revoke",
+      "actual": "pending, v1, no confirmedStart, replies [], audit grant_revoked_lease_released @22:59:06.663Z, receivedAt/deadline unchanged",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "s3_ev_revoke_after.json"
+      ]
+    },
+    {
+      "area": "revoke-fixture",
+      "test": "Fresh A9 native propose with old lease",
+      "actual": "{code:LEASE_INVALID,message:'Claim current work.'}; evidence still pending v1",
+      "positiveControl": "A9 read_agent_profile = A, cleared",
+      "result": "PASS",
+      "files": [
+        "native_log.jsonl#3.6",
+        "s3_ev_revoke_after_leaseinvalid.json"
+      ]
+    },
+    {
+      "area": "expiry-fixture",
+      "test": "POST /test/events p05_s10121857_expiry",
+      "actual": "HTTP 200 work_21a87566495afb5c4d62e2282baba8f1 deadline 23:01:25.997Z",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "s4_event_expiry.json"
+      ]
+    },
+    {
+      "area": "expiry-fixture",
+      "test": "Native claim once",
+      "actual": "leased, lease exp 23:00:28.657Z",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "native_log.jsonl#4.1"
+      ]
+    },
+    {
+      "area": "expiry-fixture",
+      "test": "Lease expiry observed before deadline (5s polls, no reclaim)",
+      "actual": "audit lease_expired_or_grant_revoked @23:00:28.663Z; poll at server Date 23:00:30Z, status pending, replies [], grant A9 live",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "s4_expiry_poll.log",
+        "s4_ev_expiry_at_lease_expiry.json"
+      ]
+    },
+    {
+      "area": "expiry-fixture",
+      "test": "Native reclaim -> different lease",
+      "actual": "leased, new lease (differs), leaseExpiresAt 23:01:25.997Z (capped at deadline)",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "native_log.jsonl#4.3"
+      ]
+    },
+    {
+      "area": "expiry-fixture",
+      "test": "Old lease propose",
+      "actual": "{code:LEASE_INVALID}",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "native_log.jsonl#4.3"
+      ]
+    },
+    {
+      "area": "expiry-fixture",
+      "test": "Owner POST /owner/turns v2",
+      "actual": "HTTP 200 {saved:true}; evidence turn v2, no confirmedStart (no audit entry for owner turn change)",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "s4_owner_turn_v2.json",
+        "s4_ev_expiry_after_vc.json"
+      ]
+    },
+    {
+      "area": "expiry-fixture",
+      "test": "Fresh lease propose with expectedTurnVersion 1",
+      "actual": "{code:VERSION_CONFLICT,message:'Turn changed.'}; no validated action",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "native_log.jsonl#4.5"
+      ]
+    },
+    {
+      "area": "fallback",
+      "test": "Revoke fixture deadline fallback",
+      "actual": "completed, decisionSource fallback, v1, no confirmedStart, deadline 23:01:00.196Z unchanged, 1 reply to synthetic_cleaner_A receipt simulated_d0846a62-..., audit deadline_fallback_selected/send_attempt/provider_accepted_and_completed, no validated_action",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "s5_ev_revoke_final.json"
+      ]
+    },
+    {
+      "area": "fallback",
+      "test": "Expiry fixture deadline fallback",
+      "actual": "completed, fallback, owner v2, no confirmedStart, deadline 23:01:25.997Z, 1 reply synthetic_cleaner_A receipt simulated_e61b26d5-..., no validated_action",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "s5_ev_expiry_final.json"
+      ]
+    },
+    {
+      "area": "fallback",
+      "test": "No normal notification accepted while A cleared",
+      "actual": "notification.status not_queued on both fixtures",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "s5_ev_revoke_final.json",
+        "s5_ev_expiry_final.json"
+      ]
+    },
+    {
+      "area": "fallback",
+      "test": "B profile/evidence intact",
+      "actual": "profile and trial-01 evidence byte-equal to baseline",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "s5_profile_B.json",
+        "s5_evB_trial01.json"
+      ]
+    },
+    {
+      "area": "action-fixture",
+      "test": "Create/read/claim p05_s10121857_action",
+      "actual": "work_1d061f44b3ec4877c50fea4391334cc6 pending v1 -> leased",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "s6_event_action.json",
+        "native_log.jsonl#6.1"
+      ]
+    },
+    {
+      "area": "action-fixture",
+      "test": "Propose valid requestedStart v1, actionKey grok_action_s10121857_01",
+      "actual": "{accepted:true,completed:false,deliveryStatus:pending}; evidence: completed v2 confirmedStart 2026-10-14T00:01:45.745Z, validated_action_and_reply_saved, 1 simulated receipt",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "s6_ev_action_after1.json"
+      ]
+    },
+    {
+      "area": "action-fixture",
+      "test": "Replay identical proposal x2",
+      "actual": "{accepted:true,completed:true,deliveryStatus:sent} both; evidence byte-equal (no extra version/audit/send/receipt)",
+      "positiveControl": "read_delegated_work completed v2",
+      "result": "PASS",
+      "files": [
+        "s6_ev_action_after_replays.json"
+      ]
+    },
+    {
+      "area": "action-fixture",
+      "test": "Same actionKey, different start",
+      "actual": "{code:ACTION_CONFLICT,message:'Action key changed.'}",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "native_log.jsonl#6.3"
+      ]
+    },
+    {
+      "area": "pre-restart",
+      "test": "No pending/leased work",
+      "actual": "native A list [] after action; B list [] at step 1 (B not re-listed natively post-faults); revoke/expiry/action completed",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": []
+    },
+    {
+      "area": "pre-restart",
+      "test": "No scheduled fixtures",
+      "actual": "No schedule-list API (GET /test/schedules -> 404); none created this packet",
+      "positiveControl": "-",
+      "result": "MISSING",
+      "files": []
+    },
+    {
+      "area": "pre-restart",
+      "test": "s3m1832 property/access under both owners",
+      "actual": "own 200 tenant-scoped names/propertyIds, clearanceCurrent=false, operatesDoors=false, hostClearance=false; foreign 404",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "s7_propacc_summary.txt"
+      ]
+    },
+    {
+      "area": "pre-restart",
+      "test": "Profiles saved",
+      "actual": "A unavailable/cleared; B equal to baseline",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "s7_profile_A.json",
+        "s7_profile_B.json"
+      ]
+    },
+    {
+      "area": "restart",
+      "test": "Scoped restart of Cleaner Core TEST service only",
+      "actual": "Saad restarted the TEST service once (operator-confirmed); no second restart",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": []
+    },
+    {
+      "area": "recovery",
+      "test": "Post-restart runtime recheck",
+      "actual": "healthy synthetic, 2 tenants, realSmsEnabled=false, server-clock-v1",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "r8_runtime.json"
+      ]
+    },
+    {
+      "area": "recovery",
+      "test": "Replay p05_s10121709_shared_01 A/B + created recovery fixtures",
+      "actual": "All 5 eventId replays returned same workIds; evidence byte-equal to pre-restart",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "r8_replay_summary.jsonl",
+        "r8_A_shared01_ev_after.json",
+        "r8_B_shared01_ev_after.json",
+        "r8_revoke_ev_after.json",
+        "r8_expiry_ev_after.json",
+        "r8_action_ev_after.json"
+      ]
+    },
+    {
+      "area": "recovery",
+      "test": "Post-restart s3m1832 reads",
+      "actual": "own 200, foreign 404, clearanceCurrent=false, operatesDoors=false under A and B; matches pre-restart",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "r8_A_properties_prop_s3m1832_A.json",
+        "r8_B_access_acc_s3m1832_B.json"
+      ]
+    },
+    {
+      "area": "recovery",
+      "test": "Old revoked A access native fail + HTTP 401 after restart",
+      "actual": "HTTP /mcp initialize A7/A8 = 401 at ~19:23 ET; native read_agent_profile as A7 at 19:25 ET FAILED: 'MCP error -32000: Connection closed'; bridge stderr only shows RegistrationRejectedError /register 404 after handleOAuthUnauthorized (bridge did not surface 401)",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "r8_http_init_A7.json",
+        "r8_http_init_A8.json",
+        "r8_native_A7.json"
+      ]
+    },
+    {
+      "area": "recovery",
+      "test": "Current A works without resurrecting evidence; fresh B identity/own read",
+      "actual": "A9 native: tenant A, executionMode unavailable, all caps unknown, no evidence; own trial-01 work_81f25a6e... completed v2. Fresh B6 grant: tenant B autonomous, mcp_tools+background_runs verified; evidenceIds/observedAt/updatedAt identical to profile_B_pre; own trial-01 work_2d48b198... completed",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "r8_native_B_profile.json",
+        "r8_mint_B6.json"
+      ]
+    },
+    {
+      "area": "onboarding",
+      "test": "Restoration onboarding",
+      "actual": "Schedule test_schedule_b657ea0c32814023630b801b00eb0a1f (eventId p05_s10121857_restore_onboard, runAt 7:31:16 PM ET) went to status=failed error=UNAUTHORIZED, workId=null, firedAt=null (observed 7:31:20 PM ET). No work created, no receiver execution, verify-workflow not called. At 7:31:25-29 PM ET MCP initialize with A9 and A10 returned 401 and the A profile showed grants=[] (A9 was 200 at 7:25:48 PM ET). Cause not confirmed. Closed-window was confirmed by Saad.",
+      "positiveControl": "-",
+      "result": "FAIL",
+      "files": [
+        "r8_sched_fired.json",
+        "r8_http_init_A9_post.json",
+        "r8_http_init_A10.json",
+        "r8_profile_A_postfail.json"
+      ]
+    },
+    {
+      "area": "recovery",
+      "test": "B preserved after onboarding attempt",
+      "actual": "B profile updatedAt 20:43:47.915Z, autonomous, evidence probe_67873e.../work_b088a49c... identical to profile_B_pre; B6 initialize 200",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "r8_profile_B_postfail.json",
+        "r8_http_init_B6.json"
+      ]
+    },
+    {
+      "area": "onboarding",
+      "test": "Retry restoration onboarding on A11 (single retry, user-approved)",
+      "actual": "A11 init 200 at 7:32:50 PM ET; schedule test_schedule_d5534d93ed15356c2804d630d7542938 (eventId p05_s10121857_restore_onboard_retry, delay 300) runAt 7:37:53.589 PM ET, fired 7:37:53.601 PM ET, workId work_9f5dbc97def60de4fcfbc9cd7b4dd77e; claimed by grok_test_agent 7:38:07.996 PM ET, completed 7:38:12.236 PM ET, decisionSource agent, simulated delivery sent",
+      "positiveControl": "prior FAIL row (UNAUTHORIZED) retained",
+      "result": "PASS",
+      "files": [
+        "r9_pre.json",
+        "r9_sched_retry.json",
+        "r9_sched_fired.json",
+        "r9_ev_completed.json"
+      ]
+    },
+    {
+      "area": "onboarding",
+      "test": "Closed-window verify-workflow after correlated agent completion",
+      "actual": "verify-workflow 200; A profile updatedAt 23:38:18.374Z, executionMode autonomous, missingForAutonomous [], background_runs verified via work_9f5dbc97... ownerConfirmedConversationClosed true",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "r9_verify.json",
+        "r9_profile_A.json"
+      ]
+    },
+    {
+      "area": "recovery",
+      "test": "B preserved after onboarding retry",
+      "actual": "B profile updatedAt 20:43:47.915Z unchanged, autonomous",
+      "positiveControl": "-",
+      "result": "PASS",
+      "files": [
+        "r9_profile_B.json"
+      ]
+    }
+  ]
+}

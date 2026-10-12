@@ -1,5 +1,9 @@
 # Continue Phase 0.5 implementation
 
+Closure update: [Phase 0.5 proof is complete](cleaner-phase05-closure.md), including
+reconciled ordinary/recovery/restoration evidence and tested conditional cost
+models, with explicit limits. This implementation brief is historical.
+
 Implementation update: the [local two-tenant runtime and acceptance results](cleaner-phase05-implementation.md)
 are now implemented on `cleaner-core/phase05-multitenant`. The copied request below
 is preserved as the historical implementation brief; the latest user request authorizes economics and live Grok testing. See

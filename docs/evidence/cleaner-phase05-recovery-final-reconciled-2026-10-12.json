@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "status": "RECOVERY_AND_RESTORATION_RECONCILED_WITH_RETAINED_FAILURE",
+  "session": "s10121857",
+  "provenance": "User-exported hosted engine/account records and retrospective closed-window confirmation; no direct authenticated hosted reads by this verifier",
+  "sources": [
+    {
+      "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/Fault_packet_recovery_final.json",
+      "bytes": 175461,
+      "sha256": "bfd9fd993df693c87025a828f4c1c303483ed7ab89efde0710adce17580b7745"
+    },
+    {
+      "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/Fault_packet_recovery_final_report.json",
+      "bytes": 26811,
+      "sha256": "5040d2364ee4cf530f566bd413c0c0659277a9659ea43f2959fce5d1f900dcde"
+    },
+    {
+      "repositoryPath": "docs/evidence/cleaner-phase05-recovery-provenance-2026-10-12.json",
+      "bytes": 1596,
+      "sha256": "a68f0bdece4243c8039f41274a86d914ae8d27bfd2a2706e58a9ff46624e44b2"
+    }
+  ],
+  "suppliedMatrixRows": 61,
+  "reportedCounts": {
+    "PASS": 56,
+    "MISSING": 2,
+    "NOT_RUN": 2,
+    "FAIL": 1
+  },
+  "restart": "USER_CONFIRMED_ONCE; post-restart baseline values persist in supplied records",
+  "replays": [
+    {
+      "label": "A_shared01",
+      "workId": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+      "originalDeadlineAt": "2026-10-12T21:16:17.594Z",
+      "replyKey": "reply_work_81f25a6ec1109b0a08d3b2e4bd85d126",
+      "receipt": "simulated_4de3a740-1c3b-4928-b381-faef4f8be675",
+      "result": "PASS_EXPORTED_VALUES_EQUAL_TO_PRE_RESTART_BASELINE"
+    },
+    {
+      "label": "B_shared01",
+      "workId": "work_2d48b19802916c30a7f411a281386f75",
+      "originalDeadlineAt": "2026-10-12T21:56:43.999Z",
+      "replyKey": "reply_work_2d48b19802916c30a7f411a281386f75",
+      "receipt": "simulated_25ff7e81-d077-4f7e-8aba-aea13bc60744",
+      "result": "PASS_EXPORTED_VALUES_EQUAL_TO_PRE_RESTART_BASELINE"
+    },
+    {
+      "label": "revoke",
+      "workId": "work_d84837d5cd476027d35197853c68aa69",
+      "originalDeadlineAt": "2026-10-12T23:01:00.196Z",
+      "replyKey": "reply_work_d84837d5cd476027d35197853c68aa69",
+      "receipt": "simulated_d0846a62-de7f-4287-a23e-960afcce53ea",
+      "result": "PASS_EXPORTED_VALUES_EQUAL_TO_PRE_RESTART_BASELINE"
+    },
+    {
+      "label": "expiry",
+      "workId": "work_21a87566495afb5c4d62e2282baba8f1",
+      "originalDeadlineAt": "2026-10-12T23:01:25.997Z",
+      "replyKey": "reply_work_21a87566495afb5c4d62e2282baba8f1",
+      "receipt": "simulated_e61b26d5-5356-43a7-9a7f-58d8891aa1b1",
+      "result": "PASS_EXPORTED_VALUES_EQUAL_TO_PRE_RESTART_BASELINE"
+    },
+    {
+      "label": "action",
+      "workId": "work_1d061f44b3ec4877c50fea4391334cc6",
+      "originalDeadlineAt": "2026-10-12T23:03:45.749Z",
+      "replyKey": "reply_work_1d061f44b3ec4877c50fea4391334cc6",
+      "receipt": "simulated_7b9fe23f-ec51-4319-8eaf-29dab225d5d1",
+      "result": "PASS_EXPORTED_VALUES_EQUAL_TO_PRE_RESTART_BASELINE"
+    }
+  ],
+  "propertyAccess": "PASS_EXPORTED_VALUES_EQUAL_FOR_BOTH_TENANTS",
+  "grantRecovery": {
+    "nativeRevokedAccess": "Recorded connection failure and /register 404; underlying MCP HTTP status not surfaced by bridge",
+    "postRestartA7A8HttpStatus": "401 reported at 19:23 EDT inside original validity; exported bodies contain UNAUTHORIZED but no numeric status/time wrapper",
+    "validControls": "A9/A11/B6 HTTP initialize 200 and structured native identity/own reads; A remains cleared until new workflow evidence",
+    "olderBTokenRejection": "Bcur initialize 401; reason for invalidity not established from redacted credential provenance. Fresh B6 works without clearing B profile."
+  },
+  "firstRestoration": {
+    "status": "FAIL_UNAUTHORIZED_NO_WORK_CREATED",
+    "schedule": {
+      "id": "test_schedule_b657ea0c32814023630b801b00eb0a1f",
+      "eventId": "p05_s10121857_restore_onboard",
+      "kind": "onboarding",
+      "delaySeconds": 300,
+      "runAt": "2026-10-12T23:31:15.981Z",
+      "status": "failed",
+      "workId": null,
+      "firedAt": null,
+      "error": "UNAUTHORIZED"
+    },
+    "sourceCause": "Account-reported accidental extra A grant revocation; consistent with agent-wide retirement and retry notification epoch 4. Actual extra revoke request not exported.",
+    "invalidInputCalls": 2,
+    "failureRetained": true
+  },
+  "retryRestoration": {
+    "status": "PASS_RECONCILED_ENGINE_AND_OWNER_CONFIRMATION",
+    "schedule": {
+      "id": "test_schedule_d5534d93ed15356c2804d630d7542938",
+      "eventId": "p05_s10121857_restore_onboard_retry",
+      "kind": "onboarding",
+      "delaySeconds": 300,
+      "runAt": "2026-10-12T23:37:53.589Z",
+      "status": "fired",
+      "workId": "work_9f5dbc97def60de4fcfbc9cd7b4dd77e",
+      "firedAt": "2026-10-12T23:37:53.601Z",
+      "error": null
+    },
+    "workId": "work_9f5dbc97def60de4fcfbc9cd7b4dd77e",
+    "source": "agent",
+    "engineLatencyMs": 18641,
+    "validatedDecisionLatencyMs": 18525,
+    "storedDeadlineMarginMs": 101359,
+    "scheduleFireLagMs": 12,
+    "receipt": "simulated_7eaf15c9-504d-419e-b0e3-d467a30fd89c",
+    "notificationEpoch": 4,
+    "closedWindow": {
+      "source": "User answer in this thread after exports supplied",
+      "question": "Did the Grok conversation actually stay closed throughout the retry window, approximately 7:32:53–7:40:54 PM ET on October 12?",
+      "answer": "Yes, closed throughout that window",
+      "confirmed": true,
+      "windowStart": "2026-10-12T19:32:53-04:00",
+      "windowEnd": "2026-10-12T19:40:54-04:00",
+      "backendVerifyAt": "2026-10-12T23:38:18.374Z",
+      "note": "Backend verification was called during the window using the advance promise; retrospective owner confirmation was obtained here afterward."
+    },
+    "verification": "HTTP 200; fresh work-linked background evidence; A autonomous; productionReady false"
+  },
+  "restorationAccounting": {
+    "acceptedSchedules": 2,
+    "failedBeforeWorkCreation": 1,
+    "createdWorks": 1,
+    "agentCompletions": 1
+  },
+  "BPreservation": "PASS_EXPORTED_FULL_PUBLIC_PROFILE_EQUAL_TO_PRE_RESTART_BASELINE",
+  "exporterContradictions": [
+    "Report aStillCleared=true and connector label (cleared) are stale; r9 final A profile is autonomous with fresh evidence",
+    "Report onboardingSchedule refers to initial failed schedule; r9 fired schedule identifies the successful explicit retry"
+  ],
+  "limits": [
+    "Missing earlier original native/refresh/revoke logs, native trace IDs and global schedule listing remain missing",
+    "A tenantId-added checks and separate revoke-fixture pre-claim read remain NOT_RUN; local transport suite covers schema rejection",
+    "Backend verify-workflow ran before the closed window ended using an advance promise; genuine retrospective confirmation was obtained in this thread afterward",
+    "Original wire bytes, restart hosting controls and reported extra revoke call are not independently inspected",
+    "Profile grants lists describe native resource grants, not OAuth bearer validity",
+    "Reply is simulated provider acceptance, not a phone delivery; no carrier events or door operation",
+    "Restoration/fault/manual-action observations remain outside the twenty ordinary trials"
+  ]
+}

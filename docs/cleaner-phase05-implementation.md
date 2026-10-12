@@ -5,8 +5,10 @@ Status: **implemented and locally demonstrated**, 12 October 2026, on
 Closure update: the user has now authorized economics and live Grok validation.
 See [economics validation](cleaner-phase05-economics.md) and the
 [same-endpoint Grok packet](cleaner-phase05-live-grok-packet.md). Live results
-now reconcile onboarding and twenty ordinary completions; security exports have
-the limits below and live recovery remains open. The attached roadmap supplies
+now reconcile onboarding, twenty ordinary completions, post-restart recovery
+and the authorized restoration retry. [Phase 0.5 is closed as the scoped
+synthetic proof](cleaner-phase05-closure.md), with retained failures/limits and
+productionReady=false. The attached roadmap supplies
 background; the user's implementation request and
 final architecture decision govern this work. The old onboarding-only restriction
 in the earlier proof does not apply to this implementation task.
@@ -201,8 +203,9 @@ The security matrix has 71 PASS rows, three native failures with HTTP status
 inferred, one browser OAuth check NOT_RUN and missing trace IDs. Replay and
 ingress exports reconcile; native scope errors and refresh/revocation outcomes
 are reconstructed account observations. Public main-profile values match
-before/after; redacted grant values cannot be compared. Main-agent revocation
-with verified evidence/leases, live stale actions and restart remain open.
+before/after; redacted grant values cannot be compared. At that checkpoint,
+main-agent revocation with verified evidence/leases, stale actions and restart
+were still open; later records below close those proof checks.
 
 Subsequent fault exports now reconcile retirement of main A with cleared
 capabilities, active-lease release and two directly observed HTTP MCP 401s.
@@ -216,9 +219,13 @@ before restart. Source hashes and scope limits are in
 `node eval/cleaner-phase05/reconcile-fault.mjs`.
 
 The user then confirmed a test-service restart under two seconds. Actual
-post-confirmation public health is ready, but authenticated replay/storage/grant
-persistence and one A restoration onboarding remain open. Follow only the resume
-block in the recovery packet. No deployed branch, revision, volume or variables
+post-confirmation public health was ready. Final exports now reconcile five
+recovery checks and one restored A workflow after an initial failed schedule.
+The retry completed in 18,641ms with 101,359ms before deadline; the owner confirms
+the whole closed window retrospectively. A has fresh epoch-4 evidence and B's
+profile remains unchanged. Final matrix has 56 PASS, one FAIL, two MISSING and
+two NOT_RUN, with partial raw-status evidence explained in the closure report.
+No more recovery packet is needed. No deployed branch, revision, volume or variables
 were changed by this workspace. The owner turn version update has no audit
 entry; global scheduled-job absence and earlier original native logs remain
 missing rather than assumed. The local profile-timestamp fix remains undeployed.

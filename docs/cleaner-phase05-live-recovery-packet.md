@@ -1,6 +1,15 @@
 # Phase 0.5 live recovery packet
 
-Latest status: session `s10121857` supplies 57 pre-restart matrix rows: 46 PASS,
+Closure update: **complete as the scoped synthetic proof**. The final exports
+reconcile all five post-restart checks and the authorized restoration retry,
+with retrospective owner confirmation of its full closed window. The initial
+restoration UNAUTHORIZED/no-work failure is retained. Final matrix: 56 PASS,
+one FAIL, two MISSING and two NOT_RUN. A is restored with fresh evidence; B is
+unchanged. See [closure](cleaner-phase05-closure.md) for provenance and limits.
+The blocks below are historical reference; do not run another fault/onboarding
+packet or restart the service to fill missing observations.
+
+Historical pre-restart status: session `s10121857` supplies 57 matrix rows: 46 PASS,
 zero FAIL, nine NOT_RUN and two MISSING. Main A retirement, active-lease
 revocation, expiry and stale-action engine records now reconcile. Lease expiry
 preceded the deadline by 57,334ms. Both forced requests got one fallback receipt;
@@ -21,7 +30,7 @@ persistence. Source bytes/hashes and verification are retained in
 
 ## Resume after the confirmed restart
 
-Copy only this block now. Keep the previous fault records unchanged; do not
+Historical resume block; this stage is complete. Keep the previous fault records unchanged; do not
 repeat retirement, lease-expiry or action fixtures. Old A7/A8 validity ends
 around 19:58 EDT: test their denial before then or record an expiry confound.
 

@@ -68,6 +68,21 @@
       "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/Fault_packet.json",
       "bytes": 61840,
       "sha256": "e0c6df6d6f8bdd84da626dfcf2901e823da1f6616b0c241292663b998d89fbd3"
+    },
+    {
+      "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/Fault_packet_recovery_final.json",
+      "bytes": 175461,
+      "sha256": "bfd9fd993df693c87025a828f4c1c303483ed7ab89efde0710adce17580b7745"
+    },
+    {
+      "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/Fault_packet_recovery_final_report.json",
+      "bytes": 26811,
+      "sha256": "5040d2364ee4cf530f566bd413c0c0659277a9659ea43f2959fce5d1f900dcde"
+    },
+    {
+      "repositoryPath": "docs/evidence/cleaner-phase05-recovery-provenance-2026-10-12.json",
+      "bytes": 1596,
+      "sha256": "a68f0bdece4243c8039f41274a86d914ae8d27bfd2a2706e58a9ff46624e44b2"
     }
   ],
   "checks": {
@@ -100,7 +115,13 @@
     "leaseExpiry": "PASS_RECONCILED 57334ms before deadline with pending/no reply, reclaim and native old-lease denial",
     "staleVersionAndAction": "PASS_STRUCTURED_NATIVE_ERRORS_AND_ENGINE_OUTCOMES; exact action replay evidence equal",
     "faultMatrix": "57 rows: 46 PASS, 0 FAIL, 9 NOT_RUN, 2 MISSING in pre-restart packet",
-    "restart": "USER_CONFIRMED less than two seconds; post-confirmation public health HTTP 200; recovery checks pending"
+    "restart": "USER_CONFIRMED less than two seconds; post-confirmation public health HTTP 200; recovery checks pending",
+    "postRestartRecovery": "PASS_RECONCILED five equal-work/evidence replays, isolated storage and A/B credential/profile controls; denial status evidence limits recorded",
+    "firstARestoration": "FAIL_UNAUTHORIZED_NO_WORK_CREATED; retained",
+    "ARestorationRetry": "PASS_RECONCILED 18641ms agent completion, margin 101359ms, one simulated receipt, fresh epoch-4 evidence and retrospective owner closed-window confirmation",
+    "finalFaultRecoveryMatrix": "61 rows: 56 PASS, one FAIL, two MISSING, two NOT_RUN",
+    "finalAProfile": "Autonomous for scoped workflow, fresh MCP/background evidence; productionReady=false",
+    "finalBProfile": "Full public exported profile unchanged from pre-restart baseline"
   },
   "accountReportedOperationalFaults": [
     "Initial B connector switch retained tenant A until old session was stopped; initial successful read/CLOSED claim excluded from isolation results",
@@ -108,11 +129,7 @@
     "Actual B onboarding fixture created at 15:10:38 EDT, but client reports receiving its response after deadline; late probe/notification followed",
     "Grok attributes delays to its computer stalling while conversation closed; server export verifies late notification, not the client-side cause"
   ],
-  "remaining": [
-    "Post-restart authenticated A/B source replay, storage and revoked/current grant checks",
-    "One restoration onboarding and genuine closed-window workflow verification",
-    "Existing missing logs, browser OAuth UI, global scheduled-job listing and hosted provider fault injection remain explicit limits"
-  ],
+  "remaining": [],
   "rawLimitations": [
     "Scope-check B fixture JSON and exact denied responses were not supplied",
     "Native per-call trace IDs unavailable in account",
@@ -129,11 +146,27 @@
     "B is listed natively before, not after faults; no global pending-schedule listing exists",
     "Prior-packet original native/refresh/revoke files remain missing",
     "No hosting restart performed by this reconciler; no real SMS, phone delivery or doors",
-    "Fault fallbacks and controlled action remain separate from the twenty ordinary latency observations"
+    "Fault fallbacks and controlled action remain separate from the twenty ordinary latency observations",
+    "Missing earlier original native/refresh/revoke logs, native trace IDs and global schedule listing remain missing",
+    "A tenantId-added checks and separate revoke-fixture pre-claim read remain NOT_RUN; local transport suite covers schema rejection",
+    "Backend verify-workflow ran before the closed window ended using an advance promise; genuine retrospective confirmation was obtained in this thread afterward",
+    "Original wire bytes, restart hosting controls and reported extra revoke call are not independently inspected",
+    "Profile grants lists describe native resource grants, not OAuth bearer validity",
+    "Reply is simulated provider acceptance, not a phone delivery; no carrier events or door operation",
+    "Restoration/fault/manual-action observations remain outside the twenty ordinary trials"
   ],
   "retryReconciliation": "docs/evidence/cleaner-phase05-grok-B-retry-2026-10-12.json",
   "ordinaryReport": "docs/evidence/cleaner-phase05-grok-ordinary-reported-2026-10-12.json",
   "ordinarySecurityReconciliation": "docs/evidence/cleaner-phase05-ordinary-security-reconciled-2026-10-12.json",
   "faultReconciliation": "docs/evidence/cleaner-phase05-fault-reconciled-2026-10-12.json",
-  "restartObservation": "docs/evidence/cleaner-phase05-restart-observation-2026-10-12.json"
+  "restartObservation": "docs/evidence/cleaner-phase05-restart-observation-2026-10-12.json",
+  "status": "COMPLETE_SCOPED_SYNTHETIC_TWO_TENANT_PROOF_WITH_KNOWN_LIMITS",
+  "finalRecoveryReconciliation": "docs/evidence/cleaner-phase05-recovery-final-reconciled-2026-10-12.json",
+  "closure": "docs/evidence/cleaner-phase05-closure-2026-10-12.json",
+  "remainingRequiredProofWork": [],
+  "laterWork": [
+    "Production hosting/deployment decision and review of local timestamp fix",
+    "Real provider integration/delivery guarantees and complete owner CRUD audit",
+    "Production agent credential lifecycle/UI, wider workload reliability and actual billed usage"
+  ]
 }

@@ -21,7 +21,7 @@
   },
   "runtimeMatchesPhase05": true,
   "userReported": "Existing Cleaner Core Railway service updated; continue account-side live validation on the same URL",
-  "liveGrokStatus": "onboarding_and_ordinary_reconciled; fault_packet_reconciled; restart_user_confirmed_and_public_health_ready; recovery_and_A_restoration_pending",
+  "liveGrokStatus": "COMPLETE_SCOPED_SYNTHETIC_PROOF_WITH_KNOWN_LIMITS; ordinary_20_of_20_and_recovery_restoration_reconciled; initial_failures_retained",
   "classification": "Actual HTTPS runtime and unauthenticated transport observations; not proof of account-side agent execution, tenant isolation, provider acceptance or phone delivery",
   "latestObservations": [
     {
@@ -89,7 +89,11 @@
     "securityMatrix": "76 rows: 71 PASS, 3 native failures with HTTP status inferred, 1 NOT_RUN browser UI, 1 missing trace IDs",
     "mainRevocation": "PASS_RECONCILED; native failures plus two direct HTTP MCP 401s, cleared profile and old-workflow 409",
     "leaseExpiryAndStaleActions": "PASS_RECONCILED engine timelines and structured native errors",
-    "restart": "USER_CONFIRMED; actual subsequent public health HTTP 200; persistence recovery NOT_YET_VERIFIED"
+    "restart": "USER_CONFIRMED_ONCE; five authenticated recovery record comparisons reconcile",
+    "ARestoration": "First accepted schedule FAIL_UNAUTHORIZED_NO_WORK; explicit retry PASS 18641ms, owner closed-window confirmed retrospectively",
+    "finalProfiles": "A autonomous with new epoch-4 evidence; B unchanged; productionReady=false",
+    "postRestartRevokedAccess": "401 reported inside validity; exported bodies UNAUTHORIZED but numeric post-restart status/time wrappers absent",
+    "finalMatrix": "56 PASS, one FAIL, two MISSING, two NOT_RUN"
   },
   "previousObservation": {
     "name": "railway_health",
@@ -111,7 +115,10 @@
     "docs/evidence/cleaner-phase05-grok-ordinary-reported-2026-10-12.json",
     "docs/evidence/cleaner-phase05-ordinary-security-reconciled-2026-10-12.json",
     "docs/evidence/cleaner-phase05-fault-reconciled-2026-10-12.json",
-    "docs/evidence/cleaner-phase05-restart-observation-2026-10-12.json"
+    "docs/evidence/cleaner-phase05-restart-observation-2026-10-12.json",
+    "docs/evidence/cleaner-phase05-recovery-final-reconciled-2026-10-12.json",
+    "docs/evidence/cleaner-phase05-recovery-provenance-2026-10-12.json"
   ],
-  "serverClockScheduler": "PASS_RECONCILED: deterministic B schedule/work linkage, fixture receipt 17ms after runAt, fired marker 24ms after runAt"
+  "serverClockScheduler": "PASS_RECONCILED: deterministic B schedule/work linkage, fixture receipt 17ms after runAt, fired marker 24ms after runAt",
+  "closure": "docs/evidence/cleaner-phase05-closure-2026-10-12.json"
 }

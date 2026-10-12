@@ -1,9 +1,10 @@
 # Phase 0.5 economics validation
 
-Status: cost model implemented and tested; A/B live onboarding reconciled from
-exports and ordinary 20/20 reconciled; security packet has partial evidence;
-main-agent revocation/lease/stale-action fault records reconciled; restart is
-user-confirmed, post-restart recovery and A restoration remain open.
+Status: **Phase 0.5 complete as the synthetic two-tenant proof**. Cost model
+implemented/tested; ordinary 20/20, fault/recovery and restoration records
+reconciled. The first restoration attempt remains FAIL and its single authorized
+retry passes with retrospective owner-confirmed closed window. See
+[closure and carried limits](cleaner-phase05-closure.md); productionReady=false.
 Measured locally on 12 October 2026. The user authorized 20/100/300 requests per
 landlord per month and fleets of 2/10/100 landlords. The original cost deferral
 is superseded for this validation; no final hosting choice has been made.
@@ -331,10 +332,17 @@ action rejection and two deterministic deadline fallbacks. Matrix accounting
 is 46 PASS, zero FAIL, nine NOT_RUN and two MISSING in that pre-restart snapshot.
 The user confirmed a subsequent test-service restart in less than two seconds;
 actual public health returned HTTP 200 afterward. Full Phase 0.5 live validation
-remains **open** for authenticated persistence/revoked-grant recovery and one
-fresh A restoration onboarding. No cost/hosting observations were regenerated.
+remained open at that checkpoint for persistence/revoked-grant recovery and
+A restoration. The final exports now reconcile all five recovery checks,
+unchanged storage/work/receipts and fresh A/B controls. First restoration failed
+UNAUTHORIZED/no work; the authorized single retry completed in 18,641ms with
+101,359ms before deadline, one simulated receipt and fresh epoch-4 evidence.
+The owner retrospectively confirmed the entire closed window. Final matrix:
+56 PASS, one retained FAIL, two MISSING and two NOT_RUN. Those missing/untested
+items and partial raw-status evidence are carried limits in the closure report,
+not silently promoted to passes. No cost/hosting observations were regenerated.
 Retry/uncertain-send behavior is covered by local
 injected-provider and process-crash tests; the hosted simulator offers no fault
-controls and proves no real-provider guarantee. The next recovery packet does
-not repeat ordinary trials or change the deployed revision. Do not infer agent
+controls and proves no real-provider guarantee. The completed recovery packet
+did not repeat ordinary trials or change the deployed revision. Do not infer agent
 completion or phone delivery from HTTP/provider acceptance.

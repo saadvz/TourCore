@@ -1,5 +1,11 @@
 # Phase 0.5 live Grok packet — same Cleaner Core URL
 
+Closure update: [Phase 0.5 is complete as the synthetic two-tenant proof](cleaner-phase05-closure.md).
+Ordinary/recovery exports reconcile and A restoration succeeds after one retained
+failed schedule. Its closed window is retrospectively owner-confirmed; B stays
+unchanged. Keep productionReady=false and the documented missing/untested items.
+All run blocks below are historical reference; no further packet is requested.
+
 Status: A onboarding and the explicit server-clock B retry reconcile with
 uploaded engine/profile exports. B has two created onboarding trials and one
 pass; its earlier late-setup failure remains recorded. Reciprocal scope checks
