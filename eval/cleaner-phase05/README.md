@@ -1,4 +1,14 @@
-# Phase 0.5 existing-core proof
+# Phase 0.5 validation
+
+The [local implementation report](../../docs/cleaner-phase05-implementation.md)
+describes the indexed two-tenant runtime and its 27 new acceptance tests.
+Run `npm run cleaner:phase05:demo` for its loopback HTTP/OAuth/MCP demonstration
+or `npm run cleaner:phase05:measure` for the indexed resource sampler.
+`results/multitenant-tests.json`, `results/multitenant-demo.json` and
+`results/indexed-resource-sample.json` record the new evidence. The historical
+runner and raw JSON-store measurements below remain available.
+
+## Historical existing-core proof
 
 These are standalone validation helpers for the existing delegation components.
 They do not implement a multi-tenant hosted product or change application source,
@@ -36,3 +46,11 @@ The five existing suites passed 60 tests. The standalone isolation result is
 The [proof/specification](../../docs/cleaner-tenant-isolation-proof.md) describes
 limits and the application changes needed for a real two-landlord runtime.
 Use a new output path to preserve the measured reports in `results/`.
+
+## Economics and live closure
+
+`npm run cleaner:phase05:fleet` measures the 2/10/100-landlord and 20/100/300-request
+combinations. `npm run cleaner:phase05:costs` computes price-reference scenarios.
+Raw per-workflow files and `results/cost-scenarios.json` are retained.
+See `docs/cleaner-phase05-economics.md` and the same-endpoint account packet in
+`docs/cleaner-phase05-live-grok-packet.md`. Live execution remains pending.

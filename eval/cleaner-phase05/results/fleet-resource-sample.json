@@ -1,0 +1,2883 @@
+{
+  "schemaVersion": 1,
+  "status": "completed",
+  "generatedAt": "2026-10-12T08:14:36.474Z",
+  "scope": "Actual local indexed lifecycles and wakeup workers for 2/10/100 synthetic landlords, 20/100/300 workflows each; phases retain earlier history. Every tenth workflow loses first idempotent-provider acknowledgment.",
+  "measurement": {
+    "agent": "Injected immediate wakeup acceptance, scripted engine calls; no real Grok or inference. Readiness evidence is an explicit trusted benchmark fixture.",
+    "cpu": "Whole-process lifecycle deltas and idle sweeps; per-tenant sequential attribution includes shared scans, not private tenant CPU",
+    "network": "Outbound business JSON bytes; provider body proxy is estimated, HTTP/TLS/vendor traffic excluded",
+    "memory": "Sampled process RSS, not billed container memory",
+    "workerIntervalMsForProjection": 250,
+    "rateLimits": "Bulk sampler lifts starts/sec to avoid clock-compression throttling; production/default budgets are tested in acceptance suite",
+    "realSms": 0,
+    "doors": 0,
+    "externalInferenceCalls": 0
+  },
+  "sourceSha256": {
+    "store": "1f09531684ff17dbbc7104c28727db0080a175a46ae043b8b7554f73143ea19c",
+    "engine": "61cbdbbdcc9cbf2c9bbfac016c0a735b4ae021dad3743e40468bdd9bdbd2d986",
+    "grants": "62cb1046b26470f8e6d0f2fc4b975bf4d3018a6b6e307516acd25acb5bd178bb",
+    "service": "dd8df6b66a48a4e8c3e08b36352ddeacf503395033005ab1a89d89ea29634f06",
+    "notifications": "2efa2cc04dbb0f56d8342d712fda3a8a746997dba5f788d4e2dd7c1d5b15b742",
+    "profiles": "5097dc296f01d74d19146c6df43bae40bd122a62bc9914ca3ceab346bb1855b8"
+  },
+  "samples": [
+    {
+      "landlords": 2,
+      "monthlyRequestsPerTenant": 20,
+      "totalCompleted": 40,
+      "phaseRequests": 40,
+      "phaseCpuMs": 464.263,
+      "phaseWallMs": 847.064447,
+      "phaseIoDelta": {
+        "rchar": 302920,
+        "wchar": 9948205,
+        "syscr": 114,
+        "syscw": 4763,
+        "read_bytes": 0,
+        "write_bytes": 11296768,
+        "cancelled_write_bytes": 0
+      },
+      "cumulativeLifecycleCpuMs": 461.0489999999999,
+      "cpuMsPerWorkflow": 11.526224999999998,
+      "p95WallMs": 31.050312000000076,
+      "maxRssBytesObserved": 134447104,
+      "startupFiles": {
+        "cleaner.sqlite": 221184,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 0
+      },
+      "liveFilesBeforeCheckpoint": {
+        "cleaner.sqlite": 311296,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 4132392
+      },
+      "checkpointedFiles": {
+        "cleaner.sqlite": 335872,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 0
+      },
+      "providerAttempts": 44,
+      "notificationAcceptances": 40,
+      "outboundJsonBytes": 58600,
+      "idle": {
+        "cycles": 50,
+        "cpuMs": 47.521,
+        "wallMs": 29.499116000000186,
+        "cpuMsPerCycle": 0.95042,
+        "ioDelta": {
+          "rchar": 116,
+          "wchar": 0,
+          "syscr": 2,
+          "syscw": 0,
+          "read_bytes": 0,
+          "write_bytes": 0,
+          "cancelled_write_bytes": 0
+        }
+      },
+      "perTenant": [
+        {
+          "tenantId": "tenant_000",
+          "requests": 20,
+          "cpuMs": 252.62300000000002,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_001",
+          "requests": 20,
+          "cpuMs": 208.42600000000002,
+          "providerAttempts": 22,
+          "workRecords": 20
+        }
+      ]
+    },
+    {
+      "landlords": 2,
+      "monthlyRequestsPerTenant": 100,
+      "totalCompleted": 200,
+      "phaseRequests": 160,
+      "phaseCpuMs": 1216.423,
+      "phaseWallMs": 2091.8147770000005,
+      "phaseIoDelta": {
+        "rchar": 2001814,
+        "wchar": 42260098,
+        "syscr": 641,
+        "syscw": 20055,
+        "read_bytes": 0,
+        "write_bytes": 47640576,
+        "cancelled_write_bytes": 0
+      },
+      "cumulativeLifecycleCpuMs": 1665.9219999999996,
+      "cpuMsPerWorkflow": 8.329609999999997,
+      "p95WallMs": 29.637461000000258,
+      "maxRssBytesObserved": 167710720,
+      "startupFiles": {
+        "cleaner.sqlite": 221184,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 0
+      },
+      "liveFilesBeforeCheckpoint": {
+        "cleaner.sqlite": 819200,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 4152992
+      },
+      "checkpointedFiles": {
+        "cleaner.sqlite": 851968,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 0
+      },
+      "providerAttempts": 220,
+      "notificationAcceptances": 200,
+      "outboundJsonBytes": 293160,
+      "idle": {
+        "cycles": 50,
+        "cpuMs": 18.234,
+        "wallMs": 18.047276000000238,
+        "cpuMsPerCycle": 0.36468000000000006,
+        "ioDelta": {
+          "rchar": 117,
+          "wchar": 0,
+          "syscr": 2,
+          "syscw": 0,
+          "read_bytes": 0,
+          "write_bytes": 0,
+          "cancelled_write_bytes": 0
+        }
+      },
+      "perTenant": [
+        {
+          "tenantId": "tenant_000",
+          "requests": 100,
+          "cpuMs": 833.5770000000001,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_001",
+          "requests": 100,
+          "cpuMs": 832.3449999999999,
+          "providerAttempts": 110,
+          "workRecords": 100
+        }
+      ]
+    },
+    {
+      "landlords": 2,
+      "monthlyRequestsPerTenant": 300,
+      "totalCompleted": 600,
+      "phaseRequests": 400,
+      "phaseCpuMs": 3063.199,
+      "phaseWallMs": 5062.933962,
+      "phaseIoDelta": {
+        "rchar": 9786604,
+        "wchar": 115485667,
+        "syscr": 2768,
+        "syscw": 53762,
+        "read_bytes": 0,
+        "write_bytes": 128892928,
+        "cancelled_write_bytes": 0
+      },
+      "cumulativeLifecycleCpuMs": 4676.079999999997,
+      "cpuMsPerWorkflow": 7.793466666666662,
+      "p95WallMs": 26.867467000000033,
+      "maxRssBytesObserved": 258207744,
+      "startupFiles": {
+        "cleaner.sqlite": 221184,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 0
+      },
+      "liveFilesBeforeCheckpoint": {
+        "cleaner.sqlite": 2056192,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 4185952
+      },
+      "checkpointedFiles": {
+        "cleaner.sqlite": 2068480,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 0
+      },
+      "providerAttempts": 660,
+      "notificationAcceptances": 600,
+      "outboundJsonBytes": 880360,
+      "idle": {
+        "cycles": 50,
+        "cpuMs": 20.627,
+        "wallMs": 20.6297029999987,
+        "cpuMsPerCycle": 0.41253999999999996,
+        "ioDelta": {
+          "rchar": 123,
+          "wchar": 0,
+          "syscr": 2,
+          "syscw": 0,
+          "read_bytes": 0,
+          "write_bytes": 0,
+          "cancelled_write_bytes": 0
+        }
+      },
+      "perTenant": [
+        {
+          "tenantId": "tenant_000",
+          "requests": 300,
+          "cpuMs": 2370.8580000000006,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_001",
+          "requests": 300,
+          "cpuMs": 2305.221999999998,
+          "providerAttempts": 330,
+          "workRecords": 300
+        }
+      ]
+    },
+    {
+      "landlords": 10,
+      "monthlyRequestsPerTenant": 20,
+      "totalCompleted": 200,
+      "phaseRequests": 200,
+      "phaseCpuMs": 2266.725,
+      "phaseWallMs": 3778.8268960000005,
+      "phaseIoDelta": {
+        "rchar": 2587455,
+        "wchar": 52235487,
+        "syscr": 822,
+        "syscw": 24763,
+        "read_bytes": 0,
+        "write_bytes": 58937344,
+        "cancelled_write_bytes": 0
+      },
+      "cumulativeLifecycleCpuMs": 2251.141000000001,
+      "cpuMsPerWorkflow": 11.255705000000004,
+      "p95WallMs": 37.725602000000436,
+      "maxRssBytesObserved": 268148736,
+      "startupFiles": {
+        "cleaner.sqlite": 237568,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 0
+      },
+      "liveFilesBeforeCheckpoint": {
+        "cleaner.sqlite": 864256,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 4165352
+      },
+      "checkpointedFiles": {
+        "cleaner.sqlite": 864256,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 0
+      },
+      "providerAttempts": 220,
+      "notificationAcceptances": 200,
+      "outboundJsonBytes": 293000,
+      "idle": {
+        "cycles": 50,
+        "cpuMs": 92.596,
+        "wallMs": 92.94921900000008,
+        "cpuMsPerCycle": 1.85192,
+        "ioDelta": {
+          "rchar": 125,
+          "wchar": 0,
+          "syscr": 2,
+          "syscw": 0,
+          "read_bytes": 0,
+          "write_bytes": 0,
+          "cancelled_write_bytes": 0
+        }
+      },
+      "perTenant": [
+        {
+          "tenantId": "tenant_000",
+          "requests": 20,
+          "cpuMs": 238.76900000000003,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_001",
+          "requests": 20,
+          "cpuMs": 218.811,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_002",
+          "requests": 20,
+          "cpuMs": 278.68199999999996,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_003",
+          "requests": 20,
+          "cpuMs": 231.655,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_004",
+          "requests": 20,
+          "cpuMs": 211.00899999999993,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_005",
+          "requests": 20,
+          "cpuMs": 273.78,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_006",
+          "requests": 20,
+          "cpuMs": 181.47700000000003,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_007",
+          "requests": 20,
+          "cpuMs": 192.43900000000002,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_008",
+          "requests": 20,
+          "cpuMs": 224.76100000000002,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_009",
+          "requests": 20,
+          "cpuMs": 199.758,
+          "providerAttempts": 22,
+          "workRecords": 20
+        }
+      ]
+    },
+    {
+      "landlords": 10,
+      "monthlyRequestsPerTenant": 100,
+      "totalCompleted": 1000,
+      "phaseRequests": 800,
+      "phaseCpuMs": 9019.482,
+      "phaseWallMs": 12874.174664999999,
+      "phaseIoDelta": {
+        "rchar": 25870164,
+        "wchar": 235326382,
+        "syscr": 7074,
+        "syscw": 108121,
+        "read_bytes": 0,
+        "write_bytes": 262144000,
+        "cancelled_write_bytes": 0
+      },
+      "cumulativeLifecycleCpuMs": 11208.73499999999,
+      "cpuMsPerWorkflow": 11.20873499999999,
+      "p95WallMs": 32.80447899999854,
+      "maxRssBytesObserved": 448524288,
+      "startupFiles": {
+        "cleaner.sqlite": 237568,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 0
+      },
+      "liveFilesBeforeCheckpoint": {
+        "cleaner.sqlite": 3293184,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 4169472
+      },
+      "checkpointedFiles": {
+        "cleaner.sqlite": 3334144,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 0
+      },
+      "providerAttempts": 1100,
+      "notificationAcceptances": 1000,
+      "outboundJsonBytes": 1465800,
+      "idle": {
+        "cycles": 50,
+        "cpuMs": 159.061,
+        "wallMs": 159.08682000000044,
+        "cpuMsPerCycle": 3.18122,
+        "ioDelta": {
+          "rchar": 126,
+          "wchar": 0,
+          "syscr": 2,
+          "syscw": 0,
+          "read_bytes": 0,
+          "write_bytes": 0,
+          "cancelled_write_bytes": 0
+        }
+      },
+      "perTenant": [
+        {
+          "tenantId": "tenant_000",
+          "requests": 100,
+          "cpuMs": 1280.9730000000002,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_001",
+          "requests": 100,
+          "cpuMs": 1281.2089999999998,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_002",
+          "requests": 100,
+          "cpuMs": 1085.259,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_003",
+          "requests": 100,
+          "cpuMs": 1036.994,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_004",
+          "requests": 100,
+          "cpuMs": 1080.4039999999998,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_005",
+          "requests": 100,
+          "cpuMs": 1193.5600000000002,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_006",
+          "requests": 100,
+          "cpuMs": 959.7309999999997,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_007",
+          "requests": 100,
+          "cpuMs": 1257.312,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_008",
+          "requests": 100,
+          "cpuMs": 1053.9730000000004,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_009",
+          "requests": 100,
+          "cpuMs": 979.3199999999997,
+          "providerAttempts": 110,
+          "workRecords": 100
+        }
+      ]
+    },
+    {
+      "landlords": 10,
+      "monthlyRequestsPerTenant": 300,
+      "totalCompleted": 3000,
+      "phaseRequests": 2000,
+      "phaseCpuMs": 18776.744,
+      "phaseWallMs": 27472.815476,
+      "phaseIoDelta": {
+        "rchar": 111526754,
+        "wchar": 641903364,
+        "syscr": 29113,
+        "syscw": 286415,
+        "read_bytes": 0,
+        "write_bytes": 709009408,
+        "cancelled_write_bytes": 0
+      },
+      "cumulativeLifecycleCpuMs": 29849.599999999955,
+      "cpuMsPerWorkflow": 9.94986666666665,
+      "p95WallMs": 26.857059000001755,
+      "maxRssBytesObserved": 472936448,
+      "startupFiles": {
+        "cleaner.sqlite": 237568,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 0
+      },
+      "liveFilesBeforeCheckpoint": {
+        "cleaner.sqlite": 9424896,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 4185952
+      },
+      "checkpointedFiles": {
+        "cleaner.sqlite": 9441280,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 0
+      },
+      "providerAttempts": 3300,
+      "notificationAcceptances": 3000,
+      "outboundJsonBytes": 4401800,
+      "idle": {
+        "cycles": 50,
+        "cpuMs": 197.502,
+        "wallMs": 188.19610500000272,
+        "cpuMsPerCycle": 3.95004,
+        "ioDelta": {
+          "rchar": 129,
+          "wchar": 0,
+          "syscr": 2,
+          "syscw": 0,
+          "read_bytes": 0,
+          "write_bytes": 0,
+          "cancelled_write_bytes": 0
+        }
+      },
+      "perTenant": [
+        {
+          "tenantId": "tenant_000",
+          "requests": 300,
+          "cpuMs": 3122.828,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_001",
+          "requests": 300,
+          "cpuMs": 3194.893000000001,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_002",
+          "requests": 300,
+          "cpuMs": 2776.6969999999997,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_003",
+          "requests": 300,
+          "cpuMs": 2865.2580000000034,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_004",
+          "requests": 300,
+          "cpuMs": 2866.3859999999995,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_005",
+          "requests": 300,
+          "cpuMs": 3140.2709999999997,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_006",
+          "requests": 300,
+          "cpuMs": 3007.845,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_007",
+          "requests": 300,
+          "cpuMs": 3076.001000000001,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_008",
+          "requests": 300,
+          "cpuMs": 2926.6269999999986,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_009",
+          "requests": 300,
+          "cpuMs": 2872.7939999999994,
+          "providerAttempts": 330,
+          "workRecords": 300
+        }
+      ]
+    },
+    {
+      "landlords": 100,
+      "monthlyRequestsPerTenant": 20,
+      "totalCompleted": 2000,
+      "phaseRequests": 2000,
+      "phaseCpuMs": 65955.789,
+      "phaseWallMs": 73563.204715,
+      "phaseIoDelta": {
+        "rchar": 45705571,
+        "wchar": 566157386,
+        "syscr": 13094,
+        "syscw": 264780,
+        "read_bytes": 0,
+        "write_bytes": 633278464,
+        "cancelled_write_bytes": 0
+      },
+      "cumulativeLifecycleCpuMs": 65758.15799999998,
+      "cpuMsPerWorkflow": 32.87907899999999,
+      "p95WallMs": 78.72411399999692,
+      "maxRssBytesObserved": 614952960,
+      "startupFiles": {
+        "cleaner.sqlite": 450560,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 0
+      },
+      "liveFilesBeforeCheckpoint": {
+        "cleaner.sqlite": 6549504,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 4190072
+      },
+      "checkpointedFiles": {
+        "cleaner.sqlite": 6561792,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 0
+      },
+      "providerAttempts": 2200,
+      "notificationAcceptances": 2000,
+      "outboundJsonBytes": 2930000,
+      "idle": {
+        "cycles": 50,
+        "cpuMs": 1355.795,
+        "wallMs": 1354.1355380000023,
+        "cpuMsPerCycle": 27.1159,
+        "ioDelta": {
+          "rchar": 163,
+          "wchar": 13,
+          "syscr": 3,
+          "syscw": 1,
+          "read_bytes": 0,
+          "write_bytes": 0,
+          "cancelled_write_bytes": 0
+        }
+      },
+      "perTenant": [
+        {
+          "tenantId": "tenant_000",
+          "requests": 20,
+          "cpuMs": 669.127,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_001",
+          "requests": 20,
+          "cpuMs": 772.9889999999999,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_002",
+          "requests": 20,
+          "cpuMs": 745.607,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_003",
+          "requests": 20,
+          "cpuMs": 556.25,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_004",
+          "requests": 20,
+          "cpuMs": 697.897,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_005",
+          "requests": 20,
+          "cpuMs": 517.649,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_006",
+          "requests": 20,
+          "cpuMs": 521.3180000000001,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_007",
+          "requests": 20,
+          "cpuMs": 584.186,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_008",
+          "requests": 20,
+          "cpuMs": 556.921,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_009",
+          "requests": 20,
+          "cpuMs": 626.807,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_010",
+          "requests": 20,
+          "cpuMs": 708.983,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_011",
+          "requests": 20,
+          "cpuMs": 777.7769999999999,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_012",
+          "requests": 20,
+          "cpuMs": 899.8620000000001,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_013",
+          "requests": 20,
+          "cpuMs": 716.044,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_014",
+          "requests": 20,
+          "cpuMs": 719.9789999999999,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_015",
+          "requests": 20,
+          "cpuMs": 599.697,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_016",
+          "requests": 20,
+          "cpuMs": 648.0660000000001,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_017",
+          "requests": 20,
+          "cpuMs": 571.299,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_018",
+          "requests": 20,
+          "cpuMs": 697.9710000000001,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_019",
+          "requests": 20,
+          "cpuMs": 560.793,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_020",
+          "requests": 20,
+          "cpuMs": 705.1310000000001,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_021",
+          "requests": 20,
+          "cpuMs": 826.6129999999999,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_022",
+          "requests": 20,
+          "cpuMs": 696.6250000000001,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_023",
+          "requests": 20,
+          "cpuMs": 759.36,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_024",
+          "requests": 20,
+          "cpuMs": 686.6120000000001,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_025",
+          "requests": 20,
+          "cpuMs": 575.454,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_026",
+          "requests": 20,
+          "cpuMs": 784.2059999999999,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_027",
+          "requests": 20,
+          "cpuMs": 603.1740000000001,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_028",
+          "requests": 20,
+          "cpuMs": 572.216,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_029",
+          "requests": 20,
+          "cpuMs": 599.587,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_030",
+          "requests": 20,
+          "cpuMs": 630.563,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_031",
+          "requests": 20,
+          "cpuMs": 637.997,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_032",
+          "requests": 20,
+          "cpuMs": 724.9099999999999,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_033",
+          "requests": 20,
+          "cpuMs": 732.72,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_034",
+          "requests": 20,
+          "cpuMs": 666.779,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_035",
+          "requests": 20,
+          "cpuMs": 636.576,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_036",
+          "requests": 20,
+          "cpuMs": 632.986,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_037",
+          "requests": 20,
+          "cpuMs": 553.649,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_038",
+          "requests": 20,
+          "cpuMs": 745.029,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_039",
+          "requests": 20,
+          "cpuMs": 814.45,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_040",
+          "requests": 20,
+          "cpuMs": 589.3950000000001,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_041",
+          "requests": 20,
+          "cpuMs": 626.7030000000001,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_042",
+          "requests": 20,
+          "cpuMs": 655.7860000000001,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_043",
+          "requests": 20,
+          "cpuMs": 697.2710000000001,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_044",
+          "requests": 20,
+          "cpuMs": 877.748,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_045",
+          "requests": 20,
+          "cpuMs": 863.9830000000002,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_046",
+          "requests": 20,
+          "cpuMs": 636.769,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_047",
+          "requests": 20,
+          "cpuMs": 514.802,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_048",
+          "requests": 20,
+          "cpuMs": 702.09,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_049",
+          "requests": 20,
+          "cpuMs": 549.217,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_050",
+          "requests": 20,
+          "cpuMs": 593.133,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_051",
+          "requests": 20,
+          "cpuMs": 569.147,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_052",
+          "requests": 20,
+          "cpuMs": 652.3060000000002,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_053",
+          "requests": 20,
+          "cpuMs": 866.2290000000002,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_054",
+          "requests": 20,
+          "cpuMs": 696.11,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_055",
+          "requests": 20,
+          "cpuMs": 695.8629999999998,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_056",
+          "requests": 20,
+          "cpuMs": 587.779,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_057",
+          "requests": 20,
+          "cpuMs": 568.266,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_058",
+          "requests": 20,
+          "cpuMs": 566.454,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_059",
+          "requests": 20,
+          "cpuMs": 662.497,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_060",
+          "requests": 20,
+          "cpuMs": 685.02,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_061",
+          "requests": 20,
+          "cpuMs": 535.0020000000001,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_062",
+          "requests": 20,
+          "cpuMs": 600.523,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_063",
+          "requests": 20,
+          "cpuMs": 592.34,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_064",
+          "requests": 20,
+          "cpuMs": 605.756,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_065",
+          "requests": 20,
+          "cpuMs": 843.0110000000001,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_066",
+          "requests": 20,
+          "cpuMs": 732.501,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_067",
+          "requests": 20,
+          "cpuMs": 742.125,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_068",
+          "requests": 20,
+          "cpuMs": 604.7669999999999,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_069",
+          "requests": 20,
+          "cpuMs": 584.415,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_070",
+          "requests": 20,
+          "cpuMs": 601.821,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_071",
+          "requests": 20,
+          "cpuMs": 511.458,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_072",
+          "requests": 20,
+          "cpuMs": 719.34,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_073",
+          "requests": 20,
+          "cpuMs": 741.8279999999999,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_074",
+          "requests": 20,
+          "cpuMs": 514.825,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_075",
+          "requests": 20,
+          "cpuMs": 602.919,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_076",
+          "requests": 20,
+          "cpuMs": 594.6109999999999,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_077",
+          "requests": 20,
+          "cpuMs": 744.5440000000001,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_078",
+          "requests": 20,
+          "cpuMs": 684.9169999999999,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_079",
+          "requests": 20,
+          "cpuMs": 674.2330000000001,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_080",
+          "requests": 20,
+          "cpuMs": 812.8590000000002,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_081",
+          "requests": 20,
+          "cpuMs": 578.321,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_082",
+          "requests": 20,
+          "cpuMs": 884.923,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_083",
+          "requests": 20,
+          "cpuMs": 564.788,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_084",
+          "requests": 20,
+          "cpuMs": 559.106,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_085",
+          "requests": 20,
+          "cpuMs": 517.3589999999999,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_086",
+          "requests": 20,
+          "cpuMs": 496.54600000000005,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_087",
+          "requests": 20,
+          "cpuMs": 682.143,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_088",
+          "requests": 20,
+          "cpuMs": 628.298,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_089",
+          "requests": 20,
+          "cpuMs": 702.0039999999999,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_090",
+          "requests": 20,
+          "cpuMs": 613.1460000000001,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_091",
+          "requests": 20,
+          "cpuMs": 608.0370000000001,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_092",
+          "requests": 20,
+          "cpuMs": 627.076,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_093",
+          "requests": 20,
+          "cpuMs": 506.871,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_094",
+          "requests": 20,
+          "cpuMs": 666.192,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_095",
+          "requests": 20,
+          "cpuMs": 808.1410000000002,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_096",
+          "requests": 20,
+          "cpuMs": 574.9909999999999,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_097",
+          "requests": 20,
+          "cpuMs": 741.6030000000001,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_098",
+          "requests": 20,
+          "cpuMs": 649.5049999999999,
+          "providerAttempts": 22,
+          "workRecords": 20
+        },
+        {
+          "tenantId": "tenant_099",
+          "requests": 20,
+          "cpuMs": 714.886,
+          "providerAttempts": 22,
+          "workRecords": 20
+        }
+      ]
+    },
+    {
+      "landlords": 100,
+      "monthlyRequestsPerTenant": 100,
+      "totalCompleted": 10000,
+      "phaseRequests": 8000,
+      "phaseCpuMs": 234981.879,
+      "phaseWallMs": 279410.814136,
+      "phaseIoDelta": {
+        "rchar": 578031553,
+        "wchar": 2480533540,
+        "syscr": 148841,
+        "syscw": 1118089,
+        "read_bytes": 0,
+        "write_bytes": 2749042688,
+        "cancelled_write_bytes": 0
+      },
+      "cumulativeLifecycleCpuMs": 300239.89599999826,
+      "cpuMsPerWorkflow": 30.023989599999826,
+      "p95WallMs": 93.89083899999969,
+      "maxRssBytesObserved": 618450944,
+      "startupFiles": {
+        "cleaner.sqlite": 450560,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 0
+      },
+      "liveFilesBeforeCheckpoint": {
+        "cleaner.sqlite": 31281152,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 4190072
+      },
+      "checkpointedFiles": {
+        "cleaner.sqlite": 31297536,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 0
+      },
+      "providerAttempts": 11000,
+      "notificationAcceptances": 10000,
+      "outboundJsonBytes": 14658000,
+      "idle": {
+        "cycles": 50,
+        "cpuMs": 1288.619,
+        "wallMs": 1267.3092780000297,
+        "cpuMsPerCycle": 25.77238,
+        "ioDelta": {
+          "rchar": 198,
+          "wchar": 26,
+          "syscr": 4,
+          "syscw": 2,
+          "read_bytes": 0,
+          "write_bytes": 0,
+          "cancelled_write_bytes": 0
+        }
+      },
+      "perTenant": [
+        {
+          "tenantId": "tenant_000",
+          "requests": 100,
+          "cpuMs": 2969.0380000000014,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_001",
+          "requests": 100,
+          "cpuMs": 3167.3859999999995,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_002",
+          "requests": 100,
+          "cpuMs": 3009.5910000000003,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_003",
+          "requests": 100,
+          "cpuMs": 2682.5280000000002,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_004",
+          "requests": 100,
+          "cpuMs": 3020.506999999999,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_005",
+          "requests": 100,
+          "cpuMs": 3157.108000000001,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_006",
+          "requests": 100,
+          "cpuMs": 2597.955999999999,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_007",
+          "requests": 100,
+          "cpuMs": 2598.3709999999996,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_008",
+          "requests": 100,
+          "cpuMs": 2749.2289999999994,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_009",
+          "requests": 100,
+          "cpuMs": 3132.4960000000005,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_010",
+          "requests": 100,
+          "cpuMs": 3109.4470000000006,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_011",
+          "requests": 100,
+          "cpuMs": 3232.6159999999995,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_012",
+          "requests": 100,
+          "cpuMs": 3310.8630000000003,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_013",
+          "requests": 100,
+          "cpuMs": 3016.033000000002,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_014",
+          "requests": 100,
+          "cpuMs": 3198.0170000000016,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_015",
+          "requests": 100,
+          "cpuMs": 2899.5209999999997,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_016",
+          "requests": 100,
+          "cpuMs": 2675.378,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_017",
+          "requests": 100,
+          "cpuMs": 2957.316,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_018",
+          "requests": 100,
+          "cpuMs": 2885.7429999999995,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_019",
+          "requests": 100,
+          "cpuMs": 2650.4720000000016,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_020",
+          "requests": 100,
+          "cpuMs": 2921.393000000001,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_021",
+          "requests": 100,
+          "cpuMs": 3259.852,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_022",
+          "requests": 100,
+          "cpuMs": 3194.0479999999993,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_023",
+          "requests": 100,
+          "cpuMs": 3030.6090000000013,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_024",
+          "requests": 100,
+          "cpuMs": 2997.4950000000017,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_025",
+          "requests": 100,
+          "cpuMs": 2614.971,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_026",
+          "requests": 100,
+          "cpuMs": 2973.1879999999987,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_027",
+          "requests": 100,
+          "cpuMs": 3081.786000000001,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_028",
+          "requests": 100,
+          "cpuMs": 2897.4179999999997,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_029",
+          "requests": 100,
+          "cpuMs": 3212.0539999999983,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_030",
+          "requests": 100,
+          "cpuMs": 2974.9539999999997,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_031",
+          "requests": 100,
+          "cpuMs": 2873.2389999999996,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_032",
+          "requests": 100,
+          "cpuMs": 3500.499999999999,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_033",
+          "requests": 100,
+          "cpuMs": 3228.6839999999975,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_034",
+          "requests": 100,
+          "cpuMs": 3065.6929999999998,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_035",
+          "requests": 100,
+          "cpuMs": 3183.183000000001,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_036",
+          "requests": 100,
+          "cpuMs": 2952.4220000000005,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_037",
+          "requests": 100,
+          "cpuMs": 2872.8029999999985,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_038",
+          "requests": 100,
+          "cpuMs": 3096.983,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_039",
+          "requests": 100,
+          "cpuMs": 3292.152000000001,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_040",
+          "requests": 100,
+          "cpuMs": 2962.6379999999986,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_041",
+          "requests": 100,
+          "cpuMs": 2724.691000000001,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_042",
+          "requests": 100,
+          "cpuMs": 3117.093,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_043",
+          "requests": 100,
+          "cpuMs": 3318.6670000000004,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_044",
+          "requests": 100,
+          "cpuMs": 3072.1570000000006,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_045",
+          "requests": 100,
+          "cpuMs": 3194.0630000000015,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_046",
+          "requests": 100,
+          "cpuMs": 2910.591999999999,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_047",
+          "requests": 100,
+          "cpuMs": 2606.955000000001,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_048",
+          "requests": 100,
+          "cpuMs": 3071.6150000000002,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_049",
+          "requests": 100,
+          "cpuMs": 3124.692,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_050",
+          "requests": 100,
+          "cpuMs": 3112.4879999999994,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_051",
+          "requests": 100,
+          "cpuMs": 2978.6829999999995,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_052",
+          "requests": 100,
+          "cpuMs": 2964.997000000001,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_053",
+          "requests": 100,
+          "cpuMs": 2888.293,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_054",
+          "requests": 100,
+          "cpuMs": 3204.0849999999996,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_055",
+          "requests": 100,
+          "cpuMs": 3366.848,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_056",
+          "requests": 100,
+          "cpuMs": 3278.8019999999997,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_057",
+          "requests": 100,
+          "cpuMs": 3044.3839999999996,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_058",
+          "requests": 100,
+          "cpuMs": 3086.227999999999,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_059",
+          "requests": 100,
+          "cpuMs": 3115.1250000000005,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_060",
+          "requests": 100,
+          "cpuMs": 3036.8740000000003,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_061",
+          "requests": 100,
+          "cpuMs": 2970.8090000000007,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_062",
+          "requests": 100,
+          "cpuMs": 3103.703,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_063",
+          "requests": 100,
+          "cpuMs": 2801.085000000001,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_064",
+          "requests": 100,
+          "cpuMs": 3064.8450000000007,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_065",
+          "requests": 100,
+          "cpuMs": 3164.0960000000005,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_066",
+          "requests": 100,
+          "cpuMs": 2956.3750000000005,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_067",
+          "requests": 100,
+          "cpuMs": 2984.269000000001,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_068",
+          "requests": 100,
+          "cpuMs": 3060.5690000000004,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_069",
+          "requests": 100,
+          "cpuMs": 2803.8080000000004,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_070",
+          "requests": 100,
+          "cpuMs": 3125.49,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_071",
+          "requests": 100,
+          "cpuMs": 3100.4359999999992,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_072",
+          "requests": 100,
+          "cpuMs": 2801.328999999999,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_073",
+          "requests": 100,
+          "cpuMs": 2971.446999999999,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_074",
+          "requests": 100,
+          "cpuMs": 2789.134,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_075",
+          "requests": 100,
+          "cpuMs": 2501.7769999999987,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_076",
+          "requests": 100,
+          "cpuMs": 3041.3689999999997,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_077",
+          "requests": 100,
+          "cpuMs": 3229.7429999999995,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_078",
+          "requests": 100,
+          "cpuMs": 2940.188,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_079",
+          "requests": 100,
+          "cpuMs": 2976.9749999999995,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_080",
+          "requests": 100,
+          "cpuMs": 3267.0169999999994,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_081",
+          "requests": 100,
+          "cpuMs": 2755.4489999999987,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_082",
+          "requests": 100,
+          "cpuMs": 3116.2509999999993,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_083",
+          "requests": 100,
+          "cpuMs": 3059.4949999999994,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_084",
+          "requests": 100,
+          "cpuMs": 2865.5989999999997,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_085",
+          "requests": 100,
+          "cpuMs": 2632.72,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_086",
+          "requests": 100,
+          "cpuMs": 3071.996999999999,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_087",
+          "requests": 100,
+          "cpuMs": 3055.3529999999987,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_088",
+          "requests": 100,
+          "cpuMs": 2887.4650000000006,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_089",
+          "requests": 100,
+          "cpuMs": 2957.7039999999997,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_090",
+          "requests": 100,
+          "cpuMs": 2890.396,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_091",
+          "requests": 100,
+          "cpuMs": 2937.663999999999,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_092",
+          "requests": 100,
+          "cpuMs": 3065.461,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_093",
+          "requests": 100,
+          "cpuMs": 2975.202,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_094",
+          "requests": 100,
+          "cpuMs": 2761.734999999999,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_095",
+          "requests": 100,
+          "cpuMs": 3118.4770000000003,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_096",
+          "requests": 100,
+          "cpuMs": 2815.1220000000003,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_097",
+          "requests": 100,
+          "cpuMs": 2971.55,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_098",
+          "requests": 100,
+          "cpuMs": 2877.6760000000004,
+          "providerAttempts": 110,
+          "workRecords": 100
+        },
+        {
+          "tenantId": "tenant_099",
+          "requests": 100,
+          "cpuMs": 3347.103,
+          "providerAttempts": 110,
+          "workRecords": 100
+        }
+      ]
+    },
+    {
+      "landlords": 100,
+      "monthlyRequestsPerTenant": 300,
+      "totalCompleted": 30000,
+      "phaseRequests": 20000,
+      "phaseCpuMs": 758061.581,
+      "phaseWallMs": 888626.4790660001,
+      "phaseIoDelta": {
+        "rchar": 2280340790,
+        "wchar": 6746082451,
+        "syscr": 576230,
+        "syscw": 2950071,
+        "read_bytes": 0,
+        "write_bytes": 7417507840,
+        "cancelled_write_bytes": 0
+      },
+      "cumulativeLifecycleCpuMs": 1056610.9469999918,
+      "cpuMsPerWorkflow": 35.22036489999972,
+      "p95WallMs": 103.76072300004307,
+      "maxRssBytesObserved": 651026432,
+      "startupFiles": {
+        "cleaner.sqlite": 450560,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 0
+      },
+      "liveFilesBeforeCheckpoint": {
+        "cleaner.sqlite": 93491200,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 4198312
+      },
+      "checkpointedFiles": {
+        "cleaner.sqlite": 93491200,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 0
+      },
+      "providerAttempts": 33000,
+      "notificationAcceptances": 30000,
+      "outboundJsonBytes": 44018000,
+      "idle": {
+        "cycles": 50,
+        "cpuMs": 1600.152,
+        "wallMs": 1590.6861479999498,
+        "cpuMsPerCycle": 32.00304,
+        "ioDelta": {
+          "rchar": 201,
+          "wchar": 26,
+          "syscr": 4,
+          "syscw": 2,
+          "read_bytes": 0,
+          "write_bytes": 0,
+          "cancelled_write_bytes": 0
+        }
+      },
+      "perTenant": [
+        {
+          "tenantId": "tenant_000",
+          "requests": 300,
+          "cpuMs": 10625.820000000007,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_001",
+          "requests": 300,
+          "cpuMs": 10406.749999999998,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_002",
+          "requests": 300,
+          "cpuMs": 11319.16100000001,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_003",
+          "requests": 300,
+          "cpuMs": 10421.073,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_004",
+          "requests": 300,
+          "cpuMs": 9909.771999999997,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_005",
+          "requests": 300,
+          "cpuMs": 10317.889999999992,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_006",
+          "requests": 300,
+          "cpuMs": 9300.672000000006,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_007",
+          "requests": 300,
+          "cpuMs": 9802.228000000001,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_008",
+          "requests": 300,
+          "cpuMs": 11020.778,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_009",
+          "requests": 300,
+          "cpuMs": 10469.563000000002,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_010",
+          "requests": 300,
+          "cpuMs": 10925.919000000005,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_011",
+          "requests": 300,
+          "cpuMs": 10752.155999999999,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_012",
+          "requests": 300,
+          "cpuMs": 11085.610999999994,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_013",
+          "requests": 300,
+          "cpuMs": 10235.371999999992,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_014",
+          "requests": 300,
+          "cpuMs": 10198.25,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_015",
+          "requests": 300,
+          "cpuMs": 10327.115999999998,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_016",
+          "requests": 300,
+          "cpuMs": 9760.483999999995,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_017",
+          "requests": 300,
+          "cpuMs": 10296.880999999998,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_018",
+          "requests": 300,
+          "cpuMs": 10895.955999999995,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_019",
+          "requests": 300,
+          "cpuMs": 9816.424000000005,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_020",
+          "requests": 300,
+          "cpuMs": 10513.836,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_021",
+          "requests": 300,
+          "cpuMs": 10989.967000000002,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_022",
+          "requests": 300,
+          "cpuMs": 10505.710000000001,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_023",
+          "requests": 300,
+          "cpuMs": 10344.035000000005,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_024",
+          "requests": 300,
+          "cpuMs": 10969.527999999993,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_025",
+          "requests": 300,
+          "cpuMs": 10088.175999999994,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_026",
+          "requests": 300,
+          "cpuMs": 10142.731000000003,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_027",
+          "requests": 300,
+          "cpuMs": 10681.588000000003,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_028",
+          "requests": 300,
+          "cpuMs": 10094.664999999995,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_029",
+          "requests": 300,
+          "cpuMs": 10959.917999999987,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_030",
+          "requests": 300,
+          "cpuMs": 10469.188000000002,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_031",
+          "requests": 300,
+          "cpuMs": 11041.180999999991,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_032",
+          "requests": 300,
+          "cpuMs": 11420.175000000005,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_033",
+          "requests": 300,
+          "cpuMs": 11058.759999999998,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_034",
+          "requests": 300,
+          "cpuMs": 10629.990999999996,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_035",
+          "requests": 300,
+          "cpuMs": 10552.920000000004,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_036",
+          "requests": 300,
+          "cpuMs": 9962.168999999993,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_037",
+          "requests": 300,
+          "cpuMs": 9984.740000000007,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_038",
+          "requests": 300,
+          "cpuMs": 10228.368,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_039",
+          "requests": 300,
+          "cpuMs": 10321.504000000003,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_040",
+          "requests": 300,
+          "cpuMs": 11233.536999999997,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_041",
+          "requests": 300,
+          "cpuMs": 10076.970999999992,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_042",
+          "requests": 300,
+          "cpuMs": 11330.726999999999,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_043",
+          "requests": 300,
+          "cpuMs": 11240.48600000001,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_044",
+          "requests": 300,
+          "cpuMs": 10240.175999999996,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_045",
+          "requests": 300,
+          "cpuMs": 10989.69100000001,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_046",
+          "requests": 300,
+          "cpuMs": 10256.394000000002,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_047",
+          "requests": 300,
+          "cpuMs": 10391.473999999998,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_048",
+          "requests": 300,
+          "cpuMs": 10035.615999999996,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_049",
+          "requests": 300,
+          "cpuMs": 10806.984999999993,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_050",
+          "requests": 300,
+          "cpuMs": 10775.537999999997,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_051",
+          "requests": 300,
+          "cpuMs": 10558.282999999994,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_052",
+          "requests": 300,
+          "cpuMs": 10810.229000000001,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_053",
+          "requests": 300,
+          "cpuMs": 10574.465000000004,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_054",
+          "requests": 300,
+          "cpuMs": 10584.949999999999,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_055",
+          "requests": 300,
+          "cpuMs": 11161.896999999999,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_056",
+          "requests": 300,
+          "cpuMs": 10349.77800000001,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_057",
+          "requests": 300,
+          "cpuMs": 10839.065000000015,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_058",
+          "requests": 300,
+          "cpuMs": 10532.089999999998,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_059",
+          "requests": 300,
+          "cpuMs": 11326.75300000001,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_060",
+          "requests": 300,
+          "cpuMs": 10469.901999999996,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_061",
+          "requests": 300,
+          "cpuMs": 10417.603000000001,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_062",
+          "requests": 300,
+          "cpuMs": 10784.532000000001,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_063",
+          "requests": 300,
+          "cpuMs": 10855.380000000003,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_064",
+          "requests": 300,
+          "cpuMs": 10771.746999999994,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_065",
+          "requests": 300,
+          "cpuMs": 11015.926000000003,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_066",
+          "requests": 300,
+          "cpuMs": 10636.786,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_067",
+          "requests": 300,
+          "cpuMs": 10635.213999999998,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_068",
+          "requests": 300,
+          "cpuMs": 11639.684999999992,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_069",
+          "requests": 300,
+          "cpuMs": 10384.757999999993,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_070",
+          "requests": 300,
+          "cpuMs": 10648.139,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_071",
+          "requests": 300,
+          "cpuMs": 10945.719000000001,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_072",
+          "requests": 300,
+          "cpuMs": 10064.334999999995,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_073",
+          "requests": 300,
+          "cpuMs": 10524.989999999998,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_074",
+          "requests": 300,
+          "cpuMs": 10090.935999999998,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_075",
+          "requests": 300,
+          "cpuMs": 10020.615999999996,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_076",
+          "requests": 300,
+          "cpuMs": 10588.907999999998,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_077",
+          "requests": 300,
+          "cpuMs": 11071.275,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_078",
+          "requests": 300,
+          "cpuMs": 10381.850000000004,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_079",
+          "requests": 300,
+          "cpuMs": 11042.700999999992,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_080",
+          "requests": 300,
+          "cpuMs": 11039.504999999992,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_081",
+          "requests": 300,
+          "cpuMs": 10650.840999999995,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_082",
+          "requests": 300,
+          "cpuMs": 10366.483999999993,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_083",
+          "requests": 300,
+          "cpuMs": 10042.46600000001,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_084",
+          "requests": 300,
+          "cpuMs": 10132.620000000006,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_085",
+          "requests": 300,
+          "cpuMs": 9888.859000000011,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_086",
+          "requests": 300,
+          "cpuMs": 10954.895999999997,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_087",
+          "requests": 300,
+          "cpuMs": 11451.566,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_088",
+          "requests": 300,
+          "cpuMs": 10200.186000000005,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_089",
+          "requests": 300,
+          "cpuMs": 11042.637,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_090",
+          "requests": 300,
+          "cpuMs": 10412.510999999999,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_091",
+          "requests": 300,
+          "cpuMs": 10160.824999999997,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_092",
+          "requests": 300,
+          "cpuMs": 10737.949999999999,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_093",
+          "requests": 300,
+          "cpuMs": 10662.669999999998,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_094",
+          "requests": 300,
+          "cpuMs": 10113.669,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_095",
+          "requests": 300,
+          "cpuMs": 10222.051999999996,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_096",
+          "requests": 300,
+          "cpuMs": 10379.308000000005,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_097",
+          "requests": 300,
+          "cpuMs": 10367.411000000002,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_098",
+          "requests": 300,
+          "cpuMs": 10492.181,
+          "providerAttempts": 330,
+          "workRecords": 300
+        },
+        {
+          "tenantId": "tenant_099",
+          "requests": 300,
+          "cpuMs": 11339.17699999999,
+          "providerAttempts": 330,
+          "workRecords": 300
+        }
+      ]
+    }
+  ]
+}

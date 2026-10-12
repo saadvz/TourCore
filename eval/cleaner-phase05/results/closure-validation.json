@@ -1,0 +1,519 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-12T08:25:58.099532+00:00",
+  "validation": {
+    "passed": 110,
+    "failed": 0,
+    "total": 110,
+    "typecheck": "pass",
+    "build": "pass",
+    "hostedEntrypointBundle": "pass",
+    "fleetUniqueWorkflows": 33600,
+    "injectedProviderAttempts": 36960,
+    "costScenarios": 324,
+    "liveGrok": "pending_existing_endpoint_update_and_account_results"
+  },
+  "sourceHashes": {
+    "src/delegation/phase05/notifications.ts": "2efa2cc04dbb0f56d8342d712fda3a8a746997dba5f788d4e2dd7c1d5b15b742",
+    "src/delegation/phase05/grants.ts": "01ee11f009224127d7c7f9bd4cea9b40cda2611bfd453cbab00d288c7172b338",
+    "src/delegation/phase05/service.ts": "99fd27e5fc69be4b7e5cb6861449fec313e32b911cacbb7dafb25c279772c762",
+    "src/delegation/phase05/store.ts": "1f09531684ff17dbbc7104c28727db0080a175a46ae043b8b7554f73143ea19c",
+    "src/delegation/phase05/hostedTest.ts": "1bf6cc0731864ca9ca4baf13cca2bab6a21803a3ea1ca18f4b28ba3a60321112",
+    "src/delegation/phase05/demo.ts": "32b04ccad3913f2c962a02eba0e933f043d338236adccfa9d85d8b5f0e0332a3",
+    "src/delegation/phase05/engine.ts": "61cbdbbdcc9cbf2c9bbfac016c0a735b4ae021dad3743e40468bdd9bdbd2d986",
+    "src/delegation/phase05/costModel.ts": "b0a6d7d75a7c9bfe02c7ed11d85ac600e6156ef02cc22ffa5f91de42dfb50146",
+    "src/delegation/phase05/profiles.ts": "4133347b24d6bf58b8c3ffa5f56f7f52a39aa234765136e0a85749e6a2214a8b"
+  },
+  "tests": [
+    {
+      "file": "test/agentProfileService.test.ts",
+      "assertions": [
+        {
+          "name": "discovers and completes read-only profile probes over the real SDK without creating work or replies",
+          "status": "passed"
+        },
+        {
+          "name": "requires owner auth and server-owned workflow evidence, then enables the scoped autonomous profile",
+          "status": "passed"
+        },
+        {
+          "name": "rejects fallback, pending work and a manually completed work item with no webhook",
+          "status": "passed"
+        },
+        {
+          "name": "refuses agent-side tenant injection, owner grant promotion and unrecognized tools",
+          "status": "passed"
+        },
+        {
+          "name": "fails closed on profile corruption without exposing stored content in MCP errors",
+          "status": "passed"
+        },
+        {
+          "name": "completes compatible onboarding through a real original connector tool, without confusing admin HTTP reads with MCP proof",
+          "status": "passed"
+        },
+        {
+          "name": "refuses an unfinished work item as a compatibility fixture and preserves ordinary reads when profile storage fails",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "test/agentProfiles.test.ts",
+      "assertions": [
+        {
+          "name": "creates a schema-valid unknown profile and refuses verified claims, arbitrary fields and write scopes",
+          "status": "passed"
+        },
+        {
+          "name": "binds challenges to tenant and agent, rejects wrong nonce/replay, and persists a genuine MCP roundtrip",
+          "status": "passed"
+        },
+        {
+          "name": "checks the fits synthetic scheduling/draft case rather than accepting a self-rated capability",
+          "status": "passed"
+        },
+        {
+          "name": "checks the overruns synthetic scheduling/draft case rather than accepting a self-rated capability",
+          "status": "passed"
+        },
+        {
+          "name": "requires offline confirmation and fresh completed work, and respects the response budget",
+          "status": "passed"
+        },
+        {
+          "name": "expires at the exact evidence boundary and cannot refresh old workflow observations by rerecording them",
+          "status": "passed"
+        },
+        {
+          "name": "invalidates evidence, declarations, grants and in-flight probes on a changed connection",
+          "status": "passed"
+        },
+        {
+          "name": "expires a probe even if its nonce is correct",
+          "status": "passed"
+        },
+        {
+          "name": "requires native read permission and actual owner-reviewed evidence; declaration and acknowledgment alone stay unverified",
+          "status": "passed"
+        },
+        {
+          "name": "invalidates pending native proofs when the granted resource changes",
+          "status": "passed"
+        },
+        {
+          "name": "keeps optional scheduled runs behind a real probe and explicit offline owner review",
+          "status": "passed"
+        },
+        {
+          "name": "lets the agent report unavailable without preserving a formerly enabled mode",
+          "status": "passed"
+        },
+        {
+          "name": "fails closed on damaged or duplicate persisted profiles",
+          "status": "passed"
+        },
+        {
+          "name": "rejects duplicate declarations and conflicting Grok envelopes while preserving the five-field wire contract",
+          "status": "passed"
+        },
+        {
+          "name": "grades an HTTP draft fixture without falsely verifying or refreshing MCP capability",
+          "status": "passed"
+        },
+        {
+          "name": "correlates only a fresh same-identity core read with the issued probe, without refreshing a consumed probe",
+          "status": "passed"
+        },
+        {
+          "name": "keeps the app catalog partial while allowing verified core autonomy and rejects a missing required delegation tool",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "test/cleanerCostModel.test.ts",
+      "assertions": [
+        {
+          "name": "charges the hosting minimum once, with included credits rather than a subscription plus the full usage again",
+          "status": "passed"
+        },
+        {
+          "name": "converts milliseconds, CPU minutes, RAM/storage minutes and egress units correctly",
+          "status": "passed"
+        },
+        {
+          "name": "includes always-running worker CPU and adds independent API invoices after hosting credits",
+          "status": "passed"
+        },
+        {
+          "name": "tests all low/medium/high usage tiers at 2 landlords and retains exact fleet totals",
+          "status": "passed"
+        },
+        {
+          "name": "tests all low/medium/high usage tiers at 10 landlords and retains exact fleet totals",
+          "status": "passed"
+        },
+        {
+          "name": "tests all low/medium/high usage tiers at 100 landlords and retains exact fleet totals",
+          "status": "passed"
+        },
+        {
+          "name": "exposes plan-floor failures and inference stress instead of hiding them in per-message marginal cost",
+          "status": "passed"
+        },
+        {
+          "name": "scales calendar time, idle cadence, replicated capacity and fixed memory assumptions",
+          "status": "passed"
+        },
+        {
+          "name": "rejects missing, negative, nonfinite and fractional accounting inputs",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "test/cleanerPhase05.test.ts",
+      "assertions": [
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime isolates reciprocal MCP operations, owner data, provider ingress and indexed storage; commits two deterministic replies",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime binds OAuth consent and PKCE to the owner/client, prevents replay, rotates refresh tokens and detects reuse",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime hot-revokes old MCP tokens, profile evidence and leases without restarting; leaves the other tenant eligible",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime preserves source deduplication, absolute deadlines and fallback across a runtime restart",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime compares leases and versions atomically; rejects stale leases/actions and conflicting stable action keys",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime refuses invalid scheduling slots and stale confirmations before the first provider attempt",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime does not let slow tenant A hold a global section or prevent B from completing; bounds each tenant to one send",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime round-robin admission with global concurrency one serves B before a second queued A reply",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime applies durable separate request and provider rate budgets per tenant",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime retries a lost acknowledgment with the same key only for an idempotent provider, across restart",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime mixed provider guarantees send uncertain non-idempotent A to review while retrying idempotent B",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime retries a provider-certified not-accepted outcome even without idempotency, but never retries mere rejection/uncertainty",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime recovers an expired sending lease according to provider guarantees and ignores stale attempt completions",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime partitions notification retries and status; HTTP 202 remains pending work, not agent completion",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime routes only fresh verified capability evidence, keeps probes tenant-scoped and invalidates queued dispatch on expiry",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime bounds provider timeout and suppresses overlapping sends from an adapter ignoring abort; B still completes",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime rejects unsigned/expired ingress and expired OAuth codes/tokens; keeps access records deterministic",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime enforces durable receipt order on the same turn and action-key uniqueness across work items",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime rejects a stale worker completion by attempt token after ownership changes",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime survives SIGKILL during an in-flight idempotent provider attempt",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime survives SIGKILL during an in-flight non_idempotent provider attempt",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime runs fallback independently when the agent is closed, without a caller pumping the engine",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime denies injected authority through every MCP tool and reciprocal probes and owner OAuth revocation",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime deduplicates scoped carrier callbacks without reopening actions or authorizing resend after delivery failure",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime rolls back turn, action and audit together when outbox insertion fails, then accepts the identical retry",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime limits concurrent authenticated HTTP operations per tenant while another tenant can read",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Phase 0.5 isolated shared runtime keeps per-provider source IDs separate within a tenant and rejects provider rebinding on restart",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "test/cleanerPhase05Hosted.test.ts",
+      "assertions": [
+        {
+          "name": "reuses one endpoint for two credential-scoped tenants; ignores real SMS settings and persists simulated receipts",
+          "status": "passed"
+        },
+        {
+          "name": "never resurrects a revoked bootstrap agent token on restart and denies owner HTTP substitutes for MCP evidence",
+          "status": "passed"
+        },
+        {
+          "name": "requires four separate test credentials and rejects an untrusted public origin",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "test/delegationNotifications.test.ts",
+      "assertions": [
+        {
+          "name": "sends only correlation IDs, records HTTP acceptance separately, and survives restart without another wakeup",
+          "status": "passed"
+        },
+        {
+          "name": "recovers durable work that was saved before a notifier existed",
+          "status": "passed"
+        },
+        {
+          "name": "retries transient failures with backoff and the same correlation ID, bounded across restart",
+          "status": "passed"
+        },
+        {
+          "name": "does not retry permanent authorization failures",
+          "status": "passed"
+        },
+        {
+          "name": "recovers an interrupted sending attempt using the same work ID",
+          "status": "passed"
+        },
+        {
+          "name": "stops retries at the deadline while the independent engine completes fallback",
+          "status": "passed"
+        },
+        {
+          "name": "bounds a hung network request and aborts it",
+          "status": "passed"
+        },
+        {
+          "name": "fails closed on damaged notification state without overwriting it",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "test/delegationPrototype.test.ts",
+      "assertions": [
+        {
+          "name": "cleaner delegation prototype completes a durable event -> SDK MCP claim/proposal -> validated local reply, then acknowledges completion",
+          "status": "passed"
+        },
+        {
+          "name": "cleaner delegation prototype persists an inbound event once and rejects a source ID reused for different contents",
+          "status": "passed"
+        },
+        {
+          "name": "cleaner delegation prototype rejects an invalid slot without changing the turn, sending, or closing the request",
+          "status": "passed"
+        },
+        {
+          "name": "cleaner delegation prototype refuses a future trusted receipt without creating a work item",
+          "status": "passed"
+        },
+        {
+          "name": "cleaner delegation prototype rejects stale booking versions and proposals violating the revised next-arrival window",
+          "status": "passed"
+        },
+        {
+          "name": "cleaner delegation prototype routes a booking changed after proposal but before sending to review, instead of confirming stale work",
+          "status": "passed"
+        },
+        {
+          "name": "cleaner delegation prototype rejects proposals without a lease and conflicting action-key reuse",
+          "status": "passed"
+        },
+        {
+          "name": "cleaner delegation prototype expires a lease, permits another agent to recover it, and refuses the old lease token",
+          "status": "passed"
+        },
+        {
+          "name": "cleaner delegation prototype at the exact agent deadline, selects fallback and refuses a late action without changing the booking",
+          "status": "passed"
+        },
+        {
+          "name": "cleaner delegation prototype a pending event survives restart and the worker sends fallback without any agent call",
+          "status": "passed"
+        },
+        {
+          "name": "cleaner delegation prototype the independent worker handles an offline agent without MCP traffic or a manual tick",
+          "status": "passed"
+        },
+        {
+          "name": "cleaner delegation prototype an accepted proposal survives restart and is sent exactly once by the idempotent local provider",
+          "status": "passed"
+        },
+        {
+          "name": "cleaner delegation prototype recovers a lost provider acknowledgment across restart without a duplicate reply",
+          "status": "passed"
+        },
+        {
+          "name": "cleaner delegation prototype does not retry an uncertain send when the provider cannot guarantee idempotency",
+          "status": "passed"
+        },
+        {
+          "name": "cleaner delegation prototype bounds idempotent-provider retries and marks exhaustion for review",
+          "status": "passed"
+        },
+        {
+          "name": "cleaner delegation prototype bounds a hung non-idempotent provider and reports uncertain delivery for review",
+          "status": "passed"
+        },
+        {
+          "name": "cleaner delegation prototype binds tenant scope to credentials and rejects unauthenticated calls and cross-tenant work",
+          "status": "passed"
+        },
+        {
+          "name": "cleaner delegation prototype fails closed on damaged durable state",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "test/delegationSmsProof.test.ts",
+      "assertions": [
+        {
+          "name": "signed allowlisted SMS -> webhook -> real SDK claim/proposal -> provider acceptance -> signed delivered callback",
+          "status": "passed"
+        },
+        {
+          "name": "rejects unsigned, tampered, foreign account/phone, wrong phrase, and query-substituted requests without work or SMS",
+          "status": "passed"
+        },
+        {
+          "name": "deduplicates simultaneous provider retries and sends one independent fallback with the agent offline",
+          "status": "passed"
+        },
+        {
+          "name": "keeps synthetic fixtures local even while the optional SMS proof is enabled",
+          "status": "passed"
+        },
+        {
+          "name": "cannot mark pending SMS sent through the simulated ledger after SMS is disabled",
+          "status": "passed"
+        },
+        {
+          "name": "does not resend after an uncertain provider outcome, even after restart",
+          "status": "passed"
+        },
+        {
+          "name": "recovers durable inbound input after an engine write failed",
+          "status": "passed"
+        },
+        {
+          "name": "fails closed on corrupt storage and changed SMS routing",
+          "status": "passed"
+        },
+        {
+          "name": "requires a matching provider message ID on status updates",
+          "status": "passed"
+        },
+        {
+          "name": "uses the real Twilio client with fixed routing, account authentication, timeout and redirect refusal",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "test/delegationStartupConfig.test.ts",
+      "assertions": [
+        {
+          "name": "Cleaner Core deployment configuration keeps SMS disabled by default and enables only a complete dedicated phone pair with canonical HTTPS origin",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Core deployment configuration refuses incomplete SMS settings and invalid opt-in values without printing credentials or phone numbers",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Core deployment configuration accepts paired webhook settings and rejects invalid or incomplete settings without disclosing them",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Core deployment configuration accepts Railway port/domain with distinct valid credentials and leaves local automatic credentials available",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Core deployment configuration names missing, short, and identical credentials without revealing values",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Core deployment configuration refuses invalid public addresses without printing credential-bearing URLs",
+          "status": "passed"
+        },
+        {
+          "name": "Cleaner Core deployment configuration refuses missing public addresses, invalid ports, and unsupported listener hosts",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "test/delegationTestService.test.ts",
+      "assertions": [
+        {
+          "name": "separates operator fixtures from agent access and restricts public host headers",
+          "status": "passed"
+        },
+        {
+          "name": "a webhook wakeup drives SDK MCP completion and produces correlated engine and notification evidence",
+          "status": "passed"
+        },
+        {
+          "name": "deduplicates concurrent synthetic events and completes an offline fallback independently",
+          "status": "passed"
+        },
+        {
+          "name": "refuses public addresses containing HTTP, credentials, or a non-origin path",
+          "status": "passed"
+        }
+      ]
+    }
+  ]
+}

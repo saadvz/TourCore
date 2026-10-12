@@ -6,7 +6,7 @@ import { writeJsonAtomic } from "../storage/atomicWrite";
 
 const Id = z.string().regex(/^[A-Za-z0-9_-]{1,100}$/);
 const Instant = z.iso.datetime();
-const TurnSchema = z.strictObject({
+export const TurnSchema = z.strictObject({
   tenantId: Id, id: Id, version: z.number().int().positive(), recipient: z.string().min(1).max(100),
   timeZone: z.string().refine((zone) => { try { new Intl.DateTimeFormat("en", { timeZone: zone }); return true; } catch { return false; } }),
   windowStart: Instant, windowEnd: Instant, nextArrival: Instant,
@@ -19,7 +19,7 @@ const ReplySchema = z.strictObject({
   status: z.enum(["pending", "sending", "sent", "review_required"]),
   attempts: z.number().int().nonnegative(), nextAttemptAt: z.number(), receipt: z.string().optional(),
 });
-const WorkSchema = z.strictObject({
+export const WorkSchema = z.strictObject({
   id: Id, tenantId: Id, providerEventId: z.string().min(1).max(200), turnId: Id,
   requestedStart: Instant, receivedAt: Instant, deadlineAt: z.number(),
   status: z.enum(["pending", "leased", "reply_pending", "completed", "review_required"]),
@@ -27,7 +27,7 @@ const WorkSchema = z.strictObject({
   decision: z.strictObject({ actionKey: Id, fingerprint: z.string(), start: Instant }).optional(),
   reply: ReplySchema.optional(), audit: z.array(AuditSchema),
 });
-type Work = z.infer<typeof WorkSchema>;
+export type Work = z.infer<typeof WorkSchema>;
 const StateSchema = z.strictObject({ schemaVersion: z.literal(1), turns: z.array(TurnSchema), work: z.array(WorkSchema) });
 type State = z.infer<typeof StateSchema>;
 export interface AgentIdentity { tenantId: string; agentId: string }

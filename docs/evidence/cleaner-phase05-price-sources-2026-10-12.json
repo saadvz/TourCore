@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-12T08:10:16.452306+00:00",
+  "sources": [
+    {
+      "name": "railway-pricing",
+      "url": "https://railway.com/pricing",
+      "status": 200,
+      "bytes": 340101,
+      "fetchedAt": "2026-10-12T07:43:40.409482+00:00",
+      "sha256": "2a3c2864c2f81c74e9801fa90429ceadbfedde510d5ced1edc94abd53d6bc98e"
+    },
+    {
+      "name": "railway-billing",
+      "url": "https://docs.railway.com/reference/pricing/plans",
+      "status": 200,
+      "bytes": 283050,
+      "fetchedAt": "2026-10-12T07:43:40.634748+00:00",
+      "sha256": "7bf01b40bef5b3cf1b5ff19a3cbb00defd218f0e9cf44f38b4aed3e5dcb47746"
+    },
+    {
+      "url": "https://docs.railway.com/reference/volumes",
+      "status": 200,
+      "sha256": "8d131dc0976f4b856ca40b6834392321a638da6ce82b779feec7124a635fe4c6"
+    },
+    {
+      "url": "https://docs.railway.com/reference/metrics",
+      "status": 200,
+      "sha256": "157f7c64b86896f09f9f8c9e1a771438ba2963a209ea6317ab3778d93ba7237f"
+    },
+    {
+      "name": "xai-models",
+      "url": "https://docs.x.ai/docs/models",
+      "status": 200,
+      "bytes": 421850,
+      "fetchedAt": "2026-10-12T07:43:40.733165+00:00",
+      "sha256": "abffbd6b64bca8138ea965a332de9dea74833bb4940060968fd045d5b390b54b"
+    }
+  ],
+  "railwayContainer": {
+    "cpuUsdPerMinute": 0.000463,
+    "ramUsdPerGbMinute": 0.000231,
+    "volumeUsdPerGbMinute": 3.472222222e-06,
+    "egressUsdPerGb": 0.05,
+    "hobbyMinimumUsd": 5,
+    "proMinimumUsd": 20,
+    "includedUsage": "Hosting bill = max(subscription minimum, measured hosting usage); other provider invoices are separate.",
+    "volume": "Only used volume storage is charged; docs say roughly 2-3% of provisioned size is filesystem metadata."
+  },
+  "grokApiCatalog": [
+    {
+      "id": "x-ai/grok-4.7",
+      "pricing": {
+        "prompt": "0.000002",
+        "completion": "0.000006",
+        "web_search": "0.005",
+        "input_cache_read": "0.0000005",
+        "overrides": [
+          {
+            "min_prompt_tokens": 200000,
+            "prompt": "0.000004",
+            "completion": "0.000012",
+            "input_cache_read": "0.000001"
+          }
+        ]
+      }
+    }
+  ],
+  "scope": "Public price references, not an account invoice or selection of final hosting; no paid model invocation."
+}

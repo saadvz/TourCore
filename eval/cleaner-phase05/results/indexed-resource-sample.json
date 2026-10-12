@@ -1,0 +1,6897 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-12T07:35:24.725Z",
+  "sourceCommit": "3a45cf01c2e7ffad38226bbdc465438a853436e6",
+  "runnerSha256": "d65a9cb0f656ee3c00e78f09ded214a81dcf177faf595df8a1c2fd8394481cef",
+  "sourceSha256": {
+    "store": "1f09531684ff17dbbc7104c28727db0080a175a46ae043b8b7554f73143ea19c",
+    "engine": "61cbdbbdcc9cbf2c9bbfac016c0a735b4ae021dad3743e40468bdd9bdbd2d986",
+    "grants": "62cb1046b26470f8e6d0f2fc4b975bf4d3018a6b6e307516acd25acb5bd178bb",
+    "service": "dd8df6b66a48a4e8c3e08b36352ddeacf503395033005ab1a89d89ea29634f06",
+    "notifications": "2efa2cc04dbb0f56d8342d712fda3a8a746997dba5f788d4e2dd7c1d5b15b742",
+    "profiles": "5097dc296f01d74d19146c6df43bae40bd122a62bc9914ca3ceab346bb1855b8"
+  },
+  "environment": {
+    "node": "v24.19.0",
+    "logicalCpus": 3,
+    "cpuQuota": "200000 100000"
+  },
+  "scope": "Sequential valid-grant direct indexed-engine lifecycle; two synthetic tenants, injected memory-idempotent providers, controlled lost acknowledgments. Acceptance tests separately exercise OAuth, HTTP and SDK MCP.",
+  "measurement": {
+    "cpu": "Process user+system delta per sequential request; includes SQLite/fsync and test adapters",
+    "latency": "saveTurn/receive/claim/propose/tick/read incl controlled immediate retry, not SMS delivery or agent inference",
+    "io": "Linux /proc/self/io process counter deltas; native SQLite included; write_bytes is kernel accounting, not exact database amplification or storage device flush bytes",
+    "storage": "Physical SQLite/WAL/shared-memory file sizes before and after WAL checkpoint; index/page overhead included",
+    "memory": "Sampled whole-process RSS; maximum observed, not continuous peak or per-tenant allocation",
+    "idle": "50 engine and notification sweeps over retained completed work; no configured notification routes",
+    "externalInferenceCalls": 0,
+    "realSmsCalls": 0
+  },
+  "limitations": [
+    "Single local Node process, no distributed/multi-host throughput claim",
+    "Sequential attribution does not measure concurrent per-tenant CPU",
+    "Process IO counters include incidental runtime activity and depend on filesystem/kernel accounting",
+    "Mock provider receipts use an in-memory map in this sampler; crash tests use durable engine records and separate fixtures",
+    "Different runtime/storage from previous JSON sample; observations do not establish a controlled hardware comparison"
+  ],
+  "samples": [
+    {
+      "count": 20,
+      "cpuMs": 155.00900000000001,
+      "p95WallMs": 10.585351999999943,
+      "maxRssBytesObserved": 105357312,
+      "liveFiles": {
+        "cleaner.sqlite": 270336,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 4136512
+      },
+      "checkpointedFiles": {
+        "cleaner.sqlite": 274432,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 0
+      },
+      "perTenant": {
+        "A": {
+          "requests": 10,
+          "cpuMs": 91.998,
+          "workRecords": 10,
+          "auditRecords": 52
+        },
+        "B": {
+          "requests": 10,
+          "cpuMs": 63.010999999999996,
+          "workRecords": 10,
+          "auditRecords": 50
+        }
+      },
+      "idle": {
+        "cycles": 50,
+        "cpuMs": 7.587,
+        "wallMs": 7.642700999999988,
+        "processIoDelta": {
+          "rchar": 114,
+          "wchar": 0,
+          "syscr": 2,
+          "syscw": 0,
+          "read_bytes": 0,
+          "write_bytes": 0,
+          "cancelled_write_bytes": 0
+        }
+      },
+      "rows": [
+        {
+          "tenantId": "A",
+          "wallMs": 38.34268400000002,
+          "cpuMs": 34.9,
+          "providerAttempts": 2,
+          "rssBytesObserved": 90152960,
+          "processIoDelta": {
+            "rchar": 285,
+            "wchar": 276040,
+            "syscr": 4,
+            "syscw": 134,
+            "read_bytes": 0,
+            "write_bytes": 311296,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 9.896473000000015,
+          "cpuMs": 8.048,
+          "providerAttempts": 1,
+          "rssBytesObserved": 91070464,
+          "processIoDelta": {
+            "rchar": 112,
+            "wchar": 206000,
+            "syscr": 2,
+            "syscw": 100,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.70906500000001,
+          "cpuMs": 7.723,
+          "providerAttempts": 1,
+          "rssBytesObserved": 91987968,
+          "processIoDelta": {
+            "rchar": 112,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 10.585351999999943,
+          "cpuMs": 7.262,
+          "providerAttempts": 1,
+          "rssBytesObserved": 92774400,
+          "processIoDelta": {
+            "rchar": 113,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 9.44867099999999,
+          "cpuMs": 7.276,
+          "providerAttempts": 1,
+          "rssBytesObserved": 93560832,
+          "processIoDelta": {
+            "rchar": 113,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 8.630854,
+          "cpuMs": 6.129,
+          "providerAttempts": 1,
+          "rssBytesObserved": 94347264,
+          "processIoDelta": {
+            "rchar": 113,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.752717999999959,
+          "cpuMs": 6.33,
+          "providerAttempts": 1,
+          "rssBytesObserved": 95133696,
+          "processIoDelta": {
+            "rchar": 113,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 8.986092999999983,
+          "cpuMs": 6.396,
+          "providerAttempts": 1,
+          "rssBytesObserved": 95920128,
+          "processIoDelta": {
+            "rchar": 113,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 9.172845000000052,
+          "cpuMs": 6.827,
+          "providerAttempts": 1,
+          "rssBytesObserved": 96706560,
+          "processIoDelta": {
+            "rchar": 114,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 9.178005999999982,
+          "cpuMs": 6.694,
+          "providerAttempts": 1,
+          "rssBytesObserved": 97492992,
+          "processIoDelta": {
+            "rchar": 114,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 10.279614999999922,
+          "cpuMs": 6.384,
+          "providerAttempts": 1,
+          "rssBytesObserved": 98279424,
+          "processIoDelta": {
+            "rchar": 114,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 9.060085999999956,
+          "cpuMs": 5.351,
+          "providerAttempts": 1,
+          "rssBytesObserved": 99065856,
+          "processIoDelta": {
+            "rchar": 114,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.815707999999972,
+          "cpuMs": 5.372,
+          "providerAttempts": 1,
+          "rssBytesObserved": 99852288,
+          "processIoDelta": {
+            "rchar": 114,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 9.267350999999962,
+          "cpuMs": 6.144,
+          "providerAttempts": 1,
+          "rssBytesObserved": 100638720,
+          "processIoDelta": {
+            "rchar": 114,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.839117999999985,
+          "cpuMs": 6.316,
+          "providerAttempts": 1,
+          "rssBytesObserved": 101556224,
+          "processIoDelta": {
+            "rchar": 114,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 8.893017999999984,
+          "cpuMs": 5.564,
+          "providerAttempts": 1,
+          "rssBytesObserved": 102211584,
+          "processIoDelta": {
+            "rchar": 114,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.56945600000006,
+          "cpuMs": 5.881,
+          "providerAttempts": 1,
+          "rssBytesObserved": 102998016,
+          "processIoDelta": {
+            "rchar": 114,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 245760,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 8.727494000000092,
+          "cpuMs": 6.653,
+          "providerAttempts": 1,
+          "rssBytesObserved": 103784448,
+          "processIoDelta": {
+            "rchar": 270450,
+            "wchar": 472248,
+            "syscr": 68,
+            "syscw": 165,
+            "read_bytes": 0,
+            "write_bytes": 499712,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.619845000000055,
+          "cpuMs": 4.989,
+          "providerAttempts": 1,
+          "rssBytesObserved": 104570880,
+          "processIoDelta": {
+            "rchar": 114,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.369148999999993,
+          "cpuMs": 4.77,
+          "providerAttempts": 1,
+          "rssBytesObserved": 105357312,
+          "processIoDelta": {
+            "rchar": 114,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        }
+      ]
+    },
+    {
+      "count": 100,
+      "cpuMs": 580.2610000000001,
+      "p95WallMs": 11.238113999999996,
+      "maxRssBytesObserved": 144830464,
+      "liveFiles": {
+        "cleaner.sqlite": 454656,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 4148872
+      },
+      "checkpointedFiles": {
+        "cleaner.sqlite": 471040,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 0
+      },
+      "perTenant": {
+        "A": {
+          "requests": 50,
+          "cpuMs": 283.861,
+          "workRecords": 50,
+          "auditRecords": 260
+        },
+        "B": {
+          "requests": 50,
+          "cpuMs": 296.4,
+          "workRecords": 50,
+          "auditRecords": 250
+        }
+      },
+      "idle": {
+        "cycles": 50,
+        "cpuMs": 7.387,
+        "wallMs": 7.270565000000033,
+        "processIoDelta": {
+          "rchar": 121,
+          "wchar": 0,
+          "syscr": 2,
+          "syscw": 0,
+          "read_bytes": 0,
+          "write_bytes": 0,
+          "cancelled_write_bytes": 0
+        }
+      },
+      "rows": [
+        {
+          "tenantId": "A",
+          "wallMs": 9.46670000000006,
+          "cpuMs": 6.466,
+          "providerAttempts": 2,
+          "rssBytesObserved": 109420544,
+          "processIoDelta": {
+            "rchar": 118,
+            "wchar": 276040,
+            "syscr": 2,
+            "syscw": 134,
+            "read_bytes": 0,
+            "write_bytes": 311296,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 12.717733000000067,
+          "cpuMs": 17.123,
+          "providerAttempts": 1,
+          "rssBytesObserved": 112435200,
+          "processIoDelta": {
+            "rchar": 118,
+            "wchar": 206000,
+            "syscr": 2,
+            "syscw": 100,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.745894000000021,
+          "cpuMs": 5.624,
+          "providerAttempts": 1,
+          "rssBytesObserved": 112435200,
+          "processIoDelta": {
+            "rchar": 118,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.908836999999949,
+          "cpuMs": 5.359,
+          "providerAttempts": 1,
+          "rssBytesObserved": 112435200,
+          "processIoDelta": {
+            "rchar": 118,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.871009999999956,
+          "cpuMs": 5.33,
+          "providerAttempts": 1,
+          "rssBytesObserved": 112435200,
+          "processIoDelta": {
+            "rchar": 118,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 9.079110000000014,
+          "cpuMs": 5.274,
+          "providerAttempts": 1,
+          "rssBytesObserved": 112435200,
+          "processIoDelta": {
+            "rchar": 118,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 9.831547,
+          "cpuMs": 5.677,
+          "providerAttempts": 1,
+          "rssBytesObserved": 112435200,
+          "processIoDelta": {
+            "rchar": 118,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.492192999999929,
+          "cpuMs": 5.441,
+          "providerAttempts": 1,
+          "rssBytesObserved": 112435200,
+          "processIoDelta": {
+            "rchar": 118,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.040050000000065,
+          "cpuMs": 4.691,
+          "providerAttempts": 1,
+          "rssBytesObserved": 112435200,
+          "processIoDelta": {
+            "rchar": 118,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.631003999999962,
+          "cpuMs": 4.856,
+          "providerAttempts": 1,
+          "rssBytesObserved": 112435200,
+          "processIoDelta": {
+            "rchar": 118,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.069856999999956,
+          "cpuMs": 5.261,
+          "providerAttempts": 1,
+          "rssBytesObserved": 112435200,
+          "processIoDelta": {
+            "rchar": 118,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.060235000000034,
+          "cpuMs": 4.974,
+          "providerAttempts": 1,
+          "rssBytesObserved": 112435200,
+          "processIoDelta": {
+            "rchar": 118,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.8259160000000065,
+          "cpuMs": 6.727,
+          "providerAttempts": 1,
+          "rssBytesObserved": 112435200,
+          "processIoDelta": {
+            "rchar": 118,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.990678000000003,
+          "cpuMs": 5.83,
+          "providerAttempts": 1,
+          "rssBytesObserved": 112435200,
+          "processIoDelta": {
+            "rchar": 118,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.185722999999939,
+          "cpuMs": 5.782,
+          "providerAttempts": 1,
+          "rssBytesObserved": 112435200,
+          "processIoDelta": {
+            "rchar": 118,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.56597899999997,
+          "cpuMs": 5.876,
+          "providerAttempts": 1,
+          "rssBytesObserved": 112435200,
+          "processIoDelta": {
+            "rchar": 119,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 9.956324999999993,
+          "cpuMs": 5.717,
+          "providerAttempts": 1,
+          "rssBytesObserved": 112566272,
+          "processIoDelta": {
+            "rchar": 119,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 245760,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 9.465705999999955,
+          "cpuMs": 4.916,
+          "providerAttempts": 1,
+          "rssBytesObserved": 112566272,
+          "processIoDelta": {
+            "rchar": 270455,
+            "wchar": 472248,
+            "syscr": 68,
+            "syscw": 165,
+            "read_bytes": 0,
+            "write_bytes": 499712,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.4242550000000165,
+          "cpuMs": 6.773,
+          "providerAttempts": 1,
+          "rssBytesObserved": 112959488,
+          "processIoDelta": {
+            "rchar": 119,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 11.238113999999996,
+          "cpuMs": 6.663,
+          "providerAttempts": 1,
+          "rssBytesObserved": 113483776,
+          "processIoDelta": {
+            "rchar": 119,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 12.732241000000045,
+          "cpuMs": 9.311,
+          "providerAttempts": 2,
+          "rssBytesObserved": 113876992,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 271920,
+            "syscr": 2,
+            "syscw": 132,
+            "read_bytes": 0,
+            "write_bytes": 307200,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.071686999999997,
+          "cpuMs": 4.922,
+          "providerAttempts": 1,
+          "rssBytesObserved": 114532352,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.9531709999999975,
+          "cpuMs": 4.977,
+          "providerAttempts": 1,
+          "rssBytesObserved": 115318784,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.250319999999988,
+          "cpuMs": 5.384,
+          "providerAttempts": 1,
+          "rssBytesObserved": 116105216,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.3876920000000155,
+          "cpuMs": 4.674,
+          "providerAttempts": 1,
+          "rssBytesObserved": 116891648,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.203122000000008,
+          "cpuMs": 5.626,
+          "providerAttempts": 1,
+          "rssBytesObserved": 117678080,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.633377999999993,
+          "cpuMs": 4.923,
+          "providerAttempts": 1,
+          "rssBytesObserved": 118464512,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.706453999999894,
+          "cpuMs": 10.58,
+          "providerAttempts": 1,
+          "rssBytesObserved": 119382016,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.817986000000019,
+          "cpuMs": 11.029,
+          "providerAttempts": 1,
+          "rssBytesObserved": 120168448,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.48457499999995,
+          "cpuMs": 4.637,
+          "providerAttempts": 1,
+          "rssBytesObserved": 120823808,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.844087999999942,
+          "cpuMs": 5.868,
+          "providerAttempts": 1,
+          "rssBytesObserved": 121741312,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.526482999999985,
+          "cpuMs": 4.844,
+          "providerAttempts": 1,
+          "rssBytesObserved": 122527744,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.176935999999955,
+          "cpuMs": 5.551,
+          "providerAttempts": 1,
+          "rssBytesObserved": 123314176,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.227431000000024,
+          "cpuMs": 4.754,
+          "providerAttempts": 1,
+          "rssBytesObserved": 124100608,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 230720,
+            "syscr": 2,
+            "syscw": 112,
+            "read_bytes": 0,
+            "write_bytes": 258048,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 9.51972899999987,
+          "cpuMs": 5.839,
+          "providerAttempts": 1,
+          "rssBytesObserved": 124755968,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.926962000000003,
+          "cpuMs": 4.775,
+          "providerAttempts": 1,
+          "rssBytesObserved": 125542400,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.587874000000056,
+          "cpuMs": 5.567,
+          "providerAttempts": 1,
+          "rssBytesObserved": 126328832,
+          "processIoDelta": {
+            "rchar": 143480,
+            "wchar": 357632,
+            "syscr": 37,
+            "syscw": 140,
+            "read_bytes": 0,
+            "write_bytes": 385024,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.8843930000000455,
+          "cpuMs": 5.382,
+          "providerAttempts": 1,
+          "rssBytesObserved": 127115264,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.74093999999991,
+          "cpuMs": 4.843,
+          "providerAttempts": 1,
+          "rssBytesObserved": 127770624,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 8.430904000000055,
+          "cpuMs": 6.486,
+          "providerAttempts": 1,
+          "rssBytesObserved": 128557056,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 218360,
+            "syscr": 2,
+            "syscw": 106,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 9.531293999999889,
+          "cpuMs": 6.424,
+          "providerAttempts": 2,
+          "rssBytesObserved": 129474560,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 280160,
+            "syscr": 2,
+            "syscw": 136,
+            "read_bytes": 0,
+            "write_bytes": 315392,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.46668899999986,
+          "cpuMs": 5.867,
+          "providerAttempts": 1,
+          "rssBytesObserved": 130260992,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.194605000000138,
+          "cpuMs": 6.285,
+          "providerAttempts": 1,
+          "rssBytesObserved": 131047424,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.01893199999995,
+          "cpuMs": 5.699,
+          "providerAttempts": 1,
+          "rssBytesObserved": 131833856,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.354650999999876,
+          "cpuMs": 4.524,
+          "providerAttempts": 1,
+          "rssBytesObserved": 132620288,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 9.539929999999913,
+          "cpuMs": 5.024,
+          "providerAttempts": 1,
+          "rssBytesObserved": 133406720,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.714993999999933,
+          "cpuMs": 4.693,
+          "providerAttempts": 1,
+          "rssBytesObserved": 134193152,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 234840,
+            "syscr": 2,
+            "syscw": 114,
+            "read_bytes": 0,
+            "write_bytes": 262144,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.282584000000043,
+          "cpuMs": 4.684,
+          "providerAttempts": 1,
+          "rssBytesObserved": 134848512,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.996278000000075,
+          "cpuMs": 9.743,
+          "providerAttempts": 1,
+          "rssBytesObserved": 135634944,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 247200,
+            "syscr": 2,
+            "syscw": 120,
+            "read_bytes": 0,
+            "write_bytes": 270336,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 18.47180100000014,
+          "cpuMs": 20.602,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137601024,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.6459299999999075,
+          "cpuMs": 4.819,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137601024,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.189617999999882,
+          "cpuMs": 5.613,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137601024,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.304059000000052,
+          "cpuMs": 8.206,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137601024,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.498391999999967,
+          "cpuMs": 4.96,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137601024,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.667552999999998,
+          "cpuMs": 4.948,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137601024,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 245760,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.766952000000174,
+          "cpuMs": 4.785,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137601024,
+          "processIoDelta": {
+            "rchar": 143480,
+            "wchar": 345240,
+            "syscr": 37,
+            "syscw": 133,
+            "read_bytes": 0,
+            "write_bytes": 368640,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.067469000000074,
+          "cpuMs": 4.721,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137601024,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 210152,
+            "syscr": 2,
+            "syscw": 103,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.261009000000058,
+          "cpuMs": 4.263,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137601024,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.032466999999997,
+          "cpuMs": 4.356,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137732096,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.811909000000014,
+          "cpuMs": 5.009,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137732096,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 12.496458999999959,
+          "cpuMs": 5.746,
+          "providerAttempts": 2,
+          "rssBytesObserved": 137732096,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 321360,
+            "syscr": 2,
+            "syscw": 156,
+            "read_bytes": 0,
+            "write_bytes": 352256,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.791161000000102,
+          "cpuMs": 4.335,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137732096,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.7383330000000115,
+          "cpuMs": 4.611,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137732096,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.799305999999888,
+          "cpuMs": 7.431,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137732096,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.658636000000115,
+          "cpuMs": 4.99,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137732096,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 230720,
+            "syscr": 2,
+            "syscw": 112,
+            "read_bytes": 0,
+            "write_bytes": 253952,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.910820000000058,
+          "cpuMs": 7.823,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137883648,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.787072999999964,
+          "cpuMs": 4.854,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137883648,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.462781000000177,
+          "cpuMs": 4.663,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137883648,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.497421999999915,
+          "cpuMs": 4.857,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137883648,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.230047000000013,
+          "cpuMs": 4.411,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137883648,
+          "processIoDelta": {
+            "rchar": 120,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.219786000000113,
+          "cpuMs": 4.305,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137883648,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 245760,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 5.973013000000037,
+          "cpuMs": 4.289,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137883648,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.475458000000117,
+          "cpuMs": 4.483,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137883648,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 234840,
+            "syscr": 2,
+            "syscw": 114,
+            "read_bytes": 0,
+            "write_bytes": 258048,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.048135999999886,
+          "cpuMs": 8.177,
+          "providerAttempts": 1,
+          "rssBytesObserved": 137883648,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.277080000000069,
+          "cpuMs": 5.643,
+          "providerAttempts": 1,
+          "rssBytesObserved": 138014720,
+          "processIoDelta": {
+            "rchar": 147577,
+            "wchar": 361728,
+            "syscr": 38,
+            "syscw": 141,
+            "read_bytes": 0,
+            "write_bytes": 389120,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.460199999999986,
+          "cpuMs": 4.147,
+          "providerAttempts": 1,
+          "rssBytesObserved": 138014720,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 11.487313000000086,
+          "cpuMs": 6.926,
+          "providerAttempts": 1,
+          "rssBytesObserved": 138014720,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 234840,
+            "syscr": 2,
+            "syscw": 114,
+            "read_bytes": 0,
+            "write_bytes": 258048,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 5.779967999999826,
+          "cpuMs": 4.144,
+          "providerAttempts": 1,
+          "rssBytesObserved": 138014720,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.5115710000000036,
+          "cpuMs": 4.987,
+          "providerAttempts": 1,
+          "rssBytesObserved": 138014720,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 218360,
+            "syscr": 2,
+            "syscw": 106,
+            "read_bytes": 0,
+            "write_bytes": 245760,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.187285999999858,
+          "cpuMs": 5.193,
+          "providerAttempts": 1,
+          "rssBytesObserved": 138014720,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.834205000000111,
+          "cpuMs": 6.204,
+          "providerAttempts": 2,
+          "rssBytesObserved": 138145792,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 280160,
+            "syscr": 2,
+            "syscw": 136,
+            "read_bytes": 0,
+            "write_bytes": 311296,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.372012000000041,
+          "cpuMs": 6.43,
+          "providerAttempts": 1,
+          "rssBytesObserved": 138145792,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.140632000000096,
+          "cpuMs": 4.661,
+          "providerAttempts": 1,
+          "rssBytesObserved": 138145792,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.269633999999996,
+          "cpuMs": 4.7,
+          "providerAttempts": 1,
+          "rssBytesObserved": 138145792,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.313999000000194,
+          "cpuMs": 4.608,
+          "providerAttempts": 1,
+          "rssBytesObserved": 138145792,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.145369000000073,
+          "cpuMs": 5.717,
+          "providerAttempts": 1,
+          "rssBytesObserved": 138539008,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.818352000000004,
+          "cpuMs": 5.589,
+          "providerAttempts": 1,
+          "rssBytesObserved": 138932224,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 245760,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.490805000000137,
+          "cpuMs": 4.885,
+          "providerAttempts": 1,
+          "rssBytesObserved": 139456512,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.038524999999936,
+          "cpuMs": 5.155,
+          "providerAttempts": 1,
+          "rssBytesObserved": 139980800,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 255440,
+            "syscr": 2,
+            "syscw": 124,
+            "read_bytes": 0,
+            "write_bytes": 278528,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 8.287120999999843,
+          "cpuMs": 6.389,
+          "providerAttempts": 1,
+          "rssBytesObserved": 140374016,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.637720999999829,
+          "cpuMs": 4.728,
+          "providerAttempts": 1,
+          "rssBytesObserved": 140898304,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 243080,
+            "syscr": 2,
+            "syscw": 118,
+            "read_bytes": 0,
+            "write_bytes": 270336,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.016483999999991,
+          "cpuMs": 4.676,
+          "providerAttempts": 1,
+          "rssBytesObserved": 141291520,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.473612999999887,
+          "cpuMs": 5.697,
+          "providerAttempts": 1,
+          "rssBytesObserved": 141815808,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.736872999999832,
+          "cpuMs": 5.085,
+          "providerAttempts": 1,
+          "rssBytesObserved": 142209024,
+          "processIoDelta": {
+            "rchar": 168057,
+            "wchar": 369848,
+            "syscr": 43,
+            "syscw": 140,
+            "read_bytes": 0,
+            "write_bytes": 397312,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.850975000000062,
+          "cpuMs": 4.541,
+          "providerAttempts": 1,
+          "rssBytesObserved": 142733312,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.613861000000043,
+          "cpuMs": 4.645,
+          "providerAttempts": 1,
+          "rssBytesObserved": 143126528,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.043633,
+          "cpuMs": 7.621,
+          "providerAttempts": 1,
+          "rssBytesObserved": 143388672,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 245760,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.6071629999999,
+          "cpuMs": 4.407,
+          "providerAttempts": 1,
+          "rssBytesObserved": 143781888,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.249240999999984,
+          "cpuMs": 4.306,
+          "providerAttempts": 1,
+          "rssBytesObserved": 144306176,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.4760660000001735,
+          "cpuMs": 4.645,
+          "providerAttempts": 1,
+          "rssBytesObserved": 144830464,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 245760,
+            "cancelled_write_bytes": 0
+          }
+        }
+      ]
+    },
+    {
+      "count": 300,
+      "cpuMs": 1892.1419999999998,
+      "p95WallMs": 22.278478000000177,
+      "maxRssBytesObserved": 208691200,
+      "liveFiles": {
+        "cleaner.sqlite": 1003520,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 4169472
+      },
+      "checkpointedFiles": {
+        "cleaner.sqlite": 1003520,
+        "cleaner.sqlite-shm": 32768,
+        "cleaner.sqlite-wal": 0
+      },
+      "perTenant": {
+        "A": {
+          "requests": 150,
+          "cpuMs": 900.736,
+          "workRecords": 150,
+          "auditRecords": 780
+        },
+        "B": {
+          "requests": 150,
+          "cpuMs": 991.4059999999996,
+          "workRecords": 150,
+          "auditRecords": 750
+        }
+      },
+      "idle": {
+        "cycles": 50,
+        "cpuMs": 7.534,
+        "wallMs": 7.585062999999536,
+        "processIoDelta": {
+          "rchar": 122,
+          "wchar": 0,
+          "syscr": 2,
+          "syscw": 0,
+          "read_bytes": 0,
+          "write_bytes": 0,
+          "cancelled_write_bytes": 0
+        }
+      },
+      "rows": [
+        {
+          "tenantId": "A",
+          "wallMs": 10.596585999999888,
+          "cpuMs": 7.064,
+          "providerAttempts": 2,
+          "rssBytesObserved": 147714048,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 276040,
+            "syscr": 2,
+            "syscw": 134,
+            "read_bytes": 0,
+            "write_bytes": 311296,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 11.465703000000076,
+          "cpuMs": 6.559,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147714048,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 206000,
+            "syscr": 2,
+            "syscw": 100,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.287939000000051,
+          "cpuMs": 7.462,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 8.061738999999989,
+          "cpuMs": 5.415,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.530195999999933,
+          "cpuMs": 5.671,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.841435000000047,
+          "cpuMs": 5.503,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.228644000000031,
+          "cpuMs": 5.37,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 10.139153000000078,
+          "cpuMs": 6.466,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 11.248385000000098,
+          "cpuMs": 6.395,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.110838000000058,
+          "cpuMs": 4.758,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.765791000000036,
+          "cpuMs": 4.757,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 13.863317000000052,
+          "cpuMs": 10.416,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 10.117062000000033,
+          "cpuMs": 7.434,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 10.429889999999887,
+          "cpuMs": 5.736,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 11.034132,
+          "cpuMs": 5.946,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 8.723275999999942,
+          "cpuMs": 6.065,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.57214399999998,
+          "cpuMs": 5.705,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 245760,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 20.809232000000065,
+          "cpuMs": 10.132,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 270457,
+            "wchar": 472248,
+            "syscr": 68,
+            "syscw": 165,
+            "read_bytes": 0,
+            "write_bytes": 499712,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 19.100114000000076,
+          "cpuMs": 5.325,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 16.62652099999991,
+          "cpuMs": 8.177,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 19.08421300000009,
+          "cpuMs": 10.97,
+          "providerAttempts": 2,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 271920,
+            "syscr": 2,
+            "syscw": 132,
+            "read_bytes": 0,
+            "write_bytes": 307200,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 16.951101000000108,
+          "cpuMs": 9.226,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 14.132816000000048,
+          "cpuMs": 6.23,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 13.715261999999939,
+          "cpuMs": 5.18,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 10.40174100000013,
+          "cpuMs": 4.795,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 18.338216999999986,
+          "cpuMs": 7.763,
+          "providerAttempts": 1,
+          "rssBytesObserved": 147976192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.352811999999858,
+          "cpuMs": 5.568,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148107264,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.999782000000096,
+          "cpuMs": 4.808,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148107264,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.311394999999948,
+          "cpuMs": 4.392,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148107264,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 5.948891000000003,
+          "cpuMs": 4.107,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148107264,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.1885879999999815,
+          "cpuMs": 4.324,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148107264,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.252880000000005,
+          "cpuMs": 4.534,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148107264,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.376303999999891,
+          "cpuMs": 5.959,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148107264,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.2901419999998325,
+          "cpuMs": 4.382,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148107264,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 230720,
+            "syscr": 2,
+            "syscw": 112,
+            "read_bytes": 0,
+            "write_bytes": 258048,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.870407999999998,
+          "cpuMs": 4.39,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148107264,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 11.179428000000144,
+          "cpuMs": 8.36,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148107264,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 12.002574999999979,
+          "cpuMs": 5.433,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148107264,
+          "processIoDelta": {
+            "rchar": 143481,
+            "wchar": 357632,
+            "syscr": 37,
+            "syscw": 140,
+            "read_bytes": 0,
+            "write_bytes": 385024,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.926106000000118,
+          "cpuMs": 5.147,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148107264,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.527526999999964,
+          "cpuMs": 4.679,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148107264,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.44696799999997,
+          "cpuMs": 9.229,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148500480,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 218360,
+            "syscr": 2,
+            "syscw": 106,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 9.241708000000017,
+          "cpuMs": 14.416,
+          "providerAttempts": 2,
+          "rssBytesObserved": 148414464,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 280160,
+            "syscr": 2,
+            "syscw": 136,
+            "read_bytes": 0,
+            "write_bytes": 315392,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.508446999999933,
+          "cpuMs": 4.423,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148414464,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.07227899999998,
+          "cpuMs": 4.312,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148414464,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.354583000000048,
+          "cpuMs": 4.146,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148414464,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.654342999999926,
+          "cpuMs": 5.433,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148414464,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.697096999999985,
+          "cpuMs": 6.629,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148414464,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 13.465744000000086,
+          "cpuMs": 7.731,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148414464,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 234840,
+            "syscr": 2,
+            "syscw": 114,
+            "read_bytes": 0,
+            "write_bytes": 262144,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 13.03563499999973,
+          "cpuMs": 5.295,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148414464,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.283449000000019,
+          "cpuMs": 4.603,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148414464,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 247200,
+            "syscr": 2,
+            "syscw": 120,
+            "read_bytes": 0,
+            "write_bytes": 270336,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.627508999999918,
+          "cpuMs": 4.353,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148414464,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.987998000000061,
+          "cpuMs": 4.545,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148414464,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.873149999999896,
+          "cpuMs": 4.495,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148414464,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.232860999999957,
+          "cpuMs": 4.42,
+          "providerAttempts": 1,
+          "rssBytesObserved": 148807680,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 21.909807,
+          "cpuMs": 22.718,
+          "providerAttempts": 1,
+          "rssBytesObserved": 150904832,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.654795999999806,
+          "cpuMs": 4.841,
+          "providerAttempts": 1,
+          "rssBytesObserved": 150904832,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 245760,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.473725000000286,
+          "cpuMs": 5.097,
+          "providerAttempts": 1,
+          "rssBytesObserved": 150904832,
+          "processIoDelta": {
+            "rchar": 143481,
+            "wchar": 345240,
+            "syscr": 37,
+            "syscw": 133,
+            "read_bytes": 0,
+            "write_bytes": 368640,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.623316000000159,
+          "cpuMs": 5.029,
+          "providerAttempts": 1,
+          "rssBytesObserved": 150904832,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210152,
+            "syscr": 2,
+            "syscw": 103,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.598977999999988,
+          "cpuMs": 4.631,
+          "providerAttempts": 1,
+          "rssBytesObserved": 150904832,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.710811999999805,
+          "cpuMs": 4.556,
+          "providerAttempts": 1,
+          "rssBytesObserved": 150904832,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 8.8144470000002,
+          "cpuMs": 4.931,
+          "providerAttempts": 1,
+          "rssBytesObserved": 150904832,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 9.669682999999623,
+          "cpuMs": 5.707,
+          "providerAttempts": 2,
+          "rssBytesObserved": 150904832,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 321360,
+            "syscr": 2,
+            "syscw": 156,
+            "read_bytes": 0,
+            "write_bytes": 352256,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.2977499999997235,
+          "cpuMs": 4.689,
+          "providerAttempts": 1,
+          "rssBytesObserved": 150904832,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.699492000000191,
+          "cpuMs": 4.386,
+          "providerAttempts": 1,
+          "rssBytesObserved": 150904832,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.261259999999766,
+          "cpuMs": 4.329,
+          "providerAttempts": 1,
+          "rssBytesObserved": 150904832,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.06708400000025,
+          "cpuMs": 4.409,
+          "providerAttempts": 1,
+          "rssBytesObserved": 150904832,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 230720,
+            "syscr": 2,
+            "syscw": 112,
+            "read_bytes": 0,
+            "write_bytes": 253952,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.838631000000078,
+          "cpuMs": 4.183,
+          "providerAttempts": 1,
+          "rssBytesObserved": 150904832,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.980825999999979,
+          "cpuMs": 5.3,
+          "providerAttempts": 1,
+          "rssBytesObserved": 150904832,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 8.657803999999942,
+          "cpuMs": 4.648,
+          "providerAttempts": 1,
+          "rssBytesObserved": 150904832,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.142855999999938,
+          "cpuMs": 4.404,
+          "providerAttempts": 1,
+          "rssBytesObserved": 150904832,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.719309000000067,
+          "cpuMs": 4.362,
+          "providerAttempts": 1,
+          "rssBytesObserved": 150904832,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.340088999999807,
+          "cpuMs": 4.41,
+          "providerAttempts": 1,
+          "rssBytesObserved": 150904832,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 245760,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.45098999999982,
+          "cpuMs": 5.425,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.211135000000013,
+          "cpuMs": 4.366,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 234840,
+            "syscr": 2,
+            "syscw": 114,
+            "read_bytes": 0,
+            "write_bytes": 258048,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.353755999999976,
+          "cpuMs": 5.087,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.375360000000001,
+          "cpuMs": 4.651,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 147577,
+            "wchar": 361728,
+            "syscr": 38,
+            "syscw": 141,
+            "read_bytes": 0,
+            "write_bytes": 389120,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 8.845842000000175,
+          "cpuMs": 4.447,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.389807000000019,
+          "cpuMs": 4.576,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 234840,
+            "syscr": 2,
+            "syscw": 114,
+            "read_bytes": 0,
+            "write_bytes": 258048,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.943384000000151,
+          "cpuMs": 5.256,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.395498999999745,
+          "cpuMs": 4.49,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 218360,
+            "syscr": 2,
+            "syscw": 106,
+            "read_bytes": 0,
+            "write_bytes": 245760,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.1608610000002955,
+          "cpuMs": 4.418,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.905134000000089,
+          "cpuMs": 5.558,
+          "providerAttempts": 2,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 280160,
+            "syscr": 2,
+            "syscw": 136,
+            "read_bytes": 0,
+            "write_bytes": 311296,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 8.124002000000019,
+          "cpuMs": 6.506,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 11.546842000000197,
+          "cpuMs": 5.217,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 11.770383000000038,
+          "cpuMs": 4.924,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 10.108178999999836,
+          "cpuMs": 4.525,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.867682000000059,
+          "cpuMs": 4.536,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 5.963804999999866,
+          "cpuMs": 4.168,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 245760,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 13.07974699999977,
+          "cpuMs": 4.38,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 12.031369999999697,
+          "cpuMs": 4.184,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 255440,
+            "syscr": 2,
+            "syscw": 124,
+            "read_bytes": 0,
+            "write_bytes": 278528,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 9.813674999999876,
+          "cpuMs": 4.111,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 38.004885000000286,
+          "cpuMs": 25.107,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 243080,
+            "syscr": 2,
+            "syscw": 118,
+            "read_bytes": 0,
+            "write_bytes": 270336,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 10.627523999999994,
+          "cpuMs": 8.017,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 11.853980999999749,
+          "cpuMs": 9.295,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 11.886781000000155,
+          "cpuMs": 9.114,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 168057,
+            "wchar": 369848,
+            "syscr": 43,
+            "syscw": 140,
+            "read_bytes": 0,
+            "write_bytes": 397312,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 19.958861999999954,
+          "cpuMs": 15.358,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151035904,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 14.023920999999973,
+          "cpuMs": 8.056,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151166976,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 13.574265000000196,
+          "cpuMs": 7.163,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151298048,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 245760,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 13.940367000000151,
+          "cpuMs": 7.023,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151298048,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.335927999999967,
+          "cpuMs": 5.272,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151298048,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.63308300000017,
+          "cpuMs": 4.821,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151298048,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 245760,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.585946000000149,
+          "cpuMs": 6.207,
+          "providerAttempts": 2,
+          "rssBytesObserved": 151298048,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 317240,
+            "syscr": 2,
+            "syscw": 154,
+            "read_bytes": 0,
+            "write_bytes": 352256,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.690532000000076,
+          "cpuMs": 5.441,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151298048,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.48768199999995,
+          "cpuMs": 4.771,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151298048,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 8.758281999999781,
+          "cpuMs": 4.527,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151298048,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.927187000000231,
+          "cpuMs": 5.911,
+          "providerAttempts": 1,
+          "rssBytesObserved": 151822336,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 218360,
+            "syscr": 2,
+            "syscw": 106,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.850812000000133,
+          "cpuMs": 4.74,
+          "providerAttempts": 1,
+          "rssBytesObserved": 152215552,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.572144999999637,
+          "cpuMs": 4.815,
+          "providerAttempts": 1,
+          "rssBytesObserved": 152739840,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.428701000000274,
+          "cpuMs": 4.64,
+          "providerAttempts": 1,
+          "rssBytesObserved": 153264128,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.194878000000244,
+          "cpuMs": 4.403,
+          "providerAttempts": 1,
+          "rssBytesObserved": 153657344,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 24.7534569999998,
+          "cpuMs": 25.603,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155361280,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.891318999999839,
+          "cpuMs": 4.563,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155361280,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.349387000000206,
+          "cpuMs": 5.179,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155361280,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.960708000000068,
+          "cpuMs": 4.677,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155361280,
+          "processIoDelta": {
+            "rchar": 176249,
+            "wchar": 398608,
+            "syscr": 45,
+            "syscw": 151,
+            "read_bytes": 0,
+            "write_bytes": 421888,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.831973000000289,
+          "cpuMs": 5.233,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155361280,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201912,
+            "syscr": 2,
+            "syscw": 99,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.503263000000061,
+          "cpuMs": 5.961,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155361280,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.284291999999823,
+          "cpuMs": 4.372,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155361280,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 10.272731000000022,
+          "cpuMs": 5.502,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155361280,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 253952,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 11.543635999999879,
+          "cpuMs": 5.667,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155361280,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 30.48628400000007,
+          "cpuMs": 9.233,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155492352,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 247200,
+            "syscr": 2,
+            "syscw": 120,
+            "read_bytes": 0,
+            "write_bytes": 270336,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 34.14323699999977,
+          "cpuMs": 6.895,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155492352,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 33.716042000000016,
+          "cpuMs": 6.244,
+          "providerAttempts": 2,
+          "rssBytesObserved": 155492352,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 280160,
+            "syscr": 2,
+            "syscw": 136,
+            "read_bytes": 0,
+            "write_bytes": 311296,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 30.108283999999912,
+          "cpuMs": 5.117,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155492352,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 19.13348700000006,
+          "cpuMs": 12.44,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155492352,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 16.94591300000002,
+          "cpuMs": 9.047,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155623424,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 12.051124000000073,
+          "cpuMs": 4.568,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155623424,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 13.814428000000134,
+          "cpuMs": 6.009,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155623424,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 15.537460999999894,
+          "cpuMs": 6.842,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155623424,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 18.400599000000057,
+          "cpuMs": 4.697,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155623424,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 18.976207999999588,
+          "cpuMs": 5.809,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155623424,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 22.278478000000177,
+          "cpuMs": 5.53,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155623424,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 253952,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 17.09465799999998,
+          "cpuMs": 6.27,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155623424,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 245760,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 14.44406700000036,
+          "cpuMs": 7.674,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155623424,
+          "processIoDelta": {
+            "rchar": 168057,
+            "wchar": 394536,
+            "syscr": 43,
+            "syscw": 151,
+            "read_bytes": 0,
+            "write_bytes": 417792,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 11.81820000000016,
+          "cpuMs": 7.354,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155623424,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210152,
+            "syscr": 2,
+            "syscw": 103,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 9.591723000000002,
+          "cpuMs": 5.269,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155623424,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 245760,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 15.767479000000094,
+          "cpuMs": 6.532,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155623424,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 11.388284000000112,
+          "cpuMs": 8.339,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155623424,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 13.140602999999828,
+          "cpuMs": 6.298,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155623424,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 255440,
+            "syscr": 2,
+            "syscw": 124,
+            "read_bytes": 0,
+            "write_bytes": 278528,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.309592000000066,
+          "cpuMs": 4.524,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155623424,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.962010000000191,
+          "cpuMs": 4.541,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155623424,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 8.804225999999744,
+          "cpuMs": 4.782,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155623424,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 11.59038499999997,
+          "cpuMs": 5.954,
+          "providerAttempts": 2,
+          "rssBytesObserved": 155623424,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 292520,
+            "syscr": 2,
+            "syscw": 142,
+            "read_bytes": 0,
+            "write_bytes": 323584,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 8.635091000000102,
+          "cpuMs": 4.491,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155754496,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 253952,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.445469999999659,
+          "cpuMs": 4.611,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155754496,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.4192840000000615,
+          "cpuMs": 4.381,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155754496,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.426299999999628,
+          "cpuMs": 4.326,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155754496,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 12.108413999999811,
+          "cpuMs": 7.67,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155754496,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.647642999999789,
+          "cpuMs": 5.339,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155754496,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 8.62690399999974,
+          "cpuMs": 4.6,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155754496,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 253952,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.895404999999755,
+          "cpuMs": 4.643,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155754496,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.405451999999968,
+          "cpuMs": 4.574,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155754496,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 9.732144000000062,
+          "cpuMs": 7.549,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155754496,
+          "processIoDelta": {
+            "rchar": 184441,
+            "wchar": 386200,
+            "syscr": 47,
+            "syscw": 143,
+            "read_bytes": 0,
+            "write_bytes": 409600,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.880220999999892,
+          "cpuMs": 5.281,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155754496,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 247232,
+            "syscr": 2,
+            "syscw": 121,
+            "read_bytes": 0,
+            "write_bytes": 274432,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.079467000000022,
+          "cpuMs": 4.695,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155754496,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 259560,
+            "syscr": 2,
+            "syscw": 126,
+            "read_bytes": 0,
+            "write_bytes": 282624,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 10.27792700000009,
+          "cpuMs": 4.646,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155754496,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 253952,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.789264000000003,
+          "cpuMs": 4.433,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155754496,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 234840,
+            "syscr": 2,
+            "syscw": 114,
+            "read_bytes": 0,
+            "write_bytes": 258048,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.024273999999878,
+          "cpuMs": 4.895,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155754496,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.4329289999996035,
+          "cpuMs": 4.485,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155754496,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 230720,
+            "syscr": 2,
+            "syscw": 112,
+            "read_bytes": 0,
+            "write_bytes": 258048,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 12.805746,
+          "cpuMs": 7.765,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155754496,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.537669000000278,
+          "cpuMs": 4.541,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155754496,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 10.394732000000204,
+          "cpuMs": 4.441,
+          "providerAttempts": 1,
+          "rssBytesObserved": 155754496,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 9.60501000000022,
+          "cpuMs": 7.125,
+          "providerAttempts": 2,
+          "rssBytesObserved": 155754496,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 280160,
+            "syscr": 2,
+            "syscw": 136,
+            "read_bytes": 0,
+            "write_bytes": 315392,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.208032999999887,
+          "cpuMs": 5.554,
+          "providerAttempts": 1,
+          "rssBytesObserved": 156016640,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 12.382946000000175,
+          "cpuMs": 4.641,
+          "providerAttempts": 1,
+          "rssBytesObserved": 156409856,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 234840,
+            "syscr": 2,
+            "syscw": 114,
+            "read_bytes": 0,
+            "write_bytes": 258048,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 11.945416000000023,
+          "cpuMs": 9.876,
+          "providerAttempts": 1,
+          "rssBytesObserved": 156934144,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 253952,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 9.987055000000055,
+          "cpuMs": 5.103,
+          "providerAttempts": 1,
+          "rssBytesObserved": 157327360,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 28.506586999999854,
+          "cpuMs": 29.563,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159555584,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 11.441537000000153,
+          "cpuMs": 6.224,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159555584,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 9.253763999999592,
+          "cpuMs": 5.228,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159555584,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 10.530011999999715,
+          "cpuMs": 6.876,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159555584,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 12.316675999999916,
+          "cpuMs": 5.153,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159555584,
+          "processIoDelta": {
+            "rchar": 213113,
+            "wchar": 435504,
+            "syscr": 54,
+            "syscw": 161,
+            "read_bytes": 0,
+            "write_bytes": 462848,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.413608999999724,
+          "cpuMs": 4.577,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159555584,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 9.009102999999868,
+          "cpuMs": 6.7,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159555584,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 247200,
+            "syscr": 2,
+            "syscw": 120,
+            "read_bytes": 0,
+            "write_bytes": 270336,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 12.371319000000312,
+          "cpuMs": 4.548,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159555584,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 234840,
+            "syscr": 2,
+            "syscw": 114,
+            "read_bytes": 0,
+            "write_bytes": 262144,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.386535999999978,
+          "cpuMs": 4.389,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159555584,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.342810999999983,
+          "cpuMs": 4.386,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159555584,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.339809000000059,
+          "cpuMs": 4.296,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159555584,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.385984999999891,
+          "cpuMs": 4.427,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159555584,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.364125000000058,
+          "cpuMs": 4.439,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159555584,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 234840,
+            "syscr": 2,
+            "syscw": 114,
+            "read_bytes": 0,
+            "write_bytes": 258048,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.394598000000315,
+          "cpuMs": 5.323,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159555584,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.231676999999763,
+          "cpuMs": 4.271,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159555584,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.809877999999571,
+          "cpuMs": 5.288,
+          "providerAttempts": 2,
+          "rssBytesObserved": 159555584,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 304880,
+            "syscr": 2,
+            "syscw": 148,
+            "read_bytes": 0,
+            "write_bytes": 335872,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 9.050387000000228,
+          "cpuMs": 4.348,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159555584,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 9.459332999999788,
+          "cpuMs": 4.389,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159555584,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 245760,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 8.918407000000116,
+          "cpuMs": 4.348,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159555584,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.6056509999998525,
+          "cpuMs": 4.369,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159555584,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 247200,
+            "syscr": 2,
+            "syscw": 120,
+            "read_bytes": 0,
+            "write_bytes": 270336,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.384932999999819,
+          "cpuMs": 4.207,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159555584,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.490223999999671,
+          "cpuMs": 4.282,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159555584,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.005486999999903,
+          "cpuMs": 4.083,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159686656,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.729845999999725,
+          "cpuMs": 5.151,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159686656,
+          "processIoDelta": {
+            "rchar": 221305,
+            "wchar": 447816,
+            "syscr": 56,
+            "syscw": 165,
+            "read_bytes": 0,
+            "write_bytes": 475136,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.477198999999928,
+          "cpuMs": 4.309,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159686656,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 10.444727000000057,
+          "cpuMs": 5.701,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159686656,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.324075999999877,
+          "cpuMs": 4.899,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159686656,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.617872000000261,
+          "cpuMs": 4.878,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159686656,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.444394000000102,
+          "cpuMs": 4.511,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159686656,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.234864000000016,
+          "cpuMs": 4.498,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159686656,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.170862999999827,
+          "cpuMs": 4.461,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159686656,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.172059999999874,
+          "cpuMs": 4.476,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159686656,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.466511000000082,
+          "cpuMs": 4.664,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159686656,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.817833999999948,
+          "cpuMs": 5.034,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159686656,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.073790999999801,
+          "cpuMs": 4.263,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159686656,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.202338000000054,
+          "cpuMs": 5.62,
+          "providerAttempts": 2,
+          "rssBytesObserved": 159686656,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 309000,
+            "syscr": 2,
+            "syscw": 150,
+            "read_bytes": 0,
+            "write_bytes": 339968,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.410937000000104,
+          "cpuMs": 4.736,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159686656,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 5.936826999999994,
+          "cpuMs": 4.338,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159686656,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 206000,
+            "syscr": 2,
+            "syscw": 100,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 8.42374000000018,
+          "cpuMs": 4.805,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159686656,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 6.9629110000000765,
+          "cpuMs": 5.051,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159686656,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 218360,
+            "syscr": 2,
+            "syscw": 106,
+            "read_bytes": 0,
+            "write_bytes": 245760,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 10.783134000000246,
+          "cpuMs": 7.442,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159686656,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 238960,
+            "syscr": 2,
+            "syscw": 116,
+            "read_bytes": 0,
+            "write_bytes": 262144,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.749589000000014,
+          "cpuMs": 4.487,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159686656,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 206000,
+            "syscr": 2,
+            "syscw": 100,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 15.202281000000312,
+          "cpuMs": 6.703,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159686656,
+          "processIoDelta": {
+            "rchar": 217209,
+            "wchar": 431360,
+            "syscr": 55,
+            "syscw": 158,
+            "read_bytes": 0,
+            "write_bytes": 458752,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 9.525935000000118,
+          "cpuMs": 4.487,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159686656,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 234840,
+            "syscr": 2,
+            "syscw": 114,
+            "read_bytes": 0,
+            "write_bytes": 258048,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 9.292762999999923,
+          "cpuMs": 6.27,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159817728,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 9.432158999999956,
+          "cpuMs": 4.349,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159817728,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 206000,
+            "syscr": 2,
+            "syscw": 100,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 11.602676999999858,
+          "cpuMs": 7.906,
+          "providerAttempts": 1,
+          "rssBytesObserved": 159817728,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 267800,
+            "syscr": 2,
+            "syscw": 130,
+            "read_bytes": 0,
+            "write_bytes": 290816,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 9.468179999999847,
+          "cpuMs": 9.572,
+          "providerAttempts": 1,
+          "rssBytesObserved": 160079872,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 218360,
+            "syscr": 2,
+            "syscw": 106,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.456698999999844,
+          "cpuMs": 7.594,
+          "providerAttempts": 1,
+          "rssBytesObserved": 160079872,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 12.562938000000031,
+          "cpuMs": 7.633,
+          "providerAttempts": 1,
+          "rssBytesObserved": 160079872,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 206000,
+            "syscr": 2,
+            "syscw": 100,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.186513999999988,
+          "cpuMs": 4.314,
+          "providerAttempts": 1,
+          "rssBytesObserved": 160079872,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 9.51636099999996,
+          "cpuMs": 4.479,
+          "providerAttempts": 1,
+          "rssBytesObserved": 160079872,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 238960,
+            "syscr": 2,
+            "syscw": 116,
+            "read_bytes": 0,
+            "write_bytes": 266240,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 8.076512000000093,
+          "cpuMs": 4.56,
+          "providerAttempts": 1,
+          "rssBytesObserved": 160473088,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 10.9566319999999,
+          "cpuMs": 5.662,
+          "providerAttempts": 1,
+          "rssBytesObserved": 160997376,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 218360,
+            "syscr": 2,
+            "syscw": 106,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.976615000000038,
+          "cpuMs": 6.521,
+          "providerAttempts": 1,
+          "rssBytesObserved": 161390592,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 9.428797000000031,
+          "cpuMs": 5.857,
+          "providerAttempts": 2,
+          "rssBytesObserved": 162045952,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 288400,
+            "syscr": 2,
+            "syscw": 140,
+            "read_bytes": 0,
+            "write_bytes": 323584,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 11.096424999999726,
+          "cpuMs": 5.072,
+          "providerAttempts": 1,
+          "rssBytesObserved": 162832384,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 245760,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 9.641010999999708,
+          "cpuMs": 4.893,
+          "providerAttempts": 1,
+          "rssBytesObserved": 163487744,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 230720,
+            "syscr": 2,
+            "syscw": 112,
+            "read_bytes": 0,
+            "write_bytes": 258048,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.599177999999938,
+          "cpuMs": 4.65,
+          "providerAttempts": 1,
+          "rssBytesObserved": 164274176,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 9.27741399999968,
+          "cpuMs": 4.846,
+          "providerAttempts": 1,
+          "rssBytesObserved": 165060608,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 230720,
+            "syscr": 2,
+            "syscw": 112,
+            "read_bytes": 0,
+            "write_bytes": 253952,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 10.535554999999931,
+          "cpuMs": 5.489,
+          "providerAttempts": 1,
+          "rssBytesObserved": 165715968,
+          "processIoDelta": {
+            "rchar": 233593,
+            "wchar": 460104,
+            "syscr": 59,
+            "syscw": 168,
+            "read_bytes": 0,
+            "write_bytes": 487424,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.60382299999992,
+          "cpuMs": 5.495,
+          "providerAttempts": 1,
+          "rssBytesObserved": 166502400,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 206000,
+            "syscr": 2,
+            "syscw": 100,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 10.274348999999802,
+          "cpuMs": 4.913,
+          "providerAttempts": 1,
+          "rssBytesObserved": 167157760,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 234840,
+            "syscr": 2,
+            "syscw": 114,
+            "read_bytes": 0,
+            "write_bytes": 258048,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.894686999999976,
+          "cpuMs": 4.747,
+          "providerAttempts": 1,
+          "rssBytesObserved": 167944192,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 218360,
+            "syscr": 2,
+            "syscw": 106,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.612937999999758,
+          "cpuMs": 4.503,
+          "providerAttempts": 1,
+          "rssBytesObserved": 168730624,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 10.528243000000202,
+          "cpuMs": 4.858,
+          "providerAttempts": 1,
+          "rssBytesObserved": 169385984,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 206000,
+            "syscr": 2,
+            "syscw": 100,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 8.2509399999999,
+          "cpuMs": 4.801,
+          "providerAttempts": 1,
+          "rssBytesObserved": 170172416,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 11.194886000000224,
+          "cpuMs": 6.255,
+          "providerAttempts": 1,
+          "rssBytesObserved": 170958848,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 253952,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 15.864652000000206,
+          "cpuMs": 11.946,
+          "providerAttempts": 1,
+          "rssBytesObserved": 171614208,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 21.942715000000135,
+          "cpuMs": 6.304,
+          "providerAttempts": 1,
+          "rssBytesObserved": 172400640,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 238960,
+            "syscr": 2,
+            "syscw": 116,
+            "read_bytes": 0,
+            "write_bytes": 262144,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 32.932734999999866,
+          "cpuMs": 5.333,
+          "providerAttempts": 1,
+          "rssBytesObserved": 173187072,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 22.36448500000006,
+          "cpuMs": 6.975,
+          "providerAttempts": 1,
+          "rssBytesObserved": 173842432,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 206000,
+            "syscr": 2,
+            "syscw": 100,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 22.139768000000004,
+          "cpuMs": 5.187,
+          "providerAttempts": 1,
+          "rssBytesObserved": 174628864,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 19.207468999999946,
+          "cpuMs": 6.972,
+          "providerAttempts": 1,
+          "rssBytesObserved": 175284224,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 206000,
+            "syscr": 2,
+            "syscw": 100,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 25.604652000000442,
+          "cpuMs": 7.787,
+          "providerAttempts": 1,
+          "rssBytesObserved": 176070656,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 17.98449699999992,
+          "cpuMs": 10.674,
+          "providerAttempts": 2,
+          "rssBytesObserved": 176988160,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 313120,
+            "syscr": 2,
+            "syscw": 152,
+            "read_bytes": 0,
+            "write_bytes": 344064,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 9.949137999999948,
+          "cpuMs": 4.957,
+          "providerAttempts": 1,
+          "rssBytesObserved": 177643520,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 8.976583000000119,
+          "cpuMs": 5.17,
+          "providerAttempts": 1,
+          "rssBytesObserved": 178429952,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.85778400000072,
+          "cpuMs": 4.936,
+          "providerAttempts": 1,
+          "rssBytesObserved": 179216384,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 10.679161000000022,
+          "cpuMs": 5.603,
+          "providerAttempts": 1,
+          "rssBytesObserved": 179871744,
+          "processIoDelta": {
+            "rchar": 249977,
+            "wchar": 505328,
+            "syscr": 63,
+            "syscw": 186,
+            "read_bytes": 0,
+            "write_bytes": 532480,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 10.505621000000247,
+          "cpuMs": 4.817,
+          "providerAttempts": 1,
+          "rssBytesObserved": 180658176,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 13.587510000000293,
+          "cpuMs": 4.832,
+          "providerAttempts": 1,
+          "rssBytesObserved": 181444608,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 218360,
+            "syscr": 2,
+            "syscw": 106,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 13.698199999999815,
+          "cpuMs": 5.957,
+          "providerAttempts": 1,
+          "rssBytesObserved": 182231040,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 13.260034999999334,
+          "cpuMs": 5.982,
+          "providerAttempts": 1,
+          "rssBytesObserved": 182886400,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 251320,
+            "syscr": 2,
+            "syscw": 122,
+            "read_bytes": 0,
+            "write_bytes": 274432,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 13.357085000000552,
+          "cpuMs": 6.049,
+          "providerAttempts": 1,
+          "rssBytesObserved": 183672832,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 15.76996599999984,
+          "cpuMs": 4.972,
+          "providerAttempts": 1,
+          "rssBytesObserved": 184459264,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 263680,
+            "syscr": 2,
+            "syscw": 128,
+            "read_bytes": 0,
+            "write_bytes": 290816,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 10.08736399999998,
+          "cpuMs": 4.778,
+          "providerAttempts": 1,
+          "rssBytesObserved": 185114624,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 14.024309999999787,
+          "cpuMs": 5.397,
+          "providerAttempts": 1,
+          "rssBytesObserved": 185901056,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 230720,
+            "syscr": 2,
+            "syscw": 112,
+            "read_bytes": 0,
+            "write_bytes": 253952,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 14.668329000000085,
+          "cpuMs": 4.977,
+          "providerAttempts": 1,
+          "rssBytesObserved": 186687488,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 222480,
+            "syscr": 2,
+            "syscw": 108,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 11.1236829999998,
+          "cpuMs": 4.954,
+          "providerAttempts": 1,
+          "rssBytesObserved": 187342848,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 11.90640600000006,
+          "cpuMs": 4.813,
+          "providerAttempts": 1,
+          "rssBytesObserved": 188129280,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 15.09579599999961,
+          "cpuMs": 5.039,
+          "providerAttempts": 1,
+          "rssBytesObserved": 188915712,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 253952,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 12.276189999999588,
+          "cpuMs": 4.842,
+          "providerAttempts": 1,
+          "rssBytesObserved": 189571072,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 16.350570000000516,
+          "cpuMs": 4.965,
+          "providerAttempts": 1,
+          "rssBytesObserved": 190357504,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 238960,
+            "syscr": 2,
+            "syscw": 116,
+            "read_bytes": 0,
+            "write_bytes": 262144,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 15.299473999999464,
+          "cpuMs": 4.889,
+          "providerAttempts": 1,
+          "rssBytesObserved": 191143936,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 13.848139000000629,
+          "cpuMs": 7.946,
+          "providerAttempts": 2,
+          "rssBytesObserved": 191930368,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 284280,
+            "syscr": 2,
+            "syscw": 138,
+            "read_bytes": 0,
+            "write_bytes": 315392,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 16.091010000000097,
+          "cpuMs": 4.989,
+          "providerAttempts": 1,
+          "rssBytesObserved": 192716800,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 234840,
+            "syscr": 2,
+            "syscw": 114,
+            "read_bytes": 0,
+            "write_bytes": 258048,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 21.458051000000523,
+          "cpuMs": 5.806,
+          "providerAttempts": 1,
+          "rssBytesObserved": 193503232,
+          "processIoDelta": {
+            "rchar": 254073,
+            "wchar": 530024,
+            "syscr": 64,
+            "syscw": 197,
+            "read_bytes": 0,
+            "write_bytes": 557056,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 15.232484999999542,
+          "cpuMs": 5.018,
+          "providerAttempts": 1,
+          "rssBytesObserved": 194158592,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 255440,
+            "syscr": 2,
+            "syscw": 124,
+            "read_bytes": 0,
+            "write_bytes": 278528,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 16.010905000000093,
+          "cpuMs": 4.967,
+          "providerAttempts": 1,
+          "rssBytesObserved": 194945024,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 234840,
+            "syscr": 2,
+            "syscw": 114,
+            "read_bytes": 0,
+            "write_bytes": 258048,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 42.837320999999974,
+          "cpuMs": 22.543,
+          "providerAttempts": 1,
+          "rssBytesObserved": 195731456,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 19.159419000000526,
+          "cpuMs": 7.84,
+          "providerAttempts": 1,
+          "rssBytesObserved": 196386816,
+          "processIoDelta": {
+            "rchar": 121,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 18.27121100000022,
+          "cpuMs": 7.241,
+          "providerAttempts": 1,
+          "rssBytesObserved": 197173248,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 38.79996500000016,
+          "cpuMs": 5.712,
+          "providerAttempts": 1,
+          "rssBytesObserved": 197959680,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 206000,
+            "syscr": 2,
+            "syscw": 100,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 24.168534000000363,
+          "cpuMs": 10.75,
+          "providerAttempts": 1,
+          "rssBytesObserved": 198746112,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 16.360368000000562,
+          "cpuMs": 9.968,
+          "providerAttempts": 1,
+          "rssBytesObserved": 199401472,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 230720,
+            "syscr": 2,
+            "syscw": 112,
+            "read_bytes": 0,
+            "write_bytes": 253952,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 15.801585999999588,
+          "cpuMs": 10.271,
+          "providerAttempts": 1,
+          "rssBytesObserved": 200187904,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 19.21052099999997,
+          "cpuMs": 6.899,
+          "providerAttempts": 1,
+          "rssBytesObserved": 200843264,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 237568,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 18.965783999999985,
+          "cpuMs": 7.073,
+          "providerAttempts": 1,
+          "rssBytesObserved": 201629696,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 16.981370999999854,
+          "cpuMs": 5.442,
+          "providerAttempts": 1,
+          "rssBytesObserved": 202285056,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 234840,
+            "syscr": 2,
+            "syscw": 114,
+            "read_bytes": 0,
+            "write_bytes": 258048,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 15.171293999999762,
+          "cpuMs": 6.371,
+          "providerAttempts": 1,
+          "rssBytesObserved": 203071488,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 230720,
+            "syscr": 2,
+            "syscw": 112,
+            "read_bytes": 0,
+            "write_bytes": 258048,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 13.04351300000053,
+          "cpuMs": 5.834,
+          "providerAttempts": 1,
+          "rssBytesObserved": 203857920,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 206000,
+            "syscr": 2,
+            "syscw": 100,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 11.86772000000019,
+          "cpuMs": 4.926,
+          "providerAttempts": 1,
+          "rssBytesObserved": 204513280,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 14.51067299999977,
+          "cpuMs": 5.347,
+          "providerAttempts": 1,
+          "rssBytesObserved": 205299712,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 206000,
+            "syscr": 2,
+            "syscw": 100,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 11.508813000000373,
+          "cpuMs": 4.93,
+          "providerAttempts": 1,
+          "rssBytesObserved": 205955072,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 259560,
+            "syscr": 2,
+            "syscw": 126,
+            "read_bytes": 0,
+            "write_bytes": 282624,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 14.766459000000395,
+          "cpuMs": 6.971,
+          "providerAttempts": 2,
+          "rssBytesObserved": 206872576,
+          "processIoDelta": {
+            "rchar": 270458,
+            "wchar": 567008,
+            "syscr": 68,
+            "syscw": 211,
+            "read_bytes": 0,
+            "write_bytes": 602112,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 58.963394999999764,
+          "cpuMs": 59.204,
+          "providerAttempts": 1,
+          "rssBytesObserved": 208691200,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 10.422747000000527,
+          "cpuMs": 5.058,
+          "providerAttempts": 1,
+          "rssBytesObserved": 208691200,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 238960,
+            "syscr": 2,
+            "syscw": 116,
+            "read_bytes": 0,
+            "write_bytes": 262144,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 9.528801000000385,
+          "cpuMs": 7.59,
+          "providerAttempts": 1,
+          "rssBytesObserved": 208691200,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 9.09182299999975,
+          "cpuMs": 4.848,
+          "providerAttempts": 1,
+          "rssBytesObserved": 208691200,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 206000,
+            "syscr": 2,
+            "syscw": 100,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 6.512217999999848,
+          "cpuMs": 4.715,
+          "providerAttempts": 1,
+          "rssBytesObserved": 208691200,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 210120,
+            "syscr": 2,
+            "syscw": 102,
+            "read_bytes": 0,
+            "write_bytes": 233472,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 34.03007600000001,
+          "cpuMs": 23.711,
+          "providerAttempts": 1,
+          "rssBytesObserved": 208691200,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 247200,
+            "syscr": 2,
+            "syscw": 120,
+            "read_bytes": 0,
+            "write_bytes": 270336,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 14.279548000000432,
+          "cpuMs": 6.653,
+          "providerAttempts": 1,
+          "rssBytesObserved": 208691200,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 11.170446999999513,
+          "cpuMs": 6.523,
+          "providerAttempts": 1,
+          "rssBytesObserved": 208691200,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 238960,
+            "syscr": 2,
+            "syscw": 116,
+            "read_bytes": 0,
+            "write_bytes": 262144,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 7.649908999999752,
+          "cpuMs": 5.583,
+          "providerAttempts": 1,
+          "rssBytesObserved": 208691200,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 13.076520000000528,
+          "cpuMs": 8.683,
+          "providerAttempts": 1,
+          "rssBytesObserved": 208691200,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 12.919585000000552,
+          "cpuMs": 8.91,
+          "providerAttempts": 1,
+          "rssBytesObserved": 208691200,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 14.05993800000033,
+          "cpuMs": 6.959,
+          "providerAttempts": 1,
+          "rssBytesObserved": 208691200,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 230720,
+            "syscr": 2,
+            "syscw": 112,
+            "read_bytes": 0,
+            "write_bytes": 253952,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 17.888128999999935,
+          "cpuMs": 6.482,
+          "providerAttempts": 1,
+          "rssBytesObserved": 208691200,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 247200,
+            "syscr": 2,
+            "syscw": 120,
+            "read_bytes": 0,
+            "write_bytes": 274432,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 18.882070000000567,
+          "cpuMs": 5.96,
+          "providerAttempts": 1,
+          "rssBytesObserved": 208691200,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 206000,
+            "syscr": 2,
+            "syscw": 100,
+            "read_bytes": 0,
+            "write_bytes": 229376,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 15.31414500000028,
+          "cpuMs": 5.419,
+          "providerAttempts": 1,
+          "rssBytesObserved": 208691200,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 201880,
+            "syscr": 2,
+            "syscw": 98,
+            "read_bytes": 0,
+            "write_bytes": 225280,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 13.936556000000564,
+          "cpuMs": 5.533,
+          "providerAttempts": 1,
+          "rssBytesObserved": 208691200,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 214240,
+            "syscr": 2,
+            "syscw": 104,
+            "read_bytes": 0,
+            "write_bytes": 241664,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 12.911142999999356,
+          "cpuMs": 8.392,
+          "providerAttempts": 1,
+          "rssBytesObserved": 208691200,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 238960,
+            "syscr": 2,
+            "syscw": 116,
+            "read_bytes": 0,
+            "write_bytes": 262144,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "A",
+          "wallMs": 7.091129999999794,
+          "cpuMs": 5.147,
+          "providerAttempts": 1,
+          "rssBytesObserved": 208691200,
+          "processIoDelta": {
+            "rchar": 122,
+            "wchar": 226600,
+            "syscr": 2,
+            "syscw": 110,
+            "read_bytes": 0,
+            "write_bytes": 249856,
+            "cancelled_write_bytes": 0
+          }
+        },
+        {
+          "tenantId": "B",
+          "wallMs": 11.663354999999683,
+          "cpuMs": 6.195,
+          "providerAttempts": 1,
+          "rssBytesObserved": 208691200,
+          "processIoDelta": {
+            "rchar": 278650,
+            "wchar": 501040,
+            "syscr": 70,
+            "syscw": 177,
+            "read_bytes": 0,
+            "write_bytes": 528384,
+            "cancelled_write_bytes": 0
+          }
+        }
+      ]
+    }
+  ]
+}

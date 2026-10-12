@@ -1,9 +1,13 @@
 # Phase 0.5: tenant isolation and delegation reliability
 
-Status: **partial, existing-core proof completed**. Costs are deferred by the
+Status of this historical runner: **partial, existing-core proof completed**.
+The subsequent [local Phase 0.5 implementation](cleaner-phase05-implementation.md)
+now demonstrates the two-tenant indexed runtime; this document preserves the
+original diagnostic evidence and gaps. Costs are deferred by the
 user on 12 October 2026 because the temporary hosting service is not the final
 hosting choice. There is no hosting-price forecast or claimed cost target here.
-The two-tenant hosted product remains unimplemented.
+The two-tenant hosted product remains undeployed; the local implementation is
+reported separately.
 
 The roadmap requires two landlords in one runtime with separate agent
 authorizations, provider credentials, properties, SMS events, access data and

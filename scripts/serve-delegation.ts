@@ -1,11 +1,13 @@
 import { randomBytes } from "node:crypto";
 import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { createHostedPhase05Test, phase05TestConfig } from "../src/delegation/phase05/hostedTest";
 import { createDelegationTestService } from "../src/delegation/testService";
 import { DelegationStartupError, resolveTestStartupConfig, validateTestCredentials } from "../src/delegation/startupConfig";
 
 let config: ReturnType<typeof resolveTestStartupConfig>;
-try { config = resolveTestStartupConfig(process.env); }
+const phase05 = process.env.CLEANER_TEST_RUNTIME === "phase05";
+try { config = phase05 ? phase05TestConfig(process.env) : resolveTestStartupConfig(process.env); }
 catch (error) {
   console.error(`Cleaner Core test startup blocked: ${error instanceof DelegationStartupError ? error.message : "Startup configuration could not be read."}`);
   process.exit(1);
@@ -23,7 +25,7 @@ if (process.env.CLEANER_TEST_EXTERNAL_LOCK !== "1") {
   writeFileSync(lock, String(process.pid));
 }
 const release = () => { if (lock !== undefined) { closeSync(lock); rmSync(lockPath); } };
-let service: ReturnType<typeof createDelegationTestService>;
+let service: ReturnType<typeof createDelegationTestService> | ReturnType<typeof createHostedPhase05Test>;
 let stage: "credentials" | "storage" = "credentials";
 try {
   let credentials = config.credentials;
@@ -35,7 +37,7 @@ try {
     credentials = validateTestCredentials(saved.agentToken, saved.adminToken);
   }
   stage = "storage";
-  service = createDelegationTestService({ root, ...credentials, publicBaseUrl, webhook: config.webhook, sms: config.sms, railwayHealthcheck: Boolean(process.env.RAILWAY_ENVIRONMENT_ID) });
+  service = phase05 ? createHostedPhase05Test(phase05TestConfig(process.env), { railwayHealthcheck: Boolean(process.env.RAILWAY_ENVIRONMENT_ID) }) : createDelegationTestService({ root, ...credentials, publicBaseUrl, webhook: config.webhook, sms: config.sms, railwayHealthcheck: Boolean(process.env.RAILWAY_ENVIRONMENT_ID) });
 } catch {
   release();
   console.error(stage === "credentials"
@@ -44,9 +46,9 @@ try {
   process.exit(1);
 }
 const server = service.app.listen(port, host, () => {
-  console.log(`Cleaner Core ${config.sms ? "SMS proof" : "synthetic"} test service ready on ${host}:${port}`);
+  console.log(`Cleaner Core ${phase05 ? "Phase 0.5 two-tenant synthetic" : config.sms ? "SMS proof" : "synthetic"} test service ready on ${host}:${port}`);
   console.log("MCP: /mcp; health: /healthz. Authentication values are saved privately and are never printed.");
-  console.log(`Grok test webhook notifications: ${config.webhook ? "configured" : "disabled"}. SMS proof: ${config.sms ? "enabled for one controlled phone" : "disabled; replies use the simulated ledger"}.`);
+  console.log(`Grok test webhook notifications: ${config.webhook ? "configured" : "disabled"}. SMS proof: ${phase05 ? "disabled; indexed simulated provider only" : config.sms ? "enabled for one controlled phone" : "disabled; replies use the simulated ledger"}.`);
 });
 let stopping = false;
 const stop = async (exitCode: number) => {

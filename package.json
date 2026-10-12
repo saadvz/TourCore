@@ -38,7 +38,11 @@
     "eval:rebaseline": "tsx src/eval/cli.ts rebaseline",
     "eval:live": "tsx src/eval/cli.ts live",
     "typecheck": "tsc --noEmit",
-    "check:storage": "tsx src/install/checkStorageCli.ts"
+    "check:storage": "tsx src/install/checkStorageCli.ts",
+    "cleaner:phase05:demo": "tsx src/delegation/phase05/demo.ts",
+    "cleaner:phase05:measure": "tsx eval/cleaner-phase05/indexed-meter.mts",
+    "cleaner:phase05:fleet": "tsx eval/cleaner-phase05/fleet-meter.mts",
+    "cleaner:phase05:costs": "tsx eval/cleaner-phase05/cost-scenarios.mts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.0",

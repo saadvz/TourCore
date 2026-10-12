@@ -1,5 +1,10 @@
 # Continue Phase 0.5 implementation
 
+Implementation update: the [local two-tenant runtime and acceptance results](cleaner-phase05-implementation.md)
+are now implemented on `cleaner-core/phase05-multitenant`. The copied request below
+is preserved as the historical implementation brief; the latest user request authorizes economics and live Grok testing. See
+[closure progress](cleaner-phase05-economics.md); the original copied request is historical.
+
 The existing-core proof and concrete gaps are in
 [cleaner-tenant-isolation-proof.md](cleaner-tenant-isolation-proof.md).
 The setup-only session produced 15 passing diagnostic groups, five known gaps,

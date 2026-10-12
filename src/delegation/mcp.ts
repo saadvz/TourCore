@@ -8,19 +8,31 @@ import { AgentProfiles, AgentProfileError } from "../agents/registry";
 import { AgentId, Capability, CapabilityDeclaration, CAPABILITY_MCP_SERVER_VERSION } from "../agents/profile";
 
 export interface PrototypeBinding extends AgentIdentity { token: string }
-export function delegationApp(engine: DelegationPrototype, bindings: PrototypeBinding[], options: { allowedHosts?: string[]; profiles?: AgentProfiles; deadlineMs?: number } = {}) {
-  if (!bindings.length || bindings.some((b) => b.token.length < 24 || !b.tenantId || !b.agentId) || new Set(bindings.map((b) => b.token)).size !== bindings.length) throw new Error("Unique prototype credentials and identities are required.");
+export type DelegationEngine = Pick<DelegationPrototype, "list" | "get" | "claim" | "propose">;
+export interface DelegationProfiles {
+  get(identity: AgentIdentity, deadlineMs?: number): Promise<unknown>;
+  observeCoreRead(identity: AgentIdentity, id: string): Promise<void>;
+  declare(identity: AgentIdentity, input: unknown): Promise<unknown>;
+  begin(identity: AgentIdentity, input: unknown): Promise<unknown>;
+  complete(identity: AgentIdentity, input: unknown): Promise<unknown>;
+}
+export function delegationApp(engine: DelegationEngine, bindings: PrototypeBinding[], options: { allowedHosts?: string[]; profiles?: DelegationProfiles; deadlineMs?: number; resolve?: (authorization: string | undefined) => AgentIdentity } = {}) {
+  if ((!bindings.length && !options.resolve) || bindings.some((b) => b.token.length < 24 || !b.tenantId || !b.agentId) || new Set(bindings.map((b) => b.token)).size !== bindings.length) throw new Error("Unique prototype credentials and identities are required.");
   const app = createMcpExpressApp({ host: "127.0.0.1", ...(options.allowedHosts ? { allowedHosts: options.allowedHosts } : {}) });
   app.post("/mcp", async (req, res) => {
     const supplied = Buffer.from((req.headers.authorization ?? "").replace(/^Bearer /, ""));
     const binding = bindings.find((b) => { const token = Buffer.from(b.token); return token.length === supplied.length && timingSafeEqual(token, supplied) && req.headers.authorization?.startsWith("Bearer "); });
-    if (!binding) { res.status(401).json({ error: "Unauthorized" }); return; }
-    const identity = { tenantId: binding.tenantId, agentId: binding.agentId };
+    let identity: AgentIdentity;
+    try {
+      if (options.resolve) identity = options.resolve(req.headers.authorization);
+      else if (binding) identity = { tenantId: binding.tenantId, agentId: binding.agentId };
+      else throw new Error("Unauthorized");
+    } catch { res.status(401).json({ error: "Unauthorized" }); return; }
     // Advertise a new version when the capability catalog is enabled so clients
     // can distinguish it from the original four-tool prototype.
     const server = new McpServer({ name: "cleaner-core-delegation-prototype", version: options.profiles ? CAPABILITY_MCP_SERVER_VERSION : "0.1.0" });
     const result = async (action: () => Promise<unknown>) => {
-      try { const value = await action(); return { content: [{ type: "text" as const, text: JSON.stringify(value) }] }; }
+      try { if (options.resolve) options.resolve(req.headers.authorization); const value = await action(); return { content: [{ type: "text" as const, text: JSON.stringify(value) }] }; }
       catch (err) { return { isError: true, content: [{ type: "text" as const, text: JSON.stringify(err instanceof DelegationError || err instanceof AgentProfileError ? { code: err.code, message: err.message } : { code: "UNAVAILABLE", message: "The action could not be confirmed. Retry only with the same action key." }) }] }; }
     };
     server.registerTool("list_delegated_work", { description: "List pending cleaner requests for this authenticated tenant.", inputSchema: z.strictObject({}) }, () => result(() => engine.list(identity)));

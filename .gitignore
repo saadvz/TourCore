@@ -23,3 +23,6 @@ coverage/
 Thumbs.db
 .vscode/
 .idea/
+
+# Local implementation scratch files and synthetic fixtures
+work/

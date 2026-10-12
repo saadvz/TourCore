@@ -1,0 +1,25 @@
+{
+  "status": "pass",
+  "runtimeCount": 1,
+  "tenants": 2,
+  "transport": "loopback HTTP + SDK MCP",
+  "oauth": "owner-scoped PKCE authorization-code exchange",
+  "reciprocalForeignReads": "denied",
+  "reusedSourceBookingAgentActionIds": "isolated",
+  "providerReceipts": 2,
+  "observed": [
+    {
+      "tenant": "A",
+      "recipient": "synthetic_cleaner_A",
+      "from": "synthetic_number_A"
+    },
+    {
+      "tenant": "B",
+      "recipient": "synthetic_cleaner_B",
+      "from": "synthetic_number_B"
+    }
+  ],
+  "phoneDelivery": "not tested; providers are injected simulations",
+  "realSms": 0,
+  "doorOperations": 0
+}
