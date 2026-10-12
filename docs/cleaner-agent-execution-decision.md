@@ -114,5 +114,9 @@ Core Phase 0.2 is complete. Phase 0.3 has now finalized the
 delegated data and commands, minimum recovery state, deterministic fallback,
 and the gate for optional inference. The contract records production gaps
 separately from existing prototype behavior.
-[Phase 0.4 model evaluation](cleaner-model-evaluation.md) is in progress, with
-measured rules/template baselines and candidate inference comparisons pending.
+[Phase 0.4 model evaluation](cleaner-model-evaluation.md) now records the user's
+final architecture decision of 12 October 2026: keep deterministic controls and
+reply templates, prioritize Grok Bot as the first delegation client with an
+engine-owned fallback, continue optional Perplexity classification evaluation,
+and defer the other tested models. Invest next in autonomous execution
+reliability and tenant isolation/economics; the production gates above remain.

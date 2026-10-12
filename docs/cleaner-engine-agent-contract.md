@@ -226,5 +226,7 @@ This phase changes documentation only. It does not modify deployed tools,
 receiver instructions, runtime configuration or production Tour Core behavior.
 The [execution evidence](cleaner-agent-execution-decision.md) and
 [capability profile](cleaner-agent-capabilities.md) remain the current feasibility
-record. [Phase 0.4 model evaluation](cleaner-model-evaluation.md) is now in
-progress; the other Phase 0 feasibility gates remain separate.
+record. [Phase 0.4 model evaluation](cleaner-model-evaluation.md) now records
+the final user decision to retain this deterministic boundary, prioritize Grok
+delegation and defer new inference dependencies. Production reliability and the
+other Phase 0 feasibility gates remain separate.

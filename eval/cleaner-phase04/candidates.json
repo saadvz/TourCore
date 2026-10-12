@@ -1,12 +1,13 @@
 {
   "schemaVersion": 1,
-  "status": "partial_static_native_and_connected_agent_comparisons_recorded_full_architectures_pending",
+  "status": "architecture_decision_finalized_by_user_diagnostic_comparisons_recorded_production_validation_pending",
   "candidates": [
     {
       "id": "rules-first",
       "status": "measured_local_diagnostic",
       "implementation": "src/intent/ruleBased.ts",
-      "result": "results/rules-first-report.json"
+      "result": "results/rules-first-report.json",
+      "productionIntegrationDecision": "retain"
     },
     {
       "id": "connected-grok",
@@ -22,7 +23,8 @@
       "modelVersion": null,
       "actualPerMessageCostUsd": null,
       "perMessageP50LatencyMs": null,
-      "perMessageP95LatencyMs": null
+      "perMessageP95LatencyMs": null,
+      "productionIntegrationDecision": "prioritize_first_agent_client_with_engine_owned_fallback"
     },
     {
       "id": "microsoft-decision-1",
@@ -43,7 +45,8 @@
       "intentResult": "results/microsoft-intent-report.json",
       "constraintResult": "results/microsoft-constraint-report.json",
       "actualApiSpendUsd": 0.004296222,
-      "scope": "Native intent types and structured scheduling constraints only; full entity/abstention/generation architectures pending"
+      "scope": "Native intent types and structured scheduling constraints only; full entity/abstention/generation architectures pending",
+      "productionIntegrationDecision": "do_not_integrate_yet"
     },
     {
       "id": "perplexity-decider",
@@ -74,7 +77,8 @@
       "intentResult": "results/perplexity-intent-report.json",
       "constraintResult": "results/perplexity-constraint-report.json",
       "actualApiSpendUsd": 0.00252388,
-      "scope": "Native intent types and structured scheduling constraints only; full entity/abstention/generation architectures pending"
+      "scope": "Native intent types and structured scheduling constraints only; full entity/abstention/generation architectures pending",
+      "productionIntegrationDecision": "continue_evaluating_optional_classification_not_integrated"
     },
     {
       "id": "vllm-sr-decision-3.0",
@@ -166,7 +170,8 @@
         "d3"
       ],
       "actualApiSpendUsd": 0,
-      "scope": "Native intent-type and structured constraint screening only; excludes entities, generators and live workflows"
+      "scope": "Native intent-type and structured constraint screening only; excludes entities, generators and live workflows",
+      "productionIntegrationDecision": "do_not_integrate_tested_small_variants_yet"
     },
     {
       "id": "shared-small-generator",
@@ -177,7 +182,8 @@
       "license": "apache-2.0",
       "result": "results/qwen-generator-wording-report.json",
       "actualApiSpendUsd": 0,
-      "actualInfrastructureCostUsd": null
+      "actualInfrastructureCostUsd": null,
+      "productionIntegrationDecision": "do_not_integrate_as_production_sms_generator"
     }
   ],
   "environmentObservations": {
@@ -197,10 +203,24 @@
     "userInitiallyConfirmedNoCandidateInferenceAccess": true
   },
   "architectureDecision": {
-    "status": "provisional_retained_existing_architecture",
+    "status": "final_user_decision_retained_existing_architecture",
     "requiredNewModelDependency": false,
     "schedulingAccessAndReplies": "deterministic_engine_and_templates",
-    "optionalReasoning": "existing_connected_grok_adapter_with_engine_owned_fallback",
-    "rationale": "No measured complete replacement architecture establishes a reliable cheaper improvement; preserve candidate failures and unknown cost/latency."
+    "optionalReasoning": "grok_bot_first_agent_delegation_client_with_engine_owned_fallback",
+    "rationale": "Keep deterministic foundation inexpensive and agent-agnostic. Delegate intelligence and work to the landlord's existing agent. Prioritize Grok with engine fallback; Perplexity stays an optional evaluation, other tested models deferred.",
+    "decisionDate": "2026-10-12",
+    "decisionAuthority": "explicit_user_instruction",
+    "agentAgnostic": true,
+    "optionalClassificationCandidate": "perplexity/pplx-decider-v1.1-27b",
+    "deferredProductionIntegrations": [
+      "microsoft/microsoft-decision-1",
+      "vllm-sr/d3-edge",
+      "vllm-sr/d3-lite",
+      "vllm-sr/d3-nano",
+      "Qwen/Qwen3.5-0.8B_as_sms_reply_generator"
+    ],
+    "nextInvestment": "reliable_autonomous_agent_execution_and_tenant_isolation_economics",
+    "additionalInferenceGate": "Measured data must demonstrate a real need and reliability gain for the complete architecture",
+    "productionReadinessEstablished": false
   }
 }

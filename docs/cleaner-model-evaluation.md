@@ -1,18 +1,51 @@
 # Phase 0.4: decision and drafting model evaluation
 
-Status: **partial**. The dataset, offline scoring and measured rules/template
-baselines are ready. Three small Decision 3.0 variants have now been measured
+Status: **architecture decision finalized by the user, 12 October 2026**.
+The dataset, offline scoring and measured rules/template baselines are ready.
+Three small Decision 3.0 variants have now been measured
 locally on native screening tasks, and Microsoft and Perplexity have completed
 the same hosted screening. One small generator was measured separately and
 failed the host-review wording fixtures. The connected Grok static comparison
 is now scored from user-uploaded predictions. Complete architecture,
-multi-turn, independent review and cost comparisons remain pending; no new
-production model dependency is selected.
+multi-turn, independent review and cost comparisons remain pending as
+production validation, not prerequisites to the retained-architecture decision.
+No new inference dependency is selected for production.
 
 The user added the [vLLM Semantic Router Decision 3.0 collection](https://huggingface.co/collections/vllm-sr/decision-30)
 to the roadmap's Microsoft Decision-1, Perplexity Decider, rules-first and
 connected-agent comparison. Its exact model cards and metadata are now
 accessible and recorded; no earlier release was substituted.
+
+## Final architecture decision
+
+- **Keep** existing deterministic rules, scheduling constraints, access
+  policies and operational reply templates.
+- **Prioritize Grok Bot** as the first agent delegation client, with an
+  engine-owned fallback. Keep the delegation contract agent-agnostic so other
+  landlord-owned clients can implement the same scoped interface.
+- **Continue evaluating Perplexity Decider V1.1** as an optional classification
+  service. It is not a required runtime dependency or authorized live integration.
+- **Do not integrate yet** Microsoft Decision-1, the tested small Decision 3.0
+  variants, or Qwen3.5-0.8B as a production SMS reply generator. This decision
+  concerns the tested configurations; larger Decision 3.0 variants remain unrun.
+
+The evaluation does not justify a complicated inference stack inside Tour Core.
+Keep the engine inexpensive and agent-agnostic; delegate as much intelligence
+and work as possible to the landlord's existing AI agent within the engine's
+authorization and validation contract. Add an inference bill only when measured
+data demonstrates a real need and a complete architecture improves reliability.
+Actual multi-tenant operating economics still require Phase 0.5 evidence.
+
+The next investment is reliable autonomous execution. The
+[existing execution proof](cleaner-agent-execution-decision.md) already supports
+unattended webhook/MCP execution, duplicate handling, deadline fallback, a
+20-request sample and one real SMS trial in the isolated prototype. Build on
+that evidence with checks for runtime/engine restart,
+credential revocation and capability expiry, concurrent claims and stale
+actions, lost provider acknowledgments and reconciliation, tenant isolation,
+and per-tenant budgets. Existing controlled tests for several of these paths
+are not live agent/provider reliability guarantees. This decision does not
+promote the prototype to production-ready or change its supported scope.
 
 ## Shared evaluation and current results
 
@@ -253,10 +286,11 @@ field is an engine input, not generator decision accuracy. Independent human
 semantic reviews are pending, and no paired full classifier/extractor/generator
 architecture or real SMS action was run. Retain deterministic reply templates.
 
-Provisional direction: keep the existing rules and engine templates. Perplexity
-is the only measured candidate worth a further classification comparison on
-the native screening results, not a selected production dependency. A new generator prompt
-would be a new experiment with matched reruns; these failures were preserved.
+The native screening supports keeping the existing rules and engine templates.
+Perplexity is the only native candidate worth a further classification
+comparison on these results, not a selected production dependency. A new
+generator prompt would be a new experiment with matched reruns; these failures
+were preserved.
 
 ## Connected Grok static evaluation, 12 October 2026
 
@@ -324,12 +358,13 @@ remains `null`. No new action-tool/SMS/booking operation was performed to score
 these files. Static contexts do not prove evolving multi-turn behavior, native
 tool execution or the cheapest complete architecture.
 
-Current architecture decision: retain deterministic scheduling, access policy
+Final user architecture decision: retain deterministic scheduling, access policy
 and reply templates; retain the already-supported optional Grok adapter with
 engine-owned fallback. Do not add a required decision-model/generator service
-on this evidence. Grok and Perplexity merit further classification work if
-needed, but unresolved combined-message behavior, unknown Grok economics and
-missing complete-architecture checks prevent selecting a replacement.
+on this evidence. Prioritize Grok as the first delegation client and continue
+evaluating Perplexity as optional classification. Unresolved combined-message
+behavior, unknown Grok economics and missing complete-architecture checks
+remain validation limits; they do not authorize replacing deterministic controls.
 
 ## Comparison protocol and model decision
 
@@ -397,6 +432,8 @@ model architecture or justify wiring a candidate into live authorization.
 
 The offline scorer and exporters were exercised, including rejection of bad
 hashes, missing/duplicate cases and invalid results. Baseline metrics were
-independently recomputed from the saved predictions. Phase 0.4 remains open
-for those remaining checks. The provisional decision keeps models optional and
-the existing deterministic controls authoritative.
+independently recomputed from the saved predictions. The Phase 0.4 architecture
+decision is now finalized. Further candidate evaluation is optional; production
+validation remains open. Keep models optional and existing deterministic controls
+authoritative, with the next implementation investment in autonomous execution
+reliability and the roadmap's Phase 0.5 tenant-isolation/economics proof.
