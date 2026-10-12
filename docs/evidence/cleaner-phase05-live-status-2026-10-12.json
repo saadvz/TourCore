@@ -1,6 +1,86 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "observation": {
+    "name": "health",
+    "method": "GET",
+    "url": "https://tourcore-production-72ec.up.railway.app/healthz",
+    "observedAt": "2026-10-12T18:08:09.009360+00:00",
+    "httpStatus": 200,
+    "body": {
+      "service": "cleaner-phase05-local",
+      "runtimeVersion": "phase05-indexed-v1",
+      "tenantCount": 2,
+      "ready": true
+    },
+    "wwwAuthenticate": null
+  },
+  "expectedPhase05Health": {
+    "runtimeVersion": "phase05-indexed-v1",
+    "tenantCount": 2,
+    "ready": true
+  },
+  "runtimeMatchesPhase05": true,
+  "userReported": "Existing Cleaner Core Railway service updated; continue account-side live validation on the same URL",
+  "liveGrokStatus": "pending_authenticated_synthetic_mode_and_account_execution",
+  "classification": "Actual HTTPS runtime and unauthenticated transport observations; not proof of account-side agent execution, tenant isolation, provider acceptance or phone delivery",
+  "latestObservations": [
+    {
+      "name": "health",
+      "method": "GET",
+      "url": "https://tourcore-production-72ec.up.railway.app/healthz",
+      "observedAt": "2026-10-12T18:08:09.009360+00:00",
+      "httpStatus": 200,
+      "body": {
+        "service": "cleaner-phase05-local",
+        "runtimeVersion": "phase05-indexed-v1",
+        "tenantCount": 2,
+        "ready": true
+      },
+      "wwwAuthenticate": null
+    },
+    {
+      "name": "owner_runtime_no_auth",
+      "method": "GET",
+      "url": "https://tourcore-production-72ec.up.railway.app/test/runtime",
+      "observedAt": "2026-10-12T18:08:09.011068+00:00",
+      "httpStatus": 401,
+      "body": {
+        "error": "UNAUTHORIZED"
+      },
+      "wwwAuthenticate": null
+    },
+    {
+      "name": "owner_work_no_auth",
+      "method": "GET",
+      "url": "https://tourcore-production-72ec.up.railway.app/owner/work/phase05_unauth_probe",
+      "observedAt": "2026-10-12T18:08:09.010354+00:00",
+      "httpStatus": 401,
+      "body": {
+        "error": "UNAUTHORIZED"
+      },
+      "wwwAuthenticate": null
+    },
+    {
+      "name": "mcp_initialize_no_auth",
+      "method": "POST",
+      "url": "https://tourcore-production-72ec.up.railway.app/mcp",
+      "observedAt": "2026-10-12T18:08:08.962909+00:00",
+      "httpStatus": 401,
+      "body": {
+        "error": "UNAUTHORIZED"
+      },
+      "wwwAuthenticate": null
+    }
+  ],
+  "checks": {
+    "runtimeReadiness": "PASS",
+    "unauthenticatedMcpAndOwnerDenial": "PASS",
+    "authenticatedSyntheticMode": "UNTESTED: no hosted owner credential configured in this workspace",
+    "reciprocalTenantIsolation": "UNTESTED on deployed runtime",
+    "nativeGrokCompletion": "PENDING account-side onboarding",
+    "realSmsOrDoors": "No such operations attempted"
+  },
+  "previousObservation": {
     "name": "railway_health",
     "url": "https://tourcore-production-72ec.up.railway.app/healthz",
     "status": 200,
@@ -12,14 +92,5 @@
       "mode": "sms-proof",
       "ready": true
     }
-  },
-  "expectedPhase05Health": {
-    "runtimeVersion": "phase05-indexed-v1",
-    "tenantCount": 2,
-    "ready": true
-  },
-  "runtimeMatchesPhase05": false,
-  "userReported": "Existing Cleaner Core Railway service not yet updated; continue live testing on Railway after same-service update",
-  "liveGrokStatus": "pending_same_service_update_and_account_execution",
-  "classification": "Public health observation only; no native agent completion, provider acceptance or phone-delivery claim"
+  }
 }

@@ -1,11 +1,17 @@
 # Phase 0.5 live Grok packet — same Cleaner Core URL
 
-Status: prepared; live execution is pending deployment and account-side runs.
-The user confirmed on 12 October 2026 that the existing service has not yet
-been updated. Railway remains the live-test host; the proposed future
+Status: deployed runtime observed; authenticated synthetic-mode verification
+and account-side execution remain pending.
+The user reported the existing service updated on 12 October 2026. A health
+check at 14:08:09 EDT returned `phase05-indexed-v1`, two tenants and `ready=true`.
+Unauthenticated MCP initialization and owner reads returned HTTP 401. These
+observations establish runtime readiness and authentication enforcement, not
+tenant isolation, synthetic-provider configuration or native Grok completion.
+Railway remains the live-test host; the proposed future
 EC2/Podman Quadlet design in `cleaner-phase05-economics.md` does not change this
-packet or require another endpoint. A health check at 17:40:02 UTC still
-reported the earlier `sms-proof` runtime (see the sanitized live-status record).
+packet or require another endpoint. Sanitized observations, including the
+earlier `sms-proof` health response, are retained in
+`docs/evidence/cleaner-phase05-live-status-2026-10-12.json`.
 Use `https://tourcore-production-72ec.up.railway.app`, with the existing dedicated
 Cleaner Core receiver and connector. One `/mcp` URL serves both tenants through
 separate credentials. If Grok only permits one connection per URL, run A and
@@ -14,6 +20,10 @@ Do not change Tour Core's separate connector, existing receiver URL/key/instruct
 real provider settings, calendars or doors. All replies are simulated.
 
 ## Existing-service update
+
+The runtime update is now observed. Keep the following checklist as a
+configuration reference; proceed to the authenticated runtime check and A
+onboarding without repeating the deployment.
 
 The repository branch is `cleaner-core/phase05-multitenant`. Keep the current
 Cleaner Core service/domain, Dockerfile (`Dockerfile.cleaner-test`), volume and
@@ -48,6 +58,14 @@ returned bearer and grant ID private. The owner credential determines A or B;
 never include a tenant field in a business request.
 
 ## Copy into the Grok account after the update
+
+For the first account-side run, execute only A onboarding through workflow
+verification and stop before creating the B scope-check fixture. Collect the
+actual runtime response, connector trace/error and sanitized onboarding
+evidence before starting the two ordinary ten-request stages. Do not rerun the
+deployment steps just to perform onboarding. If the account cannot perform
+owner HTTP or reconnect the native test connector, report that missing
+capability and stop rather than substitute another client as Grok evidence.
 
 > Run a bounded Phase 0.5 test against the existing Cleaner Core URL above.
 > Use only the dedicated Cleaner Core receiver/connector; preserve all unrelated

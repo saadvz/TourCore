@@ -185,16 +185,23 @@ The user confirmed that Railway remains the live test host while the proposed
 Quadlet design is recorded for future hosting. At 2026-10-12 17:40:02 UTC,
 GET `/healthz` on that same existing URL returned HTTP 200 and
 `{"service":"cleaner-core-test","mode":"sms-proof","ready":true}`.
-This is still the earlier runtime; it is not Phase 0.5 live completion.
-The sanitized observation is retained in
+That observation was the earlier runtime; it was not Phase 0.5 live completion.
+After the user reported the same service updated, a fresh health check at
+14:08:09 EDT (18:08:09 UTC) returned HTTP 200, `phase05-indexed-v1`, two tenants
+and `ready=true`. Unauthenticated MCP initialization, `/test/runtime` and an
+owner work read returned HTTP 401. Runtime readiness and these unauthenticated
+denials pass; authenticated synthetic-mode verification, reciprocal tenant
+checks and native Grok completion remain pending. Sanitized observations are retained in
 `docs/evidence/cleaner-phase05-live-status-2026-10-12.json`.
 
-No deployment occurred during cost measurements. The publicly observed existing
-endpoint reported the earlier `cleaner-core-test` / `sms-proof` service. That
-health response establishes reachability only, not execution of this branch.
+No deployment occurred during cost measurements. The later same-service update
+was reported by the user and its runtime version independently observed over
+HTTPS; no AWS migration occurred. A healthy deployed runtime does not establish
+agent execution or completion.
 The workspace has GitHub access but no Railway deployment credential or Grok
-account binding. The user will run the account-side packet after the existing
-test service is updated. Costs are conditional tested models; live two-tenant
+account binding or configured hosted owner credentials. The user will run A
+onboarding first in the Grok account, then the remaining packet after its
+evidence passes. Costs are conditional tested models; live two-tenant
 Grok completion is **pending**, not inferred from HTTP acceptance, old reports,
 OpenRouter availability or local scripted clients. Phase 0.5 cannot be marked
 fully closed until those fresh account-side results are reconciled.
