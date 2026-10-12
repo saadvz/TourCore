@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 1,
+  "scope": "Native label screening only; no production significance or full architecture claim",
+  "datasetSha256": "6535c7b3e63c155c04a5eba6371b3b86cf05435345111a0fa51db4e9776635bd",
+  "baselineTypeAccuracy": 0.925,
+  "candidateResults": [
+    {
+      "candidateId": "vllm-sr/d3-edge",
+      "summary": {
+        "count": 120,
+        "validCount": 120,
+        "correctCount": 62,
+        "labelAccuracy": 0.5166666666666667,
+        "rawAccessFalsePositives": 2,
+        "accessNegativeCount": 106,
+        "unknownLabelRate": 0.525,
+        "selectedProbabilityBrierScore": 0.2667912378944612,
+        "p50LatencyMs": 1388.9248200000566,
+        "p95LatencyMs": 1660.2519450000273,
+        "latencyMeasuredCount": 120,
+        "totalInferenceApiSpendUsd": 0.0,
+        "meanInferenceApiSpendUsd": 0.0,
+        "inferenceCostMeasuredCount": 120
+      },
+      "pairedTypeOnlyAgainstRules": {
+        "wins": 6,
+        "losses": 55,
+        "exactTwoSidedMcNemarP": 5.380614009897755e-11
+      }
+    },
+    {
+      "candidateId": "vllm-sr/d3-lite",
+      "summary": {
+        "count": 120,
+        "validCount": 120,
+        "correctCount": 81,
+        "labelAccuracy": 0.675,
+        "rawAccessFalsePositives": 13,
+        "accessNegativeCount": 106,
+        "unknownLabelRate": 0.125,
+        "selectedProbabilityBrierScore": 0.18683810627762548,
+        "p50LatencyMs": 3077.6852900003178,
+        "p95LatencyMs": 3732.0321450001757,
+        "latencyMeasuredCount": 120,
+        "totalInferenceApiSpendUsd": 0.0,
+        "meanInferenceApiSpendUsd": 0.0,
+        "inferenceCostMeasuredCount": 120
+      },
+      "pairedTypeOnlyAgainstRules": {
+        "wins": 7,
+        "losses": 37,
+        "exactTwoSidedMcNemarP": 5.299581744111492e-06
+      }
+    },
+    {
+      "candidateId": "vllm-sr/d3-nano",
+      "summary": {
+        "count": 120,
+        "validCount": 120,
+        "correctCount": 80,
+        "labelAccuracy": 0.6666666666666666,
+        "rawAccessFalsePositives": 18,
+        "accessNegativeCount": 106,
+        "unknownLabelRate": 0.041666666666666664,
+        "selectedProbabilityBrierScore": 0.1671512434656328,
+        "p50LatencyMs": 5443.343408000146,
+        "p95LatencyMs": 6370.511247000195,
+        "latencyMeasuredCount": 120,
+        "totalInferenceApiSpendUsd": 0.0,
+        "meanInferenceApiSpendUsd": 0.0,
+        "inferenceCostMeasuredCount": 120
+      },
+      "pairedTypeOnlyAgainstRules": {
+        "wins": 3,
+        "losses": 34,
+        "exactTwoSidedMcNemarP": 1.233129296451807e-07
+      }
+    },
+    {
+      "candidateId": "microsoft/microsoft-decision-1",
+      "summary": {
+        "count": 120,
+        "validCount": 120,
+        "correctCount": 100,
+        "labelAccuracy": 0.8333333333333334,
+        "rawAccessFalsePositives": 8,
+        "accessNegativeCount": 106,
+        "unknownLabelRate": 0.175,
+        "selectedProbabilityBrierScore": 0.12235378423568885,
+        "p50LatencyMs": 297.17449599957035,
+        "p95LatencyMs": 345.20210399932694,
+        "latencyMeasuredCount": 120,
+        "totalInferenceApiSpendUsd": 0.00397299,
+        "meanInferenceApiSpendUsd": 3.310825e-05,
+        "inferenceCostMeasuredCount": 120
+      },
+      "pairedTypeOnlyAgainstRules": {
+        "wins": 8,
+        "losses": 19,
+        "exactTwoSidedMcNemarP": 0.052238985896110535
+      }
+    },
+    {
+      "candidateId": "perplexity/pplx-decider-v1.1-27b",
+      "summary": {
+        "count": 120,
+        "validCount": 120,
+        "correctCount": 115,
+        "labelAccuracy": 0.9583333333333334,
+        "rawAccessFalsePositives": 0,
+        "accessNegativeCount": 106,
+        "unknownLabelRate": 0.2833333333333333,
+        "selectedProbabilityBrierScore": 0.03835861227013592,
+        "p50LatencyMs": 337.9335749996244,
+        "p95LatencyMs": 474.1923349993158,
+        "latencyMeasuredCount": 120,
+        "totalInferenceApiSpendUsd": 0.00233396,
+        "meanInferenceApiSpendUsd": 1.9449666666666668e-05,
+        "inferenceCostMeasuredCount": 120
+      },
+      "pairedTypeOnlyAgainstRules": {
+        "wins": 9,
+        "losses": 5,
+        "exactTwoSidedMcNemarP": 0.4239501953125
+      }
+    }
+  ],
+  "totalHostedApiSpendUsd": 0.006820102,
+  "limitPerRunUsd": 0.05,
+  "totalConfiguredRunBudgetsUsd": 0.2,
+  "actualKeyAccountLimitUsd": 100,
+  "readOnlyPreflightObservation": "One key-info request returned HTTP 401 before any constraint inference; a fresh read-only check and new run succeeded. Excluded from measured inference latency/cost, not a paid retry."
+}

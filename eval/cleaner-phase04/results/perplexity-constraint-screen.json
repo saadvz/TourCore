@@ -1,0 +1,394 @@
+{
+  "schemaVersion": 1,
+  "candidateId": "perplexity/pplx-decider-v1.1-27b",
+  "evaluationStage": "native_constraint_screening",
+  "datasetSha256": "5d78b6e5ff21fb3d5275a2af08bea3a36083691e3b31a017f0f56a5ece32afbd",
+  "taskPacketSha256": "0ce4240cfce151c373e5955dd39f0eb3205773d4105de224216dffda19981875",
+  "questionSpecSha256": "45b65d1ba9aadca664e249e2d22ff8f6dbb63164fb69d939589bb0d845f8ee25",
+  "promptRevision": "native-screen-v1",
+  "transport": "openrouter",
+  "timingScope": "Sequential HTTPS POST including transport and provider inference; excludes client startup, metadata reads, app actions and SMS",
+  "costScope": "Marginal inference API spend only; self-hosted infrastructure is unmeasured",
+  "generatedAt": "2026-10-12T04:48:02.951005+00:00",
+  "rows": [
+    {
+      "id": "draft_001",
+      "costUsd": 7.92e-06,
+      "latencyMs": 347.2685189990443,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 396,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.9985620428773072,
+        "host_review": 0.0014379571226926676
+      },
+      "nativeConfidence": 0.9971240857546144,
+      "selectedProbability": 0.9985620428773072
+    },
+    {
+      "id": "draft_002",
+      "costUsd": 7.92e-06,
+      "latencyMs": 345.01772099974914,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 396,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.9995540999243485,
+        "host_review": 0.00044590007565143547
+      },
+      "nativeConfidence": 0.999108199848697,
+      "selectedProbability": 0.9995540999243485
+    },
+    {
+      "id": "draft_003",
+      "costUsd": 7.92e-06,
+      "latencyMs": 325.4108349992748,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 396,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.9508191104317528,
+        "host_review": 0.049180889568247114
+      },
+      "nativeConfidence": 0.9016382208635056,
+      "selectedProbability": 0.9508191104317528
+    },
+    {
+      "id": "draft_004",
+      "costUsd": 7.92e-06,
+      "latencyMs": 337.5250730005064,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 396,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.9499387588102656,
+        "host_review": 0.05006124118973446
+      },
+      "nativeConfidence": 0.8998775176205311,
+      "selectedProbability": 0.9499387588102656
+    },
+    {
+      "id": "draft_005",
+      "costUsd": 7.92e-06,
+      "latencyMs": 341.14077599952,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 396,
+      "outputTokens": 1,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.00039799714655045935,
+        "host_review": 0.9996020028534495
+      },
+      "nativeConfidence": 0.9992040057068989,
+      "selectedProbability": 0.9996020028534495
+    },
+    {
+      "id": "draft_006",
+      "costUsd": 7.92e-06,
+      "latencyMs": 363.122717000806,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 396,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.5518591315933611,
+        "host_review": 0.4481408684066389
+      },
+      "nativeConfidence": 0.10371826318672217,
+      "selectedProbability": 0.5518591315933611
+    },
+    {
+      "id": "draft_007",
+      "costUsd": 7.92e-06,
+      "latencyMs": 410.56108200064045,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 396,
+      "outputTokens": 1,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.002165948770620509,
+        "host_review": 0.9978340512293795
+      },
+      "nativeConfidence": 0.995668102458759,
+      "selectedProbability": 0.9978340512293795
+    },
+    {
+      "id": "draft_008",
+      "costUsd": 7.92e-06,
+      "latencyMs": 331.8486150001263,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 396,
+      "outputTokens": 1,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.0001165341870624206,
+        "host_review": 0.9998834658129376
+      },
+      "nativeConfidence": 0.9997669316258753,
+      "selectedProbability": 0.9998834658129376
+    },
+    {
+      "id": "draft_009",
+      "costUsd": 7.92e-06,
+      "latencyMs": 332.49727499969595,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 396,
+      "outputTokens": 1,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 4.82764984338014e-05,
+        "host_review": 0.9999517235015661
+      },
+      "nativeConfidence": 0.9999034470031323,
+      "selectedProbability": 0.9999517235015661
+    },
+    {
+      "id": "draft_010",
+      "costUsd": 7.94e-06,
+      "latencyMs": 357.76572299982945,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 397,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.9859853064370631,
+        "host_review": 0.014014693562936834
+      },
+      "nativeConfidence": 0.9719706128741261,
+      "selectedProbability": 0.9859853064370631
+    },
+    {
+      "id": "draft_011",
+      "costUsd": 7.94e-06,
+      "latencyMs": 329.3937589987763,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 397,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.8788354647093847,
+        "host_review": 0.12116453529061526
+      },
+      "nativeConfidence": 0.7576709294187693,
+      "selectedProbability": 0.8788354647093847
+    },
+    {
+      "id": "draft_012",
+      "costUsd": 7.92e-06,
+      "latencyMs": 333.9639480000187,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 396,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.9411044632010237,
+        "host_review": 0.05889553679897636
+      },
+      "nativeConfidence": 0.8822089264020474,
+      "selectedProbability": 0.9411044632010237
+    },
+    {
+      "id": "draft_013",
+      "costUsd": 7.9e-06,
+      "latencyMs": 396.29907200105663,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 395,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.9983594554630111,
+        "host_review": 0.0016405445369889267
+      },
+      "nativeConfidence": 0.9967189109260222,
+      "selectedProbability": 0.9983594554630111
+    },
+    {
+      "id": "draft_014",
+      "costUsd": 7.9e-06,
+      "latencyMs": 358.2129209989944,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 395,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.9993479666739228,
+        "host_review": 0.0006520333260772061
+      },
+      "nativeConfidence": 0.9986959333478456,
+      "selectedProbability": 0.9993479666739228
+    },
+    {
+      "id": "draft_015",
+      "costUsd": 7.9e-06,
+      "latencyMs": 335.60327800114464,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 395,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.9297565961176869,
+        "host_review": 0.07024340388231314
+      },
+      "nativeConfidence": 0.8595131922353738,
+      "selectedProbability": 0.9297565961176869
+    },
+    {
+      "id": "draft_016",
+      "costUsd": 7.9e-06,
+      "latencyMs": 337.2199549994548,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 395,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.9150638765414187,
+        "host_review": 0.08493612345858126
+      },
+      "nativeConfidence": 0.8301277530828375,
+      "selectedProbability": 0.9150638765414187
+    },
+    {
+      "id": "draft_017",
+      "costUsd": 7.9e-06,
+      "latencyMs": 337.01891300006537,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 395,
+      "outputTokens": 1,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.00035401405122730266,
+        "host_review": 0.9996459859487726
+      },
+      "nativeConfidence": 0.9992919718975453,
+      "selectedProbability": 0.9996459859487726
+    },
+    {
+      "id": "draft_018",
+      "costUsd": 7.9e-06,
+      "latencyMs": 351.75168399837276,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 395,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.7716654292253114,
+        "host_review": 0.22833457077468852
+      },
+      "nativeConfidence": 0.5433308584506229,
+      "selectedProbability": 0.7716654292253114
+    },
+    {
+      "id": "draft_019",
+      "costUsd": 7.9e-06,
+      "latencyMs": 319.6095530001912,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 395,
+      "outputTokens": 1,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.0027196290388532443,
+        "host_review": 0.9972803709611469
+      },
+      "nativeConfidence": 0.9945607419222937,
+      "selectedProbability": 0.9972803709611469
+    },
+    {
+      "id": "draft_020",
+      "costUsd": 7.9e-06,
+      "latencyMs": 349.8639640001784,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 395,
+      "outputTokens": 1,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.00011548597579951311,
+        "host_review": 0.9998845140242004
+      },
+      "nativeConfidence": 0.9997690280484008,
+      "selectedProbability": 0.9998845140242004
+    },
+    {
+      "id": "draft_021",
+      "costUsd": 7.9e-06,
+      "latencyMs": 337.37934099917766,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 395,
+      "outputTokens": 1,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 5.0516552425531354e-05,
+        "host_review": 0.9999494834475744
+      },
+      "nativeConfidence": 0.9998989668951488,
+      "selectedProbability": 0.9999494834475744
+    },
+    {
+      "id": "draft_022",
+      "costUsd": 7.92e-06,
+      "latencyMs": 393.3339340001112,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 396,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.9436518430850234,
+        "host_review": 0.0563481569149766
+      },
+      "nativeConfidence": 0.8873036861700467,
+      "selectedProbability": 0.9436518430850234
+    },
+    {
+      "id": "draft_023",
+      "costUsd": 7.92e-06,
+      "latencyMs": 331.59292100026505,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 396,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.8617554744094434,
+        "host_review": 0.13824452559055653
+      },
+      "nativeConfidence": 0.7235109488188869,
+      "selectedProbability": 0.8617554744094434
+    },
+    {
+      "id": "draft_024",
+      "costUsd": 7.9e-06,
+      "latencyMs": 569.7327719990426,
+      "returnedModel": "perplexity/pplx-decider-v1.1-27b-20261006",
+      "inputTokens": 395,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.9100817308641534,
+        "host_review": 0.08991826913584654
+      },
+      "nativeConfidence": 0.8201634617283069,
+      "selectedProbability": 0.9100817308641534
+    }
+  ],
+  "segments": [
+    {
+      "startedAt": "2026-10-12T04:48:03.144169+00:00",
+      "resumeAfterRows": 0,
+      "identity": {
+        "artifact": "perplexity/pplx-decider-v1.1-27b",
+        "canonicalSlug": "perplexity/pplx-decider-v1.1-27b-20261006",
+        "publishedPromptPricePerToken": 2e-08,
+        "apiKeyCreditLimitUsd": 100
+      }
+    }
+  ],
+  "confidenceSemantics": "Provider-native confidence and selected probability retained; calibration must be evaluated separately",
+  "inferenceIdentity": {
+    "artifact": "perplexity/pplx-decider-v1.1-27b",
+    "canonicalSlug": "perplexity/pplx-decider-v1.1-27b-20261006",
+    "publishedPromptPricePerToken": 2e-08,
+    "apiKeyCreditLimitUsd": 100
+  }
+}

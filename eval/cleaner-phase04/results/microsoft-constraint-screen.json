@@ -1,0 +1,394 @@
+{
+  "schemaVersion": 1,
+  "candidateId": "microsoft/microsoft-decision-1",
+  "evaluationStage": "native_constraint_screening",
+  "datasetSha256": "5d78b6e5ff21fb3d5275a2af08bea3a36083691e3b31a017f0f56a5ece32afbd",
+  "taskPacketSha256": "0ce4240cfce151c373e5955dd39f0eb3205773d4105de224216dffda19981875",
+  "questionSpecSha256": "45b65d1ba9aadca664e249e2d22ff8f6dbb63164fb69d939589bb0d845f8ee25",
+  "promptRevision": "native-screen-v1",
+  "transport": "openrouter",
+  "timingScope": "Sequential HTTPS POST including transport and provider inference; excludes client startup, metadata reads, app actions and SMS",
+  "costScope": "Marginal inference API spend only; self-hosted infrastructure is unmeasured",
+  "generatedAt": "2026-10-12T04:46:02.914703+00:00",
+  "rows": [
+    {
+      "id": "draft_001",
+      "costUsd": 1.3482e-05,
+      "latencyMs": 434.7571920006885,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 321,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "host_review": 0.14804719803168948,
+        "propose_time": 0.8519528019683105
+      },
+      "nativeConfidence": 0.7039056039366209,
+      "selectedProbability": 0.8519528019683105
+    },
+    {
+      "id": "draft_002",
+      "costUsd": 1.3482e-05,
+      "latencyMs": 317.10998800008383,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 321,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "host_review": 0.1192029110704336,
+        "propose_time": 0.8807970889295663
+      },
+      "nativeConfidence": 0.7615941778591326,
+      "selectedProbability": 0.8807970889295663
+    },
+    {
+      "id": "draft_003",
+      "costUsd": 1.3482e-05,
+      "latencyMs": 314.17028900068544,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 321,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "host_review": 0.1480471999111614,
+        "propose_time": 0.8519528000888386
+      },
+      "nativeConfidence": 0.7039056001776771,
+      "selectedProbability": 0.8519528000888386
+    },
+    {
+      "id": "draft_004",
+      "costUsd": 1.3482e-05,
+      "latencyMs": 266.15700000002107,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 321,
+      "outputTokens": 1,
+      "choice": "host_review",
+      "probabilities": {
+        "host_review": 0.5926665999540698,
+        "propose_time": 0.4073334000459302
+      },
+      "nativeConfidence": 0.18533319990813957,
+      "selectedProbability": 0.5926665999540698
+    },
+    {
+      "id": "draft_005",
+      "costUsd": 1.3482e-05,
+      "latencyMs": 320.0638930011337,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 321,
+      "outputTokens": 1,
+      "choice": "host_review",
+      "probabilities": {
+        "host_review": 0.8519528076067262,
+        "propose_time": 0.1480471923932738
+      },
+      "nativeConfidence": 0.7039056152134524,
+      "selectedProbability": 0.8519528076067262
+    },
+    {
+      "id": "draft_006",
+      "costUsd": 1.3482e-05,
+      "latencyMs": 289.0910290007014,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 321,
+      "outputTokens": 1,
+      "choice": "host_review",
+      "probabilities": {
+        "host_review": 0.7057850154599563,
+        "propose_time": 0.29421498454004374
+      },
+      "nativeConfidence": 0.4115700309199126,
+      "selectedProbability": 0.7057850154599563
+    },
+    {
+      "id": "draft_007",
+      "costUsd": 1.3482e-05,
+      "latencyMs": 281.0174909991474,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 321,
+      "outputTokens": 1,
+      "choice": "host_review",
+      "probabilities": {
+        "host_review": 0.9324533083911025,
+        "propose_time": 0.0675466916088975
+      },
+      "nativeConfidence": 0.864906616782205,
+      "selectedProbability": 0.9324533083911025
+    },
+    {
+      "id": "draft_008",
+      "costUsd": 1.3482e-05,
+      "latencyMs": 316.52716499957023,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 321,
+      "outputTokens": 1,
+      "choice": "host_review",
+      "probabilities": {
+        "host_review": 0.9740426436499009,
+        "propose_time": 0.025957356350099027
+      },
+      "nativeConfidence": 0.9480852872998018,
+      "selectedProbability": 0.9740426436499009
+    },
+    {
+      "id": "draft_009",
+      "costUsd": 1.3482e-05,
+      "latencyMs": 341.7586730010953,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 321,
+      "outputTokens": 1,
+      "choice": "host_review",
+      "probabilities": {
+        "host_review": 0.95791227058248,
+        "propose_time": 0.042087729417519974
+      },
+      "nativeConfidence": 0.9158245411649599,
+      "selectedProbability": 0.95791227058248
+    },
+    {
+      "id": "draft_010",
+      "costUsd": 1.3524e-05,
+      "latencyMs": 329.5666220001294,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 322,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "host_review": 0.20181323186177208,
+        "propose_time": 0.798186768138228
+      },
+      "nativeConfidence": 0.596373536276456,
+      "selectedProbability": 0.798186768138228
+    },
+    {
+      "id": "draft_011",
+      "costUsd": 1.3524e-05,
+      "latencyMs": 315.41156100138323,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 322,
+      "outputTokens": 1,
+      "choice": "host_review",
+      "probabilities": {
+        "host_review": 0.7310585727705126,
+        "propose_time": 0.2689414272294874
+      },
+      "nativeConfidence": 0.4621171455410251,
+      "selectedProbability": 0.7310585727705126
+    },
+    {
+      "id": "draft_012",
+      "costUsd": 1.3482e-05,
+      "latencyMs": 292.44870799993805,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 321,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "host_review": 0.16451647108926923,
+        "propose_time": 0.8354835289107309
+      },
+      "nativeConfidence": 0.6709670578214617,
+      "selectedProbability": 0.8354835289107309
+    },
+    {
+      "id": "draft_013",
+      "costUsd": 1.344e-05,
+      "latencyMs": 281.0752990008041,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 320,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "host_review": 0.10669058400428263,
+        "propose_time": 0.8933094159957173
+      },
+      "nativeConfidence": 0.7866188319914347,
+      "selectedProbability": 0.8933094159957173
+    },
+    {
+      "id": "draft_014",
+      "costUsd": 1.344e-05,
+      "latencyMs": 265.9232179994433,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 320,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "host_review": 0.11920292828022305,
+        "propose_time": 0.880797071719777
+      },
+      "nativeConfidence": 0.7615941434395539,
+      "selectedProbability": 0.880797071719777
+    },
+    {
+      "id": "draft_015",
+      "costUsd": 1.344e-05,
+      "latencyMs": 303.58522399910726,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 320,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "host_review": 0.1329642316084462,
+        "propose_time": 0.8670357683915538
+      },
+      "nativeConfidence": 0.7340715367831077,
+      "selectedProbability": 0.8670357683915538
+    },
+    {
+      "id": "draft_016",
+      "costUsd": 1.344e-05,
+      "latencyMs": 290.26037200128485,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 320,
+      "outputTokens": 1,
+      "choice": "host_review",
+      "probabilities": {
+        "host_review": 0.7549149868676283,
+        "propose_time": 0.24508501313237172
+      },
+      "nativeConfidence": 0.5098299737352565,
+      "selectedProbability": 0.7549149868676283
+    },
+    {
+      "id": "draft_017",
+      "costUsd": 1.344e-05,
+      "latencyMs": 275.01209799993376,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 320,
+      "outputTokens": 1,
+      "choice": "host_review",
+      "probabilities": {
+        "host_review": 0.914900957313305,
+        "propose_time": 0.08509904268669496
+      },
+      "nativeConfidence": 0.82980191462661,
+      "selectedProbability": 0.914900957313305
+    },
+    {
+      "id": "draft_018",
+      "costUsd": 1.344e-05,
+      "latencyMs": 273.52002000043285,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 320,
+      "outputTokens": 1,
+      "choice": "host_review",
+      "probabilities": {
+        "host_review": 0.679178699175393,
+        "propose_time": 0.320821300824607
+      },
+      "nativeConfidence": 0.35835739835078595,
+      "selectedProbability": 0.679178699175393
+    },
+    {
+      "id": "draft_019",
+      "costUsd": 1.344e-05,
+      "latencyMs": 285.4033679996064,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 320,
+      "outputTokens": 1,
+      "choice": "host_review",
+      "probabilities": {
+        "host_review": 0.9579122768904645,
+        "propose_time": 0.042087723109535534
+      },
+      "nativeConfidence": 0.9158245537809291,
+      "selectedProbability": 0.9579122768904645
+    },
+    {
+      "id": "draft_020",
+      "costUsd": 1.344e-05,
+      "latencyMs": 307.04665800112707,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 320,
+      "outputTokens": 1,
+      "choice": "host_review",
+      "probabilities": {
+        "host_review": 0.977022628417363,
+        "propose_time": 0.022977371582637088
+      },
+      "nativeConfidence": 0.954045256834726,
+      "selectedProbability": 0.977022628417363
+    },
+    {
+      "id": "draft_021",
+      "costUsd": 1.344e-05,
+      "latencyMs": 322.494521000408,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 320,
+      "outputTokens": 1,
+      "choice": "host_review",
+      "probabilities": {
+        "host_review": 0.9706877669697345,
+        "propose_time": 0.029312233030265544
+      },
+      "nativeConfidence": 0.9413755339394689,
+      "selectedProbability": 0.9706877669697345
+    },
+    {
+      "id": "draft_022",
+      "costUsd": 1.3482e-05,
+      "latencyMs": 283.5930630008079,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 321,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "host_review": 0.20181321986003056,
+        "propose_time": 0.7981867801399695
+      },
+      "nativeConfidence": 0.5963735602799389,
+      "selectedProbability": 0.7981867801399695
+    },
+    {
+      "id": "draft_023",
+      "costUsd": 1.3482e-05,
+      "latencyMs": 275.2697879986954,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 321,
+      "outputTokens": 1,
+      "choice": "host_review",
+      "probabilities": {
+        "host_review": 0.5621765008857982,
+        "propose_time": 0.4378234991142019
+      },
+      "nativeConfidence": 0.12435300177159636,
+      "selectedProbability": 0.5621765008857982
+    },
+    {
+      "id": "draft_024",
+      "costUsd": 1.344e-05,
+      "latencyMs": 306.7463139996107,
+      "returnedModel": "microsoft/microsoft-decision-1-20261009",
+      "inputTokens": 320,
+      "outputTokens": 1,
+      "choice": "propose_time",
+      "probabilities": {
+        "host_review": 0.13296423332632276,
+        "propose_time": 0.8670357666736772
+      },
+      "nativeConfidence": 0.7340715333473544,
+      "selectedProbability": 0.8670357666736772
+    }
+  ],
+  "segments": [
+    {
+      "startedAt": "2026-10-12T04:46:03.602558+00:00",
+      "resumeAfterRows": 0,
+      "identity": {
+        "artifact": "microsoft/microsoft-decision-1",
+        "canonicalSlug": "microsoft/microsoft-decision-1-20261009",
+        "publishedPromptPricePerToken": 4.2e-08,
+        "apiKeyCreditLimitUsd": 100
+      }
+    }
+  ],
+  "confidenceSemantics": "Provider-native confidence and selected probability retained; calibration must be evaluated separately",
+  "inferenceIdentity": {
+    "artifact": "microsoft/microsoft-decision-1",
+    "canonicalSlug": "microsoft/microsoft-decision-1-20261009",
+    "publishedPromptPricePerToken": 4.2e-08,
+    "apiKeyCreditLimitUsd": 100
+  }
+}

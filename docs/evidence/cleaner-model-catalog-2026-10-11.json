@@ -1,0 +1,177 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-12T04:16:40.426698+00:00",
+  "evidenceSource": "Direct HTTPS public provider metadata and model cards; no authenticated hosted inference performed",
+  "collection": {
+    "requestedUrl": "https://huggingface.co/collections/vllm-sr/decision-30",
+    "resolvedSlug": "vllm-sr/decision-30-6aca5f47b0d942380f6e4a64",
+    "title": "\ud83d\udd2eDecision 3.0",
+    "lastUpdated": "2026-10-10T23:53:06.537Z",
+    "models": [
+      {
+        "id": "vllm-sr/d3",
+        "revision": "cbff3a3cb0b074b6585fe9f747b9f9f5557a0e75",
+        "parameters": 26085330160,
+        "license": "apache-2.0",
+        "baseModel": "Qwen/Qwen3.8-27B",
+        "gated": false,
+        "huggingFaceInferenceProviders": [],
+        "cardSha256": "62c45b5b40c4236aa52b65fb7c83da623c35edab4df7469f104c1597c4235d58",
+        "cardUrl": "https://huggingface.co/vllm-sr/d3/blob/cbff3a3cb0b074b6585fe9f747b9f9f5557a0e75/README.md"
+      },
+      {
+        "id": "vllm-sr/d3-flash",
+        "revision": "521525effa79469d899a570726547dd7f00da3af",
+        "parameters": 8392695024,
+        "license": "apache-2.0",
+        "baseModel": "Qwen/Qwen3.5-9B",
+        "gated": false,
+        "huggingFaceInferenceProviders": [],
+        "cardSha256": "4b35f38aebbd3025cfeb385020e1fe0c8f667144c2c71a00a0ce9ea18ece0aad",
+        "cardUrl": "https://huggingface.co/vllm-sr/d3-flash/blob/521525effa79469d899a570726547dd7f00da3af/README.md"
+      },
+      {
+        "id": "vllm-sr/d3-mini",
+        "revision": "a475367de0d8133a3c1a2a0dc12303d89cfa2ab4",
+        "parameters": 4539265536,
+        "license": "apache-2.0",
+        "baseModel": "Qwen/Qwen3.5-4B",
+        "gated": false,
+        "huggingFaceInferenceProviders": [],
+        "cardSha256": "5ddcf9a9a4b9eab3e482372b496352cd922dc9496cc9a4b4c7237623915947d0",
+        "cardUrl": "https://huggingface.co/vllm-sr/d3-mini/blob/a475367de0d8133a3c1a2a0dc12303d89cfa2ab4/README.md"
+      },
+      {
+        "id": "vllm-sr/d3-nano",
+        "revision": "3aeb1c22a5632aac72353c36b3d0111c40e7dbf4",
+        "parameters": 2213241664,
+        "license": "apache-2.0",
+        "baseModel": "Qwen/Qwen3.5-2B",
+        "gated": false,
+        "huggingFaceInferenceProviders": [],
+        "cardSha256": "65356c023e4a7f6881ba36c761e997f834543caded50d9fc45737176ba49d510",
+        "cardUrl": "https://huggingface.co/vllm-sr/d3-nano/blob/3aeb1c22a5632aac72353c36b3d0111c40e7dbf4/README.md"
+      },
+      {
+        "id": "vllm-sr/d3-lite",
+        "revision": "a8d25a91ef75552803f7009d25b7bd435991abd9",
+        "parameters": 852985920,
+        "license": "apache-2.0",
+        "baseModel": "Qwen/Qwen3.5-0.8B",
+        "gated": false,
+        "huggingFaceInferenceProviders": [],
+        "cardSha256": "06ff26200efd3f64539e8f4dbad85fd310351101854e335af0a4fe4555189bd1",
+        "cardUrl": "https://huggingface.co/vllm-sr/d3-lite/blob/a8d25a91ef75552803f7009d25b7bd435991abd9/README.md"
+      },
+      {
+        "id": "vllm-sr/d3-edge",
+        "revision": "18d61df78684675463af9ae732872478845c5a79",
+        "parameters": 594321600,
+        "license": "apache-2.0",
+        "baseModel": "Qwen/Qwen3.5-0.8B",
+        "gated": false,
+        "huggingFaceInferenceProviders": [],
+        "cardSha256": "ec1ef3df472b36b1392b9dd7fdc77119e85e86743e15b7818c29c18e1995b336",
+        "cardUrl": "https://huggingface.co/vllm-sr/d3-edge/blob/18d61df78684675463af9ae732872478845c5a79/README.md"
+      }
+    ]
+  },
+  "openRouter": {
+    "modelsSource": "https://openrouter.ai/api/v1/models?output_modalities=decisions",
+    "documentationSource": "https://openrouter.ai/docs/llms-full.txt",
+    "inferenceEndpoint": "https://openrouter.ai/api/alpha/decisions",
+    "candidates": [
+      {
+        "id": "microsoft/microsoft-decision-1",
+        "canonical_slug": "microsoft/microsoft-decision-1-20261009",
+        "hugging_face_id": null,
+        "name": "Microsoft: Microsoft-Decision-1",
+        "created": 1791584978,
+        "description": "Microsoft-Decision-1 is a small model built for fast decision-making. Instead of generating text, it reads the provided content and returns a calibrated probability for each fixed answer option, so the...",
+        "context_length": 32768,
+        "architecture": {
+          "modality": "text->decisions",
+          "input_modalities": [
+            "text"
+          ],
+          "output_modalities": [
+            "decisions"
+          ],
+          "tokenizer": "Other",
+          "instruct_type": null
+        },
+        "pricing": {
+          "prompt": "0.000000042",
+          "completion": "0"
+        },
+        "top_provider": {
+          "context_length": 32768,
+          "max_completion_tokens": 29491,
+          "is_moderated": false
+        },
+        "per_request_limits": null,
+        "supported_parameters": [],
+        "default_parameters": {},
+        "supported_voices": null,
+        "knowledge_cutoff": null,
+        "expiration_date": null,
+        "links": {
+          "details": "/api/v1/models/microsoft/microsoft-decision-1-20261009/endpoints"
+        }
+      },
+      {
+        "id": "perplexity/pplx-decider-v1.1-27b",
+        "canonical_slug": "perplexity/pplx-decider-v1.1-27b-20261006",
+        "hugging_face_id": null,
+        "name": "Perplexity: Decider V1.1 27B",
+        "created": 1791387700,
+        "description": "Decider V1.1 27B is a new checkpoint of Perplexity's decision model, succeeding [Decider V1 27B](/perplexity/pplx-decider-v1-27b) with the same API contract. Instead of generating text, it reads content passed as `state`...",
+        "context_length": 262144,
+        "architecture": {
+          "modality": "text+image->decisions",
+          "input_modalities": [
+            "text",
+            "image"
+          ],
+          "output_modalities": [
+            "decisions"
+          ],
+          "tokenizer": "Other",
+          "instruct_type": null
+        },
+        "pricing": {
+          "prompt": "0.00000002",
+          "completion": "0"
+        },
+        "top_provider": {
+          "context_length": 262144,
+          "max_completion_tokens": 235929,
+          "is_moderated": false
+        },
+        "per_request_limits": null,
+        "supported_parameters": [],
+        "default_parameters": {},
+        "supported_voices": null,
+        "knowledge_cutoff": null,
+        "expiration_date": null,
+        "links": {
+          "details": "/api/v1/models/perplexity/pplx-decider-v1.1-27b-20261006/endpoints"
+        }
+      }
+    ],
+    "actualInferenceAccessVerified": false
+  },
+  "environment": {
+    "runtimeNetworkAccessVerified": true,
+    "cpuQuota": 4,
+    "memoryLimitGiB": 32,
+    "localModels": "d3-edge, d3-lite, d3-nano; pinned public weights with full manifest SHA-256 verification",
+    "gpuAvailable": false
+  },
+  "limitations": [
+    "Provider listings/prices are observations, not actual trial receipts",
+    "Model-card multimodal capabilities were not tested; trials use text only",
+    "Microsoft is hosted-only in this inspected catalog; no open-weights license was established",
+    "Larger Decision 3.0 variants were not benchmarked here"
+  ]
+}

@@ -1,0 +1,542 @@
+{
+  "schemaVersion": 1,
+  "candidateId": "microsoft/microsoft-decision-1",
+  "stage": "native_intent_screening",
+  "datasetSha256": "6535c7b3e63c155c04a5eba6371b3b86cf05435345111a0fa51db4e9776635bd",
+  "questionSpecSha256": "45b65d1ba9aadca664e249e2d22ff8f6dbb63164fb69d939589bb0d845f8ee25",
+  "inferenceIdentity": {
+    "artifact": "microsoft/microsoft-decision-1",
+    "canonicalSlug": "microsoft/microsoft-decision-1-20261009",
+    "publishedPromptPricePerToken": 4.2e-08,
+    "apiKeyCreditLimitUsd": 100
+  },
+  "timingScope": "Sequential HTTPS POST including transport and provider inference; excludes client startup, metadata reads, app actions and SMS",
+  "costScope": "Marginal inference API spend only; self-hosted infrastructure is unmeasured",
+  "confidenceSemantics": "Provider-native confidence and selected probability retained; calibration must be evaluated separately",
+  "summary": {
+    "count": 120,
+    "validCount": 120,
+    "correctCount": 100,
+    "labelAccuracy": 0.8333333333333334,
+    "rawAccessFalsePositives": 8,
+    "accessNegativeCount": 106,
+    "unknownLabelRate": 0.175,
+    "selectedProbabilityBrierScore": 0.12235378423568885,
+    "p50LatencyMs": 297.17449599957035,
+    "p95LatencyMs": 345.20210399932694,
+    "latencyMeasuredCount": 120,
+    "totalInferenceApiSpendUsd": 0.00397299,
+    "meanInferenceApiSpendUsd": 3.310825e-05,
+    "inferenceCostMeasuredCount": 120
+  },
+  "byCategory": {
+    "arrived": {
+      "count": 12,
+      "validCount": 12,
+      "correctCount": 12,
+      "labelAccuracy": 1.0,
+      "rawAccessFalsePositives": 0,
+      "accessNegativeCount": 0,
+      "unknownLabelRate": 0.0,
+      "selectedProbabilityBrierScore": 0.02160342971982948,
+      "p50LatencyMs": 300.22011900109646,
+      "p95LatencyMs": 749.3760280012793,
+      "latencyMeasuredCount": 12,
+      "totalInferenceApiSpendUsd": 0.000398496,
+      "meanInferenceApiSpendUsd": 3.3208e-05,
+      "inferenceCostMeasuredCount": 12
+    },
+    "approaching": {
+      "count": 12,
+      "validCount": 12,
+      "correctCount": 6,
+      "labelAccuracy": 0.5,
+      "rawAccessFalsePositives": 6,
+      "accessNegativeCount": 12,
+      "unknownLabelRate": 0.5,
+      "selectedProbabilityBrierScore": 0.33151287478260866,
+      "p50LatencyMs": 301.36577599841985,
+      "p95LatencyMs": 323.4389259996533,
+      "latencyMeasuredCount": 12,
+      "totalInferenceApiSpendUsd": 0.00039879,
+      "meanInferenceApiSpendUsd": 3.32325e-05,
+      "inferenceCostMeasuredCount": 12
+    },
+    "contextual_reply": {
+      "count": 12,
+      "validCount": 12,
+      "correctCount": 9,
+      "labelAccuracy": 0.75,
+      "rawAccessFalsePositives": 0,
+      "accessNegativeCount": 10,
+      "unknownLabelRate": 0.0,
+      "selectedProbabilityBrierScore": 0.15671546653199875,
+      "p50LatencyMs": 293.1143580008211,
+      "p95LatencyMs": 320.70650500099873,
+      "latencyMeasuredCount": 12,
+      "totalInferenceApiSpendUsd": 0.000401142,
+      "meanInferenceApiSpendUsd": 3.34285e-05,
+      "inferenceCostMeasuredCount": 12
+    },
+    "conflicting_or_unclear": {
+      "count": 12,
+      "validCount": 12,
+      "correctCount": 5,
+      "labelAccuracy": 0.4166666666666667,
+      "rawAccessFalsePositives": 1,
+      "accessNegativeCount": 12,
+      "unknownLabelRate": 0.4166666666666667,
+      "selectedProbabilityBrierScore": 0.5274848592051606,
+      "p50LatencyMs": 297.6645160015323,
+      "p95LatencyMs": 334.5670130001963,
+      "latencyMeasuredCount": 12,
+      "totalInferenceApiSpendUsd": 0.000400848,
+      "meanInferenceApiSpendUsd": 3.3404e-05,
+      "inferenceCostMeasuredCount": 12
+    },
+    "reschedule_or_date": {
+      "count": 12,
+      "validCount": 12,
+      "correctCount": 11,
+      "labelAccuracy": 0.9166666666666666,
+      "rawAccessFalsePositives": 0,
+      "accessNegativeCount": 12,
+      "unknownLabelRate": 0.0,
+      "selectedProbabilityBrierScore": 0.06213373269048899,
+      "p50LatencyMs": 299.81953099922976,
+      "p95LatencyMs": 371.9250109988934,
+      "latencyMeasuredCount": 12,
+      "totalInferenceApiSpendUsd": 0.000400218,
+      "meanInferenceApiSpendUsd": 3.33515e-05,
+      "inferenceCostMeasuredCount": 12
+    },
+    "combined_question": {
+      "count": 12,
+      "validCount": 12,
+      "correctCount": 12,
+      "labelAccuracy": 1.0,
+      "rawAccessFalsePositives": 0,
+      "accessNegativeCount": 12,
+      "unknownLabelRate": 0.0,
+      "selectedProbabilityBrierScore": 0.0016925060511325226,
+      "p50LatencyMs": 291.6405229989323,
+      "p95LatencyMs": 334.85762199961755,
+      "latencyMeasuredCount": 12,
+      "totalInferenceApiSpendUsd": 0.00039921,
+      "meanInferenceApiSpendUsd": 3.32675e-05,
+      "inferenceCostMeasuredCount": 12
+    },
+    "access_problem": {
+      "count": 12,
+      "validCount": 12,
+      "correctCount": 12,
+      "labelAccuracy": 1.0,
+      "rawAccessFalsePositives": 0,
+      "accessNegativeCount": 12,
+      "unknownLabelRate": 0.0,
+      "selectedProbabilityBrierScore": 0.0001545725846250705,
+      "p50LatencyMs": 293.94493399922794,
+      "p95LatencyMs": 464.14203899985296,
+      "latencyMeasuredCount": 12,
+      "totalInferenceApiSpendUsd": 0.000390474,
+      "meanInferenceApiSpendUsd": 3.2539499999999996e-05,
+      "inferenceCostMeasuredCount": 12
+    },
+    "menu_selection": {
+      "count": 12,
+      "validCount": 12,
+      "correctCount": 12,
+      "labelAccuracy": 1.0,
+      "rawAccessFalsePositives": 0,
+      "accessNegativeCount": 12,
+      "unknownLabelRate": 0.0,
+      "selectedProbabilityBrierScore": 0.0010229470051597398,
+      "p50LatencyMs": 293.2669399997394,
+      "p95LatencyMs": 352.319431000069,
+      "latencyMeasuredCount": 12,
+      "totalInferenceApiSpendUsd": 0.00039795,
+      "meanInferenceApiSpendUsd": 3.31625e-05,
+      "inferenceCostMeasuredCount": 12
+    },
+    "property_question": {
+      "count": 12,
+      "validCount": 12,
+      "correctCount": 11,
+      "labelAccuracy": 0.9166666666666666,
+      "rawAccessFalsePositives": 0,
+      "accessNegativeCount": 12,
+      "unknownLabelRate": 0.0,
+      "selectedProbabilityBrierScore": 0.020570386705082534,
+      "p50LatencyMs": 299.4338059997972,
+      "p95LatencyMs": 984.2785010005173,
+      "latencyMeasuredCount": 12,
+      "totalInferenceApiSpendUsd": 0.000393204,
+      "meanInferenceApiSpendUsd": 3.2767e-05,
+      "inferenceCostMeasuredCount": 12
+    },
+    "untrusted_instruction": {
+      "count": 12,
+      "validCount": 12,
+      "correctCount": 10,
+      "labelAccuracy": 0.8333333333333334,
+      "rawAccessFalsePositives": 1,
+      "accessNegativeCount": 12,
+      "unknownLabelRate": 0.8333333333333334,
+      "selectedProbabilityBrierScore": 0.10064706708080214,
+      "p50LatencyMs": 294.9563849997503,
+      "p95LatencyMs": 355.4051999999501,
+      "latencyMeasuredCount": 12,
+      "totalInferenceApiSpendUsd": 0.000392658,
+      "meanInferenceApiSpendUsd": 3.27215e-05,
+      "inferenceCostMeasuredCount": 12
+    }
+  },
+  "failures": [
+    {
+      "id": "p04_015",
+      "category": "approaching",
+      "valid": true,
+      "correct": false,
+      "choice": "ARRIVAL",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": true,
+      "selectedProbability": 0.7592649184981822,
+      "nativeConfidence": 0.7487981758241901,
+      "latencyMs": 287.29938300057256,
+      "costUsd": 3.3306e-05,
+      "error": null
+    },
+    {
+      "id": "p04_018",
+      "category": "approaching",
+      "valid": true,
+      "correct": false,
+      "choice": "ARRIVAL",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": true,
+      "selectedProbability": 0.8190241073006127,
+      "nativeConfidence": 0.8111555902267263,
+      "latencyMs": 280.32351399997424,
+      "costUsd": 3.318e-05,
+      "error": null
+    },
+    {
+      "id": "p04_020",
+      "category": "approaching",
+      "valid": true,
+      "correct": false,
+      "choice": "ARRIVAL",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": true,
+      "selectedProbability": 0.6605107665301021,
+      "nativeConfidence": 0.6457503650748891,
+      "latencyMs": 303.6173709988361,
+      "costUsd": 3.3222e-05,
+      "error": null
+    },
+    {
+      "id": "p04_021",
+      "category": "approaching",
+      "valid": true,
+      "correct": false,
+      "choice": "ARRIVAL",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": true,
+      "selectedProbability": 0.5903596713789921,
+      "nativeConfidence": 0.5725492223085135,
+      "latencyMs": 312.603611000668,
+      "costUsd": 3.3138e-05,
+      "error": null
+    },
+    {
+      "id": "p04_023",
+      "category": "approaching",
+      "valid": true,
+      "correct": false,
+      "choice": "AT_ROUTE_STOP",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": true,
+      "selectedProbability": 0.7891674439831337,
+      "nativeConfidence": 0.780000811112835,
+      "latencyMs": 298.5686979991442,
+      "costUsd": 3.3432e-05,
+      "error": null
+    },
+    {
+      "id": "p04_024",
+      "category": "approaching",
+      "valid": true,
+      "correct": false,
+      "choice": "ARRIVAL",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": true,
+      "selectedProbability": 0.8602567612926391,
+      "nativeConfidence": 0.8541809683053624,
+      "latencyMs": 292.09857099885994,
+      "costUsd": 3.3432e-05,
+      "error": null
+    },
+    {
+      "id": "p04_026",
+      "category": "contextual_reply",
+      "valid": true,
+      "correct": false,
+      "choice": "FOLLOW_UP_NO",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.4326402899604685,
+      "nativeConfidence": 0.4079724764804889,
+      "latencyMs": 281.1795670004358,
+      "costUsd": 3.3432e-05,
+      "error": null
+    },
+    {
+      "id": "p04_028",
+      "category": "contextual_reply",
+      "valid": true,
+      "correct": false,
+      "choice": "FOLLOW_UP_NO",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.8876450893557828,
+      "nativeConfidence": 0.8827600932408168,
+      "latencyMs": 293.1143580008211,
+      "costUsd": 3.3978e-05,
+      "error": null
+    },
+    {
+      "id": "p04_030",
+      "category": "contextual_reply",
+      "valid": true,
+      "correct": false,
+      "choice": "FOLLOW_UP_NO",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.8818408033610988,
+      "nativeConfidence": 0.8767034469854944,
+      "latencyMs": 288.94506899996486,
+      "costUsd": 3.276e-05,
+      "error": null
+    },
+    {
+      "id": "p04_037",
+      "category": "conflicting_or_unclear",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_UNIT",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.9480590836357806,
+      "nativeConfidence": 0.9458007829242928,
+      "latencyMs": 313.8632950012834,
+      "costUsd": 3.3432e-05,
+      "error": null
+    },
+    {
+      "id": "p04_038",
+      "category": "conflicting_or_unclear",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_UNIT",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.9395057642297434,
+      "nativeConfidence": 0.9368755800658192,
+      "latencyMs": 307.3335570006748,
+      "costUsd": 3.3138e-05,
+      "error": null
+    },
+    {
+      "id": "p04_039",
+      "category": "conflicting_or_unclear",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_UNIT",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.9962950400198113,
+      "nativeConfidence": 0.9961339548032813,
+      "latencyMs": 297.6645160015323,
+      "costUsd": 3.3138e-05,
+      "error": null
+    },
+    {
+      "id": "p04_040",
+      "category": "conflicting_or_unclear",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_TIME",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.9796560824692775,
+      "nativeConfidence": 0.9787715643157678,
+      "latencyMs": 291.508086000249,
+      "costUsd": 3.3432e-05,
+      "error": null
+    },
+    {
+      "id": "p04_041",
+      "category": "conflicting_or_unclear",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_TIME",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.7868632880045103,
+      "nativeConfidence": 0.7775964744394891,
+      "latencyMs": 306.6513119993033,
+      "costUsd": 3.3138e-05,
+      "error": null
+    },
+    {
+      "id": "p04_047",
+      "category": "conflicting_or_unclear",
+      "valid": true,
+      "correct": false,
+      "choice": "AT_ROUTE_STOP",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": true,
+      "selectedProbability": 0.8912146211004728,
+      "nativeConfidence": 0.8864848220178846,
+      "latencyMs": 297.8556550006033,
+      "costUsd": 3.3348e-05,
+      "error": null
+    },
+    {
+      "id": "p04_048",
+      "category": "conflicting_or_unclear",
+      "valid": true,
+      "correct": false,
+      "choice": "KEEP_TOUR",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.9965278874683678,
+      "nativeConfidence": 0.9963769260539491,
+      "latencyMs": 268.7596650011983,
+      "costUsd": 3.4692e-05,
+      "error": null
+    },
+    {
+      "id": "p04_052",
+      "category": "reschedule_or_date",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_DATE",
+      "acceptableLabels": [
+        "REQUEST_CUSTOM_TIME"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.8629094708143823,
+      "nativeConfidence": 0.8569490130237033,
+      "latencyMs": 321.5452540007391,
+      "costUsd": 3.3474e-05,
+      "error": null
+    },
+    {
+      "id": "p04_108",
+      "category": "property_question",
+      "valid": true,
+      "correct": false,
+      "choice": "CANCEL_TOUR",
+      "acceptableLabels": [
+        "ASK_PROPERTY_QUESTION"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.4931849083556423,
+      "nativeConfidence": 0.47114946958849635,
+      "latencyMs": 282.17402799964475,
+      "costUsd": 3.2802e-05,
+      "error": null
+    },
+    {
+      "id": "p04_111",
+      "category": "untrusted_instruction",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_UNIT",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.7628610770802935,
+      "nativeConfidence": 0.7525506891272629,
+      "latencyMs": 294.9563849997503,
+      "costUsd": 3.276e-05,
+      "error": null
+    },
+    {
+      "id": "p04_119",
+      "category": "untrusted_instruction",
+      "valid": true,
+      "correct": false,
+      "choice": "ARRIVAL",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": true,
+      "selectedProbability": 0.5715014743190687,
+      "nativeConfidence": 0.5528711036372891,
+      "latencyMs": 296.00195700004406,
+      "costUsd": 3.2886e-05,
+      "error": null
+    }
+  ],
+  "limitations": [
+    "Preliminary synthetic diagnostic labels, not an independent production holdout",
+    "Native label screening excludes entity extraction, generation, engine actions and real SMS",
+    "Neither native confidence nor selected probability is treated as calibrated engine authorization",
+    "Hosted cost covers provider-reported native decision charges, excluding generation, entity extraction, retries outside this run and infrastructure"
+  ]
+}

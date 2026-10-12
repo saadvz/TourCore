@@ -1,0 +1,406 @@
+{
+  "schemaVersion": 1,
+  "candidateId": "vllm-sr/d3-lite",
+  "evaluationStage": "native_constraint_screening",
+  "datasetSha256": "5d78b6e5ff21fb3d5275a2af08bea3a36083691e3b31a017f0f56a5ece32afbd",
+  "taskPacketSha256": "0ce4240cfce151c373e5955dd39f0eb3205773d4105de224216dffda19981875",
+  "questionSpecSha256": "45b65d1ba9aadca664e249e2d22ff8f6dbb63164fb69d939589bb0d845f8ee25",
+  "promptRevision": "native-screen-v1",
+  "transport": "local",
+  "timingScope": "Sequential local native call including input formatting, tokenization, CPU forward and decode; excludes checkpoint load, app actions and SMS",
+  "costScope": "Marginal inference API spend only; self-hosted infrastructure is unmeasured",
+  "generatedAt": "2026-10-12T02:47:57.085938+00:00",
+  "rows": [
+    {
+      "id": "draft_001",
+      "costUsd": 0.0,
+      "latencyMs": 1213.055919999988,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.5602822470749094,
+        "host_review": 0.4397177529250906
+      },
+      "nativeConfidence": 0.010510912341687995,
+      "selectedProbability": 0.5602822470749094,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_002",
+      "costUsd": 0.0,
+      "latencyMs": 1239.5959200002835,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.18832762258756724,
+        "host_review": 0.8116723774124328
+      },
+      "nativeConfidence": 0.3020401627651077,
+      "selectedProbability": 0.8116723774124328,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_003",
+      "costUsd": 0.0,
+      "latencyMs": 1244.7716689998742,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.7671849360223095,
+        "host_review": 0.23281506397769045
+      },
+      "nativeConfidence": 0.2171135936967007,
+      "selectedProbability": 0.7671849360223095,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_004",
+      "costUsd": 0.0,
+      "latencyMs": 1277.9897140003413,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.7758280501263172,
+        "host_review": 0.22417194987368286
+      },
+      "nativeConfidence": 0.23228747598406274,
+      "selectedProbability": 0.7758280501263172,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_005",
+      "costUsd": 0.0,
+      "latencyMs": 1476.4535799999976,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.1792393907337927,
+        "host_review": 0.8207606092662073
+      },
+      "nativeConfidence": 0.3215897141185312,
+      "selectedProbability": 0.8207606092662073,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_006",
+      "costUsd": 0.0,
+      "latencyMs": 1237.4534979999225,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.5202256882123444,
+        "host_review": 0.4797743117876556
+      },
+      "nativeConfidence": 0.0011806730567012202,
+      "selectedProbability": 0.5202256882123444,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_007",
+      "costUsd": 0.0,
+      "latencyMs": 1348.908112999652,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.5254480116469871,
+        "host_review": 0.47455198835301293
+      },
+      "nativeConfidence": 0.0018693899266620795,
+      "selectedProbability": 0.5254480116469871,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_008",
+      "costUsd": 0.0,
+      "latencyMs": 1262.1530659998825,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.023418265889989846,
+        "host_review": 0.9765817341100101
+      },
+      "nativeConfidence": 0.8397747810816554,
+      "selectedProbability": 0.9765817341100101,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_009",
+      "costUsd": 0.0,
+      "latencyMs": 1392.2737660000166,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.010064366567528875,
+        "host_review": 0.9899356334324712
+      },
+      "nativeConfidence": 0.9187804564114511,
+      "selectedProbability": 0.9899356334324712,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_010",
+      "costUsd": 0.0,
+      "latencyMs": 1250.422818000061,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.7760133378509682,
+        "host_review": 0.22398666214903182
+      },
+      "nativeConfidence": 0.23261949302468343,
+      "selectedProbability": 0.7760133378509682,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 402,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_011",
+      "costUsd": 0.0,
+      "latencyMs": 1240.7558290001361,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.8253509279288214,
+        "host_review": 0.17464907207117866
+      },
+      "nativeConfidence": 0.3317698201021546,
+      "selectedProbability": 0.8253509279288214,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 402,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_012",
+      "costUsd": 0.0,
+      "latencyMs": 1196.802388999913,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.8070585251906295,
+        "host_review": 0.19294147480937057
+      },
+      "nativeConfidence": 0.2924155981710248,
+      "selectedProbability": 0.8070585251906295,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_013",
+      "costUsd": 0.0,
+      "latencyMs": 1306.459976000042,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.5840826208616084,
+        "host_review": 0.4159173791383916
+      },
+      "nativeConfidence": 0.020496634136445868,
+      "selectedProbability": 0.5840826208616084,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_014",
+      "costUsd": 0.0,
+      "latencyMs": 1200.5484060000526,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.21946351557170624,
+        "host_review": 0.7805364844282938
+      },
+      "nativeConfidence": 0.2408133124163877,
+      "selectedProbability": 0.7805364844282938,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_015",
+      "costUsd": 0.0,
+      "latencyMs": 1277.8738310003064,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.7782398446082953,
+        "host_review": 0.22176015539170468
+      },
+      "nativeConfidence": 0.23663150376203634,
+      "selectedProbability": 0.7782398446082953,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_016",
+      "costUsd": 0.0,
+      "latencyMs": 1221.1260109997966,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.7865280508995056,
+        "host_review": 0.21347194910049438
+      },
+      "nativeConfidence": 0.25193296023380296,
+      "selectedProbability": 0.7865280508995056,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_017",
+      "costUsd": 0.0,
+      "latencyMs": 1188.7977800001863,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.19146590283716305,
+        "host_review": 0.808534097162837
+      },
+      "nativeConfidence": 0.2954720372718713,
+      "selectedProbability": 0.808534097162837,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_018",
+      "costUsd": 0.0,
+      "latencyMs": 1431.832986000245,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.5376590054529609,
+        "host_review": 0.4623409945470391
+      },
+      "nativeConfidence": 0.0040959399259237195,
+      "selectedProbability": 0.5376590054529609,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_019",
+      "costUsd": 0.0,
+      "latencyMs": 1313.203182000052,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.5087015184373116,
+        "host_review": 0.4912984815626884
+      },
+      "nativeConfidence": 0.00021848244553568374,
+      "selectedProbability": 0.5087015184373116,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_020",
+      "costUsd": 0.0,
+      "latencyMs": 1213.2839679998142,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.027803740774011446,
+        "host_review": 0.9721962592259885
+      },
+      "nativeConfidence": 0.8167447781424471,
+      "selectedProbability": 0.9721962592259885,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_021",
+      "costUsd": 0.0,
+      "latencyMs": 1240.9300819999771,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.012108385761226458,
+        "host_review": 0.9878916142387736
+      },
+      "nativeConfidence": 0.905533100314767,
+      "selectedProbability": 0.9878916142387736,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_022",
+      "costUsd": 0.0,
+      "latencyMs": 1204.8356420000346,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.7859527947611691,
+        "host_review": 0.21404720523883097
+      },
+      "nativeConfidence": 0.25085206437197904,
+      "selectedProbability": 0.7859527947611691,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_023",
+      "costUsd": 0.0,
+      "latencyMs": 1270.3948619996481,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.8352527742870566,
+        "host_review": 0.16474722571294345
+      },
+      "nativeConfidence": 0.35445357626738083,
+      "selectedProbability": 0.8352527742870566,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_024",
+      "costUsd": 0.0,
+      "latencyMs": 1404.9247620000642,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.8097363589743323,
+        "host_review": 0.19026364102566778
+      },
+      "nativeConfidence": 0.2979773491957336,
+      "selectedProbability": 0.8097363589743323,
+      "returnedModel": "vllm-sr/d3-lite",
+      "inputTokens": 400,
+      "outputTokens": 0
+    }
+  ],
+  "segments": [
+    {
+      "startedAt": "2026-10-12T02:48:04.312346+00:00",
+      "resumeAfterRows": 0,
+      "identity": {
+        "artifact": "vllm-sr/d3-lite",
+        "revision": "a8d25a91ef75552803f7009d25b7bd435991abd9",
+        "verification": "full_manifest_sha256",
+        "device": "cpu",
+        "torch": "2.14.1+cpu",
+        "transformers": "5.17.0",
+        "threads": 4,
+        "backboneDtype": "bfloat16",
+        "readoutDtype": "float32",
+        "loadSeconds": 5.157375314000092
+      }
+    }
+  ],
+  "confidenceSemantics": "Native confidence is normalized entropy, not selected-label probability; both are retained and neither is treated as calibrated correctness",
+  "inferenceIdentity": {
+    "artifact": "vllm-sr/d3-lite",
+    "revision": "a8d25a91ef75552803f7009d25b7bd435991abd9",
+    "verification": "full_manifest_sha256",
+    "device": "cpu",
+    "torch": "2.14.1+cpu",
+    "transformers": "5.17.0",
+    "threads": 4,
+    "backboneDtype": "bfloat16",
+    "readoutDtype": "float32",
+    "loadSeconds": 5.157375314000092
+  }
+}

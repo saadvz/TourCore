@@ -1,0 +1,406 @@
+{
+  "schemaVersion": 1,
+  "candidateId": "vllm-sr/d3-nano",
+  "evaluationStage": "native_constraint_screening",
+  "datasetSha256": "5d78b6e5ff21fb3d5275a2af08bea3a36083691e3b31a017f0f56a5ece32afbd",
+  "taskPacketSha256": "0ce4240cfce151c373e5955dd39f0eb3205773d4105de224216dffda19981875",
+  "questionSpecSha256": "45b65d1ba9aadca664e249e2d22ff8f6dbb63164fb69d939589bb0d845f8ee25",
+  "promptRevision": "native-screen-v1",
+  "transport": "local",
+  "timingScope": "Sequential local native call including input formatting, tokenization, CPU forward and decode; excludes checkpoint load, app actions and SMS",
+  "costScope": "Marginal inference API spend only; self-hosted infrastructure is unmeasured",
+  "generatedAt": "2026-10-12T03:10:10.174408+00:00",
+  "rows": [
+    {
+      "id": "draft_001",
+      "costUsd": 0.0,
+      "latencyMs": 2239.1370970003663,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.628210742122255,
+        "host_review": 0.37178925787774497
+      },
+      "nativeConfidence": 0.0479639681705023,
+      "selectedProbability": 0.628210742122255,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_002",
+      "costUsd": 0.0,
+      "latencyMs": 2068.809665000117,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.6982334076305274,
+        "host_review": 0.3017665923694725
+      },
+      "nativeConfidence": 0.11656033974586766,
+      "selectedProbability": 0.6982334076305274,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_003",
+      "costUsd": 0.0,
+      "latencyMs": 2080.439010000191,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.4679785091889793,
+        "host_review": 0.5320214908110207
+      },
+      "nativeConfidence": 0.002960635159381275,
+      "selectedProbability": 0.5320214908110207,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_004",
+      "costUsd": 0.0,
+      "latencyMs": 2331.724265000048,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.3132593035697937,
+        "host_review": 0.6867406964302063
+      },
+      "nativeConfidence": 0.10309999189076968,
+      "selectedProbability": 0.6867406964302063,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_005",
+      "costUsd": 0.0,
+      "latencyMs": 2098.60874900005,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.04988764357365904,
+        "host_review": 0.950112356426341
+      },
+      "nativeConfidence": 0.7140805166858886,
+      "selectedProbability": 0.950112356426341,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_006",
+      "costUsd": 0.0,
+      "latencyMs": 1965.3220809996128,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.794789051776635,
+        "host_review": 0.20521094822336503
+      },
+      "nativeConfidence": 0.2677716439415604,
+      "selectedProbability": 0.794789051776635,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_007",
+      "costUsd": 0.0,
+      "latencyMs": 2057.8320350000467,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.04913667052153485,
+        "host_review": 0.9508633294784652
+      },
+      "nativeConfidence": 0.7172817850823776,
+      "selectedProbability": 0.9508633294784652,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_008",
+      "costUsd": 0.0,
+      "latencyMs": 2157.1055869999327,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.003202579188881741,
+        "host_review": 0.9967974208111182
+      },
+      "nativeConfidence": 0.9688487285994499,
+      "selectedProbability": 0.9967974208111182,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_009",
+      "costUsd": 0.0,
+      "latencyMs": 2088.481331999901,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.002507629415593796,
+        "host_review": 0.9974923705844062
+      },
+      "nativeConfidence": 0.9747222309079225,
+      "selectedProbability": 0.9974923705844062,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_010",
+      "costUsd": 0.0,
+      "latencyMs": 2390.156993999881,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.7741186253463812,
+        "host_review": 0.22588137465361877
+      },
+      "nativeConfidence": 0.22923777003196633,
+      "selectedProbability": 0.7741186253463812,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 402,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_011",
+      "costUsd": 0.0,
+      "latencyMs": 2210.25088999977,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.7130846168671663,
+        "host_review": 0.28691538313283377
+      },
+      "nativeConfidence": 0.1352967618770995,
+      "selectedProbability": 0.7130846168671663,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 402,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_012",
+      "costUsd": 0.0,
+      "latencyMs": 2061.521198000264,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.3885568562580092,
+        "host_review": 0.6114431437419908
+      },
+      "nativeConfidence": 0.03613808059405721,
+      "selectedProbability": 0.6114431437419908,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_013",
+      "costUsd": 0.0,
+      "latencyMs": 2430.25795199992,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.6782709754028625,
+        "host_review": 0.3217290245971374
+      },
+      "nativeConfidence": 0.09374819318830652,
+      "selectedProbability": 0.6782709754028625,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_014",
+      "costUsd": 0.0,
+      "latencyMs": 2431.8158129999574,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.7297891813390959,
+        "host_review": 0.2702108186609041
+      },
+      "nativeConfidence": 0.15823301491460307,
+      "selectedProbability": 0.7297891813390959,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_015",
+      "costUsd": 0.0,
+      "latencyMs": 2160.1277820000178,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.4810671806335449,
+        "host_review": 0.5189328193664551
+      },
+      "nativeConfidence": 0.001034520133019523,
+      "selectedProbability": 0.5189328193664551,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_016",
+      "costUsd": 0.0,
+      "latencyMs": 2069.87153099999,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.3048037886619568,
+        "host_review": 0.6951962113380432
+      },
+      "nativeConfidence": 0.11291601379641014,
+      "selectedProbability": 0.6951962113380432,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_017",
+      "costUsd": 0.0,
+      "latencyMs": 2110.8247080001092,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.04421023378246055,
+        "host_review": 0.9557897662175394
+      },
+      "nativeConfidence": 0.7387263920665343,
+      "selectedProbability": 0.9557897662175394,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_018",
+      "costUsd": 0.0,
+      "latencyMs": 2064.1430269997727,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.824124338040079,
+        "host_review": 0.17587566195992096
+      },
+      "nativeConfidence": 0.32902910091208926,
+      "selectedProbability": 0.824124338040079,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_019",
+      "costUsd": 0.0,
+      "latencyMs": 2067.981257000156,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.05056471641326707,
+        "host_review": 0.9494352835867329
+      },
+      "nativeConfidence": 0.7112089942886551,
+      "selectedProbability": 0.9494352835867329,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_020",
+      "costUsd": 0.0,
+      "latencyMs": 2065.670131999923,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.003344422883750075,
+        "host_review": 0.99665557711625
+      },
+      "nativeConfidence": 0.9676784709795709,
+      "selectedProbability": 0.99665557711625,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_021",
+      "costUsd": 0.0,
+      "latencyMs": 1992.5254310001037,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.0023569525076819666,
+        "host_review": 0.997643047492318
+      },
+      "nativeConfidence": 0.9760301344777303,
+      "selectedProbability": 0.997643047492318,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_022",
+      "costUsd": 0.0,
+      "latencyMs": 2004.8508099998799,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.8015074133872986,
+        "host_review": 0.19849258661270142
+      },
+      "nativeConfidence": 0.28109699573501523,
+      "selectedProbability": 0.8015074133872986,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_023",
+      "costUsd": 0.0,
+      "latencyMs": 2172.3927620000723,
+      "choice": "propose_time",
+      "probabilities": {
+        "propose_time": 0.7291121644310853,
+        "host_review": 0.27088783556891466
+      },
+      "nativeConfidence": 0.15726425849358583,
+      "selectedProbability": 0.7291121644310853,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_024",
+      "costUsd": 0.0,
+      "latencyMs": 2669.314258000213,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.38972435562981234,
+        "host_review": 0.6102756443701877
+      },
+      "nativeConfidence": 0.03537856488875635,
+      "selectedProbability": 0.6102756443701877,
+      "returnedModel": "vllm-sr/d3-nano",
+      "inputTokens": 400,
+      "outputTokens": 0
+    }
+  ],
+  "segments": [
+    {
+      "startedAt": "2026-10-12T03:10:20.592150+00:00",
+      "resumeAfterRows": 0,
+      "identity": {
+        "artifact": "vllm-sr/d3-nano",
+        "revision": "3aeb1c22a5632aac72353c36b3d0111c40e7dbf4",
+        "verification": "full_manifest_sha256",
+        "device": "cpu",
+        "torch": "2.14.1+cpu",
+        "transformers": "5.17.0",
+        "threads": 4,
+        "backboneDtype": "bfloat16",
+        "readoutDtype": "float32",
+        "loadSeconds": 6.575030006999896
+      }
+    }
+  ],
+  "confidenceSemantics": "Native confidence is normalized entropy, not selected-label probability; both are retained and neither is treated as calibrated correctness",
+  "inferenceIdentity": {
+    "artifact": "vllm-sr/d3-nano",
+    "revision": "3aeb1c22a5632aac72353c36b3d0111c40e7dbf4",
+    "verification": "full_manifest_sha256",
+    "device": "cpu",
+    "torch": "2.14.1+cpu",
+    "transformers": "5.17.0",
+    "threads": 4,
+    "backboneDtype": "bfloat16",
+    "readoutDtype": "float32",
+    "loadSeconds": 6.575030006999896
+  }
+}

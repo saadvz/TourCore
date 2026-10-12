@@ -1,0 +1,327 @@
+{
+  "schemaVersion": 1,
+  "candidateId": "Qwen/Qwen3.5-0.8B",
+  "scope": "Engine-approved wording only; decisions inherited, no independent decision accuracy claim",
+  "datasetSha256": "5d78b6e5ff21fb3d5275a2af08bea3a36083691e3b31a017f0f56a5ece32afbd",
+  "taskPacketSha256": "4e128704603560ebe4b0baaf4e747facb3eed9f1ecc793430eca21a0bc8fe999",
+  "promptSha256": "dd41baac01a7a5097967966ac194fddd05577f445ae26e4093d05c9c4e4c6415",
+  "inferenceIdentity": {
+    "artifact": "Qwen/Qwen3.5-0.8B",
+    "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+    "license": "apache-2.0",
+    "files": [
+      {
+        "path": "LICENSE",
+        "bytes": 11544,
+        "algorithm": "git_blob_sha1",
+        "digest": "f938136e3adacfd92be087f6e113b5d6d97f678f"
+      },
+      {
+        "path": "README.md",
+        "bytes": 61705,
+        "algorithm": "git_blob_sha1",
+        "digest": "5824f1761b2b3a55a2141a9a1172a7f92c7c2ad9"
+      },
+      {
+        "path": "chat_template.jinja",
+        "bytes": 7755,
+        "algorithm": "git_blob_sha1",
+        "digest": "0ef09f214eaa6d9bca297988afc1454b5827b2c7"
+      },
+      {
+        "path": "config.json",
+        "bytes": 2907,
+        "algorithm": "git_blob_sha1",
+        "digest": "715f0448b9d38103211f0ad88bbb4d6e4f4be8c9"
+      },
+      {
+        "path": "merges.txt",
+        "bytes": 3353259,
+        "algorithm": "git_blob_sha1",
+        "digest": "a494e019ca1502219fd0128658b979e5f05ae8e8"
+      },
+      {
+        "path": "model.safetensors-00001-of-00001.safetensors",
+        "bytes": 1746942600,
+        "algorithm": "sha256",
+        "digest": "04b1c301231dd422b8860db31311ab2721511346a32cb1e079c4c4e5f1fe4696"
+      },
+      {
+        "path": "model.safetensors.index.json",
+        "bytes": 50900,
+        "algorithm": "git_blob_sha1",
+        "digest": "f691cefdb79d73270895ebd6d9594ddcecfc1838"
+      },
+      {
+        "path": "preprocessor_config.json",
+        "bytes": 390,
+        "algorithm": "git_blob_sha1",
+        "digest": "2ea84a437d448ff71b08df68fdd949d5cc4ebb64"
+      },
+      {
+        "path": "tokenizer.json",
+        "bytes": 12807982,
+        "algorithm": "sha256",
+        "digest": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42"
+      },
+      {
+        "path": "tokenizer_config.json",
+        "bytes": 16709,
+        "algorithm": "git_blob_sha1",
+        "digest": "fae3ce993e07c092ad024dde45e592379fde91bb"
+      },
+      {
+        "path": "video_preprocessor_config.json",
+        "bytes": 385,
+        "algorithm": "git_blob_sha1",
+        "digest": "3ba673a5ad7d4d13f54155ecd38b2a94a6dac8fe"
+      },
+      {
+        "path": "vocab.json",
+        "bytes": 6722759,
+        "algorithm": "git_blob_sha1",
+        "digest": "0aa0ce0658d60ac4a5d609f4eadb0e8e43514176"
+      }
+    ],
+    "torch": "2.14.1+cpu",
+    "threads": 4,
+    "dtype": "bfloat16"
+  },
+  "timingScope": "Local tokenization and CPU generation only; excludes engine decision, checkpoint load, actions and SMS",
+  "costScope": "Marginal inference API spend zero; CPU infrastructure unmeasured",
+  "summary": {
+    "count": 24,
+    "validCount": 24,
+    "requiredFactCheckCount": 10,
+    "unsupportedAccessClaimFlags": 0,
+    "generationLimitReachedCount": 0,
+    "humanSemanticReviewsCompleted": 0,
+    "p50LatencyMs": 3352.376290000393,
+    "p95LatencyMs": 3897.9421300009562,
+    "totalInferenceApiSpendUsd": 0
+  },
+  "limitations": [
+    "Preliminary synthetic fixtures; no independent semantic reviews",
+    "Regex/fact checks cannot guarantee correct meaning or absence of unsupported claims",
+    "Generator receives authoritative engine decisions, not unchecked candidate proposals",
+    "No paired full decision/extraction/generation architecture or SMS action measured"
+  ],
+  "rows": [
+    {
+      "id": "draft_001",
+      "valid": true,
+      "requiredFactChecks": true,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Propose time is scheduled for Oct 13, 2026, 10:00 AM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    },
+    {
+      "id": "draft_002",
+      "valid": true,
+      "requiredFactChecks": true,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Propose time is scheduled for Oct 13, 2026, 8:00 AM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    },
+    {
+      "id": "draft_003",
+      "valid": true,
+      "requiredFactChecks": true,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Propose time is scheduled for Oct 13, 2026, 12:30 PM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    },
+    {
+      "id": "draft_004",
+      "valid": true,
+      "requiredFactChecks": false,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Cleaning is scheduled for Oct 13, 2026, 12:31 PM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    },
+    {
+      "id": "draft_005",
+      "valid": true,
+      "requiredFactChecks": false,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Cleaning is scheduled for Oct 13, 2026, 7:59 AM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    },
+    {
+      "id": "draft_006",
+      "valid": true,
+      "requiredFactChecks": false,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Cleaning is scheduled for Oct 13, 2026, 2:00 PM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    },
+    {
+      "id": "draft_007",
+      "valid": true,
+      "requiredFactChecks": false,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Cleaning is scheduled for Oct 13, 2026, 3:00 PM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    },
+    {
+      "id": "draft_008",
+      "valid": true,
+      "requiredFactChecks": false,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Cleaning is scheduled for Oct 12, 2026, 8:00 AM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    },
+    {
+      "id": "draft_009",
+      "valid": true,
+      "requiredFactChecks": false,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Cleaning is scheduled for Oct 12, 2026, 7:59 AM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    },
+    {
+      "id": "draft_010",
+      "valid": true,
+      "requiredFactChecks": true,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Propose time is scheduled for Oct 13, 2026, 12:00 PM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    },
+    {
+      "id": "draft_011",
+      "valid": true,
+      "requiredFactChecks": false,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Cleaning is scheduled for Oct 13, 2026, 12:01 PM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    },
+    {
+      "id": "draft_012",
+      "valid": true,
+      "requiredFactChecks": true,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Propose time is scheduled for Oct 13, 2026, 12:29 PM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    },
+    {
+      "id": "draft_013",
+      "valid": true,
+      "requiredFactChecks": true,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Propose time is scheduled for Oct 13, 2026, 3:00 PM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    },
+    {
+      "id": "draft_014",
+      "valid": true,
+      "requiredFactChecks": true,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Propose time is scheduled for Oct 13, 2026, 1:00 PM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    },
+    {
+      "id": "draft_015",
+      "valid": true,
+      "requiredFactChecks": true,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Propose time is scheduled for Oct 13, 2026, 5:30 PM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    },
+    {
+      "id": "draft_016",
+      "valid": true,
+      "requiredFactChecks": false,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Cleaning is scheduled for Oct 13, 2026, 5:31 PM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    },
+    {
+      "id": "draft_017",
+      "valid": true,
+      "requiredFactChecks": false,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Cleaning is scheduled for Oct 13, 2026, 12:59 PM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    },
+    {
+      "id": "draft_018",
+      "valid": true,
+      "requiredFactChecks": false,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Cleaning is scheduled for Oct 13, 2026, 7:00 PM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    },
+    {
+      "id": "draft_019",
+      "valid": true,
+      "requiredFactChecks": false,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Cleaning is scheduled for Oct 13, 2026, 8:00 PM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    },
+    {
+      "id": "draft_020",
+      "valid": true,
+      "requiredFactChecks": false,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Cleaning is scheduled for Oct 12, 2026, 1:00 PM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    },
+    {
+      "id": "draft_021",
+      "valid": true,
+      "requiredFactChecks": false,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Cleaning is scheduled for Oct 12, 2026, 12:59 PM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    },
+    {
+      "id": "draft_022",
+      "valid": true,
+      "requiredFactChecks": true,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Propose time is scheduled for Oct 13, 2026, 5:00 PM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    },
+    {
+      "id": "draft_023",
+      "valid": true,
+      "requiredFactChecks": false,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Cleaning is scheduled for Oct 13, 2026, 5:01 PM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    },
+    {
+      "id": "draft_024",
+      "valid": true,
+      "requiredFactChecks": true,
+      "unsupportedAccessClaimFlag": false,
+      "generationLimitReached": false,
+      "draft": "Propose time is scheduled for Oct 13, 2026, 5:29 PM. Entry requires host clearance.",
+      "humanSemanticReview": "pending"
+    }
+  ]
+}

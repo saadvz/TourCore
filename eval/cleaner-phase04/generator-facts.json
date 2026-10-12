@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 1,
+  "scope": "engine_approved_wording_only",
+  "datasetSha256": "5d78b6e5ff21fb3d5275a2af08bea3a36083691e3b31a017f0f56a5ece32afbd",
+  "decisionSource": "actual_engine_baseline",
+  "cases": [
+    {
+      "id": "draft_001",
+      "decision": "propose_time",
+      "requestedTimeLabel": "Oct 13, 2026, 10:00 AM",
+      "timeZone": "America/New_York",
+      "entryRequiresHostClearance": true
+    },
+    {
+      "id": "draft_002",
+      "decision": "propose_time",
+      "requestedTimeLabel": "Oct 13, 2026, 8:00 AM",
+      "timeZone": "America/New_York",
+      "entryRequiresHostClearance": true
+    },
+    {
+      "id": "draft_003",
+      "decision": "propose_time",
+      "requestedTimeLabel": "Oct 13, 2026, 12:30 PM",
+      "timeZone": "America/New_York",
+      "entryRequiresHostClearance": true
+    },
+    {
+      "id": "draft_004",
+      "decision": "host_review",
+      "requestedTimeLabel": "Oct 13, 2026, 12:31 PM",
+      "timeZone": "America/New_York",
+      "entryRequiresHostClearance": true
+    },
+    {
+      "id": "draft_005",
+      "decision": "host_review",
+      "requestedTimeLabel": "Oct 13, 2026, 7:59 AM",
+      "timeZone": "America/New_York",
+      "entryRequiresHostClearance": true
+    },
+    {
+      "id": "draft_006",
+      "decision": "host_review",
+      "requestedTimeLabel": "Oct 13, 2026, 2:00 PM",
+      "timeZone": "America/New_York",
+      "entryRequiresHostClearance": true
+    },
+    {
+      "id": "draft_007",
+      "decision": "host_review",
+      "requestedTimeLabel": "Oct 13, 2026, 3:00 PM",
+      "timeZone": "America/New_York",
+      "entryRequiresHostClearance": true
+    },
+    {
+      "id": "draft_008",
+      "decision": "host_review",
+      "requestedTimeLabel": "Oct 12, 2026, 8:00 AM",
+      "timeZone": "America/New_York",
+      "entryRequiresHostClearance": true
+    },
+    {
+      "id": "draft_009",
+      "decision": "host_review",
+      "requestedTimeLabel": "Oct 12, 2026, 7:59 AM",
+      "timeZone": "America/New_York",
+      "entryRequiresHostClearance": true
+    },
+    {
+      "id": "draft_010",
+      "decision": "propose_time",
+      "requestedTimeLabel": "Oct 13, 2026, 12:00 PM",
+      "timeZone": "America/New_York",
+      "entryRequiresHostClearance": true
+    },
+    {
+      "id": "draft_011",
+      "decision": "host_review",
+      "requestedTimeLabel": "Oct 13, 2026, 12:01 PM",
+      "timeZone": "America/New_York",
+      "entryRequiresHostClearance": true
+    },
+    {
+      "id": "draft_012",
+      "decision": "propose_time",
+      "requestedTimeLabel": "Oct 13, 2026, 12:29 PM",
+      "timeZone": "America/New_York",
+      "entryRequiresHostClearance": true
+    },
+    {
+      "id": "draft_013",
+      "decision": "propose_time",
+      "requestedTimeLabel": "Oct 13, 2026, 3:00 PM",
+      "timeZone": "Europe/London",
+      "entryRequiresHostClearance": true
+    },
+    {
+      "id": "draft_014",
+      "decision": "propose_time",
+      "requestedTimeLabel": "Oct 13, 2026, 1:00 PM",
+      "timeZone": "Europe/London",
+      "entryRequiresHostClearance": true
+    },
+    {
+      "id": "draft_015",
+      "decision": "propose_time",
+      "requestedTimeLabel": "Oct 13, 2026, 5:30 PM",
+      "timeZone": "Europe/London",
+      "entryRequiresHostClearance": true
+    },
+    {
+      "id": "draft_016",
+      "decision": "host_review",
+      "requestedTimeLabel": "Oct 13, 2026, 5:31 PM",
+      "timeZone": "Europe/London",
+      "entryRequiresHostClearance": true
+    },
+    {
+      "id": "draft_017",
+      "decision": "host_review",
+      "requestedTimeLabel": "Oct 13, 2026, 12:59 PM",
+      "timeZone": "Europe/London",
+      "entryRequiresHostClearance": true
+    },
+    {
+      "id": "draft_018",
+      "decision": "host_review",
+      "requestedTimeLabel": "Oct 13, 2026, 7:00 PM",
+      "timeZone": "Europe/London",
+      "entryRequiresHostClearance": true
+    },
+    {
+      "id": "draft_019",
+      "decision": "host_review",
+      "requestedTimeLabel": "Oct 13, 2026, 8:00 PM",
+      "timeZone": "Europe/London",
+      "entryRequiresHostClearance": true
+    },
+    {
+      "id": "draft_020",
+      "decision": "host_review",
+      "requestedTimeLabel": "Oct 12, 2026, 1:00 PM",
+      "timeZone": "Europe/London",
+      "entryRequiresHostClearance": true
+    },
+    {
+      "id": "draft_021",
+      "decision": "host_review",
+      "requestedTimeLabel": "Oct 12, 2026, 12:59 PM",
+      "timeZone": "Europe/London",
+      "entryRequiresHostClearance": true
+    },
+    {
+      "id": "draft_022",
+      "decision": "propose_time",
+      "requestedTimeLabel": "Oct 13, 2026, 5:00 PM",
+      "timeZone": "Europe/London",
+      "entryRequiresHostClearance": true
+    },
+    {
+      "id": "draft_023",
+      "decision": "host_review",
+      "requestedTimeLabel": "Oct 13, 2026, 5:01 PM",
+      "timeZone": "Europe/London",
+      "entryRequiresHostClearance": true
+    },
+    {
+      "id": "draft_024",
+      "decision": "propose_time",
+      "requestedTimeLabel": "Oct 13, 2026, 5:29 PM",
+      "timeZone": "Europe/London",
+      "entryRequiresHostClearance": true
+    }
+  ]
+}

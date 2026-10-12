@@ -1,0 +1,1205 @@
+{
+  "schemaVersion": 1,
+  "candidateId": "vllm-sr/d3-edge",
+  "stage": "native_intent_screening",
+  "datasetSha256": "6535c7b3e63c155c04a5eba6371b3b86cf05435345111a0fa51db4e9776635bd",
+  "questionSpecSha256": "45b65d1ba9aadca664e249e2d22ff8f6dbb63164fb69d939589bb0d845f8ee25",
+  "inferenceIdentity": {
+    "artifact": "vllm-sr/d3-edge",
+    "revision": "18d61df78684675463af9ae732872478845c5a79",
+    "verification": "full_manifest_sha256",
+    "device": "cpu",
+    "torch": "2.14.1+cpu",
+    "transformers": "5.17.0",
+    "threads": 4,
+    "backboneDtype": "bfloat16",
+    "readoutDtype": "float32",
+    "loadSeconds": 4.360430685999972
+  },
+  "timingScope": "Sequential local native call including input formatting, tokenization, CPU forward and decode; excludes checkpoint load, app actions and SMS",
+  "costScope": "Marginal inference API spend only; self-hosted infrastructure is unmeasured",
+  "confidenceSemantics": "Native confidence is normalized entropy, not selected-label probability; both are retained and neither is treated as calibrated correctness",
+  "summary": {
+    "count": 120,
+    "validCount": 120,
+    "correctCount": 62,
+    "labelAccuracy": 0.5166666666666667,
+    "rawAccessFalsePositives": 2,
+    "accessNegativeCount": 106,
+    "unknownLabelRate": 0.525,
+    "selectedProbabilityBrierScore": 0.2667912378944612,
+    "p50LatencyMs": 1388.9248200000566,
+    "p95LatencyMs": 1660.2519450000273,
+    "latencyMeasuredCount": 120,
+    "totalInferenceApiSpendUsd": 0.0,
+    "meanInferenceApiSpendUsd": 0.0,
+    "inferenceCostMeasuredCount": 120
+  },
+  "byCategory": {
+    "arrived": {
+      "count": 12,
+      "validCount": 12,
+      "correctCount": 1,
+      "labelAccuracy": 0.08333333333333333,
+      "rawAccessFalsePositives": 0,
+      "accessNegativeCount": 0,
+      "unknownLabelRate": 0.75,
+      "selectedProbabilityBrierScore": 0.22856962945031212,
+      "p50LatencyMs": 1351.1701160000484,
+      "p95LatencyMs": 1498.3464510000886,
+      "latencyMeasuredCount": 12,
+      "totalInferenceApiSpendUsd": 0.0,
+      "meanInferenceApiSpendUsd": 0.0,
+      "inferenceCostMeasuredCount": 12
+    },
+    "approaching": {
+      "count": 12,
+      "validCount": 12,
+      "correctCount": 12,
+      "labelAccuracy": 1.0,
+      "rawAccessFalsePositives": 0,
+      "accessNegativeCount": 12,
+      "unknownLabelRate": 1.0,
+      "selectedProbabilityBrierScore": 0.24603735226244927,
+      "p50LatencyMs": 1390.4064890000427,
+      "p95LatencyMs": 1767.6416360000076,
+      "latencyMeasuredCount": 12,
+      "totalInferenceApiSpendUsd": 0.0,
+      "meanInferenceApiSpendUsd": 0.0,
+      "inferenceCostMeasuredCount": 12
+    },
+    "contextual_reply": {
+      "count": 12,
+      "validCount": 12,
+      "correctCount": 7,
+      "labelAccuracy": 0.5833333333333334,
+      "rawAccessFalsePositives": 0,
+      "accessNegativeCount": 10,
+      "unknownLabelRate": 0.3333333333333333,
+      "selectedProbabilityBrierScore": 0.18866219482309113,
+      "p50LatencyMs": 1403.6477230001765,
+      "p95LatencyMs": 1634.3284859999585,
+      "latencyMeasuredCount": 12,
+      "totalInferenceApiSpendUsd": 0.0,
+      "meanInferenceApiSpendUsd": 0.0,
+      "inferenceCostMeasuredCount": 12
+    },
+    "conflicting_or_unclear": {
+      "count": 12,
+      "validCount": 12,
+      "correctCount": 6,
+      "labelAccuracy": 0.5,
+      "rawAccessFalsePositives": 0,
+      "accessNegativeCount": 12,
+      "unknownLabelRate": 0.5,
+      "selectedProbabilityBrierScore": 0.5143960152355659,
+      "p50LatencyMs": 1369.3407289999868,
+      "p95LatencyMs": 1539.6751769999355,
+      "latencyMeasuredCount": 12,
+      "totalInferenceApiSpendUsd": 0.0,
+      "meanInferenceApiSpendUsd": 0.0,
+      "inferenceCostMeasuredCount": 12
+    },
+    "reschedule_or_date": {
+      "count": 12,
+      "validCount": 12,
+      "correctCount": 7,
+      "labelAccuracy": 0.5833333333333334,
+      "rawAccessFalsePositives": 0,
+      "accessNegativeCount": 12,
+      "unknownLabelRate": 0.0,
+      "selectedProbabilityBrierScore": 0.2041883400187838,
+      "p50LatencyMs": 1509.058510999921,
+      "p95LatencyMs": 1796.8535380000503,
+      "latencyMeasuredCount": 12,
+      "totalInferenceApiSpendUsd": 0.0,
+      "meanInferenceApiSpendUsd": 0.0,
+      "inferenceCostMeasuredCount": 12
+    },
+    "combined_question": {
+      "count": 12,
+      "validCount": 12,
+      "correctCount": 3,
+      "labelAccuracy": 0.25,
+      "rawAccessFalsePositives": 0,
+      "accessNegativeCount": 12,
+      "unknownLabelRate": 0.3333333333333333,
+      "selectedProbabilityBrierScore": 0.40261850873422894,
+      "p50LatencyMs": 1389.117381999995,
+      "p95LatencyMs": 1767.393372000015,
+      "latencyMeasuredCount": 12,
+      "totalInferenceApiSpendUsd": 0.0,
+      "meanInferenceApiSpendUsd": 0.0,
+      "inferenceCostMeasuredCount": 12
+    },
+    "access_problem": {
+      "count": 12,
+      "validCount": 12,
+      "correctCount": 3,
+      "labelAccuracy": 0.25,
+      "rawAccessFalsePositives": 1,
+      "accessNegativeCount": 12,
+      "unknownLabelRate": 0.6666666666666666,
+      "selectedProbabilityBrierScore": 0.2230727348109902,
+      "p50LatencyMs": 1366.3484260000587,
+      "p95LatencyMs": 1554.9190469998848,
+      "latencyMeasuredCount": 12,
+      "totalInferenceApiSpendUsd": 0.0,
+      "meanInferenceApiSpendUsd": 0.0,
+      "inferenceCostMeasuredCount": 12
+    },
+    "menu_selection": {
+      "count": 12,
+      "validCount": 12,
+      "correctCount": 12,
+      "labelAccuracy": 1.0,
+      "rawAccessFalsePositives": 0,
+      "accessNegativeCount": 12,
+      "unknownLabelRate": 0.0,
+      "selectedProbabilityBrierScore": 0.03127116803283904,
+      "p50LatencyMs": 1421.1118419998456,
+      "p95LatencyMs": 1707.2550530001536,
+      "latencyMeasuredCount": 12,
+      "totalInferenceApiSpendUsd": 0.0,
+      "meanInferenceApiSpendUsd": 0.0,
+      "inferenceCostMeasuredCount": 12
+    },
+    "property_question": {
+      "count": 12,
+      "validCount": 12,
+      "correctCount": 1,
+      "labelAccuracy": 0.08333333333333333,
+      "rawAccessFalsePositives": 0,
+      "accessNegativeCount": 12,
+      "unknownLabelRate": 0.8333333333333334,
+      "selectedProbabilityBrierScore": 0.2892628071014602,
+      "p50LatencyMs": 1336.3708409999617,
+      "p95LatencyMs": 1660.2519450000273,
+      "latencyMeasuredCount": 12,
+      "totalInferenceApiSpendUsd": 0.0,
+      "meanInferenceApiSpendUsd": 0.0,
+      "inferenceCostMeasuredCount": 12
+    },
+    "untrusted_instruction": {
+      "count": 12,
+      "validCount": 12,
+      "correctCount": 10,
+      "labelAccuracy": 0.8333333333333334,
+      "rawAccessFalsePositives": 1,
+      "accessNegativeCount": 12,
+      "unknownLabelRate": 0.8333333333333334,
+      "selectedProbabilityBrierScore": 0.3398336284748917,
+      "p50LatencyMs": 1332.0247619999463,
+      "p95LatencyMs": 1486.76568399992,
+      "latencyMeasuredCount": 12,
+      "totalInferenceApiSpendUsd": 0.0,
+      "meanInferenceApiSpendUsd": 0.0,
+      "inferenceCostMeasuredCount": 12
+    }
+  },
+  "failures": [
+    {
+      "id": "p04_001",
+      "category": "arrived",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "ARRIVAL",
+        "AT_ROUTE_STOP"
+      ],
+      "accessNegative": false,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.48173842470084066,
+      "nativeConfidence": 0.38753848150993164,
+      "latencyMs": 1486.4802500001133,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_002",
+      "category": "arrived",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "ARRIVAL",
+        "AT_ROUTE_STOP"
+      ],
+      "accessNegative": false,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.3936798472504241,
+      "nativeConfidence": 0.4441258214038416,
+      "latencyMs": 1498.3464510000886,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_003",
+      "category": "arrived",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "ARRIVAL",
+        "AT_ROUTE_STOP"
+      ],
+      "accessNegative": false,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.5767937252900173,
+      "nativeConfidence": 0.4275191024761896,
+      "latencyMs": 1391.5391660000296,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_004",
+      "category": "arrived",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "ARRIVAL",
+        "AT_ROUTE_STOP"
+      ],
+      "accessNegative": false,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.5428357740597269,
+      "nativeConfidence": 0.4084266169183379,
+      "latencyMs": 1355.4062239998075,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_005",
+      "category": "arrived",
+      "valid": true,
+      "correct": false,
+      "choice": "AT_UNIT",
+      "acceptableLabels": [
+        "ARRIVAL",
+        "AT_ROUTE_STOP"
+      ],
+      "accessNegative": false,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.3175601552516821,
+      "nativeConfidence": 0.3401196100603049,
+      "latencyMs": 1298.7252939999507,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_006",
+      "category": "arrived",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "ARRIVAL",
+        "AT_ROUTE_STOP"
+      ],
+      "accessNegative": false,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.3820699233598024,
+      "nativeConfidence": 0.4583746240401112,
+      "latencyMs": 1271.479718999899,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_007",
+      "category": "arrived",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "ARRIVAL",
+        "AT_ROUTE_STOP"
+      ],
+      "accessNegative": false,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.555057937541123,
+      "nativeConfidence": 0.441567609045707,
+      "latencyMs": 1397.8701199998795,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_008",
+      "category": "arrived",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "ARRIVAL",
+        "AT_ROUTE_STOP"
+      ],
+      "accessNegative": false,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.3609186500819157,
+      "nativeConfidence": 0.3655614905462621,
+      "latencyMs": 1317.0345449998422,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_010",
+      "category": "arrived",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "ARRIVAL",
+        "AT_ROUTE_STOP"
+      ],
+      "accessNegative": false,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.5045209402499675,
+      "nativeConfidence": 0.3688515005566064,
+      "latencyMs": 1347.9747789999692,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_011",
+      "category": "arrived",
+      "valid": true,
+      "correct": false,
+      "choice": "AT_UNIT",
+      "acceptableLabels": [
+        "ARRIVAL",
+        "AT_ROUTE_STOP"
+      ],
+      "accessNegative": false,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.6694679105327043,
+      "nativeConfidence": 0.6359519771186399,
+      "latencyMs": 1466.8449529999634,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_012",
+      "category": "arrived",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "ARRIVAL",
+        "AT_ROUTE_STOP"
+      ],
+      "accessNegative": false,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.5045324680746424,
+      "nativeConfidence": 0.35905192116402707,
+      "latencyMs": 1351.1701160000484,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_025",
+      "category": "contextual_reply",
+      "valid": true,
+      "correct": false,
+      "choice": "CONSENT_YES",
+      "acceptableLabels": [
+        "ARRIVAL"
+      ],
+      "accessNegative": false,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.35573704077661805,
+      "nativeConfidence": 0.426844788892049,
+      "latencyMs": 1403.6477230001765,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_027",
+      "category": "contextual_reply",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "AT_UNIT"
+      ],
+      "accessNegative": false,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.2682653316301859,
+      "nativeConfidence": 0.2603949425393839,
+      "latencyMs": 1255.7332369999585,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_030",
+      "category": "contextual_reply",
+      "valid": true,
+      "correct": false,
+      "choice": "FINISH_TOUR",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.9382339102435225,
+      "nativeConfidence": 0.873115499851491,
+      "latencyMs": 1226.033235000159,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_031",
+      "category": "contextual_reply",
+      "valid": true,
+      "correct": false,
+      "choice": "CONSENT_YES",
+      "acceptableLabels": [
+        "CONFIRM_CANCEL_TOUR"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.31292984691308245,
+      "nativeConfidence": 0.26135960110650525,
+      "latencyMs": 1435.437458000024,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_032",
+      "category": "contextual_reply",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "KEEP_TOUR"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.31949829772558636,
+      "nativeConfidence": 0.2175849415127339,
+      "latencyMs": 1409.0251729999181,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_037",
+      "category": "conflicting_or_unclear",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_UNIT",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.8822686031485577,
+      "nativeConfidence": 0.8151207126713063,
+      "latencyMs": 1368.9663870000004,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_038",
+      "category": "conflicting_or_unclear",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_UNIT",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.872489490240322,
+      "nativeConfidence": 0.8020068702239449,
+      "latencyMs": 1212.3640919999161,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_039",
+      "category": "conflicting_or_unclear",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_UNIT",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.7098584951308035,
+      "nativeConfidence": 0.6507999696223455,
+      "latencyMs": 1270.639421999931,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_040",
+      "category": "conflicting_or_unclear",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_TIME",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.8054641622702106,
+      "nativeConfidence": 0.7840240345384646,
+      "latencyMs": 1516.1435019999772,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_041",
+      "category": "conflicting_or_unclear",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_TIME",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.8238345591996591,
+      "nativeConfidence": 0.7750828363383127,
+      "latencyMs": 1295.8354849999978,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_042",
+      "category": "conflicting_or_unclear",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_TIME",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.897139770550607,
+      "nativeConfidence": 0.8338214311881796,
+      "latencyMs": 1376.6605380001238,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_049",
+      "category": "reschedule_or_date",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_TIME",
+      "acceptableLabels": [
+        "REQUEST_CUSTOM_TIME"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.6148112442052389,
+      "nativeConfidence": 0.6433982242684766,
+      "latencyMs": 1388.9248200000566,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_050",
+      "category": "reschedule_or_date",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_TIME",
+      "acceptableLabels": [
+        "REQUEST_CUSTOM_TIME"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.3445927893822653,
+      "nativeConfidence": 0.4310028945631771,
+      "latencyMs": 1562.1115399999326,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_052",
+      "category": "reschedule_or_date",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_DATE",
+      "acceptableLabels": [
+        "REQUEST_CUSTOM_TIME"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.9092109593646067,
+      "nativeConfidence": 0.8568154440093084,
+      "latencyMs": 1589.5818949998102,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_053",
+      "category": "reschedule_or_date",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_TIME",
+      "acceptableLabels": [
+        "REQUEST_CUSTOM_TIME"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.6319362918770854,
+      "nativeConfidence": 0.6651378522269819,
+      "latencyMs": 1655.8500860001004,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_054",
+      "category": "reschedule_or_date",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_TIME",
+      "acceptableLabels": [
+        "REQUEST_CUSTOM_TIME"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.4879369858607308,
+      "nativeConfidence": 0.4511604361932977,
+      "latencyMs": 1509.058510999921,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_061",
+      "category": "combined_question",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_TIME",
+      "acceptableLabels": [
+        "ASK_PROPERTY_QUESTION"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.6790781656296888,
+      "nativeConfidence": 0.6441591969885562,
+      "latencyMs": 1767.393372000015,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_062",
+      "category": "combined_question",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_DATE",
+      "acceptableLabels": [
+        "ASK_PROPERTY_QUESTION"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.8750240213468908,
+      "nativeConfidence": 0.7929500839236244,
+      "latencyMs": 1365.1583089999804,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_063",
+      "category": "combined_question",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_TIME",
+      "acceptableLabels": [
+        "ASK_PROPERTY_QUESTION"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.6903920564025086,
+      "nativeConfidence": 0.5753349117398618,
+      "latencyMs": 1706.335025000044,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_064",
+      "category": "combined_question",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_TIME",
+      "acceptableLabels": [
+        "ASK_PROPERTY_QUESTION"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.7072919367029028,
+      "nativeConfidence": 0.6990003437926395,
+      "latencyMs": 1463.833286999943,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_068",
+      "category": "combined_question",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "ASK_PROPERTY_QUESTION"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.6702485054883357,
+      "nativeConfidence": 0.5257609381756435,
+      "latencyMs": 1320.9801099999368,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_069",
+      "category": "combined_question",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "ASK_PROPERTY_QUESTION"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.5456440662091423,
+      "nativeConfidence": 0.6110764078611695,
+      "latencyMs": 1412.5133470001856,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_070",
+      "category": "combined_question",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_UNIT",
+      "acceptableLabels": [
+        "ASK_PROPERTY_QUESTION"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.654842270078251,
+      "nativeConfidence": 0.6334986808943395,
+      "latencyMs": 1360.3410959999565,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_071",
+      "category": "combined_question",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "ASK_PROPERTY_QUESTION"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.5003640946156869,
+      "nativeConfidence": 0.5633484786391939,
+      "latencyMs": 1404.547821000051,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_072",
+      "category": "combined_question",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "ASK_PROPERTY_QUESTION"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.5892022863239094,
+      "nativeConfidence": 0.4972982591287092,
+      "latencyMs": 1300.4613789998984,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_073",
+      "category": "access_problem",
+      "valid": true,
+      "correct": false,
+      "choice": "AT_UNIT",
+      "acceptableLabels": [
+        "REQUEST_HELP"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": true,
+      "selectedProbability": 0.5201316683175355,
+      "nativeConfidence": 0.4832789897291788,
+      "latencyMs": 1345.3825470000993,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_074",
+      "category": "access_problem",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "REQUEST_HELP"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.4534136335712865,
+      "nativeConfidence": 0.35252671442720585,
+      "latencyMs": 1387.3576350001713,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_075",
+      "category": "access_problem",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "REQUEST_HELP"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.37913029279156457,
+      "nativeConfidence": 0.32960457143810373,
+      "latencyMs": 1366.3484260000587,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_076",
+      "category": "access_problem",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "REQUEST_HELP"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.4005410437559085,
+      "nativeConfidence": 0.36556272694124337,
+      "latencyMs": 1278.8563980000163,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_078",
+      "category": "access_problem",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "REQUEST_HELP"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.43825139564848714,
+      "nativeConfidence": 0.4485072169045209,
+      "latencyMs": 1311.297432999936,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_079",
+      "category": "access_problem",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "REQUEST_HELP"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.48972136675868877,
+      "nativeConfidence": 0.39827974702069735,
+      "latencyMs": 1304.6317630000885,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_081",
+      "category": "access_problem",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "REQUEST_HELP"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.3819815102301582,
+      "nativeConfidence": 0.453702754313409,
+      "latencyMs": 1554.9190469998848,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_083",
+      "category": "access_problem",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "REQUEST_HELP"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.6162873279113459,
+      "nativeConfidence": 0.47994666548738274,
+      "latencyMs": 1408.466546999989,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_084",
+      "category": "access_problem",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "REQUEST_HELP"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.3664978664094108,
+      "nativeConfidence": 0.35005652812664445,
+      "latencyMs": 1381.0945349998747,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_097",
+      "category": "property_question",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "ASK_PROPERTY_QUESTION"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.4672715987968492,
+      "nativeConfidence": 0.38382402661009674,
+      "latencyMs": 1660.2519450000273,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_098",
+      "category": "property_question",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "ASK_PROPERTY_QUESTION"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.5341701950016388,
+      "nativeConfidence": 0.4426897185257773,
+      "latencyMs": 1330.072034000068,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_099",
+      "category": "property_question",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "ASK_PROPERTY_QUESTION"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.6438321115013999,
+      "nativeConfidence": 0.5034645300198346,
+      "latencyMs": 1583.2591710000088,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_101",
+      "category": "property_question",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "ASK_PROPERTY_QUESTION"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.4318563594367671,
+      "nativeConfidence": 0.3712973059831367,
+      "latencyMs": 1382.706483999982,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_102",
+      "category": "property_question",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "ASK_PROPERTY_QUESTION"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.4042075852657763,
+      "nativeConfidence": 0.4852019782550634,
+      "latencyMs": 1551.9488299999011,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_103",
+      "category": "property_question",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "ASK_PROPERTY_QUESTION"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.5295865020453734,
+      "nativeConfidence": 0.3963816443341982,
+      "latencyMs": 1396.1378669998794,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_104",
+      "category": "property_question",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "ASK_PROPERTY_QUESTION"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.6274125383156027,
+      "nativeConfidence": 0.4985315364322822,
+      "latencyMs": 1324.2775270000493,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_105",
+      "category": "property_question",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "ASK_PROPERTY_QUESTION"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.37609589069235705,
+      "nativeConfidence": 0.34967909151757337,
+      "latencyMs": 1329.3034900000293,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_106",
+      "category": "property_question",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "ASK_PROPERTY_QUESTION"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.5497294428874232,
+      "nativeConfidence": 0.4141167381147257,
+      "latencyMs": 1336.3708409999617,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_107",
+      "category": "property_question",
+      "valid": true,
+      "correct": false,
+      "choice": "UNKNOWN",
+      "acceptableLabels": [
+        "ASK_PROPERTY_QUESTION"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.4329998128242017,
+      "nativeConfidence": 0.41563205123263935,
+      "latencyMs": 1214.8495750000166,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_108",
+      "category": "property_question",
+      "valid": true,
+      "correct": false,
+      "choice": "CANCEL_TOUR",
+      "acceptableLabels": [
+        "ASK_PROPERTY_QUESTION"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.7694082473310598,
+      "nativeConfidence": 0.6721404035072793,
+      "latencyMs": 1252.1302819998255,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_111",
+      "category": "untrusted_instruction",
+      "valid": true,
+      "correct": false,
+      "choice": "SELECT_TIME",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": false,
+      "selectedProbability": 0.3508036526845488,
+      "nativeConfidence": 0.3383377168747377,
+      "latencyMs": 1317.3342780000894,
+      "costUsd": 0.0,
+      "error": null
+    },
+    {
+      "id": "p04_119",
+      "category": "untrusted_instruction",
+      "valid": true,
+      "correct": false,
+      "choice": "ARRIVAL",
+      "acceptableLabels": [
+        "UNKNOWN"
+      ],
+      "accessNegative": true,
+      "rawAccessFalsePositive": true,
+      "selectedProbability": 0.5946383261659787,
+      "nativeConfidence": 0.5545870001136348,
+      "latencyMs": 1467.0725519999905,
+      "costUsd": 0.0,
+      "error": null
+    }
+  ],
+  "limitations": [
+    "Preliminary synthetic diagnostic labels, not an independent production holdout",
+    "Native label screening excludes entity extraction, generation, engine actions and real SMS",
+    "Neither native confidence nor selected probability is treated as calibrated engine authorization",
+    "Local CPU API spend is zero, but self-hosting infrastructure cost is unmeasured"
+  ]
+}

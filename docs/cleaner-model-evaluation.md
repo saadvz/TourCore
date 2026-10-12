@@ -1,13 +1,16 @@
 # Phase 0.4: decision and drafting model evaluation
 
 Status: **partial**. The dataset, offline scoring and measured rules/template
-baselines are ready. No candidate model has been run on this dataset, no model
-ranking is established, and no inference provider has been selected.
+baselines are ready. Three small Decision 3.0 variants have now been measured
+locally on native screening tasks, and Microsoft and Perplexity have completed
+the same hosted screening. One small generator was measured separately and
+failed the host-review wording fixtures. Connected-agent and complete
+architecture comparisons remain pending; no production model is selected.
 
 The user added the [vLLM Semantic Router Decision 3.0 collection](https://huggingface.co/collections/vllm-sr/decision-30)
 to the roadmap's Microsoft Decision-1, Perplexity Decider, rules-first and
-connected-agent comparison. The exact collection remains a required candidate;
-earlier Decision releases are not substituted for it.
+connected-agent comparison. Its exact model cards and metadata are now
+accessible and recorded; no earlier release was substituted.
 
 ## Shared evaluation and current results
 
@@ -70,7 +73,8 @@ proposal or its deterministic deadline template in temporary storage, then
 reads the saved draft without invoking the send worker. It achieved 24/24
 correct scheduling decisions and 24/24 required-fact checks. Its deadline
 clock is advanced artificially; the local draft timing does not measure a
-real timeout. No semantic reviews or generated-model drafts were performed.
+real timeout. Independent human semantic reviews remain pending; the separate
+generator wording screen below does not replace them.
 Regex/fact checks alone do not establish safety or correct meaning.
 
 ## Candidate identity and inference research
@@ -79,17 +83,17 @@ Regex/fact checks alone do not establish safety or correct meaning.
 | --- | --- | --- |
 | Rules-first interpreter | Measured directly against the frozen synthetic cases | Independent labels and representative production messages |
 | Connected Grok | Earlier verified workflow/capability evidence; user has a connected account | Closed-book predictions on these exact cases, measured timing/cost and separate multi-turn/native-tool exercises |
-| Microsoft Decision 1 | A published benchmark configuration names `microsoft/microsoft-decision-1` through OpenRouter native Decisions | Verify current provider metadata/terms and obtain supported inference access |
-| Perplexity Decider | Published hosted config names `perplexity/pplx-decider-v1.1-27b`; Baseten also supplies a self-hosted **v1** example | Verify current hosted metadata and distinguish v1.1 from the v1 weights; obtain inference access |
-| vLLM-SR Decision 3.0 | User's requested collection; related official project docs describe earlier general decision models | Read exact collection/model cards, pin suitable artifact/revision, verify license and deploy or locate a supported endpoint |
-| Shared small generator | Not selected | Pick a supported generator and hold model/version/prompt fixed across decision-model arms |
+| Microsoft Decision 1 | Actual 120 intent + 24 constraint calls through OpenRouter native Decisions API | Full entities/abstention/generation architecture and independent holdout |
+| Perplexity Decider | Actual 120 intent + 24 constraint calls; v1.1 HF card is Apache-2.0 | Full architecture and independent holdout; local full checkpoint exceeds memory budget |
+| vLLM-SR Decision 3.0 | Exact collection/cards verified; `d3-edge`, `d3-lite`, `d3-nano` benchmarked locally | Larger variants, extracted entities, generated replies and live workflows remain untested |
+| Shared small generator | Pinned Apache-2.0 Qwen3.5-0.8B measured on 24 engine-approved wording fixtures | Current prompt failed; retain templates and evaluate any new generator/prompt on a new version |
 
 The official vLLM project's earlier models support application-defined
 `choice`, `noul` and `score` questions. They return selected options and
 probabilities under a native decision interface. They can therefore be
 relevant to SMS classification rather than merely embedding-based domain
-routing. This does not verify the requested 3.0 release's membership,
-architecture, input limit, license or interfaces. Native decision output is
+routing. Those earlier-source observations preceded the direct 3.0 inspection
+recorded below. Native decision output is
 not assumed to be a generated JSON chat answer or a reply draft.
 
 The official example describes System One-shaped state/questions and a
@@ -101,8 +105,9 @@ do not carry those earlier limits forward as 3.0 facts.
 
 For Perplexity, Baseten's specific v1 deployment example uses an H100 and 80Gi
 memory. This is an example, not a universal minimum or a cost measurement.
-The current environment has no GPU, PyTorch or Transformers installed. Hosted
-API testing is a plausible way to keep this development environment while
+The current environment has no GPU. CPU PyTorch/Transformers were subsequently
+installed in a separate benchmark environment. Hosted API testing lets us keep
+this development environment while
 avoiding provisioning a model server. A self-hosted candidate would need a
 separate, appropriately sized inference service. Do not deploy a large model
 onto the small always-on Cleaner Core test service.
@@ -121,6 +126,135 @@ Sources were read from these pinned public GitHub revisions:
 
 Exact access/research status, source identity and unknown per-message costs are
 preserved in [the candidate registry](../eval/cleaner-phase04/candidates.json).
+
+## Direct inspection and measured Decision 3.0 screening
+
+After the user published the network settings, Hugging Face and the OpenRouter
+API/documentation became accessible. The filtered
+[primary-source catalog record](evidence/cleaner-model-catalog-2026-10-11.json)
+includes exact collection membership, revisions, license fields and current
+hosted metadata. All six model cards declare Apache-2.0 and native Choice,
+Yes/No and Score decisions over text/JSON, with image/video capabilities.
+Only text was tested here.
+
+| Collection artifact | Parameters including vision | Local evaluation |
+| --- | ---: | --- |
+| `vllm-sr/d3-edge` | 0.59B | Completed |
+| `vllm-sr/d3-lite` | 0.85B | Completed |
+| `vllm-sr/d3-nano` | 2.21B | Completed |
+| `vllm-sr/d3-mini` | 4.54B | Not run |
+| `vllm-sr/d3-flash` | 8.39B | Not run |
+| `vllm-sr/d3` | 26.09B | Not run |
+
+Hugging Face lists no hosted inference providers for these collection entries.
+The largest checkpoint's BF16 weights alone exceed the environment's 32 GiB
+memory limit. Three small variants were tested using the official CPU reference
+path: four CPU threads, BF16 backbone, FP32 readout, PyTorch 2.14.1 and
+Transformers 5.17.0. The pinned package manifest and every file hash were checked
+before executing the inspected runtime code. GPU-only acceleration was omitted
+as documented; checkpoint numerics and attention behavior were preserved.
+
+Each model received the same frozen `native-questions.json` and label-free
+packet. There were 120 sequential intent-type calls and 24 sequential
+structured scheduling-constraint calls per variant: **432 model calls total,
+with no runtime failures**. Native stages exclude required entity extraction,
+generated reply text, actual tools and live SMS. The table's rule figure is
+intent-type accuracy, not the earlier 91.7% complete intent/entity result.
+
+| Arm | Intent types correct | Raw access false positives / 106 | Local intent P50 / P95 | Constraint decisions correct / 24 |
+| --- | ---: | ---: | --- | ---: |
+| Rules / deterministic engine | 111/120 (92.5%) | 6 | 0.136 / 0.973 ms | 24 |
+| `d3-edge` | 62/120 (51.7%) | 2 | 1.389 / 1.660 s | 14 |
+| `d3-lite` | 81/120 (67.5%) | 13 | 3.078 / 3.732 s | 14 |
+| `d3-nano` | 80/120 (66.7%) | 18 | 5.443 / 6.371 s | 16 |
+
+Raw false positives count the label before confidence/clarification gating.
+They are distinct from the rules' one above-threshold false positive. Native
+confidence is not directly comparable: the inspected 3.0 runtime computes
+**one minus normalized entropy**, while selected probability is a separate
+value. Both are saved without renormalizing or converting them into a claim of
+calibrated correctness. `UNKNOWN` label rates and selected-probability Brier
+scores are diagnostic fields, not production clarification/calibration proof.
+
+These runs do not support replacing the rules with the tested variants under
+this prompt. This does not reject larger variants, alternative prompts or a
+different task; those are unmeasured. Prompt/label tuning would require a new
+version and matched reruns, followed by an independent holdout. Scheduling
+constraints remain an engine responsibility regardless of a model's verdict.
+
+The actual API spend for local runs was zero; infrastructure cost is unknown.
+Native call timing includes formatting/tokenization/CPU forward/decoding and
+excludes checkpoint loading and SMS. Published GPU latencies were not used as
+our measurements. Raw predictions and reports are in
+[`eval/cleaner-phase04/results/`](../eval/cleaner-phase04/results/).
+
+Current OpenRouter primary metadata lists Microsoft at **$0.042 per million
+input tokens** and Perplexity V1.1 at **$0.020**, with zero output-token price for
+these native decisions. This is advertised pricing, not actual per-message
+receipts. Use `GET /api/v1/models?output_modalities=decisions`: the default list
+contains text-output models and omits native decisions. Both use the documented
+`POST /api/alpha/decisions` interface. The helper is prepared with a shared
+question specification, bounded spend, no automatic retries/redirects and a
+secure key binding. Authenticated vendor inference was then completed below.
+
+## Hosted screening and generator wording results
+
+The user published a secure `OPENROUTER_API_KEY` binding. All four hosted runs
+used the same frozen native questions, inputs and preliminary labels as the
+local variants. There were **288 actual hosted inference calls**, all with
+valid native choices/probabilities and provider-reported costs. One read-only
+key-info request returned HTTP 401 before inference; a fresh read-only check
+and a new run succeeded. It is excluded from per-case timings and was not a
+paid retry. Each run had a $0.05 local spend ceiling ($0.20 combined). The key's
+actual account limit was $100; it was not represented as a $1 provider cap.
+Actual total native inference spend was **$0.006820102**.
+
+| Candidate | Intent correct / 120 | Raw access false positives / 106 | UNKNOWN labels | Intent HTTPS P50 / P95 | Actual mean intent API cost | Constraints correct / 24 |
+| --- | ---: | ---: | ---: | --- | ---: | ---: |
+| Microsoft Decision-1 | 100 (83.3%) | 8 | 17.5% | 297 / 345 ms | $0.00003310825 | 24 |
+| Perplexity Decider V1.1 | 115 (95.8%) | 0 | 28.3% | 338 / 474 ms | $0.00001944967 | 18 |
+
+UNKNOWN-label rate is not complete clarification/abstention behavior. These
+native heads do not return all grounded intent entities or generated drafts.
+The per-message API costs cover native decisions only. Microsoft constraints
+cost $0.000323232 total, Perplexity constraints $0.000189920 total. HTTPS timings
+include transport/provider inference and exclude startup, metadata reads,
+generation, engine actions and SMS; they are not the local rules timing scope.
+
+The [paired type-only comparison](../eval/cleaner-phase04/results/native-comparison.json)
+records Perplexity fixing nine rule misses while losing five rule-correct
+cases. Its five misses are conflicting replies (`p04_038`, `039`, `041`, `045`,
+`048`). The exact two-sided McNemar value is 0.424 on these preliminary labels;
+this small synthetic sample does not establish a reliable production gain.
+Its zero raw access false positives are promising, but scheduling was wrong
+on six fixtures and must remain deterministically validated. Microsoft fixes
+eight rule misses but loses nineteen rule-correct cases, so it does not support
+a replacement under this prompt. None of the three tested Decision 3.0 sizes
+improved aggregate type accuracy over rules.
+
+For a separate generator-component screen, **Qwen/Qwen3.5-0.8B** was pinned at
+`2fc06364715b967f1860aea9cf38778875588b17`, Apache-2.0. Every selected artifact
+was checked against public LFS SHA-256 or Git blob SHA-1 metadata before stock
+Transformers execution with `trust_remote_code=False`; see the
+[artifact record](evidence/cleaner-generator-artifact-2026-10-11.json).
+The prompt was fixed before generation: greedy decoding, thinking disabled,
+128 new-token limit, CPU BF16 and four threads. Inputs contained actual engine
+baseline decisions and formatted times, not gold rationale or template text.
+
+All 24 drafts were generated without errors or hitting the token limit. Only
+**10/24** passed required-fact checks. All fourteen host-review cases instead
+said cleaning was scheduled at the requested time, contradicting the supplied
+engine decision. No prohibited access pattern was flagged, but that does not
+make the replies correct. Generator P50/P95 was 3.352/3.898 seconds; inference
+API spend was zero and infrastructure cost is unmeasured. Its copied decision
+field is an engine input, not generator decision accuracy. Independent human
+semantic reviews are pending, and no paired full classifier/extractor/generator
+architecture or real SMS action was run. Retain deterministic reply templates.
+
+Provisional direction: keep the existing rules and engine templates. Perplexity
+is the only measured candidate worth a further classification comparison on
+these results, not a selected production dependency. A new generator prompt
+would be a new experiment with matched reruns; these failures were preserved.
 
 ## Comparison protocol and model decision
 
@@ -166,24 +300,27 @@ or review. Models remain optional. Access and consequential housing decisions
 remain under engine rules and authorized review, as specified by the
 [Phase 0.3 contract](cleaner-engine-agent-contract.md).
 
-## Current blocker and next action
+## Remaining work and next action
 
-The current network policy produced proxy CONNECT 403 for Hugging Face; this
-is not a 403 from the model collection itself and does not imply it is missing.
-A domain-addition draft for Hugging Face/Microsoft/Perplexity research was
-saved and reviewed, but subsequent runtime access still failed. The user was
-asked to save/apply the additions in environment settings. Runtime network
-access must be verified after that action.
+The earlier proxy CONNECT 403 was resolved after the user saved/published
+unrestricted Internet settings. Direct collection, model-card and primary
+provider metadata reads returned HTTP 200. Network access is now verified.
 
-The user also confirmed no existing inference access for the candidate models.
-After the model cards and hosted metadata are accessible, choose the supported
-test endpoints, declare only the credentials they actually require through
-environment secret settings, and run bounded trials. The published OpenRouter
-path may cover Microsoft and Perplexity with one account; its current API
-availability still needs verification. Decision 3.0 may need its own deployment.
-No paid inference calls, model downloads, new SMS or runtime changes occurred.
+The published, reviewed setup saves CPU dependencies, reusable checkpoint
+commands and the supported secret requirement. Native local and authenticated
+hosted inference are verified. No new SMS or external booking action occurred.
+
+Next, use the [connected-agent instructions](../eval/cleaner-phase04/connected-agent-instructions.md)
+with only the two label-free task packets in that directory, then score the
+returned files locally. No Grok inference tool is available from this workspace;
+the user must run that closed-book comparison through their connected account.
+Full entity extraction/abstention pipelines, evolving multi-turn/native-read
+exercises and independent labels/semantic reviews remain open. Static native
+screening and a generator-component test do not establish a complete model
+architecture or justify wiring a candidate into live authorization.
 
 The offline scorer and exporters were exercised, including rejection of bad
 hashes, missing/duplicate cases and invalid results. Baseline metrics were
 independently recomputed from the saved predictions. Phase 0.4 remains open
-until actual candidate results and a defensible measured decision are recorded.
+until the remaining candidate/generator/connected-agent comparisons and a
+defensible measured architecture decision are recorded.

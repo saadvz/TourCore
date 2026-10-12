@@ -1,0 +1,406 @@
+{
+  "schemaVersion": 1,
+  "candidateId": "vllm-sr/d3-edge",
+  "evaluationStage": "native_constraint_screening",
+  "datasetSha256": "5d78b6e5ff21fb3d5275a2af08bea3a36083691e3b31a017f0f56a5ece32afbd",
+  "taskPacketSha256": "0ce4240cfce151c373e5955dd39f0eb3205773d4105de224216dffda19981875",
+  "questionSpecSha256": "45b65d1ba9aadca664e249e2d22ff8f6dbb63164fb69d939589bb0d845f8ee25",
+  "promptRevision": "native-screen-v1",
+  "transport": "local",
+  "timingScope": "Sequential local native call including input formatting, tokenization, CPU forward and decode; excludes checkpoint load, app actions and SMS",
+  "costScope": "Marginal inference API spend only; self-hosted infrastructure is unmeasured",
+  "generatedAt": "2026-10-12T02:41:09.799064+00:00",
+  "rows": [
+    {
+      "id": "draft_001",
+      "costUsd": 0.0,
+      "latencyMs": 625.3022669998245,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.3685611078571943,
+        "host_review": 0.6314388921428057
+      },
+      "nativeConfidence": 0.05043913741342454,
+      "selectedProbability": 0.6314388921428057,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_002",
+      "costUsd": 0.0,
+      "latencyMs": 556.5520629997991,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.4426637291908264,
+        "host_review": 0.5573362708091736
+      },
+      "nativeConfidence": 0.009506468712395244,
+      "selectedProbability": 0.5573362708091736,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_003",
+      "costUsd": 0.0,
+      "latencyMs": 520.0755380001283,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.21920733480464422,
+        "host_review": 0.7807926651953558
+      },
+      "nativeConfidence": 0.24128252389633176,
+      "selectedProbability": 0.7807926651953558,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_004",
+      "costUsd": 0.0,
+      "latencyMs": 617.8749020000396,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.23914678038437992,
+        "host_review": 0.7608532196156201
+      },
+      "nativeConfidence": 0.20638147632156,
+      "selectedProbability": 0.7608532196156201,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_005",
+      "costUsd": 0.0,
+      "latencyMs": 638.774789999843,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.15060560629674205,
+        "host_review": 0.849394393703258
+      },
+      "nativeConfidence": 0.3886462380106471,
+      "selectedProbability": 0.849394393703258,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_006",
+      "costUsd": 0.0,
+      "latencyMs": 736.4192909999474,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.24061769247055054,
+        "host_review": 0.7593823075294495
+      },
+      "nativeConfidence": 0.20393402767735025,
+      "selectedProbability": 0.7593823075294495,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_007",
+      "costUsd": 0.0,
+      "latencyMs": 556.5798749998976,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.4720532422113337,
+        "host_review": 0.5279467577886663
+      },
+      "nativeConfidence": 0.0022547258783220947,
+      "selectedProbability": 0.5279467577886663,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_008",
+      "costUsd": 0.0,
+      "latencyMs": 514.6471479997672,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.056077918473098815,
+        "host_review": 0.9439220815269012
+      },
+      "nativeConfidence": 0.6883251721511064,
+      "selectedProbability": 0.9439220815269012,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_009",
+      "costUsd": 0.0,
+      "latencyMs": 619.4850080000833,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.07833545026682988,
+        "host_review": 0.9216645497331701
+      },
+      "nativeConfidence": 0.6037132833568717,
+      "selectedProbability": 0.9216645497331701,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_010",
+      "costUsd": 0.0,
+      "latencyMs": 694.4375449998006,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.3253976501642957,
+        "host_review": 0.6746023498357042
+      },
+      "nativeConfidence": 0.08984509597221324,
+      "selectedProbability": 0.6746023498357042,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 402,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_011",
+      "costUsd": 0.0,
+      "latencyMs": 618.96452100018,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.26097220182418823,
+        "host_review": 0.7390277981758118
+      },
+      "nativeConfidence": 0.17179010249032423,
+      "selectedProbability": 0.7390277981758118,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 402,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_012",
+      "costUsd": 0.0,
+      "latencyMs": 491.914147999978,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.2272136096241118,
+        "host_review": 0.7727863903758883
+      },
+      "nativeConfidence": 0.22687771433106718,
+      "selectedProbability": 0.7727863903758883,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_013",
+      "costUsd": 0.0,
+      "latencyMs": 500.67956099974253,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.33179134130477905,
+        "host_review": 0.668208658695221
+      },
+      "nativeConfidence": 0.08325388223947705,
+      "selectedProbability": 0.668208658695221,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_014",
+      "costUsd": 0.0,
+      "latencyMs": 617.1920420001697,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.42594470304415516,
+        "host_review": 0.5740552969558449
+      },
+      "nativeConfidence": 0.01588238708791856,
+      "selectedProbability": 0.5740552969558449,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_015",
+      "costUsd": 0.0,
+      "latencyMs": 533.0920080000396,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.2116515627763001,
+        "host_review": 0.7883484372236998
+      },
+      "nativeConfidence": 0.25537219576286085,
+      "selectedProbability": 0.7883484372236998,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_016",
+      "costUsd": 0.0,
+      "latencyMs": 554.862207000042,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.22184859384008682,
+        "host_review": 0.7781514061599132
+      },
+      "nativeConfidence": 0.2364713554347424,
+      "selectedProbability": 0.7781514061599132,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_017",
+      "costUsd": 0.0,
+      "latencyMs": 650.9287029998632,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.14469256153818494,
+        "host_review": 0.855307438461815
+      },
+      "nativeConfidence": 0.40360250798639563,
+      "selectedProbability": 0.855307438461815,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_018",
+      "costUsd": 0.0,
+      "latencyMs": 469.2800279999574,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.17957116548080754,
+        "host_review": 0.8204288345191925
+      },
+      "nativeConfidence": 0.32086198355098783,
+      "selectedProbability": 0.8204288345191925,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_019",
+      "costUsd": 0.0,
+      "latencyMs": 535.2485729999898,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.44871323269189306,
+        "host_review": 0.551286767308107
+      },
+      "nativeConfidence": 0.007602900305247129,
+      "selectedProbability": 0.551286767308107,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_020",
+      "costUsd": 0.0,
+      "latencyMs": 516.1646669998845,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.06502125170002686,
+        "host_review": 0.9349787482999732
+      },
+      "nativeConfidence": 0.6529369735570247,
+      "selectedProbability": 0.9349787482999732,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_021",
+      "costUsd": 0.0,
+      "latencyMs": 486.2996900001235,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.08348321417074119,
+        "host_review": 0.9165167858292588
+      },
+      "nativeConfidence": 0.5856648592050862,
+      "selectedProbability": 0.9165167858292588,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 400,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_022",
+      "costUsd": 0.0,
+      "latencyMs": 549.8611409998375,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.28337015857189424,
+        "host_review": 0.7166298414281058
+      },
+      "nativeConfidence": 0.1399976533997629,
+      "selectedProbability": 0.7166298414281058,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_023",
+      "costUsd": 0.0,
+      "latencyMs": 481.1664989997553,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.24991915002826676,
+        "host_review": 0.7500808499717333
+      },
+      "nativeConfidence": 0.18885004486403112,
+      "selectedProbability": 0.7500808499717333,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 401,
+      "outputTokens": 0
+    },
+    {
+      "id": "draft_024",
+      "costUsd": 0.0,
+      "latencyMs": 514.8188490002212,
+      "choice": "host_review",
+      "probabilities": {
+        "propose_time": 0.20920405415308638,
+        "host_review": 0.7907959458469136
+      },
+      "nativeConfidence": 0.2600414385667501,
+      "selectedProbability": 0.7907959458469136,
+      "returnedModel": "vllm-sr/d3-edge",
+      "inputTokens": 400,
+      "outputTokens": 0
+    }
+  ],
+  "segments": [
+    {
+      "startedAt": "2026-10-12T02:41:16.010158+00:00",
+      "resumeAfterRows": 0,
+      "identity": {
+        "artifact": "vllm-sr/d3-edge",
+        "revision": "18d61df78684675463af9ae732872478845c5a79",
+        "verification": "full_manifest_sha256",
+        "device": "cpu",
+        "torch": "2.14.1+cpu",
+        "transformers": "5.17.0",
+        "threads": 4,
+        "backboneDtype": "bfloat16",
+        "readoutDtype": "float32",
+        "loadSeconds": 4.430450560999816
+      }
+    }
+  ],
+  "confidenceSemantics": "Native confidence is normalized entropy, not selected-label probability; both are retained and neither is treated as calibrated correctness",
+  "inferenceIdentity": {
+    "artifact": "vllm-sr/d3-edge",
+    "revision": "18d61df78684675463af9ae732872478845c5a79",
+    "verification": "full_manifest_sha256",
+    "device": "cpu",
+    "torch": "2.14.1+cpu",
+    "transformers": "5.17.0",
+    "threads": 4,
+    "backboneDtype": "bfloat16",
+    "readoutDtype": "float32",
+    "loadSeconds": 4.430450560999816
+  }
+}
