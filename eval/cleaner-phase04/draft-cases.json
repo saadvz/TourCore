@@ -1,0 +1,632 @@
+{
+  "schemaVersion": 1,
+  "datasetId": "cleaner-draft-constraints-synthetic-v1",
+  "labelStatus": "preliminary_author_labeled_requires_independent_review",
+  "scope": "Structured scheduling constraint and reply-draft exercise only; no SMS or external bookings.",
+  "cases": [
+    {
+      "id": "draft_001",
+      "scenario": "inside",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-13T14:00:00Z",
+      "turn": {
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "propose_time",
+        "requiredFacts": [
+          "host clearance required",
+          "requested time"
+        ]
+      }
+    },
+    {
+      "id": "draft_002",
+      "scenario": "start_boundary",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-13T12:00:00Z",
+      "turn": {
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "propose_time",
+        "requiredFacts": [
+          "host clearance required",
+          "requested time"
+        ]
+      }
+    },
+    {
+      "id": "draft_003",
+      "scenario": "end_boundary",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-13T16:30:00Z",
+      "turn": {
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "propose_time",
+        "requiredFacts": [
+          "host clearance required",
+          "requested time"
+        ]
+      }
+    },
+    {
+      "id": "draft_004",
+      "scenario": "overrun_one_minute",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-13T16:31:00Z",
+      "turn": {
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      }
+    },
+    {
+      "id": "draft_005",
+      "scenario": "before_window",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-13T11:59:00Z",
+      "turn": {
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      }
+    },
+    {
+      "id": "draft_006",
+      "scenario": "at_window_end",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-13T18:00:00Z",
+      "turn": {
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      }
+    },
+    {
+      "id": "draft_007",
+      "scenario": "after_window",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-13T19:00:00Z",
+      "turn": {
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      }
+    },
+    {
+      "id": "draft_008",
+      "scenario": "exact_now",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-12T12:00:00Z",
+      "turn": {
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      }
+    },
+    {
+      "id": "draft_009",
+      "scenario": "past",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-12T11:59:00Z",
+      "turn": {
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      }
+    },
+    {
+      "id": "draft_010",
+      "scenario": "long_duration_fits",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-13T16:00:00Z",
+      "turn": {
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 120,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "propose_time",
+        "requiredFacts": [
+          "host clearance required",
+          "requested time"
+        ]
+      }
+    },
+    {
+      "id": "draft_011",
+      "scenario": "long_duration_overrun",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-13T16:01:00Z",
+      "turn": {
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 120,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      }
+    },
+    {
+      "id": "draft_012",
+      "scenario": "late_but_fits",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-13T16:29:00Z",
+      "turn": {
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "propose_time",
+        "requiredFacts": [
+          "host clearance required",
+          "requested time"
+        ]
+      }
+    },
+    {
+      "id": "draft_013",
+      "scenario": "inside",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-13T14:00:00Z",
+      "turn": {
+        "timeZone": "Europe/London",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "propose_time",
+        "requiredFacts": [
+          "host clearance required",
+          "requested time"
+        ]
+      }
+    },
+    {
+      "id": "draft_014",
+      "scenario": "start_boundary",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-13T12:00:00Z",
+      "turn": {
+        "timeZone": "Europe/London",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "propose_time",
+        "requiredFacts": [
+          "host clearance required",
+          "requested time"
+        ]
+      }
+    },
+    {
+      "id": "draft_015",
+      "scenario": "end_boundary",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-13T16:30:00Z",
+      "turn": {
+        "timeZone": "Europe/London",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "propose_time",
+        "requiredFacts": [
+          "host clearance required",
+          "requested time"
+        ]
+      }
+    },
+    {
+      "id": "draft_016",
+      "scenario": "overrun_one_minute",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-13T16:31:00Z",
+      "turn": {
+        "timeZone": "Europe/London",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      }
+    },
+    {
+      "id": "draft_017",
+      "scenario": "before_window",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-13T11:59:00Z",
+      "turn": {
+        "timeZone": "Europe/London",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      }
+    },
+    {
+      "id": "draft_018",
+      "scenario": "at_window_end",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-13T18:00:00Z",
+      "turn": {
+        "timeZone": "Europe/London",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      }
+    },
+    {
+      "id": "draft_019",
+      "scenario": "after_window",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-13T19:00:00Z",
+      "turn": {
+        "timeZone": "Europe/London",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      }
+    },
+    {
+      "id": "draft_020",
+      "scenario": "exact_now",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-12T12:00:00Z",
+      "turn": {
+        "timeZone": "Europe/London",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      }
+    },
+    {
+      "id": "draft_021",
+      "scenario": "past",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-12T11:59:00Z",
+      "turn": {
+        "timeZone": "Europe/London",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      }
+    },
+    {
+      "id": "draft_022",
+      "scenario": "long_duration_fits",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-13T16:00:00Z",
+      "turn": {
+        "timeZone": "Europe/London",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 120,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "propose_time",
+        "requiredFacts": [
+          "host clearance required",
+          "requested time"
+        ]
+      }
+    },
+    {
+      "id": "draft_023",
+      "scenario": "long_duration_overrun",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-13T16:01:00Z",
+      "turn": {
+        "timeZone": "Europe/London",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 120,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      }
+    },
+    {
+      "id": "draft_024",
+      "scenario": "late_but_fits",
+      "now": "2026-10-12T12:00:00Z",
+      "requestedStart": "2026-10-13T16:29:00Z",
+      "turn": {
+        "timeZone": "Europe/London",
+        "windowStart": "2026-10-13T12:00:00Z",
+        "windowEnd": "2026-10-13T18:00:00Z",
+        "nextArrival": "2026-10-13T19:00:00Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T13:00:00Z"
+      },
+      "policy": {
+        "schedulingInsideWindowPreauthorized": true,
+        "entryRequiresHostClearance": true,
+        "entryClearanceGranted": false
+      },
+      "expected": {
+        "decision": "propose_time",
+        "requiredFacts": [
+          "host clearance required",
+          "requested time"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,552 @@
+{
+  "schemaVersion": 1,
+  "candidateId": "engine-deterministic-template",
+  "datasetSha256": "5d78b6e5ff21fb3d5275a2af08bea3a36083691e3b31a017f0f56a5ece32afbd",
+  "scope": "Synthetic decision and required-fact checks. Regex checks are diagnostic, not a semantic safety guarantee.",
+  "timingScope": "Local durable engine receive/propose or deadline fallback plus snapshot read; deadline advanced by injected clock without real waiting; excludes sends and provider/network latency",
+  "costScope": "Inference only; local infrastructure cost is not measured",
+  "summary": {
+    "count": 24,
+    "validCount": 24,
+    "decisionCorrectCount": 24,
+    "requiredFactCheckCount": 24,
+    "unsupportedAccessClaimFlags": 0,
+    "humanSemanticReviewsCompleted": 0,
+    "latencyMeasuredCount": 24,
+    "p50LatencyMs": 6.803698000000054,
+    "p95LatencyMs": 16.841241000000082,
+    "inferenceCostMeasuredCount": 24,
+    "totalInferenceCostUsd": 0,
+    "meanInferenceCostPerCaseUsd": 0
+  },
+  "rows": [
+    {
+      "id": "draft_001",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": false,
+      "requestedTimeMentioned": true,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "propose_time",
+      "draft": "Cleaning scheduled for Oct 13, 2026, 10:00 AM (America/New_York). Entry requires host clearance.",
+      "expected": {
+        "decision": "propose_time",
+        "requiredFacts": [
+          "host clearance required",
+          "requested time"
+        ]
+      },
+      "latencyMs": 39.471397000000024,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_002",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": false,
+      "requestedTimeMentioned": true,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "propose_time",
+      "draft": "Cleaning scheduled for Oct 13, 2026, 8:00 AM (America/New_York). Entry requires host clearance.",
+      "expected": {
+        "decision": "propose_time",
+        "requiredFacts": [
+          "host clearance required",
+          "requested time"
+        ]
+      },
+      "latencyMs": 6.7547779999999875,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_003",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": false,
+      "requestedTimeMentioned": true,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "propose_time",
+      "draft": "Cleaning scheduled for Oct 13, 2026, 12:30 PM (America/New_York). Entry requires host clearance.",
+      "expected": {
+        "decision": "propose_time",
+        "requiredFacts": [
+          "host clearance required",
+          "requested time"
+        ]
+      },
+      "latencyMs": 6.238146999999913,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_004",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": true,
+      "requestedTimeMentioned": false,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      },
+      "latencyMs": 11.511508999999933,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_005",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": true,
+      "requestedTimeMentioned": false,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      },
+      "latencyMs": 7.020817999999963,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_006",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": true,
+      "requestedTimeMentioned": false,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      },
+      "latencyMs": 6.733316000000059,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_007",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": true,
+      "requestedTimeMentioned": false,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      },
+      "latencyMs": 4.5398799999999255,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_008",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": true,
+      "requestedTimeMentioned": false,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      },
+      "latencyMs": 6.335371000000009,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_009",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": true,
+      "requestedTimeMentioned": false,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      },
+      "latencyMs": 7.516203000000019,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_010",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": false,
+      "requestedTimeMentioned": true,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "propose_time",
+      "draft": "Cleaning scheduled for Oct 13, 2026, 12:00 PM (America/New_York). Entry requires host clearance.",
+      "expected": {
+        "decision": "propose_time",
+        "requiredFacts": [
+          "host clearance required",
+          "requested time"
+        ]
+      },
+      "latencyMs": 7.575804000000062,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_011",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": true,
+      "requestedTimeMentioned": false,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      },
+      "latencyMs": 6.829443999999967,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_012",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": false,
+      "requestedTimeMentioned": true,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "propose_time",
+      "draft": "Cleaning scheduled for Oct 13, 2026, 12:29 PM (America/New_York). Entry requires host clearance.",
+      "expected": {
+        "decision": "propose_time",
+        "requiredFacts": [
+          "host clearance required",
+          "requested time"
+        ]
+      },
+      "latencyMs": 12.957480999999916,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_013",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": false,
+      "requestedTimeMentioned": true,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "propose_time",
+      "draft": "Cleaning scheduled for Oct 13, 2026, 3:00 PM (Europe/London). Entry requires host clearance.",
+      "expected": {
+        "decision": "propose_time",
+        "requiredFacts": [
+          "host clearance required",
+          "requested time"
+        ]
+      },
+      "latencyMs": 12.155680999999959,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_014",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": false,
+      "requestedTimeMentioned": true,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "propose_time",
+      "draft": "Cleaning scheduled for Oct 13, 2026, 1:00 PM (Europe/London). Entry requires host clearance.",
+      "expected": {
+        "decision": "propose_time",
+        "requiredFacts": [
+          "host clearance required",
+          "requested time"
+        ]
+      },
+      "latencyMs": 16.841241000000082,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_015",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": false,
+      "requestedTimeMentioned": true,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "propose_time",
+      "draft": "Cleaning scheduled for Oct 13, 2026, 5:30 PM (Europe/London). Entry requires host clearance.",
+      "expected": {
+        "decision": "propose_time",
+        "requiredFacts": [
+          "host clearance required",
+          "requested time"
+        ]
+      },
+      "latencyMs": 4.9910730000000285,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_016",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": true,
+      "requestedTimeMentioned": false,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      },
+      "latencyMs": 6.803698000000054,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_017",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": true,
+      "requestedTimeMentioned": false,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      },
+      "latencyMs": 2.7712320000000545,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_018",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": true,
+      "requestedTimeMentioned": false,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      },
+      "latencyMs": 16.08033499999999,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_019",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": true,
+      "requestedTimeMentioned": false,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      },
+      "latencyMs": 4.767237000000023,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_020",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": true,
+      "requestedTimeMentioned": false,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      },
+      "latencyMs": 7.147313000000054,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_021",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": true,
+      "requestedTimeMentioned": false,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      },
+      "latencyMs": 2.16456699999992,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_022",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": false,
+      "requestedTimeMentioned": true,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "propose_time",
+      "draft": "Cleaning scheduled for Oct 13, 2026, 5:00 PM (Europe/London). Entry requires host clearance.",
+      "expected": {
+        "decision": "propose_time",
+        "requiredFacts": [
+          "host clearance required",
+          "requested time"
+        ]
+      },
+      "latencyMs": 7.571746999999959,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_023",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": true,
+      "requestedTimeMentioned": false,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "expected": {
+        "decision": "host_review",
+        "requiredFacts": [
+          "host clearance required",
+          "existing time unchanged"
+        ]
+      },
+      "latencyMs": 4.1874500000000126,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_024",
+      "valid": true,
+      "decisionCorrect": true,
+      "clearanceMentioned": true,
+      "unchangedMentioned": false,
+      "requestedTimeMentioned": true,
+      "unsupportedAccessClaim": false,
+      "requiredFactChecks": true,
+      "humanSemanticReview": "pending",
+      "decision": "propose_time",
+      "draft": "Cleaning scheduled for Oct 13, 2026, 5:29 PM (Europe/London). Entry requires host clearance.",
+      "expected": {
+        "decision": "propose_time",
+        "requiredFacts": [
+          "host clearance required",
+          "requested time"
+        ]
+      },
+      "latencyMs": 4.840331999999989,
+      "costUsd": 0
+    }
+  ]
+}

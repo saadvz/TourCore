@@ -1,0 +1,180 @@
+{
+  "schemaVersion": 1,
+  "candidateId": "engine-deterministic-template",
+  "datasetSha256": "5d78b6e5ff21fb3d5275a2af08bea3a36083691e3b31a017f0f56a5ece32afbd",
+  "generatedAt": "2026-10-12T01:13:52.728Z",
+  "sourceCommit": "2f3136fde0ba7b70424b3e9ef2dd6680f81ce5a7",
+  "transport": "local_offline",
+  "costScope": "Inference only; local infrastructure cost is not measured",
+  "rows": [
+    {
+      "id": "draft_001",
+      "decision": "propose_time",
+      "draft": "Cleaning scheduled for Oct 13, 2026, 10:00 AM (America/New_York). Entry requires host clearance.",
+      "latencyMs": 39.471397000000024,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_002",
+      "decision": "propose_time",
+      "draft": "Cleaning scheduled for Oct 13, 2026, 8:00 AM (America/New_York). Entry requires host clearance.",
+      "latencyMs": 6.7547779999999875,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_003",
+      "decision": "propose_time",
+      "draft": "Cleaning scheduled for Oct 13, 2026, 12:30 PM (America/New_York). Entry requires host clearance.",
+      "latencyMs": 6.238146999999913,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_004",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "latencyMs": 11.511508999999933,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_005",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "latencyMs": 7.020817999999963,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_006",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "latencyMs": 6.733316000000059,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_007",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "latencyMs": 4.5398799999999255,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_008",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "latencyMs": 6.335371000000009,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_009",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "latencyMs": 7.516203000000019,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_010",
+      "decision": "propose_time",
+      "draft": "Cleaning scheduled for Oct 13, 2026, 12:00 PM (America/New_York). Entry requires host clearance.",
+      "latencyMs": 7.575804000000062,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_011",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "latencyMs": 6.829443999999967,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_012",
+      "decision": "propose_time",
+      "draft": "Cleaning scheduled for Oct 13, 2026, 12:29 PM (America/New_York). Entry requires host clearance.",
+      "latencyMs": 12.957480999999916,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_013",
+      "decision": "propose_time",
+      "draft": "Cleaning scheduled for Oct 13, 2026, 3:00 PM (Europe/London). Entry requires host clearance.",
+      "latencyMs": 12.155680999999959,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_014",
+      "decision": "propose_time",
+      "draft": "Cleaning scheduled for Oct 13, 2026, 1:00 PM (Europe/London). Entry requires host clearance.",
+      "latencyMs": 16.841241000000082,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_015",
+      "decision": "propose_time",
+      "draft": "Cleaning scheduled for Oct 13, 2026, 5:30 PM (Europe/London). Entry requires host clearance.",
+      "latencyMs": 4.9910730000000285,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_016",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "latencyMs": 6.803698000000054,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_017",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "latencyMs": 2.7712320000000545,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_018",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "latencyMs": 16.08033499999999,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_019",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "latencyMs": 4.767237000000023,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_020",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "latencyMs": 7.147313000000054,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_021",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "latencyMs": 2.16456699999992,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_022",
+      "decision": "propose_time",
+      "draft": "Cleaning scheduled for Oct 13, 2026, 5:00 PM (Europe/London). Entry requires host clearance.",
+      "latencyMs": 7.571746999999959,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_023",
+      "decision": "host_review",
+      "draft": "Your cleaning time change is awaiting host review. Your existing time is unchanged. Entry still requires host clearance.",
+      "latencyMs": 4.1874500000000126,
+      "costUsd": 0
+    },
+    {
+      "id": "draft_024",
+      "decision": "propose_time",
+      "draft": "Cleaning scheduled for Oct 13, 2026, 5:29 PM (Europe/London). Entry requires host clearance.",
+      "latencyMs": 4.840331999999989,
+      "costUsd": 0
+    }
+  ],
+  "timingScope": "Local durable engine receive/propose or deadline fallback plus snapshot read; deadline advanced by injected clock without real waiting; excludes sends and provider/network latency"
+}

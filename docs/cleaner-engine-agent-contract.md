@@ -226,5 +226,5 @@ This phase changes documentation only. It does not modify deployed tools,
 receiver instructions, runtime configuration or production Tour Core behavior.
 The [execution evidence](cleaner-agent-execution-decision.md) and
 [capability profile](cleaner-agent-capabilities.md) remain the current feasibility
-record. Next is Phase 0.4 model evaluation; the other Phase 0 feasibility gates
-remain separate.
+record. [Phase 0.4 model evaluation](cleaner-model-evaluation.md) is now in
+progress; the other Phase 0 feasibility gates remain separate.

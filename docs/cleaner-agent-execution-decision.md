@@ -113,4 +113,6 @@ Core Phase 0.2 is complete. Phase 0.3 has now finalized the
 [engine/agent contract](cleaner-engine-agent-contract.md): responsibility,
 delegated data and commands, minimum recovery state, deterministic fallback,
 and the gate for optional inference. The contract records production gaps
-separately from existing prototype behavior. Next is Phase 0.4 model evaluation.
+separately from existing prototype behavior.
+[Phase 0.4 model evaluation](cleaner-model-evaluation.md) is in progress, with
+measured rules/template baselines and candidate inference comparisons pending.

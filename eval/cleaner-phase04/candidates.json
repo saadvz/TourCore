@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "status": "partial_no_model_comparison_claimed",
+  "candidates": [
+    {
+      "id": "rules-first",
+      "status": "measured_local_diagnostic",
+      "implementation": "src/intent/ruleBased.ts",
+      "result": "results/rules-first-report.json"
+    },
+    {
+      "id": "connected-grok",
+      "status": "not_run_on_phase04_dataset",
+      "access": "User has a connected Grok account; no inference binding in this workspace",
+      "priorWorkflowEvidence": "../../docs/evidence/cleaner-agent-profile-2026-10-11.json",
+      "note": "Prior capability/SMS success is not classification, drafting or native-tool accuracy on this dataset"
+    },
+    {
+      "id": "microsoft-decision-1",
+      "status": "not_run_no_inference_access",
+      "reportedHostedModelId": "microsoft/microsoft-decision-1",
+      "reportedTransport": "OpenRouter native Decisions API",
+      "reportedEndpoint": "https://openrouter.ai/api/alpha/decisions",
+      "source": "https://github.com/atlanai/decision-bench/blob/57cee31bbcc8dfa27f8b22de7fb8e2a32b2a379c/config/models.json",
+      "sourceKind": "secondary_published_benchmark_configuration",
+      "providerMetadataVerifiedHere": false,
+      "currentPricingVerifiedHere": false,
+      "licenseVerifiedHere": false,
+      "actualPerMessageCostUsd": null
+    },
+    {
+      "id": "perplexity-decider",
+      "status": "not_run_no_inference_access",
+      "reportedHostedModelId": "perplexity/pplx-decider-v1.1-27b",
+      "reportedTransport": "OpenRouter native Decisions API",
+      "source": "https://github.com/atlanai/decision-bench/blob/57cee31bbcc8dfa27f8b22de7fb8e2a32b2a379c/config/models.json",
+      "sourceKind": "secondary_published_benchmark_configuration",
+      "separateSelfHostedExample": {
+        "artifact": "perplexity-ai/pplx-decider-v1-27b",
+        "revision": "5117a6c7fe73b19308dc1a6b0fb529a40c2ecad4",
+        "source": "https://github.com/basetenlabs/truss-examples/blob/80a3a70610c1d1d1c93ab05c66e36396bb7662be/11-embeddings-reranker-classification-tensorrt/BEI-Bert-perplexity-ai-pplx-decider-v1-27b/config.yaml",
+        "exampleHardware": "H100, 80Gi memory",
+        "note": "Deployment example, not a universal hardware minimum; v1 and hosted v1.1 are different versions"
+      },
+      "providerMetadataVerifiedHere": false,
+      "currentPricingVerifiedHere": false,
+      "licenseVerifiedHere": false,
+      "actualPerMessageCostUsd": null
+    },
+    {
+      "id": "vllm-sr-decision-3.0",
+      "requestedCollection": "https://huggingface.co/collections/vllm-sr/decision-30",
+      "status": "collection_inspection_blocked_by_network_policy",
+      "exactArtifacts": null,
+      "exactRevision": null,
+      "licenseVerifiedHere": false,
+      "inferenceInterfaceVerifiedForRequestedVersion": false,
+      "currentPricingVerifiedHere": false,
+      "actualPerMessageCostUsd": null,
+      "relatedPrimarySource": "https://github.com/vllm-project/semantic-router/blob/692ff7558e909bda5a6b39585c97f0af91543b37/website/docs/model-runtime/guides/decisions.md",
+      "relatedSourceScope": "Earlier Decision 1.0/2.0 native choice/noul/score support; does not establish Decision 3.0 collection membership"
+    },
+    {
+      "id": "shared-small-generator",
+      "status": "not_selected_or_run",
+      "note": "Use the same fixed generator and prompt for each decision-model arm; include total decision plus generation cost/latency"
+    }
+  ],
+  "environmentObservations": {
+    "gpuAvailable": false,
+    "torchInstalled": false,
+    "transformersInstalled": false,
+    "candidateCredentialsPresent": false,
+    "userConfirmedNoCandidateInferenceAccess": true,
+    "huggingFaceReadFailure": "Proxy CONNECT 403; no HTTP response from Hugging Face was obtained",
+    "networkDraftSaved": true,
+    "networkDraftReviewed": true,
+    "runtimeNetworkUpdateVerified": false
+  }
+}
