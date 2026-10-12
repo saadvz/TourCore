@@ -5,7 +5,9 @@ Status: **implemented and locally demonstrated**, 12 October 2026, on
 Closure update: the user has now authorized economics and live Grok validation.
 See [economics validation](cleaner-phase05-economics.md) and the
 [same-endpoint Grok packet](cleaner-phase05-live-grok-packet.md). Live results
-remain pending. The attached roadmap supplies background; the user's implementation request and
+now reconcile onboarding and twenty ordinary completions; security exports have
+the limits below and live recovery remains open. The attached roadmap supplies
+background; the user's implementation request and
 final architecture decision govern this work. The old onboarding-only restriction
 in the earlier proof does not apply to this implementation task.
 
@@ -187,15 +189,28 @@ inference stack is introduced. The subsequent uploaded server-clock B retry
 schedule, engine and profile records reconcile to 94,349ms agent completion
 with one simulated receipt and 25,652ms remaining before its stored deadline.
 Both tenants therefore have one successful exported onboarding observation;
-the earlier failed B trial remains recorded. The account subsequently reports
-ordinary A 10/10 and B 10/10, with no fallback/review/duplicates and engine
-median/P95 19.45/31.60s and 20.29/35.69s respectively. The raw twenty-trial
-exports are not yet supplied, so these remain reported aggregates. At n=10
-nearest-rank P95 equals the sample maximum. B's post-stage profile is also
-missing. See `docs/evidence/cleaner-phase05-grok-ordinary-reported-2026-10-12.json`.
-Security, fault and recovery live checks remain pending; use the exports,
-replay, ingress, storage and OAuth section in the live packet, without repeating
-ordinary trials or retiring either main agent.
+the earlier failed B trial remains recorded. Uploaded ordinary A 10/10 and B
+10/10 records reconcile, with no fallback/review/duplicates and engine median/P95
+19.45/31.60s and 20.29/35.69s respectively. At n=10 nearest-rank P95 equals the
+sample maximum. Both post-stage profiles are supplied. The reproducible
+`eval/cleaner-phase05/reconcile-live.mjs` records exact statistics, source hashes
+and export limits in
+`docs/evidence/cleaner-phase05-ordinary-security-reconciled-2026-10-12.json`.
+
+The security matrix has 71 PASS rows, three native failures with HTTP status
+inferred, one browser OAuth check NOT_RUN and missing trace IDs. Replay and
+ingress exports reconcile; native scope errors and refresh/revocation outcomes
+are reconstructed account observations. Public main-profile values match
+before/after; redacted grant values cannot be compared. Main-agent revocation
+with verified evidence/leases, live stale actions and restart remain open.
+
+The temporary OAuth profile's changing createdAt was traced to an unsaved empty
+profile, not a credential-epoch change. First read now persists that profile;
+refresh and restart preserve timestamps while retirement deletes it. The new
+actual HTTP/MCP regression tests these boundaries and B preservation. All 51
+focused tests, typecheck and bundle pass; validation/source hashes are in
+`docs/evidence/cleaner-phase05-profile-validation-2026-10-12.json`. This local
+fix is not deployed. Raw performance observations remain unchanged.
 
 ## Raw resource observations
 

@@ -142,6 +142,33 @@ describe('Cleaner Phase 0.5 isolated shared runtime',()=>{
     expect((await h.api('/owner/properties',undefined,0,'GET',b.access_token)).status).toBe(401);
   });
 
+  it('preserves an unverified profile through reads, refresh rotation and restart, but resets it on retirement',async()=>{
+    const h=await setup(),a=await h.oauth(0),b=await h.oauth(1);
+    const ca=await h.connect(a.access_token),cb=await h.connect(b.access_token);
+    const initial=(await ca.call('read_agent_profile')).value;
+    const baselineB=(await cb.call('read_agent_profile')).value;
+    expect(initial.capabilities.every((c:any)=>c.status==='unknown')).toBe(true);
+    h.clock.t+=1000;
+    expect((await ca.call('read_agent_profile')).value).toEqual(initial);
+    const rotated=await h.api('/oauth/token',{grant_type:'refresh_token',client_id:a.auth.client_id,refresh_token:a.refresh_token});
+    expect(rotated.status).toBe(200);
+    await expect(ca.call('read_agent_profile')).rejects.toThrow();
+    const fresh=await h.connect(rotated.value.access_token);
+    expect((await fresh.call('read_agent_profile')).value).toEqual(initial);
+    h.clock.t+=1000;await h.restart();
+    const restarted=await h.connect(rotated.value.access_token);
+    expect((await restarted.call('read_agent_profile')).value).toEqual(initial);
+    expect((await h.api(`/owner/grants/${rotated.value.grantId}`,undefined,0,'DELETE')).status).toBe(200);
+    await expect(restarted.call('read_agent_profile')).rejects.toThrow();
+    h.clock.t+=1000;
+    const renewed=(await h.api('/owner/grants',{agentId:'same_agent'})).value;
+    const retiredProfile=(await(await h.connect(renewed.access_token)).call('read_agent_profile')).value;
+    expect(retiredProfile.createdAt).toBe(new Date(h.clock.t).toISOString());
+    expect(retiredProfile.createdAt).not.toBe(initial.createdAt);
+    expect(retiredProfile.capabilities.every((c:any)=>c.status==='unknown')).toBe(true);
+    expect((await h.api('/owner/agents/same_agent/profile',undefined,1)).value).toEqual(baselineB);
+  });
+
   it('hot-revokes old MCP tokens, profile evidence and leases without restarting; leaves the other tenant eligible',async()=>{
     const h=await setup();const a=await h.oauth(0),b=await h.oauth(1),ca=await h.connect(a.access_token),cb=await h.connect(b.access_token),ids=[await h.seed(0),await h.seed(1)];
     for(const agent of [ca,cb]) {

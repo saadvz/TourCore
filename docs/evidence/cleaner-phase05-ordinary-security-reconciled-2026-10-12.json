@@ -1,0 +1,450 @@
+{
+  "schemaVersion": 1,
+  "status": "ORDINARY_PASS_RECONCILED; SECURITY_PARTIAL_EVIDENCE",
+  "provenance": "User-exported account records; no direct authenticated hosted queries by this reconciler",
+  "sources": [
+    {
+      "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/Ordinary20.json",
+      "bytes": 93414,
+      "sha256": "15b788cad895292e31322876bda46943da9237e60c00f696b8e3150421764de9"
+    },
+    {
+      "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/Security_packet.json",
+      "bytes": 45954,
+      "sha256": "ae5483f0ca314b43481628c7831c2878a9f4cb89082f3eee513c6dbc68650477"
+    },
+    {
+      "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/Security_narrative.txt",
+      "bytes": 6460,
+      "sha256": "b2adaf6f7c7c3df21f3d30c9ba3529fe1f6337df7103f24e32c52f4d8f6e6eb3"
+    }
+  ],
+  "ordinary": {
+    "status": "PASS_RECONCILED_20_OF_20_EXPORTED_ENGINE_RECORDS",
+    "tenants": {
+      "A": {
+        "planned": 10,
+        "accepted": 10,
+        "fired": 10,
+        "created": 10,
+        "agentCompletedBeforeDeadline": 10,
+        "fallback": 0,
+        "review": 0,
+        "lateCompletion": 0,
+        "duplicateReceipts": 0,
+        "engineLatencyMs": {
+          "n": 10,
+          "min": 16973,
+          "median": 19446,
+          "max": 31604,
+          "p95NearestRank": 31604
+        },
+        "validatedDecisionLatencyMs": {
+          "n": 10,
+          "min": 16884,
+          "median": 19267.5,
+          "max": 31486,
+          "p95NearestRank": 31486
+        },
+        "deadlineMarginMs": {
+          "n": 10,
+          "min": 88396,
+          "median": 100554,
+          "max": 103027,
+          "p95NearestRank": 103027
+        }
+      },
+      "B": {
+        "planned": 10,
+        "accepted": 10,
+        "fired": 10,
+        "created": 10,
+        "agentCompletedBeforeDeadline": 10,
+        "fallback": 0,
+        "review": 0,
+        "lateCompletion": 0,
+        "duplicateReceipts": 0,
+        "engineLatencyMs": {
+          "n": 10,
+          "min": 17049,
+          "median": 20288.5,
+          "max": 35691,
+          "p95NearestRank": 35691
+        },
+        "validatedDecisionLatencyMs": {
+          "n": 10,
+          "min": 16930,
+          "median": 20213,
+          "max": 35512,
+          "p95NearestRank": 35512
+        },
+        "deadlineMarginMs": {
+          "n": 10,
+          "min": 84309,
+          "median": 99711.5,
+          "max": 102951,
+          "p95NearestRank": 102951
+        }
+      }
+    },
+    "rows": [
+      {
+        "tenant": "A",
+        "trial": 1,
+        "eventId": "p05_s10121709_shared_01",
+        "workId": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+        "receivedAt": "2026-10-12T21:14:17.594Z",
+        "deadlineAt": "2026-10-12T21:16:17.594Z",
+        "engineLatencyMs": 31604,
+        "validatedDecisionLatencyMs": 31486,
+        "deadlineMarginMs": 88396,
+        "deadlineIntervalMs": 120000,
+        "receivedAuditDeltaMs": 0,
+        "receipt": "simulated_4de3a740-1c3b-4928-b381-faef4f8be675"
+      },
+      {
+        "tenant": "A",
+        "trial": 2,
+        "eventId": "p05_s10121709_shared_02",
+        "workId": "work_b167f0962e9a80af779f8ce9cf084f58",
+        "receivedAt": "2026-10-12T21:15:17.904Z",
+        "deadlineAt": "2026-10-12T21:17:17.904Z",
+        "engineLatencyMs": 27892,
+        "validatedDecisionLatencyMs": 27643,
+        "deadlineMarginMs": 92108,
+        "deadlineIntervalMs": 120000,
+        "receivedAuditDeltaMs": 1,
+        "receipt": "simulated_6c19d6c4-cef2-43e2-8a1c-048a6a3b5fef"
+      },
+      {
+        "tenant": "A",
+        "trial": 3,
+        "eventId": "p05_s10121709_shared_03",
+        "workId": "work_b609180fc2ffdfa4a9113ba285b2c334",
+        "receivedAt": "2026-10-12T21:16:18.188Z",
+        "deadlineAt": "2026-10-12T21:18:18.188Z",
+        "engineLatencyMs": 19699,
+        "validatedDecisionLatencyMs": 19481,
+        "deadlineMarginMs": 100301,
+        "deadlineIntervalMs": 120000,
+        "receivedAuditDeltaMs": 0,
+        "receipt": "simulated_5ba2ae22-348f-4324-8031-217c64396283"
+      },
+      {
+        "tenant": "A",
+        "trial": 4,
+        "eventId": "p05_s10121709_shared_04",
+        "workId": "work_81405e20bac76c5cbd1bde256cc38b6c",
+        "receivedAt": "2026-10-12T21:17:18.519Z",
+        "deadlineAt": "2026-10-12T21:19:18.519Z",
+        "engineLatencyMs": 19193,
+        "validatedDecisionLatencyMs": 19054,
+        "deadlineMarginMs": 100807,
+        "deadlineIntervalMs": 120000,
+        "receivedAuditDeltaMs": 1,
+        "receipt": "simulated_565d4824-d929-4618-9024-cad9fe24ed9f"
+      },
+      {
+        "tenant": "A",
+        "trial": 5,
+        "eventId": "p05_s10121709_shared_05",
+        "workId": "work_2fd53551e60d64b5e8c99a8214397391",
+        "receivedAt": "2026-10-12T21:18:18.784Z",
+        "deadlineAt": "2026-10-12T21:20:18.784Z",
+        "engineLatencyMs": 18519,
+        "validatedDecisionLatencyMs": 18466,
+        "deadlineMarginMs": 101481,
+        "deadlineIntervalMs": 120000,
+        "receivedAuditDeltaMs": 0,
+        "receipt": "simulated_ec4a2bb7-370d-4075-815a-c634d38a02d3"
+      },
+      {
+        "tenant": "A",
+        "trial": 6,
+        "eventId": "p05_s10121709_shared_06",
+        "workId": "work_0582e6c56ffcaf32468a74892719fa9b",
+        "receivedAt": "2026-10-12T21:19:19.042Z",
+        "deadlineAt": "2026-10-12T21:21:19.042Z",
+        "engineLatencyMs": 18607,
+        "validatedDecisionLatencyMs": 18474,
+        "deadlineMarginMs": 101393,
+        "deadlineIntervalMs": 120000,
+        "receivedAuditDeltaMs": 1,
+        "receipt": "simulated_4ba18ba7-c1d8-4d90-bdee-1609946dcf45"
+      },
+      {
+        "tenant": "A",
+        "trial": 7,
+        "eventId": "p05_s10121709_shared_07",
+        "workId": "work_013feea076dfb95b2516dadf19e28655",
+        "receivedAt": "2026-10-12T21:20:19.303Z",
+        "deadlineAt": "2026-10-12T21:22:19.303Z",
+        "engineLatencyMs": 20222,
+        "validatedDecisionLatencyMs": 20005,
+        "deadlineMarginMs": 99778,
+        "deadlineIntervalMs": 120000,
+        "receivedAuditDeltaMs": 1,
+        "receipt": "simulated_6a87cc13-7e5e-4e6a-ab4c-2cbb8dd0f4e6"
+      },
+      {
+        "tenant": "A",
+        "trial": 8,
+        "eventId": "p05_s10121709_shared_08",
+        "workId": "work_57e3c8dd70cfc42c4af76e97fe0dba3b",
+        "receivedAt": "2026-10-12T21:21:19.579Z",
+        "deadlineAt": "2026-10-12T21:23:19.579Z",
+        "engineLatencyMs": 17052,
+        "validatedDecisionLatencyMs": 16923,
+        "deadlineMarginMs": 102948,
+        "deadlineIntervalMs": 120000,
+        "receivedAuditDeltaMs": 1,
+        "receipt": "simulated_15c985d9-3bdf-4b9e-813f-8443c0e60104"
+      },
+      {
+        "tenant": "A",
+        "trial": 9,
+        "eventId": "p05_s10121709_shared_09",
+        "workId": "work_3031da49d07b41d01bb7ea7b912a6d17",
+        "receivedAt": "2026-10-12T21:22:19.838Z",
+        "deadlineAt": "2026-10-12T21:24:19.838Z",
+        "engineLatencyMs": 22410,
+        "validatedDecisionLatencyMs": 22215,
+        "deadlineMarginMs": 97590,
+        "deadlineIntervalMs": 120000,
+        "receivedAuditDeltaMs": 0,
+        "receipt": "simulated_65c4f108-a873-4ceb-bab0-326cfc9b2cb9"
+      },
+      {
+        "tenant": "A",
+        "trial": 10,
+        "eventId": "p05_s10121709_shared_10",
+        "workId": "work_ebe7ec5778d0779ca76adf7709edeedb",
+        "receivedAt": "2026-10-12T21:23:20.112Z",
+        "deadlineAt": "2026-10-12T21:25:20.112Z",
+        "engineLatencyMs": 16973,
+        "validatedDecisionLatencyMs": 16884,
+        "deadlineMarginMs": 103027,
+        "deadlineIntervalMs": 120000,
+        "receivedAuditDeltaMs": 0,
+        "receipt": "simulated_7595eeb0-0fbe-42fd-860d-16d1ce6084a1"
+      },
+      {
+        "tenant": "B",
+        "trial": 1,
+        "eventId": "p05_s10121709_shared_01",
+        "workId": "work_2d48b19802916c30a7f411a281386f75",
+        "receivedAt": "2026-10-12T21:54:43.999Z",
+        "deadlineAt": "2026-10-12T21:56:43.999Z",
+        "engineLatencyMs": 35691,
+        "validatedDecisionLatencyMs": 35512,
+        "deadlineMarginMs": 84309,
+        "deadlineIntervalMs": 120000,
+        "receivedAuditDeltaMs": 1,
+        "receipt": "simulated_25ff7e81-d077-4f7e-8aba-aea13bc60744"
+      },
+      {
+        "tenant": "B",
+        "trial": 2,
+        "eventId": "p05_s10121709_shared_02",
+        "workId": "work_9bf76241db89f0edd4568e53e8b37d98",
+        "receivedAt": "2026-10-12T21:55:44.279Z",
+        "deadlineAt": "2026-10-12T21:57:44.279Z",
+        "engineLatencyMs": 23244,
+        "validatedDecisionLatencyMs": 23085,
+        "deadlineMarginMs": 96756,
+        "deadlineIntervalMs": 120000,
+        "receivedAuditDeltaMs": 0,
+        "receipt": "simulated_5cd75736-7c02-4f7d-9413-c06af0cc9dc6"
+      },
+      {
+        "tenant": "B",
+        "trial": 3,
+        "eventId": "p05_s10121709_shared_03",
+        "workId": "work_497416bb3a2d5c6164b10b4017ec50c4",
+        "receivedAt": "2026-10-12T21:56:44.595Z",
+        "deadlineAt": "2026-10-12T21:58:44.595Z",
+        "engineLatencyMs": 17049,
+        "validatedDecisionLatencyMs": 16930,
+        "deadlineMarginMs": 102951,
+        "deadlineIntervalMs": 120000,
+        "receivedAuditDeltaMs": 0,
+        "receipt": "simulated_4eceddb7-849d-4b47-b4ce-ee09a8be3d02"
+      },
+      {
+        "tenant": "B",
+        "trial": 4,
+        "eventId": "p05_s10121709_shared_04",
+        "workId": "work_a9ea18e8775de7bf26cf859f7dcd052d",
+        "receivedAt": "2026-10-12T21:57:44.889Z",
+        "deadlineAt": "2026-10-12T21:59:44.889Z",
+        "engineLatencyMs": 23863,
+        "validatedDecisionLatencyMs": 23696,
+        "deadlineMarginMs": 96137,
+        "deadlineIntervalMs": 120000,
+        "receivedAuditDeltaMs": 0,
+        "receipt": "simulated_0634c8ae-72d9-422b-9568-83434c34b9ed"
+      },
+      {
+        "tenant": "B",
+        "trial": 5,
+        "eventId": "p05_s10121709_shared_05",
+        "workId": "work_310c29b82f1f57f53bf24fa86bee08d9",
+        "receivedAt": "2026-10-12T21:58:45.221Z",
+        "deadlineAt": "2026-10-12T22:00:45.221Z",
+        "engineLatencyMs": 27401,
+        "validatedDecisionLatencyMs": 27186,
+        "deadlineMarginMs": 92599,
+        "deadlineIntervalMs": 120000,
+        "receivedAuditDeltaMs": 1,
+        "receipt": "simulated_94f8cd85-ca1f-41a8-aacc-7769cdcf889c"
+      },
+      {
+        "tenant": "B",
+        "trial": 6,
+        "eventId": "p05_s10121709_shared_06",
+        "workId": "work_0d9838798bfbec24a8d16cc8de72851b",
+        "receivedAt": "2026-10-12T21:59:45.535Z",
+        "deadlineAt": "2026-10-12T22:01:45.535Z",
+        "engineLatencyMs": 19648,
+        "validatedDecisionLatencyMs": 19547,
+        "deadlineMarginMs": 100352,
+        "deadlineIntervalMs": 120000,
+        "receivedAuditDeltaMs": 0,
+        "receipt": "simulated_8204a8d7-2d79-4a26-89fc-cd893f432bee"
+      },
+      {
+        "tenant": "B",
+        "trial": 7,
+        "eventId": "p05_s10121709_shared_07",
+        "workId": "work_9f5af30f6ec0214c1ddc9e0b3639d744",
+        "receivedAt": "2026-10-12T22:00:45.851Z",
+        "deadlineAt": "2026-10-12T22:02:45.851Z",
+        "engineLatencyMs": 20929,
+        "validatedDecisionLatencyMs": 20879,
+        "deadlineMarginMs": 99071,
+        "deadlineIntervalMs": 120000,
+        "receivedAuditDeltaMs": 0,
+        "receipt": "simulated_067a9296-8449-4a8a-b46a-b12f817371fb"
+      },
+      {
+        "tenant": "B",
+        "trial": 8,
+        "eventId": "p05_s10121709_shared_08",
+        "workId": "work_00e02d657dbbed2f192d14e35790f829",
+        "receivedAt": "2026-10-12T22:01:46.120Z",
+        "deadlineAt": "2026-10-12T22:03:46.120Z",
+        "engineLatencyMs": 19248,
+        "validatedDecisionLatencyMs": 19150,
+        "deadlineMarginMs": 100752,
+        "deadlineIntervalMs": 120000,
+        "receivedAuditDeltaMs": 0,
+        "receipt": "simulated_f311966e-1aae-4961-a4f4-20502c275e1b"
+      },
+      {
+        "tenant": "B",
+        "trial": 9,
+        "eventId": "p05_s10121709_shared_09",
+        "workId": "work_49579918209e2eae790b3d71067da167",
+        "receivedAt": "2026-10-12T22:02:46.426Z",
+        "deadlineAt": "2026-10-12T22:04:46.426Z",
+        "engineLatencyMs": 19575,
+        "validatedDecisionLatencyMs": 19325,
+        "deadlineMarginMs": 100425,
+        "deadlineIntervalMs": 120000,
+        "receivedAuditDeltaMs": 1,
+        "receipt": "simulated_ae73d075-7bad-45a4-b31e-965ece1c602e"
+      },
+      {
+        "tenant": "B",
+        "trial": 10,
+        "eventId": "p05_s10121709_shared_10",
+        "workId": "work_409b01cd4bae19be2fe3e21f3177fb2e",
+        "receivedAt": "2026-10-12T22:03:46.701Z",
+        "deadlineAt": "2026-10-12T22:05:46.701Z",
+        "engineLatencyMs": 19137,
+        "validatedDecisionLatencyMs": 19049,
+        "deadlineMarginMs": 100863,
+        "deadlineIntervalMs": 120000,
+        "receivedAuditDeltaMs": 0,
+        "receipt": "simulated_6e49202e-65ab-443c-ac20-45690eb3f5b4"
+      }
+    ],
+    "combinedEngineLatencyMs": {
+      "n": 20,
+      "min": 16973,
+      "median": 19673.5,
+      "max": 35691,
+      "p95NearestRank": 31604
+    },
+    "precision": "Recomputed medians retain half-millisecond averages; exported reconstructed medians round to three decimal seconds. Eight received audits follow receivedAt by 1ms because clocks were sampled separately; original values retained.",
+    "freshPostStageProfiles": "A/B post-stage reads present; profile grants redacted and not compared as original values"
+  },
+  "security": {
+    "suppliedMatrixRows": 76,
+    "originalResultCounts": {
+      "PASS": 71,
+      "PASS (status inferred from bridge auth fallback)": 1,
+      "PASS (status inferred)": 2,
+      "NOT_RUN": 1,
+      "missing": 1
+    },
+    "correctedClassification": {
+      "reportedPassRows": 71,
+      "nativeFailureObservedHttpStatusInferred": 3,
+      "browserOAuthConsentNotRun": 1,
+      "nativeTraceIdsMissing": 1
+    },
+    "replayChecks": {
+      "A": "PASS_EXPORTED_VALUES_EQUAL; original HTTP wire bytes and replay status lines not supplied",
+      "B": "PASS_EXPORTED_VALUES_EQUAL; original HTTP wire bytes and replay status lines not supplied"
+    },
+    "ingress": "PASS_RECONCILED_16_EXPORTED_STATUS_BODY_PAIRS",
+    "rawOAuthStatuses": {
+      "A: baseline profile": 200,
+      "B: baseline profile": 200,
+      "A: create agent": 200,
+      "A: create client": 200,
+      "B: create agent": 200,
+      "B: create client": 200,
+      "A: authorize by other owner": 404,
+      "A: authorize by own owner": 200,
+      "A: state matches": "LOCAL_COMPARISON_NOT_HTTP",
+      "A: token wrong verifier": 401,
+      "A: token other tenant client": 401,
+      "A: token correct exchange (+0.9s)": 200,
+      "A: consumed code replay": 401,
+      "A: agent token on owner route": 401,
+      "B: authorize by other owner": 404,
+      "B: authorize by own owner": 200,
+      "B: state matches": "LOCAL_COMPARISON_NOT_HTTP",
+      "B: token wrong verifier": 401,
+      "B: token other tenant client": 401,
+      "B: token correct exchange (+0.7s)": 200,
+      "B: consumed code replay": 401,
+      "B: agent token on owner route": 401
+    },
+    "propertyAccess": "Owned response values, errors and false clearance reconciled; raw log lacks route/tenant/status labels",
+    "nativeScope": "PASS_REPORTED_WITH_POSITIVE_CONTROLS; reconstructed matrix contains errors, not original tool-result objects",
+    "mainProfilePreservation": "PASS_RECONCILED_REDACTED_PUBLIC_VALUES_EQUAL; native grant values were not exported",
+    "nativeRevocation": "Three actual connector failures reported; bridge exposes registration HTTP 404, underlying MCP 401 not directly observed",
+    "exportGaps": [
+      "Raw native scope/identity/error result objects and per-call trace IDs missing",
+      "Refresh rotation/reuse and cross-owner revoke HTTP statuses are in the reconstructed matrix, not raw_oauth_log",
+      "Property/access raw log omits method/path/tenant/status; matrix supplies those interpretations",
+      "Provider signing requests not exported, so intended mutation/re-signing relies on account labels",
+      "Wire-byte equality cannot be established from parsed exported objects"
+    ]
+  },
+  "remaining": [
+    "Main-agent revocation with verified capability/profile evidence and active lease",
+    "Live lease expiry, stale proposal/version/action and post-revocation capability freshness",
+    "Controlled persistent restart and replay with revoked access still denied",
+    "Retry/uncertain-send guarantees covered by local injected-provider tests; deployed simulated provider has no fault-injection controls"
+  ],
+  "limitations": [
+    "No phone delivery or door operation; productionReady remains false",
+    "Small ordinary latency sample does not establish a production SLA",
+    "The earlier failed B onboarding remains in its separate 1-of-2 onboarding accounting",
+    "Unknown temporary profile createdAt initially recomputed on every read; see separate local correction"
+  ]
+}

@@ -150,5 +150,7 @@
     "Last narrative sentence paraphrases read_agent_profile and workflow tools ambiguously; obtain actual core tool names when available",
     "Receipts are simulated provider acceptance, not phone delivery",
     "Native trace IDs remain unavailable as previously reported"
-  ]
+  ],
+  "currentReconciliationStatus": "PASS_RECONCILED_EXPORTED_ENGINE_RECORDS",
+  "reconciledBy": "docs/evidence/cleaner-phase05-ordinary-security-reconciled-2026-10-12.json"
 }

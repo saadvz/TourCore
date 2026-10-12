@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-12T22:45:52.244488+00:00",
+  "status": "PASS_LOCAL_NOT_DEPLOYED",
+  "problem": "An unverified temporary profile was not saved, so createdAt/updatedAt were recomputed on every read and appeared to change on OAuth refresh.",
+  "change": "Persist the empty profile on first authenticated read in its current credential epoch. Refresh and restart preserve it; retirement deletes it and a later authorized read starts a fresh profile.",
+  "sourceSha256": {
+    "src/delegation/phase05/profiles.ts": "2acc1472a598bf14b10f8211a67109555bb828019d4b95b95efb8e1d0dcbf3f9",
+    "test/cleanerPhase05.test.ts": "7739833f7b588fceefd0d0eaccc967f3f7802ba230e6c2adcd3359fd2c7e3d10",
+    "eval/cleaner-phase05/reconcile-live.mjs": "f53cfc4c83188285edef0d008b4662fb0e1cb62e1ee1e2327e83ccba35b685f2"
+  },
+  "checks": [
+    {
+      "command": "npx vitest run test/cleanerPhase05.test.ts test/cleanerPhase05Hosted.test.ts test/cleanerCostModel.test.ts",
+      "status": "PASS",
+      "tests": 51,
+      "passed": 51,
+      "failed": 0,
+      "newRegressionTests": 1
+    },
+    {
+      "command": "npm run typecheck",
+      "status": "PASS"
+    },
+    {
+      "command": "npx esbuild scripts/serve-delegation.ts --bundle --platform=node --format=esm --packages=external",
+      "status": "PASS"
+    },
+    {
+      "command": "node eval/cleaner-phase05/reconcile-live.mjs",
+      "status": "PASS; reconciles uploaded evidence without network calls"
+    }
+  ],
+  "limits": [
+    "No live runtime/deployment change; hosted revision still has the timestamp display issue for never-saved profiles",
+    "No full repository suite rerun; previously recorded baseline failures unchanged",
+    "No resource observations regenerated, real SMS/access, billed inference or new inference stack"
+  ]
+}

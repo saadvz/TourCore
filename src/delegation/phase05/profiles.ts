@@ -15,7 +15,11 @@ export class CleanerProfiles {
     const r=this.store.one<{epoch:number;data:string}>('SELECT * FROM profiles WHERE tenant=? AND agent=?',identity.tenantId,identity.agentId);
     if(r?.epoch===a.epoch)return AgentProfile.parse(JSON.parse(r.data));
     const at=new Date(this.now()).toISOString();
-    return {schemaVersion:1,...identity,tenantId:identity.tenantId,agentId:identity.agentId,adapterId:a.adapter,createdAt:at,updatedAt:at,capabilities:Capability.options.map(capability=>({capability,declared:'unknown'})),nativeExtensions:[],grants:[]};
+    const profile:Profile={schemaVersion:1,tenantId:identity.tenantId,agentId:identity.agentId,adapterId:a.adapter,createdAt:at,updatedAt:at,capabilities:Capability.options.map(capability=>({capability,declared:'unknown'})),nativeExtensions:[],grants:[]};
+    // Persist even an unverified profile. Ordinary reads and OAuth refresh do
+    // not create a new capability epoch or change its creation timestamp.
+    this.save(profile);
+    return profile;
   }
   private save(p:Profile) {
     // Strip authentication fields before parsing/saving the public profile.

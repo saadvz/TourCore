@@ -43,6 +43,21 @@
       "bytes": 400,
       "sha256": "88760444d8ac28927181709e9b97e7df25172a72fc050f08da62242421d8332b",
       "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/B_retry_schedule.json"
+    },
+    {
+      "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/Ordinary20.json",
+      "bytes": 93414,
+      "sha256": "15b788cad895292e31322876bda46943da9237e60c00f696b8e3150421764de9"
+    },
+    {
+      "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/Security_packet.json",
+      "bytes": 45954,
+      "sha256": "ae5483f0ca314b43481628c7831c2878a9f4cb89082f3eee513c6dbc68650477"
+    },
+    {
+      "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/Security_narrative.txt",
+      "bytes": 6460,
+      "sha256": "b2adaf6f7c7c3df21f3d30c9ba3529fe1f6337df7103f24e32c52f4d8f6e6eb3"
     }
   ],
   "checks": {
@@ -62,9 +77,14 @@
     "BRetryEngineLatencyMs": 94349,
     "BRetryStoredDeadlineMarginMs": 25652,
     "BRetrySimulatedReceipts": 1,
-    "ordinaryA": "PASS_REPORTED_10_OF_10; raw per-trial reconciliation pending",
-    "ordinaryB": "PASS_REPORTED_10_OF_10; raw per-trial reconciliation pending",
-    "BPostOrdinaryProfile": "NOT_SUPPLIED; account last read B before ordinary stage"
+    "ordinaryA": "PASS_RECONCILED_10_OF_10_EXPORTED_ENGINE_RECORDS",
+    "ordinaryB": "PASS_RECONCILED_10_OF_10_EXPORTED_ENGINE_RECORDS",
+    "BPostOrdinaryProfile": "PASS_EXPORTED_READ_AFTER_COMPLETION; unchanged redacted public profile",
+    "replay": "PASS_RECONCILED_EXPORTED_VALUES_EQUAL_A_B",
+    "syntheticIngress": "PASS_RECONCILED_16_EXPORTED_STATUS_BODY_PAIRS",
+    "OAuth": "API issuance/PKCE checks reconcile; native identity/scope and refresh/revocation outcomes reported; three underlying MCP denial statuses unobserved",
+    "mainProfilePreservation": "PASS_RECONCILED_REDACTED_PUBLIC_VALUES_EQUAL_A_B",
+    "securityMatrix": "76 rows: 71 PASS, 3 native failures with HTTP status inferred, 1 NOT_RUN browser UI, 1 missing trace IDs"
   },
   "accountReportedOperationalFaults": [
     "Initial B connector switch retained tenant A until old session was stopped; initial successful read/CLOSED claim excluded from isolation results",
@@ -73,15 +93,22 @@
     "Grok attributes delays to its computer stalling while conversation closed; server export verifies late notification, not the client-side cause"
   ],
   "remaining": [
-    "Raw ordinary A/B schedules, event manifest, engine evidence and per-trial statistics reconciliation; fresh post-stage B profile",
-    "Live revocation and profile/grant/lease freshness",
-    "Live replay/retry, provider ingress, OAuth, property/access storage checks and restart evidence as available"
+    "Main-agent revocation with verified capability/profile evidence and active lease",
+    "Live lease expiry, stale proposal/version/action and post-revocation capability freshness",
+    "Controlled persistent restart and replay with revoked access still denied",
+    "Retry/uncertain-send guarantees covered by local injected-provider tests; deployed simulated provider has no fault-injection controls"
   ],
   "rawLimitations": [
     "Scope-check B fixture JSON and exact denied responses were not supplied",
     "Native per-call trace IDs unavailable in account",
-    "Profile grants field was redacted by exporter; do not treat its string as an original valid profile schema"
+    "Profile grants field was redacted by exporter; do not treat its string as an original valid profile schema",
+    "Raw native scope/identity/error result objects and per-call trace IDs missing",
+    "Refresh rotation/reuse and cross-owner revoke HTTP statuses are in the reconstructed matrix, not raw_oauth_log",
+    "Property/access raw log omits method/path/tenant/status; matrix supplies those interpretations",
+    "Provider signing requests not exported, so intended mutation/re-signing relies on account labels",
+    "Wire-byte equality cannot be established from parsed exported objects"
   ],
   "retryReconciliation": "docs/evidence/cleaner-phase05-grok-B-retry-2026-10-12.json",
-  "ordinaryReport": "docs/evidence/cleaner-phase05-grok-ordinary-reported-2026-10-12.json"
+  "ordinaryReport": "docs/evidence/cleaner-phase05-grok-ordinary-reported-2026-10-12.json",
+  "ordinarySecurityReconciliation": "docs/evidence/cleaner-phase05-ordinary-security-reconciled-2026-10-12.json"
 }

@@ -1,0 +1,2953 @@
+{
+ "label": "Phase 0.5 ordinary twenty-trial export (no reruns)",
+ "exportedAt": "2026-10-12T22:30:26Z",
+ "manifest": [
+  {
+   "eventId": "p05_s10121709_shared_01",
+   "kind": "ordinary",
+   "delaySeconds": 300
+  },
+  {
+   "eventId": "p05_s10121709_shared_02",
+   "kind": "ordinary",
+   "delaySeconds": 360
+  },
+  {
+   "eventId": "p05_s10121709_shared_03",
+   "kind": "ordinary",
+   "delaySeconds": 420
+  },
+  {
+   "eventId": "p05_s10121709_shared_04",
+   "kind": "ordinary",
+   "delaySeconds": 480
+  },
+  {
+   "eventId": "p05_s10121709_shared_05",
+   "kind": "ordinary",
+   "delaySeconds": 540
+  },
+  {
+   "eventId": "p05_s10121709_shared_06",
+   "kind": "ordinary",
+   "delaySeconds": 600
+  },
+  {
+   "eventId": "p05_s10121709_shared_07",
+   "kind": "ordinary",
+   "delaySeconds": 660
+  },
+  {
+   "eventId": "p05_s10121709_shared_08",
+   "kind": "ordinary",
+   "delaySeconds": 720
+  },
+  {
+   "eventId": "p05_s10121709_shared_09",
+   "kind": "ordinary",
+   "delaySeconds": 780
+  },
+  {
+   "eventId": "p05_s10121709_shared_10",
+   "kind": "ordinary",
+   "delaySeconds": 840
+  }
+ ],
+ "tenants": {
+  "A": {
+   "trials": [
+    {
+     "trial": 1,
+     "eventId": "p05_s10121709_shared_01",
+     "delaySeconds": 300,
+     "requestLog": {
+      "sentAtET": "17:09:17.390",
+      "http": 202
+     },
+     "rawAcknowledgment": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_c1c7a6dd8c4e933ddcb145fa0dd489bd",
+       "eventId": "p05_s10121709_shared_01",
+       "kind": "ordinary",
+       "delaySeconds": 300,
+       "runAt": "2026-10-12T21:14:17.573Z",
+       "status": "scheduled",
+       "workId": null,
+       "firedAt": null,
+       "error": null
+      }
+     },
+     "rawScheduleRecord": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_c1c7a6dd8c4e933ddcb145fa0dd489bd",
+       "eventId": "p05_s10121709_shared_01",
+       "kind": "ordinary",
+       "delaySeconds": 300,
+       "runAt": "2026-10-12T21:14:17.573Z",
+       "status": "fired",
+       "workId": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+       "firedAt": "2026-10-12T21:14:17.599Z",
+       "error": null
+      }
+     },
+     "rawEngineEvidence": {
+      "mode": "synthetic",
+      "work": {
+       "id": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+       "eventType": "cleaner.reschedule_requested",
+       "requestedStart": "2026-10-13T22:14:17.574Z",
+       "receivedAt": "2026-10-12T21:14:17.594Z",
+       "deadlineAt": "2026-10-12T21:16:17.594Z",
+       "status": "completed",
+       "turn": {
+        "id": "turn_c772208bd9263e2f23a7bb54b52ff481",
+        "version": 2,
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T21:14:17.574Z",
+        "windowEnd": "2026-10-14T03:14:17.575Z",
+        "nextArrival": "2026-10-14T04:14:17.575Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T22:14:17.574Z"
+       },
+       "decisionSource": "agent",
+       "deliveryStatus": "sent"
+      },
+      "audit": [
+       {
+        "at": "2026-10-12T21:14:17.594Z",
+        "type": "received",
+        "actor": "verified_provider"
+       },
+       {
+        "at": "2026-10-12T21:14:43.689Z",
+        "type": "claimed",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:14:49.080Z",
+        "type": "validated_action_and_reply_saved",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:14:49.190Z",
+        "type": "send_attempt",
+        "actor": "engine"
+       },
+       {
+        "at": "2026-10-12T21:14:49.198Z",
+        "type": "provider_accepted_and_completed",
+        "actor": "engine"
+       }
+      ],
+      "reply": "{\"key\":\"reply_work_81f25a6ec1109b0a08d3b2e4bd85d126\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:14 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791839689080,\"receipt\":\"simulated_4de3a740-1c3b-4928-b381-faef4f8be675\"}",
+      "carrierEvents": [],
+      "replies": [
+       {
+        "key": "reply_work_81f25a6ec1109b0a08d3b2e4bd85d126",
+        "recipient": "synthetic_cleaner_A",
+        "text": "Cleaning scheduled for Oct 13, 2026, 6:14 PM (America/New_York). Entry requires host clearance.",
+        "receipt": "simulated_4de3a740-1c3b-4928-b381-faef4f8be675"
+       }
+      ],
+      "notification": {
+       "tenant": "A",
+       "work_id": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+       "agent": "grok_test_agent",
+       "epoch": 1,
+       "status": "accepted",
+       "due": 1791839659108,
+       "attempts": 1,
+       "http": 200,
+       "attempted_at": 1791839657631,
+       "accepted_at": 1791839658108
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+     }
+    },
+    {
+     "trial": 2,
+     "eventId": "p05_s10121709_shared_02",
+     "delaySeconds": 360,
+     "requestLog": {
+      "sentAtET": "17:09:17.635",
+      "http": 202
+     },
+     "rawAcknowledgment": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_0bd3b8ef6cefbda028929faca617e1c6",
+       "eventId": "p05_s10121709_shared_02",
+       "kind": "ordinary",
+       "delaySeconds": 360,
+       "runAt": "2026-10-12T21:15:17.897Z",
+       "status": "scheduled",
+       "workId": null,
+       "firedAt": null,
+       "error": null
+      }
+     },
+     "rawScheduleRecord": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_0bd3b8ef6cefbda028929faca617e1c6",
+       "eventId": "p05_s10121709_shared_02",
+       "kind": "ordinary",
+       "delaySeconds": 360,
+       "runAt": "2026-10-12T21:15:17.897Z",
+       "status": "fired",
+       "workId": "work_b167f0962e9a80af779f8ce9cf084f58",
+       "firedAt": "2026-10-12T21:15:17.909Z",
+       "error": null
+      }
+     },
+     "rawEngineEvidence": {
+      "mode": "synthetic",
+      "work": {
+       "id": "work_b167f0962e9a80af779f8ce9cf084f58",
+       "eventType": "cleaner.reschedule_requested",
+       "requestedStart": "2026-10-13T22:15:17.899Z",
+       "receivedAt": "2026-10-12T21:15:17.904Z",
+       "deadlineAt": "2026-10-12T21:17:17.904Z",
+       "status": "completed",
+       "turn": {
+        "id": "turn_c3f490401f55b25535540894492ccadc",
+        "version": 2,
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T21:15:17.899Z",
+        "windowEnd": "2026-10-14T03:15:17.899Z",
+        "nextArrival": "2026-10-14T04:15:17.899Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T22:15:17.899Z"
+       },
+       "decisionSource": "agent",
+       "deliveryStatus": "sent"
+      },
+      "audit": [
+       {
+        "at": "2026-10-12T21:15:17.905Z",
+        "type": "received",
+        "actor": "verified_provider"
+       },
+       {
+        "at": "2026-10-12T21:15:39.467Z",
+        "type": "claimed",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:15:45.547Z",
+        "type": "validated_action_and_reply_saved",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:15:45.785Z",
+        "type": "send_attempt",
+        "actor": "engine"
+       },
+       {
+        "at": "2026-10-12T21:15:45.796Z",
+        "type": "provider_accepted_and_completed",
+        "actor": "engine"
+       }
+      ],
+      "reply": "{\"key\":\"reply_work_b167f0962e9a80af779f8ce9cf084f58\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:15 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791839745546,\"receipt\":\"simulated_6c19d6c4-cef2-43e2-8a1c-048a6a3b5fef\"}",
+      "carrierEvents": [],
+      "replies": [
+       {
+        "key": "reply_work_b167f0962e9a80af779f8ce9cf084f58",
+        "recipient": "synthetic_cleaner_A",
+        "text": "Cleaning scheduled for Oct 13, 2026, 6:15 PM (America/New_York). Entry requires host clearance.",
+        "receipt": "simulated_6c19d6c4-cef2-43e2-8a1c-048a6a3b5fef"
+       }
+      ],
+      "notification": {
+       "tenant": "A",
+       "work_id": "work_b167f0962e9a80af779f8ce9cf084f58",
+       "agent": "grok_test_agent",
+       "epoch": 1,
+       "status": "accepted",
+       "due": 1791839719471,
+       "attempts": 1,
+       "http": 200,
+       "attempted_at": 1791839717989,
+       "accepted_at": 1791839718471
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+     }
+    },
+    {
+     "trial": 3,
+     "eventId": "p05_s10121709_shared_03",
+     "delaySeconds": 420,
+     "requestLog": {
+      "sentAtET": "17:09:17.965",
+      "http": 202
+     },
+     "rawAcknowledgment": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_c6cb96bc6a40c30aa9bd65b9fad86fb7",
+       "eventId": "p05_s10121709_shared_03",
+       "kind": "ordinary",
+       "delaySeconds": 420,
+       "runAt": "2026-10-12T21:16:18.182Z",
+       "status": "scheduled",
+       "workId": null,
+       "firedAt": null,
+       "error": null
+      }
+     },
+     "rawScheduleRecord": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_c6cb96bc6a40c30aa9bd65b9fad86fb7",
+       "eventId": "p05_s10121709_shared_03",
+       "kind": "ordinary",
+       "delaySeconds": 420,
+       "runAt": "2026-10-12T21:16:18.182Z",
+       "status": "fired",
+       "workId": "work_b609180fc2ffdfa4a9113ba285b2c334",
+       "firedAt": "2026-10-12T21:16:18.193Z",
+       "error": null
+      }
+     },
+     "rawEngineEvidence": {
+      "mode": "synthetic",
+      "work": {
+       "id": "work_b609180fc2ffdfa4a9113ba285b2c334",
+       "eventType": "cleaner.reschedule_requested",
+       "requestedStart": "2026-10-13T22:16:18.183Z",
+       "receivedAt": "2026-10-12T21:16:18.188Z",
+       "deadlineAt": "2026-10-12T21:18:18.188Z",
+       "status": "completed",
+       "turn": {
+        "id": "turn_6ce49bb09c0795ba6cdc775bc8a295bf",
+        "version": 2,
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T21:16:18.183Z",
+        "windowEnd": "2026-10-14T03:16:18.183Z",
+        "nextArrival": "2026-10-14T04:16:18.183Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T22:16:18.183Z"
+       },
+       "decisionSource": "agent",
+       "deliveryStatus": "sent"
+      },
+      "audit": [
+       {
+        "at": "2026-10-12T21:16:18.188Z",
+        "type": "received",
+        "actor": "verified_provider"
+       },
+       {
+        "at": "2026-10-12T21:16:32.875Z",
+        "type": "claimed",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:16:37.669Z",
+        "type": "validated_action_and_reply_saved",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:16:37.868Z",
+        "type": "send_attempt",
+        "actor": "engine"
+       },
+       {
+        "at": "2026-10-12T21:16:37.887Z",
+        "type": "provider_accepted_and_completed",
+        "actor": "engine"
+       }
+      ],
+      "reply": "{\"key\":\"reply_work_b609180fc2ffdfa4a9113ba285b2c334\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:16 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791839797669,\"receipt\":\"simulated_5ba2ae22-348f-4324-8031-217c64396283\"}",
+      "carrierEvents": [],
+      "replies": [
+       {
+        "key": "reply_work_b609180fc2ffdfa4a9113ba285b2c334",
+        "recipient": "synthetic_cleaner_A",
+        "text": "Cleaning scheduled for Oct 13, 2026, 6:16 PM (America/New_York). Entry requires host clearance.",
+        "receipt": "simulated_5ba2ae22-348f-4324-8031-217c64396283"
+       }
+      ],
+      "notification": {
+       "tenant": "A",
+       "work_id": "work_b609180fc2ffdfa4a9113ba285b2c334",
+       "agent": "grok_test_agent",
+       "epoch": 1,
+       "status": "accepted",
+       "due": 1791839779779,
+       "attempts": 1,
+       "http": 200,
+       "attempted_at": 1791839778344,
+       "accepted_at": 1791839778779
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+     }
+    },
+    {
+     "trial": 4,
+     "eventId": "p05_s10121709_shared_04",
+     "delaySeconds": 480,
+     "requestLog": {
+      "sentAtET": "17:09:18.249",
+      "http": 202
+     },
+     "rawAcknowledgment": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_fb58783166278884ea1da11c8510fdfc",
+       "eventId": "p05_s10121709_shared_04",
+       "kind": "ordinary",
+       "delaySeconds": 480,
+       "runAt": "2026-10-12T21:17:18.512Z",
+       "status": "scheduled",
+       "workId": null,
+       "firedAt": null,
+       "error": null
+      }
+     },
+     "rawScheduleRecord": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_fb58783166278884ea1da11c8510fdfc",
+       "eventId": "p05_s10121709_shared_04",
+       "kind": "ordinary",
+       "delaySeconds": 480,
+       "runAt": "2026-10-12T21:17:18.512Z",
+       "status": "fired",
+       "workId": "work_81405e20bac76c5cbd1bde256cc38b6c",
+       "firedAt": "2026-10-12T21:17:18.525Z",
+       "error": null
+      }
+     },
+     "rawEngineEvidence": {
+      "mode": "synthetic",
+      "work": {
+       "id": "work_81405e20bac76c5cbd1bde256cc38b6c",
+       "eventType": "cleaner.reschedule_requested",
+       "requestedStart": "2026-10-13T22:17:18.513Z",
+       "receivedAt": "2026-10-12T21:17:18.519Z",
+       "deadlineAt": "2026-10-12T21:19:18.519Z",
+       "status": "completed",
+       "turn": {
+        "id": "turn_e62d892f62027cc6db6096e9c8a9dc05",
+        "version": 2,
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T21:17:18.513Z",
+        "windowEnd": "2026-10-14T03:17:18.513Z",
+        "nextArrival": "2026-10-14T04:17:18.513Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T22:17:18.513Z"
+       },
+       "decisionSource": "agent",
+       "deliveryStatus": "sent"
+      },
+      "audit": [
+       {
+        "at": "2026-10-12T21:17:18.520Z",
+        "type": "received",
+        "actor": "verified_provider"
+       },
+       {
+        "at": "2026-10-12T21:17:32.931Z",
+        "type": "claimed",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:17:37.573Z",
+        "type": "validated_action_and_reply_saved",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:17:37.698Z",
+        "type": "send_attempt",
+        "actor": "engine"
+       },
+       {
+        "at": "2026-10-12T21:17:37.712Z",
+        "type": "provider_accepted_and_completed",
+        "actor": "engine"
+       }
+      ],
+      "reply": "{\"key\":\"reply_work_81405e20bac76c5cbd1bde256cc38b6c\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:17 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791839857572,\"receipt\":\"simulated_565d4824-d929-4618-9024-cad9fe24ed9f\"}",
+      "carrierEvents": [],
+      "replies": [
+       {
+        "key": "reply_work_81405e20bac76c5cbd1bde256cc38b6c",
+        "recipient": "synthetic_cleaner_A",
+        "text": "Cleaning scheduled for Oct 13, 2026, 6:17 PM (America/New_York). Entry requires host clearance.",
+        "receipt": "simulated_565d4824-d929-4618-9024-cad9fe24ed9f"
+       }
+      ],
+      "notification": {
+       "tenant": "A",
+       "work_id": "work_81405e20bac76c5cbd1bde256cc38b6c",
+       "agent": "grok_test_agent",
+       "epoch": 1,
+       "status": "accepted",
+       "due": 1791839840096,
+       "attempts": 1,
+       "http": 200,
+       "attempted_at": 1791839838672,
+       "accepted_at": 1791839839096
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+     }
+    },
+    {
+     "trial": 5,
+     "eventId": "p05_s10121709_shared_05",
+     "delaySeconds": 540,
+     "requestLog": {
+      "sentAtET": "17:09:18.581",
+      "http": 202
+     },
+     "rawAcknowledgment": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_3f5468777f805498e579b09a018e7251",
+       "eventId": "p05_s10121709_shared_05",
+       "kind": "ordinary",
+       "delaySeconds": 540,
+       "runAt": "2026-10-12T21:18:18.774Z",
+       "status": "scheduled",
+       "workId": null,
+       "firedAt": null,
+       "error": null
+      }
+     },
+     "rawScheduleRecord": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_3f5468777f805498e579b09a018e7251",
+       "eventId": "p05_s10121709_shared_05",
+       "kind": "ordinary",
+       "delaySeconds": 540,
+       "runAt": "2026-10-12T21:18:18.774Z",
+       "status": "fired",
+       "workId": "work_2fd53551e60d64b5e8c99a8214397391",
+       "firedAt": "2026-10-12T21:18:18.801Z",
+       "error": null
+      }
+     },
+     "rawEngineEvidence": {
+      "mode": "synthetic",
+      "work": {
+       "id": "work_2fd53551e60d64b5e8c99a8214397391",
+       "eventType": "cleaner.reschedule_requested",
+       "requestedStart": "2026-10-13T22:18:18.775Z",
+       "receivedAt": "2026-10-12T21:18:18.784Z",
+       "deadlineAt": "2026-10-12T21:20:18.784Z",
+       "status": "completed",
+       "turn": {
+        "id": "turn_7d571879115a26fc9526cfdd5892920c",
+        "version": 2,
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T21:18:18.775Z",
+        "windowEnd": "2026-10-14T03:18:18.775Z",
+        "nextArrival": "2026-10-14T04:18:18.775Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T22:18:18.775Z"
+       },
+       "decisionSource": "agent",
+       "deliveryStatus": "sent"
+      },
+      "audit": [
+       {
+        "at": "2026-10-12T21:18:18.784Z",
+        "type": "received",
+        "actor": "verified_provider"
+       },
+       {
+        "at": "2026-10-12T21:18:32.494Z",
+        "type": "claimed",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:18:37.250Z",
+        "type": "validated_action_and_reply_saved",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:18:37.293Z",
+        "type": "send_attempt",
+        "actor": "engine"
+       },
+       {
+        "at": "2026-10-12T21:18:37.303Z",
+        "type": "provider_accepted_and_completed",
+        "actor": "engine"
+       }
+      ],
+      "reply": "{\"key\":\"reply_work_2fd53551e60d64b5e8c99a8214397391\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:18 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791839917250,\"receipt\":\"simulated_ec4a2bb7-370d-4075-815a-c634d38a02d3\"}",
+      "carrierEvents": [],
+      "replies": [
+       {
+        "key": "reply_work_2fd53551e60d64b5e8c99a8214397391",
+        "recipient": "synthetic_cleaner_A",
+        "text": "Cleaning scheduled for Oct 13, 2026, 6:18 PM (America/New_York). Entry requires host clearance.",
+        "receipt": "simulated_ec4a2bb7-370d-4075-815a-c634d38a02d3"
+       }
+      ],
+      "notification": {
+       "tenant": "A",
+       "work_id": "work_2fd53551e60d64b5e8c99a8214397391",
+       "agent": "grok_test_agent",
+       "epoch": 1,
+       "status": "accepted",
+       "due": 1791839900656,
+       "attempts": 1,
+       "http": 200,
+       "attempted_at": 1791839899020,
+       "accepted_at": 1791839899656
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+     }
+    },
+    {
+     "trial": 6,
+     "eventId": "p05_s10121709_shared_06",
+     "delaySeconds": 600,
+     "requestLog": {
+      "sentAtET": "17:09:18.840",
+      "http": 202
+     },
+     "rawAcknowledgment": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_34b90b3663614ffab1cd6beb5513ea2d",
+       "eventId": "p05_s10121709_shared_06",
+       "kind": "ordinary",
+       "delaySeconds": 600,
+       "runAt": "2026-10-12T21:19:19.035Z",
+       "status": "scheduled",
+       "workId": null,
+       "firedAt": null,
+       "error": null
+      }
+     },
+     "rawScheduleRecord": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_34b90b3663614ffab1cd6beb5513ea2d",
+       "eventId": "p05_s10121709_shared_06",
+       "kind": "ordinary",
+       "delaySeconds": 600,
+       "runAt": "2026-10-12T21:19:19.035Z",
+       "status": "fired",
+       "workId": "work_0582e6c56ffcaf32468a74892719fa9b",
+       "firedAt": "2026-10-12T21:19:19.047Z",
+       "error": null
+      }
+     },
+     "rawEngineEvidence": {
+      "mode": "synthetic",
+      "work": {
+       "id": "work_0582e6c56ffcaf32468a74892719fa9b",
+       "eventType": "cleaner.reschedule_requested",
+       "requestedStart": "2026-10-13T22:19:19.036Z",
+       "receivedAt": "2026-10-12T21:19:19.042Z",
+       "deadlineAt": "2026-10-12T21:21:19.042Z",
+       "status": "completed",
+       "turn": {
+        "id": "turn_223707c826ec099e0818931f24a46805",
+        "version": 2,
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T21:19:19.036Z",
+        "windowEnd": "2026-10-14T03:19:19.036Z",
+        "nextArrival": "2026-10-14T04:19:19.036Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T22:19:19.036Z"
+       },
+       "decisionSource": "agent",
+       "deliveryStatus": "sent"
+      },
+      "audit": [
+       {
+        "at": "2026-10-12T21:19:19.043Z",
+        "type": "received",
+        "actor": "verified_provider"
+       },
+       {
+        "at": "2026-10-12T21:19:32.922Z",
+        "type": "claimed",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:19:37.516Z",
+        "type": "validated_action_and_reply_saved",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:19:37.640Z",
+        "type": "send_attempt",
+        "actor": "engine"
+       },
+       {
+        "at": "2026-10-12T21:19:37.649Z",
+        "type": "provider_accepted_and_completed",
+        "actor": "engine"
+       }
+      ],
+      "reply": "{\"key\":\"reply_work_0582e6c56ffcaf32468a74892719fa9b\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:19 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791839977516,\"receipt\":\"simulated_4ba18ba7-c1d8-4d90-bdee-1609946dcf45\"}",
+      "carrierEvents": [],
+      "replies": [
+       {
+        "key": "reply_work_0582e6c56ffcaf32468a74892719fa9b",
+        "recipient": "synthetic_cleaner_A",
+        "text": "Cleaning scheduled for Oct 13, 2026, 6:19 PM (America/New_York). Entry requires host clearance.",
+        "receipt": "simulated_4ba18ba7-c1d8-4d90-bdee-1609946dcf45"
+       }
+      ],
+      "notification": {
+       "tenant": "A",
+       "work_id": "work_0582e6c56ffcaf32468a74892719fa9b",
+       "agent": "grok_test_agent",
+       "epoch": 1,
+       "status": "accepted",
+       "due": 1791839960547,
+       "attempts": 1,
+       "http": 200,
+       "attempted_at": 1791839959113,
+       "accepted_at": 1791839959547
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+     }
+    },
+    {
+     "trial": 7,
+     "eventId": "p05_s10121709_shared_07",
+     "delaySeconds": 660,
+     "requestLog": {
+      "sentAtET": "17:09:19.104",
+      "http": 202
+     },
+     "rawAcknowledgment": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_e717333852265e376eb4ec49a45cf150",
+       "eventId": "p05_s10121709_shared_07",
+       "kind": "ordinary",
+       "delaySeconds": 660,
+       "runAt": "2026-10-12T21:20:19.296Z",
+       "status": "scheduled",
+       "workId": null,
+       "firedAt": null,
+       "error": null
+      }
+     },
+     "rawScheduleRecord": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_e717333852265e376eb4ec49a45cf150",
+       "eventId": "p05_s10121709_shared_07",
+       "kind": "ordinary",
+       "delaySeconds": 660,
+       "runAt": "2026-10-12T21:20:19.296Z",
+       "status": "fired",
+       "workId": "work_013feea076dfb95b2516dadf19e28655",
+       "firedAt": "2026-10-12T21:20:19.308Z",
+       "error": null
+      }
+     },
+     "rawEngineEvidence": {
+      "mode": "synthetic",
+      "work": {
+       "id": "work_013feea076dfb95b2516dadf19e28655",
+       "eventType": "cleaner.reschedule_requested",
+       "requestedStart": "2026-10-13T22:20:19.297Z",
+       "receivedAt": "2026-10-12T21:20:19.303Z",
+       "deadlineAt": "2026-10-12T21:22:19.303Z",
+       "status": "completed",
+       "turn": {
+        "id": "turn_2ca79fd0a82c9d2653c42cc9f2843091",
+        "version": 2,
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T21:20:19.297Z",
+        "windowEnd": "2026-10-14T03:20:19.297Z",
+        "nextArrival": "2026-10-14T04:20:19.297Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T22:20:19.297Z"
+       },
+       "decisionSource": "agent",
+       "deliveryStatus": "sent"
+      },
+      "audit": [
+       {
+        "at": "2026-10-12T21:20:19.304Z",
+        "type": "received",
+        "actor": "verified_provider"
+       },
+       {
+        "at": "2026-10-12T21:20:35.253Z",
+        "type": "claimed",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:20:39.308Z",
+        "type": "validated_action_and_reply_saved",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:20:39.512Z",
+        "type": "send_attempt",
+        "actor": "engine"
+       },
+       {
+        "at": "2026-10-12T21:20:39.525Z",
+        "type": "provider_accepted_and_completed",
+        "actor": "engine"
+       }
+      ],
+      "reply": "{\"key\":\"reply_work_013feea076dfb95b2516dadf19e28655\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:20 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791840039308,\"receipt\":\"simulated_6a87cc13-7e5e-4e6a-ab4c-2cbb8dd0f4e6\"}",
+      "carrierEvents": [],
+      "replies": [
+       {
+        "key": "reply_work_013feea076dfb95b2516dadf19e28655",
+        "recipient": "synthetic_cleaner_A",
+        "text": "Cleaning scheduled for Oct 13, 2026, 6:20 PM (America/New_York). Entry requires host clearance.",
+        "receipt": "simulated_6a87cc13-7e5e-4e6a-ab4c-2cbb8dd0f4e6"
+       }
+      ],
+      "notification": {
+       "tenant": "A",
+       "work_id": "work_013feea076dfb95b2516dadf19e28655",
+       "agent": "grok_test_agent",
+       "epoch": 1,
+       "status": "accepted",
+       "due": 1791840020906,
+       "attempts": 1,
+       "http": 200,
+       "attempted_at": 1791840019462,
+       "accepted_at": 1791840019906
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+     }
+    },
+    {
+     "trial": 8,
+     "eventId": "p05_s10121709_shared_08",
+     "delaySeconds": 720,
+     "requestLog": {
+      "sentAtET": "17:09:19.357",
+      "http": 202
+     },
+     "rawAcknowledgment": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_566e613f332f16526fd0774e1c166b70",
+       "eventId": "p05_s10121709_shared_08",
+       "kind": "ordinary",
+       "delaySeconds": 720,
+       "runAt": "2026-10-12T21:21:19.572Z",
+       "status": "scheduled",
+       "workId": null,
+       "firedAt": null,
+       "error": null
+      }
+     },
+     "rawScheduleRecord": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_566e613f332f16526fd0774e1c166b70",
+       "eventId": "p05_s10121709_shared_08",
+       "kind": "ordinary",
+       "delaySeconds": 720,
+       "runAt": "2026-10-12T21:21:19.572Z",
+       "status": "fired",
+       "workId": "work_57e3c8dd70cfc42c4af76e97fe0dba3b",
+       "firedAt": "2026-10-12T21:21:19.583Z",
+       "error": null
+      }
+     },
+     "rawEngineEvidence": {
+      "mode": "synthetic",
+      "work": {
+       "id": "work_57e3c8dd70cfc42c4af76e97fe0dba3b",
+       "eventType": "cleaner.reschedule_requested",
+       "requestedStart": "2026-10-13T22:21:19.573Z",
+       "receivedAt": "2026-10-12T21:21:19.579Z",
+       "deadlineAt": "2026-10-12T21:23:19.579Z",
+       "status": "completed",
+       "turn": {
+        "id": "turn_45883615193eeed5f72a40cfdfe4b850",
+        "version": 2,
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T21:21:19.573Z",
+        "windowEnd": "2026-10-14T03:21:19.573Z",
+        "nextArrival": "2026-10-14T04:21:19.573Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T22:21:19.573Z"
+       },
+       "decisionSource": "agent",
+       "deliveryStatus": "sent"
+      },
+      "audit": [
+       {
+        "at": "2026-10-12T21:21:19.580Z",
+        "type": "received",
+        "actor": "verified_provider"
+       },
+       {
+        "at": "2026-10-12T21:21:31.857Z",
+        "type": "claimed",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:21:36.502Z",
+        "type": "validated_action_and_reply_saved",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:21:36.624Z",
+        "type": "send_attempt",
+        "actor": "engine"
+       },
+       {
+        "at": "2026-10-12T21:21:36.631Z",
+        "type": "provider_accepted_and_completed",
+        "actor": "engine"
+       }
+      ],
+      "reply": "{\"key\":\"reply_work_57e3c8dd70cfc42c4af76e97fe0dba3b\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:21 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791840096502,\"receipt\":\"simulated_15c985d9-3bdf-4b9e-813f-8443c0e60104\"}",
+      "carrierEvents": [],
+      "replies": [
+       {
+        "key": "reply_work_57e3c8dd70cfc42c4af76e97fe0dba3b",
+        "recipient": "synthetic_cleaner_A",
+        "text": "Cleaning scheduled for Oct 13, 2026, 6:21 PM (America/New_York). Entry requires host clearance.",
+        "receipt": "simulated_15c985d9-3bdf-4b9e-813f-8443c0e60104"
+       }
+      ],
+      "notification": {
+       "tenant": "A",
+       "work_id": "work_57e3c8dd70cfc42c4af76e97fe0dba3b",
+       "agent": "grok_test_agent",
+       "epoch": 1,
+       "status": "accepted",
+       "due": 1791840081218,
+       "attempts": 1,
+       "http": 200,
+       "attempted_at": 1791840079590,
+       "accepted_at": 1791840080219
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+     }
+    },
+    {
+     "trial": 9,
+     "eventId": "p05_s10121709_shared_09",
+     "delaySeconds": 780,
+     "requestLog": {
+      "sentAtET": "17:09:19.637",
+      "http": 202
+     },
+     "rawAcknowledgment": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_6cc7c335cdaa763d32e5b4550e4f8cd7",
+       "eventId": "p05_s10121709_shared_09",
+       "kind": "ordinary",
+       "delaySeconds": 780,
+       "runAt": "2026-10-12T21:22:19.831Z",
+       "status": "scheduled",
+       "workId": null,
+       "firedAt": null,
+       "error": null
+      }
+     },
+     "rawScheduleRecord": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_6cc7c335cdaa763d32e5b4550e4f8cd7",
+       "eventId": "p05_s10121709_shared_09",
+       "kind": "ordinary",
+       "delaySeconds": 780,
+       "runAt": "2026-10-12T21:22:19.831Z",
+       "status": "fired",
+       "workId": "work_3031da49d07b41d01bb7ea7b912a6d17",
+       "firedAt": "2026-10-12T21:22:19.843Z",
+       "error": null
+      }
+     },
+     "rawEngineEvidence": {
+      "mode": "synthetic",
+      "work": {
+       "id": "work_3031da49d07b41d01bb7ea7b912a6d17",
+       "eventType": "cleaner.reschedule_requested",
+       "requestedStart": "2026-10-13T22:22:19.832Z",
+       "receivedAt": "2026-10-12T21:22:19.838Z",
+       "deadlineAt": "2026-10-12T21:24:19.838Z",
+       "status": "completed",
+       "turn": {
+        "id": "turn_97eab579bf3d010d44df63f3ebb8fd67",
+        "version": 2,
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T21:22:19.832Z",
+        "windowEnd": "2026-10-14T03:22:19.832Z",
+        "nextArrival": "2026-10-14T04:22:19.832Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T22:22:19.832Z"
+       },
+       "decisionSource": "agent",
+       "deliveryStatus": "sent"
+      },
+      "audit": [
+       {
+        "at": "2026-10-12T21:22:19.838Z",
+        "type": "received",
+        "actor": "verified_provider"
+       },
+       {
+        "at": "2026-10-12T21:22:36.548Z",
+        "type": "claimed",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:22:42.053Z",
+        "type": "validated_action_and_reply_saved",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:22:42.233Z",
+        "type": "send_attempt",
+        "actor": "engine"
+       },
+       {
+        "at": "2026-10-12T21:22:42.248Z",
+        "type": "provider_accepted_and_completed",
+        "actor": "engine"
+       }
+      ],
+      "reply": "{\"key\":\"reply_work_3031da49d07b41d01bb7ea7b912a6d17\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:22 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791840162052,\"receipt\":\"simulated_65c4f108-a873-4ceb-bab0-326cfc9b2cb9\"}",
+      "carrierEvents": [],
+      "replies": [
+       {
+        "key": "reply_work_3031da49d07b41d01bb7ea7b912a6d17",
+        "recipient": "synthetic_cleaner_A",
+        "text": "Cleaning scheduled for Oct 13, 2026, 6:22 PM (America/New_York). Entry requires host clearance.",
+        "receipt": "simulated_65c4f108-a873-4ceb-bab0-326cfc9b2cb9"
+       }
+      ],
+      "notification": {
+       "tenant": "A",
+       "work_id": "work_3031da49d07b41d01bb7ea7b912a6d17",
+       "agent": "grok_test_agent",
+       "epoch": 1,
+       "status": "accepted",
+       "due": 1791840141427,
+       "attempts": 1,
+       "http": 200,
+       "attempted_at": 1791840139951,
+       "accepted_at": 1791840140427
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+     }
+    },
+    {
+     "trial": 10,
+     "eventId": "p05_s10121709_shared_10",
+     "delaySeconds": 840,
+     "requestLog": {
+      "sentAtET": "17:09:19.898",
+      "http": 202
+     },
+     "rawAcknowledgment": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_b15c7f99f6830aeb8168f3c741f07460",
+       "eventId": "p05_s10121709_shared_10",
+       "kind": "ordinary",
+       "delaySeconds": 840,
+       "runAt": "2026-10-12T21:23:20.106Z",
+       "status": "scheduled",
+       "workId": null,
+       "firedAt": null,
+       "error": null
+      }
+     },
+     "rawScheduleRecord": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_b15c7f99f6830aeb8168f3c741f07460",
+       "eventId": "p05_s10121709_shared_10",
+       "kind": "ordinary",
+       "delaySeconds": 840,
+       "runAt": "2026-10-12T21:23:20.106Z",
+       "status": "fired",
+       "workId": "work_ebe7ec5778d0779ca76adf7709edeedb",
+       "firedAt": "2026-10-12T21:23:20.119Z",
+       "error": null
+      }
+     },
+     "rawEngineEvidence": {
+      "mode": "synthetic",
+      "work": {
+       "id": "work_ebe7ec5778d0779ca76adf7709edeedb",
+       "eventType": "cleaner.reschedule_requested",
+       "requestedStart": "2026-10-13T22:23:20.107Z",
+       "receivedAt": "2026-10-12T21:23:20.112Z",
+       "deadlineAt": "2026-10-12T21:25:20.112Z",
+       "status": "completed",
+       "turn": {
+        "id": "turn_ebd9cbf44253d4b9a4818f1a429188ad",
+        "version": 2,
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T21:23:20.107Z",
+        "windowEnd": "2026-10-14T03:23:20.107Z",
+        "nextArrival": "2026-10-14T04:23:20.107Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T22:23:20.107Z"
+       },
+       "decisionSource": "agent",
+       "deliveryStatus": "sent"
+      },
+      "audit": [
+       {
+        "at": "2026-10-12T21:23:20.112Z",
+        "type": "received",
+        "actor": "verified_provider"
+       },
+       {
+        "at": "2026-10-12T21:23:32.588Z",
+        "type": "claimed",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:23:36.996Z",
+        "type": "validated_action_and_reply_saved",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:23:37.076Z",
+        "type": "send_attempt",
+        "actor": "engine"
+       },
+       {
+        "at": "2026-10-12T21:23:37.085Z",
+        "type": "provider_accepted_and_completed",
+        "actor": "engine"
+       }
+      ],
+      "reply": "{\"key\":\"reply_work_ebe7ec5778d0779ca76adf7709edeedb\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:23 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791840216996,\"receipt\":\"simulated_7595eeb0-0fbe-42fd-860d-16d1ce6084a1\"}",
+      "carrierEvents": [],
+      "replies": [
+       {
+        "key": "reply_work_ebe7ec5778d0779ca76adf7709edeedb",
+        "recipient": "synthetic_cleaner_A",
+        "text": "Cleaning scheduled for Oct 13, 2026, 6:23 PM (America/New_York). Entry requires host clearance.",
+        "receipt": "simulated_7595eeb0-0fbe-42fd-860d-16d1ce6084a1"
+       }
+      ],
+      "notification": {
+       "tenant": "A",
+       "work_id": "work_ebe7ec5778d0779ca76adf7709edeedb",
+       "agent": "grok_test_agent",
+       "epoch": 1,
+       "status": "accepted",
+       "due": 1791840201759,
+       "attempts": 1,
+       "http": 200,
+       "attempted_at": 1791840200290,
+       "accepted_at": 1791840200759
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+     }
+    }
+   ]
+  },
+  "B": {
+   "trials": [
+    {
+     "trial": 1,
+     "eventId": "p05_s10121709_shared_01",
+     "delaySeconds": 300,
+     "requestLog": {
+      "sentAtET": "17:49:43.747",
+      "http": 202
+     },
+     "rawAcknowledgment": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_17a5fec5bfee44ae8485df994bb3e956",
+       "eventId": "p05_s10121709_shared_01",
+       "kind": "ordinary",
+       "delaySeconds": 300,
+       "runAt": "2026-10-12T21:54:43.991Z",
+       "status": "scheduled",
+       "workId": null,
+       "firedAt": null,
+       "error": null
+      }
+     },
+     "rawScheduleRecord": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_17a5fec5bfee44ae8485df994bb3e956",
+       "eventId": "p05_s10121709_shared_01",
+       "kind": "ordinary",
+       "delaySeconds": 300,
+       "runAt": "2026-10-12T21:54:43.991Z",
+       "status": "fired",
+       "workId": "work_2d48b19802916c30a7f411a281386f75",
+       "firedAt": "2026-10-12T21:54:44.007Z",
+       "error": null
+      }
+     },
+     "rawEngineEvidence": {
+      "mode": "synthetic",
+      "work": {
+       "id": "work_2d48b19802916c30a7f411a281386f75",
+       "eventType": "cleaner.reschedule_requested",
+       "requestedStart": "2026-10-13T22:54:43.992Z",
+       "receivedAt": "2026-10-12T21:54:43.999Z",
+       "deadlineAt": "2026-10-12T21:56:43.999Z",
+       "status": "completed",
+       "turn": {
+        "id": "turn_c772208bd9263e2f23a7bb54b52ff481",
+        "version": 2,
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T21:54:43.992Z",
+        "windowEnd": "2026-10-14T03:54:43.992Z",
+        "nextArrival": "2026-10-14T04:54:43.992Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T22:54:43.992Z"
+       },
+       "decisionSource": "agent",
+       "deliveryStatus": "sent"
+      },
+      "audit": [
+       {
+        "at": "2026-10-12T21:54:44.000Z",
+        "type": "received",
+        "actor": "verified_provider"
+       },
+       {
+        "at": "2026-10-12T21:55:11.877Z",
+        "type": "claimed",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:55:19.511Z",
+        "type": "validated_action_and_reply_saved",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:55:19.659Z",
+        "type": "send_attempt",
+        "actor": "engine"
+       },
+       {
+        "at": "2026-10-12T21:55:19.690Z",
+        "type": "provider_accepted_and_completed",
+        "actor": "engine"
+       }
+      ],
+      "reply": "{\"key\":\"reply_work_2d48b19802916c30a7f411a281386f75\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:54 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_B\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791842119509,\"receipt\":\"simulated_25ff7e81-d077-4f7e-8aba-aea13bc60744\"}",
+      "carrierEvents": [],
+      "replies": [
+       {
+        "key": "reply_work_2d48b19802916c30a7f411a281386f75",
+        "recipient": "synthetic_cleaner_B",
+        "text": "Cleaning scheduled for Oct 13, 2026, 6:54 PM (America/New_York). Entry requires host clearance.",
+        "receipt": "simulated_25ff7e81-d077-4f7e-8aba-aea13bc60744"
+       }
+      ],
+      "notification": {
+       "tenant": "B",
+       "work_id": "work_2d48b19802916c30a7f411a281386f75",
+       "agent": "grok_test_agent",
+       "epoch": 1,
+       "status": "accepted",
+       "due": 1791842085564,
+       "attempts": 1,
+       "http": 200,
+       "attempted_at": 1791842084101,
+       "accepted_at": 1791842084564
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+     }
+    },
+    {
+     "trial": 2,
+     "eventId": "p05_s10121709_shared_02",
+     "delaySeconds": 360,
+     "requestLog": {
+      "sentAtET": "17:49:44.062",
+      "http": 202
+     },
+     "rawAcknowledgment": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_bac25f9d269dacb95a396ec983f68712",
+       "eventId": "p05_s10121709_shared_02",
+       "kind": "ordinary",
+       "delaySeconds": 360,
+       "runAt": "2026-10-12T21:55:44.265Z",
+       "status": "scheduled",
+       "workId": null,
+       "firedAt": null,
+       "error": null
+      }
+     },
+     "rawScheduleRecord": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_bac25f9d269dacb95a396ec983f68712",
+       "eventId": "p05_s10121709_shared_02",
+       "kind": "ordinary",
+       "delaySeconds": 360,
+       "runAt": "2026-10-12T21:55:44.265Z",
+       "status": "fired",
+       "workId": "work_9bf76241db89f0edd4568e53e8b37d98",
+       "firedAt": "2026-10-12T21:55:44.285Z",
+       "error": null
+      }
+     },
+     "rawEngineEvidence": {
+      "mode": "synthetic",
+      "work": {
+       "id": "work_9bf76241db89f0edd4568e53e8b37d98",
+       "eventType": "cleaner.reschedule_requested",
+       "requestedStart": "2026-10-13T22:55:44.266Z",
+       "receivedAt": "2026-10-12T21:55:44.279Z",
+       "deadlineAt": "2026-10-12T21:57:44.279Z",
+       "status": "completed",
+       "turn": {
+        "id": "turn_c3f490401f55b25535540894492ccadc",
+        "version": 2,
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T21:55:44.266Z",
+        "windowEnd": "2026-10-14T03:55:44.266Z",
+        "nextArrival": "2026-10-14T04:55:44.266Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T22:55:44.266Z"
+       },
+       "decisionSource": "agent",
+       "deliveryStatus": "sent"
+      },
+      "audit": [
+       {
+        "at": "2026-10-12T21:55:44.279Z",
+        "type": "received",
+        "actor": "verified_provider"
+       },
+       {
+        "at": "2026-10-12T21:56:02.471Z",
+        "type": "claimed",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:56:07.364Z",
+        "type": "validated_action_and_reply_saved",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:56:07.513Z",
+        "type": "send_attempt",
+        "actor": "engine"
+       },
+       {
+        "at": "2026-10-12T21:56:07.523Z",
+        "type": "provider_accepted_and_completed",
+        "actor": "engine"
+       }
+      ],
+      "reply": "{\"key\":\"reply_work_9bf76241db89f0edd4568e53e8b37d98\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:55 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_B\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791842167364,\"receipt\":\"simulated_5cd75736-7c02-4f7d-9413-c06af0cc9dc6\"}",
+      "carrierEvents": [],
+      "replies": [
+       {
+        "key": "reply_work_9bf76241db89f0edd4568e53e8b37d98",
+        "recipient": "synthetic_cleaner_B",
+        "text": "Cleaning scheduled for Oct 13, 2026, 6:55 PM (America/New_York). Entry requires host clearance.",
+        "receipt": "simulated_5cd75736-7c02-4f7d-9413-c06af0cc9dc6"
+       }
+      ],
+      "notification": {
+       "tenant": "B",
+       "work_id": "work_9bf76241db89f0edd4568e53e8b37d98",
+       "agent": "grok_test_agent",
+       "epoch": 1,
+       "status": "accepted",
+       "due": 1791842145979,
+       "attempts": 1,
+       "http": 200,
+       "attempted_at": 1791842144457,
+       "accepted_at": 1791842144979
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+     }
+    },
+    {
+     "trial": 3,
+     "eventId": "p05_s10121709_shared_03",
+     "delaySeconds": 420,
+     "requestLog": {
+      "sentAtET": "17:49:44.338",
+      "http": 202
+     },
+     "rawAcknowledgment": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_ce1e7d78cd6618513438731ec0f524bb",
+       "eventId": "p05_s10121709_shared_03",
+       "kind": "ordinary",
+       "delaySeconds": 420,
+       "runAt": "2026-10-12T21:56:44.587Z",
+       "status": "scheduled",
+       "workId": null,
+       "firedAt": null,
+       "error": null
+      }
+     },
+     "rawScheduleRecord": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_ce1e7d78cd6618513438731ec0f524bb",
+       "eventId": "p05_s10121709_shared_03",
+       "kind": "ordinary",
+       "delaySeconds": 420,
+       "runAt": "2026-10-12T21:56:44.587Z",
+       "status": "fired",
+       "workId": "work_497416bb3a2d5c6164b10b4017ec50c4",
+       "firedAt": "2026-10-12T21:56:44.603Z",
+       "error": null
+      }
+     },
+     "rawEngineEvidence": {
+      "mode": "synthetic",
+      "work": {
+       "id": "work_497416bb3a2d5c6164b10b4017ec50c4",
+       "eventType": "cleaner.reschedule_requested",
+       "requestedStart": "2026-10-13T22:56:44.588Z",
+       "receivedAt": "2026-10-12T21:56:44.595Z",
+       "deadlineAt": "2026-10-12T21:58:44.595Z",
+       "status": "completed",
+       "turn": {
+        "id": "turn_6ce49bb09c0795ba6cdc775bc8a295bf",
+        "version": 2,
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T21:56:44.588Z",
+        "windowEnd": "2026-10-14T03:56:44.588Z",
+        "nextArrival": "2026-10-14T04:56:44.588Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T22:56:44.588Z"
+       },
+       "decisionSource": "agent",
+       "deliveryStatus": "sent"
+      },
+      "audit": [
+       {
+        "at": "2026-10-12T21:56:44.595Z",
+        "type": "received",
+        "actor": "verified_provider"
+       },
+       {
+        "at": "2026-10-12T21:56:57.163Z",
+        "type": "claimed",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:57:01.525Z",
+        "type": "validated_action_and_reply_saved",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:57:01.627Z",
+        "type": "send_attempt",
+        "actor": "engine"
+       },
+       {
+        "at": "2026-10-12T21:57:01.644Z",
+        "type": "provider_accepted_and_completed",
+        "actor": "engine"
+       }
+      ],
+      "reply": "{\"key\":\"reply_work_497416bb3a2d5c6164b10b4017ec50c4\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:56 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_B\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791842221525,\"receipt\":\"simulated_4eceddb7-849d-4b47-b4ce-ee09a8be3d02\"}",
+      "carrierEvents": [],
+      "replies": [
+       {
+        "key": "reply_work_497416bb3a2d5c6164b10b4017ec50c4",
+        "recipient": "synthetic_cleaner_B",
+        "text": "Cleaning scheduled for Oct 13, 2026, 6:56 PM (America/New_York). Entry requires host clearance.",
+        "receipt": "simulated_4eceddb7-849d-4b47-b4ce-ee09a8be3d02"
+       }
+      ],
+      "notification": {
+       "tenant": "B",
+       "work_id": "work_497416bb3a2d5c6164b10b4017ec50c4",
+       "agent": "grok_test_agent",
+       "epoch": 1,
+       "status": "accepted",
+       "due": 1791842206249,
+       "attempts": 1,
+       "http": 200,
+       "attempted_at": 1791842204829,
+       "accepted_at": 1791842205250
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+     }
+    },
+    {
+     "trial": 4,
+     "eventId": "p05_s10121709_shared_04",
+     "delaySeconds": 480,
+     "requestLog": {
+      "sentAtET": "17:49:44.663",
+      "http": 202
+     },
+     "rawAcknowledgment": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_10beaa35da5ab6ee07e6586e10ace39b",
+       "eventId": "p05_s10121709_shared_04",
+       "kind": "ordinary",
+       "delaySeconds": 480,
+       "runAt": "2026-10-12T21:57:44.883Z",
+       "status": "scheduled",
+       "workId": null,
+       "firedAt": null,
+       "error": null
+      }
+     },
+     "rawScheduleRecord": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_10beaa35da5ab6ee07e6586e10ace39b",
+       "eventId": "p05_s10121709_shared_04",
+       "kind": "ordinary",
+       "delaySeconds": 480,
+       "runAt": "2026-10-12T21:57:44.883Z",
+       "status": "fired",
+       "workId": "work_a9ea18e8775de7bf26cf859f7dcd052d",
+       "firedAt": "2026-10-12T21:57:44.893Z",
+       "error": null
+      }
+     },
+     "rawEngineEvidence": {
+      "mode": "synthetic",
+      "work": {
+       "id": "work_a9ea18e8775de7bf26cf859f7dcd052d",
+       "eventType": "cleaner.reschedule_requested",
+       "requestedStart": "2026-10-13T22:57:44.884Z",
+       "receivedAt": "2026-10-12T21:57:44.889Z",
+       "deadlineAt": "2026-10-12T21:59:44.889Z",
+       "status": "completed",
+       "turn": {
+        "id": "turn_e62d892f62027cc6db6096e9c8a9dc05",
+        "version": 2,
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T21:57:44.884Z",
+        "windowEnd": "2026-10-14T03:57:44.884Z",
+        "nextArrival": "2026-10-14T04:57:44.884Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T22:57:44.884Z"
+       },
+       "decisionSource": "agent",
+       "deliveryStatus": "sent"
+      },
+      "audit": [
+       {
+        "at": "2026-10-12T21:57:44.889Z",
+        "type": "received",
+        "actor": "verified_provider"
+       },
+       {
+        "at": "2026-10-12T21:58:03.557Z",
+        "type": "claimed",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:58:08.585Z",
+        "type": "validated_action_and_reply_saved",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:58:08.744Z",
+        "type": "send_attempt",
+        "actor": "engine"
+       },
+       {
+        "at": "2026-10-12T21:58:08.752Z",
+        "type": "provider_accepted_and_completed",
+        "actor": "engine"
+       }
+      ],
+      "reply": "{\"key\":\"reply_work_a9ea18e8775de7bf26cf859f7dcd052d\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:57 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_B\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791842288585,\"receipt\":\"simulated_0634c8ae-72d9-422b-9568-83434c34b9ed\"}",
+      "carrierEvents": [],
+      "replies": [
+       {
+        "key": "reply_work_a9ea18e8775de7bf26cf859f7dcd052d",
+        "recipient": "synthetic_cleaner_B",
+        "text": "Cleaning scheduled for Oct 13, 2026, 6:57 PM (America/New_York). Entry requires host clearance.",
+        "receipt": "simulated_0634c8ae-72d9-422b-9568-83434c34b9ed"
+       }
+      ],
+      "notification": {
+       "tenant": "B",
+       "work_id": "work_a9ea18e8775de7bf26cf859f7dcd052d",
+       "agent": "grok_test_agent",
+       "epoch": 1,
+       "status": "accepted",
+       "due": 1791842266380,
+       "attempts": 1,
+       "http": 200,
+       "attempted_at": 1791842264953,
+       "accepted_at": 1791842265380
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+     }
+    },
+    {
+     "trial": 5,
+     "eventId": "p05_s10121709_shared_05",
+     "delaySeconds": 540,
+     "requestLog": {
+      "sentAtET": "17:49:44.953",
+      "http": 202
+     },
+     "rawAcknowledgment": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_1be6eb56bb2682d583f33fdfe6970098",
+       "eventId": "p05_s10121709_shared_05",
+       "kind": "ordinary",
+       "delaySeconds": 540,
+       "runAt": "2026-10-12T21:58:45.210Z",
+       "status": "scheduled",
+       "workId": null,
+       "firedAt": null,
+       "error": null
+      }
+     },
+     "rawScheduleRecord": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_1be6eb56bb2682d583f33fdfe6970098",
+       "eventId": "p05_s10121709_shared_05",
+       "kind": "ordinary",
+       "delaySeconds": 540,
+       "runAt": "2026-10-12T21:58:45.210Z",
+       "status": "fired",
+       "workId": "work_310c29b82f1f57f53bf24fa86bee08d9",
+       "firedAt": "2026-10-12T21:58:45.233Z",
+       "error": null
+      }
+     },
+     "rawEngineEvidence": {
+      "mode": "synthetic",
+      "work": {
+       "id": "work_310c29b82f1f57f53bf24fa86bee08d9",
+       "eventType": "cleaner.reschedule_requested",
+       "requestedStart": "2026-10-13T22:58:45.212Z",
+       "receivedAt": "2026-10-12T21:58:45.221Z",
+       "deadlineAt": "2026-10-12T22:00:45.221Z",
+       "status": "completed",
+       "turn": {
+        "id": "turn_7d571879115a26fc9526cfdd5892920c",
+        "version": 2,
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T21:58:45.212Z",
+        "windowEnd": "2026-10-14T03:58:45.212Z",
+        "nextArrival": "2026-10-14T04:58:45.212Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T22:58:45.212Z"
+       },
+       "decisionSource": "agent",
+       "deliveryStatus": "sent"
+      },
+      "audit": [
+       {
+        "at": "2026-10-12T21:58:45.222Z",
+        "type": "received",
+        "actor": "verified_provider"
+       },
+       {
+        "at": "2026-10-12T21:59:07.831Z",
+        "type": "claimed",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:59:12.407Z",
+        "type": "validated_action_and_reply_saved",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T21:59:12.602Z",
+        "type": "send_attempt",
+        "actor": "engine"
+       },
+       {
+        "at": "2026-10-12T21:59:12.622Z",
+        "type": "provider_accepted_and_completed",
+        "actor": "engine"
+       }
+      ],
+      "reply": "{\"key\":\"reply_work_310c29b82f1f57f53bf24fa86bee08d9\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:58 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_B\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791842352406,\"receipt\":\"simulated_94f8cd85-ca1f-41a8-aacc-7769cdcf889c\"}",
+      "carrierEvents": [],
+      "replies": [
+       {
+        "key": "reply_work_310c29b82f1f57f53bf24fa86bee08d9",
+        "recipient": "synthetic_cleaner_B",
+        "text": "Cleaning scheduled for Oct 13, 2026, 6:58 PM (America/New_York). Entry requires host clearance.",
+        "receipt": "simulated_94f8cd85-ca1f-41a8-aacc-7769cdcf889c"
+       }
+      ],
+      "notification": {
+       "tenant": "B",
+       "work_id": "work_310c29b82f1f57f53bf24fa86bee08d9",
+       "agent": "grok_test_agent",
+       "epoch": 1,
+       "status": "accepted",
+       "due": 1791842326936,
+       "attempts": 1,
+       "http": 200,
+       "attempted_at": 1791842325314,
+       "accepted_at": 1791842325936
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+     }
+    },
+    {
+     "trial": 6,
+     "eventId": "p05_s10121709_shared_06",
+     "delaySeconds": 600,
+     "requestLog": {
+      "sentAtET": "17:49:45.281",
+      "http": 202
+     },
+     "rawAcknowledgment": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_5e0683c0deb3002fd8b5090f927641c9",
+       "eventId": "p05_s10121709_shared_06",
+       "kind": "ordinary",
+       "delaySeconds": 600,
+       "runAt": "2026-10-12T21:59:45.530Z",
+       "status": "scheduled",
+       "workId": null,
+       "firedAt": null,
+       "error": null
+      }
+     },
+     "rawScheduleRecord": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_5e0683c0deb3002fd8b5090f927641c9",
+       "eventId": "p05_s10121709_shared_06",
+       "kind": "ordinary",
+       "delaySeconds": 600,
+       "runAt": "2026-10-12T21:59:45.530Z",
+       "status": "fired",
+       "workId": "work_0d9838798bfbec24a8d16cc8de72851b",
+       "firedAt": "2026-10-12T21:59:45.541Z",
+       "error": null
+      }
+     },
+     "rawEngineEvidence": {
+      "mode": "synthetic",
+      "work": {
+       "id": "work_0d9838798bfbec24a8d16cc8de72851b",
+       "eventType": "cleaner.reschedule_requested",
+       "requestedStart": "2026-10-13T22:59:45.531Z",
+       "receivedAt": "2026-10-12T21:59:45.535Z",
+       "deadlineAt": "2026-10-12T22:01:45.535Z",
+       "status": "completed",
+       "turn": {
+        "id": "turn_223707c826ec099e0818931f24a46805",
+        "version": 2,
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T21:59:45.531Z",
+        "windowEnd": "2026-10-14T03:59:45.531Z",
+        "nextArrival": "2026-10-14T04:59:45.531Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T22:59:45.531Z"
+       },
+       "decisionSource": "agent",
+       "deliveryStatus": "sent"
+      },
+      "audit": [
+       {
+        "at": "2026-10-12T21:59:45.535Z",
+        "type": "received",
+        "actor": "verified_provider"
+       },
+       {
+        "at": "2026-10-12T21:59:59.931Z",
+        "type": "claimed",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T22:00:05.082Z",
+        "type": "validated_action_and_reply_saved",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T22:00:05.173Z",
+        "type": "send_attempt",
+        "actor": "engine"
+       },
+       {
+        "at": "2026-10-12T22:00:05.183Z",
+        "type": "provider_accepted_and_completed",
+        "actor": "engine"
+       }
+      ],
+      "reply": "{\"key\":\"reply_work_0d9838798bfbec24a8d16cc8de72851b\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:59 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_B\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791842405082,\"receipt\":\"simulated_8204a8d7-2d79-4a26-89fc-cd893f432bee\"}",
+      "carrierEvents": [],
+      "replies": [
+       {
+        "key": "reply_work_0d9838798bfbec24a8d16cc8de72851b",
+        "recipient": "synthetic_cleaner_B",
+        "text": "Cleaning scheduled for Oct 13, 2026, 6:59 PM (America/New_York). Entry requires host clearance.",
+        "receipt": "simulated_8204a8d7-2d79-4a26-89fc-cd893f432bee"
+       }
+      ],
+      "notification": {
+       "tenant": "B",
+       "work_id": "work_0d9838798bfbec24a8d16cc8de72851b",
+       "agent": "grok_test_agent",
+       "epoch": 1,
+       "status": "accepted",
+       "due": 1791842387091,
+       "attempts": 1,
+       "http": 200,
+       "attempted_at": 1791842385647,
+       "accepted_at": 1791842386091
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+     }
+    },
+    {
+     "trial": 7,
+     "eventId": "p05_s10121709_shared_07",
+     "delaySeconds": 660,
+     "requestLog": {
+      "sentAtET": "17:49:45.628",
+      "http": 202
+     },
+     "rawAcknowledgment": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_27fb267f7749c7cbf6f8951559370a67",
+       "eventId": "p05_s10121709_shared_07",
+       "kind": "ordinary",
+       "delaySeconds": 660,
+       "runAt": "2026-10-12T22:00:45.843Z",
+       "status": "scheduled",
+       "workId": null,
+       "firedAt": null,
+       "error": null
+      }
+     },
+     "rawScheduleRecord": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_27fb267f7749c7cbf6f8951559370a67",
+       "eventId": "p05_s10121709_shared_07",
+       "kind": "ordinary",
+       "delaySeconds": 660,
+       "runAt": "2026-10-12T22:00:45.843Z",
+       "status": "fired",
+       "workId": "work_9f5af30f6ec0214c1ddc9e0b3639d744",
+       "firedAt": "2026-10-12T22:00:45.856Z",
+       "error": null
+      }
+     },
+     "rawEngineEvidence": {
+      "mode": "synthetic",
+      "work": {
+       "id": "work_9f5af30f6ec0214c1ddc9e0b3639d744",
+       "eventType": "cleaner.reschedule_requested",
+       "requestedStart": "2026-10-13T23:00:45.844Z",
+       "receivedAt": "2026-10-12T22:00:45.851Z",
+       "deadlineAt": "2026-10-12T22:02:45.851Z",
+       "status": "completed",
+       "turn": {
+        "id": "turn_2ca79fd0a82c9d2653c42cc9f2843091",
+        "version": 2,
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T22:00:45.844Z",
+        "windowEnd": "2026-10-14T04:00:45.844Z",
+        "nextArrival": "2026-10-14T05:00:45.844Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T23:00:45.844Z"
+       },
+       "decisionSource": "agent",
+       "deliveryStatus": "sent"
+      },
+      "audit": [
+       {
+        "at": "2026-10-12T22:00:45.851Z",
+        "type": "received",
+        "actor": "verified_provider"
+       },
+       {
+        "at": "2026-10-12T22:01:02.667Z",
+        "type": "claimed",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T22:01:06.730Z",
+        "type": "validated_action_and_reply_saved",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T22:01:06.770Z",
+        "type": "send_attempt",
+        "actor": "engine"
+       },
+       {
+        "at": "2026-10-12T22:01:06.780Z",
+        "type": "provider_accepted_and_completed",
+        "actor": "engine"
+       }
+      ],
+      "reply": "{\"key\":\"reply_work_9f5af30f6ec0214c1ddc9e0b3639d744\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 7:00 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_B\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791842466730,\"receipt\":\"simulated_067a9296-8449-4a8a-b46a-b12f817371fb\"}",
+      "carrierEvents": [],
+      "replies": [
+       {
+        "key": "reply_work_9f5af30f6ec0214c1ddc9e0b3639d744",
+        "recipient": "synthetic_cleaner_B",
+        "text": "Cleaning scheduled for Oct 13, 2026, 7:00 PM (America/New_York). Entry requires host clearance.",
+        "receipt": "simulated_067a9296-8449-4a8a-b46a-b12f817371fb"
+       }
+      ],
+      "notification": {
+       "tenant": "B",
+       "work_id": "work_9f5af30f6ec0214c1ddc9e0b3639d744",
+       "agent": "grok_test_agent",
+       "epoch": 1,
+       "status": "accepted",
+       "due": 1791842447447,
+       "attempts": 1,
+       "http": 200,
+       "attempted_at": 1791842445999,
+       "accepted_at": 1791842446447
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+     }
+    },
+    {
+     "trial": 8,
+     "eventId": "p05_s10121709_shared_08",
+     "delaySeconds": 720,
+     "requestLog": {
+      "sentAtET": "17:49:45.914",
+      "http": 202
+     },
+     "rawAcknowledgment": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_58769197ad6fb25a3bbda2a6b54c8679",
+       "eventId": "p05_s10121709_shared_08",
+       "kind": "ordinary",
+       "delaySeconds": 720,
+       "runAt": "2026-10-12T22:01:46.116Z",
+       "status": "scheduled",
+       "workId": null,
+       "firedAt": null,
+       "error": null
+      }
+     },
+     "rawScheduleRecord": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_58769197ad6fb25a3bbda2a6b54c8679",
+       "eventId": "p05_s10121709_shared_08",
+       "kind": "ordinary",
+       "delaySeconds": 720,
+       "runAt": "2026-10-12T22:01:46.116Z",
+       "status": "fired",
+       "workId": "work_00e02d657dbbed2f192d14e35790f829",
+       "firedAt": "2026-10-12T22:01:46.126Z",
+       "error": null
+      }
+     },
+     "rawEngineEvidence": {
+      "mode": "synthetic",
+      "work": {
+       "id": "work_00e02d657dbbed2f192d14e35790f829",
+       "eventType": "cleaner.reschedule_requested",
+       "requestedStart": "2026-10-13T23:01:46.116Z",
+       "receivedAt": "2026-10-12T22:01:46.120Z",
+       "deadlineAt": "2026-10-12T22:03:46.120Z",
+       "status": "completed",
+       "turn": {
+        "id": "turn_45883615193eeed5f72a40cfdfe4b850",
+        "version": 2,
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T22:01:46.116Z",
+        "windowEnd": "2026-10-14T04:01:46.116Z",
+        "nextArrival": "2026-10-14T05:01:46.116Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T23:01:46.116Z"
+       },
+       "decisionSource": "agent",
+       "deliveryStatus": "sent"
+      },
+      "audit": [
+       {
+        "at": "2026-10-12T22:01:46.120Z",
+        "type": "received",
+        "actor": "verified_provider"
+       },
+       {
+        "at": "2026-10-12T22:02:00.857Z",
+        "type": "claimed",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T22:02:05.270Z",
+        "type": "validated_action_and_reply_saved",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T22:02:05.353Z",
+        "type": "send_attempt",
+        "actor": "engine"
+       },
+       {
+        "at": "2026-10-12T22:02:05.368Z",
+        "type": "provider_accepted_and_completed",
+        "actor": "engine"
+       }
+      ],
+      "reply": "{\"key\":\"reply_work_00e02d657dbbed2f192d14e35790f829\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 7:01 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_B\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791842525270,\"receipt\":\"simulated_f311966e-1aae-4961-a4f4-20502c275e1b\"}",
+      "carrierEvents": [],
+      "replies": [
+       {
+        "key": "reply_work_00e02d657dbbed2f192d14e35790f829",
+        "recipient": "synthetic_cleaner_B",
+        "text": "Cleaning scheduled for Oct 13, 2026, 7:01 PM (America/New_York). Entry requires host clearance.",
+        "receipt": "simulated_f311966e-1aae-4961-a4f4-20502c275e1b"
+       }
+      ],
+      "notification": {
+       "tenant": "B",
+       "work_id": "work_00e02d657dbbed2f192d14e35790f829",
+       "agent": "grok_test_agent",
+       "epoch": 1,
+       "status": "accepted",
+       "due": 1791842507768,
+       "attempts": 1,
+       "http": 200,
+       "attempted_at": 1791842506326,
+       "accepted_at": 1791842506768
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+     }
+    },
+    {
+     "trial": 9,
+     "eventId": "p05_s10121709_shared_09",
+     "delaySeconds": 780,
+     "requestLog": {
+      "sentAtET": "17:49:46.188",
+      "http": 202
+     },
+     "rawAcknowledgment": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_a83c6145711b1b89ffd5e0cb6c5706dc",
+       "eventId": "p05_s10121709_shared_09",
+       "kind": "ordinary",
+       "delaySeconds": 780,
+       "runAt": "2026-10-12T22:02:46.413Z",
+       "status": "scheduled",
+       "workId": null,
+       "firedAt": null,
+       "error": null
+      }
+     },
+     "rawScheduleRecord": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_a83c6145711b1b89ffd5e0cb6c5706dc",
+       "eventId": "p05_s10121709_shared_09",
+       "kind": "ordinary",
+       "delaySeconds": 780,
+       "runAt": "2026-10-12T22:02:46.413Z",
+       "status": "fired",
+       "workId": "work_49579918209e2eae790b3d71067da167",
+       "firedAt": "2026-10-12T22:02:46.435Z",
+       "error": null
+      }
+     },
+     "rawEngineEvidence": {
+      "mode": "synthetic",
+      "work": {
+       "id": "work_49579918209e2eae790b3d71067da167",
+       "eventType": "cleaner.reschedule_requested",
+       "requestedStart": "2026-10-13T23:02:46.414Z",
+       "receivedAt": "2026-10-12T22:02:46.426Z",
+       "deadlineAt": "2026-10-12T22:04:46.426Z",
+       "status": "completed",
+       "turn": {
+        "id": "turn_97eab579bf3d010d44df63f3ebb8fd67",
+        "version": 2,
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T22:02:46.414Z",
+        "windowEnd": "2026-10-14T04:02:46.414Z",
+        "nextArrival": "2026-10-14T05:02:46.414Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T23:02:46.414Z"
+       },
+       "decisionSource": "agent",
+       "deliveryStatus": "sent"
+      },
+      "audit": [
+       {
+        "at": "2026-10-12T22:02:46.427Z",
+        "type": "received",
+        "actor": "verified_provider"
+       },
+       {
+        "at": "2026-10-12T22:03:00.724Z",
+        "type": "claimed",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T22:03:05.751Z",
+        "type": "validated_action_and_reply_saved",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T22:03:05.991Z",
+        "type": "send_attempt",
+        "actor": "engine"
+       },
+       {
+        "at": "2026-10-12T22:03:06.001Z",
+        "type": "provider_accepted_and_completed",
+        "actor": "engine"
+       }
+      ],
+      "reply": "{\"key\":\"reply_work_49579918209e2eae790b3d71067da167\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 7:02 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_B\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791842585751,\"receipt\":\"simulated_ae73d075-7bad-45a4-b31e-965ece1c602e\"}",
+      "carrierEvents": [],
+      "replies": [
+       {
+        "key": "reply_work_49579918209e2eae790b3d71067da167",
+        "recipient": "synthetic_cleaner_B",
+        "text": "Cleaning scheduled for Oct 13, 2026, 7:02 PM (America/New_York). Entry requires host clearance.",
+        "receipt": "simulated_ae73d075-7bad-45a4-b31e-965ece1c602e"
+       }
+      ],
+      "notification": {
+       "tenant": "B",
+       "work_id": "work_49579918209e2eae790b3d71067da167",
+       "agent": "grok_test_agent",
+       "epoch": 1,
+       "status": "accepted",
+       "due": 1791842567862,
+       "attempts": 1,
+       "http": 200,
+       "attempted_at": 1791842566445,
+       "accepted_at": 1791842566862
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+     }
+    },
+    {
+     "trial": 10,
+     "eventId": "p05_s10121709_shared_10",
+     "delaySeconds": 840,
+     "requestLog": {
+      "sentAtET": "17:49:46.490",
+      "http": 202
+     },
+     "rawAcknowledgment": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_3d135aba385ca9ff48184ae919dbe171",
+       "eventId": "p05_s10121709_shared_10",
+       "kind": "ordinary",
+       "delaySeconds": 840,
+       "runAt": "2026-10-12T22:03:46.695Z",
+       "status": "scheduled",
+       "workId": null,
+       "firedAt": null,
+       "error": null
+      }
+     },
+     "rawScheduleRecord": {
+      "mode": "synthetic",
+      "schedule": {
+       "id": "test_schedule_3d135aba385ca9ff48184ae919dbe171",
+       "eventId": "p05_s10121709_shared_10",
+       "kind": "ordinary",
+       "delaySeconds": 840,
+       "runAt": "2026-10-12T22:03:46.695Z",
+       "status": "fired",
+       "workId": "work_409b01cd4bae19be2fe3e21f3177fb2e",
+       "firedAt": "2026-10-12T22:03:46.708Z",
+       "error": null
+      }
+     },
+     "rawEngineEvidence": {
+      "mode": "synthetic",
+      "work": {
+       "id": "work_409b01cd4bae19be2fe3e21f3177fb2e",
+       "eventType": "cleaner.reschedule_requested",
+       "requestedStart": "2026-10-13T23:03:46.696Z",
+       "receivedAt": "2026-10-12T22:03:46.701Z",
+       "deadlineAt": "2026-10-12T22:05:46.701Z",
+       "status": "completed",
+       "turn": {
+        "id": "turn_ebd9cbf44253d4b9a4818f1a429188ad",
+        "version": 2,
+        "timeZone": "America/New_York",
+        "windowStart": "2026-10-13T22:03:46.696Z",
+        "windowEnd": "2026-10-14T04:03:46.696Z",
+        "nextArrival": "2026-10-14T05:03:46.696Z",
+        "minimumMinutes": 90,
+        "confirmedStart": "2026-10-13T23:03:46.696Z"
+       },
+       "decisionSource": "agent",
+       "deliveryStatus": "sent"
+      },
+      "audit": [
+       {
+        "at": "2026-10-12T22:03:46.701Z",
+        "type": "received",
+        "actor": "verified_provider"
+       },
+       {
+        "at": "2026-10-12T22:04:00.943Z",
+        "type": "claimed",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T22:04:05.750Z",
+        "type": "validated_action_and_reply_saved",
+        "actor": "grok_test_agent"
+       },
+       {
+        "at": "2026-10-12T22:04:05.823Z",
+        "type": "send_attempt",
+        "actor": "engine"
+       },
+       {
+        "at": "2026-10-12T22:04:05.838Z",
+        "type": "provider_accepted_and_completed",
+        "actor": "engine"
+       }
+      ],
+      "reply": "{\"key\":\"reply_work_409b01cd4bae19be2fe3e21f3177fb2e\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 7:03 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_B\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791842645750,\"receipt\":\"simulated_6e49202e-65ab-443c-ac20-45690eb3f5b4\"}",
+      "carrierEvents": [],
+      "replies": [
+       {
+        "key": "reply_work_409b01cd4bae19be2fe3e21f3177fb2e",
+        "recipient": "synthetic_cleaner_B",
+        "text": "Cleaning scheduled for Oct 13, 2026, 7:03 PM (America/New_York). Entry requires host clearance.",
+        "receipt": "simulated_6e49202e-65ab-443c-ac20-45690eb3f5b4"
+       }
+      ],
+      "notification": {
+       "tenant": "B",
+       "work_id": "work_409b01cd4bae19be2fe3e21f3177fb2e",
+       "agent": "grok_test_agent",
+       "epoch": 1,
+       "status": "accepted",
+       "due": 1791842628326,
+       "attempts": 1,
+       "http": 200,
+       "attempted_at": 1791842626794,
+       "accepted_at": 1791842627326
+      },
+      "carrierDelivery": "not applicable; simulated provider",
+      "operatesDoors": false
+     }
+    }
+   ]
+  }
+ },
+ "reconstructed_table_NOT_RAW": [
+  {
+   "tenant": "A",
+   "trial": 1,
+   "eventId": "p05_s10121709_shared_01",
+   "workId": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+   "receivedAt": "2026-10-12T21:14:17.594Z",
+   "deadlineAt": "2026-10-12T21:16:17.594Z",
+   "validatedAt": "2026-10-12T21:14:49.080Z",
+   "providerCompletedAt": "2026-10-12T21:14:49.198Z",
+   "decisionSource": "agent",
+   "turnVersion": 2,
+   "recipient": [
+    "synthetic_cleaner_A"
+   ],
+   "receiptCount": 1,
+   "receipts": [
+    "simulated_4de3a740-1c3b-4928-b381-faef4f8be675"
+   ],
+   "notificationTenant": "A",
+   "engineLatencyS": 31.604,
+   "validatedLatencyS": 31.486,
+   "deadlineMarginS": 88.396
+  },
+  {
+   "tenant": "A",
+   "trial": 2,
+   "eventId": "p05_s10121709_shared_02",
+   "workId": "work_b167f0962e9a80af779f8ce9cf084f58",
+   "receivedAt": "2026-10-12T21:15:17.904Z",
+   "deadlineAt": "2026-10-12T21:17:17.904Z",
+   "validatedAt": "2026-10-12T21:15:45.547Z",
+   "providerCompletedAt": "2026-10-12T21:15:45.796Z",
+   "decisionSource": "agent",
+   "turnVersion": 2,
+   "recipient": [
+    "synthetic_cleaner_A"
+   ],
+   "receiptCount": 1,
+   "receipts": [
+    "simulated_6c19d6c4-cef2-43e2-8a1c-048a6a3b5fef"
+   ],
+   "notificationTenant": "A",
+   "engineLatencyS": 27.892,
+   "validatedLatencyS": 27.643,
+   "deadlineMarginS": 92.108
+  },
+  {
+   "tenant": "A",
+   "trial": 3,
+   "eventId": "p05_s10121709_shared_03",
+   "workId": "work_b609180fc2ffdfa4a9113ba285b2c334",
+   "receivedAt": "2026-10-12T21:16:18.188Z",
+   "deadlineAt": "2026-10-12T21:18:18.188Z",
+   "validatedAt": "2026-10-12T21:16:37.669Z",
+   "providerCompletedAt": "2026-10-12T21:16:37.887Z",
+   "decisionSource": "agent",
+   "turnVersion": 2,
+   "recipient": [
+    "synthetic_cleaner_A"
+   ],
+   "receiptCount": 1,
+   "receipts": [
+    "simulated_5ba2ae22-348f-4324-8031-217c64396283"
+   ],
+   "notificationTenant": "A",
+   "engineLatencyS": 19.699,
+   "validatedLatencyS": 19.481,
+   "deadlineMarginS": 100.301
+  },
+  {
+   "tenant": "A",
+   "trial": 4,
+   "eventId": "p05_s10121709_shared_04",
+   "workId": "work_81405e20bac76c5cbd1bde256cc38b6c",
+   "receivedAt": "2026-10-12T21:17:18.519Z",
+   "deadlineAt": "2026-10-12T21:19:18.519Z",
+   "validatedAt": "2026-10-12T21:17:37.573Z",
+   "providerCompletedAt": "2026-10-12T21:17:37.712Z",
+   "decisionSource": "agent",
+   "turnVersion": 2,
+   "recipient": [
+    "synthetic_cleaner_A"
+   ],
+   "receiptCount": 1,
+   "receipts": [
+    "simulated_565d4824-d929-4618-9024-cad9fe24ed9f"
+   ],
+   "notificationTenant": "A",
+   "engineLatencyS": 19.193,
+   "validatedLatencyS": 19.054,
+   "deadlineMarginS": 100.807
+  },
+  {
+   "tenant": "A",
+   "trial": 5,
+   "eventId": "p05_s10121709_shared_05",
+   "workId": "work_2fd53551e60d64b5e8c99a8214397391",
+   "receivedAt": "2026-10-12T21:18:18.784Z",
+   "deadlineAt": "2026-10-12T21:20:18.784Z",
+   "validatedAt": "2026-10-12T21:18:37.250Z",
+   "providerCompletedAt": "2026-10-12T21:18:37.303Z",
+   "decisionSource": "agent",
+   "turnVersion": 2,
+   "recipient": [
+    "synthetic_cleaner_A"
+   ],
+   "receiptCount": 1,
+   "receipts": [
+    "simulated_ec4a2bb7-370d-4075-815a-c634d38a02d3"
+   ],
+   "notificationTenant": "A",
+   "engineLatencyS": 18.519,
+   "validatedLatencyS": 18.466,
+   "deadlineMarginS": 101.481
+  },
+  {
+   "tenant": "A",
+   "trial": 6,
+   "eventId": "p05_s10121709_shared_06",
+   "workId": "work_0582e6c56ffcaf32468a74892719fa9b",
+   "receivedAt": "2026-10-12T21:19:19.042Z",
+   "deadlineAt": "2026-10-12T21:21:19.042Z",
+   "validatedAt": "2026-10-12T21:19:37.516Z",
+   "providerCompletedAt": "2026-10-12T21:19:37.649Z",
+   "decisionSource": "agent",
+   "turnVersion": 2,
+   "recipient": [
+    "synthetic_cleaner_A"
+   ],
+   "receiptCount": 1,
+   "receipts": [
+    "simulated_4ba18ba7-c1d8-4d90-bdee-1609946dcf45"
+   ],
+   "notificationTenant": "A",
+   "engineLatencyS": 18.607,
+   "validatedLatencyS": 18.474,
+   "deadlineMarginS": 101.393
+  },
+  {
+   "tenant": "A",
+   "trial": 7,
+   "eventId": "p05_s10121709_shared_07",
+   "workId": "work_013feea076dfb95b2516dadf19e28655",
+   "receivedAt": "2026-10-12T21:20:19.303Z",
+   "deadlineAt": "2026-10-12T21:22:19.303Z",
+   "validatedAt": "2026-10-12T21:20:39.308Z",
+   "providerCompletedAt": "2026-10-12T21:20:39.525Z",
+   "decisionSource": "agent",
+   "turnVersion": 2,
+   "recipient": [
+    "synthetic_cleaner_A"
+   ],
+   "receiptCount": 1,
+   "receipts": [
+    "simulated_6a87cc13-7e5e-4e6a-ab4c-2cbb8dd0f4e6"
+   ],
+   "notificationTenant": "A",
+   "engineLatencyS": 20.222,
+   "validatedLatencyS": 20.005,
+   "deadlineMarginS": 99.778
+  },
+  {
+   "tenant": "A",
+   "trial": 8,
+   "eventId": "p05_s10121709_shared_08",
+   "workId": "work_57e3c8dd70cfc42c4af76e97fe0dba3b",
+   "receivedAt": "2026-10-12T21:21:19.579Z",
+   "deadlineAt": "2026-10-12T21:23:19.579Z",
+   "validatedAt": "2026-10-12T21:21:36.502Z",
+   "providerCompletedAt": "2026-10-12T21:21:36.631Z",
+   "decisionSource": "agent",
+   "turnVersion": 2,
+   "recipient": [
+    "synthetic_cleaner_A"
+   ],
+   "receiptCount": 1,
+   "receipts": [
+    "simulated_15c985d9-3bdf-4b9e-813f-8443c0e60104"
+   ],
+   "notificationTenant": "A",
+   "engineLatencyS": 17.052,
+   "validatedLatencyS": 16.923,
+   "deadlineMarginS": 102.948
+  },
+  {
+   "tenant": "A",
+   "trial": 9,
+   "eventId": "p05_s10121709_shared_09",
+   "workId": "work_3031da49d07b41d01bb7ea7b912a6d17",
+   "receivedAt": "2026-10-12T21:22:19.838Z",
+   "deadlineAt": "2026-10-12T21:24:19.838Z",
+   "validatedAt": "2026-10-12T21:22:42.053Z",
+   "providerCompletedAt": "2026-10-12T21:22:42.248Z",
+   "decisionSource": "agent",
+   "turnVersion": 2,
+   "recipient": [
+    "synthetic_cleaner_A"
+   ],
+   "receiptCount": 1,
+   "receipts": [
+    "simulated_65c4f108-a873-4ceb-bab0-326cfc9b2cb9"
+   ],
+   "notificationTenant": "A",
+   "engineLatencyS": 22.41,
+   "validatedLatencyS": 22.215,
+   "deadlineMarginS": 97.59
+  },
+  {
+   "tenant": "A",
+   "trial": 10,
+   "eventId": "p05_s10121709_shared_10",
+   "workId": "work_ebe7ec5778d0779ca76adf7709edeedb",
+   "receivedAt": "2026-10-12T21:23:20.112Z",
+   "deadlineAt": "2026-10-12T21:25:20.112Z",
+   "validatedAt": "2026-10-12T21:23:36.996Z",
+   "providerCompletedAt": "2026-10-12T21:23:37.085Z",
+   "decisionSource": "agent",
+   "turnVersion": 2,
+   "recipient": [
+    "synthetic_cleaner_A"
+   ],
+   "receiptCount": 1,
+   "receipts": [
+    "simulated_7595eeb0-0fbe-42fd-860d-16d1ce6084a1"
+   ],
+   "notificationTenant": "A",
+   "engineLatencyS": 16.973,
+   "validatedLatencyS": 16.884,
+   "deadlineMarginS": 103.027
+  },
+  {
+   "tenant": "B",
+   "trial": 1,
+   "eventId": "p05_s10121709_shared_01",
+   "workId": "work_2d48b19802916c30a7f411a281386f75",
+   "receivedAt": "2026-10-12T21:54:43.999Z",
+   "deadlineAt": "2026-10-12T21:56:43.999Z",
+   "validatedAt": "2026-10-12T21:55:19.511Z",
+   "providerCompletedAt": "2026-10-12T21:55:19.690Z",
+   "decisionSource": "agent",
+   "turnVersion": 2,
+   "recipient": [
+    "synthetic_cleaner_B"
+   ],
+   "receiptCount": 1,
+   "receipts": [
+    "simulated_25ff7e81-d077-4f7e-8aba-aea13bc60744"
+   ],
+   "notificationTenant": "B",
+   "engineLatencyS": 35.691,
+   "validatedLatencyS": 35.512,
+   "deadlineMarginS": 84.309
+  },
+  {
+   "tenant": "B",
+   "trial": 2,
+   "eventId": "p05_s10121709_shared_02",
+   "workId": "work_9bf76241db89f0edd4568e53e8b37d98",
+   "receivedAt": "2026-10-12T21:55:44.279Z",
+   "deadlineAt": "2026-10-12T21:57:44.279Z",
+   "validatedAt": "2026-10-12T21:56:07.364Z",
+   "providerCompletedAt": "2026-10-12T21:56:07.523Z",
+   "decisionSource": "agent",
+   "turnVersion": 2,
+   "recipient": [
+    "synthetic_cleaner_B"
+   ],
+   "receiptCount": 1,
+   "receipts": [
+    "simulated_5cd75736-7c02-4f7d-9413-c06af0cc9dc6"
+   ],
+   "notificationTenant": "B",
+   "engineLatencyS": 23.244,
+   "validatedLatencyS": 23.085,
+   "deadlineMarginS": 96.756
+  },
+  {
+   "tenant": "B",
+   "trial": 3,
+   "eventId": "p05_s10121709_shared_03",
+   "workId": "work_497416bb3a2d5c6164b10b4017ec50c4",
+   "receivedAt": "2026-10-12T21:56:44.595Z",
+   "deadlineAt": "2026-10-12T21:58:44.595Z",
+   "validatedAt": "2026-10-12T21:57:01.525Z",
+   "providerCompletedAt": "2026-10-12T21:57:01.644Z",
+   "decisionSource": "agent",
+   "turnVersion": 2,
+   "recipient": [
+    "synthetic_cleaner_B"
+   ],
+   "receiptCount": 1,
+   "receipts": [
+    "simulated_4eceddb7-849d-4b47-b4ce-ee09a8be3d02"
+   ],
+   "notificationTenant": "B",
+   "engineLatencyS": 17.049,
+   "validatedLatencyS": 16.93,
+   "deadlineMarginS": 102.951
+  },
+  {
+   "tenant": "B",
+   "trial": 4,
+   "eventId": "p05_s10121709_shared_04",
+   "workId": "work_a9ea18e8775de7bf26cf859f7dcd052d",
+   "receivedAt": "2026-10-12T21:57:44.889Z",
+   "deadlineAt": "2026-10-12T21:59:44.889Z",
+   "validatedAt": "2026-10-12T21:58:08.585Z",
+   "providerCompletedAt": "2026-10-12T21:58:08.752Z",
+   "decisionSource": "agent",
+   "turnVersion": 2,
+   "recipient": [
+    "synthetic_cleaner_B"
+   ],
+   "receiptCount": 1,
+   "receipts": [
+    "simulated_0634c8ae-72d9-422b-9568-83434c34b9ed"
+   ],
+   "notificationTenant": "B",
+   "engineLatencyS": 23.863,
+   "validatedLatencyS": 23.696,
+   "deadlineMarginS": 96.137
+  },
+  {
+   "tenant": "B",
+   "trial": 5,
+   "eventId": "p05_s10121709_shared_05",
+   "workId": "work_310c29b82f1f57f53bf24fa86bee08d9",
+   "receivedAt": "2026-10-12T21:58:45.221Z",
+   "deadlineAt": "2026-10-12T22:00:45.221Z",
+   "validatedAt": "2026-10-12T21:59:12.407Z",
+   "providerCompletedAt": "2026-10-12T21:59:12.622Z",
+   "decisionSource": "agent",
+   "turnVersion": 2,
+   "recipient": [
+    "synthetic_cleaner_B"
+   ],
+   "receiptCount": 1,
+   "receipts": [
+    "simulated_94f8cd85-ca1f-41a8-aacc-7769cdcf889c"
+   ],
+   "notificationTenant": "B",
+   "engineLatencyS": 27.401,
+   "validatedLatencyS": 27.186,
+   "deadlineMarginS": 92.599
+  },
+  {
+   "tenant": "B",
+   "trial": 6,
+   "eventId": "p05_s10121709_shared_06",
+   "workId": "work_0d9838798bfbec24a8d16cc8de72851b",
+   "receivedAt": "2026-10-12T21:59:45.535Z",
+   "deadlineAt": "2026-10-12T22:01:45.535Z",
+   "validatedAt": "2026-10-12T22:00:05.082Z",
+   "providerCompletedAt": "2026-10-12T22:00:05.183Z",
+   "decisionSource": "agent",
+   "turnVersion": 2,
+   "recipient": [
+    "synthetic_cleaner_B"
+   ],
+   "receiptCount": 1,
+   "receipts": [
+    "simulated_8204a8d7-2d79-4a26-89fc-cd893f432bee"
+   ],
+   "notificationTenant": "B",
+   "engineLatencyS": 19.648,
+   "validatedLatencyS": 19.547,
+   "deadlineMarginS": 100.352
+  },
+  {
+   "tenant": "B",
+   "trial": 7,
+   "eventId": "p05_s10121709_shared_07",
+   "workId": "work_9f5af30f6ec0214c1ddc9e0b3639d744",
+   "receivedAt": "2026-10-12T22:00:45.851Z",
+   "deadlineAt": "2026-10-12T22:02:45.851Z",
+   "validatedAt": "2026-10-12T22:01:06.730Z",
+   "providerCompletedAt": "2026-10-12T22:01:06.780Z",
+   "decisionSource": "agent",
+   "turnVersion": 2,
+   "recipient": [
+    "synthetic_cleaner_B"
+   ],
+   "receiptCount": 1,
+   "receipts": [
+    "simulated_067a9296-8449-4a8a-b46a-b12f817371fb"
+   ],
+   "notificationTenant": "B",
+   "engineLatencyS": 20.929,
+   "validatedLatencyS": 20.879,
+   "deadlineMarginS": 99.071
+  },
+  {
+   "tenant": "B",
+   "trial": 8,
+   "eventId": "p05_s10121709_shared_08",
+   "workId": "work_00e02d657dbbed2f192d14e35790f829",
+   "receivedAt": "2026-10-12T22:01:46.120Z",
+   "deadlineAt": "2026-10-12T22:03:46.120Z",
+   "validatedAt": "2026-10-12T22:02:05.270Z",
+   "providerCompletedAt": "2026-10-12T22:02:05.368Z",
+   "decisionSource": "agent",
+   "turnVersion": 2,
+   "recipient": [
+    "synthetic_cleaner_B"
+   ],
+   "receiptCount": 1,
+   "receipts": [
+    "simulated_f311966e-1aae-4961-a4f4-20502c275e1b"
+   ],
+   "notificationTenant": "B",
+   "engineLatencyS": 19.248,
+   "validatedLatencyS": 19.15,
+   "deadlineMarginS": 100.752
+  },
+  {
+   "tenant": "B",
+   "trial": 9,
+   "eventId": "p05_s10121709_shared_09",
+   "workId": "work_49579918209e2eae790b3d71067da167",
+   "receivedAt": "2026-10-12T22:02:46.426Z",
+   "deadlineAt": "2026-10-12T22:04:46.426Z",
+   "validatedAt": "2026-10-12T22:03:05.751Z",
+   "providerCompletedAt": "2026-10-12T22:03:06.001Z",
+   "decisionSource": "agent",
+   "turnVersion": 2,
+   "recipient": [
+    "synthetic_cleaner_B"
+   ],
+   "receiptCount": 1,
+   "receipts": [
+    "simulated_ae73d075-7bad-45a4-b31e-965ece1c602e"
+   ],
+   "notificationTenant": "B",
+   "engineLatencyS": 19.575,
+   "validatedLatencyS": 19.325,
+   "deadlineMarginS": 100.425
+  },
+  {
+   "tenant": "B",
+   "trial": 10,
+   "eventId": "p05_s10121709_shared_10",
+   "workId": "work_409b01cd4bae19be2fe3e21f3177fb2e",
+   "receivedAt": "2026-10-12T22:03:46.701Z",
+   "deadlineAt": "2026-10-12T22:05:46.701Z",
+   "validatedAt": "2026-10-12T22:04:05.750Z",
+   "providerCompletedAt": "2026-10-12T22:04:05.838Z",
+   "decisionSource": "agent",
+   "turnVersion": 2,
+   "recipient": [
+    "synthetic_cleaner_B"
+   ],
+   "receiptCount": 1,
+   "receipts": [
+    "simulated_6e49202e-65ab-443c-ac20-45690eb3f5b4"
+   ],
+   "notificationTenant": "B",
+   "engineLatencyS": 19.137,
+   "validatedLatencyS": 19.049,
+   "deadlineMarginS": 100.863
+  }
+ ],
+ "reconstructed_stats_NOT_RAW": {
+  "A": {
+   "engineLatency": {
+    "n": 10,
+    "median": 19.446,
+    "min": 16.973,
+    "max": 31.604,
+    "p95_nearestRank": 31.604
+   },
+   "validatedDecisionLatency": {
+    "n": 10,
+    "median": 19.267,
+    "min": 16.884,
+    "max": 31.486,
+    "p95_nearestRank": 31.486
+   },
+   "failures": 0,
+   "excluded": "onboarding fixtures and failed onboarding attempts"
+  },
+  "B": {
+   "engineLatency": {
+    "n": 10,
+    "median": 20.288,
+    "min": 17.049,
+    "max": 35.691,
+    "p95_nearestRank": 35.691
+   },
+   "validatedDecisionLatency": {
+    "n": 10,
+    "median": 20.213,
+    "min": 16.93,
+    "max": 35.512,
+    "p95_nearestRank": 35.512
+   },
+   "failures": 0,
+   "excluded": "onboarding fixtures and failed onboarding attempts"
+  }
+ },
+ "nativeTraceIds": "missing: not exposed by the app",
+ "currentProfile_A": {
+  "http": 200,
+  "readAtUTC": "2026-10-12T22:30:26Z",
+  "raw": {
+   "schemaVersion": 1,
+   "tenantId": "A",
+   "agentId": "grok_test_agent",
+   "adapterId": "grok",
+   "createdAt": "2026-10-12T18:20:33.976Z",
+   "updatedAt": "2026-10-12T18:26:21.432Z",
+   "capabilities": [
+    {
+     "capability": "mcp_tools",
+     "declared": "unknown",
+     "evidence": {
+      "status": "verified",
+      "method": "server_probe",
+      "evidenceId": "probe_4a561936c8d844e7b18da795c2b29c25",
+      "scope": "authenticated_core_work_read",
+      "observedAt": "2026-10-12T18:20:33.976Z",
+      "expiresAt": "2026-10-13T18:20:33.976Z"
+     },
+     "status": "verified"
+    },
+    {
+     "capability": "generation_reasoning",
+     "declared": "unknown",
+     "status": "unknown"
+    },
+    {
+     "capability": "background_runs",
+     "declared": "unknown",
+     "evidence": {
+      "status": "verified",
+      "method": "engine_workflow",
+      "evidenceId": "work_602f066d39fa839b6b61f2ff98bf8e9f",
+      "scope": "cleaner_reschedule",
+      "observedAt": "2026-10-12T18:20:43.017Z",
+      "expiresAt": "2026-10-13T18:20:43.017Z",
+      "latencyMs": 21246,
+      "ownerConfirmedConversationClosed": true
+     },
+     "status": "verified"
+    },
+    {
+     "capability": "scheduled_runs",
+     "declared": "unknown",
+     "status": "unknown"
+    },
+    {
+     "capability": "native_integrations",
+     "declared": "unknown",
+     "status": "unknown"
+    },
+    {
+     "capability": "files_images",
+     "declared": "unknown",
+     "status": "unknown"
+    },
+    {
+     "capability": "reminders_notifications",
+     "declared": "unknown",
+     "status": "unknown"
+    }
+   ],
+   "nativeExtensions": [],
+   "grants": "<redacted>",
+   "readiness": {
+    "executionMode": "autonomous",
+    "deadlineMs": 120000,
+    "fallback": "engine_owned",
+    "productionReady": false,
+    "autonomousScopes": [
+     "cleaner.reschedule_requested"
+    ],
+    "generation": "unverified",
+    "appToolDiscovery": "unknown",
+    "onboardingTransport": "unverified",
+    "missingForAutonomous": []
+   },
+   "extensions": []
+  }
+ },
+ "currentProfile_B": {
+  "http": 200,
+  "readAtUTC": "2026-10-12T22:30:26Z",
+  "raw": {
+   "schemaVersion": 1,
+   "tenantId": "B",
+   "agentId": "grok_test_agent",
+   "adapterId": "grok",
+   "createdAt": "2026-10-12T20:30:40.020Z",
+   "updatedAt": "2026-10-12T20:43:47.915Z",
+   "capabilities": [
+    {
+     "capability": "mcp_tools",
+     "declared": "unknown",
+     "evidence": {
+      "status": "verified",
+      "method": "server_probe",
+      "evidenceId": "probe_67873e49995c451ba9590486e76d524c",
+      "scope": "authenticated_core_work_read",
+      "observedAt": "2026-10-12T20:30:40.020Z",
+      "expiresAt": "2026-10-13T20:30:40.020Z"
+     },
+     "status": "verified"
+    },
+    {
+     "capability": "generation_reasoning",
+     "declared": "unknown",
+     "status": "unknown"
+    },
+    {
+     "capability": "background_runs",
+     "declared": "unknown",
+     "evidence": {
+      "status": "verified",
+      "method": "engine_workflow",
+      "evidenceId": "work_b088a49c406ea19116f7d319f5927eda",
+      "scope": "cleaner_reschedule",
+      "observedAt": "2026-10-12T20:30:47.346Z",
+      "expiresAt": "2026-10-13T20:30:47.346Z",
+      "latencyMs": 94349,
+      "ownerConfirmedConversationClosed": true
+     },
+     "status": "verified"
+    },
+    {
+     "capability": "scheduled_runs",
+     "declared": "unknown",
+     "status": "unknown"
+    },
+    {
+     "capability": "native_integrations",
+     "declared": "unknown",
+     "status": "unknown"
+    },
+    {
+     "capability": "files_images",
+     "declared": "unknown",
+     "status": "unknown"
+    },
+    {
+     "capability": "reminders_notifications",
+     "declared": "unknown",
+     "status": "unknown"
+    }
+   ],
+   "nativeExtensions": [],
+   "grants": "<redacted>",
+   "readiness": {
+    "executionMode": "autonomous",
+    "deadlineMs": 120000,
+    "fallback": "engine_owned",
+    "productionReady": false,
+    "autonomousScopes": [
+     "cleaner.reschedule_requested"
+    ],
+    "generation": "unverified",
+    "appToolDiscovery": "unknown",
+    "onboardingTransport": "unverified",
+    "missingForAutonomous": []
+   },
+   "extensions": []
+  }
+ }
+}

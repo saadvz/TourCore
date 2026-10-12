@@ -1,0 +1,1740 @@
+{
+ "label": "Phase 0.5 security packet (sanitized)",
+ "runtime": {
+  "service": "cleaner-core-phase05-test",
+  "mode": "synthetic",
+  "tenants": 2,
+  "agentId": "grok_test_agent",
+  "mcp": "/mcp",
+  "realSmsEnabled": false,
+  "version": "phase05-indexed-v1",
+  "fixtureSchedulerVersion": "server-clock-v1",
+  "fixtureSchedulerHealthy": true
+ },
+ "selectedFixtures": {
+  "A": {
+   "eventId": "p05_s10121709_shared_01",
+   "workId": "work_81f25a6ec1109b0a08d3b2e4bd85d126"
+  },
+  "B": {
+   "eventId": "p05_s10121709_shared_01",
+   "workId": "work_2d48b19802916c30a7f411a281386f75"
+  }
+ },
+ "raw_replay": {
+  "A": {
+   "evidenceBefore": {
+    "mode": "synthetic",
+    "work": {
+     "id": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+     "eventType": "cleaner.reschedule_requested",
+     "requestedStart": "2026-10-13T22:14:17.574Z",
+     "receivedAt": "2026-10-12T21:14:17.594Z",
+     "deadlineAt": "2026-10-12T21:16:17.594Z",
+     "status": "completed",
+     "turn": {
+      "id": "turn_c772208bd9263e2f23a7bb54b52ff481",
+      "version": 2,
+      "timeZone": "America/New_York",
+      "windowStart": "2026-10-13T21:14:17.574Z",
+      "windowEnd": "2026-10-14T03:14:17.575Z",
+      "nextArrival": "2026-10-14T04:14:17.575Z",
+      "minimumMinutes": 90,
+      "confirmedStart": "2026-10-13T22:14:17.574Z"
+     },
+     "decisionSource": "agent",
+     "deliveryStatus": "sent"
+    },
+    "audit": [
+     {
+      "at": "2026-10-12T21:14:17.594Z",
+      "type": "received",
+      "actor": "verified_provider"
+     },
+     {
+      "at": "2026-10-12T21:14:43.689Z",
+      "type": "claimed",
+      "actor": "grok_test_agent"
+     },
+     {
+      "at": "2026-10-12T21:14:49.080Z",
+      "type": "validated_action_and_reply_saved",
+      "actor": "grok_test_agent"
+     },
+     {
+      "at": "2026-10-12T21:14:49.190Z",
+      "type": "send_attempt",
+      "actor": "engine"
+     },
+     {
+      "at": "2026-10-12T21:14:49.198Z",
+      "type": "provider_accepted_and_completed",
+      "actor": "engine"
+     }
+    ],
+    "reply": "{\"key\":\"reply_work_81f25a6ec1109b0a08d3b2e4bd85d126\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:14 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791839689080,\"receipt\":\"simulated_4de3a740-1c3b-4928-b381-faef4f8be675\"}",
+    "carrierEvents": [],
+    "replies": [
+     {
+      "key": "reply_work_81f25a6ec1109b0a08d3b2e4bd85d126",
+      "recipient": "synthetic_cleaner_A",
+      "text": "Cleaning scheduled for Oct 13, 2026, 6:14 PM (America/New_York). Entry requires host clearance.",
+      "receipt": "simulated_4de3a740-1c3b-4928-b381-faef4f8be675"
+     }
+    ],
+    "notification": {
+     "tenant": "A",
+     "work_id": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+     "agent": "grok_test_agent",
+     "epoch": 1,
+     "status": "accepted",
+     "due": 1791839659108,
+     "attempts": 1,
+     "http": 200,
+     "attempted_at": 1791839657631,
+     "accepted_at": 1791839658108
+    },
+    "carrierDelivery": "not applicable; simulated provider",
+    "operatesDoors": false
+   },
+   "evidenceAfter": {
+    "mode": "synthetic",
+    "work": {
+     "id": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+     "eventType": "cleaner.reschedule_requested",
+     "requestedStart": "2026-10-13T22:14:17.574Z",
+     "receivedAt": "2026-10-12T21:14:17.594Z",
+     "deadlineAt": "2026-10-12T21:16:17.594Z",
+     "status": "completed",
+     "turn": {
+      "id": "turn_c772208bd9263e2f23a7bb54b52ff481",
+      "version": 2,
+      "timeZone": "America/New_York",
+      "windowStart": "2026-10-13T21:14:17.574Z",
+      "windowEnd": "2026-10-14T03:14:17.575Z",
+      "nextArrival": "2026-10-14T04:14:17.575Z",
+      "minimumMinutes": 90,
+      "confirmedStart": "2026-10-13T22:14:17.574Z"
+     },
+     "decisionSource": "agent",
+     "deliveryStatus": "sent"
+    },
+    "audit": [
+     {
+      "at": "2026-10-12T21:14:17.594Z",
+      "type": "received",
+      "actor": "verified_provider"
+     },
+     {
+      "at": "2026-10-12T21:14:43.689Z",
+      "type": "claimed",
+      "actor": "grok_test_agent"
+     },
+     {
+      "at": "2026-10-12T21:14:49.080Z",
+      "type": "validated_action_and_reply_saved",
+      "actor": "grok_test_agent"
+     },
+     {
+      "at": "2026-10-12T21:14:49.190Z",
+      "type": "send_attempt",
+      "actor": "engine"
+     },
+     {
+      "at": "2026-10-12T21:14:49.198Z",
+      "type": "provider_accepted_and_completed",
+      "actor": "engine"
+     }
+    ],
+    "reply": "{\"key\":\"reply_work_81f25a6ec1109b0a08d3b2e4bd85d126\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:14 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_A\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791839689080,\"receipt\":\"simulated_4de3a740-1c3b-4928-b381-faef4f8be675\"}",
+    "carrierEvents": [],
+    "replies": [
+     {
+      "key": "reply_work_81f25a6ec1109b0a08d3b2e4bd85d126",
+      "recipient": "synthetic_cleaner_A",
+      "text": "Cleaning scheduled for Oct 13, 2026, 6:14 PM (America/New_York). Entry requires host clearance.",
+      "receipt": "simulated_4de3a740-1c3b-4928-b381-faef4f8be675"
+     }
+    ],
+    "notification": {
+     "tenant": "A",
+     "work_id": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+     "agent": "grok_test_agent",
+     "epoch": 1,
+     "status": "accepted",
+     "due": 1791839659108,
+     "attempts": 1,
+     "http": 200,
+     "attempted_at": 1791839657631,
+     "accepted_at": 1791839658108
+    },
+    "carrierDelivery": "not applicable; simulated provider",
+    "operatesDoors": false
+   },
+   "scheduleReplay1": {
+    "mode": "synthetic",
+    "schedule": {
+     "id": "test_schedule_c1c7a6dd8c4e933ddcb145fa0dd489bd",
+     "eventId": "p05_s10121709_shared_01",
+     "kind": "ordinary",
+     "delaySeconds": 300,
+     "runAt": "2026-10-12T21:14:17.573Z",
+     "status": "fired",
+     "workId": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+     "firedAt": "2026-10-12T21:14:17.599Z",
+     "error": null
+    }
+   },
+   "scheduleReplay2": {
+    "mode": "synthetic",
+    "schedule": {
+     "id": "test_schedule_c1c7a6dd8c4e933ddcb145fa0dd489bd",
+     "eventId": "p05_s10121709_shared_01",
+     "kind": "ordinary",
+     "delaySeconds": 300,
+     "runAt": "2026-10-12T21:14:17.573Z",
+     "status": "fired",
+     "workId": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+     "firedAt": "2026-10-12T21:14:17.599Z",
+     "error": null
+    }
+   },
+   "eventReplay1": {
+    "mode": "synthetic",
+    "work": {
+     "id": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+     "eventType": "cleaner.reschedule_requested",
+     "requestedStart": "2026-10-13T22:14:17.574Z",
+     "receivedAt": "2026-10-12T21:14:17.594Z",
+     "deadlineAt": "2026-10-12T21:16:17.594Z",
+     "status": "completed",
+     "turn": {
+      "id": "turn_c772208bd9263e2f23a7bb54b52ff481",
+      "version": 2,
+      "timeZone": "America/New_York",
+      "windowStart": "2026-10-13T21:14:17.574Z",
+      "windowEnd": "2026-10-14T03:14:17.575Z",
+      "nextArrival": "2026-10-14T04:14:17.575Z",
+      "minimumMinutes": 90,
+      "confirmedStart": "2026-10-13T22:14:17.574Z"
+     },
+     "decisionSource": "agent",
+     "deliveryStatus": "sent"
+    }
+   },
+   "eventReplay2": {
+    "mode": "synthetic",
+    "work": {
+     "id": "work_81f25a6ec1109b0a08d3b2e4bd85d126",
+     "eventType": "cleaner.reschedule_requested",
+     "requestedStart": "2026-10-13T22:14:17.574Z",
+     "receivedAt": "2026-10-12T21:14:17.594Z",
+     "deadlineAt": "2026-10-12T21:16:17.594Z",
+     "status": "completed",
+     "turn": {
+      "id": "turn_c772208bd9263e2f23a7bb54b52ff481",
+      "version": 2,
+      "timeZone": "America/New_York",
+      "windowStart": "2026-10-13T21:14:17.574Z",
+      "windowEnd": "2026-10-14T03:14:17.575Z",
+      "nextArrival": "2026-10-14T04:14:17.575Z",
+      "minimumMinutes": 90,
+      "confirmedStart": "2026-10-13T22:14:17.574Z"
+     },
+     "decisionSource": "agent",
+     "deliveryStatus": "sent"
+    }
+   },
+   "conflict": {
+    "error": "SOURCE_CONFLICT"
+   }
+  },
+  "B": {
+   "evidenceBefore": {
+    "mode": "synthetic",
+    "work": {
+     "id": "work_2d48b19802916c30a7f411a281386f75",
+     "eventType": "cleaner.reschedule_requested",
+     "requestedStart": "2026-10-13T22:54:43.992Z",
+     "receivedAt": "2026-10-12T21:54:43.999Z",
+     "deadlineAt": "2026-10-12T21:56:43.999Z",
+     "status": "completed",
+     "turn": {
+      "id": "turn_c772208bd9263e2f23a7bb54b52ff481",
+      "version": 2,
+      "timeZone": "America/New_York",
+      "windowStart": "2026-10-13T21:54:43.992Z",
+      "windowEnd": "2026-10-14T03:54:43.992Z",
+      "nextArrival": "2026-10-14T04:54:43.992Z",
+      "minimumMinutes": 90,
+      "confirmedStart": "2026-10-13T22:54:43.992Z"
+     },
+     "decisionSource": "agent",
+     "deliveryStatus": "sent"
+    },
+    "audit": [
+     {
+      "at": "2026-10-12T21:54:44.000Z",
+      "type": "received",
+      "actor": "verified_provider"
+     },
+     {
+      "at": "2026-10-12T21:55:11.877Z",
+      "type": "claimed",
+      "actor": "grok_test_agent"
+     },
+     {
+      "at": "2026-10-12T21:55:19.511Z",
+      "type": "validated_action_and_reply_saved",
+      "actor": "grok_test_agent"
+     },
+     {
+      "at": "2026-10-12T21:55:19.659Z",
+      "type": "send_attempt",
+      "actor": "engine"
+     },
+     {
+      "at": "2026-10-12T21:55:19.690Z",
+      "type": "provider_accepted_and_completed",
+      "actor": "engine"
+     }
+    ],
+    "reply": "{\"key\":\"reply_work_2d48b19802916c30a7f411a281386f75\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:54 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_B\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791842119509,\"receipt\":\"simulated_25ff7e81-d077-4f7e-8aba-aea13bc60744\"}",
+    "carrierEvents": [],
+    "replies": [
+     {
+      "key": "reply_work_2d48b19802916c30a7f411a281386f75",
+      "recipient": "synthetic_cleaner_B",
+      "text": "Cleaning scheduled for Oct 13, 2026, 6:54 PM (America/New_York). Entry requires host clearance.",
+      "receipt": "simulated_25ff7e81-d077-4f7e-8aba-aea13bc60744"
+     }
+    ],
+    "notification": {
+     "tenant": "B",
+     "work_id": "work_2d48b19802916c30a7f411a281386f75",
+     "agent": "grok_test_agent",
+     "epoch": 1,
+     "status": "accepted",
+     "due": 1791842085564,
+     "attempts": 1,
+     "http": 200,
+     "attempted_at": 1791842084101,
+     "accepted_at": 1791842084564
+    },
+    "carrierDelivery": "not applicable; simulated provider",
+    "operatesDoors": false
+   },
+   "evidenceAfter": {
+    "mode": "synthetic",
+    "work": {
+     "id": "work_2d48b19802916c30a7f411a281386f75",
+     "eventType": "cleaner.reschedule_requested",
+     "requestedStart": "2026-10-13T22:54:43.992Z",
+     "receivedAt": "2026-10-12T21:54:43.999Z",
+     "deadlineAt": "2026-10-12T21:56:43.999Z",
+     "status": "completed",
+     "turn": {
+      "id": "turn_c772208bd9263e2f23a7bb54b52ff481",
+      "version": 2,
+      "timeZone": "America/New_York",
+      "windowStart": "2026-10-13T21:54:43.992Z",
+      "windowEnd": "2026-10-14T03:54:43.992Z",
+      "nextArrival": "2026-10-14T04:54:43.992Z",
+      "minimumMinutes": 90,
+      "confirmedStart": "2026-10-13T22:54:43.992Z"
+     },
+     "decisionSource": "agent",
+     "deliveryStatus": "sent"
+    },
+    "audit": [
+     {
+      "at": "2026-10-12T21:54:44.000Z",
+      "type": "received",
+      "actor": "verified_provider"
+     },
+     {
+      "at": "2026-10-12T21:55:11.877Z",
+      "type": "claimed",
+      "actor": "grok_test_agent"
+     },
+     {
+      "at": "2026-10-12T21:55:19.511Z",
+      "type": "validated_action_and_reply_saved",
+      "actor": "grok_test_agent"
+     },
+     {
+      "at": "2026-10-12T21:55:19.659Z",
+      "type": "send_attempt",
+      "actor": "engine"
+     },
+     {
+      "at": "2026-10-12T21:55:19.690Z",
+      "type": "provider_accepted_and_completed",
+      "actor": "engine"
+     }
+    ],
+    "reply": "{\"key\":\"reply_work_2d48b19802916c30a7f411a281386f75\",\"text\":\"Cleaning scheduled for Oct 13, 2026, 6:54 PM (America/New_York). Entry requires host clearance.\",\"recipient\":\"synthetic_cleaner_B\",\"turnVersion\":2,\"source\":\"agent\",\"status\":\"sent\",\"attempts\":1,\"nextAttemptAt\":1791842119509,\"receipt\":\"simulated_25ff7e81-d077-4f7e-8aba-aea13bc60744\"}",
+    "carrierEvents": [],
+    "replies": [
+     {
+      "key": "reply_work_2d48b19802916c30a7f411a281386f75",
+      "recipient": "synthetic_cleaner_B",
+      "text": "Cleaning scheduled for Oct 13, 2026, 6:54 PM (America/New_York). Entry requires host clearance.",
+      "receipt": "simulated_25ff7e81-d077-4f7e-8aba-aea13bc60744"
+     }
+    ],
+    "notification": {
+     "tenant": "B",
+     "work_id": "work_2d48b19802916c30a7f411a281386f75",
+     "agent": "grok_test_agent",
+     "epoch": 1,
+     "status": "accepted",
+     "due": 1791842085564,
+     "attempts": 1,
+     "http": 200,
+     "attempted_at": 1791842084101,
+     "accepted_at": 1791842084564
+    },
+    "carrierDelivery": "not applicable; simulated provider",
+    "operatesDoors": false
+   },
+   "scheduleReplay1": {
+    "mode": "synthetic",
+    "schedule": {
+     "id": "test_schedule_17a5fec5bfee44ae8485df994bb3e956",
+     "eventId": "p05_s10121709_shared_01",
+     "kind": "ordinary",
+     "delaySeconds": 300,
+     "runAt": "2026-10-12T21:54:43.991Z",
+     "status": "fired",
+     "workId": "work_2d48b19802916c30a7f411a281386f75",
+     "firedAt": "2026-10-12T21:54:44.007Z",
+     "error": null
+    }
+   },
+   "scheduleReplay2": {
+    "mode": "synthetic",
+    "schedule": {
+     "id": "test_schedule_17a5fec5bfee44ae8485df994bb3e956",
+     "eventId": "p05_s10121709_shared_01",
+     "kind": "ordinary",
+     "delaySeconds": 300,
+     "runAt": "2026-10-12T21:54:43.991Z",
+     "status": "fired",
+     "workId": "work_2d48b19802916c30a7f411a281386f75",
+     "firedAt": "2026-10-12T21:54:44.007Z",
+     "error": null
+    }
+   },
+   "eventReplay1": {
+    "mode": "synthetic",
+    "work": {
+     "id": "work_2d48b19802916c30a7f411a281386f75",
+     "eventType": "cleaner.reschedule_requested",
+     "requestedStart": "2026-10-13T22:54:43.992Z",
+     "receivedAt": "2026-10-12T21:54:43.999Z",
+     "deadlineAt": "2026-10-12T21:56:43.999Z",
+     "status": "completed",
+     "turn": {
+      "id": "turn_c772208bd9263e2f23a7bb54b52ff481",
+      "version": 2,
+      "timeZone": "America/New_York",
+      "windowStart": "2026-10-13T21:54:43.992Z",
+      "windowEnd": "2026-10-14T03:54:43.992Z",
+      "nextArrival": "2026-10-14T04:54:43.992Z",
+      "minimumMinutes": 90,
+      "confirmedStart": "2026-10-13T22:54:43.992Z"
+     },
+     "decisionSource": "agent",
+     "deliveryStatus": "sent"
+    }
+   },
+   "eventReplay2": {
+    "mode": "synthetic",
+    "work": {
+     "id": "work_2d48b19802916c30a7f411a281386f75",
+     "eventType": "cleaner.reschedule_requested",
+     "requestedStart": "2026-10-13T22:54:43.992Z",
+     "receivedAt": "2026-10-12T21:54:43.999Z",
+     "deadlineAt": "2026-10-12T21:56:43.999Z",
+     "status": "completed",
+     "turn": {
+      "id": "turn_c772208bd9263e2f23a7bb54b52ff481",
+      "version": 2,
+      "timeZone": "America/New_York",
+      "windowStart": "2026-10-13T21:54:43.992Z",
+      "windowEnd": "2026-10-14T03:54:43.992Z",
+      "nextArrival": "2026-10-14T04:54:43.992Z",
+      "minimumMinutes": 90,
+      "confirmedStart": "2026-10-13T22:54:43.992Z"
+     },
+     "decisionSource": "agent",
+     "deliveryStatus": "sent"
+    }
+   },
+   "conflict": {
+    "error": "SOURCE_CONFLICT"
+   }
+  }
+ },
+ "raw_ingress": [
+  [
+   "A",
+   "valid replay",
+   200,
+   "{\"accepted\":true,\"workId\":\"work_81f25a6ec1109b0a08d3b2e4bd85d126\"}"
+  ],
+  [
+   "A",
+   "valid replay 2",
+   200,
+   "{\"accepted\":true,\"workId\":\"work_81f25a6ec1109b0a08d3b2e4bd85d126\"}"
+  ],
+  [
+   "A",
+   "account->other",
+   401,
+   "{\"error\":\"UNAUTHORIZED\"}"
+  ],
+  [
+   "A",
+   "to->other",
+   401,
+   "{\"error\":\"UNAUTHORIZED\"}"
+  ],
+  [
+   "A",
+   "from->other",
+   401,
+   "{\"error\":\"UNAUTHORIZED\"}"
+  ],
+  [
+   "A",
+   "valid env to other provider",
+   401,
+   "{\"error\":\"UNAUTHORIZED\"}"
+  ],
+  [
+   "A",
+   "missing signature",
+   401,
+   "{\"error\":\"UNAUTHORIZED\"}"
+  ],
+  [
+   "A",
+   "timestamp 31s old",
+   401,
+   "{\"error\":\"UNAUTHORIZED\"}"
+  ],
+  [
+   "B",
+   "valid replay",
+   200,
+   "{\"accepted\":true,\"workId\":\"work_2d48b19802916c30a7f411a281386f75\"}"
+  ],
+  [
+   "B",
+   "valid replay 2",
+   200,
+   "{\"accepted\":true,\"workId\":\"work_2d48b19802916c30a7f411a281386f75\"}"
+  ],
+  [
+   "B",
+   "account->other",
+   401,
+   "{\"error\":\"UNAUTHORIZED\"}"
+  ],
+  [
+   "B",
+   "to->other",
+   401,
+   "{\"error\":\"UNAUTHORIZED\"}"
+  ],
+  [
+   "B",
+   "from->other",
+   401,
+   "{\"error\":\"UNAUTHORIZED\"}"
+  ],
+  [
+   "B",
+   "valid env to other provider",
+   401,
+   "{\"error\":\"UNAUTHORIZED\"}"
+  ],
+  [
+   "B",
+   "missing signature",
+   401,
+   "{\"error\":\"UNAUTHORIZED\"}"
+  ],
+  [
+   "B",
+   "timestamp 31s old",
+   401,
+   "{\"error\":\"UNAUTHORIZED\"}"
+  ]
+ ],
+ "raw_property_access_log": [
+  {
+   "saved": true
+  },
+  {
+   "saved": true
+  },
+  {
+   "saved": true
+  },
+  {
+   "saved": true
+  },
+  {
+   "error": "INVALID_INPUT"
+  },
+  {
+   "id": "prop_s3m1832_shared",
+   "name": "A shared house"
+  },
+  {
+   "id": "prop_s3m1832_shared",
+   "name": "B shared house"
+  },
+  {
+   "error": "NOT_FOUND"
+  },
+  {
+   "error": "NOT_FOUND"
+  },
+  {
+   "recorded": true,
+   "operatesDoors": false
+  },
+  {
+   "recorded": true,
+   "operatesDoors": false
+  },
+  {
+   "recorded": true,
+   "operatesDoors": false
+  },
+  {
+   "recorded": true,
+   "operatesDoors": false
+  },
+  {
+   "error": "NOT_FOUND"
+  },
+  {
+   "error": "NOT_FOUND"
+  },
+  {
+   "error": "INVALID_INPUT"
+  },
+  {
+   "id": "acc_s3m1832_shared",
+   "propertyId": "prop_s3m1832_A",
+   "hostClearance": false,
+   "expiresAt": "2026-11-11T22:32:23.000Z",
+   "clearanceCurrent": false,
+   "operatesDoors": false
+  },
+  {
+   "id": "acc_s3m1832_shared",
+   "propertyId": "prop_s3m1832_B",
+   "hostClearance": false,
+   "expiresAt": "2026-11-11T22:32:23.000Z",
+   "clearanceCurrent": false,
+   "operatesDoors": false
+  },
+  {
+   "id": "acc_s3m1832_A",
+   "propertyId": "prop_s3m1832_A",
+   "hostClearance": false,
+   "expiresAt": "2026-11-11T22:32:23.000Z",
+   "clearanceCurrent": false,
+   "operatesDoors": false
+  },
+  {
+   "id": "acc_s3m1832_B",
+   "propertyId": "prop_s3m1832_B",
+   "hostClearance": false,
+   "expiresAt": "2026-11-11T22:32:23.000Z",
+   "clearanceCurrent": false,
+   "operatesDoors": false
+  },
+  {
+   "error": "NOT_FOUND"
+  },
+  {
+   "error": "NOT_FOUND"
+  }
+ ],
+ "raw_oauth_log": [
+  [
+   "A",
+   "baseline profile",
+   200,
+   {
+    "updatedAt": "2026-10-12T18:26:21.432Z"
+   }
+  ],
+  [
+   "B",
+   "baseline profile",
+   200,
+   {
+    "updatedAt": "2026-10-12T20:43:47.915Z"
+   }
+  ],
+  [
+   "A",
+   "create agent",
+   200,
+   {
+    "agentId": "tmp_oauth_a_183241",
+    "adapterId": "generic_mcp"
+   }
+  ],
+  [
+   "A",
+   "create client",
+   200,
+   {
+    "client_id": "<redacted>",
+    "redirect_uri": "http://127.0.0.1:1/cleaner-test-callback"
+   }
+  ],
+  [
+   "B",
+   "create agent",
+   200,
+   {
+    "agentId": "tmp_oauth_b_183241",
+    "adapterId": "generic_mcp"
+   }
+  ],
+  [
+   "B",
+   "create client",
+   200,
+   {
+    "client_id": "<redacted>",
+    "redirect_uri": "http://127.0.0.1:1/cleaner-test-callback"
+   }
+  ],
+  [
+   "A",
+   "authorize by other owner",
+   404,
+   {
+    "error": "NOT_FOUND"
+   }
+  ],
+  [
+   "A",
+   "authorize by own owner",
+   200,
+   {
+    "code": "<redacted>",
+    "state": "CgTr_cSMAK9IXkh2Xvymkw",
+    "redirect_uri": "http://127.0.0.1:1/cleaner-test-callback"
+   }
+  ],
+  [
+   "A",
+   "state matches",
+   0,
+   {
+    "match": true,
+    "keys": [
+     "code",
+     "redirect_uri",
+     "state"
+    ]
+   }
+  ],
+  [
+   "A",
+   "token wrong verifier",
+   401,
+   {
+    "error": "UNAUTHORIZED"
+   }
+  ],
+  [
+   "A",
+   "token other tenant client",
+   401,
+   {
+    "error": "UNAUTHORIZED"
+   }
+  ],
+  [
+   "A",
+   "token correct exchange (+0.9s)",
+   200,
+   {
+    "grantId": "<redacted>",
+    "access_token": "<redacted>",
+    "token_type": "<redacted>",
+    "expires_in": 3600,
+    "refresh_token": "<redacted>"
+   }
+  ],
+  [
+   "A",
+   "consumed code replay",
+   401,
+   {
+    "error": "UNAUTHORIZED"
+   }
+  ],
+  [
+   "A",
+   "agent token on owner route",
+   401,
+   {
+    "error": "UNAUTHORIZED"
+   }
+  ],
+  [
+   "B",
+   "authorize by other owner",
+   404,
+   {
+    "error": "NOT_FOUND"
+   }
+  ],
+  [
+   "B",
+   "authorize by own owner",
+   200,
+   {
+    "code": "<redacted>",
+    "state": "wZZ4qaeNiXiS--xnF3fk-A",
+    "redirect_uri": "http://127.0.0.1:1/cleaner-test-callback"
+   }
+  ],
+  [
+   "B",
+   "state matches",
+   0,
+   {
+    "match": true,
+    "keys": [
+     "code",
+     "redirect_uri",
+     "state"
+    ]
+   }
+  ],
+  [
+   "B",
+   "token wrong verifier",
+   401,
+   {
+    "error": "UNAUTHORIZED"
+   }
+  ],
+  [
+   "B",
+   "token other tenant client",
+   401,
+   {
+    "error": "UNAUTHORIZED"
+   }
+  ],
+  [
+   "B",
+   "token correct exchange (+0.7s)",
+   200,
+   {
+    "grantId": "<redacted>",
+    "access_token": "<redacted>",
+    "token_type": "<redacted>",
+    "expires_in": 3600,
+    "refresh_token": "<redacted>"
+   }
+  ],
+  [
+   "B",
+   "consumed code replay",
+   401,
+   {
+    "error": "UNAUTHORIZED"
+   }
+  ],
+  [
+   "B",
+   "agent token on owner route",
+   401,
+   {
+    "error": "UNAUTHORIZED"
+   }
+  ]
+ ],
+ "profiles": {
+  "A": {
+   "baseline": {
+    "schemaVersion": 1,
+    "tenantId": "A",
+    "agentId": "grok_test_agent",
+    "adapterId": "grok",
+    "createdAt": "2026-10-12T18:20:33.976Z",
+    "updatedAt": "2026-10-12T18:26:21.432Z",
+    "capabilities": [
+     {
+      "capability": "mcp_tools",
+      "declared": "unknown",
+      "evidence": {
+       "status": "verified",
+       "method": "server_probe",
+       "evidenceId": "probe_4a561936c8d844e7b18da795c2b29c25",
+       "scope": "authenticated_core_work_read",
+       "observedAt": "2026-10-12T18:20:33.976Z",
+       "expiresAt": "2026-10-13T18:20:33.976Z"
+      },
+      "status": "verified"
+     },
+     {
+      "capability": "generation_reasoning",
+      "declared": "unknown",
+      "status": "unknown"
+     },
+     {
+      "capability": "background_runs",
+      "declared": "unknown",
+      "evidence": {
+       "status": "verified",
+       "method": "engine_workflow",
+       "evidenceId": "work_602f066d39fa839b6b61f2ff98bf8e9f",
+       "scope": "cleaner_reschedule",
+       "observedAt": "2026-10-12T18:20:43.017Z",
+       "expiresAt": "2026-10-13T18:20:43.017Z",
+       "latencyMs": 21246,
+       "ownerConfirmedConversationClosed": true
+      },
+      "status": "verified"
+     },
+     {
+      "capability": "scheduled_runs",
+      "declared": "unknown",
+      "status": "unknown"
+     },
+     {
+      "capability": "native_integrations",
+      "declared": "unknown",
+      "status": "unknown"
+     },
+     {
+      "capability": "files_images",
+      "declared": "unknown",
+      "status": "unknown"
+     },
+     {
+      "capability": "reminders_notifications",
+      "declared": "unknown",
+      "status": "unknown"
+     }
+    ],
+    "nativeExtensions": [],
+    "grants": "<redacted>",
+    "readiness": {
+     "executionMode": "autonomous",
+     "deadlineMs": 120000,
+     "fallback": "engine_owned",
+     "productionReady": false,
+     "autonomousScopes": [
+      "cleaner.reschedule_requested"
+     ],
+     "generation": "unverified",
+     "appToolDiscovery": "unknown",
+     "onboardingTransport": "unverified",
+     "missingForAutonomous": []
+    },
+    "extensions": []
+   },
+   "final": {
+    "schemaVersion": 1,
+    "tenantId": "A",
+    "agentId": "grok_test_agent",
+    "adapterId": "grok",
+    "createdAt": "2026-10-12T18:20:33.976Z",
+    "updatedAt": "2026-10-12T18:26:21.432Z",
+    "capabilities": [
+     {
+      "capability": "mcp_tools",
+      "declared": "unknown",
+      "evidence": {
+       "status": "verified",
+       "method": "server_probe",
+       "evidenceId": "probe_4a561936c8d844e7b18da795c2b29c25",
+       "scope": "authenticated_core_work_read",
+       "observedAt": "2026-10-12T18:20:33.976Z",
+       "expiresAt": "2026-10-13T18:20:33.976Z"
+      },
+      "status": "verified"
+     },
+     {
+      "capability": "generation_reasoning",
+      "declared": "unknown",
+      "status": "unknown"
+     },
+     {
+      "capability": "background_runs",
+      "declared": "unknown",
+      "evidence": {
+       "status": "verified",
+       "method": "engine_workflow",
+       "evidenceId": "work_602f066d39fa839b6b61f2ff98bf8e9f",
+       "scope": "cleaner_reschedule",
+       "observedAt": "2026-10-12T18:20:43.017Z",
+       "expiresAt": "2026-10-13T18:20:43.017Z",
+       "latencyMs": 21246,
+       "ownerConfirmedConversationClosed": true
+      },
+      "status": "verified"
+     },
+     {
+      "capability": "scheduled_runs",
+      "declared": "unknown",
+      "status": "unknown"
+     },
+     {
+      "capability": "native_integrations",
+      "declared": "unknown",
+      "status": "unknown"
+     },
+     {
+      "capability": "files_images",
+      "declared": "unknown",
+      "status": "unknown"
+     },
+     {
+      "capability": "reminders_notifications",
+      "declared": "unknown",
+      "status": "unknown"
+     }
+    ],
+    "nativeExtensions": [],
+    "grants": "<redacted>",
+    "readiness": {
+     "executionMode": "autonomous",
+     "deadlineMs": 120000,
+     "fallback": "engine_owned",
+     "productionReady": false,
+     "autonomousScopes": [
+      "cleaner.reschedule_requested"
+     ],
+     "generation": "unverified",
+     "appToolDiscovery": "unknown",
+     "onboardingTransport": "unverified",
+     "missingForAutonomous": []
+    },
+    "extensions": []
+   },
+   "identical": true
+  },
+  "B": {
+   "baseline": {
+    "schemaVersion": 1,
+    "tenantId": "B",
+    "agentId": "grok_test_agent",
+    "adapterId": "grok",
+    "createdAt": "2026-10-12T20:30:40.020Z",
+    "updatedAt": "2026-10-12T20:43:47.915Z",
+    "capabilities": [
+     {
+      "capability": "mcp_tools",
+      "declared": "unknown",
+      "evidence": {
+       "status": "verified",
+       "method": "server_probe",
+       "evidenceId": "probe_67873e49995c451ba9590486e76d524c",
+       "scope": "authenticated_core_work_read",
+       "observedAt": "2026-10-12T20:30:40.020Z",
+       "expiresAt": "2026-10-13T20:30:40.020Z"
+      },
+      "status": "verified"
+     },
+     {
+      "capability": "generation_reasoning",
+      "declared": "unknown",
+      "status": "unknown"
+     },
+     {
+      "capability": "background_runs",
+      "declared": "unknown",
+      "evidence": {
+       "status": "verified",
+       "method": "engine_workflow",
+       "evidenceId": "work_b088a49c406ea19116f7d319f5927eda",
+       "scope": "cleaner_reschedule",
+       "observedAt": "2026-10-12T20:30:47.346Z",
+       "expiresAt": "2026-10-13T20:30:47.346Z",
+       "latencyMs": 94349,
+       "ownerConfirmedConversationClosed": true
+      },
+      "status": "verified"
+     },
+     {
+      "capability": "scheduled_runs",
+      "declared": "unknown",
+      "status": "unknown"
+     },
+     {
+      "capability": "native_integrations",
+      "declared": "unknown",
+      "status": "unknown"
+     },
+     {
+      "capability": "files_images",
+      "declared": "unknown",
+      "status": "unknown"
+     },
+     {
+      "capability": "reminders_notifications",
+      "declared": "unknown",
+      "status": "unknown"
+     }
+    ],
+    "nativeExtensions": [],
+    "grants": "<redacted>",
+    "readiness": {
+     "executionMode": "autonomous",
+     "deadlineMs": 120000,
+     "fallback": "engine_owned",
+     "productionReady": false,
+     "autonomousScopes": [
+      "cleaner.reschedule_requested"
+     ],
+     "generation": "unverified",
+     "appToolDiscovery": "unknown",
+     "onboardingTransport": "unverified",
+     "missingForAutonomous": []
+    },
+    "extensions": []
+   },
+   "final": {
+    "schemaVersion": 1,
+    "tenantId": "B",
+    "agentId": "grok_test_agent",
+    "adapterId": "grok",
+    "createdAt": "2026-10-12T20:30:40.020Z",
+    "updatedAt": "2026-10-12T20:43:47.915Z",
+    "capabilities": [
+     {
+      "capability": "mcp_tools",
+      "declared": "unknown",
+      "evidence": {
+       "status": "verified",
+       "method": "server_probe",
+       "evidenceId": "probe_67873e49995c451ba9590486e76d524c",
+       "scope": "authenticated_core_work_read",
+       "observedAt": "2026-10-12T20:30:40.020Z",
+       "expiresAt": "2026-10-13T20:30:40.020Z"
+      },
+      "status": "verified"
+     },
+     {
+      "capability": "generation_reasoning",
+      "declared": "unknown",
+      "status": "unknown"
+     },
+     {
+      "capability": "background_runs",
+      "declared": "unknown",
+      "evidence": {
+       "status": "verified",
+       "method": "engine_workflow",
+       "evidenceId": "work_b088a49c406ea19116f7d319f5927eda",
+       "scope": "cleaner_reschedule",
+       "observedAt": "2026-10-12T20:30:47.346Z",
+       "expiresAt": "2026-10-13T20:30:47.346Z",
+       "latencyMs": 94349,
+       "ownerConfirmedConversationClosed": true
+      },
+      "status": "verified"
+     },
+     {
+      "capability": "scheduled_runs",
+      "declared": "unknown",
+      "status": "unknown"
+     },
+     {
+      "capability": "native_integrations",
+      "declared": "unknown",
+      "status": "unknown"
+     },
+     {
+      "capability": "files_images",
+      "declared": "unknown",
+      "status": "unknown"
+     },
+     {
+      "capability": "reminders_notifications",
+      "declared": "unknown",
+      "status": "unknown"
+     }
+    ],
+    "nativeExtensions": [],
+    "grants": "<redacted>",
+    "readiness": {
+     "executionMode": "autonomous",
+     "deadlineMs": 120000,
+     "fallback": "engine_owned",
+     "productionReady": false,
+     "autonomousScopes": [
+      "cleaner.reschedule_requested"
+     ],
+     "generation": "unverified",
+     "appToolDiscovery": "unknown",
+     "onboardingTransport": "unverified",
+     "missingForAutonomous": []
+    },
+    "extensions": []
+   },
+   "identical": true
+  }
+ },
+ "notes": [
+  "Temp A profile createdAt moved 22:33:01Z->22:33:24Z after refresh rotation (observation).",
+  "A and B fixtures share turn id turn_c772208bd9263e2f23a7bb54b52ff481 (same eventId); work IDs differ and scope held (observation).",
+  "Simulated provider acceptance only; no phone delivery claimed.",
+  "Temp agent/client IDs are test labels; client IDs, grant IDs and tokens redacted."
+ ],
+ "matrix_RECONSTRUCTED": [
+  {
+   "area": "replay",
+   "test": "A schedule replay x2 (trial 01, delay 300)",
+   "actual": "202 x2, original fired schedule/runAt/workId",
+   "positiveControl": "\u2014",
+   "result": "PASS"
+  },
+  {
+   "area": "replay",
+   "test": "A event replay x2",
+   "actual": "original work returned x2",
+   "positiveControl": "\u2014",
+   "result": "PASS"
+  },
+  {
+   "area": "replay",
+   "test": "A changed delay 301",
+   "actual": "409 SOURCE_CONFLICT; original schedule byte-identical",
+   "positiveControl": "\u2014",
+   "result": "PASS"
+  },
+  {
+   "area": "replay",
+   "test": "A evidence before vs after",
+   "actual": "byte-identical (same work, receivedAt, deadline, turn v2, reply key, receipt; no extra audit/send)",
+   "positiveControl": "\u2014",
+   "result": "PASS"
+  },
+  {
+   "area": "native scope",
+   "test": "A read own completed work",
+   "actual": "returned completed work",
+   "positiveControl": "\u2014",
+   "result": "PASS"
+  },
+  {
+   "area": "native scope",
+   "test": "A read B work",
+   "actual": "NOT_FOUND \"No owned work.\"",
+   "positiveControl": "A own read ok",
+   "result": "PASS"
+  },
+  {
+   "area": "native scope",
+   "test": "A claim B work",
+   "actual": "NOT_FOUND \"No owned work.\"",
+   "positiveControl": "A own read ok",
+   "result": "PASS"
+  },
+  {
+   "area": "native scope",
+   "test": "A claim own completed work",
+   "actual": "CLOSED \"Work is closed.\"",
+   "positiveControl": "\u2014",
+   "result": "PASS"
+  },
+  {
+   "area": "owner scope",
+   "test": "A GET B evidence / schedule",
+   "actual": "404 / 404",
+   "positiveControl": "own evidence 200, own schedule 200",
+   "result": "PASS"
+  },
+  {
+   "area": "replay",
+   "test": "B schedule replay x2 (trial 01, delay 300)",
+   "actual": "202 x2, original fired schedule/runAt/workId",
+   "positiveControl": "\u2014",
+   "result": "PASS"
+  },
+  {
+   "area": "replay",
+   "test": "B event replay x2",
+   "actual": "original work returned x2",
+   "positiveControl": "\u2014",
+   "result": "PASS"
+  },
+  {
+   "area": "replay",
+   "test": "B changed delay 301",
+   "actual": "409 SOURCE_CONFLICT; original schedule byte-identical",
+   "positiveControl": "\u2014",
+   "result": "PASS"
+  },
+  {
+   "area": "replay",
+   "test": "B evidence before vs after",
+   "actual": "byte-identical (same work, receivedAt, deadline, turn v2, reply key, receipt; no extra audit/send)",
+   "positiveControl": "\u2014",
+   "result": "PASS"
+  },
+  {
+   "area": "native scope",
+   "test": "B read own completed work",
+   "actual": "returned completed work",
+   "positiveControl": "\u2014",
+   "result": "PASS"
+  },
+  {
+   "area": "native scope",
+   "test": "B read A work",
+   "actual": "NOT_FOUND \"No owned work.\"",
+   "positiveControl": "B own read ok",
+   "result": "PASS"
+  },
+  {
+   "area": "native scope",
+   "test": "B claim A work",
+   "actual": "NOT_FOUND \"No owned work.\"",
+   "positiveControl": "B own read ok",
+   "result": "PASS"
+  },
+  {
+   "area": "native scope",
+   "test": "B claim own completed work",
+   "actual": "CLOSED \"Work is closed.\"",
+   "positiveControl": "\u2014",
+   "result": "PASS"
+  },
+  {
+   "area": "owner scope",
+   "test": "B GET A evidence / schedule",
+   "actual": "404 / 404",
+   "positiveControl": "own evidence 200, own schedule 200",
+   "result": "PASS"
+  },
+  {
+   "area": "synthetic ingress",
+   "test": "A valid replay",
+   "actual": "200 {\"accepted\":true,\"workId\":\"work_81f25a6ec1109b0a08d3b2e4bd85d126\"}",
+   "positiveControl": "valid replay 200 with original workId",
+   "result": "PASS"
+  },
+  {
+   "area": "synthetic ingress",
+   "test": "A valid replay 2",
+   "actual": "200 {\"accepted\":true,\"workId\":\"work_81f25a6ec1109b0a08d3b2e4bd85d126\"}",
+   "positiveControl": "valid replay 200 with original workId",
+   "result": "PASS"
+  },
+  {
+   "area": "synthetic ingress",
+   "test": "A account->other",
+   "actual": "401 {\"error\":\"UNAUTHORIZED\"}",
+   "positiveControl": "valid replay 200 with original workId",
+   "result": "PASS"
+  },
+  {
+   "area": "synthetic ingress",
+   "test": "A to->other",
+   "actual": "401 {\"error\":\"UNAUTHORIZED\"}",
+   "positiveControl": "valid replay 200 with original workId",
+   "result": "PASS"
+  },
+  {
+   "area": "synthetic ingress",
+   "test": "A from->other",
+   "actual": "401 {\"error\":\"UNAUTHORIZED\"}",
+   "positiveControl": "valid replay 200 with original workId",
+   "result": "PASS"
+  },
+  {
+   "area": "synthetic ingress",
+   "test": "A valid env to other provider",
+   "actual": "401 {\"error\":\"UNAUTHORIZED\"}",
+   "positiveControl": "valid replay 200 with original workId",
+   "result": "PASS"
+  },
+  {
+   "area": "synthetic ingress",
+   "test": "A missing signature",
+   "actual": "401 {\"error\":\"UNAUTHORIZED\"}",
+   "positiveControl": "valid replay 200 with original workId",
+   "result": "PASS"
+  },
+  {
+   "area": "synthetic ingress",
+   "test": "A timestamp 31s old",
+   "actual": "401 {\"error\":\"UNAUTHORIZED\"}",
+   "positiveControl": "valid replay 200 with original workId",
+   "result": "PASS"
+  },
+  {
+   "area": "synthetic ingress",
+   "test": "B valid replay",
+   "actual": "200 {\"accepted\":true,\"workId\":\"work_2d48b19802916c30a7f411a281386f75\"}",
+   "positiveControl": "valid replay 200 with original workId",
+   "result": "PASS"
+  },
+  {
+   "area": "synthetic ingress",
+   "test": "B valid replay 2",
+   "actual": "200 {\"accepted\":true,\"workId\":\"work_2d48b19802916c30a7f411a281386f75\"}",
+   "positiveControl": "valid replay 200 with original workId",
+   "result": "PASS"
+  },
+  {
+   "area": "synthetic ingress",
+   "test": "B account->other",
+   "actual": "401 {\"error\":\"UNAUTHORIZED\"}",
+   "positiveControl": "valid replay 200 with original workId",
+   "result": "PASS"
+  },
+  {
+   "area": "synthetic ingress",
+   "test": "B to->other",
+   "actual": "401 {\"error\":\"UNAUTHORIZED\"}",
+   "positiveControl": "valid replay 200 with original workId",
+   "result": "PASS"
+  },
+  {
+   "area": "synthetic ingress",
+   "test": "B from->other",
+   "actual": "401 {\"error\":\"UNAUTHORIZED\"}",
+   "positiveControl": "valid replay 200 with original workId",
+   "result": "PASS"
+  },
+  {
+   "area": "synthetic ingress",
+   "test": "B valid env to other provider",
+   "actual": "401 {\"error\":\"UNAUTHORIZED\"}",
+   "positiveControl": "valid replay 200 with original workId",
+   "result": "PASS"
+  },
+  {
+   "area": "synthetic ingress",
+   "test": "B missing signature",
+   "actual": "401 {\"error\":\"UNAUTHORIZED\"}",
+   "positiveControl": "valid replay 200 with original workId",
+   "result": "PASS"
+  },
+  {
+   "area": "synthetic ingress",
+   "test": "B timestamp 31s old",
+   "actual": "401 {\"error\":\"UNAUTHORIZED\"}",
+   "positiveControl": "valid replay 200 with original workId",
+   "result": "PASS"
+  },
+  {
+   "area": "synthetic ingress",
+   "test": "A/B evidence after ingress",
+   "actual": "byte-identical",
+   "positiveControl": "\u2014",
+   "result": "PASS"
+  },
+  {
+   "area": "property/access",
+   "test": "shared property, per-tenant names: own reads show own name",
+   "actual": "as stated",
+   "positiveControl": "own reads 200",
+   "result": "PASS"
+  },
+  {
+   "area": "property/access",
+   "test": "foreign unique property reads 404",
+   "actual": "as stated",
+   "positiveControl": "own reads 200",
+   "result": "PASS"
+  },
+  {
+   "area": "property/access",
+   "test": "access records: own reads correct propertyId, clearanceCurrent=false, operatesDoors=false",
+   "actual": "as stated",
+   "positiveControl": "own reads 200",
+   "result": "PASS"
+  },
+  {
+   "area": "property/access",
+   "test": "foreign unique access reads 404",
+   "actual": "as stated",
+   "positiveControl": "own reads 200",
+   "result": "PASS"
+  },
+  {
+   "area": "property/access",
+   "test": "access referencing foreign property 404",
+   "actual": "as stated",
+   "positiveControl": "own reads 200",
+   "result": "PASS"
+  },
+  {
+   "area": "property/access",
+   "test": "extra tenantId field on property and access: 400 INVALID_INPUT",
+   "actual": "as stated",
+   "positiveControl": "own reads 200",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth API",
+   "test": "A create agent",
+   "actual": "200 {\"agentId\": \"tmp_oauth_a_183241\", \"adapterId\": \"generic_mcp\"}",
+   "positiveControl": "correct exchange 200",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth API",
+   "test": "A create client",
+   "actual": "200 {\"client_id\": \"<redacted>\", \"redirect_uri\": \"http://127.0.0.1:1/cleaner-test-callback\"}",
+   "positiveControl": "correct exchange 200",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth API",
+   "test": "B create agent",
+   "actual": "200 {\"agentId\": \"tmp_oauth_b_183241\", \"adapterId\": \"generic_mcp\"}",
+   "positiveControl": "correct exchange 200",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth API",
+   "test": "B create client",
+   "actual": "200 {\"client_id\": \"<redacted>\", \"redirect_uri\": \"http://127.0.0.1:1/cleaner-test-callback\"}",
+   "positiveControl": "correct exchange 200",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth API",
+   "test": "A authorize by other owner",
+   "actual": "404 {\"error\": \"NOT_FOUND\"}",
+   "positiveControl": "correct exchange 200",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth API",
+   "test": "A authorize by own owner",
+   "actual": "200 {\"code\": \"<redacted>\", \"state\": \"CgTr_cSMAK9IXkh2Xvymkw\", \"redirect_uri\": \"http://127.0.0.1:1/cleaner-test-callback\"}",
+   "positiveControl": "correct exchange 200",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth API",
+   "test": "A token wrong verifier",
+   "actual": "401 {\"error\": \"UNAUTHORIZED\"}",
+   "positiveControl": "correct exchange 200",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth API",
+   "test": "A token other tenant client",
+   "actual": "401 {\"error\": \"UNAUTHORIZED\"}",
+   "positiveControl": "correct exchange 200",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth API",
+   "test": "A token correct exchange (+0.9s)",
+   "actual": "200 {\"grantId\": \"<redacted>\", \"access_token\": \"<redacted>\", \"token_type\": \"<redacted>\", \"expires_in\": 3600, \"refresh_token\": \"<redacted>\"}",
+   "positiveControl": "correct exchange 200",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth API",
+   "test": "A consumed code replay",
+   "actual": "401 {\"error\": \"UNAUTHORIZED\"}",
+   "positiveControl": "correct exchange 200",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth API",
+   "test": "A agent token on owner route",
+   "actual": "401 {\"error\": \"UNAUTHORIZED\"}",
+   "positiveControl": "correct exchange 200",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth API",
+   "test": "B authorize by other owner",
+   "actual": "404 {\"error\": \"NOT_FOUND\"}",
+   "positiveControl": "correct exchange 200",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth API",
+   "test": "B authorize by own owner",
+   "actual": "200 {\"code\": \"<redacted>\", \"state\": \"wZZ4qaeNiXiS--xnF3fk-A\", \"redirect_uri\": \"http://127.0.0.1:1/cleaner-test-callback\"}",
+   "positiveControl": "correct exchange 200",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth API",
+   "test": "B token wrong verifier",
+   "actual": "401 {\"error\": \"UNAUTHORIZED\"}",
+   "positiveControl": "correct exchange 200",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth API",
+   "test": "B token other tenant client",
+   "actual": "401 {\"error\": \"UNAUTHORIZED\"}",
+   "positiveControl": "correct exchange 200",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth API",
+   "test": "B token correct exchange (+0.7s)",
+   "actual": "200 {\"grantId\": \"<redacted>\", \"access_token\": \"<redacted>\", \"token_type\": \"<redacted>\", \"expires_in\": 3600, \"refresh_token\": \"<redacted>\"}",
+   "positiveControl": "correct exchange 200",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth API",
+   "test": "B consumed code replay",
+   "actual": "401 {\"error\": \"UNAUTHORIZED\"}",
+   "positiveControl": "correct exchange 200",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth API",
+   "test": "B agent token on owner route",
+   "actual": "401 {\"error\": \"UNAUTHORIZED\"}",
+   "positiveControl": "correct exchange 200",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth API",
+   "test": "state returned matches (A,B)",
+   "actual": "match true",
+   "positiveControl": "\u2014",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth API",
+   "test": "owner token on /mcp",
+   "actual": "401 (HTTP initialize, negative only)",
+   "positiveControl": "\u2014",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth native",
+   "test": "temp A connect: read_agent_profile",
+   "actual": "tenant A, agent tmp_oauth_a_183241",
+   "positiveControl": "\u2014",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth native",
+   "test": "temp A own read / foreign read",
+   "actual": "completed work / NOT_FOUND",
+   "positiveControl": "own read",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth native",
+   "test": "temp A old access after refresh rotation",
+   "actual": "native call failed: mcp-remote \"Dynamic Client Registration rejected (HTTP 404)\" after auth was refused; 401 status itself not exposed by the bridge",
+   "positiveControl": "rotated access works",
+   "result": "PASS (status inferred from bridge auth fallback)"
+  },
+  {
+   "area": "oauth native",
+   "test": "temp A rotated access: identity + own read",
+   "actual": "tenant A tmp_oauth_a_183241; completed work",
+   "positiveControl": "\u2014",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth API",
+   "test": "temp A old refresh token reuse",
+   "actual": "401",
+   "positiveControl": "rotation 200",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth native",
+   "test": "temp A new access after reuse",
+   "actual": "native call failed (same bridge error)",
+   "positiveControl": "worked before reuse",
+   "result": "PASS (status inferred)"
+  },
+  {
+   "area": "oauth native",
+   "test": "temp B connect: identity / own read / foreign read",
+   "actual": "tenant B tmp_oauth_b_183241 / completed / NOT_FOUND",
+   "positiveControl": "own read",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth",
+   "test": "temp B and main profiles valid after A reuse",
+   "actual": "temp B native ok; main A/B profiles identical to baseline",
+   "positiveControl": "\u2014",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth API",
+   "test": "A owner revoke temp B grant; B owner revoke temp A grant",
+   "actual": "404 / 404",
+   "positiveControl": "B owner revoke temp B 200",
+   "result": "PASS"
+  },
+  {
+   "area": "oauth native",
+   "test": "temp B access after revoke",
+   "actual": "native call failed (same bridge error)",
+   "positiveControl": "worked before revoke",
+   "result": "PASS (status inferred)"
+  },
+  {
+   "area": "restore",
+   "test": "main A reconnect",
+   "actual": "tenant A grok_test_agent; list_delegated_work []",
+   "positiveControl": "\u2014",
+   "result": "PASS"
+  },
+  {
+   "area": "restore",
+   "test": "main A profile vs pre-security baseline",
+   "actual": "identical",
+   "positiveControl": "\u2014",
+   "result": "PASS"
+  },
+  {
+   "area": "restore",
+   "test": "main B profile vs pre-security baseline",
+   "actual": "identical",
+   "positiveControl": "\u2014",
+   "result": "PASS"
+  },
+  {
+   "area": "not verified",
+   "test": "Grok browser OAuth consent/discovery UI",
+   "actual": "not exercised; native bridge used bearer header only",
+   "positiveControl": "\u2014",
+   "result": "NOT_RUN"
+  },
+  {
+   "area": "not verified",
+   "test": "per-call native trace IDs",
+   "actual": "not exposed",
+   "positiveControl": "\u2014",
+   "result": "missing"
+  }
+ ]
+}

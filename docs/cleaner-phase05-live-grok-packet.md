@@ -5,9 +5,13 @@ uploaded engine/profile exports. B has two created onboarding trials and one
 pass; its earlier late-setup failure remains recorded. Reciprocal scope checks
 are reported successful with own-tenant controls; their raw denied responses
 are not supplied. The server schedule/work linkage is verified in B's exports.
-Ordinary A/B trials are now reported 20/20 with no fallback/review or duplicate
-receipts. Their raw twenty-trial exports are still needed for reconciliation;
-security and recovery/fault trials remain pending. Do not repeat ordinary runs.
+Ordinary A/B exports now reconcile 20/20 with no fallback/review or duplicate
+receipts. Security exports reconcile replay/ingress and initial OAuth exchanges;
+the reconstructed matrix contains 71 PASS rows, three native credential failures
+with inferred HTTP status, one NOT_RUN browser UI check and missing trace IDs.
+Main public profiles match before/after. See the
+[next recovery packet](cleaner-phase05-live-recovery-packet.md); do not repeat
+ordinary or security stages to fill missing original logs.
 The user reported the existing service updated on 12 October 2026. A health
 check at 14:08:09 EDT returned `phase05-indexed-v1`, two tenants and `ready=true`.
 Unauthenticated MCP initialization and owner reads returned HTTP 401. These
@@ -232,12 +236,11 @@ completion. This test scheduler does not verify Grok's native scheduled_runs.
 ### Next bounded stage: ordinary A then B trials
 
 This stage is retained as a reference: the account now reports A 10/10 and B
-10/10, with explicitly confirmed closed windows. Engine median/P95 are
+10/10, now reconciled from uploaded records, with confirmed closed windows. Engine median/P95 are
 19.45/31.60 seconds for A and 20.29/35.69 seconds for B. At n=10 nearest-rank
-P95 equals the sample maximum. Raw schedules, evidence and per-trial values
-have not been supplied, so these are reported results, not independently
-recomputed statistics. B's profile was last read before its stage, not after.
-Proceed to the exports/security stage below; do not rerun these twenty fixtures.
+P95 equals the sample maximum. Raw schedules/evidence now supply independently
+recomputed statistics and both post-stage profiles. Proceed to the recovery
+packet linked above; do not rerun these twenty fixtures.
 
 The following historical quoted block describes two
 separate closed-conversation windows, ten ordinary fixtures per tenant, and no
@@ -322,7 +325,12 @@ comes from exported engine records, not HTTP acceptance or receiver summaries.
 
 ### Next bounded stage: exports, replay, ingress, storage and OAuth
 
-Copy only this quoted block into Grok. Keep the conversation open; this stage
+This completed stage is retained as a reference. The exported matrix has 76 rows:
+71 PASS, three native failures with status inferred, one NOT_RUN and one missing.
+Do not call this 76/76. See the reconciliation script/report for raw export limits
+and the recovery packet for the next bounded run.
+
+The historical quoted block kept the conversation open; this stage
 requires no timed jobs, new ordinary fixtures or deployment. It uses completed
 work, inert synthetic access records and temporary OAuth agents. Revocation
 here applies only to those temporary agents, preserving both main profiles.

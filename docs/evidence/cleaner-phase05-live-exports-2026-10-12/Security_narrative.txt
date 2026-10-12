@@ -1,0 +1,62 @@
+I'm starting with the export of the saved twenty trials, which doesn't need the connector. The connector itself is temporarily unavailable on my side for this turn, though. So I'll stop before any native scope or OAuth step and won't use direct HTTP in its place.
+
+I've stopped there, and the replay, scope, ingress, property and OAuth stages haven't run. My connection to the Cleaner Core connector is temporarily unavailable this turn. Several of those stages need native calls through it, and I won't use direct HTTP in their place. Message me again shortly and I'll pick up with the replays, keeping this conversation open.
+
+The twenty-trial export is attached below, and I didn't rerun anything to build it. The runtime is still healthy: synthetic, 2 tenants, realSmsEnabled=false, server-clock-v1, and the scheduler is healthy.
+
+The file has these parts:
+
+The exact shared manifest of ten event IDs and delays.
+All twenty original HTTP 202 acknowledgments.
+All twenty current schedule records and engine evidence records, raw except for redacted secrets.
+A per-trial table and the stats, both labeled as reconstructed, not raw.
+Both current main profiles, read at 6:30 PM ET.
+Recomputed from the actual values (n=10 each, no failures, onboarding excluded):
+
+A: Engine latency had a median of 19.45 s, min 16.97 s, max 31.60 s and P95 31.60 s. Validated-decision latency had a median of 19.27 s, min 16.88 s, max 31.49 s and P95 31.49 s.
+B: Engine latency had a median of 20.29 s, min 17.05 s, max 35.69 s and P95 35.69 s. Validated-decision latency had a median of 20.21 s, min 16.93 s, max 35.51 s and P95 35.51 s.
+I read B's profile fresh after its ordinary stage. It shows tenant B, and its last-updated time is still 4:43:47 PM ET, before the stage started. A's last-updated time is still 2:26:21 PM ET. Native per-call trace IDs aren't exposed by the app, so they're marked missing.
+
+
+export_ordinary20
+.json
+91kB
+
+Ok try again to see if the connector works
+
+The connector works again and reads as tenant A, grok_test_agent. I'm starting the replay checks now, using trial 01 for each tenant.
+
+Replays passed for both tenants. Repeat schedule POSTs returned the original fired job, repeat event POSTs returned the original work, a changed delay got a 409 conflict, and the evidence didn't change. A's native scope checks and the owner cross-reads also passed. I'm now running the same checks with the connector on B.
+
+The B scope checks, the provider ingress checks in both directions and the property and access checks all passed, and no evidence changed. Next is the OAuth test with a temporary agent in each tenant.
+
+The OAuth checks have passed so far for both tenants. Wrong verifiers, the other tenant's client, code replays and other-owner authorizations were all rejected. The connector also accepted temporary A's OAuth access and read back the right agent and tenant. I've just rotated temporary A's token and am now checking that the old access fails.
+
+The token rotation behaved correctly. Temporary A's old access failed on a real connector call, and the rotated access worked for the right agent and tenant. Reusing the old refresh token got a 401, and after that even the new access failed. Next I'm connecting temporary B, then running the revoke checks.
+
+The revoke checks passed: each owner got a 404 trying to revoke the other tenant's temporary grant. Once B's owner revoked temporary B, its connector access stopped working. Now I'm switching the connector back to a fresh main A grant and putting the export together.
+
+The security packet is done. All 76 checks in the matrix passed, and both main profiles are identical to the baselines I saved before the security tests. The connector is back on a fresh main A grant: it reads as tenant A, grok_test_agent, with no pending work. The receiver is still enabled, and the runtime is still synthetic with realSmsEnabled=false and server-clock-v1.
+
+Replays (trial 01 for each tenant): Two schedule POSTs each returned the original fired job, two event POSTs each returned the original work, and a changed delay got a 409 conflict. The evidence didn't change: same work, deadline, turn version, reply key and receipt, with no extra send.
+Scope: Each tenant could read its own completed work natively, got NOT_FOUND when reading or claiming the other tenant's work, and got CLOSED when claiming its own completed work. Owner cross-reads of evidence and schedules returned 404, while own reads returned 200.
+Synthetic ingress: A valid replay returned the original work ID without changing the evidence. Each of these got a 401: swapping account, to or from to the other tenant's value, sending to the other tenant's endpoint, leaving out the signature, or using a 31-second-old timestamp. This is the simulated provider accepting requests, not phone delivery.
+Property and access: Each tenant saw its own name for the shared property and got 404 on the other tenant's records. An access record pointing at the other tenant's property got a 404, and an added tenantId got a 400. All access records show clearanceCurrent=false and operatesDoors=false, and I left them in place under marker s3m1832.
+OAuth: Each step returned the code it should:
+The other owner's authorize got a 404.
+A wrong verifier, the other tenant's client and a reused code each got a 401.
+The correct exchange worked, and the returned state matched.
+The connector showed the right temporary agent and tenant, read that tenant's own work, and got NOT_FOUND on the other tenant's.
+After temporary A's token was rotated, the old access stopped working on the connector. After its old refresh token was reused, even the new access stopped working.
+Cross-tenant revokes got a 404, and revoking temporary B under its own owner cut off its access.
+An agent token on owner routes and an owner token on /mcp each got a 401.
+Things to keep in mind:
+
+When an access was refused, the connector bridge only reported a sign-up error, not the 401 itself. So those failures are marked as passes with the 401 inferred.
+I didn't test the browser OAuth consent screen.
+Native per-call trace IDs aren't exposed, so they're missing.
+A's and B's trial-01 work share the same turn ID because they used the same event ID. Their work IDs differ and the scope checks still held.
+Temporary A's profile creation time changed after the token rotation.
+
+export_security_packet
+.json
