@@ -9,8 +9,10 @@ Ordinary A/B exports now reconcile 20/20 with no fallback/review or duplicate
 receipts. Security exports reconcile replay/ingress and initial OAuth exchanges;
 the reconstructed matrix contains 71 PASS rows, three native credential failures
 with inferred HTTP status, one NOT_RUN browser UI check and missing trace IDs.
-Main public profiles match before/after. See the
-[next recovery packet](cleaner-phase05-live-recovery-packet.md); do not repeat
+Main public profiles matched before/after that security stage. Subsequent fault
+records reconcile revocation/lease/stale-action checks; A is intentionally
+cleared. A user-confirmed restart is followed by actual ready public health.
+Use only [resume after the confirmed restart](cleaner-phase05-live-recovery-packet.md#resume-after-the-confirmed-restart); do not repeat
 ordinary or security stages to fill missing original logs.
 The user reported the existing service updated on 12 October 2026. A health
 check at 14:08:09 EDT returned `phase05-indexed-v1`, two tenants and `ready=true`.

@@ -2,7 +2,8 @@
 
 Status: cost model implemented and tested; A/B live onboarding reconciled from
 exports and ordinary 20/20 reconciled; security packet has partial evidence;
-main-agent revocation/lease/stale-action/restart live checks remain open.
+main-agent revocation/lease/stale-action fault records reconciled; restart is
+user-confirmed, post-restart recovery and A restoration remain open.
 Measured locally on 12 October 2026. The user authorized 20/100/300 requests per
 landlord per month and fleets of 2/10/100 landlords. The original cost deferral
 is superseded for this validation; no final hosting choice has been made.
@@ -324,9 +325,15 @@ correction is **not deployed** and does not rewrite the hosted observations.
 
 Costs remain conditional tested models; these observations supply no new billed
 hosting or inference usage. Preserve the raw resource observations and current
-hosting assumptions. Full Phase 0.5 live validation remains **open** for main-agent
-revocation/verified-profile/lease freshness, lease expiry/stale actions and
-controlled persistent restart. Retry/uncertain-send behavior is covered by local
+hosting assumptions. The fault export now reconciles main A revocation with
+cleared verified evidence, lease release, pre-deadline expiry, stale version/
+action rejection and two deterministic deadline fallbacks. Matrix accounting
+is 46 PASS, zero FAIL, nine NOT_RUN and two MISSING in that pre-restart snapshot.
+The user confirmed a subsequent test-service restart in less than two seconds;
+actual public health returned HTTP 200 afterward. Full Phase 0.5 live validation
+remains **open** for authenticated persistence/revoked-grant recovery and one
+fresh A restoration onboarding. No cost/hosting observations were regenerated.
+Retry/uncertain-send behavior is covered by local
 injected-provider and process-crash tests; the hosted simulator offers no fault
 controls and proves no real-provider guarantee. The next recovery packet does
 not repeat ordinary trials or change the deployed revision. Do not infer agent

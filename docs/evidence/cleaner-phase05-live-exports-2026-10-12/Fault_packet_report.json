@@ -1,0 +1,653 @@
+{
+ "session": "s10121857",
+ "createdWorks": {
+  "revoke": "work_d84837d5cd476027d35197853c68aa69",
+  "expiry": "work_21a87566495afb5c4d62e2282baba8f1",
+  "action": "work_1d061f44b3ec4877c50fea4391334cc6"
+ },
+ "counts": {
+  "PASS": 46,
+  "MISSING": 2,
+  "NOT_RUN": 9
+ },
+ "priorSecurityMatrixNote": "The prior security matrix had 76 rows including NOT_RUN and MISSING rows; it was not 76 passes.",
+ "bridgeVsHttp": "Native failures on revoked access surfaced only as mcp-remote bridge error -32001 'Dynamic Client Registration rejected (HTTP 404) Cannot POST /register'; that 404 is the bridge's /register fallback, not an observed /mcp status. Directly observed HTTP: /mcp initialize with revoked A7 and A8 -> 401 {error:UNAUTHORIZED}.",
+ "epochVsExpiry": "A capability evidence cleared by grant revocation (epoch), not time expiry: prior evidence expiresAt 2026-10-13T18:20Z was still in the future.",
+ "syntheticNote": "All receipts are simulated provider acceptances; no phone delivery is claimed.",
+ "restart": "NOT_RUN - no scoped restart control; stopped at boundary",
+ "aStillCleared": true,
+ "connector": "tenant A / grok_test_agent on main grant A9 (minted ~18:59 EDT, valid ~1h); A cleared/unavailable",
+ "notes": [
+  "RestartMcpServers (cursor namespace) unavailable to executor; switches done by token write + pkill, stdio respawned automatically; identity confirmed natively after each switch.",
+  "Owner /owner/turns update left no audit entry.",
+  "Trial-01 A and B share turn id turn_c772208bd9263e2f23a7bb54b52ff481 (known)."
+ ],
+ "matrix": [
+  {
+   "area": "runtime",
+   "test": "synthetic, 2 tenants, realSmsEnabled=false, server-clock-v1 healthy",
+   "actual": "GET /test/runtime HTTP 200 mode=synthetic tenants=2 realSmsEnabled=false fixtureSchedulerVersion=server-clock-v1 healthy=true (parent check, runtime0.json)",
+   "positiveControl": "n/a",
+   "result": "PASS",
+   "files": [
+    "runtime0.json"
+   ]
+  },
+  {
+   "area": "prior-packet",
+   "test": "Saved raw native scope/identity/error and refresh/revoke HTTP bodies from security packet",
+   "actual": "Not saved as raw files; only live-observed",
+   "positiveControl": "n/a",
+   "result": "MISSING",
+   "files": [
+    "prior_packet_raw_inventory.json"
+   ]
+  },
+  {
+   "area": "scope-B",
+   "test": "Mint main B grant (issuance preserves profile)",
+   "actual": "HTTP 200 {grantId,access_token,token_type,expires_in:3600} (secrets redacted); B profile unchanged vs pre",
+   "positiveControl": "profile_B_pre compare",
+   "result": "PASS",
+   "files": [
+    "s1_mint_B.json",
+    "s2_profile_B.json"
+   ]
+  },
+  {
+   "area": "scope-B",
+   "test": "Native read_agent_profile = B/grok_test_agent",
+   "actual": "tenantId B, agentId grok_test_agent, autonomous, mcp_tools+background_runs verified (exp 2026-10-13T20:30Z)",
+   "positiveControl": "itself",
+   "result": "PASS",
+   "files": [
+    "native_log.jsonl#1.1"
+   ]
+  },
+  {
+   "area": "scope-B",
+   "test": "Native read own completed B trial-01",
+   "actual": "status completed, turn v2, decisionSource agent",
+   "positiveControl": "positive control",
+   "result": "PASS",
+   "files": [
+    "native_log.jsonl#1.1"
+   ]
+  },
+  {
+   "area": "scope-B",
+   "test": "Native list_delegated_work",
+   "actual": "[]",
+   "positiveControl": "n/a",
+   "result": "PASS",
+   "files": [
+    "native_log.jsonl#1.1"
+   ]
+  },
+  {
+   "area": "scope-B",
+   "test": "B propose on A completed work (dummy lease)",
+   "actual": "{code:NOT_FOUND,message:'No owned work.'}; A trial-01 evidence byte-equal after",
+   "positiveControl": "own read succeeded",
+   "result": "PASS",
+   "files": [
+    "native_log.jsonl#1.2",
+    "s1_evA_after_foreign.json"
+   ]
+  },
+  {
+   "area": "scope-B",
+   "test": "read_delegated_work + tenantId",
+   "actual": "MCP error -32602 Unrecognized key tenantId (server input validation, relayed by bridge)",
+   "positiveControl": "own read without tenantId succeeded",
+   "result": "PASS",
+   "files": [
+    "native_log.jsonl#1.3"
+   ]
+  },
+  {
+   "area": "scope-B",
+   "test": "claim_delegated_work + tenantId (A work)",
+   "actual": "MCP error -32602 Unrecognized key tenantId",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "native_log.jsonl#1.3"
+   ]
+  },
+  {
+   "area": "scope-B",
+   "test": "propose_cleaning_time + tenantId (A work)",
+   "actual": "MCP error -32602 Unrecognized key tenantId",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "native_log.jsonl#1.3"
+   ]
+  },
+  {
+   "area": "scope-A",
+   "test": "Mint main A grant A7; native read_agent_profile = A/grok_test_agent, capabilities verified fresh",
+   "actual": "tenant A, autonomous, mcp_tools verified exp 2026-10-13T18:20Z, background_runs verified exp 2026-10-13T18:20Z",
+   "positiveControl": "itself",
+   "result": "PASS",
+   "files": [
+    "s1_mint_A.json",
+    "native_log.jsonl#1.4"
+   ]
+  },
+  {
+   "area": "scope-A",
+   "test": "Native read own completed A trial-01",
+   "actual": "completed, v2, agent",
+   "positiveControl": "positive control",
+   "result": "PASS",
+   "files": [
+    "native_log.jsonl#1.4"
+   ]
+  },
+  {
+   "area": "scope-A",
+   "test": "Native list_delegated_work",
+   "actual": "[]",
+   "positiveControl": "n/a",
+   "result": "PASS",
+   "files": [
+    "native_log.jsonl#1.4"
+   ]
+  },
+  {
+   "area": "scope-A",
+   "test": "A propose on B completed work (dummy lease)",
+   "actual": "{code:NOT_FOUND}; B trial-01 evidence equal after",
+   "positiveControl": "own read succeeded",
+   "result": "PASS",
+   "files": [
+    "native_log.jsonl#1.4",
+    "s1_evB_after_foreign.json"
+   ]
+  },
+  {
+   "area": "scope-A",
+   "test": "tenantId-added native calls under A identity",
+   "actual": "Not repeated under A (schema rejection is tool-level and was shown under B)",
+   "positiveControl": "-",
+   "result": "NOT_RUN",
+   "files": []
+  },
+  {
+   "area": "retire-A",
+   "test": "A owner DELETE /owner/grants/[PRIVATE_A7]",
+   "actual": "HTTP 200 {revoked:true}",
+   "positiveControl": "n/a",
+   "result": "PASS",
+   "files": [
+    "s2_delete_A7.json"
+   ]
+  },
+  {
+   "area": "retire-A",
+   "test": "Native read_agent_profile on revoked A7 (bridge)",
+   "actual": "Bridge error: MCP error -32001 mcp-remote: Dynamic Client Registration rejected (HTTP 404) Cannot POST /register. No /mcp status exposed by bridge.",
+   "positiveControl": "A7 worked immediately before",
+   "result": "PASS",
+   "files": [
+    "native_log.jsonl#2.3"
+   ]
+  },
+  {
+   "area": "retire-A",
+   "test": "Native read_delegated_work on revoked A7 (bridge)",
+   "actual": "Same bridge error -32001 DCR 404 /register",
+   "positiveControl": "A7 worked immediately before",
+   "result": "PASS",
+   "files": [
+    "native_log.jsonl#2.3"
+   ]
+  },
+  {
+   "area": "retire-A",
+   "test": "Direct HTTP POST /mcp initialize with revoked A7 (negative HTTP check)",
+   "actual": "HTTP 401 {error:UNAUTHORIZED}",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "s2_http_init_revokedA7.json"
+   ]
+  },
+  {
+   "area": "retire-A",
+   "test": "A owner profile loses verified evidence/autonomy",
+   "actual": "HTTP 200; all capabilities unknown; executionMode unavailable; missingForAutonomous [verified_mcp_tools,verified_background_runs]; createdAt reset to revoke time (known empty-profile timestamp issue)",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "s2_profile_A_after_revoke.json"
+   ]
+  },
+  {
+   "area": "retire-A",
+   "test": "B profile unchanged after A retire",
+   "actual": "Byte-equal to profile_B_pre",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "s2_profile_B.json"
+   ]
+  },
+  {
+   "area": "retire-A",
+   "test": "verify-workflow with OLD A trial-01 work, conversationClosed=true",
+   "actual": "HTTP 409 {error:WORKFLOW_NOT_VERIFIED}; A profile still unavailable after",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "s2_verify_old_A.json",
+    "s2_profile_A_after_verify.json"
+   ]
+  },
+  {
+   "area": "retire-A",
+   "test": "Mint fresh A8; native profile cleared",
+   "actual": "tenant A grok_test_agent; all capabilities unknown; executionMode unavailable",
+   "positiveControl": "itself",
+   "result": "PASS",
+   "files": [
+    "s2_mint_A8.json",
+    "profile_A_cleared.json"
+   ]
+  },
+  {
+   "area": "revoke-fixture",
+   "test": "POST /test/events p05_s10121857_revoke",
+   "actual": "HTTP 200 work_d84837d5cd476027d35197853c68aa69 pending v1 received 22:59:00.196Z deadline 23:01:00.196Z",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "s3_event_revoke.json"
+   ]
+  },
+  {
+   "area": "revoke-fixture",
+   "test": "Native read before claim",
+   "actual": "Not issued separately (claim response returned full work)",
+   "positiveControl": "-",
+   "result": "NOT_RUN",
+   "files": []
+  },
+  {
+   "area": "revoke-fixture",
+   "test": "Native claim",
+   "actual": "leased, lease exp 23:00:02.840Z",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "native_log.jsonl#3.2"
+   ]
+  },
+  {
+   "area": "revoke-fixture",
+   "test": "A owner DELETE /owner/grants/[PRIVATE_A8] before lease/deadline",
+   "actual": "HTTP 200 {revoked:true} at 18:59:06.723 EDT",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "s3_delete_A8.json"
+   ]
+  },
+  {
+   "area": "revoke-fixture",
+   "test": "Native propose with saved args on revoked A8 (bridge)",
+   "actual": "Bridge error -32001 DCR rejected (HTTP 404) /register",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "native_log.jsonl#3.4"
+   ]
+  },
+  {
+   "area": "revoke-fixture",
+   "test": "Direct HTTP /mcp initialize revoked A8",
+   "actual": "HTTP 401 {error:UNAUTHORIZED}",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "s3_http_init_revokedA8.json"
+   ]
+  },
+  {
+   "area": "revoke-fixture",
+   "test": "Owner evidence after revoke",
+   "actual": "pending, v1, no confirmedStart, replies [], audit grant_revoked_lease_released @22:59:06.663Z, receivedAt/deadline unchanged",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "s3_ev_revoke_after.json"
+   ]
+  },
+  {
+   "area": "revoke-fixture",
+   "test": "Fresh A9 native propose with old lease",
+   "actual": "{code:LEASE_INVALID,message:'Claim current work.'}; evidence still pending v1",
+   "positiveControl": "A9 read_agent_profile = A, cleared",
+   "result": "PASS",
+   "files": [
+    "native_log.jsonl#3.6",
+    "s3_ev_revoke_after_leaseinvalid.json"
+   ]
+  },
+  {
+   "area": "expiry-fixture",
+   "test": "POST /test/events p05_s10121857_expiry",
+   "actual": "HTTP 200 work_21a87566495afb5c4d62e2282baba8f1 deadline 23:01:25.997Z",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "s4_event_expiry.json"
+   ]
+  },
+  {
+   "area": "expiry-fixture",
+   "test": "Native claim once",
+   "actual": "leased, lease exp 23:00:28.657Z",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "native_log.jsonl#4.1"
+   ]
+  },
+  {
+   "area": "expiry-fixture",
+   "test": "Lease expiry observed before deadline (5s polls, no reclaim)",
+   "actual": "audit lease_expired_or_grant_revoked @23:00:28.663Z; poll at server Date 23:00:30Z, status pending, replies [], grant A9 live",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "s4_expiry_poll.log",
+    "s4_ev_expiry_at_lease_expiry.json"
+   ]
+  },
+  {
+   "area": "expiry-fixture",
+   "test": "Native reclaim -> different lease",
+   "actual": "leased, new lease (differs), leaseExpiresAt 23:01:25.997Z (capped at deadline)",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "native_log.jsonl#4.3"
+   ]
+  },
+  {
+   "area": "expiry-fixture",
+   "test": "Old lease propose",
+   "actual": "{code:LEASE_INVALID}",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "native_log.jsonl#4.3"
+   ]
+  },
+  {
+   "area": "expiry-fixture",
+   "test": "Owner POST /owner/turns v2",
+   "actual": "HTTP 200 {saved:true}; evidence turn v2, no confirmedStart (no audit entry for owner turn change)",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "s4_owner_turn_v2.json",
+    "s4_ev_expiry_after_vc.json"
+   ]
+  },
+  {
+   "area": "expiry-fixture",
+   "test": "Fresh lease propose with expectedTurnVersion 1",
+   "actual": "{code:VERSION_CONFLICT,message:'Turn changed.'}; no validated action",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "native_log.jsonl#4.5"
+   ]
+  },
+  {
+   "area": "fallback",
+   "test": "Revoke fixture deadline fallback",
+   "actual": "completed, decisionSource fallback, v1, no confirmedStart, deadline 23:01:00.196Z unchanged, 1 reply to synthetic_cleaner_A receipt simulated_d0846a62-..., audit deadline_fallback_selected/send_attempt/provider_accepted_and_completed, no validated_action",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "s5_ev_revoke_final.json"
+   ]
+  },
+  {
+   "area": "fallback",
+   "test": "Expiry fixture deadline fallback",
+   "actual": "completed, fallback, owner v2, no confirmedStart, deadline 23:01:25.997Z, 1 reply synthetic_cleaner_A receipt simulated_e61b26d5-..., no validated_action",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "s5_ev_expiry_final.json"
+   ]
+  },
+  {
+   "area": "fallback",
+   "test": "No normal notification accepted while A cleared",
+   "actual": "notification.status not_queued on both fixtures",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "s5_ev_revoke_final.json",
+    "s5_ev_expiry_final.json"
+   ]
+  },
+  {
+   "area": "fallback",
+   "test": "B profile/evidence intact",
+   "actual": "profile and trial-01 evidence byte-equal to baseline",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "s5_profile_B.json",
+    "s5_evB_trial01.json"
+   ]
+  },
+  {
+   "area": "action-fixture",
+   "test": "Create/read/claim p05_s10121857_action",
+   "actual": "work_1d061f44b3ec4877c50fea4391334cc6 pending v1 -> leased",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "s6_event_action.json",
+    "native_log.jsonl#6.1"
+   ]
+  },
+  {
+   "area": "action-fixture",
+   "test": "Propose valid requestedStart v1, actionKey grok_action_s10121857_01",
+   "actual": "{accepted:true,completed:false,deliveryStatus:pending}; evidence: completed v2 confirmedStart 2026-10-14T00:01:45.745Z, validated_action_and_reply_saved, 1 simulated receipt",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "s6_ev_action_after1.json"
+   ]
+  },
+  {
+   "area": "action-fixture",
+   "test": "Replay identical proposal x2",
+   "actual": "{accepted:true,completed:true,deliveryStatus:sent} both; evidence byte-equal (no extra version/audit/send/receipt)",
+   "positiveControl": "read_delegated_work completed v2",
+   "result": "PASS",
+   "files": [
+    "s6_ev_action_after_replays.json"
+   ]
+  },
+  {
+   "area": "action-fixture",
+   "test": "Same actionKey, different start",
+   "actual": "{code:ACTION_CONFLICT,message:'Action key changed.'}",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "native_log.jsonl#6.3"
+   ]
+  },
+  {
+   "area": "pre-restart",
+   "test": "No pending/leased work",
+   "actual": "native A list [] after action; B list [] at step 1 (B not re-listed natively post-faults); revoke/expiry/action completed",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": []
+  },
+  {
+   "area": "pre-restart",
+   "test": "No scheduled fixtures",
+   "actual": "No schedule-list API (GET /test/schedules -> 404); none created this packet",
+   "positiveControl": "-",
+   "result": "MISSING",
+   "files": []
+  },
+  {
+   "area": "pre-restart",
+   "test": "s3m1832 property/access under both owners",
+   "actual": "own 200 tenant-scoped names/propertyIds, clearanceCurrent=false, operatesDoors=false, hostClearance=false; foreign 404",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "s7_propacc_summary.txt"
+   ]
+  },
+  {
+   "area": "pre-restart",
+   "test": "Profiles saved",
+   "actual": "A unavailable/cleared; B equal to baseline",
+   "positiveControl": "-",
+   "result": "PASS",
+   "files": [
+    "s7_profile_A.json",
+    "s7_profile_B.json"
+   ]
+  },
+  {
+   "area": "restart",
+   "test": "Scoped restart of Cleaner Core TEST service only",
+   "actual": "No scoped restart control available (no railway CLI/token in box env/workspace). Not faked from health.",
+   "positiveControl": "-",
+   "result": "NOT_RUN",
+   "files": []
+  },
+  {
+   "area": "recovery",
+   "test": "Post-restart runtime recheck",
+   "actual": "Blocked at restart boundary",
+   "positiveControl": "-",
+   "result": "NOT_RUN",
+   "files": []
+  },
+  {
+   "area": "recovery",
+   "test": "Replay p05_s10121709_shared_01 A/B + created recovery fixtures",
+   "actual": "Blocked at restart boundary",
+   "positiveControl": "-",
+   "result": "NOT_RUN",
+   "files": []
+  },
+  {
+   "area": "recovery",
+   "test": "Post-restart s3m1832 reads",
+   "actual": "Blocked at restart boundary",
+   "positiveControl": "-",
+   "result": "NOT_RUN",
+   "files": []
+  },
+  {
+   "area": "recovery",
+   "test": "Old revoked A access native fail + HTTP 401 after restart",
+   "actual": "Blocked at restart boundary",
+   "positiveControl": "-",
+   "result": "NOT_RUN",
+   "files": []
+  },
+  {
+   "area": "recovery",
+   "test": "Current A works without resurrecting evidence; fresh B identity/own read",
+   "actual": "Blocked at restart boundary",
+   "positiveControl": "-",
+   "result": "NOT_RUN",
+   "files": []
+  },
+  {
+   "area": "onboarding",
+   "test": "Restoration onboarding",
+   "actual": "Deliberately not scheduled per instructions",
+   "positiveControl": "-",
+   "result": "NOT_RUN",
+   "files": []
+  }
+ ],
+ "rawFiles": [
+  "acc_A_shared.json",
+  "acc_A_uniq.json",
+  "acc_B_shared.json",
+  "acc_B_uniq.json",
+  "evA_trial01.json",
+  "evB_trial01.json",
+  "http_log.jsonl",
+  "native_log.jsonl",
+  "prior_packet_raw_inventory.json",
+  "profile_A_cleared.json",
+  "profile_A_pre.json",
+  "profile_B_pre.json",
+  "prop_A_shared.json",
+  "prop_A_uniq.json",
+  "prop_B_shared.json",
+  "prop_B_uniq.json",
+  "runtime0.json",
+  "s1_evA_after_foreign.json",
+  "s1_evB_after_foreign.json",
+  "s1_mint_A.json",
+  "s1_mint_B.json",
+  "s2_delete_A7.json",
+  "s2_http_init_revokedA7.json",
+  "s2_mint_A8.json",
+  "s2_profile_A_after_revoke.json",
+  "s2_profile_A_after_verify.json",
+  "s2_profile_B.json",
+  "s2_verify_old_A.json",
+  "s3_delete_A8.json",
+  "s3_ev_revoke_after.json",
+  "s3_ev_revoke_after_leaseinvalid.json",
+  "s3_event_revoke.json",
+  "s3_http_init_revokedA8.json",
+  "s3_mint_A9.json",
+  "s4_ev_expiry_after_vc.json",
+  "s4_ev_expiry_at_lease_expiry.json",
+  "s4_event_expiry.json",
+  "s4_expiry_poll.log",
+  "s4_owner_turn_v2.json",
+  "s5_evB_trial01.json",
+  "s5_ev_expiry_final.json",
+  "s5_ev_revoke_final.json",
+  "s5_profile_B.json",
+  "s6_ev_action_after1.json",
+  "s6_ev_action_after_replays.json",
+  "s6_event_action.json",
+  "s7_ev_expiry.json",
+  "s7_ev_revoke.json",
+  "s7_profile_A.json",
+  "s7_profile_B.json",
+  "s7_propacc_summary.txt",
+  "s7pa_A_access_acc_s3m1832_A.json",
+  "s7pa_A_access_acc_s3m1832_B.json",
+  "s7pa_A_access_acc_s3m1832_shared.json",
+  "s7pa_A_properties_prop_s3m1832_A.json",
+  "s7pa_A_properties_prop_s3m1832_B.json",
+  "s7pa_A_properties_prop_s3m1832_shared.json",
+  "s7pa_B_access_acc_s3m1832_A.json",
+  "s7pa_B_access_acc_s3m1832_B.json",
+  "s7pa_B_access_acc_s3m1832_shared.json",
+  "s7pa_B_properties_prop_s3m1832_A.json",
+  "s7pa_B_properties_prop_s3m1832_B.json",
+  "s7pa_B_properties_prop_s3m1832_shared.json"
+ ]
+}

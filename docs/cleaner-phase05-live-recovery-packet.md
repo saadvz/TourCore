@@ -1,5 +1,46 @@
 # Phase 0.5 live recovery packet
 
+Latest status: session `s10121857` supplies 57 pre-restart matrix rows: 46 PASS,
+zero FAIL, nine NOT_RUN and two MISSING. Main A retirement, active-lease
+revocation, expiry and stale-action engine records now reconcile. Lease expiry
+preceded the deadline by 57,334ms. Both forced requests got one fallback receipt;
+the controlled action got one agent receipt and exact replays changed no exported
+values. These are separate from the twenty ordinary trials. Different private
+lease-token bytes cannot be compared because they are redacted. The owner turn
+version bump is observable but has no own audit entry. Global scheduled-job
+absence remains missing, since no listing API exists; no new jobs were queued.
+
+The user then confirmed restarting the test service in less than two seconds.
+An actual subsequent `/healthz` read at 23:19:05 UTC returned HTTP 200,
+`phase05-indexed-v1`, two tenants, `ready=true`. Restart control was performed by
+the user, not this workspace; exact control/completion timestamps and hosting
+revision/configuration are not independently inspected. Health does not prove
+persistence. Source bytes/hashes and verification are retained in
+`docs/evidence/cleaner-phase05-fault-reconciled-2026-10-12.json` and
+`cleaner-phase05-restart-observation-2026-10-12.json`.
+
+## Resume after the confirmed restart
+
+Copy only this block now. Keep the previous fault records unchanged; do not
+repeat retirement, lease-expiry or action fixtures. Old A7/A8 validity ends
+around 19:58 EDT: test their denial before then or record an expiry confound.
+
+> The dedicated Cleaner Core test service has been restarted once by its owner,
+> who reported completion in less than two seconds. Public health is ready again.
+> Resume the saved s10121857 packet at POST-RESTART recovery only. Do not repeat
+> scope/fault tests or restart again. Preserve its revision, volume, variables,
+> receiver and unrelated resources. Perform the five saved recovery checks on
+> original A/B trial-01 work, the three CREATED fault/action work IDs, s3m1832
+> storage and revoked/current grants. Export actual responses and compare with
+> saved pre-restart records. Test old A7/A8 denial before their original expiry
+> around 7:58 PM ET; distinguish native bridge errors from direct HTTP 401.
+> Then schedule only the ONE restoration onboarding fixture, report its exact
+> closed window and wait for my genuine closed-window confirmation before
+> verify-workflow. Leave B unchanged, restore fresh main A and preserve all
+> failures/missing evidence. Simulated acceptance remains distinct from delivery.
+
+## Original full recovery packet (reference)
+
 Ordinary twenty-trial records now reconcile. Security evidence has 71 PASS rows,
 three native denial outcomes with HTTP status inferred, a browser OAuth check
 not run and missing trace IDs. The timestamp fix for never-saved profiles is

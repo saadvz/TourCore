@@ -21,7 +21,7 @@
   },
   "runtimeMatchesPhase05": true,
   "userReported": "Existing Cleaner Core Railway service updated; continue account-side live validation on the same URL",
-  "liveGrokStatus": "onboarding_and_ordinary_20_of_20_reconciled; security_packet_partial_evidence; main_revocation_lease_stale_restart_recovery_pending",
+  "liveGrokStatus": "onboarding_and_ordinary_reconciled; fault_packet_reconciled; restart_user_confirmed_and_public_health_ready; recovery_and_A_restoration_pending",
   "classification": "Actual HTTPS runtime and unauthenticated transport observations; not proof of account-side agent execution, tenant isolation, provider acceptance or phone delivery",
   "latestObservations": [
     {
@@ -86,7 +86,10 @@
     "replay": "PASS_RECONCILED_EXPORTED_VALUES_EQUAL_A_B",
     "syntheticIngress": "PASS_RECONCILED_16_EXPORTED_STATUS_BODY_PAIRS",
     "OAuth": "API issuance/PKCE checks reconcile; native identity/scope and refresh/revocation outcomes reported; three underlying MCP denial statuses unobserved",
-    "securityMatrix": "76 rows: 71 PASS, 3 native failures with HTTP status inferred, 1 NOT_RUN browser UI, 1 missing trace IDs"
+    "securityMatrix": "76 rows: 71 PASS, 3 native failures with HTTP status inferred, 1 NOT_RUN browser UI, 1 missing trace IDs",
+    "mainRevocation": "PASS_RECONCILED; native failures plus two direct HTTP MCP 401s, cleared profile and old-workflow 409",
+    "leaseExpiryAndStaleActions": "PASS_RECONCILED engine timelines and structured native errors",
+    "restart": "USER_CONFIRMED; actual subsequent public health HTTP 200; persistence recovery NOT_YET_VERIFIED"
   },
   "previousObservation": {
     "name": "railway_health",
@@ -106,7 +109,9 @@
     "docs/evidence/cleaner-phase05-live-reconciliation-2026-10-12.json",
     "docs/evidence/cleaner-phase05-grok-B-retry-2026-10-12.json",
     "docs/evidence/cleaner-phase05-grok-ordinary-reported-2026-10-12.json",
-    "docs/evidence/cleaner-phase05-ordinary-security-reconciled-2026-10-12.json"
+    "docs/evidence/cleaner-phase05-ordinary-security-reconciled-2026-10-12.json",
+    "docs/evidence/cleaner-phase05-fault-reconciled-2026-10-12.json",
+    "docs/evidence/cleaner-phase05-restart-observation-2026-10-12.json"
   ],
   "serverClockScheduler": "PASS_RECONCILED: deterministic B schedule/work linkage, fixture receipt 17ms after runAt, fired marker 24ms after runAt"
 }

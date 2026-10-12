@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-12T23:21:02.079159+00:00",
+  "restart": {
+    "status": "USER_CONFIRMED",
+    "source": "User reply in this thread after being asked to use Restart on the active Cleaner Core test deployment",
+    "quote": "When I did the restart it did it almost instantly less than 2 seconds",
+    "reportedDurationSecondsLessThan": 2,
+    "exactCompletedAt": null,
+    "performedByThisWorkspace": false,
+    "sameRevisionVolumeVariables": "Requested and not independently inspected; no push to deployed branch or deployment change by this workspace"
+  },
+  "publicHealthAfterConfirmation": {
+    "url": "https://tourcore-production-72ec.up.railway.app/healthz",
+    "checkedAt": "2026-10-12T23:19:05.250491+00:00",
+    "curlExitCode": 0,
+    "httpStatus": 200,
+    "bytes": 102,
+    "sha256": "755f1d092d27dcd4c47407aab58351a22b8a22be008cf4e1ddf1831db3f1d9c2",
+    "body": {
+      "service": "cleaner-phase05-local",
+      "runtimeVersion": "phase05-indexed-v1",
+      "tenantCount": 2,
+      "ready": true
+    }
+  },
+  "classification": "User-confirmed restart plus actual post-confirmation HTTPS health; not proof of persistent state or grant revocation across restart",
+  "recoveryStatus": "PENDING_ACCOUNT_AUTHENTICATED_CHECKS_AND_RESTORATION_ONBOARDING",
+  "revokedAccessWindow": "A7/A8 issued around 18:58 EDT with expires_in=3600. Execute denied-access persistence checks before 19:58 EDT; if expired, label the expiry confound."
+}

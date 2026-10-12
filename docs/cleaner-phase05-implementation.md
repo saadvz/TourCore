@@ -204,6 +204,25 @@ are reconstructed account observations. Public main-profile values match
 before/after; redacted grant values cannot be compared. Main-agent revocation
 with verified evidence/leases, live stale actions and restart remain open.
 
+Subsequent fault exports now reconcile retirement of main A with cleared
+capabilities, active-lease release and two directly observed HTTP MCP 401s.
+Old-epoch workflow verification returns 409. Lease expiry occurred 57,334ms
+before deadline; stale lease/version/action native errors and unchanged replay
+evidence are supplied. Two deadline fallbacks and one controlled agent action
+each have one simulated receipt. B's visible profile/trial evidence remained
+equal. The 57-row matrix records 46 PASS, zero FAIL, nine NOT_RUN and two MISSING
+before restart. Source hashes and scope limits are in
+`docs/evidence/cleaner-phase05-fault-reconciled-2026-10-12.json`; reproduce with
+`node eval/cleaner-phase05/reconcile-fault.mjs`.
+
+The user then confirmed a test-service restart under two seconds. Actual
+post-confirmation public health is ready, but authenticated replay/storage/grant
+persistence and one A restoration onboarding remain open. Follow only the resume
+block in the recovery packet. No deployed branch, revision, volume or variables
+were changed by this workspace. The owner turn version update has no audit
+entry; global scheduled-job absence and earlier original native logs remain
+missing rather than assumed. The local profile-timestamp fix remains undeployed.
+
 The temporary OAuth profile's changing createdAt was traced to an unsaved empty
 profile, not a credential-epoch change. First read now persists that profile;
 refresh and restart preserve timestamps while retirement deletes it. The new

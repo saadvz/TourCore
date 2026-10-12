@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "session": "s10121857",
+  "status": "FAULT_RECORDS_RECONCILED_RESTART_AND_RESTORATION_PENDING",
+  "provenance": "User-exported engine records, structured native observations and HTTP logs; no direct authenticated hosted reads",
+  "sources": [
+    {
+      "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/Fault_packet_report.json",
+      "bytes": 19412,
+      "sha256": "eabd203b50b6aba7a7165869ecee361c728e3fe7fea5c3ece6cd7dace0f90c6e"
+    },
+    {
+      "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/Fault_packet.json",
+      "bytes": 61840,
+      "sha256": "e0c6df6d6f8bdd84da626dfcf2901e823da1f6616b0c241292663b998d89fbd3"
+    }
+  ],
+  "suppliedMatrixRows": 57,
+  "reportedCounts": {
+    "PASS": 46,
+    "MISSING": 2,
+    "NOT_RUN": 9,
+    "FAIL": 0
+  },
+  "fixtures": {
+    "revoke": {
+      "eventId": "p05_s10121857_revoke",
+      "workId": "work_d84837d5cd476027d35197853c68aa69",
+      "receivedAt": "2026-10-12T22:59:00.196Z",
+      "deadlineAt": "2026-10-12T23:01:00.196Z",
+      "finalSource": "fallback",
+      "turnVersion": 1,
+      "simulatedReceipts": 1,
+      "completionMinusDeadlineMs": 26
+    },
+    "expiry": {
+      "eventId": "p05_s10121857_expiry",
+      "workId": "work_21a87566495afb5c4d62e2282baba8f1",
+      "receivedAt": "2026-10-12T22:59:25.997Z",
+      "deadlineAt": "2026-10-12T23:01:25.997Z",
+      "finalSource": "fallback",
+      "turnVersion": 2,
+      "simulatedReceipts": 1,
+      "completionMinusDeadlineMs": 258
+    },
+    "action": {
+      "eventId": "p05_s10121857_action",
+      "workId": "work_1d061f44b3ec4877c50fea4391334cc6",
+      "receivedAt": "2026-10-12T23:01:45.749Z",
+      "deadlineAt": "2026-10-12T23:03:45.749Z",
+      "finalSource": "agent",
+      "turnVersion": 2,
+      "simulatedReceipts": 1,
+      "completionMinusDeadlineMs": -114219
+    }
+  },
+  "leaseExpiryBeforeDeadlineMs": 57334,
+  "directlyObservedHttpDenials": [
+    "Revoked A7 MCP initialize: 401",
+    "Revoked A8 MCP initialize: 401",
+    "Old-epoch workflow verification: 409 WORKFLOW_NOT_VERIFIED"
+  ],
+  "checks": {
+    "mainRevocation": "PASS_RECONCILED_ENGINE_PROFILE_AND_EXPORTED_DENIALS",
+    "activeLeaseRevocation": "PASS_RECONCILED_RELEASE_BEFORE_EXPIRY; stale lease rejection recorded natively",
+    "leaseExpiry": "PASS_RECONCILED_PENDING_BEFORE_DEADLINE_WITHOUT_REPLY",
+    "staleVersionAndAction": "PASS_STRUCTURED_NATIVE_ERRORS_AND_ENGINE_OUTCOMES",
+    "exactActionReplay": "PASS_EXPORTED_VALUES_EQUAL; one action audit/send/receipt",
+    "BPreservation": "PASS_EXPORTED_VISIBLE_PROFILE_AND_TRIAL_EVIDENCE_EQUAL",
+    "propertyAccess": "PASS_LABELLED_HTTP_STATUS_AND_RESPONSE_VALUES",
+    "nativeBridgeStatus": "Native failure /register HTTP 404 is not the MCP endpoint status; only separate HTTP calls directly expose 401",
+    "queuedScheduleAbsence": "MISSING_GLOBAL_LIST_API; no new schedules in this packet"
+  },
+  "remaining": [
+    "Restart of the dedicated test service with the same revision/volume/variables",
+    "Post-restart runtime, replay/dedup, property/access, revoked/current grants and B controls",
+    "One new restoration onboarding, genuine closed-window confirmation and fresh A workflow evidence"
+  ],
+  "limitations": [
+    "Structured native entries mix full/summarized bodies, response text and redacted saved arguments; no per-call trace IDs",
+    "Different lease-token bytes are redacted; reclaim audit and old-lease rejection corroborate the reported result",
+    "Owner turn bump succeeds and appears as v2, but saveTurn emits no audit entry",
+    "A tenantId-added calls and separate revoke-fixture pre-claim read are NOT_RUN",
+    "B is listed natively before, not after faults; no global pending-schedule listing exists",
+    "Prior-packet original native/refresh/revoke files remain missing",
+    "No hosting restart performed by this reconciler; no real SMS, phone delivery or doors",
+    "Fault fallbacks and controlled action remain separate from the twenty ordinary latency observations"
+  ]
+}

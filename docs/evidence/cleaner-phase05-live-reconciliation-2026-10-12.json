@@ -58,6 +58,16 @@
       "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/Security_narrative.txt",
       "bytes": 6460,
       "sha256": "b2adaf6f7c7c3df21f3d30c9ba3529fe1f6337df7103f24e32c52f4d8f6e6eb3"
+    },
+    {
+      "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/Fault_packet_report.json",
+      "bytes": 19412,
+      "sha256": "eabd203b50b6aba7a7165869ecee361c728e3fe7fea5c3ece6cd7dace0f90c6e"
+    },
+    {
+      "repositoryPath": "docs/evidence/cleaner-phase05-live-exports-2026-10-12/Fault_packet.json",
+      "bytes": 61840,
+      "sha256": "e0c6df6d6f8bdd84da626dfcf2901e823da1f6616b0c241292663b998d89fbd3"
     }
   ],
   "checks": {
@@ -84,7 +94,13 @@
     "syntheticIngress": "PASS_RECONCILED_16_EXPORTED_STATUS_BODY_PAIRS",
     "OAuth": "API issuance/PKCE checks reconcile; native identity/scope and refresh/revocation outcomes reported; three underlying MCP denial statuses unobserved",
     "mainProfilePreservation": "PASS_RECONCILED_REDACTED_PUBLIC_VALUES_EQUAL_A_B",
-    "securityMatrix": "76 rows: 71 PASS, 3 native failures with HTTP status inferred, 1 NOT_RUN browser UI, 1 missing trace IDs"
+    "securityMatrix": "76 rows: 71 PASS, 3 native failures with HTTP status inferred, 1 NOT_RUN browser UI, 1 missing trace IDs",
+    "mainRevocation": "PASS_RECONCILED profile evidence cleared, two HTTP MCP 401s and old-workflow 409; native bridge failures recorded separately",
+    "activeLeaseRevocation": "PASS_RECONCILED lease released before expiry; stale lease invalid; one deadline fallback",
+    "leaseExpiry": "PASS_RECONCILED 57334ms before deadline with pending/no reply, reclaim and native old-lease denial",
+    "staleVersionAndAction": "PASS_STRUCTURED_NATIVE_ERRORS_AND_ENGINE_OUTCOMES; exact action replay evidence equal",
+    "faultMatrix": "57 rows: 46 PASS, 0 FAIL, 9 NOT_RUN, 2 MISSING in pre-restart packet",
+    "restart": "USER_CONFIRMED less than two seconds; post-confirmation public health HTTP 200; recovery checks pending"
   },
   "accountReportedOperationalFaults": [
     "Initial B connector switch retained tenant A until old session was stopped; initial successful read/CLOSED claim excluded from isolation results",
@@ -93,10 +109,9 @@
     "Grok attributes delays to its computer stalling while conversation closed; server export verifies late notification, not the client-side cause"
   ],
   "remaining": [
-    "Main-agent revocation with verified capability/profile evidence and active lease",
-    "Live lease expiry, stale proposal/version/action and post-revocation capability freshness",
-    "Controlled persistent restart and replay with revoked access still denied",
-    "Retry/uncertain-send guarantees covered by local injected-provider tests; deployed simulated provider has no fault-injection controls"
+    "Post-restart authenticated A/B source replay, storage and revoked/current grant checks",
+    "One restoration onboarding and genuine closed-window workflow verification",
+    "Existing missing logs, browser OAuth UI, global scheduled-job listing and hosted provider fault injection remain explicit limits"
   ],
   "rawLimitations": [
     "Scope-check B fixture JSON and exact denied responses were not supplied",
@@ -106,9 +121,19 @@
     "Refresh rotation/reuse and cross-owner revoke HTTP statuses are in the reconstructed matrix, not raw_oauth_log",
     "Property/access raw log omits method/path/tenant/status; matrix supplies those interpretations",
     "Provider signing requests not exported, so intended mutation/re-signing relies on account labels",
-    "Wire-byte equality cannot be established from parsed exported objects"
+    "Wire-byte equality cannot be established from parsed exported objects",
+    "Structured native entries mix full/summarized bodies, response text and redacted saved arguments; no per-call trace IDs",
+    "Different lease-token bytes are redacted; reclaim audit and old-lease rejection corroborate the reported result",
+    "Owner turn bump succeeds and appears as v2, but saveTurn emits no audit entry",
+    "A tenantId-added calls and separate revoke-fixture pre-claim read are NOT_RUN",
+    "B is listed natively before, not after faults; no global pending-schedule listing exists",
+    "Prior-packet original native/refresh/revoke files remain missing",
+    "No hosting restart performed by this reconciler; no real SMS, phone delivery or doors",
+    "Fault fallbacks and controlled action remain separate from the twenty ordinary latency observations"
   ],
   "retryReconciliation": "docs/evidence/cleaner-phase05-grok-B-retry-2026-10-12.json",
   "ordinaryReport": "docs/evidence/cleaner-phase05-grok-ordinary-reported-2026-10-12.json",
-  "ordinarySecurityReconciliation": "docs/evidence/cleaner-phase05-ordinary-security-reconciled-2026-10-12.json"
+  "ordinarySecurityReconciliation": "docs/evidence/cleaner-phase05-ordinary-security-reconciled-2026-10-12.json",
+  "faultReconciliation": "docs/evidence/cleaner-phase05-fault-reconciled-2026-10-12.json",
+  "restartObservation": "docs/evidence/cleaner-phase05-restart-observation-2026-10-12.json"
 }
