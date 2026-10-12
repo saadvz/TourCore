@@ -1,0 +1,148 @@
+{
+  "schemaVersion": 1,
+  "scope": "One-process two-tenant existing delegation/MCP/profile components, scripted SDK clients and local/injected providers only",
+  "sourceCommit": "45084ffe55ad53f265e0c0006f2c42bc892c46a6",
+  "generatedAt": "2026-10-12T06:00:59.587Z",
+  "runnerSha256": "a29b7105564cb7e6313aa24159dd6817dddd3c91b5e64520318546597397e477",
+  "checks": [
+    {
+      "name": "tenant-qualified source IDs, shared booking IDs and recipient separation",
+      "status": "passed"
+    },
+    {
+      "name": "actual SDK discovery of all eight tools for both authenticated tenants",
+      "status": "passed"
+    },
+    {
+      "name": "MCP list/read returns only own work and excludes recipient/lease credentials",
+      "status": "passed"
+    },
+    {
+      "name": "cross-tenant claims and operator evidence are denied",
+      "status": "passed"
+    },
+    {
+      "name": "tenant injection rejected by each applicable strict MCP schema",
+      "status": "passed"
+    },
+    {
+      "name": "invalid bearer and untrusted host rejected by real HTTP route",
+      "status": "passed",
+      "details": {
+        "missingOrInvalidBearerStatus": 401,
+        "untrustedHostStatus": 403
+      }
+    },
+    {
+      "name": "separate profile declarations despite identical agent IDs",
+      "status": "passed"
+    },
+    {
+      "name": "cross-tenant nonce/probe completion denied; each own MCP probe succeeds",
+      "status": "passed"
+    },
+    {
+      "name": "foreign work or lease cannot authorize either tenant proposal",
+      "status": "passed"
+    },
+    {
+      "name": "two tenants complete with same action key and distinct fixed recipient replies",
+      "status": "passed",
+      "details": {
+        "repliesPerTenant": 1,
+        "status": "completed",
+        "decisionSource": "agent",
+        "deliveryStatus": "sent",
+        "provider": "local_simulation"
+      }
+    },
+    {
+      "name": "credential rotation invalidates only the changed tenant profile evidence",
+      "status": "passed",
+      "details": {
+        "profileEvidenceInvalidation": true,
+        "liveMcpTokenRevocationTested": false
+      }
+    },
+    {
+      "name": "profile-only credential rotation does not revoke the already-running MCP binding",
+      "status": "known_gap",
+      "details": {
+        "finding": "Old bearer still reaches its scoped work after profile credential evidence changes. The MCP binding list is separate and requires replacement/restart; hot revocation is not implemented.",
+        "crossTenantAccessObserved": false,
+        "scope": "Local SDK fixture, not a live Grok credential change"
+      }
+    },
+    {
+      "name": "same-directory notification workers conflict when another tenant has pending wakeup",
+      "status": "known_gap",
+      "details": {
+        "finding": "Shared notifications.json is not tenant-partitioned; second worker fails on foreign pending work. Internal status lookup is also unscoped.",
+        "liveExternalDataExposureProven": false
+      }
+    },
+    {
+      "name": "tenant-specific notification directories isolate settings and provider-event IDs",
+      "status": "passed",
+      "details": {
+        "scope": "Existing notification components explicitly composed with separate fixture directories; deployed service does not implement this tenancy configuration",
+        "network": "Injected simulation only"
+      }
+    },
+    {
+      "name": "restart preserves lease expiry/deadline and rejects old lease after reclaim",
+      "status": "passed"
+    },
+    {
+      "name": "concurrent same-agent proposals commit once and competing agent cannot take lease",
+      "status": "passed"
+    },
+    {
+      "name": "ambiguous non-idempotent provider outcome enters review without automatic resend",
+      "status": "passed"
+    },
+    {
+      "name": "global serialized provider send blocks unrelated tenant reads",
+      "status": "known_gap",
+      "details": {
+        "finding": "Provider await holds the single global engine queue. A slow tenant blocks unrelated tenant work until send completes/times out.",
+        "syntheticBlockedObservationMs": 5,
+        "productionLatencyClaim": false
+      }
+    },
+    {
+      "name": "hosted demo tenant policy rejects a second landlord rather than hosting both",
+      "status": "known_gap",
+      "details": {
+        "finding": "Existing hosted OAuth installation policy deliberately supports one client only.",
+        "scope": "Policy function, not a full OAuth authorization flow"
+      }
+    },
+    {
+      "name": "two SMS proof adapters do not resolve distinct landlords in a shared engine",
+      "status": "known_gap",
+      "details": {
+        "finding": "SMS proof fixes tenant to synthetic_host; distinct fixture account/number settings do not create landlord tenant bindings.",
+        "sameSourceIdAcrossFixturesMerged": true,
+        "scope": "Trusted receive APIs with fictional numbers and injected clients; signature/HTTP ingress and real providers not exercised"
+      }
+    }
+  ],
+  "summary": {
+    "passed": 15,
+    "knownGaps": 5,
+    "failed": 0
+  },
+  "productionReady": false,
+  "costAnalysis": "Deferred by user; current hosting service is not the final deployment choice",
+  "notMeasured": [
+    "Actual Grok background execution with two landlords",
+    "OAuth tenant isolation",
+    "Real SMS provider credential/number routing",
+    "Production properties and access records",
+    "Tenant-aware admin/event endpoints",
+    "Enforced per-tenant rate limits and budgets",
+    "Production hot token revocation"
+  ],
+  "fixtureSecretPolicy": "Tokens/nonces remain memory-only and are omitted from reports; all runtime fixture files removed after run"
+}

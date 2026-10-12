@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "scope": "Existing local delegation and capability tests, no live providers",
+  "command": "npm test -- test/delegationPrototype.test.ts test/delegationNotifications.test.ts test/delegationSmsProof.test.ts test/agentProfiles.test.ts test/agentProfileService.test.ts --maxWorkers=2 --testTimeout=30000",
+  "sourceCommit": "45084ffe55ad53f265e0c0006f2c42bc892c46a6",
+  "testsPassed": 60,
+  "testFilesPassed": 5,
+  "unexpectedFailures": 0,
+  "costAnalysis": "Deferred by user; no invoice or pricing required for this proof",
+  "applicationSourceChanged": false
+}

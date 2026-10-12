@@ -436,4 +436,6 @@ independently recomputed from the saved predictions. The Phase 0.4 architecture
 decision is now finalized. Further candidate evaluation is optional; production
 validation remains open. Keep models optional and existing deterministic controls
 authoritative, with the next implementation investment in autonomous execution
-reliability and the roadmap's Phase 0.5 tenant-isolation/economics proof.
+reliability and the [Phase 0.5 tenant-isolation proof](cleaner-tenant-isolation-proof.md).
+The user deferred hosting-cost analysis on 12 October 2026; no pricing or
+hosting decision is required to continue the reliability/isolation work.
