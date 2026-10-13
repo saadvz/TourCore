@@ -1,7 +1,11 @@
 # Phase 0.5 validation
 
+Status: [complete as the synthetic two-tenant proof](../../docs/cleaner-phase05-closure.md),
+with retained failures and documented limits. `productionReady=false`. The latest
+recorded local checks pass 51 relevant core/hosted/cost tests, typecheck and bundle.
+
 The [local implementation report](../../docs/cleaner-phase05-implementation.md)
-describes the indexed two-tenant runtime and its 27 new acceptance tests.
+describes the indexed two-tenant runtime and its acceptance evidence.
 Run `npm run cleaner:phase05:demo` for its loopback HTTP/OAuth/MCP demonstration
 or `npm run cleaner:phase05:measure` for the indexed resource sampler.
 `results/multitenant-tests.json`, `results/multitenant-demo.json` and
@@ -52,5 +56,17 @@ Use a new output path to preserve the measured reports in `results/`.
 `npm run cleaner:phase05:fleet` measures the 2/10/100-landlord and 20/100/300-request
 combinations. `npm run cleaner:phase05:costs` computes price-reference scenarios.
 Raw per-workflow files and `results/cost-scenarios.json` are retained.
-See `docs/cleaner-phase05-economics.md` and the same-endpoint account packet in
-`docs/cleaner-phase05-live-grok-packet.md`. Live execution remains pending.
+See the [cost model and shared-container design](../../docs/cleaner-phase05-economics.md)
+and [closure report](../../docs/cleaner-phase05-closure.md). Live ordinary execution
+reconciles 20/20; fault/recovery and the authorized restoration retry reconcile
+with the failed first restoration retained. Account packets are historical
+reference and do not request further runs. Raw exports, source hashes, owner
+closed-window confirmation and missing/untested items are retained in `docs/evidence/`.
+
+Reproduce the account-export reconciliation without host or provider calls:
+
+```sh
+node eval/cleaner-phase05/reconcile-live.mjs
+node eval/cleaner-phase05/reconcile-fault.mjs
+node eval/cleaner-phase05/reconcile-recovery.mjs
+```
