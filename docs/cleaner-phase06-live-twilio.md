@@ -1,6 +1,9 @@
 # Phase 0.6 joint Twilio test
 
-Prepared for the owner's dedicated test phone. **Not yet run live.**
+The first joint live test passed on 12 October 2026 (America/New_York): one
+inbound test, one accepted reply and a signed `delivered` callback. The owner
+confirmed the reply arrived. STOP/START, hosted restart and cleanup remain
+pending. See the [live evidence record](evidence/cleaner-phase06-live-twilio.json).
 The purpose is one controlled reply and provider/phone evidence. Guesty,
 bookings, entry, production cleaner consent and unattended Grok execution are
 not inferred from this test.

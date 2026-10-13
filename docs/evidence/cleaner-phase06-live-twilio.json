@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "measuredAt": "2026-10-13T02:16:52.772Z",
+  "mode": "joint_live_twilio_test",
+  "deployedCommit": "f9dd787e544b69a6dd1a1494b946f0e85cde17c5",
+  "deploymentId": "7c0fb554-cb93-472d-a238-eefcd3b2a3b5",
+  "firstReply": {
+    "outcome": "PASS",
+    "observedAt": "2026-10-13T02:15:37.820471204Z",
+    "inboundTestCount": 1,
+    "replyCount": 1,
+    "providerAcceptance": "accepted",
+    "matchingSignedDeliveryCallback": "delivered",
+    "errorObserved": false,
+    "phoneReceipt": "Owner confirmed the test reply arrived in this conversation.",
+    "webhookChange": "Owner confirmed setting the dedicated incoming webhook; successful signed inbound observed.",
+    "messageIdentifiers": "Retained in private Railway/SQLite evidence; omitted from shared record."
+  },
+  "snapshot": {
+    "mode": "isolated_test",
+    "sendsEnabled": true,
+    "consentRecorded": true,
+    "optedOut": false,
+    "inbound": [
+      {
+        "kind": "test",
+        "count": 1
+      }
+    ],
+    "replies": [
+      {
+        "ordinal": 1,
+        "status": "accepted",
+        "providerReceiptPresent": true,
+        "delivery": "delivered",
+        "errorObserved": false
+      }
+    ],
+    "receiptMeaning": "provider_acceptance",
+    "operatesDoors": false,
+    "changesBookings": false
+  },
+  "pending": [
+    "Joint STOP suppression test.",
+    "Graceful hosted restart with opt-out retained.",
+    "Joint START re-enable test.",
+    "Restore dedicated test number routing after test.",
+    "Guesty live feasibility: blocked because no active account."
+  ],
+  "controlledTwilioTransportGateComplete": false,
+  "phase06Complete": false,
+  "productionReady": false
+}

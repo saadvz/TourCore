@@ -18,9 +18,12 @@ commit `f9dd787e544b69a6dd1a1494b946f0e85cde17c5`. The public healthcheck
 reports `ready=true`, `sendsEnabled=true`, `productionReady=false`. Read-only
 Twilio checks passed for account, sender, service membership and verified
 campaign. The owner separately confirmed cleaner-coordination coverage.
-The dedicated phone number's incoming POST webhook still needs the lab path;
-the first live message, carrier receipt, STOP/START and hosted restart remain
-pending. See the [hosted preflight record](evidence/cleaner-phase06-hosted-preflight.json).
+The owner subsequently set the dedicated phone number's incoming POST webhook
+and confirmed receipt of the first test reply. One signed inbound and a matching
+`delivered` callback were recorded. STOP/START, hosted restart and cleanup remain
+pending. The [hosted preflight record](evidence/cleaner-phase06-hosted-preflight.json)
+is the historical pre-message snapshot; the [live evidence](evidence/cleaner-phase06-live-twilio.json)
+records the subsequent phone test.
 
 ## Service settings
 
