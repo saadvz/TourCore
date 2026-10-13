@@ -2,8 +2,11 @@
 
 The first joint live test passed on 12 October 2026 (America/New_York): one
 inbound test, one accepted reply and a signed `delivered` callback. The owner
-confirmed the reply arrived. STOP/START, hosted restart and cleanup remain
-pending. See the [live evidence record](evidence/cleaner-phase06-live-twilio.json).
+confirmed the reply arrived. Signed STOP was saved, and an owner-authorized
+Railway restart preserved opt-out and the single reply without a resend.
+Post-STOP follow-ups were classified as unrecognized text, so exact-phrase
+suppression remains inconclusive. START and cleanup remain pending. See the
+[live evidence record](evidence/cleaner-phase06-live-twilio.json).
 The purpose is one controlled reply and provider/phone evidence. Guesty,
 bookings, entry, production cleaner consent and unattended Grok execution are
 not inferred from this test.

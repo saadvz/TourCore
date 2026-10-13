@@ -20,8 +20,10 @@ Twilio checks passed for account, sender, service membership and verified
 campaign. The owner separately confirmed cleaner-coordination coverage.
 The owner subsequently set the dedicated phone number's incoming POST webhook
 and confirmed receipt of the first test reply. One signed inbound and a matching
-`delivered` callback were recorded. STOP/START, hosted restart and cleanup remain
-pending. The [hosted preflight record](evidence/cleaner-phase06-hosted-preflight.json)
+`delivered` callback were recorded. The owner-authorized hosted restart preserved
+the signed STOP opt-out and single reply. Account/sender/service/campaign and
+incoming webhook checks passed after restart. Exact-phrase STOP suppression,
+START and cleanup remain pending. The [hosted preflight record](evidence/cleaner-phase06-hosted-preflight.json)
 is the historical pre-message snapshot; the [live evidence](evidence/cleaner-phase06-live-twilio.json)
 records the subsequent phone test.
 

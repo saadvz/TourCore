@@ -47,11 +47,66 @@
     "replyCountUnchanged": 1,
     "phoneObservation": "Owner received provider unsubscribe confirmation and reported no reply to follow-up text.",
     "followUpKind": "other",
-    "exactTestPhraseSuppression": "PENDING: follow-up was unrecognized text; requested exact CLEANER CORE TEST while opted out."
+    "exactTestPhraseSuppression": "INCONCLUSIVE: owner confirmed no reply after the requested exact phrase, but the signed follow-up was again classified other; no new test-kind inbound was recorded. Raw message bodies are not retained.",
+    "latestFollowUpObservedAt": "2026-10-13T02:18:27.912601808Z",
+    "unrecognizedFollowUpCount": 2
   },
+  "restartObservation": {
+  "outcome": "PASS",
+  "requestedAt": "2026-10-13T02:19:06.164Z",
+  "listeningAt": "2026-10-13T02:19:07.903869251Z",
+  "observedAt": "2026-10-13T02:19:07.903874081Z",
+  "deploymentId": "7c0fb554-cb93-472d-a238-eefcd3b2a3b5",
+  "reusedDeployment": true,
+  "optedOutBefore": true,
+  "optedOutAfter": true,
+  "replyCountBefore": 1,
+  "replyCountAfter": 1,
+  "durableEvidenceUnchanged": true,
+  "health": {
+    "ready": true,
+    "sendsEnabled": true,
+    "productionReady": false
+  },
+  "providerRecheck": [
+    {
+      "check": "twilio.account_read",
+      "outcome": "PASS",
+      "http": 200,
+      "detail": "Account identity/activity check; no account details retained."
+    },
+    {
+      "check": "twilio.number_read",
+      "outcome": "PASS",
+      "http": 200,
+      "detail": "Bound sender ownership and SMS capability check; no phone retained."
+    },
+    {
+      "check": "twilio.service_number",
+      "outcome": "PASS",
+      "detail": "Exact sender membership in an owned Messaging Service observed."
+    },
+    {
+      "check": "twilio.campaign",
+      "outcome": "PASS",
+      "http": 200,
+      "detail": "Verified 10DLC campaign association check; cleaner use-case wording still needs owner review."
+    },
+    {
+      "check": "twilio.inbound_routing",
+      "outcome": "PASS",
+      "detail": "Effective routing uses the phone number webhook; it must match the lab POST endpoint."
+    },
+    {
+      "check": "twilio.cleaner_use_case_and_consent",
+      "outcome": "NOT_RUN",
+      "detail": "Account readiness does not establish cleaner use-case coverage or real cleaner consent."
+    }
+  ],
+  "notes": "No manual lock removal, database reset or resend was performed. Owner explicitly requested the test-service restart."
+},
   "pending": [
     "Exact CLEANER CORE TEST suppression while opted out.",
-    "Graceful hosted restart with opt-out retained.",
     "Joint START re-enable test.",
     "Restore dedicated test number routing after test.",
     "Guesty live feasibility: blocked because no active account."
