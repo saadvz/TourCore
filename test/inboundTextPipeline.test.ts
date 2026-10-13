@@ -10,8 +10,10 @@ import { at, liveApp, PHONE, type LiveApp } from "./liveApp";
 /**
  * Full-app inbound SMS: POST /webhooks/sendblue → handleProviderWebhook →
  * the visitor handler → the reply in the outbox. One text that matches more
- * than one intent uses this order: HELP, emergency/911, on-tour door,
- * STOP/consent, cancel, menus, fair housing last.
+ * than one intent uses this order: the bare HELP or INFO carrier keyword,
+ * emergency/911, on-tour door, STOP/consent, cancel, menus, fair housing last.
+ * HELP outranks 911 only when the text is that keyword and nothing else.
+ * An injury described alongside the word help is an emergency.
  *
  * Tests that still take the wrong path are it.fails (Vitest 5). The name
  * starts with "fixed in pipeline PR 2". A passing test is a regression guard
@@ -64,15 +66,6 @@ async function arrive(app: LiveApp, clock: { t: number }) {
 }
 
 describe("inbound text order", () => {
-  it.fails("fixed in pipeline PR 2: HELP beats emergency and fair housing on one text", async () => {
-    const { app, clock } = await appAt();
-    await arrive(app, clock);
-    const replies = await app.text("my elderly mom fell, help");
-    expect(replies, "wrong precedence: emergency beat HELP").toEqual([HELP_ACK]);
-    expect(replies.join("\n"), "wrong precedence: emergency beat HELP").not.toContain("call 911");
-    expect(replies.join("\n"), "wrong precedence: fair housing beat HELP").not.toContain(HELD);
-  });
-
   it.fails("fixed in pipeline PR 2: emergency beats STOP before opt-in", async () => {
     const { app } = await appAt();
     const phone = "+15550103011";
@@ -133,10 +126,18 @@ describe("inbound text order", () => {
     expect(replies, "missed injury: the unit menu beat 911").toEqual([MEDICAL]);
   });
 
-  it.fails("fixed in pipeline PR 2: HELP beats the keyword prompt", async () => {
+  it.fails("fixed in pipeline PR 2: a lost visitor gets the help acknowledgement, not the consent prompt", async () => {
     const { app } = await appAt();
+    // "I am lost" is a real request, not filler around the carrier keyword.
     const replies = await app.textFrom("+15550103013", "help, I am lost");
-    expect(replies, "wrong precedence: the consent prompt beat HELP").toEqual([HELP_KEYWORD]);
+    expect(replies, "wrong precedence: the consent prompt beat the help acknowledgement").toEqual([HELP_ACK]);
+  });
+
+  it.fails("fixed in pipeline PR 2: bare HELP returns the keyword body mid-tour", async () => {
+    const { app, clock } = await appAt();
+    await arrive(app, clock);
+    const replies = await app.text("HELP");
+    expect(replies, "wrong precedence: the live-tour help acknowledgement beat the HELP keyword").toEqual([HELP_KEYWORD]);
   });
 
   it.fails("fixed in pipeline PR 2: get_operator_update uses the full number for an unnamed visitor", async () => {
@@ -156,6 +157,14 @@ describe("inbound text order", () => {
 });
 
 describe("inbound text order already held on this commit", () => {
+  it("regression: an injury that also says help gets the 911 line", async () => {
+    const { app, clock } = await appAt();
+    await arrive(app, clock);
+    const replies = await app.text("my elderly mom fell, help");
+    expect(replies).toEqual([MEDICAL]);
+    expect(replies.join("\n")).not.toContain(HELD);
+  });
+
   it("regression: emergency beats an on-tour door", async () => {
     const { app, clock } = await appAt();
     await arrive(app, clock);
