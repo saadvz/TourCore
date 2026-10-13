@@ -84,8 +84,7 @@ what never does.
   mode, so no physical locks will open." Never "everything runs in demo mode".
 - **Visitor questions at every stage.** Answered only from approved facts;
   anything unknown is flagged to the operator, and the visitor picks up where
-  they left off once it's answered. A booked-tour cancel by text (any natural
-  phrasing) is handled by Tour Core: it confirms, then YES cancels (`You're
+  they left off once it's answered. A bare `cancel` is the carrier opt-out. On a booked tour that has not started it also cancels the tour, frees the slot and door access, alerts the team, and sends `Your tour is cancelled and you won't get any more texts from us. To come back or book again, reply START.` While they are touring, a bare cancel stays a cancel. Other booked-tour cancel phrasing is handled by Tour Core: it confirms, then YES cancels (`You're
   cancelled. Text me anytime if you want to book again.`) or NO keeps the
   booking (`Okay, your {time} tour on {day} stays booked.`). While they are
   touring and the cancel targets a later booking: `Cancel your later tour at

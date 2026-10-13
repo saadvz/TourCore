@@ -16,6 +16,7 @@ import { extensionUnavailable, t15Questions, t5NoOffer, t5Offering } from "../sr
 import { VisitorDenialCopy } from "../src/core/TourCore";
 import { formatTime, zonedTimeToUtc } from "../src/core/timezone";
 import { toursUnavailableText } from "../src/sms/templates";
+import { smsHelpBody } from "../src/visitor/smsConsent";
 import { tourHoursVisitorReply } from "../src/visitor/tourHoursQuestion";
 import type { LiveApp } from "./liveApp";
 import { VisitorDemoSession } from "../src/visitor";
@@ -369,7 +370,7 @@ describe("in-tour texts after the zone is cleared", () => {
     }
 
     const next = await a.text("at Unit 1A");
-    expect(next.join("\n")).toContain("Unit 1A Door is open for you now");
+    expect(next.join("\n")).toContain("Unit 1A door is open for you now");
     expect(next.join("\n")).not.toContain("aren't available right now");
     const grants = await activeGrants(a, PHONE);
     expect(grants.map((grant) => grant.doorId).sort()).toEqual(["entrance", "unit_101"]);
@@ -377,7 +378,7 @@ describe("in-tour texts after the zone is cleared", () => {
     expect((await touring.reservation())?.bookedTimeZone).toBe(keepBookedZone ? "America/New_York" : undefined);
 
     const help = await a.text("help");
-    expect(help).toEqual([VisitorDenialCopy.helpAck("property team")]);
+    expect(help).toEqual([smsHelpBody()]);
     expect(help.join("\n")).not.toContain("aren't available right now");
 
     const before15 = a.fake.sent.length;

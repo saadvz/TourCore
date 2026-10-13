@@ -89,7 +89,7 @@ describe("P0 operator demo through Grok tools, with a real-phone visitor", () =>
     });
     demo.setClock(at(14));
     expect(await demo.text("I'm here")).toContain("Entrance is open for you now.");
-    expect(await demo.text("I'm at unit 101")).toContain("Unit 101 Door is open for you now.");
+    expect(await demo.text("I'm at unit 101")).toContain("Unit 101 door is open for you now.");
 
     // Operator: "Show active tours."
     const [tour] = (await demo.grok("list_active_tours")).tours;

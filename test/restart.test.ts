@@ -246,7 +246,7 @@ describe("a text-message tour picks up where it left off after a restart", () =>
     await bookAndVerify(app);
     app.setClock(at(13, 58));
     await app.text("I'm here");
-    expect((await app.text("at unit 101")).reply).toContain("Unit 101 Door is open for you now.");
+    expect((await app.text("at unit 101")).reply).toContain("Unit 101 door is open for you now.");
 
     await app.restart();
     expect((await app.text("does this place have laundry?")).reply).toBe("Here's what the property team shared: Shared laundry room in the basement.");

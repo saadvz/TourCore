@@ -335,7 +335,7 @@ describe("medical help", () => {
     const help = phone(at(13, 58));
     await onTour(help);
     const ordinary = await addedReply(help.session, help.say, "help");
-    expect(ordinary.replies).toEqual([VisitorDenialCopy.helpAck("property team")]);
+    expect(ordinary.replies).toEqual([smsHelpBody()]);
     expect(ordinary.replies.join("\n")).not.toContain("call 911 now");
   });
 
@@ -383,8 +383,21 @@ describe("medical help", () => {
     );
   });
 
-  it("keeps the existing get_inbox item for plain HELP", async () => {
-    const shown = await inboxAfterHelp("HELP");
+  it("sends the keyword body for plain HELP and keeps the help inbox item for a real problem", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const v = await h.touringVisitor(id);
+    await v.session.act("help", {}, { text: "HELP" });
+    await persistSession(h.services, v.session);
+    const keywordInbox = await h.ok("get_inbox");
+    const keywordHelp = (keywordInbox.items as Array<{ kind?: string }>).filter((row) => row.kind === "help");
+    expect(keywordHelp).toHaveLength(0);
+    const keywordReply = (await v.session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").at(-1)?.body;
+    expect(keywordReply).toBe(smsHelpBody());
+    expect(keywordReply).not.toContain("call 911 now");
+
+    const shown = await inboxAfterHelp("I need help");
     expect(shown.visitor).not.toContain("call 911 now");
     expect(shown.text).toBe(
       [
@@ -402,6 +415,7 @@ describe("medical help", () => {
       "my kid is choking",
       "she's having a heart attack",
       "broke his back",
+      "my back is broken",
       "had a stroke",
       "cant get up",
       "cannot get up",

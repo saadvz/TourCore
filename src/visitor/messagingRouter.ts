@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { removedPropertyVisitorText } from "../core/availabilityCopy";
 import { normalizePhone } from "../core/phone";
 import { isMedicalEmergency, isUnbookedCancelAsk, messagingKeyword as keywordOf, type IntentInterpreter } from "../intent";
+import { firstInboundMatch } from "./inboundTextPipeline";
 import { NOTHING_BOOKED_CANCEL } from "../core/TourCore";
 import { MessagingEndpoints, type MessagingEndpoint } from "../messaging/endpoints";
 import { hasInboundMedia, type InboundMessage } from "../messaging/inbound";
@@ -205,12 +206,20 @@ export class MessagingConversations {
     const keyword = keywordOf(message.text);
     const openSaved = saved.filter((id) => !ws.load(id).state.removedAt);
     const open = [...openSaved, ...draftOnly];
-    // STOP, HELP, and START on a draft (including one with no saved config) before any drop or picker.
-    if ((keyword === "stop" || keyword === "help" || keyword === "start") && open.length && open.every((id) => this.isUnpublishedDraft(id))) {
+    // HELP, an emergency, STOP, and START on a draft before any drop or the not-ready line.
+    if (open.length && open.every((id) => this.isUnpublishedDraft(id))) {
       const bound = await this.boundProperty(saved, phone, message.text);
       if (!bound) {
-        await this.answerUnpublishedLine(open, phone, keyword);
-        return undefined;
+        const kind = firstInboundMatch({ text: message.text });
+        if (kind === "emergency") {
+          const propertyId = open.find((id) => this.configOf(id)) ?? open[0];
+          if (propertyId) await this.answerDraftInjury(propertyId, phone, message.text);
+          return undefined;
+        }
+        if (kind === "help" || kind === "stop" || keyword === "start") {
+          await this.answerUnpublishedLine(open, phone, kind === "help" ? "help" : kind === "stop" ? "stop" : "start");
+          return undefined;
+        }
       }
     }
     const ids = saved;
@@ -223,7 +232,8 @@ export class MessagingConversations {
 
     const candidates = this.portfolioCandidates(ids);
     // STOP on a mixed line opts out every open property, including an unsaved draft.
-    if (keyword === "stop" && open.length > 1) {
+    // An emergency in the same text already won, so this is only a real stop.
+    if (firstInboundMatch({ text: message.text }) === "stop" && open.length > 1) {
       await this.answerLineKeyword(open, phone, "stop");
       return undefined;
     }
@@ -248,14 +258,13 @@ export class MessagingConversations {
     const named = this.namedPlace(message, candidates);
     if (named) return { propertyId: named, endpoint, message };
 
-    if (keyword === "stop" || keyword === "help") {
-      await this.answerLineKeyword(candidates, phone, keyword);
+    const kind = firstInboundMatch({ text: message.text });
+    if (kind === "help" || kind === "stop") {
+      await this.answerLineKeyword(candidates, phone, kind);
       return undefined;
     }
-    if (candidates.every((id) => this.isOptedOut(id, phone)) && keyword !== "start") {
-      if (!isMedicalEmergency(message.text)) return undefined;
-      return { propertyId: candidates[0]!, endpoint, message };
-    }
+    if (kind === "emergency") return { propertyId: candidates[0]!, endpoint, message };
+    if (candidates.every((id) => this.isOptedOut(id, phone)) && keyword !== "start") return undefined;
     await this.askWhichPlace(phone, endpoint.address, candidates, message.text);
     return undefined;
   }
@@ -281,12 +290,20 @@ export class MessagingConversations {
     endpoint: MessagingEndpoint,
   ): Promise<{ propertyId: string; endpoint: MessagingEndpoint; message: InboundMessage } | undefined> {
     const keyword = keywordOf(message.text);
-    if (keyword === "stop" || keyword === "help") {
-      if (keyword === "stop") this.clearPick(pending);
-      await this.answerLineKeyword(pending.matchIds, pending.phone, keyword);
+    const kind = firstInboundMatch({ text: message.text });
+    if (kind === "stop" || kind === "help" || keyword === "stop" || keyword === "help") {
+      const answered = kind === "help" || keyword === "help" ? "help" : "stop";
+      if (answered === "stop") this.clearPick(pending);
+      await this.answerLineKeyword(pending.matchIds, pending.phone, answered);
       return undefined;
     }
-    if (isUnbookedCancelAsk(message.text)) {
+    if (kind === "emergency") {
+      this.clearPick(pending);
+      const propertyId = pending.offeredIds[0];
+      if (!propertyId) return undefined;
+      return { propertyId, endpoint, message };
+    }
+    if (kind === "cancel" || isUnbookedCancelAsk(message.text)) {
       this.clearPick(pending);
       await this.sendLine(pending.offeredIds[0], pending.phone, NOTHING_BOOKED_CANCEL);
       return undefined;
@@ -366,7 +383,12 @@ export class MessagingConversations {
     for (const session of sessions) {
       const stage = await session.stage();
       const finished = ["done", "stopped"].includes(stage) && !(await session.isPaused());
-      const stillThisTour = !finished || !!session.pendingBookingId || (await session.afterCloseStillOpen()) || !startsNewBookingAfterClose(text);
+      const stillThisTour =
+        !finished ||
+        !!session.pendingBookingId ||
+        (await session.afterCloseStillOpen()) ||
+        !startsNewBookingAfterClose(text) ||
+        session.bindNextBooking;
       if (stillThisTour) keep.push(session);
     }
     keep.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
@@ -574,14 +596,19 @@ export class MessagingConversations {
       if (!ready || !published || !isValidTimeZone(config.property.timezone)) {
         // An injury is checked before the not-ready line, the same way STOP and HELP are.
         // It does not leave a bookable session, so a later text still gets the not-ready line.
-        if (isMedicalEmergency(message.text)) {
+        const kind = firstInboundMatch({ text: message.text });
+        if (kind === "help") {
+          await this.answerUnpublishedKeyword(propertyId, phone, "help", config.operator.visitorContact);
+          return {};
+        }
+        if (kind === "emergency") {
           await this.answerDraftInjury(propertyId, phone, message.text);
           return {};
         }
-        // STOP, HELP, and START still work on a draft. They do not open a session, so a later booking text stays refused.
+        // STOP and START still work on a draft. They do not open a session, so a later booking text stays refused.
         const keyword = keywordOf(message.text);
-        if (keyword === "stop" || keyword === "help" || keyword === "start") {
-          await this.answerUnpublishedKeyword(propertyId, phone, keyword, config.operator.visitorContact);
+        if (kind === "stop" || keyword === "start") {
+          await this.answerUnpublishedKeyword(propertyId, phone, kind === "stop" ? "stop" : "start", config.operator.visitorContact);
           return {};
         }
         if (this.isOptedOut(propertyId, phone) || this.smsConsent.get(propertyId, phone)?.status === "opted_out") return {};

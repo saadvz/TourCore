@@ -415,8 +415,8 @@ right now").
   "Yes I'll take it", "Yes 1 works") for the offered next opening, and a
   new day/time ask while that offer is pending ("Can I come oct 6 at 12
   pm?") as that day, not as accepting the offer — and they should not
-  appear as a flagged question. A visitor who texts to cancel a booked
-  tour (any natural phrasing) is also handled by Tour Core: it confirms,
+  appear as a flagged question.   A bare `cancel` is the carrier opt-out. On a booked tour that has not started it also cancels the tour and sends `Your tour is cancelled and you won't get any more texts from us. To come back or book again, reply START.` While they are touring, a bare cancel stays a cancel. Other cancel phrasing for a booked
+  tour is also handled by Tour Core: it confirms,
   then YES cancels (`You're cancelled. Text me anytime if you want to book
   again.`) or NO keeps the booking (`Okay, your {time} tour on {day} stays booked.`). While they are touring and the cancel targets a later booking:
   confirm `Cancel your later tour at {time} on {day}? Your tour right now

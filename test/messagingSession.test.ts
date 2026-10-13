@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config/tourCoreConfig";
-import { VISIT_RECORD_BASIS, VisitorDenialCopy } from "../src/core/TourCore";
+import { VISIT_RECORD_BASIS } from "../src/core/TourCore";
 import { zonedTimeToUtc } from "../src/core/timezone";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
 import { withPrompt } from "../src/messaging/presentation";
 import { handleVisitorText, keywordOf } from "../src/visitor/conversation";
+import { smsHelpBody } from "../src/visitor/smsConsent";
 import { VisitorDemoSession, visitorView } from "../src/visitor";
 import { VerificationLinks } from "../src/visitor/verificationLinks";
 
@@ -210,7 +211,7 @@ describe("typed replies", () => {
     expect(keywordOf("please don't stop")).toBeUndefined();
   });
 
-  it("HELP says who this is and how to reach the team; during a tour it also alerts them", async () => {
+  it("HELP says who this is and how to reach the team, including during a booked tour", async () => {
     const { session, say, lastReply } = phoneSession();
     await say("HELP");
     expect(lastReply()).toContain("Tour Core:");
@@ -226,12 +227,12 @@ describe("typed replies", () => {
     await session.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: PHONE });
     const outboundBefore = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").length;
     await say("help");
-    expect((await session.store.listAudit()).some((e) => e.type === "HELP_REQUESTED")).toBe(true);
-    expect(lastReply()).toBe(VisitorDenialCopy.helpAckRemote("property team"));
+    expect((await session.store.listAudit()).some((e) => e.type === "HELP_REQUESTED")).toBe(false);
+    expect(lastReply()).toBe(smsHelpBody());
     expect(lastReply()).not.toContain("Stay where you are");
     const outbound = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND");
     expect(outbound.length - outboundBefore).toBe(1);
-    expect(outbound.at(-1)?.body).not.toContain("Tour Core:");
+    expect(outbound.at(-1)?.body).toContain("Tour Core:");
   });
 
   it("asks again, with the options, when it doesn't understand", async () => {

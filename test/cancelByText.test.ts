@@ -142,7 +142,6 @@ describe("visitor cancel-by-text", () => {
   it.each([
     "Can we cancel the tour?",
     "I want to cancel the booked tour",
-    "cancel",
     "please cancel my tour",
     "call off the tour",
     "I can't make it",

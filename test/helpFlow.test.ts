@@ -105,34 +105,32 @@ describe("helpContext", () => {
 });
 
 describe("help flow: one visitor reply, one open exception", () => {
-  it("a HELP text during an active tour sends only the help ack", async () => {
+  it("a HELP text during an active tour sends only the carrier keyword", async () => {
     const p = phone();
     await bookAndArrive(p);
     const before = await prospectOutbound(p.session);
     await p.say("help");
     const added = (await prospectOutbound(p.session)).slice(before.length);
-    expect(added.map((m) => m.body)).toEqual([VisitorDenialCopy.helpAck(TEAM)]);
-    expect(added[0]!.body).toContain("They'll reply as soon as they can");
-    expect(added[0]!.body).not.toContain("The property team will reply");
-    expect(added.join("\n")).not.toContain("Tour Core:");
-    expect(added.join("\n")).not.toContain("Reply STOP to opt out.");
-    expect(await p.session.store.listAudit()).toEqual(expect.arrayContaining([expect.objectContaining({ type: "HELP_REQUESTED" })]));
+    expect(added.map((m) => m.body)).toEqual([smsHelpBody()]);
+    expect(added[0]!.body).toContain("Tour Core:");
+    expect(added[0]!.body).toContain("Reply STOP to opt out.");
+    expect(added.join("\n")).not.toContain("Stay where you are");
+    expect((await p.session.store.listAudit()).filter((e) => e.type === "HELP_REQUESTED")).toHaveLength(0);
+    expect((await p.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(0);
   });
 
-  it("HELP on an upcoming booked tour (window not started) sends the remote ack, not stay-where-you-are", async () => {
+  it("HELP on an upcoming booked tour sends the carrier keyword, not the remote ack", async () => {
     const p = phone(at(10));
     await bookReady(p);
     expect((await p.session.reservation())?.status).toBe("READY");
     const before = await prospectOutbound(p.session);
     await p.say("HELP");
     const added = (await prospectOutbound(p.session)).slice(before.length);
-    expect(added.map((m) => m.body)).toEqual([VisitorDenialCopy.helpAckRemote(TEAM)]);
-    expect(added[0]!.body).toContain("They'll reply here as soon as they can");
-    expect(added[0]!.body).not.toContain("The property team will reply");
+    expect(added.map((m) => m.body)).toEqual([smsHelpBody()]);
+    expect(added[0]!.body).toContain("Tour Core:");
     expect(added[0]!.body).not.toContain("Stay where you are");
-    expect(added.join("\n")).not.toContain("Tour Core:");
-    expect((await p.session.store.listAudit()).some((e) => e.type === "HELP_REQUESTED")).toBe(true);
-    expect((await p.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(1);
+    expect((await p.session.store.listAudit()).filter((e) => e.type === "HELP_REQUESTED")).toHaveLength(0);
+    expect((await p.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(0);
   });
 
   it("HELP after choosing a unit but before a time is booked sends only the carrier keyword reply", async () => {
@@ -259,13 +257,13 @@ describe("help flow: one visitor reply, one open exception", () => {
     expect((await p.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(0);
   });
 
-  it("HELP after the tour window has ended sends the help reply and alerts the team", async () => {
+  it("a help problem after the tour window has ended sends the help reply and alerts the team", async () => {
     const p = phone();
     await bookAndArrive(p);
     p.session.clock.jumpTo(new Date(at(16)));
     expect((await p.session.reservation())?.status).toBe("TOURING");
     const before = await prospectOutbound(p.session);
-    await p.say("HELP");
+    await p.say("I need help");
     const added = (await prospectOutbound(p.session)).slice(before.length);
     expect(added.map((m) => m.body)).toEqual([VisitorDenialCopy.helpAck(TEAM)]);
     expect(added.join("\n")).not.toContain("Reply STOP to opt out.");
@@ -281,13 +279,13 @@ describe("help flow: one visitor reply, one open exception", () => {
       p.session.clock.jumpTo(new Date(at(16)));
       expect((await p.session.reservation())?.status).toBe("TOURING");
     }],
-  ] as const)("HELP %s still texts the team and sends the ack when every audit write fails", async (_label, arrive) => {
+  ] as const)("a help problem %s still texts the team and sends the ack when every audit write fails", async (_label, arrive) => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const p = phone();
     await arrive(p);
     failEveryAudit(p.session);
     const before = await prospectOutbound(p.session);
-    await p.say("HELP");
+    await p.say("I need help");
     const added = (await prospectOutbound(p.session)).slice(before.length);
     expect(added.map((m) => m.body)).toEqual([VisitorDenialCopy.helpAck(TEAM)]);
     const messages = await p.session.store.list("messages");
@@ -304,13 +302,13 @@ describe("help flow: one visitor reply, one open exception", () => {
       await bookAndArrive(p);
       p.session.clock.jumpTo(new Date(at(16)));
     }],
-  ] as const)("HELP %s sends the snag line when the team text fails", async (_label, arrive) => {
+  ] as const)("a help problem %s sends the snag line when the team text fails", async (_label, arrive) => {
     const p = phone();
     await arrive(p);
     failOperatorSend(p.session);
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const before = await prospectOutbound(p.session);
-    await p.say("HELP");
+    await p.say("I need help");
     const added = (await prospectOutbound(p.session)).slice(before.length);
     expect(added.map((m) => m.body)).toEqual([SNAG]);
     expect(added.join("\n")).not.toContain("let the property team know");
@@ -327,7 +325,7 @@ describe("help flow: one visitor reply, one open exception", () => {
     const p = phone();
     await bookAndArrive(p);
     const before = await prospectOutbound(p.session);
-    await p.say("help");
+    await p.say("I need help");
     await p.say("I need help");
     const added = (await prospectOutbound(p.session)).slice(before.length);
     expect(added.map((m) => m.body)).toEqual([VisitorDenialCopy.helpAck(TEAM), VisitorDenialCopy.helpRepeatAck(TEAM)]);

@@ -101,7 +101,7 @@ describe("fair housing runs after help, doors, cancel, and menus", () => {
     expect(stuck.join("\n")).not.toContain(HELD);
 
     const open = await a.text("I'm at unit 101 with my family");
-    expect(open.join("\n")).toContain("Unit 101 Door is open for you now.");
+    expect(open.join("\n")).toContain("Unit 101 door is open for you now.");
     expect(open.join("\n")).toContain("Welcome to Unit 101!");
     expect(open.join("\n")).not.toContain(HELD);
 
@@ -143,7 +143,7 @@ describe("fair housing runs after help, doors, cancel, and menus", () => {
   it("cancels at the confirm prompt when the reason names a family", async () => {
     const a = await liveApp({ cleanups, config: unit101() });
     await a.book();
-    const ask = await a.text("cancel");
+    const ask = await a.text("Can we cancel the tour?");
     expect(ask.join("\n")).toContain("Cancel your 2:00 PM tour on Monday, Sep 28? Reply YES or NO.");
     const done = await a.text("yes cancel, family emergency");
     expect(done).toEqual([VISITOR_CANCEL_DONE]);

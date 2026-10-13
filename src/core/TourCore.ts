@@ -28,7 +28,7 @@ import { AuditLog, type AuditInput } from "../audit/audit";
 import { buildExport, type ExportBundle } from "../export/exportBundle";
 import type { Clock } from "./clock";
 import { FAIR_HOUSING_CODE, isFairHousingQuestion } from "./fairHousing";
-import { isMedicalEmergency } from "../intent/ruleBased";
+import { isConcreteHelpProblem, isMedicalEmergency } from "../intent/ruleBased";
 import { approvedAnswerText, approvedFacts, type ApprovedFact } from "./facts";
 import { formatPhone, looksLikePhone, normalizePhone } from "./phone";
 import { resolveQuestion } from "./questions";
@@ -484,6 +484,11 @@ export class VisitorDenialCopy {
   static missingConsent(): string {
     return "Before I can open doors, text me back and I'll finish setting up your tour.";
   }
+}
+
+/** Visitor open-door sentence only. "Unit 101 Door" stays titled everywhere else. */
+function openDoorName(name: string | undefined): string {
+  return (name?.trim() || "The door").replace(/ Door$/, " door");
 }
 
 export class TourCore {
@@ -1536,6 +1541,8 @@ export class TourCore {
           messagingOptedOut: inbound.messagingOptedOut,
           suppressMedicalVisitorLine: inbound.suppressMedicalVisitorLine,
         });
+      } else if (inbound?.phone && isConcreteHelpProblem(said)) {
+        await this.deliverUnbookedHelp(inbound.phone, said);
       }
       return;
     }
@@ -1581,6 +1588,29 @@ export class TourCore {
       );
     } else if (failed) {
       await this.recordTeamTextFailure(prospect.name, reservationId, prospect.id);
+    }
+  }
+
+  /** A lost or stuck visitor before a tour exists. The help ack, not the consent prompt. */
+  private async deliverUnbookedHelp(phone: string, said: string): Promise<void> {
+    if (isFairHousingQuestion(said)) {
+      await this.forwardFlaggedQuestion({ asked: said.trim().slice(0, 300) });
+    }
+    const alert = "A visitor asked for help.";
+    const alerted = await this.textOperatorFirst(undefined, alert);
+    const body = alerted ? VisitorDenialCopy.helpAck(this.teamName(), this.visitorHelpNumber()) : renderSms("handler-snag-retry").body;
+    const normalized = normalizePhone(phone);
+    await this.sendConversationText({ phone: normalized, body, deliverDespiteOptOut: true });
+    const prospect = (await this.deps.store.list("prospects")).find((p) => p.phone === normalized);
+    await this.recordBestEffort(
+      "HELP_REQUESTED",
+      { prospectId: prospect?.id, detail: "", code: said, ...(prospect ? {} : { phone: normalized }) },
+      "Help request was not recorded",
+    );
+    if (alerted) {
+      await this.recordBestEffort("OPERATOR_NOTIFIED", { prospectId: prospect?.id, detail: alert }, "Team alert was not recorded");
+    } else {
+      await this.recordTeamTextFailure("a visitor", undefined, prospect?.id);
     }
   }
 
@@ -2170,7 +2200,7 @@ export class TourCore {
     await this.textProspect(
       prospect!,
       approved.id,
-      `${door?.name ?? "The door"} is open for you now. ${stop?.guidance ?? ""}${reminder ? ` ${reminder}` : ""}`.trim(),
+      `${openDoorName(door?.name)} is open for you now. ${stop?.guidance ?? ""}${reminder ? ` ${reminder}` : ""}`.trim(),
       nextStop ? { kind: "say", phrase: `at ${this.stopName(nextStop)}`, purpose: "when you get there" } : { kind: "say", phrase: "DONE", purpose: "when you're finished" },
     );
     return { decision, durinCalled: true, grant };
