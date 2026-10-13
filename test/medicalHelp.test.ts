@@ -1027,5 +1027,7 @@ describe("medical help", () => {
     expect(description).toContain("We sent them a text to call 911 and said you couldn't be reached, but we can't confirm it got to them.");
     expect(description).toContain("All three use Call them now, then mark it handled.");
     expect(description).toContain("They were told to call 911 and that you couldn't be reached when the 911 text went out and the alert did not");
+    expect(description).toContain("They were told to call 911 if someone is hurt, and that you'd text them here.");
+    expect(description).not.toContain("the 911 sentence");
   });
 });
