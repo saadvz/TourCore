@@ -1,0 +1,21 @@
+name: Cleaner Phase 0.6 validation kit
+on:
+  push:
+    branches: [cleaner-core/phase06-integrations]
+  pull_request:
+    branches: [cleaner-core/phase05-ordinary-evidence]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run cleaner:phase06:check
+      - run: npx vitest run test/cleanerPhase05.test.ts test/cleanerPhase05Hosted.test.ts --maxWorkers=2 --testTimeout=30000

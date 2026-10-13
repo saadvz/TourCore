@@ -24,3 +24,13 @@ await build({
   logLevel: "info",
 });
 cpSync("src/web/public", "dist/public", { recursive: true });
+await build({
+  entryPoints: ["src/integrations/phase06/cli.ts"],
+  bundle: true,
+  platform: "node",
+  format: "esm",
+  outfile: "dist/cleaner-phase06.js",
+  packages: "external",
+  sourcemap: true,
+  logLevel: "info",
+});

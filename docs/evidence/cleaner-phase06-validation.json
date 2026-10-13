@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-13T01:10:59.471877+00:00",
+  "baselineCommit": "72e9d3b736f2100e509e7def951b9d0100b70ab9",
+  "branch": "cleaner-core/phase06-integrations",
+  "runtime": {
+    "node": "v24.19.0"
+  },
+  "scope": "Local integration discovery kit; actual loopback HTTP, synthetic Guesty projections and injected SMS provider. No real provider requests or deployment.",
+  "sourceSha256": {
+    "src/integrations/phase06/cli.ts": "be7755e86a38f25e46f113971a4e52f41d94867800f159956d8f927406fa7a55",
+    "src/integrations/phase06/guesty.ts": "72f83f99438f6cfe394a414ba4db5e098b9c33285b474e2fc3f42616cea95ea4",
+    "src/integrations/phase06/probes.ts": "01fa51780aebaadab32c7dd71be7fe3117890772e9b59a645405e30d7f0a6291",
+    "src/integrations/phase06/twilioLab.ts": "a75fafef96448995e67b46b13a26a777890cd5093a7e2115d0d8d6780db8c47e",
+    "test/cleanerPhase06.test.ts": "53de54838db553f32c76fb0c2a3e649b2545d9cc446383bc5413ed6d38c15f9e",
+    "package.json": "4ef9c0b36989e5fe1ee5f8d2da9265bcb00968551470d21f24ca228a5f432945",
+    "scripts/build.mjs": "e98e218bcee68ac82186688896ba257a4e8201910b1c368f62836c88147a5a84",
+    "Dockerfile.cleaner-phase06": "4c90698dcc07b4c4199c04e602dde03b72808b6f1c2ced01b4aafc7b6ebb4495",
+    ".github/workflows/cleaner-phase06.yml": "69a1e77dd53037ed6d61de01b0b0c98a2403400d158eeafb1b7234c82d0fb028"
+  },
+  "checks": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "whitespace": "PASS",
+    "focused": {
+      "passed": 76,
+      "failed": 0,
+      "suites": [
+        {
+          "file": "cleanerPhase05.test.ts",
+          "passed": 28
+        },
+        {
+          "file": "cleanerPhase05Hosted.test.ts",
+          "passed": 14
+        },
+        {
+          "file": "cleanerPhase06.test.ts",
+          "passed": 24
+        },
+        {
+          "file": "delegationSmsProof.test.ts",
+          "passed": 10
+        }
+      ]
+    },
+    "eval": {
+      "passed": 26,
+      "failed": 0
+    },
+    "broadRun": {
+      "passed": 1812,
+      "failed": 3,
+      "failures": [
+        {
+          "file": "hostedRailway.test.ts",
+          "test": "hosted security requires a short-lived setup session and refuses an anonymous visitor",
+          "failure": "5-second timeout"
+        },
+        {
+          "file": "operatorTools.test.ts",
+          "test": "operator tool contract: boundary never returns configured credentials",
+          "failure": "5-second timeout"
+        },
+        {
+          "file": "publicComplianceBoundaries.test.ts",
+          "test": "public compliance boundaries keeps operator-specific registration data out of the public tree",
+          "failure": "8 existing phone-number occurrences in unchanged baseline sources"
+        }
+      ],
+      "timing": "Earlier broad run followed by focused revalidation of final code; no full-suite green claim."
+    },
+    "baselineReproduction": {
+      "commit": "72e9d3b736f2100e509e7def951b9d0100b70ab9",
+      "passed": 42,
+      "failed": 3,
+      "sameFailures": true
+    },
+    "bundledCliStartup": {
+      "mode": "bundled_cli_synthetic_startup",
+      "healthReady": true,
+      "productionReady": false,
+      "replyCount": 0,
+      "shutdownExitCode": 0,
+      "lockReleased": true,
+      "realProviderRequests": 0
+    },
+    "withoutLiveFlag": "Startup refused; no live settings or sends used"
+  },
+  "probeWithoutSettings": {
+    "schemaVersion": 1,
+    "measuredAt": "2026-10-13T01:07:00.746Z",
+    "mode": "read_only_probe",
+    "guesty": [
+      {
+        "check": "guesty.listing_read",
+        "outcome": "BLOCKED",
+        "detail": "No active Guesty account/token supplied."
+      },
+      {
+        "check": "guesty.reservation_read",
+        "outcome": "BLOCKED",
+        "detail": "No active Guesty account/token supplied."
+      },
+      {
+        "check": "guesty.calendar_read",
+        "outcome": "BLOCKED",
+        "detail": "No active Guesty account/token supplied."
+      },
+      {
+        "check": "guesty.task_read",
+        "outcome": "BLOCKED",
+        "detail": "No active Guesty account/token supplied."
+      }
+    ],
+    "twilio": [
+      {
+        "check": "twilio.account_read",
+        "outcome": "BLOCKED",
+        "detail": "Twilio is owner-reported ready; credentials are not configured in this workspace."
+      },
+      {
+        "check": "twilio.number_read",
+        "outcome": "BLOCKED",
+        "detail": "Twilio is owner-reported ready; credentials are not configured in this workspace."
+      },
+      {
+        "check": "twilio.service_number",
+        "outcome": "BLOCKED",
+        "detail": "Twilio is owner-reported ready; credentials are not configured in this workspace."
+      },
+      {
+        "check": "twilio.campaign",
+        "outcome": "BLOCKED",
+        "detail": "Twilio is owner-reported ready; credentials are not configured in this workspace."
+      }
+    ],
+    "phase06Complete": false,
+    "productionReady": false
+  },
+  "liveGates": {
+    "guesty": "BLOCKED: no active account",
+    "twilioAccount": "OWNER_REPORTED_READY: secure settings absent here",
+    "cleanerCampaignReview": "NOT_RUN",
+    "realCleanerConsent": "NOT_RUN",
+    "jointTestPhone": "PREPARED_NOT_RUN",
+    "liveDeliveryReceipt": "NOT_RUN",
+    "deployment": "NOT_RUN"
+  },
+  "phase06Complete": false,
+  "productionReady": false
+}

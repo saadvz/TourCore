@@ -42,7 +42,11 @@
     "cleaner:phase05:demo": "tsx src/delegation/phase05/demo.ts",
     "cleaner:phase05:measure": "tsx eval/cleaner-phase05/indexed-meter.mts",
     "cleaner:phase05:fleet": "tsx eval/cleaner-phase05/fleet-meter.mts",
-    "cleaner:phase05:costs": "tsx eval/cleaner-phase05/cost-scenarios.mts"
+    "cleaner:phase05:costs": "tsx eval/cleaner-phase05/cost-scenarios.mts",
+    "cleaner:phase06:check": "vitest run test/cleanerPhase06.test.ts",
+    "cleaner:phase06:probe": "tsx src/integrations/phase06/cli.ts probe",
+    "cleaner:phase06:lab": "tsx src/integrations/phase06/cli.ts lab",
+    "cleaner:phase06:evidence": "tsx src/integrations/phase06/cli.ts evidence"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.0",

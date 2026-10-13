@@ -925,6 +925,18 @@ phone). It does not prove identity.
 
 `npm run test:eval` reruns today's duplex setup, the same ten duplexes through the milestone tools, golden landlord tasks, and the demo click path against the checked-in snapshot in `eval/baseline/`. Both config-diff reports must show zero fields differing. `npm run eval:rebaseline` records a new snapshot when that behavior is meant to change. `npm run eval:live` points the same flow at hosted Scratch. Run one live eval at a time. It needs `TOURCORE_MCP_URL` and `TOURCORE_MCP_TOKEN` (the one-hour sign-in access token from `POST /token` after the owner's Allow click). It keeps the properties it creates on local test texting, and its end-of-run sweep removes only the property named with this run's `eval-` id. See [docs/eval.md](docs/eval.md). The per-agent client matrix runs that duplex, plus the safety gates, once for Grok, ChatGPT, Claude, an unknown client, and a spoofed grok name. See [docs/client-matrix.md](docs/client-matrix.md).
 
+## Cleaner Core integration discovery (developer)
+
+Phase 0.6 has an isolated validation kit on the cleaner branch:
+`npm run cleaner:phase06:check` runs Guesty fixtures and signed Twilio-shaped
+loopback HTTP checks; `npm run cleaner:phase06:probe` performs optional read-only
+account checks. Guesty account feasibility and the joint real-phone test remain
+open. See [scope and evidence](docs/cleaner-phase06-integrations.md) and the
+[controlled Twilio runbook](docs/cleaner-phase06-live-twilio.md). The standalone
+lab starts only with dedicated settings and explicit `--live`; the touring and
+Phase 0.5 services do not load it. No cleaning bookings or door operations are
+enabled by this discovery kit.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to propose changes. Pull requests run typecheck, build, and test in GitHub Actions.
