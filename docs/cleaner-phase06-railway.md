@@ -15,16 +15,22 @@ definition to achieve this: that file describes touring.
 
 Deployment `7c0fb554-cb93-472d-a238-eefcd3b2a3b5` reached `SUCCESS` at pinned
 commit `f9dd787e544b69a6dd1a1494b946f0e85cde17c5`. The public healthcheck
-reports `ready=true`, `sendsEnabled=true`, `productionReady=false`. Read-only
+reported `ready=true`, `sendsEnabled=true`, `productionReady=false` during the test. Read-only
 Twilio checks passed for account, sender, service membership and verified
 campaign. The owner separately confirmed cleaner-coordination coverage.
 The owner subsequently set the dedicated phone number's incoming POST webhook
 and confirmed receipt of the first test reply. One signed inbound and a matching
 `delivered` callback were recorded. The owner-authorized hosted restart preserved
 the signed STOP opt-out and single reply. Account/sender/service/campaign and
-incoming webhook checks passed after restart. Exact-phrase STOP suppression
-and cleanup remain pending; signed START and a second delivered reply
-were verified. The [hosted preflight record](evidence/cleaner-phase06-hosted-preflight.json)
+incoming webhook checks passed after restart. Signed START, a second delivered
+reply and final exact-phrase STOP suppression passed. Cleanup deployment
+`42b7097f-3f7c-4459-8ba2-a98b2a51edca` reached `SUCCESS` at
+`be30619038485b406dc6a0a9701114d198abdbfc` (documentation changes only since the
+live test commit). It reports `ready=true`, `sendsEnabled=false`,
+`productionReady=false`; opt-out and evidence remain stored. The owner confirmed
+restoring the original Twilio webhook. `CLEANER_PHASE06_USE_CASE_REVIEWED=false`
+now keeps the lab in preflight-only mode, independently of the saved campaign
+coverage attestation. The [hosted preflight record](evidence/cleaner-phase06-hosted-preflight.json)
 is the historical pre-message snapshot; the [live evidence](evidence/cleaner-phase06-live-twilio.json)
 records the subsequent phone test.
 

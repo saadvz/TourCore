@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "measuredAt": "2026-10-13T02:21:08.613580100Z",
+  "measuredAt": "2026-10-13T02:23:14.067286991Z",
   "mode": "joint_live_twilio_test",
   "deployedCommit": "f9dd787e544b69a6dd1a1494b946f0e85cde17c5",
   "deploymentId": "7c0fb554-cb93-472d-a238-eefcd3b2a3b5",
@@ -118,12 +118,45 @@
     "errorObserved": false,
     "phoneReceipt": "Owner confirmed the resubscribe acknowledgement and new Cleaner Core TEST reply arrived."
   },
+  "finalStopObservation": {
+    "outcome": "PASS",
+    "observedAt": "2026-10-13T02:22:08.693393881Z",
+    "optedOut": true,
+    "signedStopCount": 2,
+    "inboundTestCountBefore": 2,
+    "inboundTestCountAfter": 3,
+    "replyCountBefore": 2,
+    "replyCountAfter": 2,
+    "newReplies": 0,
+    "phoneObservation": "Owner confirmed no reply after STOP and resending the same successful test phrase.",
+    "resolvesEarlierInconclusiveObservation": true
+  },
+  "cleanupObservation": {
+    "outcome": "PASS",
+    "observedAt": "2026-10-13T02:23:14.067286991Z",
+    "deploymentId": "42b7097f-3f7c-4459-8ba2-a98b2a51edca",
+    "deploymentStatus": "SUCCESS",
+    "actualDeployedCommit": "be30619038485b406dc6a0a9701114d198abdbfc",
+    "codeMatchesLiveTestCommit": "Only documentation/evidence changed between the live test commit and cleanup commit; runtime and Dockerfile unchanged.",
+    "runtimeMode": "preflight_only",
+    "sendsEnabled": false,
+    "optedOut": true,
+    "evidenceRetained": true,
+    "replyCount": 2,
+    "health": {
+      "service": "cleaner-phase06-lab",
+      "ready": true,
+      "sendsEnabled": false,
+      "productionReady": false
+    },
+    "twilioRoutingRestored": "Owner confirmed restoring the saved incoming webhook in this conversation; restoration not separately verified through provider API.",
+    "note": "CLEANER_PHASE06_USE_CASE_REVIEWED=false disables the lab send gate for cleanup; the separately recorded owner attestation of campaign coverage remains valid."
+  },
   "pending": [
-    "Exact CLEANER CORE TEST suppression while opted out.",
-    "Restore dedicated test number routing after test.",
+    "Actual cleaning-service owner's consent and production opt-in flow before a pilot.",
     "Guesty live feasibility: blocked because no active account."
   ],
-  "controlledTwilioTransportGateComplete": false,
+  "controlledTwilioTransportGateComplete": true,
   "phase06Complete": false,
   "productionReady": false
 }

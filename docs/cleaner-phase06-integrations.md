@@ -1,6 +1,7 @@
 # Cleaner Core Phase 0.6: integration validation
 
-Status: local validation kit implemented; **live integration gates remain open**.
+Status: validation kit implemented and **joint controlled Twilio transport test
+passed**. Guesty live feasibility and production cleaner consent remain open.
 Based on `cleaner-core/phase05-ordinary-evidence` at
 `72e9d3b736f2100e509e7def951b9d0100b70ab9`. The user's request authorizes
 Phase 0.6 and a joint controlled Twilio test. The attached implementation plan
@@ -10,7 +11,8 @@ The user has no active Guesty account and reports Twilio/test phone readiness.
 This phase checks integration feasibility. It does not deliver the Phase 1
 shared platform or the Phase 2 cleaning workflow. Grok remains optional under
 the Phase 0.3/0.4 engine contract. No inference provider, production cleaner
-agent instructions, touring tools or existing hosted-test service changed.
+agent instructions or touring tools changed. The existing Cleaner Core test
+service was reused for the isolated lab under the owner's explicit instruction.
 
 ## Acceptance matrix
 
@@ -20,21 +22,23 @@ agent instructions, touring tools or existing hosted-test service changed.
 | Guesty listing/reservation events | Svix verification including independent published vector; synthetic account/listing scoping, duplicates, stale updates, cancellation and restart checks | Subscription creation, real signed payloads, account binding, creation/date/listing/status changes and recovery from a missed event |
 | Guesty calendar semantics | Hour-level fixture windows, offset/DST cases, multi-unit allotment and explicit absence of entry clearance | Real local time zone/check-in/check-out/late-checkout, blocks, next arrival, owner stays and sub-unit assignment |
 | Guesty cleaning-task updates | Read endpoint and documented task status update identified; no write adapter enabled | Test-task change, readback and webhook; exact meaning of task completion versus property readiness |
-| Twilio approved cleaner use case | Read probes bind account, SMS number, Messaging Service and VERIFIED campaign | Inspect approved description, samples and opt-in flow for cleaner coordination; record review |
-| Twilio cleaner consent | Test-only consent reference/timestamp, STOP suppression and START recovery tested | Test phone owner's consent for the joint test; actual cleaning-service owner's consent before a pilot |
-| Twilio reply processing | Actual loopback HTTP with Twilio signatures; allowlisted phone pair; durable receipt, source conflict/replay and reciprocal route checks | Real inbound message, one controlled response, STOP/START and restart on the dedicated lab |
-| Twilio delivery receipts | Signed receipt binding, early callback, regression/conflicting terminal statuses and uncertain-send review tested | Provider acceptance and delivered/failed carrier evidence from real test messages; recipient confirms the phone display |
+| Twilio approved cleaner use case | Live reads verified account, SMS sender, service membership and VERIFIED campaign; owner explicitly confirmed cleaner coordination coverage | Actual production opt-in flow before a pilot |
+| Twilio cleaner consent | Explicit joint-test authorization recorded; signed STOP, exact-phrase suppression, START and persistent opt-out across hosted restart verified | Actual cleaning-service owner's consent before a pilot |
+| Twilio reply processing | Joint live signed inbound/response; one reply per accepted test; STOP/START and restart passed; replay/conflict cases covered locally | Controlled transport test complete; production workflow remains later scope |
+| Twilio delivery receipts | Two accepted replies, matching signed delivered callbacks and owner-confirmed phone receipts; error/conflict/uncertain-send cases covered locally | Live failed-delivery path not forced; no claim of production guarantees |
 
 Guesty account-dependent rows are **BLOCKED**, not passed by fixtures. Twilio
-account readiness is owner-reported, not verified by this workspace: its secure
-Twilio settings have not been supplied here. Local transport tests inject the
-provider; they do not contact a carrier. See
+readiness and the controlled transport test were verified on the existing Railway
+test service using secret references. Local transport tests inject the provider;
+the separate joint phone test contacted the carrier. Cleanup disabled replies,
+preserved opt-out/evidence, and the owner confirmed restoring the saved webhook. See
 [validation evidence](evidence/cleaner-phase06-validation.json) and
-[the joint Twilio runbook](cleaner-phase06-live-twilio.md).
+[the joint Twilio runbook](cleaner-phase06-live-twilio.md) and
+[live test evidence](evidence/cleaner-phase06-live-twilio.json).
 
 ## Local validation
 
-All 24 new checks pass. Final focused revalidation passes 76 tests across
+All 28 Phase 0.6 checks pass. Focused revalidation passes 80 tests across
 Phase 0.6, Phase 0.5 and the legacy SMS proof. Typecheck, build, whitespace and
 all 26 baseline-evaluation tests pass. The bundled CLI starts/shuts down with
 synthetic settings and no sends; invocation without `--live` is refused.
