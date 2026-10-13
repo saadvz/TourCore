@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "measuredAt": "2026-10-13T02:02:31.239Z",
+  "mode": "hosted_controlled_test_preflight",
+  "source": {
+    "repository": "saadvz/TourCore",
+    "branch": "cleaner-core/phase06-integrations",
+    "deployedCommit": "f9dd787e544b69a6dd1a1494b946f0e85cde17c5",
+    "validationWorkflow": "https://github.com/saadvz/TourCore/actions/runs/38334866538",
+    "workflowConclusion": "success"
+  },
+  "railway": {
+    "projectId": "76878512-6009-4ec8-9954-3e862844dae3",
+    "environmentId": "6710b677-97df-4a50-9205-87f8cf9c7fbc",
+    "serviceId": "4ef69506-97d2-4ab5-8b25-c771c42612fc",
+    "projectName": "zucchini-endurance",
+    "serviceName": "TourCore",
+    "deploymentId": "7c0fb554-cb93-472d-a238-eefcd3b2a3b5",
+    "status": "SUCCESS",
+    "reusedProject": true,
+    "reusedService": true,
+    "reusedVolume": true,
+    "home": "/data/phase06",
+    "healthUrl": "https://tourcore-production-72ec.up.railway.app/healthz",
+    "health": {
+      "service": "cleaner-phase06-lab",
+      "ready": true,
+      "sendsEnabled": true,
+      "productionReady": false
+    },
+    "originalConfigSavedPrivately": true,
+    "commitPinned": true
+  },
+  "providerPreflight": {
+    "timestamp": "2026-10-13T02:01:34.715616317Z",
+    "level": "info",
+    "event": "phase06.twilio_preflight",
+    "checks": [
+      {
+        "check": "twilio.account_read",
+        "outcome": "PASS",
+        "http": 200,
+        "detail": "Account identity/activity check; no account details retained."
+      },
+      {
+        "check": "twilio.number_read",
+        "outcome": "PASS",
+        "http": 200,
+        "detail": "Bound sender ownership and SMS capability check; no phone retained."
+      },
+      {
+        "check": "twilio.service_number",
+        "outcome": "PASS",
+        "detail": "Exact sender membership in an owned Messaging Service observed."
+      },
+      {
+        "check": "twilio.campaign",
+        "outcome": "PASS",
+        "http": 200,
+        "detail": "Verified 10DLC campaign association check; cleaner use-case wording still needs owner review."
+      },
+      {
+        "check": "twilio.inbound_routing",
+        "outcome": "NOT_RUN",
+        "detail": "Effective routing uses the phone number webhook; it must match the lab POST endpoint."
+      },
+      {
+        "check": "twilio.cleaner_use_case_and_consent",
+        "outcome": "NOT_RUN",
+        "detail": "Account readiness does not establish cleaner use-case coverage or real cleaner consent."
+      }
+    ],
+    "sendsEnabled": true
+  },
+  "testEvidence": {
+    "timestamp": "2026-10-13T02:01:34.059633353Z",
+    "level": "info",
+    "event": "phase06.lab_evidence",
+    "evidence": {
+      "mode": "isolated_test",
+      "sendsEnabled": true,
+      "consentRecorded": true,
+      "optedOut": false,
+      "inbound": [],
+      "replies": [],
+      "receiptMeaning": "provider_acceptance",
+      "operatesDoors": false,
+      "changesBookings": false
+    }
+  },
+  "ownerAttestations": {
+    "cleanerCoordinationCampaignCoverage": "Owner explicitly confirmed in this conversation; distinct from API campaign verification.",
+    "controlledTestConsent": "Owner authorized the joint live test using the configured test phone; operator recorded this authorization. Real cleaner consent is not established."
+  },
+  "pending": [
+    "Change the dedicated test number's effective incoming POST webhook to the lab endpoint.",
+    "Joint phone test: reply, signed delivery callback and owner's receipt observation.",
+    "STOP/START and graceful persistent-state restart.",
+    "Restore dedicated test number routing after test.",
+    "Live Guesty account/API/events/calendar/task-write validation; no active account."
+  ],
+  "failures": [
+    {
+      "deploymentId": "8602cb9b-f2ae-486f-8f02-3d7a1faa89bc",
+      "commit": "53dbbd26a05a96328385e2c9d1fe1c0289d95312",
+      "stage": "Dockerfile validation",
+      "reason": "Railway rejected optional type=secret mounts.",
+      "resolution": "Removed local proxy-CA secret mounts; normal strict TLS retained; subsequent deployed build succeeded."
+    }
+  ],
+  "phase06Complete": false,
+  "productionReady": false
+}

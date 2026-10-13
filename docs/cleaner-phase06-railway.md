@@ -7,13 +7,20 @@ project, service and current settings before applying the change; do not create
 a new project or automatically select the live touring service. The earlier
 proposal for a new lab service is superseded by this instruction.
 
-This concrete configuration has not been applied to Railway. The Railway
-plugin and account access are now available. The selected existing project is
+This configuration was applied to Railway on 13 October 2026 UTC. The existing project is
 `zucchini-endurance`, test service `TourCore`, with its domain
-`tourcore-production-72ec.up.railway.app` and volume at `/data`. Save the test service's
-branch, Dockerfile/start command and routing settings, then apply only the
-test-service changes below. Do not apply the main `.railway/railway.ts`
+`tourcore-production-72ec.up.railway.app` and volume at `/data`. Its original
+configuration was saved privately before switching the test service. Do not apply the main `.railway/railway.ts`
 definition to achieve this: that file describes touring.
+
+Deployment `7c0fb554-cb93-472d-a238-eefcd3b2a3b5` reached `SUCCESS` at pinned
+commit `f9dd787e544b69a6dd1a1494b946f0e85cde17c5`. The public healthcheck
+reports `ready=true`, `sendsEnabled=true`, `productionReady=false`. Read-only
+Twilio checks passed for account, sender, service membership and verified
+campaign. The owner separately confirmed cleaner-coordination coverage.
+The dedicated phone number's incoming POST webhook still needs the lab path;
+the first live message, carrier receipt, STOP/START and hosted restart remain
+pending. See the [hosted preflight record](evidence/cleaner-phase06-hosted-preflight.json).
 
 ## Service settings
 
@@ -25,7 +32,7 @@ definition to achieve this: that file describes touring.
 | Root directory | Repository root |
 | Dockerfile | `Dockerfile.cleaner-phase06` |
 | `RAILWAY_DOCKERFILE_PATH` | `Dockerfile.cleaner-phase06` |
-| Build/start overrides | Leave unset; use the dedicated Dockerfile's build and CMD |
+| Build/start overrides | No build override; explicit start is `node dist/cleaner-phase06.js lab --live` |
 | CMD | `node dist/cleaner-phase06.js lab --live` |
 | Healthcheck | `/healthz`, timeout 120 seconds |
 | Replica count | One |
@@ -85,8 +92,9 @@ focused checks pass after the port change. See the
 [container validation record](evidence/cleaner-phase06-railway-validation.json).
 The original [implementation validation](evidence/cleaner-phase06-validation.json)
 remains the earlier snapshot; its source hashes do not describe this port/build
-follow-up. No Railway deployment, forced-kill lock recovery or live phone
-delivery is claimed by the container smoke.
+follow-up. That earlier container smoke does not establish the hosted deployment,
+forced-kill lock recovery or live phone delivery; the hosted record above is a
+separate measurement of the deployed commit.
 
 - [Custom Dockerfile selection](https://docs.railway.com/builds/dockerfiles).
 - [Volume mounting and root permissions](https://docs.railway.com/volumes).
