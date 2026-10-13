@@ -40,8 +40,17 @@
     "operatesDoors": false,
     "changesBookings": false
   },
+  "stopObservation": {
+    "observedAt": "2026-10-13T02:16:48.018358833Z",
+    "signedStopCount": 1,
+    "optedOut": true,
+    "replyCountUnchanged": 1,
+    "phoneObservation": "Owner received provider unsubscribe confirmation and reported no reply to follow-up text.",
+    "followUpKind": "other",
+    "exactTestPhraseSuppression": "PENDING: follow-up was unrecognized text; requested exact CLEANER CORE TEST while opted out."
+  },
   "pending": [
-    "Joint STOP suppression test.",
+    "Exact CLEANER CORE TEST suppression while opted out.",
     "Graceful hosted restart with opt-out retained.",
     "Joint START re-enable test.",
     "Restore dedicated test number routing after test.",
