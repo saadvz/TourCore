@@ -5,7 +5,9 @@ inbound test, one accepted reply and a signed `delivered` callback. The owner
 confirmed the reply arrived. Signed STOP was saved, and an owner-authorized
 Railway restart preserved opt-out and the single reply without a resend.
 Post-STOP follow-ups were classified as unrecognized text, so exact-phrase
-suppression remains inconclusive. START and cleanup remain pending. See the
+suppression remains inconclusive. Signed START then restored the previous test
+consent: one new reply was accepted and delivered, and the owner confirmed phone
+receipt. Final exact-phrase STOP suppression and cleanup remain pending. See the
 [live evidence record](evidence/cleaner-phase06-live-twilio.json).
 The purpose is one controlled reply and provider/phone evidence. Guesty,
 bookings, entry, production cleaner consent and unattended Grok execution are

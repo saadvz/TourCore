@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "measuredAt": "2026-10-13T02:16:52.772Z",
+  "measuredAt": "2026-10-13T02:21:08.613580100Z",
   "mode": "joint_live_twilio_test",
   "deployedCommit": "f9dd787e544b69a6dd1a1494b946f0e85cde17c5",
   "deploymentId": "7c0fb554-cb93-472d-a238-eefcd3b2a3b5",
@@ -16,7 +16,7 @@
     "webhookChange": "Owner confirmed setting the dedicated incoming webhook; successful signed inbound observed.",
     "messageIdentifiers": "Retained in private Railway/SQLite evidence; omitted from shared record."
   },
-  "snapshot": {
+  "firstReplySnapshot": {
     "mode": "isolated_test",
     "sendsEnabled": true,
     "consentRecorded": true,
@@ -52,62 +52,74 @@
     "unrecognizedFollowUpCount": 2
   },
   "restartObservation": {
-  "outcome": "PASS",
-  "requestedAt": "2026-10-13T02:19:06.164Z",
-  "listeningAt": "2026-10-13T02:19:07.903869251Z",
-  "observedAt": "2026-10-13T02:19:07.903874081Z",
-  "deploymentId": "7c0fb554-cb93-472d-a238-eefcd3b2a3b5",
-  "reusedDeployment": true,
-  "optedOutBefore": true,
-  "optedOutAfter": true,
-  "replyCountBefore": 1,
-  "replyCountAfter": 1,
-  "durableEvidenceUnchanged": true,
-  "health": {
-    "ready": true,
-    "sendsEnabled": true,
-    "productionReady": false
+    "outcome": "PASS",
+    "requestedAt": "2026-10-13T02:19:06.164Z",
+    "listeningAt": "2026-10-13T02:19:07.903869251Z",
+    "observedAt": "2026-10-13T02:19:07.903874081Z",
+    "deploymentId": "7c0fb554-cb93-472d-a238-eefcd3b2a3b5",
+    "reusedDeployment": true,
+    "optedOutBefore": true,
+    "optedOutAfter": true,
+    "replyCountBefore": 1,
+    "replyCountAfter": 1,
+    "durableEvidenceUnchanged": true,
+    "health": {
+      "ready": true,
+      "sendsEnabled": true,
+      "productionReady": false
+    },
+    "providerRecheck": [
+      {
+        "check": "twilio.account_read",
+        "outcome": "PASS",
+        "http": 200,
+        "detail": "Account identity/activity check; no account details retained."
+      },
+      {
+        "check": "twilio.number_read",
+        "outcome": "PASS",
+        "http": 200,
+        "detail": "Bound sender ownership and SMS capability check; no phone retained."
+      },
+      {
+        "check": "twilio.service_number",
+        "outcome": "PASS",
+        "detail": "Exact sender membership in an owned Messaging Service observed."
+      },
+      {
+        "check": "twilio.campaign",
+        "outcome": "PASS",
+        "http": 200,
+        "detail": "Verified 10DLC campaign association check; cleaner use-case wording still needs owner review."
+      },
+      {
+        "check": "twilio.inbound_routing",
+        "outcome": "PASS",
+        "detail": "Effective routing uses the phone number webhook; it must match the lab POST endpoint."
+      },
+      {
+        "check": "twilio.cleaner_use_case_and_consent",
+        "outcome": "NOT_RUN",
+        "detail": "Account readiness does not establish cleaner use-case coverage or real cleaner consent."
+      }
+    ],
+    "notes": "No manual lock removal, database reset or resend was performed. Owner explicitly requested the test-service restart."
   },
-  "providerRecheck": [
-    {
-      "check": "twilio.account_read",
-      "outcome": "PASS",
-      "http": 200,
-      "detail": "Account identity/activity check; no account details retained."
-    },
-    {
-      "check": "twilio.number_read",
-      "outcome": "PASS",
-      "http": 200,
-      "detail": "Bound sender ownership and SMS capability check; no phone retained."
-    },
-    {
-      "check": "twilio.service_number",
-      "outcome": "PASS",
-      "detail": "Exact sender membership in an owned Messaging Service observed."
-    },
-    {
-      "check": "twilio.campaign",
-      "outcome": "PASS",
-      "http": 200,
-      "detail": "Verified 10DLC campaign association check; cleaner use-case wording still needs owner review."
-    },
-    {
-      "check": "twilio.inbound_routing",
-      "outcome": "PASS",
-      "detail": "Effective routing uses the phone number webhook; it must match the lab POST endpoint."
-    },
-    {
-      "check": "twilio.cleaner_use_case_and_consent",
-      "outcome": "NOT_RUN",
-      "detail": "Account readiness does not establish cleaner use-case coverage or real cleaner consent."
-    }
-  ],
-  "notes": "No manual lock removal, database reset or resend was performed. Owner explicitly requested the test-service restart."
-},
+  "startObservation": {
+    "outcome": "PASS",
+    "signedStartObservedAt": "2026-10-13T02:20:48.612435514Z",
+    "replyDeliveredAt": "2026-10-13T02:21:08.613580100Z",
+    "optedOut": false,
+    "inboundTestCount": 2,
+    "totalReplyCount": 2,
+    "newReplyCount": 1,
+    "providerAcceptance": "accepted",
+    "matchingSignedDeliveryCallback": "delivered",
+    "errorObserved": false,
+    "phoneReceipt": "Owner confirmed the resubscribe acknowledgement and new Cleaner Core TEST reply arrived."
+  },
   "pending": [
     "Exact CLEANER CORE TEST suppression while opted out.",
-    "Joint START re-enable test.",
     "Restore dedicated test number routing after test.",
     "Guesty live feasibility: blocked because no active account."
   ],
