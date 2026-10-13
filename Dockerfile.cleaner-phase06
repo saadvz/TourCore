@@ -3,9 +3,7 @@
 FROM node:24-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN --mount=type=secret,id=proxy_ca \
-    if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
-    npm ci --strict-ssl=true
+RUN npm ci --strict-ssl=true
 COPY tsconfig.json ./
 COPY scripts ./scripts
 COPY src ./src
@@ -15,9 +13,7 @@ FROM node:24-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production CLEANER_PHASE06_HOST=0.0.0.0 CLEANER_PHASE06_HOME=/data/phase06
 COPY package.json package-lock.json ./
-RUN --mount=type=secret,id=proxy_ca \
-    if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
-    npm ci --omit=dev --strict-ssl=true && mkdir -p /data/phase06 && chown -R node:node /data
+RUN npm ci --omit=dev --strict-ssl=true && mkdir -p /data/phase06 && chown -R node:node /data
 COPY --from=build /app/dist/cleaner-phase06.js ./dist/cleaner-phase06.js
 USER node
 EXPOSE 4336

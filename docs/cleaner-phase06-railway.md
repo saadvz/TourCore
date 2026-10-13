@@ -93,6 +93,8 @@ delivery is claimed by the container smoke.
 - [PORT and healthchecks](https://docs.railway.com/deployments/healthchecks).
 - [UID and shutdown/draining settings](https://docs.railway.com/variables/reference).
 
-The optional `proxy_ca` build secret supports the managed development proxy.
-It is mounted only for npm's build steps and is not copied into image layers.
-Railway can build without that session-specific secret using normal TLS trust.
+The deployed Dockerfile uses normal TLS trust with npm's strict verification
+enabled. Railway's Dockerfile parser rejects secret mounts, including optional
+ones. Managed local builds that need a development proxy CA must use a temporary
+Dockerfile with the CA mounted only during npm steps; do not commit that session
+configuration or copy its CA into image layers.
