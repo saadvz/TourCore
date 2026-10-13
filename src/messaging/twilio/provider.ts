@@ -50,6 +50,7 @@ const STATUS: Record<string, DeliveryStatus> = {
   delivered: "DELIVERED",
   undelivered: "FAILED",
   failed: "FAILED",
+  canceled: "FAILED",
 };
 
 export function readTwilioEnv(env: NodeJS.ProcessEnv = process.env): TwilioEnv {

@@ -69,6 +69,8 @@ delivery with the same `eventId`, so treat a repeat as the same update.
    > Testy's Unit 1A tour has started.
 
    > Testy's Unit 1A tour is complete.
+
+   When the visitor has no name, the summary starts Visitor at {number}, {place}:. A named visitor stays their first name. Each item that had an alert includes its eventId. The webhook stays ids only.
 4. For an issue: if `stillOpen` is false (it was handled already), stop
    quietly. For an unanswered question, ask for the answer itself (not a
    yes/no), so the only confirmation later is Tour Core's:

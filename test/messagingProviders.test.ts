@@ -58,7 +58,7 @@ function photonEnv(overrides: Partial<PhotonEnv> = {}): PhotonEnv {
   };
 }
 
-function fakeTwilio(options: { missingNumber?: boolean; down?: boolean } = {}): TwilioClient & { sent: Array<{ to: string; body: string }> } {
+function fakeTwilio(options: { missingNumber?: boolean; down?: boolean; sendStatus?: string } = {}): TwilioClient & { sent: Array<{ to: string; body: string }> } {
   const sent: Array<{ to: string; body: string }> = [];
   const client: TwilioClient & { sent: typeof sent } = {
     sent,
@@ -74,7 +74,7 @@ function fakeTwilio(options: { missingNumber?: boolean; down?: boolean } = {}): 
     async sendSms(input) {
       if (options.down) throw new MessagingError("TWILIO_UNAVAILABLE", `down ${TWILIO_TOKEN}`, { retryable: true });
       sent.push({ to: input.to, body: input.body });
-      return { sid: `SM${sent.length}`, status: "queued" };
+      return { sid: `SM${sent.length}`, status: options.sendStatus ?? "queued" };
     },
   };
   return client;
@@ -191,6 +191,12 @@ describe("Twilio adapter", () => {
     expect((await deliver()).body).toEqual({ duplicate: true });
     expect(calls).toBe(1);
     expect(ledger.duplicatesOf("twilio:SM123")).toBe(1);
+  });
+
+  it("stores a canceled Twilio send as failed", async () => {
+    const provider = new TwilioMessagingProvider({ env: () => twilioEnv(), client: fakeTwilio({ sendStatus: "canceled" }) });
+    const receipt = await provider.send({ to: VISITOR, body: "Booked", audience: "PROSPECT" });
+    expect(receipt.status).toBe("FAILED");
   });
 
   it("rejects a delivery-status callback as a visitor message and sends outbound SMS with the provider id", async () => {

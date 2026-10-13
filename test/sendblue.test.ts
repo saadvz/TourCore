@@ -48,6 +48,33 @@ describe("Sendblue adapter", () => {
     expect(String(err.message)).not.toMatch(/secret-key|key-id/);
   });
 
+  it("maps declined and error sends to failed, and pending statuses to queued", async () => {
+    const cases: Array<[string | undefined, string]> = [
+      ["ERROR", "FAILED"],
+      ["DECLINED", "FAILED"],
+      ["PENDING", "QUEUED"],
+      ["REGISTERED", "QUEUED"],
+      ["ACCEPTED", "QUEUED"],
+      [undefined, "QUEUED"],
+    ];
+    for (const [providerStatus, stored] of cases) {
+      const fake = fakeSendblue();
+      const send = fake.client.messages.send.bind(fake.client.messages);
+      fake.client.messages.send = async (params) => {
+        const result = await send(params);
+        if (providerStatus === undefined) {
+          const { status: dropped, ...rest } = result;
+          void dropped;
+          return rest;
+        }
+        return { ...result, status: providerStatus };
+      };
+      const adapter = new SendblueMessagingAdapter({ client: fake.client, fromNumber: LINE });
+      const receipt = await adapter.send({ to: "+15550102000", audience: "PROSPECT", body: "Hello" });
+      expect(receipt.status, String(providerStatus)).toBe(stored);
+    }
+  });
+
   it("doesn't text operator alerts over the visitor line", async () => {
     const fake = fakeSendblue();
     const adapter = new SendblueMessagingAdapter({ client: fake.client, fromNumber: LINE });
