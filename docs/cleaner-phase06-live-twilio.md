@@ -7,12 +7,14 @@ not inferred from this test.
 
 ## Prepare the dedicated lab
 
-The owner selected a separate lab service in the existing Railway project.
-Use the [exact Railway setup](cleaner-phase06-railway.md) for Dockerfile selection,
-the new volume, permissions, port and graceful shutdown settings.
+The owner's latest instruction is to reuse the existing Railway Cleaner Core
+test service and change its source branch as needed. Use the
+[exact Railway setup](cleaner-phase06-railway.md) for the existing service/volume,
+isolated data path, Dockerfile selection, port and graceful shutdown settings.
 
 Use the review branch `cleaner-core/phase06-integrations` with Node 24.
-Keep the touring installation and the Phase 0.5 synthetic service separate.
+Keep the touring installation separate; retain the earlier Phase 0.5 records
+and original test-service settings for rollback.
 Use a dedicated Twilio test sending number and a dedicated lab process/storage
 directory. Save that number/service's original inbound configuration privately
 before routing it to the lab. Do not redirect a live visitor/cleaner line.

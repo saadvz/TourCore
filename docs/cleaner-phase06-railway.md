@@ -1,21 +1,24 @@
-# Separate Phase 0.6 lab in the existing Railway project
+# Phase 0.6 lab on the existing Railway test service
 
-The owner selected a **new, separate service in the existing Railway project**.
-Use `cleaner-phase06-lab`; leave `tour-core` and the Phase 0.5 synthetic service
-on their existing branches, settings, volumes and routines. No new Railway
-project or inference provider is needed.
+The owner's latest instruction is to **edit the existing Railway project and
+point the existing Cleaner Core test service at a different branch if needed**.
+Reuse that test service and its existing volume/domain. Inspect the actual
+project, service and current settings before applying the change; do not create
+a new project or automatically select the live touring service. The earlier
+proposal for a new lab service is superseded by this instruction.
 
-This concrete configuration has not been applied to Railway. The workspace has
-no Railway token or connected Railway plugin yet. Once Railway is connected,
-select the actual existing project/environment and create only the lab service
-and its dedicated volume. Do not apply the main `.railway/railway.ts` definition
-to achieve this: that file describes touring.
+This concrete configuration has not been applied to Railway. The Railway
+plugin is now confirmed installed, but its project tools are not available in
+this chat yet. Once access is available, save the existing test service's
+branch, Dockerfile/start command and routing settings, then apply only the
+test-service changes below. Do not apply the main `.railway/railway.ts`
+definition to achieve this: that file describes touring.
 
 ## Service settings
 
 | Setting | Value |
 | --- | --- |
-| Name | `cleaner-phase06-lab` |
+| Service | Existing Cleaner Core test service, retain its name |
 | GitHub source | `saadvz/TourCore` |
 | Branch | `cleaner-core/phase06-integrations` |
 | Root directory | Repository root |
@@ -25,12 +28,12 @@ to achieve this: that file describes touring.
 | CMD | `node dist/cleaner-phase06.js lab --live` |
 | Healthcheck | `/healthz`, timeout 120 seconds |
 | Replica count | One |
-| Volume | New `cleaner-phase06-data`, mounted at `/data`; never reuse the touring/Phase 0.5 volume |
-| Public networking | Generate a Railway HTTPS domain for the lab's listening port |
+| Volume | Existing test-service volume; use a new Phase 0.6 subdirectory without modifying earlier records |
+| Public networking | Reuse the existing test-service domain and match its target port to the lab's listening port |
 | `RAILWAY_RUN_UID` | `0`, so the lab can create private files on Railway's root-owned volume |
 | `RAILWAY_DEPLOYMENT_OVERLAP_SECONDS` | `0` |
 | `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` | `15`, allowing bounded send/shutdown and lock cleanup to finish |
-| `CLEANER_PHASE06_HOME` | `/data/phase06` |
+| `CLEANER_PHASE06_HOME` | `/data/phase06` if the existing test volume mounts at `/data`; otherwise a new `phase06` folder under its actual mount |
 | `CLEANER_PHASE06_HOST` | `0.0.0.0` |
 | `CLEANER_PHASE06_PORT` | Leave unset to use Railway's `PORT`; the lab falls back to 4336 outside Railway |
 | `CLEANER_PHASE06_PUBLIC_URL` | `https://${{RAILWAY_PUBLIC_DOMAIN}}`, or the exact generated HTTPS origin |
@@ -50,7 +53,7 @@ Railway reference variables for those particular settings instead of exposing
 their values. Confirm the sender/test-phone pairing and approved cleaner use case.
 
 Deployment and `/healthz` alone send no message. First inspect the read-only
-Twilio probe results and ensure the lab is healthy on its new volume. Only then
+Twilio probe results and ensure the lab is healthy on its isolated data path. Only then
 route the dedicated test line's effective POST webhook to:
 
 ```text
@@ -62,6 +65,12 @@ runbook for response/carrier evidence, STOP/START, a graceful restart and cleanu
 After a forced kill, a stale `lab.lock` can require explicit recovery after the
 old process is confirmed stopped; never clear SQLite evidence or opt-out state
 to get the lab running. No live SMS has been sent by this setup work.
+
+Switching the test service to the lab CMD replaces the earlier Phase 0.5 test
+endpoints while retaining their stored records. Save the original configuration
+for rollback; restoring it should not delete either phase's records. A source
+branch change alone does not enable the lab if the service still uses its
+earlier start command or the main touring Dockerfile.
 
 ## Provider references
 
