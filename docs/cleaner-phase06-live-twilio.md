@@ -7,6 +7,10 @@ not inferred from this test.
 
 ## Prepare the dedicated lab
 
+The owner selected a separate lab service in the existing Railway project.
+Use the [exact Railway setup](cleaner-phase06-railway.md) for Dockerfile selection,
+the new volume, permissions, port and graceful shutdown settings.
+
 Use the review branch `cleaner-core/phase06-integrations` with Node 24.
 Keep the touring installation and the Phase 0.5 synthetic service separate.
 Use a dedicated Twilio test sending number and a dedicated lab process/storage
@@ -62,8 +66,9 @@ An optional `Dockerfile.cleaner-phase06` builds this same lab with Node 24.
 It is a separate deployment definition, not a change to the main Dockerfile.
 Mount persistent storage at `/data`, expose port 4336 (or set
 `CLEANER_PHASE06_PORT` to the host's assigned port), and use `/healthz`.
-Only one lab process may use a database. Container deployment/build has not
-been exercised by the local validation record; the bundled Node CLI is tested.
+Only one lab process may use a database. The initial validation record covers
+the bundled Node CLI. Container/volume validation and the selected Railway
+configuration are recorded separately in the [Railway setup](cleaner-phase06-railway.md).
 
 ## Route and run together
 

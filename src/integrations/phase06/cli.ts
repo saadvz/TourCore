@@ -50,7 +50,7 @@ async function main() {
       },
     };
     const root = resolve(env.CLEANER_PHASE06_HOME ?? 'tourcore-data/cleaner-phase06-lab');
-    const port = Number(env.CLEANER_PHASE06_PORT ?? 4336), host = env.CLEANER_PHASE06_HOST ?? '127.0.0.1';
+    const port = Number(env.CLEANER_PHASE06_PORT ?? env.PORT ?? 4336), host = env.CLEANER_PHASE06_HOST ?? '127.0.0.1';
     if (!Number.isInteger(port) || port < 1 || port > 65535 || !['127.0.0.1', '0.0.0.0'].includes(host)) throw new Error('Invalid lab listen settings');
     mkdirSync(root, { recursive: true, mode: 0o700 });
     const lockPath = join(root, 'lab.lock'), lock = openSync(lockPath, 'wx', 0o600);

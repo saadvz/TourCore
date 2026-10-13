@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "mode": "local_container_with_synthetic_credentials",
+  "imageId": "sha256:732b14c990c16c3dabd100dace3ca4aba27171a25eff7e175e6f441c612b2bbe",
+  "imageBuild": "PASS",
+  "assignedPortFallback": "PASS (PORT=4347; no CLEANER_PHASE06_PORT override)",
+  "freshRootOwnedVolumeStartup": "PASS (run UID 0, matching Railway setting)",
+  "signedStopIngress": "PASS",
+  "gracefulRestartPreservesOptOut": "PASS",
+  "gracefulShutdownReleasesLock": "PASS",
+  "replyCount": 0,
+  "realTwilioRequests": 0,
+  "actualRailwayDeployment": "NOT_RUN",
+  "actualLiveSms": "NOT_RUN",
+  "containerNodeVersion": "v24.21.0",
+  "recordedAt": "2026-10-13T01:21:37.939312+00:00",
+  "baseReviewCommit": "64b776cb4e53d4566049da3114eb8afecfc798f5",
+  "sourceSha256": {
+    "Dockerfile.cleaner-phase06": "e620dc604b28dc17fb579c169d2c6c74c6476a04566ecc0e91820f9896c64646",
+    "src/integrations/phase06/cli.ts": "51ca10f406f969ba120f9cd0a16b9d255b7368e3f7d5310fe84668d90b439437",
+    "src/integrations/phase06/twilioLab.ts": "a75fafef96448995e67b46b13a26a777890cd5093a7e2115d0d8d6780db8c47e",
+    "test/cleanerPhase06.test.ts": "53de54838db553f32c76fb0c2a3e649b2545d9cc446383bc5413ed6d38c15f9e"
+  },
+  "focusedTests": {
+    "passed": 24,
+    "failed": 0
+  },
+  "typecheck": "PASS",
+  "railwayConnection": "NOT_CONNECTED; plugin found and suggested, no token configured",
+  "target": {
+    "project": "existing owner project, ID not yet inspected",
+    "service": "cleaner-phase06-lab",
+    "volume": "new cleaner-phase06-data",
+    "mount": "/data",
+    "runUid": 0,
+    "replicas": 1
+  },
+  "applicationScope": "Separate lab only; touring and Phase 0.5 service configuration/deployments untouched."
+}

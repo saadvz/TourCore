@@ -1,8 +1,11 @@
+# syntax=docker/dockerfile:1
 # Dedicated integration lab only; the touring and Phase 0.5 services are separate.
 FROM node:24-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
+    npm ci --strict-ssl=true
 COPY tsconfig.json ./
 COPY scripts ./scripts
 COPY src ./src
@@ -10,9 +13,11 @@ RUN npm run build
 
 FROM node:24-bookworm-slim
 WORKDIR /app
-ENV NODE_ENV=production CLEANER_PHASE06_HOST=0.0.0.0 CLEANER_PHASE06_PORT=4336 CLEANER_PHASE06_HOME=/data/phase06
+ENV NODE_ENV=production CLEANER_PHASE06_HOST=0.0.0.0 CLEANER_PHASE06_HOME=/data/phase06
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && mkdir -p /data/phase06 && chown -R node:node /data
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
+    npm ci --omit=dev --strict-ssl=true && mkdir -p /data/phase06 && chown -R node:node /data
 COPY --from=build /app/dist/cleaner-phase06.js ./dist/cleaner-phase06.js
 USER node
 EXPOSE 4336
