@@ -1,7 +1,7 @@
 import { mkdirSync, openSync, closeSync, unlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { CleanerStore } from '../../delegation/phase05/store';
-import { probeGuesty, probeTwilio } from './probes';
+import { probeGuesty, probeTwilio, discoverTwilioProbe } from './probes';
 import { TwilioIntegrationLab, twilioLabApp, type LabBinding } from './twilioLab';
 
 const env = process.env;
@@ -21,23 +21,25 @@ async function main() {
   }
   if (command === 'probe') {
     const g = optionalGroup(['CLEANER_PHASE06_GUESTY_ACCESS_TOKEN', 'CLEANER_PHASE06_GUESTY_LISTING_ID', 'CLEANER_PHASE06_GUESTY_RESERVATION_ID', 'CLEANER_PHASE06_GUESTY_TASK_ID', 'CLEANER_PHASE06_GUESTY_START_DATE', 'CLEANER_PHASE06_GUESTY_END_DATE']);
-    const t = optionalGroup(['CLEANER_PHASE06_TWILIO_ACCOUNT_SID', 'CLEANER_PHASE06_TWILIO_AUTH_TOKEN', 'CLEANER_PHASE06_TWILIO_FROM_NUMBER', 'CLEANER_PHASE06_TWILIO_PHONE_SID', 'CLEANER_PHASE06_TWILIO_SERVICE_SID', 'CLEANER_PHASE06_TWILIO_CAMPAIGN_SID']);
+    const t = optionalGroup(['CLEANER_PHASE06_TWILIO_ACCOUNT_SID', 'CLEANER_PHASE06_TWILIO_AUTH_TOKEN', 'CLEANER_PHASE06_TWILIO_FROM_NUMBER']);
+    const ids = optionalGroup(['CLEANER_PHASE06_TWILIO_PHONE_SID', 'CLEANER_PHASE06_TWILIO_SERVICE_SID', 'CLEANER_PHASE06_TWILIO_CAMPAIGN_SID']);
     const guesty = await probeGuesty(g ? { accessToken: g[0]!, listingId: g[1]!, reservationId: g[2]!, taskId: g[3]!, startDate: g[4]!, endDate: g[5]! } : undefined);
-    const twilio = await probeTwilio(t ? { accountSid: t[0]!, authToken: t[1]!, fromNumber: t[2]!, phoneSid: t[3]!, serviceSid: t[4]!, campaignSid: t[5]! } : undefined);
+    const base = t ? { accountSid: t[0]!, authToken: t[1]!, fromNumber: t[2]! } : undefined;
+    const twilio = base && !ids ? await discoverTwilioProbe(base) : await probeTwilio(base && ids ? { ...base, phoneSid: ids[0]!, serviceSid: ids[1]!, campaignSid: ids[2]! } : undefined);
     console.log(JSON.stringify({ schemaVersion: 1, measuredAt: new Date().toISOString(), mode: 'read_only_probe', guesty, twilio, phase06Complete: false, productionReady: false }, null, 2));
     if ([...guesty, ...twilio].some(r => r.outcome !== 'PASS')) process.exitCode = 2;
     return;
   }
   if (command === 'lab' && process.argv.includes('--live')) {
     // This command never discovers credentials or changes a Twilio number/service configuration.
-    if (required('CLEANER_PHASE06_USE_CASE_REVIEWED') !== 'true') throw new Error('Record cleaner use-case review before enabling the lab.');
+    const sendsEnabled = env.CLEANER_PHASE06_USE_CASE_REVIEWED === 'true';
     const accountSid = required('CLEANER_PHASE06_TWILIO_ACCOUNT_SID'), authToken = required('CLEANER_PHASE06_TWILIO_AUTH_TOKEN');
     const ownerToken = required('CLEANER_PHASE06_OWNER_TOKEN');
     const binding: LabBinding = {
       id: 'test', tenant: 'controlled_test', accountSid, authToken,
       fromNumber: required('CLEANER_PHASE06_TWILIO_FROM_NUMBER'), testNumber: required('CLEANER_PHASE06_TEST_NUMBER'),
       publicBaseUrl: required('CLEANER_PHASE06_PUBLIC_URL'),
-      consent: { at: required('CLEANER_PHASE06_CONSENT_AT'), reference: required('CLEANER_PHASE06_CONSENT_REFERENCE') },
+      ...(sendsEnabled ? { consent: { at: required('CLEANER_PHASE06_CONSENT_AT'), reference: required('CLEANER_PHASE06_CONSENT_REFERENCE') } } : {}),
       send: async input => {
         const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
           method: 'POST', redirect: 'error', signal: input.signal,
@@ -57,12 +59,22 @@ async function main() {
     let store: CleanerStore | undefined, lab: TwilioIntegrationLab | undefined;
     try {
       store = new CleanerStore(join(root, 'lab.sqlite'));
-      lab = new TwilioIntegrationLab(store, [binding]);
+      lab = new TwilioIntegrationLab(store, [binding], Date.now, 8000, sendsEnabled);
       let workerFailed = false;
       const app = twilioLabApp(lab, ownerToken, () => !workerFailed), worker = lab;
-      const timer = setInterval(() => { void worker.tick().catch(() => { workerFailed = true; }); }, 250); timer.unref();
-      const server = app.listen(port, host, () => console.log('Isolated Phase 0.6 lab listening. Only the configured test phone can trigger test replies; no bookings or doors are changed.'));
-      const stop = async () => { clearInterval(timer); const stopped = new Promise<void>(resolve => server.close(() => resolve())); await worker.close(); await stopped; store!.close(); closeSync(lock); unlinkSync(lockPath); process.exitCode = workerFailed ? 1 : 0; };
+      let lastEvidence = '';
+      const timer = setInterval(() => { void worker.tick().then(() => {
+        if (env.CLEANER_PHASE06_EVIDENCE_LOGGING === 'true') {
+          const evidence = worker.evidence('test'), encoded = JSON.stringify(evidence);
+          if (encoded !== lastEvidence) { lastEvidence = encoded; console.log(JSON.stringify({ event: 'phase06.lab_evidence', evidence })); }
+        }
+      }).catch(() => { workerFailed = true; }); }, 250); timer.unref();
+      const probeController = new AbortController();
+      const server = app.listen(port, host, () => {
+        console.log(JSON.stringify({ event: 'phase06.listening', sendsEnabled, mode: sendsEnabled ? 'controlled_test' : 'preflight_only', commit: env.RAILWAY_GIT_COMMIT_SHA ?? 'unknown' }));
+        if (env.CLEANER_PHASE06_PREFLIGHT_ON_START === 'true') void discoverTwilioProbe({ accountSid, authToken, fromNumber: binding.fromNumber, expectedInboundUrl: binding.publicBaseUrl + '/phase06/twilio/test/inbound' }, (url, init) => fetch(url, { ...init, signal: AbortSignal.any([probeController.signal, init.signal!]) })).then(checks => console.log(JSON.stringify({ event: 'phase06.twilio_preflight', checks, sendsEnabled }))).catch(() => console.log(JSON.stringify({ event: 'phase06.twilio_preflight', error: 'Readiness could not be confirmed', sendsEnabled })));
+      });
+      const stop = async () => { clearInterval(timer); probeController.abort(); const stopped = new Promise<void>(resolve => server.close(() => resolve())); await worker.close(); await stopped; store!.close(); closeSync(lock); unlinkSync(lockPath); process.exitCode = workerFailed ? 1 : 0; };
       let stopping = false;
       for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, () => { if (!stopping) { stopping = true; void stop(); } });
       server.on('error', () => { workerFailed = true; if (!stopping) { stopping = true; void stop(); } });

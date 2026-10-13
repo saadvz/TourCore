@@ -82,7 +82,10 @@ removal and pagination are separate future integration work.
 
 `twilioLab.ts` starts only through an explicit lab command. It retains minimal
 inbound kinds/hashes, consent and an outbox in a **separate lab database**; it
-does not import a cleaning schedule or create an agent task. Only the exact
+does not import a cleaning schedule or create an agent task. Preflight-only startup disables all test replies, including those with older
+stored consent. Enabling later never retroactively replies to an earlier test
+phrase. Optional startup probes and private evidence logging support the
+OAuth-controlled Railway test without exposing secrets. Only the exact
 `CLEANER CORE TEST` phrase from the fixed test phone queues a controlled reply.
 START/DONE are observations, not vacancy, access or property-readiness evidence.
 A Twilio `OptOutType` takes priority. Its provider confirmation is not repeated.

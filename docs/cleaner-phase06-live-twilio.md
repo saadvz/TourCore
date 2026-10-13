@@ -33,14 +33,16 @@ The CLI uses environment variables; it does not automatically load `.env`.
 | `CLEANER_PHASE06_TWILIO_CAMPAIGN_SID` | Verified Usa2p resource's QE SID (read probe only) |
 | `CLEANER_PHASE06_TEST_NUMBER` | Owner's allowlisted receiving/test phone, E.164 |
 | `CLEANER_PHASE06_PUBLIC_URL` | Trusted HTTPS origin reaching the lab, no trailing slash/path |
-| `CLEANER_PHASE06_OWNER_TOKEN` | Separate random bearer of at least 32 characters, only for lab evidence |
+| `CLEANER_PHASE06_OWNER_TOKEN` | Owner-only bearer of at least 32 characters; the existing test admin secret may be referenced on this controlled test service |
 | `CLEANER_PHASE06_USE_CASE_REVIEWED` | `true` after checking cleaner coordination against the approved campaign and opt-in flow |
-| `CLEANER_PHASE06_CONSENT_AT` | UTC ISO timestamp when the phone owner agreed to these test messages |
+| `CLEANER_PHASE06_CONSENT_AT` | UTC ISO timestamp when the operator recorded the owner's explicit authorization for these test messages |
 | `CLEANER_PHASE06_CONSENT_REFERENCE` | Private reference to that explicit test agreement, not an API key |
 | `CLEANER_PHASE06_HOME` | Separate persistent lab directory; default `tourcore-data/cleaner-phase06-lab` |
 | `CLEANER_PHASE06_HOST` / `CLEANER_PHASE06_PORT` | Default `127.0.0.1` / `4336`; use `0.0.0.0` only on the dedicated hosted lab |
 
-The read probe checks the number and VERIFIED campaign association. Review
+The read probe checks the number and VERIFIED campaign association. The three
+Account SID/Auth Token/sender settings suffice for bounded metadata discovery;
+PN/MG/QE settings are optional as a complete explicit group. Review
 approved description, examples and message flow in Twilio Console: an existing
 Tour Core campaign is not automatically proof of cleaner-use-case coverage.
 Record the result; don't edit or submit a campaign as part of this lab. If the
@@ -61,7 +63,10 @@ node --env-file=.env.phase06 dist/cleaner-phase06.js lab --live
 The probe exits 2 because the manual use-case/consent and live Guesty gates
 remain open even if Twilio reads pass. This is an incomplete-gate result, not
 a reason to retry sends. Do not start the lab with invalid Twilio read results.
-The lab requires dedicated settings and explicit `--live`. It performs no send
+The lab requires dedicated settings and explicit `--live`. Without
+`CLEANER_PHASE06_USE_CASE_REVIEWED=true`, it starts in preflight-only mode and
+queues/sends no replies, even if older consent is stored. Enabling replies also
+requires the consent fields. It performs no send
 on startup and never automatically reconfigures a number or service.
 
 An optional `Dockerfile.cleaner-phase06` builds this same lab with Node 24.

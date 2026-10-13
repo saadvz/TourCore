@@ -21,7 +21,7 @@ class LabError extends Error { constructor(readonly status: number) { super('Lab
 export class TwilioIntegrationLab {
   private active = new Map<string, Promise<void>>();
   private closing = false;
-  constructor(readonly store: CleanerStore, readonly bindings: LabBinding[], readonly now: () => number = Date.now, readonly timeoutMs = 8000) {
+  constructor(readonly store: CleanerStore, readonly bindings: LabBinding[], readonly now: () => number = Date.now, readonly timeoutMs = 8000, readonly sendsEnabled = true) {
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || new Set(bindings.map(b => b.id)).size !== bindings.length
       || new Set(bindings.map(b => `${b.accountSid}:${b.fromNumber}`)).size !== bindings.length) throw new Error('Invalid lab bindings');
     store.db.exec(`CREATE TABLE IF NOT EXISTS p06_lab_bindings(id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL);
@@ -43,6 +43,8 @@ export class TwilioIntegrationLab {
         if (old && old.fingerprint !== fingerprint) throw new Error('Lab routing changed; use separate lab storage');
         store.run('INSERT OR IGNORE INTO p06_lab_bindings VALUES(?,?)', b.id, fingerprint);
         store.run('INSERT OR IGNORE INTO p06_lab_consent(binding,at,reference) VALUES(?,?,?)', b.id, b.consent?.at ?? null, b.consent?.reference ?? null);
+        if (b.consent) store.run('UPDATE p06_lab_consent SET at=?,reference=? WHERE binding=? AND at IS NULL AND reference IS NULL', b.consent.at, b.consent.reference, b.id);
+        if (!sendsEnabled) store.run("UPDATE p06_lab_outbox SET status='suppressed' WHERE binding=? AND status='pending'", b.id);
       }
       // A crashed non-idempotent send never becomes eligible for automatic resend.
       store.run("UPDATE p06_lab_outbox SET status='review_required' WHERE status='sending'");
@@ -76,7 +78,7 @@ export class TwilioIntegrationLab {
         this.store.run("UPDATE p06_lab_outbox SET status='suppressed' WHERE binding=? AND status='pending'", id);
       } else if (kind === 'START' && this.consent(id).at) this.store.run('UPDATE p06_lab_consent SET opted_out=0 WHERE binding=?', id);
       const consent = this.consent(id);
-      if (kind === 'test' && consent.at && consent.reference && !consent.opted_out)
+      if (this.sendsEnabled && kind === 'test' && consent.at && consent.reference && !consent.opted_out)
         this.store.run('INSERT INTO p06_lab_outbox VALUES(?,?,?,NULL)', id, `test_${p.MessageSid}`, 'pending');
       return { duplicate: false };
     });
@@ -96,7 +98,7 @@ export class TwilioIntegrationLab {
     });
   }
   async tick() {
-    if (this.closing) return;
+    if (this.closing || !this.sendsEnabled) return;
     const jobs: Promise<void>[] = [];
     for (const b of this.bindings) {
       if (this.active.has(b.id)) continue;
@@ -141,7 +143,7 @@ export class TwilioIntegrationLab {
         delivery: terminal.size > 1 ? 'conflict_requires_review' : terminal.size === 1 ? [...terminal][0] : 'unconfirmed',
         errorObserved: events.some(e => e.error !== '' && e.error !== '0') };
     });
-    return { mode: 'isolated_test', consentRecorded: Boolean(consent.at && consent.reference), optedOut: Boolean(consent.opted_out),
+    return { mode: this.sendsEnabled ? 'isolated_test' : 'preflight_only', sendsEnabled: this.sendsEnabled, consentRecorded: Boolean(consent.at && consent.reference), optedOut: Boolean(consent.opted_out),
       inbound: this.store.all<{ kind: string; count: number }>('SELECT kind,COUNT(*) AS count FROM p06_lab_inbound WHERE binding=? GROUP BY kind', id),
       replies, receiptMeaning: 'provider_acceptance', operatesDoors: false, changesBookings: false };
   }
@@ -167,6 +169,6 @@ export function twilioLabApp(lab: TwilioIntegrationLab, ownerToken: string, heal
       res.setHeader('Cache-Control', 'no-store'); res.json(lab.evidence(req.params.id as string));
     } catch (e) { fail(res, e); }
   });
-  app.get('/healthz', (_req, res) => res.status(healthy() ? 200 : 503).json({ service: 'cleaner-phase06-lab', ready: healthy(), productionReady: false }));
+  app.get('/healthz', (_req, res) => res.status(healthy() ? 200 : 503).json({ service: 'cleaner-phase06-lab', ready: healthy(), sendsEnabled: lab.sendsEnabled, productionReady: false }));
   return app;
 }

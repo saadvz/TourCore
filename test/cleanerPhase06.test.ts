@@ -6,7 +6,7 @@ import { createHmac } from 'node:crypto';
 import type { Server } from 'node:http';
 import { CleanerStore } from '../src/delegation/phase05/store';
 import { GuestyFixtureProjection, fixtureCleaningWindow, calendarObservation, verifyGuestyWebhook } from '../src/integrations/phase06/guesty';
-import { probeGuesty, probeTwilio, type ProbeFetch } from '../src/integrations/phase06/probes';
+import { probeGuesty, probeTwilio, discoverTwilioProbe, type ProbeFetch } from '../src/integrations/phase06/probes';
 import { TwilioIntegrationLab, twilioLabApp, LAB_PHRASE, type LabBinding } from '../src/integrations/phase06/twilioLab';
 import { twilioSignature } from '../src/messaging/twilio/signature';
 
@@ -205,6 +205,46 @@ describe('Phase 0.6 actual Twilio-shaped HTTP transport with injected provider',
 });
 
 describe('Phase 0.6 safe live read probes with injected HTTP', () => {
+  it('keeps preflight disabled despite persisted consent and does not replay earlier test phrases after activation', async () => {
+    const { store } = storage(), b = binding(); let sends = 0;
+    b.send = async () => { sends++; return { sid: message(999) }; };
+    const disabled = new TwilioIntegrationLab(store, [b], Date.now, 8000, false); labs.push(disabled);
+    const params = { AccountSid: account, MessageSid: message(1), From: b.testNumber, To: b.fromNumber, Body: LAB_PHRASE };
+    const raw = Buffer.from(new URLSearchParams(params).toString()), signature = twilioSignature(token, b.publicBaseUrl + '/phase06/twilio/A/inbound', params);
+    disabled.inbound('A', raw, signature); await disabled.tick();
+    expect(disabled.evidence('A')).toMatchObject({ mode: 'preflight_only', sendsEnabled: false, consentRecorded: true, replies: [] });
+    await disabled.close();
+    const enabled = new TwilioIntegrationLab(store, [b]); labs.push(enabled);
+    enabled.inbound('A', raw, signature); await enabled.tick(); expect(sends).toBe(0);
+  });
+  it('records newly configured consent after preflight without resetting an existing opt-out', async () => {
+    const { store } = storage(), b = binding({ consent: undefined });
+    const initial = new TwilioIntegrationLab(store, [b], Date.now, 8000, false); labs.push(initial);
+    const params = { AccountSid: account, MessageSid: message(1), From: b.testNumber, To: b.fromNumber, Body: 'STOP' };
+    initial.inbound('A', Buffer.from(new URLSearchParams(params).toString()), twilioSignature(token, b.publicBaseUrl + '/phase06/twilio/A/inbound', params)); await initial.close();
+    const enabled = new TwilioIntegrationLab(store, [binding()]); labs.push(enabled);
+    expect(enabled.evidence('A')).toMatchObject({ consentRecorded: true, optedOut: true, replies: [] });
+  });
+  it('discovers the exact sender/service/campaign through bounded GETs and keeps the report redacted', async () => {
+    const pn = `PN${'1'.repeat(32)}`, mg = `MG${'2'.repeat(32)}`;
+    const fetcher: ProbeFetch = async (url, init) => {
+      expect(init.method).toBe('GET'); expect(init.redirect).toBe('error');
+      const body = url.endsWith(`${account}.json`) ? { sid: account, status: 'active' }
+        : url.includes('IncomingPhoneNumbers.json') ? { incoming_phone_numbers: [{ sid: pn, account_sid: account, phone_number: phone(1000), capabilities: { sms: true } }] }
+        : url.endsWith('/Services?PageSize=10') ? { services: [{ sid: mg, account_sid: account }] }
+        : url.endsWith(`/PhoneNumbers/${pn}`) ? { account_sid: account, service_sid: mg, phone_number: phone(1000) }
+        : { compliance: [{ account_sid: account, messaging_service_sid: mg, campaign_status: 'VERIFIED' }] };
+      return { status: 200, json: async () => body };
+    };
+    const report = await discoverTwilioProbe({ accountSid: account, authToken: token, fromNumber: phone(1000) }, fetcher);
+    expect(report.map(r => r.outcome)).toEqual(['PASS', 'PASS', 'PASS', 'PASS', 'NOT_RUN']);
+    expect(JSON.stringify(report)).not.toContain(token); expect(JSON.stringify(report)).not.toContain(phone(1000));
+  });
+  it('stops discovery on a failed account check and never trusts another account’s response', async () => {
+    let calls = 0;
+    const report = await discoverTwilioProbe({ accountSid: account, authToken: token, fromNumber: phone(1000) }, async () => { calls++; return { status: 200, json: async () => ({ sid: `AC${'2'.repeat(32)}`, status: 'active' }) }; });
+    expect(calls).toBe(1); expect(report[0]?.outcome).toBe('FAIL');
+  });
   it('does no network work and never claims account feasibility without settings', async () => {
     const never: ProbeFetch = async () => { throw new Error('must not call'); };
     expect((await probeGuesty(undefined, never)).every(r => r.outcome === 'BLOCKED')).toBe(true);

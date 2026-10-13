@@ -8,8 +8,9 @@ a new project or automatically select the live touring service. The earlier
 proposal for a new lab service is superseded by this instruction.
 
 This concrete configuration has not been applied to Railway. The Railway
-plugin is now confirmed installed, but its project tools are not available in
-this chat yet. Once access is available, save the existing test service's
+plugin and account access are now available. The selected existing project is
+`zucchini-endurance`, test service `TourCore`, with its domain
+`tourcore-production-72ec.up.railway.app` and volume at `/data`. Save the test service's
 branch, Dockerfile/start command and routing settings, then apply only the
 test-service changes below. Do not apply the main `.railway/railway.ts`
 definition to achieve this: that file describes touring.
@@ -33,6 +34,8 @@ definition to achieve this: that file describes touring.
 | `RAILWAY_RUN_UID` | `0`, so the lab can create private files on Railway's root-owned volume |
 | `RAILWAY_DEPLOYMENT_OVERLAP_SECONDS` | `0` |
 | `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` | `15`, allowing bounded send/shutdown and lock cleanup to finish |
+| `CLEANER_PHASE06_PREFLIGHT_ON_START` | `true`: bounded read-only Twilio checks are logged without credentials/phones |
+| `CLEANER_PHASE06_EVIDENCE_LOGGING` | `true`: controlled-lab evidence changes are recorded in private Railway logs without phone numbers, text bodies or credentials |
 | `CLEANER_PHASE06_HOME` | `/data/phase06` if the existing test volume mounts at `/data`; otherwise a new `phase06` folder under its actual mount |
 | `CLEANER_PHASE06_HOST` | `0.0.0.0` |
 | `CLEANER_PHASE06_PORT` | Leave unset to use Railway's `PORT`; the lab falls back to 4336 outside Railway |
