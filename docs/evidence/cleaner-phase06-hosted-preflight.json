@@ -88,6 +88,10 @@
       "changesBookings": false
     }
   },
+  "hostedBoundaryChecks": [
+    { "check": "owner_evidence_requires_auth", "http": 401, "outcome": "PASS" },
+    { "check": "inbound_rejects_unsigned_request", "http": 403, "outcome": "PASS" }
+  ],
   "ownerAttestations": {
     "cleanerCoordinationCampaignCoverage": "Owner explicitly confirmed in this conversation; distinct from API campaign verification.",
     "controlledTestConsent": "Owner authorized the joint live test using the configured test phone; operator recorded this authorization. Real cleaner consent is not established."
