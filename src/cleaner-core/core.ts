@@ -332,6 +332,7 @@ export interface CleanerCore {
   /** Marks an accepted door-code text undelivered so the next departure can send it again. Sends nothing. */
   markPinUndelivered(): void;
   hostNotes(): string[];
+  notePrivateCodeDelivered(): void;
   /** Keeps a door code in memory after a later tool call opens the seal. Does not write it. */
   rememberPin(pin: string): void;
 }
@@ -1352,9 +1353,6 @@ class Engine implements CleanerCore {
             body: privately.body,
           });
           if (privateText) sent.push(privateText);
-          if (this.delivery(key) === "sent" && this.owner) {
-            this.noteForHost(`pin-private:${key}`, privateCodeLine(this.groupChat.cleanerName));
-          }
         }
       }
       if (this.groupChat && route === "private" && this.delivery(key) === "sent") {
@@ -1657,6 +1655,14 @@ class Engine implements CleanerCore {
     return this.hostNoteState.map((note) => note.body);
   }
 
+  notePrivateCodeDelivered(): void {
+    if (!this.groupChat || !this.owner) return;
+    const job = this.releaseJob();
+    const key = job ? this.pinKey(job) : undefined;
+    if (!key || this.delivery(key) !== "sent") return;
+    this.noteForHost(`pin-private:${key}`, privateCodeLine(this.groupChat.cleanerName));
+  }
+
   private async emitOne(draft: Draft): Promise<CleanerText | null> {
     draft = this.hostDirect(draft);
     if (this.options.holdSends?.()) return null;
@@ -1711,11 +1717,9 @@ class Engine implements CleanerCore {
       if (err instanceof GroupNotConfirmed && draft.channel === "group") {
         this.dropUncertain(draft.id);
         this.save();
-        if (draft.kind !== "pin" && isPrivateCodeLine(draft.body)) {
-          this.noteForHost(draft.id, draft.body);
-          return null;
+        if (draft.kind !== "pin" && !isPrivateCodeLine(draft.body)) {
+          this.noteForHost(`group-unconfirmed:${this.options.property.id}`, groupUnconfirmedLine());
         }
-        if (draft.kind !== "pin") this.noteForHost(`group-unconfirmed:${this.options.property.id}`, groupUnconfirmedLine());
         return null;
       }
       this.upsert(draft, "failed");
