@@ -34,6 +34,9 @@ const HOST_HURT_SELF = "If someone is hurt, call 911 now.";
 const STOP_ACK = "You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.";
 const STOP_HOLD = `The cleaner opted out of cleaning texts for ${ADDRESS}, so the job is on hold.`;
 const ALREADY = "I already sent the door code to the cleaner.";
+const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn't go through.";
+const PIN_FAILED = "The door code didn't reach the cleaner. Tell me the guests have left again and I'll resend it.";
+const AFTER_CHECKS = "Tell me the checkout time and the next check-in time before I text the cleaner.";
 const PIN_MISSING = "I can't send the door code yet. Let's finish setting up Cleaner Core first.";
 const FAILED_ONCE = "A text failed to send. I saved it for your review and did not count it as delivered.";
 const FEED = readFileSync(join("src/cleaner-core/fixtures", "guesty-lite-scratch.ics"), "utf8");
@@ -907,5 +910,125 @@ describe("live group membership", () => {
     const after = desk.getState();
     expect(after.ok).toBe(true);
     if (after.ok) expect(after.result.next).toBe(hold);
+  });
+
+  async function privateSendWithoutHost() {
+    const root = mkdtempSync(join(tmpdir(), "cleaner-private-accept-"));
+    roots.push(root);
+    const fetchBox = groupFetch();
+    const sms = fakeSms();
+    const env: NodeJS.ProcessEnv = {
+      CLEANER_CORE_ENABLED: "1",
+      CLEANER_CORE_LIVE_SMS: "1",
+      CLEANER_CORE_GROUP_CHAT: "1",
+      CLEANER_CORE_SMS_ALLOWLIST: `${LIVE_HOST},${LIVE_CLEANER}`,
+      CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
+      CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
+      CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+    };
+    setCleanerTwilioClient(sms);
+    setCleanerGroupFetch(fetchBox.impl);
+    setCleanerCalendarFetch(async (url) => ({
+      status: url === CALENDAR_URL ? 200 : 404,
+      url,
+      async text() {
+        return url === CALENDAR_URL ? CALENDAR_ICS : "";
+      },
+    }));
+    const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
+    const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
+    expect(desk.getState("2").ok).toBe(true);
+    expect(desk.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" }).ok).toBe(true);
+    expect(desk.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER }).ok).toBe(true);
+    expect(desk.saveCalendarLink({ url: CALENDAR_URL }).ok).toBe(true);
+    expect(desk.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
+    expect(desk.setUpTexting().ok).toBe(true);
+    expect((await desk.runChecks()).ok).toBe(true);
+    await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await desk.inbound({ id: "yes-cleaner-only", from: LIVE_CLEANER, text: "YES" });
+    await desk.inbound({ id: "yes-schedule-only", from: LIVE_CLEANER, text: "YES" });
+    const privatePin = `Guests have left ${PRACTICE}. Door code: ${DOOR_CODE}. This code is only for you.`;
+    return { desk, sms, posts: fetchBox.posts, pinKey, privatePin };
+  }
+
+  it("returns the sent sentence when Twilio accepts a private door code", async () => {
+    const { desk, sms, posts, pinKey, privatePin } = await privateSendWithoutHost();
+    const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    expect(left).toEqual({ ok: true, result: { next: PIN_SENT } });
+    expect(sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
+    expect(sms.sent.filter((text) => text.to === LIVE_HOST && text.body === privatePin).map((text) => text.to)).toEqual([]);
+    expect(posts.filter((text) => text.body === privatePin).map((text) => text.body)).toEqual([]);
+    const state = desk.getState();
+    expect(state.ok).toBe(true);
+    if (state.ok) {
+      expect(state.result.next).toBe(AFTER_CHECKS);
+      expect(state.result.notes ?? []).toEqual([]);
+    }
+  });
+
+  it("returns the already-sent sentence while a private delivery report is pending", async () => {
+    const { desk, sms, posts, pinKey, privatePin } = await privateSendWithoutHost();
+    const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    expect(left).toEqual({ ok: true, result: { next: PIN_SENT } });
+    const again = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    expect(again).toEqual({ ok: true, result: { next: ALREADY } });
+    expect(sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
+    expect(posts.filter((text) => text.body === privatePin).map((text) => text.body)).toEqual([]);
+    expect(sms.sent.filter((text) => text.to === LIVE_HOST && text.body === privatePin).map((text) => text.to)).toEqual([]);
+    const state = desk.getState();
+    expect(state.ok).toBe(true);
+    if (state.ok) {
+      expect(state.result.next).toBe(AFTER_CHECKS);
+      expect(state.result.notes ?? []).toEqual([]);
+    }
+  });
+
+  it("returns the failed-send sentence after a failed private delivery report", async () => {
+    const { desk, sms, posts, pinKey, privatePin } = await privateSendWithoutHost();
+    const line = "I've sent the door code to Maria privately.";
+    const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    expect(left).toEqual({ ok: true, result: { next: PIN_SENT } });
+    const pending = desk.getState();
+    expect(pending.ok).toBe(true);
+    if (pending.ok) {
+      expect(pending.result.next).toBe(AFTER_CHECKS);
+      expect(pending.result.notes ?? []).toEqual([]);
+    }
+    const pinText = sms.sent.find((text) => text.body === privatePin);
+    desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "failed" });
+    const after = desk.getState();
+    expect(after.ok).toBe(true);
+    if (after.ok) {
+      expect(after.result.next).toBe(PIN_FAILED);
+      expect(after.result.notes ?? []).toEqual([]);
+    }
+    expect(sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
+    expect(posts.filter((text) => text.body === privatePin || text.body === line).map((text) => text.body)).toEqual([]);
+    expect(sms.sent.filter((text) => text.to === LIVE_HOST && (text.body === privatePin || text.body === PIN_FAILED || text.body === line)).map((text) => text.body)).toEqual([]);
+  });
+
+  it("hides the private note after an undelivered report and returns the failed-send sentence", async () => {
+    const { desk, sms, posts, pinKey, privatePin } = await privateSendWithoutHost();
+    const line = "I've sent the door code to Maria privately.";
+    const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    expect(left).toEqual({ ok: true, result: { next: PIN_SENT } });
+    const pinText = sms.sent.find((text) => text.body === privatePin);
+    desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "sent" });
+    const shown = desk.getState();
+    expect(shown.ok).toBe(true);
+    if (shown.ok) {
+      expect(shown.result.notes).toEqual([line]);
+      expect(shown.result.next).toBe(AFTER_CHECKS);
+    }
+    desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "undelivered" });
+    const hidden = desk.getState();
+    expect(hidden.ok).toBe(true);
+    if (hidden.ok) {
+      expect(hidden.result.notes ?? []).toEqual([]);
+      expect(hidden.result.next).toBe(PIN_FAILED);
+    }
+    expect(sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
+    expect(posts.filter((text) => text.body === privatePin || text.body === line).map((text) => text.body)).toEqual([]);
+    expect(sms.sent.filter((text) => text.to === LIVE_HOST && (text.body === privatePin || text.body === line || text.body === PIN_FAILED)).map((text) => text.body)).toEqual([]);
   });
 });
