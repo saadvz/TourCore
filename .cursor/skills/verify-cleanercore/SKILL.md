@@ -193,10 +193,18 @@ Prove the step G safety gates with:
 
 That script takes no arguments. It removes `evidence/step-g/` and writes it again. It doctors before each journey, then drives `stale-source`, `host-override-beats-stale-feed`, `permanent-code`, `backup-restore`, `replay-no-resend`, `recovery-after-restart`, `review-queue`, `observability`, `tenant-isolation`, and `stop-help-injury`. It then reruns `prove-step-d.sh`, `prove-step-e.sh`, and `prove-step-f.sh`, then `scripts/ci-check.sh` and a flag-off smoke. The default stale threshold is three hours. `npm run cleaner:health` does not send. The script prints `evidence/step-g`.
 
+Prove the group thread with:
+
+```
+.cursor/skills/verify-cleanercore/scripts/prove-group-chat.sh
+```
+
+That script takes no arguments. It removes `evidence/group-chat/` and writes it again. It doctors once, then drives `eligible`, `private`, `held`, `stop-host`, `resume`, `time`, `injury`, `problem`, `before-yes`, `inert`, `done`, `twice`, and `failed`, then one local desk run for the missing key, the failed group send, and the already-sent reply. Phones stay on area code 555. The script prints `evidence/group-chat`.
+
 After any script exits, its evidence directory must still be on disk. A cleanup that removes it fails the proof.
 
 ## Feature map
 
-Read [features/README.md](features/README.md) before driving. One feature file is one user journey. `prove-turnover.sh` drives `same-day-turnover`. `prove-safety.sh` drives flag-off, STOP, HELP, injury, and the unapproved YES. `prove-step-c.sh` drives the ten step C blockers. `prove-step-d.sh` drives the step D blockers and overwrites `evidence/step-d`. `prove-step-e.sh` drives the step E blockers and overwrites `evidence/step-e`. `prove-step-f.sh` drives the step F blockers and overwrites `evidence/step-f`. `prove-step-g.sh` drives the step G safety gates and overwrites `evidence/step-g`. Do not mark a feature verified because a different feature's stdout happened to contain a related field.
+Read [features/README.md](features/README.md) before driving. One feature file is one user journey. `prove-turnover.sh` drives `same-day-turnover`. `prove-safety.sh` drives flag-off, STOP, HELP, injury, and the unapproved YES. `prove-step-c.sh` drives the ten step C blockers. `prove-step-d.sh` drives the step D blockers and overwrites `evidence/step-d`. `prove-step-e.sh` drives the step E blockers and overwrites `evidence/step-e`. `prove-step-f.sh` drives the step F blockers and overwrites `evidence/step-f`. `prove-step-g.sh` drives the step G safety gates and overwrites `evidence/step-g`. `prove-group-chat.sh` drives the group thread and overwrites `evidence/group-chat`. Do not mark a feature verified because a different feature's stdout happened to contain a related field.
 
 When the map changes, run `/maintain-verification-skill` against `verify-cleanercore`.

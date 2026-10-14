@@ -18,7 +18,7 @@ Without `--with-pin`, the owner receives the schedule text. With `--with-pin`, t
 - Start every recipe from the baseline unless its preconditions say otherwise.
 - Treat every command as literal. Keep the flag assignment and the npm script unchanged.
 - Flag on: `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:doctor` and `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke`.
-- Replies: `npm run cleaner:smoke -- --reply +15555550100=STOP`. Repeat `--reply` for each inbound text. A reply text that starts with `@` names a fixture file. Any explicit operation (`--reply`, `--feed`, `--then-feed`, `--google`, `--notion`, `--onboard`, `--group-mode`, `--group-capable`, `--participant`, `--tenant`, `--closed`, `--now`, `--remind`, `--fail-sends`, `--data`, `--no-poll`, `--with-pin`, `--unapproved`, `--group`) does not also inject YES.
+- Replies: `npm run cleaner:smoke -- --reply +15555550100=STOP`. Repeat `--reply` for each inbound text. A reply text that starts with `@` names a fixture file. Any explicit operation (`--reply`, `--feed`, `--then-feed`, `--google`, `--notion`, `--onboard`, `--group-mode`, `--group-capable`, `--participant`, `--tenant`, `--closed`, `--now`, `--remind`, `--fail-sends`, `--data`, `--no-poll`, `--with-pin`, `--unapproved`, `--group`, `--group-chat`, `--group-extra`, `--group-reply`, `--confirm-times`, `--resume`) does not also inject YES.
 - Flag off: `env -u CLEANER_CORE_ENABLED` in front of the same scripts.
 - Assert the full stdout document and the exit code. A truthy `ok` is not a result.
 - After smoke, every `+1` number in stdout must be a Scratch test number: area code 555, or exchange 555 with line 0100–0199.
@@ -104,3 +104,4 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [Health](./g-observability.md) covers counters, a health command that does not send, and a redacted log. `prove-step-g.sh`.
 - [Step G tenants](./g-tenant-isolation.md) covers Lane and Court reviews, backups, replays, and health counts. `prove-step-g.sh`.
 - [STOP, HELP, and injury under step G](./g-stop-help-injury.md) covers the step F safety replies again. `prove-step-g.sh`.
+- [Group thread for the host and the cleaner](./group-chat.md) covers opt-in, the group door code, the private fallback, STOP, resume, a group time, injury, and a hold. `prove-group-chat.sh`.
