@@ -73,4 +73,4 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [One booking, two sources](./one-booking.md) covers one job when Guesty Lite and Google Calendar show the same stay. `prove-step-e.sh`.
 - [Google block](./google-block.md) covers an owner block that is not a departure. `prove-step-e.sh`.
 - [Wrong tenant calendar](./wrong-tenant.md) covers Scratch Lane refusing Scratch Court's calendar. `prove-step-e.sh`.
-- [Two Scratch tenants](./tenant-isolation.md) covers separate phones, jobs, and stores. `prove-step-e.sh`.
+- [Two Scratch tenants](./tenant-isolation.md) covers one shared folder, separate phones, a wrong-tenant departure that sends nothing, and each house's door code going once to that house's cleaner. Scratch Court's code follows a Google Calendar stay. `prove-step-e.sh`.

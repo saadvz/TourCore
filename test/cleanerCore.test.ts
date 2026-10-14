@@ -1237,6 +1237,148 @@ describe("step E second source and second tenant", () => {
     rmSync(courtDir, { recursive: true, force: true });
   });
 
+  it("sends each Scratch door code once, only to that house's cleaner, from one folder", async () => {
+    if (!COURT) throw new Error("Scratch Court is missing.");
+    const dir = mkdtempSync(join(tmpdir(), "cleaner-both-"));
+    const laneBox = sink();
+    const courtBox = sink();
+    const courtOpt = "Hi, this is Scratch's cleaning scheduler for 8 Scratch Court, Teaneck, NJ 07666. Reply YES to get cleaning texts, or STOP to opt out.";
+    const courtOffer = "Turnover at 8 Scratch Court, Teaneck, NJ 07666 on Monday, Oct 19. Checkout 11:00 AM. Reply YES to schedule it, or STOP to opt out.";
+    const courtConfirm = "Cleaning is scheduled for Monday, Oct 19 at 11:00 AM at 8 Scratch Court, Teaneck, NJ 07666.";
+    const courtPin = "Guests have left 8 Scratch Court, Teaneck, NJ 07666. Door code: 7392. This code is only for you.";
+    const courtPinRedacted = "Guests have left 8 Scratch Court, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you.";
+    try {
+      const lane = pinned(laneBox, { tenantId: "scratch-lane", dataDir: dir });
+      const court = pinned(courtBox, {
+        tenantId: "scratch-court",
+        property: COURT.property,
+        ownerPhone: COURT.ownerPhone,
+        cleaner: { phone: COURT.cleanerPhone, approved: true },
+        pin: "7392",
+        hostName: "Scratch",
+        dataDir: dir,
+      });
+      await lane.pollFeed(feed("guesty-lite-scratch.ics"));
+      await lane.receive({ id: "lane-wrong-yes", from: "+15555550111", text: "YES" });
+      await lane.receive({ id: "lane-opt", from: CLEANER, text: "YES" });
+      await lane.receive({ id: "lane-out", from: OWNER, text: "YES" });
+      await lane.receive({ id: "lane-in", from: OWNER, text: "YES" });
+      await lane.receive({ id: "lane-offer", from: CLEANER, text: "YES" });
+      expect(lane.jobs().map((item) => ({ id: item.id, status: item.status }))).toEqual([
+        { id: "stay-anita@guesty.com", status: "confirmed" },
+        { id: "stay-same-day@guesty.com", status: "discovered" },
+        { id: "stay-after-gap@guesty.com", status: "discovered" },
+      ]);
+      expect(await lane.receive({ id: "lane-wrong-left", from: "+15555550110", text: "guests have left" })).toEqual({
+        handled: true,
+        reason: "wrong-tenant",
+        sent: [],
+      });
+      expect(laneBox.sent.filter((text) => text.kind === "pin")).toEqual([]);
+
+      await court.readSource(google("google-court-stay.json"));
+      await court.receive({ id: "court-wrong-yes", from: CLEANER, text: "YES" });
+      await court.receive({ id: "court-opt", from: "+15555550111", text: "YES" });
+      await court.receive({ id: "court-out", from: "+15555550110", text: "YES" });
+      expect(court.jobs()).toEqual([
+        expect.objectContaining({ id: "google:evt-court", status: "offered", live: true }),
+      ]);
+      await court.receive({ id: "court-offer", from: "+15555550111", text: "YES" });
+      expect(court.jobs()).toEqual([
+        expect.objectContaining({ id: "google:evt-court", status: "confirmed", live: true }),
+      ]);
+      expect(await court.receive({ id: "court-wrong-left", from: OWNER, text: "guests have left" })).toEqual({
+        handled: true,
+        reason: "wrong-tenant",
+        sent: [],
+      });
+      expect(courtBox.sent.filter((text) => text.kind === "pin")).toEqual([]);
+      expect(courtBox.sent).toEqual([
+        { to: "+15555550110", body: COURT_MONDAY, kind: "host-checkout" },
+        { to: "+15555550111", body: courtOpt, kind: "opt-in" },
+        { to: "+15555550111", body: courtOffer, kind: "offer" },
+        { to: "+15555550111", body: courtConfirm, kind: "confirm" },
+      ]);
+
+      expect(await lane.receive({ id: "lane-left", from: OWNER, text: "guests have left" })).toEqual({
+        handled: true,
+        reason: "departure",
+        sent: [
+          { to: CLEANER, body: PIN_TEXT, kind: "pin" },
+          { to: OWNER, body: PIN_NOTICE, kind: "pin-notice" },
+        ],
+      });
+      expect(await court.receive({ id: "court-left", from: "+15555550110", text: "guests have left" })).toEqual({
+        handled: true,
+        reason: "departure",
+        sent: [
+          { to: "+15555550111", body: courtPin, kind: "pin" },
+          { to: "+15555550110", body: PIN_NOTICE, kind: "pin-notice" },
+        ],
+      });
+      expect(laneBox.sent).toEqual([
+        { to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" },
+        { to: CLEANER, body: OPT_IN, kind: "opt-in" },
+        { to: OWNER, body: CHECKIN_Q, kind: "host-checkin" },
+        { to: CLEANER, body: OFFER, kind: "offer" },
+        { to: CLEANER, body: CONFIRM, kind: "confirm" },
+        { to: CLEANER, body: PIN_TEXT, kind: "pin" },
+        { to: OWNER, body: PIN_NOTICE, kind: "pin-notice" },
+      ]);
+      expect(courtBox.sent.filter((text) => text.kind === "pin")).toEqual([
+        { to: "+15555550111", body: courtPin, kind: "pin" },
+      ]);
+      expect(lane.jobs()[0]).toEqual(expect.objectContaining({ id: "stay-anita@guesty.com", status: "cleared" }));
+      expect(court.jobs()).toEqual([
+        expect.objectContaining({ id: "google:evt-court", status: "cleared", live: true }),
+      ]);
+
+      const laneAgain = pinned(sink(), { tenantId: "scratch-lane", dataDir: dir });
+      const courtAgain = pinned(sink(), {
+        tenantId: "scratch-court",
+        property: COURT.property,
+        ownerPhone: COURT.ownerPhone,
+        cleaner: { phone: COURT.cleanerPhone, approved: true },
+        pin: "7392",
+        hostName: "Scratch",
+        dataDir: dir,
+      });
+      expect(laneAgain.jobs().map((item) => ({ id: item.id, status: item.status }))).toEqual([
+        { id: "stay-anita@guesty.com", status: "cleared" },
+        { id: "stay-same-day@guesty.com", status: "discovered" },
+        { id: "stay-after-gap@guesty.com", status: "discovered" },
+      ]);
+      expect(courtAgain.jobs().map((item) => ({ id: item.id, status: item.status }))).toEqual([
+        { id: "google:evt-court", status: "cleared" },
+      ]);
+      expect(laneAgain.outbox().filter((item) => item.kind === "pin")).toEqual([
+        {
+          id: "pin:stay-anita@guesty.com:2026-10-18:660:1",
+          to: CLEANER,
+          body: PIN_REDACTED,
+          kind: "pin",
+          status: "sent",
+          jobId: "stay-anita@guesty.com",
+        },
+      ]);
+      expect(courtAgain.outbox().filter((item) => item.kind === "pin")).toEqual([
+        {
+          id: "pin:google:evt-court:2026-10-19:660:1",
+          to: "+15555550111",
+          body: courtPinRedacted,
+          kind: "pin",
+          status: "sent",
+          jobId: "google:evt-court",
+        },
+      ]);
+      const stored = readFileSync(join(dir, "cleaner-core.json"), "utf8");
+      expect(stored.includes("4821")).toBe(false);
+      expect(stored.includes("7392")).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("drives the closed sync and the court tenant from the smoke command", () => {
     const read = cleanerCli(["smoke", "--closed", "--google", "src/cleaner-core/fixtures/google-lane-read.json"], "1");
     expect(read.status).toBe(0);

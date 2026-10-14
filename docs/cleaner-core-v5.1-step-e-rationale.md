@@ -63,7 +63,7 @@ The base is one engine and a `BookingSource` interface. A second job store that 
 ## Alternatives considered
 
 - A second engine module that only polls Google and writes a second outbox. Split ownership, and the caller would have to merge jobs. Rejected.
-- One shared store with a `tenantId` column on each job and one sink for both landlords. A missed filter texts the other house. Rejected. Each `openCleanerCore` call is one tenant, with its own directory when `--data` is set.
+- One shared job table and one sink for both landlords. A missed filter texts the other house. Rejected. Each `openCleanerCore` call is still one tenant. A shared `--data` directory keeps a separate slice per tenant in `cleaner-core.json`, so the second landlord does not load the first landlord's jobs or door code. A folder that only one tenant uses stays the flat step D file.
 - Match only on a shared reservation id. The fixtures would pass and a real export that does not share ids would open two jobs. Matching check-in or checkout catches that case. A shared id can still be added later without a second code path.
 
 ## Open questions and risks

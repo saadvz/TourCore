@@ -161,7 +161,7 @@ Prove the step E blockers with:
 .cursor/skills/verify-cleanercore/scripts/prove-step-e.sh
 ```
 
-That script takes no arguments. It removes `evidence/step-e/` and writes it again. It doctors before each journey, then drives `source-read`, `closed-sync`, `removed`, `one-job`, `block`, `wrong-tenant`, and `tenant-isolation`. The Google files are fixtures. The script prints `evidence/step-e`.
+That script takes no arguments. It removes `evidence/step-e/` and writes it again. It doctors before each journey, then drives `source-read`, `closed-sync`, `removed`, `one-job`, `block`, `wrong-tenant`, and `tenant-isolation`. The Google files are fixtures. `tenant-isolation` runs both Scratch tenants to a confirmed departure in one `--data` directory. A "guests have left" from the other house sends nothing. Scratch Court's Google stay is the one that reaches the private text. The script prints `evidence/step-e`.
 
 After any script exits, its evidence directory must still be on disk. A cleanup that removes it fails the proof.
 

@@ -1,1 +1,1 @@
-env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --tenant scratch-court --with-pin --data /tmp/tmp.x7eqavSrMc --google /workspace/src/cleaner-core/fixtures/google-court-stay.json --reply +15555550100=YES --reply +15555550101=YES
+env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --tenant scratch-court --with-pin --data /tmp/tmp.tvim6hB0sw --google /workspace/src/cleaner-core/fixtures/google-court-stay.json --reply +15555550101=YES --reply +15555550111=YES --reply +15555550110=YES --reply +15555550111=YES --reply +15555550100=guests have left

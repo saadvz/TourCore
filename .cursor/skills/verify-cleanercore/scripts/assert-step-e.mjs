@@ -23,8 +23,18 @@ const COURT_WEDNESDAY = `Is checkout at ${COURT} on Wednesday, Oct 21 still 11:0
 const COURT_CANCEL = `Update: the cleaning at ${COURT} on Monday, Oct 19 is canceled, so no need to come. Reply STOP to opt out.`;
 const LANE_OPT = `Hi, this is Scratch's cleaning scheduler for ${LANE}. Reply YES to get cleaning texts, or STOP to opt out.`;
 const COURT_OPT = `Hi, this is Scratch's cleaning scheduler for ${COURT}. Reply YES to get cleaning texts, or STOP to opt out.`;
+const LANE_CHECKIN = `Is check-in at ${LANE} on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.`;
+const LANE_OFFER = `Turnover at ${LANE} on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.`;
+const LANE_CONFIRM = `Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at ${LANE}.`;
+const COURT_OFFER = `Turnover at ${COURT} on Monday, Oct 19. Checkout 11:00 AM. Reply YES to schedule it, or STOP to opt out.`;
+const COURT_CONFIRM = `Cleaning is scheduled for Monday, Oct 19 at 11:00 AM at ${COURT}.`;
+const LANE_PIN = `Guests have left ${LANE}. Door code: [redacted]. This code is only for you.`;
+const COURT_PIN = `Guests have left ${COURT}. Door code: [redacted]. This code is only for you.`;
+const PIN_NOTICE = "Door code sent to the cleaner.";
 
-const reports = paths.map((path) => JSON.parse(readFileSync(path, "utf8")));
+const reportPaths = journey === "tenant-isolation" ? paths.slice(0, -1) : paths;
+const storePath = journey === "tenant-isolation" ? paths[paths.length - 1] : "";
+const reports = reportPaths.map((path) => JSON.parse(readFileSync(path, "utf8")));
 const blob = paths.map((path) => readFileSync(path, "utf8")).join("\n");
 if (blob.includes("4821") || blob.includes("7392")) fail("a door code leaked into the report");
 if (/\bready\b/i.test(blob)) fail("a text or status says ready");
@@ -107,23 +117,79 @@ if (journey === "source-read") {
 } else if (journey === "tenant-isolation") {
   const lane = reports[0];
   const court = reports[1];
+  const laneLeft = reports[2];
+  const courtLeft = reports[3];
+  if (!lane || !court || !laneLeft || !courtLeft || !storePath) fail("tenant-isolation needs four smoke reports and the shared store");
   same(lane.tenant, "scratch-lane");
   same(court.tenant, "scratch-court");
   same(lane.property, LANE);
   same(court.property, COURT);
-  if (recipients(lane).some((to) => to !== OWNER && to !== CLEANER)) fail(`lane texted ${recipients(lane).join(",")}`);
-  if (recipients(court).some((to) => to !== COURT_OWNER && to !== COURT_CLEANER)) fail(`court texted ${recipients(court).join(",")}`);
-  same(lane.sent.map((text) => text.body), [LANE_Q, LANE_OPT]);
-  same(court.sent.map((text) => text.body), [COURT_MONDAY, COURT_OPT]);
-  same(lane.jobs.map((job) => job.id), ["stay-anita@guesty.com", "stay-same-day@guesty.com", "stay-after-gap@guesty.com"]);
-  same(court.jobs.map((job) => ({ id: job.id, status: job.status })), [{ id: "google:evt-court", status: "discovered" }]);
-  if (!lane.transcript.includes(`${COURT_OWNER}: YES`) || !lane.transcript.includes(`${COURT_CLEANER}: YES`)) {
+  for (const report of [lane, laneLeft]) {
+    if (recipients(report).some((to) => to !== OWNER && to !== CLEANER)) fail(`lane texted ${recipients(report).join(",")}`);
+  }
+  for (const report of [court, courtLeft]) {
+    if (recipients(report).some((to) => to !== COURT_OWNER && to !== COURT_CLEANER)) fail(`court texted ${recipients(report).join(",")}`);
+  }
+  same(lane.sent, [
+    { to: OWNER, body: LANE_Q, kind: "host-checkout" },
+    { to: CLEANER, body: LANE_OPT, kind: "opt-in" },
+    { to: OWNER, body: LANE_CHECKIN, kind: "host-checkin" },
+    { to: CLEANER, body: LANE_OFFER, kind: "offer" },
+    { to: CLEANER, body: LANE_CONFIRM, kind: "confirm" },
+  ]);
+  same(court.sent, [
+    { to: COURT_OWNER, body: COURT_MONDAY, kind: "host-checkout" },
+    { to: COURT_CLEANER, body: COURT_OPT, kind: "opt-in" },
+    { to: COURT_CLEANER, body: COURT_OFFER, kind: "offer" },
+    { to: COURT_CLEANER, body: COURT_CONFIRM, kind: "confirm" },
+  ]);
+  same(lane.jobs.map((job) => ({ id: job.id, status: job.status })), [
+    { id: "stay-anita@guesty.com", status: "confirmed" },
+    { id: "stay-same-day@guesty.com", status: "discovered" },
+    { id: "stay-after-gap@guesty.com", status: "discovered" },
+  ]);
+  same(court.jobs.map((job) => ({ id: job.id, status: job.status })), [{ id: "google:evt-court", status: "confirmed" }]);
+  if (!lane.transcript.includes(`${COURT_CLEANER}: YES`) || !lane.transcript.includes(`${COURT_OWNER}: guests have left`)) {
     fail("the other tenant's reply was dropped from the lane transcript");
   }
-  if (lane.transcript.includes(COURT_OPT) || court.transcript.includes(LANE_OPT)) fail("an opt-in crossed tenants");
-  if (String(lane.pinRecipients).includes(COURT_CLEANER) || String(court.pinRecipients).includes(CLEANER)) fail("a door code crossed tenants");
+  if (!court.transcript.includes(`${CLEANER}: YES`) || !court.transcript.includes(`${OWNER}: guests have left`)) {
+    fail("the other tenant's reply was dropped from the court transcript");
+  }
+  if (lane.transcript.includes(COURT) || court.transcript.includes(LANE)) fail("an address crossed tenants");
   same(lane.pinRecipients, []);
   same(court.pinRecipients, []);
+  same(laneLeft.pinRecipients, [CLEANER]);
+  same(courtLeft.pinRecipients, [COURT_CLEANER]);
+  same(laneLeft.sent, [
+    { to: CLEANER, body: LANE_PIN, kind: "pin" },
+    { to: OWNER, body: PIN_NOTICE, kind: "pin-notice" },
+  ]);
+  same(courtLeft.sent, [
+    { to: COURT_CLEANER, body: COURT_PIN, kind: "pin" },
+    { to: COURT_OWNER, body: PIN_NOTICE, kind: "pin-notice" },
+  ]);
+  same(laneLeft.jobs.map((job) => ({ id: job.id, status: job.status })), [
+    { id: "stay-anita@guesty.com", status: "cleared" },
+    { id: "stay-same-day@guesty.com", status: "discovered" },
+    { id: "stay-after-gap@guesty.com", status: "discovered" },
+  ]);
+  same(courtLeft.jobs.map((job) => ({ id: job.id, status: job.status })), [{ id: "google:evt-court", status: "cleared" }]);
+  const store = JSON.parse(readFileSync(storePath, "utf8"));
+  const laneSlice = store.tenants?.["scratch-lane"];
+  const courtSlice = store.tenants?.["scratch-court"];
+  if (!laneSlice || !courtSlice) fail("the shared store dropped a tenant");
+  const lanePins = (laneSlice.outbox ?? []).filter((item) => item.kind === "pin" && item.status === "sent");
+  const courtPins = (courtSlice.outbox ?? []).filter((item) => item.kind === "pin" && item.status === "sent");
+  same(lanePins.map((item) => ({ to: item.to, body: item.body })), [{ to: CLEANER, body: LANE_PIN }]);
+  same(courtPins.map((item) => ({ to: item.to, body: item.body })), [{ to: COURT_CLEANER, body: COURT_PIN }]);
+  const laneTo = new Set((laneSlice.outbox ?? []).map((item) => item.to));
+  const courtTo = new Set((courtSlice.outbox ?? []).map((item) => item.to));
+  for (const phone of [COURT_OWNER, COURT_CLEANER, "+15555550119"]) {
+    if (laneTo.has(phone)) fail("Scratch Lane's outbox texted Scratch Court");
+  }
+  for (const phone of [OWNER, CLEANER, "+15555550199"]) {
+    if (courtTo.has(phone)) fail("Scratch Court's outbox texted Scratch Lane");
+  }
 } else {
   fail(`unknown journey ${journey}`);
 }

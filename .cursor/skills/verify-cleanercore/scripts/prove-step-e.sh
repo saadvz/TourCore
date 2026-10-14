@@ -124,41 +124,33 @@ run_smoke "$EVIDENCE/wrong-tenant" smoke env CLEANER_CORE_ENABLED=1 npm run --si
 assert_journey wrong-tenant "$EVIDENCE/wrong-tenant/smoke.stdout.txt"
 
 doctor "$EVIDENCE/tenant-isolation"
-LANE_DIR="$(mktemp -d)"
-COURT_DIR="$(mktemp -d)"
+SHARED="$(mktemp -d)"
 run_smoke "$EVIDENCE/tenant-isolation" lane env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- \
-  --tenant scratch-lane --with-pin --data "$LANE_DIR" \
-  --feed "$GUESTY" --google "$LANE_OVERLAP" \
-  --reply "$COURT_OWNER=YES" --reply "$COURT_CLEANER=YES"
+  --tenant scratch-lane --with-pin --data "$SHARED" \
+  --feed "$GUESTY" \
+  --reply "$COURT_CLEANER=YES" \
+  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$CLEANER=YES" \
+  --reply "$COURT_OWNER=guests have left"
 run_smoke "$EVIDENCE/tenant-isolation" court env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- \
-  --tenant scratch-court --with-pin --data "$COURT_DIR" \
+  --tenant scratch-court --with-pin --data "$SHARED" \
   --google "$COURT_STAY" \
-  --reply "$OWNER=YES" --reply "$CLEANER=YES"
-cp "$LANE_DIR/cleaner-core.json" "$EVIDENCE/tenant-isolation/lane-store.json"
-cp "$COURT_DIR/cleaner-core.json" "$EVIDENCE/tenant-isolation/court-store.json"
-rm -rf "$LANE_DIR" "$COURT_DIR"
+  --reply "$CLEANER=YES" \
+  --reply "$COURT_CLEANER=YES" --reply "$COURT_OWNER=YES" --reply "$COURT_CLEANER=YES" \
+  --reply "$OWNER=guests have left"
+run_smoke "$EVIDENCE/tenant-isolation" lane-left env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- \
+  --tenant scratch-lane --with-pin --data "$SHARED" --no-poll \
+  --reply "$OWNER=guests have left"
+run_smoke "$EVIDENCE/tenant-isolation" court-left env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- \
+  --tenant scratch-court --with-pin --data "$SHARED" --no-poll \
+  --reply "$COURT_OWNER=guests have left"
+cp "$SHARED/cleaner-core.json" "$EVIDENCE/tenant-isolation/store.json"
+rm -rf "$SHARED"
 assert_journey tenant-isolation \
   "$EVIDENCE/tenant-isolation/lane.stdout.txt" \
-  "$EVIDENCE/tenant-isolation/court.stdout.txt"
-if grep -E -n '4821|7392|12 Scratch Lane' "$EVIDENCE/tenant-isolation/court-store.json" >/dev/null; then
-  fail "Scratch Court store contains Scratch Lane"
-fi
-if grep -E -n '4821|7392|8 Scratch Court' "$EVIDENCE/tenant-isolation/lane-store.json" >/dev/null; then
-  fail "Scratch Lane store contains Scratch Court"
-fi
-node -e '
-  const fs = require("node:fs");
-  const lane = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-  const court = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-  const laneTo = new Set((lane.outbox ?? []).map((item) => item.to));
-  const courtTo = new Set((court.outbox ?? []).map((item) => item.to));
-  for (const phone of ["+15555550110", "+15555550111", "+15555550119"]) {
-    if (laneTo.has(phone)) process.exit(2);
-  }
-  for (const phone of ["+15555550100", "+15555550101", "+15555550199"]) {
-    if (courtTo.has(phone)) process.exit(3);
-  }
-' "$EVIDENCE/tenant-isolation/lane-store.json" "$EVIDENCE/tenant-isolation/court-store.json" || fail "a store outbox crossed tenants"
+  "$EVIDENCE/tenant-isolation/court.stdout.txt" \
+  "$EVIDENCE/tenant-isolation/lane-left.stdout.txt" \
+  "$EVIDENCE/tenant-isolation/court-left.stdout.txt" \
+  "$EVIDENCE/tenant-isolation/store.json"
 
 if grep -R -n -E '4821|7392' "$EVIDENCE" >/dev/null; then
   fail "step E evidence contains a scratch door code"
@@ -176,7 +168,7 @@ This run used the in-process doctor/smoke CLI. A live cleaning job will not do t
 1. Started tsx via npm run cleaner:doctor and npm run cleaner:smoke in this checkout. A hosted job is not launched that way.
 2. Read Guesty Lite and Google Calendar fixtures under src/cleaner-core/fixtures/. Did not fetch a Guesty Lite URL, did not call Google, and did not use a Google account or credential.
 3. Froze time at the smoke default 2026-10-14T15:00:00.000Z. Did not use the wall clock.
-4. Pushed texts onto an in-memory array, or a JSON file under a temporary --data directory, and printed JSON. Did not call a messaging provider. The temporary directory was removed. The saved stdout, transcript, job list, and outbox were not.
+4. Pushed texts onto an in-memory array, or a JSON file under a temporary --data directory, and printed JSON. Did not call a messaging provider. The tenant-isolation drive kept both Scratch tenants in that one directory. The temporary directory was removed. The saved stdout, transcript, job list, outbox, and shared store were not.
 5. Applied each --reply inside the process. A --closed drive applied no reply. Neither path received an inbound SMS. Closed means the sync ran with no open conversation.
 6. Printed no door code. The scratch digits are not in this folder.
 EOF
