@@ -5,7 +5,7 @@ description: "Drive Cleaner Core (src/cleaner-core) through its doctor and smoke
 
 # Verify Cleaner Core
 
-Cleaner Core texts one Scratch Lane turnover after the owner confirms the checkout time and the check-in time. The surface an agent can drive is the doctor/smoke CLI (`npm run cleaner:doctor`, `npm run cleaner:smoke`). There is no web UI and no listening port. The flag `CLEANER_CORE_ENABLED` is off unless it is `1` or `true`.
+Cleaner Core texts one Scratch Lane turnover after the owner confirms the checkout time and the check-in time. With `--with-pin`, the opted-in cleaner receives the offer, the confirmation, and the reminder, and that cleaner's YES confirms the job. The surface an agent can drive is the doctor/smoke CLI (`npm run cleaner:doctor`, `npm run cleaner:smoke`). There is no web UI and no listening port. The flag `CLEANER_CORE_ENABLED` is off unless it is `1` or `true`.
 
 Drive only Scratch test numbers. The smoke path hard-codes `+15555550100` (owner) and `+15555550101` (approved cleaner) at 12 Scratch Lane. `+15555550199` may send a reply and must not receive a text. If a report texts any other phone, stop. Do not run `sendblue:*`, do not point the CLI at a live provider, and do not substitute a real person's number.
 
@@ -69,7 +69,7 @@ env -u CLEANER_CORE_ENABLED npm run --silent cleaner:smoke -- --reply +155555501
 
 `--reply <from>=<text>` is repeatable. `from` is a Scratch test number. The text is everything after the first `=`. When any explicit operation is present (`--reply`, `--feed`, `--then-feed`, `--now`, `--remind`, `--fail-sends`, `--data`, `--no-poll`, `--with-pin`, `--unapproved`, `--group`), smoke does not inject YES. With no operation, smoke polls the built-in same-day iCal and injects three YES replies from `+15555550100`: checkout, check-in, then the offer. That stdout must match `scripts/expected/smoke-turnover.json`. Exit code 0. `pinRecipients` is `[]`. No body contains a door code.
 
-`--with-pin` opts the approved cleaner in and can send the private door code after the host says the guests have left. Smoke stdout, the transcript, and the outbox print that code as `[redacted]`. `--unapproved` leaves the cleaner unapproved, so no opt-in and no door code go out. `--group` takes one Scratch test number and that number must not receive the door code. The host notice is `door code sent to the cleaner`.
+`--with-pin` opts the approved cleaner in and can send the private door code after the host says the guests have left. Smoke stdout, the transcript, and the outbox print that code as `[redacted]`. `--unapproved` leaves the cleaner unapproved, so no opt-in and no door code go out. `--group` takes one Scratch test number and that number must not receive the door code. The host notice is `Door code sent to the cleaner.`
 
 Smoke with the flag unset exits 2 and prints `sent: []`, including when `--reply` is a Scratch YES. See the feature files for the literal documents.
 
@@ -147,7 +147,7 @@ Prove the step D blockers with:
 .cursor/skills/verify-cleanercore/scripts/prove-step-d.sh
 ```
 
-That script takes no arguments. It removes `evidence/step-d/` and writes it again. It doctors before each journey, then drives `held`, `released`, `not-opted`, `unapproved-yes`, `not-approved`, `checkout-moved`, `full-turn`, `pin-stored`, `stop-holds`, `help-waiting`, `help-cleared`, `help-progress`, `pin-failed`, and `no-group`. The script prints `evidence/step-d`.
+That script takes no arguments. It removes `evidence/step-d/` and writes it again. It doctors before each journey, then drives `held`, `released`, `not-opted`, `unapproved-yes`, `not-approved`, `checkout-moved`, `full-turn`, `pin-stored`, `stop-holds`, `help-waiting`, `help-cleared`, `help-progress`, `injury-failed`, `pin-failed`, and `no-group`. The script prints `evidence/step-d`.
 
 After any script exits, its evidence directory must still be on disk. A cleanup that removes it fails the proof.
 

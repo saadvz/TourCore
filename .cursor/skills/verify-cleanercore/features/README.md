@@ -2,7 +2,7 @@
 
 This directory is the maintained source for verifying Cleaner Core's user-facing behavior. Read the index before driving, then use the matching feature file as the recipe.
 
-The user here is the cleaning-service owner who receives the schedule text. The approved cleaner may receive a safety reply. A drive without `--with-pin` does not text a door code. `--with-pin` texts the private door code to the approved cleaner only after the host says the guests have left, and the saved record redacts the digits. The landlord's switch is `CLEANER_CORE_ENABLED`.
+Without `--with-pin`, the owner receives the schedule text. With `--with-pin`, the opted-in cleaner receives the offer, the confirmation, and the reminder, and only that cleaner's YES confirms the job. The approved cleaner also receives safety replies. A drive without `--with-pin` does not text a door code. `--with-pin` texts the private door code to the approved cleaner only after the host says the guests have left, and the saved record redacts the digits. The landlord's switch is `CLEANER_CORE_ENABLED`.
 
 ## Baseline preconditions
 
@@ -60,10 +60,10 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [Failed send is not delivered](./failed-send.md) covers a reminder whose first send fails and whose retry sends it once. `prove-step-c.sh`.
 - [Door code only after departure](./pin-after-departure.md) covers a same-day turn that holds the code until the host says the guests have left, then sends it once. `prove-step-d.sh`.
 - [Approved and opted in](./opted-in-only.md) covers no code without a cleaner YES, no code for `+15555550199`, and no opt-in for an unapproved cleaner. `prove-step-d.sh`.
-- [Later checkout holds the code](./checkout-moved.md) covers a checkout moved to 2:00 PM and a code that waits for a new confirmation. `prove-step-d.sh`.
-- [One full Scratch turn](./full-turn.md) covers opt-in, confirm, reminder, departure, the private text, START, and DONE. `prove-step-d.sh`.
+- [Later checkout holds the code](./checkout-moved.md) covers a checkout moved to 2:00 PM and a code that waits for the cleaner's new YES. `prove-step-d.sh`.
+- [One full Scratch turn](./full-turn.md) covers opt-in, the cleaner's YES, the cleaner reminder, departure, the private text, START, and DONE. `prove-step-d.sh`.
 - [Sealed door code](./pin-stored.md) covers a persisted store and a stdout that redact the digits. `prove-step-d.sh`.
 - [STOP holds the code](./stop-holds.md) covers STOP before departure and a later START that does not send the code. `prove-step-d.sh`.
-- [HELP around the door code](./help-while-cleaning.md) covers HELP and one injury phrase while waiting, after the code, and in progress. `prove-step-d.sh`.
+- [HELP around the door code](./help-while-cleaning.md) covers HELP, a host injury, and a cleaner injury while waiting, after the code, and in progress, plus a failed host alert. `prove-step-d.sh`.
 - [Failed door-code send](./pin-failed.md) covers a failed private send, one retry, and a second reminder that sends nothing. `prove-step-d.sh`.
 - [No group and no code for Cory](./no-group.md) covers a group number that receives nothing and a host notice that omits the code. `prove-step-d.sh`.

@@ -10,7 +10,7 @@
     },
     {
       "to": "+15555550100",
-      "body": "Cleaner Core: Reply here if you need help with this turnover. Reply STOP to opt out.",
+      "body": "Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.",
       "kind": "help"
     }
   ],
@@ -67,7 +67,7 @@
     {
       "id": "help:smoke-op-1",
       "to": "+15555550100",
-      "body": "Cleaner Core: Reply here if you need help with this turnover. Reply STOP to opt out.",
+      "body": "Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.",
       "kind": "help",
       "status": "sent"
     }
@@ -75,7 +75,7 @@
   "transcript": [
     "Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.",
     "+15555550100: HELP",
-    "Cleaner Core: Reply here if you need help with this turnover. Reply STOP to opt out."
+    "Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out."
   ],
   "blocks": []
 }

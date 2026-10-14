@@ -158,10 +158,12 @@ export interface CleanerCore {
   blocks(): FeedBlock[];
 }
 
-const HELP_ACK = "Cleaner Core: Reply here if you need help with this turnover. Reply STOP to opt out.";
+const HELP_ACK = "Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.";
 const START_ACK = "You're opted back in. Reply YES if you still want this turnover. Reply STOP to opt out.";
 const DECLINED = "Okay, that turnover is not scheduled.";
 const EMERGENCY = VisitorDenialCopy.medicalAlert("property team", undefined, false);
+const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know.";
+const CLEANER_HURT_MISSED = "If someone is hurt, call 911 now. I couldn't reach the host, so please call them too.";
 const SAFETY = new Set<TextKind>(["stop", "help", "start", "emergency"]);
 const DEFAULT_TRIGGERS: ReminderTrigger[] = [{ id: "morning-of", kind: "morning-of", localTime: "08:00" }];
 
@@ -170,6 +172,8 @@ const DEFAULT_TRIGGERS: ReminderTrigger[] = [{ id: "morning-of", kind: "morning-
  *   const core = openCleanerCore({ enabled: cleanerCoreEnabled(env), property, ownerPhone, cleaner, consented: true, sink, now, dataDir });
  *   await core.pollFeed(icalText);
  *   await core.receive({ id, from: ownerPhone, text: "YES" });
+ * With a pin, the opted-in cleaner receives the offer, the scheduled confirmation, and the reminder.
+ * That cleaner's YES confirms the job. The host's YES confirms times, not the offer.
  *   await core.runReminders();
  * Flag off returns reason "disabled" and sends nothing. With no pin, no door code is sent.
  * With a pin, the approved cleaner must opt in and the host must confirm departure first.
@@ -337,7 +341,7 @@ class Engine implements CleanerCore {
     if (isMedicalEmergency(input.text)) return this.safety(input.id, () => this.emergency(from, input.id));
     if (keyword === "stop" || isPlainLanguageStop(input.text)) return this.safety(input.id, () => this.stop(from, input.id));
     if (keyword === "start") return this.safety(input.id, () => this.start(from, input.id));
-    if (this.pin && from === this.cleanerPhone && isYes(input.text)) return this.optInCleaner(input.id);
+    if (this.pin && from === this.cleanerPhone && isYes(input.text) && this.awaitingOptIn()) return this.optInCleaner(input.id);
     if (this.pin && from === this.cleanerPhone && isDone(input.text)) return this.finish(from, input.id);
     if (this.pin && from === this.owner && isDeparture(input.text)) return this.clearDeparture(input.id);
     const moved = await this.moveCheckout(input.id, from, input.text);
@@ -363,13 +367,18 @@ class Engine implements CleanerCore {
         this.cancelOtherReminders(job.id, trigger.id, id);
         const existing = this.outboxState.find((item) => item.id === id);
         if (existing?.status === "sent" || existing?.status === "canceled") continue;
+        const to = this.schedulePhone();
+        if (!to) continue;
         const when = this.clock(job.checkoutDate, fact.minutes);
+        const address = this.options.property.address;
         const text = await this.emit({
           id,
           jobId: job.id,
-          to: this.owner ?? "",
+          to,
           kind: "reminder",
-          body: `Reminder: checkout at ${this.options.property.address} is ${when.day} at ${when.time}. Reply STOP to opt out.`,
+          body: this.pin
+            ? `Reminder: cleaning at ${address} is ${when.day} at ${when.time}.`
+            : `Reminder: checkout at ${address} is ${when.day} at ${when.time}. Reply STOP to opt out.`,
         });
         if (text) sent.push(text);
         else if (this.outboxState.find((item) => item.id === id)?.status === "failed") failed.push(id);
@@ -411,32 +420,27 @@ class Engine implements CleanerCore {
 
   private async answer(id: string, from: string, text: string): Promise<ReceiveResult> {
     const job = this.conversationJob();
-    if (!job || from !== this.owner) return this.markIgnored(id);
+    if (!job) return this.markIgnored(id);
     const status = this.derive(job);
     const minutes = clockMinutes(text);
-    if (status === "discovered") {
-      const chosen = isYes(text) ? this.defaultCheckout : minutes;
+    if (status === "discovered" || status === "awaiting_checkin") {
+      if (from !== this.owner) return this.markIgnored(id);
+      const chosen = isYes(text) ? (status === "discovered" ? this.defaultCheckout : this.defaultCheckIn) : minutes;
       if (chosen === undefined) return this.markIgnored(id);
-      this.addFact(job.id, "checkout", chosen);
-      this.inboundIds.push(id);
-      const sent = await this.drainOne();
-      return { handled: true, reason: "host-time", sent };
-    }
-    if (status === "awaiting_checkin") {
-      const chosen = isYes(text) ? this.defaultCheckIn : minutes;
-      if (chosen === undefined) return this.markIgnored(id);
-      this.addFact(job.id, "checkin", chosen);
+      this.addFact(job.id, status === "discovered" ? "checkout" : "checkin", chosen);
       this.inboundIds.push(id);
       const sent = await this.drainOne();
       return { handled: true, reason: "host-time", sent };
     }
     if (status === "offered") {
-      if (minutes !== undefined) {
+      if (from === this.owner && minutes !== undefined) {
         this.addFact(job.id, "checkout", minutes);
         this.inboundIds.push(id);
         const sent = await this.drainOne();
         return { handled: true, reason: "host-time", sent };
       }
+      const confirmer = this.schedulePhone();
+      if (!confirmer || from !== confirmer) return this.markIgnored(id);
       if (isYes(text)) {
         if (this.stale(job)) return this.markIgnored(id);
         const sent = await this.confirm(job);
@@ -447,8 +451,7 @@ class Engine implements CleanerCore {
       if (isNo(text)) {
         job.declined = true;
         this.inboundIds.push(id);
-        const declined = await this.reply(this.owner ?? from, DECLINED, "declined", "declined", id, job.id);
-        return declined;
+        return this.reply(confirmer, DECLINED, "declined", "declined", id, job.id);
       }
     }
     return this.markIgnored(id);
@@ -456,17 +459,29 @@ class Engine implements CleanerCore {
 
   private async confirm(job: Job): Promise<CleanerText[]> {
     const checkout = this.latestFact(job.id, "checkout");
-    if (!checkout || !this.owner) return [];
+    const to = this.schedulePhone();
+    if (!checkout || !to) return [];
     const when = this.clock(job.checkoutDate, checkout.minutes);
     const id = `confirm:${job.id}:${job.checkoutDate}:${checkout.minutes}:${job.nextCheckInDate ?? ""}`;
     const text = await this.emit({
       id,
       jobId: job.id,
-      to: this.owner,
+      to,
       kind: "confirm",
       body: `Cleaning is scheduled for ${when.day} at ${when.time} at ${this.options.property.address}.`,
     });
     return text ? [text] : [];
+  }
+
+  /** Step C texts the host. Step D texts the opted-in approved cleaner, and waits while that YES is missing. */
+  private schedulePhone(): string | undefined {
+    if (!this.pin) return this.owner;
+    if (!this.options.cleaner.approved || this.cleanerConsent !== "in" || !this.cleanerPhone) return undefined;
+    return this.cleanerPhone;
+  }
+
+  private awaitingOptIn(): boolean {
+    return Boolean(this.cleanerPhone && this.cleanerConsent === "pending" && this.delivery(`opt-in:${this.cleanerPhone}`) === "sent");
   }
 
   private async sendOptIn(): Promise<CleanerText | null> {
@@ -487,8 +502,9 @@ class Engine implements CleanerCore {
     }
     this.cleanerConsent = "in";
     this.inboundIds.push(id);
+    const sent = await this.drainOne();
     this.save();
-    return { handled: true, reason: "opted-in", sent: [] };
+    return { handled: true, reason: "opted-in", sent };
   }
 
   private async finish(from: string, id: string): Promise<ReceiveResult> {
@@ -575,7 +591,7 @@ class Engine implements CleanerCore {
         jobId: job.id,
         to: this.owner,
         kind: "pin-notice",
-        body: "door code sent to the cleaner",
+        body: "Door code sent to the cleaner.",
       });
       if (notice) sent.push(notice);
     }
@@ -708,13 +724,15 @@ class Engine implements CleanerCore {
       };
     }
     if (!job.announced) {
+      const to = this.schedulePhone();
+      if (!to) return null;
       const checkMinutes = checkin?.minutes ?? null;
       const id = `offer:${job.id}:${job.checkoutDate}:${checkout.minutes}:${job.nextCheckInDate ?? ""}:${checkMinutes ?? ""}`;
       if (this.delivery(id) === "sent") return null;
       return {
         id,
         jobId: job.id,
-        to: this.owner,
+        to,
         kind: "offer",
         body: offerBody(this.options.property.address, this.clock(job.checkoutDate, checkout.minutes), job.nextCheckInDate ? this.clock(job.nextCheckInDate, checkMinutes ?? this.defaultCheckIn) : null, job.sameDay),
         afterSend: () => {
@@ -723,13 +741,15 @@ class Engine implements CleanerCore {
       };
     }
     if (this.checkoutDrift(job)) {
+      const to = this.schedulePhone();
+      if (!to) return null;
       const when = this.clock(job.checkoutDate, checkout.minutes);
       const id = `corrected:${job.id}:${job.checkoutDate}:${checkout.minutes}:${job.nextCheckInDate ?? ""}`;
       if (this.delivery(id) === "sent") return null;
       return {
         id,
         jobId: job.id,
-        to: this.owner,
+        to,
         kind: "corrected",
         body: `Update: checkout at ${this.options.property.address} moved to ${when.day} at ${when.time}. Reply YES to keep the cleaning, or STOP to opt out.`,
         afterSend: () => {
@@ -797,9 +817,25 @@ class Engine implements CleanerCore {
     const job = this.conversationJob() ?? this.ordered()[0];
     const key = `${from}|${job?.id ?? "none"}|${job?.version ?? 0}`;
     if (this.injurySent.includes(key)) return { handled: true, reason: "emergency", sent: [], seen: true };
+    if (from === this.cleanerPhone && this.owner && this.owner !== from) return this.alertHostOfInjury(from, inboundId, key, job?.id);
     const result = await this.reply(from, EMERGENCY, "emergency", "emergency", inboundId);
     if (result.sent.length > 0) this.injurySent.push(key);
     return { ...result, seen: result.sent.length > 0 };
+  }
+
+  private async alertHostOfInjury(from: string, inboundId: string, key: string, jobId?: string): Promise<ReceiveResult & { seen?: boolean }> {
+    const hostId = `emergency-host:${key}`;
+    const host = await this.emit({
+      id: hostId,
+      ...(jobId ? { jobId } : {}),
+      to: this.owner ?? "",
+      kind: "emergency",
+      body: `The cleaner at ${this.options.property.address} says someone is hurt. They've been told to call 911.`,
+    });
+    const hostReached = this.delivery(hostId) === "sent";
+    const cleaner = await this.reply(from, hostReached ? CLEANER_HURT : CLEANER_HURT_MISSED, "emergency", "emergency", inboundId, jobId);
+    if (cleaner.sent.length > 0) this.injurySent.push(key);
+    return { handled: true, reason: "emergency", sent: [...(host ? [host] : []), ...cleaner.sent], seen: cleaner.sent.length > 0 };
   }
 
   private async stop(from: string, inboundId: string): Promise<ReceiveResult & { seen?: boolean }> {
@@ -933,7 +969,9 @@ class Engine implements CleanerCore {
 
   private canRemind(job: Job): boolean {
     const status = this.derive(job);
-    return (status === "offered" || status === "confirmed") && !this.stale(job);
+    if (this.stale(job)) return false;
+    if (this.pin) return status === "confirmed" || status === "awaiting_departure";
+    return status === "offered" || status === "confirmed";
   }
 
   private triggerDue(trigger: ReminderTrigger, checkoutDate: string): boolean {

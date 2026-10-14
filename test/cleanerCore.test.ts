@@ -23,10 +23,13 @@ const CORRECTED = "Update: checkout at 12 Scratch Lane, Teaneck, NJ 07666 moved 
 const CANCEL = "Update: the cleaning at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 is canceled, so no need to come. Reply STOP to opt out.";
 const REMINDER = "Reminder: checkout at 12 Scratch Lane, Teaneck, NJ 07666 is Sunday, Oct 18 at 11:00 AM. Reply STOP to opt out.";
 const STOP_ACK = "Tour Core: You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.";
-const HELP_ACK = "Cleaner Core: Reply here if you need help with this turnover. Reply STOP to opt out.";
+const HELP_ACK = "Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.";
 const START_ACK = "You're opted back in. Reply YES if you still want this turnover. Reply STOP to opt out.";
 const DECLINED = "Okay, that turnover is not scheduled.";
 const EMERGENCY = "If someone is hurt, call 911 now. I couldn't reach the property team just now.";
+const HOST_HURT = "The cleaner at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.";
+const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know.";
+const CLEANER_HURT_MISSED = "If someone is hurt, call 911 now. I couldn't reach the host, so please call them too.";
 const NOW = "2026-10-14T15:00:00.000Z";
 const DUE = "2026-10-18T12:00:00.000Z";
 const SMOKE_USAGE = "Usage: tsx src/cleaner-core/cli.ts smoke [--data <dir>] [--no-poll] [--feed <file>] [--then-feed <file>] [--now <iso>] [--remind] [--fail-sends <n>] [--with-pin] [--unapproved] [--group <phone>] [--reply <from>=<text> ...]";
@@ -402,7 +405,15 @@ describe("one Scratch turnover", () => {
     expect(await job.receive({ id: "hurt-cleaner-1", from: CLEANER, text: "I fell and I'm hurt" })).toEqual({
       handled: true,
       reason: "emergency",
-      sent: [{ to: CLEANER, body: EMERGENCY, kind: "emergency" }],
+      sent: [
+        { to: OWNER, body: HOST_HURT, kind: "emergency" },
+        { to: CLEANER, body: CLEANER_HURT, kind: "emergency" },
+      ],
+    });
+    expect(await job.receive({ id: "hurt-cleaner-2", from: CLEANER, text: "I fell and I'm hurt" })).toEqual({
+      handled: true,
+      reason: "emergency",
+      sent: [],
     });
     await job.pollFeed(feed("guesty-lite-stay-removed.ics"));
     expect(await job.receive({ id: "hurt-owner-3", from: OWNER, text: "I fell and I'm hurt" })).toEqual({
@@ -410,7 +421,12 @@ describe("one Scratch turnover", () => {
       reason: "emergency",
       sent: [{ to: OWNER, body: EMERGENCY, kind: "emergency" }],
     });
-    expect(box.sent.filter((text) => text.kind === "emergency").map((text) => text.to)).toEqual([OWNER, CLEANER, OWNER]);
+    expect(box.sent.filter((text) => text.kind === "emergency")).toEqual([
+      { to: OWNER, body: EMERGENCY, kind: "emergency" },
+      { to: OWNER, body: HOST_HURT, kind: "emergency" },
+      { to: CLEANER, body: CLEANER_HURT, kind: "emergency" },
+      { to: OWNER, body: EMERGENCY, kind: "emergency" },
+    ]);
   });
 
   it("opts back in on START and still does not send a door code", async () => {
@@ -552,10 +568,15 @@ describe("one Scratch turnover", () => {
       EMERGENCY,
       said(OWNER, hurt),
       said(CLEANER, hurt),
-      EMERGENCY,
+      HOST_HURT,
+      CLEANER_HURT,
       said(CLEANER, hurt),
     ]);
-    expect(JSON.parse(injury.stdout).sent.map((text: CleanerText) => text.to)).toEqual([OWNER, OWNER, CLEANER]);
+    expect(JSON.parse(injury.stdout).sent.filter((text: CleanerText) => text.kind === "emergency")).toEqual([
+      { to: OWNER, body: EMERGENCY, kind: "emergency" },
+      { to: OWNER, body: HOST_HURT, kind: "emergency" },
+      { to: CLEANER, body: CLEANER_HURT, kind: "emergency" },
+    ]);
 
     const stranger = cleanerCli(["smoke", "--reply", "+15555550199=YES"], "1");
     expect(JSON.parse(stranger.stdout).transcript).toEqual([CHECKOUT_Q, said("+15555550199", "YES")]);
@@ -601,7 +622,8 @@ const PIN = "4821";
 const OPT_IN = "Hi, this is Scratch's cleaning scheduler for 12 Scratch Lane, Teaneck, NJ 07666. Reply YES to get cleaning texts, or STOP to opt out.";
 const PIN_TEXT = "Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: 4821. This code is only for you.";
 const PIN_REDACTED = "Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you.";
-const PIN_NOTICE = "door code sent to the cleaner";
+const PIN_NOTICE = "Door code sent to the cleaner.";
+const CLEANER_REMINDER = "Reminder: cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is Sunday, Oct 18 at 11:00 AM.";
 const PIN_FAIL = "The door code didn't reach the cleaner. We'll try again in a few minutes.";
 const PIN_HELD = "The cleaner opted out, so the door code wasn't sent. Please reach them directly.";
 const STARTED = "Got it, cleaning started.";
@@ -620,7 +642,7 @@ async function confirmAnita(job: ReturnType<typeof pinned>, cleanerYes = true): 
   if (cleanerYes) await job.receive({ id: "opt-yes", from: CLEANER, text: "YES" });
   await job.receive({ id: "y-out", from: OWNER, text: "YES" });
   await job.receive({ id: "y-in", from: OWNER, text: "YES" });
-  await job.receive({ id: "y-offer", from: OWNER, text: "YES" });
+  if (cleanerYes) await job.receive({ id: "y-offer", from: CLEANER, text: "YES" });
 }
 
 describe("step D private door code", () => {
@@ -628,8 +650,28 @@ describe("step D private door code", () => {
     const box = sink();
     let now = NOW;
     const job = pinned(box, { now: () => new Date(now) });
-    await confirmAnita(job);
-    expect(box.sent.map((text) => text.body)).toEqual([CHECKOUT_Q, OPT_IN, CHECKIN_Q, OFFER, CONFIRM]);
+    await job.pollFeed(feed("guesty-lite-scratch.ics"));
+    await job.receive({ id: "opt-yes", from: CLEANER, text: "YES" });
+    await job.receive({ id: "y-out", from: OWNER, text: "YES" });
+    await job.receive({ id: "y-in", from: OWNER, text: "YES" });
+    expect(await job.receive({ id: "owner-offer", from: OWNER, text: "YES" })).toEqual({
+      handled: true,
+      reason: "ignored",
+      sent: [],
+    });
+    expect(job.jobs()[0]?.status).toBe("offered");
+    expect(await job.receive({ id: "y-offer", from: CLEANER, text: "YES" })).toEqual({
+      handled: true,
+      reason: "scheduled",
+      sent: [{ to: CLEANER, body: CONFIRM, kind: "confirm" }],
+    });
+    expect(box.sent).toEqual([
+      { to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" },
+      { to: CLEANER, body: OPT_IN, kind: "opt-in" },
+      { to: OWNER, body: CHECKIN_Q, kind: "host-checkin" },
+      { to: CLEANER, body: OFFER, kind: "offer" },
+      { to: CLEANER, body: CONFIRM, kind: "confirm" },
+    ]);
     now = AFTER;
     expect(job.jobs().map((item) => item.status)).toEqual(["awaiting_departure", "discovered", "discovered"]);
     const released = await job.receive({ id: "left-1", from: OWNER, text: "guests have left" });
@@ -656,10 +698,14 @@ describe("step D private door code", () => {
     await confirmAnita(skipped, false);
     expect(await skipped.receive({ id: "left-skip", from: OWNER, text: "guests have left" })).toEqual({
       handled: true,
-      reason: "departure",
+      reason: "ignored",
       sent: [],
     });
-    expect(quiet.sent.map((text) => text.body)).toEqual([CHECKOUT_Q, OPT_IN, CHECKIN_Q, OFFER, CONFIRM]);
+    expect(quiet.sent).toEqual([
+      { to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" },
+      { to: CLEANER, body: OPT_IN, kind: "opt-in" },
+      { to: OWNER, body: CHECKIN_Q, kind: "host-checkin" },
+    ]);
 
     const stranger = sink();
     const strangerJob = pinned(stranger);
@@ -674,11 +720,14 @@ describe("step D private door code", () => {
     await strangerJob.receive({ id: "s3", from: OWNER, text: "YES" });
     expect(await strangerJob.receive({ id: "left-stranger", from: OWNER, text: "guests have left" })).toEqual({
       handled: true,
-      reason: "departure",
+      reason: "ignored",
       sent: [],
     });
-    expect(stranger.sent.map((text) => text.to)).toEqual([OWNER, CLEANER, OWNER, OWNER, OWNER]);
-    expect(stranger.sent.map((text) => text.body)).toEqual([CHECKOUT_Q, OPT_IN, CHECKIN_Q, OFFER, CONFIRM]);
+    expect(stranger.sent).toEqual([
+      { to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" },
+      { to: CLEANER, body: OPT_IN, kind: "opt-in" },
+      { to: OWNER, body: CHECKIN_Q, kind: "host-checkin" },
+    ]);
 
     const unapproved = sink();
     const blocked = pinned(unapproved, { cleaner: { phone: CLEANER, approved: false } });
@@ -689,10 +738,13 @@ describe("step D private door code", () => {
     await blocked.receive({ id: "n3", from: OWNER, text: "YES" });
     expect(await blocked.receive({ id: "left-unapproved", from: OWNER, text: "guests have left" })).toEqual({
       handled: true,
-      reason: "departure",
+      reason: "ignored",
       sent: [],
     });
-    expect(unapproved.sent.map((text) => text.body)).toEqual([CHECKOUT_Q, CHECKIN_Q, OFFER, CONFIRM]);
+    expect(unapproved.sent).toEqual([
+      { to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" },
+      { to: OWNER, body: CHECKIN_Q, kind: "host-checkin" },
+    ]);
   });
 
   it("holds the door code when the host moves checkout later, until the host confirms again", async () => {
@@ -702,17 +754,22 @@ describe("step D private door code", () => {
     expect(await job.receive({ id: "later", from: OWNER, text: "2:00 PM" })).toEqual({
       handled: true,
       reason: "host-time",
-      sent: [{ to: OWNER, body: CORRECTED_2PM, kind: "corrected" }],
+      sent: [{ to: CLEANER, body: CORRECTED_2PM, kind: "corrected" }],
     });
     expect(await job.receive({ id: "left-early", from: OWNER, text: "guests have left" })).toEqual({
       handled: true,
       reason: "ignored",
       sent: [],
     });
-    expect(await job.receive({ id: "keep", from: OWNER, text: "YES" })).toEqual({
+    expect(await job.receive({ id: "owner-keep", from: OWNER, text: "YES" })).toEqual({
+      handled: true,
+      reason: "ignored",
+      sent: [],
+    });
+    expect(await job.receive({ id: "keep", from: CLEANER, text: "YES" })).toEqual({
       handled: true,
       reason: "scheduled",
-      sent: [{ to: OWNER, body: CONFIRM_2PM, kind: "confirm" }],
+      sent: [{ to: CLEANER, body: CONFIRM_2PM, kind: "confirm" }],
     });
     expect(await job.receive({ id: "left-again", from: OWNER, text: "guests have left" })).toEqual({
       handled: true,
@@ -731,7 +788,8 @@ describe("step D private door code", () => {
     const job = pinned(box, { now: () => new Date(now) });
     await confirmAnita(job);
     now = DUE;
-    expect(await job.runReminders()).toEqual({ sent: [{ to: OWNER, body: REMINDER, kind: "reminder" }], failed: [] });
+    expect(await job.runReminders()).toEqual({ sent: [{ to: CLEANER, body: CLEANER_REMINDER, kind: "reminder" }], failed: [] });
+    expect(await job.runReminders()).toEqual({ sent: [], failed: [] });
     now = AFTER;
     expect(job.jobs()[0]?.status).toBe("awaiting_departure");
     await job.receive({ id: "left-full", from: OWNER, text: "guests have left" });
@@ -749,9 +807,9 @@ describe("step D private door code", () => {
       { to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" },
       { to: CLEANER, body: OPT_IN, kind: "opt-in" },
       { to: OWNER, body: CHECKIN_Q, kind: "host-checkin" },
-      { to: OWNER, body: OFFER, kind: "offer" },
-      { to: OWNER, body: CONFIRM, kind: "confirm" },
-      { to: OWNER, body: REMINDER, kind: "reminder" },
+      { to: CLEANER, body: OFFER, kind: "offer" },
+      { to: CLEANER, body: CONFIRM, kind: "confirm" },
+      { to: CLEANER, body: CLEANER_REMINDER, kind: "reminder" },
       { to: CLEANER, body: PIN_TEXT, kind: "pin" },
       { to: OWNER, body: PIN_NOTICE, kind: "pin-notice" },
       { to: CLEANER, body: STARTED, kind: "started" },
@@ -766,9 +824,9 @@ describe("step D private door code", () => {
       CHECKIN_Q,
       said(OWNER, "YES"),
       OFFER,
-      said(OWNER, "YES"),
+      said(CLEANER, "YES"),
       CONFIRM,
-      REMINDER,
+      CLEANER_REMINDER,
       said(OWNER, "guests have left"),
       PIN_REDACTED,
       PIN_NOTICE,
@@ -850,10 +908,26 @@ describe("step D private door code", () => {
         reason: "emergency",
         sent: [{ to: OWNER, body: EMERGENCY, kind: "emergency" }],
       });
+      expect(await job.receive({ id: `${phase}-cleaner-hurt`, from: CLEANER, text: "I fell and I'm hurt" })).toEqual({
+        handled: true,
+        reason: "emergency",
+        sent: [
+          { to: OWNER, body: HOST_HURT, kind: "emergency" },
+          { to: CLEANER, body: CLEANER_HURT, kind: "emergency" },
+        ],
+      });
+      expect(await job.receive({ id: `${phase}-cleaner-hurt-again`, from: CLEANER, text: "I fell and I'm hurt" })).toEqual({
+        handled: true,
+        reason: "emergency",
+        sent: [],
+      });
       expect(box.sent.slice(before)).toEqual([
         { to: CLEANER, body: HELP_ACK, kind: "help" },
         { to: OWNER, body: EMERGENCY, kind: "emergency" },
+        { to: OWNER, body: HOST_HURT, kind: "emergency" },
+        { to: CLEANER, body: CLEANER_HURT, kind: "emergency" },
       ]);
+      expect(box.sent.slice(before).map((text) => text.body).join("\n").includes(PIN)).toBe(false);
       const pinTexts = box.sent.filter((text) => text.kind === "pin");
       expect(pinTexts).toEqual(phase === "waiting" ? [] : [{ to: CLEANER, body: PIN_TEXT, kind: "pin" }]);
       expect(job.jobs()[0]?.status).toBe(phase === "waiting" ? "awaiting_departure" : phase === "cleared" ? "cleared" : "in_progress");
@@ -944,7 +1018,7 @@ describe("step D private door code", () => {
       "--reply", `${CLEANER}=YES`,
       "--reply", `${OWNER}=YES`,
       "--reply", `${OWNER}=YES`,
-      "--reply", `${OWNER}=YES`,
+      "--reply", `${CLEANER}=YES`,
       "--reply", `${OWNER}=guests have left`,
     ], "1");
     expect(drive.status).toBe(0);
@@ -956,6 +1030,42 @@ describe("step D private door code", () => {
     expect(report.sent.find((text) => text.kind === "pin-notice")).toEqual({ to: OWNER, body: PIN_NOTICE, kind: "pin-notice" });
     expect(report.transcript).toContain(PIN_REDACTED);
     expect(report.jobs[0]?.status).toBe("cleared");
+  });
+
+  it("tells the cleaner to call the host when the injury alert fails once", () => {
+    const hurt = "I fell and I'm hurt";
+    const drive = cleanerCli([
+      "smoke",
+      "--with-pin",
+      "--feed", "src/cleaner-core/fixtures/guesty-lite-scratch.ics",
+      "--reply", `${CLEANER}=YES`,
+      "--reply", `${OWNER}=YES`,
+      "--reply", `${OWNER}=YES`,
+      "--reply", `${CLEANER}=YES`,
+      "--fail-sends", "1",
+      "--reply", `${CLEANER}=${hurt}`,
+      "--reply", `${CLEANER}=${hurt}`,
+    ], "1");
+    expect(drive.status).toBe(0);
+    expect(drive.stderr).toBe("");
+    expect(drive.stdout.includes(PIN)).toBe(false);
+    const report = JSON.parse(drive.stdout) as {
+      sent: CleanerText[];
+      transcript: string[];
+      outbox: { to: string; body: string; kind: string; status: string }[];
+    };
+    expect(report.sent.filter((text) => text.kind === "emergency")).toEqual([
+      { to: CLEANER, body: CLEANER_HURT_MISSED, kind: "emergency" },
+    ]);
+    expect(report.outbox.find((item) => item.body === HOST_HURT)).toEqual(expect.objectContaining({
+      to: OWNER,
+      kind: "emergency",
+      status: "failed",
+    }));
+    expect(report.transcript.filter((line) => line === CLEANER_HURT_MISSED)).toEqual([CLEANER_HURT_MISSED]);
+    expect(report.transcript.includes(HOST_HURT)).toBe(false);
+    expect(report.transcript.includes(CLEANER_HURT)).toBe(false);
+    expect(report.sent.some((text) => text.kind === "pin")).toBe(false);
   });
 });
 

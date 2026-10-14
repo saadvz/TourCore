@@ -21,18 +21,21 @@ const OFFER = `Turnover at ${ADDRESS} on Sunday, Oct 18. Checkout 11:00 AM, next
 const CONFIRM = `Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at ${ADDRESS}.`;
 const CONFIRM_2PM = `Cleaning is scheduled for Sunday, Oct 18 at 2:00 PM at ${ADDRESS}.`;
 const CORRECTED_2PM = `Update: checkout at ${ADDRESS} moved to Sunday, Oct 18 at 2:00 PM. Reply YES to keep the cleaning, or STOP to opt out.`;
-const REMINDER = `Reminder: checkout at ${ADDRESS} is Sunday, Oct 18 at 11:00 AM. Reply STOP to opt out.`;
+const REMINDER = `Reminder: cleaning at ${ADDRESS} is Sunday, Oct 18 at 11:00 AM.`;
 const OPT_IN = `Hi, this is Scratch's cleaning scheduler for ${ADDRESS}. Reply YES to get cleaning texts, or STOP to opt out.`;
 const PIN_REDACTED = `Guests have left ${ADDRESS}. Door code: [redacted]. This code is only for you.`;
-const PIN_NOTICE = "door code sent to the cleaner";
+const PIN_NOTICE = "Door code sent to the cleaner.";
 const PIN_FAIL = "The door code didn't reach the cleaner. We'll try again in a few minutes.";
 const PIN_HELD = "The cleaner opted out, so the door code wasn't sent. Please reach them directly.";
 const STARTED = "Got it, cleaning started.";
 const DONE_ACK = "Thanks, cleaning marked done.";
 const STOP_ACK = "Tour Core: You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.";
 const START_ACK = "You're opted back in. Reply YES if you still want this turnover. Reply STOP to opt out.";
-const HELP_ACK = "Cleaner Core: Reply here if you need help with this turnover. Reply STOP to opt out.";
+const HELP_ACK = "Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.";
 const EMERGENCY = "If someone is hurt, call 911 now. I couldn't reach the property team just now.";
+const HOST_HURT = `The cleaner at ${ADDRESS} says someone is hurt. They've been told to call 911.`;
+const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know.";
+const CLEANER_HURT_MISSED = "If someone is hurt, call 911 now. I couldn't reach the host, so please call them too.";
 const said = (from, text) => `${from}: ${text}`;
 
 const reports = paths.map((path) => JSON.parse(readFileSync(path, "utf8")));
@@ -88,7 +91,7 @@ if (journey === "held") {
     CHECKIN_Q,
     said(OWNER, "YES"),
     OFFER,
-    said(OWNER, "YES"),
+    said(CLEANER, "YES"),
     CONFIRM,
     REMINDER,
     said(OWNER, "guests have left"),
@@ -112,11 +115,16 @@ if (journey === "held") {
   if ((first.sent ?? []).some((text) => text.kind === "pin")) fail("START resent the door code");
   if (!first.transcript.includes(PIN_HELD)) fail("the held notice is missing from the transcript");
 } else if (journey === "help-waiting" || journey === "help-cleared" || journey === "help-progress") {
-  const tail = (first.sent ?? []).slice(-2);
+  const tail = (first.sent ?? []).slice(-4);
   same(tail, [
     { to: CLEANER, body: HELP_ACK, kind: "help" },
     { to: OWNER, body: EMERGENCY, kind: "emergency" },
+    { to: OWNER, body: HOST_HURT, kind: "emergency" },
+    { to: CLEANER, body: CLEANER_HURT, kind: "emergency" },
   ]);
+  if ([HELP_ACK, EMERGENCY, HOST_HURT, CLEANER_HURT].some((body) => body.includes("4821") || body.includes("[redacted]"))) {
+    fail("a safety reply includes the door code");
+  }
   if (journey === "help-waiting") {
     same(first.pinRecipients, []);
     same(first.jobs[0]?.status, "awaiting_departure");
@@ -129,6 +137,21 @@ if (journey === "held") {
     if (!first.transcript.includes(STARTED)) fail("cleaning had not started");
     same(first.sent.filter((text) => text.kind === "pin"), [{ to: CLEANER, body: PIN_REDACTED, kind: "pin" }]);
   }
+} else if (journey === "injury-failed") {
+  same((first.sent ?? []).filter((text) => text.kind === "emergency"), [
+    { to: CLEANER, body: CLEANER_HURT_MISSED, kind: "emergency" },
+  ]);
+  const host = (first.outbox ?? []).find((item) => item.body === HOST_HURT);
+  same(host && { to: host.to, body: host.body, kind: host.kind, status: host.status }, {
+    to: OWNER,
+    body: HOST_HURT,
+    kind: "emergency",
+    status: "failed",
+  });
+  if ((first.transcript ?? []).includes(HOST_HURT)) fail("the failed host alert was saved as delivered");
+  if ((first.transcript ?? []).includes(CLEANER_HURT)) fail("the success copy went out after the host alert failed");
+  same((first.transcript ?? []).filter((line) => line === CLEANER_HURT_MISSED), [CLEANER_HURT_MISSED]);
+  if ((first.sent ?? []).some((text) => text.kind === "pin")) fail("the injury path sent a door code");
 } else if (journey === "pin-failed") {
   const [failed, retry, again] = reports;
   if (!failed || !retry || !again) fail("pin-failed needs three reports");

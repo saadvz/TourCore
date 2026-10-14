@@ -4,7 +4,5 @@ Hi, this is Scratch's cleaning scheduler for 12 Scratch Lane, Teaneck, NJ 07666.
 +15555550100: YES
 Is check-in at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.
 +15555550100: YES
-Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.
 +15555550100: YES
-Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.
 +15555550100: guests have left

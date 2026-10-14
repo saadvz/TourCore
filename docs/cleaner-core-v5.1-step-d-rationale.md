@@ -30,7 +30,7 @@ await core.runReminders();
 await core.receive({ id, from: ownerPhone, text: "guests have left" });
 ```
 
-Omit `pin` and the engine is step C: no opt-in, no door code, `pinRecipients` empty. With `pin`, the cleaner is asked to opt in, a host departure phrase records a clearance for the current checkout version, and the private text goes only to the approved cleaner who opted in. The host receives `door code sent to the cleaner` and never the digits. Flag off still returns `disabled` and sends nothing.
+Omit `pin` and the engine is step C: no opt-in, no door code, `pinRecipients` empty, and the host still receives the offer, the confirmation, and the reminder. With `pin`, the cleaner is asked to opt in, then receives the offer, the scheduled confirmation, and the reminder `Reminder: cleaning at {address} is {day} at {time}.` The job is confirmed only when that cleaner replies YES. A host departure phrase records a clearance for the current checkout version, and the private text goes only to the approved cleaner who opted in. The host receives `Door code sent to the cleaner.` and never the digits. A cleaner injury alerts the host and does not include the code. Flag off still returns `disabled` and sends nothing.
 
 ## Shape
 

@@ -3,7 +3,7 @@
     "id": "stay-anita@guesty.com",
     "departingUid": "stay-anita@guesty.com",
     "arrivingUid": "stay-same-day@guesty.com",
-    "status": "confirmed",
+    "status": "host_confirmed",
     "live": true,
     "textsBlocked": false,
     "checkoutDate": "2026-10-18",

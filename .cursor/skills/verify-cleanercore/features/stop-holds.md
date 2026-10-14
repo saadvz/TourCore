@@ -21,7 +21,7 @@ Preconditions:
 - `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:doctor` exits 0 with `sends` false and `enabled` true.
 - The drive passes `--with-pin` and the Guesty fixture.
 
-- **Stop, depart, start.** Run `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --with-pin --feed src/cleaner-core/fixtures/guesty-lite-scratch.ics --reply +15555550101=YES --reply +15555550100=YES --reply +15555550100=YES --reply +15555550100=YES --reply +15555550101=STOP --reply "+15555550100=guests have left" --reply +15555550101=START`. Exit code 0.
+- **Stop, depart, start.** Run `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --with-pin --feed src/cleaner-core/fixtures/guesty-lite-scratch.ics --reply +15555550101=YES --reply +15555550100=YES --reply +15555550100=YES --reply +15555550101=YES --reply +15555550101=STOP --reply "+15555550100=guests have left" --reply +15555550101=START`. Exit code 0.
 - **Texts.** The cleaner receives `Tour Core: You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.` The host receives the held sentence once. START replies `You're opted back in. Reply YES if you still want this turnover. Reply STOP to opt out.` No `kind` is `pin`. `pinRecipients` is `[]`.
 - **Proof.** Save the command, stdout, stderr, exit code, and transcript with feature id `stop-holds`.
 

@@ -21,18 +21,18 @@
       "kind": "host-checkin"
     },
     {
-      "to": "+15555550100",
+      "to": "+15555550101",
       "body": "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
       "kind": "offer"
     },
     {
-      "to": "+15555550100",
+      "to": "+15555550101",
       "body": "Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
       "kind": "confirm"
     },
     {
-      "to": "+15555550100",
-      "body": "Reminder: checkout at 12 Scratch Lane, Teaneck, NJ 07666 is Sunday, Oct 18 at 11:00 AM. Reply STOP to opt out.",
+      "to": "+15555550101",
+      "body": "Reminder: cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is Sunday, Oct 18 at 11:00 AM.",
       "kind": "reminder"
     },
     {
@@ -42,7 +42,7 @@
     },
     {
       "to": "+15555550100",
-      "body": "door code sent to the cleaner",
+      "body": "Door code sent to the cleaner.",
       "kind": "pin-notice"
     },
     {
@@ -144,7 +144,7 @@
     },
     {
       "id": "offer:stay-anita@guesty.com:2026-10-18:660:2026-10-18:960",
-      "to": "+15555550100",
+      "to": "+15555550101",
       "body": "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
       "kind": "offer",
       "status": "sent",
@@ -152,7 +152,7 @@
     },
     {
       "id": "confirm:stay-anita@guesty.com:2026-10-18:660:2026-10-18",
-      "to": "+15555550100",
+      "to": "+15555550101",
       "body": "Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
       "kind": "confirm",
       "status": "sent",
@@ -160,8 +160,8 @@
     },
     {
       "id": "reminder:stay-anita@guesty.com:morning-of:2026-10-18:1:660",
-      "to": "+15555550100",
-      "body": "Reminder: checkout at 12 Scratch Lane, Teaneck, NJ 07666 is Sunday, Oct 18 at 11:00 AM. Reply STOP to opt out.",
+      "to": "+15555550101",
+      "body": "Reminder: cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is Sunday, Oct 18 at 11:00 AM.",
       "kind": "reminder",
       "status": "sent",
       "jobId": "stay-anita@guesty.com"
@@ -177,7 +177,7 @@
     {
       "id": "pin-notice:pin:stay-anita@guesty.com:2026-10-18:660:1",
       "to": "+15555550100",
-      "body": "door code sent to the cleaner",
+      "body": "Door code sent to the cleaner.",
       "kind": "pin-notice",
       "status": "sent",
       "jobId": "stay-anita@guesty.com"
@@ -207,12 +207,12 @@
     "Is check-in at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.",
     "+15555550100: YES",
     "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
-    "+15555550100: YES",
+    "+15555550101: YES",
     "Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
-    "Reminder: checkout at 12 Scratch Lane, Teaneck, NJ 07666 is Sunday, Oct 18 at 11:00 AM. Reply STOP to opt out.",
+    "Reminder: cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is Sunday, Oct 18 at 11:00 AM.",
     "+15555550100: guests have left",
     "Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you.",
-    "door code sent to the cleaner",
+    "Door code sent to the cleaner.",
     "+15555550101: START",
     "Got it, cleaning started.",
     "+15555550101: DONE",

@@ -19,7 +19,7 @@ Preconditions:
 - `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:doctor` exits 0 with `sends` false and `enabled` true.
 - A temporary directory exists for `--data`. Copy `cleaner-core.json` into the evidence directory before removing the temporary directory.
 
-- **Send into a store.** Run `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --with-pin --data <dir> --feed src/cleaner-core/fixtures/guesty-lite-scratch.ics --reply +15555550101=YES --reply +15555550100=YES --reply +15555550100=YES --reply +15555550100=YES --reply "+15555550100=guests have left"`. Exit code 0.
+- **Send into a store.** Run `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --with-pin --data <dir> --feed src/cleaner-core/fixtures/guesty-lite-scratch.ics --reply +15555550101=YES --reply +15555550100=YES --reply +15555550100=YES --reply +15555550101=YES --reply "+15555550100=guests have left"`. Exit code 0.
 - **Stdout.** `pinRecipients` is `["+15555550101"]`. The private body is the redacted sentence. The transcript contains that sentence.
 - **Grep.** The scratch digits are absent from stdout, stderr, and `cleaner-core.json`.
 - **Proof.** Save the command, stdout, stderr, exit code, transcript, job list, outbox, and a copy of the store with feature id `pin-stored`. The harness greps `evidence/step-d` for the digits and fails the run if they appear.

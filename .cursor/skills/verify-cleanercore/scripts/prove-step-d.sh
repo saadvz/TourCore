@@ -86,14 +86,14 @@ assert_journey() {
 doctor "$EVIDENCE/held"
 run_smoke "$EVIDENCE/held" smoke env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- \
   --with-pin --feed "$FEED" \
-  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" \
+  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$CLEANER=YES" \
   --now "$AFTER"
 assert_journey held "$EVIDENCE/held/smoke.stdout.txt"
 
 doctor "$EVIDENCE/released"
 run_smoke "$EVIDENCE/released" smoke env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- \
   --with-pin --feed "$FEED" \
-  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" \
+  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$CLEANER=YES" \
   --now "$AFTER" --reply "$OWNER=guests have left"
 assert_journey released "$EVIDENCE/released/smoke.stdout.txt"
 
@@ -123,15 +123,15 @@ assert_journey not-approved "$EVIDENCE/not-approved/smoke.stdout.txt"
 doctor "$EVIDENCE/checkout-moved"
 run_smoke "$EVIDENCE/checkout-moved" smoke env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- \
   --with-pin --feed "$FEED" \
-  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" \
+  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$CLEANER=YES" \
   --reply "$OWNER=2:00 PM" --reply "$OWNER=guests have left" \
-  --reply "$OWNER=YES" --reply "$OWNER=guests have left"
+  --reply "$CLEANER=YES" --reply "$OWNER=guests have left"
 assert_journey checkout-moved "$EVIDENCE/checkout-moved/smoke.stdout.txt"
 
 doctor "$EVIDENCE/full-turn"
 run_smoke "$EVIDENCE/full-turn" smoke env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- \
   --with-pin --feed "$FEED" \
-  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" \
+  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$CLEANER=YES" \
   --now "$DUE" --remind --now "$AFTER" \
   --reply "$OWNER=guests have left" --reply "$CLEANER=START" --reply "$CLEANER=DONE"
 assert_journey full-turn "$EVIDENCE/full-turn/smoke.stdout.txt"
@@ -140,7 +140,7 @@ doctor "$EVIDENCE/pin-stored"
 STORE_DIR="$(mktemp -d)"
 run_smoke "$EVIDENCE/pin-stored" smoke env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- \
   --with-pin --data "$STORE_DIR" --feed "$FEED" \
-  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" \
+  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$CLEANER=YES" \
   --reply "$OWNER=guests have left"
 cp "$STORE_DIR/cleaner-core.json" "$EVIDENCE/pin-stored/store.json"
 rm -rf "$STORE_DIR"
@@ -149,38 +149,45 @@ assert_journey pin-stored "$EVIDENCE/pin-stored/smoke.stdout.txt"
 doctor "$EVIDENCE/stop-holds"
 run_smoke "$EVIDENCE/stop-holds" smoke env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- \
   --with-pin --feed "$FEED" \
-  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" \
+  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$CLEANER=YES" \
   --reply "$CLEANER=STOP" --reply "$OWNER=guests have left" --reply "$CLEANER=START"
 assert_journey stop-holds "$EVIDENCE/stop-holds/smoke.stdout.txt"
 
 doctor "$EVIDENCE/help-waiting"
 run_smoke "$EVIDENCE/help-waiting" smoke env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- \
   --with-pin --feed "$FEED" \
-  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" \
-  --now "$AFTER" --reply "$CLEANER=HELP" --reply "$OWNER=I fell and I'm hurt"
+  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$CLEANER=YES" \
+  --now "$AFTER" --reply "$CLEANER=HELP" --reply "$OWNER=I fell and I'm hurt" --reply "$CLEANER=I fell and I'm hurt"
 assert_journey help-waiting "$EVIDENCE/help-waiting/smoke.stdout.txt"
 
 doctor "$EVIDENCE/help-cleared"
 run_smoke "$EVIDENCE/help-cleared" smoke env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- \
   --with-pin --feed "$FEED" \
-  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" \
+  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$CLEANER=YES" \
   --now "$AFTER" --reply "$OWNER=guests have left" \
-  --reply "$CLEANER=HELP" --reply "$OWNER=I fell and I'm hurt"
+  --reply "$CLEANER=HELP" --reply "$OWNER=I fell and I'm hurt" --reply "$CLEANER=I fell and I'm hurt"
 assert_journey help-cleared "$EVIDENCE/help-cleared/smoke.stdout.txt"
 
 doctor "$EVIDENCE/help-progress"
 run_smoke "$EVIDENCE/help-progress" smoke env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- \
   --with-pin --feed "$FEED" \
-  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" \
+  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$CLEANER=YES" \
   --now "$AFTER" --reply "$OWNER=guests have left" --reply "$CLEANER=START" \
-  --reply "$CLEANER=HELP" --reply "$OWNER=I fell and I'm hurt"
+  --reply "$CLEANER=HELP" --reply "$OWNER=I fell and I'm hurt" --reply "$CLEANER=I fell and I'm hurt"
 assert_journey help-progress "$EVIDENCE/help-progress/smoke.stdout.txt"
+
+doctor "$EVIDENCE/injury-failed"
+run_smoke "$EVIDENCE/injury-failed" smoke env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- \
+  --with-pin --feed "$FEED" \
+  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$CLEANER=YES" \
+  --fail-sends 1 --reply "$CLEANER=I fell and I'm hurt" --reply "$CLEANER=I fell and I'm hurt"
+assert_journey injury-failed "$EVIDENCE/injury-failed/smoke.stdout.txt"
 
 doctor "$EVIDENCE/pin-failed"
 FAIL_DIR="$(mktemp -d)"
 run_smoke "$EVIDENCE/pin-failed" failed env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- \
   --with-pin --data "$FAIL_DIR" --feed "$FEED" \
-  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" \
+  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$CLEANER=YES" \
   --now "$AFTER" --fail-sends 1 --reply "$OWNER=guests have left"
 run_smoke "$EVIDENCE/pin-failed" retry env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- \
   --with-pin --data "$FAIL_DIR" --no-poll --remind
@@ -196,7 +203,7 @@ assert_journey pin-failed \
 doctor "$EVIDENCE/no-group"
 run_smoke "$EVIDENCE/no-group" smoke env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- \
   --with-pin --group "$UNAPPROVED" --feed "$FEED" \
-  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" \
+  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$CLEANER=YES" \
   --reply "$OWNER=guests have left"
 assert_journey no-group "$EVIDENCE/no-group/smoke.stdout.txt"
 
@@ -205,7 +212,7 @@ if grep -R -n "4821" "$EVIDENCE" >/dev/null; then
 fi
 
 cat >"$EVIDENCE/result.txt" <<EOF
-features: held released not-opted unapproved-yes not-approved checkout-moved full-turn pin-stored stop-holds help-waiting help-cleared help-progress pin-failed no-group
+features: held released not-opted unapproved-yes not-approved checkout-moved full-turn pin-stored stop-holds help-waiting help-cleared help-progress injury-failed pin-failed no-group
 script: .cursor/skills/verify-cleanercore/scripts/prove-step-d.sh
 pin: redacted
 EOF
