@@ -69,6 +69,14 @@ export function holdNote(address: string): string {
   return `The cleaning at ${address} is on hold until the cleaner replies YES.`;
 }
 
+export function jobHoldLine(address: string): string {
+  return `The cleaning at ${address} is on hold.`;
+}
+
+export function optedOutCodeLine(): string {
+  return "The cleaner opted out, so the door code wasn't sent. Please reach them directly.";
+}
+
 export function resumeNote(address: string): string {
   return `The cleaning at ${address} is back on.`;
 }

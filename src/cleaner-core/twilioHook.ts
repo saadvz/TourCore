@@ -66,7 +66,7 @@ export async function handleCleanerTwilioStatus(input: {
   const status = (params.MessageStatus || params.SmsStatus || "").toLowerCase();
   if (sid && status) {
     const desk = liveDeskFor(input.root, () => input.env, input.now);
-    desk.notePinDelivery({ sid, status });
+    await desk.notePinDelivery({ sid, status });
   }
   return { status: 200, body: "{}" };
 }

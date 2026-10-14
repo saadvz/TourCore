@@ -284,7 +284,7 @@ describe("Cleaner Core live wiring", () => {
     expect(failed.status).toBe(200);
     expect(failed.raw).toBe("{}");
     expect(pins()).toHaveLength(1);
-    expect(wired.cleanerSent.some((item) => item.to === HOST && item.body === PIN_FAILED)).toBe(false);
+    expect(wired.cleanerSent.filter((item) => item.to === HOST && item.body === PIN_FAILED)).toHaveLength(1);
 
     const noted = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state");
     expect(noted.text).toContain(PIN_FAILED);

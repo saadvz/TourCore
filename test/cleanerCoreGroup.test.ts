@@ -185,12 +185,16 @@ describe("group thread", () => {
     const sent = box();
     const job = await joined(sent);
     await job.receive({ id: "stop-cory", from: OWNER, text: "STOP", channel: "group" });
+    const blocked = await job.receive({ id: "left-cory-held", from: OWNER, text: "guests have left" });
+    expect(blocked.sent.filter((text) => text.kind === "pin")).toEqual([]);
+    expect(job.jobOnHold()).toBe(true);
+    await job.resumeJob();
     const left = await job.receive({ id: "left-cory-out", from: OWNER, text: "guests have left" });
     expect(left.sent.filter((text) => text.kind === "pin")).toEqual([{ to: CLEANER, body: PRIVATE_PIN, kind: "pin" }]);
     expect(left.sent.filter((text) => text.body === PRIVATE_LINE || text.channel === "group")).toEqual([]);
-    expect(job.hostNotes()).toEqual([]);
+    expect(job.hostNotes()).toEqual([RESUME]);
     job.notePrivateCodeDelivered();
-    expect(job.hostNotes()).toEqual([PRIVATE_LINE]);
+    expect(job.hostNotes()).toEqual([RESUME, PRIVATE_LINE]);
   });
 
   it("files the private line for Cory only after a delivery report, and the group never gets it", async () => {
@@ -1112,7 +1116,7 @@ describe("live group membership", () => {
     }
     expect(sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
     expect(posts.filter((text) => text.body === privatePin).map((text) => text.body)).toEqual([]);
-    expect(sms.sent.filter((text) => text.to === LIVE_HOST && (text.body === privatePin || text.body === PIN_FAILED || text.body === line)).map((text) => text.body)).toEqual([]);
+    expect(sms.sent.filter((text) => text.to === LIVE_HOST && (text.body === privatePin || text.body === PIN_FAILED || text.body === line)).map((text) => text.body)).toEqual([PIN_FAILED]);
   });
 
   it("hides the private note after an undelivered report and returns the failed-send sentence", async () => {
@@ -1141,7 +1145,7 @@ describe("live group membership", () => {
     }
     expect(sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
     expect(posts.filter((text) => text.body === privatePin).map((text) => text.body)).toEqual([]);
-    expect(sms.sent.filter((text) => text.to === LIVE_HOST && (text.body === privatePin || text.body === line || text.body === PIN_FAILED)).map((text) => text.body)).toEqual([]);
+    expect(sms.sent.filter((text) => text.to === LIVE_HOST && (text.body === privatePin || text.body === line || text.body === PIN_FAILED)).map((text) => text.body)).toEqual([PIN_FAILED]);
   });
 
   function notesOf(reply: { ok: boolean; result?: Record<string, unknown> }): string[] {
@@ -1233,7 +1237,7 @@ describe("live group membership", () => {
     const missed = await failed.desk.markGuestsLeft({ said: "The guests have left" }, failed.pinKey);
     expect(missed).toEqual({ ok: true, result: { next: PIN_FAILED } });
     expect(notesOf(failed.desk.getState()).join("\n").includes("Door code")).toBe(false);
-    expect(hostBodies(failed.sms.sent)).toEqual([]);
+    expect(hostBodies(failed.sms.sent)).toEqual([PIN_FAILED]);
     expect(failed.sms.sent.filter((text) => text.to === LIVE_HOST && text.body.includes("Door code:"))).toEqual([]);
 
     const grouped = await readyPractice(true);
@@ -1373,7 +1377,7 @@ describe("live group membership", () => {
     await failed.desk.inbound({ id: "safety-fail-schedule", from: LIVE_CLEANER, text: "YES" });
     const missed = await failed.desk.markGuestsLeft({ said: "The guests have left" }, failed.pinKey);
     expect(missed).toEqual({ ok: true, result: { next: PIN_FAILED } });
-    expect(failed.sms.sent.filter((text) => text.to === LIVE_HOST || text.body === PIN_FAILED)).toEqual([]);
+    expect(failed.sms.sent.filter((text) => text.to === LIVE_HOST).map((text) => text.body)).toEqual([PIN_FAILED]);
 
     const solo = await readyPractice(false);
     expect(notesOf(solo.desk.getState())).toContain(checkin);
@@ -1421,7 +1425,7 @@ describe("live group membership", () => {
     const missed = await failed.desk.markGuestsLeft({ said: "The guests have left" }, failed.pinKey);
     expect(missed).toEqual({ ok: true, result: { next: PIN_FAILED } });
     expect(notesOf(failed.desk.getState()).join("\n").includes("Door code")).toBe(false);
-    expect(hostBodies(failed.sms.sent)).toEqual([]);
+    expect(hostBodies(failed.sms.sent)).toEqual([PIN_FAILED]);
 
     const sentPin = await readyPractice(false);
     await sentPin.desk.inbound({ id: "kinds-pin-yes-offer", from: LIVE_CLEANER, text: "YES" });
@@ -1518,13 +1522,17 @@ describe("live group membership", () => {
     const undelivered = blocked.desk.getState();
     expect(undelivered).toEqual({ ok: true, result: expect.objectContaining({ next: PIN_FAILED }) });
     expect(notesOf(undelivered).includes(line)).toBe(false);
-    expect(hostBodies(blocked.sms.sent)).toEqual([]);
+    expect(hostBodies(blocked.sms.sent)).toEqual([PIN_FAILED]);
 
     const hostOut = await readyPractice(true);
     await hostOut.desk.inbound({ id: "route-out-offer", from: LIVE_CLEANER, text: "YES" });
     await hostOut.desk.inbound({ id: "route-out-host", from: LIVE_HOST, text: "YES" });
     await hostOut.desk.inbound({ id: "route-out-schedule", from: LIVE_CLEANER, text: "YES" });
     await hostOut.desk.inbound({ id: "route-out-stop", from: LIVE_HOST, text: "STOP" });
+    const hostHeld = await hostOut.desk.markGuestsLeft({ said: "The guests have left" }, hostOut.pinKey);
+    expect(hostHeld).toEqual({ ok: true, result: { next: `The cleaning at ${PRACTICE} is on hold.` } });
+    expect(hostOut.sms.sent.filter((text) => text.body === privatePin)).toEqual([]);
+    await hostOut.desk.resumeCleaning();
     const hostLeft = await hostOut.desk.markGuestsLeft({ said: "The guests have left" }, hostOut.pinKey);
     expect(hostLeft).toEqual({ ok: true, result: { next: PIN_SENT } });
     expect(hostOut.sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
@@ -1619,7 +1627,7 @@ describe("live group membership", () => {
       expect(JSON.stringify(shown.result.next).includes("got")).toBe(false);
     }
     expect(sms.sent.filter((text) => text.body.includes("Door code:")).map((text) => text.to)).toEqual([LIVE_CLEANER, LIVE_CLEANER]);
-    expect(hostBodies(sms.sent)).toEqual([]);
+    expect(hostBodies(sms.sent)).toEqual([PIN_FAILED]);
     expect(posts.filter((text) => text.body.includes(DOOR_CODE) || text.body.includes("got the door code"))).toEqual([]);
     expect(blocked.posts.filter((text) => text.body.includes(DOOR_CODE))).toEqual([]);
   });
