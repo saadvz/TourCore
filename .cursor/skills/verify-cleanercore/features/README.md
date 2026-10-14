@@ -18,7 +18,7 @@ Without `--with-pin`, the owner receives the schedule text. With `--with-pin`, t
 - Start every recipe from the baseline unless its preconditions say otherwise.
 - Treat every command as literal. Keep the flag assignment and the npm script unchanged.
 - Flag on: `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:doctor` and `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke`.
-- Replies: `npm run cleaner:smoke -- --reply +15555550100=STOP`. Repeat `--reply` for each inbound text. Any explicit operation (`--reply`, `--feed`, `--then-feed`, `--google`, `--tenant`, `--closed`, `--now`, `--remind`, `--fail-sends`, `--data`, `--no-poll`, `--with-pin`, `--unapproved`, `--group`) does not also inject YES.
+- Replies: `npm run cleaner:smoke -- --reply +15555550100=STOP`. Repeat `--reply` for each inbound text. A reply text that starts with `@` names a fixture file. Any explicit operation (`--reply`, `--feed`, `--then-feed`, `--google`, `--notion`, `--onboard`, `--group-mode`, `--group-capable`, `--participant`, `--tenant`, `--closed`, `--now`, `--remind`, `--fail-sends`, `--data`, `--no-poll`, `--with-pin`, `--unapproved`, `--group`) does not also inject YES.
 - Flag off: `env -u CLEANER_CORE_ENABLED` in front of the same scripts.
 - Assert the full stdout document and the exit code. A truthy `ok` is not a result.
 - After smoke, every `+1` number in stdout must be a Scratch test number: area code 555, or exchange 555 with line 0100–0199.
@@ -74,3 +74,22 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [Google block](./google-block.md) covers an owner block that is not a departure. `prove-step-e.sh`.
 - [Wrong tenant calendar](./wrong-tenant.md) covers Scratch Lane refusing Scratch Court's calendar. `prove-step-e.sh`.
 - [Two Scratch tenants](./tenant-isolation.md) covers one shared folder, separate phones, a wrong-tenant departure that sends nothing, and each house's door code going once to that house's cleaner. Scratch Court's code follows a Google Calendar stay. `prove-step-e.sh`.
+- [Notion permission denied](./notion-permission-denied.md) covers a missing Notion permission, an empty job list, and no cleaning text. `prove-step-f.sh`.
+- [Notion booking read](./notion-source-read.md) covers one Notion stay, the Sunday checkout question, and an owner block that is not a departure. `prove-step-f.sh`.
+- [Notion sync repeat](./notion-sync-repeat.md) covers three reads and a restart that send the checkout question once. `prove-step-f.sh`.
+- [Removed Notion row](./notion-removed.md) covers one cleaner reminder and the existing cancel sentence, both sent to the opted-in cleaner. `prove-step-f.sh`.
+- [Notion job texts stay with the cleaner](./notion-cleaner-routing.md) covers a host YES that does not schedule a Notion job. `prove-step-f.sh`.
+- [No offer until the cleaner opts in](./group-no-optin.md) covers a native group that holds the job and tells the host. `prove-step-f.sh`.
+- [One booking, Guesty and Notion](./multi-source-dedupe.md) covers one job when Guesty Lite and Notion show the same stay. `prove-step-f.sh`.
+- [Full onboarding](./onboarding-full.md) covers a new property activated only after opt-in and APPROVE. `prove-step-f.sh`.
+- [Onboarding without opt-in](./onboarding-no-optin.md) covers APPROVE with no cleaner YES. Nothing is activated and no cleaning text is sent. `prove-step-f.sh`.
+- [Consented group text](./group-native-consented.md) covers one group offer after every participant opts in. `prove-step-f.sh`.
+- [Mirrored group fallback](./group-mirrored-fallback.md) covers labeled copies when a group cannot be sent. `prove-step-f.sh`.
+- [Unconsented participant left out](./group-unconsented-participant.md) covers a participant who never opts in, then that number's STOP and HELP. `prove-step-f.sh`.
+- [Door code stays private](./pin-private-only.md) covers a door code that is not sent to a group, an observer, a mirror, or an unapproved number. `prove-step-f.sh`.
+- [Notion tenants stay apart](./notion-tenant-isolation.md) covers Lane, Court, and an onboarded property in one folder. `prove-step-f.sh`.
+- [STOP, HELP, and injury after a Notion read](./notion-stop-help-injury.md) covers the same safety replies after a Notion checkout question. `prove-step-f.sh`.
+- [Observer injury inside a group](./observer-injury-group.md) covers the 911 reply and the host alert from an opted-in observer. `prove-step-f.sh`.
+- [Observer injury outside a group](./observer-injury-solo.md) covers the same injury path when texts are one-to-one. `prove-step-f.sh`.
+- [Owner injury](./owner-injury.md) covers the 911 line to the host, with no alert back to that host. `prove-step-f.sh`.
+- [Injury wordings](./injury-wording.md) covers hurt, injury, blood, and fall phrases from the cleaner and the observer, in a group and one-to-one. `prove-step-f.sh`.

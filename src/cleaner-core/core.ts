@@ -1,16 +1,26 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { isMedicalEmergency, isPlainLanguageStop, keywordOf } from "../intent";
+import { dirname, join } from "node:path";
+import { isPlainLanguageStop, keywordOf } from "../intent";
 import { normalize, stripFiller } from "../intent/normalize";
 import { spokenTimes } from "../core/spokenTime";
 import { parsePhone } from "../core/phone";
 import { smsStopAck } from "../visitor/smsConsent";
-import { VisitorDenialCopy } from "../core/TourCore";
 import { writeFileAtomic } from "../storage/atomicWrite";
 import { addCalendarDays, formatWhen, interpretFeed, zonedInstant, type FeedBlock, type Turnover } from "./calendar";
+import { isInjuryReport } from "./injury";
 import { isScratchTestNumber } from "./scratch";
-import { normalizeSnapshots, type BookingSource, type BookingSourceKind, type SourceConflict, type SourceSnapshot } from "./sources";
+import { applyOnboardingAnswer, beginOnboarding, type OnboardingPreview, type OnboardingSession } from "./onboarding";
+import {
+  BOOKING_SOURCE_KINDS,
+  normalizeSnapshots,
+  readNotionFixture,
+  type BookingSource,
+  type BookingSourceKind,
+  type JobProvenance,
+  type SourceConflict,
+  type SourceSnapshot,
+} from "./sources";
 import { isOtherScratchTenantPhone, SCRATCH_TENANTS } from "./tenants";
 
 export type TextKind =
@@ -32,12 +42,15 @@ export type TextKind =
   | "pin-failed"
   | "pin-held"
   | "started"
-  | "done";
+  | "done"
+  | "held";
 
 export interface CleanerText {
   to: string;
   body: string;
   kind: TextKind;
+  /** Set when the text is a group thread or a mirrored copy. A private text omits it. */
+  channel?: "group" | "mirror";
 }
 
 export type JobStatus =
@@ -84,10 +97,16 @@ export interface OutboxView {
 
 export interface PollResult {
   polled: boolean;
-  reason: "disabled" | "scratch-only" | "not-consented" | "read" | "wrong-tenant";
+  reason: "disabled" | "scratch-only" | "not-consented" | "read" | "wrong-tenant" | "permission-denied";
   sent: CleanerText[];
   jobs: JobView[];
   blocks: FeedBlock[];
+}
+
+export interface SourceFreshness {
+  kind: BookingSourceKind;
+  fetchedAt: string | null;
+  stale: boolean;
 }
 
 export interface SyncState {
@@ -95,6 +114,33 @@ export interface SyncState {
   conversation: "closed" | "open";
   sources: BookingSourceKind[];
   conflicts: SourceConflict[];
+  fallback?: string;
+  freshness?: SourceFreshness[];
+  provenance?: JobProvenance[];
+}
+
+export interface MessagingView {
+  requested: "cleaner-only" | "group";
+  actual: "cleaner-only" | "native" | "mirrored";
+  excluded: string[];
+  note?: string;
+}
+
+export interface SetupView {
+  activated: boolean;
+  step: string;
+  tenantId: string;
+  address: string;
+  prompt: string;
+  prompts: string[];
+  sealed: boolean;
+}
+
+export interface SetupResult {
+  handled: boolean;
+  reason: ReceiveReason | "onboarding";
+  sent: CleanerText[];
+  setup: SetupView;
 }
 
 export type ReceiveReason =
@@ -158,6 +204,18 @@ export interface CleanerCoreOptions {
   dataDir?: string;
   /** Scratch tenant id. Other Scratch tenants' phones are ignored and never texted. */
   tenantId?: string;
+  /** Host asked for a group. The engine decides native, mirrored, or cleaner-only. */
+  messaging?: {
+    requested: "cleaner-only" | "group";
+    capable: boolean;
+    participants: { phone: string; role: "owner" | "manager" | "observer" | "cleaner"; approved?: boolean }[];
+  };
+  /** Local quiet window. Overnight windows wrap. Reminders wait. The door code does not. */
+  quietHours?: { from: string; until: string };
+  /** This tenant was created by onboarding and must not see Lane or Court phones. */
+  isolate?: boolean;
+  /** Set when publishing an onboarded tenant. */
+  origin?: "onboarding";
 }
 
 export interface CleanerCore {
@@ -170,15 +228,27 @@ export interface CleanerCore {
   transcript(): string[];
   blocks(): FeedBlock[];
   lastSync(): SyncState;
+  beginOnboarding(): SetupView;
+  attachPreview(kind: "guesty-lite" | "notion", body: string): void;
+  answerOnboarding(input: { id: string; from: string; text: string }): Promise<SetupResult>;
+  setupView(): SetupView | undefined;
+  messagingView(): MessagingView | undefined;
+  markReady(): void;
 }
 
 const HELP_ACK = "Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.";
 const START_ACK = "You're opted back in. Reply YES if you still want this turnover. Reply STOP to opt out.";
 const DECLINED = "Okay, that turnover is not scheduled.";
-const EMERGENCY = VisitorDenialCopy.medicalAlert("property team", undefined, false);
+const HOST_INJURY = "If someone is hurt, call 911 now.";
 const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know.";
 const CLEANER_HURT_MISSED = "If someone is hurt, call 911 now. I couldn't reach the host, so please call them too.";
 const SAFETY = new Set<TextKind>(["stop", "help", "start", "emergency"]);
+const JOB_TEXTS = new Set<TextKind>(["offer", "corrected", "confirm", "reminder", "cancel-update", "declined", "started", "done"]);
+const GROUP_PREFIX = "Group text: ";
+const MIRROR_PREFIX = "Copy of the group text: ";
+const OFFER_YES = "Reply YES to schedule it, or STOP to opt out.";
+const OFFER_WAIT = "The cleaner will reply to confirm.";
+const STALE_MS = 3 * 60 * 60 * 1000;
 const DEFAULT_TRIGGERS: ReminderTrigger[] = [{ id: "morning-of", kind: "morning-of", localTime: "08:00" }];
 
 /**
@@ -270,6 +340,13 @@ interface Stored {
   cleanerConsent?: "pending" | "in" | "out";
   clearances?: Clearance[];
   pinSeal?: PinSeal;
+  onboarding?: OnboardingSession;
+  origin?: "onboarding";
+  activated?: boolean;
+  quietFrom?: string;
+  quietUntil?: string;
+  isolate?: boolean;
+  participantConsent?: { phone: string; consent: "pending" | "in" | "out" }[];
 }
 
 /** One file can hold several tenants. A single-tenant file stays the flat step D shape. */
@@ -290,6 +367,13 @@ interface StoreFile {
   clearances?: Clearance[];
   pinSeal?: PinSeal;
   pin?: unknown;
+  onboarding?: OnboardingSession;
+  origin?: "onboarding";
+  activated?: boolean;
+  quietFrom?: string;
+  quietUntil?: string;
+  isolate?: boolean;
+  participantConsent?: { phone: string; consent: "pending" | "in" | "out" }[];
 }
 
 interface Draft {
@@ -298,6 +382,7 @@ interface Draft {
   to: string;
   body: string;
   kind: TextKind;
+  channel?: "group" | "mirror";
   afterSend?: () => void;
 }
 
@@ -320,7 +405,7 @@ class Engine implements CleanerCore {
   private inboundIds: string[] = [];
   private transcriptState: string[] = [];
   private optedOut = false;
-  private readonly everConsented: boolean;
+  private everConsented: boolean;
   private injurySent: string[] = [];
   private blockState: FeedBlock[] = [];
   private readonly now: () => Date;
@@ -328,6 +413,16 @@ class Engine implements CleanerCore {
   private readonly tenantId: string;
   private readonly latest = new Map<BookingSourceKind, SourceSnapshot>();
   private conflictState: SourceConflict[] = [];
+  private provenanceState: JobProvenance[] = [];
+  private fallbackText: string | undefined;
+  private readonly messaging: CleanerCoreOptions["messaging"];
+  private quiet: { from: string; until: string } | undefined;
+  private isolate: boolean;
+  private origin: "onboarding" | undefined;
+  private activated = false;
+  private participantConsent = new Map<string, "pending" | "in" | "out">();
+  private session: OnboardingSession | undefined;
+  private previewFeeds: { kind: "guesty-lite" | "notion"; body: string }[] = [];
   private syncState: SyncState = { reason: "read", conversation: "open", sources: [], conflicts: [] };
 
   constructor(private readonly options: CleanerCoreOptions) {
@@ -348,6 +443,11 @@ class Engine implements CleanerCore {
     this.now = options.now ?? (() => new Date());
     this.file = options.dataDir ? join(options.dataDir, "cleaner-core.json") : undefined;
     this.tenantId = options.tenantId?.trim() || options.property.id;
+    this.messaging = options.messaging;
+    this.quiet = options.quietHours;
+    this.isolate = options.isolate === true;
+    this.origin = options.origin;
+    for (const person of options.messaging?.participants ?? []) this.participantConsent.set(parsePhone(person.phone) ?? person.phone, "pending");
     this.load();
   }
 
@@ -365,6 +465,16 @@ class Engine implements CleanerCore {
     if (blocked) return this.withSync(blocked);
     const snapshot = await source.read();
     if (snapshot.kind !== source.kind) throw new Error("Booking source kind does not match the read.");
+    const permission = snapshot.permission ?? "granted";
+    if (permission !== "granted") {
+      if (snapshot.tenantId !== "" && snapshot.tenantId !== this.tenantId) {
+        this.syncState = { reason: "wrong-tenant", conversation, sources: this.sourceNames(), conflicts: this.conflictState };
+        return this.withSync({ polled: false, reason: "wrong-tenant", sent: [], jobs: this.jobs(), blocks: this.blocks() });
+      }
+      this.fallbackText = snapshot.fallback;
+      this.syncState = { reason: "permission-denied", conversation, sources: this.sourceNames(), conflicts: this.conflictState };
+      return this.withSync({ polled: false, reason: "permission-denied", sent: [], jobs: this.jobs(), blocks: this.blocks() });
+    }
     if (snapshot.tenantId !== this.tenantId) {
       this.syncState = { reason: "wrong-tenant", conversation, sources: this.sourceNames(), conflicts: this.conflictState };
       return this.withSync({ polled: false, reason: "wrong-tenant", sent: [], jobs: this.jobs(), blocks: this.blocks() });
@@ -378,7 +488,7 @@ class Engine implements CleanerCore {
     if (!from || !isScratchTestNumber(from)) return { handled: true, reason: "scratch-only", sent: [] };
     if (this.inboundIds.includes(input.id)) return { handled: true, reason: "duplicate", sent: [] };
     this.transcriptState.push(this.redact(`${from}: ${input.text.trim()}`));
-    if (isOtherScratchTenantPhone(this.tenantId, from)) {
+    if (this.foreignPhone(from)) {
       this.inboundIds.push(input.id);
       this.save();
       return { handled: true, reason: "wrong-tenant", sent: [] };
@@ -386,10 +496,13 @@ class Engine implements CleanerCore {
 
     const keyword = keywordOf(input.text);
     if (keyword === "help") return this.safety(input.id, () => this.reply(from, HELP_ACK, "help", "help", input.id));
-    if (isMedicalEmergency(input.text)) return this.safety(input.id, () => this.emergency(from, input.id));
+    if (isInjuryReport(input.text)) return this.safety(input.id, () => this.emergency(from, input.id));
     if (keyword === "stop" || isPlainLanguageStop(input.text)) return this.safety(input.id, () => this.stop(from, input.id));
     if (keyword === "start") return this.safety(input.id, () => this.start(from, input.id));
     if (this.pin && from === this.cleanerPhone && isYes(input.text) && this.awaitingOptIn()) return this.optInCleaner(input.id);
+    if (from && isYes(input.text) && this.participantConsent.get(from) === "pending" && this.delivery(`opt-in:${from}`) === "sent") {
+      return this.optInParticipant(from, input.id);
+    }
     if (this.pin && from === this.cleanerPhone && isDone(input.text)) return this.finish(from, input.id);
     if (this.pin && from === this.owner && isDeparture(input.text)) return this.clearDeparture(input.id);
     const moved = await this.moveCheckout(input.id, from, input.text);
@@ -405,7 +518,7 @@ class Engine implements CleanerCore {
     if (!this.enabled || this.optedOut || !this.scratchReady()) return { sent: [], failed: [] };
     const sent: CleanerText[] = [];
     const failed: string[] = [];
-    for (const job of this.ordered()) {
+    if (!this.inQuietHours()) for (const job of this.ordered()) {
       if (!this.canRemind(job)) continue;
       const fact = this.latestFact(job.id, "checkout");
       if (!fact) continue;
@@ -415,7 +528,7 @@ class Engine implements CleanerCore {
         this.cancelOtherReminders(job.id, trigger.id, id);
         const existing = this.outboxState.find((item) => item.id === id);
         if (existing?.status === "sent" || existing?.status === "canceled") continue;
-        const to = this.schedulePhone();
+        const to = this.jobActor();
         if (!to) continue;
         const when = this.clock(job.checkoutDate, fact.minutes);
         const address = this.options.property.address;
@@ -467,12 +580,251 @@ class Engine implements CleanerCore {
   }
 
   lastSync(): SyncState {
-    return {
+    const freshness = this.freshnessView();
+    const sync: SyncState = {
       reason: this.syncState.reason,
       conversation: this.syncState.conversation,
       sources: [...this.syncState.sources],
       conflicts: this.syncState.conflicts.map((conflict) => ({ ...conflict })),
     };
+    if (this.fallbackText) sync.fallback = this.fallbackText;
+    if (freshness.length > 0) sync.freshness = freshness;
+    if (this.latest.has("notion") && this.provenanceState.length > 0) {
+      sync.provenance = this.provenanceState.map((item) => ({ jobId: item.jobId, sources: item.sources.map((source) => ({ ...source })) }));
+    }
+    return sync;
+  }
+
+  beginOnboarding(): SetupView {
+    if (!this.session) {
+      const begun = beginOnboarding();
+      this.session = begun.session;
+      this.transcriptState.push(begun.prompt);
+      this.isolate = true;
+      this.save();
+    }
+    return this.setupViewOrThrow();
+  }
+
+  attachPreview(kind: "guesty-lite" | "notion", body: string): void {
+    this.previewFeeds.push({ kind, body });
+  }
+
+  async answerOnboarding(input: { id: string; from: string; text: string }): Promise<SetupResult> {
+    if (!this.session) this.beginOnboarding();
+    const session = this.session;
+    if (!session) return { handled: false, reason: "ignored", sent: [], setup: this.setupViewOrThrow() };
+    const from = parsePhone(input.from);
+    if (!from || !isScratchTestNumber(from)) return { handled: true, reason: "scratch-only", sent: [], setup: this.setupViewOrThrow() };
+    if (this.foreignPhone(from)) return { handled: true, reason: "wrong-tenant", sent: [], setup: this.setupViewOrThrow() };
+    if (session.inboundIds.includes(input.id)) return { handled: true, reason: "duplicate", sent: [], setup: this.setupViewOrThrow() };
+    const effect = applyOnboardingAnswer(session, { id: input.id, from, text: input.text }, this.onboardingPreview());
+    if (effect.pin) this.pin = effect.pin;
+    this.session = effect.session;
+    this.transcriptState.push(this.redact(`${from}: ${input.text.trim()}`));
+    if (effect.prompt !== this.transcriptState[this.transcriptState.length - 1]) this.transcriptState.push(effect.prompt);
+    const sent: CleanerText[] = [];
+    for (const invite of effect.optIn) {
+      const text = await this.emit({ id: `opt-in:${invite.phone}`, to: invite.phone, kind: "opt-in", body: invite.body });
+      if (text) sent.push(text);
+    }
+    if (effect.publish && effect.session.published) this.publishSetup();
+    this.save();
+    return { handled: true, reason: "onboarding", sent, setup: this.setupViewOrThrow() };
+  }
+
+  setupView(): SetupView | undefined {
+    if (!this.session) return undefined;
+    return this.setupViewOrThrow();
+  }
+
+  messagingView(): MessagingView | undefined {
+    if (!this.messaging) return undefined;
+    const actual = this.messagingMode();
+    const excluded = this.excludedPhones();
+    const note = messagingNote(this.messaging.requested, actual, this.messaging.capable, excluded);
+    return {
+      requested: this.messaging.requested,
+      actual,
+      excluded,
+      ...(note ? { note } : {}),
+    };
+  }
+
+  markReady(): void {
+    this.origin = "onboarding";
+    this.activated = true;
+    this.isolate = true;
+    this.cleanerConsent = "in";
+    this.everConsented = true;
+    this.save();
+  }
+
+  private setupViewOrThrow(): SetupView {
+    const session = this.session;
+    if (!session) throw new Error("Onboarding has not started.");
+    return {
+      activated: session.activated,
+      step: session.step,
+      tenantId: session.tenantId,
+      address: session.address,
+      prompt: session.prompts[session.prompts.length - 1] ?? "",
+      prompts: [...session.prompts],
+      sealed: session.sealed,
+    };
+  }
+
+  private onboardingPreview(): OnboardingPreview {
+    const snapshots: SourceSnapshot[] = [];
+    for (const feed of this.previewFeeds) {
+      if (feed.kind === "notion") {
+        snapshots.push(readNotionFixture(feed.body));
+        continue;
+      }
+      const read = interpretFeed(feed.body);
+      snapshots.push({ kind: "guesty-lite", tenantId: this.session?.tenantId || this.tenantId, turnovers: read.turnovers, blocks: read.blocks });
+    }
+    const normalized = normalizeSnapshots(snapshots);
+    const stale = snapshots.some((snapshot) => this.isStale(snapshot.fetchedAt));
+    const labels = [...new Set(snapshots.map((snapshot) => (snapshot.kind === "notion" ? "Notion" : "Guesty Lite")))];
+    return {
+      stays: normalized.feed.turnovers.length,
+      blocks: normalized.feed.blocks.length,
+      stale,
+      conflicts: normalized.conflicts.length,
+      sourceLabel: labels.length > 0 ? labels.join(" and ") : "No source",
+    };
+  }
+
+  private publishSetup(): void {
+    const session = this.session;
+    if (!session || !this.pin || !this.file) return;
+    const cleaner = session.people.find((person) => person.role === "cleaner");
+    if (!cleaner) return;
+    const published = openCleanerCore({
+      enabled: this.enabled,
+      tenantId: session.tenantId,
+      property: {
+        id: `prop_${session.tenantId}`,
+        address: session.address,
+        timeZone: session.timeZone,
+        defaultCheckout: session.checkout,
+        defaultCheckIn: session.checkIn,
+      },
+      ownerPhone: session.hostPhone,
+      cleaner: { phone: cleaner.phone, approved: true },
+      pin: this.pin,
+      hostName: session.nickname,
+      consented: true,
+      sink: { send() {} },
+      now: this.now,
+      dataDir: dirname(this.file),
+      origin: "onboarding",
+      isolate: true,
+      quietHours: { from: session.quietFrom, until: session.quietUntil },
+    });
+    published.markReady();
+  }
+
+  private async sendParticipantOptIns(): Promise<CleanerText[]> {
+    if (this.messaging?.requested !== "group") return [];
+    const sent: CleanerText[] = [];
+    for (const person of this.messaging.participants) {
+      const phone = parsePhone(person.phone);
+      if (!phone || phone === this.owner || phone === this.cleanerPhone || person.approved === false) continue;
+      if (this.groupPhones.includes(phone) || this.participantConsent.get(phone) !== "pending") continue;
+      const text = await this.emit({
+        id: `opt-in:${phone}`,
+        to: phone,
+        kind: "opt-in",
+        body: `Hi, this is ${this.hostName}'s cleaning scheduler for ${this.options.property.address}. Reply YES to get cleaning texts, or STOP to opt out.`,
+      });
+      if (text) sent.push(text);
+    }
+    return sent;
+  }
+
+  private async optInParticipant(from: string, id: string): Promise<ReceiveResult> {
+    this.participantConsent.set(from, "in");
+    this.inboundIds.push(id);
+    const sent = await this.drainOne();
+    this.save();
+    return { handled: true, reason: "opted-in", sent };
+  }
+
+  private audience(): { phone: string; role: "owner" | "manager" | "observer" | "cleaner"; consent: "pending" | "in" | "out" }[] {
+    const people: { phone: string; role: "owner" | "manager" | "observer" | "cleaner"; consent: "pending" | "in" | "out" }[] = [];
+    if (this.owner) people.push({ phone: this.owner, role: "owner", consent: this.everConsented && !this.optedOut ? "in" : "out" });
+    if (this.cleanerPhone) people.push({ phone: this.cleanerPhone, role: "cleaner", consent: this.cleanerConsent });
+    for (const person of this.messaging?.participants ?? []) {
+      const phone = parsePhone(person.phone);
+      if (!phone || phone === this.owner || phone === this.cleanerPhone) continue;
+      people.push({ phone, role: person.role, consent: this.participantConsent.get(phone) ?? "pending" });
+    }
+    return people;
+  }
+
+  private messagingMode(): "cleaner-only" | "native" | "mirrored" {
+    if (!this.messaging || this.messaging.requested !== "group") return "cleaner-only";
+    const people = this.audience();
+    const pending = people.some((person) => person.consent === "pending");
+    if (!pending && this.messaging.capable && people.some((person) => person.consent === "in")) return "native";
+    return "mirrored";
+  }
+
+  private excludedPhones(): string[] {
+    const skipped = this.audience().filter((person) => person.consent !== "in").map((person) => person.phone);
+    return [...new Set([...skipped, ...this.groupPhones])];
+  }
+
+  private participantRole(phone: string): "owner" | "manager" | "observer" | "cleaner" | undefined {
+    return this.audience().find((person) => person.phone === phone)?.role;
+  }
+
+  private isExtraParticipant(phone: string): boolean {
+    const role = this.participantRole(phone);
+    return role === "observer" || role === "manager";
+  }
+
+  private foreignPhone(phone: string): boolean {
+    if (isOtherScratchTenantPhone(this.tenantId, phone)) return true;
+    if (!this.isolate) return false;
+    return SCRATCH_TENANTS.some((tenant) => phone === tenant.ownerPhone || phone === tenant.cleanerPhone || phone === tenant.unapprovedPhone);
+  }
+
+  private freshnessView(): SourceFreshness[] {
+    const rows: SourceFreshness[] = [];
+    for (const [kind, snapshot] of this.latest) {
+      if (kind !== "notion") continue;
+      const fetchedAt = snapshot.fetchedAt ?? null;
+      rows.push({ kind, fetchedAt, stale: this.isStale(fetchedAt ?? undefined) });
+    }
+    return rows;
+  }
+
+  private isStale(fetchedAt: string | undefined): boolean {
+    if (!fetchedAt) return true;
+    const readAt = Date.parse(fetchedAt);
+    if (Number.isNaN(readAt)) return true;
+    return this.now().getTime() - readAt > STALE_MS;
+  }
+
+  private inQuietHours(): boolean {
+    if (!this.quiet) return false;
+    const local = new Intl.DateTimeFormat("en-GB", {
+      timeZone: this.options.property.timeZone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(this.now());
+    const match = /^(\d{2}):(\d{2})$/.exec(local);
+    if (!match?.[1] || !match[2]) return false;
+    const nowMinutes = Number(match[1]) * 60 + Number(match[2]);
+    const from = minutesOf(this.quiet.from);
+    const until = minutesOf(this.quiet.until);
+    if (from === until) return false;
+    if (from < until) return nowMinutes >= from && nowMinutes < until;
+    return nowMinutes >= from || nowMinutes < until;
   }
 
   private syncBlocked(conversation: "closed" | "open"): PollResult | undefined {
@@ -491,12 +843,15 @@ class Engine implements CleanerCore {
     this.latest.set(snapshot.kind, snapshot);
     const normalized = normalizeSnapshots([...this.latest.values()]);
     this.conflictState = normalized.conflicts;
+    this.provenanceState = normalized.provenance;
+    this.fallbackText = undefined;
     this.blockState = normalized.feed.blocks;
     this.reconcile(normalized.feed.turnovers);
     const sent = this.optedOut ? [] : await this.drainOne();
     if (!this.optedOut) {
       const optIn = await this.sendOptIn();
       if (optIn) sent.push(optIn);
+      for (const extra of await this.sendParticipantOptIns()) sent.push(extra);
     }
     this.save();
     const result: PollResult = { polled: true, reason: "read", sent, jobs: this.jobs(), blocks: this.blocks() };
@@ -505,16 +860,11 @@ class Engine implements CleanerCore {
   }
 
   private sourceNames(): BookingSourceKind[] {
-    return (["guesty-lite", "google-calendar"] as const).filter((kind) => this.latest.has(kind));
+    return BOOKING_SOURCE_KINDS.filter((kind) => this.latest.has(kind));
   }
 
   private withSync(result: PollResult): PollResult & SyncState {
-    return {
-      ...result,
-      conversation: this.syncState.conversation,
-      sources: [...this.syncState.sources],
-      conflicts: this.syncState.conflicts.map((conflict) => ({ ...conflict })),
-    };
+    return { ...result, ...this.lastSync() };
   }
 
   private async answer(id: string, from: string, text: string): Promise<ReceiveResult> {
@@ -538,7 +888,7 @@ class Engine implements CleanerCore {
         const sent = await this.drainOne();
         return { handled: true, reason: "host-time", sent };
       }
-      const confirmer = this.schedulePhone();
+      const confirmer = this.jobActor();
       if (!confirmer || from !== confirmer) return this.markIgnored(id);
       if (isYes(text)) {
         if (this.stale(job)) return this.markIgnored(id);
@@ -558,7 +908,7 @@ class Engine implements CleanerCore {
 
   private async confirm(job: Job): Promise<CleanerText[]> {
     const checkout = this.latestFact(job.id, "checkout");
-    const to = this.schedulePhone();
+    const to = this.jobActor();
     if (!checkout || !to) return [];
     const when = this.clock(job.checkoutDate, checkout.minutes);
     const id = `confirm:${job.id}:${job.checkoutDate}:${checkout.minutes}:${job.nextCheckInDate ?? ""}`;
@@ -572,11 +922,19 @@ class Engine implements CleanerCore {
     return text ? [text] : [];
   }
 
-  /** Step C texts the host. Step D texts the opted-in approved cleaner, and waits while that YES is missing. */
-  private schedulePhone(): string | undefined {
-    if (!this.pin) return this.owner;
-    if (!this.options.cleaner.approved || this.cleanerConsent !== "in" || !this.cleanerPhone) return undefined;
-    return this.cleanerPhone;
+  /**
+   * The only phone that can receive a job text or confirm it.
+   * An opted-in approved cleaner always wins. A group or a door code will not fall back to the host.
+   * Step C, with neither, still lets the host confirm the offer.
+   */
+  private jobActor(): string | undefined {
+    if (this.options.cleaner.approved && this.cleanerConsent === "in" && this.cleanerPhone) return this.cleanerPhone;
+    if (this.cleanerConsentRequired()) return undefined;
+    return this.owner;
+  }
+
+  private cleanerConsentRequired(): boolean {
+    return Boolean(this.pin) || this.messaging?.requested === "group";
   }
 
   private awaitingOptIn(): boolean {
@@ -823,8 +1181,20 @@ class Engine implements CleanerCore {
       };
     }
     if (!job.announced) {
-      const to = this.schedulePhone();
-      if (!to) return null;
+      const to = this.jobActor();
+      if (!to) {
+        if (!this.owner) return null;
+        const holdId = `hold:${job.id}:${job.checkoutDate}`;
+        if (this.delivery(holdId) === "sent") return null;
+        const when = this.clock(job.checkoutDate, checkout.minutes);
+        return {
+          id: holdId,
+          jobId: job.id,
+          to: this.owner,
+          kind: "held",
+          body: `The cleaning at ${this.options.property.address} on ${when.day} is on hold until the cleaner replies YES.`,
+        };
+      }
       const checkMinutes = checkin?.minutes ?? null;
       const id = `offer:${job.id}:${job.checkoutDate}:${checkout.minutes}:${job.nextCheckInDate ?? ""}:${checkMinutes ?? ""}`;
       if (this.delivery(id) === "sent") return null;
@@ -840,7 +1210,7 @@ class Engine implements CleanerCore {
       };
     }
     if (this.checkoutDrift(job)) {
-      const to = this.schedulePhone();
+      const to = this.jobActor();
       if (!to) return null;
       const when = this.clock(job.checkoutDate, checkout.minutes);
       const id = `corrected:${job.id}:${job.checkoutDate}:${checkout.minutes}:${job.nextCheckInDate ?? ""}`;
@@ -860,22 +1230,62 @@ class Engine implements CleanerCore {
     return null;
   }
 
+  /** Job texts go to the job actor. Offer copies are the only texts anyone else can see. */
   private async emit(draft: Draft): Promise<CleanerText | null> {
+    if (draft.channel || !JOB_TEXTS.has(draft.kind)) return this.emitOne(draft);
+    const actor = this.jobActor();
+    if (!actor) return null;
+    const text = await this.emitOne({
+      id: draft.id,
+      ...(draft.jobId ? { jobId: draft.jobId } : {}),
+      to: actor,
+      body: draft.body,
+      kind: draft.kind,
+      ...(draft.afterSend ? { afterSend: draft.afterSend } : {}),
+    });
+    if (this.delivery(draft.id) !== "sent") return null;
+    if (draft.kind === "offer") await this.copyOffer(draft, actor);
+    return text;
+  }
+
+  private async copyOffer(draft: Draft, actor: string): Promise<void> {
+    const mode = this.messagingMode();
+    if (mode === "cleaner-only") return;
+    const channel = mode === "native" ? "group" : "mirror";
+    const body = draft.body.endsWith(OFFER_YES) ? `${draft.body.slice(0, -OFFER_YES.length)}${OFFER_WAIT}` : draft.body;
+    for (const person of this.audience()) {
+      if (person.phone === actor || person.consent !== "in" || this.groupPhones.includes(person.phone)) continue;
+      await this.emitOne({
+        id: `${draft.id}:${channel}:${person.phone}`,
+        ...(draft.jobId ? { jobId: draft.jobId } : {}),
+        to: person.phone,
+        kind: "offer",
+        channel,
+        body: withChannelPrefix(body, channel),
+      });
+    }
+  }
+
+  private async emitOne(draft: Draft): Promise<CleanerText | null> {
     if (!isScratchTestNumber(draft.to)) throw new Error("Cleaner Core only texts Scratch test numbers.");
     if (/\bready\b/i.test(draft.body)) throw new Error("A calendar time cannot mark the job ready.");
     if (draft.kind === "pin") {
-      if (!this.pin || !this.options.cleaner.approved || draft.to !== this.cleanerPhone || this.groupPhones.includes(draft.to)) {
+      if (draft.channel || this.participantRole(draft.to) === "observer" || this.groupPhones.includes(draft.to)) {
+        throw new Error("The door code only goes to the approved cleaner.");
+      }
+      if (!this.pin || !this.options.cleaner.approved || draft.to !== this.cleanerPhone) {
         throw new Error("The door code only goes to the approved cleaner.");
       }
     } else if (this.pin && draft.body.includes(this.pin)) {
       throw new Error("The door code leaked into a schedule text.");
-    } else if (!this.pin && /\bdoor code\b/i.test(draft.body)) {
+    } else if (!this.pin && /\bdoor code\b/i.test(draft.body) && draft.kind !== "opt-in") {
       throw new Error("Step C does not send a door code.");
     }
     if (this.optedOut && !SAFETY.has(draft.kind)) return null;
+    if (this.participantConsent.get(draft.to) === "out" && !SAFETY.has(draft.kind)) return null;
     const existing = this.outboxState.find((item) => item.id === draft.id);
     if (existing?.status === "sent" || existing?.status === "canceled") return null;
-    const text: CleanerText = { to: draft.to, body: draft.body, kind: draft.kind };
+    const text: CleanerText = { to: draft.to, body: draft.body, kind: draft.kind, ...(draft.channel ? { channel: draft.channel } : {}) };
     try {
       await this.options.sink.send(text);
     } catch {
@@ -916,28 +1326,50 @@ class Engine implements CleanerCore {
     const job = this.conversationJob() ?? this.ordered()[0];
     const key = `${from}|${job?.id ?? "none"}|${job?.version ?? 0}`;
     if (this.injurySent.includes(key)) return { handled: true, reason: "emergency", sent: [], seen: true };
-    if (from === this.cleanerPhone && this.owner && this.owner !== from) return this.alertHostOfInjury(from, inboundId, key, job?.id);
-    const result = await this.reply(from, EMERGENCY, "emergency", "emergency", inboundId);
-    if (result.sent.length > 0) this.injurySent.push(key);
-    return { ...result, seen: result.sent.length > 0 };
+    return this.alertHostOfInjury(from, inboundId, key, job?.id);
+  }
+
+  private injuryAlert(from: string): string {
+    const address = this.options.property.address;
+    const role = this.participantRole(from);
+    if (from === this.cleanerPhone || role === "cleaner") {
+      return `The cleaner at ${address} says someone is hurt. They've been told to call 911.`;
+    }
+    if (role === "observer") return `An observer at ${address} says someone is hurt. They've been told to call 911.`;
+    if (role === "manager") return `A manager at ${address} says someone is hurt. They've been told to call 911.`;
+    return `Someone at ${address} says someone is hurt. They've been told to call 911.`;
   }
 
   private async alertHostOfInjury(from: string, inboundId: string, key: string, jobId?: string): Promise<ReceiveResult & { seen?: boolean }> {
+    const reporterIsHost = Boolean(this.owner && from === this.owner);
     const hostId = `emergency-host:${key}`;
-    const host = await this.emit({
-      id: hostId,
+    const host = !reporterIsHost && this.owner
+      ? await this.emitOne({
+          id: hostId,
+          ...(jobId ? { jobId } : {}),
+          to: this.owner,
+          kind: "emergency",
+          body: this.injuryAlert(from),
+        })
+      : null;
+    const hostReached = !reporterIsHost && this.delivery(hostId) === "sent";
+    const ack = await this.emitOne({
+      id: `emergency:${inboundId}`,
       ...(jobId ? { jobId } : {}),
-      to: this.owner ?? "",
+      to: from,
       kind: "emergency",
-      body: `The cleaner at ${this.options.property.address} says someone is hurt. They've been told to call 911.`,
+      body: reporterIsHost ? HOST_INJURY : hostReached ? CLEANER_HURT : CLEANER_HURT_MISSED,
     });
-    const hostReached = this.delivery(hostId) === "sent";
-    const cleaner = await this.reply(from, hostReached ? CLEANER_HURT : CLEANER_HURT_MISSED, "emergency", "emergency", inboundId, jobId);
-    if (cleaner.sent.length > 0) this.injurySent.push(key);
-    return { handled: true, reason: "emergency", sent: [...(host ? [host] : []), ...cleaner.sent], seen: cleaner.sent.length > 0 };
+    if (ack) this.injurySent.push(key);
+    return { handled: true, reason: "emergency", sent: [...(host ? [host] : []), ...(ack ? [ack] : [])], seen: Boolean(ack) };
   }
 
   private async stop(from: string, inboundId: string): Promise<ReceiveResult & { seen?: boolean }> {
+    if (this.isExtraParticipant(from)) {
+      this.participantConsent.set(from, "out");
+      const result = await this.reply(from, smsStopAck(), "stop", "stop", inboundId);
+      return { ...result, seen: result.sent.length > 0 };
+    }
     if (this.pin && from === this.cleanerPhone) {
       this.cleanerConsent = "out";
       const result = await this.reply(from, smsStopAck(), "stop", "stop", inboundId);
@@ -1197,6 +1629,13 @@ class Engine implements CleanerCore {
     this.blockState = record.blocks;
     this.cleanerConsent = record.cleanerConsent ?? "pending";
     this.clearances = record.clearances ?? [];
+    this.session = record.onboarding;
+    if (record.origin === "onboarding") this.origin = "onboarding";
+    if (record.activated === true) this.activated = true;
+    if (record.isolate === true) this.isolate = true;
+    if (record.quietFrom && record.quietUntil) this.quiet = { from: record.quietFrom, until: record.quietUntil };
+    for (const person of record.participantConsent ?? []) this.participantConsent.set(person.phone, person.consent);
+    if (this.origin === "onboarding" && !this.activated) this.everConsented = false;
     if (!this.pin && record.pinSeal) {
       try {
         this.pin = openPin(record.pinSeal, this.pinKeyMaterial());
@@ -1210,6 +1649,7 @@ class Engine implements CleanerCore {
     if (!this.file) return;
     const mine: Stored = {
       schemaVersion: 1,
+      tenantId: this.tenantId,
       jobs: this.jobsState,
       hostFacts: this.hostFacts,
       tombstones: this.tombstones,
@@ -1221,6 +1661,14 @@ class Engine implements CleanerCore {
       blocks: this.blockState,
       cleanerConsent: this.cleanerConsent,
       clearances: this.clearances,
+      ...(this.session ? { onboarding: this.session } : {}),
+      ...(this.origin ? { origin: this.origin } : {}),
+      ...(this.activated ? { activated: true } : {}),
+      ...(this.isolate ? { isolate: true } : {}),
+      ...(this.quiet ? { quietFrom: this.quiet.from, quietUntil: this.quiet.until } : {}),
+      ...(this.participantConsent.size > 0
+        ? { participantConsent: [...this.participantConsent].map(([phone, consent]) => ({ phone, consent })) }
+        : {}),
       ...(this.pin ? { pinSeal: sealPin(this.pin, this.pinKeyMaterial()) } : {}),
     };
     const existing = existsSync(this.file) ? (JSON.parse(readFileSync(this.file, "utf8")) as StoreFile) : undefined;
@@ -1278,8 +1726,9 @@ function isStoredSlice(value: unknown): value is Stored {
 }
 
 function sliceOwnedBy(slice: Stored, tenantId: string): boolean {
+  if (typeof slice.tenantId === "string" && slice.tenantId !== "" && slice.tenantId !== tenantId) return false;
   const known = SCRATCH_TENANTS.find((tenant) => tenant.id === tenantId);
-  if (!known) return true;
+  if (!known) return slice.tenantId === tenantId;
   const phones = slice.outbox.map((item) => item.to);
   if (phones.length === 0) return true;
   const other = phones.some((phone) => isOtherScratchTenantPhone(tenantId, phone));
@@ -1343,4 +1792,18 @@ function openPin(sealed: PinSeal, key: Buffer): string {
   const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(sealed.iv, "base64"));
   decipher.setAuthTag(Buffer.from(sealed.tag, "base64"));
   return Buffer.concat([decipher.update(Buffer.from(sealed.data, "base64")), decipher.final()]).toString("utf8");
+}
+
+function withChannelPrefix(body: string, channel: "group" | "mirror"): string {
+  const prefix = channel === "group" ? GROUP_PREFIX : MIRROR_PREFIX;
+  return body.startsWith(prefix) ? body : `${prefix}${body}`;
+}
+
+function messagingNote(requested: "cleaner-only" | "group", actual: "cleaner-only" | "native" | "mirrored", capable: boolean, excluded: string[]): string | undefined {
+  if (requested !== "group") return undefined;
+  if (actual === "native") return "This is a group text.";
+  if (!capable) return "Group texting isn't available on this number, so I mirrored the cleaner texts instead of starting a group.";
+  if (excluded.length === 1) return `I left ${excluded[0]} out because that number has not opted in.`;
+  if (excluded.length > 1) return `I left ${excluded.join(", ")} out because those numbers have not opted in.`;
+  return "Group texting isn't available on this number, so I mirrored the cleaner texts instead of starting a group.";
 }

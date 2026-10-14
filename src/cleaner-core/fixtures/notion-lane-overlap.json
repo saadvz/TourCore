@@ -1,0 +1,15 @@
+{
+  "tenantId": "scratch-lane",
+  "timeZone": "America/New_York",
+  "permission": "read",
+  "fetchedAt": "2026-10-14T15:00:00.000Z",
+  "database": "Scratch bookings",
+  "rows": [
+    {
+      "id": "row-anita",
+      "date": "2026-10-16",
+      "end": "2026-10-18",
+      "status": "Reserved"
+    }
+  ]
+}

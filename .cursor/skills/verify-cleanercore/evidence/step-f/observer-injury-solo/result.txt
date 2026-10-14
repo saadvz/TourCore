@@ -1,0 +1,2 @@
+feature: observer-injury-solo
+pass

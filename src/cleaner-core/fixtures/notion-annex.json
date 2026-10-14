@@ -1,0 +1,22 @@
+{
+  "tenantId": "annex",
+  "timeZone": "America/New_York",
+  "permission": "read",
+  "fetchedAt": "2026-10-14T15:00:00.000Z",
+  "database": "Annex bookings",
+  "columns": { "date": "Arrive", "end": "Depart", "status": "Kind" },
+  "rows": [
+    {
+      "id": "row-annex",
+      "Arrive": "2026-10-16",
+      "Depart": "2026-10-18",
+      "Kind": "stay"
+    },
+    {
+      "id": "row-block",
+      "Arrive": "2026-10-19",
+      "Depart": "2026-10-20",
+      "Kind": "block"
+    }
+  ]
+}

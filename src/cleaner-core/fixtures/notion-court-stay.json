@@ -1,0 +1,15 @@
+{
+  "tenantId": "scratch-court",
+  "timeZone": "America/New_York",
+  "permission": "read",
+  "fetchedAt": "2026-10-14T15:00:00.000Z",
+  "database": "Scratch Court bookings",
+  "rows": [
+    {
+      "id": "row-court",
+      "date": "2026-10-17",
+      "end": "2026-10-19",
+      "status": "stay"
+    }
+  ]
+}

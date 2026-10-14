@@ -1,0 +1,1 @@
+smoke --group-mode cleaner-only --participant observer=+15555550122 --notion /workspace/src/cleaner-core/fixtures/notion-lane-read.json --reply +15555550101=there's blood everywhere --reply +15555550122=there's blood everywhere

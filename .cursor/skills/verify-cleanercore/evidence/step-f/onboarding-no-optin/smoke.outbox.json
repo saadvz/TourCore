@@ -1,0 +1,16 @@
+[
+  {
+    "id": "opt-in:+15555550121",
+    "to": "+15555550121",
+    "body": "Hi, this is Annex's cleaning scheduler for 9 Scratch Annex, Teaneck, NJ 07666. Reply YES to get cleaning texts, or STOP to opt out.",
+    "kind": "opt-in",
+    "status": "sent"
+  },
+  {
+    "id": "opt-in:+15555550122",
+    "to": "+15555550122",
+    "body": "Hi, this is Annex's cleaning scheduler for 9 Scratch Annex, Teaneck, NJ 07666. Reply YES to get cleaning texts, or STOP to opt out.",
+    "kind": "opt-in",
+    "status": "sent"
+  }
+]

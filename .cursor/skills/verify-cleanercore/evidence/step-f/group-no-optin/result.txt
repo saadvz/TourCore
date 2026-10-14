@@ -1,0 +1,2 @@
+feature: group-no-optin
+pass

@@ -12,4 +12,8 @@ A step C run contains `step-c/` with one directory per blocker (`read-feed`, `ho
 
 `prove-step-e.sh` overwrites the fixed directory `step-e/`. It does not add a timestamp. That directory holds `source-read`, `closed-sync`, `removed`, `one-job`, `block`, `wrong-tenant`, and `tenant-isolation`. `tenant-isolation` keeps the one shared store for both Scratch tenants. `result.txt` and `stand-in.txt` sit on `step-e/`. Neither scratch door code may appear. The Google files in the commands are fixtures.
 
+`prove-step-f.sh` overwrites the fixed directory `step-f/`. It does not add a timestamp. That directory holds `notion-permission-denied`, `notion-source-read`, `notion-sync-repeat`, `notion-removed`, `notion-cleaner-routing`, `group-no-optin`, `multi-source-dedupe`, `onboarding-full`, `onboarding-no-optin`, `group-native-consented`, `group-mirrored-fallback`, `group-unconsented-participant`, `pin-private-only`, `tenant-isolation`, `stop-help-injury`, `observer-injury-group`, `observer-injury-solo`, and `owner-injury`. `result.txt` and `stand-in.txt` sit on `step-f/`. The scratch door codes must be absent. Notion files in the commands are fixtures. The Annex lock reply is an `@` path.
+
+`20261014T010924Z/` and `20261014T013500Z/` were removed. Those runs stored a Scratch door code in plain text. A new evidence directory must not contain those digits.
+
 Runs dated before step C still show the earlier door-code demo. Those directories are history. A new step C tree must not contain the scratch door code. The step D tree must not contain the scratch digits.
