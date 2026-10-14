@@ -239,7 +239,7 @@ describe("inbound text order", () => {
     const { app, clock } = await appAt();
     await arrive(app, clock);
     const replies = await app.text("HELP");
-    expect(replies, "wrong precedence: the live-tour help acknowledgement beat the HELP keyword").toEqual([HELP_KEYWORD]);
+    expect(replies, "wrong precedence: the live-tour help acknowledgement beat the HELP keyword").toEqual([HELP_KEYWORD, HELP_ACK]);
   });
 
   it("fixed in pipeline PR 2: help, 2pm please is a time, not the HELP keyword", async () => {

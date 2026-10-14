@@ -378,7 +378,10 @@ describe("in-tour texts after the zone is cleared", () => {
     expect((await touring.reservation())?.bookedTimeZone).toBe(keepBookedZone ? "America/New_York" : undefined);
 
     const help = await a.text("help");
-    expect(help).toEqual([smsHelpBody()]);
+    expect(help).toEqual([
+      smsHelpBody(),
+      "I've let the property team know. Stay where you are and reply here. They'll reply as soon as they can.",
+    ]);
     expect(help.join("\n")).not.toContain("aren't available right now");
 
     const before15 = a.fake.sent.length;

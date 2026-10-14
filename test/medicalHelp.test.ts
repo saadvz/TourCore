@@ -195,8 +195,9 @@ async function inboxAfterHelp(text: string, failTeam = false, options?: { visito
   const inbox = await h.ok("get_inbox");
   const help = (inbox.items as Array<{ kind?: string; what?: string; summary?: string; nextSteps?: string[] }>).filter((row) => row.kind === "help");
   expect(help).toHaveLength(1);
-  const visitor = (await v.session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").at(-1)?.body;
-  return { text: inboxText(help[0]!), visitor, item: help[0]!, inbox };
+  const prospect = (await v.session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND");
+  const visitor = prospect.at(-1)?.body;
+  return { text: inboxText(help[0]!), visitor, visitorLines: prospect.map((m) => m.body), item: help[0]!, inbox };
 }
 
 const ctx = {
@@ -335,7 +336,10 @@ describe("medical help", () => {
     const help = phone(at(13, 58));
     await onTour(help);
     const ordinary = await addedReply(help.session, help.say, "help");
-    expect(ordinary.replies).toEqual([smsHelpBody()]);
+    expect(ordinary.replies).toEqual([
+      smsHelpBody(),
+      "I've let the property team know. Stay where you are and reply here. They'll reply as soon as they can.",
+    ]);
     expect(ordinary.replies.join("\n")).not.toContain("call 911 now");
   });
 
@@ -385,7 +389,11 @@ describe("medical help", () => {
 
   it("keeps the existing get_inbox item for plain HELP", async () => {
     const shown = await inboxAfterHelp("HELP");
-    expect(shown.visitor).toBe(smsHelpBody());
+    expect(shown.visitorLines.slice(-2)).toEqual([
+      smsHelpBody(),
+      "I've let the property team know. Stay where you are and reply here. They'll reply as soon as they can.",
+    ]);
+    expect(shown.visitor).toBe("I've let the property team know. Stay where you are and reply here. They'll reply as soon as they can.");
     expect(shown.visitor).not.toContain("call 911 now");
     expect(shown.text).toBe(
       [

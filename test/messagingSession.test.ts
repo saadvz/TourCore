@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config/tourCoreConfig";
-import { VISIT_RECORD_BASIS } from "../src/core/TourCore";
+import { VISIT_RECORD_BASIS, VisitorDenialCopy } from "../src/core/TourCore";
 import { zonedTimeToUtc } from "../src/core/timezone";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
 import { withPrompt } from "../src/messaging/presentation";
@@ -228,11 +228,13 @@ describe("typed replies", () => {
     const outboundBefore = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").length;
     await say("help");
     expect((await session.store.listAudit()).some((e) => e.type === "HELP_REQUESTED")).toBe(true);
-    expect(lastReply()).toBe(smsHelpBody());
-    expect(lastReply()).not.toContain("Stay where you are");
+    const stay = "I've let the property team know. Stay where you are and reply here. They'll reply as soon as they can.";
+    expect(lastReply()).toBe(stay);
+    expect(VisitorDenialCopy.helpAck("property team")).toBe(stay);
     const outbound = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND");
-    expect(outbound.length - outboundBefore).toBe(1);
-    expect(outbound.at(-1)?.body).toContain("Tour Core:");
+    expect(outbound.length - outboundBefore).toBe(2);
+    expect(outbound.at(-2)?.body).toBe(smsHelpBody());
+    expect(outbound.at(-1)?.body).toBe(stay);
   });
 
   it("asks again, with the options, when it doesn't understand", async () => {

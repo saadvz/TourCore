@@ -161,7 +161,10 @@ describe("a real phone over Sendblue", () => {
     expect((await app.text("how much is it?")).replies).toEqual(["Unit 101 rents for $2,300 a month."]);
     expect((await app.text("is there a gym?")).replies[0]).toBe("I'll pass your question to the property team, and they'll reply here as soon as they can.");
     const help = await app.text("help");
-    expect(help.replies).toEqual([smsHelpBody()]);
+    expect(help.replies).toEqual([
+      smsHelpBody(),
+      "I've let the property team know. Stay where you are and reply here. They'll reply as soon as they can.",
+    ]);
     expect(help.replies.join("\n")).toContain("Tour Core:");
     expect(help.replies.join("\n")).not.toContain("Khanex");
     const helpTour = app.ws.listTours(app.id).find((item) => item.kind === "messaging");

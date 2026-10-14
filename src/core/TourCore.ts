@@ -1573,10 +1573,23 @@ export class TourCore {
         : repeat
           ? VisitorDenialCopy.helpRepeatAck(team, contact)
           : VisitorDenialCopy.helpAck(team, contact);
-    // Bare HELP/INFO stays the keyword body. A failed team text still uses the snag line.
-    const visitorLine = failed ? renderSms("handler-snag-retry").body : (inbound?.keywordBody ?? ack);
-    if (medical) await this.sendMedicalVisitorLine(stored, reservationId, ack, optedOut);
-    else await this.textProspect(prospect, reservationId, visitorLine, undefined, inbound?.keywordBody ? { deliverDespiteOptOut: true } : undefined);
+    // Bare HELP/INFO is the keyword body. When the team text goes out, the
+    // stay-where-you-are line follows it. When that text fails, the snag line
+    // follows it. A real problem still sends one ack, or the snag line alone.
+    if (medical) {
+      await this.sendMedicalVisitorLine(stored, reservationId, ack, optedOut);
+    } else if (inbound?.keywordBody) {
+      const despite = { deliverDespiteOptOut: true as const };
+      await this.textProspect(prospect, reservationId, inbound.keywordBody, undefined, despite);
+      if (failed) {
+        await this.textProspect(prospect, reservationId, renderSms("handler-snag-retry").body, undefined, despite);
+      } else if (alerted) {
+        await this.textProspect(prospect, reservationId, VisitorDenialCopy.helpAck(team, contact), undefined, despite);
+      }
+    } else {
+      const visitorLine = failed ? renderSms("handler-snag-retry").body : ack;
+      await this.textProspect(prospect, reservationId, visitorLine);
+    }
     await this.recordBestEffort(
       "HELP_REQUESTED",
       { reservationId, prospectId: prospect.id, detail: where ?? "", code: said },
