@@ -239,7 +239,7 @@ describe("one Scratch turnover", () => {
     ]);
   });
 
-  it("does not schedule a no, a stranger's yes, a real phone number, a missing consent, or a multi-day gap", async () => {
+  it("does not schedule a no, a stranger's yes, a non-scratch number, a missing consent, or a multi-day gap", async () => {
     const declined = sink();
     const noJob = core(declined);
     await noJob.scheduleFromIcal(SCRATCH_ICAL);
@@ -265,7 +265,7 @@ describe("one Scratch turnover", () => {
     expect(stranger.sent).toEqual([{ to: OWNER, body: OFFER, kind: "offer" }]);
 
     const real = sink();
-    const blocked = await core(real, { ownerPhone: "+12015551212", cleaner: { phone: CLEANER, approved: true } }).scheduleFromIcal(SCRATCH_ICAL);
+    const blocked = await core(real, { ownerPhone: "+10000000000", cleaner: { phone: CLEANER, approved: true } }).scheduleFromIcal(SCRATCH_ICAL);
     expect(blocked).toEqual({ scheduled: false, reason: "scratch-only", sent: [] });
     expect(real.sent).toEqual([]);
 
