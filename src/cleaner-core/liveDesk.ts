@@ -6,7 +6,7 @@ import { messagingKeyword, normalize } from "../intent";
 import { stripFiller } from "../intent/normalize";
 import { spokenTimes } from "../core/spokenTime";
 import { interpretFeed } from "./calendar";
-import { openCleanerCore, type CleanerCore, type CleanerText, type TextKind } from "./core";
+import { openCleanerCore, SAFETY, type CleanerCore, type CleanerText, type TextKind } from "./core";
 import { readPublicCalendar, type CalendarFetch } from "./fetchLimits";
 import { isPrivateCodeLine, resumeNote } from "./cleanerTexts";
 import { GroupNotConfirmed } from "./groupThread";
@@ -610,7 +610,7 @@ export class LiveDesk {
             if (text.kind === "pin") this.noteAccepted("scratch-pin");
             return;
           }
-          if (hostLine) return;
+          if (hostLine && !SAFETY.has(text.kind)) return;
           if (text.channel === "group" && text.audience && text.audience.length > 0) {
             try {
               const sent = await sendLiveGroup(env(), { audience: [...text.audience], body: text.body, conversationSid: this.file.conversationSid });
