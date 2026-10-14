@@ -1688,6 +1688,12 @@ class Engine implements CleanerCore {
     this.keepHostNote(`pin-private:${key}`, privateCodeLine(this.groupChat.cleanerName));
   }
 
+  private ownerDeclined(draft: Draft): boolean {
+    if (!this.owner || draft.to !== this.owner || SAFETY.has(draft.kind)) return false;
+    if (this.groupChat && this.hostGroup === "out") return true;
+    return this.ownerOptedOut && HOST_DIRECT.has(draft.kind);
+  }
+
   private async emitOne(draft: Draft): Promise<CleanerText | null> {
     draft = this.hostDirect(draft);
     if (this.options.holdSends?.()) return null;
@@ -1706,7 +1712,7 @@ class Engine implements CleanerCore {
       const audience = draft.audience ?? [];
       if (audience.length === 0 || audience.some((phone) => !allowed.has(phone))) return null;
     }
-    if (this.groupChat && draft.to === this.owner && this.hostGroup === "out" && !SAFETY.has(draft.kind)) return this.noteUnsentHost(draft);
+    if (this.ownerDeclined(draft)) return this.noteUnsentHost(draft);
     if (this.groupChat && draft.to === this.cleanerPhone && this.cleanerConsent === "out" && !SAFETY.has(draft.kind)) return null;
     if (draft.kind === "pin") {
       const groupPin = Boolean(this.groupChat && draft.channel === "group" && codeRoute(this.groupSeats()) === "group" && draft.to === this.cleanerPhone);

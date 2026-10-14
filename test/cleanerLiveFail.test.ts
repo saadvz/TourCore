@@ -15,8 +15,7 @@ const LANE = SCRATCH_TENANTS[0];
 const HOST = "+15555550115";
 const OBSERVER = "+15555550142";
 const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn't go through.";
-const PIN_FAILED = "The door code didn't reach the cleaner. Tell me the guests have left again and I'll resend it.";
-const PIN_FAILED_NEXT = "The door code didn't reach the cleaner. Tell your Grok Bot the guests have left and I'll resend it.";
+const PIN_FAILED = "The door code didn't reach the cleaner. Tell your Grok Bot the guests have left and I'll resend it.";
 const PIN_REPEAT = "I already sent the door code to the cleaner.";
 const STOP_ACK = "You're opted out of cleaning texts for 12 Scratch Lane, Teaneck, NJ 07666. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.";
 const START_ACK = "You're opted back in. Reply YES if you still want this turnover. Reply STOP to opt out.";
@@ -276,7 +275,7 @@ describe("live Scratch failures from 19087415", () => {
     const afterStop = wired.cleanerSent.length;
     expect(nextOf(await call(wired, "report_delivery", { which: "Door code text to the cleaner", status: "failed" }))).toBe("Door code text to the cleaner: failed.");
     expect(redact(wired.cleanerSent.slice(afterStop), LANE.pin)).toEqual([]);
-    expect(nextOf(await call(wired, "get_state"))).toBe(PIN_FAILED_NEXT);
+    expect(nextOf(await call(wired, "get_state"))).toBe(PIN_FAILED);
     expect(codeTexts(wired.cleanerSent, LANE.pin)).toHaveLength(1);
     expect(JSON.stringify(redact(wired.cleanerSent, LANE.pin))).not.toContain(LANE.pin);
   }, 40_000);

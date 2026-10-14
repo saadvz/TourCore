@@ -36,7 +36,7 @@ const STOP_ACK = "You're opted out and won't receive more messages. Reply START 
 const STOP_HOLD = `The cleaner opted out of cleaning texts for ${ADDRESS}, so the job is on hold.`;
 const ALREADY = "I already sent the door code to the cleaner.";
 const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn't go through.";
-const PIN_FAILED = "The door code didn't reach the cleaner. Tell me the guests have left again and I'll resend it.";
+const PIN_FAILED = "The door code didn't reach the cleaner. Tell your Grok Bot the guests have left and I'll resend it.";
 const AFTER_CHECKS = "Tell me the checkout time and the next check-in time before I text the cleaner.";
 const PRACTICE_INVITE = groupOptInBody("Cory", "Maria", PRACTICE);
 const PRACTICE_HOLD = holdNote(PRACTICE);
@@ -928,7 +928,7 @@ describe("live group membership", () => {
       CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
     };
     const line = "Maria got the door code privately.";
-    const failedAlert = "The door code didn't reach the cleaner. Tell me the guests have left again and I'll resend it.";
+    const failedAlert = "The door code didn't reach the cleaner. Tell your Grok Bot the guests have left and I'll resend it.";
     const groupPin = `Maria, guests have left ${PRACTICE}. Door code: ${DOOR_CODE}.`;
     setCleanerTwilioClient(sms);
     setCleanerGroupFetch(fetchBox.impl);
