@@ -60,6 +60,10 @@ export interface VisitorTemplate {
   note?: string;
 }
 
+/** Bare cancel on a booked tour that has not started. One visitor text, and the opt-out. */
+export const CANCEL_OPT_OUT =
+  "Your tour is cancelled and you won't get any more texts from us. To come back or book again, reply START.";
+
 const TEMPLATES: VisitorTemplate[] = [
   { id: "fair-housing-held", text: "Good question for the {team}. I've passed it along, and they'll text you back here.", note: "Sent only after the question is flagged no-draft. Never names the reason." },
   { id: "door-stuck-no-steps", text: "I can't open the doors for you right now. I've let the {team} know, and they'll text you here shortly.", note: "No step left, including a stale denial on a no-form property, and a failed forward of a held question." },
@@ -79,6 +83,11 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "approved-answer-closing", text: "{answer} Let me know if you have any other questions.", explicitOnly: true, note: "Approved fact plus the closing line, from resolve_issue only." },
 
   { id: "cancel-done", text: "You're cancelled. Text me anytime if you want to book again." },
+  {
+    id: "cancel-opt-out",
+    text: CANCEL_OPT_OUT,
+    note: "Bare cancel when a tour is booked and has not started. Also the carrier opt-out. The stored keyword is STOP.",
+  },
   { id: "nothing-booked-cancel", text: "No problem, nothing's booked yet, so I'll stop here. Text me anytime if you want to pick a time." },
   { id: "cancel-failed", text: "I can't cancel it from here. I've asked the {team} to call it off and get back to you." },
   { id: "cancel-confirm", text: "Cancel your {time} tour on {day}? Reply YES or NO." },

@@ -1,4 +1,5 @@
 import { isFairHousingQuestion, isTourPartyNote, suitabilityBlocksBooking } from "../core/fairHousing";
+import { firstInboundMatch, isSchedulingMenuAnswer } from "../visitor/inboundTextPipeline";
 import { isMoreTimeAsk } from "../core/overstayCopy";
 import { dayReference, namesTourDay, spokenTimes, vagueTimeRequest, type SpokenTime } from "../core/spokenTime";
 import { isGeneralTourHoursQuestion } from "./tourHoursAsk";
@@ -20,6 +21,8 @@ const BODY_PART =
   "(?:arms?|legs?|wrists?|ankles?|hands?|feet|foot|fingers?|toes?|ribs?|noses?|hips?|collarbones?|necks?|bones?|teeth|tooth|jaws?|elbows?|knees?|shoulders?|skulls?)";
 const BROKE_BODY = `(?:broke|broken) (?:(?:his|her|my|their|your|our|a) )?${BODY_PART}`;
 const BROKE_BACK = "(?:broke|broken) (?:his|her|my|their|your|our) back";
+/** "my back is broken" is the same possessive back as "broke my back". "broke a back window" is not. */
+const BACK_IS_BROKEN = "(?:his|her|my|their|your|our) back (?:is|was|got|gets) (?:broke|broken)";
 const ACUTE =
   /\b(?:not breathing|stopped breathing|trouble breathing|cannot breathe|can not breathe|cannot get up|can not get up|choking|unconscious|unresponsive|passed out|fainted|collapsed|heart attack|(?:had|has|having) a stroke|seizure|overdos(?:e|ed|ing)|allergic reaction|chest pains?)\b/;
 
@@ -63,7 +66,7 @@ export function isMedicalEmergency(raw: string): boolean {
   const text = stripNeverCounts(medicalText(raw));
   if (!text.trim()) return false;
   if (ACUTE.test(text)) return true;
-  if (new RegExp(`\\b(?:${BROKE_BODY}|${BROKE_BACK})\\b`).test(text)) return true;
+  if (new RegExp(`\\b(?:${BROKE_BODY}|${BROKE_BACK}|${BACK_IS_BROKEN})\\b`).test(text)) return true;
   if (/\bbleeding\b/.test(text) || /\bambulance\b/.test(text)) return true;
   if (mentions911(text)) return true;
   return injuryWithPersonOrHelp(text);
@@ -129,6 +132,48 @@ const HELP: [RegExp, NonNullable<Extract<TourIntent, { type: "REQUEST_HELP" }>["
   ],
   [/^(?:help)\b|\bhelp$/, "GENERAL"],
 ];
+
+/**
+ * Lost, stuck, or a door that will not open. The bare word help, or help
+ * plus a clock, is not this. The catch-all pattern is the last HELP entry.
+ */
+export function isConcreteHelpProblem(raw: string): boolean {
+  const t = stripFiller(normalize(raw));
+  if (!t) return false;
+  return HELP.slice(0, -1).some(([pattern]) => pattern.test(t));
+}
+
+/**
+ * Presence at a stop during a running tour, confident enough to open the door.
+ * A stuck or lost problem is help, not a door. A question that only mentions
+ * the unit is not a door.
+ */
+export function isOnTourDoorAsk(raw: string, doors: StopRef[]): boolean {
+  const t = stripFiller(normalize(raw));
+  if (!t || !doors.length || isConcreteHelpProblem(raw)) return false;
+  const asked = /\?\s*$/.test(raw.trim()) || QUESTION_START.test(t);
+  const named = uniqueStops(doors.filter((door) => mentionsDoor(t, door)));
+  const present = STRONG_PRESENCE.test(t) || PRESENCE.test(t);
+  if (named.length === 1) {
+    const bare = bareReference(t, named[0]!);
+    if (asked && !OPEN.test(t) && !bare && !STRONG_PRESENCE.test(t)) return false;
+    const confidence = bare ? 0.95 : present ? 0.9 : OPEN.test(t) ? 0.7 : 0.6;
+    return confidence >= 0.85;
+  }
+  if (named.length > 1) return false;
+  if (present && !asked && (GENERIC_UNIT.test(t) || GENERIC_DOOR.test(t))) return true;
+  return PURE_HERE.test(t);
+}
+
+/** The door intent for a text isOnTourDoorAsk already accepted. */
+export function onTourDoorIntent(raw: string, doors: StopRef[]): TourIntent | undefined {
+  if (!isOnTourDoorAsk(raw, doors)) return undefined;
+  const t = stripFiller(normalize(raw));
+  const named = uniqueStops(doors.filter((door) => mentionsDoor(t, door)));
+  if (named.length === 1) return stopIntent(named[0]!);
+  if (GENERIC_UNIT.test(t) && !GENERIC_DOOR.test(t)) return { type: "AT_UNIT" };
+  return { type: "AT_ROUTE_STOP" };
+}
 
 const QUESTION_START =
   /^(how|what|whats|is|are|does|do|did|can|could|would|will|where|when|which|who|why|any|anything|tell me|i was wondering|wondering|curious|i am curious|do you know|is there|are there|how about|what about)\b/;
@@ -553,8 +598,17 @@ const OPERATION_WINS = new Set<IntentType>([
   "START_INQUIRY",
 ]);
 
-function holdFairHousingLast(raw: string, found: IntentInterpretation): IntentInterpretation {
+function holdFairHousingLast(ctx: InterpretContext, found: IntentInterpretation): IntentInterpretation {
+  const raw = ctx.message ?? "";
   if (!isFairHousingQuestion(raw)) return found;
+  // Menus, help, injury, doors, stop, and cancel already won. Fair housing is only the leftover.
+  const earlier = firstInboundMatch({
+    text: raw,
+    touring: ctx.step === "touring" || !!ctx.hasRunningTour,
+    doors: ctx.step === "touring" ? ctx.doors : [],
+    menuAnswer: isSchedulingMenuAnswer(ctx.step, found.intent.type),
+  });
+  if (earlier && earlier !== "fair-housing") return found;
   const type = found.intent.type;
   if (OPERATION_WINS.has(type)) return found;
   if ((type === "SELECT_DATE" || type === "SELECT_TIME" || type === "REQUEST_CUSTOM_TIME") && !suitabilityBlocksBooking(raw)) return found;
@@ -570,7 +624,7 @@ function holdFairHousingLast(raw: string, found: IntentInterpretation): IntentIn
 }
 
 export function interpretByRules(ctx: InterpretContext): IntentInterpretation {
-  return holdFairHousingLast(ctx.message ?? "", readByRules(ctx));
+  return holdFairHousingLast(ctx, readByRules(ctx));
 }
 
 function readByRules(ctx: InterpretContext): IntentInterpretation {

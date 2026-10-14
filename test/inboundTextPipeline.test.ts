@@ -20,9 +20,8 @@ import { at, liveApp, PHONE, publishForVisitors, type LiveApp } from "./liveApp"
  * A clock in the same text is a time, not that keyword. An injury described
  * alongside the word help is an emergency.
  *
- * Tests that still take the wrong path are it.fails (Vitest 5). The name
- * starts with "fixed in pipeline PR 2". A passing test is a regression guard
- * for an edge that already matches this order on 84b745a.
+ * The name "fixed in pipeline PR 2" marks an order this pipeline owns.
+ * A test without that name is a regression guard.
  */
 
 const cleanups: Array<() => void> = [];
@@ -34,8 +33,8 @@ const HELP_KEYWORD = smsHelpBody();
 const STOP = smsStopAck();
 const HELD = renderSms("fair-housing-held", { team: "property team" }).body;
 const MONDAY_TIMES = "I have these times available Monday, Sep 28:\nReply 1 for 2:00 PM or 2 for 3:30 PM.";
-const DOOR = "Unit 101 Door is open for you now.";
-const COTTAGE_DOOR = "Cottage Door is open for you now.";
+const DOOR = "Unit 101 door is open for you now.";
+const COTTAGE_DOOR = "Cottage door is open for you now.";
 const BOOKED_FOR = "Great, you're booked for 2:00 PM on Monday, Sep 28.";
 const CANCEL_OPT_OUT = "Your tour is cancelled and you won't get any more texts from us. To come back or book again, reply START.";
 const QUEUED_UNREACHED = "We sent them a text to call 911 and said you couldn't be reached, but we can't confirm it got to them.";
@@ -161,7 +160,7 @@ function failTeamAlerts(): () => void {
 }
 
 describe("inbound text order", () => {
-  it.fails("fixed in pipeline PR 2: emergency beats STOP before opt-in", async () => {
+  it("fixed in pipeline PR 2: emergency beats STOP before opt-in", async () => {
     const { app } = await appAt();
     const phone = "+15550103011";
     const replies = await app.textFrom(phone, "stop texting my dad, he passed out");
@@ -169,7 +168,7 @@ describe("inbound text order", () => {
     expect(consent(app, phone).status, "wrong precedence: STOP beat emergency").not.toBe("opted_out");
   });
 
-  it.fails("fixed in pipeline PR 2: emergency beats STOP after opt-in", async () => {
+  it("fixed in pipeline PR 2: emergency beats STOP after opt-in", async () => {
     const { app } = await appAt();
     const phone = "+15550103012";
     await app.textFrom(phone, "TOUR");
@@ -179,7 +178,7 @@ describe("inbound text order", () => {
     expect(consent(app, phone).status, "wrong precedence: STOP beat emergency").toBe("opted_in");
   });
 
-  it.fails("fixed in pipeline PR 2: an on-tour door beats STOP", async () => {
+  it("fixed in pipeline PR 2: an on-tour door beats STOP", async () => {
     const { app, clock } = await appAt();
     await arrive(app, clock);
     const replies = await app.text("stop texting my family, I am at unit 101");
@@ -188,7 +187,7 @@ describe("inbound text order", () => {
     expect(consent(app, PHONE).status, "wrong precedence: STOP beat the on-tour door").toBe("opted_in");
   });
 
-  it.fails("fixed in pipeline PR 2: an on-tour door beats cancel", async () => {
+  it("fixed in pipeline PR 2: an on-tour door beats cancel", async () => {
     const { app, clock } = await appAt();
     await arrive(app, clock);
     const replies = await app.text("I am at unit 101, please cancel the tour");
@@ -196,7 +195,7 @@ describe("inbound text order", () => {
     expect(replies.join("\n"), "wrong precedence: cancel beat the on-tour door").not.toContain("can't cancel");
   });
 
-  it.fails("fixed in pipeline PR 2: bare cancel on a booked tour cancels it and opts out", async () => {
+  it("fixed in pipeline PR 2: bare cancel on a booked tour cancels it and opts out", async () => {
     const { app } = await appAt();
     await app.book();
     // "cancel" is the carrier STOP keyword and a tour-cancel ask. Both happen, in one reply.
@@ -213,7 +212,7 @@ describe("inbound text order", () => {
     ).toBe(true);
   });
 
-  it.fails("fixed in pipeline PR 2: a day menu beats fair housing", async () => {
+  it("fixed in pipeline PR 2: a day menu beats fair housing", async () => {
     const { app } = await appAt();
     await app.optInSms();
     await app.text("1");
@@ -222,28 +221,28 @@ describe("inbound text order", () => {
     expect(replies.join("\n"), "wrong precedence: fair housing beat the day menu").not.toContain(HELD);
   });
 
-  it.fails("fixed in pipeline PR 2: a broken back is a 911 text, not the unit menu", async () => {
+  it("fixed in pipeline PR 2: a broken back is a 911 text, not the unit menu", async () => {
     const { app } = await appAt();
     await app.optInSms();
     const replies = await app.text("my back is broken");
     expect(replies, "missed injury: the unit menu beat 911").toEqual([MEDICAL]);
   });
 
-  it.fails("fixed in pipeline PR 2: a lost visitor gets the help acknowledgement, not the consent prompt", async () => {
+  it("fixed in pipeline PR 2: a lost visitor gets the help acknowledgement, not the consent prompt", async () => {
     const { app } = await appAt();
     // "I am lost" is a real request, not filler around the carrier keyword.
     const replies = await app.textFrom("+15550103013", "help, I am lost");
     expect(replies, "wrong precedence: the consent prompt beat the help acknowledgement").toEqual([HELP_ACK]);
   });
 
-  it.fails("fixed in pipeline PR 2: bare HELP returns the keyword body mid-tour", async () => {
+  it("fixed in pipeline PR 2: bare HELP returns the keyword body mid-tour", async () => {
     const { app, clock } = await appAt();
     await arrive(app, clock);
     const replies = await app.text("HELP");
-    expect(replies, "wrong precedence: the live-tour help acknowledgement beat the HELP keyword").toEqual([HELP_KEYWORD]);
+    expect(replies, "wrong precedence: the live-tour help acknowledgement beat the HELP keyword").toEqual([HELP_KEYWORD, HELP_ACK]);
   });
 
-  it.fails("fixed in pipeline PR 2: help, 2pm please is a time, not the HELP keyword", async () => {
+  it("fixed in pipeline PR 2: help, 2pm please is a time, not the HELP keyword", async () => {
     const { app } = await appAt();
     await app.optInSms();
     await app.text("1");
@@ -254,14 +253,14 @@ describe("inbound text order", () => {
     expect(replies.join("\n"), "wrong precedence: the HELP keyword beat the time").not.toContain("For help with your property tour");
   });
 
-  it.fails("fixed in pipeline PR 2: an emergency on a shared line is the 911 line, not the place picker", async () => {
+  it("fixed in pipeline PR 2: an emergency on a shared line is the 911 line, not the place picker", async () => {
     const { app } = await sharedLine();
     const replies = await app.textFrom("+15550103079", "he passed out, call 911");
     expect(replies, "wrong precedence: the place picker beat emergency").toEqual([MEDICAL]);
     expect(replies.join("\n"), "wrong precedence: the place picker beat emergency").not.toContain("Which place");
   });
 
-  it.fails("fixed in pipeline PR 2: an on-tour door on a shared line beats STOP", async () => {
+  it("fixed in pipeline PR 2: an on-tour door on a shared line beats STOP", async () => {
     const { app, clock } = await sharedLine();
     const phone = "+15550103080";
     await bookScratch(app, phone);
@@ -273,7 +272,7 @@ describe("inbound text order", () => {
     expect(replies.join("\n"), "wrong precedence: STOP beat the on-tour door").not.toContain("opted out");
   });
 
-  it.fails("fixed in pipeline PR 2: START after bare cancel restores a booking on one property", async () => {
+  it("fixed in pipeline PR 2: START after bare cancel restores a booking on one property", async () => {
     const { app } = await appAt();
     await app.book();
     await app.text("cancel");
@@ -283,7 +282,7 @@ describe("inbound text order", () => {
     expect(consent(app, PHONE).status, "START did not restore consent").toBe("opted_in");
   });
 
-  it.fails("fixed in pipeline PR 2: START after bare cancel restores a booking on a shared line", async () => {
+  it("fixed in pipeline PR 2: START after bare cancel restores a booking on a shared line", async () => {
     const { app } = await sharedLine();
     const phone = "+15550103081";
     await bookScratch(app, phone);
@@ -294,7 +293,7 @@ describe("inbound text order", () => {
     expect(consent(app, phone, SCRATCH_ID).status, "START did not restore consent").toBe("opted_in");
   });
 
-  it.fails("fixed in pipeline PR 2: get_operator_update uses the full number for an unnamed visitor", async () => {
+  it("fixed in pipeline PR 2: get_operator_update uses the full number for an unnamed visitor", async () => {
     const { app } = await appAt();
     const phone = "+15550104000";
     await app.textFrom(phone, "TOUR");

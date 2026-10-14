@@ -477,7 +477,7 @@ describe("dead-end visitor lines", () => {
     expect(stored.some((message) => message.templateId === "tour-window-ended" && message.body.startsWith("Your tour time ended at"))).toBe(true);
   });
 
-  it("alerts the team when HELP follows the all-doors-open line", async () => {
+  it("alerts the team when a help problem follows the all-doors-open line", async () => {
     const a = await liveApp({ cleanups });
     await a.book();
     a.clock.t = at(13, 58);
@@ -486,14 +486,14 @@ describe("dead-end visitor lines", () => {
     a.clock.t = at(14, 0);
     const open = await a.text("I'm here");
     expect(open.join("\n")).toContain("Every door on your tour is already open for you.");
-    const help = await a.text("HELP");
+    const help = await a.text("I need help");
     expect(help.join("\n")).toContain("I've let the property team know");
     expect(help.join("\n")).not.toContain("Reply STOP");
     const flagged = (await a.grok("list_exceptions")).exceptions as Array<{ what?: string; summary: string }>;
     expect(flagged.some((item) => /help/i.test(`${item.what ?? ""} ${item.summary}`))).toBe(true);
   });
 
-  it("alerts the team when HELP follows a tour window that has ended", async () => {
+  it("alerts the team when a help problem follows a tour window that has ended", async () => {
     const a = await liveApp({ cleanups });
     await a.book();
     a.clock.t = at(13, 58);
@@ -502,7 +502,7 @@ describe("dead-end visitor lines", () => {
     a.clock.t = at(14, 46);
     const tour = a.ws.listTours("prop_100_alfred_way").find((item) => item.kind === "messaging")!;
     expect(a.ws.loadTour("prop_100_alfred_way", tour.tourId)!.bundle.reservations[0]!.status).toBe("TOURING");
-    const help = await a.text("HELP");
+    const help = await a.text("I need help");
     expect(help.join("\n")).toContain("I've let the property team know");
     expect(help.join("\n")).not.toContain("Reply STOP");
     const flagged = (await a.grok("list_exceptions")).exceptions as Array<{ what?: string; summary: string }>;

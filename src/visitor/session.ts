@@ -29,7 +29,7 @@ import { toursUnavailableText, visitorTeamName } from "../sms/templates";
 import { SetupInputError } from "../setup/setupActions";
 import type { ConversationItem, TourRecord } from "../setup/workspace";
 import type { ExportBundle } from "../export/exportBundle";
-import { isMedicalEmergency, isPlainLanguageStop, type Awaiting, type IntentInterpretation } from "../intent";
+import { isConcreteHelpProblem, isMedicalEmergency, isPlainLanguageStop, keywordOf, type Awaiting, type IntentInterpretation } from "../intent";
 import { smsHelpBody, smsStopAck, type SmsCampaignConsent, type SmsConsentStatus } from "./smsConsent";
 import type { VerificationLinks } from "./verificationLinks";
 import { afterCloseAlertOpen } from "./overstayScheduler";
@@ -210,6 +210,13 @@ export class VisitorDemoSession {
   smsConsentMode: "keyword_confirm" | "disabled" = "keyword_confirm";
   /** Last keyword-consent record, so a later STOP keeps the original opt-in time. */
   smsRecord?: SmsCampaignConsent;
+  /**
+   * Bare cancel on a booked tour promised that START books again.
+   * A plain STOP does not set this, so START still asks for YES.
+   */
+  consentRestoresOnStart = false;
+  /** After that START, a greeting stays on this property instead of asking which place. */
+  bindNextBooking = false;
   /** Writes the keyword-consent record. Unset in tests that only need memory. */
   persistSmsConsent?: (record: SmsCampaignConsent) => void;
   /** Resolved PUBLIC_BASE_URL. Compliance texts never invent a host. */
@@ -586,13 +593,14 @@ export class VisitorDemoSession {
     await this.core.optInToMessaging(this.visitor?.phone ?? "");
   }
 
-  async optOut(said: Said): Promise<void> {
+  async optOut(said: Said, options?: { reply?: string; keyword?: string; restoreOnStart?: boolean }): Promise<void> {
     await this.recordText(said);
-    await this.reply(smsStopAck(), undefined, { deliverDespiteOptOut: true });
+    await this.reply(options?.reply ?? smsStopAck(), undefined, { deliverDespiteOptOut: true });
     this.optedOut = true;
     const raw = (said.text ?? "STOP").trim();
-    const keyword = isPlainLanguageStop(raw) ? "STOP" : raw.toUpperCase();
+    const keyword = options?.keyword ?? (isPlainLanguageStop(raw) ? "STOP" : raw.toUpperCase());
     this.noteSmsConsent("opted_out", keyword);
+    if (options?.restoreOnStart) this.consentRestoresOnStart = true;
     await this.core.optOutOfMessaging(this.visitor?.phone ?? "", keyword);
     await this.syncReplies();
   }
@@ -604,11 +612,15 @@ export class VisitorDemoSession {
   }
 
   /**
-   * HELP: one reply only. A booked tour that is upcoming, still inside its
-   * window, or past the window while the tour is still in progress gets the
-   * help ack (at-door or remote) and alerts the team. Finished, canceled,
-   * revoked, failed-ID, expired, or not-yet-booked reservations — and unknown
-   * numbers — get the carrier HELP keyword reply.
+   * HELP. Bare HELP or INFO is always the carrier keyword body. On a booked
+   * tour that is upcoming, inside its window, or still in progress after the
+   * window, that keyword also alerts the team, files the help inbox item, and
+   * records HELP_REQUESTED. When the team text goes out, a tour in progress
+   * gets the stay-where-you-are line and an upcoming booking gets the remote
+   * help line. When it fails, the snag line follows the keyword.
+   * A real problem still uses the help ack alone. Finished, canceled, revoked,
+   * failed-ID, expired, or not-yet-booked reservations — and unknown numbers —
+   * get the keyword reply and no alert.
    */
   async help(said: Said): Promise<void> {
     const text = said.text ?? "HELP";
@@ -630,10 +642,30 @@ export class VisitorDemoSession {
       await this.syncReplies();
       return;
     }
+    // Bare HELP or INFO is the carrier keyword. A booked or in-progress tour still alerts the team, then sends the remote line, the stay line, or the snag line.
+    if (keywordOf(text) === "help") {
+      const keywordBody = smsHelpBody(process.env, { visitorContact: this.config.operator.visitorContact });
+      const reservation = await this.reservation();
+      if (reservation && isLiveHelpReservation(reservation, this.clock.now())) {
+        this.say("visitor", text);
+        await this.core.requestHelp(reservation.id, await this.currentPlace(), { text, meta: said.meta, keywordBody });
+        await this.syncReplies();
+        return;
+      }
+      await this.recordText(said);
+      await this.reply(keywordBody, undefined, { deliverDespiteOptOut: true });
+      return;
+    }
     const reservation = await this.reservation();
     if (reservation && isLiveHelpReservation(reservation, this.clock.now())) {
       this.say("visitor", said.text ?? "HELP");
       await this.core.requestHelp(reservation.id, await this.currentPlace(), { text: said.text ?? "HELP", meta: said.meta });
+      await this.syncReplies();
+      return;
+    }
+    if (!reservation && isConcreteHelpProblem(text)) {
+      await this.recordText(said);
+      await this.core.requestHelp(undefined, undefined, { text, meta: said.meta, phone: this.visitor?.phone ?? "" });
       await this.syncReplies();
       return;
     }

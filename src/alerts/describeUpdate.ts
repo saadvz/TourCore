@@ -62,7 +62,7 @@ export async function describeOperatorUpdate(services: OperatorServices, event: 
   if (isIssueEvent(event.eventType)) {
     if (!event.exceptionId) throw new SetupInputError("UPDATE_INCOMPLETE", "That update doesn't point at an issue.");
     const x = await inspectException(services, event.exceptionId);
-    const phoneLabel = options?.inbox ? inboxPhoneVisitorLabel(x.visitorName) : undefined;
+    const phoneLabel = inboxPhoneVisitorLabel(x.visitorName);
     const who = phoneLabel ?? (x.visitorName.startsWith("A visitor") ? x.visitorName : x.visitorName.split(/\s+/)[0]);
     return {
       eventType: event.eventType,

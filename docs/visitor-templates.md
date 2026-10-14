@@ -4,7 +4,7 @@ Every outbound visitor text uses one of these ids. `{slot}` is filled before sen
 
 Text from the landlord or from a model reaches a visitor only as `approved-answer` or `approved-answer-closing`, and only after they approve a flagged question (`resolve_issue`). A no-draft flag never gets a draft. `approved-profile-fact` repeats a fact they already saved.
 
-203 message templates. 7 channel prompts.
+204 message templates. 7 channel prompts.
 
 ## Messages
 
@@ -114,6 +114,14 @@ Explicit id only. Not matched automatically. Approved fact plus the closing line
 
 ```
 You're cancelled. Text me anytime if you want to book again.
+```
+
+### cancel-opt-out
+
+Bare cancel when a tour is booked and has not started. Also the carrier opt-out. The stored keyword is STOP.
+
+```
+Your tour is cancelled and you won't get any more texts from us. To come back or book again, reply START.
 ```
 
 ### nothing-booked-cancel

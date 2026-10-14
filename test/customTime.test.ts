@@ -2472,7 +2472,7 @@ describe("an operator booking change stale-dates a leftover menu", () => {
   it("a leftover 1 after cancel-by-text does not book Tuesday 3:30", async () => {
     const a = await liveApp({ cleanups });
     await takenTuesdayMenu(a);
-    await a.text("cancel");
+    await a.text("please cancel my tour");
     await a.text("yes");
     const leftover = await a.text("1");
     expect(leftover.join("\n")).toContain(TOUR_ENDED_REPLY);

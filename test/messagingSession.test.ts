@@ -5,6 +5,7 @@ import { zonedTimeToUtc } from "../src/core/timezone";
 import { DemoMessagingAdapter } from "../src/messaging/Messenger";
 import { withPrompt } from "../src/messaging/presentation";
 import { handleVisitorText, keywordOf } from "../src/visitor/conversation";
+import { smsHelpBody } from "../src/visitor/smsConsent";
 import { VisitorDemoSession, visitorView } from "../src/visitor";
 import { VerificationLinks } from "../src/visitor/verificationLinks";
 
@@ -210,7 +211,7 @@ describe("typed replies", () => {
     expect(keywordOf("please don't stop")).toBeUndefined();
   });
 
-  it("HELP says who this is and how to reach the team; during a tour it also alerts them", async () => {
+  it("HELP says who this is and how to reach the team, including during a booked tour", async () => {
     const { session, say, lastReply } = phoneSession();
     await say("HELP");
     expect(lastReply()).toContain("Tour Core:");
@@ -227,11 +228,14 @@ describe("typed replies", () => {
     const outboundBefore = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").length;
     await say("help");
     expect((await session.store.listAudit()).some((e) => e.type === "HELP_REQUESTED")).toBe(true);
-    expect(lastReply()).toBe(VisitorDenialCopy.helpAckRemote("property team"));
+    const remote = "I've let the property team know. They'll reply here as soon as they can.";
+    expect(VisitorDenialCopy.helpAckRemote("property team")).toBe(remote);
+    expect(lastReply()).toBe(remote);
     expect(lastReply()).not.toContain("Stay where you are");
     const outbound = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND");
-    expect(outbound.length - outboundBefore).toBe(1);
-    expect(outbound.at(-1)?.body).not.toContain("Tour Core:");
+    expect(outbound.length - outboundBefore).toBe(2);
+    expect(outbound.at(-2)?.body).toBe(smsHelpBody());
+    expect(outbound.at(-1)?.body).toBe(remote);
   });
 
   it("asks again, with the options, when it doesn't understand", async () => {

@@ -15,7 +15,7 @@ import {
   type InboundMeta,
 } from "../core/TourCore";
 import { cannotCancelRunningOfferLater, cannotCancelRunningTour, laterCancelConfirm } from "../core/availabilityCopy";
-import { renderSms, visitorTeamName } from "../sms/templates";
+import { CANCEL_OPT_OUT, renderSms, visitorTeamName } from "../sms/templates";
 import { namedCancelFocus } from "./cancelTarget";
 import { awaitingLatestYesNo, doorAskSupersedesCancel } from "./latestQuestion";
 import { DOOR_AFTER_T, isLeavingTour, T5_NO_OFFER_BARE_YES } from "../core/overstayCopy";
@@ -26,11 +26,13 @@ import { isRunningReservation, TERMINAL } from "../domain/stateMachine";
 import { stripFiller } from "../intent/normalize";
 import {
   isCancelTourAsk,
+  isConcreteHelpProblem,
   isMedicalEmergency,
   isUnbookedCancelAsk,
   isConfident,
   keywordOf,
   messagingKeyword,
+  onTourDoorIntent,
   LayeredIntentInterpreter,
   normalize,
   type Awaiting,
@@ -46,6 +48,7 @@ import { timeMenu } from "./entry";
 import { OPERATOR_SCHEDULE_CONFIRM_PROMPT, type InterpretationNote, type Said, type VisitorDemoSession, type VisitorStage } from "./session";
 import { savedTourHours } from "./tourHoursQuestion";
 import { acceptsOfferedOpening, nextOpeningFollowUp, offerDate, takeOfferedOpening } from "./unavailableDay";
+import { firstInboundMatch, isBareCarrierCancel, isSchedulingMenuAnswer, type InboundKind } from "./inboundTextPipeline";
 import { SMS_GATE_REMINDER, SMS_KEYWORD_PROMPT, smsDisclosure, smsHelpBody, smsOptInConfirmation } from "./smsConsent";
 
 /**
@@ -436,6 +439,23 @@ class Turn {
   }
 }
 
+/** Facts for the shared inbound pipeline. Doors are included only while a tour is running. */
+async function classifyInbound(session: VisitorDemoSession, text: string): Promise<{
+  kind?: InboundKind;
+  touring: boolean;
+  doors: StopRef[];
+  reservation: Awaited<ReturnType<VisitorDemoSession["reservation"]>>;
+}> {
+  const reservation = await session.reservation();
+  const touring = !!reservation && isRunningReservation(reservation.status);
+  // Every door on the property, not only the route. A named door that is not
+  // on this tour is still a door ask, so policy can refuse it. Limiting the
+  // list to the route made "I'm at unit 102" look like a generic unit and
+  // opened the next stop.
+  const doors = touring ? session.config.doors.map((door) => stopRef(session, door.id)) : [];
+  return { kind: firstInboundMatch({ text, touring, doors }), touring, doors, reservation };
+}
+
 /**
  * The single entry point for a typed message from a visitor. The caller
  * (any messaging webhook) has already verified and de-duplicated it.
@@ -461,6 +481,26 @@ export async function handleVisitorText(
   if (photo && !typed) {
     if (!silent) await session.reply(PHOTO_ALONE_REPLY);
     await session.recordText({ text: "(photo)", meta });
+    return undefined;
+  }
+
+  const inbound = await classifyInbound(session, text);
+  if (inbound.kind === "help") {
+    await session.help(said);
+    return undefined;
+  }
+  if (inbound.kind === "emergency") {
+    await session.help(said);
+    return undefined;
+  }
+  if (inbound.kind === "stop") {
+    if (session.pendingClarification?.awaiting.kind === "confirm-operator-tour") session.takeExpected(await session.stage());
+    const bareBookedCancel = !inbound.touring && isBareCarrierCancel(text) && (await session.hasCancelableTour());
+    await session.optOut(said, bareBookedCancel ? { reply: CANCEL_OPT_OUT, keyword: "STOP", restoreOnStart: true } : undefined);
+    return undefined;
+  }
+  if (!session.optedOut && session.smsConsent !== "opted_in" && !inbound.reservation && isConcreteHelpProblem(text)) {
+    await session.help(said);
     return undefined;
   }
 
@@ -540,7 +580,11 @@ export async function handleVisitorText(
     }
   }
 
-  const interpretation = await interpreter.interpret(await contextFor(session, text, stage, awaiting));
+  let interpretation = await interpreter.interpret(await contextFor(session, text, stage, awaiting));
+  if (inbound.kind === "door") {
+    const doorIntent = onTourDoorIntent(text, inbound.doors);
+    if (doorIntent) interpretation = { intent: doorIntent, confidence: 1, interpreter: "rules", clarificationNeeded: false };
+  }
   const note = session.noteInterpretation(interpretation);
   const turn = new Turn(session, said, stage, interpretation, note, awaiting);
   const { intent } = interpretation;
@@ -552,9 +596,7 @@ export async function handleVisitorText(
     turn.photoLineSent = photo && !!typed && !silent;
   }
 
-  if (intent.type === "STOP_MESSAGES" && turn.confident) await session.optOut(said);
-  else if (intent.type === "START_MESSAGES" && turn.confident) await session.optIn(said);
-  else if (isMedicalEmergency(text)) await session.help(said);
+  if (intent.type === "START_MESSAGES" && turn.confident) await session.optIn(said);
   else if (await handleOverstayReply(turn)) {
     /* T-15 / T-5 / more-time / DONE / after-close / rebook after no-time */
   } else if (await handlePostTourDistress(turn)) {
@@ -567,8 +609,7 @@ export async function handleVisitorText(
     /* consent / verification for a booking held while the current tour runs */
   } else if (await takeOverHeldBookingOnGreeting(turn)) {
     /* after the tour ends, HI continues the held booking with booked-for then consent */
-  } else if (keyword === "help") await session.help(said);
-  else if (await handleCancelIntent(turn)) {
+  } else if (inbound.kind !== "door" && (await handleCancelIntent(turn))) {
     /* cancel-by-text: confirm, YES, or NO; or stop when nothing is booked */
   } else if (await resumeClearedScheduling(turn)) {
     /* the text after an unbooked cancel starts scheduling again */
@@ -636,16 +677,12 @@ async function handleOperatorScheduledReply(session: VisitorDemoSession, said: S
  */
 async function handleSmsGate(session: VisitorDemoSession, said: Said, text: string): Promise<void> {
   const keyword = messagingKeyword(text);
-  if (keyword === "stop") {
-    await session.optOut(said);
-    return;
-  }
-  if (keyword === "help") {
-    await session.help(said);
-    return;
-  }
-  if (isMedicalEmergency(text)) {
-    await session.help(said);
+  // Bare cancel told them START books again. A plain STOP still needs YES.
+  if (keyword === "start" && session.consentRestoresOnStart) {
+    session.consentRestoresOnStart = false;
+    session.bindNextBooking = true;
+    await session.optIn(said);
+    session.noteSmsConsent("opted_in", "START");
     return;
   }
   const normalized = normalize(text);
@@ -1453,6 +1490,12 @@ async function openBareTodayOrTonight(turn: Turn): Promise<boolean> {
   return true;
 }
 
+/** A shown day or time already won in the pipeline. The word "help" in that text is not distress. */
+function helpAheadOfMenu(turn: Turn): boolean {
+  if (isSchedulingMenuAnswer(turn.stage, turn.intent.type)) return false;
+  return mentionsAfterCloseDistress(turn.said.text ?? "") || turn.intent.type === "REQUEST_HELP";
+}
+
 async function byStage(turn: Turn): Promise<void> {
   const { session, intent } = turn;
   const yesNo: ReplyPrompt = { kind: "yes-no" };
@@ -1517,7 +1560,7 @@ async function byStage(turn: Turn): Promise<void> {
           return takeOfferedOpening(session, turn.awaiting, turn.said);
         }
       }
-      if (mentionsAfterCloseDistress(turn.said.text ?? "") || intent.type === "REQUEST_HELP") return session.help(turn.said);
+      if (helpAheadOfMenu(turn)) return session.help(turn.said);
       if (intent.type === "START_INQUIRY") return restartBookingDays(turn);
       if (session.staleDateMenu) {
         const text = turn.said.text ?? "";
@@ -1544,7 +1587,7 @@ async function byStage(turn: Turn): Promise<void> {
       }
       const labels = session.offeredSlots.map((s) => s.label);
       const menu: ReplyPrompt = { kind: "choose", options: labels, what: "a time" };
-      if (mentionsAfterCloseDistress(turn.said.text ?? "") || intent.type === "REQUEST_HELP") return session.help(turn.said);
+      if (helpAheadOfMenu(turn)) return session.help(turn.said);
       if (intent.type === "START_INQUIRY") return restartBookingDays(turn);
       if (session.staleTimeMenu || session.staleDateMenu) {
         const text = turn.said.text ?? "";
