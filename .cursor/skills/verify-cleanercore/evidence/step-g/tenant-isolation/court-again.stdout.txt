@@ -1,0 +1,80 @@
+{
+  "ok": true,
+  "flag": true,
+  "property": "8 Scratch Court, Teaneck, NJ 07666",
+  "sent": [],
+  "pinRecipients": [],
+  "jobs": [
+    {
+      "id": "google:evt-court",
+      "departingUid": "google:evt-court",
+      "arrivingUid": null,
+      "status": "discovered",
+      "live": true,
+      "textsBlocked": false,
+      "checkoutDate": "2026-10-19",
+      "nextCheckInDate": null,
+      "sameDay": false,
+      "checkoutTime": null,
+      "nextCheckInTime": null,
+      "checkoutAt": null,
+      "nextCheckInAt": null,
+      "version": 1,
+      "hostCheckoutVersion": 0,
+      "hostCheckInVersion": 0,
+      "asking": "checkout"
+    }
+  ],
+  "outbox": [
+    {
+      "id": "host-checkout:google:evt-court:2026-10-19:660",
+      "to": "+15555550110",
+      "body": "Is checkout at 8 Scratch Court, Teaneck, NJ 07666 on Monday, Oct 19 still 11:00 AM? Reply YES or send the new time.",
+      "kind": "host-checkout",
+      "status": "sent",
+      "jobId": "google:evt-court"
+    }
+  ],
+  "transcript": [
+    "Is checkout at 8 Scratch Court, Teaneck, NJ 07666 on Monday, Oct 19 still 11:00 AM? Reply YES or send the new time."
+  ],
+  "blocks": [],
+  "tenant": "scratch-court",
+  "sync": {
+    "reason": "read",
+    "conversation": "open",
+    "sources": [],
+    "conflicts": []
+  },
+  "reviews": [],
+  "health": {
+    "ok": true,
+    "sends": false,
+    "note": "Cleaner Core health. This check does not send texts.",
+    "openReviews": 0,
+    "staleSources": 0,
+    "counters": {
+      "sent": 1,
+      "failed": 0,
+      "uncertain": 0,
+      "canceled": 0,
+      "injury": 0,
+      "stop": 0,
+      "help": 0,
+      "polls": 1,
+      "pollFails": 0,
+      "pollDurationMs": 8
+    },
+    "codeHandling": "To change the outdoor code at 8 Scratch Court, Teaneck, NJ 07666, set the new code on the lock yourself, then tell me the new code in a private text. I store only a sealed reference. I do not change the lock. To offboard a cleaner, reply STOP from their number or tell me to remove them. I will not send the code again until you confirm a new cleaner and the guests have left."
+  },
+  "sources": [
+    {
+      "kind": "google-calendar",
+      "fetchedAt": null,
+      "fingerprint": "google:evt-court|2026-10-19|||1",
+      "freshness": "unknown",
+      "interpretation": "ok"
+    }
+  ],
+  "audit": []
+}

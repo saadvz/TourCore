@@ -1,0 +1,24 @@
+# Cleaner Core safety gates
+
+These gates have to stay green before `CLEANER_CORE_ENABLED` is turned on for a live job. The proof is `.cursor/skills/verify-cleanercore/scripts/prove-step-g.sh`, which overwrites `evidence/step-g`. The behavior tests are `test/cleanerCoreStepG.test.ts`. CI runs `scripts/ci-check.sh` on Node 22.
+
+What pauses live activation: the flag defaults off; CI fails when a configured scratch code appears outside the historical allowlist; a stale watched feed does not offer a cleaning or release a door code; an uncertain send is not retried until the host says so; restore, replay, and restart do not send a second copy; the demo does not change the lock.
+
+| Gate | What it holds | Proof |
+| --- | --- | --- |
+| Flag off | Doctor and smoke send nothing, including a stale feed and a review. Smoke exits 2. | `evidence/step-g/ci-local`, `test/cleanerCoreStepG.test.ts` |
+| Stale source | Default threshold is three hours (three missed hourly Guesty Lite polls). Past that, no new offer and no door code. One host alert. A fresh fetch clears it and sends the offer once. Exactly three hours is still fresh. | `evidence/step-g/stale-source` |
+| Host time | A newer host checkout stays when a stale feed names another day. No extra text. | `evidence/step-g/host-override-beats-stale-feed` |
+| Door code | Private send only to the opted-in approved cleaner after clearance. Not to the observer, a group, a mirror, or an unapproved number. A code-like inbound opens one exposure review and the digits are not stored. Backups and logs keep the sealed reference only. | `evidence/step-g/permanent-code` |
+| Review queue | Each review kind is texted once. A second file sends nothing. "booked on airbnb" opens the Airbnb review. | `evidence/step-g/review-queue` |
+| Replay | Replaying inbound ids and sent outbox rows sends nothing new. | `evidence/step-g/replay-no-resend` |
+| Restart | A crash after the sink accepts an offer leaves it uncertain. Replay alerts the host once and does not send the offer again. A crash after clearance sends the door code once on the next reminder pass. | `evidence/step-g/recovery-after-restart` |
+| Backup | A consistent SQLite snapshot restores one tenant. The next tick sends nothing. The opt-out remains. The other tenant's job remains. | `evidence/step-g/backup-restore` |
+| Tenants | Lane and Court keep separate reviews, backups, replays, and health counts. | `evidence/step-g/tenant-isolation` |
+| Health | Counters, open reviews, and stale sources. `sends` is false. The log has no full phone number and no door code. | `evidence/step-g/observability` |
+| STOP, HELP, injury | STOP and HELP still win. Hurt, injury, blood, and fall phrases from the cleaner and the observer, in a group and one-to-one, use the 911 path once. | `evidence/step-g/stop-help-injury` |
+| Fetch limits | A calendar link must be public https. Private addresses and redirects are refused. | `test/cleanerCoreStepG.test.ts` |
+| Older proofs | Step D, step E, and step F proofs still pass. | `evidence/step-g/regression-step-d.txt` and the step E and step F lines |
+| Secret scan | Configured scratch codes are absent from new files, test logs, and evidence. | `scripts/scan-cleaner-secrets.mjs` inside `scripts/ci-check.sh` |
+
+Audit rows on a watched turn record actor, source, version, reason, and time. Review texts go out through the same consent-checked send path as every other job text. Injury texts still use the single 911 path from step F.

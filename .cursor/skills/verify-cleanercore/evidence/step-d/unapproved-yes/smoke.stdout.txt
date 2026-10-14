@@ -19,6 +19,11 @@
       "to": "+15555550100",
       "body": "Is check-in at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.",
       "kind": "host-checkin"
+    },
+    {
+      "to": "+15555550100",
+      "body": "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 is on hold until the cleaner replies YES.",
+      "kind": "held"
     }
   ],
   "pinRecipients": [],
@@ -104,6 +109,14 @@
       "kind": "host-checkin",
       "status": "sent",
       "jobId": "stay-anita@guesty.com"
+    },
+    {
+      "id": "hold:stay-anita@guesty.com:2026-10-18",
+      "to": "+15555550100",
+      "body": "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 is on hold until the cleaner replies YES.",
+      "kind": "held",
+      "status": "sent",
+      "jobId": "stay-anita@guesty.com"
     }
   ],
   "transcript": [
@@ -113,6 +126,7 @@
     "+15555550100: YES",
     "Is check-in at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.",
     "+15555550100: YES",
+    "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 is on hold until the cleaner replies YES.",
     "+15555550100: YES",
     "+15555550100: guests have left"
   ],

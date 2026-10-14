@@ -1,0 +1,1 @@
+smoke --watch-freshness --feed /workspace/src/cleaner-core/fixtures/guesty-lite-scratch.ics --reply +15555550100=2:00 PM --reply +15555550100=YES --now 2026-10-14T18:00:00.001Z --fetched-at 2026-10-14T15:00:00.000Z --then-feed /workspace/src/cleaner-core/fixtures/guesty-lite-date-moved.ics

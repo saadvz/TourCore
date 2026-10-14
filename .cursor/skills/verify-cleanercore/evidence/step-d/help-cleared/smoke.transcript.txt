@@ -13,7 +13,7 @@ Door code sent to the cleaner.
 +15555550101: HELP
 Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.
 +15555550100: I fell and I'm hurt
-If someone is hurt, call 911 now. I couldn't reach the property team just now.
+If someone is hurt, call 911 now.
 +15555550101: I fell and I'm hurt
 The cleaner at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.
 If someone is hurt, call 911 now. I've let the host know.

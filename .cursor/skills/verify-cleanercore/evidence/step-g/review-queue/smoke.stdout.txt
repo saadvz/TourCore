@@ -1,0 +1,300 @@
+{
+  "ok": true,
+  "flag": true,
+  "property": "12 Scratch Lane, Teaneck, NJ 07666",
+  "sent": [
+    {
+      "to": "+15555550100",
+      "body": "The booking feed for 12 Scratch Lane, Teaneck, NJ 07666 is stale, so I did not offer a new cleaning or send the door code. I will use the feed again after a fresh read.",
+      "kind": "review"
+    },
+    {
+      "to": "+15555550100",
+      "body": "I saved a manual Airbnb booking exception for 12 Scratch Lane, Teaneck, NJ 07666. I did not change the cleaning until you confirm it.",
+      "kind": "review"
+    },
+    {
+      "to": "+15555550100",
+      "body": "Same-day cleaning at 12 Scratch Lane, Teaneck, NJ 07666 may be too tight. I saved it for your review and did not add another offer.",
+      "kind": "review"
+    },
+    {
+      "to": "+15555550100",
+      "body": "A cleaning reminder for 12 Scratch Lane, Teaneck, NJ 07666 did not go out. I saved it for your review.",
+      "kind": "review"
+    },
+    {
+      "to": "+15555550100",
+      "body": "I got conflicting replies about the cleaning at 12 Scratch Lane, Teaneck, NJ 07666. I did not change the job.",
+      "kind": "review"
+    },
+    {
+      "to": "+15555550100",
+      "body": "A text failed to send. I saved it for your review and did not count it as delivered.",
+      "kind": "review"
+    },
+    {
+      "to": "+15555550100",
+      "body": "A text may not have gone out. I did not send it again. Please check, then tell me if I should retry.",
+      "kind": "review"
+    },
+    {
+      "to": "+15555550100",
+      "body": "I could not tell who should get the cleaning texts at 12 Scratch Lane, Teaneck, NJ 07666. I did not start a group or send the door code.",
+      "kind": "review"
+    },
+    {
+      "to": "+15555550100",
+      "body": "A text may include the door code. I saved it for your review and did not repeat the digits.",
+      "kind": "review"
+    }
+  ],
+  "pinRecipients": [],
+  "jobs": [],
+  "outbox": [
+    {
+      "id": "review:stale-source:host",
+      "to": "+15555550100",
+      "body": "The booking feed for 12 Scratch Lane, Teaneck, NJ 07666 is stale, so I did not offer a new cleaning or send the door code. I will use the feed again after a fresh read.",
+      "kind": "review",
+      "status": "sent"
+    },
+    {
+      "id": "review:airbnb-exception:host",
+      "to": "+15555550100",
+      "body": "I saved a manual Airbnb booking exception for 12 Scratch Lane, Teaneck, NJ 07666. I did not change the cleaning until you confirm it.",
+      "kind": "review",
+      "status": "sent"
+    },
+    {
+      "id": "review:same-day-capacity:host",
+      "to": "+15555550100",
+      "body": "Same-day cleaning at 12 Scratch Lane, Teaneck, NJ 07666 may be too tight. I saved it for your review and did not add another offer.",
+      "kind": "review",
+      "status": "sent"
+    },
+    {
+      "id": "review:missed-reminder:host",
+      "to": "+15555550100",
+      "body": "A cleaning reminder for 12 Scratch Lane, Teaneck, NJ 07666 did not go out. I saved it for your review.",
+      "kind": "review",
+      "status": "sent"
+    },
+    {
+      "id": "review:conflicting-replies:host",
+      "to": "+15555550100",
+      "body": "I got conflicting replies about the cleaning at 12 Scratch Lane, Teaneck, NJ 07666. I did not change the job.",
+      "kind": "review",
+      "status": "sent"
+    },
+    {
+      "id": "review:failed-sms:host",
+      "to": "+15555550100",
+      "body": "A text failed to send. I saved it for your review and did not count it as delivered.",
+      "kind": "review",
+      "status": "sent"
+    },
+    {
+      "id": "review:uncertain-sms:host",
+      "to": "+15555550100",
+      "body": "A text may not have gone out. I did not send it again. Please check, then tell me if I should retry.",
+      "kind": "review",
+      "status": "sent"
+    },
+    {
+      "id": "review:shared-chat-routing:host",
+      "to": "+15555550100",
+      "body": "I could not tell who should get the cleaning texts at 12 Scratch Lane, Teaneck, NJ 07666. I did not start a group or send the door code.",
+      "kind": "review",
+      "status": "sent"
+    },
+    {
+      "id": "review:possible-code-exposure:host",
+      "to": "+15555550100",
+      "body": "A text may include the door code. I saved it for your review and did not repeat the digits.",
+      "kind": "review",
+      "status": "sent"
+    }
+  ],
+  "transcript": [
+    "The booking feed for 12 Scratch Lane, Teaneck, NJ 07666 is stale, so I did not offer a new cleaning or send the door code. I will use the feed again after a fresh read.",
+    "I saved a manual Airbnb booking exception for 12 Scratch Lane, Teaneck, NJ 07666. I did not change the cleaning until you confirm it.",
+    "Same-day cleaning at 12 Scratch Lane, Teaneck, NJ 07666 may be too tight. I saved it for your review and did not add another offer.",
+    "A cleaning reminder for 12 Scratch Lane, Teaneck, NJ 07666 did not go out. I saved it for your review.",
+    "I got conflicting replies about the cleaning at 12 Scratch Lane, Teaneck, NJ 07666. I did not change the job.",
+    "A text failed to send. I saved it for your review and did not count it as delivered.",
+    "A text may not have gone out. I did not send it again. Please check, then tell me if I should retry.",
+    "I could not tell who should get the cleaning texts at 12 Scratch Lane, Teaneck, NJ 07666. I did not start a group or send the door code.",
+    "A text may include the door code. I saved it for your review and did not repeat the digits."
+  ],
+  "blocks": [],
+  "reviews": [
+    {
+      "id": "review:stale-source:host",
+      "kind": "stale-source",
+      "subject": "host",
+      "status": "open",
+      "at": "2026-10-14T15:00:00.000Z",
+      "version": 1
+    },
+    {
+      "id": "review:airbnb-exception:host",
+      "kind": "airbnb-exception",
+      "subject": "host",
+      "status": "open",
+      "at": "2026-10-14T15:00:00.000Z",
+      "version": 1
+    },
+    {
+      "id": "review:same-day-capacity:host",
+      "kind": "same-day-capacity",
+      "subject": "host",
+      "status": "open",
+      "at": "2026-10-14T15:00:00.000Z",
+      "version": 1
+    },
+    {
+      "id": "review:missed-reminder:host",
+      "kind": "missed-reminder",
+      "subject": "host",
+      "status": "open",
+      "at": "2026-10-14T15:00:00.000Z",
+      "version": 1
+    },
+    {
+      "id": "review:conflicting-replies:host",
+      "kind": "conflicting-replies",
+      "subject": "host",
+      "status": "open",
+      "at": "2026-10-14T15:00:00.000Z",
+      "version": 1
+    },
+    {
+      "id": "review:failed-sms:host",
+      "kind": "failed-sms",
+      "subject": "host",
+      "status": "open",
+      "at": "2026-10-14T15:00:00.000Z",
+      "version": 1
+    },
+    {
+      "id": "review:uncertain-sms:host",
+      "kind": "uncertain-sms",
+      "subject": "host",
+      "status": "open",
+      "at": "2026-10-14T15:00:00.000Z",
+      "version": 1
+    },
+    {
+      "id": "review:shared-chat-routing:host",
+      "kind": "shared-chat-routing",
+      "subject": "host",
+      "status": "open",
+      "at": "2026-10-14T15:00:00.000Z",
+      "version": 1
+    },
+    {
+      "id": "review:possible-code-exposure:host",
+      "kind": "possible-code-exposure",
+      "subject": "host",
+      "status": "open",
+      "at": "2026-10-14T15:00:00.000Z",
+      "version": 1
+    }
+  ],
+  "health": {
+    "ok": true,
+    "sends": false,
+    "note": "Cleaner Core health. This check does not send texts.",
+    "openReviews": 9,
+    "staleSources": 0,
+    "counters": {
+      "sent": 9,
+      "failed": 0,
+      "uncertain": 0,
+      "canceled": 0,
+      "injury": 0,
+      "stop": 0,
+      "help": 0,
+      "polls": 0,
+      "pollFails": 0,
+      "pollDurationMs": 0
+    },
+    "codeHandling": "To change the outdoor code at 12 Scratch Lane, Teaneck, NJ 07666, set the new code on the lock yourself, then tell me the new code in a private text. I store only a sealed reference. I do not change the lock. To offboard a cleaner, reply STOP from their number or tell me to remove them. I will not send the code again until you confirm a new cleaner and the guests have left."
+  },
+  "sources": [],
+  "audit": [
+    {
+      "actor": "engine",
+      "source": "review",
+      "version": 1,
+      "reason": "open stale-source",
+      "at": "2026-10-14T15:00:00.000Z",
+      "action": "open stale-source"
+    },
+    {
+      "actor": "engine",
+      "source": "review",
+      "version": 1,
+      "reason": "open airbnb-exception",
+      "at": "2026-10-14T15:00:00.000Z",
+      "action": "open airbnb-exception"
+    },
+    {
+      "actor": "engine",
+      "source": "review",
+      "version": 1,
+      "reason": "open same-day-capacity",
+      "at": "2026-10-14T15:00:00.000Z",
+      "action": "open same-day-capacity"
+    },
+    {
+      "actor": "engine",
+      "source": "review",
+      "version": 1,
+      "reason": "open missed-reminder",
+      "at": "2026-10-14T15:00:00.000Z",
+      "action": "open missed-reminder"
+    },
+    {
+      "actor": "engine",
+      "source": "review",
+      "version": 1,
+      "reason": "open conflicting-replies",
+      "at": "2026-10-14T15:00:00.000Z",
+      "action": "open conflicting-replies"
+    },
+    {
+      "actor": "engine",
+      "source": "review",
+      "version": 1,
+      "reason": "open failed-sms",
+      "at": "2026-10-14T15:00:00.000Z",
+      "action": "open failed-sms"
+    },
+    {
+      "actor": "engine",
+      "source": "review",
+      "version": 1,
+      "reason": "open uncertain-sms",
+      "at": "2026-10-14T15:00:00.000Z",
+      "action": "open uncertain-sms"
+    },
+    {
+      "actor": "engine",
+      "source": "review",
+      "version": 1,
+      "reason": "open shared-chat-routing",
+      "at": "2026-10-14T15:00:00.000Z",
+      "action": "open shared-chat-routing"
+    },
+    {
+      "actor": "engine",
+      "source": "review",
+      "version": 1,
+      "reason": "open possible-code-exposure",
+      "at": "2026-10-14T15:00:00.000Z",
+      "action": "open possible-code-exposure"
+    }
+  ]
+}

@@ -1,6 +1,9 @@
 export { cleanerCoreEnabled } from "./flag";
 export { isScratchTestNumber } from "./scratch";
-export { openCleanerCore, type CleanerCore, type CleanerCoreOptions, type CleanerSink, type CleanerText, type JobView, type MessagingView, type OutboxView, type PollResult, type ReceiveResult, type ReminderResult, type ReminderTrigger, type SetupResult, type SetupView, type SourceFreshness, type SyncState } from "./core";
+export { HaltError, openCleanerCore, type CleanerCore, type CleanerCoreOptions, type CleanerSink, type CleanerText, type Counters, type HealthReport, type JobView, type MessagingView, type OutboxView, type PollResult, type ReceiveResult, type ReminderResult, type ReminderTrigger, type SetupResult, type SetupView, type SourceFreshness, type SyncState } from "./core";
+export { DEFAULT_STALE_AFTER_MS, GUESTY_POLL_MS } from "./freshness";
+export { REVIEW_KINDS, codeHandlingText, reviewAlert, type ReviewItem, type ReviewKind } from "./review";
+export { CALENDAR_URL_REFUSAL, calendarUrlAllowed, readPublicCalendar } from "./fetchLimits";
 export { googleCalendarFixtureSource, guestyLiteSource, normalizeSnapshots, notionFixtureSource, readNotionFixture, NOTION_PERMISSION_MISSING, NOTION_PERMISSION_INSUFFICIENT, type BookingSource, type BookingSourceKind, type JobProvenance, type SourceConflict, type SourcePermission, type SourceSnapshot } from "./sources";
 export { beginOnboarding, applyOnboardingAnswer, type OnboardingSession, type OnboardingPreview } from "./onboarding";
 export { isOtherScratchTenantPhone, scratchTenant, SCRATCH_TENANTS, type ScratchTenant } from "./tenants";

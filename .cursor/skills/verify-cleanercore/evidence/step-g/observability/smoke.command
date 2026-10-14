@@ -1,0 +1,1 @@
+smoke --watch-freshness --data /tmp/tmp.xz6QrWRC4P --backup-dir /tmp/tmp.xz6QrWRC4P/scheduled --feed /workspace/src/cleaner-core/fixtures/guesty-lite-scratch.ics --reply +15555550100=YES --now 2026-10-14T18:00:00.001Z --reply +15555550100=YES

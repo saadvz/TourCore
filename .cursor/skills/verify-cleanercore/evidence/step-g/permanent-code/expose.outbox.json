@@ -1,0 +1,9 @@
+[
+  {
+    "id": "review:possible-code-exposure:smoke-op-0",
+    "to": "+15555550100",
+    "body": "A text may include the door code. I saved it for your review and did not repeat the digits.",
+    "kind": "review",
+    "status": "sent"
+  }
+]

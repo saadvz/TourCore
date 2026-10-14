@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { cleanerCoreEnabled } from "./flag";
-import { openCleanerCore, type CleanerText, type JobView, type OutboxView, type SyncState } from "./core";
+import { HaltError, openCleanerCore, type CleanerText, type HealthReport, type JobView, type OutboxView, type SyncState } from "./core";
+import type { SourceRecord } from "./freshness";
+import type { AuditEvent, ReviewItem, ReviewKind } from "./review";
+import { isReviewKind } from "./review";
 import type { FeedBlock } from "./calendar";
 import { isScratchTestNumber } from "./scratch";
 import { googleCalendarFixtureSource, notionFixtureSource } from "./sources";
@@ -47,7 +50,12 @@ export type SmokeOp =
   | { type: "reply"; from: string; text: string }
   | { type: "remind" }
   | { type: "now"; iso: string }
-  | { type: "fail"; n: number };
+  | { type: "fail"; n: number }
+  | { type: "fetched-at"; iso: string }
+  | { type: "review"; kind: ReviewKind }
+  | { type: "replay" }
+  | { type: "backup"; file: string }
+  | { type: "restore"; file: string };
 
 export interface SmokeReport {
   ok: boolean;
@@ -66,6 +74,11 @@ export interface SmokeReport {
   sync?: SyncState;
   messaging?: MessagingView;
   setup?: SetupView;
+  reviews?: ReviewItem[];
+  health?: HealthReport;
+  sources?: SourceRecord[];
+  audit?: AuditEvent[];
+  halted?: "after-accept" | "before-pin";
 }
 
 const LANE = scratchTenant("scratch-lane");
@@ -119,6 +132,12 @@ export async function runSmoke(
     onboard?: boolean;
     stepF?: boolean;
     messaging?: MessagingOpt;
+    stepG?: boolean;
+    watchFreshness?: boolean;
+    sqlite?: boolean;
+    staleAfterMs?: number;
+    halt?: "after-accept" | "before-pin";
+    backupDir?: string;
   },
 ): Promise<SmokeReport> {
   if (extra?.onboard) return runOnboardingSmoke(env, extra);
@@ -156,17 +175,33 @@ export async function runSmoke(
     },
     now: () => new Date(now),
     ...(extra?.dataDir ? { dataDir: extra.dataDir } : {}),
+    ...(extra?.watchFreshness ? { watchFreshness: true } : {}),
+    ...(extra?.sqlite ? { sqlite: true } : {}),
+    ...(extra?.staleAfterMs ? { staleAfterMs: extra.staleAfterMs } : {}),
+    ...(extra?.halt ? { halt: extra.halt } : {}),
+    ...(extra?.backupDir ? { backupDir: extra.backupDir } : {}),
   });
-  for (let index = 0; index < ops.length; index++) {
-    const op = ops[index];
-    if (!op) continue;
-    if (op.type === "now") now = op.iso;
-    else if (op.type === "fail") failures += op.n;
-    else if (op.type === "poll") await core.pollFeed(op.ical, { conversation });
-    else if (op.type === "google") await core.readSource(googleCalendarFixtureSource(op.body), { conversation });
-    else if (op.type === "notion") await core.readSource(notionFixtureSource(op.body), { conversation });
-    else if (op.type === "reply") await core.receive({ id: `smoke-op-${index}`, from: op.from, text: op.text });
-    else await core.runReminders();
+  let halted: "after-accept" | "before-pin" | undefined;
+  try {
+    for (let index = 0; index < ops.length; index++) {
+      const op = ops[index];
+      if (!op) continue;
+      if (op.type === "now") now = op.iso;
+      else if (op.type === "fail") failures += op.n;
+      else if (op.type === "poll") await core.pollFeed(op.ical, { conversation });
+      else if (op.type === "google") await core.readSource(googleCalendarFixtureSource(op.body), { conversation });
+      else if (op.type === "notion") await core.readSource(notionFixtureSource(op.body), { conversation });
+      else if (op.type === "reply") await core.receive({ id: `smoke-op-${index}`, from: op.from, text: op.text });
+      else if (op.type === "fetched-at") core.stampFetchedAt(op.iso);
+      else if (op.type === "review") await core.fileReview(op.kind);
+      else if (op.type === "replay") await core.replay();
+      else if (op.type === "backup") core.backup(op.file);
+      else if (op.type === "restore") core.restore(op.file);
+      else await core.runReminders();
+    }
+  } catch (err) {
+    if (!(err instanceof HaltError)) throw err;
+    halted = err.point;
   }
   const jobs = core.jobs();
   const primary = jobs.find((job) => job.status === "done" || job.status === "cleared" || job.status === "in_progress") ?? jobs.find((job) => job.status === "confirmed") ?? jobs.find((job) => job.checkoutAt);
@@ -184,6 +219,9 @@ export async function runSmoke(
     blocks: core.blocks(),
     ...(extra?.stepE || extra?.stepF ? { tenant: tenant.id, sync: core.lastSync() } : {}),
     ...(extra?.messaging ? { messaging: core.messagingView() } : {}),
+    ...(extra?.stepG
+      ? { reviews: core.reviews(), health: core.health(), sources: core.sourceHealth(), audit: core.auditTrail(), ...(halted ? { halted } : {}) }
+      : {}),
   };
   return redactReport(report, [tenant.pin, ...SCRATCH_TENANTS.map((item) => item.pin)]);
 }
@@ -259,7 +297,7 @@ function defaultOps(replies?: SmokeReply[]): SmokeOp[] {
 const DOCTOR_USAGE = "Usage: tsx src/cleaner-core/cli.ts doctor";
 const SMOKE_USAGE = "Usage: tsx src/cleaner-core/cli.ts smoke [--data <dir>] [--no-poll] [--feed <file>] [--then-feed <file>] [--google <file>] [--notion <file>] [--onboard] [--group-mode cleaner-only|native|mirrored] [--group-capable] [--participant <role>=<phone>] [--tenant scratch-lane|scratch-court] [--closed] [--now <iso>] [--remind] [--fail-sends <n>] [--with-pin] [--unapproved] [--group <phone>] [--reply <from>=<text> ...]";
 
-export function parseSmokeArgs(argv: string[]): { replies?: SmokeReply[]; ops: SmokeOp[]; dataDir?: string; explicit: boolean; withPin: boolean; approved: boolean; groupPhones: string[]; tenantId: string; closed: boolean; stepE: boolean; stepF: boolean; onboard: boolean; messaging?: MessagingOpt } {
+export function parseSmokeArgs(argv: string[]): { replies?: SmokeReply[]; ops: SmokeOp[]; dataDir?: string; explicit: boolean; withPin: boolean; approved: boolean; groupPhones: string[]; tenantId: string; closed: boolean; stepE: boolean; stepF: boolean; stepG: boolean; onboard: boolean; messaging?: MessagingOpt; watchFreshness: boolean; sqlite: boolean; staleAfterMs?: number; halt?: "after-accept" | "before-pin"; backupDir?: string } {
   const ops: SmokeOp[] = [];
   const replies: SmokeReply[] = [];
   const groupPhones: string[] = [];
@@ -273,6 +311,12 @@ export function parseSmokeArgs(argv: string[]): { replies?: SmokeReply[]; ops: S
   let closed = false;
   let stepE = false;
   let stepF = false;
+  let stepG = false;
+  let watchFreshness = false;
+  let sqlite = false;
+  let staleAfterMs: number | undefined;
+  let halt: "after-accept" | "before-pin" | undefined;
+  let backupDir: string | undefined;
   let onboard = false;
   let groupMode: "cleaner-only" | "native" | "mirrored" | undefined;
   let groupCapable = false;
@@ -420,6 +464,62 @@ export function parseSmokeArgs(argv: string[]): { replies?: SmokeReply[]; ops: S
       groupPhones.push(value);
       continue;
     }
+    if (arg === "--watch-freshness") {
+      explicit = true;
+      stepG = true;
+      watchFreshness = true;
+      continue;
+    }
+    if (arg === "--stale-after") {
+      const value = argv[++i];
+      if (value === undefined || !/^\d+$/.test(value)) throw new Error(`smoke --stale-after needs a number of milliseconds. ${SMOKE_USAGE}`);
+      explicit = true;
+      stepG = true;
+      staleAfterMs = Number(value);
+      continue;
+    }
+    if (arg === "--fetched-at") {
+      const value = argv[++i];
+      if (value === undefined || value.startsWith("--")) throw new Error(`smoke --fetched-at needs an ISO time. ${SMOKE_USAGE}`);
+      explicit = true;
+      stepG = true;
+      watchFreshness = true;
+      ops.push({ type: "fetched-at", iso: value });
+      continue;
+    }
+    if (arg === "--review") {
+      const value = argv[++i];
+      if (value === undefined || !isReviewKind(value)) throw new Error(`smoke --review needs a review kind. ${SMOKE_USAGE}`);
+      explicit = true;
+      stepG = true;
+      ops.push({ type: "review", kind: value });
+      continue;
+    }
+    if (arg === "--replay") {
+      explicit = true;
+      stepG = true;
+      ops.push({ type: "replay" });
+      continue;
+    }
+    if (arg === "--backup" || arg === "--restore" || arg === "--backup-dir") {
+      const value = argv[++i];
+      if (value === undefined || value.startsWith("--")) throw new Error(`smoke ${arg} needs a path. ${SMOKE_USAGE}`);
+      explicit = true;
+      stepG = true;
+      sqlite = true;
+      if (arg === "--backup") ops.push({ type: "backup", file: value });
+      else if (arg === "--restore") ops.push({ type: "restore", file: value });
+      else backupDir = value;
+      continue;
+    }
+    if (arg === "--crash") {
+      const value = argv[++i];
+      if (value !== "before-pin" && value !== "after-accept") throw new Error(`smoke --crash needs before-pin or after-accept. ${SMOKE_USAGE}`);
+      explicit = true;
+      stepG = true;
+      halt = value;
+      continue;
+    }
     throw new Error(`Unexpected argument ${arg ?? ""}. ${SMOKE_USAGE}`);
   }
   if (!onboard && !noPoll && !ops.some((op) => op.type === "poll" || op.type === "google" || op.type === "notion")) {
@@ -429,10 +529,11 @@ export function parseSmokeArgs(argv: string[]): { replies?: SmokeReply[]; ops: S
   const messaging = groupMode
     ? { requested: groupMode === "cleaner-only" ? "cleaner-only" as const : "group" as const, capable: groupMode === "native" && groupCapable, participants }
     : undefined;
+  const gate = { stepG, watchFreshness, sqlite, ...(staleAfterMs ? { staleAfterMs } : {}), ...(halt ? { halt } : {}), ...(backupDir ? { backupDir } : {}) };
   if (!explicit) {
-    return { ops: defaultOps(undefined), ...(dataDir ? { dataDir } : {}), explicit, withPin, approved, groupPhones, tenantId, closed, stepE, stepF, onboard };
+    return { ops: defaultOps(undefined), ...(dataDir ? { dataDir } : {}), explicit, withPin, approved, groupPhones, tenantId, closed, stepE, stepF, onboard, ...gate };
   }
-  return { ops, ...(sawReply ? { replies } : {}), ...(dataDir ? { dataDir } : {}), explicit, withPin, approved, groupPhones, tenantId, closed, stepE, stepF, onboard, ...(messaging ? { messaging } : {}) };
+  return { ops, ...(sawReply ? { replies } : {}), ...(dataDir ? { dataDir } : {}), explicit, withPin, approved, groupPhones, tenantId, closed, stepE, stepF, onboard, ...(messaging ? { messaging } : {}), ...gate };
 }
 
 async function main(): Promise<void> {
@@ -457,9 +558,54 @@ async function main(): Promise<void> {
       ...(parsed.stepF ? { stepF: true } : {}),
       ...(parsed.onboard ? { onboard: true } : {}),
       ...(parsed.messaging ? { messaging: parsed.messaging } : {}),
+      ...(parsed.stepG ? { stepG: true } : {}),
+      ...(parsed.watchFreshness ? { watchFreshness: true } : {}),
+      ...(parsed.sqlite ? { sqlite: true } : {}),
+      ...(parsed.staleAfterMs ? { staleAfterMs: parsed.staleAfterMs } : {}),
+      ...(parsed.halt ? { halt: parsed.halt } : {}),
+      ...(parsed.backupDir ? { backupDir: parsed.backupDir } : {}),
     });
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
     if (!report.ok) process.exit(2);
+    return;
+  }
+  if (command === "health") {
+    let dataDir: string | undefined;
+    let tenantId = "scratch-lane";
+    let nowIso: string | undefined;
+    for (let i = 3; i < process.argv.length; i++) {
+      const arg = process.argv[i];
+      if (arg === "--data") {
+        dataDir = process.argv[++i];
+        if (!dataDir) throw new Error("health --data needs a directory.");
+        continue;
+      }
+      if (arg === "--tenant") {
+        tenantId = process.argv[++i] ?? "";
+        continue;
+      }
+      if (arg === "--now") {
+        nowIso = process.argv[++i];
+        if (!nowIso) throw new Error("health --now needs an ISO time.");
+        continue;
+      }
+      throw new Error(`Unexpected argument ${arg ?? ""}. Usage: tsx src/cleaner-core/cli.ts health [--data <dir>] [--tenant scratch-lane|scratch-court] [--now <iso>]`);
+    }
+    const tenant = scratchTenant(tenantId);
+    if (!tenant) throw new Error("Unknown Scratch tenant.");
+    const clock = nowIso ? new Date(nowIso) : new Date();
+    const core = openCleanerCore({
+      enabled: cleanerCoreEnabled(),
+      tenantId: tenant.id,
+      property: tenant.property,
+      ownerPhone: tenant.ownerPhone,
+      cleaner: { phone: tenant.cleanerPhone, approved: true },
+      consented: true,
+      sink: { send() { throw new Error("health does not send"); } },
+      now: () => clock,
+      ...(dataDir ? { dataDir } : {}),
+    });
+    process.stdout.write(`${JSON.stringify(core.health(), null, 2)}\n`);
     return;
   }
   process.stderr.write(`${DOCTOR_USAGE}\n${SMOKE_USAGE}\n`);

@@ -17,6 +17,7 @@ credentials*.json
 
 # Logs, coverage, OS/editor files
 *.log
+ci-logs/
 npm-debug.log*
 coverage/
 .DS_Store

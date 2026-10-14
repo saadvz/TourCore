@@ -15,15 +15,9 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          # node:sqlite, used by Cleaner Core backups, needs Node 22.
+          node-version: "22"
           cache: npm
       - run: npm ci
-      - run: npm run typecheck
-      - run: npm run build
-      - run: npm test
-      - name: Baseline eval
-        run: npm run test:eval
-      - name: SETUP_PROMPT unchanged
-        run: |
-          git fetch origin master --depth=1
-          git diff --exit-code origin/master -- grok-template/SETUP_PROMPT.md
+      - name: Typecheck, tests, cleaner-core flag off and on, secret scan
+        run: bash scripts/ci-check.sh

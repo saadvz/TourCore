@@ -1,0 +1,69 @@
+{
+  "ok": true,
+  "flag": true,
+  "property": "12 Scratch Lane, Teaneck, NJ 07666",
+  "sent": [
+    {
+      "to": "+15555550100",
+      "body": "A text may include the door code. I saved it for your review and did not repeat the digits.",
+      "kind": "review"
+    }
+  ],
+  "pinRecipients": [],
+  "jobs": [],
+  "outbox": [
+    {
+      "id": "review:possible-code-exposure:smoke-op-0",
+      "to": "+15555550100",
+      "body": "A text may include the door code. I saved it for your review and did not repeat the digits.",
+      "kind": "review",
+      "status": "sent"
+    }
+  ],
+  "transcript": [
+    "+15555550101: [redacted]",
+    "A text may include the door code. I saved it for your review and did not repeat the digits."
+  ],
+  "blocks": [],
+  "reviews": [
+    {
+      "id": "review:possible-code-exposure:smoke-op-0",
+      "kind": "possible-code-exposure",
+      "subject": "smoke-op-0",
+      "status": "open",
+      "at": "2026-10-14T15:00:00.000Z",
+      "version": 1
+    }
+  ],
+  "health": {
+    "ok": true,
+    "sends": false,
+    "note": "Cleaner Core health. This check does not send texts.",
+    "openReviews": 1,
+    "staleSources": 0,
+    "counters": {
+      "sent": 1,
+      "failed": 0,
+      "uncertain": 0,
+      "canceled": 0,
+      "injury": 0,
+      "stop": 0,
+      "help": 0,
+      "polls": 0,
+      "pollFails": 0,
+      "pollDurationMs": 0
+    },
+    "codeHandling": "To change the outdoor code at 12 Scratch Lane, Teaneck, NJ 07666, set the new code on the lock yourself, then tell me the new code in a private text. I store only a sealed reference. I do not change the lock. To offboard a cleaner, reply STOP from their number or tell me to remove them. I will not send the code again until you confirm a new cleaner and the guests have left."
+  },
+  "sources": [],
+  "audit": [
+    {
+      "actor": "engine",
+      "source": "review",
+      "version": 1,
+      "reason": "open possible-code-exposure",
+      "at": "2026-10-14T15:00:00.000Z",
+      "action": "open possible-code-exposure"
+    }
+  ]
+}

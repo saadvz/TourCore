@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { isPlainLanguageStop, keywordOf } from "../intent";
 import { normalize, stripFiller } from "../intent/normalize";
@@ -21,6 +21,10 @@ import {
   type SourceConflict,
   type SourceSnapshot,
 } from "./sources";
+import { fingerprintOf, freshnessOf, GUESTY_POLL_MS, staleAfterMs, type SourceRecord } from "./freshness";
+import { redactLine, redactPhone } from "./redact";
+import { codeHandlingText, HEALTH_NOTE, isReviewKind, reviewAlert, reviewId, type AuditEvent, type ReviewItem, type ReviewKind } from "./review";
+import { mirrorStore, restoreTenantSlice, snapshotStore } from "./sqliteStore";
 import { isOtherScratchTenantPhone, SCRATCH_TENANTS } from "./tenants";
 
 export type TextKind =
@@ -43,7 +47,8 @@ export type TextKind =
   | "pin-held"
   | "started"
   | "done"
-  | "held";
+  | "held"
+  | "review";
 
 export interface CleanerText {
   to: string;
@@ -91,8 +96,38 @@ export interface OutboxView {
   to: string;
   body: string;
   kind: TextKind;
-  status: "sent" | "failed" | "canceled";
+  status: "sent" | "failed" | "canceled" | "uncertain";
   jobId?: string;
+}
+
+export interface Counters {
+  sent: number;
+  failed: number;
+  uncertain: number;
+  canceled: number;
+  injury: number;
+  stop: number;
+  help: number;
+  polls: number;
+  pollFails: number;
+  pollDurationMs: number;
+}
+
+export interface HealthReport {
+  ok: true;
+  sends: false;
+  note: string;
+  openReviews: number;
+  staleSources: number;
+  counters: Counters;
+  codeHandling: string;
+}
+
+export class HaltError extends Error {
+  constructor(readonly point: "after-accept" | "before-pin") {
+    super(`Halted at ${point}`);
+    this.name = "HaltError";
+  }
 }
 
 export interface PollResult {
@@ -158,7 +193,8 @@ export type ReceiveReason =
   | "departure"
   | "opted-in"
   | "done"
-  | "wrong-tenant";
+  | "wrong-tenant"
+  | "review";
 
 export interface ReceiveResult {
   handled: boolean;
@@ -216,6 +252,16 @@ export interface CleanerCoreOptions {
   isolate?: boolean;
   /** Set when publishing an onboarded tenant. */
   origin?: "onboarding";
+  /** Milliseconds after the last successful fetch before the turn is STALE_SOURCE. Default is three missed hourly polls. */
+  staleAfterMs?: number;
+  /** Record a fetch time on Guesty Lite polls that do not carry one. */
+  watchFreshness?: boolean;
+  /** Mirror the redacted store into SQLite and allow backup. */
+  sqlite?: boolean;
+  /** Crash point. after-accept leaves an offer uncertain. before-pin saves clearance and does not send the code. */
+  halt?: "after-accept" | "before-pin";
+  /** When set, a poll older than one Guesty Lite interval writes a scheduled snapshot here. */
+  backupDir?: string;
 }
 
 export interface CleanerCore {
@@ -234,6 +280,16 @@ export interface CleanerCore {
   setupView(): SetupView | undefined;
   messagingView(): MessagingView | undefined;
   markReady(): void;
+  fileReview(kind: ReviewKind): Promise<ReceiveResult>;
+  replay(): Promise<{ sent: CleanerText[] }>;
+  backup(dest: string): void;
+  restore(backupPath: string): void;
+  health(): HealthReport;
+  reviews(): ReviewItem[];
+  auditTrail(): AuditEvent[];
+  sourceHealth(): SourceRecord[];
+  revealPin(role: "cleaner" | "observer" | "owner" | "manager"): string | undefined;
+  stampFetchedAt(iso: string): void;
 }
 
 const HELP_ACK = "Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.";
@@ -248,7 +304,6 @@ const GROUP_PREFIX = "Group text: ";
 const MIRROR_PREFIX = "Copy of the group text: ";
 const OFFER_YES = "Reply YES to schedule it, or STOP to opt out.";
 const OFFER_WAIT = "The cleaner will reply to confirm.";
-const STALE_MS = 3 * 60 * 60 * 1000;
 const DEFAULT_TRIGGERS: ReminderTrigger[] = [{ id: "morning-of", kind: "morning-of", localTime: "08:00" }];
 
 /**
@@ -316,13 +371,23 @@ interface Tombstone {
   contentHash: string;
 }
 
+interface ActionLease {
+  version: number;
+  actor: string;
+  source: string;
+  reason: string;
+  at: string;
+  state: "open" | "committed" | "uncertain" | "expired" | "revoked";
+}
+
 interface OutboxItem {
   id: string;
   to: string;
   body: string;
   kind: TextKind;
-  status: "sent" | "failed" | "canceled";
+  status: "sent" | "failed" | "canceled" | "uncertain";
   jobId?: string;
+  lease?: ActionLease;
 }
 
 interface Stored {
@@ -347,6 +412,10 @@ interface Stored {
   quietUntil?: string;
   isolate?: boolean;
   participantConsent?: { phone: string; consent: "pending" | "in" | "out" }[];
+  sourceRecords?: SourceRecord[];
+  reviews?: ReviewItem[];
+  audit?: AuditEvent[];
+  counters?: Counters;
 }
 
 /** One file can hold several tenants. A single-tenant file stays the flat step D shape. */
@@ -374,6 +443,10 @@ interface StoreFile {
   quietUntil?: string;
   isolate?: boolean;
   participantConsent?: { phone: string; consent: "pending" | "in" | "out" }[];
+  sourceRecords?: SourceRecord[];
+  reviews?: ReviewItem[];
+  audit?: AuditEvent[];
+  counters?: Counters;
 }
 
 interface Draft {
@@ -424,6 +497,17 @@ class Engine implements CleanerCore {
   private session: OnboardingSession | undefined;
   private previewFeeds: { kind: "guesty-lite" | "notion"; body: string }[] = [];
   private syncState: SyncState = { reason: "read", conversation: "open", sources: [], conflicts: [] };
+  private readonly thresholdMs: number;
+  private readonly watchFreshness: boolean;
+  private readonly sqlite: boolean;
+  private readonly halt: CleanerCoreOptions["halt"];
+  private readonly backupDir: string | undefined;
+  private sourceRecords: SourceRecord[] = [];
+  private reviewItems: ReviewItem[] = [];
+  private auditLog: AuditEvent[] = [];
+  private counters: Counters = emptyCounters();
+  private nextFetchedAt: string | undefined;
+  private lastBackupAt = 0;
 
   constructor(private readonly options: CleanerCoreOptions) {
     this.enabled = options.enabled;
@@ -447,6 +531,11 @@ class Engine implements CleanerCore {
     this.quiet = options.quietHours;
     this.isolate = options.isolate === true;
     this.origin = options.origin;
+    this.thresholdMs = staleAfterMs(process.env, options.staleAfterMs);
+    this.watchFreshness = options.watchFreshness === true;
+    this.sqlite = options.sqlite === true;
+    this.halt = options.halt;
+    this.backupDir = options.backupDir;
     for (const person of options.messaging?.participants ?? []) this.participantConsent.set(parsePhone(person.phone) ?? person.phone, "pending");
     this.load();
   }
@@ -456,7 +545,7 @@ class Engine implements CleanerCore {
     const blocked = this.syncBlocked(conversation);
     if (blocked) return blocked;
     const feed = interpretFeed(ical);
-    return this.applySnapshot({ kind: "guesty-lite", tenantId: this.tenantId, turnovers: feed.turnovers, blocks: feed.blocks }, conversation);
+    return this.applySnapshot(this.stamp({ kind: "guesty-lite", tenantId: this.tenantId, turnovers: feed.turnovers, blocks: feed.blocks }), conversation);
   }
 
   async readSource(source: BookingSource, options?: { conversation?: "closed" | "open" }): Promise<PollResult & SyncState> {
@@ -472,6 +561,7 @@ class Engine implements CleanerCore {
         return this.withSync({ polled: false, reason: "wrong-tenant", sent: [], jobs: this.jobs(), blocks: this.blocks() });
       }
       this.fallbackText = snapshot.fallback;
+      this.counters.pollFails += 1;
       this.syncState = { reason: "permission-denied", conversation, sources: this.sourceNames(), conflicts: this.conflictState };
       return this.withSync({ polled: false, reason: "permission-denied", sent: [], jobs: this.jobs(), blocks: this.blocks() });
     }
@@ -479,7 +569,7 @@ class Engine implements CleanerCore {
       this.syncState = { reason: "wrong-tenant", conversation, sources: this.sourceNames(), conflicts: this.conflictState };
       return this.withSync({ polled: false, reason: "wrong-tenant", sent: [], jobs: this.jobs(), blocks: this.blocks() });
     }
-    return this.withSync(await this.applySnapshot(snapshot, conversation));
+    return this.withSync(await this.applySnapshot(this.stamp(snapshot), conversation));
   }
 
   async receive(input: { id: string; from: string; text: string }): Promise<ReceiveResult> {
@@ -487,7 +577,7 @@ class Engine implements CleanerCore {
     const from = parsePhone(input.from);
     if (!from || !isScratchTestNumber(from)) return { handled: true, reason: "scratch-only", sent: [] };
     if (this.inboundIds.includes(input.id)) return { handled: true, reason: "duplicate", sent: [] };
-    this.transcriptState.push(this.redact(`${from}: ${input.text.trim()}`));
+    this.transcriptState.push(`${from}: ${this.redactInbound(input.text.trim())}`);
     if (this.foreignPhone(from)) {
       this.inboundIds.push(input.id);
       this.save();
@@ -499,6 +589,20 @@ class Engine implements CleanerCore {
     if (isInjuryReport(input.text)) return this.safety(input.id, () => this.emergency(from, input.id));
     if (keyword === "stop" || isPlainLanguageStop(input.text)) return this.safety(input.id, () => this.stop(from, input.id));
     if (keyword === "start") return this.safety(input.id, () => this.start(from, input.id));
+    if (from === this.owner && stripFiller(normalize(input.text)) === "booked on airbnb") {
+      const alert = await this.openReview("airbnb-exception", input.id, true);
+      this.inboundIds.push(input.id);
+      this.save();
+      return { handled: true, reason: "review", sent: alert ? [alert] : [] };
+    }
+    if (this.looksLikeCode(input.text)) {
+      const alert = await this.openReview("possible-code-exposure", input.id, true);
+      if (this.codeOnly(input.text)) {
+        this.inboundIds.push(input.id);
+        this.save();
+        return { handled: true, reason: "review", sent: alert ? [alert] : [] };
+      }
+    }
     if (this.pin && from === this.cleanerPhone && isYes(input.text) && this.awaitingOptIn()) return this.optInCleaner(input.id);
     if (from && isYes(input.text) && this.participantConsent.get(from) === "pending" && this.delivery(`opt-in:${from}`) === "sent") {
       return this.optInParticipant(from, input.id);
@@ -516,7 +620,7 @@ class Engine implements CleanerCore {
 
   async runReminders(): Promise<ReminderResult> {
     if (!this.enabled || this.optedOut || !this.scratchReady()) return { sent: [], failed: [] };
-    const sent: CleanerText[] = [];
+    const sent: CleanerText[] = await this.settleUncertain();
     const failed: string[] = [];
     if (!this.inQuietHours()) for (const job of this.ordered()) {
       if (!this.canRemind(job)) continue;
@@ -806,7 +910,7 @@ class Engine implements CleanerCore {
     if (!fetchedAt) return true;
     const readAt = Date.parse(fetchedAt);
     if (Number.isNaN(readAt)) return true;
-    return this.now().getTime() - readAt > STALE_MS;
+    return this.now().getTime() - readAt > this.thresholdMs;
   }
 
   private inQuietHours(): boolean {
@@ -840,14 +944,23 @@ class Engine implements CleanerCore {
   }
 
   private async applySnapshot(snapshot: SourceSnapshot, conversation: "closed" | "open"): Promise<PollResult> {
+    const started = Date.now();
     this.latest.set(snapshot.kind, snapshot);
+    this.rememberSource(snapshot, "ok");
+    if (freshnessOf(snapshot.fetchedAt, this.now().getTime(), this.thresholdMs) === "fresh") this.resolveKind("stale-source");
     const normalized = normalizeSnapshots([...this.latest.values()]);
     this.conflictState = normalized.conflicts;
     this.provenanceState = normalized.provenance;
     this.fallbackText = undefined;
     this.blockState = normalized.feed.blocks;
-    this.reconcile(normalized.feed.turnovers);
+    const preserveHostClock = this.watchFreshness && freshnessOf(snapshot.fetchedAt, this.now().getTime(), this.thresholdMs) === "stale";
+    this.reconcile(normalized.feed.turnovers, preserveHostClock);
+    const settled = await this.settleUncertain();
     const sent = this.optedOut ? [] : await this.drainOne();
+    sent.unshift(...settled);
+    this.counters.polls += 1;
+    this.counters.pollDurationMs += Math.max(0, Date.now() - started);
+    this.maybeScheduledBackup();
     if (!this.optedOut) {
       const optIn = await this.sendOptIn();
       if (optIn) sent.push(optIn);
@@ -981,6 +1094,8 @@ class Engine implements CleanerCore {
     if (!job || this.stale(job) || !this.confirmSent(job)) return this.markIgnored(id);
     this.recordClearance(job);
     this.inboundIds.push(id);
+    this.save();
+    if (this.halt === "before-pin") throw new HaltError("before-pin");
     const sent = await this.deliverPin(job);
     this.save();
     return { handled: true, reason: "departure", sent };
@@ -1022,6 +1137,10 @@ class Engine implements CleanerCore {
       this.dropClearance(job.id);
       return sent;
     }
+    if (this.delivery(key) !== "sent" && this.sourceFeedStale()) {
+      const alert = await this.alertStale();
+      return alert ? [alert] : [];
+    }
     if (this.delivery(key) !== "sent") {
       const text = await this.emit({
         id: key,
@@ -1055,7 +1174,7 @@ class Engine implements CleanerCore {
     return sent;
   }
 
-  private reconcile(turnovers: Turnover[]): void {
+  private reconcile(turnovers: Turnover[], preserveHostClock = false): void {
     const seen = new Set<string>();
     for (const turnover of turnovers) {
       seen.add(turnover.id);
@@ -1083,6 +1202,10 @@ class Engine implements CleanerCore {
       }
       if (existing.canceled && turnover.contentHash === existing.contentHash) continue;
       if (turnover.sequence < existing.sourceSequence) continue;
+      if (preserveHostClock && this.latestFact(existing.id, "checkout")) {
+        existing.sourceSequence = Math.max(existing.sourceSequence, turnover.sequence);
+        continue;
+      }
       if (turnover.contentHash === existing.contentHash && !existing.canceled) {
         existing.sourceSequence = Math.max(existing.sourceSequence, turnover.sequence);
         continue;
@@ -1132,6 +1255,10 @@ class Engine implements CleanerCore {
       if (status === "confirmed" || status === "awaiting_departure" || status === "cleared" || status === "in_progress" || status === "done") continue;
       const draft = this.noticeFor(job);
       if (!draft) return [];
+      if ((draft.kind === "offer" || draft.kind === "corrected") && this.sourceFeedStale()) {
+        const alert = await this.alertStale();
+        return alert ? [alert] : [];
+      }
       const text = await this.emit(draft);
       return text ? [text] : [];
     }
@@ -1278,29 +1405,47 @@ class Engine implements CleanerCore {
       }
     } else if (this.pin && draft.body.includes(this.pin)) {
       throw new Error("The door code leaked into a schedule text.");
-    } else if (!this.pin && /\bdoor code\b/i.test(draft.body) && draft.kind !== "opt-in") {
+    } else if (!this.pin && /\bdoor code\b/i.test(draft.body) && draft.kind !== "opt-in" && draft.kind !== "review") {
       throw new Error("Step C does not send a door code.");
     }
     if (this.optedOut && !SAFETY.has(draft.kind)) return null;
     if (this.participantConsent.get(draft.to) === "out" && !SAFETY.has(draft.kind)) return null;
     const existing = this.outboxState.find((item) => item.id === draft.id);
     if (existing?.status === "sent" || existing?.status === "canceled") return null;
+    if (existing?.lease?.state === "revoked" || existing?.lease?.state === "expired") return null;
+    if (existing?.status === "uncertain") return this.openReview("uncertain-sms", draft.id, true);
     const text: CleanerText = { to: draft.to, body: draft.body, kind: draft.kind, ...(draft.channel ? { channel: draft.channel } : {}) };
+    this.upsert(draft, "uncertain");
+    this.save();
     try {
       await this.options.sink.send(text);
-    } catch {
+    } catch (err) {
+      if (err instanceof HaltError) throw err;
       this.upsert(draft, "failed");
+      this.counters.failed += 1;
+      await this.openReview("failed-sms", draft.id, false);
+      this.logSend(draft.kind, "failed", draft.to);
       this.save();
       return null;
     }
+    if (this.halt === "after-accept" && draft.kind === "offer") {
+      this.counters.uncertain += 1;
+      this.logSend(draft.kind, "uncertain", draft.to);
+      throw new HaltError("after-accept");
+    }
     this.upsert(draft, "sent");
+    this.counters.sent += 1;
+    if (draft.kind === "stop") this.counters.stop += 1;
+    if (draft.kind === "help") this.counters.help += 1;
+    if (draft.kind === "emergency") this.counters.injury += 1;
     this.transcriptState.push(this.redact(draft.body));
     draft.afterSend?.();
+    this.logSend(draft.kind, "sent", draft.to);
     this.save();
     return text;
   }
 
-  private upsert(draft: Draft, status: "sent" | "failed"): void {
+  private upsert(draft: Draft, status: "sent" | "failed" | "uncertain" | "canceled"): void {
     const next: OutboxItem = {
       id: draft.id,
       to: draft.to,
@@ -1308,6 +1453,14 @@ class Engine implements CleanerCore {
       kind: draft.kind,
       status,
       ...(draft.jobId ? { jobId: draft.jobId } : {}),
+      lease: {
+        version: 1,
+        actor: "engine",
+        source: draft.kind,
+        reason: status,
+        at: this.now().toISOString(),
+        state: status === "sent" ? "committed" : status === "uncertain" ? "uncertain" : status === "canceled" ? "revoked" : "open",
+      },
     };
     const index = this.outboxState.findIndex((item) => item.id === draft.id);
     if (index >= 0) this.outboxState[index] = next;
@@ -1636,6 +1789,10 @@ class Engine implements CleanerCore {
     if (record.quietFrom && record.quietUntil) this.quiet = { from: record.quietFrom, until: record.quietUntil };
     for (const person of record.participantConsent ?? []) this.participantConsent.set(person.phone, person.consent);
     if (this.origin === "onboarding" && !this.activated) this.everConsented = false;
+    this.sourceRecords = record.sourceRecords ?? [];
+    this.reviewItems = record.reviews ?? [];
+    this.auditLog = record.audit ?? [];
+    this.counters = { ...emptyCounters(), ...record.counters };
     if (!this.pin && record.pinSeal) {
       try {
         this.pin = openPin(record.pinSeal, this.pinKeyMaterial());
@@ -1670,13 +1827,217 @@ class Engine implements CleanerCore {
         ? { participantConsent: [...this.participantConsent].map(([phone, consent]) => ({ phone, consent })) }
         : {}),
       ...(this.pin ? { pinSeal: sealPin(this.pin, this.pinKeyMaterial()) } : {}),
+      ...(this.sourceRecords.length > 0 ? { sourceRecords: this.sourceRecords } : {}),
+      ...(this.reviewItems.length > 0 ? { reviews: this.reviewItems } : {}),
+      ...(this.auditLog.length > 0 ? { audit: this.auditLog } : {}),
+      counters: this.counters,
     };
     const existing = existsSync(this.file) ? (JSON.parse(readFileSync(this.file, "utf8")) as StoreFile) : undefined;
     if (existing && existing.schemaVersion !== 1) throw new Error("Cleaner Core store is not version 1.");
     const json = JSON.stringify(mergeTenantSlice(existing, this.tenantId, mine));
     if (this.pin && json.includes(this.pin)) throw new Error("The door code cannot be stored in plaintext.");
     writeFileAtomic(this.file, `${json}\n`);
+    if (this.sqlite) mirrorStore(this.databasePath(), json);
   }
+
+  async fileReview(kind: ReviewKind): Promise<ReceiveResult> {
+    if (!this.enabled) return { handled: false, reason: "disabled", sent: [] };
+    const alert = await this.openReview(kind, "host", true);
+    return { handled: true, reason: "review", sent: alert ? [alert] : [] };
+  }
+
+  async replay(): Promise<{ sent: CleanerText[] }> {
+    if (!this.enabled) return { sent: [] };
+    const sent = await this.settleUncertain();
+    for (const id of [...this.inboundIds]) {
+      if (!this.owner) break;
+      const result = await this.receive({ id, from: this.owner, text: "YES" });
+      sent.push(...result.sent);
+    }
+    for (const item of [...this.outboxState]) {
+      if (item.status !== "sent" && item.status !== "canceled") continue;
+      if (item.lease?.state === "revoked" || item.lease?.state === "expired") continue;
+      const text = await this.emit({
+        id: item.id,
+        to: item.to,
+        kind: item.kind,
+        body: item.body,
+        ...(item.jobId ? { jobId: item.jobId } : {}),
+      });
+      if (text) sent.push(text);
+    }
+    this.audit("engine", "replay", 1, "replay");
+    this.save();
+    return { sent };
+  }
+
+  backup(dest: string): void {
+    if (!this.file) throw new Error("Backup needs a data directory.");
+    this.save();
+    const json = readFileSync(this.file, "utf8");
+    if (this.pin && json.includes(this.pin)) throw new Error("The door code cannot be stored in plaintext.");
+    mirrorStore(this.databasePath(), json);
+    snapshotStore(this.databasePath(), dest);
+    this.audit("engine", "backup", 1, "backup");
+    this.lastBackupAt = this.now().getTime();
+    this.save();
+  }
+
+  restore(backupPath: string): void {
+    if (!this.file) throw new Error("Restore needs a data directory.");
+    restoreTenantSlice(this.file, backupPath, this.tenantId);
+    this.load();
+    this.audit("engine", "restore", 1, "restore");
+    this.save();
+  }
+
+  health(): HealthReport {
+    return {
+      ok: true,
+      sends: false,
+      note: HEALTH_NOTE,
+      openReviews: this.reviewItems.filter((item) => item.status === "open").length,
+      staleSources: this.sourceRecords.filter((record) => freshnessOf(record.fetchedAt, this.now().getTime(), this.thresholdMs) === "stale").length,
+      counters: { ...this.counters },
+      codeHandling: codeHandlingText(this.options.property.address),
+    };
+  }
+
+  reviews(): ReviewItem[] {
+    return this.reviewItems.map((item) => ({ ...item }));
+  }
+
+  auditTrail(): AuditEvent[] {
+    return this.auditLog.map((item) => ({ ...item }));
+  }
+
+  sourceHealth(): SourceRecord[] {
+    return this.sourceRecords.map((record) => ({
+      ...record,
+      freshness: freshnessOf(record.fetchedAt, this.now().getTime(), this.thresholdMs),
+    }));
+  }
+
+  revealPin(role: "cleaner" | "observer" | "owner" | "manager"): string | undefined {
+    if (role !== "cleaner" || !this.options.cleaner.approved) return undefined;
+    return this.pin;
+  }
+
+  stampFetchedAt(iso: string): void {
+    this.nextFetchedAt = iso;
+  }
+
+  private databasePath(): string {
+    if (!this.file) throw new Error("Backup needs a data directory.");
+    return join(dirname(this.file), "cleaner-core.db");
+  }
+
+  private stamp(snapshot: SourceSnapshot): SourceSnapshot {
+    const fetchedAt = this.nextFetchedAt ?? snapshot.fetchedAt ?? (this.watchFreshness ? this.now().toISOString() : undefined);
+    this.nextFetchedAt = undefined;
+    return fetchedAt ? { ...snapshot, fetchedAt } : snapshot;
+  }
+
+  private rememberSource(snapshot: SourceSnapshot, interpretation: SourceRecord["interpretation"]): void {
+    const parts = [
+      ...snapshot.turnovers.map((turnover) => `${turnover.id}|${turnover.contentHash}|${turnover.sequence}`),
+      ...snapshot.blocks.map((block) => `block|${block.uid}|${block.summary}`),
+    ];
+    const record: SourceRecord = {
+      kind: snapshot.kind,
+      fetchedAt: snapshot.fetchedAt ?? null,
+      fingerprint: fingerprintOf(parts),
+      freshness: freshnessOf(snapshot.fetchedAt, this.now().getTime(), this.thresholdMs),
+      interpretation,
+    };
+    this.sourceRecords = [...this.sourceRecords.filter((item) => item.kind !== snapshot.kind), record];
+  }
+
+  private sourceFeedStale(): boolean {
+    if (!this.watchFreshness) return false;
+    return this.sourceRecords.some((record) => freshnessOf(record.fetchedAt, this.now().getTime(), this.thresholdMs) === "stale");
+  }
+
+  private async alertStale(): Promise<CleanerText | null> {
+    const stale = this.sourceRecords.find((record) => freshnessOf(record.fetchedAt, this.now().getTime(), this.thresholdMs) === "stale");
+    return this.openReview("stale-source", `${stale?.kind ?? "feed"}:${stale?.fetchedAt ?? "none"}`, true);
+  }
+
+  private resolveKind(kind: ReviewKind): void {
+    for (const item of this.reviewItems) {
+      if (item.kind !== kind || item.status !== "open") continue;
+      item.status = "resolved";
+      item.version += 1;
+      this.audit("engine", "review", item.version, `clear ${kind}`);
+    }
+  }
+
+  private async settleUncertain(): Promise<CleanerText[]> {
+    const sent: CleanerText[] = [];
+    for (const item of this.outboxState) {
+      if (item.status !== "uncertain") continue;
+      if (item.lease?.state === "revoked" || item.lease?.state === "expired") continue;
+      const alert = await this.openReview("uncertain-sms", item.id, true);
+      if (alert) sent.push(alert);
+    }
+    return sent;
+  }
+
+  private async openReview(kind: ReviewKind, subject: string, notify: boolean): Promise<CleanerText | null> {
+    const id = reviewId(kind, subject);
+    if (this.reviewItems.some((item) => item.id === id)) return null;
+    const at = this.now().toISOString();
+    this.reviewItems.push({ id, kind, subject, status: "open", at, version: 1 });
+    this.audit("engine", "review", 1, `open ${kind}`);
+    if (!notify || !this.owner || !this.enabled) {
+      this.save();
+      return null;
+    }
+    return this.emit({ id, to: this.owner, kind: "review", body: reviewAlert(kind, this.options.property.address) });
+  }
+
+  private audit(actor: string, source: string, version: number, reason: string): void {
+    this.auditLog.push({ actor, source, version, reason, at: this.now().toISOString(), action: reason });
+  }
+
+  private maybeScheduledBackup(): void {
+    if (!this.sqlite || !this.backupDir || !this.file) return;
+    const due = this.now().getTime() - this.lastBackupAt >= GUESTY_POLL_MS;
+    if (!due && this.lastBackupAt !== 0) return;
+    mkdirSync(this.backupDir, { recursive: true });
+    this.backup(join(this.backupDir, "scheduled.db"));
+  }
+
+  private logSend(kind: TextKind, outcome: string, to: string): void {
+    if (!this.file || (!this.sqlite && !this.watchFreshness)) return;
+    const line = JSON.stringify({
+      at: this.now().toISOString(),
+      tenant: this.tenantId,
+      kind,
+      outcome,
+      to: redactPhone(to),
+    });
+    const secrets = this.pin ? [this.pin] : [];
+    appendFileSync(join(dirname(this.file), "cleaner-core.log"), `${redactLine(line, secrets)}\n`);
+  }
+
+  private redactInbound(text: string): string {
+    return this.redact(text).replace(/door code\D*\d{4,8}/gi, "door code [redacted]");
+  }
+
+  private looksLikeCode(text: string): boolean {
+    if (this.pin && text.includes(this.pin)) return true;
+    return /door code\D*\d{4,8}/i.test(text);
+  }
+
+  private codeOnly(text: string): boolean {
+    const stripped = this.redactInbound(text).replace(/\[redacted\]/g, "").replace(/door code/gi, "").replace(/[^a-z0-9]+/gi, "");
+    return stripped.length === 0;
+  }
+}
+
+function emptyCounters(): Counters {
+  return { sent: 0, failed: 0, uncertain: 0, canceled: 0, injury: 0, stop: 0, help: 0, polls: 0, pollFails: 0, pollDurationMs: 0 };
 }
 
 function offerBody(address: string, checkout: { day: string; time: string }, next: { day: string; time: string } | null, sameDay: boolean): string {
