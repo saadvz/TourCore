@@ -1,2 +1,0 @@
-feature: notion-removed
-pass

@@ -1,2 +1,0 @@
-features: flag-off stop help injury unapproved-yes
-script: .cursor/skills/verify-cleanercore/scripts/prove-safety.sh

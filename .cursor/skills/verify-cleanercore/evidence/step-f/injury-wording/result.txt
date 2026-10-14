@@ -1,5 +1,0 @@
-feature: injury-wording
-pass
-everyday from +15555550101, one-to-one: "that hurt my schedule lol, running late" was treated as an injury.
-+15555550100: The cleaner at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.
-+15555550101: If someone is hurt, call 911 now. I've let the host know.

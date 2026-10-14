@@ -1,1 +1,0 @@
-env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --reply +15555550100=I fell and I'm hurt --reply +15555550100=I fell and I'm hurt --reply +15555550101=I fell and I'm hurt --reply +15555550101=I fell and I'm hurt

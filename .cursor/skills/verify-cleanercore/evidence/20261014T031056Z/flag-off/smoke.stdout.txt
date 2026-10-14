@@ -1,6 +1,0 @@
-{
-  "ok": false,
-  "reason": "disabled",
-  "sent": [],
-  "pinRecipients": []
-}

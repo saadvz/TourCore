@@ -1,8 +1,0 @@
-This run used the in-process doctor/smoke CLI. A live cleaning job will not do these steps. They stay unverified until a run on that live target covers them. That run still uses only Scratch test numbers.
-
-1. Started tsx via npm run cleaner:doctor and npm run cleaner:smoke in this checkout. A hosted job is not launched that way.
-2. Read the Guesty Lite fixture src/cleaner-core/fixtures/guesty-lite-scratch.ics. Did not fetch a Guesty Lite URL.
-3. Froze time with --now or the smoke default 2026-10-14T15:00:00.000Z. Did not use the wall clock.
-4. Pushed texts onto an in-memory array, or a JSON file under a temporary --data directory, and printed JSON. Did not call a messaging provider. The temporary directory was removed. The saved stdout, transcript, job list, and outbox were not.
-5. Applied each --reply inside the process. Did not receive an inbound SMS.
-6. Printed the private door code as [redacted]. The scratch digits are not in this folder.

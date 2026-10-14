@@ -1,2 +1,0 @@
-feature: one-live-job
-pass

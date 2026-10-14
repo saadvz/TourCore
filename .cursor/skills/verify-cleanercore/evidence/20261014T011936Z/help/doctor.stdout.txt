@@ -1,6 +1,0 @@
-{
-  "ok": true,
-  "enabled": true,
-  "sends": false,
-  "note": "Cleaner Core is on. doctor does not send texts."
-}

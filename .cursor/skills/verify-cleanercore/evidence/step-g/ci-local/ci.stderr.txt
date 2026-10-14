@@ -1,2 +1,0 @@
-From https://github.com/saadvz/TourCore
- * branch            master     -> FETCH_HEAD

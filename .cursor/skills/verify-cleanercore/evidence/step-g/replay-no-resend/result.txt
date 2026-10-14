@@ -1,2 +1,0 @@
-feature: replay-no-resend
-pass

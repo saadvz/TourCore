@@ -15,6 +15,13 @@ logs/
 *.key
 credentials*.json
 
+# Cleaner Core proof output and local databases stay untracked
+.cursor/skills/verify-cleanercore/evidence/*
+!.cursor/skills/verify-cleanercore/evidence/README.md
+*.db
+*.sqlite*
+*.bak
+
 # Logs, coverage, OS/editor files
 *.log
 ci-logs/

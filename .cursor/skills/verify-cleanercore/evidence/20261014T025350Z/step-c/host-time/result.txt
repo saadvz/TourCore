@@ -1,2 +1,0 @@
-feature: host-time
-pass

@@ -1,2 +1,0 @@
-feature: unapproved-yes
-pass

@@ -1,1 +1,0 @@
-env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --closed --feed /workspace/src/cleaner-core/fixtures/guesty-lite-scratch.ics --google /workspace/src/cleaner-core/fixtures/google-lane-overlap.json
