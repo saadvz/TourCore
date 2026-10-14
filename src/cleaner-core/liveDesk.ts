@@ -343,7 +343,7 @@ export class LiveDesk {
   private readonly claiming = new Set<string>();
 
   private async inboundBeforeJob(id: string, from: string, keyword: ReturnType<typeof messagingKeyword>): Promise<CleanerText[]> {
-    if (keyword !== "stop" && keyword !== "help" && keyword !== "start") return [];
+    if (keyword !== "stop" && keyword !== "start") return [];
     if (keyword === "stop" && from === this.file.cleaner) {
       this.held = true;
       this.file.cleanerOut = true;
@@ -358,9 +358,7 @@ export class LiveDesk {
     const body =
       keyword === "stop"
         ? `You're opted out of cleaning texts for ${address}. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.`
-        : keyword === "start"
-          ? "You're opted back in to cleaning texts. Reply YES if you still want this turnover. Reply STOP to opt out."
-          : "Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.";
+        : "You're opted back in to cleaning texts. Reply YES if you still want this turnover. Reply STOP to opt out.";
     try {
       await sendLiveSms(this.env(), { to: from, body });
       return [{ to: from, body, kind: keyword }];

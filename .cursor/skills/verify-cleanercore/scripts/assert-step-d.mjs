@@ -31,7 +31,6 @@ const STARTED = "Got it, cleaning started.";
 const DONE_ACK = "Thanks, cleaning marked done.";
 const STOP_ACK = "You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.";
 const START_ACK = "You're opted back in. Reply YES if you still want this turnover. Reply STOP to opt out.";
-const HELP_ACK = "Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.";
 const EMERGENCY = "If someone is hurt, call 911 now.";
 const HOST_HURT = `The cleaner at ${ADDRESS} says someone is hurt. They've been told to call 911.`;
 const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know.";
@@ -115,14 +114,14 @@ if (journey === "held") {
   if ((first.sent ?? []).some((text) => text.kind === "pin")) fail("START resent the door code");
   if (!first.transcript.includes(PIN_HELD)) fail("the held notice is missing from the transcript");
 } else if (journey === "help-waiting" || journey === "help-cleared" || journey === "help-progress") {
-  const tail = (first.sent ?? []).slice(-4);
+  const tail = (first.sent ?? []).slice(-3);
   same(tail, [
-    { to: CLEANER, body: HELP_ACK, kind: "help" },
     { to: OWNER, body: EMERGENCY, kind: "emergency" },
     { to: OWNER, body: HOST_HURT, kind: "emergency" },
     { to: CLEANER, body: CLEANER_HURT, kind: "emergency" },
   ]);
-  if ([HELP_ACK, EMERGENCY, HOST_HURT, CLEANER_HURT].some((body) => body.includes("4821") || body.includes("[redacted]"))) {
+  if ((first.sent ?? []).some((text) => text.kind === "help")) fail("HELP sent a reply");
+  if ([EMERGENCY, HOST_HURT, CLEANER_HURT].some((body) => body.includes("4821") || body.includes("[redacted]"))) {
     fail("a safety reply includes the door code");
   }
   if (journey === "help-waiting") {

@@ -24,7 +24,6 @@ const CORRECTED = "Update: checkout at 12 Scratch Lane, Teaneck, NJ 07666 moved 
 const CANCEL = "Update: the cleaning at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 is canceled, so no need to come. Reply STOP to opt out.";
 const REMINDER = "Reminder: checkout at 12 Scratch Lane, Teaneck, NJ 07666 is Sunday, Oct 18 at 11:00 AM. Reply STOP to opt out.";
 const STOP_ACK = "You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.";
-const HELP_ACK = "Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.";
 const START_ACK = "You're opted back in. Reply YES if you still want this turnover. Reply STOP to opt out.";
 const DECLINED = "Okay, that turnover is not scheduled.";
 const EMERGENCY = "If someone is hurt, call 911 now.";
@@ -339,10 +338,9 @@ describe("one Scratch turnover", () => {
     expect(job.jobs().every((item) => item.textsBlocked)).toBe(true);
   });
 
-  it("answers STOP, HELP, and an injury before step C in every new state", async () => {
+  it("answers STOP and an injury before step C in every new state", async () => {
     const phrases = [
       { text: "STOP", body: STOP_ACK, kind: "stop" as const, reason: "stop" as const },
-      { text: "HELP", body: HELP_ACK, kind: "help" as const, reason: "help" as const },
       { text: "I fell and I'm hurt", body: EMERGENCY, kind: "emergency" as const, reason: "emergency" as const },
     ];
     for (const phrase of phrases) {
@@ -552,7 +550,10 @@ describe("one Scratch turnover", () => {
     ]);
 
     const help = cleanerCli(["smoke", "--reply", `${OWNER}=HELP`], "1");
-    expect(JSON.parse(help.stdout).transcript).toEqual([CHECKOUT_Q, said(OWNER, "HELP"), HELP_ACK]);
+    const helpReport = JSON.parse(help.stdout) as { transcript: string[]; sent: CleanerText[]; jobs: Array<{ status: string }> };
+    expect(helpReport.transcript).toEqual([CHECKOUT_Q, said(OWNER, "HELP")]);
+    expect(helpReport.sent.map((text) => text.kind)).toEqual(["host-checkout"]);
+    expect(helpReport.jobs[0]?.status).toBe("discovered");
 
     const hurt = "I fell and I'm hurt";
     const injury = cleanerCli([
@@ -904,8 +905,8 @@ describe("step D private door code", () => {
       const before = box.sent.length;
       expect(await job.receive({ id: `${phase}-help`, from: CLEANER, text: "HELP" })).toEqual({
         handled: true,
-        reason: "help",
-        sent: [{ to: CLEANER, body: HELP_ACK, kind: "help" }],
+        reason: "ignored",
+        sent: [],
       });
       expect(await job.receive({ id: `${phase}-hurt`, from: OWNER, text: "I fell and I'm hurt" })).toEqual({
         handled: true,
@@ -926,7 +927,6 @@ describe("step D private door code", () => {
         sent: [],
       });
       expect(box.sent.slice(before)).toEqual([
-        { to: CLEANER, body: HELP_ACK, kind: "help" },
         { to: OWNER, body: EMERGENCY, kind: "emergency" },
         { to: OWNER, body: HOST_HURT, kind: "emergency" },
         { to: CLEANER, body: CLEANER_HURT, kind: "emergency" },
@@ -936,6 +936,142 @@ describe("step D private door code", () => {
       expect(pinTexts).toEqual(phase === "waiting" ? [] : [{ to: CLEANER, body: PIN_TEXT, kind: "pin" }]);
       expect(job.jobs()[0]?.status).toBe(phase === "waiting" ? "awaiting_departure" : phase === "cleared" ? "cleared" : "in_progress");
     }
+  });
+
+  it("leaves every job state unchanged when the cleaner texts HELP", async () => {
+    let helpN = 0;
+    const unchanged = async (job: ReturnType<typeof core>, box: ReturnType<typeof sink>, from: string, text = "HELP") => {
+      const jobs = job.jobs();
+      const outbox = job.outbox();
+      const optedOut = job.cleanerHasOptedOut();
+      const sent = box.sent.length;
+      expect(await job.receive({ id: `plain-help-${helpN++}`, from, text })).toEqual({ handled: true, reason: "ignored", sent: [] });
+      expect(job.jobs()).toEqual(jobs);
+      expect(job.outbox()).toEqual(outbox);
+      expect(job.cleanerHasOptedOut()).toBe(optedOut);
+      expect(box.sent).toHaveLength(sent);
+      expect(box.sent.filter((item) => item.kind === "help")).toEqual([]);
+      expect(box.sent.some((item) => item.body.includes("I've let Cory know"))).toBe(false);
+      expect(job.health().counters.help).toBe(0);
+      expect(await job.receive({ id: `plain-help-${helpN++}`, from, text })).toEqual({ handled: true, reason: "ignored", sent: [] });
+      expect(job.jobs()).toEqual(jobs);
+      expect(job.cleanerHasOptedOut()).toBe(optedOut);
+      expect(box.sent).toHaveLength(sent);
+    };
+
+    const discovered = sink();
+    const discoveredJob = pinned(discovered);
+    await discoveredJob.pollFeed(feed("guesty-lite-scratch.ics"));
+    expect(discoveredJob.jobs()[0]?.status).toBe("discovered");
+    await unchanged(discoveredJob, discovered, CLEANER);
+    await unchanged(discoveredJob, discovered, OWNER, "INFO");
+
+    const waiting = sink();
+    const waitingJob = pinned(waiting);
+    await waitingJob.pollFeed(feed("guesty-lite-scratch.ics"));
+    await waitingJob.receive({ id: "help-state-out", from: OWNER, text: "YES" });
+    expect(waitingJob.jobs()[0]?.status).toBe("awaiting_checkin");
+    await unchanged(waitingJob, waiting, CLEANER);
+    await unchanged(waitingJob, waiting, OWNER);
+
+    const heldTimes = sink();
+    const heldTimesJob = pinned(heldTimes);
+    await heldTimesJob.pollFeed(feed("guesty-lite-scratch.ics"));
+    await heldTimesJob.receive({ id: "help-state-h1", from: OWNER, text: "YES" });
+    await heldTimesJob.receive({ id: "help-state-h2", from: OWNER, text: "YES" });
+    expect(heldTimesJob.jobs()[0]?.status).toBe("host_confirmed");
+    await unchanged(heldTimesJob, heldTimes, CLEANER);
+
+    const offered = sink();
+    const offeredJob = pinned(offered);
+    await offeredJob.pollFeed(feed("guesty-lite-scratch.ics"));
+    await offeredJob.receive({ id: "help-state-opt", from: CLEANER, text: "YES" });
+    await offeredJob.receive({ id: "help-state-o1", from: OWNER, text: "YES" });
+    await offeredJob.receive({ id: "help-state-o2", from: OWNER, text: "YES" });
+    expect(offeredJob.jobs()[0]?.status).toBe("offered");
+    await unchanged(offeredJob, offered, CLEANER);
+
+    const declined = sink();
+    const declinedJob = pinned(declined);
+    await declinedJob.pollFeed(feed("guesty-lite-scratch.ics"));
+    await declinedJob.receive({ id: "help-state-dopt", from: CLEANER, text: "YES" });
+    await declinedJob.receive({ id: "help-state-d1", from: OWNER, text: "YES" });
+    await declinedJob.receive({ id: "help-state-d2", from: OWNER, text: "YES" });
+    await declinedJob.receive({ id: "help-state-no", from: CLEANER, text: "NO" });
+    expect(declinedJob.jobs()[0]?.status).toBe("declined");
+    await unchanged(declinedJob, declined, CLEANER);
+
+    const confirmed = sink();
+    const confirmedJob = pinned(confirmed);
+    await confirmAnita(confirmedJob);
+    expect(confirmedJob.jobs()[0]?.status).toBe("confirmed");
+    await unchanged(confirmedJob, confirmed, CLEANER);
+
+    let now = NOW;
+    const departing = sink();
+    const departingJob = pinned(departing, { now: () => new Date(now) });
+    await confirmAnita(departingJob);
+    now = AFTER;
+    expect(departingJob.jobs()[0]?.status).toBe("awaiting_departure");
+    await unchanged(departingJob, departing, CLEANER);
+
+    const cleared = sink();
+    let clearedNow = NOW;
+    const clearedJob = pinned(cleared, { now: () => new Date(clearedNow) });
+    await confirmAnita(clearedJob);
+    clearedNow = AFTER;
+    await clearedJob.receive({ id: "help-state-left", from: OWNER, text: "guests have left" });
+    expect(clearedJob.jobs()[0]?.status).toBe("cleared");
+    await unchanged(clearedJob, cleared, CLEANER);
+
+    const started = sink();
+    let startedNow = NOW;
+    const startedJob = pinned(started, { now: () => new Date(startedNow) });
+    await confirmAnita(startedJob);
+    startedNow = AFTER;
+    await startedJob.receive({ id: "help-state-left-2", from: OWNER, text: "guests have left" });
+    await startedJob.receive({ id: "help-state-start", from: CLEANER, text: "START" });
+    expect(startedJob.jobs()[0]?.status).toBe("in_progress");
+    await unchanged(startedJob, started, CLEANER);
+
+    const finished = sink();
+    let finishedNow = NOW;
+    const finishedJob = pinned(finished, { now: () => new Date(finishedNow) });
+    await confirmAnita(finishedJob);
+    finishedNow = AFTER;
+    await finishedJob.receive({ id: "help-state-left-3", from: OWNER, text: "guests have left" });
+    await finishedJob.receive({ id: "help-state-start-2", from: CLEANER, text: "START" });
+    await finishedJob.receive({ id: "help-state-done", from: CLEANER, text: "DONE" });
+    expect(finishedJob.jobs()[0]?.status).toBe("done");
+    await unchanged(finishedJob, finished, CLEANER);
+
+    const canceled = sink();
+    const canceledJob = pinned(canceled);
+    await confirmAnita(canceledJob);
+    await canceledJob.pollFeed(feed("guesty-lite-stay-removed.ics"));
+    expect(canceledJob.jobs()[0]?.status).toBe("canceled");
+    await unchanged(canceledJob, canceled, CLEANER);
+
+    const paused = sink();
+    let pausedNow = NOW;
+    const pausedJob = pinned(paused, { now: () => new Date(pausedNow) });
+    await confirmAnita(pausedJob);
+    pausedNow = AFTER;
+    await pausedJob.receive({ id: "help-state-stop", from: CLEANER, text: "STOP" });
+    await pausedJob.receive({ id: "help-state-held", from: OWNER, text: "guests have left" });
+    expect(pausedJob.cleanerHasOptedOut()).toBe(true);
+    expect(paused.sent.filter((text) => text.kind === "pin")).toEqual([]);
+    await unchanged(pausedJob, paused, CLEANER);
+    expect(pausedJob.cleanerHasOptedOut()).toBe(true);
+    expect(paused.sent.filter((text) => text.kind === "pin")).toEqual([]);
+
+    const silenced = sink();
+    const silencedJob = core(silenced);
+    await silencedJob.pollFeed(feed("guesty-lite-scratch.ics"));
+    await silencedJob.receive({ id: "help-state-owner-stop", from: OWNER, text: "STOP" });
+    expect(silencedJob.jobs().every((item) => item.textsBlocked)).toBe(true);
+    await unchanged(silencedJob, silenced, OWNER);
+    expect(silencedJob.jobs().every((item) => item.textsBlocked)).toBe(true);
   });
 
   it("does not call a failed door-code send delivered, then retries it once", async () => {
@@ -1757,7 +1893,8 @@ describe("step F Notion, onboarding, and group delivery", () => {
     const stopped = await job.receive({ id: "stop-o", from: OBSERVER, text: "STOP" });
     expect(stopped.sent).toEqual([{ to: OBSERVER, body: STOP_ACK, kind: "stop" }]);
     const help = await job.receive({ id: "help-o", from: OBSERVER, text: "HELP" });
-    expect(help.sent).toEqual([{ to: OBSERVER, body: HELP_ACK, kind: "help" }]);
+    expect(help).toEqual({ handled: true, reason: "ignored", sent: [] });
+    expect(job.messagingView()?.excluded).toEqual([OBSERVER]);
   });
 
   it("sends the door code only to the approved cleaner, never to the group, the observer, or a mirror", async () => {

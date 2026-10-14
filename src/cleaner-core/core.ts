@@ -321,13 +321,12 @@ export interface CleanerCore {
   rememberPin(pin: string): void;
 }
 
-const HELP_ACK = "Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.";
 const START_ACK = "You're opted back in. Reply YES if you still want this turnover. Reply STOP to opt out.";
 const DECLINED = "Okay, that turnover is not scheduled.";
 const HOST_INJURY = "If someone is hurt, call 911 now.";
 const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know.";
 const CLEANER_HURT_MISSED = "If someone is hurt, call 911 now. I couldn't reach the host, so please call them too.";
-const SAFETY = new Set<TextKind>(["stop", "help", "start", "emergency"]);
+const SAFETY = new Set<TextKind>(["stop", "start", "emergency"]);
 const JOB_TEXTS = new Set<TextKind>(["offer", "corrected", "confirm", "reminder", "cancel-update", "declined", "started", "done"]);
 const GROUP_PREFIX = "Group text: ";
 const MIRROR_PREFIX = "Copy of the group text: ";
@@ -620,7 +619,6 @@ class Engine implements CleanerCore {
     }
 
     const keyword = keywordOf(input.text);
-    if (keyword === "help") return this.safety(input.id, () => this.reply(from, HELP_ACK, "help", "help", input.id));
     if (isInjuryReport(input.text)) return this.safety(input.id, () => this.emergency(from, input.id));
     if (keyword === "stop" || isPlainLanguageStop(input.text)) return this.safety(input.id, () => this.stop(from, input.id));
     if (keyword === "start") return this.safety(input.id, () => this.start(from, input.id));
@@ -1526,7 +1524,6 @@ class Engine implements CleanerCore {
     this.upsert(draft, "sent");
     this.counters.sent += 1;
     if (draft.kind === "stop") this.counters.stop += 1;
-    if (draft.kind === "help") this.counters.help += 1;
     if (draft.kind === "emergency") this.counters.injury += 1;
     this.transcriptState.push(this.redact(draft.body));
     draft.afterSend?.();

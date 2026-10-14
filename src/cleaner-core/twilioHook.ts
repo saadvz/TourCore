@@ -24,7 +24,7 @@ function header(headers: IncomingHttpHeaders, name: string): string | undefined 
 }
 
 /**
- * Inbound texts for the cleaning number. STOP, HELP, and START are applied
+ * Inbound texts for the cleaning number. STOP and START are applied
  * before any job step. The HTTP body never includes a door code or a reply.
  */
 export async function handleCleanerTwilioWebhook(input: {

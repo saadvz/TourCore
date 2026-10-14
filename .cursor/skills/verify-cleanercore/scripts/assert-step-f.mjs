@@ -29,7 +29,6 @@ const CONFIRM = `Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at ${LANE}
 const REMINDER = `Reminder: checkout at ${LANE} is Sunday, Oct 18 at 11:00 AM. Reply STOP to opt out.`;
 const CANCEL = `Update: the cleaning at ${LANE} on Sunday, Oct 18 is canceled, so no need to come. Reply STOP to opt out.`;
 const STOP_ACK = "You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.";
-const HELP_ACK = "Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.";
 const EMERGENCY = "If someone is hurt, call 911 now.";
 const HOST_HURT = `The cleaner at ${LANE} says someone is hurt. They've been told to call 911.`;
 const OBSERVER_HURT = `An observer at ${LANE} says someone is hurt. They've been told to call 911.`;
@@ -183,9 +182,9 @@ if (journey === "notion-permission-denied") {
   if (held.sent.filter((text) => text.kind === "offer").some((text) => text.channel === "group")) {
     fail("the group started while a participant had not opted in");
   }
-  same(last.sent.filter((text) => text.to === OBSERVER).map((text) => text.kind), ["opt-in", "stop", "help"]);
+  same(last.sent.filter((text) => text.to === OBSERVER).map((text) => text.kind), ["opt-in", "stop"]);
   same(last.sent.filter((text) => text.to === OBSERVER && text.kind === "stop"), [{ to: OBSERVER, body: STOP_ACK, kind: "stop" }]);
-  same(last.sent.filter((text) => text.to === OBSERVER && text.kind === "help"), [{ to: OBSERVER, body: HELP_ACK, kind: "help" }]);
+  if (last.sent.some((text) => text.kind === "help")) fail("HELP sent a reply");
   if (last.sent.some((text) => text.to === OBSERVER && text.kind === "offer")) fail("the unconsented observer got the offer");
   if (last.sent.filter((text) => text.kind === "offer").some((text) => text.channel === "group")) {
     fail("the group started while a participant had not opted in");
@@ -288,8 +287,8 @@ if (journey === "notion-permission-denied") {
   same(stop.jobs[0].textsBlocked, true);
   same(help.sent, [
     { to: OWNER, body: LANE_Q, kind: "host-checkout" },
-    { to: OWNER, body: HELP_ACK, kind: "help" },
   ]);
+  if (help.sent.some((text) => text.kind === "help")) fail("HELP sent a reply");
   same(injury.sent, [
     { to: OWNER, body: LANE_Q, kind: "host-checkout" },
     { to: OWNER, body: EMERGENCY, kind: "emergency" },
