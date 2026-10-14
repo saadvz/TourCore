@@ -364,7 +364,7 @@ export class LiveDesk {
     this.resume();
     if (!this.file.address || !this.engine) return this.fail("Run the checks first.");
     await this.engine.resumeJob();
-    this.held = this.engine.jobOnHold();
+    this.held = this.engine.jobOnHold() || this.engine.cleanerHasOptedOut();
     this.persist();
     return this.reply({ next: resumeNote(this.file.address) });
   }
@@ -477,8 +477,9 @@ export class LiveDesk {
       if (!this.engine) return { sent: await this.inboundBeforeJob(input.id, from, keyword) };
       const result = await this.engine.receive({ id: input.id, from, text: input.text, ...(input.channel ? { channel: input.channel } : {}) });
       this.noteSeen(input.id);
-      if (from === this.file.cleaner && keyword === "stop") this.held = this.engine?.cleanerHasOptedOut() === true;
-      if (from === this.file.cleaner && keyword === "start") this.held = false;
+      if (from === this.file.cleaner && (keyword === "stop" || keyword === "start")) {
+        this.held = this.engine?.cleanerHasOptedOut() === true || this.engine?.jobOnHold() === true;
+      }
       return { sent: result.sent };
     } finally {
       this.claiming.delete(input.id);
