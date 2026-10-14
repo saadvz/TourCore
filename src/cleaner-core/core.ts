@@ -332,6 +332,7 @@ export interface CleanerCore {
   /** Marks an accepted door-code text undelivered so the next departure can send it again. Sends nothing. */
   markPinUndelivered(): void;
   hostNotes(): string[];
+  keepHostNote(id: string, body: string): void;
   notePrivateCodeDelivered(): void;
   /** Keeps a door code in memory after a later tool call opens the seal. Does not write it. */
   rememberPin(pin: string): void;
@@ -1356,10 +1357,6 @@ class Engine implements CleanerCore {
           if (privateText) sent.push(privateText);
         }
       }
-      if (this.groupChat && route === "private" && this.delivery(key) === "sent") {
-        const note = await this.emitGroup(`pin-private:${key}`, privateCodeLine(this.groupChat.cleanerName), "pin-notice", job.id);
-        if (note) sent.push(note);
-      }
     }
     if (this.groupChat && this.groupPinTerminal && this.delivery(key) !== "sent") return sent;
     if (this.delivery(key) === "failed" && this.owner && !this.groupPhones.includes(this.owner)) {
@@ -1646,8 +1643,9 @@ class Engine implements CleanerCore {
     };
   }
 
-  private noteForHost(id: string, body: string): void {
-    if (!this.groupChat || this.hostNoteState.some((note) => note.id === id)) return;
+  keepHostNote(id: string, body: string): void {
+    if (!id || !body || this.hostNoteState.some((note) => note.id === id)) return;
+    if (this.pin && body.includes(this.pin)) return;
     this.hostNoteState.push({ id, body });
     this.save();
   }
@@ -1661,7 +1659,7 @@ class Engine implements CleanerCore {
     const job = this.releaseJob();
     const key = job ? this.pinKey(job) : undefined;
     if (!key || this.delivery(key) !== "sent") return;
-    this.noteForHost(`pin-private:${key}`, privateCodeLine(this.groupChat.cleanerName));
+    this.keepHostNote(`pin-private:${key}`, privateCodeLine(this.groupChat.cleanerName));
   }
 
   private async emitOne(draft: Draft): Promise<CleanerText | null> {
@@ -1719,7 +1717,7 @@ class Engine implements CleanerCore {
         this.dropUncertain(draft.id);
         this.save();
         if (draft.kind !== "pin" && !isPrivateCodeLine(draft.body)) {
-          this.noteForHost(`group-unconfirmed:${this.options.property.id}`, groupUnconfirmedLine());
+          this.keepHostNote(`group-unconfirmed:${this.options.property.id}:${draft.kind}`, groupUnconfirmedLine(draft.kind));
         }
         return null;
       }

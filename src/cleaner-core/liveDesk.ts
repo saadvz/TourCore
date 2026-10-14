@@ -341,6 +341,7 @@ export class LiveDesk {
     }
     const result = await this.engine.receive({ id: `left-${randomUUID()}`, from: this.file.host, text: said });
     if (result.reason !== "departure") return this.fail("Say that the guests have left. I won't guess from the calendar.");
+    const heldLine = result.sent.find((text) => text.kind === "pin-held")?.body;
     const sentNow = result.sent.some((text) => text.kind === "pin");
     const privateNow = result.sent.some((text) => text.kind === "pin" && text.channel !== "group");
     const failed = result.sent.some((text) => text.kind === "pin-failed") || this.engine.outbox().some((item) => item.kind === "pin" && item.status === "failed");
@@ -353,6 +354,7 @@ export class LiveDesk {
       this.file.pinSend = { sid: this.file.pinSend?.sid ?? "group", outcome: "accepted", notePending: false };
       this.persist();
     }
+    if (heldLine) return this.reply({ next: heldLine });
     if (sentNow) return this.reply({ next: PIN_SENT });
     if (failed) return this.reply({ next: PIN_FAILED });
     return this.reply({ next: PIN_FAILED });
@@ -440,8 +442,9 @@ export class LiveDesk {
     const tracked = this.file.pinSend;
     if (!tracked || tracked.outcome === "settled" || tracked.sid !== input.sid) return;
     const status = input.status.toLowerCase();
-    if (status === "sent" || status === "delivered") {
-      if (tracked.delivered) return;
+    if (status === "sent") return;
+    if (status === "delivered") {
+      if (tracked.outcome === "undelivered" || tracked.delivered) return;
       tracked.delivered = true;
       tracked.notePending = false;
       this.persist();
@@ -598,11 +601,15 @@ export class LiveDesk {
       ...(groupChatOn(env()) ? { groupChat: { hostName: "Cory", cleanerName: "Maria" } } : {}),
       sink: {
         send: async (text) => {
+          const hostLine = text.to === file.host && text.channel !== "group";
+          if (hostLine && text.kind !== "pin-notice" && text.kind !== "pin-failed") {
+            this.engine?.keepHostNote(`host:${text.kind}:${text.body}`, text.body);
+          }
           if (this.scratchCapture()) {
             if (text.kind === "pin") this.noteAccepted("scratch-pin");
             return;
           }
-          if ((text.kind === "pin-notice" || text.kind === "pin-failed" || text.kind === "host-checkout" || text.kind === "host-checkin") && text.channel !== "group") return;
+          if (hostLine) return;
           if (text.channel === "group" && text.audience && text.audience.length > 0) {
             try {
               const sent = await sendLiveGroup(env(), { audience: [...text.audience], body: text.body, conversationSid: this.file.conversationSid });
@@ -763,16 +770,9 @@ export class LiveDesk {
       const result = await this.engine.receive({ id, from, text });
       return { sent: result.sent };
     }
-    if (this.scratchCapture()) {
-      this.noteLocal(from, "held");
-      return { sent: [{ to: from, body: DIRECT_TEXT_REPLY, kind: "held" }] };
-    }
-    try {
-      await sendLiveSms(this.env(), { to: from, body: DIRECT_TEXT_REPLY });
-    } catch {
-      return { sent: [] };
-    }
-    if (!liveSmsOn(this.env())) return { sent: [] };
-    return { sent: [{ to: from, body: DIRECT_TEXT_REPLY, kind: "held" }] };
+    this.resume();
+    this.engine?.keepHostNote("host:direct-left", DIRECT_TEXT_REPLY);
+    if (this.scratchCapture()) this.noteLocal(from, "held");
+    return { sent: [] };
   }
 }

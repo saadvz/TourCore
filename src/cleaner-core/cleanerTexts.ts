@@ -92,8 +92,16 @@ export function isPrivateCodeLine(body: string): boolean {
   return body.startsWith(PRIVATE_CODE_PREFIX) && body.endsWith(PRIVATE_CODE_SUFFIX) && body.length > PRIVATE_CODE_PREFIX.length + PRIVATE_CODE_SUFFIX.length;
 }
 
-export function groupUnconfirmedLine(): string {
-  return "I couldn't send that to the group.";
+const GROUP_SEND_TOPICS = new Map<string, string>([
+  ["confirm", "the time"],
+  ["offer", "the cleaning offer"],
+  ["reminder", "the reminder"],
+  ["opt-in", "the invitation"],
+]);
+
+export function groupUnconfirmedLine(kind: string): string {
+  const topic = GROUP_SEND_TOPICS.get(kind) ?? "that update";
+  return `I couldn't send ${topic} to the group.`;
 }
 
 export function groupTimeLine(hostName: string): string {
