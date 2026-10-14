@@ -198,8 +198,8 @@ describe("Cleaner Core live wiring", () => {
     expect(stopSends.find((item) => item.to === CLEANER)?.body).toBe(
       `You're opted out of cleaning texts for ${ADDRESS}. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.`,
     );
-    expect(stopSends.find((item) => item.to === HOST)).toBeUndefined();
     const stopNote = `The cleaner opted out of cleaning texts for ${ADDRESS}, so the job is on hold.`;
+    expect(stopSends.filter((item) => item.to === HOST).map((item) => item.body)).toEqual([stopNote]);
     const held = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state");
     remember(held);
     expect(held.text).toContain(stopNote);
@@ -503,7 +503,7 @@ describe("Cleaner Core live wiring", () => {
     expect(wired.cleanerSent.filter((item) => item.to === CLEANER && item.body.startsWith("You're opted out of cleaning texts")).map((item) => item.body)).toEqual([
       `You're opted out of cleaning texts for ${ADDRESS}. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.`,
     ]);
-    expect(wired.cleanerSent.filter((item) => item.to === HOST && item.body === `The cleaner opted out of cleaning texts for ${ADDRESS}, so the job is on hold.`)).toHaveLength(0);
+    expect(wired.cleanerSent.filter((item) => item.to === HOST && item.body === `The cleaner opted out of cleaning texts for ${ADDRESS}, so the job is on hold.`)).toHaveLength(1);
     const stopState = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state");
     expect(stopState.text).toContain(`The cleaner opted out of cleaning texts for ${ADDRESS}, so the job is on hold.`);
 
