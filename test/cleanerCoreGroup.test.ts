@@ -1,11 +1,11 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { groupDoorCodeBody, groupOptInBody, groupTimeLine, holdNote, privateCodeLine, resumeNote } from "../src/cleaner-core/cleanerTexts";
 import { openCleanerCore, type CleanerText } from "../src/cleaner-core/core";
 import { liveDeskFor, resetLiveDesks, setCleanerCalendarFetch } from "../src/cleaner-core/liveDesk";
-import { sendLiveGroup, setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
+import { sendLiveGroup, sendLiveSms, setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
 import { SCRATCH_TENANTS } from "../src/cleaner-core/tenants";
 import { CALENDAR_ICS, CALENDAR_URL, CLEANER as LIVE_CLEANER, CLEANER_LINE, DOOR_CODE, fakeSms, FROZEN, HOST as LIVE_HOST, OBSERVER, TEST_PIN_KEY } from "./wiringProof";
 
@@ -162,6 +162,17 @@ describe("group thread", () => {
     expect(sent.sent.filter((text) => text.body.includes(PIN))).toEqual([]);
   });
 
+  it("sends the door code privately after Cory opts out", async () => {
+    const sent = box();
+    const job = await joined(sent);
+    await job.receive({ id: "stop-cory", from: OWNER, text: "STOP", channel: "group" });
+    const left = await job.receive({ id: "left-cory-out", from: OWNER, text: "guests have left" });
+    expect(left.sent.filter((text) => text.kind === "pin")).toEqual([{ to: CLEANER, body: PRIVATE_PIN, kind: "pin" }]);
+    expect(left.sent.filter((text) => text.channel === "group")).toEqual([
+      { to: CLEANER, body: PRIVATE_LINE, kind: "pin-notice", channel: "group", audience: [CLEANER] },
+    ]);
+  });
+
   it("removes only the person who sent STOP, and only Cory can resume", async () => {
     const sent = box();
     const job = await joined(sent);
@@ -286,9 +297,10 @@ describe("group thread on the desk", () => {
 
   it("keeps the missing key note and does not retry a failed group send", async () => {
     const calls: string[] = [];
-    setCleanerGroupFetch(async (url) => {
+    const fetchBox = groupFetch({ failMessages: true });
+    setCleanerGroupFetch(async (url, init) => {
       calls.push(String(url));
-      return { ok: false, status: 500, json: async () => ({}) } as Response;
+      return fetchBox.impl(url, init);
     });
     setCleanerTwilioClient(fakeSms());
     setCleanerCalendarFetch(async (url) => ({
@@ -355,5 +367,172 @@ describe("live group send", () => {
     };
     expect(await sendLiveGroup(env, { audience: [OWNER, CLEANER], body: "Hello the group" })).toBeUndefined();
     expect(calls).toEqual([]);
+  });
+});
+
+interface GroupPost {
+  conversationSid: string;
+  to: string[];
+  body: string;
+}
+
+function groupFetch(options?: { failMessages?: boolean }) {
+  const conversations = new Map<string, { sid: string; address: string }[]>();
+  const posts: GroupPost[] = [];
+  let sequence = 0;
+  let blockMembership = false;
+  const impl: typeof fetch = async (input, init) => {
+    const url = String(input);
+    const method = (init?.method ?? "GET").toUpperCase();
+    const reply = (status: number, body: unknown) => ({ ok: status >= 200 && status < 300, status, json: async () => body }) as Response;
+    const root = "https://conversations.twilio.com/v1/Conversations";
+    if (url === root && method === "POST") {
+      const sid = `CH${++sequence}`;
+      conversations.set(sid, []);
+      return reply(201, { sid });
+    }
+    if (!url.startsWith(`${root}/`)) return reply(404, {});
+    const path = url.slice(root.length + 1);
+    const [rawSid, ...rest] = path.split("/");
+    const sid = decodeURIComponent(rawSid ?? "");
+    const tail = rest.join("/").split("?")[0] ?? "";
+    const people = conversations.get(sid);
+    if (!people) return reply(404, {});
+    if (tail === "Messages" && method === "POST") {
+      if (options?.failMessages) return reply(500, {});
+      const params = new URLSearchParams(String(init?.body ?? ""));
+      posts.push({ conversationSid: sid, to: people.map((person) => person.address).sort(), body: params.get("Body") ?? "" });
+      return reply(201, { sid: `IM${posts.length}` });
+    }
+    if (tail === "Participants" || tail.startsWith("Participants/")) {
+      if (blockMembership) return reply(500, {});
+      if (tail === "Participants" && method === "GET") {
+        return reply(200, {
+          participants: people.map((person) => ({ sid: person.sid, messaging_binding: { address: person.address } })),
+          meta: { next_page_url: null },
+        });
+      }
+      if (tail === "Participants" && method === "POST") {
+        const params = new URLSearchParams(String(init?.body ?? ""));
+        const address = params.get("MessagingBinding.Address") ?? "";
+        if (people.some((person) => person.address === address)) return reply(409, {});
+        const person = { sid: `MB${++sequence}`, address };
+        people.push(person);
+        return reply(201, { sid: person.sid });
+      }
+      if (method === "DELETE") {
+        const party = decodeURIComponent(tail.slice("Participants/".length));
+        const index = people.findIndex((person) => person.sid === party);
+        if (index < 0) return reply(404, {});
+        people.splice(index, 1);
+        return reply(204, {});
+      }
+    }
+    return reply(404, {});
+  };
+  return { impl, posts, blockMembership() { blockMembership = true; } };
+}
+
+describe("live group membership", () => {
+  const roots: string[] = [];
+
+  afterEach(() => {
+    setCleanerTwilioClient(undefined);
+    setCleanerGroupFetch(undefined);
+    for (const root of roots) rmSync(root, { recursive: true, force: true });
+    roots.length = 0;
+  });
+
+  function liveGroup(extra: boolean) {
+    const root = mkdtempSync(join(tmpdir(), "cleaner-group-live-"));
+    roots.push(root);
+    const store = join(root, "conversation.json");
+    const readSid = () => {
+      if (!existsSync(store)) return undefined;
+      const parsed = JSON.parse(readFileSync(store, "utf8")) as { conversationSid?: string };
+      return parsed.conversationSid;
+    };
+    const sms = fakeSms();
+    const fetchBox = groupFetch();
+    setCleanerTwilioClient(sms);
+    setCleanerGroupFetch(fetchBox.impl);
+    const allow = extra ? [OWNER, CLEANER, EXTRA] : [OWNER, CLEANER];
+    const env: NodeJS.ProcessEnv = {
+      CLEANER_CORE_LIVE_SMS: "1",
+      CLEANER_CORE_SMS_ALLOWLIST: allow.join(","),
+      CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
+      CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
+      CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+    };
+    const job = openCleanerCore({
+      enabled: true,
+      property: { id: "prop_12_scratch_lane", address: ADDRESS, timeZone: "America/New_York" },
+      ownerPhone: OWNER,
+      cleaner: { phone: CLEANER, approved: true },
+      pin: PIN,
+      hostName: "Scratch",
+      consented: true,
+      allowlist: allow,
+      sink: {
+        async send(text: CleanerText) {
+          if (text.channel === "group" && text.audience && text.audience.length > 0) {
+            const sent = await sendLiveGroup(env, { audience: [...text.audience], body: text.body, conversationSid: readSid() });
+            if (sent?.conversationSid) writeFileSync(store, `${JSON.stringify({ conversationSid: sent.conversationSid })}\n`);
+            return;
+          }
+          await sendLiveSms(env, { to: text.to, body: text.body });
+        },
+      },
+      now: () => new Date(NOW),
+      groupChat: {
+        hostName: "Cory",
+        cleanerName: "Maria",
+        ...(extra ? { extra: [{ phone: EXTRA, name: "Alex" }] } : {}),
+      },
+    });
+    return { job, sms, posts: fetchBox.posts, blockMembership: fetchBox.blockMembership, readSid };
+  }
+
+  async function ready(extra: boolean) {
+    const live = liveGroup(extra);
+    await live.job.pollFeed(FEED);
+    await live.job.receive({ id: "host-yes", from: OWNER, text: "YES" });
+    await live.job.receive({ id: "cleaner-yes", from: CLEANER, text: "YES" });
+    if (extra) await live.job.receive({ id: "extra-yes", from: EXTRA, text: "YES" });
+    await live.job.confirmHostTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await live.job.receive({ id: "schedule", from: CLEANER, text: "YES" });
+    await live.job.receive({ id: "time-1", from: CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
+    return live;
+  }
+
+  it("keeps Alex out of a saved conversation after STOP, including the next group text and the door code", async () => {
+    const live = await ready(true);
+    const sid = live.readSid();
+    expect(live.posts).toEqual([{ conversationSid: sid, to: [OWNER, CLEANER, EXTRA], body: TIME_LINE }]);
+    await live.job.receive({ id: "stop-alex", from: EXTRA, text: "STOP", channel: "group" });
+    await live.job.receive({ id: "time-2", from: CLEANER, text: "Can we do 3:00 PM?", channel: "group" });
+    const left = await live.job.receive({ id: "left-alex", from: OWNER, text: "guests have left" });
+    expect(live.posts).toEqual([
+      { conversationSid: sid, to: [OWNER, CLEANER, EXTRA], body: TIME_LINE },
+      { conversationSid: sid, to: [OWNER, CLEANER], body: TIME_LINE },
+      { conversationSid: sid, to: [OWNER, CLEANER], body: GROUP_PIN },
+    ]);
+    expect(left.sent.filter((text) => text.kind === "pin")).toEqual([
+      { to: CLEANER, body: GROUP_PIN, kind: "pin", channel: "group", audience: [OWNER, CLEANER] },
+    ]);
+  });
+
+  it("sends nothing to the group when the saved conversation's members cannot be confirmed", async () => {
+    const live = await ready(false);
+    const sid = live.readSid();
+    expect(live.posts).toEqual([{ conversationSid: sid, to: [OWNER, CLEANER], body: TIME_LINE }]);
+    live.blockMembership();
+    const left = await live.job.receive({ id: "left-unsynced", from: OWNER, text: "guests have left" });
+    expect(live.posts).toEqual([{ conversationSid: sid, to: [OWNER, CLEANER], body: TIME_LINE }]);
+    expect(live.sms.sent.filter((text) => text.body === PRIVATE_PIN).map((text) => ({ to: text.to, body: text.body }))).toEqual([
+      { to: CLEANER, body: PRIVATE_PIN },
+    ]);
+    expect(left.sent.filter((text) => text.channel === "group")).toEqual([]);
+    expect(left.sent.filter((text) => text.kind === "pin")).toEqual([{ to: CLEANER, body: PRIVATE_PIN, kind: "pin" }]);
   });
 });
