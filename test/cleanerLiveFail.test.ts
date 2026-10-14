@@ -16,6 +16,7 @@ const HOST = "+15555550115";
 const OBSERVER = "+15555550142";
 const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn't go through.";
 const PIN_FAILED = "The door code didn't reach the cleaner. Tell me the guests have left again and I'll resend it.";
+const PIN_FAILED_NEXT = "The door code didn't reach the cleaner. Tell your Grok Bot the guests have left and I'll resend it.";
 const PIN_REPEAT = "I already sent the door code to the cleaner.";
 const STOP_ACK = "You're opted out of cleaning texts for 12 Scratch Lane, Teaneck, NJ 07666. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.";
 const START_ACK = "You're opted back in. Reply YES if you still want this turnover. Reply STOP to opt out.";
@@ -43,6 +44,13 @@ function nextOf(result: ToolResult): string {
   const next = result.structured?.next;
   if (typeof next !== "string") throw new Error(result.text);
   return next;
+}
+
+function notesOf(result: ToolResult): string[] {
+  const notes = result.structured?.notes;
+  if (notes === undefined) return [];
+  if (!Array.isArray(notes) || notes.some((line) => typeof line !== "string")) throw new Error(result.text);
+  return notes as string[];
 }
 
 function linesOf(result: ToolResult): string[] {
@@ -251,5 +259,50 @@ describe("live Scratch failures from 19087415", () => {
     expect(bodies.filter((body) => body === "Thanks, cleaning marked done.")).toHaveLength(1);
     expect(bodies.filter((body) => body === PIN_FAILED || body === HOLD || body === OPTED_OUT_HOLD)).toEqual([]);
     expect(wired.cleanerSent.filter((item) => item.to !== LANE.cleanerPhone && item.to !== HOST)).toEqual([]);
+  }, 40_000);
+
+  it("sends Cory nothing after STOP when the door code fails, and get_state still shows the failed line", async () => {
+    if (!LANE) throw new Error("missing lane");
+    const wired = await scratchApp();
+    await saveLane(wired);
+    await confirmJob(wired);
+    expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(PIN_SENT);
+    expect(codeTexts(wired.cleanerSent, LANE.pin)).toEqual([
+      { to: LANE.cleanerPhone, body: "Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you." },
+    ]);
+    const beforeStop = wired.cleanerSent.length;
+    expect(nextOf(await call(wired, "send_test_text", { from: HOST, text: "STOP" }))).toBe("The test text went through.");
+    expect(redact(wired.cleanerSent.slice(beforeStop), LANE.pin)).toEqual([{ to: HOST, body: STOP_ACK }]);
+    const afterStop = wired.cleanerSent.length;
+    expect(nextOf(await call(wired, "report_delivery", { which: "Door code text to the cleaner", status: "failed" }))).toBe("Door code text to the cleaner: failed.");
+    expect(redact(wired.cleanerSent.slice(afterStop), LANE.pin)).toEqual([]);
+    expect(nextOf(await call(wired, "get_state"))).toBe(PIN_FAILED_NEXT);
+    expect(codeTexts(wired.cleanerSent, LANE.pin)).toHaveLength(1);
+    expect(JSON.stringify(redact(wired.cleanerSent, LANE.pin))).not.toContain(LANE.pin);
+  }, 40_000);
+
+  it("keeps the other host lines in get_state and off Twilio after Cory opts out", async () => {
+    if (!LANE) throw new Error("missing lane");
+    const wired = await scratchApp();
+    await saveLane(wired);
+    await confirmJob(wired);
+    expect(nextOf(await call(wired, "send_test_text", { from: LANE.cleanerPhone, text: "STOP" }))).toBe("The test text went through.");
+    const beforeStop = wired.cleanerSent.length;
+    expect(nextOf(await call(wired, "send_test_text", { from: HOST, text: "STOP" }))).toBe("The test text went through.");
+    expect(redact(wired.cleanerSent.slice(beforeStop), LANE.pin)).toEqual([{ to: HOST, body: STOP_ACK }]);
+    const afterStop = wired.cleanerSent.length;
+    const resumed = await call(wired, "resume_job");
+    const backOn = "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is back on.";
+    const held = "The cleaner opted out, so the door code wasn't sent. Please reach them directly.";
+    expect(resumed.text).toContain(backOn);
+    expect(redact(wired.cleanerSent.slice(afterStop), LANE.pin)).toEqual([]);
+    expect(notesOf(await call(wired, "get_state"))).toContain(backOn);
+    expect(nextOf(await call(wired, "mark_guests_left", { said: "The guests have left" }))).toBe(held);
+    expect(redact(wired.cleanerSent.slice(afterStop), LANE.pin)).toEqual([]);
+    expect(codeTexts(wired.cleanerSent, LANE.pin)).toEqual([]);
+    const notes = notesOf(await call(wired, "get_state"));
+    expect(notes).toContain(backOn);
+    expect(notes).toContain(held);
+    expect(JSON.stringify(redact(wired.cleanerSent, LANE.pin))).not.toContain(LANE.pin);
   }, 40_000);
 });

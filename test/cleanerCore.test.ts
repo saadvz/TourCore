@@ -1139,6 +1139,55 @@ describe("step D private door code", () => {
     }
   });
 
+  it("keeps host-direct lines for an opted-out owner and does not text them", async () => {
+    const asked = sink();
+    const questions = pinned(asked);
+    await questions.receive({ id: "questions-stop", from: OWNER, text: "STOP" });
+    expect(asked.sent.filter((text) => text.to === OWNER).map((text) => text.body)).toEqual([STOP_ACK]);
+    await questions.resumeJob();
+    await questions.pollFeed(feed("guesty-lite-scratch.ics"));
+    await questions.receive({ id: "questions-yes", from: OWNER, text: "YES" });
+    expect(asked.sent.filter((text) => text.to === OWNER).map((text) => text.body)).toEqual([STOP_ACK]);
+    expect(questions.hostNotes()).toEqual([
+      "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is back on.",
+      CHECKOUT_Q,
+      CHECKIN_Q,
+    ]);
+
+    const failed = sink();
+    let failedNow = NOW;
+    const failedJob = pinned(failed, { now: () => new Date(failedNow) });
+    await confirmAnita(failedJob);
+    failedNow = AFTER;
+    await failedJob.receive({ id: "failed-left", from: OWNER, text: "guests have left" });
+    const pin = failedJob.outbox().find((item) => item.kind === "pin");
+    expect(pin).toEqual(expect.objectContaining({ kind: "pin", status: "sent", to: CLEANER }));
+    await failedJob.receive({ id: "failed-stop", from: OWNER, text: "STOP" });
+    const afterStop = failed.sent.length;
+    await failedJob.reportPin(pin?.id ?? "", "failed");
+    await failedJob.reportPin(pin?.id ?? "", "undelivered");
+    expect(failed.sent.slice(afterStop)).toEqual([]);
+    expect(failedJob.pullPinFailure()).toBe(true);
+    expect(failedJob.pinAccepted()).toBe(false);
+
+    const held = sink();
+    let heldNow = NOW;
+    const heldJob = pinned(held, { now: () => new Date(heldNow) });
+    await confirmAnita(heldJob);
+    heldNow = AFTER;
+    await heldJob.receive({ id: "held-cleaner-stop", from: CLEANER, text: "STOP" });
+    await heldJob.receive({ id: "held-owner-stop", from: OWNER, text: "STOP" });
+    const marked = held.sent.length;
+    await heldJob.resumeJob();
+    const left = await heldJob.receive({ id: "held-left", from: OWNER, text: "guests have left" });
+    expect(held.sent.slice(marked).filter((text) => text.to === OWNER)).toEqual([]);
+    expect(left.sent.filter((text) => text.kind === "pin")).toEqual([]);
+    expect(heldJob.hostNotes()).toEqual([
+      "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is back on.",
+      PIN_HELD,
+    ]);
+  });
+
   it("keeps the door code off the group and off Cory's copy", async () => {
     const box = sink();
     const job = pinned(box, { groupPhones: [UNAPPROVED] });
