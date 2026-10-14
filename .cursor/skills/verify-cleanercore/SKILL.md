@@ -175,7 +175,7 @@ Prove the step F blockers with:
 .cursor/skills/verify-cleanercore/scripts/prove-step-f.sh
 ```
 
-That script takes no arguments. It removes `evidence/step-f/` and writes it again. It doctors before each journey, then drives `notion-permission-denied`, `notion-source-read`, `notion-sync-repeat`, `notion-removed`, `multi-source-dedupe`, `onboarding-full`, `onboarding-no-optin`, `group-native-consented`, `group-mirrored-fallback`, `group-unconsented-participant`, `pin-private-only`, `tenant-isolation`, and `stop-help-injury`. The Notion files are fixtures. `tenant-isolation` reads Lane and Court, activates Annex, and reads Lane again in one `--data` directory. The script prints `evidence/step-f`.
+That script takes no arguments. It removes `evidence/step-f/` and writes it again. It doctors before each journey, then drives `notion-permission-denied`, `notion-source-read`, `notion-sync-repeat`, `notion-removed`, `notion-cleaner-routing`, `group-no-optin`, `multi-source-dedupe`, `onboarding-full`, `onboarding-no-optin`, `group-native-consented`, `group-mirrored-fallback`, `group-unconsented-participant`, `pin-private-only`, `tenant-isolation`, `stop-help-injury`, `observer-injury-group`, `observer-injury-solo`, and `owner-injury`. The Notion files are fixtures. `tenant-isolation` reads Lane and Court, activates Annex, and reads Lane again in one `--data` directory. The script prints `evidence/step-f`.
 
 After any script exits, its evidence directory must still be on disk. A cleanup that removes it fails the proof.
 

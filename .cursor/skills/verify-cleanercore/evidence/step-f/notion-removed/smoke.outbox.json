@@ -8,8 +8,15 @@
     "jobId": "notion:row-anita"
   },
   {
+    "id": "opt-in:+15555550101",
+    "to": "+15555550101",
+    "body": "Hi, this is Scratch's cleaning scheduler for 12 Scratch Lane, Teaneck, NJ 07666. Reply YES to get cleaning texts, or STOP to opt out.",
+    "kind": "opt-in",
+    "status": "sent"
+  },
+  {
     "id": "offer:notion:row-anita:2026-10-18:660::",
-    "to": "+15555550100",
+    "to": "+15555550101",
     "body": "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM. Reply YES to schedule it, or STOP to opt out.",
     "kind": "offer",
     "status": "sent",
@@ -17,7 +24,7 @@
   },
   {
     "id": "confirm:notion:row-anita:2026-10-18:660:",
-    "to": "+15555550100",
+    "to": "+15555550101",
     "body": "Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
     "kind": "confirm",
     "status": "sent",
@@ -25,15 +32,15 @@
   },
   {
     "id": "reminder:notion:row-anita:morning-of:2026-10-18:1:660",
-    "to": "+15555550100",
-    "body": "Reminder: checkout at 12 Scratch Lane, Teaneck, NJ 07666 is Sunday, Oct 18 at 11:00 AM. Reply STOP to opt out.",
+    "to": "+15555550101",
+    "body": "Reminder: cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is Sunday, Oct 18 at 11:00 AM.",
     "kind": "reminder",
     "status": "sent",
     "jobId": "notion:row-anita"
   },
   {
     "id": "cancel:notion:row-anita:v2",
-    "to": "+15555550100",
+    "to": "+15555550101",
     "body": "Update: the cleaning at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 is canceled, so no need to come. Reply STOP to opt out.",
     "kind": "cancel-update",
     "status": "sent",

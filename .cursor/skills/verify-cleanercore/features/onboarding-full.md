@@ -5,7 +5,7 @@ A new Scratch property is named, previewed, staffed, scheduled, and activated. T
 ## Sub-features
 
 - `preview` shows one stay and one block, and says a block is not a departure.
-- `people` names Cory as an observer and says a number is not texted until it opts in.
+- `people` asks who should get texts, lists the roles owner, manager, and observer, and says nobody is texted until they reply YES. It does not name Cory.
 - `lock-limit` says this demo cannot rotate, revoke, or control the lock.
 - `old-texts` says old texts are not consent.
 - `activated` sets `setup.activated` true, `setup.tenantId` to `annex`, and `setup.sealed` true.

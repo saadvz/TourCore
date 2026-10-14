@@ -1,11 +1,11 @@
 # Consented group text
 
-When group texting is available and the cleaner, the owner, and the observer have all opted in, the offer is one group text to each of them. No door code is sent.
+When group texting is available and the cleaner, the owner, and the observer have all opted in, the cleaner gets a private offer. The owner and the observer each get a group copy that does not ask them to reply YES. No door code is sent.
 
 ## Sub-features
 
 - `native` sets `messaging.actual` to `native` and `messaging.note` to `This is a group text.`
-- `three-offers` sends the offer to `+15555550101`, `+15555550100`, and `+15555550122`, each prefixed with `Group text: `.
+- `three-offers` sends the private offer to `+15555550101`. The owner and the observer each get `Group text: ` plus the offer ending `The cleaner will reply to confirm.`
 - `no-pin` leaves `pinRecipients` empty.
 
 ## How to get to it (user POV)
@@ -21,7 +21,7 @@ Preconditions:
 - `--with-pin` is required so the cleaner must opt in before the offer. This drive does not say the guests have left.
 
 - **Opt everyone in.** Run `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --with-pin --group-mode native --group-capable --participant observer=+15555550122 --feed src/cleaner-core/fixtures/guesty-lite-scratch.ics --reply +15555550101=YES --reply +15555550122=YES --reply +15555550100=YES --reply +15555550100=YES`. Exit code 0.
-- **Result.** The three offer texts use channel `group`. `pinRecipients` is `[]`. No offer body is missing the `Group text: ` prefix.
+- **Result.** The cleaner's offer has no channel and ends `Reply YES to schedule it, or STOP to opt out.` The owner and observer offers use channel `group`, start with `Group text: `, and end `The cleaner will reply to confirm.` `pinRecipients` is `[]`.
 - **Proof.** Save the command, stdout, stderr, exit code, transcript, and job list with feature id `group-native-consented`. `prove-step-f.sh`.
 
 ## Gotchas

@@ -10,9 +10,10 @@
   {
     "id": "emergency:smoke-op-1",
     "to": "+15555550100",
-    "body": "If someone is hurt, call 911 now. I couldn't reach the property team just now.",
+    "body": "If someone is hurt, call 911 now.",
     "kind": "emergency",
-    "status": "sent"
+    "status": "sent",
+    "jobId": "notion:row-anita"
   },
   {
     "id": "emergency-host:+15555550101|notion:row-anita|1",

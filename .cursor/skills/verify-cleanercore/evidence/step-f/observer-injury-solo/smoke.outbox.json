@@ -1,0 +1,26 @@
+[
+  {
+    "id": "host-checkout:notion:row-anita:2026-10-18:660",
+    "to": "+15555550100",
+    "body": "Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.",
+    "kind": "host-checkout",
+    "status": "sent",
+    "jobId": "notion:row-anita"
+  },
+  {
+    "id": "emergency-host:+15555550122|notion:row-anita|1",
+    "to": "+15555550100",
+    "body": "An observer at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.",
+    "kind": "emergency",
+    "status": "sent",
+    "jobId": "notion:row-anita"
+  },
+  {
+    "id": "emergency:smoke-op-1",
+    "to": "+15555550122",
+    "body": "If someone is hurt, call 911 now. I've let the host know.",
+    "kind": "emergency",
+    "status": "sent",
+    "jobId": "notion:row-anita"
+  }
+]

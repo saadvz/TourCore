@@ -1,1 +1,1 @@
-smoke --closed --data /tmp/tmp.Bg3k3m58Qb --notion /workspace/src/cleaner-core/fixtures/notion-lane-read.json
+smoke --closed --data /tmp/tmp.jDNKjshvym --notion /workspace/src/cleaner-core/fixtures/notion-lane-read.json

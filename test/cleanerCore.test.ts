@@ -26,7 +26,7 @@ const STOP_ACK = "Tour Core: You're opted out and won't receive more messages. R
 const HELP_ACK = "Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.";
 const START_ACK = "You're opted back in. Reply YES if you still want this turnover. Reply STOP to opt out.";
 const DECLINED = "Okay, that turnover is not scheduled.";
-const EMERGENCY = "If someone is hurt, call 911 now. I couldn't reach the property team just now.";
+const EMERGENCY = "If someone is hurt, call 911 now.";
 const HOST_HURT = "The cleaner at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.";
 const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know.";
 const CLEANER_HURT_MISSED = "If someone is hurt, call 911 now. I couldn't reach the host, so please call them too.";
@@ -701,10 +701,12 @@ describe("step D private door code", () => {
       reason: "ignored",
       sent: [],
     });
+    const onHold = `The cleaning at ${ADDRESS} on Sunday, Oct 18 is on hold until the cleaner replies YES.`;
     expect(quiet.sent).toEqual([
       { to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" },
       { to: CLEANER, body: OPT_IN, kind: "opt-in" },
       { to: OWNER, body: CHECKIN_Q, kind: "host-checkin" },
+      { to: OWNER, body: onHold, kind: "held" },
     ]);
 
     const stranger = sink();
@@ -727,6 +729,7 @@ describe("step D private door code", () => {
       { to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" },
       { to: CLEANER, body: OPT_IN, kind: "opt-in" },
       { to: OWNER, body: CHECKIN_Q, kind: "host-checkin" },
+      { to: OWNER, body: onHold, kind: "held" },
     ]);
 
     const unapproved = sink();
@@ -744,6 +747,7 @@ describe("step D private door code", () => {
     expect(unapproved.sent).toEqual([
       { to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" },
       { to: OWNER, body: CHECKIN_Q, kind: "host-checkin" },
+      { to: OWNER, body: onHold, kind: "held" },
     ]);
   });
 
@@ -1415,7 +1419,7 @@ describe("step F Notion, onboarding, and group delivery", () => {
   const ANNEX = "9 Scratch Annex, Teaneck, NJ 07666";
   const OPT_ANNEX = `Hi, this is Annex's cleaning scheduler for ${ANNEX}. Reply YES to get cleaning texts, or STOP to opt out.`;
   const GROUP = "Group text: ";
-  const MIRROR = "Mirrored copy, not a group reply: ";
+  const MIRROR = "Copy of the group text: ";
   const notion = (name: string) => notionFixtureSource(feed(name));
 
   it("tells the host when Notion permission is missing or insufficient and sends nothing", async () => {
@@ -1559,7 +1563,7 @@ describe("step F Notion, onboarding, and group delivery", () => {
       await draft.answerOnboarding({ id: "p", from: ANNEX_HOST, text: `Annex | ${ANNEX} | America/New_York | 11:00 AM | 4:00 PM | ${ANNEX_HOST}` });
       await draft.answerOnboarding({ id: "s", from: ANNEX_HOST, text: "Guesty Lite and Notion. Yes, early check-ins and late checkouts are agreed on Airbnb, outside that calendar." });
       const preview = await draft.answerOnboarding({ id: "ok", from: ANNEX_HOST, text: "OK" });
-      expect(preview.setup.prompt).toBe("Who should get texts? Send the cleaner phone, then each other person as a role and a phone. Roles are owner, manager, or observer. Cory is an observer. I will not text a number until that number opts in.");
+      expect(preview.setup.prompt).toBe("Who should get texts? Send the cleaner's phone, then each other person's role and phone. Roles are owner, manager, or observer. I won't text anyone until they reply YES.");
       expect(preview.setup.prompts.some((line) => line.startsWith("Preview for Annex: 1 stay, 1 block."))).toBe(true);
       await draft.answerOnboarding({ id: "people", from: ANNEX_HOST, text: `Cleaner ${ANNEX_CLEANER}. Observer Cory ${OBSERVER}.` });
       await draft.answerOnboarding({ id: "c-yes", from: ANNEX_CLEANER, text: "YES" });
@@ -1689,10 +1693,11 @@ describe("step F Notion, onboarding, and group delivery", () => {
     await job.receive({ id: "out", from: OWNER, text: "YES" });
     await job.receive({ id: "in", from: OWNER, text: "YES" });
     const offer = `Turnover at ${ADDRESS} on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.`;
+    const copy = offer.replace("Reply YES to schedule it, or STOP to opt out.", "The cleaner will reply to confirm.");
     expect(box.sent.filter((text) => text.kind === "offer")).toEqual([
-      { to: CLEANER, body: `${GROUP}${offer}`, kind: "offer", channel: "group" },
-      { to: OWNER, body: `${GROUP}${offer}`, kind: "offer", channel: "group" },
-      { to: OBSERVER, body: `${GROUP}${offer}`, kind: "offer", channel: "group" },
+      { to: CLEANER, body: offer, kind: "offer" },
+      { to: OWNER, body: `${GROUP}${copy}`, kind: "offer", channel: "group" },
+      { to: OBSERVER, body: `${GROUP}${copy}`, kind: "offer", channel: "group" },
     ]);
     expect(job.messagingView()).toEqual({ requested: "group", actual: "native", excluded: [], note: "This is a group text." });
   });
@@ -1712,10 +1717,11 @@ describe("step F Notion, onboarding, and group delivery", () => {
     await job.receive({ id: "out", from: OWNER, text: "YES" });
     await job.receive({ id: "in", from: OWNER, text: "YES" });
     const offer = `Turnover at ${ADDRESS} on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.`;
+    const copy = offer.replace("Reply YES to schedule it, or STOP to opt out.", "The cleaner will reply to confirm.");
     expect(box.sent.filter((text) => text.kind === "offer")).toEqual([
       { to: CLEANER, body: offer, kind: "offer" },
-      { to: OWNER, body: `${MIRROR}${offer}`, kind: "offer", channel: "mirror" },
-      { to: OBSERVER, body: `${MIRROR}${offer}`, kind: "offer", channel: "mirror" },
+      { to: OWNER, body: `${MIRROR}${copy}`, kind: "offer", channel: "mirror" },
+      { to: OBSERVER, body: `${MIRROR}${copy}`, kind: "offer", channel: "mirror" },
     ]);
     expect(job.messagingView()?.actual).toBe("mirrored");
     expect(job.messagingView()?.note).toBe("Group texting isn't available on this number, so I mirrored the cleaner texts instead of starting a group.");
@@ -1815,6 +1821,241 @@ describe("step F Notion, onboarding, and group delivery", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("sends each source's offer, confirmation, reminder, and cancel only to the opted-in cleaner", async () => {
+    const MANAGER = "+15555550123";
+    const YES_LINE = "Reply YES to schedule it, or STOP to opt out.";
+    const WAIT_LINE = "The cleaner will reply to confirm.";
+    const SOLO_OFFER = `Turnover at ${ADDRESS} on Sunday, Oct 18. Checkout 11:00 AM. ${YES_LINE}`;
+    const HOLD = `The cleaning at ${ADDRESS} on Sunday, Oct 18 is on hold until the cleaner replies YES.`;
+    const googleGone = JSON.stringify({ tenantId: "scratch-lane", timeZone: "America/New_York", items: [] });
+    const sources = [
+      {
+        name: "guesty",
+        offer: OFFER,
+        nextGuest: true,
+        read: async (job: ReturnType<typeof pinned>, removed = false) => {
+          await job.pollFeed(feed(removed ? "guesty-lite-stay-removed.ics" : "guesty-lite-scratch.ics"));
+        },
+      },
+      {
+        name: "google",
+        offer: SOLO_OFFER,
+        nextGuest: false,
+        read: async (job: ReturnType<typeof pinned>, removed = false) => {
+          await job.readSource(googleCalendarFixtureSource(removed ? googleGone : feed("google-lane-read.json")));
+        },
+      },
+      {
+        name: "notion",
+        offer: SOLO_OFFER,
+        nextGuest: false,
+        read: async (job: ReturnType<typeof pinned>, removed = false) => {
+          await job.readSource(notion(removed ? "notion-lane-removed.json" : "notion-lane-read.json"));
+        },
+      },
+    ] as const;
+    const modes = ["direct", "native", "mirrored"] as const;
+    for (const source of sources) {
+      for (const mode of modes) {
+        const box = sink();
+        const clock = { at: NOW };
+        const job = pinned(box, {
+          tenantId: "scratch-lane",
+          now: () => new Date(clock.at),
+          ...(mode === "direct"
+            ? {}
+            : {
+                messaging: {
+                  requested: "group" as const,
+                  capable: mode === "native",
+                  participants: [
+                    { phone: OBSERVER, role: "observer" as const },
+                    { phone: MANAGER, role: "manager" as const },
+                  ],
+                },
+              }),
+        });
+        await source.read(job);
+        await job.receive({ id: `${source.name}-${mode}-opt`, from: CLEANER, text: "YES" });
+        if (mode !== "direct") {
+          await job.receive({ id: `${source.name}-${mode}-obs`, from: OBSERVER, text: "YES" });
+          await job.receive({ id: `${source.name}-${mode}-mgr`, from: MANAGER, text: "YES" });
+        }
+        await job.receive({ id: `${source.name}-${mode}-out`, from: OWNER, text: "YES" });
+        if (source.nextGuest) await job.receive({ id: `${source.name}-${mode}-in`, from: OWNER, text: "YES" });
+        const copy = source.offer.replace(YES_LINE, WAIT_LINE);
+        const prefix = mode === "native" ? GROUP : "Copy of the group text: ";
+        const offers = mode === "direct"
+          ? [{ to: CLEANER, body: source.offer, kind: "offer" as const }]
+          : [
+              { to: CLEANER, body: source.offer, kind: "offer" as const },
+              { to: OWNER, body: `${prefix}${copy}`, kind: "offer" as const, channel: mode === "native" ? "group" as const : "mirror" as const },
+              { to: OBSERVER, body: `${prefix}${copy}`, kind: "offer" as const, channel: mode === "native" ? "group" as const : "mirror" as const },
+              { to: MANAGER, body: `${prefix}${copy}`, kind: "offer" as const, channel: mode === "native" ? "group" as const : "mirror" as const },
+            ];
+        expect(box.sent.filter((text) => text.kind === "offer"), `${source.name} ${mode} offer`).toEqual(offers);
+        expect(await job.receive({ id: `${source.name}-${mode}-host`, from: OWNER, text: "YES" }), `${source.name} ${mode} host`).toEqual({
+          handled: true,
+          reason: "ignored",
+          sent: [],
+        });
+        if (mode !== "direct") {
+          expect(await job.receive({ id: `${source.name}-${mode}-obs-yes`, from: OBSERVER, text: "YES" }), `${source.name} ${mode} observer`).toEqual({
+            handled: true,
+            reason: "ignored",
+            sent: [],
+          });
+        }
+        expect(job.jobs()[0]?.status, `${source.name} ${mode} still offered`).toBe("offered");
+        expect(await job.receive({ id: `${source.name}-${mode}-book`, from: CLEANER, text: "YES" }), `${source.name} ${mode} book`).toEqual({
+          handled: true,
+          reason: "scheduled",
+          sent: [{ to: CLEANER, body: CONFIRM, kind: "confirm" }],
+        });
+        expect(box.sent.filter((text) => text.kind === "confirm"), `${source.name} ${mode} confirm`).toEqual([
+          { to: CLEANER, body: CONFIRM, kind: "confirm" },
+        ]);
+        clock.at = DUE;
+        expect(await job.runReminders(), `${source.name} ${mode} reminder`).toEqual({
+          sent: [{ to: CLEANER, body: CLEANER_REMINDER, kind: "reminder" }],
+          failed: [],
+        });
+        expect(await job.runReminders(), `${source.name} ${mode} reminder again`).toEqual({ sent: [], failed: [] });
+        await source.read(job, true);
+        expect(box.sent.filter((text) => text.kind === "cancel-update"), `${source.name} ${mode} cancel`).toEqual([
+          { to: CLEANER, body: CANCEL, kind: "cancel-update" },
+        ]);
+        await source.read(job, true);
+        expect(box.sent.filter((text) => text.kind === "cancel-update"), `${source.name} ${mode} cancel again`).toEqual([
+          { to: CLEANER, body: CANCEL, kind: "cancel-update" },
+        ]);
+      }
+    }
+    const held = sink();
+    const waiting = core(held, {
+      tenantId: "scratch-lane",
+      messaging: { requested: "group", capable: true, participants: [{ phone: OBSERVER, role: "observer" }] },
+    });
+    await waiting.pollFeed(feed("guesty-lite-scratch.ics"));
+    await waiting.receive({ id: "held-out", from: OWNER, text: "YES" });
+    await waiting.receive({ id: "held-in", from: OWNER, text: "YES" });
+    await waiting.receive({ id: "held-again", from: OWNER, text: "YES" });
+    expect(waiting.jobs()[0]?.status).toBe("host_confirmed");
+    expect(held.sent).toEqual([
+      { to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" },
+      { to: OBSERVER, body: OPT_IN, kind: "opt-in" },
+      { to: OWNER, body: CHECKIN_Q, kind: "host-checkin" },
+      { to: OWNER, body: HOLD, kind: "held" },
+    ]);
+    await waiting.pollFeed(feed("guesty-lite-stay-removed.ics"));
+    expect(held.sent.filter((text) => text.kind === "cancel-update")).toEqual([]);
+    expect(held.sent.some((text) => text.kind === "offer" || text.kind === "confirm")).toBe(false);
+  });
+
+  it("answers an injury from the owner, the cleaner, and an observer in and out of a group", async () => {
+    const MANAGER = "+15555550123";
+    const HURT = "I fell and I'm hurt";
+    const HOST_LINE = "If someone is hurt, call 911 now.";
+    const TOLD = "If someone is hurt, call 911 now. I've let the host know.";
+    const MISSED = "If someone is hurt, call 911 now. I couldn't reach the host, so please call them too.";
+    const alertFor = (role: "cleaner" | "observer" | "manager") => {
+      if (role === "cleaner") return `The cleaner at ${ADDRESS} says someone is hurt. They've been told to call 911.`;
+      if (role === "observer") return `An observer at ${ADDRESS} says someone is hurt. They've been told to call 911.`;
+      return `A manager at ${ADDRESS} says someone is hurt. They've been told to call 911.`;
+    };
+    const people = [
+      { role: "owner" as const, phone: OWNER },
+      { role: "cleaner" as const, phone: CLEANER },
+      { role: "observer" as const, phone: OBSERVER },
+      { role: "manager" as const, phone: MANAGER },
+    ];
+    for (const grouped of [false, true]) {
+      for (const person of people) {
+        const box = sink();
+        const job = pinned(box, {
+          tenantId: "scratch-lane",
+          messaging: {
+            requested: grouped ? "group" : "cleaner-only",
+            capable: grouped,
+            participants: [
+              { phone: OBSERVER, role: "observer" },
+              { phone: MANAGER, role: "manager" },
+            ],
+          },
+        });
+        await job.pollFeed(feed("guesty-lite-scratch.ics"));
+        if (grouped) {
+          await job.receive({ id: `${person.role}-c`, from: CLEANER, text: "YES" });
+          await job.receive({ id: `${person.role}-o`, from: OBSERVER, text: "YES" });
+          await job.receive({ id: `${person.role}-m`, from: MANAGER, text: "YES" });
+        }
+        const first = await job.receive({ id: `${person.role}-${grouped}-1`, from: person.phone, text: HURT });
+        const again = await job.receive({ id: `${person.role}-${grouped}-2`, from: person.phone, text: HURT });
+        expect(again, `${person.role} ${grouped ? "group" : "solo"} repeat`).toEqual({ handled: true, reason: "emergency", sent: [] });
+        if (person.role === "owner") {
+          expect(first, `${person.role} ${grouped ? "group" : "solo"}`).toEqual({
+            handled: true,
+            reason: "emergency",
+            sent: [{ to: OWNER, body: HOST_LINE, kind: "emergency" }],
+          });
+          expect(box.sent.filter((text) => text.kind === "emergency")).toEqual([
+            { to: OWNER, body: HOST_LINE, kind: "emergency" },
+          ]);
+        } else {
+          expect(first, `${person.role} ${grouped ? "group" : "solo"}`).toEqual({
+            handled: true,
+            reason: "emergency",
+            sent: [
+              { to: OWNER, body: alertFor(person.role), kind: "emergency" },
+              { to: person.phone, body: TOLD, kind: "emergency" },
+            ],
+          });
+        }
+      }
+    }
+    const failing = sink();
+    let failNext = false;
+    const missed = pinned(failing, {
+      tenantId: "scratch-lane",
+      sink: {
+        send(text: CleanerText) {
+          if (failNext) {
+            failNext = false;
+            throw new Error("send failed");
+          }
+          failing.sent.push(text);
+        },
+      },
+      messaging: {
+        requested: "cleaner-only",
+        capable: false,
+        participants: [{ phone: OBSERVER, role: "observer" }],
+      },
+    });
+    await missed.pollFeed(feed("guesty-lite-scratch.ics"));
+    failNext = true;
+    const failed = await missed.receive({ id: "obs-miss", from: OBSERVER, text: HURT });
+    expect(failed).toEqual({
+      handled: true,
+      reason: "emergency",
+      sent: [{ to: OBSERVER, body: MISSED, kind: "emergency" }],
+    });
+    expect(missed.outbox().filter((item) => item.kind === "emergency").map((item) => ({
+      to: item.to,
+      body: item.body,
+      kind: item.kind,
+      status: item.status,
+    }))).toEqual([
+      {
+        to: OWNER,
+        body: `An observer at ${ADDRESS} says someone is hurt. They've been told to call 911.`,
+        kind: "emergency",
+        status: "failed",
+      },
+      { to: OBSERVER, body: MISSED, kind: "emergency", status: "sent" },
+    ]);
   });
 });
 

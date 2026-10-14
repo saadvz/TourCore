@@ -117,12 +117,24 @@ assert_journey notion-sync-repeat \
   "$EVIDENCE/notion-sync-repeat/restart.stdout.txt"
 
 doctor "$EVIDENCE/notion-removed"
-run_smoke "$EVIDENCE/notion-removed" smoke smoke \
+run_smoke "$EVIDENCE/notion-removed" smoke smoke --with-pin \
   --notion "$LANE_READ" \
-  --reply "$OWNER=YES" --reply "$OWNER=YES" \
+  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$CLEANER=YES" \
   --now "$DUE" --remind \
   --notion "$LANE_REMOVED" --remind --notion "$LANE_REMOVED"
 assert_journey notion-removed "$EVIDENCE/notion-removed/smoke.stdout.txt"
+
+doctor "$EVIDENCE/notion-cleaner-routing"
+run_smoke "$EVIDENCE/notion-cleaner-routing" smoke smoke --with-pin \
+  --notion "$LANE_READ" \
+  --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$CLEANER=YES"
+assert_journey notion-cleaner-routing "$EVIDENCE/notion-cleaner-routing/smoke.stdout.txt"
+
+doctor "$EVIDENCE/group-no-optin"
+run_smoke "$EVIDENCE/group-no-optin" smoke smoke \
+  --group-mode native --group-capable --feed "$GUESTY" \
+  --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES"
+assert_journey group-no-optin "$EVIDENCE/group-no-optin/smoke.stdout.txt"
 
 doctor "$EVIDENCE/multi-source-dedupe"
 run_smoke "$EVIDENCE/multi-source-dedupe" smoke smoke --closed --feed "$GUESTY" --notion "$LANE_OVERLAP"
@@ -225,12 +237,32 @@ assert_journey stop-help-injury \
   "$EVIDENCE/stop-help-injury/help.stdout.txt" \
   "$EVIDENCE/stop-help-injury/injury.stdout.txt"
 
+doctor "$EVIDENCE/observer-injury-group"
+run_smoke "$EVIDENCE/observer-injury-group" smoke smoke \
+  --with-pin --group-mode native --group-capable --participant "observer=$OBSERVER" \
+  --notion "$LANE_READ" \
+  --reply "$CLEANER=YES" --reply "$OBSERVER=YES" \
+  --reply "$OBSERVER=$HURT" --reply "$OBSERVER=$HURT"
+assert_journey observer-injury-group "$EVIDENCE/observer-injury-group/smoke.stdout.txt"
+
+doctor "$EVIDENCE/observer-injury-solo"
+run_smoke "$EVIDENCE/observer-injury-solo" smoke smoke \
+  --group-mode cleaner-only --participant "observer=$OBSERVER" \
+  --notion "$LANE_READ" \
+  --reply "$OBSERVER=$HURT" --reply "$OBSERVER=$HURT"
+assert_journey observer-injury-solo "$EVIDENCE/observer-injury-solo/smoke.stdout.txt"
+
+doctor "$EVIDENCE/owner-injury"
+run_smoke "$EVIDENCE/owner-injury" smoke smoke --notion "$LANE_READ" \
+  --reply "$OWNER=$HURT" --reply "$OWNER=$HURT"
+assert_journey owner-injury "$EVIDENCE/owner-injury/smoke.stdout.txt"
+
 if grep -R -n -E '4821|7392|2468' "$EVIDENCE" >/dev/null; then
   fail "step F evidence contains a scratch door code"
 fi
 
 cat >"$EVIDENCE/result.txt" <<EOF
-features: notion-permission-denied notion-source-read notion-sync-repeat notion-removed multi-source-dedupe onboarding-full onboarding-no-optin group-native-consented group-mirrored-fallback group-unconsented-participant pin-private-only tenant-isolation stop-help-injury
+features: notion-permission-denied notion-source-read notion-sync-repeat notion-removed notion-cleaner-routing group-no-optin multi-source-dedupe onboarding-full onboarding-no-optin group-native-consented group-mirrored-fallback group-unconsented-participant pin-private-only tenant-isolation stop-help-injury observer-injury-group observer-injury-solo owner-injury
 script: .cursor/skills/verify-cleanercore/scripts/prove-step-f.sh
 pins: redacted
 EOF

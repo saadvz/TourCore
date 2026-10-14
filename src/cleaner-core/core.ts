@@ -6,7 +6,6 @@ import { normalize, stripFiller } from "../intent/normalize";
 import { spokenTimes } from "../core/spokenTime";
 import { parsePhone } from "../core/phone";
 import { smsStopAck } from "../visitor/smsConsent";
-import { VisitorDenialCopy } from "../core/TourCore";
 import { writeFileAtomic } from "../storage/atomicWrite";
 import { addCalendarDays, formatWhen, interpretFeed, zonedInstant, type FeedBlock, type Turnover } from "./calendar";
 import { isScratchTestNumber } from "./scratch";
@@ -42,7 +41,8 @@ export type TextKind =
   | "pin-failed"
   | "pin-held"
   | "started"
-  | "done";
+  | "done"
+  | "held";
 
 export interface CleanerText {
   to: string;
@@ -238,13 +238,15 @@ export interface CleanerCore {
 const HELP_ACK = "Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.";
 const START_ACK = "You're opted back in. Reply YES if you still want this turnover. Reply STOP to opt out.";
 const DECLINED = "Okay, that turnover is not scheduled.";
-const EMERGENCY = VisitorDenialCopy.medicalAlert("property team", undefined, false);
+const HOST_INJURY = "If someone is hurt, call 911 now.";
 const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know.";
 const CLEANER_HURT_MISSED = "If someone is hurt, call 911 now. I couldn't reach the host, so please call them too.";
 const SAFETY = new Set<TextKind>(["stop", "help", "start", "emergency"]);
-const SHAREABLE = new Set<TextKind>(["offer", "corrected", "confirm", "reminder", "cancel-update", "declined", "started", "done"]);
+const JOB_TEXTS = new Set<TextKind>(["offer", "corrected", "confirm", "reminder", "cancel-update", "declined", "started", "done"]);
 const GROUP_PREFIX = "Group text: ";
-const MIRROR_PREFIX = "Mirrored copy, not a group reply: ";
+const MIRROR_PREFIX = "Copy of the group text: ";
+const OFFER_YES = "Reply YES to schedule it, or STOP to opt out.";
+const OFFER_WAIT = "The cleaner will reply to confirm.";
 const STALE_MS = 3 * 60 * 60 * 1000;
 const DEFAULT_TRIGGERS: ReminderTrigger[] = [{ id: "morning-of", kind: "morning-of", localTime: "08:00" }];
 
@@ -525,7 +527,7 @@ class Engine implements CleanerCore {
         this.cancelOtherReminders(job.id, trigger.id, id);
         const existing = this.outboxState.find((item) => item.id === id);
         if (existing?.status === "sent" || existing?.status === "canceled") continue;
-        const to = this.schedulePhone();
+        const to = this.jobActor();
         if (!to) continue;
         const when = this.clock(job.checkoutDate, fact.minutes);
         const address = this.options.property.address;
@@ -885,7 +887,7 @@ class Engine implements CleanerCore {
         const sent = await this.drainOne();
         return { handled: true, reason: "host-time", sent };
       }
-      const confirmer = this.schedulePhone();
+      const confirmer = this.jobActor();
       if (!confirmer || from !== confirmer) return this.markIgnored(id);
       if (isYes(text)) {
         if (this.stale(job)) return this.markIgnored(id);
@@ -905,7 +907,7 @@ class Engine implements CleanerCore {
 
   private async confirm(job: Job): Promise<CleanerText[]> {
     const checkout = this.latestFact(job.id, "checkout");
-    const to = this.schedulePhone();
+    const to = this.jobActor();
     if (!checkout || !to) return [];
     const when = this.clock(job.checkoutDate, checkout.minutes);
     const id = `confirm:${job.id}:${job.checkoutDate}:${checkout.minutes}:${job.nextCheckInDate ?? ""}`;
@@ -919,11 +921,19 @@ class Engine implements CleanerCore {
     return text ? [text] : [];
   }
 
-  /** Step C texts the host. Step D texts the opted-in approved cleaner, and waits while that YES is missing. */
-  private schedulePhone(): string | undefined {
-    if (!this.pin) return this.owner;
-    if (!this.options.cleaner.approved || this.cleanerConsent !== "in" || !this.cleanerPhone) return undefined;
-    return this.cleanerPhone;
+  /**
+   * The only phone that can receive a job text or confirm it.
+   * An opted-in approved cleaner always wins. A group or a door code will not fall back to the host.
+   * Step C, with neither, still lets the host confirm the offer.
+   */
+  private jobActor(): string | undefined {
+    if (this.options.cleaner.approved && this.cleanerConsent === "in" && this.cleanerPhone) return this.cleanerPhone;
+    if (this.cleanerConsentRequired()) return undefined;
+    return this.owner;
+  }
+
+  private cleanerConsentRequired(): boolean {
+    return Boolean(this.pin) || this.messaging?.requested === "group";
   }
 
   private awaitingOptIn(): boolean {
@@ -1170,8 +1180,20 @@ class Engine implements CleanerCore {
       };
     }
     if (!job.announced) {
-      const to = this.schedulePhone();
-      if (!to) return null;
+      const to = this.jobActor();
+      if (!to) {
+        if (!this.owner) return null;
+        const holdId = `hold:${job.id}:${job.checkoutDate}`;
+        if (this.delivery(holdId) === "sent") return null;
+        const when = this.clock(job.checkoutDate, checkout.minutes);
+        return {
+          id: holdId,
+          jobId: job.id,
+          to: this.owner,
+          kind: "held",
+          body: `The cleaning at ${this.options.property.address} on ${when.day} is on hold until the cleaner replies YES.`,
+        };
+      }
       const checkMinutes = checkin?.minutes ?? null;
       const id = `offer:${job.id}:${job.checkoutDate}:${checkout.minutes}:${job.nextCheckInDate ?? ""}:${checkMinutes ?? ""}`;
       if (this.delivery(id) === "sent") return null;
@@ -1187,7 +1209,7 @@ class Engine implements CleanerCore {
       };
     }
     if (this.checkoutDrift(job)) {
-      const to = this.schedulePhone();
+      const to = this.jobActor();
       if (!to) return null;
       const when = this.clock(job.checkoutDate, checkout.minutes);
       const id = `corrected:${job.id}:${job.checkoutDate}:${checkout.minutes}:${job.nextCheckInDate ?? ""}`;
@@ -1207,42 +1229,40 @@ class Engine implements CleanerCore {
     return null;
   }
 
+  /** Job texts go to the job actor. Offer copies are the only texts anyone else can see. */
   private async emit(draft: Draft): Promise<CleanerText | null> {
-    if (draft.channel || !SHAREABLE.has(draft.kind)) return this.emitOne(draft);
-    const mode = this.messagingMode();
-    if (mode === "native") {
-      const people = this.audience().filter((person) => person.consent === "in" && !this.groupPhones.includes(person.phone));
-      const ordered = [...people].sort((a, b) => (a.phone === draft.to ? -1 : b.phone === draft.to ? 1 : a.phone.localeCompare(b.phone)));
-      let primary: CleanerText | null = null;
-      for (const person of ordered) {
-        const text = await this.emitOne({
-          ...draft,
-          id: person.phone === draft.to ? draft.id : `${draft.id}:group:${person.phone}`,
-          to: person.phone,
-          channel: "group",
-          body: withChannelPrefix(draft.body, "group"),
-          ...(person.phone === draft.to ? {} : { afterSend: undefined }),
-        });
-        if (person.phone === draft.to) primary = text;
-      }
-      return primary;
-    }
-    const text = await this.emitOne(draft);
-    if (text && mode === "mirrored") {
-      for (const person of this.audience()) {
-        if (person.phone === draft.to || person.consent !== "in" || this.groupPhones.includes(person.phone)) continue;
-        if (person.role === "observer" && draft.kind === "pin") continue;
-        await this.emitOne({
-          id: `${draft.id}:mirror:${person.phone}`,
-          ...(draft.jobId ? { jobId: draft.jobId } : {}),
-          to: person.phone,
-          kind: draft.kind,
-          channel: "mirror",
-          body: withChannelPrefix(draft.body, "mirror"),
-        });
-      }
-    }
+    if (draft.channel || !JOB_TEXTS.has(draft.kind)) return this.emitOne(draft);
+    const actor = this.jobActor();
+    if (!actor) return null;
+    const text = await this.emitOne({
+      id: draft.id,
+      ...(draft.jobId ? { jobId: draft.jobId } : {}),
+      to: actor,
+      body: draft.body,
+      kind: draft.kind,
+      ...(draft.afterSend ? { afterSend: draft.afterSend } : {}),
+    });
+    if (this.delivery(draft.id) !== "sent") return null;
+    if (draft.kind === "offer") await this.copyOffer(draft, actor);
     return text;
+  }
+
+  private async copyOffer(draft: Draft, actor: string): Promise<void> {
+    const mode = this.messagingMode();
+    if (mode === "cleaner-only") return;
+    const channel = mode === "native" ? "group" : "mirror";
+    const body = draft.body.endsWith(OFFER_YES) ? `${draft.body.slice(0, -OFFER_YES.length)}${OFFER_WAIT}` : draft.body;
+    for (const person of this.audience()) {
+      if (person.phone === actor || person.consent !== "in" || this.groupPhones.includes(person.phone)) continue;
+      await this.emitOne({
+        id: `${draft.id}:${channel}:${person.phone}`,
+        ...(draft.jobId ? { jobId: draft.jobId } : {}),
+        to: person.phone,
+        kind: "offer",
+        channel,
+        body: withChannelPrefix(body, channel),
+      });
+    }
   }
 
   private async emitOne(draft: Draft): Promise<CleanerText | null> {
@@ -1305,25 +1325,42 @@ class Engine implements CleanerCore {
     const job = this.conversationJob() ?? this.ordered()[0];
     const key = `${from}|${job?.id ?? "none"}|${job?.version ?? 0}`;
     if (this.injurySent.includes(key)) return { handled: true, reason: "emergency", sent: [], seen: true };
-    if (from === this.cleanerPhone && this.owner && this.owner !== from) return this.alertHostOfInjury(from, inboundId, key, job?.id);
-    const result = await this.reply(from, EMERGENCY, "emergency", "emergency", inboundId);
-    if (result.sent.length > 0) this.injurySent.push(key);
-    return { ...result, seen: result.sent.length > 0 };
+    return this.alertHostOfInjury(from, inboundId, key, job?.id);
+  }
+
+  private injuryAlert(from: string): string {
+    const address = this.options.property.address;
+    const role = this.participantRole(from);
+    if (from === this.cleanerPhone || role === "cleaner") {
+      return `The cleaner at ${address} says someone is hurt. They've been told to call 911.`;
+    }
+    if (role === "observer") return `An observer at ${address} says someone is hurt. They've been told to call 911.`;
+    if (role === "manager") return `A manager at ${address} says someone is hurt. They've been told to call 911.`;
+    return `Someone at ${address} says someone is hurt. They've been told to call 911.`;
   }
 
   private async alertHostOfInjury(from: string, inboundId: string, key: string, jobId?: string): Promise<ReceiveResult & { seen?: boolean }> {
+    const reporterIsHost = Boolean(this.owner && from === this.owner);
     const hostId = `emergency-host:${key}`;
-    const host = await this.emit({
-      id: hostId,
+    const host = !reporterIsHost && this.owner
+      ? await this.emitOne({
+          id: hostId,
+          ...(jobId ? { jobId } : {}),
+          to: this.owner,
+          kind: "emergency",
+          body: this.injuryAlert(from),
+        })
+      : null;
+    const hostReached = !reporterIsHost && this.delivery(hostId) === "sent";
+    const ack = await this.emitOne({
+      id: `emergency:${inboundId}`,
       ...(jobId ? { jobId } : {}),
-      to: this.owner ?? "",
+      to: from,
       kind: "emergency",
-      body: `The cleaner at ${this.options.property.address} says someone is hurt. They've been told to call 911.`,
+      body: reporterIsHost ? HOST_INJURY : hostReached ? CLEANER_HURT : CLEANER_HURT_MISSED,
     });
-    const hostReached = this.delivery(hostId) === "sent";
-    const cleaner = await this.reply(from, hostReached ? CLEANER_HURT : CLEANER_HURT_MISSED, "emergency", "emergency", inboundId, jobId);
-    if (cleaner.sent.length > 0) this.injurySent.push(key);
-    return { handled: true, reason: "emergency", sent: [...(host ? [host] : []), ...cleaner.sent], seen: cleaner.sent.length > 0 };
+    if (ack) this.injurySent.push(key);
+    return { handled: true, reason: "emergency", sent: [...(host ? [host] : []), ...(ack ? [ack] : [])], seen: Boolean(ack) };
   }
 
   private async stop(from: string, inboundId: string): Promise<ReceiveResult & { seen?: boolean }> {

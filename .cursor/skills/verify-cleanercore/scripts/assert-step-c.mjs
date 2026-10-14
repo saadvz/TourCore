@@ -27,7 +27,7 @@ const CANCEL = `Update: the cleaning at ${ADDRESS} on Sunday, Oct 18 is canceled
 const REMINDER = `Reminder: checkout at ${ADDRESS} is Sunday, Oct 18 at 11:00 AM. Reply STOP to opt out.`;
 const STOP_ACK = "Tour Core: You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.";
 const HELP_ACK = "Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.";
-const EMERGENCY = "If someone is hurt, call 911 now. I couldn't reach the property team just now.";
+const EMERGENCY = "If someone is hurt, call 911 now.";
 const NEXT_Q = `Is checkout at ${ADDRESS} on Tuesday, Oct 20 still 11:00 AM? Reply YES or send the new time.`;
 const said = (text) => `${OWNER}: ${text}`;
 

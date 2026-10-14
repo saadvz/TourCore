@@ -27,39 +27,25 @@
     },
     {
       "to": "+15555550101",
-      "body": "Group text: Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
-      "kind": "offer",
-      "channel": "group"
+      "body": "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
+      "kind": "offer"
     },
     {
       "to": "+15555550100",
-      "body": "Group text: Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
+      "body": "Group text: Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. The cleaner will reply to confirm.",
       "kind": "offer",
       "channel": "group"
     },
     {
       "to": "+15555550122",
-      "body": "Group text: Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
+      "body": "Group text: Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. The cleaner will reply to confirm.",
       "kind": "offer",
       "channel": "group"
     },
     {
       "to": "+15555550101",
-      "body": "Group text: Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
-      "kind": "confirm",
-      "channel": "group"
-    },
-    {
-      "to": "+15555550100",
-      "body": "Group text: Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
-      "kind": "confirm",
-      "channel": "group"
-    },
-    {
-      "to": "+15555550122",
-      "body": "Group text: Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
-      "kind": "confirm",
-      "channel": "group"
+      "body": "Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
+      "kind": "confirm"
     },
     {
       "to": "+15555550101",
@@ -168,7 +154,7 @@
     {
       "id": "offer:stay-anita@guesty.com:2026-10-18:660:2026-10-18:960",
       "to": "+15555550101",
-      "body": "Group text: Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
+      "body": "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
       "kind": "offer",
       "status": "sent",
       "jobId": "stay-anita@guesty.com"
@@ -176,7 +162,7 @@
     {
       "id": "offer:stay-anita@guesty.com:2026-10-18:660:2026-10-18:960:group:+15555550100",
       "to": "+15555550100",
-      "body": "Group text: Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
+      "body": "Group text: Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. The cleaner will reply to confirm.",
       "kind": "offer",
       "status": "sent",
       "jobId": "stay-anita@guesty.com"
@@ -184,7 +170,7 @@
     {
       "id": "offer:stay-anita@guesty.com:2026-10-18:660:2026-10-18:960:group:+15555550122",
       "to": "+15555550122",
-      "body": "Group text: Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
+      "body": "Group text: Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. The cleaner will reply to confirm.",
       "kind": "offer",
       "status": "sent",
       "jobId": "stay-anita@guesty.com"
@@ -192,23 +178,7 @@
     {
       "id": "confirm:stay-anita@guesty.com:2026-10-18:660:2026-10-18",
       "to": "+15555550101",
-      "body": "Group text: Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
-      "kind": "confirm",
-      "status": "sent",
-      "jobId": "stay-anita@guesty.com"
-    },
-    {
-      "id": "confirm:stay-anita@guesty.com:2026-10-18:660:2026-10-18:group:+15555550100",
-      "to": "+15555550100",
-      "body": "Group text: Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
-      "kind": "confirm",
-      "status": "sent",
-      "jobId": "stay-anita@guesty.com"
-    },
-    {
-      "id": "confirm:stay-anita@guesty.com:2026-10-18:660:2026-10-18:group:+15555550122",
-      "to": "+15555550122",
-      "body": "Group text: Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
+      "body": "Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
       "kind": "confirm",
       "status": "sent",
       "jobId": "stay-anita@guesty.com"
@@ -239,13 +209,11 @@
     "+15555550100: YES",
     "Is check-in at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.",
     "+15555550100: YES",
-    "Group text: Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
-    "Group text: Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
-    "Group text: Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
+    "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
+    "Group text: Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. The cleaner will reply to confirm.",
+    "Group text: Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. The cleaner will reply to confirm.",
     "+15555550101: YES",
-    "Group text: Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
-    "Group text: Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
-    "Group text: Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
+    "Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
     "+15555550100: guests have left",
     "Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you.",
     "Door code sent to the cleaner."

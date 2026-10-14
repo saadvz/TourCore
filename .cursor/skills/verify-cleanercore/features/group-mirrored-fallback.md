@@ -1,12 +1,12 @@
 # Mirrored group fallback
 
-When a group was requested and the number cannot send one, the cleaner gets the normal offer. The owner and the observer each get a copy labeled as a mirror, not a group reply.
+When a group was requested and the number cannot send one, the cleaner gets the normal offer. The owner and the observer each get a copy labeled `Copy of the group text:`.
 
 ## Sub-features
 
 - `mirrored` sets `messaging.actual` to `mirrored`.
 - `mirror-note` sets `messaging.note` to `Group texting isn't available on this number, so I mirrored the cleaner texts instead of starting a group.`
-- `copies` sends the plain offer to `+15555550101` and a `Mirrored copy, not a group reply: ` offer to `+15555550100` and `+15555550122`.
+- `copies` sends the plain offer to `+15555550101` and a `Copy of the group text: ` offer, ending `The cleaner will reply to confirm.`, to `+15555550100` and `+15555550122`.
 
 ## How to get to it (user POV)
 

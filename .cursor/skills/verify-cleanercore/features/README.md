@@ -77,7 +77,9 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [Notion permission denied](./notion-permission-denied.md) covers a missing Notion permission, an empty job list, and no cleaning text. `prove-step-f.sh`.
 - [Notion booking read](./notion-source-read.md) covers one Notion stay, the Sunday checkout question, and an owner block that is not a departure. `prove-step-f.sh`.
 - [Notion sync repeat](./notion-sync-repeat.md) covers three reads and a restart that send the checkout question once. `prove-step-f.sh`.
-- [Removed Notion row](./notion-removed.md) covers one reminder and the existing cancel sentence. `prove-step-f.sh`.
+- [Removed Notion row](./notion-removed.md) covers one cleaner reminder and the existing cancel sentence, both sent to the opted-in cleaner. `prove-step-f.sh`.
+- [Notion job texts stay with the cleaner](./notion-cleaner-routing.md) covers a host YES that does not schedule a Notion job. `prove-step-f.sh`.
+- [No offer until the cleaner opts in](./group-no-optin.md) covers a native group that holds the job and tells the host. `prove-step-f.sh`.
 - [One booking, Guesty and Notion](./multi-source-dedupe.md) covers one job when Guesty Lite and Notion show the same stay. `prove-step-f.sh`.
 - [Full onboarding](./onboarding-full.md) covers a new property activated only after opt-in and APPROVE. `prove-step-f.sh`.
 - [Onboarding without opt-in](./onboarding-no-optin.md) covers APPROVE with no cleaner YES. Nothing is activated and no cleaning text is sent. `prove-step-f.sh`.
@@ -87,3 +89,6 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [Door code stays private](./pin-private-only.md) covers a door code that is not sent to a group, an observer, a mirror, or an unapproved number. `prove-step-f.sh`.
 - [Notion tenants stay apart](./notion-tenant-isolation.md) covers Lane, Court, and an onboarded property in one folder. `prove-step-f.sh`.
 - [STOP, HELP, and injury after a Notion read](./notion-stop-help-injury.md) covers the same safety replies after a Notion checkout question. `prove-step-f.sh`.
+- [Observer injury inside a group](./observer-injury-group.md) covers the 911 reply and the host alert from an opted-in observer. `prove-step-f.sh`.
+- [Observer injury outside a group](./observer-injury-solo.md) covers the same injury path when texts are one-to-one. `prove-step-f.sh`.
+- [Owner injury](./owner-injury.md) covers the 911 line to the host, with no alert back to that host. `prove-step-f.sh`.

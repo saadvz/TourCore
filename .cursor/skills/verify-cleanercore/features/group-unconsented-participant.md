@@ -1,6 +1,6 @@
 # Unconsented participant left out
 
-A group was requested and the number can send one, but the observer has not opted in. The offer is mirrored to the people who are in, and the observer is left out. STOP and HELP from that observer go only to that number.
+A group was requested and the number can send one, but the observer has not opted in. The cleaner gets the private offer. The owner gets a copy labeled `Copy of the group text: ` that ends `The cleaner will reply to confirm.` The observer is left out. STOP and HELP from that observer go only to that number.
 
 ## Sub-features
 

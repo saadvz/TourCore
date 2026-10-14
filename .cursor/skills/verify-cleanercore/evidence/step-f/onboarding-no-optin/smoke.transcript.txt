@@ -4,7 +4,7 @@ Which booking sources should I read? Name each one. Say whether early check-ins 
 +15555550120: Notion. Yes, late checkouts are agreed on Airbnb, outside that calendar.
 Preview for Annex: 1 stay, 1 block. Notion was read just now. 0 date conflicts. A block is not a departure. Airbnb timing changes are not in the calendar. I will not assume the place is empty. Reply OK to continue.
 +15555550120: OK
-Who should get texts? Send the cleaner phone, then each other person as a role and a phone. Roles are owner, manager, or observer. Cory is an observer. I will not text a number until that number opts in.
+Who should get texts? Send the cleaner's phone, then each other person's role and phone. Roles are owner, manager, or observer. I won't text anyone until they reply YES.
 +15555550120: Cleaner +15555550121. Observer Cory +15555550122.
 When should I send cleaning texts? Choose any of: when a booking is created, days after check-in, days before checkout, the morning of checkout, after you say the guests have left, and if nobody answers. Also send quiet hours and who to escalate to.
 Hi, this is Annex's cleaning scheduler for 9 Scratch Annex, Teaneck, NJ 07666. Reply YES to get cleaning texts, or STOP to opt out.

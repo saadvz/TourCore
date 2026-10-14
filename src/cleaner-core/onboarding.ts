@@ -11,7 +11,7 @@ export const DUPLICATE_FEED =
   "Guesty Lite already includes Airbnb and Vrbo stays. I did not add a second feed. Name the sources again, without a separate Airbnb or Vrbo feed.";
 export const SOURCES_RETRY = "Name at least one booking source, such as Guesty Lite, Google Calendar, or Notion.";
 export const PEOPLE_PROMPT =
-  "Who should get texts? Send the cleaner phone, then each other person as a role and a phone. Roles are owner, manager, or observer. Cory is an observer. I will not text a number until that number opts in.";
+  "Who should get texts? Send the cleaner's phone, then each other person's role and phone. Roles are owner, manager, or observer. I won't text anyone until they reply YES.";
 export const PEOPLE_RETRY =
   "Send the cleaner phone, then each other person as a role and a phone. Use owner, manager, or observer. Each phone has to be a Scratch number for this property.";
 export const SCHEDULE_PROMPT =
