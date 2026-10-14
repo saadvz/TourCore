@@ -890,11 +890,11 @@ class Engine implements CleanerCore {
   }
 
   async resumeJob(): Promise<CleanerText | null> {
-    if (!this.groupChat || !this.owner) return null;
+    if (!this.groupChat) return null;
     this.problemHold = false;
     const text = await this.emit({
       id: `resume:${this.options.property.id}`,
-      to: this.owner,
+      to: this.owner ?? "",
       kind: "resume",
       body: resumeNote(this.options.property.address),
     });
@@ -1643,6 +1643,16 @@ class Engine implements CleanerCore {
     };
   }
 
+  private noteUnsentHost(draft: Draft): CleanerText | null {
+    if (draft.channel === "group" || !draft.body) return null;
+    if (draft.kind === "pin" || draft.kind === "pin-notice" || draft.kind === "pin-failed") return null;
+    if (this.pin && draft.body.includes(this.pin)) return null;
+    const forHost = (this.owner && draft.to === this.owner) || (!this.owner && HOST_DIRECT.has(draft.kind));
+    if (!forHost) return null;
+    this.keepHostNote(`host:${draft.kind}:${draft.body}`, draft.body);
+    return { to: draft.to, body: draft.body, kind: draft.kind };
+  }
+
   keepHostNote(id: string, body: string): void {
     if (!id || !body || this.hostNoteState.some((note) => note.id === id)) return;
     if (this.pin && body.includes(this.pin)) return;
@@ -1669,6 +1679,7 @@ class Engine implements CleanerCore {
       const addressed = addressCleaner(this.cleanerRecord(), { kind: draft.kind, body: draft.body });
       if (!addressed || draft.to !== addressed.to) return null;
     }
+    if (!this.owner && HOST_DIRECT.has(draft.kind)) return this.noteUnsentHost(draft);
     if (!this.numberAllowed(draft.to)) {
       if (this.options.allowlist) return null;
       throw new Error("Cleaner Core only texts Scratch test numbers.");
@@ -1679,7 +1690,7 @@ class Engine implements CleanerCore {
       const audience = draft.audience ?? [];
       if (audience.length === 0 || audience.some((phone) => !allowed.has(phone))) return null;
     }
-    if (this.groupChat && draft.to === this.owner && this.hostGroup === "out" && !SAFETY.has(draft.kind)) return null;
+    if (this.groupChat && draft.to === this.owner && this.hostGroup === "out" && !SAFETY.has(draft.kind)) return this.noteUnsentHost(draft);
     if (this.groupChat && draft.to === this.cleanerPhone && this.cleanerConsent === "out" && !SAFETY.has(draft.kind)) return null;
     if (draft.kind === "pin") {
       const groupPin = Boolean(this.groupChat && draft.channel === "group" && codeRoute(this.groupSeats()) === "group" && draft.to === this.cleanerPhone);
@@ -1694,8 +1705,10 @@ class Engine implements CleanerCore {
     } else if (!this.pin && /\bdoor code\b/i.test(draft.body) && draft.kind !== "opt-in" && draft.kind !== "review") {
       throw new Error("Step C does not send a door code.");
     }
-    if (this.optedOut && !SAFETY.has(draft.kind)) return null;
-    if (this.participantConsent.get(draft.to) === "out" && !SAFETY.has(draft.kind)) return null;
+    if (this.optedOut && !SAFETY.has(draft.kind)) return draft.to === this.owner ? this.noteUnsentHost(draft) : null;
+    if (this.participantConsent.get(draft.to) === "out" && !SAFETY.has(draft.kind)) {
+      return draft.to === this.owner ? this.noteUnsentHost(draft) : null;
+    }
     const existing = this.outboxState.find((item) => item.id === draft.id);
     if (existing?.status === "sent" || existing?.status === "canceled") return null;
     if (existing?.lease?.state === "revoked" || existing?.lease?.state === "expired") return null;
