@@ -3,6 +3,7 @@ import { cleanerCoreEnabled } from "./flag";
 import { liveDeskFor } from "./liveDesk";
 import { CLEANER_MCP_PATH, handleCleanerMcpMessage } from "./mcp";
 import { pinKeyFromHeader } from "./pinSeal";
+import { scratchToolsOn } from "./scratchQa";
 import { CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo } from "./twilioHook";
 
 export { CLEANER_MCP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo };
@@ -46,7 +47,7 @@ export async function handleCleanerMcpHttp(input: {
     return { status: 400, body: JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "That request couldn't be read." } }) };
   }
   const desk = liveDeskFor(input.root, () => input.env, input.now);
-  const reply = await handleCleanerMcpMessage(desk, message, pinKeyFromHeader(input.pinKeyHeader));
+  const reply = await handleCleanerMcpMessage(desk, message, pinKeyFromHeader(input.pinKeyHeader), scratchToolsOn(input.env));
   if (reply.body === undefined) return { status: reply.status, body: "" };
   return { status: reply.status, body: JSON.stringify(reply.body) };
 }

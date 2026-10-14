@@ -1,17 +1,36 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { parsePhone } from "../core/phone";
 import { messagingKeyword, normalize } from "../intent";
 import { stripFiller } from "../intent/normalize";
 import { spokenTimes } from "../core/spokenTime";
 import { interpretFeed } from "./calendar";
-import { openCleanerCore, type CleanerCore, type CleanerText } from "./core";
+import { openCleanerCore, type CleanerCore, type CleanerText, type TextKind } from "./core";
 import { readPublicCalendar, type CalendarFetch } from "./fetchLimits";
 import { isPrivateCodeLine, resumeNote } from "./cleanerTexts";
 import { GroupNotConfirmed } from "./groupThread";
 import { cleanerPinStatusUrl, isAllowlisted, liveSmsOn, sendLiveGroup, sendLiveSms, smsAllowlist } from "./liveSms";
 import { openPin, sealPin, type PinSeal } from "./pinSeal";
+import { isScratchTestNumber } from "./scratch";
+import {
+  SCRATCH_NUMBER_REFUSAL,
+  SCRATCH_PROPERTY_REFUSAL,
+  SCRATCH_RESET_LINE,
+  SCRATCH_STATUS_NEEDED,
+  SCRATCH_TEST_WENT_THROUGH,
+  SCRATCH_TEXT_MISSING,
+  SCRATCH_TEXT_NEEDED,
+  SCRATCH_WHICH_NEEDED,
+  inboxLine,
+  isDeliveryReport,
+  isScratchPropertyAddress,
+  outboxLabel,
+  outboxLine,
+  scratchToolsOn,
+  whoTheyAre,
+  type DeliveryReport,
+} from "./scratchQa";
 
 export const FIRST_QUESTION =
   "What do you want help with? 1) Letting renters tour a unit on their own, or 2) Scheduling cleaners between guest stays.";
@@ -72,6 +91,16 @@ interface LiveFile {
   cleanerOut?: boolean;
   seenInbound?: string[];
   conversationSid?: string;
+  deliveries?: { id: string; status: DeliveryReport }[];
+  localSends?: { id: string; to: string; kind: TextKind; status: DeliveryReport }[];
+}
+
+interface OutboxRow {
+  id: string;
+  kind: TextKind;
+  local: boolean;
+  label: string;
+  line: string;
 }
 
 let calendarFetch: CalendarFetch | undefined;
@@ -338,6 +367,74 @@ export class LiveDesk {
     return this.reply({ next: resumeNote(this.file.address) });
   }
 
+  resetScratch(): ToolReply {
+    const guard = this.scratchGuard();
+    if (guard) return this.fail(guard);
+    this.engine = undefined;
+    rmSync(join(this.root, "cleaner-job"), { recursive: true, force: true });
+    this.file.seenInbound = [];
+    this.file.cleanerOut = false;
+    this.file.released = false;
+    delete this.file.pinSend;
+    delete this.file.conversationSid;
+    delete this.file.deliveries;
+    delete this.file.localSends;
+    this.held = false;
+    this.persist();
+    return this.reply({ next: SCRATCH_RESET_LINE });
+  }
+
+  readInbox(): ToolReply {
+    const guard = this.scratchGuard();
+    if (guard) return this.fail(guard);
+    this.resume();
+    const lines = (this.engine?.transcript() ?? []).flatMap((line) => {
+      const formatted = this.inboxFromTranscript(line);
+      return formatted ? [formatted] : [];
+    });
+    return this.reply({ lines });
+  }
+
+  readOutbox(): ToolReply {
+    const guard = this.scratchGuard();
+    if (guard) return this.fail(guard);
+    this.resume();
+    return this.reply({ lines: this.outboxRows().map((row) => row.line) });
+  }
+
+  async sendTestText(input: { from?: string; text?: string }): Promise<ToolReply> {
+    const guard = this.scratchGuard(input.from ?? "");
+    if (guard) return this.fail(guard);
+    const text = input.text?.trim() ?? "";
+    if (!text) return this.fail(SCRATCH_TEXT_NEEDED);
+    await this.inbound({ id: `scratch-${randomUUID()}`, from: input.from ?? "", text });
+    return this.reply({ next: SCRATCH_TEST_WENT_THROUGH });
+  }
+
+  reportDelivery(input: { which?: string; status?: string }): ToolReply {
+    const guard = this.scratchGuard();
+    if (guard) return this.fail(guard);
+    const status = input.status?.trim().toLowerCase() ?? "";
+    if (!isDeliveryReport(status)) return this.fail(SCRATCH_STATUS_NEEDED);
+    this.resume();
+    const which = input.which?.trim().toLowerCase() ?? "";
+    const rows = this.outboxRows();
+    const exactLine = rows.filter((row) => row.line.toLowerCase() === which);
+    const exactLabel = rows.filter((row) => row.label.toLowerCase() === which);
+    const contains = rows.filter((row) => which.length > 0 && row.label.toLowerCase().includes(which));
+    if (exactLine.length === 0 && exactLabel.length === 0 && contains.length > 1) return this.fail(SCRATCH_WHICH_NEEDED);
+    const matches = exactLine.length > 0 ? exactLine : exactLabel.length > 0 ? exactLabel : contains;
+    const row = matches[matches.length - 1];
+    if (!row) return this.fail(SCRATCH_TEXT_MISSING);
+    const latestPinId = [...this.outboxRows()].reverse().find((item) => item.kind === "pin")?.id;
+    this.setDelivery(row, status);
+    if (row.kind === "pin" && row.id === latestPinId && this.file.pinSend?.sid) {
+      this.notePinDelivery({ sid: this.file.pinSend.sid, status });
+    }
+    const updated = this.outboxRows().find((item) => item.id === row.id);
+    return this.reply({ next: updated?.line ?? row.line });
+  }
+
   /** Records a Twilio delivery status. Does not unseal the door code and does not text anyone. */
   notePinDelivery(input: { sid: string; status: string }): void {
     const tracked = this.file.pinSend;
@@ -398,12 +495,16 @@ export class LiveDesk {
       this.file.cleanerOut = false;
     }
     this.noteSeen(id);
-    if (!liveSmsOn(this.env())) return [];
     const address = this.file.address ?? "the property";
     const body =
       keyword === "stop"
         ? `You're opted out of cleaning texts for ${address}. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.`
         : "You're opted back in to cleaning texts. Reply YES if you still want this turnover. Reply STOP to opt out.";
+    if (this.scratchCapture()) {
+      this.noteLocal(from, keyword);
+      return [{ to: from, body, kind: keyword }];
+    }
+    if (!liveSmsOn(this.env())) return [];
     try {
       await sendLiveSms(this.env(), { to: from, body });
       return [{ to: from, body, kind: keyword }];
@@ -483,7 +584,7 @@ export class LiveDesk {
       hostName: file.business,
       consented: true,
       allowlist: smsAllowlist(env()),
-      holdSends: () => this.checking || !liveSmsOn(env()),
+      holdSends: () => this.checking || (!liveSmsOn(env()) && !this.scratchCapture()),
       deferCleanerTexts: this.file.released !== true,
       ...(this.file.cleanerOut ? { cleanerConsent: "out" as const } : {}),
       optInBody: `Hi, this is ${file.business} at ${file.address}. You're getting this because you clean between guest stays. Reply YES to get cleaning texts, or STOP to opt out.`,
@@ -497,6 +598,10 @@ export class LiveDesk {
       ...(groupChatOn(env()) ? { groupChat: { hostName: "Cory", cleanerName: "Maria" } } : {}),
       sink: {
         send: async (text) => {
+          if (this.scratchCapture()) {
+            if (text.kind === "pin") this.noteAccepted("scratch-pin");
+            return;
+          }
           if ((text.kind === "pin-notice" || text.kind === "pin-failed" || text.kind === "host-checkout" || text.kind === "host-checkin") && text.channel !== "group") return;
           if (text.channel === "group" && text.audience && text.audience.length > 0) {
             try {
@@ -517,6 +622,68 @@ export class LiveDesk {
       now: this.now,
       dataDir,
     });
+  }
+
+  private scratchGuard(from?: string): string | undefined {
+    if (!scratchToolsOn(this.env())) return SCRATCH_PROPERTY_REFUSAL;
+    if (from !== undefined && !isScratchTestNumber(from)) return SCRATCH_NUMBER_REFUSAL;
+    if (!isScratchPropertyAddress(this.file.address)) return SCRATCH_PROPERTY_REFUSAL;
+    const saved = [this.file.host, this.file.cleaner, this.file.observer].filter((phone): phone is string => Boolean(phone));
+    if (saved.some((phone) => !isScratchTestNumber(phone))) return SCRATCH_NUMBER_REFUSAL;
+    if (from !== undefined) {
+      const parsed = parsePhone(from);
+      if (!parsed || !saved.includes(parsed)) return SCRATCH_NUMBER_REFUSAL;
+    }
+    return undefined;
+  }
+
+  private scratchCapture(): boolean {
+    return this.scratchGuard() === undefined;
+  }
+
+  private inboxFromTranscript(line: string): string | undefined {
+    const match = /^(\+\d+): (.*)$/.exec(line);
+    if (!match?.[1]) return undefined;
+    return inboxLine(whoTheyAre(match[1], this.file), this.hideCode(match[2] ?? ""));
+  }
+
+  private hideCode(text: string): string {
+    if (!this.pin || !text.includes(this.pin)) return text;
+    return text.split(this.pin).join("[redacted]");
+  }
+
+  private outboxRows(): OutboxRow[] {
+    const people = this.file;
+    const engineRows = (this.engine?.outbox() ?? []).map((item) => {
+      const saved = this.file.deliveries?.find((row) => row.id === item.id)?.status;
+      const status = saved ?? (item.status === "sent" ? "sent" : item.status === "failed" ? "failed" : item.status === "canceled" ? "canceled" : "waiting");
+      const role = whoTheyAre(item.to, people);
+      return { id: item.id, kind: item.kind, local: false, label: outboxLabel(item.kind, role), line: outboxLine(item.kind, role, status) };
+    });
+    const localRows = (this.file.localSends ?? []).map((item) => {
+      const role = whoTheyAre(item.to, people);
+      return { id: item.id, kind: item.kind, local: true, label: outboxLabel(item.kind, role), line: outboxLine(item.kind, role, item.status) };
+    });
+    return [...engineRows, ...localRows];
+  }
+
+  private setDelivery(row: OutboxRow, status: DeliveryReport): void {
+    if (row.local) {
+      const item = this.file.localSends?.find((send) => send.id === row.id);
+      if (item) item.status = status;
+    } else {
+      const deliveries = (this.file.deliveries ?? []).filter((item) => item.id !== row.id);
+      deliveries.push({ id: row.id, status });
+      this.file.deliveries = deliveries;
+    }
+    this.persist();
+  }
+
+  private noteLocal(to: string, kind: TextKind): void {
+    const sends = this.file.localSends ?? [];
+    sends.push({ id: `local-${randomUUID()}`, to, kind, status: "sent" });
+    this.file.localSends = sends;
+    this.persist();
   }
 
   private reply(result: Record<string, unknown>): ToolReply {
@@ -595,6 +762,10 @@ export class LiveDesk {
       if (!this.engine) return { sent: [] };
       const result = await this.engine.receive({ id, from, text });
       return { sent: result.sent };
+    }
+    if (this.scratchCapture()) {
+      this.noteLocal(from, "held");
+      return { sent: [{ to: from, body: DIRECT_TEXT_REPLY, kind: "held" }] };
     }
     try {
       await sendLiveSms(this.env(), { to: from, body: DIRECT_TEXT_REPLY });
