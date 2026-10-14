@@ -1,8 +1,8 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { CALENDAR_URL_REFUSAL, calendarUrlAllowed, openCleanerCore, readPublicCalendar, REVIEW_KINDS, reviewAlert, scratchTenant, type CleanerText, type ReviewKind } from "../src/cleaner-core";
+import { CALENDAR_URL_REFUSAL, calendarUrlAllowed, openCleanerCore, readPublicCalendar, REVIEW_KINDS, reviewAlert, runSmoke, scratchTenant, type CleanerText, type ReviewKind } from "../src/cleaner-core";
 
 function requiredTenant(id: "scratch-lane" | "scratch-court") {
   const tenant = scratchTenant(id);
@@ -20,7 +20,7 @@ const CHECKOUT_Q = "Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday,
 const OFFER = "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.";
 const OFFER_2PM = "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 2:00 PM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.";
 const STALE_ALERT = reviewAlert("stale-source", ADDRESS);
-const UNCERTAIN_ALERT = reviewAlert("uncertain-sms", ADDRESS);
+const UNCERTAIN_ALERT = reviewAlert("uncertain-sms", ADDRESS, { day: "Sunday, Oct 18", about: "offer" });
 const EXPOSURE_ALERT = reviewAlert("possible-code-exposure", ADDRESS);
 const FRESH = "2026-10-14T15:00:00.000Z";
 const EXACT = "2026-10-14T18:00:00.000Z";
@@ -52,7 +52,57 @@ function engine(box: ReturnType<typeof sink>, clock: { at: string }, extra: Part
   });
 }
 
+function sourceFiles(dir: string): string[] {
+  const found: string[] = [];
+  for (const name of readdirSync(dir)) {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) found.push(...sourceFiles(path));
+    else if (name.endsWith(".ts")) found.push(path);
+  }
+  return found;
+}
+
 describe("step G safety gates", () => {
+  const HOLD = `The cleaning at ${ADDRESS} is on hold until the cleaner replies YES.`;
+
+  it("holds the Guesty Lite feed, the smoke default, and a replay when no cleaner has opted in", async () => {
+    const box = sink();
+    const clock = { at: FRESH };
+    const job = engine(box, clock, { watchFreshness: false });
+    await job.pollFeed(feed("guesty-lite-scratch.ics"));
+    await job.receive({ id: "out", from: OWNER, text: "YES" });
+    await job.receive({ id: "in", from: OWNER, text: "YES" });
+    await job.receive({ id: "again", from: OWNER, text: "YES" });
+    const replayed = await job.replay();
+    expect(box.sent.filter((text) => text.kind === "offer" || text.body.startsWith("Turnover at"))).toEqual([]);
+    expect(box.sent.filter((text) => text.body === HOLD)).toEqual([{ to: OWNER, body: HOLD, kind: "held" }]);
+    expect(replayed.sent).toEqual([]);
+    expect(job.jobs().some((item) => item.status === "offered")).toBe(false);
+
+    const smoke = await runSmoke({ CLEANER_CORE_ENABLED: "1" });
+    expect(smoke.sent.filter((text) => text.kind === "offer" || text.body.startsWith("Turnover at"))).toEqual([]);
+    expect(smoke.sent.filter((text) => text.body === HOLD)).toEqual([{ to: OWNER, body: HOLD, kind: "held" }]);
+    expect(smoke.jobs?.some((item) => item.status === "offered")).toBe(false);
+
+    const dir = mkdtempSync(join(tmpdir(), "cleaner-no-cleaner-"));
+    try {
+      const first = await runSmoke({ CLEANER_CORE_ENABLED: "1" }, undefined, { dataDir: dir });
+      const second = await runSmoke({ CLEANER_CORE_ENABLED: "1" }, undefined, { dataDir: dir, ops: [{ type: "replay" }] });
+      expect(first.sent.filter((text) => text.kind === "offer")).toEqual([]);
+      expect(first.sent.filter((text) => text.body === HOLD)).toEqual([{ to: OWNER, body: HOLD, kind: "held" }]);
+      expect(second.sent).toEqual([]);
+      expect(second.outbox?.filter((item) => item.body === HOLD && item.status === "sent")).toHaveLength(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("builds the cleaning offer only inside the cleaner text choke point", () => {
+    const needle = "Reply YES to schedule it, or STOP to opt out.";
+    const hits = sourceFiles("src").filter((path) => readFileSync(path, "utf8").includes(needle)).sort();
+    expect(hits).toEqual(["src/cleaner-core/cleanerTexts.ts"]);
+  });
+
   it("sends nothing when the flag is off, including a stale feed and a review", async () => {
     const box = sink();
     const clock = { at: FRESH };
@@ -77,18 +127,20 @@ describe("step G safety gates", () => {
   it("holds a new offer once the feed is past three missed hourly polls, alerts the host once, and sends the offer after a fresh read", async () => {
     const exact = sink();
     const exactClock = { at: FRESH };
-    const onTime = engine(exact, exactClock);
+    const onTime = engine(exact, exactClock, { pin: lane.pin, hostName: lane.hostName });
     await onTime.pollFeed(feed("guesty-lite-scratch.ics"));
+    await onTime.receive({ id: "opt", from: CLEANER, text: "YES" });
     await onTime.receive({ id: "checkout", from: OWNER, text: "YES" });
     exactClock.at = EXACT;
     const still = await onTime.receive({ id: "checkin", from: OWNER, text: "YES" });
-    expect(still.sent).toEqual([{ to: OWNER, body: OFFER, kind: "offer" }]);
+    expect(still.sent).toEqual([{ to: CLEANER, body: OFFER, kind: "offer" }]);
 
     const box = sink();
     const clock = { at: FRESH };
-    const job = engine(box, clock);
+    const job = engine(box, clock, { pin: lane.pin, hostName: lane.hostName });
     const opened = await job.pollFeed(feed("guesty-lite-scratch.ics"));
-    expect(opened.sent).toEqual([{ to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" }]);
+    expect(opened.sent.map((text) => text.kind)).toEqual(["host-checkout", "opt-in"]);
+    await job.receive({ id: "opt", from: CLEANER, text: "YES" });
     await job.receive({ id: "checkout", from: OWNER, text: "YES" });
     clock.at = STALE;
     const blocked = await job.receive({ id: "checkin", from: OWNER, text: "YES" });
@@ -99,18 +151,19 @@ describe("step G safety gates", () => {
     expect(repeat.sent).toEqual([]);
     job.stampFetchedAt(STALE);
     const fresh = await job.pollFeed(feed("guesty-lite-scratch.ics"));
-    expect(fresh.sent).toEqual([{ to: OWNER, body: OFFER, kind: "offer" }]);
+    expect(fresh.sent).toEqual([{ to: CLEANER, body: OFFER, kind: "offer" }]);
     expect(job.reviews().filter((item) => item.kind === "stale-source" && item.status === "open")).toEqual([]);
   });
 
   it("keeps a newer host checkout when a stale feed names a different day", async () => {
     const box = sink();
     const clock = { at: FRESH };
-    const job = engine(box, clock);
+    const job = engine(box, clock, { pin: lane.pin, hostName: lane.hostName });
     await job.pollFeed(feed("guesty-lite-scratch.ics"));
+    await job.receive({ id: "opt", from: CLEANER, text: "YES" });
     await job.receive({ id: "two", from: OWNER, text: "2:00 PM" });
     await job.receive({ id: "in", from: OWNER, text: "YES" });
-    expect(box.sent.map((text) => text.body)).toContain(OFFER_2PM);
+    expect(box.sent.filter((text) => text.kind === "offer")).toEqual([{ to: CLEANER, body: OFFER_2PM, kind: "offer" }]);
     clock.at = STALE;
     job.stampFetchedAt(FRESH);
     const moved = await job.pollFeed(feed("guesty-lite-date-moved.ics"));
@@ -164,8 +217,9 @@ describe("step G safety gates", () => {
   it("replays a finished turn without sending again", async () => {
     const box = sink();
     const clock = { at: FRESH };
-    const job = engine(box, clock);
+    const job = engine(box, clock, { pin: lane.pin, hostName: lane.hostName });
     await job.pollFeed(feed("guesty-lite-scratch.ics"));
+    await job.receive({ id: "opt", from: CLEANER, text: "YES" });
     await job.receive({ id: "out", from: OWNER, text: "YES" });
     await job.receive({ id: "in", from: OWNER, text: "YES" });
     const before = box.sent.length;
@@ -191,6 +245,10 @@ describe("step G safety gates", () => {
       const resumed = await second.replay();
       expect(resumed.sent).toEqual([{ to: OWNER, body: UNCERTAIN_ALERT, kind: "review" }]);
       expect(secondBox.sent.filter((text) => text.kind === "offer")).toEqual([]);
+      const retried = await second.receive({ id: "retry-1", from: OWNER, text: "RETRY" });
+      expect(retried.sent).toEqual([{ to: CLEANER, body: OFFER, kind: "offer" }]);
+      const retriedAgain = await second.receive({ id: "retry-2", from: OWNER, text: "RETRY" });
+      expect(retriedAgain.sent).toEqual([]);
       const again = await second.replay();
       expect(again.sent).toEqual([]);
     } finally {
@@ -243,9 +301,14 @@ describe("step G safety gates", () => {
     const clock = { at: FRESH };
     const job = engine(sink(), clock);
     for (const kind of REVIEW_KINDS) {
+      const detail = kind === "missed-reminder"
+        ? { day: "Wednesday, Oct 14", about: "reminder" as const }
+        : kind === "uncertain-sms"
+          ? { day: "Wednesday, Oct 14", about: "offer" as const }
+          : undefined;
       const first = await job.fileReview(kind as ReviewKind);
       const second = await job.fileReview(kind as ReviewKind);
-      expect(first.sent).toEqual([{ to: OWNER, body: reviewAlert(kind, ADDRESS), kind: "review" }]);
+      expect(first.sent).toEqual([{ to: OWNER, body: reviewAlert(kind, ADDRESS, detail), kind: "review" }]);
       expect(second.sent).toEqual([]);
     }
     expect(job.reviews()).toHaveLength(REVIEW_KINDS.length);

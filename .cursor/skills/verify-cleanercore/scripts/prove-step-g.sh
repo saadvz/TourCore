@@ -101,14 +101,16 @@ smoke() {
 # ci-local runs last so a journey failure stops first. The folder is still the CI proof.
 run_journeys() {
   doctor "$EVIDENCE/stale-source"
-  run_smoke "$EVIDENCE/stale-source" smoke smoke --watch-freshness --feed "$GUESTY" \
+  run_smoke "$EVIDENCE/stale-source" smoke smoke --with-pin --watch-freshness --feed "$GUESTY" \
+    --reply "$CLEANER=YES" \
     --reply "$OWNER=YES" --now "$STALE" --reply "$OWNER=YES" \
     --fetched-at "$FRESH" --feed "$GUESTY" \
     --fetched-at "$STALE" --feed "$GUESTY"
   assert_journey stale-source "$EVIDENCE/stale-source/smoke.stdout.txt"
 
   doctor "$EVIDENCE/host-override-beats-stale-feed"
-  run_smoke "$EVIDENCE/host-override-beats-stale-feed" smoke smoke --watch-freshness --feed "$GUESTY" \
+  run_smoke "$EVIDENCE/host-override-beats-stale-feed" smoke smoke --with-pin --watch-freshness --feed "$GUESTY" \
+    --reply "$CLEANER=YES" \
     --reply "$OWNER=2:00 PM" --reply "$OWNER=YES" \
     --now "$STALE" --fetched-at "$FRESH" --then-feed "$MOVED"
   assert_journey host-override-beats-stale-feed "$EVIDENCE/host-override-beats-stale-feed/smoke.stdout.txt"
@@ -185,10 +187,20 @@ run_journeys() {
     "$EVIDENCE/backup-restore/restored.stdout.txt" \
     "$EVIDENCE/backup-restore/court-again.stdout.txt"
 
+  doctor "$EVIDENCE/no-cleaner"
+  NO_CLEANER="$(mktemp -d)"
+  run_smoke "$EVIDENCE/no-cleaner" turn smoke --data "$NO_CLEANER" \
+    --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES"
+  run_smoke "$EVIDENCE/no-cleaner" replay smoke --no-poll --data "$NO_CLEANER" --replay
+  rm -rf "$NO_CLEANER"
+  assert_journey no-cleaner \
+    "$EVIDENCE/no-cleaner/turn.stdout.txt" \
+    "$EVIDENCE/no-cleaner/replay.stdout.txt"
+
   doctor "$EVIDENCE/replay-no-resend"
   REPLAY_DIR="$(mktemp -d)"
-  run_smoke "$EVIDENCE/replay-no-resend" turn smoke --data "$REPLAY_DIR" --feed "$GUESTY" \
-    --reply "$OWNER=YES" --reply "$OWNER=YES"
+  run_smoke "$EVIDENCE/replay-no-resend" turn smoke --with-pin --data "$REPLAY_DIR" --feed "$GUESTY" \
+    --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES"
   run_smoke "$EVIDENCE/replay-no-resend" replay smoke --no-poll --data "$REPLAY_DIR" --replay
   rm -rf "$REPLAY_DIR"
   assert_journey replay-no-resend \
@@ -202,6 +214,8 @@ run_journeys() {
     --feed "$GUESTY" --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES"
   run_smoke "$EVIDENCE/recovery-after-restart" replay smoke --no-poll --data "$OFFER_DIR" --replay
   run_smoke "$EVIDENCE/recovery-after-restart" replay-again smoke --no-poll --data "$OFFER_DIR" --replay
+  run_smoke "$EVIDENCE/recovery-after-restart" retry smoke --no-poll --data "$OFFER_DIR" --reply "$OWNER=RETRY"
+  run_smoke "$EVIDENCE/recovery-after-restart" retry-again smoke --no-poll --data "$OFFER_DIR" --reply "$OWNER=RETRY"
   run_smoke "$EVIDENCE/recovery-after-restart" crash-pin smoke --with-pin --data "$PIN_HALT" --crash before-pin \
     --feed "$GUESTY" --reply "$CLEANER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES" \
     --reply "$CLEANER=YES" --reply "$OWNER=guests have left"
@@ -212,6 +226,8 @@ run_journeys() {
     "$EVIDENCE/recovery-after-restart/crash-offer.stdout.txt" \
     "$EVIDENCE/recovery-after-restart/replay.stdout.txt" \
     "$EVIDENCE/recovery-after-restart/replay-again.stdout.txt" \
+    "$EVIDENCE/recovery-after-restart/retry.stdout.txt" \
+    "$EVIDENCE/recovery-after-restart/retry-again.stdout.txt" \
     "$EVIDENCE/recovery-after-restart/crash-pin.stdout.txt" \
     "$EVIDENCE/recovery-after-restart/resume.stdout.txt" \
     "$EVIDENCE/recovery-after-restart/resume-again.stdout.txt"
@@ -399,7 +415,7 @@ if ! node scripts/scan-cleaner-secrets.mjs "$EVIDENCE"; then
 fi
 
 cat >"$EVIDENCE/result.txt" <<EOF
-features: ci-local stale-source host-override-beats-stale-feed permanent-code backup-restore replay-no-resend recovery-after-restart review-queue observability tenant-isolation stop-help-injury
+features: ci-local stale-source host-override-beats-stale-feed permanent-code backup-restore no-cleaner replay-no-resend recovery-after-restart review-queue observability tenant-isolation stop-help-injury
 regressions: prove-step-d.sh prove-step-e.sh prove-step-f.sh
 script: .cursor/skills/verify-cleanercore/scripts/prove-step-g.sh
 pins: redacted

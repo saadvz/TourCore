@@ -18,7 +18,7 @@
   {
     "id": "hold:stay-anita@guesty.com:2026-10-18",
     "to": "+15555550100",
-    "body": "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 is on hold until the cleaner replies YES.",
+    "body": "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold until the cleaner replies YES.",
     "kind": "held",
     "status": "sent",
     "jobId": "stay-anita@guesty.com"

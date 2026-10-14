@@ -33,7 +33,7 @@
   {
     "id": "review:uncertain-sms:offer:stay-anita@guesty.com:2026-10-18:660:2026-10-18:960",
     "to": "+15555550100",
-    "body": "A text may not have gone out. I did not send it again. Please check, then tell me if I should retry.",
+    "body": "My cleaning offer to the cleaner for Sunday, Oct 18 may not have gone out. I didn't resend it. Reply RETRY to send it again.",
     "kind": "review",
     "status": "sent"
   }

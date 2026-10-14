@@ -8,6 +8,13 @@
     "jobId": "stay-anita@guesty.com"
   },
   {
+    "id": "opt-in:+15555550101",
+    "to": "+15555550101",
+    "body": "Hi, this is Scratch's cleaning scheduler for 12 Scratch Lane, Teaneck, NJ 07666. Reply YES to get cleaning texts, or STOP to opt out.",
+    "kind": "opt-in",
+    "status": "sent"
+  },
+  {
     "id": "host-checkin:stay-anita@guesty.com:2026-10-18:960",
     "to": "+15555550100",
     "body": "Is check-in at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.",
@@ -18,13 +25,13 @@
   {
     "id": "review:stale-source:guesty-lite:2026-10-14T15:00:00.000Z",
     "to": "+15555550100",
-    "body": "The booking feed for 12 Scratch Lane, Teaneck, NJ 07666 is stale, so I did not offer a new cleaning or send the door code. I will use the feed again after a fresh read.",
+    "body": "I can't see the latest bookings for 12 Scratch Lane, Teaneck, NJ 07666 right now, so I'm holding new cleanings and the door code. I'll pick back up once the calendar updates. If a time changed, just text it to me.",
     "kind": "review",
     "status": "sent"
   },
   {
     "id": "offer:stay-anita@guesty.com:2026-10-18:660:2026-10-18:960",
-    "to": "+15555550100",
+    "to": "+15555550101",
     "body": "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
     "kind": "offer",
     "status": "sent",

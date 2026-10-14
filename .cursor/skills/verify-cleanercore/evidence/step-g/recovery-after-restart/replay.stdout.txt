@@ -7,7 +7,7 @@
   "sent": [
     {
       "to": "+15555550100",
-      "body": "A text may not have gone out. I did not send it again. Please check, then tell me if I should retry.",
+      "body": "My cleaning offer to the cleaner for Sunday, Oct 18 may not have gone out. I didn't resend it. Reply RETRY to send it again.",
       "kind": "review"
     }
   ],
@@ -106,7 +106,7 @@
     {
       "id": "review:uncertain-sms:offer:stay-anita@guesty.com:2026-10-18:660:2026-10-18:960",
       "to": "+15555550100",
-      "body": "A text may not have gone out. I did not send it again. Please check, then tell me if I should retry.",
+      "body": "My cleaning offer to the cleaner for Sunday, Oct 18 may not have gone out. I didn't resend it. Reply RETRY to send it again.",
       "kind": "review",
       "status": "sent"
     }
@@ -118,7 +118,7 @@
     "+15555550100: YES",
     "Is check-in at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.",
     "+15555550100: YES",
-    "A text may not have gone out. I did not send it again. Please check, then tell me if I should retry."
+    "My cleaning offer to the cleaner for Sunday, Oct 18 may not have gone out. I didn't resend it. Reply RETRY to send it again."
   ],
   "blocks": [
     {
@@ -156,7 +156,7 @@
       "help": 0,
       "polls": 1,
       "pollFails": 0,
-      "pollDurationMs": 8
+      "pollDurationMs": 10
     },
     "codeHandling": "To change the outdoor code at 12 Scratch Lane, Teaneck, NJ 07666, set the new code on the lock yourself, then tell me the new code in a private text. I store only a sealed reference. I do not change the lock. To offboard a cleaner, reply STOP from their number or tell me to remove them. I will not send the code again until you confirm a new cleaner and the guests have left."
   },

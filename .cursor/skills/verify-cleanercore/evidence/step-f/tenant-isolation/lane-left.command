@@ -1,1 +1,1 @@
-smoke --tenant scratch-lane --no-poll --data /tmp/tmp.oyysOD6Oi8
+smoke --tenant scratch-lane --no-poll --data /tmp/tmp.ey9Bfcq34u

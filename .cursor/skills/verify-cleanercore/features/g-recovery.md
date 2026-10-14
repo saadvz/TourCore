@@ -21,7 +21,7 @@ Preconditions:
 - `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:doctor` exits 0 with `sends` false.
 - `--crash after-accept` and `--crash before-pin` exit 0 and set `halted`. They are not a kill of a live host.
 
-- **Offer.** Smoke with `--with-pin --data <dir> --crash after-accept`, the feed, cleaner YES, and two owner YES replies. `halted` is `after-accept` and there is one offer. A later `--no-poll --replay` sends only `A text may not have gone out. I did not send it again. Please check, then tell me if I should retry.` A second replay sends nothing.
+- **Offer.** Smoke with `--with-pin --data <dir> --crash after-accept`, the feed, cleaner YES, and two owner YES replies. `halted` is `after-accept` and there is one offer. A later `--no-poll --replay` sends only `My cleaning offer to the cleaner for Sunday, Oct 18 may not have gone out. I didn't resend it. Reply RETRY to send it again.` A second replay sends nothing. `RETRY` from the host sends that offer once, and only to the opted-in cleaner.
 - **Code.** Smoke with `--crash before-pin` through `guests have left`. `sent` has no pin. `--now 2026-10-18T16:00:00.000Z --remind` sends one pin to `+15555550101` with `[redacted]`. The next remind sends no pin.
 
 ## Gotchas

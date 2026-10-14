@@ -18,7 +18,7 @@ Preconditions:
 
 - `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:doctor` exits 0 with `sends` false.
 
-- **Correct, then re-read.** Run `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --watch-freshness --feed src/cleaner-core/fixtures/guesty-lite-scratch.ics --reply +15555550100=2:00 PM --reply +15555550100=YES --now 2026-10-14T18:00:00.001Z --fetched-at 2026-10-14T15:00:00.000Z --then-feed src/cleaner-core/fixtures/guesty-lite-date-moved.ics`. Exit code 0. The offer says `Checkout 2:00 PM`. The job `stay-anita@guesty.com` stays on `2026-10-18` at `2:00 PM`. The source freshness is `stale`. `reviews` is empty.
+- **Correct, then re-read.** Run `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --with-pin --watch-freshness --feed src/cleaner-core/fixtures/guesty-lite-scratch.ics --reply +15555550101=YES --reply +15555550100=2:00 PM --reply +15555550100=YES --now 2026-10-14T18:00:00.001Z --fetched-at 2026-10-14T15:00:00.000Z --then-feed src/cleaner-core/fixtures/guesty-lite-date-moved.ics`. Exit code 0. The offer to `+15555550101` says `Checkout 2:00 PM`. The job `stay-anita@guesty.com` stays on `2026-10-18` at `2:00 PM`. The source freshness is `stale`. `reviews` is empty.
 
 ## Gotchas
 

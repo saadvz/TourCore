@@ -18,7 +18,7 @@
   {
     "id": "review:stale-source:guesty-lite:2026-10-14T15:00:00.000Z",
     "to": "+15555550100",
-    "body": "The booking feed for 12 Scratch Lane, Teaneck, NJ 07666 is stale, so I did not offer a new cleaning or send the door code. I will use the feed again after a fresh read.",
+    "body": "I can't see the latest bookings for 12 Scratch Lane, Teaneck, NJ 07666 right now, so I'm holding new cleanings and the door code. I'll pick back up once the calendar updates. If a time changed, just text it to me.",
     "kind": "review",
     "status": "sent"
   }

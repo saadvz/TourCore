@@ -11,8 +11,9 @@ What pauses live activation: the flag defaults off; CI fails when a configured s
 | Host time | A newer host checkout stays when a stale feed names another day. No extra text. | `evidence/step-g/host-override-beats-stale-feed` |
 | Door code | Private send only to the opted-in approved cleaner after clearance. Not to the observer, a group, a mirror, or an unapproved number. A code-like inbound opens one exposure review and the digits are not stored. Backups and logs keep the sealed reference only. | `evidence/step-g/permanent-code` |
 | Review queue | Each review kind is texted once. A second file sends nothing. "booked on airbnb" opens the Airbnb review. | `evidence/step-g/review-queue` |
-| Replay | Replaying inbound ids and sent outbox rows sends nothing new. | `evidence/step-g/replay-no-resend` |
-| Restart | A crash after the sink accepts an offer leaves it uncertain. Replay alerts the host once and does not send the offer again. A crash after clearance sends the door code once on the next reminder pass. | `evidence/step-g/recovery-after-restart` |
+| No cleaner | Guesty Lite, the smoke default, and replay do not offer a cleaning when no cleaner has opted in. The job is not `offered`. The host gets one hold note, and a replay does not send it again. | `evidence/step-g/no-cleaner` |
+| Replay | Replaying inbound ids and sent outbox rows sends nothing new. With the cleaner opted in, the offer stays on that cleaner. | `evidence/step-g/replay-no-resend` |
+| Restart | A crash after the sink accepts an offer leaves it uncertain. Replay alerts the host once and does not send the offer again. `RETRY` from the host sends that offer once, only to the opted-in cleaner. A crash after clearance sends the door code once on the next reminder pass. | `evidence/step-g/recovery-after-restart` |
 | Backup | A consistent SQLite snapshot restores one tenant. The next tick sends nothing. The opt-out remains. The other tenant's job remains. | `evidence/step-g/backup-restore` |
 | Tenants | Lane and Court keep separate reviews, backups, replays, and health counts. | `evidence/step-g/tenant-isolation` |
 | Health | Counters, open reviews, and stale sources. `sends` is false. The log has no full phone number and no door code. | `evidence/step-g/observability` |

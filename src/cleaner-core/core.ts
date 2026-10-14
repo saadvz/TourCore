@@ -23,7 +23,8 @@ import {
 } from "./sources";
 import { fingerprintOf, freshnessOf, GUESTY_POLL_MS, staleAfterMs, type SourceRecord } from "./freshness";
 import { redactLine, redactPhone } from "./redact";
-import { codeHandlingText, HEALTH_NOTE, isReviewKind, reviewAlert, reviewId, type AuditEvent, type ReviewItem, type ReviewKind } from "./review";
+import { addressCleaner, asOptedInCleaner, doorCodeBody, holdNote, offerBody, offerForOthers, reminderBody, type OptedInCleaner } from "./cleanerTexts";
+import { codeHandlingText, HEALTH_NOTE, isReviewKind, reviewAlert, reviewId, type AuditEvent, type ReviewDetail, type ReviewItem, type ReviewKind } from "./review";
 import { mirrorStore, restoreTenantSlice, snapshotStore } from "./sqliteStore";
 import { isOtherScratchTenantPhone, SCRATCH_TENANTS } from "./tenants";
 
@@ -194,7 +195,8 @@ export type ReceiveReason =
   | "opted-in"
   | "done"
   | "wrong-tenant"
-  | "review";
+  | "review"
+  | "retry";
 
 export interface ReceiveResult {
   handled: boolean;
@@ -302,8 +304,6 @@ const SAFETY = new Set<TextKind>(["stop", "help", "start", "emergency"]);
 const JOB_TEXTS = new Set<TextKind>(["offer", "corrected", "confirm", "reminder", "cancel-update", "declined", "started", "done"]);
 const GROUP_PREFIX = "Group text: ";
 const MIRROR_PREFIX = "Copy of the group text: ";
-const OFFER_YES = "Reply YES to schedule it, or STOP to opt out.";
-const OFFER_WAIT = "The cleaner will reply to confirm.";
 const DEFAULT_TRIGGERS: ReminderTrigger[] = [{ id: "morning-of", kind: "morning-of", localTime: "08:00" }];
 
 /**
@@ -603,6 +603,7 @@ class Engine implements CleanerCore {
         return { handled: true, reason: "review", sent: alert ? [alert] : [] };
       }
     }
+    if (from === this.owner && stripFiller(normalize(input.text)) === "retry") return this.retryUncertain(input.id);
     if (this.pin && from === this.cleanerPhone && isYes(input.text) && this.awaitingOptIn()) return this.optInCleaner(input.id);
     if (from && isYes(input.text) && this.participantConsent.get(from) === "pending" && this.delivery(`opt-in:${from}`) === "sent") {
       return this.optInParticipant(from, input.id);
@@ -632,18 +633,18 @@ class Engine implements CleanerCore {
         this.cancelOtherReminders(job.id, trigger.id, id);
         const existing = this.outboxState.find((item) => item.id === id);
         if (existing?.status === "sent" || existing?.status === "canceled") continue;
-        const to = this.jobActor();
-        if (!to) continue;
         const when = this.clock(job.checkoutDate, fact.minutes);
-        const address = this.options.property.address;
+        const addressed = addressCleaner(this.cleanerRecord(), {
+          kind: "reminder",
+          body: reminderBody(this.options.property.address, when, Boolean(this.pin)),
+        });
+        if (!addressed) continue;
         const text = await this.emit({
           id,
           jobId: job.id,
-          to,
+          to: addressed.to,
           kind: "reminder",
-          body: this.pin
-            ? `Reminder: cleaning at ${address} is ${when.day} at ${when.time}.`
-            : `Reminder: checkout at ${address} is ${when.day} at ${when.time}. Reply STOP to opt out.`,
+          body: addressed.body,
         });
         if (text) sent.push(text);
         else if (this.outboxState.find((item) => item.id === id)?.status === "failed") failed.push(id);
@@ -1001,7 +1002,7 @@ class Engine implements CleanerCore {
         const sent = await this.drainOne();
         return { handled: true, reason: "host-time", sent };
       }
-      const confirmer = this.jobActor();
+      const confirmer = this.cleanerRecord()?.phone;
       if (!confirmer || from !== confirmer) return this.markIgnored(id);
       if (isYes(text)) {
         if (this.stale(job)) return this.markIgnored(id);
@@ -1021,7 +1022,7 @@ class Engine implements CleanerCore {
 
   private async confirm(job: Job): Promise<CleanerText[]> {
     const checkout = this.latestFact(job.id, "checkout");
-    const to = this.jobActor();
+    const to = this.cleanerRecord()?.phone;
     if (!checkout || !to) return [];
     const when = this.clock(job.checkoutDate, checkout.minutes);
     const id = `confirm:${job.id}:${job.checkoutDate}:${checkout.minutes}:${job.nextCheckInDate ?? ""}`;
@@ -1035,19 +1036,13 @@ class Engine implements CleanerCore {
     return text ? [text] : [];
   }
 
-  /**
-   * The only phone that can receive a job text or confirm it.
-   * An opted-in approved cleaner always wins. A group or a door code will not fall back to the host.
-   * Step C, with neither, still lets the host confirm the offer.
-   */
-  private jobActor(): string | undefined {
-    if (this.options.cleaner.approved && this.cleanerConsent === "in" && this.cleanerPhone) return this.cleanerPhone;
-    if (this.cleanerConsentRequired()) return undefined;
-    return this.owner;
-  }
-
-  private cleanerConsentRequired(): boolean {
-    return Boolean(this.pin) || this.messaging?.requested === "group";
+  /** The property's opted-in cleaner. No record means cleaner texts stay unsent. */
+  private cleanerRecord(): OptedInCleaner | undefined {
+    return asOptedInCleaner({
+      phone: this.cleanerPhone,
+      approved: this.options.cleaner.approved,
+      consent: this.cleanerConsent,
+    });
   }
 
   private awaitingOptIn(): boolean {
@@ -1141,13 +1136,18 @@ class Engine implements CleanerCore {
       const alert = await this.alertStale();
       return alert ? [alert] : [];
     }
-    if (this.delivery(key) !== "sent") {
+    if (this.delivery(key) !== "sent" && this.pin) {
+      const addressed = addressCleaner(this.cleanerRecord(), {
+        kind: "pin",
+        body: doorCodeBody(this.options.property.address, this.pin),
+      });
+      if (!addressed) return sent;
       const text = await this.emit({
         id: key,
         jobId: job.id,
-        to: this.cleanerPhone,
+        to: addressed.to,
         kind: "pin",
-        body: `Guests have left ${this.options.property.address}. Door code: ${this.pin}. This code is only for you.`,
+        body: addressed.body,
       });
       if (text) sent.push(text);
     }
@@ -1255,7 +1255,7 @@ class Engine implements CleanerCore {
       if (status === "confirmed" || status === "awaiting_departure" || status === "cleared" || status === "in_progress" || status === "done") continue;
       const draft = this.noticeFor(job);
       if (!draft) return [];
-      if ((draft.kind === "offer" || draft.kind === "corrected") && this.sourceFeedStale()) {
+      if ((draft.kind === "offer" || draft.kind === "corrected" || draft.kind === "held") && this.sourceFeedStale()) {
         const alert = await this.alertStale();
         return alert ? [alert] : [];
       }
@@ -1308,36 +1308,40 @@ class Engine implements CleanerCore {
       };
     }
     if (!job.announced) {
-      const to = this.jobActor();
-      if (!to) {
+      const checkMinutes = checkin?.minutes ?? null;
+      const checkoutWhen = this.clock(job.checkoutDate, checkout.minutes);
+      const nextWhen = job.nextCheckInDate ? this.clock(job.nextCheckInDate, checkMinutes ?? this.defaultCheckIn) : null;
+      const addressed = addressCleaner(this.cleanerRecord(), {
+        kind: "offer",
+        body: offerBody(this.options.property.address, checkoutWhen, nextWhen, job.sameDay),
+      });
+      if (!addressed) {
         if (!this.owner) return null;
         const holdId = `hold:${job.id}:${job.checkoutDate}`;
         if (this.delivery(holdId) === "sent") return null;
-        const when = this.clock(job.checkoutDate, checkout.minutes);
         return {
           id: holdId,
           jobId: job.id,
           to: this.owner,
           kind: "held",
-          body: `The cleaning at ${this.options.property.address} on ${when.day} is on hold until the cleaner replies YES.`,
+          body: holdNote(this.options.property.address),
         };
       }
-      const checkMinutes = checkin?.minutes ?? null;
       const id = `offer:${job.id}:${job.checkoutDate}:${checkout.minutes}:${job.nextCheckInDate ?? ""}:${checkMinutes ?? ""}`;
       if (this.delivery(id) === "sent") return null;
       return {
         id,
         jobId: job.id,
-        to,
+        to: addressed.to,
         kind: "offer",
-        body: offerBody(this.options.property.address, this.clock(job.checkoutDate, checkout.minutes), job.nextCheckInDate ? this.clock(job.nextCheckInDate, checkMinutes ?? this.defaultCheckIn) : null, job.sameDay),
+        body: addressed.body,
         afterSend: () => {
           job.announced = this.currentAnnouncement(job);
         },
       };
     }
     if (this.checkoutDrift(job)) {
-      const to = this.jobActor();
+      const to = this.cleanerRecord()?.phone;
       if (!to) return null;
       const when = this.clock(job.checkoutDate, checkout.minutes);
       const id = `corrected:${job.id}:${job.checkoutDate}:${checkout.minutes}:${job.nextCheckInDate ?? ""}`;
@@ -1357,29 +1361,52 @@ class Engine implements CleanerCore {
     return null;
   }
 
-  /** Job texts go to the job actor. Offer copies are the only texts anyone else can see. */
+  /** Offer, reminder, and door-code texts are re-addressed here. No cleaner record means they are not sent. */
   private async emit(draft: Draft): Promise<CleanerText | null> {
+    if ((draft.kind === "offer" || draft.kind === "reminder" || draft.kind === "pin") && !draft.channel) {
+      const addressed = addressCleaner(this.cleanerRecord(), { kind: draft.kind, body: draft.body });
+      if (!addressed) return null;
+      const text = await this.emitOne({
+        id: draft.id,
+        ...(draft.jobId ? { jobId: draft.jobId } : {}),
+        to: addressed.to,
+        body: addressed.body,
+        kind: draft.kind,
+        ...(draft.afterSend ? { afterSend: draft.afterSend } : {}),
+      });
+      if (this.delivery(draft.id) !== "sent") return null;
+      if (draft.kind === "offer") await this.copyOffer({ ...draft, body: addressed.body }, addressed.to);
+      return text;
+    }
+    if (draft.kind === "cancel-update") {
+      const cleaner = this.cleanerRecord();
+      if (!cleaner) return this.emitOne(draft);
+      return this.emitOne({
+        id: draft.id,
+        ...(draft.jobId ? { jobId: draft.jobId } : {}),
+        to: cleaner.phone,
+        body: draft.body,
+        kind: draft.kind,
+      });
+    }
     if (draft.channel || !JOB_TEXTS.has(draft.kind)) return this.emitOne(draft);
-    const actor = this.jobActor();
-    if (!actor) return null;
-    const text = await this.emitOne({
+    const cleaner = this.cleanerRecord();
+    if (!cleaner) return null;
+    return this.emitOne({
       id: draft.id,
       ...(draft.jobId ? { jobId: draft.jobId } : {}),
-      to: actor,
+      to: cleaner.phone,
       body: draft.body,
       kind: draft.kind,
       ...(draft.afterSend ? { afterSend: draft.afterSend } : {}),
     });
-    if (this.delivery(draft.id) !== "sent") return null;
-    if (draft.kind === "offer") await this.copyOffer(draft, actor);
-    return text;
   }
 
   private async copyOffer(draft: Draft, actor: string): Promise<void> {
     const mode = this.messagingMode();
     if (mode === "cleaner-only") return;
     const channel = mode === "native" ? "group" : "mirror";
-    const body = draft.body.endsWith(OFFER_YES) ? `${draft.body.slice(0, -OFFER_YES.length)}${OFFER_WAIT}` : draft.body;
+    const body = offerForOthers(draft.body);
     for (const person of this.audience()) {
       if (person.phone === actor || person.consent !== "in" || this.groupPhones.includes(person.phone)) continue;
       await this.emitOne({
@@ -1394,6 +1421,10 @@ class Engine implements CleanerCore {
   }
 
   private async emitOne(draft: Draft): Promise<CleanerText | null> {
+    if ((draft.kind === "offer" || draft.kind === "reminder" || draft.kind === "pin") && !draft.channel) {
+      const addressed = addressCleaner(this.cleanerRecord(), { kind: draft.kind, body: draft.body });
+      if (!addressed || draft.to !== addressed.to) return null;
+    }
     if (!isScratchTestNumber(draft.to)) throw new Error("Cleaner Core only texts Scratch test numbers.");
     if (/\bready\b/i.test(draft.body)) throw new Error("A calendar time cannot mark the job ready.");
     if (draft.kind === "pin") {
@@ -1983,6 +2014,53 @@ class Engine implements CleanerCore {
     return sent;
   }
 
+  private async retryUncertain(inboundId: string): Promise<ReceiveResult> {
+    const item = this.outboxState.find((row) => row.status === "uncertain" && (row.kind === "offer" || row.kind === "reminder"));
+    const retryId = item ? `retry:${item.id}` : "";
+    if (!item || this.delivery(retryId) === "sent") {
+      this.inboundIds.push(inboundId);
+      this.save();
+      return { handled: true, reason: item ? "duplicate" : "ignored", sent: [] };
+    }
+    const kind = item.kind === "reminder" ? "reminder" : "offer";
+    const addressed = addressCleaner(this.cleanerRecord(), { kind, body: item.body });
+    if (!addressed) {
+      this.inboundIds.push(inboundId);
+      this.save();
+      return { handled: true, reason: "ignored", sent: [] };
+    }
+    const text = await this.emitOne({
+      id: retryId,
+      ...(item.jobId ? { jobId: item.jobId } : {}),
+      to: addressed.to,
+      kind,
+      body: addressed.body,
+    });
+    if (text) {
+      item.status = "sent";
+      if (item.lease) item.lease.state = "committed";
+      if (kind === "offer" && item.jobId) {
+        const job = this.jobsState.find((row) => row.id === item.jobId);
+        if (job && !job.announced) job.announced = this.currentAnnouncement(job);
+      }
+    }
+    this.inboundIds.push(inboundId);
+    this.save();
+    return { handled: true, reason: "retry", sent: text ? [text] : [] };
+  }
+
+  private reviewDetail(kind: ReviewKind, subject: string): ReviewDetail {
+    if (kind !== "uncertain-sms" && kind !== "missed-reminder") return {};
+    const item = this.outboxState.find((row) => row.id === subject);
+    const job = (item?.jobId ? this.jobsState.find((row) => row.id === item.jobId) : undefined) ?? this.ordered()[0];
+    const minutes = job ? (this.latestFact(job.id, "checkout")?.minutes ?? this.defaultCheckout) : this.defaultCheckout;
+    const day = job
+      ? this.clock(job.checkoutDate, minutes).day
+      : formatWhen(this.now().toISOString(), this.options.property.timeZone).day;
+    const about = kind === "missed-reminder" || item?.kind === "reminder" ? "reminder" : "offer";
+    return { day, about };
+  }
+
   private async openReview(kind: ReviewKind, subject: string, notify: boolean): Promise<CleanerText | null> {
     const id = reviewId(kind, subject);
     if (this.reviewItems.some((item) => item.id === id)) return null;
@@ -1993,7 +2071,12 @@ class Engine implements CleanerCore {
       this.save();
       return null;
     }
-    return this.emit({ id, to: this.owner, kind: "review", body: reviewAlert(kind, this.options.property.address) });
+    return this.emit({
+      id,
+      to: this.owner,
+      kind: "review",
+      body: reviewAlert(kind, this.options.property.address, this.reviewDetail(kind, subject)),
+    });
   }
 
   private audit(actor: string, source: string, version: number, reason: string): void {
@@ -2038,11 +2121,6 @@ class Engine implements CleanerCore {
 
 function emptyCounters(): Counters {
   return { sent: 0, failed: 0, uncertain: 0, canceled: 0, injury: 0, stop: 0, help: 0, polls: 0, pollFails: 0, pollDurationMs: 0 };
-}
-
-function offerBody(address: string, checkout: { day: string; time: string }, next: { day: string; time: string } | null, sameDay: boolean): string {
-  const guest = !next ? "" : sameDay || next.day === checkout.day ? `, next guest ${next.time}` : `, next guest ${next.day} at ${next.time}`;
-  return `Turnover at ${address} on ${checkout.day}. Checkout ${checkout.time}${guest}. Reply YES to schedule it, or STOP to opt out.`;
 }
 
 function minutesOf(hmText: string): number {

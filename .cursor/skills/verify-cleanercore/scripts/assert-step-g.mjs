@@ -24,9 +24,11 @@ const OFFER_2PM = `Turnover at ${LANE} on Sunday, Oct 18. Checkout 2:00 PM, next
 const WAIT_OFFER = OFFER.replace("Reply YES to schedule it, or STOP to opt out.", "The cleaner will reply to confirm.");
 const GROUP = "Group text: ";
 const MIRROR = "Copy of the group text: ";
-const STALE = `The booking feed for ${LANE} is stale, so I did not offer a new cleaning or send the door code. I will use the feed again after a fresh read.`;
-const UNCERTAIN = "A text may not have gone out. I did not send it again. Please check, then tell me if I should retry.";
-const EXPOSURE = "A text may include the door code. I saved it for your review and did not repeat the digits.";
+const STALE = `I can't see the latest bookings for ${LANE} right now, so I'm holding new cleanings and the door code. I'll pick back up once the calendar updates. If a time changed, just text it to me.`;
+const UNCERTAIN = "My cleaning offer to the cleaner for Sunday, Oct 18 may not have gone out. I didn't resend it. Reply RETRY to send it again.";
+const UNCERTAIN_QUEUE = "My cleaning offer to the cleaner for Wednesday, Oct 14 may not have gone out. I didn't resend it. Reply RETRY to send it again.";
+const REMINDER_MISSED = "My reminder to the cleaner for Wednesday, Oct 14 didn't go out. I didn't resend it. Reply RETRY to send it again.";
+const EXPOSURE = "I held a text to the cleaner because it looked like it had the door code in it.";
 const AIRBNB = `I saved a manual Airbnb booking exception for ${LANE}. I did not change the cleaning until you confirm it.`;
 const PIN = `Guests have left ${LANE}. Door code: [redacted]. This code is only for you.`;
 const PIN_NOTICE = "Door code sent to the cleaner.";
@@ -38,15 +40,16 @@ const HOST_HURT = `The cleaner at ${LANE} says someone is hurt. They've been tol
 const OBSERVER_HURT = `An observer at ${LANE} says someone is hurt. They've been told to call 911.`;
 const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know.";
 const OPT_IN = `Hi, this is Scratch's cleaning scheduler for ${LANE}. Reply YES to get cleaning texts, or STOP to opt out.`;
+const HOLD = `The cleaning at ${LANE} is on hold until the cleaner replies YES.`;
 const COURT_MONDAY = `Is checkout at ${COURT} on Monday, Oct 19 still 11:00 AM? Reply YES or send the new time.`;
 const REVIEWS = [
   ["stale-source", STALE],
   ["airbnb-exception", AIRBNB],
   ["same-day-capacity", `Same-day cleaning at ${LANE} may be too tight. I saved it for your review and did not add another offer.`],
-  ["missed-reminder", `A cleaning reminder for ${LANE} did not go out. I saved it for your review.`],
+  ["missed-reminder", REMINDER_MISSED],
   ["conflicting-replies", `I got conflicting replies about the cleaning at ${LANE}. I did not change the job.`],
   ["failed-sms", "A text failed to send. I saved it for your review and did not count it as delivered."],
-  ["uncertain-sms", UNCERTAIN],
+  ["uncertain-sms", UNCERTAIN_QUEUE],
   ["shared-chat-routing", `I could not tell who should get the cleaning texts at ${LANE}. I did not start a group or send the door code.`],
   ["possible-code-exposure", EXPOSURE],
 ];
@@ -80,9 +83,10 @@ const last = reports[reports.length - 1];
 if (journey === "stale-source") {
   same(first.sent, [
     { to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" },
+    { to: CLEANER, body: OPT_IN, kind: "opt-in" },
     { to: OWNER, body: CHECKIN_Q, kind: "host-checkin" },
     { to: OWNER, body: STALE, kind: "review" },
-    { to: OWNER, body: OFFER, kind: "offer" },
+    { to: CLEANER, body: OFFER, kind: "offer" },
   ]);
   same(first.reviews.map((item) => ({ kind: item.kind, status: item.status })), [{ kind: "stale-source", status: "resolved" }]);
   same(first.sources.map((item) => item.freshness), ["fresh"]);
@@ -93,8 +97,9 @@ if (journey === "stale-source") {
 } else if (journey === "host-override-beats-stale-feed") {
   same(first.sent, [
     { to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" },
+    { to: CLEANER, body: OPT_IN, kind: "opt-in" },
     { to: OWNER, body: CHECKIN_Q, kind: "host-checkin" },
-    { to: OWNER, body: OFFER_2PM, kind: "offer" },
+    { to: CLEANER, body: OFFER_2PM, kind: "offer" },
   ]);
   const job = first.jobs.find((item) => item.id === "stay-anita@guesty.com");
   same(job && { checkoutDate: job.checkoutDate, checkoutTime: job.checkoutTime }, { checkoutDate: "2026-10-18", checkoutTime: "2:00 PM" });
@@ -136,22 +141,38 @@ if (journey === "stale-source") {
   same(courtAgain.sent, []);
   same(courtAgain.jobs.map((job) => job.id), ["google:evt-court"]);
   if (JSON.stringify(restored.sent).includes(COURT_OWNER) || JSON.stringify(court.sent).includes(OWNER)) fail("a house texted the other house");
+} else if (journey === "no-cleaner") {
+  same(first.sent, [
+    { to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" },
+    { to: OWNER, body: CHECKIN_Q, kind: "host-checkin" },
+    { to: OWNER, body: HOLD, kind: "held" },
+  ]);
+  if (first.sent.some((text) => text.kind === "offer" || text.body.startsWith("Turnover at"))) fail("an offer went out with no opted-in cleaner");
+  if (first.jobs.some((job) => job.status === "offered")) fail("a job was offered with no opted-in cleaner");
+  same(last.sent, []);
+  if (last.outbox.filter((item) => item.body === HOLD && item.status === "sent").length !== 1) fail("the hold note was repeated");
 } else if (journey === "replay-no-resend") {
-  if (!first.sent.some((text) => text.kind === "offer" && text.body === OFFER)) fail("the turn never sent the offer");
+  if (!first.sent.some((text) => text.kind === "offer" && text.to === CLEANER && text.body === OFFER)) fail("the offer did not go to the cleaner");
+  if (first.sent.some((text) => text.kind === "offer" && text.to === OWNER)) fail("the offer went to the host");
   same(last.sent, []);
   if (!last.outbox.some((item) => item.kind === "offer" && item.status === "sent")) fail("the offer disappeared");
 } else if (journey === "recovery-after-restart") {
   const crashed = reports[0];
   const replay = reports[1];
   const again = reports[2];
-  const held = reports[3];
-  const resumed = reports[4];
-  const third = reports[5];
+  const retried = reports[3];
+  const retriedAgain = reports[4];
+  const held = reports[5];
+  const resumed = reports[6];
+  const third = reports[7];
   same(crashed.halted, "after-accept");
   if (crashed.sent.filter((text) => text.kind === "offer").length !== 1) fail("the offer was not accepted once");
   same(replay.sent, [{ to: OWNER, body: UNCERTAIN, kind: "review" }]);
   same(replay.reviews.map((item) => item.kind), ["uncertain-sms"]);
   same(again.sent, []);
+  same(retried.sent, [{ to: CLEANER, body: OFFER, kind: "offer" }]);
+  if (retried.sent.some((text) => text.to !== CLEANER)) fail("RETRY sent the offer to someone other than the cleaner");
+  same(retriedAgain.sent, []);
   same(held.halted, "before-pin");
   if (held.sent.some((text) => text.kind === "pin")) fail("the crash sent the door code");
   same(resumed.sent.filter((text) => text.kind === "pin"), [{ to: CLEANER, body: PIN, kind: "pin" }]);

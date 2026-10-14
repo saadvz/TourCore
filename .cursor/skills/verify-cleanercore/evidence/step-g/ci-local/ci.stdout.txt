@@ -14,6 +14,6 @@ secret-scan ok
 test-eval ok
 == SETUP_PROMPT unchanged
 SETUP_PROMPT ok
-test-default       Tests  1787 passed (1787)
-test-on       Tests  70 passed (70)
-test-off       Tests  70 passed (70)
+test-default       Tests  1789 passed (1789)
+test-on       Tests  72 passed (72)
+test-off       Tests  72 passed (72)

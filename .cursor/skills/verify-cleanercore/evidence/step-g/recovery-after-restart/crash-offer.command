@@ -1,1 +1,1 @@
-smoke --with-pin --data /tmp/tmp.fESiwKp2aW --crash after-accept --feed /workspace/src/cleaner-core/fixtures/guesty-lite-scratch.ics --reply +15555550101=YES --reply +15555550100=YES --reply +15555550100=YES
+smoke --with-pin --data /tmp/tmp.V4YIdNOR1i --crash after-accept --feed /workspace/src/cleaner-core/fixtures/guesty-lite-scratch.ics --reply +15555550101=YES --reply +15555550100=YES --reply +15555550100=YES
