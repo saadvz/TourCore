@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "flag": true,
+  "property": "12 Scratch Lane, Teaneck, NJ 07666",
+  "sent": [],
+  "pinRecipients": [],
+  "jobs": [],
+  "outbox": [],
+  "transcript": [],
+  "blocks": [],
+  "tenant": "scratch-lane",
+  "sync": {
+    "reason": "wrong-tenant",
+    "conversation": "closed",
+    "sources": [],
+    "conflicts": []
+  }
+}

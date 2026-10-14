@@ -1,0 +1,3 @@
+features: source-read closed-sync removed one-job block wrong-tenant tenant-isolation
+script: .cursor/skills/verify-cleanercore/scripts/prove-step-e.sh
+pins: redacted

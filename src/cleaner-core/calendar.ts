@@ -7,6 +7,8 @@ export interface Turnover {
   id: string;
   departingUid: string;
   arrivingUid: string | null;
+  /** Check-in date of the departing stay. Used to recognize the same booking in another source. */
+  checkInDate: string;
   checkoutDate: string;
   nextCheckInDate: string | null;
   sameDay: boolean;
@@ -44,6 +46,7 @@ export function interpretFeed(ical: string): FeedRead {
       id: stay.uid,
       departingUid: stay.uid,
       arrivingUid,
+      checkInDate: stay.checkInDate,
       checkoutDate: stay.checkOutDate,
       nextCheckInDate,
       sameDay: nextCheckInDate === stay.checkOutDate,
@@ -101,7 +104,7 @@ function parseEvent(body: string): ParsedEvent | undefined {
   const sequence = Number(prop(body, "SEQUENCE")?.value ?? "0");
   return {
     uid,
-    kind: isBlock(summary, description) ? "block" : "stay",
+    kind: isCalendarBlock(summary, description) ? "block" : "stay",
     summary,
     checkInDate,
     checkOutDate,
@@ -109,7 +112,8 @@ function parseEvent(body: string): ParsedEvent | undefined {
   };
 }
 
-function isBlock(summary: string, description: string): boolean {
+/** A block is not a stay and not a departure. Shared by Guesty Lite and Google Calendar. */
+export function isCalendarBlock(summary: string, description: string): boolean {
   return /\b(blocked|block|not available|unavailable|owner block)\b/i.test(`${summary}\n${description}`);
 }
 

@@ -1,0 +1,1 @@
+env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --tenant scratch-court --closed --data /tmp/tmp.GGI7182CnI --google /workspace/src/cleaner-core/fixtures/google-court-stay.json --google /workspace/src/cleaner-core/fixtures/google-court-stay-moved.json --google /workspace/src/cleaner-core/fixtures/google-court-stay-moved.json

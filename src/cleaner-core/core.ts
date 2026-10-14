@@ -10,6 +10,8 @@ import { VisitorDenialCopy } from "../core/TourCore";
 import { writeFileAtomic } from "../storage/atomicWrite";
 import { addCalendarDays, formatWhen, interpretFeed, zonedInstant, type FeedBlock, type Turnover } from "./calendar";
 import { isScratchTestNumber } from "./scratch";
+import { normalizeSnapshots, type BookingSource, type BookingSourceKind, type SourceConflict, type SourceSnapshot } from "./sources";
+import { isOtherScratchTenantPhone } from "./tenants";
 
 export type TextKind =
   | "host-checkout"
@@ -82,10 +84,17 @@ export interface OutboxView {
 
 export interface PollResult {
   polled: boolean;
-  reason: "disabled" | "scratch-only" | "not-consented" | "read";
+  reason: "disabled" | "scratch-only" | "not-consented" | "read" | "wrong-tenant";
   sent: CleanerText[];
   jobs: JobView[];
   blocks: FeedBlock[];
+}
+
+export interface SyncState {
+  reason: PollResult["reason"];
+  conversation: "closed" | "open";
+  sources: BookingSourceKind[];
+  conflicts: SourceConflict[];
 }
 
 export type ReceiveReason =
@@ -102,7 +111,8 @@ export type ReceiveReason =
   | "host-time"
   | "departure"
   | "opted-in"
-  | "done";
+  | "done"
+  | "wrong-tenant";
 
 export interface ReceiveResult {
   handled: boolean;
@@ -146,16 +156,20 @@ export interface CleanerCoreOptions {
   triggers?: ReminderTrigger[];
   /** When set, jobs and the outbox reload after a process restart. */
   dataDir?: string;
+  /** Scratch tenant id. Other Scratch tenants' phones are ignored and never texted. */
+  tenantId?: string;
 }
 
 export interface CleanerCore {
-  pollFeed(ical: string): Promise<PollResult>;
+  pollFeed(ical: string, options?: { conversation?: "closed" | "open" }): Promise<PollResult>;
+  readSource(source: BookingSource, options?: { conversation?: "closed" | "open" }): Promise<PollResult & SyncState>;
   receive(input: { id: string; from: string; text: string }): Promise<ReceiveResult>;
   runReminders(): Promise<ReminderResult>;
   jobs(): JobView[];
   outbox(): OutboxView[];
   transcript(): string[];
   blocks(): FeedBlock[];
+  lastSync(): SyncState;
 }
 
 const HELP_ACK = "Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.";
@@ -290,6 +304,10 @@ class Engine implements CleanerCore {
   private blockState: FeedBlock[] = [];
   private readonly now: () => Date;
   private readonly file: string | undefined;
+  private readonly tenantId: string;
+  private readonly latest = new Map<BookingSourceKind, SourceSnapshot>();
+  private conflictState: SourceConflict[] = [];
+  private syncState: SyncState = { reason: "read", conversation: "open", sources: [], conflicts: [] };
 
   constructor(private readonly options: CleanerCoreOptions) {
     this.enabled = options.enabled;
@@ -308,25 +326,29 @@ class Engine implements CleanerCore {
     this.everConsented = options.consented === true;
     this.now = options.now ?? (() => new Date());
     this.file = options.dataDir ? join(options.dataDir, "cleaner-core.json") : undefined;
+    this.tenantId = options.tenantId?.trim() || options.property.id;
     this.load();
   }
 
-  async pollFeed(ical: string): Promise<PollResult> {
-    if (!this.enabled) return { polled: false, reason: "disabled", sent: [], jobs: [], blocks: [] };
-    if (!this.scratchReady()) return { polled: false, reason: "scratch-only", sent: [], jobs: this.jobs(), blocks: [] };
-    if (this.optedOut || !this.everConsented) {
-      if (!this.everConsented) return { polled: false, reason: "not-consented", sent: [], jobs: [], blocks: [] };
-    }
+  async pollFeed(ical: string, options?: { conversation?: "closed" | "open" }): Promise<PollResult> {
+    const conversation = options?.conversation ?? "open";
+    const blocked = this.syncBlocked(conversation);
+    if (blocked) return blocked;
     const feed = interpretFeed(ical);
-    this.blockState = feed.blocks;
-    this.reconcile(feed.turnovers);
-    const sent = this.optedOut ? [] : await this.drainOne();
-    if (!this.optedOut) {
-      const optIn = await this.sendOptIn();
-      if (optIn) sent.push(optIn);
+    return this.applySnapshot({ kind: "guesty-lite", tenantId: this.tenantId, turnovers: feed.turnovers, blocks: feed.blocks }, conversation);
+  }
+
+  async readSource(source: BookingSource, options?: { conversation?: "closed" | "open" }): Promise<PollResult & SyncState> {
+    const conversation = options?.conversation ?? "open";
+    const blocked = this.syncBlocked(conversation);
+    if (blocked) return this.withSync(blocked);
+    const snapshot = await source.read();
+    if (snapshot.kind !== source.kind) throw new Error("Booking source kind does not match the read.");
+    if (snapshot.tenantId !== this.tenantId) {
+      this.syncState = { reason: "wrong-tenant", conversation, sources: this.sourceNames(), conflicts: this.conflictState };
+      return this.withSync({ polled: false, reason: "wrong-tenant", sent: [], jobs: this.jobs(), blocks: this.blocks() });
     }
-    this.save();
-    return { polled: true, reason: "read", sent, jobs: this.jobs(), blocks: this.blocks() };
+    return this.withSync(await this.applySnapshot(snapshot, conversation));
   }
 
   async receive(input: { id: string; from: string; text: string }): Promise<ReceiveResult> {
@@ -335,6 +357,11 @@ class Engine implements CleanerCore {
     if (!from || !isScratchTestNumber(from)) return { handled: true, reason: "scratch-only", sent: [] };
     if (this.inboundIds.includes(input.id)) return { handled: true, reason: "duplicate", sent: [] };
     this.transcriptState.push(this.redact(`${from}: ${input.text.trim()}`));
+    if (isOtherScratchTenantPhone(this.tenantId, from)) {
+      this.inboundIds.push(input.id);
+      this.save();
+      return { handled: true, reason: "wrong-tenant", sent: [] };
+    }
 
     const keyword = keywordOf(input.text);
     if (keyword === "help") return this.safety(input.id, () => this.reply(from, HELP_ACK, "help", "help", input.id));
@@ -416,6 +443,57 @@ class Engine implements CleanerCore {
 
   blocks(): FeedBlock[] {
     return this.blockState.map((block) => ({ ...block }));
+  }
+
+  lastSync(): SyncState {
+    return {
+      reason: this.syncState.reason,
+      conversation: this.syncState.conversation,
+      sources: [...this.syncState.sources],
+      conflicts: this.syncState.conflicts.map((conflict) => ({ ...conflict })),
+    };
+  }
+
+  private syncBlocked(conversation: "closed" | "open"): PollResult | undefined {
+    if (!this.enabled) return this.noteSync({ polled: false, reason: "disabled", sent: [], jobs: [], blocks: [] }, conversation);
+    if (!this.scratchReady()) return this.noteSync({ polled: false, reason: "scratch-only", sent: [], jobs: this.jobs(), blocks: [] }, conversation);
+    if (!this.everConsented) return this.noteSync({ polled: false, reason: "not-consented", sent: [], jobs: [], blocks: [] }, conversation);
+    return undefined;
+  }
+
+  private noteSync(result: PollResult, conversation: "closed" | "open"): PollResult {
+    this.syncState = { reason: result.reason, conversation, sources: this.sourceNames(), conflicts: this.conflictState };
+    return result;
+  }
+
+  private async applySnapshot(snapshot: SourceSnapshot, conversation: "closed" | "open"): Promise<PollResult> {
+    this.latest.set(snapshot.kind, snapshot);
+    const normalized = normalizeSnapshots([...this.latest.values()]);
+    this.conflictState = normalized.conflicts;
+    this.blockState = normalized.feed.blocks;
+    this.reconcile(normalized.feed.turnovers);
+    const sent = this.optedOut ? [] : await this.drainOne();
+    if (!this.optedOut) {
+      const optIn = await this.sendOptIn();
+      if (optIn) sent.push(optIn);
+    }
+    this.save();
+    const result: PollResult = { polled: true, reason: "read", sent, jobs: this.jobs(), blocks: this.blocks() };
+    this.syncState = { reason: "read", conversation, sources: this.sourceNames(), conflicts: this.conflictState };
+    return result;
+  }
+
+  private sourceNames(): BookingSourceKind[] {
+    return (["guesty-lite", "google-calendar"] as const).filter((kind) => this.latest.has(kind));
+  }
+
+  private withSync(result: PollResult): PollResult & SyncState {
+    return {
+      ...result,
+      conversation: this.syncState.conversation,
+      sources: [...this.syncState.sources],
+      conflicts: this.syncState.conflicts.map((conflict) => ({ ...conflict })),
+    };
   }
 
   private async answer(id: string, from: string, text: string): Promise<ReceiveResult> {

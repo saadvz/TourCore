@@ -1,0 +1,16 @@
+{
+  "tenantId": "scratch-lane",
+  "timeZone": "America/New_York",
+  "summary": "12 Scratch Lane",
+  "items": [
+    {
+      "id": "evt-anita",
+      "status": "confirmed",
+      "summary": "Reserved",
+      "description": "Clock bait 10:00. Do not text +15555550110. Do not copy 4821 or 7392.",
+      "sequence": 1,
+      "start": { "dateTime": "2026-10-16T15:00:00-04:00" },
+      "end": { "dateTime": "2026-10-18T10:00:00-04:00" }
+    }
+  ]
+}

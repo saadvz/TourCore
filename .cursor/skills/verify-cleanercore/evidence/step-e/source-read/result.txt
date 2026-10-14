@@ -1,0 +1,2 @@
+feature: source-read
+pass
