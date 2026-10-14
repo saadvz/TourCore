@@ -82,18 +82,26 @@ export function groupDoorCodeBody(cleanerName: string, address: string, code: st
 }
 
 export function privateCodeLine(cleanerName: string): string {
-  return `I've sent the door code to ${cleanerName} privately.`;
+  return `${cleanerName} got the door code privately.`;
 }
 
-const PRIVATE_CODE_PREFIX = "I've sent the door code to ";
-const PRIVATE_CODE_SUFFIX = " privately.";
+const PRIVATE_GOT = " got the door code privately.";
 
 export function isPrivateCodeLine(body: string): boolean {
-  return body.startsWith(PRIVATE_CODE_PREFIX) && body.endsWith(PRIVATE_CODE_SUFFIX) && body.length > PRIVATE_CODE_PREFIX.length + PRIVATE_CODE_SUFFIX.length;
+  return body.endsWith(PRIVATE_GOT) && body.length > PRIVATE_GOT.length;
 }
 
-export function groupUnconfirmedLine(): string {
-  return "I couldn't send that to the group.";
+const GROUP_SEND_TOPICS = new Map<string, string>([
+  ["confirm", "checkout time"],
+  ["offer", "cleaning offer"],
+  ["reminder", "reminder"],
+  ["opt-in", "invitation"],
+]);
+
+export function groupUnconfirmedLine(kind: string): string {
+  const topic = GROUP_SEND_TOPICS.get(kind);
+  if (!topic) return "I couldn't send that to the group.";
+  return `I couldn't send the ${topic} to the group.`;
 }
 
 export function groupTimeLine(hostName: string): string {

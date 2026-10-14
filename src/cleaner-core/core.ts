@@ -332,6 +332,7 @@ export interface CleanerCore {
   /** Marks an accepted door-code text undelivered so the next departure can send it again. Sends nothing. */
   markPinUndelivered(): void;
   hostNotes(): string[];
+  keepHostNote(id: string, body: string): void;
   notePrivateCodeDelivered(): void;
   /** Keeps a door code in memory after a later tool call opens the seal. Does not write it. */
   rememberPin(pin: string): void;
@@ -342,7 +343,7 @@ const DECLINED = "Okay, that turnover is not scheduled.";
 const HOST_INJURY = "If someone is hurt, call 911 now.";
 const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know.";
 const CLEANER_HURT_MISSED = "If someone is hurt, call 911 now. I couldn't reach the host, so please call them too.";
-const SAFETY = new Set<TextKind>(["stop", "start", "emergency"]);
+export const SAFETY = new Set<TextKind>(["stop", "start", "emergency"]);
 const JOB_TEXTS = new Set<TextKind>(["offer", "corrected", "confirm", "reminder", "cancel-update", "declined", "started", "done"]);
 const HOST_DIRECT = new Set<TextKind>(["host-checkout", "host-checkin", "pin-failed", "pin-held", "resume"]);
 const GROUP_PREFIX = "Group text: ";
@@ -889,11 +890,11 @@ class Engine implements CleanerCore {
   }
 
   async resumeJob(): Promise<CleanerText | null> {
-    if (!this.groupChat || !this.owner) return null;
+    if (!this.groupChat) return null;
     this.problemHold = false;
     const text = await this.emit({
       id: `resume:${this.options.property.id}`,
-      to: this.owner,
+      to: this.owner ?? "",
       kind: "resume",
       body: resumeNote(this.options.property.address),
     });
@@ -1356,10 +1357,6 @@ class Engine implements CleanerCore {
           if (privateText) sent.push(privateText);
         }
       }
-      if (this.groupChat && route === "private" && this.delivery(key) === "sent") {
-        const note = await this.emitGroup(`pin-private:${key}`, privateCodeLine(this.groupChat.cleanerName), "pin-notice", job.id);
-        if (note) sent.push(note);
-      }
     }
     if (this.groupChat && this.groupPinTerminal && this.delivery(key) !== "sent") return sent;
     if (this.delivery(key) === "failed" && this.owner && !this.groupPhones.includes(this.owner)) {
@@ -1646,8 +1643,20 @@ class Engine implements CleanerCore {
     };
   }
 
-  private noteForHost(id: string, body: string): void {
-    if (!this.groupChat || this.hostNoteState.some((note) => note.id === id)) return;
+  private noteUnsentHost(draft: Draft): CleanerText | null {
+    if (draft.channel === "group" || !draft.body) return null;
+    if (draft.kind === "pin" || draft.kind === "pin-notice" || draft.kind === "pin-failed") return null;
+    if (this.pin && draft.body.includes(this.pin)) return null;
+    const forHost = (this.owner && draft.to === this.owner) || (!this.owner && HOST_DIRECT.has(draft.kind));
+    if (!forHost) return null;
+    if (this.outboxState.find((item) => item.id === draft.id)?.status !== "sent") this.upsert(draft, "sent");
+    this.keepHostNote(`host:${draft.kind}:${draft.body}`, draft.body);
+    return { to: draft.to, body: draft.body, kind: draft.kind };
+  }
+
+  keepHostNote(id: string, body: string): void {
+    if (!id || !body || this.hostNoteState.some((note) => note.id === id)) return;
+    if (this.pin && body.includes(this.pin)) return;
     this.hostNoteState.push({ id, body });
     this.save();
   }
@@ -1661,7 +1670,7 @@ class Engine implements CleanerCore {
     const job = this.releaseJob();
     const key = job ? this.pinKey(job) : undefined;
     if (!key || this.delivery(key) !== "sent") return;
-    this.noteForHost(`pin-private:${key}`, privateCodeLine(this.groupChat.cleanerName));
+    this.keepHostNote(`pin-private:${key}`, privateCodeLine(this.groupChat.cleanerName));
   }
 
   private async emitOne(draft: Draft): Promise<CleanerText | null> {
@@ -1671,6 +1680,7 @@ class Engine implements CleanerCore {
       const addressed = addressCleaner(this.cleanerRecord(), { kind: draft.kind, body: draft.body });
       if (!addressed || draft.to !== addressed.to) return null;
     }
+    if (!this.owner && HOST_DIRECT.has(draft.kind)) return this.noteUnsentHost(draft);
     if (!this.numberAllowed(draft.to)) {
       if (this.options.allowlist) return null;
       throw new Error("Cleaner Core only texts Scratch test numbers.");
@@ -1681,7 +1691,7 @@ class Engine implements CleanerCore {
       const audience = draft.audience ?? [];
       if (audience.length === 0 || audience.some((phone) => !allowed.has(phone))) return null;
     }
-    if (this.groupChat && draft.to === this.owner && this.hostGroup === "out" && !SAFETY.has(draft.kind)) return null;
+    if (this.groupChat && draft.to === this.owner && this.hostGroup === "out" && !SAFETY.has(draft.kind)) return this.noteUnsentHost(draft);
     if (this.groupChat && draft.to === this.cleanerPhone && this.cleanerConsent === "out" && !SAFETY.has(draft.kind)) return null;
     if (draft.kind === "pin") {
       const groupPin = Boolean(this.groupChat && draft.channel === "group" && codeRoute(this.groupSeats()) === "group" && draft.to === this.cleanerPhone);
@@ -1696,8 +1706,10 @@ class Engine implements CleanerCore {
     } else if (!this.pin && /\bdoor code\b/i.test(draft.body) && draft.kind !== "opt-in" && draft.kind !== "review") {
       throw new Error("Step C does not send a door code.");
     }
-    if (this.optedOut && !SAFETY.has(draft.kind)) return null;
-    if (this.participantConsent.get(draft.to) === "out" && !SAFETY.has(draft.kind)) return null;
+    if (this.optedOut && !SAFETY.has(draft.kind)) return draft.to === this.owner ? this.noteUnsentHost(draft) : null;
+    if (this.participantConsent.get(draft.to) === "out" && !SAFETY.has(draft.kind)) {
+      return draft.to === this.owner ? this.noteUnsentHost(draft) : null;
+    }
     const existing = this.outboxState.find((item) => item.id === draft.id);
     if (existing?.status === "sent" || existing?.status === "canceled") return null;
     if (existing?.lease?.state === "revoked" || existing?.lease?.state === "expired") return null;
@@ -1719,7 +1731,7 @@ class Engine implements CleanerCore {
         this.dropUncertain(draft.id);
         this.save();
         if (draft.kind !== "pin" && !isPrivateCodeLine(draft.body)) {
-          this.noteForHost(`group-unconfirmed:${this.options.property.id}`, groupUnconfirmedLine());
+          this.keepHostNote(`group-unconfirmed:${this.options.property.id}:${draft.kind}`, groupUnconfirmedLine(draft.kind));
         }
         return null;
       }

@@ -17,7 +17,7 @@ const HOLD = `The cleaning at ${ADDRESS} is on hold until the cleaner replies YE
 const STOP_HOLD = `The cleaner opted out of cleaning texts for ${ADDRESS}, so the job is on hold.`;
 const RESUME = `The cleaning at ${ADDRESS} is back on.`;
 const TIME = "Cory will confirm that time.";
-const PRIVATE_LINE = "I've sent the door code to Maria privately.";
+const PRIVATE_LINE = "Maria got the door code privately.";
 const GROUP_PIN = `Maria, guests have left ${ADDRESS}. Door code: [redacted].`;
 const PRIVATE_PIN = `Guests have left ${ADDRESS}. Door code: [redacted]. This code is only for you.`;
 const HURT = "If someone is hurt, call 911 now. I've let the host know.";
@@ -62,9 +62,8 @@ const checks = {
   },
   private() {
     if (pins.length !== 1 || pins[0].channel || pins[0].body !== PRIVATE_PIN || pins[0].to !== CLEANER) fail("private pin");
-    const notes = groups.filter((text) => text.kind === "pin-notice");
-    if (notes.length !== 1 || notes[0].body !== PRIVATE_LINE) fail("private line");
-    if (JSON.stringify(notes[0].audience) !== JSON.stringify([OWNER, CLEANER, EXTRA])) fail("private audience");
+    if (sent.some((text) => text.body === PRIVATE_LINE)) fail("private line was sent");
+    if (groups.some((text) => text.body === PRIVATE_LINE)) fail("group saw the private line");
     if (groups.some((text) => text.body.includes("[redacted]"))) fail("group saw the code");
     if (sent.filter((text) => text.to === EXTRA).some((text) => text.body.includes("[redacted]"))) fail("extra saw the code");
   },

@@ -1,11 +1,11 @@
 # Group thread for the host and the cleaner
 
-Cory and Maria opt in one-on-one, then read the same cleaning thread. The door code goes to that thread only when both have opted in and nobody else is in it. Otherwise Maria gets it privately and the thread gets one line that says so. Cory's texts do not move the job. A hurt message gets the same 911 reply as a one-on-one text, and the thread does not see it.
+Cory and Maria opt in one-on-one, then read the same cleaning thread. The door code goes to that thread only when both have opted in and nobody else is in it. Otherwise Maria gets it privately and the thread does not hear that. After delivery, Cory reads "Maria got the door code privately." from get_state. Cory's texts do not move the job. A hurt message gets the same 911 reply as a one-on-one text, and the thread does not see it.
 
 ## Sub-features
 
 - `eligible` sends one group door code after both people reply YES and the cleaner confirms.
-- `private` sends the code one-on-one when Alex has joined, plus one group line that names Maria.
+- `private` sends the code one-on-one when Alex has joined. The group does not get the private line.
 - `held` sends no code after the cleaner replies STOP, and the job does not clear.
 - `stop-host` drops Cory from later group texts and leaves Maria on them.
 - `resume` sends one resume line to Cory. Maria's START does not clear the hold.
