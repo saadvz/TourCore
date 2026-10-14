@@ -1,0 +1,3 @@
+features: read-feed host-time corrected-time reminder-once blocks one-live-job stop-silences no-pin safety-states failed-send
+script: .cursor/skills/verify-cleanercore/scripts/prove-step-c.sh
+pin: absent

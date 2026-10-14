@@ -53,34 +53,18 @@ for (const to of report.pinRecipients ?? []) {
   }
 }
 
-const pinTexts = (report.sent ?? []).filter((text) => text.kind === "pin");
-if (pinMode === "forbidden") {
-  if (pinTexts.length !== 0 || (report.pinRecipients ?? []).length !== 0) {
-    process.stderr.write("This journey must not send the door code\n");
-    process.exit(1);
-  }
-  for (const text of report.sent ?? []) {
-    if (String(text.body).includes("4821")) {
-      process.stderr.write("The door code leaked into a text\n");
-      process.exit(1);
-    }
-  }
-  process.exit(0);
-}
-
-if (pinTexts.length !== 1 || pinTexts[0].to !== "+15555550101") {
-  process.stderr.write("The door code must go only to +15555550101\n");
+const raw = actual.toString("utf8");
+if ((report.sent ?? []).some((text) => text.kind === "pin") || (report.pinRecipients ?? []).length !== 0) {
+  process.stderr.write("Step C must not send a door code\n");
   process.exit(1);
 }
-if (!Array.isArray(report.pinRecipients) || report.pinRecipients.length !== 1 || report.pinRecipients[0] !== "+15555550101") {
-  process.stderr.write("pinRecipients must be exactly [\"+15555550101\"]\n");
+if (raw.includes("4821") || raw.toLowerCase().includes("door code")) {
+  process.stderr.write("The door code leaked into the smoke report\n");
   process.exit(1);
 }
-for (const text of report.sent ?? []) {
-  if (text.kind !== "pin" && String(text.body).includes("4821")) {
-    process.stderr.write("The door code leaked into a non-pin text\n");
-    process.exit(1);
-  }
+if (pinMode === "required") {
+  process.stderr.write("Step C has no door-code send to require\n");
+  process.exit(1);
 }
 
 process.exit(0);

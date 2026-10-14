@@ -1,18 +1,19 @@
+import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { cleanerCoreEnabled } from "./flag";
-import { openCleanerCore, type CleanerText } from "./core";
+import { openCleanerCore, type CleanerText, type JobView, type OutboxView } from "./core";
+import type { FeedBlock } from "./calendar";
 import { isScratchTestNumber } from "./scratch";
 
 /**
  * Launch: `npx tsx src/cleaner-core/cli.ts doctor` or
  * `CLEANER_CORE_ENABLED=1 npx tsx src/cleaner-core/cli.ts smoke`.
- * Ready: doctor prints JSON and `"sends": false`. Smoke exits 0 only after one Scratch turnover.
+ * Ready: doctor prints JSON and `"sends": false`. Smoke exits 0 only after the Scratch script finishes.
  * Teardown: the process exits. It does not listen.
- * Drive: smoke reads a Guesty Lite-style iCal fixture and texts the test owner.
- * With no `--reply`, it injects YES from the owner and texts the door code only to the approved test cleaner.
- * `--reply <from>=<text>` is repeatable and replaces that YES. `from` must be a Scratch test number.
- * Any other argument fails the process and sends nothing.
- * Evidence: JSON on stdout (`sent`, `pinRecipients`). No socket is opened.
+ * Drive: smoke reads a Guesty Lite-style iCal feed and texts the test owner.
+ * With no arguments it asks the host, accepts the proposed times, and confirms the cleaning.
+ * It does not text a door code. `--reply`, `--feed`, `--then-feed`, `--remind`, `--data`, and `--now`
+ * run in argument order. `--no-poll` reloads a data directory without reading the feed again.
  */
 export interface DoctorReport {
   ok: true;
@@ -26,6 +27,13 @@ export interface SmokeReply {
   text: string;
 }
 
+export type SmokeOp =
+  | { type: "poll"; ical: string }
+  | { type: "reply"; from: string; text: string }
+  | { type: "remind" }
+  | { type: "now"; iso: string }
+  | { type: "fail"; n: number };
+
 export interface SmokeReport {
   ok: boolean;
   reason?: "disabled";
@@ -35,12 +43,16 @@ export interface SmokeReport {
   nextArrival?: string;
   sent: CleanerText[];
   pinRecipients: string[];
+  jobs?: JobView[];
+  outbox?: OutboxView[];
+  transcript?: string[];
+  blocks?: FeedBlock[];
 }
 
 const ADDRESS = "12 Scratch Lane, Teaneck, NJ 07666";
 const OWNER = "+15555550100";
 const CLEANER = "+15555550101";
-const PIN = "4821";
+const NOW = "2026-10-14T15:00:00.000Z";
 
 /** Same-day Scratch turnover. The later stay is first. The checkout date is folded. */
 const SCRATCH_ICAL = [
@@ -71,60 +83,92 @@ export function runDoctor(env: NodeJS.ProcessEnv = process.env): DoctorReport {
   };
 }
 
-export async function runSmoke(env: NodeJS.ProcessEnv = process.env, replies?: SmokeReply[]): Promise<SmokeReport> {
-  if (replies) {
-    for (const reply of replies) {
-      if (!isScratchTestNumber(reply.from)) {
-        throw new Error(`Cleaner Core only texts Scratch test numbers. Refusing ${reply.from}.`);
-      }
+export async function runSmoke(
+  env: NodeJS.ProcessEnv = process.env,
+  replies?: SmokeReply[],
+  extra?: { ops?: SmokeOp[]; dataDir?: string },
+): Promise<SmokeReport> {
+  const ops = extra?.ops ?? defaultOps(replies);
+  for (const op of ops) {
+    if (op.type === "reply" && !isScratchTestNumber(op.from)) {
+      throw new Error(`Cleaner Core only texts Scratch test numbers. Refusing ${op.from}.`);
     }
   }
   if (!cleanerCoreEnabled(env)) return { ok: false, reason: "disabled", sent: [], pinRecipients: [] };
   const sent: CleanerText[] = [];
+  let now = NOW;
+  let failures = 0;
   const core = openCleanerCore({
     enabled: true,
     property: { id: "prop_12_scratch_lane", address: ADDRESS, timeZone: "America/New_York" },
     ownerPhone: OWNER,
     cleaner: { phone: CLEANER, approved: true },
-    pin: PIN,
     consented: true,
-    sink: { send: (text) => { sent.push(text); } },
-    now: () => new Date("2026-10-14T15:00:00.000Z"),
+    sink: {
+      send: (text) => {
+        if (failures > 0) {
+          failures -= 1;
+          throw new Error("send failed");
+        }
+        sent.push(text);
+      },
+    },
+    now: () => new Date(now),
+    ...(extra?.dataDir ? { dataDir: extra.dataDir } : {}),
   });
-  const offer = await core.scheduleFromIcal(SCRATCH_ICAL);
-  if (replies) {
-    for (let i = 0; i < replies.length; i++) {
-      const reply = replies[i];
-      if (!reply) throw new Error("Cleaner Core failed");
-      await core.receive({ id: `smoke-reply-${i + 1}`, from: reply.from, text: reply.text });
-    }
-  } else {
-    await core.receive({ id: "smoke-yes", from: OWNER, text: "YES" });
+  for (let index = 0; index < ops.length; index++) {
+    const op = ops[index];
+    if (!op) continue;
+    if (op.type === "now") now = op.iso;
+    else if (op.type === "fail") failures += op.n;
+    else if (op.type === "poll") await core.pollFeed(op.ical);
+    else if (op.type === "reply") await core.receive({ id: `smoke-op-${index}`, from: op.from, text: op.text });
+    else await core.runReminders();
   }
+  const jobs = core.jobs();
+  const primary = jobs.find((job) => job.status === "confirmed") ?? jobs.find((job) => job.checkoutAt);
   return {
     ok: true,
     flag: true,
     property: ADDRESS,
-    checkout: offer.turnover?.checkout,
-    nextArrival: offer.turnover?.nextArrival,
+    ...(primary?.checkoutAt ? { checkout: primary.checkoutAt } : {}),
+    ...(primary?.nextCheckInAt ? { nextArrival: primary.nextCheckInAt } : {}),
     sent,
-    pinRecipients: sent.filter((text) => text.kind === "pin").map((text) => text.to),
+    pinRecipients: [],
+    jobs,
+    outbox: core.outbox(),
+    transcript: core.transcript(),
+    blocks: core.blocks(),
   };
 }
 
-const DOCTOR_USAGE = "Usage: tsx src/cleaner-core/cli.ts doctor";
-const SMOKE_USAGE = "Usage: tsx src/cleaner-core/cli.ts smoke [--reply <from>=<text> ...]";
+function defaultOps(replies?: SmokeReply[]): SmokeOp[] {
+  const ops: SmokeOp[] = [{ type: "poll", ical: SCRATCH_ICAL }];
+  if (replies) {
+    for (const reply of replies) ops.push({ type: "reply", from: reply.from, text: reply.text });
+    return ops;
+  }
+  ops.push({ type: "reply", from: OWNER, text: "YES" }, { type: "reply", from: OWNER, text: "YES" }, { type: "reply", from: OWNER, text: "YES" });
+  return ops;
+}
 
-export function parseSmokeArgs(argv: string[]): SmokeReply[] | undefined {
+const DOCTOR_USAGE = "Usage: tsx src/cleaner-core/cli.ts doctor";
+const SMOKE_USAGE = "Usage: tsx src/cleaner-core/cli.ts smoke [--data <dir>] [--no-poll] [--feed <file>] [--then-feed <file>] [--now <iso>] [--remind] [--fail-sends <n>] [--reply <from>=<text> ...]";
+
+export function parseSmokeArgs(argv: string[]): { replies?: SmokeReply[]; ops: SmokeOp[]; dataDir?: string; explicit: boolean } {
+  const ops: SmokeOp[] = [];
   const replies: SmokeReply[] = [];
+  let dataDir: string | undefined;
+  let noPoll = false;
   let sawReply = false;
+  let explicit = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--reply") {
-      const value = argv[i + 1];
+      const value = argv[++i];
       if (value === undefined || value.startsWith("--")) throw new Error(`smoke --reply needs <from>=<text>. ${SMOKE_USAGE}`);
-      i++;
       sawReply = true;
+      explicit = true;
       const eq = value.indexOf("=");
       if (eq <= 0) throw new Error(`smoke --reply must look like <from>=<text>. Got ${value}. ${SMOKE_USAGE}`);
       const from = value.slice(0, eq);
@@ -132,11 +176,54 @@ export function parseSmokeArgs(argv: string[]): SmokeReply[] | undefined {
       if (text.length === 0) throw new Error(`smoke --reply text is empty for ${from}. ${SMOKE_USAGE}`);
       if (!isScratchTestNumber(from)) throw new Error(`Cleaner Core only texts Scratch test numbers. Refusing ${from}.`);
       replies.push({ from, text });
+      ops.push({ type: "reply", from, text });
+      continue;
+    }
+    if (arg === "--feed" || arg === "--then-feed") {
+      const value = argv[++i];
+      if (value === undefined || value.startsWith("--")) throw new Error(`${arg} needs a fixture path. ${SMOKE_USAGE}`);
+      explicit = true;
+      ops.push({ type: "poll", ical: readFileSync(value, "utf8") });
+      continue;
+    }
+    if (arg === "--data") {
+      const value = argv[++i];
+      if (value === undefined || value.startsWith("--")) throw new Error(`smoke --data needs a directory. ${SMOKE_USAGE}`);
+      explicit = true;
+      dataDir = value;
+      continue;
+    }
+    if (arg === "--now") {
+      const value = argv[++i];
+      if (value === undefined || value.startsWith("--")) throw new Error(`smoke --now needs an ISO time. ${SMOKE_USAGE}`);
+      explicit = true;
+      ops.push({ type: "now", iso: value });
+      continue;
+    }
+    if (arg === "--remind") {
+      explicit = true;
+      ops.push({ type: "remind" });
+      continue;
+    }
+    if (arg === "--fail-sends") {
+      const value = argv[++i];
+      if (value === undefined || !/^\d+$/.test(value)) throw new Error(`smoke --fail-sends needs a number. ${SMOKE_USAGE}`);
+      explicit = true;
+      ops.push({ type: "fail", n: Number(value) });
+      continue;
+    }
+    if (arg === "--no-poll") {
+      explicit = true;
+      noPoll = true;
       continue;
     }
     throw new Error(`Unexpected argument ${arg ?? ""}. ${SMOKE_USAGE}`);
   }
-  return sawReply ? replies : undefined;
+  if (!noPoll && !ops.some((op) => op.type === "poll")) ops.unshift({ type: "poll", ical: SCRATCH_ICAL });
+  if (!explicit) {
+    return { ops: defaultOps(undefined), ...(dataDir ? { dataDir } : {}), explicit };
+  }
+  return { ops, ...(sawReply ? { replies } : {}), ...(dataDir ? { dataDir } : {}), explicit };
 }
 
 async function main(): Promise<void> {
@@ -148,8 +235,8 @@ async function main(): Promise<void> {
     return;
   }
   if (command === "smoke") {
-    const replies = parseSmokeArgs(process.argv.slice(3));
-    const report = await runSmoke(process.env, replies);
+    const parsed = parseSmokeArgs(process.argv.slice(3));
+    const report = await runSmoke(process.env, parsed.explicit ? [] : undefined, { ops: parsed.ops, ...(parsed.dataDir ? { dataDir: parsed.dataDir } : {}) });
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
     if (!report.ok) process.exit(2);
     return;

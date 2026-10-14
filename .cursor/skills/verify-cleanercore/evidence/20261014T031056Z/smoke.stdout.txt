@@ -1,0 +1,114 @@
+{
+  "ok": true,
+  "flag": true,
+  "property": "12 Scratch Lane, Teaneck, NJ 07666",
+  "checkout": "2026-10-18T15:00:00.000Z",
+  "nextArrival": "2026-10-18T20:00:00.000Z",
+  "sent": [
+    {
+      "to": "+15555550100",
+      "body": "Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.",
+      "kind": "host-checkout"
+    },
+    {
+      "to": "+15555550100",
+      "body": "Is check-in at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.",
+      "kind": "host-checkin"
+    },
+    {
+      "to": "+15555550100",
+      "body": "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
+      "kind": "offer"
+    },
+    {
+      "to": "+15555550100",
+      "body": "Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
+      "kind": "confirm"
+    }
+  ],
+  "pinRecipients": [],
+  "jobs": [
+    {
+      "id": "stay-a",
+      "departingUid": "stay-a",
+      "arrivingUid": "stay-b",
+      "status": "confirmed",
+      "live": true,
+      "textsBlocked": false,
+      "checkoutDate": "2026-10-18",
+      "nextCheckInDate": "2026-10-18",
+      "sameDay": true,
+      "checkoutTime": "11:00 AM",
+      "nextCheckInTime": "4:00 PM",
+      "checkoutAt": "2026-10-18T15:00:00.000Z",
+      "nextCheckInAt": "2026-10-18T20:00:00.000Z",
+      "version": 1,
+      "hostCheckoutVersion": 1,
+      "hostCheckInVersion": 1,
+      "asking": null
+    },
+    {
+      "id": "stay-b",
+      "departingUid": "stay-b",
+      "arrivingUid": null,
+      "status": "discovered",
+      "live": true,
+      "textsBlocked": false,
+      "checkoutDate": "2026-10-20",
+      "nextCheckInDate": null,
+      "sameDay": false,
+      "checkoutTime": null,
+      "nextCheckInTime": null,
+      "checkoutAt": null,
+      "nextCheckInAt": null,
+      "version": 1,
+      "hostCheckoutVersion": 0,
+      "hostCheckInVersion": 0,
+      "asking": null
+    }
+  ],
+  "outbox": [
+    {
+      "id": "host-checkout:stay-a:2026-10-18:660",
+      "to": "+15555550100",
+      "body": "Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.",
+      "kind": "host-checkout",
+      "status": "sent",
+      "jobId": "stay-a"
+    },
+    {
+      "id": "host-checkin:stay-a:2026-10-18:960",
+      "to": "+15555550100",
+      "body": "Is check-in at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.",
+      "kind": "host-checkin",
+      "status": "sent",
+      "jobId": "stay-a"
+    },
+    {
+      "id": "offer:stay-a:2026-10-18:660:2026-10-18:960",
+      "to": "+15555550100",
+      "body": "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
+      "kind": "offer",
+      "status": "sent",
+      "jobId": "stay-a"
+    },
+    {
+      "id": "confirm:stay-a:2026-10-18:660:2026-10-18",
+      "to": "+15555550100",
+      "body": "Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
+      "kind": "confirm",
+      "status": "sent",
+      "jobId": "stay-a"
+    }
+  ],
+  "transcript": [
+    "Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.",
+    "+15555550100: YES",
+    "Is check-in at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.",
+    "+15555550100: YES",
+    "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
+    "+15555550100: YES",
+    "Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666."
+  ],
+  "blocks": []
+}

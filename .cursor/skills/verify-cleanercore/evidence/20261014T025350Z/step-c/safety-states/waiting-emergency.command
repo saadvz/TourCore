@@ -1,0 +1,1 @@
+env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --feed /workspace/src/cleaner-core/fixtures/guesty-lite-scratch.ics --reply +15555550100=I fell and I'm hurt
