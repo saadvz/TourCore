@@ -2,20 +2,19 @@
 // Fail when a configured Cleaner Core secret appears outside the historical allowlist.
 // Secrets are read from the tenant store and the Annex lock fixture. This file does not repeat them.
 
+import { execFileSync } from "node:child_process";
 import { createDecipheriv } from "node:crypto";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { TEST_SEAL_KEY } from "./cleaner-seal-test-key.mjs";
+import { scratchSecrets } from "./scratch-pin-pattern.mjs";
 
 const root = process.cwd();
 const allow = new Set([
   "src/cleaner-core/fixtures/annex-lock.txt",
   "src/cleaner-core/fixtures/google-lane-read.json",
   "test/cleanerCore.test.ts",
-  "docs/cleaner-core-v5.1-step-d-rationale.md",
-  "docs/cleaner-core-v5.1-step-e-rationale.md",
   "docs/cleaner-core-v5.1-plan.pdf",
-  ".cursor/skills/verify-cleanercore/SKILL.md",
   ".cursor/skills/verify-cleanercore/features/no-pin.md",
   ".cursor/skills/verify-cleanercore/features/tenant-isolation.md",
   ".cursor/skills/verify-cleanercore/scripts/assert-report.mjs",
@@ -23,25 +22,20 @@ const allow = new Set([
   ".cursor/skills/verify-cleanercore/scripts/assert-step-d.mjs",
   ".cursor/skills/verify-cleanercore/scripts/assert-step-e.mjs",
   ".cursor/skills/verify-cleanercore/scripts/assert-step-f.mjs",
-  ".cursor/skills/verify-cleanercore/scripts/prove-step-c.sh",
-  ".cursor/skills/verify-cleanercore/scripts/prove-step-d.sh",
-  ".cursor/skills/verify-cleanercore/scripts/prove-step-e.sh",
-  ".cursor/skills/verify-cleanercore/scripts/prove-step-f.sh",
 ]);
 
 const skipDirs = new Set(["node_modules", ".git", "dist", "coverage"]);
 
-function scratchSecrets() {
-  const tenants = readFileSync(join(root, "src/cleaner-core/tenants.ts"), "utf8");
-  const annex = readFileSync(join(root, "src/cleaner-core/fixtures/annex-lock.txt"), "utf8");
-  const found = new Set();
-  for (const match of tenants.matchAll(/pin:\s*"(\d{4,8})"/g)) found.add(match[1]);
-  for (const match of annex.matchAll(/\b(\d{4,8})\b/g)) found.add(match[1]);
-  if (found.size < 3) {
-    process.stderr.write("secret scan could not load the configured scratch values\n");
-    process.exit(1);
-  }
-  return [...found];
+function trackedPaths() {
+  const out = execFileSync("git", ["ls-files", "-z"], { cwd: root });
+  return out.toString("utf8").split("\0").filter(Boolean);
+}
+
+function bannedTracked(rel) {
+  if (rel === ".cursor/skills/verify-cleanercore/evidence/README.md") return false;
+  if (rel.startsWith(".cursor/skills/verify-cleanercore/evidence/")) return true;
+  const base = rel.split("/").pop() ?? rel;
+  return /\.db$/i.test(base) || /\.sqlite/i.test(base) || /\.bak$/i.test(base);
 }
 
 function openSeal(sealed) {
@@ -119,10 +113,27 @@ function leak(path, values) {
   return values.some((value) => text.includes(value));
 }
 
-const scratch = scratchSecrets();
+let scratch;
+try {
+  scratch = scratchSecrets(root);
+} catch (err) {
+  process.stderr.write(`${err instanceof Error ? err.message : "secret scan could not load the configured scratch values"}\n`);
+  process.exit(1);
+}
+const trackedOnly = process.argv.includes("--tracked");
 const files = [];
-walk(root, files);
-for (const extra of process.argv.slice(2)) {
+if (trackedOnly) {
+  const banned = trackedPaths().filter((rel) => bannedTracked(rel));
+  if (banned.length > 0) {
+    const sample = banned.slice(0, 20).join("\n");
+    process.stderr.write(`tracked scan found evidence or a database file (${banned.length}):\n${sample}\n`);
+    process.exit(1);
+  }
+  for (const rel of trackedPaths()) files.push(join(root, rel));
+} else {
+  walk(root, files);
+}
+for (const extra of process.argv.slice(2).filter((arg) => arg !== "--tracked")) {
   const path = resolve(extra);
   let st;
   try {

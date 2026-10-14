@@ -18,7 +18,7 @@ const core = openCleanerCore({
   sink,
   now: () => new Date("2026-10-14T15:00:00.000Z"),
   dataDir,
-  pin: "4821",
+  pin: scratchTenant("scratch-lane").pin,
   hostName: "Scratch",
   groupPhones: [],
 });

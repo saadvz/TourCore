@@ -14,6 +14,7 @@ EVIDENCE="$SKILL/evidence/step-d"
 rm -rf "$EVIDENCE"
 mkdir -p "$EVIDENCE"
 cd "$ROOT"
+PIN_PATTERN="$(node "$ROOT/scripts/scratch-pin-pattern.mjs")"
 
 if [[ ! -x node_modules/.bin/tsx ]]; then
   printf '%s\n' "tsx is missing. From the repo root run: npm ci" >&2
@@ -207,7 +208,7 @@ run_smoke "$EVIDENCE/no-group" smoke env CLEANER_CORE_ENABLED=1 npm run --silent
   --reply "$OWNER=guests have left"
 assert_journey no-group "$EVIDENCE/no-group/smoke.stdout.txt"
 
-if grep -R -n "4821" "$EVIDENCE" >/dev/null; then
+if grep -R -n -E "$PIN_PATTERN" "$EVIDENCE" >/dev/null; then
   fail "step D evidence contains the scratch door code"
 fi
 

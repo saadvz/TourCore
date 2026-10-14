@@ -25,7 +25,7 @@ await core.readSource(source, { conversation: "closed" });
 
 `pollFeed` is unchanged for a Guesty-only drive. `readSource` adds one snapshot and reconciles it with the snapshots already read. A closed conversation is a flag on that call. It does not require an inbound text. The smoke command is `npm run cleaner:smoke -- --closed --google <fixture>` and `--tenant scratch-court`.
 
-Scratch Lane stays `+15555550100`, `+15555550101`, `+15555550199`, 12 Scratch Lane, door code 4821. Scratch Court is `+15555550110`, `+15555550111`, `+15555550119`, 8 Scratch Court, door code 7392. Neither code is stored or printed in plaintext. The private text, when a pin drive sends one, is still the only place the digits leave the process, and smoke replaces them with `[redacted]` before the report is saved.
+Scratch Lane stays `+15555550100`, `+15555550101`, `+15555550199`, 12 Scratch Lane. Scratch Court is `+15555550110`, `+15555550111`, `+15555550119`, 8 Scratch Court. Both door codes are loaded from `src/cleaner-core/tenants.ts` at runtime. Neither code is stored or printed in plaintext. The private text, when a pin drive sends one, is still the only place the digits leave the process, and smoke replaces them with `[redacted]` before the report is saved.
 
 ## Shape
 
