@@ -33,6 +33,8 @@ export default defineRailway(() => {
       // available for `npm run build` even when NODE_ENV is production.
       RAILPACK_NODE_NPM_INSTALL: "npm ci",
       NPM_CONFIG_PRODUCTION: "false",
+      // node:sqlite backups need Node 22.13 or newer. Railpack installs this exact version.
+      RAILPACK_NODE_VERSION: "22.14.0",
     },
   });
   return project("tour-core", { resources: [web, data] });

@@ -7,11 +7,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 mkdir -p ci-logs
 
-major="$(node -p 'process.versions.node.split(".")[0]')"
-if [[ "$major" -lt 22 ]]; then
-  printf '%s\n' "Cleaner Core SQLite backups need Node 22. This process is Node $(node -v)." >&2
-  exit 1
-fi
+node -e 'const [major, minor] = process.versions.node.split(".").map(Number); if (major < 22 || (major === 22 && minor < 13)) { console.error(`Cleaner Core SQLite backups need Node 22.13 or newer. This process is Node ${process.version}.`); process.exit(1); }'
 
 run_log() {
   local name="$1"

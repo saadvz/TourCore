@@ -1,0 +1,5 @@
+wiring
+flow: pass
+direct-text: no door code
+failed-send: see failed-send.json
+door code: absent

@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { openPin, pinKeyFor, sealPin, type PinSeal } from "./pinSeal";
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { isPlainLanguageStop, keywordOf } from "../intent";
@@ -264,6 +264,26 @@ export interface CleanerCoreOptions {
   halt?: "after-accept" | "before-pin";
   /** When set, a poll older than one Guesty Lite interval writes a scheduled snapshot here. */
   backupDir?: string;
+  /** Live texts go only to these numbers. Scratch fixtures leave this unset and keep the 555 lock. */
+  allowlist?: readonly string[];
+  /** When this returns true, the sink is not called and nothing is recorded as sent. */
+  holdSends?: () => boolean;
+  /** Hold the cleaner opt-in and the offer until the host has confirmed both times. */
+  deferCleanerTexts?: boolean;
+  /** Opt-in sentence. Unset keeps the Scratch scheduler sentence. */
+  optInBody?: string;
+  /** STOP sentence. Unset keeps the shared acknowledgement. */
+  stopReply?: string;
+  /** A cleaner STOP also texts the host that the job is on hold. */
+  noteHostOnStop?: boolean;
+  /** Used only when this tenant has no saved consent yet. A stored choice wins. */
+  cleanerConsent?: "pending" | "in" | "out";
+  /** Live chat keeps the seal outside this store. Scratch fixtures seal here. */
+  sealPinAtRest?: boolean;
+  /** Host sentence after the private text is accepted. Unset keeps the fixture sentence. */
+  pinSentBody?: string;
+  /** Host sentence when the private text fails. Unset keeps the fixture sentence. */
+  pinFailedBody?: string;
 }
 
 export interface CleanerCore {
@@ -282,6 +302,9 @@ export interface CleanerCore {
   setupView(): SetupView | undefined;
   messagingView(): MessagingView | undefined;
   markReady(): void;
+  /** Sends the cleaner opt-in, then any text that was waiting on the host's times. */
+  releaseCleanerTexts(): Promise<CleanerText[]>;
+  cleanerHasOptedOut(): boolean;
   fileReview(kind: ReviewKind): Promise<ReceiveResult>;
   replay(): Promise<{ sent: CleanerText[] }>;
   backup(dest: string): void;
@@ -292,6 +315,10 @@ export interface CleanerCore {
   sourceHealth(): SourceRecord[];
   revealPin(role: "cleaner" | "observer" | "owner" | "manager"): string | undefined;
   stampFetchedAt(iso: string): void;
+  /** Marks an accepted door-code text undelivered so the next departure can send it again. Sends nothing. */
+  markPinUndelivered(): void;
+  /** Keeps a door code in memory after a later tool call opens the seal. Does not write it. */
+  rememberPin(pin: string): void;
 }
 
 const HELP_ACK = "Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.";
@@ -350,12 +377,6 @@ interface Clearance {
   checkoutDate: string;
   minutes: number;
   hostVersion: number;
-}
-
-interface PinSeal {
-  iv: string;
-  tag: string;
-  data: string;
 }
 
 interface HostFact {
@@ -502,6 +523,9 @@ class Engine implements CleanerCore {
   private readonly sqlite: boolean;
   private readonly halt: CleanerCoreOptions["halt"];
   private readonly backupDir: string | undefined;
+  private deferCleaner: boolean;
+  private hadStoredConsent = false;
+  private readonly inflight = new Set<string>();
   private sourceRecords: SourceRecord[] = [];
   private reviewItems: ReviewItem[] = [];
   private auditLog: AuditEvent[] = [];
@@ -536,8 +560,10 @@ class Engine implements CleanerCore {
     this.sqlite = options.sqlite === true;
     this.halt = options.halt;
     this.backupDir = options.backupDir;
+    this.deferCleaner = options.deferCleanerTexts === true;
     for (const person of options.messaging?.participants ?? []) this.participantConsent.set(parsePhone(person.phone) ?? person.phone, "pending");
     this.load();
+    if (!this.hadStoredConsent && options.cleanerConsent) this.cleanerConsent = options.cleanerConsent;
   }
 
   async pollFeed(ical: string, options?: { conversation?: "closed" | "open" }): Promise<PollResult> {
@@ -575,8 +601,17 @@ class Engine implements CleanerCore {
   async receive(input: { id: string; from: string; text: string }): Promise<ReceiveResult> {
     if (!this.enabled) return { handled: false, reason: "disabled", sent: [] };
     const from = parsePhone(input.from);
-    if (!from || !isScratchTestNumber(from)) return { handled: true, reason: "scratch-only", sent: [] };
-    if (this.inboundIds.includes(input.id)) return { handled: true, reason: "duplicate", sent: [] };
+    if (!from || !this.numberAllowed(from)) return { handled: true, reason: "scratch-only", sent: [] };
+    if (this.inboundIds.includes(input.id) || this.inflight.has(input.id)) return { handled: true, reason: "duplicate", sent: [] };
+    this.inflight.add(input.id);
+    try {
+      return await this.receiveClaimed(input, from);
+    } finally {
+      this.inflight.delete(input.id);
+    }
+  }
+
+  private async receiveClaimed(input: { id: string; from: string; text: string }, from: string): Promise<ReceiveResult> {
     this.transcriptState.push(`${from}: ${this.redactInbound(input.text.trim())}`);
     if (this.foreignPhone(from)) {
       this.inboundIds.push(input.id);
@@ -763,6 +798,20 @@ class Engine implements CleanerCore {
     this.cleanerConsent = "in";
     this.everConsented = true;
     this.save();
+  }
+
+  async releaseCleanerTexts(): Promise<CleanerText[]> {
+    this.deferCleaner = false;
+    const sent: CleanerText[] = [];
+    const optIn = await this.sendOptIn();
+    if (optIn) sent.push(optIn);
+    if (!this.optedOut) sent.push(...(await this.drainOne()));
+    this.save();
+    return sent;
+  }
+
+  cleanerHasOptedOut(): boolean {
+    return this.cleanerConsent === "out";
   }
 
   private setupViewOrThrow(): SetupView {
@@ -1050,6 +1099,7 @@ class Engine implements CleanerCore {
   }
 
   private async sendOptIn(): Promise<CleanerText | null> {
+    if (this.deferCleaner) return null;
     if (!this.pin || !this.options.cleaner.approved || !this.cleanerPhone || this.cleanerConsent !== "pending") return null;
     const id = `opt-in:${this.cleanerPhone}`;
     if (this.delivery(id) === "sent") return null;
@@ -1057,8 +1107,12 @@ class Engine implements CleanerCore {
       id,
       to: this.cleanerPhone,
       kind: "opt-in",
-      body: `Hi, this is ${this.hostName}'s cleaning scheduler for ${this.options.property.address}. Reply YES to get cleaning texts, or STOP to opt out.`,
+      body: this.cleanerOptInBody(),
     });
+  }
+
+  private cleanerOptInBody(): string {
+    return this.options.optInBody ?? `Hi, this is ${this.hostName}'s cleaning scheduler for ${this.options.property.address}. Reply YES to get cleaning texts, or STOP to opt out.`;
   }
 
   private async optInCleaner(id: string): Promise<ReceiveResult> {
@@ -1157,7 +1211,7 @@ class Engine implements CleanerCore {
         jobId: job.id,
         to: this.owner,
         kind: "pin-failed",
-        body: "The door code didn't reach the cleaner. We'll try again in a few minutes.",
+        body: this.options.pinFailedBody ?? "The door code didn't reach the cleaner. We'll try again in a few minutes.",
       });
       if (failed) sent.push(failed);
     }
@@ -1167,7 +1221,7 @@ class Engine implements CleanerCore {
         jobId: job.id,
         to: this.owner,
         kind: "pin-notice",
-        body: "Door code sent to the cleaner.",
+        body: this.options.pinSentBody ?? "Door code sent to the cleaner.",
       });
       if (notice) sent.push(notice);
     }
@@ -1308,6 +1362,7 @@ class Engine implements CleanerCore {
       };
     }
     if (!job.announced) {
+      if (this.deferCleaner) return null;
       const checkMinutes = checkin?.minutes ?? null;
       const checkoutWhen = this.clock(job.checkoutDate, checkout.minutes);
       const nextWhen = job.nextCheckInDate ? this.clock(job.nextCheckInDate, checkMinutes ?? this.defaultCheckIn) : null;
@@ -1421,11 +1476,15 @@ class Engine implements CleanerCore {
   }
 
   private async emitOne(draft: Draft): Promise<CleanerText | null> {
+    if (this.options.holdSends?.()) return null;
     if ((draft.kind === "offer" || draft.kind === "reminder" || draft.kind === "pin") && !draft.channel) {
       const addressed = addressCleaner(this.cleanerRecord(), { kind: draft.kind, body: draft.body });
       if (!addressed || draft.to !== addressed.to) return null;
     }
-    if (!isScratchTestNumber(draft.to)) throw new Error("Cleaner Core only texts Scratch test numbers.");
+    if (!this.numberAllowed(draft.to)) {
+      if (this.options.allowlist) return null;
+      throw new Error("Cleaner Core only texts Scratch test numbers.");
+    }
     if (/\bready\b/i.test(draft.body)) throw new Error("A calendar time cannot mark the job ready.");
     if (draft.kind === "pin") {
       if (draft.channel || this.participantRole(draft.to) === "observer" || this.groupPhones.includes(draft.to)) {
@@ -1549,28 +1608,49 @@ class Engine implements CleanerCore {
   }
 
   private async stop(from: string, inboundId: string): Promise<ReceiveResult & { seen?: boolean }> {
+    const ack = this.options.stopReply ?? smsStopAck();
     if (this.isExtraParticipant(from)) {
       this.participantConsent.set(from, "out");
-      const result = await this.reply(from, smsStopAck(), "stop", "stop", inboundId);
-      return { ...result, seen: result.sent.length > 0 };
+      const result = await this.reply(from, ack, "stop", "stop", inboundId);
+      return { ...result, seen: this.replySeen("stop", inboundId, result.sent.length) };
     }
     if (this.pin && from === this.cleanerPhone) {
       this.cleanerConsent = "out";
-      const result = await this.reply(from, smsStopAck(), "stop", "stop", inboundId);
-      return { ...result, seen: result.sent.length > 0 };
+      const result = await this.reply(from, ack, "stop", "stop", inboundId);
+      const note = await this.hostStopNote(from, inboundId);
+      return { handled: true, reason: "stop", sent: [...result.sent, ...note], seen: this.replySeen("stop", inboundId, result.sent.length) };
     }
     this.optedOut = true;
     this.cancelPendingReminders();
-    const result = await this.reply(from, smsStopAck(), "stop", "stop", inboundId);
-    return { ...result, seen: result.sent.length > 0 };
+    const result = await this.reply(from, ack, "stop", "stop", inboundId);
+    return { ...result, seen: this.replySeen("stop", inboundId, result.sent.length) };
+  }
+
+  private replySeen(kind: string, inboundId: string, sentNow: number): boolean {
+    return sentNow > 0 || this.delivery(`${kind}:${inboundId}`) === "sent";
+  }
+
+  private async hostStopNote(from: string, inboundId: string): Promise<CleanerText[]> {
+    if (!this.options.noteHostOnStop || !this.owner || from === this.owner) return [];
+    const text = await this.emit({
+      id: `stop-host:${inboundId}`,
+      to: this.owner,
+      kind: "stop",
+      body: `The cleaner opted out of cleaning texts for ${this.options.property.address}, so the job is on hold.`,
+    });
+    return text ? [text] : [];
   }
 
   private async start(from: string, inboundId: string): Promise<ReceiveResult & { seen?: boolean }> {
+    if (this.delivery(`start:${inboundId}`) === "sent") {
+      if (this.pin && from === this.cleanerPhone && this.cleanerConsent === "out") this.cleanerConsent = "in";
+      return { handled: true, reason: "start", sent: [], seen: true };
+    }
     if (this.pin && from === this.cleanerPhone) {
       if (this.cleanerConsent === "out") {
         this.cleanerConsent = "in";
         const result = await this.reply(from, START_ACK, "start", "start", inboundId);
-        return { ...result, seen: result.sent.length > 0 };
+        return { ...result, seen: this.replySeen("start", inboundId, result.sent.length) };
       }
       const job = this.ordered().find((item) => this.pinDelivered(item) && !item.started && !item.done);
       if (this.cleanerConsent !== "in" || !job) return { handled: true, reason: "ignored", sent: [], seen: true };
@@ -1581,7 +1661,7 @@ class Engine implements CleanerCore {
     if (!this.everConsented) return { handled: true, reason: "ignored", sent: [], seen: true };
     this.optedOut = false;
     const result = await this.reply(from, START_ACK, "start", "start", inboundId);
-    return { ...result, seen: result.sent.length > 0 };
+    return { ...result, seen: this.replySeen("start", inboundId, result.sent.length) };
   }
 
   private async reply(to: string, body: string, kind: TextKind, reason: ReceiveReason, inboundId: string, jobId?: string): Promise<ReceiveResult> {
@@ -1737,7 +1817,15 @@ class Engine implements CleanerCore {
   }
 
   private scratchReady(): boolean {
-    return Boolean(this.owner && this.cleanerPhone && isScratchTestNumber(this.owner) && isScratchTestNumber(this.cleanerPhone));
+    if (!this.owner || !this.cleanerPhone) return false;
+    if (this.options.allowlist) return this.numberAllowed(this.owner) && this.numberAllowed(this.cleanerPhone);
+    return isScratchTestNumber(this.owner) && isScratchTestNumber(this.cleanerPhone);
+  }
+
+  private numberAllowed(phone: string): boolean {
+    const parsed = parsePhone(phone) ?? phone;
+    if (this.options.allowlist) return this.options.allowlist.some((item) => (parsePhone(item) ?? item) === parsed);
+    return isScratchTestNumber(parsed);
   }
 
   private releaseJob(): Job | undefined {
@@ -1758,6 +1846,21 @@ class Engine implements CleanerCore {
   private pinDelivered(job: Job): boolean {
     const key = this.pinKey(job);
     return Boolean(key && this.delivery(key) === "sent");
+  }
+
+  markPinUndelivered(): void {
+    let changed = false;
+    for (const item of this.outboxState) {
+      if (item.kind !== "pin" || item.status !== "sent") continue;
+      item.status = "failed";
+      if (item.lease) item.lease.state = "open";
+      changed = true;
+    }
+    if (changed) this.save();
+  }
+
+  rememberPin(pin: string): void {
+    if (!this.pin) this.pin = pin;
   }
 
   private recordClearance(job: Job): void {
@@ -1791,7 +1894,7 @@ class Engine implements CleanerCore {
   }
 
   private pinKeyMaterial(): Buffer {
-    return createHash("sha256").update(`cleaner-core-pin:${this.options.property.id}`).digest();
+    return pinKeyFor(this.options.property.id);
   }
 
   private load(): void {
@@ -1807,6 +1910,7 @@ class Engine implements CleanerCore {
     this.tombstones = record.tombstones;
     this.outboxState = record.outbox;
     this.inboundIds = record.inboundIds;
+    this.hadStoredConsent = record.cleanerConsent === "pending" || record.cleanerConsent === "in" || record.cleanerConsent === "out";
     this.transcriptState = record.transcript;
     this.optedOut = record.optedOut;
     this.injurySent = record.injurySent;
@@ -1824,7 +1928,7 @@ class Engine implements CleanerCore {
     this.reviewItems = record.reviews ?? [];
     this.auditLog = record.audit ?? [];
     this.counters = { ...emptyCounters(), ...record.counters };
-    if (!this.pin && record.pinSeal) {
+    if (this.options.sealPinAtRest !== false && !this.pin && record.pinSeal) {
       try {
         this.pin = openPin(record.pinSeal, this.pinKeyMaterial());
       } catch {
@@ -1857,7 +1961,7 @@ class Engine implements CleanerCore {
       ...(this.participantConsent.size > 0
         ? { participantConsent: [...this.participantConsent].map(([phone, consent]) => ({ phone, consent })) }
         : {}),
-      ...(this.pin ? { pinSeal: sealPin(this.pin, this.pinKeyMaterial()) } : {}),
+      ...(this.options.sealPinAtRest !== false && this.pin ? { pinSeal: sealPin(this.pin, this.pinKeyMaterial()) } : {}),
       ...(this.sourceRecords.length > 0 ? { sourceRecords: this.sourceRecords } : {}),
       ...(this.reviewItems.length > 0 ? { reviews: this.reviewItems } : {}),
       ...(this.auditLog.length > 0 ? { audit: this.auditLog } : {}),
@@ -2154,7 +2258,7 @@ function isDone(text: string): boolean {
 }
 
 function isDeparture(text: string): boolean {
-  const phrase = stripFiller(normalize(text));
+  const phrase = stripFiller(normalize(text)).replace(/^the\s+/, "");
   return phrase === "guests have left" || phrase === "guests left" || phrase === "they have left" || phrase === "they left" || phrase === "departed" || phrase === "left";
 }
 
@@ -2214,23 +2318,6 @@ function mergeTenantSlice(existing: StoreFile | undefined, tenantId: string, min
   const others = otherSlices(existing, tenantId);
   if (Object.keys(others).length === 0) return mine;
   return { schemaVersion: 1, tenants: { ...others, [tenantId]: { ...mine, tenantId } } };
-}
-
-function sealPin(pin: string, key: Buffer): PinSeal {
-  for (let attempt = 0; attempt < 8; attempt++) {
-    const iv = randomBytes(12);
-    const cipher = createCipheriv("aes-256-gcm", key, iv);
-    const data = Buffer.concat([cipher.update(pin, "utf8"), cipher.final()]);
-    const sealed = { iv: iv.toString("base64"), tag: cipher.getAuthTag().toString("base64"), data: data.toString("base64") };
-    if (!JSON.stringify(sealed).includes(pin)) return sealed;
-  }
-  throw new Error("Could not seal the door code.");
-}
-
-function openPin(sealed: PinSeal, key: Buffer): string {
-  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(sealed.iv, "base64"));
-  decipher.setAuthTag(Buffer.from(sealed.tag, "base64"));
-  return Buffer.concat([decipher.update(Buffer.from(sealed.data, "base64")), decipher.final()]).toString("utf8");
 }
 
 function withChannelPrefix(body: string, channel: "group" | "mirror"): string {

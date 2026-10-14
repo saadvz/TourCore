@@ -509,7 +509,9 @@ Checked against Railway's docs as of September 2026:
   connected branch; it does not apply that file by itself. Railpack installs
   with `npm ci` (`RAILPACK_NODE_NPM_INSTALL`) so the lockfile is the install,
   then runs `npm run build` and `npm start`. `NPM_CONFIG_PRODUCTION=false`
-  keeps the build tools installed for that build. No Docker image.
+  keeps the build tools installed for that build. `RAILPACK_NODE_VERSION` is
+  `22.14.0` because Cleaner Core backups need Node 22.13 or newer. No Docker image.
+  Cleaner Core uses this same `tour-core` service. It does not add a second service.
 
 Production start is `npm run build` then `npm start` (`node dist/server.js`).
 `npm run setup` stays the developer process. The hosted process exits if
