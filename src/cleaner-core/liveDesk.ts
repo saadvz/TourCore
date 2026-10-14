@@ -8,7 +8,7 @@ import { spokenTimes } from "../core/spokenTime";
 import { interpretFeed } from "./calendar";
 import { openCleanerCore, type CleanerCore, type CleanerText } from "./core";
 import { readPublicCalendar, type CalendarFetch } from "./fetchLimits";
-import { resumeNote } from "./cleanerTexts";
+import { isPrivateCodeLine, resumeNote } from "./cleanerTexts";
 import { GroupNotConfirmed } from "./groupThread";
 import { cleanerPinStatusUrl, isAllowlisted, liveSmsOn, sendLiveGroup, sendLiveSms, smsAllowlist } from "./liveSms";
 import { openPin, sealPin, type PinSeal } from "./pinSeal";
@@ -465,7 +465,11 @@ export class LiveDesk {
       hostName: file.business,
       consented: true,
       allowlist: smsAllowlist(env()),
-      holdSends: () => this.checking || !liveSmsOn(env()),
+      holdSends: (kind) => {
+        if (!liveSmsOn(env())) return true;
+        if (!this.checking) return false;
+        return !(groupChatOn(env()) && (kind === "host-checkout" || kind === "host-checkin"));
+      },
       deferCleanerTexts: this.file.released !== true,
       ...(this.file.cleanerOut ? { cleanerConsent: "out" as const } : {}),
       optInBody: `Hi, this is ${file.business} at ${file.address}. You're getting this because you clean between guest stays. Reply YES to get cleaning texts, or STOP to opt out.`,
@@ -479,7 +483,14 @@ export class LiveDesk {
       ...(groupChatOn(env()) ? { groupChat: { hostName: "Cory", cleanerName: "Maria" } } : {}),
       sink: {
         send: async (text) => {
-          if ((text.kind === "pin-notice" || text.kind === "pin-failed" || text.kind === "host-checkout" || text.kind === "host-checkin") && text.channel !== "group") return;
+          const hostClock = text.kind === "host-checkout" || text.kind === "host-checkin";
+          const hostDirect = hostClock || text.kind === "pin-failed" || text.kind === "pin-held" || text.kind === "resume";
+          const privateLine = text.kind === "pin-notice" && text.channel !== "group" && isPrivateCodeLine(text.body);
+          if ((groupChatOn(env()) && (hostClock || privateLine)) || (text.channel === "group" && hostDirect)) {
+            await sendLiveSms(env(), { to: text.to, body: text.body });
+            return;
+          }
+          if ((text.kind === "pin-notice" || text.kind === "pin-failed" || hostClock) && text.channel !== "group") return;
           if (text.channel === "group" && text.audience && text.audience.length > 0) {
             try {
               const sent = await sendLiveGroup(env(), { audience: [...text.audience], body: text.body, conversationSid: this.file.conversationSid });

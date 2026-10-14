@@ -23,7 +23,7 @@ import {
 } from "./sources";
 import { fingerprintOf, freshnessOf, GUESTY_POLL_MS, staleAfterMs, type SourceRecord } from "./freshness";
 import { redactLine, redactPhone } from "./redact";
-import { addressCleaner, asOptedInCleaner, doorCodeBody, groupDoorCodeBody, groupOptInBody, groupTimeLine, holdNote, offerBody, offerForOthers, privateCodeLine, reminderBody, resumeNote, type OptedInCleaner } from "./cleanerTexts";
+import { addressCleaner, asOptedInCleaner, doorCodeBody, groupDoorCodeBody, groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, isPrivateCodeLine, offerBody, offerForOthers, privateCodeLine, reminderBody, resumeNote, type OptedInCleaner } from "./cleanerTexts";
 import { codeRoute, GroupNotConfirmed, groupTurn, isProblemText, type GroupSeat } from "./groupThread";
 import { codeHandlingText, HEALTH_NOTE, isReviewKind, reviewAlert, reviewId, type AuditEvent, type ReviewDetail, type ReviewItem, type ReviewKind } from "./review";
 import { mirrorStore, restoreTenantSlice, snapshotStore } from "./sqliteStore";
@@ -271,7 +271,7 @@ export interface CleanerCoreOptions {
   /** Live texts go only to these numbers. Scratch fixtures leave this unset and keep the 555 lock. */
   allowlist?: readonly string[];
   /** When this returns true, the sink is not called and nothing is recorded as sent. */
-  holdSends?: () => boolean;
+  holdSends?: (kind: TextKind) => boolean;
   /** Hold the cleaner opt-in and the offer until the host has confirmed both times. */
   deferCleanerTexts?: boolean;
   /** Opt-in sentence. Unset keeps the Scratch scheduler sentence. */
@@ -342,6 +342,7 @@ const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know."
 const CLEANER_HURT_MISSED = "If someone is hurt, call 911 now. I couldn't reach the host, so please call them too.";
 const SAFETY = new Set<TextKind>(["stop", "start", "emergency"]);
 const JOB_TEXTS = new Set<TextKind>(["offer", "corrected", "confirm", "reminder", "cancel-update", "declined", "started", "done"]);
+const HOST_DIRECT = new Set<TextKind>(["host-checkout", "host-checkin", "pin-failed", "pin-held", "resume"]);
 const GROUP_PREFIX = "Group text: ";
 const MIRROR_PREFIX = "Copy of the group text: ";
 const DEFAULT_TRIGGERS: ReminderTrigger[] = [{ id: "morning-of", kind: "morning-of", localTime: "08:00" }];
@@ -1348,8 +1349,14 @@ class Engine implements CleanerCore {
             body: privately.body,
           });
           if (privateText) sent.push(privateText);
-          if (this.delivery(key) === "sent") {
-            const note = await this.emitGroup(`pin-private:${key}`, privateCodeLine(this.groupChat.cleanerName), "pin-notice", job.id);
+          if (this.delivery(key) === "sent" && this.owner) {
+            const note = await this.emit({
+              id: `pin-private:${key}`,
+              jobId: job.id,
+              to: this.owner,
+              kind: "pin-notice",
+              body: privateCodeLine(this.groupChat.cleanerName),
+            });
             if (note) sent.push(note);
           }
         }
@@ -1630,8 +1637,31 @@ class Engine implements CleanerCore {
     }
   }
 
+  private hostDirect(draft: Draft): Draft {
+    if (!HOST_DIRECT.has(draft.kind)) return draft;
+    return {
+      id: draft.id,
+      ...(draft.jobId ? { jobId: draft.jobId } : {}),
+      to: this.owner ?? draft.to,
+      body: draft.body,
+      kind: draft.kind,
+      ...(draft.afterSend ? { afterSend: draft.afterSend } : {}),
+    };
+  }
+
+  private async tellHostGroupUnconfirmed(): Promise<void> {
+    if (!this.groupChat || !this.owner) return;
+    await this.emit({
+      id: `group-unconfirmed:${this.options.property.id}`,
+      to: this.owner,
+      kind: "held",
+      body: groupUnconfirmedLine(),
+    });
+  }
+
   private async emitOne(draft: Draft): Promise<CleanerText | null> {
-    if (this.options.holdSends?.()) return null;
+    draft = this.hostDirect(draft);
+    if (this.options.holdSends?.(draft.kind)) return null;
     if ((draft.kind === "offer" || draft.kind === "reminder" || draft.kind === "pin") && !draft.channel) {
       const addressed = addressCleaner(this.cleanerRecord(), { kind: draft.kind, body: draft.body });
       if (!addressed || draft.to !== addressed.to) return null;
@@ -1683,6 +1713,17 @@ class Engine implements CleanerCore {
       if (err instanceof GroupNotConfirmed && draft.channel === "group") {
         this.dropUncertain(draft.id);
         this.save();
+        if (draft.kind !== "pin" && isPrivateCodeLine(draft.body) && this.owner) {
+          await this.emit({
+            id: draft.id,
+            ...(draft.jobId ? { jobId: draft.jobId } : {}),
+            to: this.owner,
+            kind: "pin-notice",
+            body: draft.body,
+          });
+          return null;
+        }
+        if (draft.kind !== "pin") await this.tellHostGroupUnconfirmed();
         return null;
       }
       this.upsert(draft, "failed");

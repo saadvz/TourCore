@@ -347,15 +347,10 @@ describe("group thread on the desk", () => {
   });
 
   it("asks Cory the checkout question once and keeps every host clock question off the group", async () => {
-    const posts: { body: string }[] = [];
     const sms = fakeSms();
     const fetchBox = groupFetch();
     setCleanerTwilioClient(sms);
-    setCleanerGroupFetch(async (url, init) => {
-      const response = await fetchBox.impl(url, init);
-      return response;
-    });
-    const originalPosts = fetchBox.posts;
+    setCleanerGroupFetch(fetchBox.impl);
     let feed = CALENDAR_ICS;
     setCleanerCalendarFetch(async (url) => ({
       status: url === CALENDAR_URL ? 200 : 404,
@@ -389,23 +384,58 @@ describe("group thread on the desk", () => {
     const clockTexts = () => sms.sent.filter((text) => text.body === checkout || text.body === checkin);
     expect(clockTexts().map((text) => ({ to: text.to, body: text.body }))).toEqual([{ to: LIVE_HOST, body: checkout }]);
     expect(sms.sent.filter((text) => text.to === LIVE_CLEANER && (text.body === checkout || text.body === checkin))).toEqual([]);
-    expect(originalPosts.filter((text) => text.body === checkout || text.body === checkin)).toEqual([]);
+    expect(fetchBox.posts.filter((text) => text.body === checkout || text.body === checkin)).toEqual([]);
     await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
-    expect(clockTexts().filter((text) => text.body === checkout)).toHaveLength(1);
+    expect(clockTexts().map((text) => text.body)).toEqual([checkout]);
     feed = CALENDAR_ICS.replace("DTSTART;VALUE=DATE:20261018", "DTSTART;VALUE=DATE:20261019");
     expect((await desk.runChecks()).ok).toBe(true);
     expect(clockTexts().map((text) => ({ to: text.to, body: text.body }))).toEqual([
       { to: LIVE_HOST, body: checkout },
       { to: LIVE_HOST, body: checkin },
     ]);
-    expect(originalPosts.map((text) => text.body).filter((body) => body === checkout || body === checkin)).toEqual([]);
-    posts.push(...originalPosts);
-    expect(posts.filter((text) => text.body === checkout || text.body === checkin)).toEqual([]);
+    expect(fetchBox.posts.filter((text) => text.body === checkout || text.body === checkin)).toEqual([]);
     resetLiveDesks();
     const restarted = open();
     expect(restarted.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
     expect((await restarted.runChecks()).ok).toBe(true);
     expect(clockTexts()).toHaveLength(2);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("waits to ask Cory the checkout question until live texts are on", async () => {
+    const sms = fakeSms();
+    setCleanerTwilioClient(sms);
+    setCleanerGroupFetch(groupFetch().impl);
+    setCleanerCalendarFetch(async (url) => ({
+      status: url === CALENDAR_URL ? 200 : 404,
+      url,
+      async text() {
+        return url === CALENDAR_URL ? CALENDAR_ICS : "";
+      },
+    }));
+    const root = mkdtempSync(join(tmpdir(), "cleaner-host-clock-off-"));
+    const env: NodeJS.ProcessEnv = {
+      CLEANER_CORE_ENABLED: "1",
+      CLEANER_CORE_GROUP_CHAT: "1",
+      CLEANER_CORE_SMS_ALLOWLIST: `${LIVE_HOST},${LIVE_CLEANER}`,
+      CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
+      CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
+      CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+    };
+    const checkout = `Is checkout at ${PRACTICE} on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.`;
+    const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
+    const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
+    expect(desk.getState("2").ok).toBe(true);
+    expect(desk.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" }).ok).toBe(true);
+    expect(desk.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER }).ok).toBe(true);
+    expect(desk.saveCalendarLink({ url: CALENDAR_URL }).ok).toBe(true);
+    expect(desk.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
+    expect(desk.setUpTexting().ok).toBe(true);
+    expect((await desk.runChecks()).ok).toBe(true);
+    expect(sms.sent.filter((text) => text.body === checkout)).toEqual([]);
+    env.CLEANER_CORE_LIVE_SMS = "1";
+    expect((await desk.runChecks()).ok).toBe(true);
+    expect(sms.sent.filter((text) => text.body === checkout).map((text) => text.to)).toEqual([LIVE_HOST]);
     rmSync(root, { recursive: true, force: true });
   });
 });
@@ -647,10 +677,11 @@ describe("live group membership", () => {
     fetchBox.blockMembership();
     await job.receive({ id: "time-dropped", from: CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
     await job.receive({ id: "time-dropped-2", from: CLEANER, text: "Can we do 3:00 PM?", channel: "group" });
-    expect(firstSms.sent.filter((text) => text.body === line).map((text) => text.to)).toEqual([OWNER]);
+    const alerts = firstSms.sent.filter((text) => text.body === line);
+    expect(alerts.map((text) => text.to)).toEqual([OWNER]);
+    expect(alerts[0]?.body).toBe("I couldn't send that to the group.");
+    expect(alerts[0]?.body).not.toMatch(/twilio|grok|door code|cleaner_core|\d/);
     expect(fetchBox.posts.map((text) => text.body)).toEqual([]);
-    expect(line).not.toMatch(/twilio|grok|door code|cleaner_core/i);
-    expect(firstSms.sent.filter((text) => text.body === line).every((text) => !text.body.includes(PIN))).toBe(true);
 
     const secondSms = fakeSms();
     const restarted = open(secondSms);
@@ -674,13 +705,13 @@ describe("live group membership", () => {
     expect(live.posts.some((text) => text.body === PRIVATE_LINE)).toBe(false);
 
     const optedOut = await ready(false);
+    const optedSid = optedOut.readSid();
     optedOut.blockMembership();
     await optedOut.job.receive({ id: "stop-before-sync", from: CLEANER, text: "STOP" });
     const held = await optedOut.job.receive({ id: "left-opted-out-sync", from: OWNER, text: "guests have left" });
-    expect(optedOut.posts.filter((text) => text.body === PRIVATE_LINE || text.body === GROUP_PIN)).toEqual([]);
+    expect(optedOut.posts).toEqual([{ conversationSid: optedSid, to: [OWNER, CLEANER], body: TIME_LINE }]);
     expect(optedOut.sms.sent.filter((text) => text.body === PRIVATE_PIN || text.body === PRIVATE_LINE)).toEqual([]);
     expect(held.sent.filter((text) => text.kind === "pin" || text.channel === "group")).toEqual([]);
-    expect(held.sent.filter((text) => text.to === OWNER && text.body === STOP_HOLD)).toEqual([]);
-    expect(optedOut.sms.sent.filter((text) => text.to === OWNER && text.body === STOP_HOLD)).toHaveLength(1);
+    expect(optedOut.sms.sent.filter((text) => text.body === STOP_HOLD).map((text) => text.to)).toEqual([OWNER]);
   });
 });

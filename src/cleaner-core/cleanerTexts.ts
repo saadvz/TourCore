@@ -85,6 +85,17 @@ export function privateCodeLine(cleanerName: string): string {
   return `I've sent the door code to ${cleanerName} privately.`;
 }
 
+const PRIVATE_CODE_PREFIX = "I've sent the door code to ";
+const PRIVATE_CODE_SUFFIX = " privately.";
+
+export function isPrivateCodeLine(body: string): boolean {
+  return body.startsWith(PRIVATE_CODE_PREFIX) && body.endsWith(PRIVATE_CODE_SUFFIX) && body.length > PRIVATE_CODE_PREFIX.length + PRIVATE_CODE_SUFFIX.length;
+}
+
+export function groupUnconfirmedLine(): string {
+  return "I couldn't send that to the group.";
+}
+
 export function groupTimeLine(hostName: string): string {
   return `${hostName} will confirm that time.`;
 }
