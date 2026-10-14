@@ -1,0 +1,8 @@
+This run used the in-process doctor/smoke CLI. A live cleaning job will not do these steps. They stay unverified until a run on that live target covers them. That run still uses only Scratch test numbers.
+
+1. Started tsx via npm run cleaner:doctor and npm run cleaner:smoke in this checkout. A hosted job is not launched that way.
+2. Read Guesty Lite and Notion fixtures under src/cleaner-core/fixtures/. Did not call Notion, did not write a Notion database, and did not use a Notion account or credential.
+3. Froze time at the smoke default 2026-10-14T15:00:00.000Z, or at the --now instant a journey passed. Did not use the wall clock.
+4. Pushed texts onto an in-memory array, or a JSON file under a temporary --data directory, and printed JSON. Did not call a messaging provider. The tenant-isolation drive kept Scratch Lane, Scratch Court, and the onboarded property in that one directory. The temporary directory was removed. The saved stdout, transcript, job list, and outbox were not.
+5. Applied each --reply inside the process. A reply that starts with @ reads a fixture file inside the process. Neither path received an inbound SMS. --closed means the sync ran with no open conversation.
+6. Printed no door code. The scratch digits are not in this folder. A group text and a mirrored copy do not carry the door code.

@@ -1,0 +1,81 @@
+{
+  "ok": true,
+  "flag": true,
+  "property": "9 Scratch Annex, Teaneck, NJ 07666",
+  "sent": [
+    {
+      "to": "+15555550121",
+      "body": "Hi, this is Annex's cleaning scheduler for 9 Scratch Annex, Teaneck, NJ 07666. Reply YES to get cleaning texts, or STOP to opt out.",
+      "kind": "opt-in"
+    },
+    {
+      "to": "+15555550122",
+      "body": "Hi, this is Annex's cleaning scheduler for 9 Scratch Annex, Teaneck, NJ 07666. Reply YES to get cleaning texts, or STOP to opt out.",
+      "kind": "opt-in"
+    }
+  ],
+  "pinRecipients": [],
+  "jobs": [],
+  "outbox": [
+    {
+      "id": "opt-in:+15555550121",
+      "to": "+15555550121",
+      "body": "Hi, this is Annex's cleaning scheduler for 9 Scratch Annex, Teaneck, NJ 07666. Reply YES to get cleaning texts, or STOP to opt out.",
+      "kind": "opt-in",
+      "status": "sent"
+    },
+    {
+      "id": "opt-in:+15555550122",
+      "to": "+15555550122",
+      "body": "Hi, this is Annex's cleaning scheduler for 9 Scratch Annex, Teaneck, NJ 07666. Reply YES to get cleaning texts, or STOP to opt out.",
+      "kind": "opt-in",
+      "status": "sent"
+    }
+  ],
+  "transcript": [
+    "What should I call this property? Send the nickname, the street address, the time zone, the usual checkout time, the usual check-in time, and the host phone, separated by |.",
+    "+15555550120: Annex | 9 Scratch Annex, Teaneck, NJ 07666 | America/New_York | 11:00 AM | 4:00 PM | +15555550120",
+    "Which booking sources should I read? Name each one. Say whether early check-ins or late checkouts are agreed on Airbnb, outside that calendar. Do not add a separate Airbnb or Vrbo feed when Guesty Lite already includes those stays.",
+    "+15555550120: Guesty Lite and Notion. Yes, early check-ins and late checkouts are agreed on Airbnb, outside that calendar.",
+    "Preview for Annex: 1 stay, 1 block. Notion was read just now. 0 date conflicts. A block is not a departure. Airbnb timing changes are not in the calendar. I will not assume the place is empty. Reply OK to continue.",
+    "+15555550120: OK",
+    "Who should get texts? Send the cleaner phone, then each other person as a role and a phone. Roles are owner, manager, or observer. Cory is an observer. I will not text a number until that number opts in.",
+    "+15555550120: Cleaner +15555550121. Observer Cory +15555550122.",
+    "When should I send cleaning texts? Choose any of: when a booking is created, days after check-in, days before checkout, the morning of checkout, after you say the guests have left, and if nobody answers. Also send quiet hours and who to escalate to.",
+    "Hi, this is Annex's cleaning scheduler for 9 Scratch Annex, Teaneck, NJ 07666. Reply YES to get cleaning texts, or STOP to opt out.",
+    "Hi, this is Annex's cleaning scheduler for 9 Scratch Annex, Teaneck, NJ 07666. Reply YES to get cleaning texts, or STOP to opt out.",
+    "+15555550121: YES",
+    "When should I send cleaning texts? Choose any of: when a booking is created, days after check-in, days before checkout, the morning of checkout, after you say the guests have left, and if nobody answers. Also send quiet hours and who to escalate to.",
+    "+15555550122: YES",
+    "When should I send cleaning texts? Choose any of: when a booking is created, days after check-in, days before checkout, the morning of checkout, after you say the guests have left, and if nobody answers. Also send quiet hours and who to escalate to.",
+    "+15555550120: Morning of checkout, and after you say the guests have left. Quiet hours 9:00 PM to 8:00 AM. Escalate to the host.",
+    "What is the permanent outdoor code, and where is the lock? I store a sealed reference and never print the digits. This demo cannot rotate, revoke, or control the lock. When you change the code, change it on the lock yourself, then tell me it changed.",
+    "+15555550120: The outdoor lock code is [redacted]. The lock is by the back door.",
+    "Recorded a sealed code for the outdoor lock. This demo cannot rotate, revoke, or control the lock. Change the code on the lock yourself, then tell me it changed. The code goes only to the approved cleaner after you say the guests have left. It does not go to a group, an observer, a mirrored copy, or a number that has not opted in. Do you want checklists, photos, supplies, a ledger, or a review of old cleaner texts? Old texts are not consent. Reply SKIP to leave this out.",
+    "+15555550120: SKIP",
+    "Saved. Old texts are not consent, and I did not opt anyone in from them. Dry run for Annex at 9 Scratch Annex, Teaneck, NJ 07666. Cleaner +15555550121 is opted in. Cory at +15555550122 is an observer and does not get the door code. Quiet hours 9:00 PM to 8:00 AM. Escalate to the host. Airbnb timing stays with you, not the calendar. This demo cannot rotate or revoke the lock. Reply APPROVE to activate. I will not activate without the cleaner's YES and your APPROVE.",
+    "+15555550120: APPROVE",
+    "Activated Annex. I will text only the numbers that opted in. I will not infer consent, a vacancy, or a lock-code change."
+  ],
+  "blocks": [],
+  "tenant": "onboarding-draft",
+  "setup": {
+    "activated": true,
+    "step": "active",
+    "tenantId": "annex",
+    "address": "9 Scratch Annex, Teaneck, NJ 07666",
+    "prompt": "Activated Annex. I will text only the numbers that opted in. I will not infer consent, a vacancy, or a lock-code change.",
+    "prompts": [
+      "What should I call this property? Send the nickname, the street address, the time zone, the usual checkout time, the usual check-in time, and the host phone, separated by |.",
+      "Which booking sources should I read? Name each one. Say whether early check-ins or late checkouts are agreed on Airbnb, outside that calendar. Do not add a separate Airbnb or Vrbo feed when Guesty Lite already includes those stays.",
+      "Preview for Annex: 1 stay, 1 block. Notion was read just now. 0 date conflicts. A block is not a departure. Airbnb timing changes are not in the calendar. I will not assume the place is empty. Reply OK to continue.",
+      "Who should get texts? Send the cleaner phone, then each other person as a role and a phone. Roles are owner, manager, or observer. Cory is an observer. I will not text a number until that number opts in.",
+      "When should I send cleaning texts? Choose any of: when a booking is created, days after check-in, days before checkout, the morning of checkout, after you say the guests have left, and if nobody answers. Also send quiet hours and who to escalate to.",
+      "What is the permanent outdoor code, and where is the lock? I store a sealed reference and never print the digits. This demo cannot rotate, revoke, or control the lock. When you change the code, change it on the lock yourself, then tell me it changed.",
+      "Recorded a sealed code for the outdoor lock. This demo cannot rotate, revoke, or control the lock. Change the code on the lock yourself, then tell me it changed. The code goes only to the approved cleaner after you say the guests have left. It does not go to a group, an observer, a mirrored copy, or a number that has not opted in. Do you want checklists, photos, supplies, a ledger, or a review of old cleaner texts? Old texts are not consent. Reply SKIP to leave this out.",
+      "Saved. Old texts are not consent, and I did not opt anyone in from them. Dry run for Annex at 9 Scratch Annex, Teaneck, NJ 07666. Cleaner +15555550121 is opted in. Cory at +15555550122 is an observer and does not get the door code. Quiet hours 9:00 PM to 8:00 AM. Escalate to the host. Airbnb timing stays with you, not the calendar. This demo cannot rotate or revoke the lock. Reply APPROVE to activate. I will not activate without the cleaner's YES and your APPROVE.",
+      "Activated Annex. I will text only the numbers that opted in. I will not infer consent, a vacancy, or a lock-code change."
+    ],
+    "sealed": true
+  }
+}

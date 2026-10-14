@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { MessagingLedger } from "../src/messaging/ledger";
 import { handleProviderWebhook } from "../src/messaging/pipeline";
 import { LocalMessagingProvider } from "../src/messaging/local/provider";
-import { cleanerCoreEnabled, googleCalendarFixtureSource, openCleanerCore, runDoctor, runSmoke, scratchTenant, type CleanerText } from "../src/cleaner-core";
+import { cleanerCoreEnabled, googleCalendarFixtureSource, notionFixtureSource, openCleanerCore, runDoctor, runSmoke, scratchTenant, type CleanerText } from "../src/cleaner-core";
 
 const ADDRESS = "12 Scratch Lane, Teaneck, NJ 07666";
 const OWNER = "+15555550100";
@@ -32,7 +32,7 @@ const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know."
 const CLEANER_HURT_MISSED = "If someone is hurt, call 911 now. I couldn't reach the host, so please call them too.";
 const NOW = "2026-10-14T15:00:00.000Z";
 const DUE = "2026-10-18T12:00:00.000Z";
-const SMOKE_USAGE = "Usage: tsx src/cleaner-core/cli.ts smoke [--data <dir>] [--no-poll] [--feed <file>] [--then-feed <file>] [--google <file>] [--tenant scratch-lane|scratch-court] [--closed] [--now <iso>] [--remind] [--fail-sends <n>] [--with-pin] [--unapproved] [--group <phone>] [--reply <from>=<text> ...]";
+const SMOKE_USAGE = "Usage: tsx src/cleaner-core/cli.ts smoke [--data <dir>] [--no-poll] [--feed <file>] [--then-feed <file>] [--google <file>] [--notion <file>] [--onboard] [--group-mode cleaner-only|native|mirrored] [--group-capable] [--participant <role>=<phone>] [--tenant scratch-lane|scratch-court] [--closed] [--now <iso>] [--remind] [--fail-sends <n>] [--with-pin] [--unapproved] [--group <phone>] [--reply <from>=<text> ...]";
 
 const feed = (name: string) => readFileSync(join("src/cleaner-core/fixtures", name), "utf8");
 
@@ -1403,6 +1403,418 @@ describe("step E second source and second tenant", () => {
     expect(missing.status).toBe(1);
     expect(missing.stdout).toBe("");
     expect(missing.stderr).toContain("does not read Scratch Lane's calendar");
+  });
+});
+
+describe("step F Notion, onboarding, and group delivery", () => {
+  const NOTION_MISSING = "I can't read that Notion database. Permission is missing, so I did not sync bookings and I did not send a cleaning text.";
+  const NOTION_INSUFFICIENT = "I can't read that Notion database. Permission is not enough to read it, so I did not sync bookings and I did not send a cleaning text.";
+  const OBSERVER = "+15555550122";
+  const ANNEX_HOST = "+15555550120";
+  const ANNEX_CLEANER = "+15555550121";
+  const ANNEX = "9 Scratch Annex, Teaneck, NJ 07666";
+  const OPT_ANNEX = `Hi, this is Annex's cleaning scheduler for ${ANNEX}. Reply YES to get cleaning texts, or STOP to opt out.`;
+  const GROUP = "Group text: ";
+  const MIRROR = "Mirrored copy, not a group reply: ";
+  const notion = (name: string) => notionFixtureSource(feed(name));
+
+  it("tells the host when Notion permission is missing or insufficient and sends nothing", async () => {
+    const missingBox = sink();
+    const missing = core(missingBox, { tenantId: "scratch-lane" });
+    const denied = await missing.readSource(notion("notion-lane-denied.json"), { conversation: "closed" });
+    expect(denied.reason).toBe("permission-denied");
+    expect(denied.fallback).toBe(NOTION_MISSING);
+    expect(denied.sent).toEqual([]);
+    expect(denied.jobs).toEqual([]);
+    expect(missingBox.sent).toEqual([]);
+
+    const shortBox = sink();
+    const short = core(shortBox, { tenantId: "scratch-lane" });
+    const insufficient = await short.readSource(notion("notion-lane-insufficient.json"), { conversation: "closed" });
+    expect(insufficient.fallback).toBe(NOTION_INSUFFICIENT);
+    expect(insufficient.sent).toEqual([]);
+    expect(short.jobs()).toEqual([]);
+    expect(shortBox.sent).toEqual([]);
+  });
+
+  it("reads a Notion stay in the tenant time zone and does not turn a block into a departure", async () => {
+    const box = sink();
+    const job = core(box, { tenantId: "scratch-lane" });
+    const read = await job.readSource(notion("notion-lane-read.json"), { conversation: "closed" });
+    expect(read.sent).toEqual([{ to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" }]);
+    expect(read.blocks).toEqual([{ uid: "notion:row-block", summary: "Owner block" }]);
+    expect(read.jobs.map((item) => ({ id: item.id, checkoutDate: item.checkoutDate }))).toEqual([
+      { id: "notion:row-anita", checkoutDate: "2026-10-18" },
+    ]);
+    expect(read.freshness).toEqual([{ kind: "notion", fetchedAt: "2026-10-14T15:00:00.000Z", stale: false }]);
+    expect(read.provenance).toEqual([{ jobId: "notion:row-anita", sources: [{ kind: "notion", uid: "notion:row-anita" }] }]);
+    expect(read.sent.some((text) => text.body.includes("10:00"))).toBe(false);
+    expect(job.jobs().some((item) => item.id === "notion:row-block")).toBe(false);
+  });
+
+  it("marks a Notion read stale when it is older than three hours", async () => {
+    const box = sink();
+    const job = core(box, { tenantId: "scratch-lane" });
+    const body = feed("notion-lane-read.json").replace("2026-10-14T15:00:00.000Z", "2026-10-14T10:00:00.000Z");
+    const read = await job.readSource(notionFixtureSource(body), { conversation: "closed" });
+    expect(read.freshness).toEqual([{ kind: "notion", fetchedAt: "2026-10-14T10:00:00.000Z", stale: true }]);
+    expect(read.sent).toEqual([{ to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" }]);
+  });
+
+  it("sends nothing when the same Notion snapshot is read again, including after a restart", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cleaner-notion-"));
+    try {
+      const first = core(sink(), { tenantId: "scratch-lane", dataDir: dir });
+      const opened = await first.readSource(notion("notion-lane-read.json"), { conversation: "closed" });
+      const again = await first.readSource(notion("notion-lane-read.json"), { conversation: "closed" });
+      expect(opened.sent).toEqual([{ to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" }]);
+      expect(again.sent).toEqual([]);
+      expect(first.jobs()).toHaveLength(1);
+      const restarted = core(sink(), { tenantId: "scratch-lane", dataDir: dir });
+      const third = await restarted.readSource(notion("notion-lane-read.json"), { conversation: "closed" });
+      expect(third.sent).toEqual([]);
+      expect(restarted.jobs().map((item) => item.id)).toEqual(["notion:row-anita"]);
+      expect(restarted.outbox().filter((item) => item.kind === "host-checkout")).toHaveLength(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("cancels a removed Notion row and does not send another reminder", async () => {
+    const box = sink();
+    const clock = { at: NOW };
+    const timed = openCleanerCore({
+      enabled: true,
+      tenantId: "scratch-lane",
+      property: { id: "prop_12_scratch_lane", address: ADDRESS, timeZone: "America/New_York" },
+      ownerPhone: OWNER,
+      cleaner: { phone: CLEANER, approved: true },
+      consented: true,
+      sink: box,
+      now: () => new Date(clock.at),
+    });
+    await timed.readSource(notion("notion-lane-read.json"));
+    await timed.receive({ id: "out", from: OWNER, text: "YES" });
+    await timed.receive({ id: "yes", from: OWNER, text: "YES" });
+    expect(timed.jobs()[0]?.status).toBe("confirmed");
+    clock.at = DUE;
+    const reminded = await timed.runReminders();
+    expect(reminded.sent).toEqual([{ to: OWNER, body: REMINDER, kind: "reminder" }]);
+    const removed = await timed.readSource(notion("notion-lane-removed.json"), { conversation: "closed" });
+    expect(removed.sent).toEqual([{ to: OWNER, body: CANCEL, kind: "cancel-update" }]);
+    expect(removed.jobs[0]).toEqual(expect.objectContaining({ id: "notion:row-anita", status: "canceled", live: false }));
+    const after = await timed.runReminders();
+    expect(after.sent).toEqual([]);
+    expect(timed.outbox().filter((item) => item.kind === "reminder" && item.status === "sent")).toHaveLength(1);
+    const repeat = await timed.readSource(notion("notion-lane-removed.json"), { conversation: "closed" });
+    expect(repeat.sent).toEqual([]);
+  });
+
+  it("keeps one job when Guesty Lite and Notion describe the same stay", async () => {
+    const box = sink();
+    const job = core(box, { tenantId: "scratch-lane" });
+    await job.pollFeed(feed("guesty-lite-scratch.ics"), { conversation: "closed" });
+    const merged = await job.readSource(notion("notion-lane-overlap.json"), { conversation: "closed" });
+    expect(merged.sent).toEqual([]);
+    expect(merged.conflicts).toEqual([]);
+    expect(merged.provenance).toEqual([
+      {
+        jobId: "stay-anita@guesty.com",
+        sources: [
+          { kind: "guesty-lite", uid: "stay-anita@guesty.com" },
+          { kind: "notion", uid: "notion:row-anita" },
+        ],
+      },
+      { jobId: "stay-same-day@guesty.com", sources: [{ kind: "guesty-lite", uid: "stay-same-day@guesty.com" }] },
+      { jobId: "stay-after-gap@guesty.com", sources: [{ kind: "guesty-lite", uid: "stay-after-gap@guesty.com" }] },
+    ]);
+    expect(job.jobs().map((item) => item.id)).toEqual([
+      "stay-anita@guesty.com",
+      "stay-same-day@guesty.com",
+      "stay-after-gap@guesty.com",
+    ]);
+    expect(job.jobs().some((item) => item.id.startsWith("notion:"))).toBe(false);
+    expect(box.sent).toEqual([{ to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" }]);
+  });
+
+  it("activates a new tenant only after the cleaner opts in and the owner approves", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cleaner-onboard-"));
+    const lock = readFileSync("src/cleaner-core/fixtures/annex-lock.txt", "utf8").trim();
+    try {
+      const box = sink();
+      const draft = openCleanerCore({
+        enabled: true,
+        tenantId: "onboarding-draft",
+        property: { id: "onboarding-draft", address: "Scratch setup", timeZone: "America/New_York" },
+        ownerPhone: ANNEX_HOST,
+        cleaner: { phone: ANNEX_CLEANER, approved: true },
+        consented: false,
+        isolate: true,
+        sink: box,
+        now: () => new Date(NOW),
+        dataDir: dir,
+      });
+      draft.beginOnboarding();
+      draft.attachPreview("notion", feed("notion-annex.json"));
+      await draft.answerOnboarding({ id: "p", from: ANNEX_HOST, text: `Annex | ${ANNEX} | America/New_York | 11:00 AM | 4:00 PM | ${ANNEX_HOST}` });
+      await draft.answerOnboarding({ id: "s", from: ANNEX_HOST, text: "Guesty Lite and Notion. Yes, early check-ins and late checkouts are agreed on Airbnb, outside that calendar." });
+      const preview = await draft.answerOnboarding({ id: "ok", from: ANNEX_HOST, text: "OK" });
+      expect(preview.setup.prompt).toBe("Who should get texts? Send the cleaner phone, then each other person as a role and a phone. Roles are owner, manager, or observer. Cory is an observer. I will not text a number until that number opts in.");
+      expect(preview.setup.prompts.some((line) => line.startsWith("Preview for Annex: 1 stay, 1 block."))).toBe(true);
+      await draft.answerOnboarding({ id: "people", from: ANNEX_HOST, text: `Cleaner ${ANNEX_CLEANER}. Observer Cory ${OBSERVER}.` });
+      await draft.answerOnboarding({ id: "c-yes", from: ANNEX_CLEANER, text: "YES" });
+      await draft.answerOnboarding({ id: "o-yes", from: OBSERVER, text: "YES" });
+      await draft.answerOnboarding({ id: "sched", from: ANNEX_HOST, text: "Morning of checkout, and after you say the guests have left. Quiet hours 9:00 PM to 8:00 AM. Escalate to the host." });
+      await draft.answerOnboarding({ id: "pin", from: ANNEX_HOST, text: lock });
+      await draft.answerOnboarding({ id: "opt", from: ANNEX_HOST, text: "SKIP" });
+      const approved = await draft.answerOnboarding({ id: "go", from: ANNEX_HOST, text: "APPROVE" });
+      const again = await draft.answerOnboarding({ id: "go-2", from: ANNEX_HOST, text: "APPROVE" });
+      expect(approved.setup.activated).toBe(true);
+      expect(approved.setup.tenantId).toBe("annex");
+      expect(approved.setup.prompt).toBe("Activated Annex. I will text only the numbers that opted in. I will not infer consent, a vacancy, or a lock-code change.");
+      expect(again.setup.activated).toBe(true);
+      expect(box.sent).toEqual([
+        { to: ANNEX_CLEANER, body: OPT_ANNEX, kind: "opt-in" },
+        { to: OBSERVER, body: OPT_ANNEX, kind: "opt-in" },
+      ]);
+      const stored = readFileSync(join(dir, "cleaner-core.json"), "utf8");
+      expect(stored.includes(lock.match(/\d{4,8}/)?.[0] ?? "no-code")).toBe(false);
+      expect(stored.includes("+15555550100")).toBe(false);
+      expect(stored.includes("12 Scratch Lane")).toBe(false);
+      const annex = openCleanerCore({
+        enabled: true,
+        tenantId: "annex",
+        property: { id: "prop_annex", address: ANNEX, timeZone: "America/New_York" },
+        ownerPhone: ANNEX_HOST,
+        cleaner: { phone: ANNEX_CLEANER, approved: true },
+        pin: lock.match(/\d{4,8}/)?.[0],
+        consented: true,
+        sink: sink(),
+        dataDir: dir,
+      });
+      expect(annex.jobs()).toEqual([]);
+      const crossed = await annex.receive({ id: "lane", from: OWNER, text: "YES" });
+      expect(crossed).toEqual({ handled: true, reason: "wrong-tenant", sent: [] });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not activate or send a cleaning text when the cleaner has not opted in", async () => {
+    const box = sink();
+    const draft = openCleanerCore({
+      enabled: true,
+      tenantId: "onboarding-draft",
+      property: { id: "onboarding-draft", address: "Scratch setup", timeZone: "America/New_York" },
+      ownerPhone: ANNEX_HOST,
+      cleaner: { phone: ANNEX_CLEANER, approved: true },
+      consented: false,
+      isolate: true,
+      sink: box,
+      now: () => new Date(NOW),
+    });
+    draft.beginOnboarding();
+    draft.attachPreview("notion", feed("notion-annex.json"));
+    await draft.answerOnboarding({ id: "p", from: ANNEX_HOST, text: `Annex | ${ANNEX} | America/New_York | 11:00 AM | 4:00 PM | ${ANNEX_HOST}` });
+    await draft.answerOnboarding({ id: "s", from: ANNEX_HOST, text: "Notion. Yes, late checkouts are agreed on Airbnb, outside that calendar." });
+    await draft.answerOnboarding({ id: "ok", from: ANNEX_HOST, text: "OK" });
+    await draft.answerOnboarding({ id: "people", from: ANNEX_HOST, text: `Cleaner ${ANNEX_CLEANER}. Observer Cory ${OBSERVER}.` });
+    await draft.answerOnboarding({ id: "sched", from: ANNEX_HOST, text: "Morning of checkout. Quiet hours 9:00 PM to 8:00 AM. Escalate to the host." });
+    await draft.answerOnboarding({ id: "pin", from: ANNEX_HOST, text: readFileSync("src/cleaner-core/fixtures/annex-lock.txt", "utf8").trim() });
+    await draft.answerOnboarding({ id: "opt", from: ANNEX_HOST, text: "SKIP" });
+    const refused = await draft.answerOnboarding({ id: "go", from: ANNEX_HOST, text: "APPROVE" });
+    expect(refused.setup.activated).toBe(false);
+    expect(refused.setup.prompt).toBe("Not activated. The cleaner has not opted in, so I did not send a cleaning text.");
+    expect(box.sent.map((text) => text.kind)).toEqual(["opt-in", "opt-in"]);
+    expect(box.sent.some((text) => text.kind === "offer" || text.kind === "pin" || text.kind === "reminder" || text.kind === "host-checkout")).toBe(false);
+  });
+
+  it("refuses a second Airbnb feed when Guesty Lite is already named", async () => {
+    const draft = openCleanerCore({
+      enabled: true,
+      tenantId: "onboarding-draft",
+      property: { id: "onboarding-draft", address: "Scratch setup", timeZone: "America/New_York" },
+      ownerPhone: ANNEX_HOST,
+      cleaner: { phone: ANNEX_CLEANER, approved: true },
+      consented: false,
+      isolate: true,
+      sink: sink(),
+      now: () => new Date(NOW),
+    });
+    draft.beginOnboarding();
+    await draft.answerOnboarding({ id: "p", from: ANNEX_HOST, text: `Annex | ${ANNEX} | America/New_York | 11:00 AM | 4:00 PM | ${ANNEX_HOST}` });
+    const dup = await draft.answerOnboarding({ id: "s", from: ANNEX_HOST, text: "Guesty Lite and a separate Airbnb feed." });
+    expect(dup.setup.step).toBe("sources");
+    expect(dup.setup.prompt).toBe("Guesty Lite already includes Airbnb and Vrbo stays. I did not add a second feed. Name the sources again, without a separate Airbnb or Vrbo feed.");
+  });
+
+  it("holds a reminder during quiet hours and sends it once the window ends", async () => {
+    const box = sink();
+    const clock = { at: "2026-10-18T02:00:00.000Z" };
+    const job = openCleanerCore({
+      enabled: true,
+      tenantId: "scratch-lane",
+      property: { id: "prop_12_scratch_lane", address: ADDRESS, timeZone: "America/New_York" },
+      ownerPhone: OWNER,
+      cleaner: { phone: CLEANER, approved: true },
+      consented: true,
+      sink: box,
+      now: () => new Date(clock.at),
+      quietHours: { from: "21:00", until: "08:00" },
+    });
+    await job.readSource(notion("notion-lane-read.json"));
+    await job.receive({ id: "out", from: OWNER, text: "YES" });
+    await job.receive({ id: "yes", from: OWNER, text: "YES" });
+    const held = await job.runReminders();
+    expect(held.sent).toEqual([]);
+    clock.at = DUE;
+    const sent = await job.runReminders();
+    expect(sent.sent).toEqual([{ to: OWNER, body: REMINDER, kind: "reminder" }]);
+    const twice = await job.runReminders();
+    expect(twice.sent).toEqual([]);
+  });
+
+  it("uses a native group only when every participant has opted in", async () => {
+    const box = sink();
+    const job = pinned(box, {
+      messaging: {
+        requested: "group",
+        capable: true,
+        participants: [{ phone: OBSERVER, role: "observer" }],
+      },
+    });
+    await job.pollFeed(feed("guesty-lite-scratch.ics"));
+    await job.receive({ id: "c", from: CLEANER, text: "YES" });
+    await job.receive({ id: "o", from: OBSERVER, text: "YES" });
+    await job.receive({ id: "out", from: OWNER, text: "YES" });
+    await job.receive({ id: "in", from: OWNER, text: "YES" });
+    const offer = `Turnover at ${ADDRESS} on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.`;
+    expect(box.sent.filter((text) => text.kind === "offer")).toEqual([
+      { to: CLEANER, body: `${GROUP}${offer}`, kind: "offer", channel: "group" },
+      { to: OWNER, body: `${GROUP}${offer}`, kind: "offer", channel: "group" },
+      { to: OBSERVER, body: `${GROUP}${offer}`, kind: "offer", channel: "group" },
+    ]);
+    expect(job.messagingView()).toEqual({ requested: "group", actual: "native", excluded: [], note: "This is a group text." });
+  });
+
+  it("mirrors cleaner texts when group texting is not available", async () => {
+    const box = sink();
+    const job = pinned(box, {
+      messaging: {
+        requested: "group",
+        capable: false,
+        participants: [{ phone: OBSERVER, role: "observer" }],
+      },
+    });
+    await job.pollFeed(feed("guesty-lite-scratch.ics"));
+    await job.receive({ id: "c", from: CLEANER, text: "YES" });
+    await job.receive({ id: "o", from: OBSERVER, text: "YES" });
+    await job.receive({ id: "out", from: OWNER, text: "YES" });
+    await job.receive({ id: "in", from: OWNER, text: "YES" });
+    const offer = `Turnover at ${ADDRESS} on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.`;
+    expect(box.sent.filter((text) => text.kind === "offer")).toEqual([
+      { to: CLEANER, body: offer, kind: "offer" },
+      { to: OWNER, body: `${MIRROR}${offer}`, kind: "offer", channel: "mirror" },
+      { to: OBSERVER, body: `${MIRROR}${offer}`, kind: "offer", channel: "mirror" },
+    ]);
+    expect(job.messagingView()?.actual).toBe("mirrored");
+    expect(job.messagingView()?.note).toBe("Group texting isn't available on this number, so I mirrored the cleaner texts instead of starting a group.");
+  });
+
+  it("leaves a participant out until that number opts in", async () => {
+    const box = sink();
+    const job = pinned(box, {
+      messaging: {
+        requested: "group",
+        capable: true,
+        participants: [{ phone: OBSERVER, role: "observer" }],
+      },
+    });
+    await job.pollFeed(feed("guesty-lite-scratch.ics"));
+    await job.receive({ id: "c", from: CLEANER, text: "YES" });
+    await job.receive({ id: "out", from: OWNER, text: "YES" });
+    await job.receive({ id: "in", from: OWNER, text: "YES" });
+    expect(box.sent.filter((text) => text.to === OBSERVER).map((text) => text.kind)).toEqual(["opt-in"]);
+    expect(box.sent.some((text) => text.kind === "offer" && text.to === OBSERVER)).toBe(false);
+    expect(job.messagingView()).toEqual({
+      requested: "group",
+      actual: "mirrored",
+      excluded: [OBSERVER],
+      note: `I left ${OBSERVER} out because that number has not opted in.`,
+    });
+    const stopped = await job.receive({ id: "stop-o", from: OBSERVER, text: "STOP" });
+    expect(stopped.sent).toEqual([{ to: OBSERVER, body: STOP_ACK, kind: "stop" }]);
+    const help = await job.receive({ id: "help-o", from: OBSERVER, text: "HELP" });
+    expect(help.sent).toEqual([{ to: OBSERVER, body: HELP_ACK, kind: "help" }]);
+  });
+
+  it("sends the door code only to the approved cleaner, never to the group, the observer, or a mirror", async () => {
+    const box = sink();
+    const job = pinned(box, {
+      groupPhones: [UNAPPROVED],
+      messaging: {
+        requested: "group",
+        capable: true,
+        participants: [{ phone: OBSERVER, role: "observer" }],
+      },
+    });
+    await job.pollFeed(feed("guesty-lite-scratch.ics"));
+    await job.receive({ id: "c", from: CLEANER, text: "YES" });
+    await job.receive({ id: "o", from: OBSERVER, text: "YES" });
+    await job.receive({ id: "out", from: OWNER, text: "YES" });
+    await job.receive({ id: "in", from: OWNER, text: "YES" });
+    await job.receive({ id: "offer", from: CLEANER, text: "YES" });
+    await job.receive({ id: "left", from: OWNER, text: "guests have left" });
+    expect(box.sent.filter((text) => text.kind === "pin")).toEqual([{ to: CLEANER, body: PIN_TEXT, kind: "pin" }]);
+    expect(box.sent.filter((text) => text.to === UNAPPROVED)).toEqual([]);
+    const shared = box.sent.filter((text) => text.channel === "group" || text.channel === "mirror" || text.to === OBSERVER);
+    expect(shared.some((text) => text.body.includes(PIN) || text.kind === "pin")).toBe(false);
+    expect(box.sent.find((text) => text.kind === "pin-notice")).toEqual({ to: OWNER, body: PIN_NOTICE, kind: "pin-notice" });
+  });
+
+  it("keeps Notion bookings and an onboarded tenant apart in one folder", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cleaner-f-iso-"));
+    const court = scratchTenant("scratch-court");
+    if (!court) throw new Error("Scratch Court is missing.");
+    try {
+      const lane = core(sink(), { tenantId: "scratch-lane", dataDir: dir });
+      const courtCore = openCleanerCore({
+        enabled: true,
+        tenantId: "scratch-court",
+        property: court.property,
+        ownerPhone: court.ownerPhone,
+        cleaner: { phone: court.cleanerPhone, approved: true },
+        consented: true,
+        sink: sink(),
+        now: () => new Date(NOW),
+        dataDir: dir,
+      });
+      await lane.readSource(notion("notion-lane-read.json"), { conversation: "closed" });
+      await courtCore.readSource(notion("notion-court-stay.json"), { conversation: "closed" });
+      const draft = openCleanerCore({
+        enabled: true,
+        tenantId: "onboarding-draft",
+        property: { id: "onboarding-draft", address: "Scratch setup", timeZone: "America/New_York" },
+        ownerPhone: ANNEX_HOST,
+        cleaner: { phone: ANNEX_CLEANER, approved: true },
+        consented: false,
+        isolate: true,
+        sink: sink(),
+        now: () => new Date(NOW),
+        dataDir: dir,
+      });
+      const ignored = await draft.answerOnboarding({ id: "lane-yes", from: OWNER, text: "YES" });
+      expect(ignored).toEqual(expect.objectContaining({ reason: "wrong-tenant", sent: [] }));
+      expect(lane.jobs().map((item) => item.id)).toEqual(["notion:row-anita"]);
+      expect(courtCore.jobs().map((item) => item.id)).toEqual(["notion:row-court"]);
+      expect(lane.outbox().every((item) => item.to === OWNER)).toBe(true);
+      expect(courtCore.outbox().every((item) => item.to === court.ownerPhone)).toBe(true);
+      const stored = readFileSync(join(dir, "cleaner-core.json"), "utf8");
+      expect(stored.includes("4821")).toBe(false);
+      expect(stored.includes("7392")).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

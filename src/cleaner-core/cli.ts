@@ -4,8 +4,15 @@ import { cleanerCoreEnabled } from "./flag";
 import { openCleanerCore, type CleanerText, type JobView, type OutboxView, type SyncState } from "./core";
 import type { FeedBlock } from "./calendar";
 import { isScratchTestNumber } from "./scratch";
-import { googleCalendarFixtureSource } from "./sources";
-import { scratchTenant } from "./tenants";
+import { googleCalendarFixtureSource, notionFixtureSource } from "./sources";
+import { scratchTenant, SCRATCH_TENANTS } from "./tenants";
+import type { MessagingView, SetupView } from "./core";
+
+type MessagingOpt = {
+  requested: "cleaner-only" | "group";
+  capable: boolean;
+  participants: { phone: string; role: "owner" | "manager" | "observer" | "cleaner"; approved?: boolean }[];
+};
 
 /**
  * Launch: `npx tsx src/cleaner-core/cli.ts doctor` or
@@ -36,6 +43,7 @@ export interface SmokeReply {
 export type SmokeOp =
   | { type: "poll"; ical: string }
   | { type: "google"; body: string }
+  | { type: "notion"; body: string }
   | { type: "reply"; from: string; text: string }
   | { type: "remind" }
   | { type: "now"; iso: string }
@@ -56,6 +64,8 @@ export interface SmokeReport {
   blocks?: FeedBlock[];
   tenant?: string;
   sync?: SyncState;
+  messaging?: MessagingView;
+  setup?: SetupView;
 }
 
 const LANE = scratchTenant("scratch-lane");
@@ -97,8 +107,21 @@ export function runDoctor(env: NodeJS.ProcessEnv = process.env): DoctorReport {
 export async function runSmoke(
   env: NodeJS.ProcessEnv = process.env,
   replies?: SmokeReply[],
-  extra?: { ops?: SmokeOp[]; dataDir?: string; withPin?: boolean; groupPhones?: string[]; approved?: boolean; tenantId?: string; closed?: boolean; stepE?: boolean },
+  extra?: {
+    ops?: SmokeOp[];
+    dataDir?: string;
+    withPin?: boolean;
+    groupPhones?: string[];
+    approved?: boolean;
+    tenantId?: string;
+    closed?: boolean;
+    stepE?: boolean;
+    onboard?: boolean;
+    stepF?: boolean;
+    messaging?: MessagingOpt;
+  },
 ): Promise<SmokeReport> {
+  if (extra?.onboard) return runOnboardingSmoke(env, extra);
   const tenant = scratchTenant(extra?.tenantId ?? "scratch-lane");
   if (!tenant) throw new Error("Unknown Scratch tenant.");
   const ops = extra?.ops ?? defaultOps(replies);
@@ -120,6 +143,7 @@ export async function runSmoke(
     cleaner: { phone: tenant.cleanerPhone, approved: extra?.approved !== false },
     ...(extra?.withPin ? { pin: tenant.pin, hostName: tenant.hostName } : {}),
     ...(extra?.groupPhones?.length ? { groupPhones: extra.groupPhones } : {}),
+    ...(extra?.messaging ? { messaging: extra.messaging } : {}),
     consented: true,
     sink: {
       send: (text) => {
@@ -140,6 +164,7 @@ export async function runSmoke(
     else if (op.type === "fail") failures += op.n;
     else if (op.type === "poll") await core.pollFeed(op.ical, { conversation });
     else if (op.type === "google") await core.readSource(googleCalendarFixtureSource(op.body), { conversation });
+    else if (op.type === "notion") await core.readSource(notionFixtureSource(op.body), { conversation });
     else if (op.type === "reply") await core.receive({ id: `smoke-op-${index}`, from: op.from, text: op.text });
     else await core.runReminders();
   }
@@ -157,9 +182,68 @@ export async function runSmoke(
     outbox: core.outbox(),
     transcript: core.transcript(),
     blocks: core.blocks(),
-    ...(extra?.stepE ? { tenant: tenant.id, sync: core.lastSync() } : {}),
+    ...(extra?.stepE || extra?.stepF ? { tenant: tenant.id, sync: core.lastSync() } : {}),
+    ...(extra?.messaging ? { messaging: core.messagingView() } : {}),
   };
-  return JSON.parse(JSON.stringify(report).split(tenant.pin).join("[redacted]")) as SmokeReport;
+  return redactReport(report, [tenant.pin, ...SCRATCH_TENANTS.map((item) => item.pin)]);
+}
+
+async function runOnboardingSmoke(
+  env: NodeJS.ProcessEnv,
+  extra: { ops?: SmokeOp[]; dataDir?: string },
+): Promise<SmokeReport> {
+  if (!cleanerCoreEnabled(env)) return { ok: false, reason: "disabled", sent: [], pinRecipients: [] };
+  const sent: CleanerText[] = [];
+  let now = NOW;
+  const core = openCleanerCore({
+    enabled: true,
+    tenantId: "onboarding-draft",
+    property: { id: "onboarding-draft", address: "Scratch setup", timeZone: "America/New_York" },
+    ownerPhone: "+15555550120",
+    cleaner: { phone: "+15555550121", approved: true },
+    consented: false,
+    isolate: true,
+    sink: {
+      send: (text) => {
+        sent.push(text);
+      },
+    },
+    now: () => new Date(now),
+    ...(extra.dataDir ? { dataDir: extra.dataDir } : {}),
+  });
+  core.beginOnboarding();
+  const ops = extra.ops ?? [];
+  for (let index = 0; index < ops.length; index++) {
+    const op = ops[index];
+    if (!op) continue;
+    if (op.type === "now") now = op.iso;
+    else if (op.type === "poll") core.attachPreview("guesty-lite", op.ical);
+    else if (op.type === "notion") core.attachPreview("notion", op.body);
+    else if (op.type === "reply") await core.answerOnboarding({ id: `smoke-op-${index}`, from: op.from, text: op.text });
+  }
+  const setup = core.setupView();
+  const report: SmokeReport = {
+    ok: true,
+    flag: true,
+    property: setup?.address || "Scratch setup",
+    sent,
+    pinRecipients: sent.filter((text) => text.kind === "pin").map((text) => text.to),
+    jobs: core.jobs(),
+    outbox: core.outbox(),
+    transcript: core.transcript(),
+    blocks: core.blocks(),
+    tenant: "onboarding-draft",
+    ...(setup ? { setup } : {}),
+  };
+  return redactReport(report, SCRATCH_TENANTS.map((item) => item.pin));
+}
+
+function redactReport(report: SmokeReport, pins: string[]): SmokeReport {
+  let json = JSON.stringify(report);
+  for (const pin of pins) {
+    if (pin) json = json.split(pin).join("[redacted]");
+  }
+  return JSON.parse(json) as SmokeReport;
 }
 
 function defaultOps(replies?: SmokeReply[]): SmokeOp[] {
@@ -173,9 +257,9 @@ function defaultOps(replies?: SmokeReply[]): SmokeOp[] {
 }
 
 const DOCTOR_USAGE = "Usage: tsx src/cleaner-core/cli.ts doctor";
-const SMOKE_USAGE = "Usage: tsx src/cleaner-core/cli.ts smoke [--data <dir>] [--no-poll] [--feed <file>] [--then-feed <file>] [--google <file>] [--tenant scratch-lane|scratch-court] [--closed] [--now <iso>] [--remind] [--fail-sends <n>] [--with-pin] [--unapproved] [--group <phone>] [--reply <from>=<text> ...]";
+const SMOKE_USAGE = "Usage: tsx src/cleaner-core/cli.ts smoke [--data <dir>] [--no-poll] [--feed <file>] [--then-feed <file>] [--google <file>] [--notion <file>] [--onboard] [--group-mode cleaner-only|native|mirrored] [--group-capable] [--participant <role>=<phone>] [--tenant scratch-lane|scratch-court] [--closed] [--now <iso>] [--remind] [--fail-sends <n>] [--with-pin] [--unapproved] [--group <phone>] [--reply <from>=<text> ...]";
 
-export function parseSmokeArgs(argv: string[]): { replies?: SmokeReply[]; ops: SmokeOp[]; dataDir?: string; explicit: boolean; withPin: boolean; approved: boolean; groupPhones: string[]; tenantId: string; closed: boolean; stepE: boolean } {
+export function parseSmokeArgs(argv: string[]): { replies?: SmokeReply[]; ops: SmokeOp[]; dataDir?: string; explicit: boolean; withPin: boolean; approved: boolean; groupPhones: string[]; tenantId: string; closed: boolean; stepE: boolean; stepF: boolean; onboard: boolean; messaging?: MessagingOpt } {
   const ops: SmokeOp[] = [];
   const replies: SmokeReply[] = [];
   const groupPhones: string[] = [];
@@ -188,6 +272,11 @@ export function parseSmokeArgs(argv: string[]): { replies?: SmokeReply[]; ops: S
   let tenantId = "scratch-lane";
   let closed = false;
   let stepE = false;
+  let stepF = false;
+  let onboard = false;
+  let groupMode: "cleaner-only" | "native" | "mirrored" | undefined;
+  let groupCapable = false;
+  const participants: MessagingOpt["participants"] = [];
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--reply") {
@@ -198,7 +287,8 @@ export function parseSmokeArgs(argv: string[]): { replies?: SmokeReply[]; ops: S
       const eq = value.indexOf("=");
       if (eq <= 0) throw new Error(`smoke --reply must look like <from>=<text>. Got ${value}. ${SMOKE_USAGE}`);
       const from = value.slice(0, eq);
-      const text = value.slice(eq + 1);
+      const rawText = value.slice(eq + 1);
+      const text = rawText.startsWith("@") ? readFileSync(rawText.slice(1), "utf8").trim() : rawText;
       if (text.length === 0) throw new Error(`smoke --reply text is empty for ${from}. ${SMOKE_USAGE}`);
       if (!isScratchTestNumber(from)) throw new Error(`Cleaner Core only texts Scratch test numbers. Refusing ${from}.`);
       replies.push({ from, text });
@@ -218,6 +308,52 @@ export function parseSmokeArgs(argv: string[]): { replies?: SmokeReply[]; ops: S
       explicit = true;
       stepE = true;
       ops.push({ type: "google", body: readFileSync(value, "utf8") });
+      continue;
+    }
+    if (arg === "--notion") {
+      const value = argv[++i];
+      if (value === undefined || value.startsWith("--")) throw new Error(`smoke --notion needs a fixture path. ${SMOKE_USAGE}`);
+      explicit = true;
+      stepE = true;
+      stepF = true;
+      ops.push({ type: "notion", body: readFileSync(value, "utf8") });
+      continue;
+    }
+    if (arg === "--onboard") {
+      explicit = true;
+      stepF = true;
+      onboard = true;
+      continue;
+    }
+    if (arg === "--group-mode") {
+      const value = argv[++i];
+      if (value !== "cleaner-only" && value !== "native" && value !== "mirrored") {
+        throw new Error(`smoke --group-mode must be cleaner-only, native, or mirrored. ${SMOKE_USAGE}`);
+      }
+      explicit = true;
+      stepF = true;
+      groupMode = value;
+      continue;
+    }
+    if (arg === "--group-capable") {
+      explicit = true;
+      stepF = true;
+      groupCapable = true;
+      continue;
+    }
+    if (arg === "--participant") {
+      const value = argv[++i];
+      if (value === undefined || value.startsWith("--") || !value.includes("=")) throw new Error(`smoke --participant needs <role>=<phone>. ${SMOKE_USAGE}`);
+      const eq = value.indexOf("=");
+      const role = value.slice(0, eq);
+      const phone = value.slice(eq + 1);
+      if (role !== "owner" && role !== "manager" && role !== "observer" && role !== "cleaner") {
+        throw new Error(`smoke --participant role must be owner, manager, observer, or cleaner. ${SMOKE_USAGE}`);
+      }
+      if (!isScratchTestNumber(phone)) throw new Error(`Cleaner Core only texts Scratch test numbers. Refusing ${phone}.`);
+      explicit = true;
+      stepF = true;
+      participants.push({ phone, role });
       continue;
     }
     if (arg === "--tenant") {
@@ -286,14 +422,17 @@ export function parseSmokeArgs(argv: string[]): { replies?: SmokeReply[]; ops: S
     }
     throw new Error(`Unexpected argument ${arg ?? ""}. ${SMOKE_USAGE}`);
   }
-  if (!noPoll && !ops.some((op) => op.type === "poll" || op.type === "google")) {
-    if (tenantId !== "scratch-lane") throw new Error(`scratch-court needs --google or --feed. It does not read Scratch Lane's calendar. ${SMOKE_USAGE}`);
+  if (!onboard && !noPoll && !ops.some((op) => op.type === "poll" || op.type === "google" || op.type === "notion")) {
+    if (tenantId !== "scratch-lane") throw new Error(`scratch-court needs --google, --notion, or --feed. It does not read Scratch Lane's calendar. ${SMOKE_USAGE}`);
     ops.unshift({ type: "poll", ical: SCRATCH_ICAL });
   }
+  const messaging = groupMode
+    ? { requested: groupMode === "cleaner-only" ? "cleaner-only" as const : "group" as const, capable: groupMode === "native" && groupCapable, participants }
+    : undefined;
   if (!explicit) {
-    return { ops: defaultOps(undefined), ...(dataDir ? { dataDir } : {}), explicit, withPin, approved, groupPhones, tenantId, closed, stepE };
+    return { ops: defaultOps(undefined), ...(dataDir ? { dataDir } : {}), explicit, withPin, approved, groupPhones, tenantId, closed, stepE, stepF, onboard };
   }
-  return { ops, ...(sawReply ? { replies } : {}), ...(dataDir ? { dataDir } : {}), explicit, withPin, approved, groupPhones, tenantId, closed, stepE };
+  return { ops, ...(sawReply ? { replies } : {}), ...(dataDir ? { dataDir } : {}), explicit, withPin, approved, groupPhones, tenantId, closed, stepE, stepF, onboard, ...(messaging ? { messaging } : {}) };
 }
 
 async function main(): Promise<void> {
@@ -315,6 +454,9 @@ async function main(): Promise<void> {
       tenantId: parsed.tenantId,
       ...(parsed.closed ? { closed: true } : {}),
       ...(parsed.stepE ? { stepE: true } : {}),
+      ...(parsed.stepF ? { stepF: true } : {}),
+      ...(parsed.onboard ? { onboard: true } : {}),
+      ...(parsed.messaging ? { messaging: parsed.messaging } : {}),
     });
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
     if (!report.ok) process.exit(2);

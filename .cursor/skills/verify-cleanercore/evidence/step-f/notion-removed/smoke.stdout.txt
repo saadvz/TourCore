@@ -1,0 +1,123 @@
+{
+  "ok": true,
+  "flag": true,
+  "property": "12 Scratch Lane, Teaneck, NJ 07666",
+  "checkout": "2026-10-18T15:00:00.000Z",
+  "sent": [
+    {
+      "to": "+15555550100",
+      "body": "Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.",
+      "kind": "host-checkout"
+    },
+    {
+      "to": "+15555550100",
+      "body": "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM. Reply YES to schedule it, or STOP to opt out.",
+      "kind": "offer"
+    },
+    {
+      "to": "+15555550100",
+      "body": "Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
+      "kind": "confirm"
+    },
+    {
+      "to": "+15555550100",
+      "body": "Reminder: checkout at 12 Scratch Lane, Teaneck, NJ 07666 is Sunday, Oct 18 at 11:00 AM. Reply STOP to opt out.",
+      "kind": "reminder"
+    },
+    {
+      "to": "+15555550100",
+      "body": "Update: the cleaning at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 is canceled, so no need to come. Reply STOP to opt out.",
+      "kind": "cancel-update"
+    }
+  ],
+  "pinRecipients": [],
+  "jobs": [
+    {
+      "id": "notion:row-anita",
+      "departingUid": "notion:row-anita",
+      "arrivingUid": null,
+      "status": "canceled",
+      "live": false,
+      "textsBlocked": true,
+      "checkoutDate": "2026-10-18",
+      "nextCheckInDate": null,
+      "sameDay": false,
+      "checkoutTime": "11:00 AM",
+      "nextCheckInTime": null,
+      "checkoutAt": "2026-10-18T15:00:00.000Z",
+      "nextCheckInAt": null,
+      "version": 2,
+      "hostCheckoutVersion": 1,
+      "hostCheckInVersion": 0,
+      "asking": null
+    }
+  ],
+  "outbox": [
+    {
+      "id": "host-checkout:notion:row-anita:2026-10-18:660",
+      "to": "+15555550100",
+      "body": "Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.",
+      "kind": "host-checkout",
+      "status": "sent",
+      "jobId": "notion:row-anita"
+    },
+    {
+      "id": "offer:notion:row-anita:2026-10-18:660::",
+      "to": "+15555550100",
+      "body": "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM. Reply YES to schedule it, or STOP to opt out.",
+      "kind": "offer",
+      "status": "sent",
+      "jobId": "notion:row-anita"
+    },
+    {
+      "id": "confirm:notion:row-anita:2026-10-18:660:",
+      "to": "+15555550100",
+      "body": "Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
+      "kind": "confirm",
+      "status": "sent",
+      "jobId": "notion:row-anita"
+    },
+    {
+      "id": "reminder:notion:row-anita:morning-of:2026-10-18:1:660",
+      "to": "+15555550100",
+      "body": "Reminder: checkout at 12 Scratch Lane, Teaneck, NJ 07666 is Sunday, Oct 18 at 11:00 AM. Reply STOP to opt out.",
+      "kind": "reminder",
+      "status": "sent",
+      "jobId": "notion:row-anita"
+    },
+    {
+      "id": "cancel:notion:row-anita:v2",
+      "to": "+15555550100",
+      "body": "Update: the cleaning at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 is canceled, so no need to come. Reply STOP to opt out.",
+      "kind": "cancel-update",
+      "status": "sent",
+      "jobId": "notion:row-anita"
+    }
+  ],
+  "transcript": [
+    "Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.",
+    "+15555550100: YES",
+    "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM. Reply YES to schedule it, or STOP to opt out.",
+    "+15555550100: YES",
+    "Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
+    "Reminder: checkout at 12 Scratch Lane, Teaneck, NJ 07666 is Sunday, Oct 18 at 11:00 AM. Reply STOP to opt out.",
+    "Update: the cleaning at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 is canceled, so no need to come. Reply STOP to opt out."
+  ],
+  "blocks": [],
+  "tenant": "scratch-lane",
+  "sync": {
+    "reason": "read",
+    "conversation": "open",
+    "sources": [
+      "notion"
+    ],
+    "conflicts": [],
+    "freshness": [
+      {
+        "kind": "notion",
+        "fetchedAt": "2026-10-14T15:00:00.000Z",
+        "stale": true
+      }
+    ]
+  }
+}

@@ -1,0 +1,1 @@
+smoke --with-pin --group-mode native --group-capable --participant observer=+15555550122 --feed /workspace/src/cleaner-core/fixtures/guesty-lite-scratch.ics --reply +15555550101=YES --reply +15555550100=YES --reply +15555550100=YES

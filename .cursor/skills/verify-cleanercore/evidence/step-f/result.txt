@@ -1,0 +1,3 @@
+features: notion-permission-denied notion-source-read notion-sync-repeat notion-removed multi-source-dedupe onboarding-full onboarding-no-optin group-native-consented group-mirrored-fallback group-unconsented-participant pin-private-only tenant-isolation stop-help-injury
+script: .cursor/skills/verify-cleanercore/scripts/prove-step-f.sh
+pins: redacted
