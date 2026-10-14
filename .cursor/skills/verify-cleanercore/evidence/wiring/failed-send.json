@@ -1,0 +1,9 @@
+{
+  "tool": "{\"next\":\"The door code didn't reach the cleaner.\"}",
+  "hostNote": "The door code didn't reach the cleaner. We'll try again in a few minutes.",
+  "attempt": {
+    "to": "+15555550131",
+    "status": "failed",
+    "body": "Guests have left 12 Practice Lane, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you."
+  }
+}
