@@ -10,12 +10,24 @@ export interface GroupSeat {
 
 export type CodeRoute = "group" | "private" | "held";
 
+export class GroupNotConfirmed extends Error {
+  readonly conversationSid: string | undefined;
+
+  constructor(conversationSid?: string) {
+    super("not sent");
+    this.name = "GroupNotConfirmed";
+    this.conversationSid = conversationSid;
+  }
+}
+
 export function codeRoute(seats: readonly GroupSeat[]): CodeRoute {
   const cleaner = seats.find((seat) => seat.role === "cleaner");
   if (!cleaner?.approved || cleaner.consent !== "in") return "held";
-  const members = seats.filter((seat) => seat.consent !== "out");
-  const group = members.every((seat) => seat.consent === "in" && (seat.role === "host" || (seat.role === "cleaner" && seat.approved)));
-  return group ? "group" : "private";
+  const host = seats.find((seat) => seat.role === "host");
+  if (!host || host.consent !== "in") return "private";
+  const active = seats.filter((seat) => seat.consent !== "out");
+  const pair = active.length === 2 && active.every((seat) => seat.consent === "in" && (seat.role === "host" || (seat.role === "cleaner" && seat.approved)));
+  return pair ? "group" : "private";
 }
 
 export type GroupTurn = "injury" | "stop" | "problem" | "time" | "host" | "cleaner";

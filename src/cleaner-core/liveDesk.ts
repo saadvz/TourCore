@@ -9,6 +9,7 @@ import { interpretFeed } from "./calendar";
 import { openCleanerCore, type CleanerCore, type CleanerText } from "./core";
 import { readPublicCalendar, type CalendarFetch } from "./fetchLimits";
 import { resumeNote } from "./cleanerTexts";
+import { GroupNotConfirmed } from "./groupThread";
 import { cleanerPinStatusUrl, isAllowlisted, liveSmsOn, sendLiveGroup, sendLiveSms, smsAllowlist } from "./liveSms";
 import { openPin, sealPin, type PinSeal } from "./pinSeal";
 
@@ -480,9 +481,14 @@ export class LiveDesk {
         send: async (text) => {
           if ((text.kind === "pin-notice" || text.kind === "pin-failed" || text.kind === "host-checkout" || text.kind === "host-checkin") && text.channel !== "group") return;
           if (text.channel === "group" && text.audience && text.audience.length > 0) {
-            const sent = await sendLiveGroup(env(), { audience: [...text.audience], body: text.body, conversationSid: this.file.conversationSid });
-            if (sent?.conversationSid) this.file.conversationSid = sent.conversationSid;
-            if (text.kind === "pin" && sent?.sid) this.noteAccepted(sent.sid);
+            try {
+              const sent = await sendLiveGroup(env(), { audience: [...text.audience], body: text.body, conversationSid: this.file.conversationSid });
+              if (sent?.conversationSid) this.file.conversationSid = sent.conversationSid;
+              if (text.kind === "pin" && sent?.sid) this.noteAccepted(sent.sid);
+            } catch (err) {
+              if (err instanceof GroupNotConfirmed && err.conversationSid) this.file.conversationSid = err.conversationSid;
+              throw err;
+            }
             return;
           }
           const statusCallback = text.kind === "pin" ? cleanerPinStatusUrl(env()) : undefined;

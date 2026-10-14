@@ -24,7 +24,7 @@ import {
 import { fingerprintOf, freshnessOf, GUESTY_POLL_MS, staleAfterMs, type SourceRecord } from "./freshness";
 import { redactLine, redactPhone } from "./redact";
 import { addressCleaner, asOptedInCleaner, doorCodeBody, groupDoorCodeBody, groupOptInBody, groupTimeLine, holdNote, offerBody, offerForOthers, privateCodeLine, reminderBody, resumeNote, type OptedInCleaner } from "./cleanerTexts";
-import { codeRoute, groupTurn, isProblemText, type GroupSeat } from "./groupThread";
+import { codeRoute, GroupNotConfirmed, groupTurn, isProblemText, type GroupSeat } from "./groupThread";
 import { codeHandlingText, HEALTH_NOTE, isReviewKind, reviewAlert, reviewId, type AuditEvent, type ReviewDetail, type ReviewItem, type ReviewKind } from "./review";
 import { mirrorStore, restoreTenantSlice, snapshotStore } from "./sqliteStore";
 import { isOtherScratchTenantPhone, SCRATCH_TENANTS } from "./tenants";
@@ -1317,11 +1317,12 @@ class Engine implements CleanerCore {
     }
     if (this.problemHold || this.groupPinTerminal) return sent;
     if (this.delivery(key) !== "sent" && this.pin) {
+      const pin = this.pin;
       const route = this.groupChat ? codeRoute(this.groupSeats()) : "private";
       if (route === "held") return sent;
       const body = route === "group" && this.groupChat
-        ? groupDoorCodeBody(this.groupChat.cleanerName, this.options.property.address, this.pin)
-        : doorCodeBody(this.options.property.address, this.pin);
+        ? groupDoorCodeBody(this.groupChat.cleanerName, this.options.property.address, pin)
+        : doorCodeBody(this.options.property.address, pin);
       const addressed = addressCleaner(this.cleanerRecord(), { kind: "pin", body });
       if (!addressed) return sent;
       const audience = route === "group" ? this.groupAudience() : undefined;
@@ -1336,6 +1337,23 @@ class Engine implements CleanerCore {
       if (text) sent.push(text);
       if (this.groupChat && route === "group" && this.delivery(key) === "failed") this.sealGroupPin(key);
       if (this.groupChat && route === "group" && this.delivery(key) === "sent") this.groupPinTerminal = true;
+      if (this.groupChat && route === "group" && this.delivery(key) !== "sent" && this.delivery(key) !== "failed" && this.delivery(key) !== "canceled") {
+        const privately = addressCleaner(this.cleanerRecord(), { kind: "pin", body: doorCodeBody(this.options.property.address, pin) });
+        if (privately) {
+          const privateText = await this.emit({
+            id: key,
+            jobId: job.id,
+            to: privately.to,
+            kind: "pin",
+            body: privately.body,
+          });
+          if (privateText) sent.push(privateText);
+          if (this.delivery(key) === "sent") {
+            const note = await this.emitGroup(`pin-private:${key}`, privateCodeLine(this.groupChat.cleanerName), "pin-notice", job.id);
+            if (note) sent.push(note);
+          }
+        }
+      }
       if (this.groupChat && route === "private" && this.delivery(key) === "sent") {
         const note = await this.emitGroup(`pin-private:${key}`, privateCodeLine(this.groupChat.cleanerName), "pin-notice", job.id);
         if (note) sent.push(note);
@@ -1662,6 +1680,11 @@ class Engine implements CleanerCore {
       await this.options.sink.send(text);
     } catch (err) {
       if (err instanceof HaltError) throw err;
+      if (err instanceof GroupNotConfirmed && draft.channel === "group") {
+        this.dropUncertain(draft.id);
+        this.save();
+        return null;
+      }
       this.upsert(draft, "failed");
       this.counters.failed += 1;
       await this.openReview("failed-sms", draft.id, false);
@@ -2052,6 +2075,11 @@ class Engine implements CleanerCore {
 
   private delivery(id: string): OutboxItem["status"] | undefined {
     return this.outboxState.find((item) => item.id === id)?.status;
+  }
+
+  private dropUncertain(id: string): void {
+    const index = this.outboxState.findIndex((item) => item.id === id && item.status === "uncertain");
+    if (index >= 0) this.outboxState.splice(index, 1);
   }
 
   private cancelPendingReminders(jobId?: string): void {

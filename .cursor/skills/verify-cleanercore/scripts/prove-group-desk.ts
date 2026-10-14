@@ -9,9 +9,48 @@ const outPath = process.argv[2];
 if (!outPath) throw new Error("prove-group-desk.ts needs an output path");
 
 const calls: string[] = [];
-setCleanerGroupFetch(async (url) => {
+const conversations = new Map<string, { sid: string; address: string }[]>();
+let sequence = 0;
+setCleanerGroupFetch(async (url, init) => {
   calls.push(String(url));
-  return { ok: false, status: 500, json: async () => ({}) } as Response;
+  const method = (init?.method ?? "GET").toUpperCase();
+  const target = String(url);
+  const reply = (status: number, body: unknown) => ({ ok: status >= 200 && status < 300, status, json: async () => body }) as Response;
+  const root = "https://conversations.twilio.com/v1/Conversations";
+  if (target === root && method === "POST") {
+    const sid = `CH${++sequence}`;
+    conversations.set(sid, []);
+    return reply(201, { sid });
+  }
+  if (!target.startsWith(`${root}/`)) return reply(500, {});
+  const path = target.slice(root.length + 1);
+  const [rawSid, ...rest] = path.split("/");
+  const sid = decodeURIComponent(rawSid ?? "");
+  const tail = rest.join("/").split("?")[0] ?? "";
+  const people = conversations.get(sid);
+  if (!people) return reply(404, {});
+  if (tail === "Messages" && method === "POST") return reply(500, {});
+  if (tail === "Participants" && method === "GET") {
+    return reply(200, {
+      participants: people.map((person) => ({ sid: person.sid, messaging_binding: { address: person.address } })),
+      meta: { next_page_url: null },
+    });
+  }
+  if (tail === "Participants" && method === "POST") {
+    const params = new URLSearchParams(String(init?.body ?? ""));
+    const address = params.get("MessagingBinding.Address") ?? "";
+    if (people.some((person) => person.address === address)) return reply(409, {});
+    const person = { sid: `MB${++sequence}`, address };
+    people.push(person);
+    return reply(201, { sid: person.sid });
+  }
+  if (method === "DELETE" && tail.startsWith("Participants/")) {
+    const party = decodeURIComponent(tail.slice("Participants/".length));
+    const index = people.findIndex((person) => person.sid === party);
+    if (index >= 0) people.splice(index, 1);
+    return reply(index >= 0 ? 204 : 404, {});
+  }
+  return reply(500, {});
 });
 setCleanerTwilioClient(fakeSms());
 setCleanerCalendarFetch(async (url) => ({
