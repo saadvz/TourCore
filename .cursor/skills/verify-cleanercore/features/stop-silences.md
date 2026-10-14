@@ -23,7 +23,7 @@ Preconditions:
 - Replies are from `+15555550100` only.
 
 - **Opt out, then change the feed and remind.** Run `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --now 2026-10-18T12:00:00.000Z --feed src/cleaner-core/fixtures/guesty-lite-scratch.ics --reply +15555550100=YES --reply +15555550100=YES --reply +15555550100=STOP --then-feed src/cleaner-core/fixtures/guesty-lite-date-moved.ics --remind`. Exit code 0.
-- **Transcript.** The last line is `Tour Core: You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.` The transcript has no `Update:`, no `Reminder:`, and no second offer.
+- **Transcript.** The last line is `You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.` The transcript has no `Update:`, no `Reminder:`, and no second offer.
 - **Outbox.** Every `to` is `+15555550100`, and none of those bodies is a reminder, a corrected-time text, or an offer sent after the STOP line. `pinRecipients` is `[]`.
 - **Proof.** Save the command, stdout, stderr, exit code, transcript, and outbox with feature id `stop-silences`.
 

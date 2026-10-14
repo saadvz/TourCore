@@ -21,7 +21,7 @@ Preconditions:
 - `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:doctor` exits 0 with `sends` false and `enabled` true.
 - Each reply is its own smoke process, after `--closed --notion src/cleaner-core/fixtures/notion-lane-read.json`.
 
-- **STOP.** Add `--reply +15555550100=STOP`. `textsBlocked` is true. The second text is `Tour Core: You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.`
+- **STOP.** Add `--reply +15555550100=STOP`. `textsBlocked` is true. The second text is `You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.`
 - **HELP.** Add `--reply +15555550100=HELP`. The second text is `Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.`
 - **Injury.** Add `--reply "+15555550100=I fell and I'm hurt"` twice, then the same words from `+15555550101` twice. `sent` has four texts: the checkout question, `If someone is hurt, call 911 now.` to the owner, `The cleaner at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.` to the owner, and `If someone is hurt, call 911 now. I've let the host know.` to the cleaner.
 - **Proof.** Save the three stdout files with feature id `stop-help-injury`. `prove-step-f.sh`.
