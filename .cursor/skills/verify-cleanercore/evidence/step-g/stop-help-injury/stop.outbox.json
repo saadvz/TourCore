@@ -1,0 +1,17 @@
+[
+  {
+    "id": "host-checkout:notion:row-anita:2026-10-18:660",
+    "to": "+15555550100",
+    "body": "Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.",
+    "kind": "host-checkout",
+    "status": "sent",
+    "jobId": "notion:row-anita"
+  },
+  {
+    "id": "stop:smoke-op-1",
+    "to": "+15555550100",
+    "body": "Tour Core: You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.",
+    "kind": "stop",
+    "status": "sent"
+  }
+]

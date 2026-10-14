@@ -17,13 +17,8 @@
     },
     {
       "to": "+15555550100",
-      "body": "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
-      "kind": "offer"
-    },
-    {
-      "to": "+15555550100",
-      "body": "Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
-      "kind": "confirm"
+      "body": "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold until the cleaner replies YES.",
+      "kind": "held"
     }
   ],
   "pinRecipients": [],
@@ -32,7 +27,7 @@
       "id": "stay-a",
       "departingUid": "stay-a",
       "arrivingUid": "stay-b",
-      "status": "confirmed",
+      "status": "host_confirmed",
       "live": true,
       "textsBlocked": false,
       "checkoutDate": "2026-10-18",
@@ -85,18 +80,10 @@
       "jobId": "stay-a"
     },
     {
-      "id": "offer:stay-a:2026-10-18:660:2026-10-18:960",
+      "id": "hold:stay-a:2026-10-18",
       "to": "+15555550100",
-      "body": "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
-      "kind": "offer",
-      "status": "sent",
-      "jobId": "stay-a"
-    },
-    {
-      "id": "confirm:stay-a:2026-10-18:660:2026-10-18",
-      "to": "+15555550100",
-      "body": "Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
-      "kind": "confirm",
+      "body": "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold until the cleaner replies YES.",
+      "kind": "held",
       "status": "sent",
       "jobId": "stay-a"
     }
@@ -106,9 +93,8 @@
     "+15555550100: YES",
     "Is check-in at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.",
     "+15555550100: YES",
-    "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
-    "+15555550100: YES",
-    "Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666."
+    "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold until the cleaner replies YES.",
+    "+15555550100: YES"
   ],
   "blocks": []
 }

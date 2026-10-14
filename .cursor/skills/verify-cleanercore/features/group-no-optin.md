@@ -4,7 +4,7 @@ A native group with no opted-in cleaner does not send the offer, and a host YES 
 
 ## Sub-features
 
-- `held` sends `The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 is on hold until the cleaner replies YES.` to `+15555550100`.
+- `held` sends `The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold until the cleaner replies YES.` to `+15555550100`.
 - `no-schedule` leaves the Anita job at `host_confirmed` after three host YES replies. No offer, confirmation, group text, or mirror copy is sent.
 
 ## How to get to it (user POV)

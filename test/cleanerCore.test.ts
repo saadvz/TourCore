@@ -14,6 +14,7 @@ const CLEANER = "+15555550101";
 const CHECKOUT_Q = "Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.";
 const CHECKIN_Q = "Is check-in at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.";
 const OFFER = "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.";
+const HOLD = "The cleaning at 12 Scratch Lane, Teaneck, NJ 07666 is on hold until the cleaner replies YES.";
 const OFFER_1PM = "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 1:00 PM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.";
 const CONFIRM = "Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.";
 const CONFIRM_1PM = "Cleaning is scheduled for Sunday, Oct 18 at 1:00 PM at 12 Scratch Lane, Teaneck, NJ 07666.";
@@ -171,9 +172,9 @@ describe("Guesty Lite feed", () => {
       checkoutAt: "2026-10-18T17:00:00.000Z",
       nextCheckInTime: "4:00 PM",
       hostCheckoutVersion: 1,
-      status: "offered",
+      status: "host_confirmed",
     });
-    expect(box.sent.map((text) => text.body)).toEqual([CHECKOUT_Q, CHECKIN_Q, OFFER_1PM]);
+    expect(box.sent.map((text) => text.body)).toEqual([CHECKOUT_Q, CHECKIN_Q, HOLD]);
     expect(box.sent.map((text) => text.body).join("\n")).not.toContain("10:00");
   });
 });
@@ -186,16 +187,17 @@ describe("one Scratch turnover", () => {
     await job.receive({ id: "yes-checkout", from: OWNER, text: "YES" });
     await job.receive({ id: "yes-checkin", from: OWNER, text: "YES" });
     const booked = await job.receive({ id: "yes-offer", from: OWNER, text: "YES" });
-    expect(booked).toEqual({ handled: true, reason: "scheduled", sent: [{ to: OWNER, body: CONFIRM, kind: "confirm" }] });
-    expect(box.sent.map((text) => text.body)).toEqual([CHECKOUT_Q, CHECKIN_Q, OFFER, CONFIRM]);
-    expect(box.sent.map((text) => text.kind)).toEqual(["host-checkout", "host-checkin", "offer", "confirm"]);
+    expect(booked).toEqual({ handled: true, reason: "ignored", sent: [] });
+    expect(box.sent.map((text) => text.body)).toEqual([CHECKOUT_Q, CHECKIN_Q, HOLD]);
+    expect(box.sent.map((text) => text.kind)).toEqual(["host-checkout", "host-checkin", "held"]);
+    expect(job.jobs().some((item) => item.status === "offered")).toBe(false);
     expect(job.transcript()).toEqual([
-      CHECKOUT_Q, said(OWNER, "YES"), CHECKIN_Q, said(OWNER, "YES"), OFFER, said(OWNER, "YES"), CONFIRM,
+      CHECKOUT_Q, said(OWNER, "YES"), CHECKIN_Q, said(OWNER, "YES"), HOLD, said(OWNER, "YES"),
     ]);
     const again = await job.receive({ id: "yes-offer", from: OWNER, text: "YES" });
     expect(again).toEqual({ handled: true, reason: "duplicate", sent: [] });
     expect(job.transcript()).toEqual([
-      CHECKOUT_Q, said(OWNER, "YES"), CHECKIN_Q, said(OWNER, "YES"), OFFER, said(OWNER, "YES"), CONFIRM,
+      CHECKOUT_Q, said(OWNER, "YES"), CHECKIN_Q, said(OWNER, "YES"), HOLD, said(OWNER, "YES"),
     ]);
   });
 
@@ -207,7 +209,7 @@ describe("one Scratch turnover", () => {
     await job.receive({ id: "t2", from: OWNER, text: "YES" });
     await job.receive({ id: "t3", from: OWNER, text: "YES" });
     await job.pollFeed(feed("guesty-lite-date-moved.ics"));
-    expect(box.sent.map((text) => text.body)).toEqual([CHECKOUT_Q, CHECKIN_Q, OFFER_1PM, CONFIRM_1PM, MONDAY_Q]);
+    expect(box.sent.map((text) => text.body)).toEqual([CHECKOUT_Q, CHECKIN_Q, HOLD, MONDAY_Q]);
     expect(box.sent.map((text) => text.body).some((body) => body.startsWith("Update:"))).toBe(false);
     expect(job.jobs().find((item) => item.id === "stay-anita@guesty.com")).toMatchObject({
       live: true,
@@ -224,13 +226,13 @@ describe("one Scratch turnover", () => {
     expect(box.sent.map((text) => text.body).some((body) => body.startsWith("Update:"))).toBe(false);
     await job.receive({ id: "t5", from: OWNER, text: "YES" });
     const bodies = box.sent.map((text) => text.body);
-    expect(bodies.at(-1)).toBe(CORRECTED);
-    expect(bodies.indexOf(MONDAY_Q)).toBeLessThan(bodies.indexOf(CORRECTED));
-    expect(bodies.filter((body) => body.startsWith("Turnover at"))).toEqual([OFFER_1PM]);
+    expect(bodies.at(-1)).toBe(HOLD);
+    expect(bodies.filter((body) => body === HOLD)).toHaveLength(2);
+    expect(bodies.filter((body) => body.startsWith("Turnover at"))).toEqual([]);
     const anita = job.jobs().filter((item) => item.id === "stay-anita@guesty.com");
     expect(anita).toEqual([expect.objectContaining({
       live: true,
-      status: "offered",
+      status: "host_confirmed",
       checkoutDate: "2026-10-19",
       checkoutTime: "11:00 AM",
       version: 2,
@@ -253,13 +255,13 @@ describe("one Scratch turnover", () => {
     await job.receive({ id: "c1", from: OWNER, text: "YES" });
     await job.receive({ id: "c2", from: OWNER, text: "YES" });
     await job.pollFeed(feed("guesty-lite-stay-removed.ics"));
-    expect(box.sent.map((text) => text.body)).toEqual([CHECKOUT_Q, CHECKIN_Q, OFFER, CANCEL]);
+    expect(box.sent.map((text) => text.body)).toEqual([CHECKOUT_Q, CHECKIN_Q, HOLD, CANCEL]);
     await job.pollFeed(feed("guesty-lite-stay-removed.ics"));
     await job.pollFeed(feed("guesty-lite-stay-removed.ics"));
     expect(box.sent.map((text) => text.body)).toEqual([
       CHECKOUT_Q,
       CHECKIN_Q,
-      OFFER,
+      HOLD,
       CANCEL,
       "Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Tuesday, Oct 20 still 11:00 AM? Reply YES or send the new time.",
     ]);
@@ -276,7 +278,7 @@ describe("one Scratch turnover", () => {
     try {
       let fail = true;
       const firstSink = sink();
-      const first = core(firstSink, {
+      const first = pinned(firstSink, {
         dataDir: dir,
         now: () => new Date(DUE),
         sink: {
@@ -291,25 +293,27 @@ describe("one Scratch turnover", () => {
       });
       await first.pollFeed(feed("guesty-lite-scratch.ics"));
       await first.pollFeed(feed("guesty-lite-scratch.ics"));
-      expect(first.transcript()).toEqual([CHECKOUT_Q]);
+      expect(first.transcript()).toEqual([CHECKOUT_Q, OPT_IN]);
+      await first.receive({ id: "opt", from: CLEANER, text: "YES" });
       await first.receive({ id: "m1", from: OWNER, text: "YES" });
       await first.receive({ id: "m2", from: OWNER, text: "YES" });
+      await first.receive({ id: "m3", from: CLEANER, text: "YES" });
       expect(await first.runReminders()).toEqual({
         sent: [],
         failed: ["reminder:stay-anita@guesty.com:morning-of:2026-10-18:1:660"],
       });
-      expect(first.outbox().find((item) => item.kind === "reminder")).toMatchObject({ status: "failed", body: REMINDER });
-      expect(first.transcript()).not.toContain(REMINDER);
+      expect(first.outbox().find((item) => item.kind === "reminder")).toMatchObject({ status: "failed", body: CLEANER_REMINDER, to: CLEANER });
+      expect(first.transcript()).not.toContain(CLEANER_REMINDER);
 
       const secondSink = sink();
-      const second = core(secondSink, { dataDir: dir, now: () => new Date(DUE) });
-      expect(await second.runReminders()).toEqual({ sent: [{ to: OWNER, body: REMINDER, kind: "reminder" }], failed: [] });
-      expect(second.transcript().filter((line) => line === REMINDER)).toEqual([REMINDER]);
+      const second = pinned(secondSink, { dataDir: dir, now: () => new Date(DUE) });
+      expect(await second.runReminders()).toEqual({ sent: [{ to: CLEANER, body: CLEANER_REMINDER, kind: "reminder" }], failed: [] });
+      expect(second.transcript().filter((line) => line === CLEANER_REMINDER)).toEqual([CLEANER_REMINDER]);
       expect(second.outbox().find((item) => item.kind === "reminder")?.status).toBe("sent");
 
-      const third = core(sink(), { dataDir: dir, now: () => new Date(DUE) });
+      const third = pinned(sink(), { dataDir: dir, now: () => new Date(DUE) });
       expect(await third.runReminders()).toEqual({ sent: [], failed: [] });
-      expect(third.transcript().filter((line) => line === REMINDER)).toEqual([REMINDER]);
+      expect(third.transcript().filter((line) => line === CLEANER_REMINDER)).toEqual([CLEANER_REMINDER]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -330,9 +334,8 @@ describe("one Scratch turnover", () => {
     await job.pollFeed(feed("guesty-lite-date-moved.ics"));
     expect(await job.runReminders()).toEqual({ sent: [], failed: [] });
     expect(box.sent.slice(before)).toEqual([]);
-    expect(box.sent.filter((text) => text.body === CORRECTED || text.body === REMINDER || text.kind === "offer")).toEqual([
-      { to: OWNER, body: OFFER, kind: "offer" },
-    ]);
+    expect(box.sent.filter((text) => text.body === CORRECTED || text.body === REMINDER || text.kind === "offer")).toEqual([]);
+    expect(box.sent.filter((text) => text.body === HOLD)).toEqual([{ to: OWNER, body: HOLD, kind: "held" }]);
     expect(job.jobs().every((item) => item.textsBlocked)).toBe(true);
   });
 
@@ -360,13 +363,13 @@ describe("one Scratch turnover", () => {
       await offeredJob.pollFeed(feed("guesty-lite-scratch.ics"));
       await offeredJob.receive({ id: `o1-${phrase.kind}`, from: OWNER, text: "YES" });
       await offeredJob.receive({ id: `o2-${phrase.kind}`, from: OWNER, text: "YES" });
-      expect(offeredJob.jobs()[0]?.status).toBe("offered");
+      expect(offeredJob.jobs()[0]?.status).toBe("host_confirmed");
       expect(await offeredJob.receive({ id: `o3-${phrase.kind}`, from: OWNER, text: phrase.text })).toEqual({
         handled: true,
         reason: phrase.reason,
         sent: [{ to: OWNER, body: phrase.body, kind: phrase.kind }],
       });
-      expect(offeredJob.jobs()[0]?.status).toBe(phrase.kind === "stop" ? "offered" : "offered");
+      expect(offeredJob.jobs()[0]?.status).toBe("host_confirmed");
       expect(offered.sent.at(-1)?.body).toBe(phrase.body);
       expect(offered.sent.map((text) => text.body)).not.toContain(CONFIRM);
 
@@ -452,17 +455,14 @@ describe("one Scratch turnover", () => {
     await noJob.receive({ id: "no-b", from: OWNER, text: "YES" });
     expect(await noJob.receive({ id: "no-1", from: OWNER, text: "NO" })).toEqual({
       handled: true,
-      reason: "declined",
-      sent: [{ to: OWNER, body: DECLINED, kind: "declined" }],
+      reason: "ignored",
+      sent: [],
     });
-    expect((await noJob.pollFeed(feed("guesty-lite-scratch.ics"))).sent).toEqual([{
-      to: OWNER,
-      body: "Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Tuesday, Oct 20 still 11:00 AM? Reply YES or send the new time.",
-      kind: "host-checkout",
-    }]);
     expect((await noJob.pollFeed(feed("guesty-lite-scratch.ics"))).sent).toEqual([]);
-    expect(declined.sent.filter((text) => text.body === OFFER)).toEqual([{ to: OWNER, body: OFFER, kind: "offer" }]);
-    expect(declined.sent.map((text) => text.body)).toContain(DECLINED);
+    expect(noJob.jobs()[0]?.status).toBe("host_confirmed");
+    expect(declined.sent.filter((text) => text.kind === "offer")).toEqual([]);
+    expect(declined.sent.filter((text) => text.body === HOLD)).toEqual([{ to: OWNER, body: HOLD, kind: "held" }]);
+    expect(declined.sent.map((text) => text.body)).not.toContain(DECLINED);
 
     const stranger = sink();
     const strangerJob = core(stranger);
@@ -507,7 +507,7 @@ describe("one Scratch turnover", () => {
       });
       const smoke = await runSmoke({ CLEANER_CORE_ENABLED: "1" });
       expect(smoke.transcript).toEqual([
-        CHECKOUT_Q, said(OWNER, "YES"), CHECKIN_Q, said(OWNER, "YES"), OFFER, said(OWNER, "YES"), CONFIRM,
+        CHECKOUT_Q, said(OWNER, "YES"), CHECKIN_Q, said(OWNER, "YES"), HOLD, said(OWNER, "YES"),
       ]);
       expect(smoke.pinRecipients).toEqual([]);
       expect(smoke.checkout).toBe("2026-10-18T15:00:00.000Z");
@@ -531,9 +531,9 @@ describe("one Scratch turnover", () => {
     expect(report.ok).toBe(true);
     expect(report.pinRecipients).toEqual([]);
     expect(report.transcript).toEqual([
-      CHECKOUT_Q, said(OWNER, "YES"), CHECKIN_Q, said(OWNER, "YES"), OFFER, said(OWNER, "YES"), CONFIRM,
+      CHECKOUT_Q, said(OWNER, "YES"), CHECKIN_Q, said(OWNER, "YES"), HOLD, said(OWNER, "YES"),
     ]);
-    expect(report.sent.map((text) => text.kind)).toEqual(["host-checkout", "host-checkin", "offer", "confirm"]);
+    expect(report.sent.map((text) => text.kind)).toEqual(["host-checkout", "host-checkin", "held"]);
 
     const doctor = cleanerCli(["doctor"], undefined);
     expect(JSON.parse(doctor.stdout)).toEqual({
@@ -701,7 +701,7 @@ describe("step D private door code", () => {
       reason: "ignored",
       sent: [],
     });
-    const onHold = `The cleaning at ${ADDRESS} on Sunday, Oct 18 is on hold until the cleaner replies YES.`;
+    const onHold = `The cleaning at ${ADDRESS} is on hold until the cleaner replies YES.`;
     expect(quiet.sent).toEqual([
       { to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" },
       { to: CLEANER, body: OPT_IN, kind: "opt-in" },
@@ -1493,19 +1493,22 @@ describe("step F Notion, onboarding, and group delivery", () => {
       property: { id: "prop_12_scratch_lane", address: ADDRESS, timeZone: "America/New_York" },
       ownerPhone: OWNER,
       cleaner: { phone: CLEANER, approved: true },
+      pin: PIN,
+      hostName: "Scratch",
       consented: true,
       sink: box,
       now: () => new Date(clock.at),
     });
     await timed.readSource(notion("notion-lane-read.json"));
+    await timed.receive({ id: "opt", from: CLEANER, text: "YES" });
     await timed.receive({ id: "out", from: OWNER, text: "YES" });
-    await timed.receive({ id: "yes", from: OWNER, text: "YES" });
+    await timed.receive({ id: "yes", from: CLEANER, text: "YES" });
     expect(timed.jobs()[0]?.status).toBe("confirmed");
     clock.at = DUE;
     const reminded = await timed.runReminders();
-    expect(reminded.sent).toEqual([{ to: OWNER, body: REMINDER, kind: "reminder" }]);
+    expect(reminded.sent).toEqual([{ to: CLEANER, body: CLEANER_REMINDER, kind: "reminder" }]);
     const removed = await timed.readSource(notion("notion-lane-removed.json"), { conversation: "closed" });
-    expect(removed.sent).toEqual([{ to: OWNER, body: CANCEL, kind: "cancel-update" }]);
+    expect(removed.sent).toEqual([{ to: CLEANER, body: CANCEL, kind: "cancel-update" }]);
     expect(removed.jobs[0]).toEqual(expect.objectContaining({ id: "notion:row-anita", status: "canceled", live: false }));
     const after = await timed.runReminders();
     expect(after.sent).toEqual([]);
@@ -1661,19 +1664,22 @@ describe("step F Notion, onboarding, and group delivery", () => {
       property: { id: "prop_12_scratch_lane", address: ADDRESS, timeZone: "America/New_York" },
       ownerPhone: OWNER,
       cleaner: { phone: CLEANER, approved: true },
+      pin: PIN,
+      hostName: "Scratch",
       consented: true,
       sink: box,
       now: () => new Date(clock.at),
       quietHours: { from: "21:00", until: "08:00" },
     });
     await job.readSource(notion("notion-lane-read.json"));
+    await job.receive({ id: "opt", from: CLEANER, text: "YES" });
     await job.receive({ id: "out", from: OWNER, text: "YES" });
-    await job.receive({ id: "yes", from: OWNER, text: "YES" });
+    await job.receive({ id: "yes", from: CLEANER, text: "YES" });
     const held = await job.runReminders();
     expect(held.sent).toEqual([]);
     clock.at = DUE;
     const sent = await job.runReminders();
-    expect(sent.sent).toEqual([{ to: OWNER, body: REMINDER, kind: "reminder" }]);
+    expect(sent.sent).toEqual([{ to: CLEANER, body: CLEANER_REMINDER, kind: "reminder" }]);
     const twice = await job.runReminders();
     expect(twice.sent).toEqual([]);
   });
@@ -1828,7 +1834,6 @@ describe("step F Notion, onboarding, and group delivery", () => {
     const YES_LINE = "Reply YES to schedule it, or STOP to opt out.";
     const WAIT_LINE = "The cleaner will reply to confirm.";
     const SOLO_OFFER = `Turnover at ${ADDRESS} on Sunday, Oct 18. Checkout 11:00 AM. ${YES_LINE}`;
-    const HOLD = `The cleaning at ${ADDRESS} on Sunday, Oct 18 is on hold until the cleaner replies YES.`;
     const googleGone = JSON.stringify({ tenantId: "scratch-lane", timeZone: "America/New_York", items: [] });
     const sources = [
       {
@@ -1950,7 +1955,9 @@ describe("step F Notion, onboarding, and group delivery", () => {
       { to: OWNER, body: HOLD, kind: "held" },
     ]);
     await waiting.pollFeed(feed("guesty-lite-stay-removed.ics"));
-    expect(held.sent.filter((text) => text.kind === "cancel-update")).toEqual([]);
+    expect(held.sent.filter((text) => text.kind === "cancel-update")).toEqual([
+      { to: OWNER, body: CANCEL, kind: "cancel-update" },
+    ]);
     expect(held.sent.some((text) => text.kind === "offer" || text.kind === "confirm")).toBe(false);
   });
 

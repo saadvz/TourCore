@@ -1,0 +1,2 @@
+feature: stale-source
+pass

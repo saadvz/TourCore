@@ -31,6 +31,7 @@
     "demo:auto": "tsx src/demo/run.ts --auto",
     "cleaner:doctor": "tsx src/cleaner-core/cli.ts doctor",
     "cleaner:smoke": "tsx src/cleaner-core/cli.ts smoke",
+    "cleaner:health": "tsx src/cleaner-core/cli.ts health",
     "build": "node scripts/build.mjs",
     "start": "node dist/server.js",
     "test": "vitest run",
