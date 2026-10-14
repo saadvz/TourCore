@@ -615,8 +615,9 @@ export class VisitorDemoSession {
    * HELP. Bare HELP or INFO is always the carrier keyword body. On a booked
    * tour that is upcoming, inside its window, or still in progress after the
    * window, that keyword also alerts the team, files the help inbox item, and
-   * records HELP_REQUESTED. When the team text goes out, the stay-where-you-are
-   * line follows the keyword. When it fails, the snag line follows the keyword.
+   * records HELP_REQUESTED. When the team text goes out, a tour in progress
+   * gets the stay-where-you-are line and an upcoming booking gets the remote
+   * help line. When it fails, the snag line follows the keyword.
    * A real problem still uses the help ack alone. Finished, canceled, revoked,
    * failed-ID, expired, or not-yet-booked reservations — and unknown numbers —
    * get the keyword reply and no alert.
@@ -641,7 +642,7 @@ export class VisitorDemoSession {
       await this.syncReplies();
       return;
     }
-    // Bare HELP or INFO is the carrier keyword. A booked or in-progress tour still alerts the team, then sends the stay line or the snag line.
+    // Bare HELP or INFO is the carrier keyword. A booked or in-progress tour still alerts the team, then sends the remote line, the stay line, or the snag line.
     if (keywordOf(text) === "help") {
       const keywordBody = smsHelpBody(process.env, { visitorContact: this.config.operator.visitorContact });
       const reservation = await this.reservation();

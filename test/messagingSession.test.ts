@@ -228,13 +228,14 @@ describe("typed replies", () => {
     const outboundBefore = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").length;
     await say("help");
     expect((await session.store.listAudit()).some((e) => e.type === "HELP_REQUESTED")).toBe(true);
-    const stay = "I've let the property team know. Stay where you are and reply here. They'll reply as soon as they can.";
-    expect(lastReply()).toBe(stay);
-    expect(VisitorDenialCopy.helpAck("property team")).toBe(stay);
+    const remote = "I've let the property team know. They'll reply here as soon as they can.";
+    expect(VisitorDenialCopy.helpAckRemote("property team")).toBe(remote);
+    expect(lastReply()).toBe(remote);
+    expect(lastReply()).not.toContain("Stay where you are");
     const outbound = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND");
     expect(outbound.length - outboundBefore).toBe(2);
     expect(outbound.at(-2)?.body).toBe(smsHelpBody());
-    expect(outbound.at(-1)?.body).toBe(stay);
+    expect(outbound.at(-1)?.body).toBe(remote);
   });
 
   it("asks again, with the options, when it doesn't understand", async () => {

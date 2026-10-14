@@ -1573,9 +1573,10 @@ export class TourCore {
         : repeat
           ? VisitorDenialCopy.helpRepeatAck(team, contact)
           : VisitorDenialCopy.helpAck(team, contact);
-    // Bare HELP/INFO is the keyword body. When the team text goes out, the
-    // stay-where-you-are line follows it. When that text fails, the snag line
-    // follows it. A real problem still sends one ack, or the snag line alone.
+    // Bare HELP/INFO is the keyword body. When the team text goes out, an
+    // in-progress tour gets the stay-where-you-are line and an upcoming booking
+    // gets the remote help line. When that text fails, the snag line follows
+    // the keyword. A real problem still sends one ack, or the snag line alone.
     if (medical) {
       await this.sendMedicalVisitorLine(stored, reservationId, ack, optedOut);
     } else if (inbound?.keywordBody) {
@@ -1584,7 +1585,7 @@ export class TourCore {
       if (failed) {
         await this.textProspect(prospect, reservationId, renderSms("handler-snag-retry").body, undefined, despite);
       } else if (alerted) {
-        await this.textProspect(prospect, reservationId, VisitorDenialCopy.helpAck(team, contact), undefined, despite);
+        await this.textProspect(prospect, reservationId, ack, undefined, despite);
       }
     } else {
       const visitorLine = failed ? renderSms("handler-snag-retry").body : ack;

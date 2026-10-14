@@ -15,6 +15,7 @@ const PHONE = "+15550102000";
 const TEAM = "property team";
 const SNAG = "Sorry, I hit a snag with that. Could you text me again in a few minutes?";
 const STAY = "I've let the property team know. Stay where you are and reply here. They'll reply as soon as they can.";
+const REMOTE = "I've let the property team know. They'll reply here as soon as they can.";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -120,16 +121,18 @@ describe("help flow: one visitor reply, one open exception", () => {
     expect((await p.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(1);
   });
 
-  it("HELP on an upcoming booked tour sends the keyword body, then the stay-where-you-are line", async () => {
+  it("HELP on an upcoming booked tour sends the keyword body, then the remote help line", async () => {
     const p = phone(at(10));
     await bookReady(p);
     expect((await p.session.reservation())?.status).toBe("READY");
     const before = await prospectOutbound(p.session);
     await p.say("HELP");
     const added = (await prospectOutbound(p.session)).slice(before.length);
-    expect(added.map((m) => m.body)).toEqual([smsHelpBody(), STAY]);
+    expect(VisitorDenialCopy.helpAckRemote(TEAM)).toBe(REMOTE);
+    expect(added.map((m) => m.body)).toEqual([smsHelpBody(), REMOTE]);
+    expect(added[1]!.body).toBe(VisitorDenialCopy.helpAckRemote(TEAM));
+    expect(added.join("\n")).not.toContain("Stay where you are");
     expect(added[0]!.body).toContain("Tour Core:");
-    expect(added[1]!.body).toBe(STAY);
     expect((await p.session.store.listAudit()).some((e) => e.type === "HELP_REQUESTED")).toBe(true);
     expect((await p.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(1);
   });
@@ -165,7 +168,7 @@ describe("help flow: one visitor reply, one open exception", () => {
     expect((inbox.items as Array<{ kind?: string }>).filter((row) => row.kind === "help")).toHaveLength(1);
   });
 
-  it("bare HELP on an upcoming booked tour sends the keyword body, then the stay-where-you-are line, and alerts the team once", async () => {
+  it("bare HELP on an upcoming booked tour sends the keyword body, then the remote help line, and alerts the team once", async () => {
     const h = grokHarness();
     cleanups.push(h.cleanup);
     const id = await h.publish();
@@ -179,7 +182,10 @@ describe("help flow: one visitor reply, one open exception", () => {
     await persistSession(h.services, v.session);
     const added = (await prospectOutbound(v.session)).slice(before.length);
     const keyword = smsHelpBody(process.env, { visitorContact: v.session.config.operator.visitorContact });
-    expect(added.map((m) => m.body)).toEqual([keyword, STAY]);
+    const remote = VisitorDenialCopy.helpAckRemote(TEAM);
+    expect(remote).toBe("I've let the property team know. They'll reply here as soon as they can.");
+    expect(added.map((m) => m.body)).toEqual([keyword, remote]);
+    expect(added.join("\n")).not.toContain("Stay where you are");
     expect((await v.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(1);
     expect((await v.session.store.listAudit()).filter((e) => e.type === "HELP_REQUESTED")).toHaveLength(1);
     const inbox = await h.ok("get_inbox");
