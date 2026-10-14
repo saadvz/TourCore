@@ -2,9 +2,10 @@ import { authorized } from "../mcp/mcpBridge";
 import { cleanerCoreEnabled } from "./flag";
 import { liveDeskFor } from "./liveDesk";
 import { CLEANER_MCP_PATH, handleCleanerMcpMessage } from "./mcp";
-import { CLEANER_TWILIO_PATH, handleCleanerTwilioWebhook, textAddressedTo } from "./twilioHook";
+import { pinKeyFromHeader } from "./pinSeal";
+import { CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo } from "./twilioHook";
 
-export { CLEANER_MCP_PATH, CLEANER_TWILIO_PATH, handleCleanerTwilioWebhook, textAddressedTo };
+export { CLEANER_MCP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo };
 
 /**
  * Cleaning scheduler chat. Its own credential. It lists none of the touring tools.
@@ -13,6 +14,7 @@ export { CLEANER_MCP_PATH, CLEANER_TWILIO_PATH, handleCleanerTwilioWebhook, text
 export async function handleCleanerMcpHttp(input: {
   method: string;
   authorization: string | undefined;
+  pinKeyHeader: string | string[] | undefined;
   contentType: string;
   readBody: () => Promise<Buffer>;
   env: NodeJS.ProcessEnv;
@@ -44,7 +46,7 @@ export async function handleCleanerMcpHttp(input: {
     return { status: 400, body: JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "That request couldn't be read." } }) };
   }
   const desk = liveDeskFor(input.root, () => input.env, input.now);
-  const reply = await handleCleanerMcpMessage(desk, message);
+  const reply = await handleCleanerMcpMessage(desk, message, pinKeyFromHeader(input.pinKeyHeader));
   if (reply.body === undefined) return { status: reply.status, body: "" };
   return { status: reply.status, body: JSON.stringify(reply.body) };
 }

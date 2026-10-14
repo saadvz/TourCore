@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { resetLiveDesks, setCleanerCalendarFetch } from "../src/cleaner-core/liveDesk";
 import { setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
-import { pinKeyFor, sealPin } from "../src/cleaner-core/pinSeal";
+import { openPin, pinKeyFor, pinKeyFromHeader, sealPin } from "../src/cleaner-core/pinSeal";
 import {
   ADDRESS,
   BUSINESS,
@@ -22,7 +22,9 @@ import {
   OBSERVER,
   OFF_LIST,
   redactCode,
+  PIN_KEY_HEADER,
   startWiredApp,
+  TEST_PIN_KEY,
   toCleaner,
   TOUR_AUTH,
   TOUR_LINE,
@@ -55,6 +57,15 @@ function newer(before: SentSms[], after: SentSms[]): SentSms[] {
 
 const BANNED = /\b(flag|webhook|token|connector|scratch)\b/i;
 const PRODUCT = /\b(Tour Core|Cleaner Core)\b/;
+const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn't go through.";
+const PIN_FAILED = "The door code didn't reach the cleaner. Tell me the guests have left again and I'll resend it.";
+const PIN_REPEAT = "I already sent the door code to the cleaner.";
+const PIN_KEY_MISSING = "I can't send the door code yet. Let's finish setting up Cleaner Core first.";
+const PIN_REENTER = "Please enter the door code again in the private box. Don't text it here.";
+const PIN_CHAT = "Please don't send the door code in chat. Use the private box instead.";
+const DIRECT_REPLY = "Got it. To send the door code, tell your Grok Bot the guests have left. The cleaner is still waiting for the OK.";
+const HOST_LEAK = /\b(webhook|key|request|queued)\b/i;
+const FALSE_RETRY = /try again in a few minutes|we'll try again/i;
 
 describe("Cleaner Core live wiring", () => {
   it("sets up from an empty install and runs the five cleaning steps through the webhook", async () => {
@@ -100,6 +111,13 @@ describe("Cleaner Core live wiring", () => {
     expect(beforeTimes.text).not.toContain("11:00");
     expect(beforeTimes.text).not.toContain("4:00");
     expect(beforeTimes.text).not.toContain("10:30");
+    const timeText = await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: HOST, to: CLEANER_LINE, body: "10:30 AM", sid: "SM-direct-time", token: CLEANER_AUTH });
+    http.push(timeText.raw);
+    expect(timeText.status).toBe(200);
+    expect(toCleaner(wired.cleanerSent)).toEqual([]);
+    const afterTimeText = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_turns");
+    remember(afterTimeText);
+    expect(afterTimeText.text).not.toContain("10:30");
 
     const confirmed = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" });
     remember(confirmed);
@@ -139,19 +157,34 @@ describe("Cleaner Core live wiring", () => {
     expect(bodies(toCleaner(wired.cleanerSent)).some((body) => body.includes(DOOR_CODE))).toBe(false);
 
     const leftBefore = wired.cleanerSent.map((item) => item.body);
+    const directBefore = wired.cleanerSent.length;
+    const direct = await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: HOST, to: CLEANER_LINE, body: "guests left", sid: "SM-direct-left", token: CLEANER_AUTH });
+    http.push(direct.raw);
+    expect(direct.status).toBe(200);
+    const directSends = newer(wired.cleanerSent.slice(0, directBefore), wired.cleanerSent);
+    expect(directSends.map((item) => item.body)).toEqual([DIRECT_REPLY]);
+    expect(directSends.some((item) => item.body.includes(DOOR_CODE))).toBe(false);
+    const waiting = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_turns");
+    remember(waiting);
+    expect(waiting.text).toContain("\"status\":\"confirmed\"");
+    expect(waiting.text).not.toContain("cleared");
+
     const left = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "The guests have left" });
     remember(left);
-    expect(left.text).toContain("Door code sent to the cleaner.");
+    expect(left.text).toContain(PIN_SENT);
+    expect(left.text).not.toMatch(HOST_LEAK);
+    expect(left.text).not.toMatch(FALSE_RETRY);
     const pinTexts = toCleaner(wired.cleanerSent).filter((item) => item.body.includes(DOOR_CODE));
     expect(pinTexts).toHaveLength(1);
     expect(pinTexts[0]?.to).toBe(CLEANER);
     expect(pinTexts[0]?.body).toBe(`Guests have left ${ADDRESS}. Door code: ${DOOR_CODE}. This code is only for you.`);
+    expect(pinTexts[0]?.statusCallback).toBe("https://tour.example/webhooks/twilio/cleaner-core/status");
     expect(wired.cleanerSent.filter((item) => item.to !== CLEANER && item.body.includes(DOOR_CODE))).toEqual([]);
     expect(leftBefore.some((body) => body.includes(DOOR_CODE))).toBe(false);
 
     const again = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "The guests have left" });
     remember(again);
-    expect(again.text).toContain("The cleaner already has the door code.");
+    expect(again.text).toContain(PIN_REPEAT);
     expect(toCleaner(wired.cleanerSent).filter((item) => item.body.includes(DOOR_CODE))).toHaveLength(1);
 
     const stopBefore = wired.cleanerSent.length;
@@ -200,71 +233,91 @@ describe("Cleaner Core live wiring", () => {
     for (const text of [...tools, ...http, ...bodies(wired.cleanerSent.filter((item) => !item.body.includes(DOOR_CODE)))]) {
       expect(text).not.toMatch(BANNED);
       expect(text).not.toMatch(/\b(911|injury|blood)\b/i);
+      expect(text).not.toMatch(FALSE_RETRY);
+      expect(text).not.toMatch(HOST_LEAK);
     }
     expect(http.join("\n")).not.toContain(DOOR_CODE);
     expect(tools.join("\n")).not.toContain(DOOR_CODE);
+    const captured = [...tools, ...http, ...bodies(wired.cleanerSent), ...wired.logs].join("\n");
+    expect(wired.cleanerSent.filter((item) => item.to === HOST).some((item) => /send the new time/i.test(item.body))).toBe(false);
+    expect(captured).not.toContain(TEST_PIN_KEY);
+    const store = readFileSync(join(wired.root, "cleaner-live.json"), "utf8");
+    expect(store).not.toContain(DOOR_CODE);
+    expect(store).not.toContain(TEST_PIN_KEY);
+    const sealed = JSON.parse(store) as { propertyId: string; pinSeal: { iv: string; tag: string; data: string } };
+    expect(pinKeyFromHeader(undefined)).toBeUndefined();
+    expect(() => openPin(sealed.pinSeal, pinKeyFor(sealed.propertyId))).toThrow();
 
     writeEvidence({
       tools,
       sends: wired.cleanerSent,
       stop: stopSends.find((item) => item.to === CLEANER)?.body ?? "",
       hostNote: stopSends.find((item) => item.to === HOST)?.body ?? "",
+      directReply: DIRECT_REPLY,
     });
   });
 
-  it("does not say a door code was sent when Twilio reports the send failed", async () => {
+  it("tells the host once after an undelivered callback and resends only on the next tool call", async () => {
     const wired = await app();
-    wired.cleanerSent.splice(0, wired.cleanerSent.length);
-    const failing = {
-      sent: wired.cleanerSent,
-      async getAccount() {
-        return { sid: "ACfake", status: "active" };
-      },
-      async findNumber() {
-        return undefined;
-      },
-      async setSmsUrl() {},
-      async sendSms(input: { to: string; body: string }) {
-        const status = input.body.startsWith("Guests have left") ? "failed" : "queued";
-        wired.cleanerSent.push({ to: input.to, body: input.body, status });
-        return { sid: `SM${wired.cleanerSent.length}`, status };
-      },
-    };
-    setCleanerTwilioClient(failing);
-    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { said: "2" });
-    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
-    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_people", { host: HOST, cleaner: CLEANER, observer: OBSERVER });
-    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_calendar_link", { url: CALENDAR_URL });
-    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_door_code", { code: DOOR_CODE });
-    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "set_up_texting");
-    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "run_checks");
-    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" });
-    await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: CLEANER, to: CLEANER_LINE, body: "YES", sid: "SM-fail-yes-1", token: CLEANER_AUTH });
-    await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: CLEANER, to: CLEANER_LINE, body: "YES", sid: "SM-fail-yes-2", token: CLEANER_AUTH });
+    await throughSchedule(wired, "fail");
     const marked = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "The guests have left" });
-    expect(marked.text).toContain("The door code didn't reach the cleaner.");
+    expect(marked.text).toContain(PIN_SENT);
     expect(marked.raw).not.toContain(DOOR_CODE);
-    const attempt = wired.cleanerSent.find((item) => item.body.startsWith("Guests have left"));
-    expect(attempt).toMatchObject({ to: CLEANER, status: "failed" });
-    expect(attempt?.body).toContain(DOOR_CODE);
-    const note = wired.cleanerSent.find((item) => item.to === HOST && /didn't reach the cleaner/.test(item.body));
-    expect(note?.body).toBe("The door code didn't reach the cleaner. We'll try again in a few minutes.");
-    expect(note?.body).not.toContain(DOOR_CODE);
-    expect(wired.cleanerSent.some((item) => item.body === "Door code sent to the cleaner.")).toBe(false);
-    const dir = join(EVIDENCE_DIR);
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(
-      join(dir, "failed-send.json"),
-      `${JSON.stringify(
-        {
-          tool: redactCode(marked.text),
-          hostNote: note?.body ?? "",
-          attempt: { to: attempt?.to, status: attempt?.status, body: attempt ? redactCode(attempt.body) : "" },
-        },
-        null,
-        2,
-      )}\n`,
-    );
+    expect(marked.raw).not.toContain(TEST_PIN_KEY);
+    const attempt = toCleaner(wired.cleanerSent).find((item) => item.body.includes(DOOR_CODE));
+    expect(attempt).toMatchObject({ to: CLEANER, status: "queued" });
+    expect(attempt?.statusCallback).toBe("https://tour.example/webhooks/twilio/cleaner-core/status");
+    const pins = () => toCleaner(wired.cleanerSent).filter((item) => item.body.includes(DOOR_CODE));
+    expect(pins()).toHaveLength(1);
+
+    const queued = await wired.postStatus({ sid: attempt?.sid ?? "", status: "queued" });
+    expect(queued.status).toBe(200);
+    const repeat = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "The guests have left" });
+    expect(repeat.text).toContain(PIN_REPEAT);
+    expect(pins()).toHaveLength(1);
+
+    const failed = await wired.postStatus({ sid: attempt?.sid ?? "", status: "undelivered" });
+    expect(failed.status).toBe(200);
+    expect(failed.raw).toBe("{}");
+    expect(pins()).toHaveLength(1);
+    expect(wired.cleanerSent.some((item) => item.to === HOST && item.body === PIN_FAILED)).toBe(false);
+
+    const noted = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state");
+    expect(noted.text).toContain(PIN_FAILED);
+    expect(noted.text).not.toMatch(FALSE_RETRY);
+    expect(noted.text).not.toMatch(HOST_LEAK);
+    expect(noted.raw).not.toContain(DOOR_CODE);
+    expect(noted.raw).not.toContain(TEST_PIN_KEY);
+    expect(pins()).toHaveLength(1);
+
+    const replay = await wired.postStatus({ sid: attempt?.sid ?? "", status: "undelivered" });
+    expect(replay.status).toBe(200);
+    const again = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state");
+    expect(again.text).not.toContain(PIN_FAILED);
+    expect(pins()).toHaveLength(1);
+
+    const resent = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "The guests have left" });
+    expect(resent.text).toContain(PIN_SENT);
+    expect(pins()).toHaveLength(2);
+    expect(wired.cleanerSent.filter((item) => item.to === HOST).map((item) => item.body).join("\n")).not.toMatch(FALSE_RETRY);
+
+    mkdirSync(EVIDENCE_DIR, { recursive: true });
+    const evidence = `${JSON.stringify(
+      {
+        tool: redactCode(marked.text),
+        hostNote: PIN_FAILED,
+        hostSms: wired.cleanerSent.filter((item) => item.to === HOST).map((item) => redactCode(item.body)),
+        attempt: { to: attempt?.to, status: "queued", body: attempt ? redactCode(attempt.body) : "" },
+        callback: "undelivered",
+        replay: "no further send",
+        resend: "mark_guests_left",
+      },
+      null,
+      2,
+    )}\n`;
+    expect(evidence).not.toContain(DOOR_CODE);
+    expect(evidence).not.toContain(TEST_PIN_KEY);
+    writeFileSync(join(EVIDENCE_DIR, "failed-send.json"), evidence);
   });
 
   it("sends nothing when live texts are off", async () => {
@@ -423,9 +476,13 @@ describe("Cleaner Core live wiring", () => {
     const left = { from: HOST, to: CLEANER_LINE, body: "The guests have left", sid: "SM-once-left", token: CLEANER_AUTH };
     await wired.postTwilio("/webhooks/twilio/cleaner-core", left);
     await wired.postTwilio("/webhooks/twilio", left);
+    expect(wired.cleanerSent.filter((item) => item.body.includes(DOOR_CODE))).toEqual([]);
+    expect(wired.cleanerSent.filter((item) => item.body === DIRECT_REPLY)).toHaveLength(1);
     resetLiveDesks();
+    const sent = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "The guests have left" });
+    expect(sent.text).toContain(PIN_SENT);
     const again = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "The guests have left" });
-    expect(again.text).toContain("The cleaner already has the door code.");
+    expect(again.text).toContain(PIN_REPEAT);
     expect(wired.cleanerSent.filter((item) => item.body.includes(DOOR_CODE)).map((item) => ({ to: item.to, body: item.body }))).toEqual([
       { to: CLEANER, body: `Guests have left ${ADDRESS}. Door code: ${DOOR_CODE}. This code is only for you.` },
     ]);
@@ -452,11 +509,87 @@ describe("Cleaner Core live wiring", () => {
     expect(wired.cleanerSent.filter((item) => item.body.includes(DOOR_CODE))).toHaveLength(1);
   });
 
+  it("refuses to seal or send when the header key is missing or wrong", async () => {
+    const wired = await app();
+    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { said: "2" });
+    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
+    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_people", { host: HOST, cleaner: CLEANER, observer: OBSERVER });
+    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_calendar_link", { url: CALENDAR_URL });
+    const missing = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_door_code", { code: DOOR_CODE }, { pinKey: null });
+    expect(missing.isError).toBe(true);
+    expect(missing.text).toBe(PIN_KEY_MISSING);
+    expect(missing.raw).not.toContain(DOOR_CODE);
+    const savedPath = join(wired.root, "cleaner-live.json");
+    const beforeSeal = readFileSync(savedPath, "utf8");
+    expect(beforeSeal).not.toContain("pinSeal");
+    expect(beforeSeal).not.toContain(DOOR_CODE);
+
+    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_door_code", { code: DOOR_CODE });
+    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "set_up_texting");
+    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "run_checks");
+    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" });
+    await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: CLEANER, to: CLEANER_LINE, body: "YES", sid: "SM-key-yes-1", token: CLEANER_AUTH });
+    await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: CLEANER, to: CLEANER_LINE, body: "YES", sid: "SM-key-yes-2", token: CLEANER_AUTH });
+    const wrongKey = Buffer.alloc(32, 9).toString("base64");
+    const wrong = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "The guests have left" }, { pinKey: wrongKey });
+    expect(wrong.isError).toBe(true);
+    expect(wrong.text).toBe(PIN_REENTER);
+    expect(wrong.raw).not.toContain(DOOR_CODE);
+    expect(wrong.raw).not.toContain(wrongKey);
+    expect(toCleaner(wired.cleanerSent).filter((item) => item.body.includes(DOOR_CODE))).toEqual([]);
+    const stored = readFileSync(savedPath, "utf8");
+    expect(stored).not.toContain(wrongKey);
+    expect(stored).not.toContain(TEST_PIN_KEY);
+    expect(stored).not.toContain(DOOR_CODE);
+    const absent = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "The guests have left" }, { pinKey: null });
+    expect(absent.text).toBe(PIN_KEY_MISSING);
+    expect(toCleaner(wired.cleanerSent).filter((item) => item.body.includes(DOOR_CODE))).toEqual([]);
+
+    const parsed = JSON.parse(stored) as { propertyId: string; pinSeal: { iv: string; tag: string; data: string } };
+    parsed.pinSeal = sealPin(DOOR_CODE, pinKeyFor(parsed.propertyId));
+    writeFileSync(savedPath, `${JSON.stringify(parsed)}\n`);
+    resetLiveDesks();
+    const stale = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "The guests have left" });
+    expect(stale.text).toBe(PIN_REENTER);
+    expect(toCleaner(wired.cleanerSent).filter((item) => item.body.includes(DOOR_CODE))).toEqual([]);
+    expect(readFileSync(savedPath, "utf8")).not.toContain(TEST_PIN_KEY);
+  });
+
+  it("keeps the door-code key out of the tool schema and out of chat replies", async () => {
+    const wired = await app();
+    const listed = await wired.listTools("/mcp/cleaner-core", CLEANER_TOKEN);
+    const tools = JSON.parse(listed.raw) as { result?: { tools?: Array<{ name: string; inputSchema?: { properties?: Record<string, unknown> } }> } };
+    expect(listed.raw).not.toContain(TEST_PIN_KEY);
+    expect(listed.raw).not.toContain(PIN_KEY_HEADER);
+    for (const tool of tools.result?.tools ?? []) {
+      expect(Object.keys(tool.inputSchema?.properties ?? {}).join(" ")).not.toMatch(/key/i);
+    }
+    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { said: "2" });
+    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
+    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_people", { host: HOST, cleaner: CLEANER, observer: OBSERVER });
+    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_calendar_link", { url: CALENDAR_URL });
+    const chat = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { said: DOOR_CODE });
+    expect(chat.isError).toBe(true);
+    expect(chat.text).toBe(PIN_CHAT);
+    expect(chat.raw).not.toContain(DOOR_CODE);
+    await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_door_code", { code: DOOR_CODE });
+    const echoed = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { said: `the door code is ${DOOR_CODE}` });
+    expect(echoed.text).toBe(PIN_CHAT);
+    expect(echoed.raw).not.toContain(DOOR_CODE);
+    expect(echoed.raw).not.toContain(TEST_PIN_KEY);
+    const unsigned = await wired.postStatus({ sid: "SM-unsigned", status: "undelivered", signed: false });
+    expect(unsigned.status).toBe(403);
+    expect(unsigned.raw).not.toContain(DOOR_CODE);
+  });
+
   it("catches a saved door code outside the file that stored it", () => {
     const code = ["9", "0", "8", "1", "7", "3", "6", "4"].join("");
     const dir = mkdtempSync(join(tmpdir(), "cleaner-secret-"));
+    const scanner = readFileSync("scripts/scan-cleaner-secrets.mjs", "utf8");
+    const allow = scanner.match(/const allow = new Set\(\[([\s\S]*?)\]\)/)?.[1] ?? "";
+    expect(allow).not.toContain("tenants.ts");
     try {
-      const sealed = { propertyId: "probe-property", pinSeal: sealPin(code, pinKeyFor("probe-property")) };
+      const sealed = { propertyId: "probe-property", pinSeal: sealPin(code, Buffer.from("cleaner-core-scanner-test-key!!!")) };
       writeFileSync(join(dir, "saved.json"), `${JSON.stringify(sealed)}\n`);
       writeFileSync(join(dir, "leak.txt"), `the code is ${code}\n`);
       const leaked = spawnSync(process.execPath, ["scripts/scan-cleaner-secrets.mjs", dir], { encoding: "utf8" });
@@ -468,23 +601,47 @@ describe("Cleaner Core live wiring", () => {
       const clean = spawnSync(process.execPath, ["scripts/scan-cleaner-secrets.mjs", dir], { encoding: "utf8" });
       expect(clean.status).toBe(0);
       expect(clean.stdout).not.toContain(code);
+
+      const hidden = ["6", "4", "2", "0", "8", "1", "3", "5"].join("");
+      const propertySeal = { propertyId: "probe-property", pinSeal: sealPin(hidden, pinKeyFor("probe-property")) };
+      writeFileSync(join(dir, "saved.json"), `${JSON.stringify(propertySeal)}\n`);
+      writeFileSync(join(dir, "leak.txt"), `the code is ${hidden}\n`);
+      const missed = spawnSync(process.execPath, ["scripts/scan-cleaner-secrets.mjs", dir], { encoding: "utf8" });
+      expect(missed.status).toBe(0);
+      expect(missed.stdout).not.toContain(hidden);
+      expect(missed.stderr).not.toContain(hidden);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 });
 
-function writeEvidence(input: { tools: string[]; sends: SentSms[]; stop: string; hostNote: string }): void {
+async function throughSchedule(wired: WiredApp, tag: string): Promise<void> {
+  await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state", { said: "2" });
+  await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_property", { business: BUSINESS, address: ADDRESS, timeZone: "America/New_York" });
+  await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_people", { host: HOST, cleaner: CLEANER, observer: OBSERVER });
+  await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_calendar_link", { url: CALENDAR_URL });
+  await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "save_door_code", { code: DOOR_CODE });
+  await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "set_up_texting");
+  await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "run_checks");
+  await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "confirm_times", { checkout: "10:30 AM", checkIn: "3:00 PM" });
+  await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: CLEANER, to: CLEANER_LINE, body: "YES", sid: `${tag}-yes-1`, token: CLEANER_AUTH });
+  await wired.postTwilio("/webhooks/twilio/cleaner-core", { from: CLEANER, to: CLEANER_LINE, body: "YES", sid: `${tag}-yes-2`, token: CLEANER_AUTH });
+}
+
+function writeEvidence(input: { tools: string[]; sends: SentSms[]; stop: string; hostNote: string; directReply: string }): void {
   mkdirSync(EVIDENCE_DIR, { recursive: true });
   const sends = input.sends.map((item) => ({ to: item.to, status: item.status, body: redactCode(item.body) }));
   const flow = {
     steps: [
-      "setup",
-      "confirm-times",
+      "setup-via-tool",
+      "direct-time-text-ignored",
+      "confirm-times-via-tool",
       "cleaner-yes-offer",
       "cleaner-yes-schedule",
-      "guests-left",
-      "guests-left-again",
+      "direct-guests-left-sends-nothing",
+      "mark-guests-left-via-tool",
+      "mark-guests-left-again",
       "stop",
       "start",
     ],
@@ -492,12 +649,15 @@ function writeEvidence(input: { tools: string[]; sends: SentSms[]; stop: string;
     sends,
     stop: input.stop,
     hostNote: input.hostNote,
+    directReply: input.directReply,
+    directTextSendsDoorCode: false,
   };
   writeFileSync(join(EVIDENCE_DIR, "flow.json"), `${JSON.stringify(flow, null, 2)}\n`);
   writeFileSync(
     join(EVIDENCE_DIR, "result.txt"),
-    ["wiring", "flow: pass", "failed-send: see failed-send.json", "door code: absent", ""].join("\n"),
+    ["wiring", "flow: pass", "direct-text: no door code", "failed-send: see failed-send.json", "door code: absent", ""].join("\n"),
   );
   const saved = readFileSync(join(EVIDENCE_DIR, "flow.json"), "utf8");
   if (saved.includes(DOOR_CODE)) throw new Error("wiring evidence contains the door code");
+  if (saved.includes(TEST_PIN_KEY)) throw new Error("wiring evidence contains the pin key");
 }

@@ -38,12 +38,26 @@ export function cleanerTwilioClient(env: NodeJS.ProcessEnv): TwilioClient {
   return twilioHttpClient({ accountSid, authToken });
 }
 
+export const CLEANER_PIN_STATUS_PATH = "/webhooks/twilio/cleaner-core/status";
+
+export function cleanerPinStatusUrl(env: NodeJS.ProcessEnv): string | undefined {
+  const base = env.PUBLIC_BASE_URL?.trim().replace(/\/$/, "");
+  if (!base) return undefined;
+  return `${base}${CLEANER_PIN_STATUS_PATH}`;
+}
+
 /** Sends one text when live texts are on and the number is allowed. A failed Twilio status throws. */
-export async function sendLiveSms(env: NodeJS.ProcessEnv, text: { to: string; body: string }): Promise<void> {
-  if (!liveSmsOn(env) || !isAllowlisted(env, text.to)) return;
+export async function sendLiveSms(env: NodeJS.ProcessEnv, text: { to: string; body: string; statusCallback?: string }): Promise<string | undefined> {
+  if (!liveSmsOn(env) || !isAllowlisted(env, text.to)) return undefined;
   const from = parsePhone(env.CLEANER_CORE_TWILIO_PHONE_NUMBER ?? "");
   if (!from) throw new Error("not sent");
-  const result = await cleanerTwilioClient(env).sendSms({ to: text.to, from, body: text.body });
+  const result = await cleanerTwilioClient(env).sendSms({
+    to: text.to,
+    from,
+    body: text.body,
+    ...(text.statusCallback ? { statusCallback: text.statusCallback } : {}),
+  });
   const status = (result.status ?? "").toLowerCase();
   if (status === "failed" || status === "undelivered" || status === "canceled") throw new Error("not sent");
+  return result.sid;
 }

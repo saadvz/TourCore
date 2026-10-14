@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { LiveDesk, ToolReply } from "./liveDesk";
+import { DOOR_CODE_IN_CHAT, type LiveDesk, type ToolReply } from "./liveDesk";
 
 export const CLEANER_MCP_PATH = "/mcp/cleaner-core";
 
@@ -57,7 +57,7 @@ const TOOLS = [
   {
     name: "mark_guests_left",
     title: "Guests have left",
-    description: "Sends the door code only when the host says the guests have left. A second call does not send it again.",
+    description: "Sends the door code when the host says the guests have left. If that text did not go through, say it again to send it once more.",
     input: z.object({ said: z.string() }),
   },
   {
@@ -77,7 +77,7 @@ const Request = z.object({
   params: z.record(z.string(), z.unknown()).optional(),
 });
 
-export async function handleCleanerMcpMessage(desk: LiveDesk, message: unknown): Promise<{ status: number; body?: unknown }> {
+export async function handleCleanerMcpMessage(desk: LiveDesk, message: unknown, pinKey?: Buffer): Promise<{ status: number; body?: unknown }> {
   if (Array.isArray(message)) return rpcError(null, -32600, "Batched requests aren't supported.");
   const parsed = Request.safeParse(message);
   if (!parsed.success) return rpcError(null, -32600, "That isn't a valid request.");
@@ -106,9 +106,12 @@ export async function handleCleanerMcpMessage(desk: LiveDesk, message: unknown):
     if (!tool) return rpcError(id, -32602, "I can't do that from this chat.");
     const args = tool.input.safeParse(params?.arguments ?? {});
     if (!args.success) return rpcResult(id, { content: [{ type: "text", text: "That was missing something I need." }], isError: true });
+    if (chatCarriesDoorCode(tool.name, args.data, desk)) {
+      return rpcResult(id, { content: [{ type: "text", text: DOOR_CODE_IN_CHAT }], isError: true });
+    }
     let reply: ToolReply;
     try {
-      reply = await callTool(desk, tool.name, args.data);
+      reply = await callTool(desk, tool.name, args.data, pinKey);
     } catch {
       reply = { ok: false, error: "That didn't work. Try again." };
     }
@@ -123,7 +126,15 @@ export async function handleCleanerMcpMessage(desk: LiveDesk, message: unknown):
   return rpcError(id, -32601, "I don't support that.");
 }
 
-async function callTool(desk: LiveDesk, name: ToolName, args: object): Promise<ToolReply> {
+function chatCarriesDoorCode(name: string, args: object, desk: LiveDesk): boolean {
+  for (const [key, value] of Object.entries(args)) {
+    if (name === "save_door_code" && key === "code") continue;
+    if (typeof value === "string" && desk.chatCarriesDoorCode(value)) return true;
+  }
+  return false;
+}
+
+async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Buffer | undefined): Promise<ToolReply> {
   switch (name) {
     case "get_state":
       return desk.getState("said" in args ? (args as { said?: string }).said : undefined);
@@ -134,7 +145,7 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object): Promise<T
     case "save_calendar_link":
       return desk.saveCalendarLink(args as { url: string });
     case "save_door_code":
-      return desk.saveDoorCode(args as { code: string });
+      return desk.saveDoorCode(args as { code: string }, pinKey);
     case "set_up_texting":
       return desk.setUpTexting();
     case "get_turns":
@@ -142,7 +153,7 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object): Promise<T
     case "confirm_times":
       return desk.confirmTimes(args as { checkout: string; checkIn: string });
     case "mark_guests_left":
-      return desk.markGuestsLeft(args as { said: string });
+      return desk.markGuestsLeft(args as { said: string }, pinKey);
     case "run_checks":
       return desk.runChecks();
   }

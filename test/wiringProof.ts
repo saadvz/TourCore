@@ -30,6 +30,8 @@ export const CLEANER_TOKEN = "cleaner-mcp-token-wiring";
 export const TOUR_AUTH = "tour-twilio-auth-token-wiring";
 export const CLEANER_AUTH = "cleaner-twilio-auth-token-wiring";
 export const EVIDENCE_DIR = ".cursor/skills/verify-cleanercore/evidence/wiring";
+export const TEST_PIN_KEY = Buffer.from("0123456789abcdef0123456789abcdef").toString("base64");
+export const PIN_KEY_HEADER = "x-cleaner-core-pin-key";
 
 export const CALENDAR_ICS = [
   "BEGIN:VCALENDAR",
@@ -53,6 +55,8 @@ export interface SentSms {
   to: string;
   body: string;
   status: string;
+  sid: string;
+  statusCallback?: string;
 }
 
 export interface ToolResult {
@@ -69,9 +73,11 @@ export interface WiredApp {
   tourSent: SentSms[];
   cleanerSent: SentSms[];
   close: () => Promise<void>;
-  tool: (path: string, token: string, name: string, args?: Record<string, unknown>) => Promise<ToolResult>;
+  tool: (path: string, token: string, name: string, args?: Record<string, unknown>, options?: { pinKey?: string | null }) => Promise<ToolResult>;
   listTools: (path: string, token: string) => Promise<{ status: number; names: string[]; raw: string }>;
   postTwilio: (path: string, input: { from: string; to: string; body: string; sid: string; token: string }) => Promise<{ status: number; raw: string }>;
+  postStatus: (input: { sid: string; status: string; signed?: boolean }) => Promise<{ status: number; raw: string }>;
+  logs: string[];
 }
 
 export function redactCode(value: string, code = DOOR_CODE): string {
@@ -91,8 +97,9 @@ export function fakeSms(decide: (body: string) => string = () => "queued"): Twil
     async setSmsUrl() {},
     async sendSms(input) {
       const status = decide(input.body);
-      sent.push({ to: input.to, body: input.body, status });
-      return { sid: `SM${sent.length}`, status };
+      const sid = `SM${sent.length + 1}`;
+      sent.push({ to: input.to, body: input.body, status, sid, ...(input.statusCallback ? { statusCallback: input.statusCallback } : {}) });
+      return { sid, status };
     },
   };
 }
@@ -141,13 +148,16 @@ export async function startWiredApp(options: { live?: boolean; enabled?: boolean
       return url === CALENDAR_URL ? CALENDAR_ICS : "";
     },
   }));
+  const logs: string[] = [];
   const server: Server = createSetupServer({
     toolSurface: "all",
     workspace: ws,
     installation,
     operatorToken: () => TOUR_TOKEN,
     now: () => new Date(FROZEN),
-    log: () => {},
+    log: (line) => {
+      logs.push(line);
+    },
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const port = (server.address() as { port: number }).port;
@@ -160,10 +170,13 @@ export async function startWiredApp(options: { live?: boolean; enabled?: boolean
     await new Promise<void>((resolve) => server.close(() => resolve()));
     rmSync(root, { recursive: true, force: true });
   };
-  const tool = async (path: string, token: string, name: string, args: Record<string, unknown> = {}): Promise<ToolResult> => {
+  const tool = async (path: string, token: string, name: string, args: Record<string, unknown> = {}, options?: { pinKey?: string | null }): Promise<ToolResult> => {
+    const pinKey = options?.pinKey === null ? undefined : (options?.pinKey ?? TEST_PIN_KEY);
+    const headers: Record<string, string> = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+    if (pinKey) headers[PIN_KEY_HEADER] = pinKey;
     const res = await fetch(`http://127.0.0.1:${port}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers,
       body: JSON.stringify({ jsonrpc: "2.0", id: ++rpc, method: "tools/call", params: { name, arguments: args } }),
     });
     const raw = await res.text();
@@ -195,7 +208,16 @@ export async function startWiredApp(options: { live?: boolean; enabled?: boolean
     });
     return { status: res.status, raw: await res.text() };
   };
-  return { port, root, tourSent: tour.sent, cleanerSent: cleaner.sent, close, tool, listTools, postTwilio };
+  const postStatus = async (input: { sid: string; status: string; signed?: boolean }) => {
+    const path = "/webhooks/twilio/cleaner-core/status";
+    const fields = { MessageSid: input.sid, MessageStatus: input.status, From: CLEANER_LINE, To: CLEANER };
+    const rawBody = new URLSearchParams(fields).toString();
+    const headers: Record<string, string> = { "Content-Type": "application/x-www-form-urlencoded" };
+    if (input.signed !== false) headers["X-Twilio-Signature"] = twilioSignature(CLEANER_AUTH, `${PUBLIC}${path}`, fields);
+    const res = await fetch(`http://127.0.0.1:${port}${path}`, { method: "POST", headers, body: rawBody });
+    return { status: res.status, raw: await res.text() };
+  };
+  return { port, root, tourSent: tour.sent, cleanerSent: cleaner.sent, close, tool, listTools, postTwilio, postStatus, logs };
 }
 
 export function toCleaner(sent: SentSms[]): SentSms[] {

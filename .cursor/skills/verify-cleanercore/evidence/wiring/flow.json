@@ -1,11 +1,13 @@
 {
   "steps": [
-    "setup",
-    "confirm-times",
+    "setup-via-tool",
+    "direct-time-text-ignored",
+    "confirm-times-via-tool",
     "cleaner-yes-offer",
     "cleaner-yes-schedule",
-    "guests-left",
-    "guests-left-again",
+    "direct-guests-left-sends-nothing",
+    "mark-guests-left-via-tool",
+    "mark-guests-left-again",
     "stop",
     "start"
   ],
@@ -21,18 +23,15 @@
     "{\"next\":\"I read the calendar. Tell me the checkout time and the next check-in time before I text the cleaner.\",\"turns\":[{\"checkoutDate\":\"2026-10-18\",\"nextCheckInDate\":\"2026-10-18\",\"checkoutTime\":null,\"nextCheckInTime\":null,\"status\":\"discovered\"},{\"checkoutDate\":\"2026-10-22\",\"nextCheckInDate\":null,\"checkoutTime\":null,\"nextCheckInTime\":null,\"status\":\"discovered\"}]}",
     "Tell me the checkout time and the next check-in time, like 10:30 AM and 3:00 PM.",
     "{\"turns\":[{\"checkoutDate\":\"2026-10-18\",\"nextCheckInDate\":\"2026-10-18\",\"checkoutTime\":null,\"nextCheckInTime\":null,\"status\":\"discovered\"},{\"checkoutDate\":\"2026-10-22\",\"nextCheckInDate\":null,\"checkoutTime\":null,\"nextCheckInTime\":null,\"status\":\"discovered\"}]}",
+    "{\"turns\":[{\"checkoutDate\":\"2026-10-18\",\"nextCheckInDate\":\"2026-10-18\",\"checkoutTime\":null,\"nextCheckInTime\":null,\"status\":\"discovered\"},{\"checkoutDate\":\"2026-10-22\",\"nextCheckInDate\":null,\"checkoutTime\":null,\"nextCheckInTime\":null,\"status\":\"discovered\"}]}",
     "{\"next\":\"Times saved. The cleaner got one text asking them to reply YES. Nothing else goes to them until they do.\",\"turns\":[{\"checkoutDate\":\"2026-10-18\",\"nextCheckInDate\":\"2026-10-18\",\"checkoutTime\":\"10:30 AM\",\"nextCheckInTime\":\"3:00 PM\",\"status\":\"host_confirmed\"},{\"checkoutDate\":\"2026-10-22\",\"nextCheckInDate\":null,\"checkoutTime\":null,\"nextCheckInTime\":null,\"status\":\"discovered\"}]}",
     "Say that the guests have left. I won't guess from the calendar.",
-    "{\"next\":\"Door code sent to the cleaner.\"}",
-    "{\"next\":\"The cleaner already has the door code.\"}",
+    "{\"turns\":[{\"checkoutDate\":\"2026-10-18\",\"nextCheckInDate\":\"2026-10-18\",\"checkoutTime\":\"10:30 AM\",\"nextCheckInTime\":\"3:00 PM\",\"status\":\"confirmed\"},{\"checkoutDate\":\"2026-10-22\",\"nextCheckInDate\":null,\"checkoutTime\":null,\"nextCheckInTime\":null,\"status\":\"discovered\"}]}",
+    "{\"next\":\"I sent the door code to the cleaner. I'll tell you if it doesn't go through.\"}",
+    "{\"next\":\"I already sent the door code to the cleaner.\"}",
     "{\"done\":[\"Property saved.\",\"Cleaner and observer saved.\",\"Calendar link saved.\",\"Door code saved.\",\"Texting saved.\",\"Checks finished.\"],\"next\":\"The cleaner opted out of cleaning texts, so the job is on hold.\",\"turns\":[{\"checkoutDate\":\"2026-10-18\",\"nextCheckInDate\":\"2026-10-18\",\"checkoutTime\":\"10:30 AM\",\"nextCheckInTime\":\"3:00 PM\",\"status\":\"cleared\",\"held\":true},{\"checkoutDate\":\"2026-10-22\",\"nextCheckInDate\":null,\"checkoutTime\":null,\"nextCheckInTime\":null,\"status\":\"discovered\",\"held\":true}]}"
   ],
   "sends": [
-    {
-      "to": "+15555550130",
-      "status": "queued",
-      "body": "Is check-in at 12 Practice Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time."
-    },
     {
       "to": "+15555550131",
       "status": "queued",
@@ -54,14 +53,14 @@
       "body": "Cleaning is scheduled for Sunday, Oct 18 at 10:30 AM at 12 Practice Lane, Teaneck, NJ 07666."
     },
     {
+      "to": "+15555550130",
+      "status": "queued",
+      "body": "Got it. To send the door code, tell your Grok Bot the guests have left. The cleaner is still waiting for the OK."
+    },
+    {
       "to": "+15555550131",
       "status": "queued",
       "body": "Guests have left 12 Practice Lane, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you."
-    },
-    {
-      "to": "+15555550130",
-      "status": "queued",
-      "body": "Door code sent to the cleaner."
     },
     {
       "to": "+15555550131",
@@ -80,5 +79,7 @@
     }
   ],
   "stop": "You're opted out of cleaning texts for 12 Practice Lane, Teaneck, NJ 07666. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.",
-  "hostNote": "The cleaner opted out of cleaning texts for 12 Practice Lane, Teaneck, NJ 07666, so the job is on hold."
+  "hostNote": "The cleaner opted out of cleaning texts for 12 Practice Lane, Teaneck, NJ 07666, so the job is on hold.",
+  "directReply": "Got it. To send the door code, tell your Grok Bot the guests have left. The cleaner is still waiting for the OK.",
+  "directTextSendsDoorCode": false
 }

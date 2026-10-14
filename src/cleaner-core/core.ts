@@ -278,6 +278,12 @@ export interface CleanerCoreOptions {
   noteHostOnStop?: boolean;
   /** Used only when this tenant has no saved consent yet. A stored choice wins. */
   cleanerConsent?: "pending" | "in" | "out";
+  /** Live chat keeps the seal outside this store. Scratch fixtures seal here. */
+  sealPinAtRest?: boolean;
+  /** Host sentence after the private text is accepted. Unset keeps the fixture sentence. */
+  pinSentBody?: string;
+  /** Host sentence when the private text fails. Unset keeps the fixture sentence. */
+  pinFailedBody?: string;
 }
 
 export interface CleanerCore {
@@ -309,6 +315,10 @@ export interface CleanerCore {
   sourceHealth(): SourceRecord[];
   revealPin(role: "cleaner" | "observer" | "owner" | "manager"): string | undefined;
   stampFetchedAt(iso: string): void;
+  /** Marks an accepted door-code text undelivered so the next departure can send it again. Sends nothing. */
+  markPinUndelivered(): void;
+  /** Keeps a door code in memory after a later tool call opens the seal. Does not write it. */
+  rememberPin(pin: string): void;
 }
 
 const HELP_ACK = "Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.";
@@ -1201,7 +1211,7 @@ class Engine implements CleanerCore {
         jobId: job.id,
         to: this.owner,
         kind: "pin-failed",
-        body: "The door code didn't reach the cleaner. We'll try again in a few minutes.",
+        body: this.options.pinFailedBody ?? "The door code didn't reach the cleaner. We'll try again in a few minutes.",
       });
       if (failed) sent.push(failed);
     }
@@ -1211,7 +1221,7 @@ class Engine implements CleanerCore {
         jobId: job.id,
         to: this.owner,
         kind: "pin-notice",
-        body: "Door code sent to the cleaner.",
+        body: this.options.pinSentBody ?? "Door code sent to the cleaner.",
       });
       if (notice) sent.push(notice);
     }
@@ -1838,6 +1848,21 @@ class Engine implements CleanerCore {
     return Boolean(key && this.delivery(key) === "sent");
   }
 
+  markPinUndelivered(): void {
+    let changed = false;
+    for (const item of this.outboxState) {
+      if (item.kind !== "pin" || item.status !== "sent") continue;
+      item.status = "failed";
+      if (item.lease) item.lease.state = "open";
+      changed = true;
+    }
+    if (changed) this.save();
+  }
+
+  rememberPin(pin: string): void {
+    if (!this.pin) this.pin = pin;
+  }
+
   private recordClearance(job: Job): void {
     const checkout = this.latestFact(job.id, "checkout");
     if (!checkout) return;
@@ -1903,7 +1928,7 @@ class Engine implements CleanerCore {
     this.reviewItems = record.reviews ?? [];
     this.auditLog = record.audit ?? [];
     this.counters = { ...emptyCounters(), ...record.counters };
-    if (!this.pin && record.pinSeal) {
+    if (this.options.sealPinAtRest !== false && !this.pin && record.pinSeal) {
       try {
         this.pin = openPin(record.pinSeal, this.pinKeyMaterial());
       } catch {
@@ -1936,7 +1961,7 @@ class Engine implements CleanerCore {
       ...(this.participantConsent.size > 0
         ? { participantConsent: [...this.participantConsent].map(([phone, consent]) => ({ phone, consent })) }
         : {}),
-      ...(this.pin ? { pinSeal: sealPin(this.pin, this.pinKeyMaterial()) } : {}),
+      ...(this.options.sealPinAtRest !== false && this.pin ? { pinSeal: sealPin(this.pin, this.pinKeyMaterial()) } : {}),
       ...(this.sourceRecords.length > 0 ? { sourceRecords: this.sourceRecords } : {}),
       ...(this.reviewItems.length > 0 ? { reviews: this.reviewItems } : {}),
       ...(this.auditLog.length > 0 ? { audit: this.auditLog } : {}),

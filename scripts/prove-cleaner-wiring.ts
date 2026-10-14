@@ -26,4 +26,13 @@ if (combined.includes("8088")) {
   process.stderr.write("wiring evidence contains a door code\n");
   process.exit(1);
 }
+const flow = readFileSync(join(evidence, "flow.json"), "utf8");
+if (!flow.includes("mark-guests-left-via-tool") || !flow.includes("confirm-times-via-tool") || !flow.includes("direct-guests-left-sends-nothing")) {
+  process.stderr.write("wiring evidence is missing the tool path or the direct text\n");
+  process.exit(1);
+}
+if (combined.includes("We'll try again") || combined.includes("Door code sent to the cleaner")) {
+  process.stderr.write("wiring evidence still uses the old host copy\n");
+  process.exit(1);
+}
 process.stdout.write(`${evidence}\n`);

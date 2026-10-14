@@ -2,13 +2,13 @@
 // Fail when a configured Cleaner Core secret appears outside the historical allowlist.
 // Secrets are read from the tenant store and the Annex lock fixture. This file does not repeat them.
 
-import { createDecipheriv, createHash } from "node:crypto";
+import { createDecipheriv } from "node:crypto";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+import { TEST_SEAL_KEY } from "./cleaner-seal-test-key.mjs";
 
 const root = process.cwd();
 const allow = new Set([
-  "src/cleaner-core/tenants.ts",
   "src/cleaner-core/fixtures/annex-lock.txt",
   "src/cleaner-core/fixtures/google-lane-read.json",
   "test/cleanerCore.test.ts",
@@ -44,10 +44,9 @@ function scratchSecrets() {
   return [...found];
 }
 
-function openSeal(sealed, propertyId) {
+function openSeal(sealed) {
   try {
-    const key = createHash("sha256").update(`cleaner-core-pin:${propertyId}`).digest();
-    const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(sealed.iv, "base64"));
+    const decipher = createDecipheriv("aes-256-gcm", TEST_SEAL_KEY, Buffer.from(sealed.iv, "base64"));
     decipher.setAuthTag(Buffer.from(sealed.tag, "base64"));
     const pin = Buffer.concat([decipher.update(Buffer.from(sealed.data, "base64")), decipher.final()]).toString("utf8");
     return /^\d{4,8}$/.test(pin) ? pin : undefined;
@@ -59,8 +58,8 @@ function openSeal(sealed, propertyId) {
 function collectSeals(value, propertyId, into) {
   if (!value || typeof value !== "object") return;
   const nextId = typeof value.propertyId === "string" ? value.propertyId : propertyId;
-  if (value.pinSeal && nextId) {
-    const pin = openSeal(value.pinSeal, nextId);
+  if (value.pinSeal) {
+    const pin = openSeal(value.pinSeal);
     if (pin) into.add(pin);
   }
   if (Array.isArray(value)) {
@@ -154,10 +153,12 @@ for (const path of files) {
   }
 }
 
+const secretSource = "src/cleaner-core/tenants.ts";
 const hits = [];
 const seen = new Set();
 for (const path of files) {
   const rel = relative(root, path);
+  if (rel === secretSource) continue;
   if (seen.has(path)) continue;
   seen.add(path);
   const leaked = [];

@@ -18,7 +18,7 @@ import { resetLocalSmsOutbox } from "../messaging/local/outbox";
 import { PHOTON_WEBHOOK_PATH } from "../messaging/photon/provider";
 import { readTwilioEnv, TWILIO_WEBHOOK_PATH } from "../messaging/twilio/provider";
 import { cleanerCoreEnabled } from "../cleaner-core/flag";
-import { CLEANER_MCP_PATH, CLEANER_TWILIO_PATH, handleCleanerMcpHttp, handleCleanerTwilioWebhook, textAddressedTo } from "../cleaner-core/http";
+import { CLEANER_MCP_PATH, CLEANER_TWILIO_PATH, CLEANER_TWILIO_STATUS_PATH, handleCleanerMcpHttp, handleCleanerTwilioStatus, handleCleanerTwilioWebhook, textAddressedTo } from "../cleaner-core/http";
 import { publicBaseUrl } from "../messaging/publicUrl";
 import { createIntentInterpreter, intentModelFromEnv, type IntentInterpreter } from "../intent";
 import { mcpAuthModeFromEnv, type McpAuthMode } from "../mcp/authMode";
@@ -155,7 +155,7 @@ function publicRouteAllowed(method: string, path: string, oauth: boolean, hosted
     return (method === "GET" && path.startsWith("/portable/artifacts/")) || (method === "POST" && path.startsWith("/portable/uploads/"));
   }
   if (oauth && (isOAuthPublicPath(path, MCP_PATH) || (method === "GET" && path === "/oauth.js"))) return true;
-  if (method === "POST" && (path === SENDBLUE_WEBHOOK_PATH || path === TWILIO_WEBHOOK_PATH || path === CLEANER_TWILIO_PATH || path === PHOTON_WEBHOOK_PATH || path === LOCAL_WEBHOOK_PATH)) return true;
+  if (method === "POST" && (path === SENDBLUE_WEBHOOK_PATH || path === TWILIO_WEBHOOK_PATH || path === CLEANER_TWILIO_PATH || path === CLEANER_TWILIO_STATUS_PATH || path === PHOTON_WEBHOOK_PATH || path === LOCAL_WEBHOOK_PATH)) return true;
   if (method === "GET" && isPublicCompliancePath(path)) return true;
   if (method === "GET" && (/^\/verify\/[A-Za-z0-9_-]+$/.test(path) || path === "/verify.js" || path === "/styles.css")) return true;
   if (hosted && method === "GET" && (path === "/connect" || path === "/connect.js" || path === "/install" || path === "/install.js" || path === "/styles.css")) return true;
@@ -657,6 +657,7 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         const result = await handleCleanerMcpHttp({
           method,
           authorization: req.headers.authorization,
+          pinKeyHeader: req.headers["x-cleaner-core-pin-key"],
           contentType: String(req.headers["content-type"] ?? ""),
           readBody: () => readRaw(req),
           env: installation.env(),
@@ -664,6 +665,20 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
           now: () => options.now?.() ?? new Date(),
         });
         return send(result.status, "application/json; charset=utf-8", result.body, result.headers);
+      }
+      if (method === "POST" && url.pathname === CLEANER_TWILIO_STATUS_PATH) {
+        const rawBody = await readRaw(req);
+        const env = installation.env();
+        const signedUrl = installation.publicBaseUrl() ? `${installation.publicBaseUrl()}${url.pathname}${url.search}` : undefined;
+        const result = await handleCleanerTwilioStatus({
+          rawBody,
+          headers: req.headers,
+          url: signedUrl,
+          env,
+          root: installation.root,
+          now: () => options.now?.() ?? new Date(),
+        });
+        return send(result.status, "application/json; charset=utf-8", result.body);
       }
       if (method === "POST" && url.pathname === CLEANER_TWILIO_PATH) {
         const rawBody = await readRaw(req);

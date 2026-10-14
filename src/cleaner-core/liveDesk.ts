@@ -8,8 +8,8 @@ import { spokenTimes } from "../core/spokenTime";
 import { interpretFeed } from "./calendar";
 import { openCleanerCore, type CleanerCore, type CleanerText } from "./core";
 import { readPublicCalendar, type CalendarFetch } from "./fetchLimits";
-import { isAllowlisted, liveSmsOn, sendLiveSms, smsAllowlist } from "./liveSms";
-import { openPin, pinKeyFor, sealPin, type PinSeal } from "./pinSeal";
+import { cleanerPinStatusUrl, isAllowlisted, liveSmsOn, sendLiveSms, smsAllowlist } from "./liveSms";
+import { openPin, sealPin, type PinSeal } from "./pinSeal";
 
 export const FIRST_QUESTION =
   "What do you want help with? 1) Letting renters tour a unit on their own, or 2) Scheduling cleaners between guest stays.";
@@ -19,6 +19,20 @@ const CLEANER_PICK =
   "That's Cleaner Core. It schedules cleaners between guest stays. What's the property address, and what should I call the business?";
 
 const DEPARTURES = new Set(["guests have left", "guests left", "they have left", "they left", "departed", "left"]);
+
+const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn't go through.";
+const PIN_FAILED = "The door code didn't reach the cleaner. Tell me the guests have left again and I'll resend it.";
+const PIN_REPEAT = "I already sent the door code to the cleaner.";
+const PIN_KEY_MISSING = "I can't send the door code yet. Let's finish setting up Cleaner Core first.";
+const PIN_REENTER = "Please enter the door code again in the private box. Don't text it here.";
+export const DOOR_CODE_IN_CHAT = "Please don't send the door code in chat. Use the private box instead.";
+const DIRECT_TEXT_REPLY = "Got it. To send the door code, tell your Grok Bot the guests have left. The cleaner is still waiting for the OK.";
+
+interface PinSend {
+  sid: string;
+  outcome: "accepted" | "undelivered";
+  notePending: boolean;
+}
 
 export interface ToolOk {
   ok: true;
@@ -43,6 +57,7 @@ interface LiveFile {
   observer?: string;
   calendarLink?: string;
   pinSeal?: PinSeal;
+  pinSend?: PinSend;
   texting?: boolean;
   checked?: boolean;
   released?: boolean;
@@ -111,7 +126,15 @@ export class LiveDesk {
     return Boolean(this.pin && text.includes(this.pin));
   }
 
+  chatCarriesDoorCode(text: string): boolean {
+    if (this.pin && text.includes(this.pin)) return true;
+    const trimmed = text.trim();
+    if (/^\d{4,8}$/.test(trimmed)) return true;
+    return /\bdoor code\b/i.test(text) && /\b\d{4,8}\b/.test(text);
+  }
+
   getState(said?: string): ToolReply {
+    const failure = this.takeFailureNote();
     if (this.file.choice === "cleaners") this.resume();
     if (!this.file.choice) {
       const pick = said ? choiceOf(said) : undefined;
@@ -121,8 +144,8 @@ export class LiveDesk {
       if (pick === "tours") return this.reply({ done: [], next: TOUR_PICK });
       return this.reply({ done: ["You chose cleaning."], next: CLEANER_PICK });
     }
-    if (this.file.choice === "tours") return this.reply({ done: ["You chose touring."], next: "What's the property you want renters to tour?" });
-    return this.reply(this.cleaningState());
+    if (this.file.choice === "tours") return this.withFailure(this.reply({ done: ["You chose touring."], next: "What's the property you want renters to tour?" }), failure);
+    return this.withFailure(this.reply(this.cleaningState()), failure);
   }
 
   saveProperty(input: { address?: string; business?: string; timeZone?: string }): ToolReply {
@@ -165,16 +188,26 @@ export class LiveDesk {
     return this.reply({ next: "What's the door code? I'll save it and I won't repeat it." });
   }
 
-  saveDoorCode(input: { code?: string }): ToolReply {
+  saveDoorCode(input: { code?: string }, pinKey: Buffer | undefined): ToolReply {
     if (!this.file.calendarLink || !this.file.propertyId) return this.fail("Save the calendar link first.");
     const code = input.code?.trim() ?? "";
     if (!/^\d{4,8}$/.test(code)) return this.fail("Send the door code as 4 to 8 digits.");
+    if (!pinKey) return this.fail(PIN_KEY_MISSING);
+    const previousPin = this.pin;
+    const previousSeal = this.file.pinSeal;
     this.pin = code;
-    this.file.pinSeal = sealPin(code, pinKeyFor(this.file.propertyId));
-    this.persist();
-    return this.reply({
-      next: "Saved the door code. It goes only to the cleaner, in a private text, after you say the guests have left.",
-    });
+    for (let attempt = 0; attempt < 8; attempt++) {
+      this.file.pinSeal = sealPin(code, pinKey);
+      const json = `${JSON.stringify(this.file)}\n`;
+      if (json.includes(code) || json.includes(pinKey.toString("base64"))) continue;
+      this.writeFile(json);
+      return this.reply({
+        next: "Saved the door code. It goes only to the cleaner, in a private text, after you say the guests have left.",
+      });
+    }
+    this.pin = previousPin;
+    this.file.pinSeal = previousSeal;
+    return this.fail("Could not seal the door code.");
   }
 
   setUpTexting(): ToolReply {
@@ -243,21 +276,44 @@ export class LiveDesk {
     });
   }
 
-  async markGuestsLeft(input: { said?: string }): Promise<ToolReply> {
-    this.resume();
-    if (!this.engine || !this.file.host) return this.fail("Run the checks first.");
+  async markGuestsLeft(input: { said?: string }, pinKey: Buffer | undefined): Promise<ToolReply> {
+    if (!this.file.host || !this.file.checked) return this.fail("Run the checks first.");
     const said = input.said?.trim() ?? "";
     const phrase = stripFiller(normalize(said)).replace(/^the\s+/, "");
     if (!DEPARTURES.has(phrase)) return this.fail("Say that the guests have left. I won't guess from the calendar.");
-    const before = this.pinSends();
+    if (!pinKey) return this.fail(PIN_KEY_MISSING);
+    if (this.unlock(pinKey) !== "ready") return this.fail(PIN_REENTER);
+    this.resume();
+    if (this.pin) this.engine?.rememberPin(this.pin);
+    if (!this.engine) return this.fail("Run the checks first.");
+    if (this.file.pinSend?.outcome === "accepted") return this.reply({ next: PIN_REPEAT });
+    if (this.file.pinSend?.outcome === "undelivered") {
+      if (this.file.pinSend.notePending) {
+        this.file.pinSend.notePending = false;
+        this.persist();
+      }
+      this.engine.markPinUndelivered();
+    }
     const result = await this.engine.receive({ id: `left-${randomUUID()}`, from: this.file.host, text: said });
     if (result.reason !== "departure") return this.fail("Say that the guests have left. I won't guess from the calendar.");
     const sentNow = result.sent.some((text) => text.kind === "pin");
     const failed = result.sent.some((text) => text.kind === "pin-failed") || this.engine.outbox().some((item) => item.kind === "pin" && item.status === "failed");
-    if (sentNow) return this.reply({ next: "Door code sent to the cleaner." });
-    if (before > 0) return this.reply({ next: "The cleaner already has the door code." });
-    if (failed || !liveSmsOn(this.env())) return this.reply({ next: "The door code didn't reach the cleaner." });
-    return this.reply({ next: "The door code didn't reach the cleaner." });
+    if (sentNow) return this.reply({ next: PIN_SENT });
+    if (failed) return this.reply({ next: PIN_FAILED });
+    return this.reply({ next: PIN_FAILED });
+  }
+
+  /** Records a Twilio delivery status. Does not unseal the door code and does not text anyone. */
+  notePinDelivery(input: { sid: string; status: string }): void {
+    const tracked = this.file.pinSend;
+    if (!tracked || tracked.sid !== input.sid) return;
+    const status = input.status.toLowerCase();
+    if (status !== "failed" && status !== "undelivered") return;
+    if (tracked.outcome === "undelivered") return;
+    tracked.outcome = "undelivered";
+    tracked.notePending = true;
+    this.persist();
+    this.engine?.markPinUndelivered();
   }
 
   async inbound(input: { id: string; from: string; text: string }): Promise<{ sent: CleanerText[] }> {
@@ -270,6 +326,7 @@ export class LiveDesk {
     }
     this.claiming.add(input.id);
     try {
+      if (from === this.file.host) return await this.hostText(input.id, from, input.text);
       this.resume();
       const keyword = messagingKeyword(input.text);
       if (!this.engine) return { sent: await this.inboundBeforeJob(input.id, from, keyword) };
@@ -345,7 +402,8 @@ export class LiveDesk {
   }
 
   private resume(): void {
-    if (this.engine || !this.file.checked || !this.pin) return;
+    if (this.engine || !this.file.checked) return;
+    if (!this.pin && !this.file.pinSeal) return;
     this.engine = this.openEngine();
     this.held = this.engine.cleanerHasOptedOut();
   }
@@ -364,7 +422,7 @@ export class LiveDesk {
 
   private openEngine(): CleanerCore {
     const file = this.file;
-    if (!file.host || !file.cleaner || !file.address || !file.timeZone || !file.propertyId || !file.business || !this.pin) {
+    if (!file.host || !file.cleaner || !file.address || !file.timeZone || !file.propertyId || !file.business) {
       throw new Error("Setup is incomplete.");
     }
     const env = this.env;
@@ -375,7 +433,7 @@ export class LiveDesk {
       property: { id: file.propertyId, address: file.address, timeZone: file.timeZone },
       ownerPhone: file.host,
       cleaner: { phone: file.cleaner, approved: true },
-      pin: this.pin,
+      ...(this.pin ? { pin: this.pin } : {}),
       hostName: file.business,
       consented: true,
       allowlist: smsAllowlist(env()),
@@ -387,8 +445,16 @@ export class LiveDesk {
       noteHostOnStop: true,
       isolate: true,
       tenantId: file.propertyId,
+      sealPinAtRest: false,
+      pinSentBody: PIN_SENT,
+      pinFailedBody: PIN_FAILED,
       sink: {
-        send: (text) => sendLiveSms(env(), text),
+        send: async (text) => {
+          if (text.kind === "pin-notice" || text.kind === "pin-failed" || text.kind === "host-checkout" || text.kind === "host-checkin") return;
+          const statusCallback = text.kind === "pin" ? cleanerPinStatusUrl(env()) : undefined;
+          const sid = await sendLiveSms(env(), { to: text.to, body: text.body, ...(statusCallback ? { statusCallback } : {}) });
+          if (text.kind === "pin" && sid) this.noteAccepted(sid);
+        },
       },
       now: this.now,
       dataDir,
@@ -411,25 +477,58 @@ export class LiveDesk {
     const parsed = JSON.parse(readFileSync(this.path, "utf8")) as LiveFile;
     this.file = parsed;
     if (parsed.cleanerOut) this.held = true;
-    if (parsed.pinSeal && parsed.propertyId) {
-      try {
-        const opened = openPin(parsed.pinSeal, pinKeyFor(parsed.propertyId));
-        if (/^\d{4,8}$/.test(opened)) this.pin = opened;
-      } catch {
-        this.pin = undefined;
-      }
-    }
   }
 
   private persist(): void {
+    const json = `${JSON.stringify(this.file)}\n`;
+    if (this.pin && json.includes(this.pin)) throw new Error("Could not seal the door code.");
+    this.writeFile(json);
+  }
+
+  private writeFile(json: string): void {
     mkdirSync(this.root, { recursive: true });
-    for (let attempt = 0; attempt < 8; attempt++) {
-      if (this.pin && this.file.propertyId) this.file.pinSeal = sealPin(this.pin, pinKeyFor(this.file.propertyId));
-      const json = `${JSON.stringify(this.file)}\n`;
-      if (this.pin && json.includes(this.pin)) continue;
-      writeFileSync(this.path, json);
-      return;
+    writeFileSync(this.path, json);
+  }
+
+  private unlock(pinKey: Buffer): "ready" | "closed" {
+    if (!this.file.pinSeal) return this.pin ? "ready" : "closed";
+    try {
+      const opened = openPin(this.file.pinSeal, pinKey);
+      if (!/^\d{4,8}$/.test(opened)) return "closed";
+      this.pin = opened;
+      return "ready";
+    } catch {
+      return "closed";
     }
-    throw new Error("Could not seal the door code.");
+  }
+
+  private noteAccepted(sid: string): void {
+    this.file.pinSend = { sid, outcome: "accepted", notePending: false };
+    this.persist();
+  }
+
+  private takeFailureNote(): string | undefined {
+    if (!this.file.pinSend?.notePending) return undefined;
+    this.file.pinSend.notePending = false;
+    this.persist();
+    return PIN_FAILED;
+  }
+
+  private withFailure(reply: ToolReply, failure: string | undefined): ToolReply {
+    if (!failure || !reply.ok) return reply;
+    return this.reply({ ...reply.result, next: failure });
+  }
+
+  private async hostText(id: string, from: string, text: string): Promise<{ sent: CleanerText[] }> {
+    this.noteSeen(id);
+    const phrase = stripFiller(normalize(text)).replace(/^the\s+/, "");
+    if (!DEPARTURES.has(phrase)) return { sent: [] };
+    try {
+      await sendLiveSms(this.env(), { to: from, body: DIRECT_TEXT_REPLY });
+    } catch {
+      return { sent: [] };
+    }
+    if (!liveSmsOn(this.env())) return { sent: [] };
+    return { sent: [{ to: from, body: DIRECT_TEXT_REPLY, kind: "held" }] };
   }
 }
