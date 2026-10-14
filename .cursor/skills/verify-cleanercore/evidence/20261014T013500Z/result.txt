@@ -1,0 +1,6 @@
+feature: same-day-turnover
+entry: CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke
+doctor_exit: 0
+smoke_exit: 0
+scratch: pass
+pin_recipient: +15555550101

@@ -1,0 +1,27 @@
+{
+  "ok": true,
+  "flag": true,
+  "property": "12 Scratch Lane, Teaneck, NJ 07666",
+  "checkout": "2026-10-18T15:00:00.000Z",
+  "nextArrival": "2026-10-18T20:00:00.000Z",
+  "sent": [
+    {
+      "to": "+15555550100",
+      "body": "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.",
+      "kind": "offer"
+    },
+    {
+      "to": "+15555550100",
+      "body": "Cleaning is scheduled for Sunday, Oct 18 at 11:00 AM at 12 Scratch Lane, Teaneck, NJ 07666.",
+      "kind": "confirm"
+    },
+    {
+      "to": "+15555550101",
+      "body": "Door code for 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18: 4821. This code is only for you.",
+      "kind": "pin"
+    }
+  ],
+  "pinRecipients": [
+    "+15555550101"
+  ]
+}
