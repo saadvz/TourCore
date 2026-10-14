@@ -1,2 +1,0 @@
-feature: group-native-consented
-pass

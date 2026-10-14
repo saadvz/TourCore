@@ -1,5 +1,0 @@
-features: ci-local stale-source host-override-beats-stale-feed permanent-code backup-restore no-cleaner replay-no-resend recovery-after-restart review-queue observability tenant-isolation stop-help-injury
-regressions: prove-step-d.sh prove-step-e.sh prove-step-f.sh
-script: .cursor/skills/verify-cleanercore/scripts/prove-step-g.sh
-pins: redacted
-stale-default: 3 hours, three missed hourly Guesty Lite polls

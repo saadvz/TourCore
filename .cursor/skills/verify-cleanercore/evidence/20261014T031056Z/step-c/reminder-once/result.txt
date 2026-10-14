@@ -1,2 +1,0 @@
-feature: reminder-once
-pass

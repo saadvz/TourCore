@@ -1,10 +1,10 @@
 # Safety replies in new states
 
-STOP, HELP, and one emergency phrase work while a job waits for the host, after an offer, and after a corrected-time text. Each gets its normal reply before any step C scheduling reply.
+STOP and one emergency phrase still reply while a job waits for the host, after the host confirms both times, and after a corrected-time text. HELP sends nothing in those states and does not schedule the job.
 
 ## Sub-features
 
-- `waiting-safety` answers STOP, HELP, and `I fell and I'm hurt` after the checkout question. The job stays `discovered`.
+- `waiting-safety` answers STOP and `I fell and I'm hurt` after the checkout question, and records HELP with no reply. The job stays `discovered`.
 - `offered-safety` answers the same three after the offer. The offer is not confirmed.
 - `corrected-safety` answers the same three after the Monday update. The update is not accepted as a new confirmation.
 
@@ -21,8 +21,8 @@ Preconditions:
 - `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:doctor` exits 0 with `sends` false and `enabled` true.
 - Each of the nine drives is its own process. Replies are from `+15555550100`, plus `+15555550101` on the corrected emergency drive.
 
-- **Waiting.** Run smoke with `--feed src/cleaner-core/fixtures/guesty-lite-scratch.ics` and one reply: `+15555550100=STOP`, then the same feed with `+15555550100=HELP`, then the same feed with `+15555550100=I fell and I'm hurt`. Exit code 0 each time. The last transcript line is the STOP ack, the HELP line `Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.`, or `If someone is hurt, call 911 now.` The Anita job stays `discovered`.
-- **Offered.** Add `--reply +15555550100=YES --reply +15555550100=YES` before the safety reply. The transcript includes the offer and ends with the matching safety line. It does not include `Cleaning is scheduled`. The job stays `offered` on the HELP and emergency drives.
+- **Waiting.** Run smoke with `--feed src/cleaner-core/fixtures/guesty-lite-scratch.ics` and one reply: `+15555550100=STOP`, then the same feed with `+15555550100=HELP`, then the same feed with `+15555550100=I fell and I'm hurt`. Exit code 0 each time. The last transcript line is the STOP ack, `+15555550100: HELP`, or `If someone is hurt, call 911 now.` The Anita job stays `discovered`.
+- **Offered.** Add `--reply +15555550100=YES --reply +15555550100=YES` before the safety reply. No cleaner has opted in, so the job is `host_confirmed` and the host has the hold note. STOP and the injury phrase end the transcript. HELP ends on `+15555550100: HELP` and sends no reply. The transcript does not include `Cleaning is scheduled`.
 - **Corrected.** Use the three YES replies, then `--then-feed src/cleaner-core/fixtures/guesty-lite-date-moved.ics`, then YES for the new Monday checkout and YES for the new Monday check-in, then the safety reply. The transcript includes the Monday checkout question before `Update: checkout at 12 Scratch Lane, Teaneck, NJ 07666 moved to Monday, Oct 19 at 11:00 AM. Reply YES to keep the cleaning, or STOP to opt out.`, and it ends with the safety line. The corrected emergency drive also passes `--reply "+15555550101=I fell and I'm hurt"`. That drive ends with `If someone is hurt, call 911 now. I've let the host know.` and includes `The cleaner at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.` Neither body contains a door code.
 - **Proof.** Save each command, stdout, stderr, exit code, and transcript with feature id `safety-states`. `prove-step-c.sh` runs the nine drives in the order waiting, offered, corrected, and within each order STOP, HELP, emergency.
 

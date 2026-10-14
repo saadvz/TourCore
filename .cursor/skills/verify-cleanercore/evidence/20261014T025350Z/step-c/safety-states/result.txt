@@ -1,2 +1,0 @@
-feature: safety-states
-pass

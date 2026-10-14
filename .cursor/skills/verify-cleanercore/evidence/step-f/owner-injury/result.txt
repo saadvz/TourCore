@@ -1,2 +1,0 @@
-feature: owner-injury
-pass

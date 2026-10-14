@@ -1,2 +1,0 @@
-feature: checkout-moved
-pass

@@ -1,2 +1,0 @@
-feature: pin-failed
-pass

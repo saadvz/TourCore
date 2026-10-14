@@ -1,3 +1,0 @@
-features: notion-permission-denied notion-source-read notion-sync-repeat notion-removed notion-cleaner-routing group-no-optin multi-source-dedupe onboarding-full onboarding-no-optin group-native-consented group-mirrored-fallback group-unconsented-participant pin-private-only tenant-isolation stop-help-injury observer-injury-group observer-injury-solo owner-injury injury-wording
-script: .cursor/skills/verify-cleanercore/scripts/prove-step-f.sh
-pins: redacted

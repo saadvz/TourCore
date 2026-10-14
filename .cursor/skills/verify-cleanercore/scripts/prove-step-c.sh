@@ -14,6 +14,7 @@ RUN_ID="${VERIFY_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 EVIDENCE="$SKILL/evidence/$RUN_ID/step-c"
 mkdir -p "$EVIDENCE"
 cd "$ROOT"
+PIN_PATTERN="$(node "$ROOT/scripts/scratch-pin-pattern.mjs")"
 
 if [[ ! -x node_modules/.bin/tsx ]]; then
   printf '%s\n' "tsx is missing. From the repo root run: npm ci" >&2
@@ -154,7 +155,7 @@ run_smoke "$EVIDENCE/no-pin" smoke env CLEANER_CORE_ENABLED=1 npm run --silent c
   --feed "$FEED/guesty-lite-scratch.ics" \
   --reply "$OWNER=YES" --reply "$OWNER=YES" --reply "$OWNER=YES"
 cp "$PIN_DIR/cleaner-core.json" "$EVIDENCE/no-pin/store.json"
-if grep -q "4821" "$EVIDENCE/no-pin/smoke.stdout.txt" "$EVIDENCE/no-pin/store.json" "$EVIDENCE/no-pin/smoke.stderr.txt"; then
+if grep -q -E "$PIN_PATTERN" "$EVIDENCE/no-pin/smoke.stdout.txt" "$EVIDENCE/no-pin/store.json" "$EVIDENCE/no-pin/smoke.stderr.txt"; then
   fail "feature: no-pin leaked the scratch code"
 fi
 assert_journey no-pin "$EVIDENCE/no-pin/smoke.stdout.txt"
@@ -205,7 +206,7 @@ assert_journey failed-send \
   "$EVIDENCE/failed-send/restart.stdout.txt"
 rm -rf "$FAIL_DIR"
 
-if grep -R -n "4821" "$EVIDENCE" >/dev/null; then
+if grep -R -n -E "$PIN_PATTERN" "$EVIDENCE" >/dev/null; then
   fail "step C evidence contains the scratch code"
 fi
 

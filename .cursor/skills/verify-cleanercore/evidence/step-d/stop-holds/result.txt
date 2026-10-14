@@ -1,2 +1,0 @@
-feature: stop-holds
-pass

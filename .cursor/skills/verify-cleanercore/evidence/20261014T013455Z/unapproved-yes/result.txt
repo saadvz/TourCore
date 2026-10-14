@@ -1,6 +1,0 @@
-feature: unapproved-yes
-entry: env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --reply +15555550199=YES
-doctor_exit: 0
-smoke_exit: 0
-scratch: pass
-pin: forbidden

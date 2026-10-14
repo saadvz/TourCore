@@ -1,1 +1,0 @@
-smoke --group-mode cleaner-only --participant observer=+15555550122 --notion /workspace/src/cleaner-core/fixtures/notion-lane-read.json --reply +15555550101=she fell and can't get up --reply +15555550122=she fell and can't get up

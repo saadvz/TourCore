@@ -1,1 +1,0 @@
-smoke --with-pin --group-mode native --group-capable --participant observer=+15555550122 --notion /workspace/src/cleaner-core/fixtures/notion-lane-read.json --reply +15555550101=YES --reply +15555550122=YES --reply +15555550101=I'm injured --reply +15555550122=I'm injured

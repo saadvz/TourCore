@@ -14,6 +14,7 @@ EVIDENCE="$SKILL/evidence/step-f"
 rm -rf "$EVIDENCE"
 mkdir -p "$EVIDENCE"
 cd "$ROOT"
+PIN_PATTERN="$(node "$ROOT/scripts/scratch-pin-pattern.mjs")"
 
 if [[ ! -x node_modules/.bin/tsx ]]; then
   printf '%s\n' "tsx is missing. From the repo root run: npm ci" >&2
@@ -303,7 +304,7 @@ node -e '
   fs.appendFileSync(process.argv[2], note + "\n");
 ' "$EVIDENCE/injury-wording/everyday.stdout.txt" "$EVIDENCE/injury-wording/result.txt"
 
-if grep -R -n -E '4821|7392|2468' "$EVIDENCE" >/dev/null; then
+if grep -R -n -E "$PIN_PATTERN" "$EVIDENCE" >/dev/null; then
   fail "step F evidence contains a scratch door code"
 fi
 

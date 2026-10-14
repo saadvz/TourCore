@@ -27,6 +27,7 @@ run_log test-default npm test
 run_log test-on env CLEANER_CORE_ENABLED=1 npx vitest run test/cleanerCore.test.ts test/cleanerCoreStepG.test.ts
 run_log test-off env -u CLEANER_CORE_ENABLED npx vitest run test/cleanerCore.test.ts test/cleanerCoreStepG.test.ts
 run_log secret-scan node scripts/scan-cleaner-secrets.mjs ci-logs
+run_log tracked-scan node scripts/scan-cleaner-secrets.mjs --tracked
 run_log test-eval npm run test:eval
 
 printf '%s\n' "== SETUP_PROMPT unchanged"

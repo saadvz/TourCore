@@ -34,7 +34,6 @@ const PIN = `Guests have left ${LANE}. Door code: [redacted]. This code is only 
 const PIN_NOTICE = "Door code sent to the cleaner.";
 const HEALTH = "Cleaner Core health. This check does not send texts.";
 const STOP_ACK = "You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.";
-const HELP_ACK = "Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.";
 const EMERGENCY = "If someone is hurt, call 911 now.";
 const HOST_HURT = `The cleaner at ${LANE} says someone is hurt. They've been told to call 911.`;
 const OBSERVER_HURT = `An observer at ${LANE} says someone is hurt. They've been told to call 911.`;
@@ -234,8 +233,8 @@ if (journey === "stale-source") {
   same(stop.jobs[0].textsBlocked, true);
   same(help.sent, [
     { to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" },
-    { to: OWNER, body: HELP_ACK, kind: "help" },
   ]);
+  if (help.sent.some((text) => text.kind === "help")) fail("HELP sent a reply");
   same(injury.sent, [
     { to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" },
     { to: OWNER, body: EMERGENCY, kind: "emergency" },

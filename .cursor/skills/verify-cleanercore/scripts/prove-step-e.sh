@@ -14,6 +14,7 @@ EVIDENCE="$SKILL/evidence/step-e"
 rm -rf "$EVIDENCE"
 mkdir -p "$EVIDENCE"
 cd "$ROOT"
+PIN_PATTERN="$(node "$ROOT/scripts/scratch-pin-pattern.mjs")"
 
 if [[ ! -x node_modules/.bin/tsx ]]; then
   printf '%s\n' "tsx is missing. From the repo root run: npm ci" >&2
@@ -152,7 +153,7 @@ assert_journey tenant-isolation \
   "$EVIDENCE/tenant-isolation/court-left.stdout.txt" \
   "$EVIDENCE/tenant-isolation/store.json"
 
-if grep -R -n -E '4821|7392' "$EVIDENCE" >/dev/null; then
+if grep -R -n -E "$PIN_PATTERN" "$EVIDENCE" >/dev/null; then
   fail "step E evidence contains a scratch door code"
 fi
 

@@ -1,6 +1,0 @@
-feature: flag-off
-entry: env -u CLEANER_CORE_ENABLED npm run --silent cleaner:smoke -- --reply +15555550100=YES
-doctor_exit: 0
-smoke_exit: 2
-scratch: pass
-pin: forbidden

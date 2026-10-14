@@ -370,7 +370,9 @@ describe("Cleaner Core live wiring", () => {
     const help = await wired.postTwilio("/webhooks/twilio", { from: CLEANER, to: CLEANER_LINE, body: "HELP", sid: "SM-clean-help", token: CLEANER_AUTH });
     expect(help.raw).toBe("{}");
     expect(wired.tourSent.length).toBe(helpBeforeTour);
-    expect(wired.cleanerSent.map((item) => item.body).join("\n")).toMatch(/cleaning/i);
+    expect(wired.cleanerSent).toEqual([]);
+    const afterHelp = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state");
+    expect(afterHelp.text).not.toContain("on hold");
 
     const stopBeforeTour = wired.tourSent.length;
     const stop = await wired.postTwilio("/webhooks/twilio", { from: CLEANER, to: CLEANER_LINE, body: "STOP", sid: "SM-clean-stop", token: CLEANER_AUTH });

@@ -1,1 +1,0 @@
-env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --data /tmp/tmp.n1vfkXvUyf --now 2026-10-18T12:00:00.000Z --feed /workspace/src/cleaner-core/fixtures/guesty-lite-scratch.ics --feed /workspace/src/cleaner-core/fixtures/guesty-lite-scratch.ics --reply +15555550100=YES --reply +15555550100=YES --remind --remind

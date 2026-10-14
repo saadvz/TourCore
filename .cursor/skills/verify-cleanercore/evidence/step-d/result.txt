@@ -1,3 +1,0 @@
-features: held released not-opted unapproved-yes not-approved checkout-moved full-turn pin-stored stop-holds help-waiting help-cleared help-progress injury-failed pin-failed no-group
-script: .cursor/skills/verify-cleanercore/scripts/prove-step-d.sh
-pin: redacted
