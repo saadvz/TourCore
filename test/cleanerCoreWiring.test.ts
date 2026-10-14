@@ -162,7 +162,10 @@ describe("Cleaner Core live wiring", () => {
     http.push(direct.raw);
     expect(direct.status).toBe(200);
     const directSends = newer(wired.cleanerSent.slice(0, directBefore), wired.cleanerSent);
-    expect(directSends.map((item) => item.body)).toEqual([DIRECT_REPLY]);
+    expect(directSends.map((item) => item.body)).toEqual([]);
+    const directState = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state");
+    remember(directState);
+    expect(directState.text).toContain(DIRECT_REPLY);
     expect(directSends.some((item) => item.body.includes(DOOR_CODE))).toBe(false);
     const waiting = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_turns");
     remember(waiting);
@@ -195,10 +198,11 @@ describe("Cleaner Core live wiring", () => {
     expect(stopSends.find((item) => item.to === CLEANER)?.body).toBe(
       `You're opted out of cleaning texts for ${ADDRESS}. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.`,
     );
-    expect(stopSends.find((item) => item.to === HOST)?.body).toBe(`The cleaner opted out of cleaning texts for ${ADDRESS}, so the job is on hold.`);
+    expect(stopSends.find((item) => item.to === HOST)).toBeUndefined();
+    const stopNote = `The cleaner opted out of cleaning texts for ${ADDRESS}, so the job is on hold.`;
     const held = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state");
     remember(held);
-    expect(held.text).toMatch(/on hold/i);
+    expect(held.text).toContain(stopNote);
 
     const startBefore = wired.cleanerSent.length;
     const pinCount = () => toCleaner(wired.cleanerSent).filter((item) => item.body.includes(DOOR_CODE)).length;
@@ -252,7 +256,7 @@ describe("Cleaner Core live wiring", () => {
       tools,
       sends: wired.cleanerSent,
       stop: stopSends.find((item) => item.to === CLEANER)?.body ?? "",
-      hostNote: stopSends.find((item) => item.to === HOST)?.body ?? "",
+      hostNote: stopNote,
       directReply: DIRECT_REPLY,
     });
   });
@@ -479,7 +483,9 @@ describe("Cleaner Core live wiring", () => {
     await wired.postTwilio("/webhooks/twilio/cleaner-core", left);
     await wired.postTwilio("/webhooks/twilio", left);
     expect(wired.cleanerSent.filter((item) => item.body.includes(DOOR_CODE))).toEqual([]);
-    expect(wired.cleanerSent.filter((item) => item.body === DIRECT_REPLY)).toHaveLength(1);
+    expect(wired.cleanerSent.filter((item) => item.body === DIRECT_REPLY)).toHaveLength(0);
+    const directState = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state");
+    expect(directState.text).toContain(DIRECT_REPLY);
     resetLiveDesks();
     const sent = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "mark_guests_left", { said: "The guests have left" });
     expect(sent.text).toContain(PIN_SENT);
@@ -497,7 +503,9 @@ describe("Cleaner Core live wiring", () => {
     expect(wired.cleanerSent.filter((item) => item.to === CLEANER && item.body.startsWith("You're opted out of cleaning texts")).map((item) => item.body)).toEqual([
       `You're opted out of cleaning texts for ${ADDRESS}. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.`,
     ]);
-    expect(wired.cleanerSent.filter((item) => item.to === HOST && item.body === `The cleaner opted out of cleaning texts for ${ADDRESS}, so the job is on hold.`)).toHaveLength(1);
+    expect(wired.cleanerSent.filter((item) => item.to === HOST && item.body === `The cleaner opted out of cleaning texts for ${ADDRESS}, so the job is on hold.`)).toHaveLength(0);
+    const stopState = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state");
+    expect(stopState.text).toContain(`The cleaner opted out of cleaning texts for ${ADDRESS}, so the job is on hold.`);
 
     const start = { from: CLEANER, to: CLEANER_LINE, body: "START", sid: "SM-once-start", token: CLEANER_AUTH };
     const beforeStart = wired.cleanerSent.length;

@@ -62,9 +62,8 @@ const checks = {
   },
   private() {
     if (pins.length !== 1 || pins[0].channel || pins[0].body !== PRIVATE_PIN || pins[0].to !== CLEANER) fail("private pin");
-    const notes = groups.filter((text) => text.kind === "pin-notice");
-    if (notes.length !== 1 || notes[0].body !== PRIVATE_LINE) fail("private line");
-    if (JSON.stringify(notes[0].audience) !== JSON.stringify([OWNER, CLEANER, EXTRA])) fail("private audience");
+    if (sent.some((text) => text.body === PRIVATE_LINE)) fail("private line was sent");
+    if (groups.some((text) => text.body === PRIVATE_LINE)) fail("group saw the private line");
     if (groups.some((text) => text.body.includes("[redacted]"))) fail("group saw the code");
     if (sent.filter((text) => text.to === EXTRA).some((text) => text.body.includes("[redacted]"))) fail("extra saw the code");
   },
