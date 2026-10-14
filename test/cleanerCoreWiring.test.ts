@@ -58,7 +58,7 @@ function newer(before: SentSms[], after: SentSms[]): SentSms[] {
 const BANNED = /\b(flag|webhook|token|connector|scratch)\b/i;
 const PRODUCT = /\b(Tour Core|Cleaner Core)\b/;
 const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn't go through.";
-const PIN_FAILED = "The door code didn't reach the cleaner. Tell me the guests have left again and I'll resend it.";
+const PIN_FAILED = "The door code didn't reach the cleaner. Tell your Grok Bot the guests have left and I'll resend it.";
 const PIN_REPEAT = "I already sent the door code to the cleaner.";
 const PIN_KEY_MISSING = "I can't send the door code yet. Let's finish setting up Cleaner Core first.";
 const PIN_REENTER = "Please enter the door code again in the private box. Don't text it here.";
@@ -284,7 +284,7 @@ describe("Cleaner Core live wiring", () => {
     expect(failed.status).toBe(200);
     expect(failed.raw).toBe("{}");
     expect(pins()).toHaveLength(1);
-    expect(wired.cleanerSent.some((item) => item.to === HOST && item.body === PIN_FAILED)).toBe(false);
+    expect(wired.cleanerSent.filter((item) => item.to === HOST && item.body === PIN_FAILED)).toHaveLength(1);
 
     const noted = await wired.tool("/mcp/cleaner-core", CLEANER_TOKEN, "get_state");
     expect(noted.text).toContain(PIN_FAILED);

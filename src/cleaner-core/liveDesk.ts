@@ -8,7 +8,8 @@ import { spokenTimes } from "../core/spokenTime";
 import { interpretFeed } from "./calendar";
 import { openCleanerCore, SAFETY, type CleanerCore, type CleanerText, type TextKind } from "./core";
 import { readPublicCalendar, type CalendarFetch } from "./fetchLimits";
-import { isPrivateCodeLine, resumeNote } from "./cleanerTexts";
+import { isPrivateCodeLine, jobHoldLine, optedOutCodeLine, resumeNote } from "./cleanerTexts";
+import { isInjuryReport } from "./injury";
 import { GroupNotConfirmed } from "./groupThread";
 import { cleanerPinStatusUrl, isAllowlisted, liveSmsOn, sendLiveGroup, sendLiveSms, smsAllowlist } from "./liveSms";
 import { openPin, sealPin, type PinSeal } from "./pinSeal";
@@ -42,7 +43,7 @@ const CLEANER_PICK =
 const DEPARTURES = new Set(["guests have left", "guests left", "they have left", "they left", "departed", "left"]);
 
 const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn't go through.";
-const PIN_FAILED = "The door code didn't reach the cleaner. Tell me the guests have left again and I'll resend it.";
+const PIN_FAILED = "The door code didn't reach the cleaner. Tell your Grok Bot the guests have left and I'll resend it.";
 const PIN_REPEAT = "I already sent the door code to the cleaner.";
 const PIN_KEY_MISSING = "I can't send the door code yet. Let's finish setting up Cleaner Core first.";
 const PIN_REENTER = "Please enter the door code again in the private box. Don't text it here.";
@@ -172,8 +173,8 @@ export class LiveDesk {
   }
 
   getState(said?: string): ToolReply {
-    const failure = this.takeFailureNote();
     if (this.file.choice === "cleaners") this.resume();
+    const failure = this.engine?.pullPinFailure() ? PIN_FAILED : undefined;
     if (!this.file.choice) {
       const pick = said ? choiceOf(said) : undefined;
       if (!pick) return this.reply({ done: [], next: FIRST_QUESTION });
@@ -328,17 +329,13 @@ export class LiveDesk {
     this.resume();
     if (this.pin) this.engine?.rememberPin(this.pin);
     if (!this.engine) return this.fail("Run the checks first.");
-    const tracked = this.file.pinSend;
-    if (tracked && (tracked.outcome === "accepted" || tracked.outcome === "settled")) {
-      return this.reply({ next: PIN_REPEAT });
+    if (this.file.pinSend?.outcome === "settled") return this.reply({ next: PIN_REPEAT });
+    if (this.engine.jobOnHold()) {
+      const line = this.heldDepartureLine();
+      if (line === optedOutCodeLine()) this.engine.keepHostNote(`host:pin-held:${line}`, line);
+      return this.reply({ next: line });
     }
-    if (this.file.pinSend?.outcome === "undelivered") {
-      if (this.file.pinSend.notePending) {
-        this.file.pinSend.notePending = false;
-        this.persist();
-      }
-      this.engine.markPinUndelivered();
-    }
+    if (this.engine.pinAccepted()) return this.reply({ next: PIN_REPEAT });
     const result = await this.engine.receive({ id: `left-${randomUUID()}`, from: this.file.host, text: said });
     if (result.reason !== "departure") return this.fail("Say that the guests have left. I won't guess from the calendar.");
     const heldLine = result.sent.find((text) => text.kind === "pin-held")?.body;
@@ -364,7 +361,7 @@ export class LiveDesk {
     this.resume();
     if (!this.file.address || !this.engine) return this.fail("Run the checks first.");
     await this.engine.resumeJob();
-    this.held = this.engine.jobOnHold() || this.engine.cleanerHasOptedOut();
+    this.syncHold();
     this.persist();
     return this.reply({ next: resumeNote(this.file.address) });
   }
@@ -413,7 +410,7 @@ export class LiveDesk {
     return this.reply({ next: SCRATCH_TEST_WENT_THROUGH });
   }
 
-  reportDelivery(input: { which?: string; status?: string }): ToolReply {
+  async reportDelivery(input: { which?: string; status?: string }): Promise<ToolReply> {
     const guard = this.scratchGuard();
     if (guard) return this.fail(guard);
     const status = input.status?.trim().toLowerCase() ?? "";
@@ -428,37 +425,20 @@ export class LiveDesk {
     const matches = exactLine.length > 0 ? exactLine : exactLabel.length > 0 ? exactLabel : contains;
     const row = matches[matches.length - 1];
     if (!row) return this.fail(SCRATCH_TEXT_MISSING);
-    const latestPinId = [...this.outboxRows()].reverse().find((item) => item.kind === "pin")?.id;
-    this.setDelivery(row, status);
-    if (row.kind === "pin" && row.id === latestPinId && this.file.pinSend?.sid) {
-      this.notePinDelivery({ sid: this.file.pinSend.sid, status });
-    }
+    if (row.kind === "pin" && !row.local) await this.applyPinReport(row.id, status);
+    else this.setDelivery(row, status);
     const updated = this.outboxRows().find((item) => item.id === row.id);
     return this.reply({ next: updated?.line ?? row.line });
   }
 
-  /** Records a Twilio delivery status. Does not unseal the door code and does not text anyone. */
-  notePinDelivery(input: { sid: string; status: string }): void {
+  /** Records a Twilio delivery status. Does not unseal the door code. A failure tells the host once. */
+  async notePinDelivery(input: { sid: string; status: string }): Promise<void> {
     const tracked = this.file.pinSend;
     if (!tracked || tracked.outcome === "settled" || tracked.sid !== input.sid) return;
-    const status = input.status.toLowerCase();
-    if (status === "sent") return;
-    if (status === "delivered") {
-      if (tracked.outcome === "undelivered" || tracked.delivered) return;
-      tracked.delivered = true;
-      tracked.notePending = false;
-      this.persist();
-      this.resume();
-      this.engine?.notePrivateCodeDelivered();
-      return;
-    }
-    if (status !== "failed" && status !== "undelivered") return;
-    tracked.delivered = false;
-    if (tracked.outcome === "undelivered") return;
-    tracked.outcome = "undelivered";
-    tracked.notePending = true;
-    this.persist();
-    this.engine?.markPinUndelivered();
+    this.resume();
+    const pinId = [...this.outboxRows()].reverse().find((item) => item.kind === "pin" && !item.local)?.id;
+    if (!pinId) return;
+    await this.applyPinReport(pinId, input.status.toLowerCase());
   }
 
   async inbound(input: { id: string; from: string; text: string; channel?: "group" }): Promise<{ sent: CleanerText[] }> {
@@ -477,9 +457,7 @@ export class LiveDesk {
       if (!this.engine) return { sent: await this.inboundBeforeJob(input.id, from, keyword) };
       const result = await this.engine.receive({ id: input.id, from, text: input.text, ...(input.channel ? { channel: input.channel } : {}) });
       this.noteSeen(input.id);
-      if (from === this.file.cleaner && (keyword === "stop" || keyword === "start")) {
-        this.held = this.engine?.cleanerHasOptedOut() === true || this.engine?.jobOnHold() === true;
-      }
+      this.syncHold();
       return { sent: result.sent };
     } finally {
       this.claiming.delete(input.id);
@@ -533,9 +511,14 @@ export class LiveDesk {
     else if (!this.file.texting) next = "Set up texting when you're ready for the cleaner to get a YES text.";
     else if (!this.file.checked) next = "Run the checks. I'll read the calendar and I won't text anyone while I do.";
     else next = "Tell me the checkout time and the next check-in time before I text the cleaner.";
-    if (this.held) next = "The cleaner opted out of cleaning texts, so the job is on hold.";
+    if (this.held) {
+      next = this.engine?.cleanerHasOptedOut() || this.file.cleanerOut
+        ? "The cleaner opted out of cleaning texts, so the job is on hold."
+        : jobHoldLine(this.file.address ?? "the property");
+    }
     const delivered = this.file.pinSend?.delivered === true && this.file.pinSend.outcome !== "undelivered";
-    const notes = (this.engine?.hostNotes() ?? []).filter((line) => delivered || !isPrivateCodeLine(line));
+    let notes = (this.engine?.hostNotes() ?? []).filter((line) => delivered || !isPrivateCodeLine(line));
+    if (this.engine && !this.engine.pinAccepted()) notes = notes.filter((line) => line !== PIN_SENT);
     if (!this.held && this.privateCodeWaiting()) next = PIN_FAILED;
     return { done, next, ...(this.file.checked ? { turns: this.turns() } : {}), ...(notes.length > 0 ? { notes } : {}) };
   }
@@ -556,7 +539,7 @@ export class LiveDesk {
     if (this.engine || !this.file.checked) return;
     if (!this.pin && !this.file.pinSeal) return;
     this.engine = this.openEngine();
-    this.held = this.engine.cleanerHasOptedOut();
+    this.syncHold();
   }
 
   private noteSeen(id: string): void {
@@ -606,11 +589,11 @@ export class LiveDesk {
           if (hostLine && text.kind !== "pin-notice" && text.kind !== "pin-failed") {
             this.engine?.keepHostNote(`host:${text.kind}:${text.body}`, text.body);
           }
-          if (this.scratchCapture()) {
+          if (!liveSmsOn(env())) {
             if (text.kind === "pin") this.noteAccepted("scratch-pin");
             return;
           }
-          if (hostLine && !SAFETY.has(text.kind)) return;
+          if (hostLine && text.kind !== "pin-failed" && !SAFETY.has(text.kind)) return;
           if (text.channel === "group" && text.audience && text.audience.length > 0) {
             try {
               const sent = await sendLiveGroup(env(), { audience: [...text.audience], body: text.body, conversationSid: this.file.conversationSid });
@@ -663,8 +646,9 @@ export class LiveDesk {
   private outboxRows(): OutboxRow[] {
     const people = this.file;
     const engineRows = (this.engine?.outbox() ?? []).map((item) => {
-      const saved = this.file.deliveries?.find((row) => row.id === item.id)?.status;
-      const status = saved ?? (item.status === "sent" ? "sent" : item.status === "failed" ? "failed" : item.status === "canceled" ? "canceled" : "waiting");
+      const shown = item.kind === "pin" ? this.engine?.pinShownStatus(item.id) : undefined;
+      const saved = shown ? undefined : this.file.deliveries?.find((row) => row.id === item.id)?.status;
+      const status = shown ?? saved ?? (item.status === "sent" ? "sent" : item.status === "failed" ? "failed" : item.status === "canceled" ? "canceled" : "waiting");
       const role = whoTheyAre(item.to, people);
       return { id: item.id, kind: item.kind, local: false, label: outboxLabel(item.kind, role), line: outboxLine(item.kind, role, status) };
     });
@@ -749,26 +733,62 @@ export class LiveDesk {
     return this.engine.outbox().some((item) => item.kind === "pin" && (item.status === "failed" || item.status === "uncertain"));
   }
 
-  private takeFailureNote(): string | undefined {
-    if (!this.file.pinSend?.notePending) return undefined;
-    this.file.pinSend.notePending = false;
-    this.persist();
-    return PIN_FAILED;
-  }
-
   private withFailure(reply: ToolReply, failure: string | undefined): ToolReply {
     if (!failure || !reply.ok) return reply;
     return this.reply({ ...reply.result, next: failure });
   }
 
+  private heldDepartureLine(): string {
+    if (this.engine?.cleanerHasOptedOut()) return optedOutCodeLine();
+    return jobHoldLine(this.file.address ?? "the property");
+  }
+
+  private syncHold(): void {
+    this.held = this.file.cleanerOut === true || this.engine?.jobOnHold() === true || this.engine?.cleanerHasOptedOut() === true;
+  }
+
+  private async applyPinReport(id: string, status: string): Promise<void> {
+    this.resume();
+    const tracked = this.file.pinSend;
+    const latest = [...this.outboxRows()].reverse().find((item) => item.kind === "pin" && !item.local)?.id;
+    if (tracked && id === latest) {
+      if (status === "sent" || status === "queued") return;
+      if (status === "delivered") {
+        if (tracked.outcome === "undelivered" || tracked.delivered) {
+          await this.engine?.reportPin(id, status);
+          return;
+        }
+        tracked.delivered = true;
+        this.persist();
+      } else if ((status === "failed" || status === "undelivered") && tracked.outcome !== "undelivered") {
+        tracked.delivered = false;
+        tracked.outcome = "undelivered";
+        this.persist();
+      }
+    }
+    await this.engine?.reportPin(id, status);
+  }
+
   private async hostText(id: string, from: string, text: string): Promise<{ sent: CleanerText[] }> {
     this.noteSeen(id);
+    const keyword = messagingKeyword(text);
+    if (keyword === "stop" || keyword === "start" || isInjuryReport(text)) {
+      this.resume();
+      if (!this.engine) {
+        if (keyword === "stop" || keyword === "start") return { sent: await this.inboundBeforeJob(id, from, keyword) };
+        return { sent: [] };
+      }
+      const result = await this.engine.receive({ id, from, text });
+      this.syncHold();
+      return { sent: result.sent };
+    }
     const phrase = stripFiller(normalize(text)).replace(/^the\s+/, "");
     if (!DEPARTURES.has(phrase)) {
       if (!groupChatOn(this.env())) return { sent: [] };
       this.resume();
       if (!this.engine) return { sent: [] };
       const result = await this.engine.receive({ id, from, text });
+      this.syncHold();
       return { sent: result.sent };
     }
     this.resume();

@@ -23,7 +23,7 @@ import {
 } from "./sources";
 import { fingerprintOf, freshnessOf, GUESTY_POLL_MS, staleAfterMs, type SourceRecord } from "./freshness";
 import { redactLine, redactPhone } from "./redact";
-import { addressCleaner, asOptedInCleaner, doorCodeBody, groupDoorCodeBody, groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, isPrivateCodeLine, offerBody, offerForOthers, privateCodeLine, reminderBody, resumeNote, type OptedInCleaner } from "./cleanerTexts";
+import { addressCleaner, asOptedInCleaner, doorCodeBody, groupDoorCodeBody, groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, isPrivateCodeLine, offerBody, offerForOthers, optedOutCodeLine, privateCodeLine, reminderBody, resumeNote, type OptedInCleaner } from "./cleanerTexts";
 import { codeRoute, GroupNotConfirmed, groupTurn, isProblemText, type GroupSeat } from "./groupThread";
 import { codeHandlingText, HEALTH_NOTE, isReviewKind, reviewAlert, reviewId, type AuditEvent, type ReviewDetail, type ReviewItem, type ReviewKind } from "./review";
 import { mirrorStore, restoreTenantSlice, snapshotStore } from "./sqliteStore";
@@ -331,6 +331,14 @@ export interface CleanerCore {
   stampFetchedAt(iso: string): void;
   /** Marks an accepted door-code text undelivered so the next departure can send it again. Sends nothing. */
   markPinUndelivered(): void;
+  /** One record of whether this door-code text was accepted, delivered, or failed. */
+  reportPin(id: string, status: string): Promise<void>;
+  /** True when the current door-code text was accepted and has not failed. */
+  pinAccepted(): boolean;
+  /** The word read_outbox should show for this door-code text. */
+  pinShownStatus(id: string): "sent" | "delivered" | "failed" | "undelivered" | undefined;
+  /** True once after a failure, then clear. */
+  pullPinFailure(): boolean;
   hostNotes(): string[];
   keepHostNote(id: string, body: string): void;
   notePrivateCodeDelivered(): void;
@@ -456,6 +464,9 @@ interface Stored {
   counters?: Counters;
   hostGroup?: "pending" | "in" | "out";
   problemHold?: boolean;
+  ownerOptedOut?: boolean;
+  pinFailurePending?: boolean;
+  pinPhase?: { id: string; phase: "accepted" | "delivered" | "failed" | "undelivered" }[];
   groupPinTerminal?: boolean;
   hostNotes?: { id: string; body: string }[];
 }
@@ -540,6 +551,9 @@ class Engine implements CleanerCore {
   private readonly groupChat: CleanerCoreOptions["groupChat"];
   private hostGroup: "pending" | "in" | "out" = "pending";
   private problemHold = false;
+  private ownerOptedOut = false;
+  private pinFailurePending = false;
+  private pinPhase = new Map<string, "accepted" | "delivered" | "failed" | "undelivered">();
   private groupPinTerminal = false;
   private hostNoteState: { id: string; body: string }[] = [];
   private session: OnboardingSession | undefined;
@@ -711,7 +725,7 @@ class Engine implements CleanerCore {
   }
 
   async runReminders(): Promise<ReminderResult> {
-    if (!this.enabled || this.optedOut || !this.scratchReady()) return { sent: [], failed: [] };
+    if (!this.enabled || this.optedOut || this.problemHold || !this.scratchReady()) return { sent: [], failed: [] };
     const sent: CleanerText[] = await this.settleUncertain();
     const failed: string[] = [];
     if (!this.inQuietHours()) for (const job of this.ordered()) {
@@ -890,8 +904,9 @@ class Engine implements CleanerCore {
   }
 
   async resumeJob(): Promise<CleanerText | null> {
-    if (!this.groupChat) return null;
+    const held = this.problemHold;
     this.problemHold = false;
+    if (!this.groupChat && !held) return null;
     const text = await this.emit({
       id: `resume:${this.options.property.id}`,
       to: this.owner ?? "",
@@ -1129,12 +1144,12 @@ class Engine implements CleanerCore {
     const preserveHostClock = this.watchFreshness && freshnessOf(snapshot.fetchedAt, this.now().getTime(), this.thresholdMs) === "stale";
     this.reconcile(normalized.feed.turnovers, preserveHostClock);
     const settled = await this.settleUncertain();
-    const sent = this.optedOut ? [] : await this.drainOne();
+    const sent = this.optedOut || this.problemHold ? [] : await this.drainOne();
     sent.unshift(...settled);
     this.counters.polls += 1;
     this.counters.pollDurationMs += Math.max(0, Date.now() - started);
     this.maybeScheduledBackup();
-      if (!this.optedOut) {
+      if (!this.optedOut && !this.problemHold) {
       const optIn = await this.sendOptIn();
       if (optIn) sent.push(optIn);
       for (const extra of await this.sendParticipantOptIns()) sent.push(extra);
@@ -1311,7 +1326,7 @@ class Engine implements CleanerCore {
           jobId: job.id,
           to: this.owner,
           kind: "pin-held",
-          body: "The cleaner opted out, so the door code wasn't sent. Please reach them directly.",
+          body: optedOutCodeLine(),
         });
         if (held) sent.push(held);
       }
@@ -1450,7 +1465,7 @@ class Engine implements CleanerCore {
   }
 
   private async drainOne(): Promise<CleanerText[]> {
-    if (this.optedOut) return [];
+    if (this.optedOut || this.problemHold) return [];
     for (const job of this.ordered()) {
       if (job.declined) continue;
       if (job.canceled) {
@@ -1673,6 +1688,12 @@ class Engine implements CleanerCore {
     this.keepHostNote(`pin-private:${key}`, privateCodeLine(this.groupChat.cleanerName));
   }
 
+  private ownerDeclined(draft: Draft): boolean {
+    if (!this.owner || draft.to !== this.owner || SAFETY.has(draft.kind)) return false;
+    if (this.groupChat && this.hostGroup === "out") return true;
+    return this.ownerOptedOut && HOST_DIRECT.has(draft.kind);
+  }
+
   private async emitOne(draft: Draft): Promise<CleanerText | null> {
     draft = this.hostDirect(draft);
     if (this.options.holdSends?.()) return null;
@@ -1691,7 +1712,7 @@ class Engine implements CleanerCore {
       const audience = draft.audience ?? [];
       if (audience.length === 0 || audience.some((phone) => !allowed.has(phone))) return null;
     }
-    if (this.groupChat && draft.to === this.owner && this.hostGroup === "out" && !SAFETY.has(draft.kind)) return this.noteUnsentHost(draft);
+    if (this.ownerDeclined(draft)) return this.noteUnsentHost(draft);
     if (this.groupChat && draft.to === this.cleanerPhone && this.cleanerConsent === "out" && !SAFETY.has(draft.kind)) return null;
     if (draft.kind === "pin") {
       const groupPin = Boolean(this.groupChat && draft.channel === "group" && codeRoute(this.groupSeats()) === "group" && draft.to === this.cleanerPhone);
@@ -1748,6 +1769,7 @@ class Engine implements CleanerCore {
       throw new HaltError("after-accept");
     }
     this.upsert(draft, "sent");
+    if (draft.kind === "pin") this.pinPhase.set(draft.id, "accepted");
     this.counters.sent += 1;
     if (draft.kind === "stop") this.counters.stop += 1;
     if (draft.kind === "emergency") this.counters.injury += 1;
@@ -1789,6 +1811,7 @@ class Engine implements CleanerCore {
   }
 
   private async emergency(from: string, inboundId: string): Promise<ReceiveResult & { seen?: boolean }> {
+    this.problemHold = true;
     const job = this.conversationJob() ?? this.ordered()[0];
     const key = `${from}|${job?.id ?? "none"}|${job?.version ?? 0}`;
     if (this.injurySent.includes(key)) return { handled: true, reason: "emergency", sent: [], seen: true };
@@ -1832,7 +1855,20 @@ class Engine implements CleanerCore {
 
   private async stopMember(from: string, inboundId: string): Promise<ReceiveResult & { seen?: boolean }> {
     const ack = this.options.stopReply ?? smsStopAck();
-    if (from === this.owner) this.hostGroup = "out";
+    if (from === this.owner && (this.ownerOptedOut || this.hostGroup === "out")) {
+      return { handled: true, reason: "stop", sent: [], seen: true };
+    }
+    if (from === this.cleanerPhone && this.cleanerConsent === "out") {
+      return { handled: true, reason: "stop", sent: [], seen: true };
+    }
+    if (from !== this.owner && from !== this.cleanerPhone && this.participantConsent.get(from) === "out") {
+      return { handled: true, reason: "stop", sent: [], seen: true };
+    }
+    if (from === this.owner) {
+      this.hostGroup = "out";
+      this.ownerOptedOut = true;
+      this.problemHold = true;
+    }
     if (from === this.cleanerPhone) {
       this.cleanerConsent = "out";
       this.problemHold = true;
@@ -1941,15 +1977,30 @@ class Engine implements CleanerCore {
     if (this.groupChat) return this.stopMember(from, inboundId);
     const ack = this.options.stopReply ?? smsStopAck();
     if (this.isExtraParticipant(from)) {
+      if (this.participantConsent.get(from) === "out") return { handled: true, reason: "stop", sent: [], seen: true };
       this.participantConsent.set(from, "out");
       const result = await this.reply(from, ack, "stop", "stop", inboundId);
       return { ...result, seen: this.replySeen("stop", inboundId, result.sent.length) };
     }
+    if (from === this.cleanerPhone && this.cleanerConsent === "out") {
+      return { handled: true, reason: "stop", sent: [], seen: true };
+    }
+    if (from === this.owner && this.ownerOptedOut) {
+      return { handled: true, reason: "stop", sent: [], seen: true };
+    }
     if (this.pin && from === this.cleanerPhone) {
       this.cleanerConsent = "out";
+      this.problemHold = true;
       const result = await this.reply(from, ack, "stop", "stop", inboundId);
       const note = await this.hostStopNote(from, inboundId);
       return { handled: true, reason: "stop", sent: [...result.sent, ...note], seen: this.replySeen("stop", inboundId, result.sent.length) };
+    }
+    if (from === this.owner) {
+      this.ownerOptedOut = true;
+      if (this.pin) this.problemHold = true;
+      else this.optedOut = true;
+      const result = await this.reply(from, ack, "stop", "stop", inboundId);
+      return { ...result, seen: this.replySeen("stop", inboundId, result.sent.length) };
     }
     this.optedOut = true;
     this.cancelPendingReminders();
@@ -1973,6 +2024,22 @@ class Engine implements CleanerCore {
   }
 
   private async start(from: string, inboundId: string): Promise<ReceiveResult & { seen?: boolean }> {
+    if (from === this.owner) {
+      this.ownerOptedOut = false;
+      if (!this.pin) this.optedOut = false;
+      if (this.groupChat && this.hostGroup === "out") this.hostGroup = "in";
+      if (this.delivery(`start:${inboundId}`) === "sent") return { handled: true, reason: "start", sent: [], seen: true };
+      const result = await this.reply(from, START_ACK, "start", "start", inboundId);
+      return { ...result, seen: this.replySeen("start", inboundId, result.sent.length) };
+    }
+    if (this.problemHold && this.pin && from === this.cleanerPhone) {
+      if (this.cleanerConsent === "out" && !this.groupChat) {
+        this.cleanerConsent = "in";
+        const result = await this.reply(from, START_ACK, "start", "start", inboundId);
+        return { ...result, seen: this.replySeen("start", inboundId, result.sent.length) };
+      }
+      return { handled: true, reason: "ignored", sent: [], seen: true };
+    }
     if (this.delivery(`start:${inboundId}`) === "sent") {
       if (this.pin && from === this.cleanerPhone && this.cleanerConsent === "out") this.cleanerConsent = "in";
       return { handled: true, reason: "start", sent: [], seen: true };
@@ -2046,7 +2113,7 @@ class Engine implements CleanerCore {
       arrivingUid: job.arrivingUid,
       status,
       live,
-      textsBlocked: !live || this.optedOut,
+      textsBlocked: !live || this.optedOut || this.problemHold,
       checkoutDate: job.checkoutDate,
       nextCheckInDate: job.nextCheckInDate,
       sameDay: job.sameDay,
@@ -2193,9 +2260,70 @@ class Engine implements CleanerCore {
       if (item.kind !== "pin" || item.status !== "sent") continue;
       item.status = "failed";
       if (item.lease) item.lease.state = "open";
+      this.pinPhase.set(item.id, "failed");
       changed = true;
     }
-    if (changed) this.save();
+    if (changed) {
+      this.pinFailurePending = true;
+      this.save();
+    }
+  }
+
+  async reportPin(id: string, status: string): Promise<void> {
+    const item = this.outboxState.find((row) => row.id === id && row.kind === "pin");
+    if (!item) return;
+    const phase = this.pinPhase.get(id) ?? (item.status === "failed" ? "failed" : item.status === "sent" ? "accepted" : undefined);
+    const normalized = status.toLowerCase();
+    if (normalized === "sent" || normalized === "") return;
+    if (normalized === "delivered") {
+      if (phase === "failed" || phase === "undelivered" || phase === "delivered") return;
+      this.pinPhase.set(id, "delivered");
+      this.save();
+      this.notePrivateCodeDelivered();
+      return;
+    }
+    if (normalized !== "failed" && normalized !== "undelivered") return;
+    if (phase === "failed" || phase === "undelivered") return;
+    const failedPhase = normalized === "undelivered" ? "undelivered" : "failed";
+    this.pinPhase.set(id, failedPhase);
+    item.status = "failed";
+    if (item.lease) item.lease.state = "open";
+    this.pinFailurePending = true;
+    this.save();
+    if (!this.owner) return;
+    const priorFailures = this.outboxState.filter((row) => row.kind === "pin-failed" && (row.id === `pin-failed:${id}` || row.id.startsWith(`pin-failed:${id}:`))).length;
+    await this.emit({
+      id: priorFailures === 0 ? `pin-failed:${id}` : `pin-failed:${id}:${priorFailures}`,
+      ...(item.jobId ? { jobId: item.jobId } : {}),
+      to: this.owner,
+      kind: "pin-failed",
+      body: this.options.pinFailedBody ?? "The door code didn't reach the cleaner. We'll try again in a few minutes.",
+    });
+    this.save();
+  }
+
+  pinAccepted(): boolean {
+    const job = this.releaseJob();
+    const key = job ? this.pinKey(job) : undefined;
+    if (!key) return false;
+    const phase = this.pinPhase.get(key);
+    if (phase === "failed" || phase === "undelivered") return false;
+    if (phase === "accepted" || phase === "delivered") return true;
+    return this.delivery(key) === "sent";
+  }
+
+  pinShownStatus(id: string): "sent" | "delivered" | "failed" | "undelivered" | undefined {
+    const phase = this.pinPhase.get(id);
+    if (phase === "delivered" || phase === "failed" || phase === "undelivered") return phase;
+    if (phase === "accepted") return "sent";
+    return undefined;
+  }
+
+  pullPinFailure(): boolean {
+    if (!this.pinFailurePending) return false;
+    this.pinFailurePending = false;
+    this.save();
+    return true;
   }
 
   rememberPin(pin: string): void {
@@ -2269,6 +2397,13 @@ class Engine implements CleanerCore {
     this.counters = { ...emptyCounters(), ...record.counters };
     if (record.hostGroup === "pending" || record.hostGroup === "in" || record.hostGroup === "out") this.hostGroup = record.hostGroup;
     if (record.problemHold === true) this.problemHold = true;
+    if (record.ownerOptedOut === true) this.ownerOptedOut = true;
+    if (record.pinFailurePending === true) this.pinFailurePending = true;
+    for (const pin of record.pinPhase ?? []) {
+      if (pin.phase === "accepted" || pin.phase === "delivered" || pin.phase === "failed" || pin.phase === "undelivered") {
+        this.pinPhase.set(pin.id, pin.phase);
+      }
+    }
     if (record.groupPinTerminal === true) this.groupPinTerminal = true;
     this.hostNoteState = (record.hostNotes ?? []).filter((note) => typeof note?.id === "string" && typeof note?.body === "string");
     if (this.options.sealPinAtRest !== false && !this.pin && record.pinSeal) {
@@ -2309,7 +2444,11 @@ class Engine implements CleanerCore {
       ...(this.reviewItems.length > 0 ? { reviews: this.reviewItems } : {}),
       ...(this.auditLog.length > 0 ? { audit: this.auditLog } : {}),
       counters: this.counters,
-      ...(this.groupChat ? { hostGroup: this.hostGroup, problemHold: this.problemHold, groupPinTerminal: this.groupPinTerminal } : {}),
+      ...(this.groupChat ? { hostGroup: this.hostGroup, groupPinTerminal: this.groupPinTerminal } : {}),
+      ...(this.problemHold ? { problemHold: true } : {}),
+      ...(this.ownerOptedOut ? { ownerOptedOut: true } : {}),
+      ...(this.pinFailurePending ? { pinFailurePending: true } : {}),
+      ...(this.pinPhase.size > 0 ? { pinPhase: [...this.pinPhase].map(([id, phase]) => ({ id, phase })) } : {}),
       ...(this.hostNoteState.length > 0 ? { hostNotes: this.hostNoteState } : {}),
     };
     const existing = existsSync(this.file) ? (JSON.parse(readFileSync(this.file, "utf8")) as StoreFile) : undefined;

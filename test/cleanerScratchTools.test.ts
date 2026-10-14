@@ -21,7 +21,7 @@ const LANE_OBSERVER = "+15555550142";
 const COURT_OBSERVER = "+15555550152";
 const REAL_NUMBER = ["+1", "212", "555", "1234"].join("");
 const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn't go through.";
-const PIN_FAILED = "The door code didn't reach the cleaner. Tell me the guests have left again and I'll resend it.";
+const PIN_FAILED = "The door code didn't reach the cleaner. Tell your Grok Bot the guests have left and I'll resend it.";
 const PIN_REPEAT = "I already sent the door code to the cleaner.";
 const PROPERTY_REFUSAL = "That only works on the Scratch test property.";
 const NUMBER_REFUSAL = "That only works with 555 test numbers.";
@@ -64,14 +64,14 @@ function throwingClient(): TwilioClient {
   };
 }
 
-async function scratchApp(options?: { groupChat?: boolean; allowlist?: string; scratchTools?: boolean }): Promise<WiredApp> {
+async function scratchApp(options?: { groupChat?: boolean; allowlist?: string; scratchTools?: boolean; blockSms?: boolean }): Promise<WiredApp> {
   const started = await startWiredApp({
     scratchTools: options?.scratchTools !== false,
     allowlist: options?.allowlist,
     groupChat: options?.groupChat,
   });
   open.push(started);
-  setCleanerTwilioClient(throwingClient());
+  if (options?.blockSms) setCleanerTwilioClient(throwingClient());
   return started;
 }
 
@@ -275,7 +275,10 @@ describe("Scratch test tools", () => {
     expect(blob.includes(COURT.pin)).toBe(false);
     expect(blob).not.toMatch(/PIN_SENT|PIN_REPEAT|PIN_FAILED|CLEANER_CORE_SCRATCH_TOOLS/);
     expect(twilioCalls).toBe(0);
-    expect(wired.cleanerSent).toEqual([]);
+    const sentBodies = wired.cleanerSent.map((item) => item.body.split(LANE.pin).join("[redacted]").split(COURT.pin).join("[redacted]"));
+    expect(sentBodies.join("\n")).not.toContain(LANE.pin);
+    expect(sentBodies.join("\n")).not.toContain(COURT.pin);
+    expect(sentBodies.filter((body) => body.includes("Door code:"))).toHaveLength(3);
   }, 40_000);
 
   it("hides both Scratch door codes and never calls Twilio for a Court code text", async () => {
@@ -299,11 +302,16 @@ describe("Scratch test tools", () => {
     expect(blob.includes(COURT.pin)).toBe(false);
     expect(blob.includes(LANE.pin)).toBe(false);
     expect(twilioCalls).toBe(0);
+    const courtSent = wired.cleanerSent.map((item) => item.body.split(COURT.pin).join("[redacted]").split(LANE.pin).join("[redacted]"));
+    expect(courtSent.join("\n")).not.toContain(COURT.pin);
+    expect(courtSent.filter((body) => body.includes("Door code:"))).toEqual([
+      "Guests have left 8 Scratch Court, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you.",
+    ]);
   }, 40_000);
 
   it("refuses a real number and a property that is not Scratch, and stores nothing", async () => {
     if (!LANE) throw new Error("missing lane");
-    const wired = await scratchApp({ allowlist: `${LANE.ownerPhone},${LANE.cleanerPhone},${LANE_OBSERVER}` });
+    const wired = await scratchApp({ blockSms: true, allowlist: `${LANE.ownerPhone},${LANE.cleanerPhone},${LANE_OBSERVER}` });
     await saveScratch(wired, { address: LANE.property.address, host: LANE.ownerPhone, cleaner: LANE.cleanerPhone, observer: LANE_OBSERVER, pin: LANE.pin }, "Scratch");
     const refused = await call(wired, "send_test_text", { from: REAL_NUMBER, text: "YES please come now" });
     expect(refused.isError).toBe(true);
@@ -313,7 +321,7 @@ describe("Scratch test tools", () => {
     expect(linesOf(await call(wired, "read_outbox"))).toEqual([]);
     expect(twilioCalls).toBe(0);
 
-    const mixed = await scratchApp({ allowlist: `${LANE.ownerPhone},${REAL_NUMBER},${LANE_OBSERVER}` });
+    const mixed = await scratchApp({ blockSms: true, allowlist: `${LANE.ownerPhone},${REAL_NUMBER},${LANE_OBSERVER}` });
     await call(mixed, "get_state", { said: "2" });
     await call(mixed, "save_property", { business: "Scratch", address: LANE.property.address, timeZone: "America/New_York" });
     await call(mixed, "save_people", { host: LANE.ownerPhone, cleaner: REAL_NUMBER, observer: LANE_OBSERVER });
@@ -330,7 +338,7 @@ describe("Scratch test tools", () => {
     expect(sent.text).toBe(NUMBER_REFUSAL);
     expect(twilioCalls).toBe(0);
 
-    const practice = await scratchApp({ allowlist: `${LANE.ownerPhone},${LANE.cleanerPhone},${LANE_OBSERVER}` });
+    const practice = await scratchApp({ blockSms: true, allowlist: `${LANE.ownerPhone},${LANE.cleanerPhone},${LANE_OBSERVER}` });
     await call(practice, "get_state", { said: "2" });
     await call(practice, "save_property", { business: "Harbor", address: ADDRESS, timeZone: "America/New_York" });
     await call(practice, "save_people", { host: LANE.ownerPhone, cleaner: LANE.cleanerPhone, observer: LANE_OBSERVER });
@@ -399,7 +407,8 @@ describe("Scratch test tools", () => {
     expect(lines.join("\n").includes(LANE.pin)).toBe(false);
     expect(groupCalls).toBe(0);
     expect(twilioCalls).toBe(0);
-    expect(wired.cleanerSent).toEqual([]);
+    expect(wired.cleanerSent.map((item) => item.body).join("\n").includes(LANE.pin)).toBe(false);
+    expect(wired.cleanerSent.some((item) => item.body.includes("someone is hurt"))).toBe(true);
   }, 40_000);
 
   it("records an opted-out host note in the outbox and does not call Twilio", async () => {
@@ -419,6 +428,9 @@ describe("Scratch test tools", () => {
     expect(state.text).toContain(sentence);
     expect(state.text.includes(LANE.pin)).toBe(false);
     expect(twilioCalls).toBe(0);
-    expect(wired.cleanerSent).toEqual([]);
+    const stopAck = `You're opted out of cleaning texts for ${LANE.property.address}. You won't get cleaning offers or the door code. Reply START to opt back in. Reply HELP for help.`;
+    expect(wired.cleanerSent.map((item) => item.body)).toContain(stopAck);
+    expect(wired.cleanerSent.some((item) => item.body.includes("is back on"))).toBe(false);
+    expect(wired.cleanerSent.map((item) => item.body).join("\n").includes(LANE.pin)).toBe(false);
   }, 40_000);
 });
