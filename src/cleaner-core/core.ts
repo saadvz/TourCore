@@ -1,3 +1,4 @@
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { isMedicalEmergency, isPlainLanguageStop, keywordOf } from "../intent";
@@ -22,7 +23,14 @@ export type TextKind =
   | "stop"
   | "help"
   | "start"
-  | "emergency";
+  | "emergency"
+  | "opt-in"
+  | "pin"
+  | "pin-notice"
+  | "pin-failed"
+  | "pin-held"
+  | "started"
+  | "done";
 
 export interface CleanerText {
   to: string;
@@ -36,6 +44,10 @@ export type JobStatus =
   | "host_confirmed"
   | "offered"
   | "confirmed"
+  | "awaiting_departure"
+  | "cleared"
+  | "in_progress"
+  | "done"
   | "declined"
   | "canceled";
 
@@ -87,7 +99,10 @@ export type ReceiveReason =
   | "declined"
   | "ignored"
   | "scratch-only"
-  | "host-time";
+  | "host-time"
+  | "departure"
+  | "opted-in"
+  | "done";
 
 export interface ReceiveResult {
   handled: boolean;
@@ -116,8 +131,14 @@ export interface CleanerCoreOptions {
   property: { id: string; address: string; timeZone: string; defaultCheckout?: string; defaultCheckIn?: string };
   /** Host who confirms times and receives the schedule text. */
   ownerPhone: string;
-  /** Cleaner identity. Step C never texts a door code to this number. */
+  /** Approved cleaner. The door code is a private text to this number, and only after opt-in and departure. */
   cleaner: { phone: string; approved: boolean };
+  /** Standing door code. Absent means this engine never texts one. */
+  pin?: string;
+  /** Name in the cleaner opt-in text. */
+  hostName?: string;
+  /** Numbers that share a group thread. They never receive the door code. */
+  groupPhones?: string[];
   /** Landlord already approved texting this owner. A phone number alone is not consent. */
   consented?: boolean;
   sink: CleanerSink;
@@ -150,7 +171,8 @@ const DEFAULT_TRIGGERS: ReminderTrigger[] = [{ id: "morning-of", kind: "morning-
  *   await core.pollFeed(icalText);
  *   await core.receive({ id, from: ownerPhone, text: "YES" });
  *   await core.runReminders();
- * Flag off returns reason "disabled" and sends nothing. Step C never sends a door code.
+ * Flag off returns reason "disabled" and sends nothing. With no pin, no door code is sent.
+ * With a pin, the approved cleaner must opt in and the host must confirm departure first.
  */
 export function openCleanerCore(options: CleanerCoreOptions): CleanerCore {
   return new Engine(options);
@@ -176,6 +198,21 @@ interface Job {
   canceled: boolean;
   declined: boolean;
   announced: Announced | null;
+  started: boolean;
+  done: boolean;
+}
+
+interface Clearance {
+  jobId: string;
+  checkoutDate: string;
+  minutes: number;
+  hostVersion: number;
+}
+
+interface PinSeal {
+  iv: string;
+  tag: string;
+  data: string;
 }
 
 interface HostFact {
@@ -211,6 +248,9 @@ interface Stored {
   optedOut: boolean;
   injurySent: string[];
   blocks: FeedBlock[];
+  cleanerConsent?: "pending" | "in" | "out";
+  clearances?: Clearance[];
+  pinSeal?: PinSeal;
 }
 
 interface Draft {
@@ -226,6 +266,11 @@ class Engine implements CleanerCore {
   private readonly enabled: boolean;
   private readonly owner: string | undefined;
   private readonly cleanerPhone: string | undefined;
+  private pin: string | undefined;
+  private readonly hostName: string;
+  private readonly groupPhones: string[];
+  private cleanerConsent: "pending" | "in" | "out" = "pending";
+  private clearances: Clearance[] = [];
   private readonly triggers: ReminderTrigger[];
   private readonly defaultCheckout: number;
   private readonly defaultCheckIn: number;
@@ -246,6 +291,13 @@ class Engine implements CleanerCore {
     this.enabled = options.enabled;
     this.owner = parsePhone(options.ownerPhone);
     this.cleanerPhone = parsePhone(options.cleaner.phone);
+    const pin = options.pin?.trim();
+    this.pin = pin && /^\d{4,8}$/.test(pin) ? pin : undefined;
+    this.hostName = options.hostName?.trim() || "Scratch";
+    this.groupPhones = (options.groupPhones ?? []).flatMap((phone) => {
+      const parsed = parsePhone(phone);
+      return parsed ? [parsed] : [];
+    });
     this.triggers = options.triggers ?? DEFAULT_TRIGGERS;
     this.defaultCheckout = minutesOf(options.property.defaultCheckout ?? "11:00");
     this.defaultCheckIn = minutesOf(options.property.defaultCheckIn ?? "16:00");
@@ -265,6 +317,10 @@ class Engine implements CleanerCore {
     this.blockState = feed.blocks;
     this.reconcile(feed.turnovers);
     const sent = this.optedOut ? [] : await this.drainOne();
+    if (!this.optedOut) {
+      const optIn = await this.sendOptIn();
+      if (optIn) sent.push(optIn);
+    }
     this.save();
     return { polled: true, reason: "read", sent, jobs: this.jobs(), blocks: this.blocks() };
   }
@@ -274,13 +330,18 @@ class Engine implements CleanerCore {
     const from = parsePhone(input.from);
     if (!from || !isScratchTestNumber(from)) return { handled: true, reason: "scratch-only", sent: [] };
     if (this.inboundIds.includes(input.id)) return { handled: true, reason: "duplicate", sent: [] };
-    this.transcriptState.push(`${from}: ${input.text.trim()}`);
+    this.transcriptState.push(this.redact(`${from}: ${input.text.trim()}`));
 
     const keyword = keywordOf(input.text);
     if (keyword === "help") return this.safety(input.id, () => this.reply(from, HELP_ACK, "help", "help", input.id));
     if (isMedicalEmergency(input.text)) return this.safety(input.id, () => this.emergency(from, input.id));
     if (keyword === "stop" || isPlainLanguageStop(input.text)) return this.safety(input.id, () => this.stop(from, input.id));
     if (keyword === "start") return this.safety(input.id, () => this.start(from, input.id));
+    if (this.pin && from === this.cleanerPhone && isYes(input.text)) return this.optInCleaner(input.id);
+    if (this.pin && from === this.cleanerPhone && isDone(input.text)) return this.finish(from, input.id);
+    if (this.pin && from === this.owner && isDeparture(input.text)) return this.clearDeparture(input.id);
+    const moved = await this.moveCheckout(input.id, from, input.text);
+    if (moved) return moved;
     if (this.optedOut || !this.everConsented) return this.markIgnored(input.id);
 
     const result = await this.answer(input.id, from, input.text);
@@ -312,6 +373,13 @@ class Engine implements CleanerCore {
         });
         if (text) sent.push(text);
         else if (this.outboxState.find((item) => item.id === id)?.status === "failed") failed.push(id);
+      }
+    }
+    if (this.pin) {
+      for (const job of this.ordered()) {
+        const key = this.pinKey(job);
+        if (!key || this.delivery(key) === "sent" || this.delivery(key) === "canceled") continue;
+        for (const text of await this.deliverPin(job)) sent.push(text);
       }
     }
     this.save();
@@ -401,6 +469,119 @@ class Engine implements CleanerCore {
     return text ? [text] : [];
   }
 
+  private async sendOptIn(): Promise<CleanerText | null> {
+    if (!this.pin || !this.options.cleaner.approved || !this.cleanerPhone || this.cleanerConsent !== "pending") return null;
+    const id = `opt-in:${this.cleanerPhone}`;
+    if (this.delivery(id) === "sent") return null;
+    return this.emit({
+      id,
+      to: this.cleanerPhone,
+      kind: "opt-in",
+      body: `Hi, this is ${this.hostName}'s cleaning scheduler for ${this.options.property.address}. Reply YES to get cleaning texts, or STOP to opt out.`,
+    });
+  }
+
+  private async optInCleaner(id: string): Promise<ReceiveResult> {
+    if (!this.cleanerPhone || this.delivery(`opt-in:${this.cleanerPhone}`) !== "sent" || this.cleanerConsent !== "pending") {
+      return this.markIgnored(id);
+    }
+    this.cleanerConsent = "in";
+    this.inboundIds.push(id);
+    this.save();
+    return { handled: true, reason: "opted-in", sent: [] };
+  }
+
+  private async finish(from: string, id: string): Promise<ReceiveResult> {
+    const job = this.ordered().find((item) => item.started && !item.done && this.pinDelivered(item));
+    if (!job || this.cleanerConsent !== "in") return this.markIgnored(id);
+    const result = await this.reply(from, "Thanks, cleaning marked done.", "done", "done", id, job.id);
+    if (result.sent.length > 0) {
+      job.done = true;
+      this.inboundIds.push(id);
+    }
+    this.save();
+    return result;
+  }
+
+  private async clearDeparture(id: string): Promise<ReceiveResult> {
+    const job = this.releaseJob();
+    if (!job || this.stale(job) || !this.confirmSent(job)) return this.markIgnored(id);
+    this.recordClearance(job);
+    this.inboundIds.push(id);
+    const sent = await this.deliverPin(job);
+    this.save();
+    return { handled: true, reason: "departure", sent };
+  }
+
+  private async moveCheckout(id: string, from: string, text: string): Promise<ReceiveResult | undefined> {
+    if (!this.pin || from !== this.owner) return undefined;
+    const job = this.releaseJob();
+    const minutes = clockMinutes(text);
+    const checkout = job ? this.latestFact(job.id, "checkout") : undefined;
+    if (!job || minutes === undefined || !checkout || minutes <= checkout.minutes) return undefined;
+    this.addFact(job.id, "checkout", minutes);
+    job.started = false;
+    job.done = false;
+    this.dropClearance(job.id);
+    this.cancelUnsentPin(job.id);
+    this.inboundIds.push(id);
+    const sent = await this.drainOne();
+    this.save();
+    return { handled: true, reason: "host-time", sent };
+  }
+
+  private async deliverPin(job: Job): Promise<CleanerText[]> {
+    if (!this.pin || !this.cleanerPhone || this.optedOut || this.stale(job) || job.canceled || job.declined) return [];
+    const key = this.pinKey(job);
+    if (!key) return [];
+    const sent: CleanerText[] = [];
+    if (!this.options.cleaner.approved || this.cleanerConsent !== "in") {
+      if (this.cleanerConsent === "out" && this.options.cleaner.approved && this.owner && !this.groupPhones.includes(this.owner)) {
+        const held = await this.emit({
+          id: `pin-held:${key}`,
+          jobId: job.id,
+          to: this.owner,
+          kind: "pin-held",
+          body: "The cleaner opted out, so the door code wasn't sent. Please reach them directly.",
+        });
+        if (held) sent.push(held);
+      }
+      this.dropClearance(job.id);
+      return sent;
+    }
+    if (this.delivery(key) !== "sent") {
+      const text = await this.emit({
+        id: key,
+        jobId: job.id,
+        to: this.cleanerPhone,
+        kind: "pin",
+        body: `Guests have left ${this.options.property.address}. Door code: ${this.pin}. This code is only for you.`,
+      });
+      if (text) sent.push(text);
+    }
+    if (this.delivery(key) === "failed" && this.owner && !this.groupPhones.includes(this.owner)) {
+      const failed = await this.emit({
+        id: `pin-failed:${key}`,
+        jobId: job.id,
+        to: this.owner,
+        kind: "pin-failed",
+        body: "The door code didn't reach the cleaner. We'll try again in a few minutes.",
+      });
+      if (failed) sent.push(failed);
+    }
+    if (this.delivery(key) === "sent" && this.owner && !this.groupPhones.includes(this.owner)) {
+      const notice = await this.emit({
+        id: `pin-notice:${key}`,
+        jobId: job.id,
+        to: this.owner,
+        kind: "pin-notice",
+        body: "door code sent to the cleaner",
+      });
+      if (notice) sent.push(notice);
+    }
+    return sent;
+  }
+
   private reconcile(turnovers: Turnover[]): void {
     const seen = new Set<string>();
     for (const turnover of turnovers) {
@@ -422,6 +603,8 @@ class Engine implements CleanerCore {
           canceled: false,
           declined: false,
           announced: null,
+          started: false,
+          done: false,
         });
         continue;
       }
@@ -441,7 +624,13 @@ class Engine implements CleanerCore {
       existing.sourceSequence = turnover.sequence;
       existing.version += 1;
       existing.canceled = false;
-      if (checkoutDateChanged) this.clearHostTime(existing.id, "checkout");
+      if (checkoutDateChanged) {
+        this.clearHostTime(existing.id, "checkout");
+        this.dropClearance(existing.id);
+        existing.started = false;
+        existing.done = false;
+        this.cancelUnsentPin(existing.id);
+      }
       if (checkInDateChanged) this.clearHostTime(existing.id, "checkin");
       this.cancelPendingReminders(existing.id);
     }
@@ -450,6 +639,8 @@ class Engine implements CleanerCore {
       job.canceled = true;
       job.version += 1;
       this.tombstones.push({ uid: job.id, version: job.version, contentHash: job.contentHash });
+      this.dropClearance(job.id);
+      this.cancelUnsentPin(job.id);
       this.cancelPendingReminders(job.id);
     }
   }
@@ -464,7 +655,8 @@ class Engine implements CleanerCore {
         const text = await this.emit(draft);
         return text ? [text] : [];
       }
-      if (this.derive(job) === "confirmed") continue;
+      const status = this.derive(job);
+      if (status === "confirmed" || status === "awaiting_departure" || status === "cleared" || status === "in_progress" || status === "done") continue;
       const draft = this.noticeFor(job);
       if (!draft) return [];
       const text = await this.emit(draft);
@@ -552,7 +744,15 @@ class Engine implements CleanerCore {
   private async emit(draft: Draft): Promise<CleanerText | null> {
     if (!isScratchTestNumber(draft.to)) throw new Error("Cleaner Core only texts Scratch test numbers.");
     if (/\bready\b/i.test(draft.body)) throw new Error("A calendar time cannot mark the job ready.");
-    if (/\bdoor code\b/i.test(draft.body)) throw new Error("Step C does not send a door code.");
+    if (draft.kind === "pin") {
+      if (!this.pin || !this.options.cleaner.approved || draft.to !== this.cleanerPhone || this.groupPhones.includes(draft.to)) {
+        throw new Error("The door code only goes to the approved cleaner.");
+      }
+    } else if (this.pin && draft.body.includes(this.pin)) {
+      throw new Error("The door code leaked into a schedule text.");
+    } else if (!this.pin && /\bdoor code\b/i.test(draft.body)) {
+      throw new Error("Step C does not send a door code.");
+    }
     if (this.optedOut && !SAFETY.has(draft.kind)) return null;
     const existing = this.outboxState.find((item) => item.id === draft.id);
     if (existing?.status === "sent" || existing?.status === "canceled") return null;
@@ -565,7 +765,7 @@ class Engine implements CleanerCore {
       return null;
     }
     this.upsert(draft, "sent");
-    this.transcriptState.push(draft.body);
+    this.transcriptState.push(this.redact(draft.body));
     draft.afterSend?.();
     this.save();
     return text;
@@ -575,7 +775,7 @@ class Engine implements CleanerCore {
     const next: OutboxItem = {
       id: draft.id,
       to: draft.to,
-      body: draft.body,
+      body: this.redact(draft.body),
       kind: draft.kind,
       status,
       ...(draft.jobId ? { jobId: draft.jobId } : {}),
@@ -603,6 +803,11 @@ class Engine implements CleanerCore {
   }
 
   private async stop(from: string, inboundId: string): Promise<ReceiveResult & { seen?: boolean }> {
+    if (this.pin && from === this.cleanerPhone) {
+      this.cleanerConsent = "out";
+      const result = await this.reply(from, smsStopAck(), "stop", "stop", inboundId);
+      return { ...result, seen: result.sent.length > 0 };
+    }
     this.optedOut = true;
     this.cancelPendingReminders();
     const result = await this.reply(from, smsStopAck(), "stop", "stop", inboundId);
@@ -610,6 +815,18 @@ class Engine implements CleanerCore {
   }
 
   private async start(from: string, inboundId: string): Promise<ReceiveResult & { seen?: boolean }> {
+    if (this.pin && from === this.cleanerPhone) {
+      if (this.cleanerConsent === "out") {
+        this.cleanerConsent = "in";
+        const result = await this.reply(from, START_ACK, "start", "start", inboundId);
+        return { ...result, seen: result.sent.length > 0 };
+      }
+      const job = this.ordered().find((item) => this.pinDelivered(item) && !item.started && !item.done);
+      if (this.cleanerConsent !== "in" || !job) return { handled: true, reason: "ignored", sent: [], seen: true };
+      const result = await this.reply(from, "Got it, cleaning started.", "started", "start", inboundId, job.id);
+      if (result.sent.length > 0) job.started = true;
+      return { ...result, seen: result.sent.length > 0 };
+    }
     if (!this.everConsented) return { handled: true, reason: "ignored", sent: [], seen: true };
     this.optedOut = false;
     const result = await this.reply(from, START_ACK, "start", "start", inboundId);
@@ -641,7 +858,13 @@ class Engine implements CleanerCore {
     if (!checkout) return "discovered";
     if (job.nextCheckInDate && !checkin) return "awaiting_checkin";
     if (!job.announced) return "host_confirmed";
-    if (this.confirmSent(job) && !this.stale(job)) return "confirmed";
+    if (this.confirmSent(job) && !this.stale(job)) {
+      if (job.done) return "done";
+      if (job.started) return "in_progress";
+      if (this.pinDelivered(job)) return "cleared";
+      if (this.pin && this.checkoutReached(job)) return "awaiting_departure";
+      return "confirmed";
+    }
     return "offered";
   }
 
@@ -764,12 +987,66 @@ class Engine implements CleanerCore {
     return Boolean(this.owner && this.cleanerPhone && isScratchTestNumber(this.owner) && isScratchTestNumber(this.cleanerPhone));
   }
 
+  private releaseJob(): Job | undefined {
+    return this.ordered().find((job) => {
+      const status = this.derive(job);
+      return status === "confirmed" || status === "awaiting_departure" || status === "cleared" || status === "in_progress" || status === "done";
+    });
+  }
+
+  private pinKey(job: Job): string | undefined {
+    const checkout = this.latestFact(job.id, "checkout");
+    const clearance = [...this.clearances].reverse().find((item) => item.jobId === job.id);
+    if (!checkout || !clearance) return undefined;
+    if (clearance.checkoutDate !== job.checkoutDate || clearance.minutes !== checkout.minutes || clearance.hostVersion !== checkout.version) return undefined;
+    return `pin:${job.id}:${job.checkoutDate}:${checkout.minutes}:${checkout.version}`;
+  }
+
+  private pinDelivered(job: Job): boolean {
+    const key = this.pinKey(job);
+    return Boolean(key && this.delivery(key) === "sent");
+  }
+
+  private recordClearance(job: Job): void {
+    const checkout = this.latestFact(job.id, "checkout");
+    if (!checkout) return;
+    const current = [...this.clearances].reverse().find((item) => item.jobId === job.id);
+    if (current && current.checkoutDate === job.checkoutDate && current.minutes === checkout.minutes && current.hostVersion === checkout.version) return;
+    this.clearances.push({ jobId: job.id, checkoutDate: job.checkoutDate, minutes: checkout.minutes, hostVersion: checkout.version });
+  }
+
+  private dropClearance(jobId: string): void {
+    this.clearances = this.clearances.filter((item) => item.jobId !== jobId);
+  }
+
+  private cancelUnsentPin(jobId: string): void {
+    for (const item of this.outboxState) {
+      if (item.jobId !== jobId || item.status === "sent") continue;
+      if (item.kind === "pin" || item.kind === "pin-failed" || item.kind === "pin-notice" || item.kind === "pin-held") item.status = "canceled";
+    }
+  }
+
+  private checkoutReached(job: Job): boolean {
+    const checkout = this.latestFact(job.id, "checkout");
+    if (!checkout) return false;
+    return this.now().getTime() >= Date.parse(zonedInstant(job.checkoutDate, hm(checkout.minutes), this.options.property.timeZone));
+  }
+
+  private redact(body: string): string {
+    if (!this.pin || !body.includes(this.pin)) return body;
+    return body.split(this.pin).join("[redacted]");
+  }
+
+  private pinKeyMaterial(): Buffer {
+    return createHash("sha256").update(`cleaner-core-pin:${this.options.property.id}`).digest();
+  }
+
   private load(): void {
     if (!this.file || !existsSync(this.file)) return;
     const parsed = JSON.parse(readFileSync(this.file, "utf8")) as Stored & { pin?: unknown };
     if (parsed.schemaVersion !== 1) throw new Error("Cleaner Core store is not version 1.");
     delete parsed.pin;
-    this.jobsState = parsed.jobs;
+    this.jobsState = parsed.jobs.map((job) => ({ ...job, started: job.started === true, done: job.done === true }));
     this.hostFacts = parsed.hostFacts;
     this.tombstones = parsed.tombstones;
     this.outboxState = parsed.outbox;
@@ -778,6 +1055,15 @@ class Engine implements CleanerCore {
     this.optedOut = parsed.optedOut;
     this.injurySent = parsed.injurySent;
     this.blockState = parsed.blocks;
+    this.cleanerConsent = parsed.cleanerConsent ?? "pending";
+    this.clearances = parsed.clearances ?? [];
+    if (!this.pin && parsed.pinSeal) {
+      try {
+        this.pin = openPin(parsed.pinSeal, this.pinKeyMaterial());
+      } catch {
+        this.pin = undefined;
+      }
+    }
   }
 
   private save(): void {
@@ -793,8 +1079,13 @@ class Engine implements CleanerCore {
       optedOut: this.optedOut,
       injurySent: this.injurySent,
       blocks: this.blockState,
+      cleanerConsent: this.cleanerConsent,
+      clearances: this.clearances,
+      ...(this.pin ? { pinSeal: sealPin(this.pin, this.pinKeyMaterial()) } : {}),
     };
-    writeFileAtomic(this.file, `${JSON.stringify(stored)}\n`);
+    const json = JSON.stringify(stored);
+    if (this.pin && json.includes(this.pin)) throw new Error("The door code cannot be stored in plaintext.");
+    writeFileAtomic(this.file, `${json}\n`);
   }
 }
 
@@ -827,4 +1118,30 @@ function isYes(text: string): boolean {
 
 function isNo(text: string): boolean {
   return /^(no|nope|nah)$/.test(stripFiller(normalize(text)));
+}
+
+function isDone(text: string): boolean {
+  return stripFiller(normalize(text)) === "done";
+}
+
+function isDeparture(text: string): boolean {
+  const phrase = stripFiller(normalize(text));
+  return phrase === "guests have left" || phrase === "guests left" || phrase === "they have left" || phrase === "they left" || phrase === "departed" || phrase === "left";
+}
+
+function sealPin(pin: string, key: Buffer): PinSeal {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const iv = randomBytes(12);
+    const cipher = createCipheriv("aes-256-gcm", key, iv);
+    const data = Buffer.concat([cipher.update(pin, "utf8"), cipher.final()]);
+    const sealed = { iv: iv.toString("base64"), tag: cipher.getAuthTag().toString("base64"), data: data.toString("base64") };
+    if (!JSON.stringify(sealed).includes(pin)) return sealed;
+  }
+  throw new Error("Could not seal the door code.");
+}
+
+function openPin(sealed: PinSeal, key: Buffer): string {
+  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(sealed.iv, "base64"));
+  decipher.setAuthTag(Buffer.from(sealed.tag, "base64"));
+  return Buffer.concat([decipher.update(Buffer.from(sealed.data, "base64")), decipher.final()]).toString("utf8");
 }

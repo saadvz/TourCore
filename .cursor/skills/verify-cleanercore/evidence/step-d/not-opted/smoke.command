@@ -1,0 +1,1 @@
+env CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke -- --with-pin --feed /workspace/src/cleaner-core/fixtures/guesty-lite-scratch.ics --reply +15555550100=YES --reply +15555550100=YES --reply +15555550100=YES --reply +15555550100=guests have left

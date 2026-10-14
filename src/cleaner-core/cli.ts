@@ -12,8 +12,10 @@ import { isScratchTestNumber } from "./scratch";
  * Teardown: the process exits. It does not listen.
  * Drive: smoke reads a Guesty Lite-style iCal feed and texts the test owner.
  * With no arguments it asks the host, accepts the proposed times, and confirms the cleaning.
- * It does not text a door code. `--reply`, `--feed`, `--then-feed`, `--remind`, `--data`, and `--now`
- * run in argument order. `--no-poll` reloads a data directory without reading the feed again.
+ * It does not text a door code unless `--with-pin` is set, and then only after the cleaner opts in
+ * and the host says the guests have left. The printed JSON redacts that code.
+ * `--reply`, `--feed`, `--then-feed`, `--remind`, `--data`, and `--now` run in argument order.
+ * `--no-poll` reloads a data directory without reading the feed again.
  */
 export interface DoctorReport {
   ok: true;
@@ -52,6 +54,7 @@ export interface SmokeReport {
 const ADDRESS = "12 Scratch Lane, Teaneck, NJ 07666";
 const OWNER = "+15555550100";
 const CLEANER = "+15555550101";
+const PIN = "4821";
 const NOW = "2026-10-14T15:00:00.000Z";
 
 /** Same-day Scratch turnover. The later stay is first. The checkout date is folded. */
@@ -86,7 +89,7 @@ export function runDoctor(env: NodeJS.ProcessEnv = process.env): DoctorReport {
 export async function runSmoke(
   env: NodeJS.ProcessEnv = process.env,
   replies?: SmokeReply[],
-  extra?: { ops?: SmokeOp[]; dataDir?: string },
+  extra?: { ops?: SmokeOp[]; dataDir?: string; withPin?: boolean; groupPhones?: string[]; approved?: boolean },
 ): Promise<SmokeReport> {
   const ops = extra?.ops ?? defaultOps(replies);
   for (const op of ops) {
@@ -102,7 +105,9 @@ export async function runSmoke(
     enabled: true,
     property: { id: "prop_12_scratch_lane", address: ADDRESS, timeZone: "America/New_York" },
     ownerPhone: OWNER,
-    cleaner: { phone: CLEANER, approved: true },
+    cleaner: { phone: CLEANER, approved: extra?.approved !== false },
+    ...(extra?.withPin ? { pin: PIN, hostName: "Scratch" } : {}),
+    ...(extra?.groupPhones?.length ? { groupPhones: extra.groupPhones } : {}),
     consented: true,
     sink: {
       send: (text) => {
@@ -126,20 +131,21 @@ export async function runSmoke(
     else await core.runReminders();
   }
   const jobs = core.jobs();
-  const primary = jobs.find((job) => job.status === "confirmed") ?? jobs.find((job) => job.checkoutAt);
-  return {
+  const primary = jobs.find((job) => job.status === "done" || job.status === "cleared" || job.status === "in_progress") ?? jobs.find((job) => job.status === "confirmed") ?? jobs.find((job) => job.checkoutAt);
+  const report: SmokeReport = {
     ok: true,
     flag: true,
     property: ADDRESS,
     ...(primary?.checkoutAt ? { checkout: primary.checkoutAt } : {}),
     ...(primary?.nextCheckInAt ? { nextArrival: primary.nextCheckInAt } : {}),
     sent,
-    pinRecipients: [],
+    pinRecipients: sent.filter((text) => text.kind === "pin").map((text) => text.to),
     jobs,
     outbox: core.outbox(),
     transcript: core.transcript(),
     blocks: core.blocks(),
   };
+  return JSON.parse(JSON.stringify(report).split(PIN).join("[redacted]")) as SmokeReport;
 }
 
 function defaultOps(replies?: SmokeReply[]): SmokeOp[] {
@@ -153,15 +159,18 @@ function defaultOps(replies?: SmokeReply[]): SmokeOp[] {
 }
 
 const DOCTOR_USAGE = "Usage: tsx src/cleaner-core/cli.ts doctor";
-const SMOKE_USAGE = "Usage: tsx src/cleaner-core/cli.ts smoke [--data <dir>] [--no-poll] [--feed <file>] [--then-feed <file>] [--now <iso>] [--remind] [--fail-sends <n>] [--reply <from>=<text> ...]";
+const SMOKE_USAGE = "Usage: tsx src/cleaner-core/cli.ts smoke [--data <dir>] [--no-poll] [--feed <file>] [--then-feed <file>] [--now <iso>] [--remind] [--fail-sends <n>] [--with-pin] [--unapproved] [--group <phone>] [--reply <from>=<text> ...]";
 
-export function parseSmokeArgs(argv: string[]): { replies?: SmokeReply[]; ops: SmokeOp[]; dataDir?: string; explicit: boolean } {
+export function parseSmokeArgs(argv: string[]): { replies?: SmokeReply[]; ops: SmokeOp[]; dataDir?: string; explicit: boolean; withPin: boolean; approved: boolean; groupPhones: string[] } {
   const ops: SmokeOp[] = [];
   const replies: SmokeReply[] = [];
+  const groupPhones: string[] = [];
   let dataDir: string | undefined;
   let noPoll = false;
   let sawReply = false;
   let explicit = false;
+  let withPin = false;
+  let approved = true;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--reply") {
@@ -217,13 +226,31 @@ export function parseSmokeArgs(argv: string[]): { replies?: SmokeReply[]; ops: S
       noPoll = true;
       continue;
     }
+    if (arg === "--with-pin") {
+      explicit = true;
+      withPin = true;
+      continue;
+    }
+    if (arg === "--unapproved") {
+      explicit = true;
+      approved = false;
+      continue;
+    }
+    if (arg === "--group") {
+      const value = argv[++i];
+      if (value === undefined || value.startsWith("--")) throw new Error(`smoke --group needs a Scratch test number. ${SMOKE_USAGE}`);
+      if (!isScratchTestNumber(value)) throw new Error(`Cleaner Core only texts Scratch test numbers. Refusing ${value}.`);
+      explicit = true;
+      groupPhones.push(value);
+      continue;
+    }
     throw new Error(`Unexpected argument ${arg ?? ""}. ${SMOKE_USAGE}`);
   }
   if (!noPoll && !ops.some((op) => op.type === "poll")) ops.unshift({ type: "poll", ical: SCRATCH_ICAL });
   if (!explicit) {
-    return { ops: defaultOps(undefined), ...(dataDir ? { dataDir } : {}), explicit };
+    return { ops: defaultOps(undefined), ...(dataDir ? { dataDir } : {}), explicit, withPin, approved, groupPhones };
   }
-  return { ops, ...(sawReply ? { replies } : {}), ...(dataDir ? { dataDir } : {}), explicit };
+  return { ops, ...(sawReply ? { replies } : {}), ...(dataDir ? { dataDir } : {}), explicit, withPin, approved, groupPhones };
 }
 
 async function main(): Promise<void> {
@@ -236,8 +263,14 @@ async function main(): Promise<void> {
   }
   if (command === "smoke") {
     const parsed = parseSmokeArgs(process.argv.slice(3));
-    const report = await runSmoke(process.env, parsed.explicit ? [] : undefined, { ops: parsed.ops, ...(parsed.dataDir ? { dataDir: parsed.dataDir } : {}) });
-    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    const report = await runSmoke(process.env, parsed.explicit ? [] : undefined, {
+      ops: parsed.ops,
+      ...(parsed.dataDir ? { dataDir: parsed.dataDir } : {}),
+      ...(parsed.withPin ? { withPin: true } : {}),
+      ...(parsed.approved ? {} : { approved: false }),
+      ...(parsed.groupPhones.length ? { groupPhones: parsed.groupPhones } : {}),
+    });
+    process.stdout.write(`${JSON.stringify(report, null, 2).split(PIN).join("[redacted]")}\n`);
     if (!report.ok) process.exit(2);
     return;
   }

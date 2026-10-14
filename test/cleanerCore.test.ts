@@ -29,7 +29,7 @@ const DECLINED = "Okay, that turnover is not scheduled.";
 const EMERGENCY = "If someone is hurt, call 911 now. I couldn't reach the property team just now.";
 const NOW = "2026-10-14T15:00:00.000Z";
 const DUE = "2026-10-18T12:00:00.000Z";
-const SMOKE_USAGE = "Usage: tsx src/cleaner-core/cli.ts smoke [--data <dir>] [--no-poll] [--feed <file>] [--then-feed <file>] [--now <iso>] [--remind] [--fail-sends <n>] [--reply <from>=<text> ...]";
+const SMOKE_USAGE = "Usage: tsx src/cleaner-core/cli.ts smoke [--data <dir>] [--no-poll] [--feed <file>] [--then-feed <file>] [--now <iso>] [--remind] [--fail-sends <n>] [--with-pin] [--unapproved] [--group <phone>] [--reply <from>=<text> ...]";
 
 const feed = (name: string) => readFileSync(join("src/cleaner-core/fixtures", name), "utf8");
 
@@ -594,6 +594,368 @@ describe("one Scratch turnover", () => {
     expect(doctor.status).toBe(1);
     expect(doctor.stdout).toBe("");
     expect(doctor.stderr).toBe("Unexpected argument --reply. Usage: tsx src/cleaner-core/cli.ts doctor\n");
+  });
+});
+
+const PIN = "4821";
+const OPT_IN = "Hi, this is Scratch's cleaning scheduler for 12 Scratch Lane, Teaneck, NJ 07666. Reply YES to get cleaning texts, or STOP to opt out.";
+const PIN_TEXT = "Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: 4821. This code is only for you.";
+const PIN_REDACTED = "Guests have left 12 Scratch Lane, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you.";
+const PIN_NOTICE = "door code sent to the cleaner";
+const PIN_FAIL = "The door code didn't reach the cleaner. We'll try again in a few minutes.";
+const PIN_HELD = "The cleaner opted out, so the door code wasn't sent. Please reach them directly.";
+const STARTED = "Got it, cleaning started.";
+const DONE_ACK = "Thanks, cleaning marked done.";
+const CORRECTED_2PM = "Update: checkout at 12 Scratch Lane, Teaneck, NJ 07666 moved to Sunday, Oct 18 at 2:00 PM. Reply YES to keep the cleaning, or STOP to opt out.";
+const CONFIRM_2PM = "Cleaning is scheduled for Sunday, Oct 18 at 2:00 PM at 12 Scratch Lane, Teaneck, NJ 07666.";
+const AFTER = "2026-10-18T15:30:00.000Z";
+const UNAPPROVED = "+15555550199";
+
+function pinned(box: ReturnType<typeof sink>, overrides: Partial<Parameters<typeof openCleanerCore>[0]> = {}) {
+  return core(box, { pin: PIN, hostName: "Scratch", ...overrides });
+}
+
+async function confirmAnita(job: ReturnType<typeof pinned>, cleanerYes = true): Promise<void> {
+  await job.pollFeed(feed("guesty-lite-scratch.ics"));
+  if (cleanerYes) await job.receive({ id: "opt-yes", from: CLEANER, text: "YES" });
+  await job.receive({ id: "y-out", from: OWNER, text: "YES" });
+  await job.receive({ id: "y-in", from: OWNER, text: "YES" });
+  await job.receive({ id: "y-offer", from: OWNER, text: "YES" });
+}
+
+describe("step D private door code", () => {
+  it("holds the door code until the host confirms departure, then sends it once", async () => {
+    const box = sink();
+    let now = NOW;
+    const job = pinned(box, { now: () => new Date(now) });
+    await confirmAnita(job);
+    expect(box.sent.map((text) => text.body)).toEqual([CHECKOUT_Q, OPT_IN, CHECKIN_Q, OFFER, CONFIRM]);
+    now = AFTER;
+    expect(job.jobs().map((item) => item.status)).toEqual(["awaiting_departure", "discovered", "discovered"]);
+    const released = await job.receive({ id: "left-1", from: OWNER, text: "guests have left" });
+    expect(released).toEqual({
+      handled: true,
+      reason: "departure",
+      sent: [
+        { to: CLEANER, body: PIN_TEXT, kind: "pin" },
+        { to: OWNER, body: PIN_NOTICE, kind: "pin-notice" },
+      ],
+    });
+    expect(await job.receive({ id: "left-2", from: OWNER, text: "guests have left" })).toEqual({
+      handled: true,
+      reason: "departure",
+      sent: [],
+    });
+    expect(box.sent.filter((text) => text.kind === "pin")).toEqual([{ to: CLEANER, body: PIN_TEXT, kind: "pin" }]);
+    expect(job.jobs()[0]?.status).toBe("cleared");
+  });
+
+  it("sends the door code only to an approved cleaner who opted in", async () => {
+    const quiet = sink();
+    const skipped = pinned(quiet);
+    await confirmAnita(skipped, false);
+    expect(await skipped.receive({ id: "left-skip", from: OWNER, text: "guests have left" })).toEqual({
+      handled: true,
+      reason: "departure",
+      sent: [],
+    });
+    expect(quiet.sent.map((text) => text.body)).toEqual([CHECKOUT_Q, OPT_IN, CHECKIN_Q, OFFER, CONFIRM]);
+
+    const stranger = sink();
+    const strangerJob = pinned(stranger);
+    await strangerJob.pollFeed(feed("guesty-lite-scratch.ics"));
+    expect(await strangerJob.receive({ id: "stranger-yes", from: UNAPPROVED, text: "YES" })).toEqual({
+      handled: true,
+      reason: "ignored",
+      sent: [],
+    });
+    await strangerJob.receive({ id: "s1", from: OWNER, text: "YES" });
+    await strangerJob.receive({ id: "s2", from: OWNER, text: "YES" });
+    await strangerJob.receive({ id: "s3", from: OWNER, text: "YES" });
+    expect(await strangerJob.receive({ id: "left-stranger", from: OWNER, text: "guests have left" })).toEqual({
+      handled: true,
+      reason: "departure",
+      sent: [],
+    });
+    expect(stranger.sent.map((text) => text.to)).toEqual([OWNER, CLEANER, OWNER, OWNER, OWNER]);
+    expect(stranger.sent.map((text) => text.body)).toEqual([CHECKOUT_Q, OPT_IN, CHECKIN_Q, OFFER, CONFIRM]);
+
+    const unapproved = sink();
+    const blocked = pinned(unapproved, { cleaner: { phone: CLEANER, approved: false } });
+    await blocked.pollFeed(feed("guesty-lite-scratch.ics"));
+    await blocked.receive({ id: "no-app", from: CLEANER, text: "YES" });
+    await blocked.receive({ id: "n1", from: OWNER, text: "YES" });
+    await blocked.receive({ id: "n2", from: OWNER, text: "YES" });
+    await blocked.receive({ id: "n3", from: OWNER, text: "YES" });
+    expect(await blocked.receive({ id: "left-unapproved", from: OWNER, text: "guests have left" })).toEqual({
+      handled: true,
+      reason: "departure",
+      sent: [],
+    });
+    expect(unapproved.sent.map((text) => text.body)).toEqual([CHECKOUT_Q, CHECKIN_Q, OFFER, CONFIRM]);
+  });
+
+  it("holds the door code when the host moves checkout later, until the host confirms again", async () => {
+    const box = sink();
+    const job = pinned(box);
+    await confirmAnita(job);
+    expect(await job.receive({ id: "later", from: OWNER, text: "2:00 PM" })).toEqual({
+      handled: true,
+      reason: "host-time",
+      sent: [{ to: OWNER, body: CORRECTED_2PM, kind: "corrected" }],
+    });
+    expect(await job.receive({ id: "left-early", from: OWNER, text: "guests have left" })).toEqual({
+      handled: true,
+      reason: "ignored",
+      sent: [],
+    });
+    expect(await job.receive({ id: "keep", from: OWNER, text: "YES" })).toEqual({
+      handled: true,
+      reason: "scheduled",
+      sent: [{ to: OWNER, body: CONFIRM_2PM, kind: "confirm" }],
+    });
+    expect(await job.receive({ id: "left-again", from: OWNER, text: "guests have left" })).toEqual({
+      handled: true,
+      reason: "departure",
+      sent: [
+        { to: CLEANER, body: PIN_TEXT, kind: "pin" },
+        { to: OWNER, body: PIN_NOTICE, kind: "pin-notice" },
+      ],
+    });
+    expect(box.sent.filter((text) => text.kind === "pin")).toEqual([{ to: CLEANER, body: PIN_TEXT, kind: "pin" }]);
+  });
+
+  it("walks one turn from the offer through a private door code to done", async () => {
+    const box = sink();
+    let now = NOW;
+    const job = pinned(box, { now: () => new Date(now) });
+    await confirmAnita(job);
+    now = DUE;
+    expect(await job.runReminders()).toEqual({ sent: [{ to: OWNER, body: REMINDER, kind: "reminder" }], failed: [] });
+    now = AFTER;
+    expect(job.jobs()[0]?.status).toBe("awaiting_departure");
+    await job.receive({ id: "left-full", from: OWNER, text: "guests have left" });
+    expect(await job.receive({ id: "start-clean", from: CLEANER, text: "START" })).toEqual({
+      handled: true,
+      reason: "start",
+      sent: [{ to: CLEANER, body: STARTED, kind: "started" }],
+    });
+    expect(await job.receive({ id: "done-clean", from: CLEANER, text: "DONE" })).toEqual({
+      handled: true,
+      reason: "done",
+      sent: [{ to: CLEANER, body: DONE_ACK, kind: "done" }],
+    });
+    expect(box.sent.map((text) => ({ to: text.to, body: text.body, kind: text.kind }))).toEqual([
+      { to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" },
+      { to: CLEANER, body: OPT_IN, kind: "opt-in" },
+      { to: OWNER, body: CHECKIN_Q, kind: "host-checkin" },
+      { to: OWNER, body: OFFER, kind: "offer" },
+      { to: OWNER, body: CONFIRM, kind: "confirm" },
+      { to: OWNER, body: REMINDER, kind: "reminder" },
+      { to: CLEANER, body: PIN_TEXT, kind: "pin" },
+      { to: OWNER, body: PIN_NOTICE, kind: "pin-notice" },
+      { to: CLEANER, body: STARTED, kind: "started" },
+      { to: CLEANER, body: DONE_ACK, kind: "done" },
+    ]);
+    expect(job.jobs().map((item) => item.status)).toEqual(["done", "discovered", "discovered"]);
+    expect(job.transcript()).toEqual([
+      CHECKOUT_Q,
+      OPT_IN,
+      said(CLEANER, "YES"),
+      said(OWNER, "YES"),
+      CHECKIN_Q,
+      said(OWNER, "YES"),
+      OFFER,
+      said(OWNER, "YES"),
+      CONFIRM,
+      REMINDER,
+      said(OWNER, "guests have left"),
+      PIN_REDACTED,
+      PIN_NOTICE,
+      said(CLEANER, "START"),
+      STARTED,
+      said(CLEANER, "DONE"),
+      DONE_ACK,
+    ]);
+  });
+
+  it("stores the door code encrypted and keeps plaintext out of the record", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cleaner-core-pin-"));
+    const box = sink();
+    try {
+      const job = pinned(box, { dataDir: dir });
+      await confirmAnita(job);
+      await job.receive({ id: "left-store", from: OWNER, text: "guests have left" });
+      const stored = readFileSync(join(dir, "cleaner-core.json"), "utf8");
+      expect(stored.includes(PIN)).toBe(false);
+      expect(box.sent.find((text) => text.kind === "pin")).toEqual({ to: CLEANER, body: PIN_TEXT, kind: "pin" });
+      expect(job.transcript().join("\n").includes(PIN)).toBe(false);
+      expect(job.outbox().map((item) => item.body).join("\n").includes(PIN)).toBe(false);
+      expect(job.transcript()).toContain(PIN_REDACTED);
+      expect(job.outbox().find((item) => item.kind === "pin")).toEqual({
+        id: "pin:stay-anita@guesty.com:2026-10-18:660:1",
+        to: CLEANER,
+        body: PIN_REDACTED,
+        kind: "pin",
+        status: "sent",
+        jobId: "stay-anita@guesty.com",
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("tells the host when STOP holds the door code, and START does not send it", async () => {
+    const box = sink();
+    const job = pinned(box);
+    await confirmAnita(job);
+    expect(await job.receive({ id: "cleaner-stop", from: CLEANER, text: "STOP" })).toEqual({
+      handled: true,
+      reason: "stop",
+      sent: [{ to: CLEANER, body: STOP_ACK, kind: "stop" }],
+    });
+    expect(await job.receive({ id: "left-stopped", from: OWNER, text: "guests have left" })).toEqual({
+      handled: true,
+      reason: "departure",
+      sent: [{ to: OWNER, body: PIN_HELD, kind: "pin-held" }],
+    });
+    expect(await job.receive({ id: "cleaner-start", from: CLEANER, text: "START" })).toEqual({
+      handled: true,
+      reason: "start",
+      sent: [{ to: CLEANER, body: START_ACK, kind: "start" }],
+    });
+    expect(box.sent.filter((text) => text.kind === "pin")).toEqual([]);
+    expect(box.sent.map((text) => text.body)).toContain(PIN_HELD);
+    expect(job.transcript()).toContain(PIN_HELD);
+  });
+
+  it("answers HELP and an injury while waiting, after the door code, and in progress", async () => {
+    const phases = ["waiting", "cleared", "progress"] as const;
+    for (const phase of phases) {
+      const box = sink();
+      let now = NOW;
+      const job = pinned(box, { now: () => new Date(now) });
+      await confirmAnita(job);
+      now = AFTER;
+      if (phase !== "waiting") await job.receive({ id: `${phase}-left`, from: OWNER, text: "guests have left" });
+      if (phase === "progress") await job.receive({ id: `${phase}-start`, from: CLEANER, text: "START" });
+      const before = box.sent.length;
+      expect(await job.receive({ id: `${phase}-help`, from: CLEANER, text: "HELP" })).toEqual({
+        handled: true,
+        reason: "help",
+        sent: [{ to: CLEANER, body: HELP_ACK, kind: "help" }],
+      });
+      expect(await job.receive({ id: `${phase}-hurt`, from: OWNER, text: "I fell and I'm hurt" })).toEqual({
+        handled: true,
+        reason: "emergency",
+        sent: [{ to: OWNER, body: EMERGENCY, kind: "emergency" }],
+      });
+      expect(box.sent.slice(before)).toEqual([
+        { to: CLEANER, body: HELP_ACK, kind: "help" },
+        { to: OWNER, body: EMERGENCY, kind: "emergency" },
+      ]);
+      const pinTexts = box.sent.filter((text) => text.kind === "pin");
+      expect(pinTexts).toEqual(phase === "waiting" ? [] : [{ to: CLEANER, body: PIN_TEXT, kind: "pin" }]);
+      expect(job.jobs()[0]?.status).toBe(phase === "waiting" ? "awaiting_departure" : phase === "cleared" ? "cleared" : "in_progress");
+    }
+  });
+
+  it("does not call a failed door-code send delivered, then retries it once", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cleaner-core-pin-fail-"));
+    try {
+      let fail = true;
+      const firstBox = sink();
+      let now = NOW;
+      const first = pinned(firstBox, {
+        dataDir: dir,
+        now: () => new Date(now),
+        sink: {
+          send(text: CleanerText) {
+            if (fail && text.kind === "pin") {
+              fail = false;
+              throw new Error("send failed");
+            }
+            firstBox.sent.push(text);
+          },
+        },
+      });
+      await confirmAnita(first);
+      now = AFTER;
+      expect(await first.receive({ id: "left-fail", from: OWNER, text: "guests have left" })).toEqual({
+        handled: true,
+        reason: "departure",
+        sent: [{ to: OWNER, body: PIN_FAIL, kind: "pin-failed" }],
+      });
+      expect(first.jobs()[0]?.status).toBe("awaiting_departure");
+      expect(first.outbox().find((item) => item.kind === "pin")).toEqual({
+        id: "pin:stay-anita@guesty.com:2026-10-18:660:1",
+        to: CLEANER,
+        body: PIN_REDACTED,
+        kind: "pin",
+        status: "failed",
+        jobId: "stay-anita@guesty.com",
+      });
+      expect(first.transcript()).toContain(PIN_FAIL);
+      expect(first.transcript().join("\n").includes(PIN)).toBe(false);
+
+      const secondBox = sink();
+      const second = pinned(secondBox, { dataDir: dir });
+      expect(await second.runReminders()).toEqual({
+        sent: [
+          { to: CLEANER, body: PIN_TEXT, kind: "pin" },
+          { to: OWNER, body: PIN_NOTICE, kind: "pin-notice" },
+        ],
+        failed: [],
+      });
+      expect(second.jobs()[0]?.status).toBe("cleared");
+      expect(secondBox.sent.filter((text) => text.kind === "pin")).toEqual([{ to: CLEANER, body: PIN_TEXT, kind: "pin" }]);
+
+      const third = pinned(sink(), { dataDir: dir });
+      expect(await third.runReminders()).toEqual({ sent: [], failed: [] });
+      expect(third.outbox().find((item) => item.kind === "pin")).toEqual({
+        id: "pin:stay-anita@guesty.com:2026-10-18:660:1",
+        to: CLEANER,
+        body: PIN_REDACTED,
+        kind: "pin",
+        status: "sent",
+        jobId: "stay-anita@guesty.com",
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the door code off the group and off Cory's copy", async () => {
+    const box = sink();
+    const job = pinned(box, { groupPhones: [UNAPPROVED] });
+    await confirmAnita(job);
+    await job.receive({ id: "left-group", from: OWNER, text: "guests have left" });
+    expect(box.sent.filter((text) => text.to === UNAPPROVED)).toEqual([]);
+    expect(box.sent.filter((text) => text.kind === "pin")).toEqual([{ to: CLEANER, body: PIN_TEXT, kind: "pin" }]);
+    expect(box.sent.filter((text) => text.kind === "pin-notice")).toEqual([{ to: OWNER, body: PIN_NOTICE, kind: "pin-notice" }]);
+    expect(box.sent.filter((text) => text.kind !== "pin").map((text) => text.body).join("\n").includes(PIN)).toBe(false);
+  });
+
+  it("prints the private door code redacted and leaves it out of the smoke log", () => {
+    const drive = cleanerCli([
+      "smoke",
+      "--with-pin",
+      "--feed", "src/cleaner-core/fixtures/guesty-lite-scratch.ics",
+      "--reply", `${CLEANER}=YES`,
+      "--reply", `${OWNER}=YES`,
+      "--reply", `${OWNER}=YES`,
+      "--reply", `${OWNER}=YES`,
+      "--reply", `${OWNER}=guests have left`,
+    ], "1");
+    expect(drive.status).toBe(0);
+    expect(drive.stderr).toBe("");
+    expect(drive.stdout.includes(PIN)).toBe(false);
+    const report = JSON.parse(drive.stdout) as { pinRecipients: string[]; sent: CleanerText[]; transcript: string[]; jobs: { status: string }[] };
+    expect(report.pinRecipients).toEqual([CLEANER]);
+    expect(report.sent.find((text) => text.kind === "pin")).toEqual({ to: CLEANER, body: PIN_REDACTED, kind: "pin" });
+    expect(report.sent.find((text) => text.kind === "pin-notice")).toEqual({ to: OWNER, body: PIN_NOTICE, kind: "pin-notice" });
+    expect(report.transcript).toContain(PIN_REDACTED);
+    expect(report.jobs[0]?.status).toBe("cleared");
   });
 });
 
