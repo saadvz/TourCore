@@ -16,7 +16,9 @@ import { handleSendblueWebhook } from "../messaging/sendblue/webhook";
 import { LOCAL_WEBHOOK_PATH } from "../messaging/local/provider";
 import { resetLocalSmsOutbox } from "../messaging/local/outbox";
 import { PHOTON_WEBHOOK_PATH } from "../messaging/photon/provider";
-import { TWILIO_WEBHOOK_PATH } from "../messaging/twilio/provider";
+import { readTwilioEnv, TWILIO_WEBHOOK_PATH } from "../messaging/twilio/provider";
+import { cleanerCoreEnabled } from "../cleaner-core/flag";
+import { CLEANER_MCP_PATH, CLEANER_TWILIO_PATH, handleCleanerMcpHttp, handleCleanerTwilioWebhook, textAddressedTo } from "../cleaner-core/http";
 import { publicBaseUrl } from "../messaging/publicUrl";
 import { createIntentInterpreter, intentModelFromEnv, type IntentInterpreter } from "../intent";
 import { mcpAuthModeFromEnv, type McpAuthMode } from "../mcp/authMode";
@@ -146,14 +148,14 @@ export const operatorTokenFromEnv = () => process.env.TOURCORE_OPERATOR_TOKEN?.t
  * page where the owner approves a connection.
  */
 function publicRouteAllowed(method: string, path: string, oauth: boolean, hosted: boolean): boolean {
-  if (path === MCP_PATH || path === MCP_OPS_PATH || path === MCP_QA_PATH) return true;
+  if (path === MCP_PATH || path === MCP_OPS_PATH || path === MCP_QA_PATH || path === CLEANER_MCP_PATH) return true;
   if (method === "GET" && path === HEALTH_PATH) return true;
   if (method === "GET" && path === "/google/oauth/callback") return true;
   if (/^\/portable\/(?:artifacts|uploads)\/art_[A-Za-z0-9_-]{20,80}$/.test(path)) {
     return (method === "GET" && path.startsWith("/portable/artifacts/")) || (method === "POST" && path.startsWith("/portable/uploads/"));
   }
   if (oauth && (isOAuthPublicPath(path, MCP_PATH) || (method === "GET" && path === "/oauth.js"))) return true;
-  if (method === "POST" && (path === SENDBLUE_WEBHOOK_PATH || path === TWILIO_WEBHOOK_PATH || path === PHOTON_WEBHOOK_PATH || path === LOCAL_WEBHOOK_PATH)) return true;
+  if (method === "POST" && (path === SENDBLUE_WEBHOOK_PATH || path === TWILIO_WEBHOOK_PATH || path === CLEANER_TWILIO_PATH || path === PHOTON_WEBHOOK_PATH || path === LOCAL_WEBHOOK_PATH)) return true;
   if (method === "GET" && isPublicCompliancePath(path)) return true;
   if (method === "GET" && (/^\/verify\/[A-Za-z0-9_-]+$/.test(path) || path === "/verify.js" || path === "/styles.css")) return true;
   if (hosted && method === "GET" && (path === "/connect" || path === "/connect.js" || path === "/install" || path === "/install.js" || path === "/styles.css")) return true;
@@ -651,11 +653,69 @@ export function createSetupServer(options: SetupServerOptions = {}): TourCoreSer
         }
         return send(reply.status, json, JSON.stringify(reply.body), sessionHeaders);
       }
+      if (url.pathname === CLEANER_MCP_PATH) {
+        const result = await handleCleanerMcpHttp({
+          method,
+          authorization: req.headers.authorization,
+          contentType: String(req.headers["content-type"] ?? ""),
+          readBody: () => readRaw(req),
+          env: installation.env(),
+          root: installation.root,
+          now: () => options.now?.() ?? new Date(),
+        });
+        return send(result.status, "application/json; charset=utf-8", result.body, result.headers);
+      }
+      if (method === "POST" && url.pathname === CLEANER_TWILIO_PATH) {
+        const rawBody = await readRaw(req);
+        const env = installation.env();
+        const signedUrl = installation.publicBaseUrl() ? `${installation.publicBaseUrl()}${url.pathname}${url.search}` : undefined;
+        const tourNumber = readTwilioEnv(env).fromNumber;
+        const cleanerNumber = env.CLEANER_CORE_TWILIO_PHONE_NUMBER;
+        // A text sent to the touring number is handled by Tour Core, even on this path.
+        if (textAddressedTo(rawBody, tourNumber) && !textAddressedTo(rawBody, cleanerNumber)) {
+          const selection = selectionFromInstallation(installation);
+          const provider = createMessagingProvider("twilio", { env: () => installation.env(), sendblue: () => installation.sendblueEnv(), ledger, now: options.now });
+          const result = await handleProviderWebhook(provider, { rawBody, headers: req.headers, url: signedUrl }, {
+            ledger,
+            receive: (m) => conversations.receive(m),
+            now: options.now,
+            log,
+            active: selection.provider === "twilio",
+          });
+          return send(result.status, "application/json; charset=utf-8", JSON.stringify(result.body));
+        }
+        const result = await handleCleanerTwilioWebhook({
+          rawBody,
+          headers: req.headers,
+          url: signedUrl,
+          env,
+          root: installation.root,
+          now: () => options.now?.() ?? new Date(),
+        });
+        return send(result.status, "application/json; charset=utf-8", result.body);
+      }
       if (method === "POST" && (url.pathname === SENDBLUE_WEBHOOK_PATH || url.pathname === TWILIO_WEBHOOK_PATH || url.pathname === PHOTON_WEBHOOK_PATH || url.pathname === LOCAL_WEBHOOK_PATH)) {
         const rawBody = await readRaw(req);
         const providerId = url.pathname === TWILIO_WEBHOOK_PATH ? "twilio" : url.pathname === PHOTON_WEBHOOK_PATH ? "photon" : url.pathname === LOCAL_WEBHOOK_PATH ? "local" : "sendblue";
         const selection = selectionFromInstallation(installation);
         const signedUrl = installation.publicBaseUrl() ? `${installation.publicBaseUrl()}${url.pathname}${url.search}` : undefined;
+        if (providerId === "twilio") {
+          const env = installation.env();
+          const tourNumber = readTwilioEnv(env).fromNumber;
+          const cleanerNumber = env.CLEANER_CORE_TWILIO_PHONE_NUMBER;
+          // A text sent to the cleaning number is handled by Cleaner Core, even on this path.
+          if (cleanerCoreEnabled(env) && textAddressedTo(rawBody, cleanerNumber) && !textAddressedTo(rawBody, tourNumber)) {
+            const result = await handleCleanerTwilioWebhook({
+              rawBody,
+              headers: req.headers,
+              url: signedUrl,
+              env,
+              root: installation.root,
+              now: () => options.now?.() ?? new Date(),
+            });
+            return send(result.status, "application/json; charset=utf-8", result.body);
+          }
+        }
         const provider = createMessagingProvider(providerId, { env: () => installation.env(), sendblue: () => installation.sendblueEnv(), ledger, now: options.now });
         if (providerId === "sendblue") {
           if (selection.provider && selection.provider !== "sendblue") {
