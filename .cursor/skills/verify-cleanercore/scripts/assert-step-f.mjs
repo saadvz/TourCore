@@ -246,6 +246,29 @@ if (journey === "notion-permission-denied") {
   if (first.sent.some((text) => text.kind === "emergency" && text.channel)) fail("the injury reply was a group or mirror text");
   if (first.sent.filter((text) => text.kind === "emergency").length !== 2) fail("the injury reply was repeated or the host was not alerted");
   if (journey === "observer-injury-group") same(first.messaging?.actual, "native");
+} else if (journey === "injury-wording") {
+  const told = { to: null, kind: "emergency", body: CLEANER_HURT };
+  const pair = (alert, phone) => [
+    { to: OWNER, kind: "emergency", body: alert },
+    { ...told, to: phone },
+  ];
+  for (const report of reports) {
+    const grouped = report.messaging?.actual === "native";
+    const head = grouped
+      ? [
+          { to: OWNER, kind: "host-checkout", body: LANE_Q },
+          { to: CLEANER, kind: "opt-in", body: OPT_IN },
+          { to: OBSERVER, kind: "opt-in", body: OPT_IN },
+        ]
+      : [{ to: OWNER, kind: "host-checkout", body: LANE_Q }];
+    same(report.sent.map((text) => ({ to: text.to, kind: text.kind, body: text.body })), [
+      ...head,
+      ...pair(HOST_HURT, CLEANER),
+      ...pair(OBSERVER_HURT, OBSERVER),
+    ]);
+    if (report.sent.some((text) => text.kind === "emergency" && text.channel)) fail("the injury reply was a group or mirror text");
+    if (report.sent.filter((text) => text.kind === "emergency").length !== 4) fail("an injury wording did not alert the host and reply once to each sender");
+  }
 } else if (journey === "owner-injury") {
   same(first.sent.map((text) => ({ to: text.to, kind: text.kind, body: text.body })), [
     { to: OWNER, kind: "host-checkout", body: LANE_Q },

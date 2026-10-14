@@ -1,13 +1,14 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { isMedicalEmergency, isPlainLanguageStop, keywordOf } from "../intent";
+import { isPlainLanguageStop, keywordOf } from "../intent";
 import { normalize, stripFiller } from "../intent/normalize";
 import { spokenTimes } from "../core/spokenTime";
 import { parsePhone } from "../core/phone";
 import { smsStopAck } from "../visitor/smsConsent";
 import { writeFileAtomic } from "../storage/atomicWrite";
 import { addCalendarDays, formatWhen, interpretFeed, zonedInstant, type FeedBlock, type Turnover } from "./calendar";
+import { isInjuryReport } from "./injury";
 import { isScratchTestNumber } from "./scratch";
 import { applyOnboardingAnswer, beginOnboarding, type OnboardingPreview, type OnboardingSession } from "./onboarding";
 import {
@@ -495,7 +496,7 @@ class Engine implements CleanerCore {
 
     const keyword = keywordOf(input.text);
     if (keyword === "help") return this.safety(input.id, () => this.reply(from, HELP_ACK, "help", "help", input.id));
-    if (isMedicalEmergency(input.text)) return this.safety(input.id, () => this.emergency(from, input.id));
+    if (isInjuryReport(input.text)) return this.safety(input.id, () => this.emergency(from, input.id));
     if (keyword === "stop" || isPlainLanguageStop(input.text)) return this.safety(input.id, () => this.stop(from, input.id));
     if (keyword === "start") return this.safety(input.id, () => this.start(from, input.id));
     if (this.pin && from === this.cleanerPhone && isYes(input.text) && this.awaitingOptIn()) return this.optInCleaner(input.id);

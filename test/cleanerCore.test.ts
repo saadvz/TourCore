@@ -2057,6 +2057,73 @@ describe("step F Notion, onboarding, and group delivery", () => {
       { to: OBSERVER, body: MISSED, kind: "emergency", status: "sent" },
     ]);
   });
+
+  it("treats hurt, injury, blood, and fall wordings as an injury from the cleaner and the observer", async () => {
+    const told = "If someone is hurt, call 911 now. I've let the host know.";
+    const phrases = [
+      "she's hurt",
+      "Cleaner fell down the stairs, she's hurt",
+      "there's blood everywhere",
+      "someone got hurt",
+      "I'm injured",
+      "she fell and can't get up",
+      "I fell and I'm hurt",
+    ];
+    const senders = [
+      {
+        name: "cleaner",
+        phone: CLEANER,
+        alert: `The cleaner at ${ADDRESS} says someone is hurt. They've been told to call 911.`,
+      },
+      {
+        name: "observer",
+        phone: OBSERVER,
+        alert: `An observer at ${ADDRESS} says someone is hurt. They've been told to call 911.`,
+      },
+    ] as const;
+    let n = 0;
+    for (const phrase of phrases) {
+      for (const sender of senders) {
+        for (const grouped of [false, true]) {
+          const mode = grouped ? "group" : "one-to-one";
+          const box = sink();
+          const job = pinned(box, {
+            tenantId: "scratch-lane",
+            messaging: {
+              requested: grouped ? "group" : "cleaner-only",
+              capable: grouped,
+              participants: [{ phone: OBSERVER, role: "observer" }],
+            },
+          });
+          await job.pollFeed(feed("guesty-lite-scratch.ics"));
+          if (grouped) {
+            await job.receive({ id: `word-opt-c-${n}`, from: CLEANER, text: "YES" });
+            await job.receive({ id: `word-opt-o-${n}`, from: OBSERVER, text: "YES" });
+          }
+          const first = await job.receive({ id: `word-${n}`, from: sender.phone, text: phrase });
+          const again = await job.receive({ id: `word-${n}-again`, from: sender.phone, text: phrase });
+          n += 1;
+          expect(first, `${sender.name} ${mode}: ${phrase}`).toEqual({
+            handled: true,
+            reason: "emergency",
+            sent: [
+              { to: OWNER, body: sender.alert, kind: "emergency" },
+              { to: sender.phone, body: told, kind: "emergency" },
+            ],
+          });
+          expect(again, `${sender.name} ${mode} repeat: ${phrase}`).toEqual({
+            handled: true,
+            reason: "emergency",
+            sent: [],
+          });
+          expect(box.sent.filter((text) => text.kind === "emergency"), `${sender.name} ${mode} outbox: ${phrase}`).toEqual([
+            { to: OWNER, body: sender.alert, kind: "emergency" },
+            { to: sender.phone, body: told, kind: "emergency" },
+          ]);
+        }
+      }
+    }
+  });
 });
 
 function cleanerCli(args: string[], flag: "1" | undefined): { status: number | null; stdout: string; stderr: string } {

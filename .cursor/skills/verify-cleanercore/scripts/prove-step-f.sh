@@ -257,12 +257,58 @@ run_smoke "$EVIDENCE/owner-injury" smoke smoke --notion "$LANE_READ" \
   --reply "$OWNER=$HURT" --reply "$OWNER=$HURT"
 assert_journey owner-injury "$EVIDENCE/owner-injury/smoke.stdout.txt"
 
+doctor "$EVIDENCE/injury-wording"
+WORD_REPORTS=()
+word_i=0
+while IFS= read -r phrase; do
+  for mode in solo group; do
+    name="phrase-${word_i}-${mode}"
+    if [[ "$mode" == "group" ]]; then
+      run_smoke "$EVIDENCE/injury-wording" "$name" smoke \
+        --with-pin --group-mode native --group-capable --participant "observer=$OBSERVER" \
+        --notion "$LANE_READ" \
+        --reply "$CLEANER=YES" --reply "$OBSERVER=YES" \
+        --reply "$CLEANER=$phrase" --reply "$OBSERVER=$phrase"
+    else
+      run_smoke "$EVIDENCE/injury-wording" "$name" smoke \
+        --group-mode cleaner-only --participant "observer=$OBSERVER" \
+        --notion "$LANE_READ" \
+        --reply "$CLEANER=$phrase" --reply "$OBSERVER=$phrase"
+    fi
+    WORD_REPORTS+=("$EVIDENCE/injury-wording/${name}.stdout.txt")
+  done
+  word_i=$((word_i + 1))
+done <<'PHRASES'
+she's hurt
+Cleaner fell down the stairs, she's hurt
+there's blood everywhere
+someone got hurt
+I'm injured
+she fell and can't get up
+I fell and I'm hurt
+PHRASES
+assert_journey injury-wording "${WORD_REPORTS[@]}"
+run_smoke "$EVIDENCE/injury-wording" everyday smoke \
+  --group-mode cleaner-only --participant "observer=$OBSERVER" \
+  --notion "$LANE_READ" \
+  --reply "$CLEANER=that hurt my schedule lol, running late"
+node -e '
+  const fs = require("node:fs");
+  const report = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const emergencies = (report.sent ?? []).filter((text) => text.kind === "emergency");
+  const lines = emergencies.map((text) => text.to + ": " + text.body);
+  const note = lines.length > 0
+    ? "everyday from +15555550101, one-to-one: \"that hurt my schedule lol, running late\" was treated as an injury.\n" + lines.join("\n")
+    : "everyday from +15555550101, one-to-one: \"that hurt my schedule lol, running late\" was not treated as an injury.";
+  fs.appendFileSync(process.argv[2], note + "\n");
+' "$EVIDENCE/injury-wording/everyday.stdout.txt" "$EVIDENCE/injury-wording/result.txt"
+
 if grep -R -n -E '4821|7392|2468' "$EVIDENCE" >/dev/null; then
   fail "step F evidence contains a scratch door code"
 fi
 
 cat >"$EVIDENCE/result.txt" <<EOF
-features: notion-permission-denied notion-source-read notion-sync-repeat notion-removed notion-cleaner-routing group-no-optin multi-source-dedupe onboarding-full onboarding-no-optin group-native-consented group-mirrored-fallback group-unconsented-participant pin-private-only tenant-isolation stop-help-injury observer-injury-group observer-injury-solo owner-injury
+features: notion-permission-denied notion-source-read notion-sync-repeat notion-removed notion-cleaner-routing group-no-optin multi-source-dedupe onboarding-full onboarding-no-optin group-native-consented group-mirrored-fallback group-unconsented-participant pin-private-only tenant-isolation stop-help-injury observer-injury-group observer-injury-solo owner-injury injury-wording
 script: .cursor/skills/verify-cleanercore/scripts/prove-step-f.sh
 pins: redacted
 EOF

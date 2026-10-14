@@ -92,3 +92,4 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [Observer injury inside a group](./observer-injury-group.md) covers the 911 reply and the host alert from an opted-in observer. `prove-step-f.sh`.
 - [Observer injury outside a group](./observer-injury-solo.md) covers the same injury path when texts are one-to-one. `prove-step-f.sh`.
 - [Owner injury](./owner-injury.md) covers the 911 line to the host, with no alert back to that host. `prove-step-f.sh`.
+- [Injury wordings](./injury-wording.md) covers hurt, injury, blood, and fall phrases from the cleaner and the observer, in a group and one-to-one. `prove-step-f.sh`.
