@@ -30,8 +30,12 @@ const FileSchema = z.object({
   senders: z.record(z.string(), SmsCampaignConsentSchema),
 });
 
-export function smsStopAck(env: NodeJS.ProcessEnv = process.env): string {
-  return `${publicBrandName(env)}: You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.`;
+/**
+ * Carrier STOP confirmation. Tour Core and Cleaner Core send this same
+ * sentence, so it has no product-brand prefix.
+ */
+export function smsStopAck(): string {
+  return "You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.";
 }
 export const SMS_GATE_REMINDER = "Reply YES to continue, HELP for help, or STOP to opt out.";
 export const SMS_KEYWORD_PROMPT = "Text TOUR to ask questions or schedule a self-guided tour. Reply HELP for help or STOP to opt out.";

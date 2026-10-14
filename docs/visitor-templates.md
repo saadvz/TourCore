@@ -1075,8 +1075,10 @@ Text TOUR to ask questions or schedule a self-guided tour. Reply HELP for help o
 
 ### sms-stop
 
+Shared with Cleaner Core. No product-brand prefix.
+
 ```
-{brand}: You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.
+You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.
 ```
 
 ### sms-help

@@ -254,7 +254,7 @@ const TEMPLATES: VisitorTemplate[] = [
   { id: "sms-opt-in", text: "{brand}: You're opted in. I can answer questions about the property and help you schedule and complete a self-guided tour.\nI'll keep a record of your visit times and the doors you use.\n\nReply STOP at any time to opt out." },
   { id: "sms-gate", text: "Reply YES to continue, HELP for help, or STOP to opt out." },
   { id: "sms-keyword", text: "Text TOUR to ask questions or schedule a self-guided tour. Reply HELP for help or STOP to opt out." },
-  { id: "sms-stop", text: "{brand}: You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help." },
+  { id: "sms-stop", text: "You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.", note: "Shared with Cleaner Core. No product-brand prefix." },
   { id: "sms-help", text: "{brand}: {help} Message and data rates may apply. Reply STOP to opt out." },
 
   { id: "property-not-ready", text: "Thanks for reaching out to {name}. Tours by text aren't available right now. Please check back soon.", note: "Sent when tours cannot run and no visitor help number is saved, including a new visitor text to a property that is not published for demo (a draft, or a demo sent back to draft). A tour that was already booked on that property keeps going." },
