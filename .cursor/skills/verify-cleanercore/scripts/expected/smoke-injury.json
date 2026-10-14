@@ -14,8 +14,13 @@
       "kind": "emergency"
     },
     {
+      "to": "+15555550100",
+      "body": "The cleaner at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.",
+      "kind": "emergency"
+    },
+    {
       "to": "+15555550101",
-      "body": "If someone is hurt, call 911 now. I couldn't reach the property team just now.",
+      "body": "If someone is hurt, call 911 now. I've let the host know.",
       "kind": "emergency"
     }
   ],
@@ -77,11 +82,20 @@
       "status": "sent"
     },
     {
+      "id": "emergency-host:+15555550101|stay-a|1",
+      "to": "+15555550100",
+      "body": "The cleaner at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.",
+      "kind": "emergency",
+      "status": "sent",
+      "jobId": "stay-a"
+    },
+    {
       "id": "emergency:smoke-op-3",
       "to": "+15555550101",
-      "body": "If someone is hurt, call 911 now. I couldn't reach the property team just now.",
+      "body": "If someone is hurt, call 911 now. I've let the host know.",
       "kind": "emergency",
-      "status": "sent"
+      "status": "sent",
+      "jobId": "stay-a"
     }
   ],
   "transcript": [
@@ -90,7 +104,8 @@
     "If someone is hurt, call 911 now. I couldn't reach the property team just now.",
     "+15555550100: I fell and I'm hurt",
     "+15555550101: I fell and I'm hurt",
-    "If someone is hurt, call 911 now. I couldn't reach the property team just now.",
+    "The cleaner at 12 Scratch Lane, Teaneck, NJ 07666 says someone is hurt. They've been told to call 911.",
+    "If someone is hurt, call 911 now. I've let the host know.",
     "+15555550101: I fell and I'm hurt"
   ],
   "blocks": []

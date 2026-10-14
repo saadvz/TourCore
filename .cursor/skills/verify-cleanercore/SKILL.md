@@ -1,15 +1,15 @@
 ---
 name: verify-cleanercore
-description: "Drive Cleaner Core (src/cleaner-core) through its doctor and smoke CLI to prove Scratch Lane host times, feed changes, reminders, and safety replies. Use when changing CLEANER_CORE_ENABLED, turnover texts, STOP/HELP/injury handling, or step C reconciliation. Sends nothing to a real phone. Step C does not text a door code."
+description: "Drive Cleaner Core (src/cleaner-core) through its doctor and smoke CLI to prove Scratch Lane host times, feed changes, reminders, safety replies, and the step D private door code. Use when changing CLEANER_CORE_ENABLED, turnover texts, the door code, STOP/HELP/injury handling, or step C reconciliation. Sends nothing to a real phone. A smoke run without --with-pin does not text a door code."
 ---
 
 # Verify Cleaner Core
 
-Cleaner Core texts one Scratch Lane turnover after the owner confirms the checkout time and the check-in time. The surface an agent can drive is the doctor/smoke CLI (`npm run cleaner:doctor`, `npm run cleaner:smoke`). There is no web UI and no listening port. The flag `CLEANER_CORE_ENABLED` is off unless it is `1` or `true`.
+Cleaner Core texts one Scratch Lane turnover after the owner confirms the checkout time and the check-in time. With `--with-pin`, the opted-in cleaner receives the offer, the confirmation, and the reminder, and that cleaner's YES confirms the job. The surface an agent can drive is the doctor/smoke CLI (`npm run cleaner:doctor`, `npm run cleaner:smoke`). There is no web UI and no listening port. The flag `CLEANER_CORE_ENABLED` is off unless it is `1` or `true`.
 
 Drive only Scratch test numbers. The smoke path hard-codes `+15555550100` (owner) and `+15555550101` (approved cleaner) at 12 Scratch Lane. `+15555550199` may send a reply and must not receive a text. If a report texts any other phone, stop. Do not run `sendblue:*`, do not point the CLI at a live provider, and do not substitute a real person's number.
 
-Step C never texts a door code and never marks a job ready from calendar time. A new evidence directory that contains the scratch door code fails the proof.
+A smoke run without `--with-pin` is step C. It never texts a door code and never marks a job ready from calendar time. `--with-pin` is step D: the private text goes to the approved cleaner only after the host says the guests have left, and the saved evidence replaces the scratch digits with `[redacted]`. A new evidence directory that contains those digits fails the proof. No job status is `ready`.
 
 ## Launch
 
@@ -54,7 +54,7 @@ If doctor exits non-zero, or `sends` is not false, do not run smoke. The process
 
 ## Drive
 
-The harness is `npm run cleaner:doctor` and `npm run cleaner:smoke`. Pass replies and step C operations after `--`:
+The harness is `npm run cleaner:doctor` and `npm run cleaner:smoke`. Pass replies, step C operations, and step D flags after `--`:
 
 ```
 CLEANER_CORE_ENABLED=1 npm run --silent cleaner:doctor
@@ -67,7 +67,9 @@ env -u CLEANER_CORE_ENABLED npm run --silent cleaner:doctor
 env -u CLEANER_CORE_ENABLED npm run --silent cleaner:smoke -- --reply +15555550100=YES
 ```
 
-`--reply <from>=<text>` is repeatable. `from` is a Scratch test number. The text is everything after the first `=`. When any explicit operation is present (`--reply`, `--feed`, `--then-feed`, `--now`, `--remind`, `--fail-sends`, `--data`, `--no-poll`), smoke does not inject YES. With no operation, smoke polls the built-in same-day iCal and injects three YES replies from `+15555550100`: checkout, check-in, then the offer. That stdout must match `scripts/expected/smoke-turnover.json`. Exit code 0. `pinRecipients` is `[]`. No body contains a door code.
+`--reply <from>=<text>` is repeatable. `from` is a Scratch test number. The text is everything after the first `=`. When any explicit operation is present (`--reply`, `--feed`, `--then-feed`, `--now`, `--remind`, `--fail-sends`, `--data`, `--no-poll`, `--with-pin`, `--unapproved`, `--group`), smoke does not inject YES. With no operation, smoke polls the built-in same-day iCal and injects three YES replies from `+15555550100`: checkout, check-in, then the offer. That stdout must match `scripts/expected/smoke-turnover.json`. Exit code 0. `pinRecipients` is `[]`. No body contains a door code.
+
+`--with-pin` opts the approved cleaner in and can send the private door code after the host says the guests have left. Smoke stdout, the transcript, and the outbox print that code as `[redacted]`. `--unapproved` leaves the cleaner unapproved, so no opt-in and no door code go out. `--group` takes one Scratch test number and that number must not receive the door code. The host notice is `Door code sent to the cleaner.`
 
 Smoke with the flag unset exits 2 and prints `sent: []`, including when `--reply` is a Scratch YES. See the feature files for the literal documents.
 
@@ -81,13 +83,21 @@ The ten step C blockers are one script. It reads fixtures under `src/cleaner-cor
 .cursor/skills/verify-cleanercore/scripts/prove-step-c.sh
 ```
 
+The step D blockers are one script. It overwrites the fixed directory `evidence/step-d/` and does not add a timestamp:
+
+```
+.cursor/skills/verify-cleanercore/scripts/prove-step-d.sh
+```
+
 ## Evidence
 
-Write one directory per run:
+Write one directory per turnover, safety, or step C run:
 
 `.cursor/skills/verify-cleanercore/evidence/<UTC timestamp>/`
 
-Keep the command, stdout, stderr, and exit code for doctor and for the drive. Name the feature id in `result.txt`. Assert the literal JSON files under `scripts/expected/` for the default turnover and the safety journeys. Step C journeys also save `transcript`, `jobs`, and `outbox` extracted from that stdout. The transcript lists each outbound body and each inbound Scratch reply, as `+15555550100: YES`. Assert every `+1` number in smoke stdout is a Scratch test number and every recipient is `+15555550100` or `+15555550101`. Every new drive requires `pinRecipients` empty and the scratch door code absent from the saved stdout. `prove-step-c.sh` also greps the new evidence tree and fails if that code appears.
+Step D is the exception. `prove-step-d.sh` overwrites `.cursor/skills/verify-cleanercore/evidence/step-d/` and does not create a timestamped folder.
+
+Keep the command, stdout, stderr, and exit code for doctor and for the drive. Name the feature id in `result.txt`. Assert the literal JSON files under `scripts/expected/` for the default turnover and the safety journeys. Step C journeys also save `transcript`, `jobs`, and `outbox` extracted from that stdout. The transcript lists each outbound body and each inbound Scratch reply, as `+15555550100: YES`. Assert every `+1` number in smoke stdout is a Scratch test number and every recipient is `+15555550100` or `+15555550101`. A drive without `--with-pin` requires `pinRecipients` empty and the scratch door code absent from the saved stdout. `prove-step-c.sh` greps the new evidence tree and fails if that code appears. `prove-step-d.sh` overwrites `evidence/step-d/` and fails if those digits appear there. The phrase `door code` is allowed in that folder only as the redacted private text and the host notice.
 
 The default smoke process exits and leaves the in-memory sink behind. The saved stdout is the record of what that sink accepted. Journeys that pass `--data` also persist `cleaner-core.json` for the life of that directory. Capture stdout before removing the temporary directory. Cleanup must not delete the evidence directory.
 
@@ -131,10 +141,18 @@ Prove the ten step C blockers with:
 
 That script takes no arguments. It doctors before each journey, then drives `read-feed`, `host-time`, `corrected-time`, `reminder-once`, `blocks`, `one-live-job`, `stop-silences`, `no-pin`, `safety-states`, and `failed-send`. Evidence is `evidence/<UTC timestamp>/step-c/<journey>/`. The script prints the `step-c` directory.
 
+Prove the step D blockers with:
+
+```
+.cursor/skills/verify-cleanercore/scripts/prove-step-d.sh
+```
+
+That script takes no arguments. It removes `evidence/step-d/` and writes it again. It doctors before each journey, then drives `held`, `released`, `not-opted`, `unapproved-yes`, `not-approved`, `checkout-moved`, `full-turn`, `pin-stored`, `stop-holds`, `help-waiting`, `help-cleared`, `help-progress`, `injury-failed`, `pin-failed`, and `no-group`. The script prints `evidence/step-d`.
+
 After any script exits, its evidence directory must still be on disk. A cleanup that removes it fails the proof.
 
 ## Feature map
 
-Read [features/README.md](features/README.md) before driving. One feature file is one user journey. `prove-turnover.sh` drives `same-day-turnover`. `prove-safety.sh` drives flag-off, STOP, HELP, injury, and the unapproved YES. `prove-step-c.sh` drives the ten step C blockers. Do not mark a feature verified because a different feature's stdout happened to contain a related field.
+Read [features/README.md](features/README.md) before driving. One feature file is one user journey. `prove-turnover.sh` drives `same-day-turnover`. `prove-safety.sh` drives flag-off, STOP, HELP, injury, and the unapproved YES. `prove-step-c.sh` drives the ten step C blockers. `prove-step-d.sh` drives the step D blockers and overwrites `evidence/step-d`. Do not mark a feature verified because a different feature's stdout happened to contain a related field.
 
 When the map changes, run `/maintain-verification-skill` against `verify-cleanercore`.

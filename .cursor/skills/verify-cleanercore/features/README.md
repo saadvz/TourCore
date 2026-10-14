@@ -2,7 +2,7 @@
 
 This directory is the maintained source for verifying Cleaner Core's user-facing behavior. Read the index before driving, then use the matching feature file as the recipe.
 
-The user here is the cleaning-service owner who receives the schedule text. The approved cleaner may receive a safety reply. Step C does not text a door code to either of them. The landlord's switch is `CLEANER_CORE_ENABLED`.
+Without `--with-pin`, the owner receives the schedule text. With `--with-pin`, the opted-in cleaner receives the offer, the confirmation, and the reminder, and only that cleaner's YES confirms the job. The approved cleaner also receives safety replies. A drive without `--with-pin` does not text a door code. `--with-pin` texts the private door code to the approved cleaner only after the host says the guests have left, and the saved record redacts the digits. The landlord's switch is `CLEANER_CORE_ENABLED`.
 
 ## Baseline preconditions
 
@@ -18,11 +18,11 @@ The user here is the cleaning-service owner who receives the schedule text. The 
 - Start every recipe from the baseline unless its preconditions say otherwise.
 - Treat every command as literal. Keep the flag assignment and the npm script unchanged.
 - Flag on: `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:doctor` and `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke`.
-- Replies: `npm run cleaner:smoke -- --reply +15555550100=STOP`. Repeat `--reply` for each inbound text. Any explicit operation (`--reply`, `--feed`, `--then-feed`, `--now`, `--remind`, `--fail-sends`, `--data`, `--no-poll`) does not also inject YES.
+- Replies: `npm run cleaner:smoke -- --reply +15555550100=STOP`. Repeat `--reply` for each inbound text. Any explicit operation (`--reply`, `--feed`, `--then-feed`, `--now`, `--remind`, `--fail-sends`, `--data`, `--no-poll`, `--with-pin`, `--unapproved`, `--group`) does not also inject YES.
 - Flag off: `env -u CLEANER_CORE_ENABLED` in front of the same scripts.
 - Assert the full stdout document and the exit code. A truthy `ok` is not a result.
 - After smoke, every `+1` number in stdout must be a Scratch test number: area code 555, or exchange 555 with line 0100–0199.
-- `pinRecipients` is empty. No new stdout, job list, outbox, or persisted store contains a door code.
+- A drive without `--with-pin` leaves `pinRecipients` empty. Its stdout, job list, outbox, and persisted store contain no door code. A `--with-pin` drive may list `+15555550101` in `pinRecipients`. Its saved stdout, transcript, outbox, and store replace the scratch digits with `[redacted]`.
 - Do not remove proof artifacts during cleanup. A temporary `--data` directory is removed only after its stdout is saved.
 
 ## Proof and skip reporting
@@ -58,3 +58,12 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [Persisted store has no door code](./no-pin.md) covers a confirmed job whose stdout and store omit the scratch door code. `prove-step-c.sh`.
 - [Safety replies in new states](./safety-states.md) covers STOP, HELP, and one emergency phrase while waiting, after an offer, and after a corrected-time text. `prove-step-c.sh`.
 - [Failed send is not delivered](./failed-send.md) covers a reminder whose first send fails and whose retry sends it once. `prove-step-c.sh`.
+- [Door code only after departure](./pin-after-departure.md) covers a same-day turn that holds the code until the host says the guests have left, then sends it once. `prove-step-d.sh`.
+- [Approved and opted in](./opted-in-only.md) covers no code without a cleaner YES, no code for `+15555550199`, and no opt-in for an unapproved cleaner. `prove-step-d.sh`.
+- [Later checkout holds the code](./checkout-moved.md) covers a checkout moved to 2:00 PM and a code that waits for the cleaner's new YES. `prove-step-d.sh`.
+- [One full Scratch turn](./full-turn.md) covers opt-in, the cleaner's YES, the cleaner reminder, departure, the private text, START, and DONE. `prove-step-d.sh`.
+- [Sealed door code](./pin-stored.md) covers a persisted store and a stdout that redact the digits. `prove-step-d.sh`.
+- [STOP holds the code](./stop-holds.md) covers STOP before departure and a later START that does not send the code. `prove-step-d.sh`.
+- [HELP around the door code](./help-while-cleaning.md) covers HELP, a host injury, and a cleaner injury while waiting, after the code, and in progress, plus a failed host alert. `prove-step-d.sh`.
+- [Failed door-code send](./pin-failed.md) covers a failed private send, one retry, and a second reminder that sends nothing. `prove-step-d.sh`.
+- [No group and no code for Cory](./no-group.md) covers a group number that receives nothing and a host notice that omits the code. `prove-step-d.sh`.

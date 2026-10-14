@@ -26,7 +26,7 @@ const CORRECTED_11 = `Update: checkout at ${ADDRESS} moved to Monday, Oct 19 at 
 const CANCEL = `Update: the cleaning at ${ADDRESS} on Sunday, Oct 18 is canceled, so no need to come. Reply STOP to opt out.`;
 const REMINDER = `Reminder: checkout at ${ADDRESS} is Sunday, Oct 18 at 11:00 AM. Reply STOP to opt out.`;
 const STOP_ACK = "Tour Core: You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.";
-const HELP_ACK = "Cleaner Core: Reply here if you need help with this turnover. Reply STOP to opt out.";
+const HELP_ACK = "Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.";
 const EMERGENCY = "If someone is hurt, call 911 now. I couldn't reach the property team just now.";
 const NEXT_Q = `Is checkout at ${ADDRESS} on Tuesday, Oct 20 still 11:00 AM? Reply YES or send the new time.`;
 const said = (text) => `${OWNER}: ${text}`;
@@ -107,7 +107,13 @@ if (journey === "read-feed") {
     const name = names[index] ?? String(index);
     const phrase = name.endsWith("stop") ? "stop" : name.endsWith("help") ? "help" : "emergency";
     const body = replies[phrase];
-    if (report.transcript?.at(-1) !== body) fail(`${name} last text was not the safety reply`);
+    if (name === "corrected-emergency") {
+      const hostHurt = `The cleaner at ${ADDRESS} says someone is hurt. They've been told to call 911.`;
+      const cleanerHurt = "If someone is hurt, call 911 now. I've let the host know.";
+      if (report.transcript?.at(-1) !== cleanerHurt) fail(`${name} last text was not the cleaner injury reply`);
+      if (!report.transcript?.includes(hostHurt)) fail(`${name} did not alert the host`);
+      if ((report.transcript ?? []).some((line) => String(line).includes("4821") || String(line).includes("[redacted]"))) fail(`${name} included a door code`);
+    } else if (report.transcript?.at(-1) !== body) fail(`${name} last text was not the safety reply`);
     if (name.startsWith("waiting") && report.jobs[0]?.status !== "discovered") fail(`${name} advanced the job`);
     if (name.startsWith("offered") && report.jobs[0]?.status !== "offered") fail(`${name} left the offered job`);
     if (name.startsWith("corrected") && report.jobs[0]?.status === "confirmed") fail(`${name} confirmed the old time`);
