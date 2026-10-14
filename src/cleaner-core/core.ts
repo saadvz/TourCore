@@ -23,7 +23,7 @@ import {
 } from "./sources";
 import { fingerprintOf, freshnessOf, GUESTY_POLL_MS, staleAfterMs, type SourceRecord } from "./freshness";
 import { redactLine, redactPhone } from "./redact";
-import { addressCleaner, asOptedInCleaner, doorCodeBody, groupDoorCodeBody, groupOptInBody, groupTimeLine, holdNote, offerBody, offerForOthers, privateCodeLine, reminderBody, resumeNote, type OptedInCleaner } from "./cleanerTexts";
+import { addressCleaner, asOptedInCleaner, doorCodeBody, groupDoorCodeBody, groupOptInBody, groupTimeLine, groupUnconfirmedLine, holdNote, isPrivateCodeLine, offerBody, offerForOthers, privateCodeLine, reminderBody, resumeNote, type OptedInCleaner } from "./cleanerTexts";
 import { codeRoute, GroupNotConfirmed, groupTurn, isProblemText, type GroupSeat } from "./groupThread";
 import { codeHandlingText, HEALTH_NOTE, isReviewKind, reviewAlert, reviewId, type AuditEvent, type ReviewDetail, type ReviewItem, type ReviewKind } from "./review";
 import { mirrorStore, restoreTenantSlice, snapshotStore } from "./sqliteStore";
@@ -331,6 +331,8 @@ export interface CleanerCore {
   stampFetchedAt(iso: string): void;
   /** Marks an accepted door-code text undelivered so the next departure can send it again. Sends nothing. */
   markPinUndelivered(): void;
+  hostNotes(): string[];
+  notePrivateCodeDelivered(): void;
   /** Keeps a door code in memory after a later tool call opens the seal. Does not write it. */
   rememberPin(pin: string): void;
 }
@@ -342,6 +344,7 @@ const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know."
 const CLEANER_HURT_MISSED = "If someone is hurt, call 911 now. I couldn't reach the host, so please call them too.";
 const SAFETY = new Set<TextKind>(["stop", "start", "emergency"]);
 const JOB_TEXTS = new Set<TextKind>(["offer", "corrected", "confirm", "reminder", "cancel-update", "declined", "started", "done"]);
+const HOST_DIRECT = new Set<TextKind>(["host-checkout", "host-checkin", "pin-failed", "pin-held", "resume"]);
 const GROUP_PREFIX = "Group text: ";
 const MIRROR_PREFIX = "Copy of the group text: ";
 const DEFAULT_TRIGGERS: ReminderTrigger[] = [{ id: "morning-of", kind: "morning-of", localTime: "08:00" }];
@@ -453,6 +456,7 @@ interface Stored {
   hostGroup?: "pending" | "in" | "out";
   problemHold?: boolean;
   groupPinTerminal?: boolean;
+  hostNotes?: { id: string; body: string }[];
 }
 
 /** One file can hold several tenants. A single-tenant file stays the flat step D shape. */
@@ -536,6 +540,7 @@ class Engine implements CleanerCore {
   private hostGroup: "pending" | "in" | "out" = "pending";
   private problemHold = false;
   private groupPinTerminal = false;
+  private hostNoteState: { id: string; body: string }[] = [];
   private session: OnboardingSession | undefined;
   private previewFeeds: { kind: "guesty-lite" | "notion"; body: string }[] = [];
   private syncState: SyncState = { reason: "read", conversation: "open", sources: [], conflicts: [] };
@@ -1348,10 +1353,6 @@ class Engine implements CleanerCore {
             body: privately.body,
           });
           if (privateText) sent.push(privateText);
-          if (this.delivery(key) === "sent") {
-            const note = await this.emitGroup(`pin-private:${key}`, privateCodeLine(this.groupChat.cleanerName), "pin-notice", job.id);
-            if (note) sent.push(note);
-          }
         }
       }
       if (this.groupChat && route === "private" && this.delivery(key) === "sent") {
@@ -1493,6 +1494,7 @@ class Engine implements CleanerCore {
     const checkout = this.latestFact(job.id, "checkout");
     const checkin = this.latestFact(job.id, "checkin");
     if (!checkout) {
+      if (this.groupChat) return null;
       const id = `host-checkout:${job.id}:${job.checkoutDate}:${this.defaultCheckout}`;
       if (this.delivery(id) === "sent") return null;
       const when = this.clock(job.checkoutDate, this.defaultCheckout);
@@ -1505,6 +1507,7 @@ class Engine implements CleanerCore {
       };
     }
     if (job.nextCheckInDate && !checkin) {
+      if (this.groupChat) return null;
       const id = `host-checkin:${job.id}:${job.nextCheckInDate}:${this.defaultCheckIn}`;
       if (this.delivery(id) === "sent") return null;
       const when = this.clock(job.nextCheckInDate, this.defaultCheckIn);
@@ -1630,7 +1633,38 @@ class Engine implements CleanerCore {
     }
   }
 
+  private hostDirect(draft: Draft): Draft {
+    if (!HOST_DIRECT.has(draft.kind)) return draft;
+    return {
+      id: draft.id,
+      ...(draft.jobId ? { jobId: draft.jobId } : {}),
+      to: this.owner ?? draft.to,
+      body: draft.body,
+      kind: draft.kind,
+      ...(draft.afterSend ? { afterSend: draft.afterSend } : {}),
+    };
+  }
+
+  private noteForHost(id: string, body: string): void {
+    if (!this.groupChat || this.hostNoteState.some((note) => note.id === id)) return;
+    this.hostNoteState.push({ id, body });
+    this.save();
+  }
+
+  hostNotes(): string[] {
+    return this.hostNoteState.map((note) => note.body);
+  }
+
+  notePrivateCodeDelivered(): void {
+    if (!this.groupChat || !this.owner) return;
+    const job = this.releaseJob();
+    const key = job ? this.pinKey(job) : undefined;
+    if (!key || this.delivery(key) !== "sent") return;
+    this.noteForHost(`pin-private:${key}`, privateCodeLine(this.groupChat.cleanerName));
+  }
+
   private async emitOne(draft: Draft): Promise<CleanerText | null> {
+    draft = this.hostDirect(draft);
     if (this.options.holdSends?.()) return null;
     if ((draft.kind === "offer" || draft.kind === "reminder" || draft.kind === "pin") && !draft.channel) {
       const addressed = addressCleaner(this.cleanerRecord(), { kind: draft.kind, body: draft.body });
@@ -1683,6 +1717,9 @@ class Engine implements CleanerCore {
       if (err instanceof GroupNotConfirmed && draft.channel === "group") {
         this.dropUncertain(draft.id);
         this.save();
+        if (draft.kind !== "pin" && !isPrivateCodeLine(draft.body)) {
+          this.noteForHost(`group-unconfirmed:${this.options.property.id}`, groupUnconfirmedLine());
+        }
         return null;
       }
       this.upsert(draft, "failed");
@@ -2220,6 +2257,7 @@ class Engine implements CleanerCore {
     if (record.hostGroup === "pending" || record.hostGroup === "in" || record.hostGroup === "out") this.hostGroup = record.hostGroup;
     if (record.problemHold === true) this.problemHold = true;
     if (record.groupPinTerminal === true) this.groupPinTerminal = true;
+    this.hostNoteState = (record.hostNotes ?? []).filter((note) => typeof note?.id === "string" && typeof note?.body === "string");
     if (this.options.sealPinAtRest !== false && !this.pin && record.pinSeal) {
       try {
         this.pin = openPin(record.pinSeal, this.pinKeyMaterial());
@@ -2259,6 +2297,7 @@ class Engine implements CleanerCore {
       ...(this.auditLog.length > 0 ? { audit: this.auditLog } : {}),
       counters: this.counters,
       ...(this.groupChat ? { hostGroup: this.hostGroup, problemHold: this.problemHold, groupPinTerminal: this.groupPinTerminal } : {}),
+      ...(this.hostNoteState.length > 0 ? { hostNotes: this.hostNoteState } : {}),
     };
     const existing = existsSync(this.file) ? (JSON.parse(readFileSync(this.file, "utf8")) as StoreFile) : undefined;
     if (existing && existing.schemaVersion !== 1) throw new Error("Cleaner Core store is not version 1.");

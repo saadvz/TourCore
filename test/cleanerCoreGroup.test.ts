@@ -7,7 +7,7 @@ import { openCleanerCore, type CleanerText } from "../src/cleaner-core/core";
 import { liveDeskFor, resetLiveDesks, setCleanerCalendarFetch } from "../src/cleaner-core/liveDesk";
 import { sendLiveGroup, sendLiveSms, setCleanerGroupFetch, setCleanerTwilioClient } from "../src/cleaner-core/liveSms";
 import { SCRATCH_TENANTS } from "../src/cleaner-core/tenants";
-import { CALENDAR_ICS, CALENDAR_URL, CLEANER as LIVE_CLEANER, CLEANER_LINE, DOOR_CODE, fakeSms, FROZEN, HOST as LIVE_HOST, OBSERVER, TEST_PIN_KEY } from "./wiringProof";
+import { ADDRESS as PRACTICE, CALENDAR_ICS, CALENDAR_URL, CLEANER as LIVE_CLEANER, CLEANER_LINE, DOOR_CODE, fakeSms, FROZEN, HOST as LIVE_HOST, OBSERVER, TEST_PIN_KEY } from "./wiringProof";
 
 const ADDRESS = "12 Scratch Lane, Teaneck, NJ 07666";
 const OWNER = "+15555550100";
@@ -34,6 +34,9 @@ const HOST_HURT_SELF = "If someone is hurt, call 911 now.";
 const STOP_ACK = "You're opted out and won't receive more messages. Reply START to opt back in. Reply HELP for help.";
 const STOP_HOLD = `The cleaner opted out of cleaning texts for ${ADDRESS}, so the job is on hold.`;
 const ALREADY = "I already sent the door code to the cleaner.";
+const PIN_SENT = "I sent the door code to the cleaner. I'll tell you if it doesn't go through.";
+const PIN_FAILED = "The door code didn't reach the cleaner. Tell me the guests have left again and I'll resend it.";
+const AFTER_CHECKS = "Tell me the checkout time and the next check-in time before I text the cleaner.";
 const PIN_MISSING = "I can't send the door code yet. Let's finish setting up Cleaner Core first.";
 const FAILED_ONCE = "A text failed to send. I saved it for your review and did not count it as delivered.";
 const FEED = readFileSync(join("src/cleaner-core/fixtures", "guesty-lite-scratch.ics"), "utf8");
@@ -285,6 +288,23 @@ describe("group thread", () => {
     expect(sent.sent.some((text) => text.body === OFFER && !text.channel)).toBe(true);
     expect(sent.sent.some((text) => text.body === CONFIRM && !text.channel)).toBe(true);
   });
+
+  it("drops the checkout question in group mode and sets times only through confirm_times", async () => {
+    const sent = box();
+    const job = open(sent);
+    const checkout = `Is checkout at ${ADDRESS} on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.`;
+    const checkin = `Is check-in at ${ADDRESS} on Sunday, Oct 18 still 4:00 PM? Reply YES or send the new time.`;
+    const poll = await job.pollFeed(FEED);
+    expect(poll.sent.filter((text) => text.body === checkout || text.body === checkin)).toEqual([]);
+    expect(sent.sent.filter((text) => text.body === checkout || text.body === checkin)).toEqual([]);
+    expect(groupTexts(sent.sent).filter((text) => text.body === checkout || text.body === checkin)).toEqual([]);
+    await job.receive({ id: "yes-not-the-clock", from: OWNER, text: "YES" });
+    expect(job.jobs().filter((item) => item.checkoutTime === "11:00 AM")).toEqual([]);
+    await job.confirmHostTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    expect(job.jobs().filter((item) => item.checkoutTime === "11:00 AM").map((item) => item.nextCheckInTime)).toEqual(["4:00 PM"]);
+    expect(sent.sent.filter((text) => text.body === checkout || text.body === checkin)).toEqual([]);
+    expect(groupTexts(sent.sent).filter((text) => text.body === checkout || text.body === checkin)).toEqual([]);
+  });
 });
 
 describe("group thread on the desk", () => {
@@ -343,6 +363,71 @@ describe("group thread on the desk", () => {
     expect(again).toEqual({ ok: true, result: { next: ALREADY } });
     expect(JSON.stringify(again).includes(DOOR_CODE)).toBe(false);
     expect(JSON.stringify(failed).includes(DOOR_CODE)).toBe(false);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("drops the checkout question on the desk and sets times only through confirm_times", async () => {
+    const sms = fakeSms();
+    const fetchBox = groupFetch();
+    setCleanerTwilioClient(sms);
+    setCleanerGroupFetch(fetchBox.impl);
+    let feed = CALENDAR_ICS;
+    setCleanerCalendarFetch(async (url) => ({
+      status: url === CALENDAR_URL ? 200 : 404,
+      url,
+      async text() {
+        return url === CALENDAR_URL ? feed : "";
+      },
+    }));
+    const root = mkdtempSync(join(tmpdir(), "cleaner-host-clock-"));
+    const env: NodeJS.ProcessEnv = {
+      CLEANER_CORE_ENABLED: "1",
+      CLEANER_CORE_GROUP_CHAT: "1",
+      CLEANER_CORE_SMS_ALLOWLIST: `${LIVE_HOST},${LIVE_CLEANER}`,
+      CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
+      CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
+      CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+    };
+    const checkout = `Is checkout at ${PRACTICE} on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.`;
+    const checkin = `Is check-in at ${PRACTICE} on Monday, Oct 19 still 4:00 PM? Reply YES or send the new time.`;
+    const clockBodies = () => sms.sent.filter((text) => text.body === checkout || text.body === checkin);
+    const open = () => liveDeskFor(root, () => env, () => new Date(FROZEN));
+    const desk = open();
+    const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
+    expect(desk.getState("2").ok).toBe(true);
+    expect(desk.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" }).ok).toBe(true);
+    expect(desk.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER }).ok).toBe(true);
+    expect(desk.saveCalendarLink({ url: CALENDAR_URL }).ok).toBe(true);
+    expect(desk.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
+    expect(desk.setUpTexting().ok).toBe(true);
+    expect((await desk.runChecks()).ok).toBe(true);
+    expect(clockBodies()).toEqual([]);
+    expect(fetchBox.posts.filter((text) => text.body === checkout || text.body === checkin)).toEqual([]);
+    await desk.inbound({ id: "yes-not-the-clock", from: LIVE_HOST, text: "YES" });
+    const early = desk.getTurns();
+    expect(early.ok).toBe(true);
+    if (early.ok) {
+      const turns = early.result.turns as { checkoutTime: string | null }[];
+      expect(turns.filter((turn) => turn.checkoutTime === "11:00 AM")).toEqual([]);
+    }
+    env.CLEANER_CORE_LIVE_SMS = "1";
+    expect((await desk.runChecks()).ok).toBe(true);
+    expect(clockBodies()).toEqual([]);
+    await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    const saved = desk.getTurns();
+    expect(saved.ok).toBe(true);
+    if (saved.ok) {
+      const turns = saved.result.turns as { checkoutTime: string | null; nextCheckInTime: string | null }[];
+      expect(turns.filter((turn) => turn.checkoutTime === "11:00 AM").map((turn) => turn.nextCheckInTime)).toEqual(["4:00 PM"]);
+    }
+    expect(clockBodies()).toEqual([]);
+    feed = CALENDAR_ICS.replace("DTSTART;VALUE=DATE:20261018", "DTSTART;VALUE=DATE:20261019");
+    expect((await desk.runChecks()).ok).toBe(true);
+    expect(clockBodies()).toEqual([]);
+    expect(fetchBox.posts.filter((text) => text.body === checkout || text.body === checkin)).toEqual([]);
+    const read = desk.getState();
+    expect(read.ok).toBe(true);
+    if (read.ok) expect(read.result.notes ?? []).toEqual([]);
     rmSync(root, { recursive: true, force: true });
   });
 });
@@ -439,6 +524,8 @@ describe("live group membership", () => {
   afterEach(() => {
     setCleanerTwilioClient(undefined);
     setCleanerGroupFetch(undefined);
+    setCleanerCalendarFetch(undefined);
+    resetLiveDesks();
     for (const root of roots) rmSync(root, { recursive: true, force: true });
     roots.length = 0;
   });
@@ -534,5 +621,413 @@ describe("live group membership", () => {
     ]);
     expect(left.sent.filter((text) => text.channel === "group")).toEqual([]);
     expect(left.sent.filter((text) => text.kind === "pin")).toEqual([{ to: CLEANER, body: PRIVATE_PIN, kind: "pin" }]);
+  });
+
+  it("tells Cory once in get_state when a group text is dropped, including a retry and a restart", async () => {
+    const root = mkdtempSync(join(tmpdir(), "cleaner-group-alert-"));
+    roots.push(root);
+    const fetchBox = groupFetch();
+    const sms = fakeSms();
+    const env: NodeJS.ProcessEnv = {
+      CLEANER_CORE_ENABLED: "1",
+      CLEANER_CORE_LIVE_SMS: "1",
+      CLEANER_CORE_GROUP_CHAT: "1",
+      CLEANER_CORE_SMS_ALLOWLIST: `${LIVE_HOST},${LIVE_CLEANER}`,
+      CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
+      CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
+      CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+    };
+    const line = "I couldn't send that to the group.";
+    const checkout = `Is checkout at ${PRACTICE} on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.`;
+    const privateLine = "I've sent the door code to Maria privately.";
+    setCleanerTwilioClient(sms);
+    setCleanerGroupFetch(fetchBox.impl);
+    setCleanerCalendarFetch(async (url) => ({
+      status: url === CALENDAR_URL ? 200 : 404,
+      url,
+      async text() {
+        return url === CALENDAR_URL ? CALENDAR_ICS : "";
+      },
+    }));
+    const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
+    const boot = () => {
+      const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
+      return desk;
+    };
+    const desk = boot();
+    expect(desk.getState("2").ok).toBe(true);
+    expect(desk.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" }).ok).toBe(true);
+    expect(desk.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER }).ok).toBe(true);
+    expect(desk.saveCalendarLink({ url: CALENDAR_URL }).ok).toBe(true);
+    expect(desk.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
+    expect(desk.setUpTexting().ok).toBe(true);
+    expect((await desk.runChecks()).ok).toBe(true);
+    await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await desk.inbound({ id: "yes-host", from: LIVE_HOST, text: "YES" });
+    await desk.inbound({ id: "yes-cleaner", from: LIVE_CLEANER, text: "YES" });
+    await desk.inbound({ id: "yes-schedule", from: LIVE_CLEANER, text: "YES" });
+    const quiet = desk.getState();
+    expect(quiet.ok).toBe(true);
+    if (quiet.ok) expect(quiet.result.notes ?? []).toEqual([]);
+    fetchBox.blockMembership();
+    await desk.inbound({ id: "time-dropped", from: LIVE_CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
+    await desk.inbound({ id: "time-dropped-2", from: LIVE_CLEANER, text: "Can we do 3:00 PM?", channel: "group" });
+    const read = desk.getState();
+    expect(read.ok).toBe(true);
+    if (read.ok) expect(read.result.notes).toEqual([line]);
+    expect(line).not.toMatch(/twilio|grok|door code|cleaner_core|\d/);
+    expect(sms.sent.filter((text) => text.body === line || text.body === privateLine || text.body === checkout)).toEqual([]);
+    expect(fetchBox.posts.map((text) => text.body)).toEqual([]);
+    const reread = desk.getState();
+    expect(reread.ok).toBe(true);
+    if (reread.ok) expect(reread.result.notes).toEqual([line]);
+
+    resetLiveDesks();
+    const restarted = boot();
+    expect(restarted.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
+    const afterRestart = restarted.getState();
+    expect(afterRestart.ok).toBe(true);
+    if (afterRestart.ok) expect(afterRestart.result.notes).toEqual([line]);
+    await restarted.inbound({ id: "time-dropped-3", from: LIVE_CLEANER, text: "Can we do 4:00 PM?", channel: "group" });
+    const still = restarted.getState();
+    expect(still.ok).toBe(true);
+    if (still.ok) expect(still.result.notes).toEqual([line]);
+    expect(fetchBox.posts.map((text) => text.body)).toEqual([]);
+    expect(sms.sent.filter((text) => text.body === line)).toEqual([]);
+  });
+
+  it("shows the private line in get_state after a failed member check and posts nothing to the group", async () => {
+    const root = mkdtempSync(join(tmpdir(), "cleaner-group-private-note-"));
+    roots.push(root);
+    const fetchBox = groupFetch();
+    const sms = fakeSms();
+    const env: NodeJS.ProcessEnv = {
+      CLEANER_CORE_ENABLED: "1",
+      CLEANER_CORE_LIVE_SMS: "1",
+      CLEANER_CORE_GROUP_CHAT: "1",
+      CLEANER_CORE_SMS_ALLOWLIST: `${LIVE_HOST},${LIVE_CLEANER}`,
+      CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
+      CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
+      CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+    };
+    const line = "I've sent the door code to Maria privately.";
+    const alert = "I couldn't send that to the group.";
+    const checkout = `Is checkout at ${PRACTICE} on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.`;
+    const groupPin = `Maria, guests have left ${PRACTICE}. Door code: ${DOOR_CODE}.`;
+    const privatePin = `Guests have left ${PRACTICE}. Door code: ${DOOR_CODE}. This code is only for you.`;
+    setCleanerTwilioClient(sms);
+    setCleanerGroupFetch(fetchBox.impl);
+    setCleanerCalendarFetch(async (url) => ({
+      status: url === CALENDAR_URL ? 200 : 404,
+      url,
+      async text() {
+        return url === CALENDAR_URL ? CALENDAR_ICS : "";
+      },
+    }));
+    const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
+    const boot = () => liveDeskFor(root, () => env, () => new Date(FROZEN));
+    const desk = boot();
+    expect(desk.getState("2").ok).toBe(true);
+    expect(desk.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" }).ok).toBe(true);
+    expect(desk.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER }).ok).toBe(true);
+    expect(desk.saveCalendarLink({ url: CALENDAR_URL }).ok).toBe(true);
+    expect(desk.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
+    expect(desk.setUpTexting().ok).toBe(true);
+    expect((await desk.runChecks()).ok).toBe(true);
+    await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await desk.inbound({ id: "yes-host", from: LIVE_HOST, text: "YES" });
+    await desk.inbound({ id: "yes-cleaner", from: LIVE_CLEANER, text: "YES" });
+    await desk.inbound({ id: "yes-schedule", from: LIVE_CLEANER, text: "YES" });
+    fetchBox.blockMembership();
+    const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    const again = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    expect(left).toEqual({ ok: true, result: { next: PIN_SENT } });
+    expect(again).toEqual({ ok: true, result: { next: ALREADY } });
+    expect(fetchBox.posts.filter((text) => text.body === line || text.body === alert || text.body === checkout || text.body === groupPin || text.body === TIME_LINE)).toEqual([]);
+    expect(sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
+    expect(sms.sent.filter((text) => text.body === line || text.body === alert || text.body === checkout || text.body === groupPin)).toEqual([]);
+    const waiting = desk.getState();
+    expect(waiting.ok).toBe(true);
+    if (waiting.ok) {
+      expect(waiting.result.next).toBe(AFTER_CHECKS);
+      expect(waiting.result.notes ?? []).toEqual([]);
+    }
+    const pinText = sms.sent.find((text) => text.body === privatePin);
+    desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "sent" });
+    const read = desk.getState();
+    expect(read.ok).toBe(true);
+    if (read.ok) {
+      expect(read.result.notes).toEqual([line]);
+      expect(read.result.next).toBe(AFTER_CHECKS);
+      expect(JSON.stringify(read.result.notes).includes(DOOR_CODE)).toBe(false);
+      expect(JSON.stringify(read.result.notes).includes(groupPin)).toBe(false);
+    }
+    resetLiveDesks();
+    const restarted = boot();
+    expect(restarted.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
+    const afterRestart = restarted.getState();
+    expect(afterRestart.ok).toBe(true);
+    if (afterRestart.ok) expect(afterRestart.result.notes).toEqual([line]);
+    expect(fetchBox.posts.filter((text) => text.body === line || text.body === alert || text.body === groupPin || text.body === TIME_LINE)).toEqual([]);
+
+    const heldRoot = mkdtempSync(join(tmpdir(), "cleaner-group-private-held-"));
+    roots.push(heldRoot);
+    const heldFetch = groupFetch();
+    const heldSms = fakeSms();
+    setCleanerTwilioClient(heldSms);
+    setCleanerGroupFetch(heldFetch.impl);
+    const held = liveDeskFor(heldRoot, () => env, () => new Date(FROZEN));
+    expect(held.getState("2").ok).toBe(true);
+    expect(held.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" }).ok).toBe(true);
+    expect(held.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER }).ok).toBe(true);
+    expect(held.saveCalendarLink({ url: CALENDAR_URL }).ok).toBe(true);
+    expect(held.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
+    expect(held.setUpTexting().ok).toBe(true);
+    expect((await held.runChecks()).ok).toBe(true);
+    await held.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await held.inbound({ id: "yes-host-held", from: LIVE_HOST, text: "YES" });
+    await held.inbound({ id: "yes-cleaner-held", from: LIVE_CLEANER, text: "YES" });
+    await held.inbound({ id: "yes-schedule-held", from: LIVE_CLEANER, text: "YES" });
+    heldFetch.blockMembership();
+    await held.inbound({ id: "stop-before-sync", from: LIVE_CLEANER, text: "STOP" });
+    const stayed = await held.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    expect(stayed.ok).toBe(true);
+    expect(heldFetch.posts.filter((text) => text.body === line || text.body === groupPin || text.body === alert || text.body === TIME_LINE)).toEqual([]);
+    expect(heldSms.sent.filter((text) => text.body === privatePin || text.body === line || text.body === groupPin)).toEqual([]);
+    const heldRead = held.getState();
+    expect(heldRead.ok).toBe(true);
+    if (heldRead.ok) expect(heldRead.result.notes ?? []).toEqual([]);
+    expect(heldSms.sent.filter((text) => text.body === `The cleaner opted out of cleaning texts for ${PRACTICE}, so the job is on hold.`).map((text) => text.to)).toEqual([LIVE_HOST]);
+  });
+
+  it("shows the failed-send alert when the private door-code text fails and never the private note", async () => {
+    const root = mkdtempSync(join(tmpdir(), "cleaner-group-private-fail-"));
+    roots.push(root);
+    const fetchBox = groupFetch();
+    const sms = fakeSms((body) => (body.includes("Door code:") ? "failed" : "queued"));
+    const env: NodeJS.ProcessEnv = {
+      CLEANER_CORE_ENABLED: "1",
+      CLEANER_CORE_LIVE_SMS: "1",
+      CLEANER_CORE_GROUP_CHAT: "1",
+      CLEANER_CORE_SMS_ALLOWLIST: `${LIVE_HOST},${LIVE_CLEANER}`,
+      CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
+      CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
+      CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+    };
+    const line = "I've sent the door code to Maria privately.";
+    const failedAlert = "The door code didn't reach the cleaner. Tell me the guests have left again and I'll resend it.";
+    const groupPin = `Maria, guests have left ${PRACTICE}. Door code: ${DOOR_CODE}.`;
+    setCleanerTwilioClient(sms);
+    setCleanerGroupFetch(fetchBox.impl);
+    setCleanerCalendarFetch(async (url) => ({
+      status: url === CALENDAR_URL ? 200 : 404,
+      url,
+      async text() {
+        return url === CALENDAR_URL ? CALENDAR_ICS : "";
+      },
+    }));
+    const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
+    const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
+    expect(desk.getState("2").ok).toBe(true);
+    expect(desk.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" }).ok).toBe(true);
+    expect(desk.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER }).ok).toBe(true);
+    expect(desk.saveCalendarLink({ url: CALENDAR_URL }).ok).toBe(true);
+    expect(desk.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
+    expect(desk.setUpTexting().ok).toBe(true);
+    expect((await desk.runChecks()).ok).toBe(true);
+    await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await desk.inbound({ id: "yes-host-fail", from: LIVE_HOST, text: "YES" });
+    await desk.inbound({ id: "yes-cleaner-fail", from: LIVE_CLEANER, text: "YES" });
+    await desk.inbound({ id: "yes-schedule-fail", from: LIVE_CLEANER, text: "YES" });
+    fetchBox.blockMembership();
+    const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    expect(left).toEqual({ ok: true, result: { next: failedAlert } });
+    desk.notePinDelivery({ sid: "SM-none", status: "sent" });
+    const read = desk.getState();
+    expect(read.ok).toBe(true);
+    if (read.ok) {
+      expect(read.result.next).toBe(failedAlert);
+      expect(JSON.stringify(read.result.notes ?? [])).not.toContain(line);
+      expect(JSON.stringify(read.result).includes(DOOR_CODE)).toBe(false);
+    }
+    expect(fetchBox.posts.filter((text) => text.body === line || text.body === groupPin)).toEqual([]);
+    expect(sms.sent.filter((text) => text.to === LIVE_HOST && text.body === line)).toEqual([]);
+  });
+
+  it("keeps the job on hold when STOP comes before a dropped group text and sends no code", async () => {
+    const root = mkdtempSync(join(tmpdir(), "cleaner-group-stop-drop-"));
+    roots.push(root);
+    const fetchBox = groupFetch();
+    const sms = fakeSms();
+    const env: NodeJS.ProcessEnv = {
+      CLEANER_CORE_ENABLED: "1",
+      CLEANER_CORE_LIVE_SMS: "1",
+      CLEANER_CORE_GROUP_CHAT: "1",
+      CLEANER_CORE_SMS_ALLOWLIST: `${LIVE_HOST},${LIVE_CLEANER}`,
+      CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
+      CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
+      CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+    };
+    const hold = "The cleaner opted out of cleaning texts, so the job is on hold.";
+    const line = "I've sent the door code to Maria privately.";
+    setCleanerTwilioClient(sms);
+    setCleanerGroupFetch(fetchBox.impl);
+    setCleanerCalendarFetch(async (url) => ({
+      status: url === CALENDAR_URL ? 200 : 404,
+      url,
+      async text() {
+        return url === CALENDAR_URL ? CALENDAR_ICS : "";
+      },
+    }));
+    const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
+    const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
+    expect(desk.getState("2").ok).toBe(true);
+    expect(desk.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" }).ok).toBe(true);
+    expect(desk.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER }).ok).toBe(true);
+    expect(desk.saveCalendarLink({ url: CALENDAR_URL }).ok).toBe(true);
+    expect(desk.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
+    expect(desk.setUpTexting().ok).toBe(true);
+    expect((await desk.runChecks()).ok).toBe(true);
+    await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await desk.inbound({ id: "yes-host-stop", from: LIVE_HOST, text: "YES" });
+    await desk.inbound({ id: "yes-cleaner-stop", from: LIVE_CLEANER, text: "YES" });
+    await desk.inbound({ id: "yes-schedule-stop", from: LIVE_CLEANER, text: "YES" });
+    await desk.inbound({ id: "stop-first", from: LIVE_CLEANER, text: "STOP" });
+    fetchBox.blockMembership();
+    await desk.inbound({ id: "time-after-stop", from: LIVE_CLEANER, text: "Can we do 2:00 PM?", channel: "group" });
+    const read = desk.getState();
+    expect(read.ok).toBe(true);
+    if (read.ok) expect(read.result.next).toBe(hold);
+    const turns = desk.getTurns();
+    expect(turns.ok).toBe(true);
+    if (turns.ok) expect(turns.result.held).toBe(true);
+    const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    expect(left.ok).toBe(true);
+    expect(sms.sent.filter((text) => text.body.includes("Door code:"))).toEqual([]);
+    expect(fetchBox.posts.filter((text) => text.body.includes("Door code:") || text.body === line)).toEqual([]);
+    expect(sms.sent.filter((text) => text.body === "You're opted back in to cleaning texts. Reply YES if you still want this turnover. Reply STOP to opt out.")).toEqual([]);
+    const after = desk.getState();
+    expect(after.ok).toBe(true);
+    if (after.ok) expect(after.result.next).toBe(hold);
+  });
+
+  async function privateSendWithoutHost() {
+    const root = mkdtempSync(join(tmpdir(), "cleaner-private-accept-"));
+    roots.push(root);
+    const fetchBox = groupFetch();
+    const sms = fakeSms();
+    const env: NodeJS.ProcessEnv = {
+      CLEANER_CORE_ENABLED: "1",
+      CLEANER_CORE_LIVE_SMS: "1",
+      CLEANER_CORE_GROUP_CHAT: "1",
+      CLEANER_CORE_SMS_ALLOWLIST: `${LIVE_HOST},${LIVE_CLEANER}`,
+      CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACfake",
+      CLEANER_CORE_TWILIO_AUTH_TOKEN: "token",
+      CLEANER_CORE_TWILIO_PHONE_NUMBER: CLEANER_LINE,
+    };
+    setCleanerTwilioClient(sms);
+    setCleanerGroupFetch(fetchBox.impl);
+    setCleanerCalendarFetch(async (url) => ({
+      status: url === CALENDAR_URL ? 200 : 404,
+      url,
+      async text() {
+        return url === CALENDAR_URL ? CALENDAR_ICS : "";
+      },
+    }));
+    const pinKey = Buffer.from(TEST_PIN_KEY, "base64");
+    const desk = liveDeskFor(root, () => env, () => new Date(FROZEN));
+    expect(desk.getState("2").ok).toBe(true);
+    expect(desk.saveProperty({ business: "Harbor", address: PRACTICE, timeZone: "America/New_York" }).ok).toBe(true);
+    expect(desk.savePeople({ host: LIVE_HOST, cleaner: LIVE_CLEANER, observer: OBSERVER }).ok).toBe(true);
+    expect(desk.saveCalendarLink({ url: CALENDAR_URL }).ok).toBe(true);
+    expect(desk.saveDoorCode({ code: DOOR_CODE }, pinKey).ok).toBe(true);
+    expect(desk.setUpTexting().ok).toBe(true);
+    expect((await desk.runChecks()).ok).toBe(true);
+    await desk.confirmTimes({ checkout: "11:00 AM", checkIn: "4:00 PM" });
+    await desk.inbound({ id: "yes-cleaner-only", from: LIVE_CLEANER, text: "YES" });
+    await desk.inbound({ id: "yes-schedule-only", from: LIVE_CLEANER, text: "YES" });
+    const privatePin = `Guests have left ${PRACTICE}. Door code: ${DOOR_CODE}. This code is only for you.`;
+    return { desk, sms, posts: fetchBox.posts, pinKey, privatePin };
+  }
+
+  it("returns the sent sentence when Twilio accepts a private door code", async () => {
+    const { desk, sms, posts, pinKey, privatePin } = await privateSendWithoutHost();
+    const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    expect(left).toEqual({ ok: true, result: { next: PIN_SENT } });
+    expect(sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
+    expect(sms.sent.filter((text) => text.to === LIVE_HOST && text.body === privatePin).map((text) => text.to)).toEqual([]);
+    expect(posts.filter((text) => text.body === privatePin).map((text) => text.body)).toEqual([]);
+    const state = desk.getState();
+    expect(state.ok).toBe(true);
+    if (state.ok) {
+      expect(state.result.next).toBe(AFTER_CHECKS);
+      expect(state.result.notes ?? []).toEqual([]);
+    }
+  });
+
+  it("returns the already-sent sentence while a private delivery report is pending", async () => {
+    const { desk, sms, posts, pinKey, privatePin } = await privateSendWithoutHost();
+    const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    expect(left).toEqual({ ok: true, result: { next: PIN_SENT } });
+    const again = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    expect(again).toEqual({ ok: true, result: { next: ALREADY } });
+    expect(sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
+    expect(posts.filter((text) => text.body === privatePin).map((text) => text.body)).toEqual([]);
+    expect(sms.sent.filter((text) => text.to === LIVE_HOST && text.body === privatePin).map((text) => text.to)).toEqual([]);
+    const state = desk.getState();
+    expect(state.ok).toBe(true);
+    if (state.ok) {
+      expect(state.result.next).toBe(AFTER_CHECKS);
+      expect(state.result.notes ?? []).toEqual([]);
+    }
+  });
+
+  it("returns the failed-send sentence after a failed private delivery report", async () => {
+    const { desk, sms, posts, pinKey, privatePin } = await privateSendWithoutHost();
+    const line = "I've sent the door code to Maria privately.";
+    const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    expect(left).toEqual({ ok: true, result: { next: PIN_SENT } });
+    const pending = desk.getState();
+    expect(pending.ok).toBe(true);
+    if (pending.ok) {
+      expect(pending.result.next).toBe(AFTER_CHECKS);
+      expect(pending.result.notes ?? []).toEqual([]);
+    }
+    const pinText = sms.sent.find((text) => text.body === privatePin);
+    desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "failed" });
+    const after = desk.getState();
+    expect(after.ok).toBe(true);
+    if (after.ok) {
+      expect(after.result.next).toBe(PIN_FAILED);
+      expect(after.result.notes ?? []).toEqual([]);
+    }
+    expect(sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
+    expect(posts.filter((text) => text.body === privatePin).map((text) => text.body)).toEqual([]);
+    expect(sms.sent.filter((text) => text.to === LIVE_HOST && (text.body === privatePin || text.body === PIN_FAILED || text.body === line)).map((text) => text.body)).toEqual([]);
+  });
+
+  it("hides the private note after an undelivered report and returns the failed-send sentence", async () => {
+    const { desk, sms, posts, pinKey, privatePin } = await privateSendWithoutHost();
+    const line = "I've sent the door code to Maria privately.";
+    const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
+    expect(left).toEqual({ ok: true, result: { next: PIN_SENT } });
+    const pinText = sms.sent.find((text) => text.body === privatePin);
+    desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "sent" });
+    const shown = desk.getState();
+    expect(shown.ok).toBe(true);
+    if (shown.ok) {
+      expect(shown.result.notes).toEqual([line]);
+      expect(shown.result.next).toBe(AFTER_CHECKS);
+    }
+    desk.notePinDelivery({ sid: pinText?.sid ?? "", status: "undelivered" });
+    const hidden = desk.getState();
+    expect(hidden.ok).toBe(true);
+    if (hidden.ok) {
+      expect(hidden.result.notes ?? []).toEqual([]);
+      expect(hidden.result.next).toBe(PIN_FAILED);
+    }
+    expect(sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
+    expect(posts.filter((text) => text.body === privatePin).map((text) => text.body)).toEqual([]);
+    expect(sms.sent.filter((text) => text.to === LIVE_HOST && (text.body === privatePin || text.body === line || text.body === PIN_FAILED)).map((text) => text.body)).toEqual([]);
   });
 });

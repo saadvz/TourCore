@@ -8,7 +8,7 @@ import { spokenTimes } from "../core/spokenTime";
 import { interpretFeed } from "./calendar";
 import { openCleanerCore, type CleanerCore, type CleanerText } from "./core";
 import { readPublicCalendar, type CalendarFetch } from "./fetchLimits";
-import { resumeNote } from "./cleanerTexts";
+import { isPrivateCodeLine, resumeNote } from "./cleanerTexts";
 import { GroupNotConfirmed } from "./groupThread";
 import { cleanerPinStatusUrl, isAllowlisted, liveSmsOn, sendLiveGroup, sendLiveSms, smsAllowlist } from "./liveSms";
 import { openPin, sealPin, type PinSeal } from "./pinSeal";
@@ -34,6 +34,7 @@ interface PinSend {
   sid: string;
   outcome: "accepted" | "undelivered" | "settled";
   notePending: boolean;
+  delivered?: boolean;
 }
 
 function groupChatOn(env: NodeJS.ProcessEnv): boolean {
@@ -298,7 +299,10 @@ export class LiveDesk {
     this.resume();
     if (this.pin) this.engine?.rememberPin(this.pin);
     if (!this.engine) return this.fail("Run the checks first.");
-    if (this.file.pinSend?.outcome === "accepted" || this.file.pinSend?.outcome === "settled") return this.reply({ next: PIN_REPEAT });
+    const tracked = this.file.pinSend;
+    if (tracked && (tracked.outcome === "accepted" || tracked.outcome === "settled")) {
+      return this.reply({ next: PIN_REPEAT });
+    }
     if (this.file.pinSend?.outcome === "undelivered") {
       if (this.file.pinSend.notePending) {
         this.file.pinSend.notePending = false;
@@ -309,13 +313,14 @@ export class LiveDesk {
     const result = await this.engine.receive({ id: `left-${randomUUID()}`, from: this.file.host, text: said });
     if (result.reason !== "departure") return this.fail("Say that the guests have left. I won't guess from the calendar.");
     const sentNow = result.sent.some((text) => text.kind === "pin");
+    const privateNow = result.sent.some((text) => text.kind === "pin" && text.channel !== "group");
     const failed = result.sent.some((text) => text.kind === "pin-failed") || this.engine.outbox().some((item) => item.kind === "pin" && item.status === "failed");
     if (groupChatOn(this.env()) && this.engine.groupPinSettled() && !sentNow) {
       this.file.pinSend = { sid: this.file.pinSend?.sid ?? "", outcome: "settled", notePending: false };
       this.persist();
       return this.reply({ next: "A text failed to send. I saved it for your review and did not count it as delivered." });
     }
-    if (sentNow && groupChatOn(this.env())) {
+    if (sentNow && groupChatOn(this.env()) && !privateNow) {
       this.file.pinSend = { sid: this.file.pinSend?.sid ?? "group", outcome: "accepted", notePending: false };
       this.persist();
     }
@@ -338,7 +343,17 @@ export class LiveDesk {
     const tracked = this.file.pinSend;
     if (!tracked || tracked.outcome === "settled" || tracked.sid !== input.sid) return;
     const status = input.status.toLowerCase();
+    if (status === "sent" || status === "delivered") {
+      if (tracked.delivered) return;
+      tracked.delivered = true;
+      tracked.notePending = false;
+      this.persist();
+      this.resume();
+      this.engine?.notePrivateCodeDelivered();
+      return;
+    }
     if (status !== "failed" && status !== "undelivered") return;
+    tracked.delivered = false;
     if (tracked.outcome === "undelivered") return;
     tracked.outcome = "undelivered";
     tracked.notePending = true;
@@ -346,7 +361,7 @@ export class LiveDesk {
     this.engine?.markPinUndelivered();
   }
 
-  async inbound(input: { id: string; from: string; text: string }): Promise<{ sent: CleanerText[] }> {
+  async inbound(input: { id: string; from: string; text: string; channel?: "group" }): Promise<{ sent: CleanerText[] }> {
     const from = parsePhone(input.from);
     if (!from || !isAllowlisted(this.env(), from)) return { sent: [] };
     if (this.claiming.has(input.id)) return { sent: [] };
@@ -360,7 +375,7 @@ export class LiveDesk {
       this.resume();
       const keyword = messagingKeyword(input.text);
       if (!this.engine) return { sent: await this.inboundBeforeJob(input.id, from, keyword) };
-      const result = await this.engine.receive({ id: input.id, from, text: input.text });
+      const result = await this.engine.receive({ id: input.id, from, text: input.text, ...(input.channel ? { channel: input.channel } : {}) });
       this.noteSeen(input.id);
       if (from === this.file.cleaner && keyword === "stop") this.held = this.engine?.cleanerHasOptedOut() === true;
       if (from === this.file.cleaner && keyword === "start") this.held = false;
@@ -414,7 +429,10 @@ export class LiveDesk {
     else if (!this.file.checked) next = "Run the checks. I'll read the calendar and I won't text anyone while I do.";
     else next = "Tell me the checkout time and the next check-in time before I text the cleaner.";
     if (this.held) next = "The cleaner opted out of cleaning texts, so the job is on hold.";
-    return { done, next, ...(this.file.checked ? { turns: this.turns() } : {}) };
+    const delivered = this.file.pinSend?.delivered === true && this.file.pinSend.outcome !== "undelivered";
+    const notes = (this.engine?.hostNotes() ?? []).filter((line) => delivered || !isPrivateCodeLine(line));
+    if (!this.held && this.privateCodeWaiting()) next = PIN_FAILED;
+    return { done, next, ...(this.file.checked ? { turns: this.turns() } : {}), ...(notes.length > 0 ? { notes } : {}) };
   }
 
   private turns(): Record<string, unknown>[] {
@@ -545,6 +563,15 @@ export class LiveDesk {
   private noteAccepted(sid: string): void {
     this.file.pinSend = { sid, outcome: "accepted", notePending: false };
     this.persist();
+  }
+
+  private privateCodeWaiting(): boolean {
+    if (!groupChatOn(this.env()) || !this.engine) return false;
+    const tracked = this.file.pinSend;
+    if (tracked?.delivered === true && tracked.outcome !== "undelivered") return false;
+    if (tracked?.outcome === "undelivered") return true;
+    if (tracked?.sid === "group" || tracked?.outcome === "settled" || tracked?.outcome === "accepted") return false;
+    return this.engine.outbox().some((item) => item.kind === "pin" && (item.status === "failed" || item.status === "uncertain"));
   }
 
   private takeFailureNote(): string | undefined {
