@@ -1649,6 +1649,7 @@ class Engine implements CleanerCore {
     if (this.pin && draft.body.includes(this.pin)) return null;
     const forHost = (this.owner && draft.to === this.owner) || (!this.owner && HOST_DIRECT.has(draft.kind));
     if (!forHost) return null;
+    if (this.outboxState.find((item) => item.id === draft.id)?.status !== "sent") this.upsert(draft, "sent");
     this.keepHostNote(`host:${draft.kind}:${draft.body}`, draft.body);
     return { to: draft.to, body: draft.body, kind: draft.kind };
   }

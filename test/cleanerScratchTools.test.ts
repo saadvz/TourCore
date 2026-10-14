@@ -401,4 +401,24 @@ describe("Scratch test tools", () => {
     expect(twilioCalls).toBe(0);
     expect(wired.cleanerSent).toEqual([]);
   }, 40_000);
+
+  it("records an opted-out host note in the outbox and does not call Twilio", async () => {
+    if (!LANE) throw new Error("missing lane");
+    const wired = await scratchApp({ groupChat: true, allowlist: `${LANE.ownerPhone},${LANE.cleanerPhone},${LANE_OBSERVER}` });
+    await saveScratch(wired, { address: LANE.property.address, host: LANE.ownerPhone, cleaner: LANE.cleanerPhone, observer: LANE_OBSERVER, pin: LANE.pin }, "Scratch");
+    expect(nextOf(await call(wired, "send_test_text", { from: LANE.ownerPhone, text: "STOP" }))).toBe(WENT_THROUGH);
+    const resumed = await call(wired, "resume_job");
+    const sentence = `The cleaning at ${LANE.property.address} is back on.`;
+    expect(resumed.isError).toBe(false);
+    expect(resumed.text).toContain(sentence);
+    const lines = linesOf(await call(wired, "read_outbox"));
+    expect(lines).toContain("Hold note to the host: sent.");
+    expect(lines).toContain("Resume note to the host: sent.");
+    expect(lines.join("\n").includes(LANE.pin)).toBe(false);
+    const state = await call(wired, "get_state");
+    expect(state.text).toContain(sentence);
+    expect(state.text.includes(LANE.pin)).toBe(false);
+    expect(twilioCalls).toBe(0);
+    expect(wired.cleanerSent).toEqual([]);
+  }, 40_000);
 });

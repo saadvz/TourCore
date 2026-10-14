@@ -322,9 +322,11 @@ describe("group thread", () => {
     expect(sent).toEqual([]);
     expect(job.hostNotes()).toEqual([sentence]);
     expect(resumed?.body).toBe(sentence);
+    expect(job.outbox()).toEqual([expect.objectContaining({ to: "", kind: "resume", status: "sent", body: sentence })]);
     const again = await job.resumeJob();
     expect(again?.body).toBe(sentence);
     expect(job.hostNotes()).toEqual([sentence]);
+    expect(job.outbox()).toEqual([expect.objectContaining({ to: "", kind: "resume", status: "sent", body: sentence })]);
     expect(sent).toEqual([]);
   });
 
