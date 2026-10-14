@@ -38,6 +38,23 @@ const SCRATCH_ICAL = [
   "END:VCALENDAR",
 ].join("\n");
 
+const NEXT_JOB_ICAL = [
+  "BEGIN:VCALENDAR",
+  "BEGIN:VEVENT",
+  "DTSTART;VALUE=DATE:20261019",
+  "DTEND;VALUE=DATE:20261021",
+  "SUMMARY:Reserved",
+  "END:VEVENT",
+  "BEGIN:VEVENT",
+  "DTSTART;VALUE=DATE:20261021",
+  "DTEND;VALUE=DATE:20261023",
+  "SUMMARY:Reserved",
+  "END:VEVENT",
+  "END:VCALENDAR",
+].join("\n");
+
+const NEXT_OFFER = "Turnover at 12 Scratch Lane, Teaneck, NJ 07666 on Wednesday, Oct 21. Checkout 11:00 AM, next guest 4:00 PM. Reply YES to schedule it, or STOP to opt out.";
+
 const GAP_ICAL = [
   "BEGIN:VCALENDAR",
   "BEGIN:VEVENT",
@@ -217,6 +234,53 @@ describe("one Scratch turnover", () => {
     });
     expect(hurt.sent).toEqual([
       { to: OWNER, body: OFFER, kind: "offer" },
+      { to: OWNER, body: EMERGENCY, kind: "emergency" },
+    ]);
+  });
+
+  it("sends the emergency reply once per sender per job", async () => {
+    const box = sink();
+    const job = core(box);
+    await job.scheduleFromIcal(SCRATCH_ICAL);
+
+    expect(await job.receive({ id: "hurt-owner-1", from: OWNER, text: "I fell and I'm hurt" })).toEqual({
+      handled: true,
+      reason: "emergency",
+      sent: [{ to: OWNER, body: EMERGENCY, kind: "emergency" }],
+    });
+    expect(await job.receive({ id: "hurt-owner-2", from: OWNER, text: "I fell and I'm hurt" })).toEqual({
+      handled: true,
+      reason: "emergency",
+      sent: [],
+    });
+    expect(await job.receive({ id: "hurt-cleaner-1", from: CLEANER, text: "I fell and I'm hurt" })).toEqual({
+      handled: true,
+      reason: "emergency",
+      sent: [{ to: CLEANER, body: EMERGENCY, kind: "emergency" }],
+    });
+    expect(await job.receive({ id: "hurt-cleaner-2", from: CLEANER, text: "I fell and I'm hurt" })).toEqual({
+      handled: true,
+      reason: "emergency",
+      sent: [],
+    });
+
+    await job.scheduleFromIcal(NEXT_JOB_ICAL);
+    expect(await job.receive({ id: "hurt-owner-3", from: OWNER, text: "I fell and I'm hurt" })).toEqual({
+      handled: true,
+      reason: "emergency",
+      sent: [{ to: OWNER, body: EMERGENCY, kind: "emergency" }],
+    });
+    expect(await job.receive({ id: "hurt-owner-4", from: OWNER, text: "I fell and I'm hurt" })).toEqual({
+      handled: true,
+      reason: "emergency",
+      sent: [],
+    });
+
+    expect(box.sent).toEqual([
+      { to: OWNER, body: OFFER, kind: "offer" },
+      { to: OWNER, body: EMERGENCY, kind: "emergency" },
+      { to: CLEANER, body: EMERGENCY, kind: "emergency" },
+      { to: OWNER, body: NEXT_OFFER, kind: "offer" },
       { to: OWNER, body: EMERGENCY, kind: "emergency" },
     ]);
   });

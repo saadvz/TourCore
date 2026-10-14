@@ -96,7 +96,8 @@ class Engine implements CleanerCore {
   private consented: boolean;
   private readonly everConsented: boolean;
   private optedOut = false;
-  private injurySent = false;
+  /** Sender + turnover already given the emergency reply. Recorded only after the text is sent. */
+  private readonly injurySent = new Set<string>();
   private readonly seen = new Set<string>();
   private job: (TurnoverWindow & { status: JobStatus }) | undefined;
 
@@ -150,9 +151,11 @@ class Engine implements CleanerCore {
   }
 
   private async emergency(from: string): Promise<ReceiveResult> {
-    if (this.injurySent) return { handled: true, reason: "emergency", sent: [] };
-    this.injurySent = true;
-    return this.reply(from, EMERGENCY, "emergency", "emergency");
+    const key = `${from}|${this.job?.checkout ?? ""}|${this.job?.nextArrival ?? ""}`;
+    if (this.injurySent.has(key)) return { handled: true, reason: "emergency", sent: [] };
+    const result = await this.reply(from, EMERGENCY, "emergency", "emergency");
+    this.injurySent.add(key);
+    return result;
   }
 
   private async stop(from: string): Promise<ReceiveResult> {
