@@ -1531,7 +1531,7 @@ export class TourCore {
   async requestHelp(
     reservationId: string | undefined,
     where?: string,
-    inbound?: { text: string; meta?: InboundMeta; phone?: string; messagingOptedOut?: boolean; suppressMedicalVisitorLine?: boolean },
+    inbound?: { text: string; meta?: InboundMeta; phone?: string; messagingOptedOut?: boolean; suppressMedicalVisitorLine?: boolean; keywordBody?: string },
   ): Promise<void> {
     const said = inbound?.text ?? "I need help";
     const medical = isMedicalEmergency(said);
@@ -1573,8 +1573,10 @@ export class TourCore {
         : repeat
           ? VisitorDenialCopy.helpRepeatAck(team, contact)
           : VisitorDenialCopy.helpAck(team, contact);
+    // Bare HELP/INFO stays the keyword body. A failed team text still uses the snag line.
+    const visitorLine = failed ? renderSms("handler-snag-retry").body : (inbound?.keywordBody ?? ack);
     if (medical) await this.sendMedicalVisitorLine(stored, reservationId, ack, optedOut);
-    else await this.textProspect(prospect, reservationId, failed ? renderSms("handler-snag-retry").body : ack);
+    else await this.textProspect(prospect, reservationId, visitorLine, undefined, inbound?.keywordBody ? { deliverDespiteOptOut: true } : undefined);
     await this.recordBestEffort(
       "HELP_REQUESTED",
       { reservationId, prospectId: prospect.id, detail: where ?? "", code: said },

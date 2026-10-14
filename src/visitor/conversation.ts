@@ -486,8 +486,7 @@ export async function handleVisitorText(
 
   const inbound = await classifyInbound(session, text);
   if (inbound.kind === "help") {
-    await session.recordText(said);
-    await session.reply(smsHelpBody(process.env, { visitorContact: session.config.operator.visitorContact }), undefined, { deliverDespiteOptOut: true });
+    await session.help(said);
     return undefined;
   }
   if (inbound.kind === "emergency") {

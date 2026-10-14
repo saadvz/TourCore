@@ -227,7 +227,7 @@ describe("typed replies", () => {
     await session.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: PHONE });
     const outboundBefore = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND").length;
     await say("help");
-    expect((await session.store.listAudit()).some((e) => e.type === "HELP_REQUESTED")).toBe(false);
+    expect((await session.store.listAudit()).some((e) => e.type === "HELP_REQUESTED")).toBe(true);
     expect(lastReply()).toBe(smsHelpBody());
     expect(lastReply()).not.toContain("Stay where you are");
     const outbound = (await session.store.list("messages")).filter((m) => m.audience === "PROSPECT" && m.direction === "OUTBOUND");

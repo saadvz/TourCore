@@ -6,6 +6,7 @@ import { DemoMessagingAdapter } from "../src/messaging/Messenger";
 import { handleVisitorText } from "../src/visitor/conversation";
 import { smsHelpBody } from "../src/visitor/smsConsent";
 import { VisitorDemoSession } from "../src/visitor";
+import { persistSession } from "../src/operator/services";
 import { grokHarness } from "./grokHarness";
 import { bookTour, minutesFrom, setup } from "./helpers";
 
@@ -115,8 +116,8 @@ describe("help flow: one visitor reply, one open exception", () => {
     expect(added[0]!.body).toContain("Tour Core:");
     expect(added[0]!.body).toContain("Reply STOP to opt out.");
     expect(added.join("\n")).not.toContain("Stay where you are");
-    expect((await p.session.store.listAudit()).filter((e) => e.type === "HELP_REQUESTED")).toHaveLength(0);
-    expect((await p.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(0);
+    expect(await p.session.store.listAudit()).toEqual(expect.arrayContaining([expect.objectContaining({ type: "HELP_REQUESTED" })]));
+    expect((await p.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(1);
   });
 
   it("HELP on an upcoming booked tour sends the carrier keyword, not the remote ack", async () => {
@@ -129,8 +130,8 @@ describe("help flow: one visitor reply, one open exception", () => {
     expect(added.map((m) => m.body)).toEqual([smsHelpBody()]);
     expect(added[0]!.body).toContain("Tour Core:");
     expect(added[0]!.body).not.toContain("Stay where you are");
-    expect((await p.session.store.listAudit()).filter((e) => e.type === "HELP_REQUESTED")).toHaveLength(0);
-    expect((await p.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(0);
+    expect((await p.session.store.listAudit()).some((e) => e.type === "HELP_REQUESTED")).toBe(true);
+    expect((await p.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(1);
   });
 
   it("HELP after choosing a unit but before a time is booked sends only the carrier keyword reply", async () => {
@@ -145,6 +146,81 @@ describe("help flow: one visitor reply, one open exception", () => {
     expect(added.map((m) => m.body)).toEqual([smsHelpBody()]);
     expect((await p.session.store.listAudit()).filter((e) => e.type === "HELP_REQUESTED")).toHaveLength(0);
     expect((await p.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(0);
+  });
+
+  it("bare HELP mid-tour gives the keyword body only, plus one team alert and one inbox help item", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const v = await h.touringVisitor(id);
+    const before = await prospectOutbound(v.session);
+    await v.session.act("help", {}, { text: "HELP" });
+    await persistSession(h.services, v.session);
+    const added = (await prospectOutbound(v.session)).slice(before.length);
+    const keyword = smsHelpBody(process.env, { visitorContact: v.session.config.operator.visitorContact });
+    expect(added.map((m) => m.body)).toEqual([keyword]);
+    expect(added.join("\n")).not.toContain("Stay where you are");
+    expect((await v.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(1);
+    expect((await v.session.store.listAudit()).filter((e) => e.type === "HELP_REQUESTED")).toHaveLength(1);
+    const inbox = await h.ok("get_inbox");
+    expect((inbox.items as Array<{ kind?: string }>).filter((row) => row.kind === "help")).toHaveLength(1);
+  });
+
+  it("bare HELP on an upcoming booked tour keeps the keyword body and alerts the team once", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const v = await h.visitor(id);
+    await v.act("chooseTime", { slotStart: v.slot().toISOString() });
+    await v.act("consent", { agree: true });
+    await v.act("submitIdentity", { firstName: "Pat", lastName: "Smith", email: "pat@example.com", phone: "555-010-2000" });
+    expect((await v.session.reservation())?.status).toBe("READY");
+    const before = await prospectOutbound(v.session);
+    await v.session.act("help", {}, { text: "HELP" });
+    await persistSession(h.services, v.session);
+    const added = (await prospectOutbound(v.session)).slice(before.length);
+    const keyword = smsHelpBody(process.env, { visitorContact: v.session.config.operator.visitorContact });
+    expect(added.map((m) => m.body)).toEqual([keyword]);
+    expect(added.join("\n")).not.toContain("They'll reply here");
+    expect((await v.session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(1);
+    expect((await v.session.store.listAudit()).filter((e) => e.type === "HELP_REQUESTED")).toHaveLength(1);
+    const inbox = await h.ok("get_inbox");
+    expect((inbox.items as Array<{ kind?: string }>).filter((row) => row.kind === "help")).toHaveLength(1);
+  });
+
+  it("bare HELP with no booking gives no alert", async () => {
+    const h = grokHarness();
+    cleanups.push(h.cleanup);
+    const id = await h.publish();
+    const { config } = h.workspace.load(id);
+    const session = h.visitors.add(
+      new VisitorDemoSession(id, config, h.workspace.newVisitorTourId(id, new Date(h.now())), { realNow: () => h.now(), kind: "messaging" }),
+    );
+    await handleVisitorText(session, "+15550108881", "HELP", { provider: "test", providerMessageId: "help-none" });
+    await persistSession(h.services, session);
+    const keyword = smsHelpBody(process.env, { visitorContact: session.config.operator.visitorContact });
+    expect((await prospectOutbound(session)).map((m) => m.body)).toEqual([keyword]);
+    expect((await session.store.list("messages")).filter((m) => m.audience === "OPERATOR" && m.body.includes("asked for help"))).toHaveLength(0);
+    expect((await session.store.listAudit()).filter((e) => e.type === "HELP_REQUESTED")).toHaveLength(0);
+    const inbox = await h.ok("get_inbox");
+    expect((inbox.items as Array<{ kind?: string }>).filter((row) => row.kind === "help")).toHaveLength(0);
+  });
+
+  it("a failing team text on a mid-tour HELP uses the snag-line fallback", async () => {
+    const p = phone();
+    await bookAndArrive(p);
+    failOperatorSend(p.session);
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const before = await prospectOutbound(p.session);
+    await p.say("HELP");
+    const added = (await prospectOutbound(p.session)).slice(before.length);
+    expect(added.map((m) => m.body)).toEqual([SNAG]);
+    expect(added.join("\n")).not.toContain("For help with your property tour");
+    expect(added.join("\n")).not.toContain("let the property team know");
+    const notice = teamTextFailedNotice("Pat Smith");
+    const failed = (await p.session.store.listAudit()).filter((event) => event.type === "MESSAGE_FAILED");
+    expect(failed.map((event) => event.detail)).toEqual([notice]);
+    expect(errors.mock.calls.map((args) => args.join(" ")).join("\n")).toContain("Sendblue rejected the text");
   });
 
   it("HELP with no reservation still sends the carrier compliance reply", async () => {

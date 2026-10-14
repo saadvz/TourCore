@@ -612,11 +612,13 @@ export class VisitorDemoSession {
   }
 
   /**
-   * HELP: one reply only. A booked tour that is upcoming, still inside its
-   * window, or past the window while the tour is still in progress gets the
-   * help ack (at-door or remote) and alerts the team. Finished, canceled,
-   * revoked, failed-ID, expired, or not-yet-booked reservations — and unknown
-   * numbers — get the carrier HELP keyword reply.
+   * HELP: one visitor reply. Bare HELP or INFO is always the carrier keyword
+   * body. On a booked tour that is upcoming, inside its window, or still in
+   * progress after the window, that keyword also alerts the team, files the
+   * help inbox item, and records HELP_REQUESTED. If the team text fails, the
+   * visitor gets the snag line instead. A real problem still uses the help
+   * ack. Finished, canceled, revoked, failed-ID, expired, or not-yet-booked
+   * reservations — and unknown numbers — get the keyword reply and no alert.
    */
   async help(said: Said): Promise<void> {
     const text = said.text ?? "HELP";
@@ -638,10 +640,18 @@ export class VisitorDemoSession {
       await this.syncReplies();
       return;
     }
-    // Bare HELP or INFO is the carrier keyword even during a tour. It does not alert the team.
+    // Bare HELP or INFO is the carrier keyword. A booked or in-progress tour still alerts the team.
     if (keywordOf(text) === "help") {
+      const keywordBody = smsHelpBody(process.env, { visitorContact: this.config.operator.visitorContact });
+      const reservation = await this.reservation();
+      if (reservation && isLiveHelpReservation(reservation, this.clock.now())) {
+        this.say("visitor", text);
+        await this.core.requestHelp(reservation.id, await this.currentPlace(), { text, meta: said.meta, keywordBody });
+        await this.syncReplies();
+        return;
+      }
       await this.recordText(said);
-      await this.reply(smsHelpBody(process.env, { visitorContact: this.config.operator.visitorContact }), undefined, { deliverDespiteOptOut: true });
+      await this.reply(keywordBody, undefined, { deliverDespiteOptOut: true });
       return;
     }
     const reservation = await this.reservation();

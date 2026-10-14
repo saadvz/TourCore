@@ -164,6 +164,10 @@ describe("a real phone over Sendblue", () => {
     expect(help.replies).toEqual([smsHelpBody()]);
     expect(help.replies.join("\n")).toContain("Tour Core:");
     expect(help.replies.join("\n")).not.toContain("Khanex");
+    const helpTour = app.ws.listTours(app.id).find((item) => item.kind === "messaging");
+    const helpBundle = app.ws.loadTour(app.id, helpTour!.tourId)!.bundle;
+    expect(helpBundle.messages.filter((message) => message.audience === "OPERATOR" && message.body.includes("asked for help"))).toHaveLength(1);
+    expect(helpBundle.auditEvents.filter((event) => event.type === "HELP_REQUESTED")).toHaveLength(1);
 
     const finish = await app.text("finish");
     expect(finish.replies[0]).toContain("Would you like someone from the property team to follow up?\nReply YES or NO.");
