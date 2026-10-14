@@ -301,8 +301,6 @@ export class LiveDesk {
     if (!this.engine) return this.fail("Run the checks first.");
     const tracked = this.file.pinSend;
     if (tracked && (tracked.outcome === "accepted" || tracked.outcome === "settled")) {
-      const privatePending = groupChatOn(this.env()) && tracked.outcome === "accepted" && tracked.sid !== "group" && tracked.delivered !== true;
-      if (privatePending) return this.reply({ next: PIN_FAILED });
       return this.reply({ next: PIN_REPEAT });
     }
     if (this.file.pinSend?.outcome === "undelivered") {
@@ -326,7 +324,6 @@ export class LiveDesk {
       this.file.pinSend = { sid: this.file.pinSend?.sid ?? "group", outcome: "accepted", notePending: false };
       this.persist();
     }
-    if (sentNow && groupChatOn(this.env()) && privateNow) return this.reply({ next: PIN_FAILED });
     if (sentNow) return this.reply({ next: PIN_SENT });
     if (failed) return this.reply({ next: PIN_FAILED });
     return this.reply({ next: PIN_FAILED });
@@ -572,8 +569,8 @@ export class LiveDesk {
     if (!groupChatOn(this.env()) || !this.engine) return false;
     const tracked = this.file.pinSend;
     if (tracked?.delivered === true && tracked.outcome !== "undelivered") return false;
-    if (tracked?.sid === "group" || tracked?.outcome === "settled") return false;
-    if (tracked?.outcome === "accepted" || tracked?.outcome === "undelivered") return true;
+    if (tracked?.outcome === "undelivered") return true;
+    if (tracked?.sid === "group" || tracked?.outcome === "settled" || tracked?.outcome === "accepted") return false;
     return this.engine.outbox().some((item) => item.kind === "pin" && (item.status === "failed" || item.status === "uncertain"));
   }
 

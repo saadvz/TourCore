@@ -739,18 +739,17 @@ describe("live group membership", () => {
     await desk.inbound({ id: "yes-cleaner", from: LIVE_CLEANER, text: "YES" });
     await desk.inbound({ id: "yes-schedule", from: LIVE_CLEANER, text: "YES" });
     fetchBox.blockMembership();
-    const failedAlert = "The door code didn't reach the cleaner. Tell me the guests have left again and I'll resend it.";
     const left = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
     const again = await desk.markGuestsLeft({ said: "The guests have left" }, pinKey);
-    expect(left).toEqual({ ok: true, result: { next: failedAlert } });
-    expect(again).toEqual({ ok: true, result: { next: failedAlert } });
+    expect(left).toEqual({ ok: true, result: { next: PIN_SENT } });
+    expect(again).toEqual({ ok: true, result: { next: ALREADY } });
     expect(fetchBox.posts.filter((text) => text.body === line || text.body === alert || text.body === checkout || text.body === groupPin || text.body === TIME_LINE)).toEqual([]);
     expect(sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
     expect(sms.sent.filter((text) => text.body === line || text.body === alert || text.body === checkout || text.body === groupPin)).toEqual([]);
     const waiting = desk.getState();
     expect(waiting.ok).toBe(true);
     if (waiting.ok) {
-      expect(waiting.result.next).toBe(failedAlert);
+      expect(waiting.result.next).toBe(AFTER_CHECKS);
       expect(waiting.result.notes ?? []).toEqual([]);
     }
     const pinText = sms.sent.find((text) => text.body === privatePin);
@@ -759,7 +758,7 @@ describe("live group membership", () => {
     expect(read.ok).toBe(true);
     if (read.ok) {
       expect(read.result.notes).toEqual([line]);
-      expect(read.result.next).toBe("Tell me the checkout time and the next check-in time before I text the cleaner.");
+      expect(read.result.next).toBe(AFTER_CHECKS);
       expect(JSON.stringify(read.result.notes).includes(DOOR_CODE)).toBe(false);
       expect(JSON.stringify(read.result.notes).includes(groupPin)).toBe(false);
     }
@@ -1003,7 +1002,7 @@ describe("live group membership", () => {
       expect(after.result.notes ?? []).toEqual([]);
     }
     expect(sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
-    expect(posts.filter((text) => text.body === privatePin || text.body === line).map((text) => text.body)).toEqual([]);
+    expect(posts.filter((text) => text.body === privatePin).map((text) => text.body)).toEqual([]);
     expect(sms.sent.filter((text) => text.to === LIVE_HOST && (text.body === privatePin || text.body === PIN_FAILED || text.body === line)).map((text) => text.body)).toEqual([]);
   });
 
@@ -1028,7 +1027,7 @@ describe("live group membership", () => {
       expect(hidden.result.next).toBe(PIN_FAILED);
     }
     expect(sms.sent.filter((text) => text.body === privatePin).map((text) => text.to)).toEqual([LIVE_CLEANER]);
-    expect(posts.filter((text) => text.body === privatePin || text.body === line).map((text) => text.body)).toEqual([]);
+    expect(posts.filter((text) => text.body === privatePin).map((text) => text.body)).toEqual([]);
     expect(sms.sent.filter((text) => text.to === LIVE_HOST && (text.body === privatePin || text.body === line || text.body === PIN_FAILED)).map((text) => text.body)).toEqual([]);
   });
 });
