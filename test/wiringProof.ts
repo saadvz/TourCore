@@ -104,7 +104,7 @@ export function fakeSms(decide: (body: string) => string = () => "queued"): Twil
   };
 }
 
-export async function startWiredApp(options: { live?: boolean; enabled?: boolean } = {}): Promise<WiredApp> {
+export async function startWiredApp(options: { live?: boolean; enabled?: boolean; scratchTools?: boolean; allowlist?: string; groupChat?: boolean } = {}): Promise<WiredApp> {
   const live = options.live !== false;
   const enabled = options.enabled !== false;
   const root = mkdtempSync(join(tmpdir(), "cleaner-wiring-"));
@@ -121,7 +121,9 @@ export async function startWiredApp(options: { live?: boolean; enabled?: boolean
     TOURCORE_OPERATOR_TOKEN: TOUR_TOKEN,
     ...(enabled ? { CLEANER_CORE_ENABLED: "1" } : {}),
     ...(live ? { CLEANER_CORE_LIVE_SMS: "1" } : {}),
-    CLEANER_CORE_SMS_ALLOWLIST: `${HOST},${CLEANER}`,
+    CLEANER_CORE_SMS_ALLOWLIST: options.allowlist ?? `${HOST},${CLEANER}`,
+    ...(options.scratchTools ? { CLEANER_CORE_SCRATCH_TOOLS: "1" } : {}),
+    ...(options.groupChat ? { CLEANER_CORE_GROUP_CHAT: "1" } : {}),
     CLEANER_CORE_MCP_TOKEN: CLEANER_TOKEN,
     CLEANER_CORE_TWILIO_ACCOUNT_SID: "ACcleanerwiring",
     CLEANER_CORE_TWILIO_AUTH_TOKEN: CLEANER_AUTH,

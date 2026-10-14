@@ -1062,6 +1062,7 @@ class Engine implements CleanerCore {
   }
 
   private foreignPhone(phone: string): boolean {
+    if (phone === this.owner || phone === this.cleanerPhone) return false;
     if (isOtherScratchTenantPhone(this.tenantId, phone)) return true;
     if (!this.isolate) return false;
     return SCRATCH_TENANTS.some((tenant) => phone === tenant.ownerPhone || phone === tenant.cleanerPhone || phone === tenant.unapprovedPhone);

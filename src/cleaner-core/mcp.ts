@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DOOR_CODE_IN_CHAT, type LiveDesk, type ToolReply } from "./liveDesk";
+import { DELIVERY_REPORTS, SCRATCH_TOOLS } from "./scratchQa";
 
 export const CLEANER_MCP_PATH = "/mcp/cleaner-core";
 
@@ -74,7 +75,50 @@ const TOOLS = [
   },
 ] as const;
 
-type ToolName = (typeof TOOLS)[number]["name"];
+function scratchCopy(name: (typeof SCRATCH_TOOLS)[number]["name"]) {
+  const found = SCRATCH_TOOLS.find((tool) => tool.name === name);
+  if (!found) throw new Error(`Missing ${name}`);
+  return found;
+}
+
+const SCRATCH_TOOL_LIST = [
+  {
+    name: "reset_scratch",
+    title: scratchCopy("reset_scratch").title,
+    description: scratchCopy("reset_scratch").description,
+    input: z.object({}),
+  },
+  {
+    name: "read_inbox",
+    title: scratchCopy("read_inbox").title,
+    description: scratchCopy("read_inbox").description,
+    input: z.object({}),
+  },
+  {
+    name: "read_outbox",
+    title: scratchCopy("read_outbox").title,
+    description: scratchCopy("read_outbox").description,
+    input: z.object({}),
+  },
+  {
+    name: "send_test_text",
+    title: scratchCopy("send_test_text").title,
+    description: scratchCopy("send_test_text").description,
+    input: z.object({ from: z.string(), text: z.string() }),
+  },
+  {
+    name: "report_delivery",
+    title: scratchCopy("report_delivery").title,
+    description: scratchCopy("report_delivery").description,
+    input: z.object({ which: z.string(), status: z.enum(DELIVERY_REPORTS) }),
+  },
+] as const;
+
+type ToolName = (typeof TOOLS)[number]["name"] | (typeof SCRATCH_TOOL_LIST)[number]["name"];
+
+function listedTools(scratchTools: boolean) {
+  return scratchTools ? [...TOOLS, ...SCRATCH_TOOL_LIST] : [...TOOLS];
+}
 
 const Request = z.object({
   jsonrpc: z.literal("2.0"),
@@ -83,7 +127,7 @@ const Request = z.object({
   params: z.record(z.string(), z.unknown()).optional(),
 });
 
-export async function handleCleanerMcpMessage(desk: LiveDesk, message: unknown, pinKey?: Buffer): Promise<{ status: number; body?: unknown }> {
+export async function handleCleanerMcpMessage(desk: LiveDesk, message: unknown, pinKey?: Buffer, scratchTools = false): Promise<{ status: number; body?: unknown }> {
   if (Array.isArray(message)) return rpcError(null, -32600, "Batched requests aren't supported.");
   const parsed = Request.safeParse(message);
   if (!parsed.success) return rpcError(null, -32600, "That isn't a valid request.");
@@ -100,7 +144,7 @@ export async function handleCleanerMcpMessage(desk: LiveDesk, message: unknown, 
   if (method === "ping") return rpcResult(id, {});
   if (method === "tools/list") {
     return rpcResult(id, {
-      tools: TOOLS.map((tool) => {
+      tools: listedTools(scratchTools).map((tool) => {
         const { $schema: _schema, ...inputSchema } = z.toJSONSchema(tool.input) as Record<string, unknown>;
         return { name: tool.name, title: tool.title, description: tool.description, inputSchema };
       }),
@@ -108,7 +152,7 @@ export async function handleCleanerMcpMessage(desk: LiveDesk, message: unknown, 
   }
   if (method === "tools/call") {
     const name = typeof params?.name === "string" ? params.name : "";
-    const tool = TOOLS.find((item) => item.name === name);
+    const tool = listedTools(scratchTools).find((item) => item.name === name);
     if (!tool) return rpcError(id, -32602, "I can't do that from this chat.");
     const args = tool.input.safeParse(params?.arguments ?? {});
     if (!args.success) return rpcResult(id, { content: [{ type: "text", text: "That was missing something I need." }], isError: true });
@@ -164,6 +208,16 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
       return desk.runChecks();
     case "resume_job":
       return desk.resumeCleaning();
+    case "reset_scratch":
+      return desk.resetScratch();
+    case "read_inbox":
+      return desk.readInbox();
+    case "read_outbox":
+      return desk.readOutbox();
+    case "send_test_text":
+      return desk.sendTestText(args as { from?: string; text?: string });
+    case "report_delivery":
+      return desk.reportDelivery(args as { which?: string; status?: string });
   }
 }
 
