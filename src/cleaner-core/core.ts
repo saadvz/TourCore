@@ -10,6 +10,8 @@ import { VisitorDenialCopy } from "../core/TourCore";
 import { writeFileAtomic } from "../storage/atomicWrite";
 import { addCalendarDays, formatWhen, interpretFeed, zonedInstant, type FeedBlock, type Turnover } from "./calendar";
 import { isScratchTestNumber } from "./scratch";
+import { normalizeSnapshots, type BookingSource, type BookingSourceKind, type SourceConflict, type SourceSnapshot } from "./sources";
+import { isOtherScratchTenantPhone, SCRATCH_TENANTS } from "./tenants";
 
 export type TextKind =
   | "host-checkout"
@@ -82,10 +84,17 @@ export interface OutboxView {
 
 export interface PollResult {
   polled: boolean;
-  reason: "disabled" | "scratch-only" | "not-consented" | "read";
+  reason: "disabled" | "scratch-only" | "not-consented" | "read" | "wrong-tenant";
   sent: CleanerText[];
   jobs: JobView[];
   blocks: FeedBlock[];
+}
+
+export interface SyncState {
+  reason: PollResult["reason"];
+  conversation: "closed" | "open";
+  sources: BookingSourceKind[];
+  conflicts: SourceConflict[];
 }
 
 export type ReceiveReason =
@@ -102,7 +111,8 @@ export type ReceiveReason =
   | "host-time"
   | "departure"
   | "opted-in"
-  | "done";
+  | "done"
+  | "wrong-tenant";
 
 export interface ReceiveResult {
   handled: boolean;
@@ -146,16 +156,20 @@ export interface CleanerCoreOptions {
   triggers?: ReminderTrigger[];
   /** When set, jobs and the outbox reload after a process restart. */
   dataDir?: string;
+  /** Scratch tenant id. Other Scratch tenants' phones are ignored and never texted. */
+  tenantId?: string;
 }
 
 export interface CleanerCore {
-  pollFeed(ical: string): Promise<PollResult>;
+  pollFeed(ical: string, options?: { conversation?: "closed" | "open" }): Promise<PollResult>;
+  readSource(source: BookingSource, options?: { conversation?: "closed" | "open" }): Promise<PollResult & SyncState>;
   receive(input: { id: string; from: string; text: string }): Promise<ReceiveResult>;
   runReminders(): Promise<ReminderResult>;
   jobs(): JobView[];
   outbox(): OutboxView[];
   transcript(): string[];
   blocks(): FeedBlock[];
+  lastSync(): SyncState;
 }
 
 const HELP_ACK = "Need help with this cleaning? Reply here and the host will see it. Reply STOP to opt out.";
@@ -243,6 +257,7 @@ interface OutboxItem {
 
 interface Stored {
   schemaVersion: 1;
+  tenantId?: string;
   jobs: Job[];
   hostFacts: HostFact[];
   tombstones: Tombstone[];
@@ -255,6 +270,26 @@ interface Stored {
   cleanerConsent?: "pending" | "in" | "out";
   clearances?: Clearance[];
   pinSeal?: PinSeal;
+}
+
+/** One file can hold several tenants. A single-tenant file stays the flat step D shape. */
+interface StoreFile {
+  schemaVersion: 1;
+  tenantId?: string;
+  tenants?: Record<string, Stored>;
+  jobs?: Job[];
+  hostFacts?: HostFact[];
+  tombstones?: Tombstone[];
+  outbox?: OutboxItem[];
+  inboundIds?: string[];
+  transcript?: string[];
+  optedOut?: boolean;
+  injurySent?: string[];
+  blocks?: FeedBlock[];
+  cleanerConsent?: "pending" | "in" | "out";
+  clearances?: Clearance[];
+  pinSeal?: PinSeal;
+  pin?: unknown;
 }
 
 interface Draft {
@@ -290,6 +325,10 @@ class Engine implements CleanerCore {
   private blockState: FeedBlock[] = [];
   private readonly now: () => Date;
   private readonly file: string | undefined;
+  private readonly tenantId: string;
+  private readonly latest = new Map<BookingSourceKind, SourceSnapshot>();
+  private conflictState: SourceConflict[] = [];
+  private syncState: SyncState = { reason: "read", conversation: "open", sources: [], conflicts: [] };
 
   constructor(private readonly options: CleanerCoreOptions) {
     this.enabled = options.enabled;
@@ -308,25 +347,29 @@ class Engine implements CleanerCore {
     this.everConsented = options.consented === true;
     this.now = options.now ?? (() => new Date());
     this.file = options.dataDir ? join(options.dataDir, "cleaner-core.json") : undefined;
+    this.tenantId = options.tenantId?.trim() || options.property.id;
     this.load();
   }
 
-  async pollFeed(ical: string): Promise<PollResult> {
-    if (!this.enabled) return { polled: false, reason: "disabled", sent: [], jobs: [], blocks: [] };
-    if (!this.scratchReady()) return { polled: false, reason: "scratch-only", sent: [], jobs: this.jobs(), blocks: [] };
-    if (this.optedOut || !this.everConsented) {
-      if (!this.everConsented) return { polled: false, reason: "not-consented", sent: [], jobs: [], blocks: [] };
-    }
+  async pollFeed(ical: string, options?: { conversation?: "closed" | "open" }): Promise<PollResult> {
+    const conversation = options?.conversation ?? "open";
+    const blocked = this.syncBlocked(conversation);
+    if (blocked) return blocked;
     const feed = interpretFeed(ical);
-    this.blockState = feed.blocks;
-    this.reconcile(feed.turnovers);
-    const sent = this.optedOut ? [] : await this.drainOne();
-    if (!this.optedOut) {
-      const optIn = await this.sendOptIn();
-      if (optIn) sent.push(optIn);
+    return this.applySnapshot({ kind: "guesty-lite", tenantId: this.tenantId, turnovers: feed.turnovers, blocks: feed.blocks }, conversation);
+  }
+
+  async readSource(source: BookingSource, options?: { conversation?: "closed" | "open" }): Promise<PollResult & SyncState> {
+    const conversation = options?.conversation ?? "open";
+    const blocked = this.syncBlocked(conversation);
+    if (blocked) return this.withSync(blocked);
+    const snapshot = await source.read();
+    if (snapshot.kind !== source.kind) throw new Error("Booking source kind does not match the read.");
+    if (snapshot.tenantId !== this.tenantId) {
+      this.syncState = { reason: "wrong-tenant", conversation, sources: this.sourceNames(), conflicts: this.conflictState };
+      return this.withSync({ polled: false, reason: "wrong-tenant", sent: [], jobs: this.jobs(), blocks: this.blocks() });
     }
-    this.save();
-    return { polled: true, reason: "read", sent, jobs: this.jobs(), blocks: this.blocks() };
+    return this.withSync(await this.applySnapshot(snapshot, conversation));
   }
 
   async receive(input: { id: string; from: string; text: string }): Promise<ReceiveResult> {
@@ -335,6 +378,11 @@ class Engine implements CleanerCore {
     if (!from || !isScratchTestNumber(from)) return { handled: true, reason: "scratch-only", sent: [] };
     if (this.inboundIds.includes(input.id)) return { handled: true, reason: "duplicate", sent: [] };
     this.transcriptState.push(this.redact(`${from}: ${input.text.trim()}`));
+    if (isOtherScratchTenantPhone(this.tenantId, from)) {
+      this.inboundIds.push(input.id);
+      this.save();
+      return { handled: true, reason: "wrong-tenant", sent: [] };
+    }
 
     const keyword = keywordOf(input.text);
     if (keyword === "help") return this.safety(input.id, () => this.reply(from, HELP_ACK, "help", "help", input.id));
@@ -416,6 +464,57 @@ class Engine implements CleanerCore {
 
   blocks(): FeedBlock[] {
     return this.blockState.map((block) => ({ ...block }));
+  }
+
+  lastSync(): SyncState {
+    return {
+      reason: this.syncState.reason,
+      conversation: this.syncState.conversation,
+      sources: [...this.syncState.sources],
+      conflicts: this.syncState.conflicts.map((conflict) => ({ ...conflict })),
+    };
+  }
+
+  private syncBlocked(conversation: "closed" | "open"): PollResult | undefined {
+    if (!this.enabled) return this.noteSync({ polled: false, reason: "disabled", sent: [], jobs: [], blocks: [] }, conversation);
+    if (!this.scratchReady()) return this.noteSync({ polled: false, reason: "scratch-only", sent: [], jobs: this.jobs(), blocks: [] }, conversation);
+    if (!this.everConsented) return this.noteSync({ polled: false, reason: "not-consented", sent: [], jobs: [], blocks: [] }, conversation);
+    return undefined;
+  }
+
+  private noteSync(result: PollResult, conversation: "closed" | "open"): PollResult {
+    this.syncState = { reason: result.reason, conversation, sources: this.sourceNames(), conflicts: this.conflictState };
+    return result;
+  }
+
+  private async applySnapshot(snapshot: SourceSnapshot, conversation: "closed" | "open"): Promise<PollResult> {
+    this.latest.set(snapshot.kind, snapshot);
+    const normalized = normalizeSnapshots([...this.latest.values()]);
+    this.conflictState = normalized.conflicts;
+    this.blockState = normalized.feed.blocks;
+    this.reconcile(normalized.feed.turnovers);
+    const sent = this.optedOut ? [] : await this.drainOne();
+    if (!this.optedOut) {
+      const optIn = await this.sendOptIn();
+      if (optIn) sent.push(optIn);
+    }
+    this.save();
+    const result: PollResult = { polled: true, reason: "read", sent, jobs: this.jobs(), blocks: this.blocks() };
+    this.syncState = { reason: "read", conversation, sources: this.sourceNames(), conflicts: this.conflictState };
+    return result;
+  }
+
+  private sourceNames(): BookingSourceKind[] {
+    return (["guesty-lite", "google-calendar"] as const).filter((kind) => this.latest.has(kind));
+  }
+
+  private withSync(result: PollResult): PollResult & SyncState {
+    return {
+      ...result,
+      conversation: this.syncState.conversation,
+      sources: [...this.syncState.sources],
+      conflicts: this.syncState.conflicts.map((conflict) => ({ ...conflict })),
+    };
   }
 
   private async answer(id: string, from: string, text: string): Promise<ReceiveResult> {
@@ -1081,23 +1180,26 @@ class Engine implements CleanerCore {
 
   private load(): void {
     if (!this.file || !existsSync(this.file)) return;
-    const parsed = JSON.parse(readFileSync(this.file, "utf8")) as Stored & { pin?: unknown };
+    const parsed = JSON.parse(readFileSync(this.file, "utf8")) as StoreFile;
     if (parsed.schemaVersion !== 1) throw new Error("Cleaner Core store is not version 1.");
-    delete parsed.pin;
-    this.jobsState = parsed.jobs.map((job) => ({ ...job, started: job.started === true, done: job.done === true }));
-    this.hostFacts = parsed.hostFacts;
-    this.tombstones = parsed.tombstones;
-    this.outboxState = parsed.outbox;
-    this.inboundIds = parsed.inboundIds;
-    this.transcriptState = parsed.transcript;
-    this.optedOut = parsed.optedOut;
-    this.injurySent = parsed.injurySent;
-    this.blockState = parsed.blocks;
-    this.cleanerConsent = parsed.cleanerConsent ?? "pending";
-    this.clearances = parsed.clearances ?? [];
-    if (!this.pin && parsed.pinSeal) {
+    const mine = sliceForTenant(parsed, this.tenantId);
+    if (!mine) return;
+    const record = JSON.parse(JSON.stringify(mine)) as Stored & { pin?: unknown };
+    delete record.pin;
+    this.jobsState = record.jobs.map((job) => ({ ...job, started: job.started === true, done: job.done === true }));
+    this.hostFacts = record.hostFacts;
+    this.tombstones = record.tombstones;
+    this.outboxState = record.outbox;
+    this.inboundIds = record.inboundIds;
+    this.transcriptState = record.transcript;
+    this.optedOut = record.optedOut;
+    this.injurySent = record.injurySent;
+    this.blockState = record.blocks;
+    this.cleanerConsent = record.cleanerConsent ?? "pending";
+    this.clearances = record.clearances ?? [];
+    if (!this.pin && record.pinSeal) {
       try {
-        this.pin = openPin(parsed.pinSeal, this.pinKeyMaterial());
+        this.pin = openPin(record.pinSeal, this.pinKeyMaterial());
       } catch {
         this.pin = undefined;
       }
@@ -1106,7 +1208,7 @@ class Engine implements CleanerCore {
 
   private save(): void {
     if (!this.file) return;
-    const stored: Stored = {
+    const mine: Stored = {
       schemaVersion: 1,
       jobs: this.jobsState,
       hostFacts: this.hostFacts,
@@ -1121,7 +1223,9 @@ class Engine implements CleanerCore {
       clearances: this.clearances,
       ...(this.pin ? { pinSeal: sealPin(this.pin, this.pinKeyMaterial()) } : {}),
     };
-    const json = JSON.stringify(stored);
+    const existing = existsSync(this.file) ? (JSON.parse(readFileSync(this.file, "utf8")) as StoreFile) : undefined;
+    if (existing && existing.schemaVersion !== 1) throw new Error("Cleaner Core store is not version 1.");
+    const json = JSON.stringify(mergeTenantSlice(existing, this.tenantId, mine));
     if (this.pin && json.includes(this.pin)) throw new Error("The door code cannot be stored in plaintext.");
     writeFileAtomic(this.file, `${json}\n`);
   }
@@ -1165,6 +1269,63 @@ function isDone(text: string): boolean {
 function isDeparture(text: string): boolean {
   const phrase = stripFiller(normalize(text));
   return phrase === "guests have left" || phrase === "guests left" || phrase === "they have left" || phrase === "they left" || phrase === "departed" || phrase === "left";
+}
+
+function isStoredSlice(value: unknown): value is Stored {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Stored;
+  return record.schemaVersion === 1 && Array.isArray(record.jobs) && Array.isArray(record.outbox);
+}
+
+function sliceOwnedBy(slice: Stored, tenantId: string): boolean {
+  const known = SCRATCH_TENANTS.find((tenant) => tenant.id === tenantId);
+  if (!known) return true;
+  const phones = slice.outbox.map((item) => item.to);
+  if (phones.length === 0) return true;
+  const other = phones.some((phone) => isOtherScratchTenantPhone(tenantId, phone));
+  const own = phones.some((phone) => phone === known.ownerPhone || phone === known.cleanerPhone || phone === known.unapprovedPhone);
+  return !(other && !own);
+}
+
+function foreignTenantId(slice: Stored): string {
+  if (typeof slice.tenantId === "string" && slice.tenantId !== "") return slice.tenantId;
+  const phones = new Set(slice.outbox.map((item) => item.to));
+  const match = SCRATCH_TENANTS.find((tenant) => [tenant.ownerPhone, tenant.cleanerPhone, tenant.unapprovedPhone].some((phone) => phones.has(phone)));
+  return match?.id ?? "scratch-lane";
+}
+
+function sliceForTenant(file: StoreFile, tenantId: string): Stored | undefined {
+  if (file.tenants && typeof file.tenants === "object") {
+    const slice = file.tenants[tenantId];
+    return isStoredSlice(slice) ? slice : undefined;
+  }
+  if (typeof file.tenantId === "string" && file.tenantId !== tenantId) return undefined;
+  if (!isStoredSlice(file)) return undefined;
+  if (!sliceOwnedBy(file, tenantId)) return undefined;
+  return file;
+}
+
+function otherSlices(file: StoreFile | undefined, tenantId: string): Record<string, Stored> {
+  if (!file || file.schemaVersion !== 1) return {};
+  if (file.tenants && typeof file.tenants === "object") {
+    const rest: Record<string, Stored> = {};
+    for (const [key, value] of Object.entries(file.tenants)) {
+      if (key === tenantId || !isStoredSlice(value)) continue;
+      rest[key] = value;
+    }
+    return rest;
+  }
+  if (!isStoredSlice(file)) return {};
+  if (sliceOwnedBy(file, tenantId)) return {};
+  const key = foreignTenantId(file);
+  if (key === tenantId) return {};
+  return { [key]: { ...file, tenantId: key } };
+}
+
+function mergeTenantSlice(existing: StoreFile | undefined, tenantId: string, mine: Stored): StoreFile {
+  const others = otherSlices(existing, tenantId);
+  if (Object.keys(others).length === 0) return mine;
+  return { schemaVersion: 1, tenants: { ...others, [tenantId]: { ...mine, tenantId } } };
 }
 
 function sealPin(pin: string, key: Buffer): PinSeal {

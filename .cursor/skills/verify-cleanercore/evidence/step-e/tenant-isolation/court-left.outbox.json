@@ -1,0 +1,49 @@
+[
+  {
+    "id": "host-checkout:google:evt-court:2026-10-19:660",
+    "to": "+15555550110",
+    "body": "Is checkout at 8 Scratch Court, Teaneck, NJ 07666 on Monday, Oct 19 still 11:00 AM? Reply YES or send the new time.",
+    "kind": "host-checkout",
+    "status": "sent",
+    "jobId": "google:evt-court"
+  },
+  {
+    "id": "opt-in:+15555550111",
+    "to": "+15555550111",
+    "body": "Hi, this is Scratch's cleaning scheduler for 8 Scratch Court, Teaneck, NJ 07666. Reply YES to get cleaning texts, or STOP to opt out.",
+    "kind": "opt-in",
+    "status": "sent"
+  },
+  {
+    "id": "offer:google:evt-court:2026-10-19:660::",
+    "to": "+15555550111",
+    "body": "Turnover at 8 Scratch Court, Teaneck, NJ 07666 on Monday, Oct 19. Checkout 11:00 AM. Reply YES to schedule it, or STOP to opt out.",
+    "kind": "offer",
+    "status": "sent",
+    "jobId": "google:evt-court"
+  },
+  {
+    "id": "confirm:google:evt-court:2026-10-19:660:",
+    "to": "+15555550111",
+    "body": "Cleaning is scheduled for Monday, Oct 19 at 11:00 AM at 8 Scratch Court, Teaneck, NJ 07666.",
+    "kind": "confirm",
+    "status": "sent",
+    "jobId": "google:evt-court"
+  },
+  {
+    "id": "pin:google:evt-court:2026-10-19:660:1",
+    "to": "+15555550111",
+    "body": "Guests have left 8 Scratch Court, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you.",
+    "kind": "pin",
+    "status": "sent",
+    "jobId": "google:evt-court"
+  },
+  {
+    "id": "pin-notice:pin:google:evt-court:2026-10-19:660:1",
+    "to": "+15555550110",
+    "body": "Door code sent to the cleaner.",
+    "kind": "pin-notice",
+    "status": "sent",
+    "jobId": "google:evt-court"
+  }
+]

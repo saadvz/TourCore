@@ -8,7 +8,7 @@ Without `--with-pin`, the owner receives the schedule text. With `--with-pin`, t
 
 - Repo root of this checkout, Node 20 or newer, `node_modules/.bin/tsx` present (`npm ci` when it is not).
 - Default doctor and smoke do not read `TOURCORE_HOME`. A journey that says `--data` uses only that temporary directory.
-- Recipients are only `+15555550100` (owner) and `+15555550101` (approved cleaner). `+15555550199` may be a reply sender and must not be a recipient. All three are Scratch 555 numbers. Never type a real person's number.
+- Scratch Lane recipients are only `+15555550100` (owner) and `+15555550101` (approved cleaner). `+15555550199` may be a reply sender and must not be a recipient. Scratch Court recipients are only `+15555550110` (owner) and `+15555550111` (approved cleaner). `+15555550119` may be a reply sender and must not be a recipient. A drive for one tenant must not text the other. All of these are Scratch 555 numbers. Never type a real person's number.
 - Run doctor in the same flag setting as the drive and require `sends` false.
 - Each command is a fresh process. Do not reuse a shell that still has `CLEANER_CORE_ENABLED` set when the recipe says unset.
 - Never drive `sendblue:*` or any other live messaging script from this map.
@@ -18,7 +18,7 @@ Without `--with-pin`, the owner receives the schedule text. With `--with-pin`, t
 - Start every recipe from the baseline unless its preconditions say otherwise.
 - Treat every command as literal. Keep the flag assignment and the npm script unchanged.
 - Flag on: `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:doctor` and `CLEANER_CORE_ENABLED=1 npm run --silent cleaner:smoke`.
-- Replies: `npm run cleaner:smoke -- --reply +15555550100=STOP`. Repeat `--reply` for each inbound text. Any explicit operation (`--reply`, `--feed`, `--then-feed`, `--now`, `--remind`, `--fail-sends`, `--data`, `--no-poll`, `--with-pin`, `--unapproved`, `--group`) does not also inject YES.
+- Replies: `npm run cleaner:smoke -- --reply +15555550100=STOP`. Repeat `--reply` for each inbound text. Any explicit operation (`--reply`, `--feed`, `--then-feed`, `--google`, `--tenant`, `--closed`, `--now`, `--remind`, `--fail-sends`, `--data`, `--no-poll`, `--with-pin`, `--unapproved`, `--group`) does not also inject YES.
 - Flag off: `env -u CLEANER_CORE_ENABLED` in front of the same scripts.
 - Assert the full stdout document and the exit code. A truthy `ok` is not a result.
 - After smoke, every `+1` number in stdout must be a Scratch test number: area code 555, or exchange 555 with line 0100–0199.
@@ -67,3 +67,10 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [HELP around the door code](./help-while-cleaning.md) covers HELP, a host injury, and a cleaner injury while waiting, after the code, and in progress, plus a failed host alert. `prove-step-d.sh`.
 - [Failed door-code send](./pin-failed.md) covers a failed private send, one retry, and a second reminder that sends nothing. `prove-step-d.sh`.
 - [No group and no code for Cory](./no-group.md) covers a group number that receives nothing and a host notice that omits the code. `prove-step-d.sh`.
+- [Google Calendar read](./source-read.md) covers a closed read of one fixture stay and the Sunday checkout question. `prove-step-e.sh`.
+- [Closed sync](./closed-sync.md) covers a read, a checkout change, and a second sync that sends nothing. `prove-step-e.sh`.
+- [Removed Google event](./removed-event.md) covers the existing cancel sentence after the event disappears. `prove-step-e.sh`.
+- [One booking, two sources](./one-booking.md) covers one job when Guesty Lite and Google Calendar show the same stay. `prove-step-e.sh`.
+- [Google block](./google-block.md) covers an owner block that is not a departure. `prove-step-e.sh`.
+- [Wrong tenant calendar](./wrong-tenant.md) covers Scratch Lane refusing Scratch Court's calendar. `prove-step-e.sh`.
+- [Two Scratch tenants](./tenant-isolation.md) covers one shared folder, separate phones, a wrong-tenant departure that sends nothing, and each house's door code going once to that house's cleaner. Scratch Court's code follows a Google Calendar stay. `prove-step-e.sh`.

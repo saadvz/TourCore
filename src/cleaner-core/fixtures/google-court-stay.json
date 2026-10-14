@@ -1,0 +1,16 @@
+{
+  "tenantId": "scratch-court",
+  "timeZone": "America/New_York",
+  "summary": "8 Scratch Court",
+  "items": [
+    {
+      "id": "evt-court",
+      "status": "confirmed",
+      "summary": "Reserved",
+      "description": "Do not text +15555550100 or +15555550101.",
+      "sequence": 1,
+      "start": { "date": "2026-10-17" },
+      "end": { "date": "2026-10-19" }
+    }
+  ]
+}

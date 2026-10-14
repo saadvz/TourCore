@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { MessagingLedger } from "../src/messaging/ledger";
 import { handleProviderWebhook } from "../src/messaging/pipeline";
 import { LocalMessagingProvider } from "../src/messaging/local/provider";
-import { cleanerCoreEnabled, openCleanerCore, runDoctor, runSmoke, type CleanerText } from "../src/cleaner-core";
+import { cleanerCoreEnabled, googleCalendarFixtureSource, openCleanerCore, runDoctor, runSmoke, scratchTenant, type CleanerText } from "../src/cleaner-core";
 
 const ADDRESS = "12 Scratch Lane, Teaneck, NJ 07666";
 const OWNER = "+15555550100";
@@ -32,7 +32,7 @@ const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know."
 const CLEANER_HURT_MISSED = "If someone is hurt, call 911 now. I couldn't reach the host, so please call them too.";
 const NOW = "2026-10-14T15:00:00.000Z";
 const DUE = "2026-10-18T12:00:00.000Z";
-const SMOKE_USAGE = "Usage: tsx src/cleaner-core/cli.ts smoke [--data <dir>] [--no-poll] [--feed <file>] [--then-feed <file>] [--now <iso>] [--remind] [--fail-sends <n>] [--with-pin] [--unapproved] [--group <phone>] [--reply <from>=<text> ...]";
+const SMOKE_USAGE = "Usage: tsx src/cleaner-core/cli.ts smoke [--data <dir>] [--no-poll] [--feed <file>] [--then-feed <file>] [--google <file>] [--tenant scratch-lane|scratch-court] [--closed] [--now <iso>] [--remind] [--fail-sends <n>] [--with-pin] [--unapproved] [--group <phone>] [--reply <from>=<text> ...]";
 
 const feed = (name: string) => readFileSync(join("src/cleaner-core/fixtures", name), "utf8");
 
@@ -1066,6 +1066,343 @@ describe("step D private door code", () => {
     expect(report.transcript.includes(HOST_HURT)).toBe(false);
     expect(report.transcript.includes(CLEANER_HURT)).toBe(false);
     expect(report.sent.some((text) => text.kind === "pin")).toBe(false);
+  });
+});
+
+describe("step E second source and second tenant", () => {
+  const COURT = scratchTenant("scratch-court");
+  const LANE_Q = "Is checkout at 12 Scratch Lane, Teaneck, NJ 07666 on Sunday, Oct 18 still 11:00 AM? Reply YES or send the new time.";
+  const COURT_MONDAY = "Is checkout at 8 Scratch Court, Teaneck, NJ 07666 on Monday, Oct 19 still 11:00 AM? Reply YES or send the new time.";
+  const COURT_WEDNESDAY = "Is checkout at 8 Scratch Court, Teaneck, NJ 07666 on Wednesday, Oct 21 still 11:00 AM? Reply YES or send the new time.";
+  const COURT_CANCEL = "Update: the cleaning at 8 Scratch Court, Teaneck, NJ 07666 on Monday, Oct 19 is canceled, so no need to come. Reply STOP to opt out.";
+  if (!COURT) throw new Error("Scratch Court is missing.");
+  const google = (name: string) => googleCalendarFixtureSource(feed(name));
+
+  it("reads a Google Calendar fixture with the conversation closed and ignores the event clock", async () => {
+    const box = sink();
+    const job = core(box, { tenantId: "scratch-lane" });
+    const read = await job.readSource(google("google-lane-read.json"), { conversation: "closed" });
+    expect(read.conversation).toBe("closed");
+    expect(read.sources).toEqual(["google-calendar"]);
+    expect(read.sent).toEqual([{ to: OWNER, body: LANE_Q, kind: "host-checkout" }]);
+    expect(read.jobs.map((item) => ({ id: item.id, checkoutDate: item.checkoutDate, live: item.live }))).toEqual([
+      { id: "google:evt-anita", checkoutDate: "2026-10-18", live: true },
+    ]);
+    expect(read.sent.some((text) => text.body.includes("10:00"))).toBe(false);
+    expect(box.sent.some((text) => text.to === "+15555550110" || text.body.includes("4821") || text.body.includes("7392"))).toBe(false);
+    expect(job.transcript().some((line) => line.startsWith("+1"))).toBe(false);
+  });
+
+  it("applies a checkout change on a closed sync, and a second sync sends nothing", async () => {
+    const box = sink();
+    const job = core(box, { tenantId: "scratch-court", property: COURT?.property, ownerPhone: COURT?.ownerPhone, cleaner: { phone: COURT?.cleanerPhone ?? "", approved: true } });
+    const first = await job.readSource(google("google-court-stay.json"), { conversation: "closed" });
+    const changed = await job.readSource(google("google-court-stay-moved.json"), { conversation: "closed" });
+    const again = await job.readSource(google("google-court-stay-moved.json"), { conversation: "closed" });
+    expect(first.sent).toEqual([{ to: "+15555550110", body: COURT_MONDAY, kind: "host-checkout" }]);
+    expect(changed.sent).toEqual([{ to: "+15555550110", body: COURT_WEDNESDAY, kind: "host-checkout" }]);
+    expect(again.sent).toEqual([]);
+    expect(again.conversation).toBe("closed");
+    expect(job.jobs()).toEqual([
+      expect.objectContaining({ id: "google:evt-court", checkoutDate: "2026-10-21", status: "discovered", live: true }),
+    ]);
+    expect(job.jobs()).toHaveLength(1);
+    expect(job.transcript().filter((line) => line.startsWith("+1"))).toEqual([]);
+  });
+
+  it("retries a failed closed-sync text once and does not send it a third time", async () => {
+    const sent: CleanerText[] = [];
+    let fail = true;
+    const job = core({
+      sent,
+      send(text: CleanerText) {
+        if (fail) {
+          fail = false;
+          throw new Error("send failed");
+        }
+        sent.push(text);
+      },
+    }, { tenantId: "scratch-lane" });
+    await job.readSource(google("google-lane-read.json"), { conversation: "closed" });
+    expect(sent).toEqual([]);
+    expect(job.outbox()).toEqual([expect.objectContaining({ to: OWNER, body: LANE_Q, kind: "host-checkout", status: "failed" })]);
+    await job.readSource(google("google-lane-read.json"), { conversation: "closed" });
+    expect(sent).toEqual([{ to: OWNER, body: LANE_Q, kind: "host-checkout" }]);
+    await job.readSource(google("google-lane-read.json"), { conversation: "closed" });
+    expect(sent).toEqual([{ to: OWNER, body: LANE_Q, kind: "host-checkout" }]);
+  });
+
+  it("cancels a removed Google event with the existing cancel text", async () => {
+    const box = sink();
+    const job = core(box, { tenantId: "scratch-court", property: COURT?.property, ownerPhone: COURT?.ownerPhone, cleaner: { phone: COURT?.cleanerPhone ?? "", approved: true } });
+    await job.readSource(google("google-court-stay.json"), { conversation: "closed" });
+    const removed = await job.readSource(google("google-court-empty.json"), { conversation: "closed" });
+    expect(removed.sent).toEqual([{ to: "+15555550110", body: COURT_CANCEL, kind: "cancel-update" }]);
+    expect(removed.jobs).toEqual([
+      expect.objectContaining({ id: "google:evt-court", status: "canceled", live: false, textsBlocked: true }),
+    ]);
+    const repeat = await job.readSource(google("google-court-empty.json"), { conversation: "closed" });
+    expect(repeat.sent).toEqual([]);
+  });
+
+  it("keeps one job when Guesty Lite and Google Calendar describe the same stay", async () => {
+    const box = sink();
+    const job = core(box, { tenantId: "scratch-lane" });
+    await job.pollFeed(feed("guesty-lite-scratch.ics"), { conversation: "closed" });
+    const merged = await job.readSource(google("google-lane-overlap.json"), { conversation: "closed" });
+    expect(merged.sent).toEqual([]);
+    expect(merged.conflicts).toEqual([{ jobId: "stay-anita@guesty.com", checkoutDate: "2026-10-18", otherCheckoutDate: "2026-10-19" }]);
+    expect(merged.sources).toEqual(["guesty-lite", "google-calendar"]);
+    expect(job.jobs().map((item) => item.id)).toEqual([
+      "stay-anita@guesty.com",
+      "stay-same-day@guesty.com",
+      "stay-after-gap@guesty.com",
+    ]);
+    expect(job.jobs().filter((item) => item.checkoutDate === "2026-10-18")).toHaveLength(1);
+    expect(job.jobs().some((item) => item.id.startsWith("google:"))).toBe(false);
+    expect(box.sent).toEqual([{ to: OWNER, body: LANE_Q, kind: "host-checkout" }]);
+  });
+
+  it("does not turn a Google block into a departure", async () => {
+    const box = sink();
+    const job = core(box, { tenantId: "scratch-lane" });
+    const read = await job.readSource(google("google-lane-block.json"), { conversation: "closed" });
+    expect(read.blocks).toEqual([{ uid: "google:evt-block", summary: "Owner block" }]);
+    expect(read.jobs.map((item) => ({ id: item.id, checkoutDate: item.checkoutDate }))).toEqual([
+      { id: "google:evt-stay", checkoutDate: "2026-10-18" },
+    ]);
+    expect(read.sent).toEqual([{ to: OWNER, body: LANE_Q, kind: "host-checkout" }]);
+  });
+
+  it("refuses the other tenant's calendar and does not text their phones", async () => {
+    const laneBox = sink();
+    const lane = core(laneBox, { tenantId: "scratch-lane" });
+    const refused = await lane.readSource(google("google-court-stay.json"), { conversation: "closed" });
+    expect(refused).toMatchObject({ polled: false, reason: "wrong-tenant", sent: [], conversation: "closed" });
+    expect(lane.jobs()).toEqual([]);
+    expect(laneBox.sent).toEqual([]);
+
+    await lane.readSource(google("google-lane-read.json"), { conversation: "closed" });
+    const stopped = await lane.receive({ id: "court-stop", from: "+15555550110", text: "STOP" });
+    expect(stopped).toEqual({ handled: true, reason: "wrong-tenant", sent: [] });
+    expect(lane.jobs()[0]?.textsBlocked).toBe(false);
+    expect(laneBox.sent.map((text) => text.to)).toEqual([OWNER]);
+
+    const courtBox = sink();
+    const court = core(courtBox, {
+      tenantId: "scratch-court",
+      property: COURT?.property,
+      ownerPhone: COURT?.ownerPhone,
+      cleaner: { phone: COURT?.cleanerPhone ?? "", approved: true },
+    });
+    await court.readSource(google("google-court-stay.json"), { conversation: "closed" });
+    const laneYes = await court.receive({ id: "lane-yes", from: OWNER, text: "YES" });
+    expect(laneYes).toEqual({ handled: true, reason: "wrong-tenant", sent: [] });
+    expect(court.jobs()[0]?.status).toBe("discovered");
+    expect(courtBox.sent).toEqual([{ to: "+15555550110", body: COURT_MONDAY, kind: "host-checkout" }]);
+    expect(JSON.stringify(laneBox.sent).includes("+15555550110")).toBe(false);
+    expect(JSON.stringify(courtBox.sent).includes(OWNER)).toBe(false);
+    expect(JSON.stringify(courtBox.sent).includes("12 Scratch Lane")).toBe(false);
+    expect(JSON.stringify(laneBox.sent).includes("8 Scratch Court")).toBe(false);
+  });
+
+  it("keeps each tenant's sealed door code and texts in that tenant's store", async () => {
+    const laneDir = mkdtempSync(join(tmpdir(), "cleaner-lane-"));
+    const courtDir = mkdtempSync(join(tmpdir(), "cleaner-court-"));
+    const lane = pinned(sink(), { tenantId: "scratch-lane", dataDir: laneDir });
+    const court = pinned(sink(), {
+      tenantId: "scratch-court",
+      property: COURT?.property,
+      ownerPhone: COURT?.ownerPhone,
+      cleaner: { phone: COURT?.cleanerPhone ?? "", approved: true },
+      pin: COURT?.pin,
+      dataDir: courtDir,
+    });
+    await lane.pollFeed(feed("guesty-lite-scratch.ics"));
+    await court.readSource(google("google-court-stay.json"), { conversation: "closed" });
+    const laneStore = readFileSync(join(laneDir, "cleaner-core.json"), "utf8");
+    const courtStore = readFileSync(join(courtDir, "cleaner-core.json"), "utf8");
+    expect(laneStore.includes("4821")).toBe(false);
+    expect(laneStore.includes("7392")).toBe(false);
+    expect(laneStore.includes("+15555550110")).toBe(false);
+    expect(laneStore.includes("8 Scratch Court")).toBe(false);
+    expect(courtStore.includes("4821")).toBe(false);
+    expect(courtStore.includes("7392")).toBe(false);
+    expect(courtStore.includes("+15555550100")).toBe(false);
+    expect(courtStore.includes("+15555550101")).toBe(false);
+    expect(courtStore.includes("12 Scratch Lane")).toBe(false);
+    expect(court.outbox().every((item) => item.to === "+15555550110" || item.to === "+15555550111")).toBe(true);
+    expect(lane.outbox().every((item) => item.to === OWNER || item.to === CLEANER)).toBe(true);
+    rmSync(laneDir, { recursive: true, force: true });
+    rmSync(courtDir, { recursive: true, force: true });
+  });
+
+  it("sends each Scratch door code once, only to that house's cleaner, from one folder", async () => {
+    if (!COURT) throw new Error("Scratch Court is missing.");
+    const dir = mkdtempSync(join(tmpdir(), "cleaner-both-"));
+    const laneBox = sink();
+    const courtBox = sink();
+    const courtOpt = "Hi, this is Scratch's cleaning scheduler for 8 Scratch Court, Teaneck, NJ 07666. Reply YES to get cleaning texts, or STOP to opt out.";
+    const courtOffer = "Turnover at 8 Scratch Court, Teaneck, NJ 07666 on Monday, Oct 19. Checkout 11:00 AM. Reply YES to schedule it, or STOP to opt out.";
+    const courtConfirm = "Cleaning is scheduled for Monday, Oct 19 at 11:00 AM at 8 Scratch Court, Teaneck, NJ 07666.";
+    const courtPin = "Guests have left 8 Scratch Court, Teaneck, NJ 07666. Door code: 7392. This code is only for you.";
+    const courtPinRedacted = "Guests have left 8 Scratch Court, Teaneck, NJ 07666. Door code: [redacted]. This code is only for you.";
+    try {
+      const lane = pinned(laneBox, { tenantId: "scratch-lane", dataDir: dir });
+      const court = pinned(courtBox, {
+        tenantId: "scratch-court",
+        property: COURT.property,
+        ownerPhone: COURT.ownerPhone,
+        cleaner: { phone: COURT.cleanerPhone, approved: true },
+        pin: "7392",
+        hostName: "Scratch",
+        dataDir: dir,
+      });
+      await lane.pollFeed(feed("guesty-lite-scratch.ics"));
+      await lane.receive({ id: "lane-wrong-yes", from: "+15555550111", text: "YES" });
+      await lane.receive({ id: "lane-opt", from: CLEANER, text: "YES" });
+      await lane.receive({ id: "lane-out", from: OWNER, text: "YES" });
+      await lane.receive({ id: "lane-in", from: OWNER, text: "YES" });
+      await lane.receive({ id: "lane-offer", from: CLEANER, text: "YES" });
+      expect(lane.jobs().map((item) => ({ id: item.id, status: item.status }))).toEqual([
+        { id: "stay-anita@guesty.com", status: "confirmed" },
+        { id: "stay-same-day@guesty.com", status: "discovered" },
+        { id: "stay-after-gap@guesty.com", status: "discovered" },
+      ]);
+      expect(await lane.receive({ id: "lane-wrong-left", from: "+15555550110", text: "guests have left" })).toEqual({
+        handled: true,
+        reason: "wrong-tenant",
+        sent: [],
+      });
+      expect(laneBox.sent.filter((text) => text.kind === "pin")).toEqual([]);
+
+      await court.readSource(google("google-court-stay.json"));
+      await court.receive({ id: "court-wrong-yes", from: CLEANER, text: "YES" });
+      await court.receive({ id: "court-opt", from: "+15555550111", text: "YES" });
+      await court.receive({ id: "court-out", from: "+15555550110", text: "YES" });
+      expect(court.jobs()).toEqual([
+        expect.objectContaining({ id: "google:evt-court", status: "offered", live: true }),
+      ]);
+      await court.receive({ id: "court-offer", from: "+15555550111", text: "YES" });
+      expect(court.jobs()).toEqual([
+        expect.objectContaining({ id: "google:evt-court", status: "confirmed", live: true }),
+      ]);
+      expect(await court.receive({ id: "court-wrong-left", from: OWNER, text: "guests have left" })).toEqual({
+        handled: true,
+        reason: "wrong-tenant",
+        sent: [],
+      });
+      expect(courtBox.sent.filter((text) => text.kind === "pin")).toEqual([]);
+      expect(courtBox.sent).toEqual([
+        { to: "+15555550110", body: COURT_MONDAY, kind: "host-checkout" },
+        { to: "+15555550111", body: courtOpt, kind: "opt-in" },
+        { to: "+15555550111", body: courtOffer, kind: "offer" },
+        { to: "+15555550111", body: courtConfirm, kind: "confirm" },
+      ]);
+
+      expect(await lane.receive({ id: "lane-left", from: OWNER, text: "guests have left" })).toEqual({
+        handled: true,
+        reason: "departure",
+        sent: [
+          { to: CLEANER, body: PIN_TEXT, kind: "pin" },
+          { to: OWNER, body: PIN_NOTICE, kind: "pin-notice" },
+        ],
+      });
+      expect(await court.receive({ id: "court-left", from: "+15555550110", text: "guests have left" })).toEqual({
+        handled: true,
+        reason: "departure",
+        sent: [
+          { to: "+15555550111", body: courtPin, kind: "pin" },
+          { to: "+15555550110", body: PIN_NOTICE, kind: "pin-notice" },
+        ],
+      });
+      expect(laneBox.sent).toEqual([
+        { to: OWNER, body: CHECKOUT_Q, kind: "host-checkout" },
+        { to: CLEANER, body: OPT_IN, kind: "opt-in" },
+        { to: OWNER, body: CHECKIN_Q, kind: "host-checkin" },
+        { to: CLEANER, body: OFFER, kind: "offer" },
+        { to: CLEANER, body: CONFIRM, kind: "confirm" },
+        { to: CLEANER, body: PIN_TEXT, kind: "pin" },
+        { to: OWNER, body: PIN_NOTICE, kind: "pin-notice" },
+      ]);
+      expect(courtBox.sent.filter((text) => text.kind === "pin")).toEqual([
+        { to: "+15555550111", body: courtPin, kind: "pin" },
+      ]);
+      expect(lane.jobs()[0]).toEqual(expect.objectContaining({ id: "stay-anita@guesty.com", status: "cleared" }));
+      expect(court.jobs()).toEqual([
+        expect.objectContaining({ id: "google:evt-court", status: "cleared", live: true }),
+      ]);
+
+      const laneAgain = pinned(sink(), { tenantId: "scratch-lane", dataDir: dir });
+      const courtAgain = pinned(sink(), {
+        tenantId: "scratch-court",
+        property: COURT.property,
+        ownerPhone: COURT.ownerPhone,
+        cleaner: { phone: COURT.cleanerPhone, approved: true },
+        pin: "7392",
+        hostName: "Scratch",
+        dataDir: dir,
+      });
+      expect(laneAgain.jobs().map((item) => ({ id: item.id, status: item.status }))).toEqual([
+        { id: "stay-anita@guesty.com", status: "cleared" },
+        { id: "stay-same-day@guesty.com", status: "discovered" },
+        { id: "stay-after-gap@guesty.com", status: "discovered" },
+      ]);
+      expect(courtAgain.jobs().map((item) => ({ id: item.id, status: item.status }))).toEqual([
+        { id: "google:evt-court", status: "cleared" },
+      ]);
+      expect(laneAgain.outbox().filter((item) => item.kind === "pin")).toEqual([
+        {
+          id: "pin:stay-anita@guesty.com:2026-10-18:660:1",
+          to: CLEANER,
+          body: PIN_REDACTED,
+          kind: "pin",
+          status: "sent",
+          jobId: "stay-anita@guesty.com",
+        },
+      ]);
+      expect(courtAgain.outbox().filter((item) => item.kind === "pin")).toEqual([
+        {
+          id: "pin:google:evt-court:2026-10-19:660:1",
+          to: "+15555550111",
+          body: courtPinRedacted,
+          kind: "pin",
+          status: "sent",
+          jobId: "google:evt-court",
+        },
+      ]);
+      const stored = readFileSync(join(dir, "cleaner-core.json"), "utf8");
+      expect(stored.includes("4821")).toBe(false);
+      expect(stored.includes("7392")).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("drives the closed sync and the court tenant from the smoke command", () => {
+    const read = cleanerCli(["smoke", "--closed", "--google", "src/cleaner-core/fixtures/google-lane-read.json"], "1");
+    expect(read.status).toBe(0);
+    const readReport = JSON.parse(read.stdout) as { sent: CleanerText[]; sync: { conversation: string; sources: string[] }; tenant: string; jobs: { id: string }[] };
+    expect(readReport.tenant).toBe("scratch-lane");
+    expect(readReport.sync).toEqual({ conversation: "closed", sources: ["google-calendar"], reason: "read", conflicts: [] });
+    expect(readReport.sent).toEqual([{ to: OWNER, body: LANE_Q, kind: "host-checkout" }]);
+    expect(readReport.jobs.map((item) => item.id)).toEqual(["google:evt-anita"]);
+    expect(read.stdout.includes("4821")).toBe(false);
+    expect(read.stdout.includes("+15555550110")).toBe(false);
+
+    const court = cleanerCli(["smoke", "--tenant", "scratch-court", "--closed", "--google", "src/cleaner-core/fixtures/google-court-stay.json"], "1");
+    expect(court.status).toBe(0);
+    const courtReport = JSON.parse(court.stdout) as { property: string; sent: CleanerText[]; jobs: { id: string }[] };
+    expect(courtReport.property).toBe("8 Scratch Court, Teaneck, NJ 07666");
+    expect(courtReport.sent).toEqual([{ to: "+15555550110", body: COURT_MONDAY, kind: "host-checkout" }]);
+    expect(courtReport.jobs.map((item) => item.id)).toEqual(["google:evt-court"]);
+    expect(court.stdout.includes("12 Scratch Lane")).toBe(false);
+    expect(court.stdout.includes("+15555550100")).toBe(false);
+
+    const missing = cleanerCli(["smoke", "--tenant", "scratch-court"], "1");
+    expect(missing.status).toBe(1);
+    expect(missing.stdout).toBe("");
+    expect(missing.stderr).toContain("does not read Scratch Lane's calendar");
   });
 });
 

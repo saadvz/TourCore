@@ -1,0 +1,71 @@
+{
+  "ok": true,
+  "flag": true,
+  "property": "8 Scratch Court, Teaneck, NJ 07666",
+  "sent": [
+    {
+      "to": "+15555550110",
+      "body": "Is checkout at 8 Scratch Court, Teaneck, NJ 07666 on Monday, Oct 19 still 11:00 AM? Reply YES or send the new time.",
+      "kind": "host-checkout"
+    },
+    {
+      "to": "+15555550110",
+      "body": "Update: the cleaning at 8 Scratch Court, Teaneck, NJ 07666 on Monday, Oct 19 is canceled, so no need to come. Reply STOP to opt out.",
+      "kind": "cancel-update"
+    }
+  ],
+  "pinRecipients": [],
+  "jobs": [
+    {
+      "id": "google:evt-court",
+      "departingUid": "google:evt-court",
+      "arrivingUid": null,
+      "status": "canceled",
+      "live": false,
+      "textsBlocked": true,
+      "checkoutDate": "2026-10-19",
+      "nextCheckInDate": null,
+      "sameDay": false,
+      "checkoutTime": null,
+      "nextCheckInTime": null,
+      "checkoutAt": null,
+      "nextCheckInAt": null,
+      "version": 2,
+      "hostCheckoutVersion": 0,
+      "hostCheckInVersion": 0,
+      "asking": null
+    }
+  ],
+  "outbox": [
+    {
+      "id": "host-checkout:google:evt-court:2026-10-19:660",
+      "to": "+15555550110",
+      "body": "Is checkout at 8 Scratch Court, Teaneck, NJ 07666 on Monday, Oct 19 still 11:00 AM? Reply YES or send the new time.",
+      "kind": "host-checkout",
+      "status": "sent",
+      "jobId": "google:evt-court"
+    },
+    {
+      "id": "cancel:google:evt-court:v2",
+      "to": "+15555550110",
+      "body": "Update: the cleaning at 8 Scratch Court, Teaneck, NJ 07666 on Monday, Oct 19 is canceled, so no need to come. Reply STOP to opt out.",
+      "kind": "cancel-update",
+      "status": "sent",
+      "jobId": "google:evt-court"
+    }
+  ],
+  "transcript": [
+    "Is checkout at 8 Scratch Court, Teaneck, NJ 07666 on Monday, Oct 19 still 11:00 AM? Reply YES or send the new time.",
+    "Update: the cleaning at 8 Scratch Court, Teaneck, NJ 07666 on Monday, Oct 19 is canceled, so no need to come. Reply STOP to opt out."
+  ],
+  "blocks": [],
+  "tenant": "scratch-court",
+  "sync": {
+    "reason": "read",
+    "conversation": "closed",
+    "sources": [
+      "google-calendar"
+    ],
+    "conflicts": []
+  }
+}

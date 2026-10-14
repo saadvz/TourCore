@@ -1,0 +1,16 @@
+{
+  "tenantId": "scratch-lane",
+  "timeZone": "America/New_York",
+  "summary": "12 Scratch Lane",
+  "items": [
+    {
+      "id": "evt-anita-overlap",
+      "status": "confirmed",
+      "summary": "Reserved",
+      "description": "Same stay as Guesty. Do not text +15555550110 or +15555550111.",
+      "sequence": 2,
+      "start": { "date": "2026-10-16" },
+      "end": { "date": "2026-10-19" }
+    }
+  ]
+}
