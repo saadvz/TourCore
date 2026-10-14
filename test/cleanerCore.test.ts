@@ -32,7 +32,7 @@ const CLEANER_HURT = "If someone is hurt, call 911 now. I've let the host know."
 const CLEANER_HURT_MISSED = "If someone is hurt, call 911 now. I couldn't reach the host, so please call them too.";
 const NOW = "2026-10-14T15:00:00.000Z";
 const DUE = "2026-10-18T12:00:00.000Z";
-const SMOKE_USAGE = "Usage: tsx src/cleaner-core/cli.ts smoke [--data <dir>] [--no-poll] [--feed <file>] [--then-feed <file>] [--google <file>] [--notion <file>] [--onboard] [--group-mode cleaner-only|native|mirrored] [--group-capable] [--participant <role>=<phone>] [--tenant scratch-lane|scratch-court] [--closed] [--now <iso>] [--remind] [--fail-sends <n>] [--with-pin] [--unapproved] [--group <phone>] [--reply <from>=<text> ...]";
+const SMOKE_USAGE = "Usage: tsx src/cleaner-core/cli.ts smoke [--data <dir>] [--no-poll] [--feed <file>] [--then-feed <file>] [--google <file>] [--notion <file>] [--onboard] [--group-mode cleaner-only|native|mirrored] [--group-capable] [--participant <role>=<phone>] [--tenant scratch-lane|scratch-court] [--closed] [--now <iso>] [--remind] [--fail-sends <n>] [--with-pin] [--unapproved] [--group <phone>] [--group-chat] [--group-extra <phone>] [--group-reply <from>=<text>] [--confirm-times <checkout>|<check-in>] [--resume] [--reply <from>=<text> ...]";
 
 const feed = (name: string) => readFileSync(join("src/cleaner-core/fixtures", name), "utf8");
 

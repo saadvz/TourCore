@@ -68,3 +68,23 @@ export function doorCodeBody(address: string, code: string): string {
 export function holdNote(address: string): string {
   return `The cleaning at ${address} is on hold until the cleaner replies YES.`;
 }
+
+export function resumeNote(address: string): string {
+  return `The cleaning at ${address} is back on.`;
+}
+
+export function groupOptInBody(name: string, otherName: string, address: string): string {
+  return `${name}, you're invited to the cleaning group for ${address} with ${otherName}. Reply YES to join that group, or STOP to opt out.`;
+}
+
+export function groupDoorCodeBody(cleanerName: string, address: string, code: string): string {
+  return `${cleanerName}, guests have left ${address}. Door code: ${code}.`;
+}
+
+export function privateCodeLine(cleanerName: string): string {
+  return `I've sent the door code to ${cleanerName} privately.`;
+}
+
+export function groupTimeLine(hostName: string): string {
+  return `${hostName} will confirm that time.`;
+}

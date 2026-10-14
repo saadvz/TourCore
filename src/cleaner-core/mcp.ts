@@ -66,6 +66,12 @@ const TOOLS = [
     description: "Reads the calendar and checks the setup. It does not send a live text.",
     input: z.object({}),
   },
+  {
+    name: "resume_job",
+    title: "Resume the cleaning",
+    description: "The host resumes a cleaning that was on hold. A text from the cleaner cannot do this.",
+    input: z.object({}),
+  },
 ] as const;
 
 type ToolName = (typeof TOOLS)[number]["name"];
@@ -156,6 +162,8 @@ async function callTool(desk: LiveDesk, name: ToolName, args: object, pinKey: Bu
       return desk.markGuestsLeft(args as { said: string }, pinKey);
     case "run_checks":
       return desk.runChecks();
+    case "resume_job":
+      return desk.resumeCleaning();
   }
 }
 

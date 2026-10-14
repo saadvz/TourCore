@@ -61,3 +61,52 @@ export async function sendLiveSms(env: NodeJS.ProcessEnv, text: { to: string; bo
   if (status === "failed" || status === "undelivered" || status === "canceled") throw new Error("not sent");
   return result.sid;
 }
+
+let groupFetch: typeof fetch | undefined;
+
+export function setCleanerGroupFetch(impl: typeof fetch | undefined): void {
+  groupFetch = impl;
+}
+
+export async function sendLiveGroup(
+  env: NodeJS.ProcessEnv,
+  input: { audience: string[]; body: string; conversationSid?: string },
+): Promise<{ sid?: string; conversationSid?: string } | undefined> {
+  if (!liveSmsOn(env)) return undefined;
+  const allow = smsAllowlist(env);
+  if (allow.length === 0) return undefined;
+  const audience = input.audience.map((phone) => parsePhone(phone)).filter((phone): phone is string => Boolean(phone));
+  if (audience.length === 0 || audience.some((phone) => !allow.includes(phone))) return undefined;
+  const accountSid = env.CLEANER_CORE_TWILIO_ACCOUNT_SID?.trim();
+  const authToken = env.CLEANER_CORE_TWILIO_AUTH_TOKEN?.trim();
+  const from = parsePhone(env.CLEANER_CORE_TWILIO_PHONE_NUMBER ?? "");
+  if (!accountSid || !authToken || !from) throw new Error("not sent");
+  const fetchImpl = groupFetch ?? fetch;
+  const root = "https://conversations.twilio.com/v1";
+  const auth = `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`;
+  const post = async (url: string, fields: Record<string, string>): Promise<{ sid?: string }> => {
+    const body = new URLSearchParams(fields);
+    const res = await fetchImpl(url, {
+      method: "POST",
+      headers: { Authorization: auth, "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    });
+    if (!res.ok) throw new Error("not sent");
+    return (await res.json()) as { sid?: string };
+  };
+  let conversationSid = input.conversationSid;
+  if (!conversationSid) {
+    const created = await post(`${root}/Conversations`, { FriendlyName: "Cleaning group" });
+    if (!created.sid) throw new Error("not sent");
+    conversationSid = created.sid;
+    for (const phone of audience) {
+      await post(`${root}/Conversations/${encodeURIComponent(conversationSid)}/Participants`, {
+        "MessagingBinding.Address": phone,
+        "MessagingBinding.ProxyAddress": from,
+      });
+    }
+  }
+  const message = await post(`${root}/Conversations/${encodeURIComponent(conversationSid)}/Messages`, { Body: input.body, Author: from });
+  if (!message.sid) throw new Error("not sent");
+  return { sid: message.sid, conversationSid };
+}

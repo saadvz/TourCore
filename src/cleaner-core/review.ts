@@ -1,3 +1,5 @@
+import { holdNote } from "./cleanerTexts";
+
 export const REVIEW_KINDS = [
   "stale-source",
   "airbnb-exception",
@@ -8,6 +10,7 @@ export const REVIEW_KINDS = [
   "uncertain-sms",
   "shared-chat-routing",
   "possible-code-exposure",
+  "group-problem",
 ] as const;
 
 export type ReviewKind = (typeof REVIEW_KINDS)[number];
@@ -62,6 +65,8 @@ export function reviewAlert(kind: ReviewKind, address: string, detail?: ReviewDe
       return `I could not tell who should get the cleaning texts at ${address}. I did not start a group or send the door code.`;
     case "possible-code-exposure":
       return "I held a text to the cleaner because it looked like it had the door code in it.";
+    case "group-problem":
+      return holdNote(address);
   }
 }
 

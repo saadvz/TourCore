@@ -8,7 +8,8 @@ import { spokenTimes } from "../core/spokenTime";
 import { interpretFeed } from "./calendar";
 import { openCleanerCore, type CleanerCore, type CleanerText } from "./core";
 import { readPublicCalendar, type CalendarFetch } from "./fetchLimits";
-import { cleanerPinStatusUrl, isAllowlisted, liveSmsOn, sendLiveSms, smsAllowlist } from "./liveSms";
+import { resumeNote } from "./cleanerTexts";
+import { cleanerPinStatusUrl, isAllowlisted, liveSmsOn, sendLiveGroup, sendLiveSms, smsAllowlist } from "./liveSms";
 import { openPin, sealPin, type PinSeal } from "./pinSeal";
 
 export const FIRST_QUESTION =
@@ -30,8 +31,13 @@ const DIRECT_TEXT_REPLY = "Got it. To send the door code, tell your Grok Bot the
 
 interface PinSend {
   sid: string;
-  outcome: "accepted" | "undelivered";
+  outcome: "accepted" | "undelivered" | "settled";
   notePending: boolean;
+}
+
+function groupChatOn(env: NodeJS.ProcessEnv): boolean {
+  const raw = env.CLEANER_CORE_GROUP_CHAT?.trim().toLowerCase();
+  return raw === "1" || raw === "true";
 }
 
 export interface ToolOk {
@@ -63,6 +69,7 @@ interface LiveFile {
   released?: boolean;
   cleanerOut?: boolean;
   seenInbound?: string[];
+  conversationSid?: string;
 }
 
 let calendarFetch: CalendarFetch | undefined;
@@ -258,8 +265,12 @@ export class LiveDesk {
     if (!statedClock(checkout) || !statedClock(checkIn)) {
       return this.fail("Tell me the checkout time and the next check-in time, like 10:30 AM and 3:00 PM.");
     }
-    await this.engine.receive({ id: `confirm-out-${randomUUID()}`, from: this.file.host, text: checkout });
-    await this.engine.receive({ id: `confirm-in-${randomUUID()}`, from: this.file.host, text: checkIn });
+    if (groupChatOn(this.env())) {
+      await this.engine.confirmHostTimes({ checkout, checkIn });
+    } else {
+      await this.engine.receive({ id: `confirm-out-${randomUUID()}`, from: this.file.host, text: checkout });
+      await this.engine.receive({ id: `confirm-in-${randomUUID()}`, from: this.file.host, text: checkIn });
+    }
     const job = this.engine.jobs().find((item) => item.checkoutTime && item.nextCheckInTime);
     if (!job) {
       return this.fail("I only save a time you stated. Say the checkout and the next check-in, like 10:30 AM and 3:00 PM.");
@@ -286,7 +297,7 @@ export class LiveDesk {
     this.resume();
     if (this.pin) this.engine?.rememberPin(this.pin);
     if (!this.engine) return this.fail("Run the checks first.");
-    if (this.file.pinSend?.outcome === "accepted") return this.reply({ next: PIN_REPEAT });
+    if (this.file.pinSend?.outcome === "accepted" || this.file.pinSend?.outcome === "settled") return this.reply({ next: PIN_REPEAT });
     if (this.file.pinSend?.outcome === "undelivered") {
       if (this.file.pinSend.notePending) {
         this.file.pinSend.notePending = false;
@@ -298,15 +309,33 @@ export class LiveDesk {
     if (result.reason !== "departure") return this.fail("Say that the guests have left. I won't guess from the calendar.");
     const sentNow = result.sent.some((text) => text.kind === "pin");
     const failed = result.sent.some((text) => text.kind === "pin-failed") || this.engine.outbox().some((item) => item.kind === "pin" && item.status === "failed");
+    if (groupChatOn(this.env()) && this.engine.groupPinSettled() && !sentNow) {
+      this.file.pinSend = { sid: this.file.pinSend?.sid ?? "", outcome: "settled", notePending: false };
+      this.persist();
+      return this.reply({ next: "A text failed to send. I saved it for your review and did not count it as delivered." });
+    }
+    if (sentNow && groupChatOn(this.env())) {
+      this.file.pinSend = { sid: this.file.pinSend?.sid ?? "group", outcome: "accepted", notePending: false };
+      this.persist();
+    }
     if (sentNow) return this.reply({ next: PIN_SENT });
     if (failed) return this.reply({ next: PIN_FAILED });
     return this.reply({ next: PIN_FAILED });
   }
 
+  async resumeCleaning(): Promise<ToolReply> {
+    this.resume();
+    if (!this.file.address || !this.engine) return this.fail("Run the checks first.");
+    await this.engine.resumeJob();
+    this.held = this.engine.jobOnHold();
+    this.persist();
+    return this.reply({ next: resumeNote(this.file.address) });
+  }
+
   /** Records a Twilio delivery status. Does not unseal the door code and does not text anyone. */
   notePinDelivery(input: { sid: string; status: string }): void {
     const tracked = this.file.pinSend;
-    if (!tracked || tracked.sid !== input.sid) return;
+    if (!tracked || tracked.outcome === "settled" || tracked.sid !== input.sid) return;
     const status = input.status.toLowerCase();
     if (status !== "failed" && status !== "undelivered") return;
     if (tracked.outcome === "undelivered") return;
@@ -446,9 +475,16 @@ export class LiveDesk {
       sealPinAtRest: false,
       pinSentBody: PIN_SENT,
       pinFailedBody: PIN_FAILED,
+      ...(groupChatOn(env()) ? { groupChat: { hostName: "Cory", cleanerName: "Maria" } } : {}),
       sink: {
         send: async (text) => {
-          if (text.kind === "pin-notice" || text.kind === "pin-failed" || text.kind === "host-checkout" || text.kind === "host-checkin") return;
+          if ((text.kind === "pin-notice" || text.kind === "pin-failed" || text.kind === "host-checkout" || text.kind === "host-checkin") && text.channel !== "group") return;
+          if (text.channel === "group" && text.audience && text.audience.length > 0) {
+            const sent = await sendLiveGroup(env(), { audience: [...text.audience], body: text.body, conversationSid: this.file.conversationSid });
+            if (sent?.conversationSid) this.file.conversationSid = sent.conversationSid;
+            if (text.kind === "pin" && sent?.sid) this.noteAccepted(sent.sid);
+            return;
+          }
           const statusCallback = text.kind === "pin" ? cleanerPinStatusUrl(env()) : undefined;
           const sid = await sendLiveSms(env(), { to: text.to, body: text.body, ...(statusCallback ? { statusCallback } : {}) });
           if (text.kind === "pin" && sid) this.noteAccepted(sid);
@@ -520,7 +556,13 @@ export class LiveDesk {
   private async hostText(id: string, from: string, text: string): Promise<{ sent: CleanerText[] }> {
     this.noteSeen(id);
     const phrase = stripFiller(normalize(text)).replace(/^the\s+/, "");
-    if (!DEPARTURES.has(phrase)) return { sent: [] };
+    if (!DEPARTURES.has(phrase)) {
+      if (!groupChatOn(this.env())) return { sent: [] };
+      this.resume();
+      if (!this.engine) return { sent: [] };
+      const result = await this.engine.receive({ id, from, text });
+      return { sent: result.sent };
+    }
     try {
       await sendLiveSms(this.env(), { to: from, body: DIRECT_TEXT_REPLY });
     } catch {

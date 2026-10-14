@@ -48,6 +48,9 @@ export type SmokeOp =
   | { type: "google"; body: string }
   | { type: "notion"; body: string }
   | { type: "reply"; from: string; text: string }
+  | { type: "group-reply"; from: string; text: string }
+  | { type: "confirm-times"; checkout: string; checkIn: string }
+  | { type: "resume" }
   | { type: "remind" }
   | { type: "now"; iso: string }
   | { type: "fail"; n: number }
@@ -138,6 +141,7 @@ export async function runSmoke(
     staleAfterMs?: number;
     halt?: "after-accept" | "before-pin";
     backupDir?: string;
+    groupChat?: { hostName: string; cleanerName: string; extra?: { phone: string; name: string }[] };
   },
 ): Promise<SmokeReport> {
   if (extra?.onboard) return runOnboardingSmoke(env, extra);
@@ -145,7 +149,7 @@ export async function runSmoke(
   if (!tenant) throw new Error("Unknown Scratch tenant.");
   const ops = extra?.ops ?? defaultOps(replies);
   for (const op of ops) {
-    if (op.type === "reply" && !isScratchTestNumber(op.from)) {
+    if ((op.type === "reply" || op.type === "group-reply") && !isScratchTestNumber(op.from)) {
       throw new Error(`Cleaner Core only texts Scratch test numbers. Refusing ${op.from}.`);
     }
   }
@@ -180,6 +184,7 @@ export async function runSmoke(
     ...(extra?.staleAfterMs ? { staleAfterMs: extra.staleAfterMs } : {}),
     ...(extra?.halt ? { halt: extra.halt } : {}),
     ...(extra?.backupDir ? { backupDir: extra.backupDir } : {}),
+    ...(extra?.groupChat ? { groupChat: extra.groupChat } : {}),
   });
   let halted: "after-accept" | "before-pin" | undefined;
   try {
@@ -192,6 +197,9 @@ export async function runSmoke(
       else if (op.type === "google") await core.readSource(googleCalendarFixtureSource(op.body), { conversation });
       else if (op.type === "notion") await core.readSource(notionFixtureSource(op.body), { conversation });
       else if (op.type === "reply") await core.receive({ id: `smoke-op-${index}`, from: op.from, text: op.text });
+      else if (op.type === "group-reply") await core.receive({ id: `smoke-op-${index}`, from: op.from, text: op.text, channel: "group" });
+      else if (op.type === "confirm-times") await core.confirmHostTimes({ checkout: op.checkout, checkIn: op.checkIn });
+      else if (op.type === "resume") await core.resumeJob();
       else if (op.type === "fetched-at") core.stampFetchedAt(op.iso);
       else if (op.type === "review") await core.fileReview(op.kind);
       else if (op.type === "replay") await core.replay();
@@ -295,9 +303,9 @@ function defaultOps(replies?: SmokeReply[]): SmokeOp[] {
 }
 
 const DOCTOR_USAGE = "Usage: tsx src/cleaner-core/cli.ts doctor";
-const SMOKE_USAGE = "Usage: tsx src/cleaner-core/cli.ts smoke [--data <dir>] [--no-poll] [--feed <file>] [--then-feed <file>] [--google <file>] [--notion <file>] [--onboard] [--group-mode cleaner-only|native|mirrored] [--group-capable] [--participant <role>=<phone>] [--tenant scratch-lane|scratch-court] [--closed] [--now <iso>] [--remind] [--fail-sends <n>] [--with-pin] [--unapproved] [--group <phone>] [--reply <from>=<text> ...]";
+const SMOKE_USAGE = "Usage: tsx src/cleaner-core/cli.ts smoke [--data <dir>] [--no-poll] [--feed <file>] [--then-feed <file>] [--google <file>] [--notion <file>] [--onboard] [--group-mode cleaner-only|native|mirrored] [--group-capable] [--participant <role>=<phone>] [--tenant scratch-lane|scratch-court] [--closed] [--now <iso>] [--remind] [--fail-sends <n>] [--with-pin] [--unapproved] [--group <phone>] [--group-chat] [--group-extra <phone>] [--group-reply <from>=<text>] [--confirm-times <checkout>|<check-in>] [--resume] [--reply <from>=<text> ...]";
 
-export function parseSmokeArgs(argv: string[]): { replies?: SmokeReply[]; ops: SmokeOp[]; dataDir?: string; explicit: boolean; withPin: boolean; approved: boolean; groupPhones: string[]; tenantId: string; closed: boolean; stepE: boolean; stepF: boolean; stepG: boolean; onboard: boolean; messaging?: MessagingOpt; watchFreshness: boolean; sqlite: boolean; staleAfterMs?: number; halt?: "after-accept" | "before-pin"; backupDir?: string } {
+export function parseSmokeArgs(argv: string[]): { replies?: SmokeReply[]; ops: SmokeOp[]; dataDir?: string; explicit: boolean; withPin: boolean; approved: boolean; groupPhones: string[]; tenantId: string; closed: boolean; stepE: boolean; stepF: boolean; stepG: boolean; onboard: boolean; messaging?: MessagingOpt; watchFreshness: boolean; sqlite: boolean; staleAfterMs?: number; halt?: "after-accept" | "before-pin"; backupDir?: string; groupChat: boolean; groupExtra?: string } {
   const ops: SmokeOp[] = [];
   const replies: SmokeReply[] = [];
   const groupPhones: string[] = [];
@@ -318,6 +326,8 @@ export function parseSmokeArgs(argv: string[]): { replies?: SmokeReply[]; ops: S
   let halt: "after-accept" | "before-pin" | undefined;
   let backupDir: string | undefined;
   let onboard = false;
+  let groupChat = false;
+  let groupExtra: string | undefined;
   let groupMode: "cleaner-only" | "native" | "mirrored" | undefined;
   let groupCapable = false;
   const participants: MessagingOpt["participants"] = [];
@@ -456,6 +466,50 @@ export function parseSmokeArgs(argv: string[]): { replies?: SmokeReply[]; ops: S
       approved = false;
       continue;
     }
+    if (arg === "--group-chat") {
+      explicit = true;
+      groupChat = true;
+      continue;
+    }
+    if (arg === "--group-extra") {
+      const value = argv[++i];
+      if (value === undefined || value.startsWith("--")) throw new Error(`smoke --group-extra needs a Scratch test number. ${SMOKE_USAGE}`);
+      if (!isScratchTestNumber(value)) throw new Error(`Cleaner Core only texts Scratch test numbers. Refusing ${value}.`);
+      explicit = true;
+      groupChat = true;
+      groupExtra = value;
+      continue;
+    }
+    if (arg === "--group-reply") {
+      const value = argv[++i];
+      if (value === undefined || value.startsWith("--")) throw new Error(`smoke --group-reply needs <from>=<text>. ${SMOKE_USAGE}`);
+      explicit = true;
+      groupChat = true;
+      const eq = value.indexOf("=");
+      if (eq <= 0) throw new Error(`smoke --group-reply must look like <from>=<text>. Got ${value}. ${SMOKE_USAGE}`);
+      const from = value.slice(0, eq);
+      const text = value.slice(eq + 1);
+      if (!isScratchTestNumber(from)) throw new Error(`Cleaner Core only texts Scratch test numbers. Refusing ${from}.`);
+      if (text.length === 0) throw new Error(`smoke --group-reply text is empty for ${from}. ${SMOKE_USAGE}`);
+      ops.push({ type: "group-reply", from, text });
+      continue;
+    }
+    if (arg === "--confirm-times") {
+      const value = argv[++i];
+      if (value === undefined || !value.includes("|")) throw new Error(`smoke --confirm-times needs <checkout>|<check-in>. ${SMOKE_USAGE}`);
+      explicit = true;
+      groupChat = true;
+      const [checkout, checkIn] = value.split("|");
+      if (!checkout || !checkIn) throw new Error(`smoke --confirm-times needs <checkout>|<check-in>. ${SMOKE_USAGE}`);
+      ops.push({ type: "confirm-times", checkout, checkIn });
+      continue;
+    }
+    if (arg === "--resume") {
+      explicit = true;
+      groupChat = true;
+      ops.push({ type: "resume" });
+      continue;
+    }
     if (arg === "--group") {
       const value = argv[++i];
       if (value === undefined || value.startsWith("--")) throw new Error(`smoke --group needs a Scratch test number. ${SMOKE_USAGE}`);
@@ -531,9 +585,9 @@ export function parseSmokeArgs(argv: string[]): { replies?: SmokeReply[]; ops: S
     : undefined;
   const gate = { stepG, watchFreshness, sqlite, ...(staleAfterMs ? { staleAfterMs } : {}), ...(halt ? { halt } : {}), ...(backupDir ? { backupDir } : {}) };
   if (!explicit) {
-    return { ops: defaultOps(undefined), ...(dataDir ? { dataDir } : {}), explicit, withPin, approved, groupPhones, tenantId, closed, stepE, stepF, onboard, ...gate };
+    return { ops: defaultOps(undefined), ...(dataDir ? { dataDir } : {}), explicit, withPin, approved, groupPhones, tenantId, closed, stepE, stepF, onboard, groupChat, ...gate };
   }
-  return { ops, ...(sawReply ? { replies } : {}), ...(dataDir ? { dataDir } : {}), explicit, withPin, approved, groupPhones, tenantId, closed, stepE, stepF, onboard, ...(messaging ? { messaging } : {}), ...gate };
+  return { ops, ...(sawReply ? { replies } : {}), ...(dataDir ? { dataDir } : {}), explicit, withPin, approved, groupPhones, tenantId, closed, stepE, stepF, onboard, groupChat, ...(groupExtra ? { groupExtra } : {}), ...(messaging ? { messaging } : {}), ...gate };
 }
 
 async function main(): Promise<void> {
@@ -564,6 +618,15 @@ async function main(): Promise<void> {
       ...(parsed.staleAfterMs ? { staleAfterMs: parsed.staleAfterMs } : {}),
       ...(parsed.halt ? { halt: parsed.halt } : {}),
       ...(parsed.backupDir ? { backupDir: parsed.backupDir } : {}),
+      ...(parsed.groupChat
+        ? {
+            groupChat: {
+              hostName: "Cory",
+              cleanerName: "Maria",
+              ...(parsed.groupExtra ? { extra: [{ phone: parsed.groupExtra, name: "Alex" }] } : {}),
+            },
+          }
+        : {}),
     });
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
     if (!report.ok) process.exit(2);
